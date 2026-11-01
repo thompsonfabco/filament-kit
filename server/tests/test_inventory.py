@@ -1,5 +1,6 @@
 import json
 import threading
+import time
 
 import pytest
 
@@ -94,10 +95,25 @@ def test_spool_note_appended(sm):
     assert sm.get(f"spool/{r.spool_ids[0]}")["comment"] == "SEALED - tag when opened | UNVERIFIED"
 
 
-def test_concurrent_adds_get_distinct_boxes(sm):
+def _slow_spool_post(sm, monkeypatch):
+    """Widen the race window: every spool POST sleeps, so an unlocked second add would read stale locations."""
+    real_post = sm.post
+
+    def post(path, body):
+        if path == "spool":
+            time.sleep(0.3)
+        return real_post(path, body)
+
+    monkeypatch.setattr(sm, "post", post)
+
+
+def test_concurrent_adds_get_distinct_boxes(sm, monkeypatch):
+    _slow_spool_post(sm, monkeypatch)
     results = []
+    barrier = threading.Barrier(2)
 
     def go():
+        barrier.wait()
         results.append(inventory.add_spools(
             sm, [item(material="PETG", name="PETG Blue", sealed=False)], RULES, dry=False))
 
@@ -252,3 +268,145 @@ def test_find_by_tag(sm):
     assert [s["id"] for s in inventory.find(sm, "4:77:90", sealed_only=False)] == [b["id"]]
     assert {s["id"] for s in inventory.find(sm, "SUNLU grey", sealed_only=False)} == {a["id"]}
     assert [s["id"] for s in inventory.find(sm, "sealed stock", sealed_only=True)] == [a["id"]]
+
+
+def test_add_and_link_conflict_writes_nothing(sm, spoolman_fake_store):
+    a = _spool(sm)
+    inventory.link_tag(sm, a["id"], UID, force=False, dry=False)
+    n = len(spoolman_fake_store["spools"])
+    with pytest.raises(inventory.TagConflict) as e:
+        inventory.add_and_link(sm, [item(sealed=False, name="New one")], RULES, dry=False, uid=UID)
+    assert e.value.other["id"] == a["id"] and e.value.reason == "tag_on_other_spool"
+    assert len(spoolman_fake_store["spools"]) == n
+    assert not [f for f in spoolman_fake_store["filaments"].values() if f["name"] == "New one"]
+
+
+@pytest.mark.parametrize("bad", [
+    {"vendor": 5}, {"name": ["x"]}, {"material": None}, {"price_per_kg": "12"}, {"nozzle": "220"},
+    {"bed": [1]}, {"location": 3}, {"color_hex": 1}, {"lot": 1}, {"note": 1}, {"nozzle_range": 1},
+    {"bed_range": 1}, {"spool_note": 1}, {"gross": "5"}, {"sealed": "no"}, {"net": 0}, {"density": "1.2"},
+])
+def test_validation_covers_every_item_before_any_write(sm, spoolman_fake_store, bad):
+    with pytest.raises(ValueError):
+        inventory.add_spools(sm, [item(name="Good"), item(**{"name": "Bad", **bad})], RULES, dry=False)
+    assert not spoolman_fake_store["spools"] and not spoolman_fake_store["filaments"]
+    assert not spoolman_fake_store["vendors"]
+
+
+def test_mid_batch_spoolman_error_reports_partial(sm, monkeypatch):
+    real_post = sm.post
+    calls = {"n": 0}
+
+    def post(path, body):
+        if path == "spool":
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise SpoolmanError("boom", status=500)
+        return real_post(path, body)
+
+    monkeypatch.setattr(sm, "post", post)
+    with pytest.raises(inventory.AddFailed) as e:
+        inventory.add_spools(sm, [item(count=3)], RULES, dry=False)
+    assert len(e.value.partial.spool_ids) == 1
+
+
+def test_gross_checked_against_existing_filament_tare(sm, spoolman_fake_store):
+    inventory.add_spools(sm, [item(tare=213)], RULES, dry=False)
+    n = len(spoolman_fake_store["spools"])
+    # item tare 100 would allow gross 150, but the existing filament's tare (213) will be used
+    with pytest.raises(ValueError):
+        inventory.add_spools(sm, [item(tare=100, sealed=False, gross=150)], RULES, dry=False)
+    assert len(spoolman_fake_store["spools"]) == n
+
+
+def test_link_tag_is_serialized(sm, monkeypatch):
+    a, b = _spool(sm), _spool(sm)
+    real_patch = sm.patch
+
+    def patch(path, body):
+        time.sleep(0.3)
+        return real_patch(path, body)
+
+    monkeypatch.setattr(sm, "patch", patch)
+    outcomes = []
+    barrier = threading.Barrier(2)
+
+    def go(sid):
+        barrier.wait()
+        try:
+            inventory.link_tag(sm, sid, UID, force=False, dry=False)
+            outcomes.append("ok")
+        except inventory.TagConflict:
+            outcomes.append("conflict")
+
+    ts = [threading.Thread(target=go, args=(s["id"],)) for s in (a, b)]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join()
+    assert sorted(outcomes) == ["conflict", "ok"]
+
+
+def test_tag_conflict_reason_for_spool_with_other_tag(sm):
+    a = _spool(sm)
+    inventory.link_tag(sm, a["id"], UID, force=False, dry=False)
+    with pytest.raises(inventory.TagConflict) as e:
+        inventory.link_tag(sm, a["id"], UID2, force=False, dry=False)
+    assert e.value.other is None and e.value.reason == "spool_has_other_tag"
+
+
+def test_open_spool_petg_gets_lowest_free_box(sm):
+    taken = _spool(sm, material="PETG", name="P1", sealed=False)
+    assert taken["location"] == "Storage box 01"
+    s = _spool(sm, material="PETG", name="P2")
+    assert s["location"] == "Sealed stock"
+    out = inventory.open_spool(sm, s["id"], UID, RULES, gross=500, dry=False)
+    assert out["location"] == "Storage box 02" and tags.stored(out) == UID
+    assert out["first_used"] and out["comment"] in (None, "") and out["remaining_weight"] == 287
+
+
+def test_open_spool_pla_goes_to_rack_and_explicit_location_wins(sm):
+    s = _spool(sm)
+    out = inventory.open_spool(sm, s["id"], UID, RULES, dry=False)
+    assert out["location"] == "Rack 1"
+    s2 = _spool(sm, name="P3", material="PETG")
+    out = inventory.open_spool(sm, s2["id"], UID2, RULES, location="Dry box", dry=False)
+    assert out["location"] == "Dry box"
+
+
+def test_open_spool_dry_and_conflict_and_low_gross(sm):
+    s, t = _spool(sm, material="PETG", name="Q"), _spool(sm, material="PETG", name="R")
+    dry = inventory.open_spool(sm, s["id"], UID, RULES, dry=True)
+    assert dry["location"] == "Storage box 01"
+    assert sm.get(f"spool/{s['id']}")["location"] == "Sealed stock"
+    inventory.open_spool(sm, s["id"], UID, RULES, dry=False)
+    with pytest.raises(inventory.TagConflict):
+        inventory.open_spool(sm, t["id"], UID, RULES, dry=False)
+    assert sm.get(f"spool/{t['id']}")["location"] == "Sealed stock"
+    with pytest.raises(ValueError):
+        inventory.open_spool(sm, t["id"], UID2, RULES, gross=10, dry=False)
+
+
+def test_concurrent_open_spool_distinct_boxes(sm, monkeypatch):
+    a = _spool(sm, material="PETG", name="A1")
+    b = _spool(sm, material="PETG", name="B1")
+    real_patch = sm.patch
+
+    def patch(path, body):
+        time.sleep(0.3)
+        return real_patch(path, body)
+
+    monkeypatch.setattr(sm, "patch", patch)
+    barrier = threading.Barrier(2)
+
+    def go(sid, uid):
+        barrier.wait()
+        inventory.open_spool(sm, sid, uid, RULES, dry=False)
+
+    ts = [threading.Thread(target=go, args=(a["id"], UID)), threading.Thread(target=go, args=(b["id"], UID2))]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join()
+    locs = {sm.get(f"spool/{i}")["location"] for i in (a["id"], b["id"])}
+    assert locs == {"Storage box 01", "Storage box 02"}

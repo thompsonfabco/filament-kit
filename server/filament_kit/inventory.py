@@ -11,7 +11,7 @@ from .spoolman import Spoolman, SpoolmanError
 
 SEALED_COMMENT = "SEALED - tag when opened"
 
-_LOCK = threading.Lock()  # serializes add + placement so two adds never pick the same box
+_LOCK = threading.RLock()  # serializes add + placement so two adds never pick the same box
 
 _REQUIRED = ("vendor", "name", "material", "net", "tare", "density", "count")
 
@@ -33,10 +33,22 @@ class LinkResult:
     patch: dict = field(default_factory=dict)
 
 
+class AddFailed(Exception):
+    """Spoolman failed part-way through an add; `partial` lists what was already created."""
+
+    def __init__(self, message: str, partial: AddResult):
+        super().__init__(message)
+        self.partial = partial
+
+
 class TagConflict(Exception):
-    def __init__(self, other: dict, message: str | None = None):
+    """reason "tag_on_other_spool": `other` is the spool holding the tag.
+    reason "spool_has_other_tag": the target spool has a different tag; `other` is None."""
+
+    def __init__(self, other: dict | None, message: str, reason: str = "tag_on_other_spool"):
         self.other = other
-        super().__init__(message or f"tag is already linked to {describe(other)}")
+        self.reason = reason
+        super().__init__(message)
 
 
 def _now() -> str:
@@ -57,6 +69,10 @@ def _is_num(v) -> bool:
     return isinstance(v, (int, float)) and not isinstance(v, bool)
 
 
+_OPT_NUM = ("nozzle", "bed", "price_per_kg", "gross")
+_OPT_STR = ("location", "color_hex", "lot", "note", "price_line", "nozzle_range", "bed_range", "spool_note")
+
+
 def _validate(items: list[dict]) -> None:
     if not isinstance(items, list) or not items:
         raise ValueError("no items to add")
@@ -64,17 +80,27 @@ def _validate(items: list[dict]) -> None:
         if not isinstance(it, dict):
             raise ValueError("each item must be an object")
         label = f"{it.get('vendor')} {it.get('name')}"
-        for k in _REQUIRED:
-            if it.get(k) in (None, ""):
+        for k in ("vendor", "name", "material"):
+            if not isinstance(it.get(k), str) or not it[k].strip():
+                raise ValueError(f"{label}: {k} must be a non-empty string")
+        for k in ("net", "tare", "density", "count"):
+            if it.get(k) is None:
                 raise ValueError(f"{label}: missing {k}")
         if not _is_int(it["count"]) or it["count"] < 1:
             raise ValueError(f"{label}: count must be a whole number of at least 1")
         for k in ("net", "tare", "density"):
             if not _is_num(it[k]) or it[k] <= 0:
                 raise ValueError(f"{label}: {k} must be a positive number")
-        if it.get("gross") is not None:
-            if not _is_num(it["gross"]) or it["count"] != 1 or it["gross"] <= it["tare"]:
-                raise ValueError(f"{label}: gross {it['gross']} g needs count 1 and a weight above the spool")
+        for k in _OPT_NUM:
+            if it.get(k) is not None and not _is_num(it[k]):
+                raise ValueError(f"{label}: {k} must be a number")
+        for k in _OPT_STR:
+            if it.get(k) is not None and not isinstance(it[k], str):
+                raise ValueError(f"{label}: {k} must be text")
+        if it.get("sealed") is not None and not isinstance(it["sealed"], bool):
+            raise ValueError(f"{label}: sealed must be true or false")
+        if it.get("gross") is not None and (it["count"] != 1 or it["gross"] <= it["tare"]):
+            raise ValueError(f"{label}: gross {it['gross']} g needs count 1 and a weight above the spool")
 
 
 def _used_locations(sm: Spoolman) -> set[str]:
@@ -88,44 +114,60 @@ def add_spools(sm: Spoolman, items: list[dict], rules: dict, dry: bool) -> AddRe
         placed = placement.place(items, _used_locations(sm), rules)
         vendors = {v["name"].lower(): v for v in sm.get("vendor")}
         fils = {((f.get("vendor") or {}).get("name", "").lower(), f["name"].lower()): f for f in sm.get("filament")}
+        # re-check gross against the tare that will really be used (an existing filament's, else the item's)
+        tares = {k: f.get("spool_weight") for k, f in fils.items()}
         for it in placed:
-            vn = it["vendor"]
-            v = vendors.get(vn.lower())
-            if v is None:
-                v = ({"id": None, "name": vn} if dry
-                     else sm.post("vendor", {"name": vn, "empty_spool_weight": it["tare"]}))
-                vendors[vn.lower()] = v
-                result.lines.append(f"new vendor {vn}")
-            key = (vn.lower(), it["name"].lower())
-            f = fils.get(key)
-            if f is None:
-                f = _new_filament(sm, it, v, dry)
-                fils[key] = f
-                state = "new filament"
-            else:
-                state = "existing filament"
-            tare = f.get("spool_weight") or it["tare"]
-            remaining = round(it["gross"] - tare, 1) if it.get("gross") is not None else it["net"]
-            opened = it.get("sealed") is False
-            comment = " | ".join(x for x in (SEALED_COMMENT if not opened else "", it.get("spool_note")) if x)
-            ids: list[int | None] = []
-            for _ in range(it["count"]):
-                body = {"filament_id": f["id"], "initial_weight": it["net"], "spool_weight": tare,
-                        "remaining_weight": remaining, "location": it["location"], "comment": comment}
-                if it.get("lot"):
-                    body["lot_nr"] = it["lot"]
-                if dry:
-                    ids.append(None)
-                    continue
-                sid = sm.post("spool", body)["id"]
-                _read_back(sm, sid)
-                ids.append(sid)
-                result.spool_ids.append(sid)
-            gross_note = f" (gross {it['gross']} - tare {tare})" if it.get("gross") is not None else ""
-            result.lines.append(
-                f"F{f['id']} {vn} {it['name']} ({state}): {it['count']} spool(s) {ids} @ {it['location']}"
-                f"{' (opened)' if opened else ''}, {remaining} g{gross_note}")
+            key = (it["vendor"].lower(), it["name"].lower())
+            tares.setdefault(key, it["tare"])
+            tare = tares[key] or it["tare"]
+            if it.get("gross") is not None and it["gross"] <= tare:
+                raise ValueError(f"{it['vendor']} {it['name']}: gross {it['gross']} g is not above the spool "
+                                 f"weight {tare} g used for this filament")
+        try:
+            _write_items(sm, placed, vendors, fils, result, dry)
+        except SpoolmanError as e:
+            raise AddFailed(f"spoolman failed part-way: {e}", result) from e
     return result
+
+
+def _write_items(sm, placed, vendors, fils, result, dry) -> None:
+    for it in placed:
+        vn = it["vendor"]
+        v = vendors.get(vn.lower())
+        if v is None:
+            v = ({"id": None, "name": vn} if dry
+                 else sm.post("vendor", {"name": vn, "empty_spool_weight": it["tare"]}))
+            vendors[vn.lower()] = v
+            result.lines.append(f"new vendor {vn}")
+        key = (vn.lower(), it["name"].lower())
+        f = fils.get(key)
+        if f is None:
+            f = _new_filament(sm, it, v, dry)
+            fils[key] = f
+            state = "new filament"
+        else:
+            state = "existing filament"
+        tare = f.get("spool_weight") or it["tare"]
+        remaining = round(it["gross"] - tare, 1) if it.get("gross") is not None else it["net"]
+        opened = it.get("sealed") is False
+        comment = " | ".join(x for x in (SEALED_COMMENT if not opened else "", it.get("spool_note")) if x)
+        ids: list[int | None] = []
+        for _ in range(it["count"]):
+            body = {"filament_id": f["id"], "initial_weight": it["net"], "spool_weight": tare,
+                    "remaining_weight": remaining, "location": it["location"], "comment": comment}
+            if it.get("lot"):
+                body["lot_nr"] = it["lot"]
+            if dry:
+                ids.append(None)
+                continue
+            sid = sm.post("spool", body)["id"]
+            result.spool_ids.append(sid)
+            _read_back(sm, sid)
+            ids.append(sid)
+        gross_note = f" (gross {it['gross']} - tare {tare})" if it.get("gross") is not None else ""
+        result.lines.append(
+            f"F{f['id']} {vn} {it['name']} ({state}): {it['count']} spool(s) {ids} @ {it['location']}"
+            f"{' (opened)' if opened else ''}, {remaining} g{gross_note}")
 
 
 def _new_filament(sm: Spoolman, it: dict, vendor: dict, dry: bool) -> dict:
@@ -165,48 +207,89 @@ def by_tag(sm: Spoolman, uid: str) -> dict | None:
 
 def link_tag(sm: Spoolman, spool_id: int, uid: str, force: bool, dry: bool) -> LinkResult:
     uid = tags.normalize_uid(uid)
-    target = sm.get(f"spool/{spool_id}")
-    if tags.stored(target) == uid:
-        return LinkResult(spool_id, uid, noop=True, dry=dry)
-    others = [s for s in _all_spools(sm) if tags.stored(s) == uid and s["id"] != spool_id]
-    if others and not force:
-        raise TagConflict(others[0])
-    if tags.stored(target) and not force:
-        raise TagConflict(target, f"{describe(target)} already has tag {tags.stored(target)}; "
-                                  f"tapped {uid} (force replaces it)")
-    patch: dict = {}
-    if not target.get("first_used"):
-        patch["first_used"] = _now()
-    comment = (target.get("comment") or "").replace(SEALED_COMMENT, "").strip(" |;.")
-    if comment != (target.get("comment") or ""):
-        patch["comment"] = comment
-    result = LinkResult(spool_id, uid, dry=dry, cleared=[s["id"] for s in others], patch=patch)
-    if dry:
+    with _LOCK:
+        target = sm.get(f"spool/{spool_id}")
+        if tags.stored(target) == uid:
+            return LinkResult(spool_id, uid, noop=True, dry=dry)
+        others = [s for s in _all_spools(sm) if tags.stored(s) == uid and s["id"] != spool_id]
+        if others and not force:
+            raise TagConflict(others[0], f"tag {uid} is already linked to {describe(others[0])}")
+        if tags.stored(target) and not force:
+            raise TagConflict(None, f"{describe(target)} already has tag {tags.stored(target)}; "
+                                    f"tapped {uid} (force replaces it)", reason="spool_has_other_tag")
+        patch: dict = {}
+        if not target.get("first_used"):
+            patch["first_used"] = _now()
+        comment = (target.get("comment") or "").replace(SEALED_COMMENT, "").strip(" |;.")
+        if comment != (target.get("comment") or ""):
+            patch["comment"] = comment
+        result = LinkResult(spool_id, uid, dry=dry, cleared=[s["id"] for s in others], patch=patch)
+        if dry:
+            return result
+        for s in others:
+            sm.patch(f"spool/{s['id']}", {"extra": {**(s.get("extra") or {}), "nfc_id": json.dumps("")}})
+        sm.patch(f"spool/{spool_id}",
+                 {**patch, "extra": {**(target.get("extra") or {}), "nfc_id": json.dumps(uid)}})
+        if tags.stored(sm.get(f"spool/{spool_id}")) != uid:
+            raise RuntimeError("tag did not land")
         return result
-    for s in others:
-        sm.patch(f"spool/{s['id']}", {"extra": {**(s.get("extra") or {}), "nfc_id": json.dumps("")}})
-    sm.patch(f"spool/{spool_id}",
-             {**patch, "extra": {**(target.get("extra") or {}), "nfc_id": json.dumps(uid)}})
-    if tags.stored(sm.get(f"spool/{spool_id}")) != uid:
-        raise RuntimeError("tag did not land")
-    return result
 
 
 def add_and_link(sm: Spoolman, items: list[dict], rules: dict, dry: bool, uid: str | None) -> AddResult:
     if uid is not None:
         uid = tags.normalize_uid(uid)  # refuse before anything is written
-    result = add_spools(sm, items, rules, dry)
-    if uid is None:
-        return result
-    single_opened = (len(items) == 1 and items[0].get("count") == 1 and items[0].get("sealed") is False)
-    if not single_opened:
-        result.lines.append("tag not linked: it can only be linked when exactly one opened spool is added")
-    elif dry:
-        result.lines.append(f"would link tag {uid}")
-    else:
-        link_tag(sm, result.spool_ids[0], uid, force=False, dry=False)
-        result.lines.append(f"linked tag {uid} to spool {result.spool_ids[0]}")
+    single_opened = (isinstance(items, list) and len(items) == 1 and isinstance(items[0], dict)
+                     and items[0].get("count") == 1 and items[0].get("sealed") is False)
+    with _LOCK:
+        if uid is not None and single_opened:
+            other = by_tag(sm, uid)
+            if other is not None:  # refuse before writing, so a retry cannot duplicate the spool
+                raise TagConflict(other, f"tag {uid} is already linked to {describe(other)}")
+        result = add_spools(sm, items, rules, dry)
+        if uid is None:
+            return result
+        if not single_opened:
+            result.lines.append("tag not linked: it can only be linked when exactly one opened spool is added")
+        elif dry:
+            result.lines.append(f"would link tag {uid}")
+        else:
+            link_tag(sm, result.spool_ids[0], uid, force=False, dry=False)
+            result.lines.append(f"linked tag {uid} to spool {result.spool_ids[0]}")
     return result
+
+
+def open_spool(sm: Spoolman, spool_id: int, uid: str, rules: dict, *, gross: float | None = None,
+               location: str | None = None, force: bool = False, dry: bool) -> dict:
+    """Link the tag and mark the spool opened: first_used, SEALED comment dropped, moved out of sealed stock."""
+    uid = tags.normalize_uid(uid)
+    with _LOCK:
+        spool = sm.get(f"spool/{spool_id}")
+        patch: dict = {}
+        if gross is not None:
+            tare = spool.get("spool_weight") or (spool.get("filament") or {}).get("spool_weight") or 0
+            if gross < tare:
+                raise ValueError(f"gross {gross} g is below the spool tare {tare} g - check the weight")
+            patch["remaining_weight"] = round(gross - tare, 1)
+        link = link_tag(sm, spool_id, uid, force=force, dry=dry)  # raises TagConflict before any other write
+        if location is None and spool.get("location") in (None, "", rules["sealed_location"]):
+            used = {s["location"] for s in sm.get("spool") if s.get("location") and s["id"] != spool_id}
+            material = (spool.get("filament") or {}).get("material") or ""
+            location = placement.place([{"material": material, "sealed": False, "count": 1}], used, rules)[0][
+                "location"]
+        if location is not None and location != spool.get("location"):
+            patch["location"] = location
+        if dry:
+            return {**spool, **link.patch, **patch,
+                    "extra": {**(spool.get("extra") or {}), "nfc_id": json.dumps(uid)}}
+        fresh = sm.get(f"spool/{spool_id}")
+        if not fresh.get("first_used"):
+            patch["first_used"] = _now()
+        comment = (fresh.get("comment") or "").replace(SEALED_COMMENT, "").strip(" |;.")
+        if comment != (fresh.get("comment") or ""):
+            patch["comment"] = comment
+        if patch:
+            sm.patch(f"spool/{spool_id}", patch)
+        return sm.get(f"spool/{spool_id}")
 
 
 def update_spool(sm: Spoolman, spool_id: int, *, gross: float | None = None, remaining: float | None = None,
