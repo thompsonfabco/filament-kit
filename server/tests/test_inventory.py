@@ -135,8 +135,9 @@ def test_add_missing_readback_raises(sm, monkeypatch):
         return real_get(path)
 
     monkeypatch.setattr(sm, "get", get)
-    with pytest.raises(RuntimeError):
+    with pytest.raises(inventory.AddFailed, match="not found after writing") as e:
         inventory.add_spools(sm, [item()], RULES, dry=False)
+    assert len(e.value.partial.spool_ids) == 1
 
 
 def _spool(sm, **kw):
@@ -410,3 +411,28 @@ def test_concurrent_open_spool_distinct_boxes(sm, monkeypatch):
         t.join()
     locs = {sm.get(f"spool/{i}")["location"] for i in (a["id"], b["id"])}
     assert locs == {"Storage box 01", "Storage box 02"}
+
+
+def test_add_and_link_tag_not_landing_reports_created_spool(sm, monkeypatch):
+    real_get = sm.get
+
+    def get(path):
+        out = real_get(path)
+        if path.startswith("spool/") and isinstance(out, dict):
+            out["extra"] = {}
+        return out
+
+    monkeypatch.setattr(sm, "get", get)
+    with pytest.raises(inventory.AddFailed, match="tag did not land") as e:
+        inventory.add_and_link(sm, [item(sealed=False)], RULES, dry=False, uid=UID)
+    assert len(e.value.partial.spool_ids) == 1
+
+
+def test_add_and_link_spoolman_error_while_linking_reports_created_spool(sm, monkeypatch):
+    def patch(path, body):
+        raise SpoolmanError("down", status=None)
+
+    monkeypatch.setattr(sm, "patch", patch)
+    with pytest.raises(inventory.AddFailed) as e:
+        inventory.add_and_link(sm, [item(sealed=False)], RULES, dry=False, uid=UID)
+    assert len(e.value.partial.spool_ids) == 1

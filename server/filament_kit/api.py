@@ -165,18 +165,28 @@ def create_app(sm: Spoolman | None = None, claude=None) -> Starlette:
             raise BadRequest("hint and tag must be text fields")
         images = intake.check_photos(photos)
         uid = tags.normalize_uid(tag) if tag.strip() else None
-        await run_in_threadpool(cap.take)
-        out = await run_in_threadpool(intake.read_labels, sm, images, hint[:MAX_HINT], uid, claude)
-        return JSONResponse(out)
+        def run() -> dict:
+            cap.take()
+            try:
+                return intake.read_labels(sm, images, hint[:MAX_HINT], uid, claude)
+            except SpoolmanError:  # Spoolman down: the catalog fetch failed before Claude was called
+                cap.refund()
+                raise
+        return JSONResponse(await run_in_threadpool(run))
 
     @_authed
     async def intake_retry(request: Request):
         read_id = request.path_params["read_id"]
 
         def run() -> dict:
-            if intake.is_kept(read_id):  # an unknown or expired read fails with not_found without using up a read
-                cap.take()
-            return intake.retry(read_id, sm, claude)
+            if not intake.is_kept(read_id):  # an unknown or expired read fails with not_found, using no read
+                return intake.retry(read_id, sm, claude)
+            cap.take()
+            try:
+                return intake.retry(read_id, sm, claude)
+            except SpoolmanError:  # Spoolman down: the catalog fetch failed before Claude was called
+                cap.refund()
+                raise
         return JSONResponse(await run_in_threadpool(run))
 
     @_authed

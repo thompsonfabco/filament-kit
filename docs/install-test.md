@@ -15,11 +15,22 @@ Record every command's output in the task report.
 scp dist/filament-kit-0.1.0.tar.gz label.jpg KIT_TEST_HOST:
 ssh -t KIT_TEST_HOST
 tar xzf filament-kit-0.1.0.tar.gz && cd filament-kit-0.1.0
-sudo ./install.sh          # Enter for name, Enter for storage defaults, paste the key
+sudo ./install.sh          # display name: type  Pat's Küche  (not the default), Enter for storage defaults, paste the key
 ```
 
-Expect: the installer ends with `filament-kit status` (all lines `OK`) and a QR code + 6-digit pairing code.
-Note the code.
+Expect: the installer ends with `filament-kit status` (all lines `OK`, including `filament-kit API answering`)
+and a QR code + 6-digit pairing code. Note the code. The display name must not break anything: the
+certificate and the QR use the host name, not the display name.
+
+```
+sudo runuser -u filament-kit -- /opt/filament-kit/venv/bin/python -I -c \
+  'from filament_kit import pairing; print(pairing.issue().qr)'    # the QR payload as text
+openssl x509 -in /etc/filament-kit/cert.pem -noout -subject -ext subjectAltName
+```
+
+Expect the cert subject `CN=<hostname>`, SANs `<hostname>`, `<hostname>.local`, `localhost` and the host's
+LAN IPs (no 169.254.x.x). The QR payload has `h=<hostname>.local`, `p=8710`, `t=`, `fp=` and one `ip=` per
+LAN address.
 
 Checks on the host:
 
@@ -42,7 +53,7 @@ sudo journalctl -b | grep -c sk-ant- ; history | grep -c sk-ant-      # both 0
 ## 2. Network checks (from another machine on the LAN)
 
 ```
-curl -k https://KIT_TEST_HOST:8710/api/info          # {"name": ..., "version": "0.1.0", "api": 1, ...}
+curl -k https://KIT_TEST_HOST:8710/api/info          # {"name": "Pat's Küche", "version": "0.1.0", "api": 1, ...}
 avahi-browse -rt _filamentkit._tcp                   # lists "filament-kit on <host>", port 8710
 curl -s http://KIT_TEST_HOST:7912/api/v1/info        # Spoolman version 0.27.0
 ```
@@ -73,6 +84,23 @@ curl -sk $H/api/intake/add -H "Authorization: Bearer $TOKEN" -H 'Content-Type: a
 
 Expect `{"spool_ids": [...], "dry": false, ...}` from the second call. Open `http://KIT_TEST_HOST:7912` in a
 browser and confirm the spool is there with the right brand, material and colour.
+
+### Unpair while the phone polls
+
+Pair a second device (`sudo filament-kit pair`, redeem the code as above into `TOKEN2`), then poll with it from
+the LAN machine while the CLI revokes it on the host:
+
+```
+while true; do curl -sk -o /dev/null -w '%{http_code}\n' $H/api/spools -H "Authorization: Bearer $TOKEN2"; sleep 0.5; done
+# on the host, while the loop runs:
+sudo filament-kit unpair                             # note the second device's id
+sudo filament-kit unpair <id>
+sudo filament-kit unpair                             # that id is gone and stays gone
+```
+
+Expect the loop to switch from `200` to `401` and stay there, the first device still listed and its `$TOKEN`
+still answering `200`, and `/var/lib/filament-kit/devices.json` valid JSON
+(`sudo python3 -m json.tool /var/lib/filament-kit/devices.json`).
 
 ## 4. Backup
 
