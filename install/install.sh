@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # filament-kit installer for Ubuntu 24.04 or newer. Run as root: sudo ./install.sh
 # Safe to run again: an existing install is upgraded and keeps its data,
-# settings, key and certificate (no questions are asked on upgrade).
+# settings, key and certificate. On upgrade the only question is the API key,
+# and only if it is still missing.
 set -euo pipefail
 
 SPOOLMAN_VERSION=v0.27.0
@@ -70,45 +71,58 @@ install -d -m 750 -o filament-kit -g filament-kit "$STATE"
 install -d -m 2750 -o root -g filament-kit "$ETC"
 
 # ---------- 3. Spoolman ----------
-installed_version=""
-if [ -f "$SPOOLMAN_OPT/release_info.json" ]; then
-    installed_version=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' \
-        "$SPOOLMAN_OPT/release_info.json" 2>/dev/null || true)
-fi
-if [ "$installed_version" = "$SPOOLMAN_VERSION" ] && [ -x "$SPOOLMAN_OPT/venv/bin/python" ]; then
+# Built in $SPOOLMAN_OPT.new and swapped in only when complete; the marker is
+# written last, so a failed or interrupted install is redone on the next run.
+SPOOLMAN_MARKER="$SPOOLMAN_OPT/.fk-installed"
+if [ -f "$SPOOLMAN_MARKER" ] && [ "$(cat "$SPOOLMAN_MARKER")" = "$SPOOLMAN_VERSION" ]; then
     say "Spoolman $SPOOLMAN_VERSION already installed"
 else
     say "Installing Spoolman $SPOOLMAN_VERSION"
+    new="$SPOOLMAN_OPT.new"
     tmp=$(mktemp -d)
-    trap 'rm -rf "$tmp"' EXIT
+    trap 'rm -rf "$tmp" "$new"' EXIT
     curl -fsSL --retry 3 -o "$tmp/spoolman.zip" "$SPOOLMAN_URL"
     echo "$SPOOLMAN_SHA256  $tmp/spoolman.zip" | sha256sum -c --quiet - \
         || die "spoolman.zip checksum mismatch"
-    mkdir "$tmp/x"
-    unzip -q "$tmp/spoolman.zip" -d "$tmp/x"
-    [ -f "$tmp/x/requirements.txt" ] && [ -d "$tmp/x/spoolman" ] \
+    rm -rf "$new"
+    mkdir -p "$new"
+    unzip -q "$tmp/spoolman.zip" -d "$new"
+    [ -f "$new/requirements.txt" ] && [ -d "$new/spoolman" ] \
         || die "spoolman.zip does not look like a Spoolman release"
+    python3 -m venv "$new/venv"
+    "$new/venv/bin/python" -m pip install -q --upgrade pip
+    "$new/venv/bin/python" -m pip install -q -r "$new/requirements.txt"
+    "$new/venv/bin/python" -m compileall -q "$new/spoolman" >/dev/null
+    chown -R root:root "$new"
+    chmod -R go-w "$new"
     systemctl stop spoolman 2>/dev/null || true
-    rm -rf "$SPOOLMAN_OPT"
-    mkdir -p "$SPOOLMAN_OPT"
-    cp -a "$tmp/x/." "$SPOOLMAN_OPT/"
-    python3 -m venv "$SPOOLMAN_OPT/venv"
-    "$SPOOLMAN_OPT/venv/bin/pip" install -q --upgrade pip
-    "$SPOOLMAN_OPT/venv/bin/pip" install -q -r "$SPOOLMAN_OPT/requirements.txt"
-    chown -R root:root "$SPOOLMAN_OPT"
-    chmod -R go-w "$SPOOLMAN_OPT"
+    rm -rf "$SPOOLMAN_OPT.old"
+    if [ -d "$SPOOLMAN_OPT" ]; then
+        mv "$SPOOLMAN_OPT" "$SPOOLMAN_OPT.old"
+    fi
+    mv "$new" "$SPOOLMAN_OPT"
+    rm -rf "$SPOOLMAN_OPT.old"
+    printf '%s\n' "$SPOOLMAN_VERSION" > "$SPOOLMAN_MARKER"
     rm -rf "$tmp"
     trap - EXIT
 fi
 
 # ---------- 4. filament-kit ----------
+# The marker is removed before and written after the venv work, so a failed
+# install leaves no marker and the next run rebuilds the venv from scratch.
+FK_MARKER="$OPT/.fk-installed"
 say "Installing filament-kit ($(basename "$WHEEL"))"
 mkdir -p "$OPT"
+if [ ! -f "$FK_MARKER" ]; then
+    rm -rf "$VENV"
+fi
+rm -f "$FK_MARKER"
 [ -x "$VENV/bin/python" ] || python3 -m venv "$VENV"
-"$VENV/bin/pip" install -q --upgrade pip
-"$VENV/bin/pip" install -q --upgrade "$WHEEL"
+"$VENV/bin/python" -m pip install -q --upgrade pip
+"$VENV/bin/python" -m pip install -q --upgrade "$WHEEL"
 # Same version number on a rebuild: make sure the new code is in place.
-"$VENV/bin/pip" install -q --force-reinstall --no-deps "$WHEEL"
+"$VENV/bin/python" -m pip install -q --force-reinstall --no-deps "$WHEEL"
+"$VENV/bin/python" -m compileall -q "$VENV/lib" >/dev/null
 install -m 755 "$RES/backup.sh" "$OPT/backup.sh"
 install -m 755 "$RES/filament-kit-cli.sh" /usr/local/bin/filament-kit
 if [ -f "$HERE/app/filament-kit.apk" ]; then
@@ -120,6 +134,7 @@ if [ -f "$HERE/app/filament-kit.apk" ]; then
 fi
 chown -R root:root "$OPT"
 chmod -R go-w "$OPT"
+basename "$WHEEL" > "$FK_MARKER"
 
 # ---------- 5. first-install questions ----------
 if [ "$FIRST_INSTALL" -eq 1 ]; then
@@ -146,19 +161,21 @@ config.save(cfg)
             FK_NO_SYSTEMD=1 "$FK" config
             ;;
     esac
+fi
 
-    if [ ! -s "$ETC/anthropic_key" ]; then
-        key=""
-        read -r -s -p "Anthropic API key (typing is hidden, Enter to skip): " key || true
-        echo
-        if [ -n "$key" ]; then
-            printf '%s\n' "$key" | install -m 640 -o root -g filament-kit /dev/stdin "$ETC/anthropic_key"
-            echo "Key saved."
-        else
-            echo "No key entered. Add it later with: sudo filament-kit config  (option 4)"
-        fi
-        unset key
+# Ask for the key whenever it is missing and someone is at the keyboard
+# (also on upgrade, e.g. after an earlier install skipped it).
+if [ ! -s "$ETC/anthropic_key" ] && [ -t 0 ]; then
+    key=""
+    read -r -s -p "Anthropic API key (typing is hidden, Enter to skip): " key || true
+    echo
+    if [ -n "$key" ]; then
+        printf '%s\n' "$key" | install -m 640 -o root -g filament-kit /dev/stdin "$ETC/anthropic_key"
+        echo "Key saved."
+    else
+        echo "No key entered. Add it later with: sudo filament-kit config  (option 4)"
     fi
+    unset key
 fi
 for f in "$ETC/config.json" "$ETC/anthropic_key"; do
     if [ -f "$f" ]; then
@@ -192,7 +209,7 @@ systemctl restart spoolman
 say "Waiting for Spoolman to start"
 ok=0
 for _ in $(seq 1 90); do
-    if curl -fsS -o /dev/null http://127.0.0.1:7912/api/v1/info; then
+    if curl -fs -o /dev/null http://127.0.0.1:7912/api/v1/info; then
         ok=1
         break
     fi
@@ -206,8 +223,15 @@ systemctl restart filament-kit
 systemctl start filament-kit-backup.timer
 
 # ---------- 8. check and pair ----------
+say "Waiting for filament-kit to start"
+for _ in $(seq 1 30); do
+    if curl -kfs -o /dev/null "https://127.0.0.1:$port/api/info"; then
+        break
+    fi
+    sleep 1
+done
+
 say "Status"
-sleep 2
 /usr/local/bin/filament-kit status || echo "Some checks failed; follow the 'fix:' lines above."
 
 say "Pair a phone: open the filament-kit app and scan this code"
