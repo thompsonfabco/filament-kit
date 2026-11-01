@@ -124,7 +124,7 @@ SDK, cryptography; pytest + httpx for tests; bash for the installer; Spoolman v0
 **Interfaces:**
 - Consumes: `Spoolman`, `config.paths()`, `config.load()`.
 - Produces:
-  - `RULES: str` — the owner's rules text from `C:\CODING\SV08MAX-Orca-Scripts\filament_profiles\vm\intake.py` (`RULES`) with the "Orders:" paragraph and every mention of Amazon orders removed, and `order`, `price_per_kg`, `price_line` removed from the schema (prices are entered by hand in the app).
+  - `RULES: str` — the owner's rules text from `C:\CODING\filament-ops\vm\intake.py` (`RULES`) with the "Orders:" paragraph and every mention of Amazon orders removed, and `order`, `price_per_kg`, `price_line` removed from the schema (prices are entered by hand in the app).
   - `SCHEMA: dict` — that file's `SCHEMA` minus those three properties.
   - `class ReadCap(path: Path, per_day: int)` with `take() -> None` (raises `CapReached`) — timestamps persisted in `state/reads.json` so the cap survives restarts.
   - `check_photos(photos: list[tuple[str, bytes]]) -> list[bytes]` — 1–8 photos, each JPEG (starts `FF D8 FF`) and ≤ 3 MB, else `PhotoError(message)` naming the file and limit.

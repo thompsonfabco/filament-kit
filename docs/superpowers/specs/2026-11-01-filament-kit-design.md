@@ -60,7 +60,7 @@ docs/
 Separate repo `filament-library`: the spec library (section 6).
 
 Each server module has one job and a small interface; `api.py` and `cli.py` are thin layers over the rest.
-Code is ported from the owner's working system (`C:\CODING\SV08MAX-Orca-Scripts\filament_profiles\vm\intake.py`,
+Code is ported from the owner's working system (`C:\CODING\filament-ops\vm\intake.py`,
 `open_spool.py`, `gen.py`, `spec.py`, `inapp.py`, `install.py`, `fpsync.py`, and the H2D orchestrator and usage
 tracker in `C:\CODING\h2d-filament-scanner`), with owner-specific locations, host names and H2D-only paths
 replaced by configuration.

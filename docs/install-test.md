@@ -25,7 +25,7 @@ certificate and the QR use the host name, not the display name.
 ```
 sudo runuser -u filament-kit -- /opt/filament-kit/venv/bin/python -I -c \
   'from filament_kit import pairing; print(pairing.issue().qr)'    # the QR payload as text
-openssl x509 -in /etc/filament-kit/cert.pem -noout -subject -ext subjectAltName
+sudo openssl x509 -in /etc/filament-kit/cert.pem -noout -subject -ext subjectAltName   # the dir is 2750: sudo
 ```
 
 Here `<hostname>` is the short name (`hostname -s`). Expect the cert subject `CN=<hostname>`, SANs
@@ -39,7 +39,7 @@ Checks on the host:
 ```
 sudo filament-kit status; echo "exit=$?"                     # every line OK, exit=0
 systemctl is-active spoolman filament-kit filament-kit-backup.timer   # active x3
-sudo stat -c '%U:%G %a %n' /etc/filament-kit /etc/filament-kit/* /var/lib/filament-kit /var/lib/spoolman
+sudo sh -c 'stat -c "%U:%G %a %n" /etc/filament-kit /etc/filament-kit/* /var/lib/filament-kit /var/lib/spoolman'
 ```
 
 Expected modes: `/etc/filament-kit` root:filament-kit 2750; `config.json`, `anthropic_key`, `key.pem`
@@ -56,7 +56,7 @@ sudo journalctl -b | grep -c sk-ant- ; history | grep -c sk-ant-      # both 0
 
 ```
 curl -k https://KIT_TEST_HOST:8710/api/info          # {"name": "Pat's Küche", "version": "0.1.0", "api": 1, ...}
-avahi-browse -rt _filamentkit._tcp                   # lists "filament-kit on <host>", port 8710
+avahi-browse -rt _filamentkit._tcp                   # (needs avahi-utils) lists "filament-kit on <host>", port 8710
 curl -s http://KIT_TEST_HOST:7912/api/v1/info        # Spoolman version 0.27.0
 ```
 
