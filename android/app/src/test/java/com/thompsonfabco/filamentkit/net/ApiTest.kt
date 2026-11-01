@@ -103,6 +103,14 @@ class ApiTest {
         assertTrue(!take().body!!.utf8().contains("""name="tag""""))
     }
 
+    @Test fun readAcceptsTheServersTagObject() = runBlocking {
+        // The real server echoes the tag as {"nfc_id": uid} (intake.read_labels), not as a bare string.
+        json("""{"items":[],"questions":[],"tag":{"nfc_id":"4:77"},"usage":{"model":"m"},"read_id":"r3"}""")
+        val res = api.read(listOf(byteArrayOf(1)), "", "4:77")
+        assertEquals("4:77", res.tag)
+        assertEquals("r3", res.readId)
+    }
+
     @Test fun retryPostsToReadId() = runBlocking {
         json("""{"items":[],"questions":[],"tag":null,"read_id":"abc-1"}""")
         api.retry("abc-1")

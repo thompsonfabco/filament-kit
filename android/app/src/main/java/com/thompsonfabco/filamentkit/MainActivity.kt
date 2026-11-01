@@ -50,6 +50,7 @@ import com.thompsonfabco.filamentkit.tags.disableTagReader
 import com.thompsonfabco.filamentkit.tags.enableTagReader
 import com.thompsonfabco.filamentkit.ui.add.AddSpoolsScreen
 import com.thompsonfabco.filamentkit.ui.add.AddViewModel
+import com.thompsonfabco.filamentkit.ui.add.DebugPhotos
 import com.thompsonfabco.filamentkit.ui.add.IntakeApi
 import com.thompsonfabco.filamentkit.ui.home.HomeScreen
 import com.thompsonfabco.filamentkit.ui.pair.NetPairingBackend
@@ -236,6 +237,7 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
             val addVm: AddViewModel = viewModel(factory = viewModelFactory {
                 initializer { AddViewModel(IntakeApi.of(a), app.drafts, draftId = draft, initialTag = tag) }
             })
+            if (BuildConfig.DEBUG) LaunchedEffect(addVm) { DebugPhotos.photos.collect(addVm::addPhoto) }
             AddSpoolsScreen(
                 vm = addVm,
                 onClose = { nav.popBackStack() },
