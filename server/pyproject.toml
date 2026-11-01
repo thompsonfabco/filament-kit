@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "filament-kit"
+version = "0.1.0"
+description = "Pair phones, read filament labels with Claude, write spools to Spoolman"
+requires-python = ">=3.12"
+dependencies = [
+    "starlette>=0.46",
+    "uvicorn>=0.34",
+    "python-multipart",
+    "anthropic>=0.80",
+    "cryptography>=44",
+]
+
+[project.optional-dependencies]
+test = ["pytest", "httpx"]
+
+[project.scripts]
+filament-kit = "filament_kit.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["filament_kit*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
