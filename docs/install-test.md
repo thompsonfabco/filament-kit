@@ -56,19 +56,23 @@ H=https://KIT_TEST_HOST:8710
 TOKEN=$(curl -sk -X POST $H/api/pair -H 'Content-Type: application/json' \
   -d '{"code": "<6-digit code>"}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')
 curl -sk $H/api/intake/read -H "Authorization: Bearer $TOKEN" -F photo=@label.jpg > read.json
-cat read.json                                        # proposed spool(s), read_id
+cat read.json        # {"items": [...], "questions": [...], "tag": ..., "usage": {...}, "read_id": "..."}
 ```
 
-Build the add body from the proposed items in `read.json` and add for real:
+`/api/intake/add`, `/api/spools/{id}/link` and `PATCH /api/spools/{id}` default to a dry run
+(`"dry_run": true`) unless the body says otherwise. First a dry run, then the real write with
+`"dry_run": false` sent explicitly:
 
 ```
+python3 -c 'import json; r=json.load(open("read.json")); print(json.dumps({"items": r["items"], "dry_run": True}))' > dry.json
 python3 -c 'import json; r=json.load(open("read.json")); print(json.dumps({"items": r["items"], "dry_run": False}))' > add.json
+curl -sk $H/api/intake/add -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d @dry.json
+#   expect "dry": true, nothing in Spoolman yet
 curl -sk $H/api/intake/add -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d @add.json
 ```
 
-Expect `{"spool_ids": [...], "dry": false, ...}`. Open `http://KIT_TEST_HOST:7912` in a browser and confirm
-the spool is there with the right brand, material and colour.
-(If the read result's field names differ from `items`, adjust the body to the shape Task 8 documents.)
+Expect `{"spool_ids": [...], "dry": false, ...}` from the second call. Open `http://KIT_TEST_HOST:7912` in a
+browser and confirm the spool is there with the right brand, material and colour.
 
 ## 4. Backup
 

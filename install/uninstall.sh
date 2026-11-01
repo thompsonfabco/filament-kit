@@ -30,7 +30,7 @@ systemctl daemon-reload
 rm -f /etc/avahi/services/filament-kit.service
 systemctl reload avahi-daemon 2>/dev/null || true
 rm -f /usr/local/bin/filament-kit
-rm -rf /opt/filament-kit /opt/spoolman
+rm -rf /opt/filament-kit /opt/spoolman /opt/spoolman.new /opt/spoolman.old
 
 if [ "$PURGE" -eq 1 ]; then
     rm -rf /etc/filament-kit /var/lib/filament-kit /var/lib/spoolman /var/backups/filament-kit

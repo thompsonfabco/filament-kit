@@ -66,7 +66,8 @@ Run these in a Terminal on the Ubuntu computer.
 | `sudo filament-kit config` | Settings menu: server name, storage locations, Claude model and daily limit, API key. |
 
 Your spool inventory (Spoolman) is also in a web browser on any computer at home:
-`http://<server name>.local:7912`
+`http://<computer name>.local:7912`, where `<computer name>` is the Ubuntu computer's own name (type
+`hostname` in a Terminal to see it). The installer prints this address at the end.
 
 A backup of your spools and settings is made every night in `/var/backups/filament-kit` (the last 14 days are
 kept).
