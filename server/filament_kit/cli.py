@@ -288,6 +288,8 @@ def _printers_action(choice: str, printers: list) -> None:
         if not registry.SERIAL.fullmatch(serial):
             print(f"Not added: {registry.BAD_SERIAL}.")
             return
+        # a printer added by hand may never announce its model, and the model decides which camera it has
+        model = (_ask("Model (e.g. H2D, X1C, P1S; Enter to skip): ") or "").strip()
         code = getpass.getpass("Access Code (hidden): ").strip()
         if not code:
             print("No Access Code entered; nothing added.")
@@ -297,7 +299,7 @@ def _printers_action(choice: str, printers: list) -> None:
             print(f"Not added: {problem}.")
             return
         old = registry.load().get(serial)
-        registry.upsert(registry.Printer(serial, name, old.model if old else "", ip, code, True))
+        registry.upsert(registry.Printer(serial, name, model or (old.model if old else ""), ip, code, True))
         print(f"Added {name}.")
     elif choice in ("3", "4"):
         p = _pick_printer(printers)
