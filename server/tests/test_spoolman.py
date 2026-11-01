@@ -1,3 +1,6 @@
+import http.server
+import threading
+
 import pytest
 
 from filament_kit.spoolman import Spoolman, SpoolmanError
@@ -33,6 +36,7 @@ def test_http_error_carries_status(spoolman_url):
 
 def test_fake_write_shapes(spoolman_url):
     sm = Spoolman(spoolman_url)
+    sm.ensure_fields()
     v = sm.post("vendor", {"name": "SUNLU"})
     f = sm.post("filament", {"name": "PLA", "vendor_id": v["id"], "weight": 1000, "material": "PLA"})
     assert f["vendor"]["name"] == "SUNLU"
@@ -43,3 +47,65 @@ def test_fake_write_shapes(spoolman_url):
     sm.patch(f"spool/{s['id']}", {"archived": True})
     assert sm.get("spool") == []
     assert len(sm.get("spool?allow_archived=true")) == 1
+
+
+def test_fake_rejects_unregistered_or_non_json_extra(spoolman_url):
+    sm = Spoolman(spoolman_url)
+    v = sm.post("vendor", {"name": "V"})
+    f = sm.post("filament", {"name": "F", "vendor_id": v["id"], "weight": 1000})
+    s = sm.post("spool", {"filament_id": f["id"]})
+    for call in (
+        lambda: sm.post("filament", {"name": "G", "extra": {"line": '"x"'}}),
+        lambda: sm.post("vendor", {"name": "W", "extra": {"nope": '"x"'}}),
+        lambda: sm.patch(f"spool/{s['id']}", {"extra": {"nfc_id": '"a"'}}),
+    ):
+        with pytest.raises(SpoolmanError) as ei:
+            call()
+        assert ei.value.status == 422
+    sm.ensure_fields()
+    for bad in ("not json", 5):
+        with pytest.raises(SpoolmanError) as ei:
+            sm.patch(f"spool/{s['id']}", {"extra": {"nfc_id": bad}})
+        assert ei.value.status == 422
+    assert sm.patch(f"spool/{s['id']}", {"extra": {"nfc_id": '"a"'}})["extra"] == {"nfc_id": '"a"'}
+
+
+def _stub(handler_fn):
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            handler_fn(self)
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv
+
+
+def test_bad_json_body_raises_spoolman_error():
+    def h(r):
+        r.send_response(200)
+        r.send_header("Content-Length", "6")
+        r.end_headers()
+        r.wfile.write(b"<html>")
+    srv = _stub(h)
+    try:
+        with pytest.raises(SpoolmanError) as ei:
+            Spoolman(f"http://127.0.0.1:{srv.server_port}").get("info")
+        assert ei.value.status == 200 and "bad response" in str(ei.value)
+    finally:
+        srv.shutdown()
+
+
+def test_dropped_connection_is_unreachable():
+    def h(r):
+        r.wfile.write(b"garbage\r\n\r\n")
+        r.close_connection = True
+    srv = _stub(h)
+    try:
+        with pytest.raises(SpoolmanError) as ei:
+            Spoolman(f"http://127.0.0.1:{srv.server_port}", timeout=2).get("info")
+        assert ei.value.status is None
+    finally:
+        srv.shutdown()

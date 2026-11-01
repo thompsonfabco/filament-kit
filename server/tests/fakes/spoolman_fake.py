@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import copy
+import json
 from datetime import datetime, timezone
 from typing import Any
 
@@ -46,6 +47,25 @@ def _spool_view(store: dict, s: dict) -> dict:
     return out
 
 
+def _check_extra(store: dict, entity: str, extra: Any) -> JSONResponse | None:
+    """Spoolman rule: keys must be registered fields; values must be strings holding JSON."""
+    if extra is None:
+        return None
+    if not isinstance(extra, dict):
+        return _err("extra must be an object", 422)
+    keys = {f["key"] for f in store["fields"][entity]}
+    for k, v in extra.items():
+        if k not in keys:
+            return _err(f"Unknown extra field {k}", 422)
+        try:
+            if not isinstance(v, str):
+                raise ValueError
+            json.loads(v)
+        except ValueError:
+            return _err(f"Extra field {k} value is not a JSON string", 422)
+    return None
+
+
 def app(store: dict[str, Any] | None = None) -> Starlette:
     store = store if store is not None else new_store()
 
@@ -63,6 +83,8 @@ def app(store: dict[str, Any] | None = None) -> Starlette:
         b = await request.json()
         if not b.get("name"):
             return _err("name required", 422)
+        if (bad := _check_extra(store, "vendor", b.get("extra"))):
+            return bad
         v = {"id": alloc("vendor"), "registered": _now(), "name": b["name"],
              "empty_spool_weight": b.get("empty_spool_weight"),
              "comment": b.get("comment"), "extra": b.get("extra", {})}
@@ -76,6 +98,8 @@ def app(store: dict[str, Any] | None = None) -> Starlette:
         vid = b.get("vendor_id")
         if vid is not None and vid not in store["vendors"]:
             return _err(f"No vendor with ID {vid} found", 404)
+        if (bad := _check_extra(store, "filament", b.get("extra"))):
+            return bad
         f = {"id": alloc("filament"), "registered": _now(), "name": b.get("name"),
              "vendor_id": vid, "material": b.get("material"), "price": b.get("price"),
              "density": b.get("density", 1.24), "diameter": b.get("diameter", 1.75),
@@ -121,6 +145,8 @@ def app(store: dict[str, Any] | None = None) -> Starlette:
         fid = b.get("filament_id")
         if fid not in store["filaments"]:
             return _err(f"No filament with ID {fid} found", 404)
+        if (bad := _check_extra(store, "spool", b.get("extra"))):
+            return bad
         s = {"id": alloc("spool"), "registered": _now(), "first_used": b.get("first_used"),
              "last_used": None, "filament_id": fid, "location": b.get("location"),
              "comment": b.get("comment"), "archived": b.get("archived", False),
@@ -135,6 +161,8 @@ def app(store: dict[str, Any] | None = None) -> Starlette:
             return _err("Spool not found", 404)
         if request.method == "PATCH":
             b = await request.json()
+            if (bad := _check_extra(store, "spool", b.get("extra"))):
+                return bad
             if "filament_id" in b:
                 if b["filament_id"] not in store["filaments"]:
                     return _err("No such filament", 404)
