@@ -274,9 +274,67 @@ def test_light_also_drives_second_chamber_light_when_reported(manager, clients):
     c.deliver({"print": {"lights_report": [{"node": "chamber_light", "mode": "off"},
                                            {"node": "chamber_light2", "mode": "off"}]}})
     c.responder = lambda t, b: ({"system": {**b["system"], "result": "success"}} if "system" in b else None)
-    manager.command("S1", "light_off")
+    assert manager.command("S1", "light_off")["ok"] is True
     nodes = [b["system"]["led_node"] for t, b in c.published if "system" in b]
     assert nodes == ["chamber_light", "chamber_light2"]
+
+
+def _two_lights(c):
+    c.deliver({"print": {"lights_report": [{"node": "chamber_light", "mode": "off"},
+                                           {"node": "chamber_light2", "mode": "off"}]}})
+
+
+def test_light_fails_if_second_node_fails(manager, clients):
+    add()
+    manager.sync()
+    c = clients[0]
+    c.connected(0)
+    _two_lights(c)
+
+    def responder(t, b):
+        s = b.get("system")
+        if s:
+            ok = s["led_node"] == "chamber_light"
+            return {"system": {**s, "result": "success" if ok else "fail", "reason": "" if ok else "busy"}}
+    c.responder = responder
+    got = manager.command("S1", "light_on")
+    assert got["ok"] is False and got["reply"]["led_node"] == "chamber_light2"
+    assert manager.state("S1") == "connected"
+
+
+def test_light_second_node_refused_needs_developer_mode(manager, clients):
+    add()
+    manager.sync()
+    c = clients[0]
+    c.connected(0)
+    _two_lights(c)
+
+    def responder(t, b):
+        s = b.get("system")
+        if s:
+            if s["led_node"] == "chamber_light":
+                return {"system": {**s, "result": "success"}}
+            return {"system": {**s, "result": "failed", "reason": "", "err_code": 84033543}}
+    c.responder = responder
+    assert manager.command("S1", "light_on")["ok"] is False
+    assert manager.state("S1") == "needs_developer_mode"
+
+
+def test_developer_mode_detected_by_err_code_alone(manager, clients):
+    add()
+    manager.sync()
+    c = clients[0]
+    c.connected(0)
+    c.responder = lambda t, b: ({"print": {"sequence_id": b["print"]["sequence_id"], "result": "fail",
+                                           "reason": "", "err_code": 84033543}} if "print" in b else None)
+    assert manager.command("S1", "pause")["ok"] is False
+    assert manager.state("S1") == "needs_developer_mode"
+
+
+def test_keepalive_is_ten_seconds(manager, clients):
+    add()
+    manager.sync()
+    assert clients[0].keepalive == 10
 
 
 def test_failed_reply_with_authorization_reason_needs_developer_mode(manager, clients):
