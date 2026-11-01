@@ -1,0 +1,26 @@
+{
+  "questions": ["Is the spool sealed? A tag sticker is not visible, so I assumed a bare spool."],
+  "items": [
+    {
+      "photos": [0, 1],
+      "existing_filament_id": 1,
+      "vendor": "Sunlu",
+      "name": "PETG Grey",
+      "material": "PETG",
+      "color_hex": "#8a8d8f",
+      "net": 1000,
+      "tare": 213,
+      "density": 1.27,
+      "count": 1,
+      "nozzle": 245,
+      "bed": 70,
+      "nozzle_range": "230-260",
+      "bed_range": "60-80",
+      "lot": null,
+      "note": "SKU 12345; printed nozzle 230-260 C, bed 60-80 C.",
+      "estimates": ["color_hex"],
+      "sealed": true,
+      "sealed_reason": "in vacuum bag"
+    }
+  ]
+}
