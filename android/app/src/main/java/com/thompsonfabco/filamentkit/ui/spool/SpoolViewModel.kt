@@ -132,6 +132,13 @@ class SpoolViewModel(private val backend: SpoolBackend) : ViewModel() {
         }
     }
 
+    /** Opens the card for a spool found by search (no tag involved). */
+    fun open(spool: JsonObject) {
+        job?.cancel()
+        tag = null
+        _state.value = card(spool.toSpoolSummary())
+    }
+
     fun dismiss() {
         job?.cancel()
         _state.value = SpoolUiState.Idle
