@@ -252,6 +252,46 @@ def test_read_error_502_then_retry(sm):
     assert len(json.loads((config.paths().state / "reads.json").read_text())) == 2  # not_found took no read
 
 
+def test_retry_expired_read_costs_no_cap(sm, tmp_path):
+    import os
+    import time
+    old = tmp_path / "state" / "failed" / "oldread"
+    old.mkdir(parents=True)
+    (old / "photo0.jpg").write_bytes(JPEG)
+    t = time.time() - 25 * 3600
+    os.utime(old, (t, t))
+    fake = FakeClaude(READ)
+    r = client(sm, fake).post("/api/intake/retry/oldread", headers=auth(token()))
+    assert r.status_code == 404 and r.json()["error"] == "not_found"
+    assert fake.calls == [] and not (tmp_path / "state" / "reads.json").exists()
+
+
+def test_read_oversized_hint_400(sm, caplog):
+    fake = FakeClaude(READ)
+    r = read(client(sm, fake), token(), [("a.jpg", JPEG)], hint="x" * (1024 * 1024 + 10))
+    assert r.status_code == 400 and r.json()["error"] == "bad_request" and r.json()["message"]
+    assert fake.calls == [] and "Traceback" not in caplog.text and "internal error" not in caplog.text
+
+
+def test_add_failed_502_partial(sm, monkeypatch):
+    from filament_kit.spoolman import SpoolmanError
+    real_post, spools = sm.post, []
+
+    def post(path, body):
+        if path == "spool":
+            spools.append(1)
+            if len(spools) == 2:
+                raise SpoolmanError("spoolman POST spool -> 500: boom", status=500)
+        return real_post(path, body)
+    monkeypatch.setattr(sm, "post", post)
+    it = {"vendor": "SUNLU", "name": "PETG Grey", "material": "PETG", "net": 1000, "tare": 213, "density": 1.27,
+          "count": 2}
+    r = client(sm).post("/api/intake/add", headers=auth(token()), json={"items": [it], "dry_run": False})
+    assert r.status_code == 502
+    body = r.json()
+    assert body["error"] == "spoolman_error" and body["partial_spool_ids"] == [1]
+
+
 def test_apk(sm, tmp_path):
     c = client(sm)
     r = c.get("/app.apk")
