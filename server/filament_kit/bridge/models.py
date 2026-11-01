@@ -8,6 +8,9 @@ X1/X1E/H2/X2/P2S, a JPEG stream on TCP 6000 for P1/A1/A2L.
 """
 from __future__ import annotations
 
+HLS = "hls"      # RTSPS stream that the relay turns into HLS
+MJPEG = "mjpeg"  # JPEG frames over TLS port 6000
+
 # code (upper case) -> (display name, camera kind)
 _MODELS: dict[str, tuple[str, str]] = {
     "BL-P001": ("X1 Carbon", "hls"),
@@ -36,8 +39,9 @@ for _code, (_name, _kind) in _MODELS.items():
 _BY_NAME.update({"X1C": "hls", "X1CARBON": "hls", "A1MINI": "mjpeg", "H2DPRO": "hls"})
 
 
-def camera_kind(model: str) -> str | None:
-    """"hls" (RTSPS camera, relayed as HLS), "mjpeg" (port-6000 JPEG stream) or None (unknown model)."""
+def camera_kind(model: str | None) -> str | None:
+    """"hls" (RTSPS camera, relayed as HLS), "mjpeg" (port-6000 JPEG stream) or None (unknown model; the app
+    then offers no camera)."""
     m = (model or "").strip().upper()
     if m in _MODELS:
         return _MODELS[m][1]

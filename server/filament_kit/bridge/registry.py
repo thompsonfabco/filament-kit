@@ -129,3 +129,23 @@ def detected(serial: str, ip: str, model: str = "", name: str = "") -> Printer:
         printers[serial] = p
         _write(printers)
         return p
+
+
+class AlreadyConfigured(RegistryError):
+    pass
+
+
+def set_code(serial: str, code: str, name: str | None = None, replace: bool = False) -> Printer:
+    """Atomically configure `serial` with an Access Code (creating the entry if needed). A printer that is
+    already configured raises AlreadyConfigured unless `replace`; the name only changes when one is given."""
+    with _locked():
+        printers = _read()
+        p = printers.get(serial) or Printer(serial=serial)
+        if p.configured and not replace:
+            raise AlreadyConfigured(serial)
+        p.access_code = code
+        p.configured = True
+        p.name = (name or "").strip() or p.name or serial
+        printers[serial] = p
+        _write(printers)
+        return p

@@ -17,8 +17,10 @@ from starlette.responses import FileResponse, JSONResponse
 from starlette.routing import Route
 
 from . import API_VERSION, __version__, config, intake, inventory, pairing, tags
-from .bridge import camera
 from .intake import CapReached, PhotoError, ReadCap, ReadError
+from .bridge import camera, registry
+from .bridge.connection import ACTIONS, Manager, NoReply, PrinterOffline, UnknownPrinter
+from .bridge.models import camera_kind
 from .inventory import AddFailed, TagConflict
 from .spoolman import Spoolman, SpoolmanError
 
@@ -127,10 +129,112 @@ def _apk_version() -> str | None:
         return None
 
 
-def create_app(sm: Spoolman | None = None, claude=None, camera_hub=None) -> Starlette:
+# ---- printer routes --------------------------------------------------------------------------------------
+FIRST_STATE_WAIT = 8.0  # seconds POST /api/printers waits for the first connection result
+
+
+def _printer_view(p: registry.Printer, printers) -> dict:
+    """The public shape of a printer. Built field by field so the Access Code can never leak."""
+    state = "not_configured"
+    if p.configured:
+        state = printers.state(p.serial)
+        if state == "not_configured":  # configured, but the manager has no connection for it (yet)
+            state = "offline"
+    return {"id": p.serial, "name": p.name or p.serial, "model": p.model, "serial": p.serial, "ip": p.ip,
+            "configured": p.configured, "state": state, "camera": {"kind": camera_kind(p.model)},
+            "summary": printers.summary(p.serial)}
+
+
+def _printer_routes(printers) -> list[Route]:
+    def known(serial: str) -> registry.Printer:
+        p = registry.load().get(serial)
+        if p is None:
+            raise HTTPException(404, "no such printer")
+        return p
+
+    @_authed
+    async def printer_list(request: Request):
+        def build() -> list[dict]:
+            return [_printer_view(p, printers) for p in registry.load().values()]
+        return JSONResponse({"printers": await run_in_threadpool(build)})
+
+    @_authed
+    async def printer_add(request: Request):
+        body = await _json(request)
+        serial, code = body.get("serial"), body.get("access_code")
+        if not isinstance(serial, str) or not serial.strip():
+            raise BadRequest("serial is required")
+        if not isinstance(code, str) or not code.strip():
+            raise BadRequest("access_code is required")
+        name = _opt(body, "name", str)
+        serial = serial.strip()
+
+        def run() -> dict | None:
+            old = registry.load().get(serial)
+            # a connected printer keeps its code; a wrong-code or offline one is re-keyed with the new one
+            replace = old is not None and old.configured and printers.state(serial) != "connected"
+            try:
+                p = registry.set_code(serial, code.strip(), name, replace=replace)
+            except registry.AlreadyConfigured:
+                return None
+            printers.sync()
+            printers.wait_settled(serial, FIRST_STATE_WAIT)
+            return _printer_view(p, printers)
+        view = await run_in_threadpool(run)
+        if view is None:
+            return _err(409, "exists", "this printer is already set up")
+        return JSONResponse({"printer": view})
+
+    @_authed
+    async def printer_get(request: Request):
+        serial = request.path_params["id"]
+
+        def build() -> dict:
+            p = known(serial)
+            return {"printer": _printer_view(p, printers), "status": printers.status(serial)}
+        return JSONResponse(await run_in_threadpool(build))
+
+    @_authed
+    async def printer_command(request: Request):
+        serial = request.path_params["id"]
+        action = (await _json(request)).get("action")
+        if action not in ACTIONS:
+            raise BadRequest("action must be one of: " + ", ".join(ACTIONS))
+        device = request.state.device
+
+        def run() -> dict:
+            result = "ok"
+            try:
+                return printers.command(serial, action)
+            except Exception as e:
+                result = type(e).__name__
+                raise
+            finally:
+                log.info("printer command device_id=%s serial=%s action=%s result=%s", device, serial, action, result)
+        try:
+            reply = await run_in_threadpool(run)
+        except PrinterOffline:
+            return _err(409, "printer_offline", "the printer is offline; check that it is on and on the network")
+        except NoReply:
+            return _err(504, "no_reply", "the printer did not answer in time")
+        except UnknownPrinter:
+            return _err(404, "not_found", "no such printer")
+        return JSONResponse({"ok": True, "reply": reply})
+
+    return [
+        Route("/api/printers", printer_list),
+        Route("/api/printers", printer_add, methods=["POST"]),
+        Route("/api/printers/{id}", printer_get),
+        Route("/api/printers/{id}/command", printer_command, methods=["POST"]),
+    ]
+# ---- end printer routes ----------------------------------------------------------------------------------
+
+
+def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hub=None) -> Starlette:
     cfg = config.load()
     sm = sm if sm is not None else Spoolman(cfg["spoolman_url"])
-    camera_hub = camera_hub if camera_hub is not None else camera.Hub()
+    printers = printers if printers is not None else Manager(spoolman=sm)  # started by __main__, not here
+    camera_hub = camera_hub if camera_hub is not None else camera.Hub()  # stopped by __main__'s lifespan
     cap = ReadCap(config.paths().state / "reads.json", cfg["reads_per_day"])
 
     def rules() -> dict:  # sync: call it from inside the threadpool
@@ -263,6 +367,7 @@ def create_app(sm: Spoolman | None = None, claude=None, camera_hub=None) -> Star
             Route("/api/spools/{id:int}", spool_update, methods=["PATCH"]),
             Route("/api/locations", locations),
             Route("/app.apk", apk),
+            *_printer_routes(printers),
             *camera.routes(camera_hub, _authed),
         ],
         exception_handlers={HTTPException: http_error},
