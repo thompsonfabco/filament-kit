@@ -30,28 +30,17 @@ DASH = '–'          # Spoolman locations are "<printer name> – AMS <label>" 
 def merge(full: dict, delta: dict) -> dict:
     """Deep-merge a report delta onto the last merged report; returns a new dict, inputs untouched.
 
-    Dicts merge key by key (untouched keys stay). A list in the delta replaces the old list, element-wise as Bambu
-    sends them: element i of the result is the delta's element i, deep-merged onto the old element i when both are
-    dicts (and, when both carry an `id`, only if the ids match). So a partial tray update keeps the tray's other
-    fields, and a shorter list (e.g. HMS alerts cleared) shrinks."""
+    Dicts merge key by key (untouched keys stay). A list in the delta replaces the old list outright, as in the
+    owner's remote.py: Bambu deltas carry complete `ams.ams` (with full tray objects) and `hms` lists (proven on
+    the H2D), so an emptied slot (`{"id": "1"}`) really is empty and cleared alerts disappear."""
     out = dict(full)
     for k, v in delta.items():
         old = out.get(k)
         if isinstance(v, dict) and isinstance(old, dict):
             out[k] = merge(old, v)
-        elif isinstance(v, list) and isinstance(old, list):
-            out[k] = [_merge_item(old[i] if i < len(old) else None, item) for i, item in enumerate(v)]
         else:
             out[k] = v
     return out
-
-
-def _merge_item(old: Any, new: Any) -> Any:
-    if isinstance(old, dict) and isinstance(new, dict):
-        if 'id' in old and 'id' in new and str(old['id']) != str(new['id']):
-            return new
-        return merge(old, new)
-    return new
 
 
 def packed(v: Any) -> tuple[int | None, int | None]:

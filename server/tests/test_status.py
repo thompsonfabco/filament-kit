@@ -17,26 +17,39 @@ def spool(sid, location, vendor="Acme", name="Matte Red", material="PLA"):
             "filament": {"name": name, "material": material, "color_hex": "cc2222", "vendor": {"name": vendor}}}
 
 
-def test_merge_keeps_untouched_keys_and_replaces_list_elements():
+def test_merge_keeps_untouched_keys_and_replaces_lists():
     full, delta = load("h2d_pushall.json"), load("h2d_delta.json")
     merged = status.merge(full, delta)
     assert merged["mc_percent"] == 43 and merged["layer_num"] == 121
     assert merged["gcode_state"] == "RUNNING"                     # untouched key kept
     assert merged["device"] == full["device"]                     # untouched subtree kept
-    tray0 = merged["ams"]["ams"][0]["tray"][0]
-    assert tray0["remain"] == 89                                  # element updated in place
-    assert tray0["tray_type"] == "PLA" and tray0["tray_color"] == "FF0000FF"   # its other fields kept
-    assert merged["ams"]["ams"][1]["tray"][0]["tray_type"] == "PA-CF"
-    assert merged["ams"]["tray_now"] == "1"
-    assert merged["hms"] == []                                    # shorter list shrinks (alert cleared)
+    assert merged["ams"]["tray_now"] == "1"                       # untouched key inside a merged dict
+    assert merged["ams"]["ams"] == delta["ams"]["ams"]            # list replaced as sent
+    assert merged["ams"]["ams"][0]["tray"][0]["remain"] == 89
     assert full["mc_percent"] == 42 and full["hms"]               # inputs untouched
 
 
-def test_merge_scalar_list_elements_replaced_and_mismatched_ids_not_mixed():
+def test_merge_lists_replace_and_scalars_override():
     assert status.merge({"a": [1, 2, 3]}, {"a": [9]}) == {"a": [9]}
-    got = status.merge({"u": [{"id": "0", "x": 1}]}, {"u": [{"id": "128", "y": 2}]})
-    assert got == {"u": [{"id": "128", "y": 2}]}
+    assert status.merge({"u": [{"id": "0", "x": 1}]}, {"u": [{"id": "0", "y": 2}]}) == {"u": [{"id": "0", "y": 2}]}
     assert status.merge({"a": {"b": 1}}, {"a": 5}) == {"a": 5}
+
+
+def test_delta_empties_slot():
+    full = load("h2d_pushall.json")
+    units = json.loads(json.dumps(full["ams"]["ams"]))
+    units[0]["tray"][1] = {"id": "1"}                             # spool A2 pulled out
+    merged = status.merge(full, {"ams": {"ams": units}})
+    a2 = status.summarize(merged, [], now=NOW)["ams"][0]["slots"][1]
+    assert (a2["label"], a2["type"], a2["color_hex"]) == ("A2", "", "")
+    assert "tray_type" not in merged["ams"]["ams"][0]["tray"][1]
+
+
+def test_hms_cleared_by_empty_list():
+    full = load("h2d_pushall.json")
+    assert status.summarize(full, [], now=NOW)["hms"]
+    merged = status.merge(full, {"hms": []})
+    assert merged["hms"] == [] and status.summarize(merged, [], now=NOW)["hms"] == []
 
 
 def test_summarize_stage_progress_eta_temps():

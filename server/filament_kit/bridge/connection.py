@@ -25,7 +25,7 @@ log = logging.getLogger(__name__)
 
 PORT = 8883
 USER = 'bblp'
-KEEPALIVE = 20                  # seconds; a dead printer is noticed within about one keepalive
+KEEPALIVE = 10                  # seconds; a dead printer is noticed within ~10-20 s
 BACKOFF = (2, 60)               # reconnect delay, doubling from 2 s up to 60 s
 COMMAND_TIMEOUT = 10.0          # seconds to wait for the printer's reply to a command
 PUSHALL_AFTER_COMMAND = 1.5     # seconds after a command, ask for a full report
@@ -33,6 +33,7 @@ QUIET_PUSHALL = 90              # a connected printer silent this long gets a pu
 SPOOL_TTL = 30                  # seconds the Spoolman spool list is cached
 AUTH_REFUSED = {4, 5, 134, 135}  # CONNACK bad user/password, not authorized (MQTT 3.1.1 and paho v5 codes)
 DEVELOPER_MODE_REASON = re.compile(r'verify|auth|permission|denied|developer', re.I)
+DEVELOPER_MODE_ERR_CODES = {84033543}   # Bambu: "mqtt message verify failed" (LAN-only without Developer Mode)
 ACTIONS = ('pause', 'resume', 'stop', 'light_on', 'light_off')
 
 
@@ -65,6 +66,18 @@ def _rc_ok(rc: Any) -> bool:
         return int(getattr(rc, 'value', rc)) == 0
     except (TypeError, ValueError):
         return False
+
+
+def _developer_mode_refusal(reply: dict) -> bool:
+    """A command reply refused because the printer wants Developer Mode (LAN-only mode blocks control)."""
+    if not str(reply.get('result', '')).lower().startswith('fail'):
+        return False
+    try:
+        if int(reply.get('err_code')) in DEVELOPER_MODE_ERR_CODES:
+            return True
+    except (TypeError, ValueError):
+        pass
+    return bool(DEVELOPER_MODE_REASON.search(str(reply.get('reason', ''))))
 
 
 def _tls_context() -> ssl.SSLContext:
@@ -240,20 +253,24 @@ class PrinterConnection:
         t = threading.Timer(PUSHALL_AFTER_COMMAND, self.request_pushall)
         t.daemon = True
         t.start()
-        reply = waiters[0][1].reply
-        if reply is None:
+        replies = [w.reply for _, w in waiters]      # ok only if every node's reply succeeded
+        reply = replies[0]
+        if any(r is None for r in replies):
             if self._state != 'connected':
                 raise PrinterOffline(self.serial)
             raise NoReply(self.serial)
-        result = str(reply.get('result', '')).lower()
-        ok = result == 'success'
-        if ok:
-            self._developer_mode_needed = False
-        elif result.startswith('fail') and DEVELOPER_MODE_REASON.search(str(reply.get('reason', ''))):
+        ok = all(str(r.get('result', '')).lower() == 'success' for r in replies)
+        refused = [r for r in replies if _developer_mode_refusal(r)]
+        if refused:
             if not self._developer_mode_needed:
                 log.warning("printer %s: command refused (%s); Developer Mode needed",
-                            self.serial, reply.get('reason'))
+                            self.serial, refused[0].get('reason'))
             self._developer_mode_needed = True
+            reply = refused[0]
+        elif ok:
+            self._developer_mode_needed = False
+        else:
+            reply = next(r for r in replies if str(r.get('result', '')).lower() != 'success')
         return {'ok': ok, 'reply': reply}
 
 
