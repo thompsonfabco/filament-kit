@@ -15,6 +15,7 @@ line, never logged and never part of a repr.
 from __future__ import annotations
 
 import asyncio
+import functools
 import hashlib
 import logging
 import os
@@ -30,6 +31,8 @@ import threading
 import time
 from pathlib import Path
 from typing import Callable
+
+import anyio
 
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
@@ -51,6 +54,10 @@ RESTART_AFTER = 5.0         # a dead ffmpeg is restarted by a fetch at most this
 MJPEG_MIN_INTERVAL = 0.2    # ≤ 5 fps to the phone
 MAX_FRAME = 8 * 1024 * 1024
 BACKOFF = (1.0, 30.0)
+MAX_RTSP_HEADERS = 64 * 1024
+MAX_RTSP_BODY = 1024 * 1024
+UPSTREAM_TIMEOUT = 20.0     # a printer silent this long drops the relay; ffmpeg exits, the next fetch restarts it
+FFMPEG_IO_TIMEOUT_US = 10_000_000  # ffmpeg RTSP `-timeout` in µs (ffmpeg >= 5; Ubuntu 24.04 ships 6.1)
 SEGMENT = re.compile(r"[A-Za-z0-9_-]{1,64}\.(ts|m3u8)")
 SERIAL = re.compile(r"[A-Za-z0-9_-]{1,64}")
 
@@ -67,6 +74,10 @@ class NotConfigured(CameraError):
     status, code = 409, "not_configured"
 
 
+class Unavailable(CameraError):
+    status, code = 503, "camera_unavailable"
+
+
 def _insecure_ctx() -> ssl.SSLContext:
     """Bambu printers present a self-signed certificate; the code only ever goes to the registry IP."""
     ctx = ssl.create_default_context()
@@ -80,6 +91,8 @@ def _insecure_ctx() -> ssl.SSLContext:
 def _read_rtsp(sock, buf: bytes) -> tuple[bytes, bytes]:
     """Read one RTSP text message (headers + Content-Length body) -> (msg bytes, rest)."""
     while b"\r\n\r\n" not in buf:
+        if len(buf) > MAX_RTSP_HEADERS:
+            raise ConnectionError("RTSP headers too long")
         d = sock.recv(65536)
         if not d:
             raise ConnectionError("closed")
@@ -87,6 +100,8 @@ def _read_rtsp(sock, buf: bytes) -> tuple[bytes, bytes]:
     head, rest = buf.split(b"\r\n\r\n", 1)
     m = re.search(rb"(?im)^content-length:\s*(\d+)", head)
     n = int(m.group(1)) if m else 0
+    if len(head) > MAX_RTSP_HEADERS or n > MAX_RTSP_BODY:
+        raise ConnectionError("RTSP message too large")
     while len(rest) < n:
         d = sock.recv(65536)
         if not d:
@@ -166,7 +181,7 @@ class RtspRelay:
                 raise ConnectionError("no digest challenge from the camera (is LAN mode liveview on?)")
             realm, nonce = m.group(1).decode(), m.group(2).decode()
             ha1 = _md5(f"{USER}:{realm}:{self._code}")
-            up.settimeout(None)
+            up.settimeout(UPSTREAM_TIMEOUT)
             cli.settimeout(None)
             local = f"rtsp://127.0.0.1:{self.local_port}".encode()
 
@@ -279,7 +294,7 @@ class HlsSource:
 
     def command(self, relay_port: int) -> list[str]:
         return [*self._ffmpeg, "-nostdin", "-loglevel", "error", "-rtsp_transport", "tcp",
-                "-i", f"rtsp://127.0.0.1:{relay_port}{CAM_PATH}", "-an", "-c", "copy",
+                "-timeout", str(FFMPEG_IO_TIMEOUT_US), "-i", f"rtsp://127.0.0.1:{relay_port}{CAM_PATH}", "-an", "-c", "copy",
                 "-f", "hls", "-hls_time", "1", "-hls_list_size", "4", "-hls_flags", "delete_segments",
                 "-hls_segment_filename", str(self.dir / "seg%05d.ts"), str(self.dir / "index.m3u8")]
 
@@ -313,9 +328,9 @@ class HlsSource:
 
 def auth_packet(access_code: str) -> bytes:
     """u32 LE 0x40, 0x3000, 0, 0; then user and Access Code, each NUL-padded to 32 bytes."""
+    if not access_code.isascii() or len(access_code) > 32:
+        raise ValueError("the Access Code must be at most 32 ASCII characters")
     user, code = USER.encode("ascii"), access_code.encode("ascii")
-    if len(code) > 32:
-        raise ValueError("Access Code too long")
     return struct.pack("<4I", 0x40, 0x3000, 0, 0) + user.ljust(32, b"\0") + code.ljust(32, b"\0")
 
 
@@ -391,7 +406,11 @@ class MjpegSource:
                     with self._lock:
                         self._frame, self.seq = img, self.seq + 1
                     delay = BACKOFF[0]
-            except (OSError, ConnectionError, ValueError) as e:
+            except ValueError as e:  # an unusable Access Code: log the type only, retrying cannot help
+                log.warning("camera %s: %s; not retrying", self.serial, type(e).__name__)
+                self._stop.set()
+                break
+            except (OSError, ConnectionError) as e:
                 if not self._stop.is_set():
                     log.info("camera %s: %s; retry in %.0f s", self.serial, e or type(e).__name__, delay)
             finally:
@@ -411,7 +430,11 @@ def _runtime_root() -> Path:
 
 class Hub:
     """One camera source per printer, reference-counted: the first viewer starts it, the last `release()`
-    stops it `idle_stop` seconds later unless a new viewer arrives first."""
+    stops it `idle_stop` seconds later unless a new viewer arrives first.
+
+    Locking: `_lock` guards the dictionaries only and is never held while a source starts or stops. Starting
+    and stopping one printer's source holds that printer's own lock, so a printer that is slow to stop delays
+    only its own next viewer (who waits for the stop to finish), never another printer's."""
 
     def __init__(self, lookup: Callable[[str], registry.Printer | None] | None = None,
                  runtime_dir: Path | None = None, idle_stop: float = IDLE_STOP, hls_window: float = HLS_WINDOW,
@@ -422,7 +445,9 @@ class Hub:
         self.idle_stop, self.hls_window = idle_stop, hls_window
         self._sources = {"hls": HlsSource, "mjpeg": MjpegSource, **(sources or {})}
         self.ffmpeg, self.rtsp_port, self.jpeg_port = tuple(ffmpeg), rtsp_port, jpeg_port
-        self._lock = threading.RLock()
+        self.stopping = threading.Event()   # set when the server is shutting down: streams end, no new ones
+        self._lock = threading.Lock()
+        self._serial_locks: dict[str, threading.RLock] = {}
         self._running: dict[str, object] = {}
         self._refs: dict[str, int] = {}
         self._stop_timers: dict[str, threading.Timer] = {}
@@ -435,7 +460,9 @@ class Hub:
         return self.root / "cam" / serial
 
     def check(self, serial: str, kind: str | None = None) -> tuple[registry.Printer, str]:
-        """The printer and its camera kind; raises NoCamera / NotConfigured."""
+        """The printer and its camera kind; raises NoCamera / NotConfigured / Unavailable."""
+        if self.stopping.is_set():
+            raise Unavailable("the server is shutting down")
         if not SERIAL.fullmatch(serial or ""):
             raise NoCamera("no such printer")
         p = self._lookup(serial)
@@ -450,22 +477,37 @@ class Hub:
         with self._lock:
             return serial in self._running
 
-    def acquire(self, serial: str, kind: str | None = None):
-        """Count a viewer in; start the source if needed. Returns the source."""
-        p, k = self.check(serial, kind)
+    def _serial_lock(self, serial: str) -> threading.RLock:
         with self._lock:
-            t = self._stop_timers.pop(serial, None)
-            if t:
-                t.cancel()
-            src = self._running.get(serial)
+            return self._serial_locks.setdefault(serial, threading.RLock())
+
+    def acquire(self, serial: str, kind: str | None = None, checked: tuple | None = None):
+        """Count a viewer in; start the source if needed. Returns the source. `checked` = a `check()` result
+        the caller already has (saves a registry read)."""
+        p, k = checked or self.check(serial, kind)
+        with self._serial_lock(serial):
+            with self._lock:
+                t = self._stop_timers.pop(serial, None)
+                if t:
+                    t.cancel()
+                src = self._running.get(serial)
+                self._refs[serial] = self._refs.get(serial, 0) + 1
             if src is None:
-                src = self._sources[k](p, self)
-                src.start()
-                self._running[serial] = src
-            self._refs[serial] = self._refs.get(serial, 0) + 1
+                try:
+                    src = self._sources[k](p, self)
+                    src.start()
+                except BaseException:
+                    with self._lock:
+                        self._refs[serial] -= 1
+                        if not self._refs[serial]:
+                            del self._refs[serial]
+                    raise
+                with self._lock:
+                    self._running[serial] = src
             return src
 
     def release(self, serial: str) -> None:
+        """Count a viewer out. Never waits for a source to stop."""
         with self._lock:
             n = self._refs.get(serial, 0) - 1
             if n > 0:
@@ -479,30 +521,36 @@ class Hub:
                 t.start()
 
     def _idle(self, serial: str) -> None:
-        with self._lock:
-            if self._stop_timers.pop(serial, None) is None or self._refs.get(serial):
-                return
-            src = self._running.pop(serial, None)
-            if src is not None:  # under the lock: a new viewer's source must not start in a dir being removed
-                src.stop()
+        # the printer's own lock: its next viewer waits until the old source has stopped and cleaned its dir
+        with self._serial_lock(serial):
+            with self._lock:
+                if self._stop_timers.pop(serial, None) is None or self._refs.get(serial):
+                    return
+                src = self._running.pop(serial, None)
+            if src is not None:
+                _stop(src)
 
     def touch_hls(self, serial: str):
         """An HLS fetch: holds one viewer reference until `hls_window` passes without a fetch. A source whose
-        ffmpeg died is restarted (at most every RESTART_AFTER seconds)."""
-        self.check(serial, "hls")
-        with self._lock:
-            self._hls_last[serial] = time.monotonic()
-            if serial not in self._hls_timers:
-                src = self.acquire(serial, "hls")
-                self._arm_hls(serial, self.hls_window)
-            else:
-                src = self._running[serial]
+        ffmpeg died is restarted (at most every RESTART_AFTER seconds). One registry read per fetch."""
+        checked = self.check(serial, "hls")
+        with self._serial_lock(serial):
+            with self._lock:
+                self._hls_last[serial] = time.monotonic()
+                src = self._running.get(serial) if serial in self._hls_timers else None
+            if src is None:
+                src = self.acquire(serial, "hls", checked)
+                with self._lock:
+                    if serial not in self._hls_timers:
+                        self._arm_hls(serial, self.hls_window)
+                    else:  # lease held but its source was gone: keep one reference for the lease
+                        self._refs[serial] -= 1
             if not src.alive() and time.monotonic() - getattr(src, "started_at", 0) > RESTART_AFTER:
                 src.stop()
                 src.start()
             return src
 
-    def _arm_hls(self, serial: str, delay: float) -> None:
+    def _arm_hls(self, serial: str, delay: float) -> None:  # caller holds _lock
         t = threading.Timer(delay, self._hls_check, args=(serial,))
         t.daemon = True
         self._hls_timers[serial] = t
@@ -520,8 +568,13 @@ class Hub:
             self._hls_last.pop(serial, None)
         self.release(serial)
 
+    def begin_stop(self) -> None:
+        """The server is going down: open MJPEG streams end at their next check, new viewers are refused."""
+        self.stopping.set()
+
     def shutdown(self) -> None:
         """Stop every source now (no orphan ffmpeg)."""
+        self.stopping.set()
         with self._lock:
             for t in [*self._stop_timers.values(), *self._hls_timers.values()]:
                 t.cancel()
@@ -529,12 +582,17 @@ class Hub:
             self._hls_timers.clear()
             self._hls_last.clear()
             self._refs.clear()
-            sources, self._running = list(self._running.values()), {}
-            for src in sources:
-                try:
-                    src.stop()
-                except Exception:  # noqa: BLE001 - stop the rest regardless
-                    log.exception("camera: stopping a source failed")
+            sources, self._running = list(self._running.items()), {}
+        for serial, src in sources:
+            with self._serial_lock(serial):
+                _stop(src)
+
+
+def _stop(src) -> None:
+    try:
+        src.stop()
+    except Exception:  # noqa: BLE001 - a failed stop must not break the hub
+        log.exception("camera: stopping a source failed")
 
 
 # ---------------------------------------------------------------- routes
@@ -543,6 +601,20 @@ def _err(e: CameraError | int, code: str = "", message: str = "") -> JSONRespons
     if isinstance(e, CameraError):
         return JSONResponse({"error": e.code, "message": str(e)}, status_code=e.status)
     return JSONResponse({"error": code, "message": message}, status_code=e)
+
+
+def _guard(fn):
+    """CameraError -> its JSON error; anything unexpected (ffmpeg missing, ...) -> 500 `internal`."""
+    @functools.wraps(fn)
+    async def wrapper(request: Request):
+        try:
+            return await fn(request)
+        except CameraError as e:
+            return _err(e)
+        except Exception as e:  # noqa: BLE001
+            log.error("camera: internal error (%s)", type(e).__name__, exc_info=e)
+            return _err(500, "internal", "internal error")
+    return wrapper
 
 
 _TYPES = {"m3u8": "application/vnd.apple.mpegurl", "ts": "video/mp2t"}
@@ -556,15 +628,12 @@ def routes(hub: Hub, auth_wrapper: Callable) -> list[Route]:
         serial, name = request.path_params["id"], request.path_params["name"]
         if not SEGMENT.fullmatch(name):
             return _err(400, "bad_request", "only index.m3u8 and .ts segments are served here")
-        try:
-            src = await run_in_threadpool(hub.touch_hls, serial)
-        except CameraError as e:
-            return _err(e)
+        src = await run_in_threadpool(hub.touch_hls, serial)
         path = src.dir / name
         if name.endswith(".m3u8"):
             end = time.monotonic() + HLS_START_WAIT
             while not await run_in_threadpool(path.exists):
-                if time.monotonic() >= end:
+                if time.monotonic() >= end or hub.stopping.is_set():
                     return _err(503, "camera_unavailable",
                                 "the camera stream did not start; check that the printer is on and "
                                 "LAN mode liveview is enabled")
@@ -577,34 +646,37 @@ def routes(hub: Hub, auth_wrapper: Callable) -> list[Route]:
 
     async def mjpeg(request: Request):
         serial = request.path_params["id"]
-        try:
-            await run_in_threadpool(hub.check, serial, "mjpeg")
-        except CameraError as e:
-            return _err(e)
-
-        async def frames():
-            src = await run_in_threadpool(hub.acquire, serial, "mjpeg")
-            try:
-                seq, last = 0, 0.0
-                while src.alive():
-                    s, img = src.frame()
-                    if s == seq or img is None:
-                        await asyncio.sleep(0.05)
-                        continue
-                    wait = MJPEG_MIN_INTERVAL - (time.monotonic() - last)
-                    if wait > 0:
-                        await asyncio.sleep(wait)
-                        s, img = src.frame()  # the newest frame after the wait
-                    seq, last = s, time.monotonic()
-                    yield (b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\n\r\n" % len(img)
-                           + img + b"\r\n")
-            finally:
-                hub.release(serial)
-
-        return StreamingResponse(frames(), media_type="multipart/x-mixed-replace; boundary=frame",
+        await run_in_threadpool(hub.check, serial, "mjpeg")
+        return StreamingResponse(_frames(hub, serial), media_type="multipart/x-mixed-replace; boundary=frame",
                                  headers={"Cache-Control": "no-cache"})
 
     return [
-        Route("/api/printers/{id}/camera/{name:path}", auth_wrapper(hls)),
-        Route("/api/printers/{id}/camera.mjpeg", auth_wrapper(mjpeg)),
+        Route("/api/printers/{id}/camera/{name:path}", auth_wrapper(_guard(hls))),
+        Route("/api/printers/{id}/camera.mjpeg", auth_wrapper(_guard(mjpeg))),
     ]
+
+
+async def _frames(hub: Hub, serial: str):
+    """The multipart body. The viewer is counted in on the first iteration (a body that is never iterated
+    holds nothing) and counted out when the client goes, the source dies or the server is stopping."""
+    try:
+        src = await run_in_threadpool(hub.acquire, serial, "mjpeg")
+    except Exception as e:  # noqa: BLE001 - the 200 is already sent; end the stream
+        log.info("camera %s: cannot start the stream (%s)", serial, type(e).__name__)
+        return
+    try:
+        seq, last = 0, 0.0
+        while src.alive() and not hub.stopping.is_set():
+            s, img = src.frame()
+            if s == seq or img is None:
+                await asyncio.sleep(0.05)
+                continue
+            wait = MJPEG_MIN_INTERVAL - (time.monotonic() - last)
+            if wait > 0:
+                await asyncio.sleep(wait)
+                s, img = src.frame()  # the newest frame after the wait
+            seq, last = s, time.monotonic()
+            yield b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\n\r\n" % len(img) + img + b"\r\n"
+    finally:
+        with anyio.CancelScope(shield=True):  # also runs when the client's disconnect cancels the body
+            await run_in_threadpool(hub.release, serial)

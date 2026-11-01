@@ -61,8 +61,9 @@ def test_main_installs_lifespan_hook(tmp_path, monkeypatch):
         (tmp_path / n).mkdir()
         monkeypatch.setenv(f"FK_{n.upper()}", str(tmp_path / n))
     seen = {}
-    monkeypatch.setattr(m.uvicorn, "run", lambda app, **kw: seen.update(app=app, kw=kw))
+    monkeypatch.setattr(m, "serve", lambda app, hub, **kw: seen.update(app=app, kw=kw))
     m.main()
+    assert seen["kw"]["timeout_graceful_shutdown"] == 5
     ctx = seen["app"].router.lifespan_context
     assert ctx.__qualname__.startswith("printer_lifespan")
 
@@ -162,6 +163,14 @@ def test_main_passes_one_hub_to_app_and_lifespan(tmp_path, monkeypatch):
                         or real_create(*a, **kw))
     monkeypatch.setattr(m, "printer_lifespan", lambda mgr, **kw: seen.update(life_hub=kw.get("camera_hub"))
                         or real_lifespan(mgr, **kw))
-    monkeypatch.setattr(m.uvicorn, "run", lambda app, **kw: None)
+    monkeypatch.setattr(m, "serve", lambda app, hub, **kw: seen.update(serve_hub=hub))
     m.main()
     assert isinstance(seen["app_hub"], camera.Hub) and seen["life_hub"] is seen["app_hub"]
+    assert seen["serve_hub"] is seen["app_hub"]
+
+
+def test_exit_signal_ends_camera_streams_before_uvicorn_drains():
+    hub = camera.Hub(lookup=lambda s: None)
+    server = m._Server(m.uvicorn.Config(lambda scope, receive, send: None), hub.begin_stop)
+    server.handle_exit(15, None)
+    assert hub.stopping.is_set() and server.should_exit
