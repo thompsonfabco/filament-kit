@@ -29,3 +29,8 @@ def test_stored():
     assert tags.stored({"extra": {"nfc_id": ""}}) is None
     assert tags.stored({"extra": {}}) is None
     assert tags.stored({}) is None
+
+
+@pytest.mark.parametrize("raw", ["123", "[1, 2]", "true", "null"])
+def test_stored_non_string_json_is_none(raw):
+    assert tags.stored({"extra": {"nfc_id": raw}}) is None
