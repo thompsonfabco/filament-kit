@@ -17,9 +17,24 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        // Release signing comes from the environment only (tools/make_release.sh sets it up).
+        val ksPath = System.getenv("FK_KEYSTORE")
+        val ksPassword = System.getenv("FK_KEYSTORE_PASSWORD")
+        if (!ksPath.isNullOrBlank() && !ksPassword.isNullOrBlank()) {
+            create("release") {
+                storeFile = file(ksPath)
+                storePassword = ksPassword
+                keyAlias = "filament-kit"
+                keyPassword = ksPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfigs.findByName("release")?.let { signingConfig = it }
         }
     }
     compileOptions {
