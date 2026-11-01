@@ -90,8 +90,9 @@ else
     rm -rf "$new"
     mkdir -p "$new"
     unzip -q "$tmp/spoolman.zip" -d "$new"
-    [ -f "$new/requirements.txt" ] && [ -d "$new/spoolman" ] \
-        || die "spoolman.zip does not look like a Spoolman release"
+    if [ ! -f "$new/requirements.txt" ] || [ ! -d "$new/spoolman" ]; then
+        die "spoolman.zip does not look like a Spoolman release"
+    fi
     python3 -m venv "$new/venv"
     "$new/venv/bin/python" -m pip install -q --upgrade pip
     "$new/venv/bin/python" -m pip install -q -r "$new/requirements.txt"
