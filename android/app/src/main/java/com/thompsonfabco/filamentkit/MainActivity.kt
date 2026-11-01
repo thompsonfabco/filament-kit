@@ -27,7 +27,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -45,6 +44,7 @@ import com.thompsonfabco.filamentkit.session.AppViewModel
 import com.thompsonfabco.filamentkit.session.Connection
 import com.thompsonfabco.filamentkit.session.PairNotice
 import com.thompsonfabco.filamentkit.session.UNPAIRED_MESSAGE
+import com.thompsonfabco.filamentkit.session.isPaired
 import com.thompsonfabco.filamentkit.tags.TagEvents
 import com.thompsonfabco.filamentkit.tags.disableTagReader
 import com.thompsonfabco.filamentkit.tags.enableTagReader
@@ -63,11 +63,7 @@ import com.thompsonfabco.filamentkit.ui.spool.ApiSpoolBackend
 import com.thompsonfabco.filamentkit.ui.spool.SpoolHost
 import com.thompsonfabco.filamentkit.ui.spool.SpoolUiState
 import com.thompsonfabco.filamentkit.ui.spool.SpoolViewModel
-import com.thompsonfabco.filamentkit.update.ApkInstaller
-import com.thompsonfabco.filamentkit.update.UpdateSource
 import com.thompsonfabco.filamentkit.update.UpdateUi
-import com.thompsonfabco.filamentkit.update.Updater
-import java.io.File
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -113,7 +109,6 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
         true -> Routes.HOME
         false -> Routes.PAIR
     }
-    val context = LocalContext.current
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route
@@ -123,26 +118,12 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
     val connection by app.session.connection.collectAsStateWithLifecycle()
     val fp = config?.fingerprint
 
-    // App-wide, one per paired fingerprint (owned by the activity, not by a screen).
-    val spoolVm: SpoolViewModel? = api?.let { a ->
-        viewModel(key = "spool-$fp", factory = viewModelFactory { initializer { SpoolViewModel(ApiSpoolBackend(a)) } })
-    }
-    val updater: Updater? = api?.let { a ->
-        viewModel(key = "updater-$fp", factory = viewModelFactory {
-            initializer {
-                Updater(
-                    source = UpdateSource.of(a),
-                    installer = ApkInstaller(context),
-                    currentVersion = BuildConfig.VERSION_CODE,
-                    apkFile = File(context.cacheDir, "updates/filament-kit.apk"),
-                    onProblem = app.router::report,
-                )
-            }
-        })
-    }
+    // App-wide, one per Api (owned by AppViewModel; replaced when the pinned client changes).
+    val spoolVm by app.spool.current.collectAsStateWithLifecycle()
+    val updater by app.updater.current.collectAsStateWithLifecycle()
     val online = connection is Connection.Online
     LaunchedEffect(updater, online) {
-        if (online) updater?.check()
+        if (online) updater?.onOnline()
     }
 
     // Global 401 / certificate change: go to Pair (once per request, also across rotation).
@@ -156,9 +137,10 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
     }
 
     // Tag taps open the spool card anywhere except pairing and the add flow (AddViewModel takes taps itself).
-    val tapsOn = spoolVm != null && route != null && route != Routes.PAIR && route != Routes.ADD
-    LaunchedEffect(spoolVm, tapsOn) {
-        if (tapsOn) TagEvents.taps.collect { spoolVm.onTag(it) }
+    val tapVm = spoolVm
+    val tapsOn = tapVm != null && route != null && route != Routes.PAIR && route != Routes.ADD
+    LaunchedEffect(tapVm, tapsOn) {
+        if (tapsOn) TagEvents.taps.collect { tapVm.onTag(it) }
     }
 
     NavHost(nav, startDestination = start) {
@@ -178,7 +160,7 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
             val servers = remember { app.discovery.servers() }
             val discovered by servers.collectAsStateWithLifecycle(emptyList())
             Column(Modifier.fillMaxSize()) {
-                if (notice == PairNotice.Unpaired) {
+                if (notice == PairNotice.Unpaired || (config != null && !config.isPaired())) {
                     Text(
                         UNPAIRED_MESSAGE,
                         color = MaterialTheme.colorScheme.error,
@@ -215,12 +197,17 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
                 onRetryConnection = app.session::refresh,
                 onReviewCertificate = app.router::pairAgain,
                 onInstallUpdate = { updater?.install() },
+                onConfirmInstall = { updater?.confirmInstall() },
                 extra = { if (BuildConfig.DEBUG) SimulateTag() },
             )
         }
 
         composable(Routes.SEARCH) {
-            val a = api ?: return@composable
+            val a = api
+            if (a == null) {
+                NotPaired { nav.navigateClearing(Routes.PAIR) }
+                return@composable
+            }
             val searchVm: SearchViewModel = viewModel(factory = viewModelFactory {
                 initializer { SearchViewModel { q, sealedOnly -> a.search(q, sealedOnly) } }
             })
@@ -239,7 +226,11 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
                 navArgument("draft") { type = NavType.StringType; nullable = true; defaultValue = null },
             ),
         ) { e ->
-            val a = api ?: return@composable
+            val a = api
+            if (a == null) {
+                NotPaired { nav.navigateClearing(Routes.PAIR) }
+                return@composable
+            }
             val tag = e.arguments?.getString("tag")
             val draft = e.arguments?.getString("draft")
             val addVm: AddViewModel = viewModel(factory = viewModelFactory {
@@ -256,7 +247,7 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
         composable(Routes.SETTINGS) {
             SettingsScreen(
                 config = config,
-                onPairAgain = { nav.navigate(Routes.PAIR) },
+                onPairAgain = app.router::pairAgain,
                 onForget = { app.forget { nav.navigateClearing(Routes.PAIR) } },
             )
         }
@@ -287,6 +278,16 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
                 }
             }
         }
+    }
+}
+
+/** Shown instead of a screen that needs the server when no server is paired. */
+@Composable
+private fun NotPaired(onPair: () -> Unit) {
+    Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Not paired", style = MaterialTheme.typography.headlineSmall)
+        Text("Pair this phone with your server first.")
+        Button(onClick = onPair) { Text("Pair") }
     }
 }
 

@@ -8,6 +8,8 @@ import com.thompsonfabco.filamentkit.session.PairRouter
 import com.thompsonfabco.filamentkit.session.UNPAIRED_MESSAGE
 import java.io.File
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
@@ -52,6 +54,10 @@ class UpdaterTest {
         override fun canInstall() = allowed
         override fun requestPermission() { permissionRequests++ }
         override suspend fun install(apk: File) { installed += apk }
+        val pending = MutableStateFlow(false)
+        var confirmsShown = 0
+        override val confirmPending: Flow<Boolean> = pending
+        override fun showConfirm() { confirmsShown++ }
     }
 
     private fun updater(source: UpdateSource, installer: ApkInstall = FakeInstaller(true), router: PairRouter = PairRouter()) =
@@ -143,5 +149,44 @@ class UpdaterTest {
         assertEquals(source.downloads, installer.installed)
         assertFalse(u.state.value.busy)
         assertFalse(u.state.value.needsPermission)
+    }
+
+    @Test fun startupCheckIsNotDuplicated() {
+        val source = FakeSource("7")
+        val u = updater(source)
+        u.check()
+        u.onOnline()
+        scheduler.runCurrent()
+        assertEquals(1, source.infoCalls)
+        u.onOnline() // last check succeeded: nothing to do
+        scheduler.runCurrent()
+        assertEquals(1, source.infoCalls)
+    }
+
+    @Test fun comingOnlineRetriesAFailedCheck() {
+        val source = FakeSource("7").apply { infoError = ApiError(0, "offline", "gone") }
+        val u = updater(source)
+        scheduler.runCurrent()
+        assertNull(u.state.value.available)
+        source.infoError = null
+        u.onOnline()
+        scheduler.runCurrent()
+        assertEquals(2, source.infoCalls)
+        assertEquals(7, u.state.value.available)
+    }
+
+    @Test fun waitingConfirmationShowsTapToInstall() {
+        val installer = FakeInstaller(true)
+        val u = updater(FakeSource("7"), installer)
+        scheduler.runCurrent()
+        assertFalse(u.state.value.confirmPending)
+        installer.pending.value = true
+        scheduler.runCurrent()
+        assertTrue(u.state.value.confirmPending)
+        u.confirmInstall()
+        assertEquals(1, installer.confirmsShown)
+        installer.pending.value = false
+        scheduler.runCurrent()
+        assertFalse(u.state.value.confirmPending)
     }
 }

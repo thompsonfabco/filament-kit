@@ -3,10 +3,16 @@ package com.thompsonfabco.filamentkit.session
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.thompsonfabco.filamentkit.BuildConfig
 import com.thompsonfabco.filamentkit.data.Settings
 import com.thompsonfabco.filamentkit.drafts.Draft
 import com.thompsonfabco.filamentkit.drafts.DraftStore
 import com.thompsonfabco.filamentkit.net.Discovery
+import com.thompsonfabco.filamentkit.ui.spool.ApiSpoolBackend
+import com.thompsonfabco.filamentkit.ui.spool.SpoolViewModel
+import com.thompsonfabco.filamentkit.update.ApkInstaller
+import com.thompsonfabco.filamentkit.update.UpdateSource
+import com.thompsonfabco.filamentkit.update.Updater
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,14 +29,28 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val session = ServerSession(viewModelScope, settings.server, settings::save, discovery::hosts, router)
     val drafts = DraftStore(File(app.filesDir, "drafts"))
 
+    /** The spool card, one per [ServerSession.api] (cleared when the pinned client changes or the server is forgotten). */
+    val spool = ApiOwned(viewModelScope, session.api, SpoolViewModel::class) { SpoolViewModel(ApiSpoolBackend(it)) }
+
+    /** The update checker, one per [ServerSession.api]; its daily loop stops with the old client. */
+    val updater = ApiOwned(viewModelScope, session.api, Updater::class) { api ->
+        Updater(
+            source = UpdateSource.of(api),
+            installer = ApkInstaller(app),
+            currentVersion = BuildConfig.VERSION_CODE,
+            apkFile = File(app.cacheDir, "updates/filament-kit.apk"),
+            onProblem = router::report,
+        )
+    }
+
     private val _draftList = MutableStateFlow<List<Draft>>(emptyList())
     val draftList: StateFlow<List<Draft>> = _draftList.asStateFlow()
 
     /** The last [PairRouter.requests] value the navigation host acted on (survives rotation). */
     var handledPairRequests = 0
 
-    /** True when a server is paired (start on Home), false to start on Pair. */
-    suspend fun isPaired(): Boolean = settings.server.first() != null
+    /** True when a server is stored with a usable token (start on Home); false (none, or revoked) starts on Pair. */
+    suspend fun isPaired(): Boolean = settings.server.first().isPaired()
 
     fun refreshDrafts() {
         viewModelScope.launch(Dispatchers.IO) {
@@ -40,6 +60,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 emptyList()
             }
         }
+    }
+
+    override fun onCleared() {
+        spool.close()
+        updater.close()
     }
 
     /** Settings → Forget server. */

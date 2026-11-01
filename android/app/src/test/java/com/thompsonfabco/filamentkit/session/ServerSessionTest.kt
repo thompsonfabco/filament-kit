@@ -15,9 +15,10 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import mockwebserver3.MockWebServer
-import okhttp3.OkHttpClient
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
@@ -39,13 +40,15 @@ class ServerSessionTest {
     private fun config(endpoints: List<String>, port: Int, fp: String = cert.fingerprint(), token: String = "tok") =
         ServerConfig(endpoints, port, fp, token, "Workshop")
 
+    private val router = PairRouter()
+
     private fun session(configs: MutableStateFlow<ServerConfig?>, discovered: List<String> = emptyList()) = ServerSession(
         scope = scope,
         configs = configs,
         save = { saved += it; configs.value = it },
         discover = { discovered },
-        router = PairRouter(),
-        clientFor = { fp: String -> built += fp; pinnedClient(fp) as OkHttpClient },
+        router = router,
+        clientFor = { fp: String -> built += fp; pinnedClient(fp) },
     )
 
     private fun <T> await(block: suspend () -> T): T = runBlocking { withTimeout(15_000) { block() } }
@@ -118,5 +121,32 @@ class ServerSessionTest {
         val configs = MutableStateFlow<ServerConfig?>(config(listOf("127.0.0.3"), port))
         val s = session(configs)
         await { s.connection.first { it == Connection.Offline } }
+    }
+
+    @Test fun unpairedNoticeStoresBlankTokenAndStopsSendingIt() {
+        val good = httpsServer(cert, "127.0.0.3").also { servers += it }
+        val configs = MutableStateFlow<ServerConfig?>(config(listOf("127.0.0.3"), good.port, token = "revoked"))
+        val s = session(configs)
+        await { s.connection.first { it is Connection.Online } }
+        assertTrue(configs.value.isPaired())
+
+        router.report(ApiError(401, "unauthorized", "nope"))
+
+        val blanked = await { s.config.first { it?.token == "" } }!!
+        assertEquals(listOf("127.0.0.3"), blanked.endpoints)
+        assertEquals(cert.fingerprint(), blanked.fingerprint)
+        assertEquals(good.port, blanked.port)
+        assertFalse(blanked.isPaired()) // a cold start opens Pair
+
+        runBlocking { s.api.value!!.locations() }
+        var req = good.takeRequest()
+        while (req.url.encodedPath != "/api/locations") req = good.takeRequest()
+        assertNull(req.headers["Authorization"])
+    }
+
+    @Test fun isPairedNeedsAStoredNonBlankToken() {
+        assertFalse((null as ServerConfig?).isPaired())
+        assertFalse(config(listOf("h"), 1, token = " ").isPaired())
+        assertTrue(config(listOf("h"), 1).isPaired())
     }
 }

@@ -50,15 +50,18 @@ class ServerSession(
     val connection: StateFlow<Connection> = _connection.asStateFlow()
 
     private val lock = Any()
-    private var fingerprint: String? = null
-    private var pinned: OkHttpClient? = null
-    private var endpoints: Endpoints? = null
-    private var endpointsPort = 0
+    @Volatile private var fingerprint: String? = null
+    @Volatile private var pinned: OkHttpClient? = null
+    @Volatile private var endpoints: Endpoints? = null
+    @Volatile private var endpointsPort = 0
+    /** A token the server rejected (401); never sent again and never written back by a later save. */
+    @Volatile private var revokedToken: String? = null
     private var resolveJob: Job? = null
     @Volatile private var host: String? = null
 
     init {
         scope.launch { configs.collect(::apply) }
+        scope.launch { router.notice.collect { if (it == PairNotice.Unpaired) forgetToken() } }
     }
 
     /** `https://<host>:<port>` of the server: the last reachable host, else the best stored one. */
@@ -67,6 +70,9 @@ class ServerSession(
         val h = host ?: cfg.endpoints.firstOrNull() ?: "unpaired.invalid"
         return "https://${if (':' in h) "[$h]" else h}:${cfg.port}"
     }
+
+    /** The bearer token, or null (no Authorization header) when it is blank or was revoked. */
+    private fun currentToken(): String? = _config.value?.token?.takeIf { it.isNotBlank() && it != revokedToken }
 
     /** Finds the server again (no-op while a search is already running). */
     fun refresh() {
@@ -77,6 +83,14 @@ class ServerSession(
             _connection.value = Connection.Checking
             resolveJob = scope.launch { resolve(client, eps) }
         }
+    }
+
+    /** The token was revoked: keep the server (endpoints, fingerprint) but store a blank token so a cold start opens Pair. */
+    private suspend fun forgetToken() {
+        val cfg = _config.value ?: return
+        if (cfg.token.isBlank()) return
+        revokedToken = cfg.token
+        save(cfg.copy(token = ""))
     }
 
     private fun apply(cfg: ServerConfig?) {
@@ -101,7 +115,7 @@ class ServerSession(
                     .build()
                 fingerprint = cfg.fingerprint
                 pinned = client
-                _api.value = Api(watched, ::baseUrl) { _config.value?.token }
+                _api.value = Api(watched, ::baseUrl, ::currentToken)
                 endpoints = null
             }
             val eps = endpoints
@@ -127,7 +141,9 @@ class ServerSession(
             host = found
             _connection.value = Connection.Online(found)
             val cfg = _config.value
-            if (cfg != null && endpoints === eps && cfg.endpoints != eps.hosts) save(cfg.copy(endpoints = eps.hosts))
+            if (cfg != null && endpoints === eps && cfg.endpoints != eps.hosts) {
+                save(cfg.copy(endpoints = eps.hosts, token = if (cfg.token == revokedToken) "" else cfg.token))
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: FingerprintMismatch) {
@@ -138,3 +154,6 @@ class ServerSession(
         }
     }
 }
+
+/** A server is stored and its token has not been revoked (a revoked token is stored blank). */
+fun ServerConfig?.isPaired(): Boolean = this != null && token.isNotBlank()

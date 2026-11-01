@@ -48,6 +48,7 @@ fun HomeScreen(
     onRetryConnection: () -> Unit,
     onReviewCertificate: () -> Unit,
     onInstallUpdate: () -> Unit,
+    onConfirmInstall: () -> Unit,
     modifier: Modifier = Modifier,
     extra: @Composable () -> Unit = {},
 ) {
@@ -57,7 +58,7 @@ fun HomeScreen(
     ) {
         Text("filament-kit", style = MaterialTheme.typography.headlineSmall)
         ConnectionRow(serverName, connection, onRetryConnection, onReviewCertificate)
-        UpdateBanner(update, onInstallUpdate)
+        UpdateBanner(update, onInstallUpdate, onConfirmInstall)
 
         Button(onClick = onAddSpools, modifier = Modifier.fillMaxWidth()) { Text("Add spools") }
         Button(onClick = onSearch, modifier = Modifier.fillMaxWidth()) { Text("Search") }
@@ -96,14 +97,18 @@ private fun ConnectionRow(name: String, connection: Connection, onRetry: () -> U
 }
 
 @Composable
-private fun UpdateBanner(update: UpdateUi, onInstall: () -> Unit) {
-    if (update.available == null) return
+private fun UpdateBanner(update: UpdateUi, onInstall: () -> Unit, onConfirm: () -> Unit) {
+    if (update.available == null && !update.confirmPending) return
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Update available", style = MaterialTheme.typography.titleMedium)
             if (update.needsPermission) Text("Allow filament-kit to install apps, then tap Install again.")
             update.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            Button(onClick = onInstall, enabled = !update.busy) { Text(if (update.busy) "Downloading…" else "Install") }
+            if (update.confirmPending) {
+                Button(onClick = onConfirm) { Text("Tap to install") }
+            } else {
+                Button(onClick = onInstall, enabled = !update.busy) { Text(if (update.busy) "Downloading…" else "Install") }
+            }
         }
     }
 }
