@@ -46,12 +46,18 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Uses ML Kit's bundled model, so no Google Play services are needed.
  */
 @Composable
-fun QrScanner(onResult: (String) -> Unit, onClose: () -> Unit, modifier: Modifier = Modifier) {
+fun QrScanner(
+    onResult: (String) -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+    onEnterAddress: () -> Unit = onClose,
+) {
     val context = LocalContext.current
     var granted by remember {
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
     }
     var denied by remember { mutableStateOf(false) }
+    var cameraFailed by remember { mutableStateOf(false) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         granted = it
         denied = !it
@@ -60,13 +66,21 @@ fun QrScanner(onResult: (String) -> Unit, onClose: () -> Unit, modifier: Modifie
 
     Box(modifier.fillMaxSize()) {
         when {
-            granted -> CameraPreview(onResult)
+            cameraFailed -> Column(
+                Modifier.align(Alignment.Center).padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text("The camera could not be started, so the pairing code can't be scanned. Enter the server's address instead.")
+                Button(onClick = onEnterAddress) { Text("Enter address instead") }
+            }
+            granted -> CameraPreview(onResult, onFailed = { cameraFailed = true })
             denied -> Column(
                 Modifier.align(Alignment.Center).padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text("The camera is needed to scan the pairing code. You can allow it in the phone's app settings, or enter the address by hand instead.")
                 Button(onClick = { launcher.launch(Manifest.permission.CAMERA) }) { Text("Try again") }
+                OutlinedButton(onClick = onEnterAddress) { Text("Enter address instead") }
             }
         }
         OutlinedButton(onClick = onClose, modifier = Modifier.align(Alignment.BottomCenter).padding(24.dp)) {
@@ -77,7 +91,7 @@ fun QrScanner(onResult: (String) -> Unit, onClose: () -> Unit, modifier: Modifie
 
 @OptIn(ExperimentalGetImage::class)
 @Composable
-private fun CameraPreview(onResult: (String) -> Unit) {
+private fun CameraPreview(onResult: (String) -> Unit, onFailed: () -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val executor = remember { Executors.newSingleThreadExecutor() }
@@ -86,6 +100,7 @@ private fun CameraPreview(onResult: (String) -> Unit) {
     }
     val reported = remember { AtomicBoolean(false) }
     val currentOnResult by rememberUpdatedState(onResult)
+    val currentOnFailed by rememberUpdatedState(onFailed)
     val preview = remember { Preview.Builder().build() }
     val analysis = remember {
         ImageAnalysis.Builder().setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build()
@@ -112,7 +127,13 @@ private fun CameraPreview(onResult: (String) -> Unit) {
             val future = ProcessCameraProvider.getInstance(ctx)
             future.addListener({
                 if (disposed.get()) return@addListener
-                val cameraProvider = future.get()
+                // No camera, camera in use, or CameraX failed to start: offer typing the address instead of crashing.
+                val cameraProvider = try {
+                    future.get()
+                } catch (_: Exception) {
+                    currentOnFailed()
+                    return@addListener
+                }
                 analysis.setAnalyzer(executor) { proxy ->
                     val image = proxy.image
                     if (image == null || reported.get()) {
@@ -126,8 +147,13 @@ private fun CameraPreview(onResult: (String) -> Unit) {
                             .addOnCompleteListener { proxy.close() }
                     }
                 }
-                cameraProvider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
-                provider = cameraProvider
+                try {
+                    cameraProvider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
+                    provider = cameraProvider
+                } catch (_: Exception) { // IllegalArgumentException (no back camera), IllegalStateException, ...
+                    analysis.clearAnalyzer()
+                    currentOnFailed()
+                }
             }, ContextCompat.getMainExecutor(context))
             view
         },

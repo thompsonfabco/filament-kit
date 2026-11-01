@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.thompsonfabco.filamentkit.ui.parseWeight
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -139,12 +140,12 @@ private fun TagRow(tag: String?, onClear: () -> Unit, enabled: Boolean) {
 private fun WeightFields(state: AddUiState, vm: AddViewModel, enabled: Boolean) {
     var text by remember(state.generation) { mutableStateOf(state.weight?.let(::grams).orEmpty()) }
     LaunchedEffect(state.sealed) { if (state.sealed) text = "" }
-    val bad = text.isNotBlank() && (text.toDoubleOrNull()?.let { it <= 0 } ?: true)
+    val bad = text.isNotBlank() && parseWeight(text) == null
     OutlinedTextField(
         value = text,
         onValueChange = {
             text = it
-            vm.setWeight(it.toDoubleOrNull()?.takeIf { g -> g > 0 })
+            vm.setWeight(parseWeight(it))
         },
         enabled = enabled && !state.sealed,
         label = { Text("Weight on the scale, with spool (g)") },

@@ -82,6 +82,9 @@ object PrinterHelp {
         else -> e.message
     }
 
+    /** Errors of "Add printer": a 404 means the server has not seen that printer on the network yet (its own words). */
+    fun addMessage(e: ApiError): String = if (e.code == "not_found") e.message else message(e)
+
     const val UNEXPECTED = "Unexpected response from the server"
 
     /** gcode_state values during which a print is under way (the server's `status.ACTIVE`). */
@@ -90,7 +93,8 @@ object PrinterHelp {
     fun isPrinting(gcodeState: String): Boolean = gcodeState in PRINTING
 
     /** The list line while printing: "job · percent · time left" (", paused" when paused); null when idle. */
-    fun jobLine(s: PrinterSummary): String? {
+    fun jobLine(s: PrinterSummary?): String? {
+        if (s == null) return null
         if (!isPrinting(s.gcodeState)) return null
         return listOfNotNull(
             s.job?.ifBlank { null },
@@ -301,7 +305,10 @@ class PrintersViewModel(private val backend: PrinterBackend) : ViewModel() {
         }
         _state.update { it.copy(dialog = d.copy(name = name, busy = true, error = null)) }
         viewModelScope.launch {
-            guard(onError = { msg -> _state.update { s -> s.copy(dialog = s.dialog?.copy(busy = false, error = msg)) } }) {
+            guard(
+                onError = { msg -> _state.update { s -> s.copy(dialog = s.dialog?.copy(busy = false, error = msg)) } },
+                describe = PrinterHelp::addMessage,
+            ) {
                 val p = backend.addPrinter(d.serial, code, name.trim().ifBlank { null })
                 val problem = if (p.state == "connected") null else PrinterHelp.fix(p.state)
                 if (problem == null) {
@@ -314,7 +321,11 @@ class PrintersViewModel(private val backend: PrinterBackend) : ViewModel() {
         }
     }
 
-    private suspend fun guard(onError: (String) -> Unit, block: suspend () -> Unit) {
+    private suspend fun guard(
+        onError: (String) -> Unit,
+        describe: (ApiError) -> String = PrinterHelp::message,
+        block: suspend () -> Unit,
+    ) {
         try {
             block()
         } catch (e: CancellationException) {
@@ -322,7 +333,7 @@ class PrintersViewModel(private val backend: PrinterBackend) : ViewModel() {
         } catch (e: FingerprintMismatch) {
             _state.update { it.copy(mismatch = e.expected to e.actual) }
         } catch (e: ApiError) {
-            if (e.code == "unauthorized") _state.update { it.copy(unauthorized = true) } else onError(PrinterHelp.message(e))
+            if (e.code == "unauthorized") _state.update { it.copy(unauthorized = true) } else onError(describe(e))
         } catch (e: Exception) {
             onError(PrinterHelp.UNEXPECTED)
         }

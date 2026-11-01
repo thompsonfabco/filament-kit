@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.thompsonfabco.filamentkit.net.Api
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
+import com.thompsonfabco.filamentkit.ui.isValidWeight
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -147,6 +148,7 @@ class SpoolViewModel(private val backend: SpoolBackend) : ViewModel() {
     // --- known spool ---
 
     fun previewWeight(gross: Double) {
+        if (!isValidWeight(gross)) return
         val c = _state.value as? SpoolUiState.Card ?: return
         op(onError = { c.copy(message = it) }) {
             val preview = backend.update(c.spool.id, gross, null, empty = false, dryRun = true).toSpoolSummary()
@@ -225,6 +227,7 @@ class SpoolViewModel(private val backend: SpoolBackend) : ViewModel() {
 
     /** Previews linking tag to [spoolId] (dry run); [gross] is the optional gross weight to record. */
     fun pick(spoolId: Int, gross: Double?) {
+        if (gross != null && !isValidWeight(gross)) return
         val t = tag ?: return
         val s = _state.value as? SpoolUiState.LinkSearch
         op(onError = { msg -> s?.copy(error = msg) ?: SpoolUiState.Failed(msg, retryTag = t) }, onConflict = { conflict(it, t, spoolId, gross) }) {

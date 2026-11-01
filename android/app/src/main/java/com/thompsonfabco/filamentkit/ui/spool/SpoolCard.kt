@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
+import com.thompsonfabco.filamentkit.ui.parseWeight
 
 /**
  * Everything shown after a tag tap. [onStartAdd] receives the tag when the user chooses "Add as new"
@@ -117,8 +118,8 @@ private fun SpoolCard(card: SpoolUiState.Card, vm: SpoolViewModel, onClose: () -
     )
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(
-            onClick = { gross.toDoubleOrNull()?.let(vm::previewWeight) },
-            enabled = gross.toDoubleOrNull() != null,
+            onClick = { parseWeight(gross)?.let(vm::previewWeight) },
+            enabled = parseWeight(gross) != null,
         ) { Text("Update weight") }
         OutlinedButton(onClick = vm::openMove) { Text("Move") }
         OutlinedButton(onClick = vm::askMarkEmpty) { Text("Mark empty") }

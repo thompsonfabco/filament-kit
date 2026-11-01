@@ -47,6 +47,7 @@ class PairFlowTest {
         }
         override suspend fun info(host: String, port: Int, fingerprint: String, token: String?) =
             ServerInfo("Workshop server", "1", 1)
+        override suspend fun claim(host: String, port: Int, fingerprint: String, token: String) = Unit
     }
 
     @Test fun manualFlowShowsFingerprintFirstThenCodeThenPairs() {

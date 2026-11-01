@@ -3,6 +3,7 @@ package com.thompsonfabco.filamentkit.net
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -49,7 +50,18 @@ class Discovery(context: Context) {
             override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) = Unit
         }
         trySend(emptyList())
-        nsd.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, listener)
+        // Without the API 37 local network permission browsing would open the system device picker: stay empty.
+        if (LocalNetwork.missing()) {
+            awaitClose { events.close() }
+            return@callbackFlow
+        }
+        try {
+            nsd.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, listener)
+        } catch (_: RuntimeException) { // NSD refused to start: no servers, not a crash
+            close()
+            awaitClose { events.close() }
+            return@callbackFlow
+        }
         awaitClose {
             events.close()
             try {
@@ -60,9 +72,21 @@ class Discovery(context: Context) {
         }
     }
 
-    /** Addresses of servers found within a few seconds; the fallback source for `Endpoints.firstReachable`. */
-    suspend fun hosts(): List<String> =
-        withTimeoutOrNull(HOSTS_WAIT_MS) { servers().first { it.isNotEmpty() } }?.map { it.host }.orEmpty()
+    /**
+     * Addresses of servers found within a few seconds; the fallback source for `Endpoints.firstReachable`. Empty (never
+     * an exception) when nothing is found, browsing is not allowed (API 37 local network permission) or NSD fails to
+     * start.
+     */
+    suspend fun hosts(): List<String> {
+        if (LocalNetwork.missing()) return emptyList()
+        return try {
+            withTimeoutOrNull(HOSTS_WAIT_MS) { servers().first { it.isNotEmpty() } }?.map { it.host }.orEmpty()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) { // the browse ended without a result (start failed), or NsdManager threw
+            emptyList()
+        }
+    }
 
     private sealed interface Event {
         class Found(val info: NsdServiceInfo) : Event

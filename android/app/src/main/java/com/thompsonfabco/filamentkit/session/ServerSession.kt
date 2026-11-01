@@ -18,6 +18,8 @@ import okhttp3.OkHttpClient
 /** How the app currently reaches the paired server (the Home screen's connection dot). */
 sealed interface Connection {
     data object Unpaired : Connection
+    /** API 37+: the local network permission is missing, so the server is not looked for (and is not "offline"). */
+    data object NeedsLocalNetwork : Connection
     data object Checking : Connection
     data class Online(val host: String) : Connection
     data object Offline : Connection
@@ -39,6 +41,8 @@ class ServerSession(
     private val discover: suspend () -> List<String>,
     val router: PairRouter,
     private val clientFor: (fingerprint: String) -> OkHttpClient = { pinnedClient(it) },
+    /** API 37 `ACCESS_LOCAL_NETWORK`; while false the server is not resolved ([Connection.NeedsLocalNetwork]). */
+    private val localNetworkGranted: () -> Boolean = { true },
 ) {
     private val _config = MutableStateFlow<ServerConfig?>(null)
     val config: StateFlow<ServerConfig?> = _config.asStateFlow()
@@ -61,7 +65,7 @@ class ServerSession(
 
     init {
         scope.launch { configs.collect(::apply) }
-        scope.launch { router.notice.collect { if (it == PairNotice.Unpaired) forgetToken() } }
+        scope.launch { router.notice.collect { if (it is PairNotice.Unpaired && it.token != null) forgetToken(it.token) } }
     }
 
     /** `https://<host>:<port>` of the server: the last reachable host, else the best stored one. */
@@ -74,22 +78,33 @@ class ServerSession(
     /** The bearer token, or null (no Authorization header) when it is blank or was revoked. */
     private fun currentToken(): String? = _config.value?.token?.takeIf { it.isNotBlank() && it != revokedToken }
 
-    /** Finds the server again (no-op while a search is already running). */
+    /**
+     * Finds the server again (no-op while a search is already running). Without the local network permission it only
+     * shows [Connection.NeedsLocalNetwork]; call it again once the permission is granted.
+     */
     fun refresh() {
         synchronized(lock) {
             if (resolveJob?.isActive == true) return
             val client = pinned ?: return
             val eps = endpoints ?: return
+            if (!localNetworkGranted()) {
+                _connection.value = Connection.NeedsLocalNetwork
+                return
+            }
             _connection.value = Connection.Checking
             resolveJob = scope.launch { resolve(client, eps) }
         }
     }
 
-    /** The token was revoked: keep the server (endpoints, fingerprint) but store a blank token so a cold start opens Pair. */
-    private suspend fun forgetToken() {
+    /**
+     * [sent] was rejected: never send it again, and if it is still the stored token keep the server (endpoints,
+     * fingerprint) but store a blank token so a cold start opens Pair. A 401 for an older token changes nothing.
+     */
+    private suspend fun forgetToken(sent: String) {
+        if (sent.isBlank()) return
+        revokedToken = sent
         val cfg = _config.value ?: return
-        if (cfg.token.isBlank()) return
-        revokedToken = cfg.token
+        if (cfg.token != sent) return
         save(cfg.copy(token = ""))
     }
 
@@ -135,7 +150,7 @@ class ServerSession(
             val found = eps.firstReachable(client, discover)
             if (endpoints !== eps) return
             if (found == null) {
-                _connection.value = Connection.Offline
+                _connection.value = unreachable()
                 return
             }
             host = found
@@ -150,9 +165,12 @@ class ServerSession(
             router.noteMismatch(e)
             _connection.value = Connection.CertChanged(e.expected, e.actual)
         } catch (_: Exception) {
-            _connection.value = Connection.Offline
+            _connection.value = unreachable()
         }
     }
+
+    /** No host answered: blame the missing local network permission when that is the cause. */
+    private fun unreachable(): Connection = if (localNetworkGranted()) Connection.Offline else Connection.NeedsLocalNetwork
 }
 
 /** A server is stored and its token has not been revoked (a revoked token is stored blank). */

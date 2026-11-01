@@ -8,6 +8,7 @@ import com.thompsonfabco.filamentkit.data.Settings
 import com.thompsonfabco.filamentkit.drafts.Draft
 import com.thompsonfabco.filamentkit.drafts.DraftStore
 import com.thompsonfabco.filamentkit.net.Discovery
+import com.thompsonfabco.filamentkit.net.LocalNetwork
 import com.thompsonfabco.filamentkit.ui.spool.ApiSpoolBackend
 import com.thompsonfabco.filamentkit.ui.spool.SpoolViewModel
 import com.thompsonfabco.filamentkit.update.ApkInstaller
@@ -23,10 +24,17 @@ import kotlinx.coroutines.launch
 
 /** Activity-wide state: settings, the one [ServerSession], the pairing router and the drafts on disk. */
 class AppViewModel(app: Application) : AndroidViewModel(app) {
+    init {
+        LocalNetwork.install(app) // before anything below can open a socket
+    }
+
     val settings: Settings = Settings.create(app)
     val router = PairRouter()
     val discovery = Discovery(app)
-    val session = ServerSession(viewModelScope, settings.server, settings::save, discovery::hosts, router)
+    val session = ServerSession(
+        viewModelScope, settings.server, settings::save, discovery::hosts, router,
+        localNetworkGranted = { LocalNetwork.granted(app) },
+    )
     val drafts = DraftStore(File(app.filesDir, "drafts"))
 
     /** The spool card, one per [ServerSession.api] (cleared when the pinned client changes or the server is forgotten). */

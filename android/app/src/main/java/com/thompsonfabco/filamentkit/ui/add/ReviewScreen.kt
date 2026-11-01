@@ -15,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -40,6 +41,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.thompsonfabco.filamentkit.ui.parseWeight
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -90,6 +92,15 @@ fun ReviewScreen(
         }
 
         state.error?.let { ErrorCard(it, vm, onPairAgain, kept = state.draftId != null) }
+        state.addedBefore?.let { before ->
+            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                Column(Modifier.padding(12.dp)) {
+                    Text(before.note, fontWeight = FontWeight.Bold)
+                    Text("Check Spoolman before adding these spools again.", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+        if (state.askAddAgain) AddAgainDialog(state.addedBefore, vm)
         when (state.stage) {
             Stage.Previewing -> Busy("Checking…")
             Stage.Adding -> Busy("Adding to Spoolman…")
@@ -115,6 +126,23 @@ fun ReviewScreen(
             }
         }
     }
+}
+
+/** The real add after one that may already have written spools: only after an explicit "I checked". */
+@Composable
+private fun AddAgainDialog(before: AddedBefore?, vm: AddViewModel) {
+    AlertDialog(
+        onDismissRequest = vm::cancelAddAgain,
+        title = { Text("Add these spools again?") },
+        text = {
+            Text(
+                (before?.note?.let { "$it\n\n" } ?: "") +
+                    "Adding again can create duplicate spools. Check Spoolman first and only continue if they are missing.",
+            )
+        },
+        confirmButton = { Button(onClick = vm::addAgain) { Text("I checked — add again") } },
+        dismissButton = { TextButton(onClick = vm::cancelAddAgain) { Text("Cancel") } },
+    )
 }
 
 @Composable
@@ -197,19 +225,22 @@ private fun TextField(label: String, initial: String?, enabled: Boolean, onChang
 }
 
 @Composable
+/** [whole]: a count (whole number, 0 allowed so the user sees the error). Otherwise grams: finite and above 0. */
 private fun NumberField(label: String, initial: Double?, enabled: Boolean, whole: Boolean = false, onChange: (Double?) -> Unit) {
     var text by remember { mutableStateOf(initial?.let(::grams).orEmpty()) }
-    val parsed = text.trim().toDoubleOrNull()
-    val bad = text.isNotBlank() && (parsed == null || parsed < 0 || (whole && parsed != Math.floor(parsed)))
+    fun parse(t: String): Double? = if (whole) {
+        t.trim().toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0 && it == Math.floor(it) && it <= Int.MAX_VALUE }
+    } else parseWeight(t)
+    val bad = text.isNotBlank() && parse(text) == null
     OutlinedTextField(
         value = text,
         onValueChange = {
             text = it
-            val v = it.trim().toDoubleOrNull()
-            if (it.isBlank() || (v != null && v >= 0 && (!whole || v == Math.floor(v)))) onChange(v)
+            val v = parse(it)
+            if (it.isBlank() || v != null) onChange(v)
         },
         enabled = enabled, singleLine = true, isError = bad,
-        supportingText = if (bad) ({ Text(if (whole) "Enter a whole number" else "Enter a number") }) else null,
+        supportingText = if (bad) ({ Text(if (whole) "Enter a whole number" else "Enter grams above 0") }) else null,
         keyboardOptions = KeyboardOptions(keyboardType = if (whole) KeyboardType.Number else KeyboardType.Decimal),
         label = { Text(label) }, modifier = Modifier.fillMaxWidth(),
     )

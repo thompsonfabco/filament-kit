@@ -50,6 +50,8 @@ fun HomeScreen(
     onInstallUpdate: () -> Unit,
     onConfirmInstall: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Shown while [connection] is [Connection.NeedsLocalNetwork] (explanation, Allow, Open app settings). */
+    localNetworkPanel: @Composable () -> Unit = {},
     extra: @Composable () -> Unit = {},
 ) {
     Column(
@@ -58,6 +60,7 @@ fun HomeScreen(
     ) {
         Text("filament-kit", style = MaterialTheme.typography.headlineSmall)
         ConnectionRow(serverName, connection, onRetryConnection, onReviewCertificate)
+        if (connection == Connection.NeedsLocalNetwork) localNetworkPanel()
         UpdateBanner(update, onInstallUpdate, onConfirmInstall)
 
         Button(onClick = onAddSpools, modifier = Modifier.fillMaxWidth()) { Text("Add spools") }
@@ -81,6 +84,7 @@ private fun ConnectionRow(name: String, connection: Connection, onRetry: () -> U
         Connection.Offline -> Color(0xFFC62828) to "Can't reach the server"
         is Connection.CertChanged -> Color(0xFFC62828) to "The server's certificate changed"
         Connection.Unpaired -> Color.Gray to "Not paired"
+        Connection.NeedsLocalNetwork -> Color(0xFFF9A825) to "Needs local network access"
     }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Box(Modifier.size(12.dp).background(color, CircleShape))
@@ -98,15 +102,24 @@ private fun ConnectionRow(name: String, connection: Connection, onRetry: () -> U
 
 @Composable
 private fun UpdateBanner(update: UpdateUi, onInstall: () -> Unit, onConfirm: () -> Unit) {
-    if (update.available == null && !update.confirmPending) return
+    if (update.available == null && !update.confirmPending && !update.serverTooNew) return
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Update available", style = MaterialTheme.typography.titleMedium)
+            if (update.serverTooNew) {
+                Text("Update the app", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "The server is newer than this app, so some things may not work. " +
+                        if (update.available != null || update.confirmPending) "Install the update below."
+                        else "The server has no newer app to install yet: ask whoever runs the server for the latest filament-kit app.",
+                )
+            } else {
+                Text("Update available", style = MaterialTheme.typography.titleMedium)
+            }
             if (update.needsPermission) Text("Allow filament-kit to install apps, then tap Install again.")
             update.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             if (update.confirmPending) {
                 Button(onClick = onConfirm) { Text("Tap to install") }
-            } else {
+            } else if (update.available != null) {
                 Button(onClick = onInstall, enabled = !update.busy) { Text(if (update.busy) "Downloading…" else "Install") }
             }
         }

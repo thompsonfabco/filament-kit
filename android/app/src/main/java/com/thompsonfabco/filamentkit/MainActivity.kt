@@ -48,6 +48,8 @@ import com.thompsonfabco.filamentkit.session.isPaired
 import com.thompsonfabco.filamentkit.tags.TagEvents
 import com.thompsonfabco.filamentkit.tags.disableTagReader
 import com.thompsonfabco.filamentkit.tags.enableTagReader
+import com.thompsonfabco.filamentkit.ui.LocalNetworkPanel
+import com.thompsonfabco.filamentkit.ui.rememberLocalNetworkAccess
 import com.thompsonfabco.filamentkit.ui.add.AddSpoolsScreen
 import com.thompsonfabco.filamentkit.ui.add.AddViewModel
 import com.thompsonfabco.filamentkit.ui.add.DebugPhotos
@@ -110,6 +112,8 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
         true -> Routes.HOME
         false -> Routes.PAIR
     }
+    // API 37: every LAN socket needs ACCESS_LOCAL_NETWORK. Asked once at start; the session waits for it.
+    val localNetwork = rememberLocalNetworkAccess(autoRequest = true, onGranted = app.session::refresh)
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route
@@ -158,10 +162,8 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
                     pairVm.showMismatch(n.expected, n.actual)
                 }
             }
-            val servers = remember { app.discovery.servers() }
-            val discovered by servers.collectAsStateWithLifecycle(emptyList())
             Column(Modifier.fillMaxSize()) {
-                if (notice == PairNotice.Unpaired || (config != null && !config.isPaired())) {
+                if (notice is PairNotice.Unpaired || (config != null && !config.isPaired())) {
                     Text(
                         UNPAIRED_MESSAGE,
                         color = MaterialTheme.colorScheme.error,
@@ -169,15 +171,25 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
                         modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp),
                     )
                 }
-                PairScreen(
-                    viewModel = pairVm,
-                    discovered = discovered,
-                    onPaired = {
-                        app.router.clear()
-                        nav.navigateClearing(Routes.HOME)
-                    },
-                    modifier = Modifier.weight(1f),
-                )
+                if (!localNetwork.granted) {
+                    // No NSD browse, probe, verify or pair until the permission is granted.
+                    Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Text("Pair with your server", style = MaterialTheme.typography.headlineSmall)
+                        LocalNetworkPanel(localNetwork)
+                    }
+                } else {
+                    val servers = remember { app.discovery.servers() }
+                    val discovered by servers.collectAsStateWithLifecycle(emptyList())
+                    PairScreen(
+                        viewModel = pairVm,
+                        discovered = discovered,
+                        onPaired = {
+                            app.router.clear()
+                            nav.navigateClearing(Routes.HOME)
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
         }
 
@@ -199,6 +211,7 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
                 onReviewCertificate = app.router::pairAgain,
                 onInstallUpdate = { updater?.install() },
                 onConfirmInstall = { updater?.confirmInstall() },
+                localNetworkPanel = { LocalNetworkPanel(localNetwork) },
                 extra = { if (BuildConfig.DEBUG) SimulateTag() },
             )
         }

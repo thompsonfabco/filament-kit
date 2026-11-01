@@ -75,7 +75,7 @@ private fun AddressStep(ui: PairUi, onSubmit: (String, String) -> Unit, onBack: 
 @Composable
 private fun ConfirmStep(ui: PairUi, onConfirm: () -> Unit, onReject: () -> Unit) {
     Text("Check the server's fingerprint", style = MaterialTheme.typography.titleMedium)
-    Text("${ui.host} presented this certificate fingerprint. Compare it with the one shown on the server before you continue.")
+    Text("${ui.host} presented this certificate fingerprint. Compare it with the fingerprint shown by \"sudo filament-kit pair\" on the server before you continue.")
     Text(groupFingerprint(ui.fingerprint.orEmpty()), fontFamily = FontFamily.Monospace)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(onClick = onConfirm) { Text("It matches") }
@@ -87,7 +87,7 @@ private fun ConfirmStep(ui: PairUi, onConfirm: () -> Unit, onReject: () -> Unit)
 private fun CodeStep(ui: PairUi, onSubmit: (String) -> Unit, onBack: () -> Unit) {
     var code by rememberSaveable { mutableStateOf("") }
     Text("Enter the pairing code", style = MaterialTheme.typography.titleMedium)
-    Text("Type the 6-digit code shown on the server.")
+    Text("Type the 6-digit code shown by \"sudo filament-kit pair\" on the server.")
     OutlinedTextField(
         value = code,
         onValueChange = { code = it.filter(Char::isDigit).take(6) },

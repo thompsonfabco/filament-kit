@@ -14,9 +14,15 @@ const val UNPAIRED_MESSAGE = "This phone was unpaired from the server"
 
 /** Why the app sent the user to the pairing screen. */
 sealed interface PairNotice {
-    /** The server rejected the token (401). */
-    data object Unpaired : PairNotice {
+    /**
+     * The server rejected the token (401). [token] is the token that request was sent with (null when only a screen
+     * reported the error); the session forgets the stored token only if it is still that one, so a late 401 from
+     * before a re-pair never blanks the new token.
+     */
+    data class Unpaired(val token: String? = null) : PairNotice {
         val message: String get() = UNPAIRED_MESSAGE
+
+        override fun toString() = "Unpaired" // never log the token
     }
 
     /** The server presents a certificate other than the paired one; never auto-accepted. */
@@ -42,9 +48,13 @@ class PairRouter {
     fun report(e: Throwable) {
         when {
             e is FingerprintMismatch -> route(PairNotice.CertChanged(e.expected, e.actual))
-            e is ApiError && e.code == "unauthorized" -> route(PairNotice.Unpaired)
+            // Keep the token a call already reported (StateFlow conflation must not hide it from the session).
+            e is ApiError && e.code == "unauthorized" -> route(PairNotice.Unpaired((_notice.value as? PairNotice.Unpaired)?.token))
         }
     }
+
+    /** The server answered 401 to a request sent with [sentToken]. */
+    fun unauthorized(sentToken: String) = route(PairNotice.Unpaired(sentToken))
 
     /** A call saw another certificate; remembered so a later [pairAgain] can show both fingerprints. */
     fun noteMismatch(e: FingerprintMismatch) {
@@ -85,11 +95,8 @@ class SessionWatcher(private val router: PairRouter, private val onOffline: () -
             if (!chain.call().isCanceled()) onOffline()
             throw e
         }
-        if (response.code == 401 && request.header("Authorization") != null) router.report(UNAUTHORIZED)
+        val auth = request.header("Authorization")
+        if (response.code == 401 && auth != null) router.unauthorized(auth.removePrefix("Bearer ").trim())
         return response
-    }
-
-    private companion object {
-        val UNAUTHORIZED = ApiError(401, "unauthorized", UNPAIRED_MESSAGE)
     }
 }
