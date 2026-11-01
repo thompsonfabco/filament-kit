@@ -91,5 +91,9 @@ dependencies {
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.rules)
+    // Compose ui-test pulls an Espresso too old for API 37 (InputManager.getInstance is gone); pin a current one.
+    androidTestImplementation(libs.androidx.test.espresso.core)
+    androidTestImplementation(libs.okhttp.tls)
+    androidTestImplementation(libs.okhttp.mockwebserver3)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
