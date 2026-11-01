@@ -175,6 +175,19 @@ def test_old_failed_reads_are_deleted(sm, tmp_path):
     assert not old.exists()
 
 
+def test_is_kept(tmp_path):
+    from filament_kit.intake import is_kept
+    root = tmp_path / "state" / "failed"
+    (root / "fresh").mkdir(parents=True)
+    old = root / "old"
+    old.mkdir()
+    t = time.time() - 25 * 3600
+    os.utime(old, (t, t))
+    assert is_kept("fresh")
+    assert not is_kept("old") and not old.exists()  # swept before the check
+    assert not is_kept("nope") and not is_kept("../failed") and not is_kept("")
+
+
 def test_retry_unknown_id(sm):
     with pytest.raises(ReadError) as e:
         retry("nope", sm, client=FakeClaude(recorded()))
