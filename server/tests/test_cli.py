@@ -335,3 +335,19 @@ def test_config_menu_lists_printers_entry(capsys, monkeypatch):
     monkeypatch.setattr(sys, "stdin", io.StringIO("0\n"))
     cli.main(["config"])
     assert "5) Printers" in capsys.readouterr().out
+
+
+def test_printers_bad_number_says_no_such_printer(capsys, monkeypatch):
+    from filament_kit.bridge import registry
+    registry.upsert(registry.Printer("S1", "A", configured=True))
+    assert _printers_session(monkeypatch, "5\n4\n0\n4\n-1\n4\n9\n4\nx\n0\n0\n") == 0
+    assert capsys.readouterr().out.count("No such printer.") == 4
+    assert "S1" in registry.load()
+
+
+def test_printers_corrupt_file_reports_error_and_keeps_it(capsys, monkeypatch, env):
+    f = env / "state" / "printers.json"
+    f.write_text("garbage")
+    assert _printers_session(monkeypatch, "5\n2\nA\n1.2.3.4\nS1\n0\n0\n") == 0
+    assert "unreadable" in capsys.readouterr().out
+    assert f.read_text() == "garbage"

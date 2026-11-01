@@ -59,3 +59,42 @@ def test_file_mode_600(env):
 def test_file_is_json_keyed_by_serial(env):
     registry.upsert(Printer("S1", "A"))
     assert json.loads((env / "state" / "printers.json").read_text())["S1"]["name"] == "A"
+
+
+def test_detected_unchanged_does_not_rewrite(env):
+    registry.detected("S4", "10.0.0.1", "M", "N")
+    f = env / "state" / "printers.json"
+    f.write_text(f.read_text() + " ")  # marker: a rewrite would drop it
+    registry.detected("S4", "10.0.0.1", "M", "N")
+    assert f.read_text().endswith(" ")
+    registry.upsert(Printer("S5", "x", "m", "10.0.0.2", "c", True))
+    f.write_text(f.read_text() + " ")
+    registry.detected("S5", "10.0.0.2", "other", "other")
+    assert f.read_text().endswith(" ")
+
+
+def test_rename():
+    registry.upsert(Printer("S1", "A", access_code="c", configured=True))
+    assert registry.rename("S1", "B") is True
+    assert registry.load()["S1"].name == "B" and registry.load()["S1"].access_code == "c"
+    assert registry.rename("nope", "x") is False
+
+
+def test_unknown_keys_ignored(env):
+    (env / "state").mkdir()
+    (env / "state" / "printers.json").write_text(json.dumps(
+        {"S1": {"name": "A", "ip": "1.2.3.4", "future_field": 7}}))
+    assert registry.load()["S1"].name == "A"
+
+
+def test_corrupt_file_reads_empty_and_is_never_overwritten(env, caplog):
+    (env / "state").mkdir()
+    f = env / "state" / "printers.json"
+    f.write_text("{not json")
+    assert registry.load() == {}
+    assert "unreadable" in caplog.text
+    for call in (lambda: registry.upsert(Printer("S1")), lambda: registry.remove("S1"),
+                 lambda: registry.rename("S1", "x"), lambda: registry.detected("S1", "1.1.1.1")):
+        with pytest.raises(registry.RegistryError):
+            call()
+    assert f.read_text() == "{not json"
