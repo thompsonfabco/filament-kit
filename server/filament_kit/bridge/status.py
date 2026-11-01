@@ -45,23 +45,23 @@ def merge(full: dict, delta: dict) -> dict:
 
 def packed(v: Any) -> tuple[int | None, int | None]:
     """Newer printers (H2D family) pack a temperature as (target << 16) | current. Returns (current, target)."""
-    try:
-        v = int(v)
-    except (TypeError, ValueError):
+    v = _int(v)
+    if v is None:
         return None, None
     return v & 0xFFFF, (v >> 16) & 0xFFFF
 
 
 def hms_code(e: dict) -> str:
-    a, c = int(e.get('attr', 0)), int(e.get('code', 0))
+    """"AAAA_AAAA_CCCC_CCCC" from an HMS entry; odd values count as 0, each part is a 32-bit field."""
+    a = (_int(e.get('attr'), 0) or 0) & 0xFFFFFFFF
+    c = (_int(e.get('code'), 0) or 0) & 0xFFFFFFFF
     return f"{a >> 16:04X}_{a & 0xFFFF:04X}_{c >> 16:04X}_{c & 0xFFFF:04X}"
 
 
 def tray_now_tag(n: Any) -> str | None:
     """`ams.tray_now` as "<ams_id>:<tray_id>"; 254 = external spool ('ext'), 255 = nothing loaded (None)."""
-    try:
-        n = int(n)
-    except (TypeError, ValueError):
+    n = _int(n)
+    if n is None:
         return None
     if n >= 254:
         return None if n == 255 else 'ext'
@@ -69,10 +69,13 @@ def tray_now_tag(n: Any) -> str | None:
 
 
 def unit_label(ams_id: int) -> tuple[str, str]:
-    """(label, kind) as Bambu Studio names units: 0 -> 'A', 1 -> 'B' ...; 128 -> 'HT-A', 129 -> 'HT-B' ..."""
-    if ams_id >= HT_BASE:
+    """(label, kind) as Bambu Studio names units: 0 -> 'A', 1 -> 'B' ...; 128 -> 'HT-A', 129 -> 'HT-B' ...
+    An id outside those ranges is labelled with its number ('#40')."""
+    if HT_BASE <= ams_id < HT_BASE + 26:
         return f"HT-{chr(ord('A') + ams_id - HT_BASE)}", 'ams_ht'
-    return chr(ord('A') + ams_id), 'ams'
+    if 0 <= ams_id < 26:
+        return chr(ord('A') + ams_id), 'ams'
+    return f"#{ams_id}", 'ams'
 
 
 def slot_label(ams_id: int, tray_id: int) -> str:
@@ -89,8 +92,22 @@ def location(printer_name: str, label: str) -> str:
 def _int(v: Any, default: int | None = None) -> int | None:
     try:
         return int(v)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):  # OverflowError: JSON Infinity
         return default
+
+
+def _d(v: Any) -> dict:
+    """`v` if it is a dict, else {}: report fields are whatever the printer sent."""
+    return v if isinstance(v, dict) else {}
+
+
+def _l(v: Any) -> list:
+    """The dict items of `v` if it is a list, else []."""
+    return [x for x in v if isinstance(x, dict)] if isinstance(v, list) else []
+
+
+def _s(v: Any) -> str:
+    return v if isinstance(v, str) else ''
 
 
 def _temp(cur: Any, tgt: Any) -> dict:
@@ -98,16 +115,16 @@ def _temp(cur: Any, tgt: Any) -> dict:
 
 
 def _temps(p: dict) -> dict:
-    dev = p.get('device') or {}
+    dev = _d(p.get('device'))
     nozzles = []
-    extruders = sorted((dev.get('extruder') or {}).get('info') or [], key=lambda e: _int(e.get('id'), 0))
+    extruders = sorted(_l(_d(dev.get('extruder')).get('info')), key=lambda e: _int(e.get('id'), 0) or 0)
     for ex in extruders:
         nozzles.append(_temp(*packed(ex.get('temp'))))
     if not nozzles and ('nozzle_temper' in p or 'nozzle_target_temper' in p):
         nozzles.append(_temp(p.get('nozzle_temper'), p.get('nozzle_target_temper')))
-    bc, bt = packed(((dev.get('bed') or {}).get('info') or {}).get('temp'))
+    bc, bt = packed(_d(_d(dev.get('bed')).get('info')).get('temp'))
     bed = _temp(bc if bc is not None else p.get('bed_temper'), bt if bt is not None else p.get('bed_target_temper'))
-    cc, ct = packed(((dev.get('ctc') or {}).get('info') or {}).get('temp'))
+    cc, ct = packed(_d(_d(dev.get('ctc')).get('info')).get('temp'))
     if cc is not None:
         chamber = _temp(cc, ct)
     elif p.get('chamber_temper') is not None:
@@ -118,35 +135,35 @@ def _temps(p: dict) -> dict:
 
 
 def _spool_view(s: dict) -> dict:
-    f = s.get('filament') or {}
-    vendor = (f.get('vendor') or {}).get('name', '')
-    return {'id': s.get('id'), 'name': f"{vendor} {f.get('name') or ''}".strip(),
-            'material': f.get('material') or '', 'color_hex': f.get('color_hex') or '',
+    f = _d(s.get('filament'))
+    vendor = _s(_d(f.get('vendor')).get('name'))
+    return {'id': s.get('id'), 'name': f"{vendor} {_s(f.get('name'))}".strip(),
+            'material': _s(f.get('material')), 'color_hex': _s(f.get('color_hex')),
             'remaining_weight': s.get('remaining_weight')}
 
 
 def _ams(p: dict, spools: list[dict], printer_name: str) -> list[dict]:
-    ams = p.get('ams') or {}
+    ams = _d(p.get('ams'))
     now = tray_now_tag(ams.get('tray_now'))
     by_location: dict[str, dict] = {}
     if printer_name:
-        for s in sorted(spools, key=lambda s: s.get('id') or 0):
-            by_location.setdefault(s.get('location') or '', s)
+        for s in sorted(_l(spools), key=lambda s: _int(s.get('id'), 0) or 0):
+            by_location.setdefault(_s(s.get('location')), s)
     units = []
-    for u in ams.get('ams') or []:
+    for u in _l(ams.get('ams')):
         uid = _int(u.get('id'))
-        if uid is None:
+        if uid is None or uid < 0:
             continue
         label, kind = unit_label(uid)
         slots = []
-        for t in u.get('tray') or []:
+        for t in _l(u.get('tray')):
             tid = _int(t.get('id'))
-            if tid is None:
+            if tid is None or tid < 0:
                 continue
             sl = slot_label(uid, tid)
             spool = by_location.get(location(printer_name, sl)) if printer_name else None
-            slots.append({'slot': tid, 'label': sl, 'type': t.get('tray_type') or '',
-                          'color_hex': (t.get('tray_color') or '')[:6],
+            slots.append({'slot': tid, 'label': sl, 'type': _s(t.get('tray_type')),
+                          'color_hex': _s(t.get('tray_color'))[:6],
                           'active': now == f"{uid}:{tid}",
                           'spool': _spool_view(spool) if spool else None})
         units.append({'unit': uid, 'label': label, 'kind': kind, 'slots': slots})
@@ -159,28 +176,30 @@ def summarize(report: dict, spools: list[dict], *, printer_name: str = '', updat
 
     `spools` are Spoolman spools; a slot shows the spool whose `location` is "<printer_name> – AMS <label>"
     (no join without a printer name). `updated` is when the last report arrived (unix seconds)."""
-    p = report or {}
+    p = _d(report)
     now = time.time() if now is None else now
-    gs = p.get('gcode_state') or 'UNKNOWN'
+    gs = _s(p.get('gcode_state')) or 'UNKNOWN'
     active = gs in ACTIVE
     stg = _int(p.get('stg_cur'), -1)
     remaining = _int(p.get('mc_remaining_time'), 0) or 0
     eta = None
     if active and remaining > 0:
-        eta = datetime.fromtimestamp(now + remaining * 60).astimezone().isoformat(timespec='minutes')
-    lights = {l.get('node'): l.get('mode') for l in p.get('lights_report') or [] if isinstance(l, dict)}
+        try:
+            eta = datetime.fromtimestamp(now + remaining * 60).astimezone().isoformat(timespec='minutes')
+        except (OverflowError, OSError, ValueError):  # an absurd remaining time
+            eta = None
+    lights = {l.get('node'): l.get('mode') for l in _l(p.get('lights_report')) if isinstance(l.get('node'), str)}
     light = None
     if 'chamber_light' in lights:
         light = 'on' if lights['chamber_light'] == 'on' else 'off'
     hms = []
-    for e in p.get('hms') or []:
-        if isinstance(e, dict):
-            code = hms_code(e)
-            hms.append({'code': code, 'text': f"Printer alert HMS {code}"})
+    for e in _l(p.get('hms')):
+        code = hms_code(e)
+        hms.append({'code': code, 'text': f"Printer alert HMS {code}"})
     return {
         'gcode_state': gs,
         'stage': STAGES.get(stg, f"Stage {stg}") if active and 0 <= stg < 255 else '',
-        'job': p.get('subtask_name') or '',
+        'job': _s(p.get('subtask_name')),
         'percent': _int(p.get('mc_percent'), 0) or 0,
         'layer': _int(p.get('layer_num')),
         'total_layers': _int(p.get('total_layer_num')),

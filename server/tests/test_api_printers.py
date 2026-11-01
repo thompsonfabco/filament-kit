@@ -124,6 +124,7 @@ def test_add_returns_first_state(client, mgr):
 
 def test_add_with_name_and_wrong_code(client, mgr):
     mgr.settle = "wrong_code"
+    registry.detected(SERIAL, "10.0.0.5", "C12", "Shop P1S")
     r = client.post("/api/printers", json={"serial": SERIAL, "access_code": CODE, "name": "Bench"})
     no_code(r)
     assert r.status_code == 200 and r.json()["printer"]["state"] == "wrong_code"
@@ -255,3 +256,45 @@ def test_command_unknown_printer_and_bad_action(client, mgr):
                                         ("", None), ("Unknown9", None), ("ZZ9", None), (None, None)])
 def test_camera_kind(model, kind):
     assert camera_kind(model) == kind
+
+
+# ---------- final review ----------
+
+@pytest.mark.parametrize("serial", ["../etc", "has space", "x" * 65, "semi;colon"])
+def test_add_rejects_bad_serial(client, serial):
+    r = client.post("/api/printers", json={"serial": serial, "access_code": CODE})
+    assert r.status_code == 400 and r.json()["error"] == "bad_request"
+    assert registry.load() == {}
+
+
+@pytest.mark.parametrize("code", ["1234 5678", "abc-123", "x" * 33, "côde123"])
+def test_add_rejects_bad_access_code_with_plain_message(client, code):
+    registry.detected(SERIAL, "10.0.0.5", "C12", "Shop P1S")
+    r = client.post("/api/printers", json={"serial": SERIAL, "access_code": code})
+    assert r.status_code == 400 and r.json()["error"] == "bad_request"
+    assert "Access Code" in r.json()["message"] and code not in r.text
+    assert registry.load()[SERIAL].configured is False
+
+
+def test_add_unseen_printer_is_404(client, mgr):
+    r = client.post("/api/printers", json={"serial": SERIAL, "access_code": CODE})
+    assert r.status_code == 404 and r.json() == {"error": "not_found",
+                                                 "message": "That printer hasn't been seen on the network yet"}
+    assert registry.load() == {} and mgr.synced == 0
+
+
+def test_list_survives_one_bad_summary(client, mgr):
+    add_configured(mgr)
+    add_configured(mgr, serial="01P00A222222222", name="Other")
+    real = mgr.summary
+
+    def summary(serial):
+        if serial == SERIAL:
+            raise TypeError("odd report")
+        return real(serial)
+    mgr.summary = summary
+    r = client.get("/api/printers")
+    assert r.status_code == 200
+    by = {p["id"]: p for p in r.json()["printers"]}
+    assert by[SERIAL]["summary"] is None and by[SERIAL]["state"] == "connected"
+    assert by["01P00A222222222"]["summary"]["percent"] == 42
