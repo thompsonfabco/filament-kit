@@ -7,9 +7,11 @@ import json
 import os
 import shutil
 import socket
+import ssl
 import subprocess
 import sys
 import time
+import urllib.request
 from pathlib import Path
 
 from . import config, pairing
@@ -54,6 +56,18 @@ def _reads_today() -> int:
         return 0
 
 
+def _api_answers(port: int) -> tuple[bool, str]:
+    url = f"https://127.0.0.1:{port}/api/info"
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE  # local self-check of our own self-signed cert
+    try:
+        with urllib.request.urlopen(url, timeout=5, context=ctx) as r:
+            return r.status == 200, url
+    except (OSError, ValueError):
+        return False, url
+
+
 def cmd_status(client_factory) -> int:
     cfg = config.load()
     p = config.paths()
@@ -69,6 +83,9 @@ def cmd_status(client_factory) -> int:
             except (OSError, subprocess.SubprocessError):
                 active = False
             good &= _line(active, f"service {svc} active", f"sudo systemctl start {svc}")
+        ok, url = _api_answers(cfg["port"])
+        good &= _line(ok, f"filament-kit API {'answering' if ok else 'not answering'} at {url}",
+                      "sudo journalctl -u filament-kit -n 50")
 
     try:
         version = Spoolman(cfg["spoolman_url"]).ping()
@@ -99,6 +116,7 @@ def cmd_status(client_factory) -> int:
     else:
         good &= _line(False, f"certificate missing ({cert})", "run: sudo filament-kit cert")
 
+    print(f"--   display name: {cfg['server_name']}")
     print(f"--   paired devices: {len(pairing.devices())}")
     print(f"--   reads used today: {_reads_today()} of {cfg['reads_per_day']}")
     return 0 if good else 1
@@ -244,7 +262,7 @@ def cmd_config() -> int:
     cfg = config.load()
     while True:
         print("\nfilament-kit settings\n"
-              f"  1) server name        {cfg['server_name']}\n"
+              f"  1) display name       {cfg['server_name']}\n"
               "  2) storage\n"
               f"  3) Claude model       {cfg['model']}, {cfg['reads_per_day']} reads/day\n"
               "  4) Anthropic key\n"
@@ -254,7 +272,7 @@ def cmd_config() -> int:
             break
         choice = choice.strip()
         if choice == "1":
-            v = _ask("Server name: ")
+            v = _ask("Display name (shown in the app): ")
             if v and v.strip():
                 cfg["server_name"] = v.strip()
         elif choice == "2":
@@ -283,29 +301,13 @@ def cmd_config() -> int:
 
 # ---------- cert / ensure-fields ----------
 
-def _local_ips() -> list[str]:
-    ips: list[str] = []
-    if os.name != "nt":
-        try:
-            out = subprocess.run(["hostname", "-I"], capture_output=True, text=True, timeout=5).stdout
-            ips = [a for a in out.split() if "." in a]
-        except (OSError, subprocess.SubprocessError):
-            ips = []
-    if not ips:
-        try:
-            ips = [i[4][0] for i in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET)]
-        except OSError:
-            ips = []
-    return list(dict.fromkeys(a for a in ips if not a.startswith("127.")))
-
-
 def cmd_cert() -> int:
     cert = config.paths().etc / "cert.pem"
     if cert.exists():
         print(pairing.fingerprint(cert.read_bytes()))
         return 0
     cert.parent.mkdir(parents=True, exist_ok=True)
-    print(pairing.make_cert(config.load()["server_name"], _local_ips(), cert.parent))
+    print(pairing.make_cert(socket.gethostname(), pairing.local_ips(), cert.parent))
     return 0
 
 

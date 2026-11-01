@@ -125,7 +125,7 @@ def add_spools(sm: Spoolman, items: list[dict], rules: dict, dry: bool) -> AddRe
                                  f"weight {tare} g used for this filament")
         try:
             _write_items(sm, placed, vendors, fils, result, dry)
-        except SpoolmanError as e:
+        except (SpoolmanError, RuntimeError) as e:  # RuntimeError: a written spool did not read back
             raise AddFailed(f"spoolman failed part-way: {e}", result) from e
     return result
 
@@ -253,7 +253,11 @@ def add_and_link(sm: Spoolman, items: list[dict], rules: dict, dry: bool, uid: s
         elif dry:
             result.lines.append(f"would link tag {uid}")
         else:
-            link_tag(sm, result.spool_ids[0], uid, force=False, dry=False)
+            try:
+                link_tag(sm, result.spool_ids[0], uid, force=False, dry=False)
+            except (SpoolmanError, RuntimeError) as e:  # the spool exists; report it so a retry doesn't duplicate
+                raise AddFailed(f"spool {result.spool_ids[0]} was added but linking tag {uid} failed: {e}",
+                                result) from e
             result.lines.append(f"linked tag {uid} to spool {result.spool_ids[0]}")
     return result
 

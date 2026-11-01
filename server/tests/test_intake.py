@@ -199,3 +199,20 @@ def test_rules_mention_no_orders():
     props = SCHEMA["properties"]["items"]["items"]["properties"]
     assert not {"order", "price_per_kg", "price_line"} & set(props)
     assert SCHEMA["properties"]["items"]["items"]["required"] == list(props)
+
+
+def test_cap_refund_gives_back_newest(tmp_path):
+    f = tmp_path / "reads.json"
+    f.write_text(json.dumps([time.time() - 100]))
+    cap = ReadCap(f, 2)
+    cap.take()
+    cap.refund()
+    stamps = json.loads(f.read_text())
+    assert len(stamps) == 1 and stamps[0] < time.time() - 50
+    cap.take()
+    with pytest.raises(CapReached):
+        cap.take()
+    cap.refund()
+    cap.refund()
+    cap.refund()  # never below empty
+    assert json.loads(f.read_text()) == []

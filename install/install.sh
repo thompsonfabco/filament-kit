@@ -73,8 +73,11 @@ install -d -m 2750 -o root -g filament-kit "$ETC"
 # ---------- 3. Spoolman ----------
 # Built in $SPOOLMAN_OPT.new and swapped in only when complete; the marker is
 # written last, so a failed or interrupted install is redone on the next run.
+# Both markers carry the system Python version, so a distro Python upgrade rebuilds the venvs.
+PYVER=$(python3 --version 2>&1)
 SPOOLMAN_MARKER="$SPOOLMAN_OPT/.fk-installed"
-if [ -f "$SPOOLMAN_MARKER" ] && [ "$(cat "$SPOOLMAN_MARKER")" = "$SPOOLMAN_VERSION" ]; then
+SPOOLMAN_STAMP="$SPOOLMAN_VERSION $PYVER"
+if [ -f "$SPOOLMAN_MARKER" ] && [ "$(cat "$SPOOLMAN_MARKER")" = "$SPOOLMAN_STAMP" ]; then
     say "Spoolman $SPOOLMAN_VERSION already installed"
 else
     say "Installing Spoolman $SPOOLMAN_VERSION"
@@ -92,7 +95,7 @@ else
     python3 -m venv "$new/venv"
     "$new/venv/bin/python" -m pip install -q --upgrade pip
     "$new/venv/bin/python" -m pip install -q -r "$new/requirements.txt"
-    "$new/venv/bin/python" -m compileall -q "$new/spoolman" >/dev/null
+    "$new/venv/bin/python" -m compileall -q "$new/spoolman" >/dev/null || true
     chown -R root:root "$new"
     chmod -R go-w "$new"
     systemctl stop spoolman 2>/dev/null || true
@@ -102,7 +105,7 @@ else
     fi
     mv "$new" "$SPOOLMAN_OPT"
     rm -rf "$SPOOLMAN_OPT.old"
-    printf '%s\n' "$SPOOLMAN_VERSION" > "$SPOOLMAN_MARKER"
+    printf '%s\n' "$SPOOLMAN_STAMP" > "$SPOOLMAN_MARKER"
     rm -rf "$tmp"
     trap - EXIT
 fi
@@ -113,7 +116,7 @@ fi
 FK_MARKER="$OPT/.fk-installed"
 say "Installing filament-kit ($(basename "$WHEEL"))"
 mkdir -p "$OPT"
-if [ ! -f "$FK_MARKER" ]; then
+if [ ! -f "$FK_MARKER" ] || ! grep -qxF "$PYVER" "$FK_MARKER"; then
     rm -rf "$VENV"
 fi
 rm -f "$FK_MARKER"
@@ -122,7 +125,7 @@ rm -f "$FK_MARKER"
 "$VENV/bin/python" -m pip install -q --upgrade "$WHEEL"
 # Same version number on a rebuild: make sure the new code is in place.
 "$VENV/bin/python" -m pip install -q --force-reinstall --no-deps "$WHEEL"
-"$VENV/bin/python" -m compileall -q "$VENV/lib" >/dev/null
+"$VENV/bin/python" -m compileall -q "$VENV/lib" >/dev/null || true
 install -m 755 "$RES/backup.sh" "$OPT/backup.sh"
 install -m 755 "$RES/filament-kit-cli.sh" /usr/local/bin/filament-kit
 if [ -f "$HERE/app/filament-kit.apk" ]; then
@@ -134,14 +137,14 @@ if [ -f "$HERE/app/filament-kit.apk" ]; then
 fi
 chown -R root:root "$OPT"
 chmod -R go-w "$OPT"
-basename "$WHEEL" > "$FK_MARKER"
+{ basename "$WHEEL"; echo "$PYVER"; } > "$FK_MARKER"
 
 # ---------- 5. first-install questions ----------
 if [ "$FIRST_INSTALL" -eq 1 ]; then
     say "First-time setup"
     default_name=$(hostname)
     name=""
-    read -r -p "Server name [$default_name]: " name || true
+    read -r -p "Display name shown in the phone app (any text) [$default_name]: " name || true
     name=${name:-$default_name}
     FK_NAME="$name" FK_NO_SYSTEMD=1 "$VENV/bin/python" -I -c '
 import os

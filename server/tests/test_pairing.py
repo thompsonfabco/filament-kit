@@ -149,10 +149,43 @@ def test_devices_lists_only_claimed_with_paired():
     assert all(x["paired"] is not None for x in pairing.devices())
 
 
+def _qr(p):
+    return urllib.parse.parse_qs(urllib.parse.urlparse(p.qr).query)
+
+
 def test_qr_is_urlencoded(monkeypatch):
-    monkeypatch.setattr(config, "load", lambda: {"server_name": "a b&c", "port": 8710})
+    monkeypatch.setattr(pairing.socket, "gethostname", lambda: "a b&c")
+    monkeypatch.setattr(pairing, "local_ips", lambda: [])
     q = pairing.issue().qr
-    assert "a b" not in q and "h=a+b%26c" in q
+    assert "a b" not in q and "h=a+b%26c.local" in q
+
+
+def test_qr_host_is_hostname_not_display_name(monkeypatch):
+    cfg = config.load()
+    cfg["server_name"] = "Pat's Küche"
+    config.save(cfg)
+    monkeypatch.setattr(pairing.socket, "gethostname", lambda: "fkbox")
+    q = _qr(pairing.issue())
+    assert q["h"] == ["fkbox.local"] and q["p"] == ["8710"]
+
+
+def test_qr_has_ip_params_without_link_local(monkeypatch):
+    monkeypatch.setattr(pairing, "_candidate_ips",
+                        lambda: ["127.0.0.1", "169.254.3.4", "192.168.1.9", "fe80::1", "10.0.0.2", "192.168.1.9"])
+    q = _qr(pairing.issue())
+    assert q["ip"] == ["192.168.1.9", "10.0.0.2"]
+
+
+def test_local_ips_filters_loopback_link_local_and_junk(monkeypatch):
+    monkeypatch.setattr(pairing, "_candidate_ips",
+                        lambda: ["127.0.1.1", "169.254.0.9", "fe80::2", "not-an-ip", "172.16.0.4"])
+    assert pairing.local_ips() == ["172.16.0.4"]
+
+
+def test_cert_skips_link_local_and_loopback_ips(tmp_path):
+    pairing.make_cert("h3", ["169.254.1.1", "192.168.1.5", "127.0.0.1"], tmp_path / "c")
+    san = x509.load_pem_x509_certificate((tmp_path / "c" / "cert.pem").read_bytes()).extensions         .get_extension_for_class(x509.SubjectAlternativeName).value
+    assert san.get_values_for_type(x509.IPAddress) == [ipaddress.ip_address("192.168.1.5")]
 
 
 def test_last_seen_not_rewritten_every_check():
@@ -164,7 +197,8 @@ def test_last_seen_not_rewritten_every_check():
     assert f.read_text() == before
 
 
-def test_revoke_races_check():
+def test_revoke_races_check(monkeypatch):
+    monkeypatch.setattr(pairing, "LAST_SEEN_STALE", -1)  # every check rewrites devices.json
     p = pairing.issue()
     dev = pairing.check(p.token)
     stop = threading.Event()
@@ -188,3 +222,24 @@ def test_revoke_races_check():
     assert pairing.check(p.token) is None
     for f in config.paths().state.iterdir():
         json.loads(f.read_text())
+
+
+def _mp_worker(n: int) -> None:
+    for i in range(n):
+        keep, drop = pairing.issue("keep"), pairing.issue("drop")
+        pairing.check(keep.token)
+        pairing.revoke(pairing.check(drop.token))
+
+
+@pytest.mark.skipif(os.name == "nt", reason="cross-process flock is POSIX only")
+def test_two_processes_do_not_lose_updates():
+    import multiprocessing
+    ctx = multiprocessing.get_context("fork")
+    procs = [ctx.Process(target=_mp_worker, args=(15,)) for _ in range(3)]
+    for pr in procs:
+        pr.start()
+    for pr in procs:
+        pr.join(60)
+        assert pr.exitcode == 0
+    devs = pairing.devices()
+    assert len(devs) == 45 and {d["name"] for d in devs} == {"keep"}

@@ -30,7 +30,8 @@ Do these steps on the Ubuntu computer, in a Terminal window.
    ```
 
 4. Answer the questions:
-   - **Server name**: press Enter to keep the suggested name.
+   - **Display name**: the name the phone app shows for this server. Any text works (spaces, accents);
+     press Enter to keep the suggested name. Phones find the server by the computer's own name, not this one.
    - **Default storage locations**: press Enter for yes. Type `n` if you want to name your own racks and
      boxes now (you can also change them later).
    - **Anthropic API key**: paste the key and press Enter. Nothing shows while you type or paste; that is on
@@ -63,7 +64,7 @@ Run these in a Terminal on the Ubuntu computer.
 | `sudo filament-kit status` | Checks that everything works. Anything failing shows a `fix:` line telling you what to do. |
 | `sudo filament-kit pair` | Shows a new QR code to pair another phone. |
 | `sudo filament-kit unpair` | Lists paired phones. `sudo filament-kit unpair <id>` removes one. |
-| `sudo filament-kit config` | Settings menu: server name, storage locations, Claude model and daily limit, API key. |
+| `sudo filament-kit config` | Settings menu: display name, storage locations, Claude model and daily limit, API key. |
 
 Your spool inventory (Spoolman) is also in a web browser on any computer at home:
 `http://<computer name>.local:7912`, where `<computer name>` is the Ubuntu computer's own name (type

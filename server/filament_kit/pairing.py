@@ -9,11 +9,14 @@ import json
 import os
 import re
 import secrets
+import socket
+import subprocess
 import tempfile
 import threading
 import time
 import urllib.parse
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -24,10 +27,32 @@ from cryptography.x509.oid import NameOID
 
 from . import config
 
+try:
+    import fcntl
+except ImportError:  # Windows dev PCs: no cross-process lock (the service only runs on Linux)
+    fcntl = None
+
 TOKEN_TTL = 600
 MAX_ATTEMPTS = 5
 LAST_SEEN_STALE = 60
 _lock = threading.Lock()
+
+
+@contextmanager
+def _locked():
+    """Serialize pairing state between threads and with the CLI (`pair`/`unpair`) in another process."""
+    with _lock:
+        if fcntl is None:
+            yield
+            return
+        state = config.paths().state
+        state.mkdir(parents=True, exist_ok=True)
+        with open(state / "pairing.lock", "a") as fh:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
 
 
 class PairingError(Exception):
@@ -62,6 +87,34 @@ def _write_atomic(path: Path, data: bytes, mode: int) -> None:
         raise
 
 
+def _candidate_ips() -> list[str]:
+    ips: list[str] = []
+    if os.name != "nt":
+        try:
+            ips = subprocess.run(["hostname", "-I"], capture_output=True, text=True, timeout=5).stdout.split()
+        except (OSError, subprocess.SubprocessError):
+            ips = []
+    if not ips:
+        try:
+            ips = [i[4][0] for i in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET)]
+        except OSError:
+            ips = []
+    return ips
+
+
+def _usable(ip: str) -> bool:
+    try:
+        a = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return a.version == 4 and not a.is_loopback and not a.is_link_local
+
+
+def local_ips() -> list[str]:
+    """This machine's IPv4 addresses a phone can reach: no loopback, no link-local (169.254.x.x)."""
+    return list(dict.fromkeys(a for a in _candidate_ips() if _usable(a)))
+
+
 def make_cert(hostname: str, ips: list[str], dest: Path) -> str:
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
@@ -69,7 +122,7 @@ def make_cert(hostname: str, ips: list[str], dest: Path) -> str:
     name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, hostname)])
     dns = list(dict.fromkeys([hostname, f"{hostname}.local", "localhost"]))
     sans: list[x509.GeneralName] = [x509.DNSName(n) for n in dns]
-    sans += [x509.IPAddress(ipaddress.ip_address(ip)) for ip in ips]
+    sans += [x509.IPAddress(ipaddress.ip_address(ip)) for ip in dict.fromkeys(ips) if _usable(ip)]
     now = dt.datetime.now(dt.timezone.utc)
     cert = (
         x509.CertificateBuilder()
@@ -116,7 +169,7 @@ def _new_token() -> str:
 
 
 def _load_devices() -> list:
-    """Read devices, purging QR tokens never claimed within their window. Caller holds _lock."""
+    """Read devices, purging QR tokens never claimed within their window. Caller holds _locked()."""
     now = time.time()
     devs = _read("devices.json")
     kept = [d for d in devs if d.get("claimed") is not None or d.get("expires", 0) > now]
@@ -130,8 +183,8 @@ def issue(device_hint: str = "") -> Pairing:
     if not cert.exists():
         raise PairingError(f"no server certificate at {cert}; create it first")
     fp = fingerprint(cert.read_bytes())
-    cfg = config.load()
-    with _lock:
+    port = config.load()["port"]
+    with _locked():
         now = time.time()
         token = _new_token()
         code = f"{secrets.randbelow(1_000_000):06d}"
@@ -154,14 +207,16 @@ def issue(device_hint: str = "") -> Pairing:
         pending.append({"code": code, "device": device_id, "expires": expires, "attempts": 0})
         _write("pending.json", pending)
 
+    # server_name is only a display name; the phone finds the server by mDNS hostname or one of its IPs
     query = urllib.parse.urlencode(
-        {"h": cfg["server_name"], "p": cfg["port"], "t": token, "fp": fp}
+        {"h": f"{socket.gethostname()}.local", "p": port, "t": token, "fp": fp, "ip": local_ips()},
+        doseq=True,
     )
     return Pairing(token=token, code=code, expires=expires, qr=f"fkit://pair?{query}")
 
 
 def redeem_code(code: str) -> str:
-    with _lock:
+    with _locked():
         now = time.time()
         pending = [p for p in _read("pending.json") if p["expires"] > now]
         match = None
@@ -188,7 +243,7 @@ def redeem_code(code: str) -> str:
 
 def check(token: str) -> str | None:
     h = _hash(token)
-    with _lock:
+    with _locked():
         devs = _load_devices()
         for d in devs:
             if hmac.compare_digest(d["hash"], h):
@@ -206,7 +261,7 @@ def check(token: str) -> str | None:
 
 
 def revoke(device_id: str) -> bool:
-    with _lock:
+    with _locked():
         devs = _load_devices()
         kept = [d for d in devs if d["id"] != device_id]
         if len(kept) == len(devs):
@@ -216,7 +271,7 @@ def revoke(device_id: str) -> bool:
 
 
 def devices() -> list[dict]:
-    with _lock:
+    with _locked():
         return [
             {k: d[k] for k in ("id", "name", "paired", "last_seen")}
             for d in _load_devices()

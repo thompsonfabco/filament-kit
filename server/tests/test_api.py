@@ -306,3 +306,45 @@ def test_apk(sm, tmp_path):
 def test_unknown_route_json_404(sm):
     r = client(sm).get("/api/nope")
     assert r.status_code == 404 and r.json()["error"] == "not_found"
+
+
+def test_add_and_link_tag_not_landing_502_partial(sm, monkeypatch):
+    real_get = sm.get
+
+    def get(path):
+        out = real_get(path)
+        if path.startswith("spool/") and isinstance(out, dict):
+            out["extra"] = {}
+        return out
+    monkeypatch.setattr(sm, "get", get)
+    it = {"vendor": "SUNLU", "name": "PETG Grey", "material": "PETG", "net": 1000, "tare": 213, "density": 1.27,
+          "count": 1, "sealed": False}
+    r = client(sm).post("/api/intake/add", headers=auth(token()),
+                        json={"items": [it], "dry_run": False, "tag": UID})
+    assert r.status_code == 502
+    body = r.json()
+    assert body["error"] == "spoolman_error" and len(body["partial_spool_ids"]) == 1
+    assert "tag did not land" in body["message"]
+
+
+def test_read_spoolman_down_503_refunds_cap(sm):
+    import anthropic
+    import httpx
+    fake = FakeClaude(READ)
+    c = client(sm, fake)
+    tok = token()
+    assert read(c, tok, [("a.jpg", JPEG)]).status_code == 200
+    reads = config.paths().state / "reads.json"
+    assert len(json.loads(reads.read_text())) == 1
+    dead = Spoolman(f"http://127.0.0.1:{free_port()}", timeout=2)
+    c_dead = client(dead, fake)
+    r = read(c_dead, tok, [("a.jpg", JPEG)])
+    assert r.status_code == 503 and r.json()["error"] == "spoolman_unreachable"
+    assert len(json.loads(reads.read_text())) == 1
+    # retry of a kept read: a Spoolman outage gives the read back too
+    fake.raises = anthropic.APIConnectionError(request=httpx.Request("POST", "https://x"))
+    read_id = read(c, tok, [("a.jpg", JPEG)]).json()["read_id"]
+    assert len(json.loads(reads.read_text())) == 2
+    r = c_dead.post(f"/api/intake/retry/{read_id}", headers=auth(tok))
+    assert r.status_code == 503 and r.json()["error"] == "spoolman_unreachable"
+    assert len(json.loads(reads.read_text())) == 2

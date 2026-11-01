@@ -190,3 +190,74 @@ def test_ensure_fields_unreachable(capsys):
     cfg["spoolman_url"] = "http://127.0.0.1:1"
     config.save(cfg)
     assert cli.main(["ensure-fields"]) == 1
+
+
+def test_cert_uses_hostname_not_display_name(monkeypatch):
+    from cryptography import x509
+    cfg = config.load()
+    cfg["server_name"] = "Pat's Küche"
+    config.save(cfg)
+    monkeypatch.setattr(cli.socket, "gethostname", lambda: "fkbox")
+    monkeypatch.setattr(pairing, "_candidate_ips", lambda: ["169.254.7.7", "192.168.1.20", "127.0.0.1"])
+    assert cli.main(["cert"]) == 0
+    cert = x509.load_pem_x509_certificate((config.paths().etc / "cert.pem").read_bytes())
+    san = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+    assert cert.subject.rfc4514_string() == "CN=fkbox"
+    assert set(san.get_values_for_type(x509.DNSName)) == {"fkbox", "fkbox.local", "localhost"}
+    assert [str(a) for a in san.get_values_for_type(x509.IPAddress)] == ["192.168.1.20"]
+
+
+class _Active:
+    stdout = "active\n"
+
+
+def _systemd_on(monkeypatch):
+    monkeypatch.delenv("FK_NO_SYSTEMD")
+    monkeypatch.setattr(cli.subprocess, "run", lambda *a, **kw: _Active())
+
+
+def test_status_api_not_answering_fails(capsys, monkeypatch):
+    from conftest import free_port
+    _systemd_on(monkeypatch)
+    cfg = config.load()
+    cfg["port"] = free_port()
+    config.save(cfg)
+    cli.main(["status"])
+    out = capsys.readouterr().out
+    assert f"FAIL filament-kit API not answering at https://127.0.0.1:{cfg['port']}/api/info" in out
+    assert "sudo journalctl -u filament-kit -n 50" in out
+
+
+def test_status_api_answering_ok(capsys, monkeypatch):
+    _systemd_on(monkeypatch)
+    seen = {}
+
+    class Resp:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    real_urlopen = cli.urllib.request.urlopen
+
+    def urlopen(url, timeout=None, context=None):
+        if not isinstance(url, str):  # Spoolman's own requests
+            return real_urlopen(url, timeout=timeout)
+        seen.update(url=url, timeout=timeout, verify=context.verify_mode)
+        return Resp()
+
+    monkeypatch.setattr(cli.urllib.request, "urlopen", urlopen)
+    cli.main(["status"])
+    out = capsys.readouterr().out
+    assert "OK   filament-kit API answering at https://127.0.0.1:8710/api/info" in out
+    import ssl
+    assert seen == {"url": "https://127.0.0.1:8710/api/info", "timeout": 5, "verify": ssl.CERT_NONE}
+
+
+def test_status_api_check_skipped_without_systemd(capsys):
+    cli.main(["status"])
+    out = capsys.readouterr().out
+    assert "api/info" not in out and f"display name: {config.load()['server_name']}" in out

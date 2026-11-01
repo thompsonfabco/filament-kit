@@ -102,20 +102,34 @@ class ReadCap:
         self.path, self.per_day = Path(path), per_day
         self._lock = threading.Lock()
 
+    def _load(self, now: float) -> list[float]:
+        try:
+            return [t for t in json.loads(self.path.read_text(encoding="utf-8")) if t > now - 86400]
+        except (OSError, ValueError, TypeError):
+            return []
+
+    def _save(self, stamps: list[float]) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self.path.with_name(self.path.name + ".tmp")
+        tmp.write_text(json.dumps(stamps), encoding="utf-8")
+        os.replace(tmp, self.path)
+
     def take(self) -> None:
         with self._lock:
             now = time.time()
-            try:
-                stamps = [t for t in json.loads(self.path.read_text(encoding="utf-8")) if t > now - 86400]
-            except (OSError, ValueError, TypeError):
-                stamps = []
+            stamps = self._load(now)
             if len(stamps) >= self.per_day:
                 raise CapReached(f"daily limit of {self.per_day} label reads reached (reads_per_day)")
             stamps.append(now)
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = self.path.with_name(self.path.name + ".tmp")
-            tmp.write_text(json.dumps(stamps), encoding="utf-8")
-            os.replace(tmp, self.path)
+            self._save(stamps)
+
+    def refund(self) -> None:
+        """Give back the newest read (one that never reached Claude)."""
+        with self._lock:
+            stamps = self._load(time.time())
+            if stamps:
+                stamps.remove(max(stamps))
+            self._save(stamps)
 
 
 # ---------- failed reads kept for retry ----------
