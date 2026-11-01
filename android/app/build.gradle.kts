@@ -31,12 +31,17 @@ android {
     }
     testOptions {
         unitTests.isIncludeAndroidResources = true
+        unitTests.all {
+            // Robolectric native graphics (Bitmap codecs) needs JDK internals on JDK 17+.
+            it.jvmArgs("--add-exports=java.base/jdk.internal.access=ALL-UNNAMED")
+        }
     }
 }
 
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.exifinterface)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.material3)
