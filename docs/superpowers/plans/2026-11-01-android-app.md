@@ -1,14 +1,16 @@
-# filament-kit Android app Implementation Plan
+# filament-kit Android app + printers Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** A sideloadable Android app that pairs with a filament-kit server, adds spools from label photos + tag + weight, and opens/updates spools from a tag tap.
+**Goal:** A sideloadable Android app that pairs with a filament-kit server, adds spools from label photos + tag + weight, and opens/updates spools from a tag tap; plus the server-side printer bridge part 1 (discovery, status, controls, camera relay) and the app's Printers screens.
 
 **Architecture:** One Gradle project in `android/`, single `app` module, package `com.thompsonfabco.filamentkit`. Pure-Kotlin core packages (`tags`, `pairing`, `net`, `drafts`, `imaging`) with JVM unit tests; Compose UI on top (`ui/*`), one activity, Navigation Compose. Networking is OkHttp with a TrustManager that trusts exactly the pinned certificate fingerprint and ignores the host name, so any address of the server (mDNS name, IP, emulator `10.0.2.2`) works once paired.
 
 **Tech Stack:** Kotlin (current stable), Jetpack Compose (BOM), Navigation Compose, kotlinx.serialization, OkHttp (+ MockWebServer, okhttp-tls in tests), CameraX, ML Kit barcode-scanning (bundled model), DataStore Preferences, JUnit 4, Compose UI test / AndroidX Test (instrumented). Build with the Gradle wrapper, AGP current stable supporting compileSdk 37, JDK 21 at `G:\Android\jdk-21.0.13+9`, SDK `G:\Android\Sdk`.
 
-**Spec:** `docs/superpowers/specs/2026-11-01-filament-kit-design.md` (section 4 Android app; section 3 Security for the QR/pinning contract; section 7 app error handling; section 8 app testing). Server API: `server/filament_kit/api.py`.
+**Server printer stack (Tasks 12–15):** Python in `server/filament_kit/bridge/` (paho-mqtt, ffmpeg from apt), ported from the owner's proven `C:\CODING\h2d-filament-scanner\remote\remote.py` and generalised to many printers. **App printer screens (Task 16):** Media3 ExoPlayer (HLS, with an OkHttp data source on the pinned client) and an MJPEG view.
+
+**Spec:** `docs/superpowers/specs/2026-11-01-filament-kit-design.md` (section 4 Android app incl. Printers; section 5 "Finding and adding printers", "Status", "Controls", "Camera relay"; section 3 Security for the QR/pinning contract; section 7 app error handling; section 8 app testing). Server API: `server/filament_kit/api.py`.
 
 ## Global Constraints
 
@@ -19,6 +21,8 @@
 - Auth: `Authorization: Bearer <token>` on every call except `GET /api/info`, `POST /api/pair`, `GET /app.apk`.
 - Server API (JSON): `GET /api/info` → `{name, version, api, apk_version}`; `POST /api/pair {code}` → `{token}`; `POST /api/intake/read` multipart `photo`×1–8 (JPEG ≤ 3 MB each), `hint`, optional `tag` → `{items, questions, tag, usage, read_id}`; `POST /api/intake/retry/{read_id}`; `POST /api/intake/add {items, dry_run, tag}` → `{spool_ids, lines, dry}`; `GET /api/tags/{uid}` → `{spool|null}`; `POST /api/spools/{id}/link {tag, force, dry_run, gross?, location?}` → `{spool}`; `PATCH /api/spools/{id} {gross|remaining|location|empty, dry_run}` → `{spool}`; `GET /api/spools?q=&sealed=1` → `{spools}`; `GET /api/locations` → `{locations}`; `GET /app.apk`.
 - Errors: body `{error, message, ...}`; codes `bad_photo`, `bad_request` (400), `unauthorized` (401), `not_found` (404), `tag_conflict` (409, `reason`, `other_spool`), `daily_cap` (429), Claude codes `bad_key|rate_limited|unreachable|refused|truncated|api_error` (502, `read_id`), `spoolman_error` (502, `partial_spool_ids`), `spoolman_unreachable` (503), `internal` (500).
+- Printer API (Bearer on all): `GET /api/printers` → `{printers: [{id, name, model, serial, ip, configured: bool, state: "connected"|"offline"|"wrong_code"|"needs_developer_mode"|"not_configured", camera: {kind: "hls"|"mjpeg"|null}, summary: {gcode_state, percent, remaining_min}}]}`; `POST /api/printers {serial, access_code, name?}` → `{printer}` (409 `exists`, 400 `bad_request`); `GET /api/printers/{id}` → `{printer, status}` (`status`: `gcode_state`, `stage`, `job`, `percent`, `layer`, `total_layers`, `remaining_min`, `eta`, `temps {nozzle[], bed, chamber}`, `ams [{unit, label, kind, slots [{slot, label, type, color_hex, spool}]}]`, `hms [{code, text}]`, `light`, `updated`); `POST /api/printers/{id}/command {action}` with `pause|resume|stop|light_on|light_off` → `{ok, reply}` (409 `printer_offline`, 504 `no_reply`); camera `GET /api/printers/{id}/camera/index.m3u8` (+ segments under the same path) or `GET /api/printers/{id}/camera.mjpeg` (`multipart/x-mixed-replace`). `id` = printer serial.
+- Access Codes: stored only in `/var/lib/filament-kit/printers.json` (filament-kit:filament-kit 600); never returned by any API, never logged, never on a command line (ffmpeg reads from the loopback relay).
 - Writes always send `dry_run` explicitly: `true` for the preview, `false` for the confirmed write.
 - Tag UID format: bytes as lowercase hex without padding joined by `:` (`04 77 90 0E` → `4:77:90:e`), identical to the server's `tags.format_uid`.
 - Photos: always JPEG, longest side ≤ 1600 px, quality 85, EXIF orientation applied; must end ≤ 3 MB.
@@ -33,6 +37,8 @@
 3. The token is revoked (`unpair`) → any 401 sends the user to the pairing screen with an explanation, not a crash loop (test in Task 4).
 4. The server's DHCP address changes → stored endpoints are tried in order (mDNS name, last good, each `ip=`), then NSD discovery; the first that presents the pinned cert wins and is remembered (test in Task 3).
 5. A camera returns a huge or rotated image → resized/rotated JPEG ≤ 3 MB, never HEIC/PNG (test in Task 2).
+6. Two phones open the same printer's camera and one leaves → the stream keeps running for the other; it stops 45 s after the last viewer, and no ffmpeg process is left behind if the client disconnects mid-segment (test in Task 15).
+7. A printer powers off mid-print or its IP changes → state goes `offline` within one keepalive, the next SSDP announce updates the IP and it reconnects without a restart; commands while offline get 409 `printer_offline`, not a hang (test in Task 13).
 
 ---
 
@@ -152,6 +158,61 @@
 - [ ] **Step 2:** Run `./gradlew connectedDebugAndroidTest` on `fk_test` with the args → PASS; record in `docs/android-e2e.md`.
 - [ ] **Step 3:** Commit `test(android): end-to-end against a real server`.
 
+### Task 12: Printer registry and SSDP discovery (server)
+
+**Files:** Create `server/filament_kit/bridge/__init__.py`, `bridge/registry.py`, `bridge/discovery.py`; modify `cli.py` (config menu `5) Printers`: list, add manually, rename, remove); tests `server/tests/test_registry.py`, `test_discovery.py`.
+
+**Interfaces:**
+- Produces: `registry.Printer` dataclass (`serial, name, model, ip, access_code (repr hidden), configured`); `registry.load() -> dict[str, Printer]`, `registry.upsert(p)`, `registry.remove(serial)`, `registry.detected(serial, ip, model, name)` (adds or updates an unconfigured entry, updates `ip` of a configured one) — file `state/printers.json`, mode 600, atomic, same lock pattern as `pairing._locked`. `discovery.parse_notify(data: bytes) -> dict | None` (headers `Location`, `USN`, `DevModel.bambu.com`, `DevName.bambu.com`, `DevConnect.bambu.com`; case-insensitive); `discovery.Listener(on_found)` binds UDP 2021 (SO_REUSEADDR) in a thread.
+- [ ] **Step 1: Failing tests** — parse a Bambu NOTIFY built from the format above (CRLF and lowercase-header variants); garbage → None; `detected()` adds unconfigured, updates the IP of a configured one, never touches its access code; `printers.json` mode 600 (POSIX); `repr(Printer)` hides the code; CLI add/rename/remove via scripted stdin; the access code is never printed.
+- [ ] **Steps 2–4:** RED → implement → GREEN. **Step 5:** Commit `feat(bridge): printer registry and discovery`.
+
+### Task 13: MQTT connection and status (server)
+
+**Files:** Create `bridge/connection.py`, `bridge/status.py`; add `paho-mqtt` to `server/pyproject.toml`; tests `test_status.py`, `test_connection.py`, `server/tests/data/h2d_pushall.json` + `h2d_delta.json` (built from the field usage in the owner's `remote.py`; no secrets).
+
+**Interfaces:**
+- Consumes: registry.
+- Produces: `status.merge(full: dict, delta: dict) -> dict` (deep merge; lists element-wise as Bambu sends them); `status.summarize(report: dict, spools: list[dict]) -> dict` (the `status` shape in Global Constraints; stage names ported from `remote.py`; AMS labels A1–D4 / HT-A…; slots joined to Spoolman spools whose `location` is `"<printer name> – AMS <label>"`); `connection.Manager` — one `PrinterConnection` per configured printer (paho, TLS without verification, user `bblp`, password = Access Code; subscribe `device/<serial>/report`; `pushall` on connect and 1.5 s after each command; reconnect with backoff 2 → 60 s; states `connected|offline|wrong_code|needs_developer_mode` (MQTT rc 5 → `wrong_code`; a command reply with `result: fail` and an authorization reason → `needs_developer_mode`)); `Manager.command(serial, action) -> dict` waits ≤ 10 s for the reply with the matching `sequence_id` (`pause|resume|stop` → `print.command`; `light_on|light_off` → `system` `ledctrl` `chamber_light`); offline → `PrinterOffline`; no reply → `NoReply`. The paho client is injected (`client_factory`) so tests drive it with a fake.
+- [ ] **Step 1: Failing tests** — merge keeps untouched keys and replaces list elements; summarize gives stage text, percent, eta, temps, AMS labels and joins a spool; fake client: connect → pushall published; rc 5 → `wrong_code`; disconnect → `offline`, then reconnect with backoff; a registry IP change → reconnect to the new IP; `command("pause")` publishes the right JSON and returns the reply; offline → `PrinterOffline`; a silent printer → `NoReply` after the (patched, 0.2 s) timeout.
+- [ ] **Steps 2–4:** RED → implement → GREEN. **Step 5:** Commit `feat(bridge): mqtt connection, status, commands`.
+
+### Task 14: Printer API routes (server)
+
+**Files:** Modify `server/filament_kit/api.py`, `__main__.py` (start the discovery listener and connection manager with the app, stop them on shutdown); tests `test_api_printers.py`.
+
+**Interfaces:**
+- Consumes: registry, discovery, connection, status.
+- Produces: the printer routes in Global Constraints. `POST /api/printers` stores the code, starts the connection, waits ≤ 8 s for the first state and returns it (so the app can say "wrong code" at once). Commands are logged with `device_id`, `serial`, `action`, result at INFO (never the code). Errors: `printer_offline` 409, `no_reply` 504, `not_found` 404, `exists` 409.
+- [ ] **Step 1: Failing tests** (TestClient + fake Manager): list shows detected and configured printers with states; add → 200 with state, duplicate → 409; status shape; command ok / offline 409 / no reply 504; no response body contains an access code (checked in every test); 401 without a token.
+- [ ] **Steps 2–4:** RED → implement → GREEN. **Step 5:** Commit `feat(api): printer routes`.
+
+### Task 15: Camera relay (server)
+
+**Files:** Create `bridge/camera.py`; modify `api.py` (camera routes), `install/install.sh` (apt `ffmpeg`), `install/systemd/filament-kit.service` (`RuntimeDirectory=filament-kit` for HLS segments on tmpfs); tests `test_camera.py`.
+
+**Interfaces:**
+- Produces: `camera.Hub` — per printer, reference-counted viewers; the first viewer starts the source, `release()` schedules a stop after 45 s. RTSP models (X1 series, H2D, X2D families; table in code): port the loopback RTSP relay from `remote.py` (TLS + Digest auth to `rtsps://<ip>:322/streaming/live/1`) and run `ffmpeg -rtsp_transport tcp -i rtsp://127.0.0.1:<relay>/... -c copy -f hls -hls_time 1 -hls_list_size 4 -hls_flags delete_segments` into `$RUNTIME_DIRECTORY/cam/<serial>/`; routes serve only `index.m3u8` and `*.ts` from there. P1/A1 (port 6000): TLS socket, 80-byte auth packet (user `bblp`, Access Code), then 16-byte header + JPEG frames; the route streams `multipart/x-mixed-replace; boundary=frame` at ≤ 5 fps. A viewer = an open MJPEG response, or an HLS fetch within the last 10 s.
+- [ ] **Step 1: Failing tests** — refcount: two viewers, one leaves → still running; both leave → stopped after the (patched) delay; the ffmpeg command line never contains the access code; a fake port-6000 server (TLS, checks the auth packet, sends 3 frames) → the MJPEG route yields 3 parts; the HLS route refuses `../` and names other than `.ts`/`.m3u8`; the source process is killed on Hub shutdown (no orphans).
+- [ ] **Steps 2–4:** RED → implement → GREEN. **Step 5:** Commit `feat(bridge): camera relay`.
+
+### Task 16: Printers screens (app)
+
+**Files:** Create `.../ui/printers/PrintersScreen.kt`, `PrinterScreen.kt`, `PrinterViewModel.kt`, `MjpegView.kt`, `HlsPlayer.kt`; modify `Api.kt` / `Models.kt` (printer routes) and Home (Printers entry); tests `PrinterViewModelTest.kt`, `ApiPrintersTest.kt`, `MjpegParserTest.kt`.
+
+**Interfaces:**
+- Consumes: Api, pinned client.
+- Produces: Printers list (name, model, state dot, job + percent while printing; an unconfigured printer → "Add printer" dialog asking for the Access Code, with help text "on the printer: Settings → Network/LAN → Access Code"); printer screen: camera on top (Media3 HLS through `OkHttpDataSource.Factory(pinnedClient)` with the Bearer header, or `MjpegView` reading the multipart stream), status below, polling every 2 s only while visible, controls (Pause or Resume by state; Stop → confirm → second confirm naming the printer and job; Light toggle); each command shows the printer's reply or the error (`printer_offline`, `no_reply`). States `wrong_code` / `needs_developer_mode` show the fix in plain words.
+- [ ] **Step 1: Failing tests** — printer API routes (MockWebServer); the MJPEG parser yields frames from a multipart stream split across reads; view model: polls only while active, Stop needs two confirms, a 409 shows "printer is offline".
+- [ ] **Steps 2–4:** RED → implement → GREEN. **Step 5:** Commit `feat(android): printers and camera`.
+
+### Task 17: Real-printer check on the owner's H2D
+
+The owner's OK is required before starting, and the H2D must be idle. Read-only plus the chamber light only: never pause, resume or stop a real printer in this task.
+- [ ] **Step 1:** On the WSL test server, confirm the H2D shows up via SSDP; the owner enters its Access Code through the app or `filament-kit config` (never typed by the agent).
+- [ ] **Step 2:** Status fields match the printer screen (state, temps, AMS slots); the camera plays in the emulator (HLS); light on → off with the reply shown.
+- [ ] **Step 3:** Record results in `docs/android-e2e.md`; commit `test: real-printer check (H2D)`.
+
 ## Execution waves (parallel where independent)
 
-W1: Task 1 · W2: Tasks 2, 3, 6 · W3: Task 4 · W4: Tasks 5, 7, 8 · W5: Tasks 9, 10 · W6: Task 11.
+W1: Tasks 1, 12 · W2: Tasks 2, 3, 6, 13 · W3: Tasks 4, 14, 15 · W4: Tasks 5, 7, 8, 16 · W5: Tasks 9, 10 · W6: Task 11 · W7: Task 17 (owner present).

@@ -124,15 +124,46 @@ location); Claude model and daily cap; printers; library update schedule.
   the phone until sent successfully.
 - **Spool card:** Load into printer (printer + slot from the live list) · Update weight · Move · Mark empty.
 - **Tags:** NFC reader mode; UID formatted like nfc2klipper (`":".join(f"{b:x}")`, bytes in hex, no padding).
+- **Printers:** every printer the server has detected or been given, each with a state dot. Tapping one opens
+  its screen: live camera; state and stage, job name, progress, layer, time left + ETA, temperatures (nozzles,
+  bed, chamber), every AMS slot with colour, type and its Spoolman spool, active HMS messages; controls
+  Pause / Resume / Stop / chamber light (Stop asks twice). A detected printer that isn't set up yet offers
+  "Add printer" (asks for its Access Code, which goes to the server and never stays on the phone).
 - **Updates:** checks the server for a newer APK and offers to install it (needs "install unknown apps" once).
 - **Debug builds:** a "simulate tag tap" control for the emulator.
 
 ## 5. Bambu bridge
 
-### Adding a printer
+### Finding and adding printers
 
-In `filament-kit config`: name, IP, serial, Access Code (stored root-only). The bridge tests at once and reports
-connected / wrong code / Developer Mode needed.
+Bambu printers announce themselves on the LAN (SSDP NOTIFY on UDP 2021: serial, model, name, IP, LAN/cloud).
+The bridge listens and keeps a list of detected printers; an IP change is picked up automatically. A detected
+printer is added from the app ("Add printer": Access Code) or `filament-kit config` → Printers (name, IP,
+serial, Access Code, for printers that don't announce). Access Codes live in
+`/var/lib/filament-kit/printers.json` (filament-kit 600), never on the phone. The bridge tests at once and
+reports connected / wrong code / Developer Mode needed.
+
+### Status
+
+From the MQTT reports (deltas deep-merged onto the last full report; `pushall` on connect and after each
+command): state, stage (named from `stg_cur`), job, progress, layer, time left, temperatures, AMS units and
+slots (joined to Spoolman spools by `extra.active_tray`/location), HMS codes. `GET /api/printers` and
+`GET /api/printers/{id}`; the app polls every 2 s while a printer screen is open.
+
+### Controls
+
+`POST /api/printers/{id}/command {action}` with `pause`, `resume`, `stop`, `light_on`, `light_off`; the bridge
+waits for the printer's reply and returns it. Every command is logged with the paired device's id. Any paired
+phone can control any printer (owner's choice, 2026-11-01).
+
+### Camera relay
+
+On demand, started by the first viewer and stopped 45 s after the last. X1-series, H2D/X2D (RTSPS on 322,
+"LAN mode liveview" on): a loopback relay does the TLS and Digest auth, ffmpeg remuxes H.264 to HLS without
+re-encoding (segments on tmpfs), served at `/api/printers/{id}/camera/index.m3u8`. P1/A1-series (JPEG stream on
+TCP 6000): read frame by frame and served as MJPEG at `/api/printers/{id}/camera.mjpeg`. Both need the Bearer
+token; the printer's entry says which kind it has. The Access Code is never on a command line. Ported from the
+owner's H2D remote (`C:\CODING\h2d-filament-scanner\remote\remote.py`), proven on hardware.
 
 ### Connection
 
@@ -261,8 +292,9 @@ the app, never on disk.
 ## 9. Build order
 
 1. Server core: install, Spoolman, pairing, intake, tags, placement, status/config CLI.
-2. Android app against the server core.
-3. Bambu bridge, starting with the H2D prototype checks.
+2. Android app against the server core, plus printers: discovery, connection, status, controls and camera
+   (server and app together, owner's choice 2026-11-01).
+3. Rest of the Bambu bridge (slot mapping, loading, usage tracking), starting with the H2D prototype checks.
 4. Profiles, spec library updater, PC sync.
 
 Each step gets its own implementation plan.
