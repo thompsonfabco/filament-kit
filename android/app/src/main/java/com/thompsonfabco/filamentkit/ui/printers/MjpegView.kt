@@ -23,6 +23,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import com.thompsonfabco.filamentkit.net.LOCAL_NETWORK_MESSAGE
+import com.thompsonfabco.filamentkit.net.LocalNetwork
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -151,7 +154,7 @@ fun MjpegView(client: OkHttpClient, url: String, headers: Map<String, String>, m
         } catch (e: CameraHttpError) {
             PrinterHelp.cameraFix(e.code)
         } catch (e: Exception) {
-            "The camera stream was interrupted. Tap Try again."
+            if (LocalNetwork.missing()) LOCAL_NETWORK_MESSAGE else "The camera stream was interrupted. Tap Try again."
         }
     }
     Box(modifier, contentAlignment = Alignment.Center) {
@@ -188,7 +191,8 @@ internal suspend fun streamMjpeg(
         .build().newCall(req)
     // A blocked socket read ignores coroutine cancellation; this sibling cancels the call the moment the
     // caller is cancelled, which fails the read and closes the response at once.
-    val closer = launch {
+    // UNDISPATCHED: the closer is waiting before the blocking read starts, so a cancellation at any point closes the call.
+    val closer = launch(start = CoroutineStart.UNDISPATCHED) {
         try {
             awaitCancellation()
         } finally {

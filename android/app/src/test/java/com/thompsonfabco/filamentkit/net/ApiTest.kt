@@ -315,6 +315,24 @@ class ApiTest {
         assertEquals("offline", e.code)
     }
 
+    @Test fun refusedConnectionWithoutTheLocalNetworkPermissionSaysSo() {
+        val port = server.port
+        server.close()
+        val blocked = Api(pinnedClient(cert.fingerprint()), { "https://127.0.0.1:$port" }, { token }, localNetworkMissing = { true })
+        val e = failure { blocked.locations() }
+        assertEquals("local_network", e.code)
+        assertEquals(LOCAL_NETWORK_MESSAGE, e.message)
+    }
+
+    @Test fun downloadApkWriteFailureIsNotOffline() {
+        val bytes = ByteArray(5000) { it.toByte() }
+        server.enqueue(MockResponse.Builder().code(200).body(okio.Buffer().write(bytes)).build())
+        val blocker = tmp.newFile("not-a-dir")
+        val e = failure { api.downloadApk(java.io.File(blocker, "c.apk")) }
+        assertEquals("storage", e.code)
+        assertTrue(e.message, "space" in e.message || "save" in e.message)
+    }
+
     @Test fun fingerprintMismatchPropagatesUnwrapped() {
         val other = serverCert()
         val bad = Api(pinnedClient(other.fingerprint()), { baseOf(server) }, { token })

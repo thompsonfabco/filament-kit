@@ -11,6 +11,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PairRouterTest {
@@ -26,7 +27,7 @@ class PairRouterTest {
     @Test fun unauthorizedApiErrorRoutesToPairWithMessage() {
         val router = PairRouter()
         router.report(ApiError(401, "unauthorized", "nope"))
-        assertEquals(PairNotice.Unpaired, router.notice.value)
+        assertTrue(router.notice.value is PairNotice.Unpaired)
         assertEquals(UNPAIRED_MESSAGE, (router.notice.value as PairNotice.Unpaired).message)
         assertEquals(1, router.requests.value)
     }
@@ -79,8 +80,19 @@ class PairRouterTest {
         server.enqueue(MockResponse(code = 401, body = """{"error":"unauthorized","message":"Token revoked"}"""))
         val e = assertThrows(ApiError::class.java) { runBlocking { api.search("grey", false) } }
         assertEquals("unauthorized", e.code)
-        assertEquals(PairNotice.Unpaired, router.notice.value)
+        // the notice carries the token that call was sent with, so only that token is forgotten
+        assertEquals(PairNotice.Unpaired("tok"), router.notice.value)
         assertEquals(1, router.requests.value)
+    }
+
+    @Test fun aReportedUnauthorizedKeepsTheTokenAlreadyNoted() {
+        val router = PairRouter()
+        router.unauthorized("tok")
+        router.report(ApiError(401, "unauthorized", "nope"))
+        assertEquals(PairNotice.Unpaired("tok"), router.notice.value)
+        router.clear()
+        router.report(ApiError(401, "unauthorized", "nope"))
+        assertEquals(PairNotice.Unpaired(null), router.notice.value)
     }
 
     @Test fun a401FromAnUnauthenticatedCallDoesNotRoute() = runBlocking {

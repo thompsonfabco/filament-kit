@@ -21,13 +21,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.thompsonfabco.filamentkit.ui.parseWeight
 
 /** The link-to-sealed flow: search sealed spools, preview the link, confirm; or resolve a tag conflict. */
 @Composable
 fun LinkSealedScreen(state: SpoolUiState, vm: SpoolViewModel) {
     var query by remember { mutableStateOf("") }
     var gross by remember { mutableStateOf("") }
-    val grossInvalid = gross.isNotBlank() && gross.trim().toDoubleOrNull() == null
+    val grossInvalid = gross.isNotBlank() && parseWeight(gross) == null
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         when (state) {
             is SpoolUiState.LinkSearch -> {
@@ -46,7 +47,7 @@ fun LinkSealedScreen(state: SpoolUiState, vm: SpoolViewModel) {
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
                     isError = grossInvalid,
-                    supportingText = { if (grossInvalid) Text("Enter a number, or leave this empty") },
+                    supportingText = { if (grossInvalid) Text("Enter grams above 0, or leave this empty") },
                     modifier = Modifier.fillMaxWidth(),
                 )
                 state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -58,7 +59,7 @@ fun LinkSealedScreen(state: SpoolUiState, vm: SpoolViewModel) {
                 state.results.forEach { spool ->
                     Column(
                         Modifier.fillMaxWidth()
-                            .clickable(enabled = !grossInvalid) { vm.pick(spool.id, gross.trim().toDoubleOrNull()) }
+                            .clickable(enabled = !grossInvalid) { vm.pick(spool.id, parseWeight(gross)) }
                             .padding(vertical = 6.dp),
                     ) { SpoolSummaryRow(spool) }
                 }

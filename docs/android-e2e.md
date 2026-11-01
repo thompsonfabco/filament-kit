@@ -18,8 +18,40 @@ installed between runs (`leaveApksInstalledAfterRun`), otherwise the app data is
 
 `fkStopBeforeRead=1` stops `main` right before Read, for a free rehearsal.
 
-The test grants CAMERA and `ACCESS_LOCAL_NETWORK`. Without the second one, API 37 shows the system device picker
-("Choose a device to connect") over the app as soon as the Pair screen browses for servers.
+With `fkPhase` the test grants CAMERA and `ACCESS_LOCAL_NETWORK` before the app starts. Without `fkPhase` it skips
+before any rule runs (it does not even start the activity), so the default run keeps `ACCESS_LOCAL_NETWORK` denied.
+
+## Local network permission (API 37)
+
+`ACCESS_LOCAL_NETWORK` governs every LAN socket the app opens: API calls, the certificate probe, camera streams, the
+APK download and NSD browsing. The app asks for it at start (API 37+ only). While it is missing the app does not
+browse, probe, verify or pair, the session does not look for the server (Home shows "Needs local network access",
+never "Can't reach the server"), and a failed connection says the permission is missing instead of "offline". Pair
+and Home show a plain explanation with **Allow**, plus **Open app settings** once Android stops showing its dialog.
+
+`LocalNetworkDeniedTest` covers the denied state on the emulator in the default run: the app is installed fresh
+without the grant; it refuses the system dialog, checks the explanation and **Allow** (and that no QR scan or
+"Can't reach the server" is shown), asks again, refuses again and checks **Open app settings**. To rerun it after the
+permission was granted, revoke it first (revoking kills the app, so do it between runs, never inside a test):
+
+```bash
+$ADB shell pm revoke com.thompsonfabco.filamentkit android.permission.ACCESS_LOCAL_NETWORK
+```
+
+On the emulator the permission is a normal runtime permission; if a future image enforces it only behind the
+compatibility change, also run `$ADB shell am compat enable RESTRICT_LOCAL_NETWORK com.thompsonfabco.filamentkit`.
+
+### Owner's check on a real phone (Android 17 / API 37) — not automated
+
+1. Install the app fresh (or `adb shell pm clear com.thompsonfabco.filamentkit`) and open it: the system asks for
+   local network access (it may be shown as "Nearby devices"). Tap **Don't allow**: Pair shows the explanation and
+   **Allow**, and no QR scan button; no "Choose a device to connect" picker appears.
+2. Tap **Allow** in the app and refuse again: **Open app settings** appears and opens the app's settings page. Allow
+   the permission there and return: the Pair screen (QR scan, servers found on this network) appears without
+   restarting the app.
+3. Pair by QR. Then revoke the permission in the system settings (Android restarts the app): Home shows "Needs local
+   network access" with **Allow**, not "Can't reach the server". Allow it: Home turns to "Connected".
+4. With the permission granted, check Printers (camera view), Search, Add spools and an app update download once.
 
 The certificate-change case is a separate instrumented test, `net/PinnedTlsDeviceTest.kt`: a MockWebServer with
 another `HeldCertificate` checks that Android's TLS stack (Conscrypt) surfaces a bare `FingerprintMismatch` with both

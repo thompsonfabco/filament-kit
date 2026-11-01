@@ -20,6 +20,9 @@ data class Draft(
     val readResult: JsonObject?,
     val editedItems: JsonArray?,
     val created: Long,
+    /** Set after a real add that may have written spools (partial Spoolman failure, or the reply was lost): the ids
+     * already created (possibly none known). The next real add needs an explicit "I checked". */
+    val addedBefore: List<Long>? = null,
 )
 
 @Serializable
@@ -31,6 +34,7 @@ private data class DraftJson(
     val readResult: JsonObject? = null,
     val editedItems: JsonArray? = null,
     val created: Long = 0,
+    val addedBefore: List<Long>? = null,
 )
 
 /**
@@ -76,7 +80,7 @@ class DraftStore(private val dir: File) {
         if (!file.isFile) return null
         return try {
             val d = json.decodeFromString<DraftJson>(file.readText())
-            Draft(id, photoFiles(folder), d.hint, d.tag, d.weightGrams, d.sealed, d.readResult, d.editedItems, d.created)
+            Draft(id, photoFiles(folder), d.hint, d.tag, d.weightGrams, d.sealed, d.readResult, d.editedItems, d.created, d.addedBefore)
         } catch (e: Exception) {
             null
         }
@@ -94,7 +98,11 @@ class DraftStore(private val dir: File) {
     private fun write(draft: Draft) {
         val folder = folder(draft.id)
         val body = json.encodeToString(
-            DraftJson(draft.hint, draft.tag, draft.weightGrams, draft.sealed, draft.readResult, draft.editedItems, draft.created),
+            // JSON has no NaN/Infinity: such a weight would make every later write of this draft fail.
+            DraftJson(
+                draft.hint, draft.tag, draft.weightGrams?.takeIf { it.isFinite() }, draft.sealed, draft.readResult,
+                draft.editedItems, draft.created, draft.addedBefore,
+            ),
         )
         val tmp = File(folder, "$DRAFT_FILE.tmp")
         tmp.writeText(body)

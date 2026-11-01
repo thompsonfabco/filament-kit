@@ -65,7 +65,12 @@ data class UpdateUi(
     val error: String? = null,
     /** The download is done and the system confirmation is waiting: Home shows "Tap to install". */
     val confirmPending: Boolean = false,
+    /** The server speaks a newer API than [SUPPORTED_API]: Home asks the user to update the app. */
+    val serverTooNew: Boolean = false,
 )
+
+/** The server API version (`/api/info` `api`) this app understands. */
+const val SUPPORTED_API = 1
 
 /**
  * Checks the server for a newer APK when created and every [checkEveryMs] after; [install] downloads it to
@@ -140,7 +145,12 @@ class Updater(
         try {
             val info = source.info()
             val offered = info.apkVersion?.trim()?.toIntOrNull()
-            _state.update { it.copy(available = if (isNewer(info.apkVersion, currentVersion)) offered else null) }
+            _state.update {
+                it.copy(
+                    available = if (isNewer(info.apkVersion, currentVersion)) offered else null,
+                    serverTooNew = info.api > SUPPORTED_API,
+                )
+            }
             lastCheckOk = true
         } catch (e: CancellationException) {
             throw e

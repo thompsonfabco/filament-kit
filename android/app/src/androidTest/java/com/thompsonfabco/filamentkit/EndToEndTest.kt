@@ -33,6 +33,8 @@ import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.RuleChain
+import org.junit.rules.TestRule
+import org.junit.runners.model.Statement
 import org.junit.runner.RunWith
 
 private const val TAG = "FkE2E"
@@ -50,11 +52,25 @@ private const val TAG = "FkE2E"
  */
 @RunWith(AndroidJUnit4::class)
 class EndToEndTest {
+    /** Skips before any other rule runs unless `fkPhase` is passed. */
+    private val onlyWithPhase = TestRule { base, _ ->
+        object : Statement() {
+            override fun evaluate() {
+                assumeTrue("end-to-end runs only with -e fkPhase", !InstrumentationRegistry.getArguments().getString("fkPhase").isNullOrBlank())
+                base.evaluate()
+            }
+        }
+    }
+
     private val compose = createAndroidComposeRule<MainActivity>()
 
     @get:Rule val rules: RuleChain = RuleChain
-        // ACCESS_LOCAL_NETWORK (API 37): without it, browsing for servers opens the system device picker over the app.
-        .outerRule(GrantPermissionRule.grant(Manifest.permission.CAMERA, "android.permission.ACCESS_LOCAL_NETWORK"))
+        // ACCESS_LOCAL_NETWORK (API 37): the app cannot reach the server without it. Granted only for a real E2E run
+        // (fkPhase passed): the default run keeps it denied for LocalNetworkDeniedTest, and a grant cannot be undone
+        // in-process (revoking kills the app).
+        // Without fkPhase nothing runs at all, not even the activity (it would open the permission dialog).
+        .outerRule(onlyWithPhase)
+        .around(GrantPermissionRule.grant(Manifest.permission.CAMERA, "android.permission.ACCESS_LOCAL_NETWORK"))
         .around(compose)
 
     private val args = InstrumentationRegistry.getArguments()
