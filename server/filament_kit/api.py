@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import functools
 import logging
-import re
 
 from starlette.applications import Starlette
 from starlette.concurrency import run_in_threadpool
@@ -36,7 +35,14 @@ def _err(status: int, code: str, message: str, **extra) -> JSONResponse:
     return JSONResponse({"error": code, "message": message, **extra}, status_code=status)
 
 
+def _http_error(e: HTTPException) -> JSONResponse:
+    code = {404: "not_found", 405: "method_not_allowed"}.get(e.status_code, "bad_request")
+    return _err(e.status_code, code, str(e.detail))
+
+
 def _to_response(e: Exception) -> JSONResponse:
+    if isinstance(e, HTTPException):  # e.g. a malformed or oversized multipart body from request.form()
+        return _http_error(e)
     if isinstance(e, PhotoError):
         return _err(400, "bad_photo", str(e))
     if isinstance(e, CapReached):
@@ -125,13 +131,16 @@ def create_app(sm: Spoolman | None = None, claude=None) -> Starlette:
     sm = sm if sm is not None else Spoolman(cfg["spoolman_url"])
     cap = ReadCap(config.paths().state / "reads.json", cfg["reads_per_day"])
 
-    def rules() -> dict:
+    def rules() -> dict:  # sync: call it from inside the threadpool
         return config.load()["placement"]
+
+    def info_body() -> dict:
+        return {"name": config.load()["server_name"], "version": __version__, "api": API_VERSION,
+                "apk_version": _apk_version()}
 
     @_handle
     async def info(request: Request):
-        return JSONResponse({"name": config.load()["server_name"], "version": __version__, "api": API_VERSION,
-                             "apk_version": await run_in_threadpool(_apk_version)})
+        return JSONResponse(await run_in_threadpool(info_body))
 
     @_handle
     async def pair(request: Request):
@@ -163,17 +172,19 @@ def create_app(sm: Spoolman | None = None, claude=None) -> Starlette:
     @_authed
     async def intake_retry(request: Request):
         read_id = request.path_params["read_id"]
-        kept = re.fullmatch(r"[A-Za-z0-9_-]+", read_id) and (config.paths().state / "failed" / read_id).is_dir()
-        if kept:  # an unknown read_id fails with not_found without using up a read
-            await run_in_threadpool(cap.take)
-        return JSONResponse(await run_in_threadpool(intake.retry, read_id, sm, claude))
+
+        def run() -> dict:
+            if intake.is_kept(read_id):  # an unknown or expired read fails with not_found without using up a read
+                cap.take()
+            return intake.retry(read_id, sm, claude)
+        return JSONResponse(await run_in_threadpool(run))
 
     @_authed
     async def intake_add(request: Request):
         body = await _json(request)
         dry = _opt(body, "dry_run", bool, True)
         uid = _opt(body, "tag", str) or None
-        r = await run_in_threadpool(inventory.add_and_link, sm, body.get("items"), rules(), dry, uid)
+        r = await run_in_threadpool(lambda: inventory.add_and_link(sm, body.get("items"), rules(), dry, uid))
         return JSONResponse({"spool_ids": r.spool_ids, "lines": r.lines, "dry": r.dry})
 
     @_authed
@@ -186,10 +197,10 @@ def create_app(sm: Spoolman | None = None, claude=None) -> Starlette:
         tag = body.get("tag")
         if not isinstance(tag, str) or not tag.strip():
             raise BadRequest("tag is required")
-        spool = await run_in_threadpool(functools.partial(
-            inventory.open_spool, sm, request.path_params["id"], tag, rules(),
-            gross=_opt(body, "gross", float), location=_opt(body, "location", str),
-            force=_opt(body, "force", bool, False), dry=_opt(body, "dry_run", bool, True)))
+        kw = dict(gross=_opt(body, "gross", float), location=_opt(body, "location", str),
+                  force=_opt(body, "force", bool, False), dry=_opt(body, "dry_run", bool, True))
+        spool = await run_in_threadpool(
+            lambda: inventory.open_spool(sm, request.path_params["id"], tag, rules(), **kw))
         return JSONResponse({"spool": spool})
 
     @_authed
@@ -209,26 +220,23 @@ def create_app(sm: Spoolman | None = None, claude=None) -> Starlette:
 
     @_authed
     async def locations(request: Request):
-        names = list(config.load()["locations"])
-        used = await run_in_threadpool(sm.get, "spool")
-        for loc in sorted({s["location"] for s in used if s.get("location")}):
-            if loc not in names:
-                names.append(loc)
-        return JSONResponse({"locations": names})
+        def names() -> list[str]:
+            out = list(config.load()["locations"])
+            for loc in sorted({s["location"] for s in sm.get("spool") if s.get("location")}):
+                if loc not in out:
+                    out.append(loc)
+            return out
+        return JSONResponse({"locations": await run_in_threadpool(names)})
 
     @_handle
     async def apk(request: Request):
         f = config.paths().opt / "app" / "filament-kit.apk"
-        if not f.is_file():
+        if not await run_in_threadpool(f.is_file):
             return _err(404, "not_found", "no app package is installed on this server")
         return FileResponse(f, media_type=APK_TYPE, filename="filament-kit.apk")
 
     async def http_error(request: Request, exc: HTTPException):
-        code = {404: "not_found", 405: "method_not_allowed"}.get(exc.status_code, "bad_request")
-        return _err(exc.status_code, code, str(exc.detail))
-
-    async def internal_error(request: Request, exc: Exception):
-        return _to_response(exc)
+        return _http_error(exc)
 
     return Starlette(
         routes=[
@@ -244,5 +252,5 @@ def create_app(sm: Spoolman | None = None, claude=None) -> Starlette:
             Route("/api/locations", locations),
             Route("/app.apk", apk),
         ],
-        exception_handlers={HTTPException: http_error, Exception: internal_error},
+        exception_handlers={HTTPException: http_error},
     )
