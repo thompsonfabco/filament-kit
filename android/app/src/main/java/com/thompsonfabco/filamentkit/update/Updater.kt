@@ -10,6 +10,7 @@ import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -45,6 +46,12 @@ interface ApkInstall {
     fun requestPermission()
 
     suspend fun install(apk: File)
+
+    /** True while the system's install confirmation waits for the user (it may not have opened by itself). */
+    val confirmPending: Flow<Boolean>
+
+    /** Opens the waiting install confirmation. */
+    fun showConfirm()
 }
 
 /**
@@ -56,6 +63,8 @@ data class UpdateUi(
     val busy: Boolean = false,
     val needsPermission: Boolean = false,
     val error: String? = null,
+    /** The download is done and the system confirmation is waiting: Home shows "Tap to install". */
+    val confirmPending: Boolean = false,
 )
 
 /**
@@ -75,13 +84,17 @@ class Updater(
     val state: StateFlow<UpdateUi> = _state.asStateFlow()
 
     private var checkJob: Job? = null
+    private var lastCheckOk = false
 
     init {
         viewModelScope.launch {
             while (isActive) {
-                runCheck()
+                check()
                 delay(checkEveryMs)
             }
+        }
+        viewModelScope.launch {
+            installer.confirmPending.collect { pending -> _state.update { it.copy(confirmPending = pending) } }
         }
     }
 
@@ -90,6 +103,14 @@ class Updater(
         if (checkJob?.isActive == true) return
         checkJob = viewModelScope.launch { runCheck() }
     }
+
+    /** The server became reachable: check again only if the last check failed (no duplicate startup check). */
+    fun onOnline() {
+        if (!lastCheckOk) check()
+    }
+
+    /** "Tap to install": opens the waiting system confirmation. */
+    fun confirmInstall() = installer.showConfirm()
 
     fun install() {
         val s = _state.value
@@ -120,9 +141,11 @@ class Updater(
             val info = source.info()
             val offered = info.apkVersion?.trim()?.toIntOrNull()
             _state.update { it.copy(available = if (isNewer(info.apkVersion, currentVersion)) offered else null) }
+            lastCheckOk = true
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            lastCheckOk = false
             onProblem(e)
         }
     }
