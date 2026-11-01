@@ -38,7 +38,7 @@ data class ServerInfo(
 data class ReadResult(
     val items: JsonArray = JsonArray(emptyList()),
     val questions: List<String> = emptyList(),
-    val tag: String? = null,
+    @Serializable(with = ReadTag::class) val tag: String? = null,
     val usage: JsonObject? = null,
     @SerialName("read_id") val readId: String? = null,
 )
@@ -183,3 +183,19 @@ internal object LenientInt : KSerializer<Int> {
     override fun serialize(encoder: Encoder, value: Int) = encoder.encodeInt(value)
 }
 // ---- end printer models ------------------------------------------------------------------------------
+
+/**
+ * The tag a read was made with. The server echoes it as `{"nfc_id": uid}`; a bare string (older drafts) is accepted
+ * too. Written back as the bare uid.
+ */
+@OptIn(ExperimentalSerializationApi::class)
+internal object ReadTag : KSerializer<String?> {
+    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("ReadTag", PrimitiveKind.STRING).nullable
+    override fun deserialize(decoder: Decoder): String? {
+        val el = (decoder as? JsonDecoder ?: throw SerializationException("JSON only")).decodeJsonElement()
+        val value = (el as? JsonObject)?.get("nfc_id") ?: el
+        return (value as? JsonPrimitive)?.takeIf { it !is JsonNull }?.content
+    }
+    override fun serialize(encoder: Encoder, value: String?) =
+        (encoder as JsonEncoder).encodeJsonElement(if (value == null) JsonNull else JsonPrimitive(value))
+}
