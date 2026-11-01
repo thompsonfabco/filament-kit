@@ -95,7 +95,20 @@ def serve(app, hub, **kw) -> None:
         sys.exit(STARTUP_FAILURE)
 
 
+def _log_to_journal() -> None:
+    """uvicorn configures only its own loggers, so ours (command audit lines, IP-change warnings) need a handler;
+    stderr goes to the systemd journal."""
+    app_log = logging.getLogger("filament_kit")
+    if not app_log.handlers:
+        handler = logging.StreamHandler(sys.stderr)
+        handler.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
+        app_log.addHandler(handler)
+        app_log.propagate = False
+    app_log.setLevel(logging.INFO)
+
+
 def main() -> None:
+    _log_to_journal()
     cfg = config.load()
     etc = config.paths().etc
     sm = Spoolman(cfg["spoolman_url"])

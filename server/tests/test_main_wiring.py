@@ -71,6 +71,23 @@ def test_main_installs_lifespan_hook(tmp_path, monkeypatch):
     assert ctx.__qualname__.startswith("printer_lifespan")
 
 
+def test_main_routes_app_info_logs_to_the_journal(tmp_path, monkeypatch):
+    # The command audit line (device, serial, action) is INFO; without a handler on our logger it was dropped
+    # (found on the real H2D check: uvicorn only configures its own loggers).
+    import logging
+    for n in ("etc", "state", "opt"):
+        (tmp_path / n).mkdir()
+        monkeypatch.setenv(f"FK_{n.upper()}", str(tmp_path / n))
+    monkeypatch.setattr(m, "serve", lambda app, hub, **kw: None)
+    log = logging.getLogger("filament_kit")
+    monkeypatch.setattr(log, "handlers", [])
+    monkeypatch.setattr(log, "level", logging.NOTSET)
+    monkeypatch.setattr(log, "propagate", True)  # restored afterwards so caplog-based tests still see records
+    m.main()
+    assert log.isEnabledFor(logging.INFO)
+    assert log.handlers or logging.getLogger().handlers
+
+
 def test_manager_start_failure_does_not_leak_listener(tmp_path, monkeypatch):
     monkeypatch.setenv("FK_STATE", str(tmp_path))
     events = []
