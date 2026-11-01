@@ -1,6 +1,7 @@
 """Minimal Spoolman REST client (urllib, JSON). Paths are relative to /api/v1."""
 from __future__ import annotations
 
+import http.client
 import json
 import urllib.error
 import urllib.request
@@ -36,13 +37,19 @@ class Spoolman:
         req = urllib.request.Request(url, data=data, method=method, headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                status = resp.status
                 raw = resp.read()
         except urllib.error.HTTPError as e:
             detail = e.read().decode(errors="replace")[:500]
             raise SpoolmanError(f"spoolman {method} {path} -> {e.code}: {detail}", status=e.code) from e
-        except (urllib.error.URLError, OSError) as e:
+        except (urllib.error.URLError, http.client.HTTPException, OSError) as e:
             raise SpoolmanError("spoolman_unreachable", status=None) from e
-        return json.loads(raw) if raw else None
+        if not raw:
+            return None
+        try:
+            return json.loads(raw)
+        except ValueError as e:
+            raise SpoolmanError(f"bad response from spoolman {method} {path}: not JSON", status=status) from e
 
     def get(self, path: str) -> Any:
         return self._request("GET", path)
