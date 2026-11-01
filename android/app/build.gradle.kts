@@ -14,6 +14,7 @@ android {
         targetSdk = 37
         versionCode = 1
         versionName = "1.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
@@ -50,10 +51,22 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.datastore.preferences)
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
+    implementation(libs.mlkit.barcode.scanning)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.robolectric)
     testImplementation(libs.okhttp.tls)
     testImplementation(libs.okhttp.mockwebserver3)
+
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
