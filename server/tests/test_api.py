@@ -175,15 +175,33 @@ def test_patch_and_locations(sm):
     r = c.patch(f"/api/spools/{sid}", headers=auth(tok), json={"remaining": 500, "dry_run": True})
     assert r.status_code == 200 and r.json()["spool"]["remaining_weight"] == 500
     assert sm.get(f"spool/{sid}")["remaining_weight"] == 1000
-    r = c.patch(f"/api/spools/{sid}", headers=auth(tok), json={"gross": 713, "location": "Rack 1"})
+    r = c.patch(f"/api/spools/{sid}", headers=auth(tok), json={"remaining": 400})  # no dry_run = dry run
+    assert r.status_code == 200 and sm.get(f"spool/{sid}")["remaining_weight"] == 1000
+    r = c.patch(f"/api/spools/{sid}", headers=auth(tok),
+                json={"gross": 713, "location": "Rack 1", "dry_run": False})
     assert r.status_code == 200
     assert r.json()["spool"]["remaining_weight"] == 500 and r.json()["spool"]["location"] == "Rack 1"
+    stored = sm.get(f"spool/{sid}")
+    assert stored["remaining_weight"] == 500 and stored["location"] == "Rack 1"
     r = c.patch(f"/api/spools/{sid}", headers=auth(tok), json={"gross": 10})
     assert r.status_code == 400 and r.json()["error"] == "bad_request"
     r = c.patch(f"/api/spools/{sid}", headers=auth(tok), json={"remaining": "lots"})
     assert r.status_code == 400 and r.json()["error"] == "bad_request"
     locs = c.get("/api/locations", headers=auth(tok)).json()["locations"]
     assert locs[:4] == config.load()["locations"]
+
+
+def test_add_without_dry_run_is_dry(sm, spoolman_fake_store):
+    c = client(sm)
+    r = c.post("/api/intake/add", headers=auth(token()), json={"items": READ["items"]})
+    assert r.status_code == 200, r.text
+    assert r.json()["dry"] is True and r.json()["spool_ids"] == []
+    assert spoolman_fake_store["spools"] == {} and spoolman_fake_store["filaments"] == {}
+
+
+def test_missing_spool_404(sm):
+    r = client(sm).patch("/api/spools/99999", headers=auth(token()), json={"remaining": 5, "dry_run": False})
+    assert r.status_code == 404 and r.json()["error"] == "not_found" and r.json()["message"]
 
 
 def test_spoolman_down_503():
