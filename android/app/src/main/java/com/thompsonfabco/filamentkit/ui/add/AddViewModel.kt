@@ -94,7 +94,11 @@ data class AddUiState(
     val error: AddError? = null,
     /** Bumped when items or fields are replaced wholesale (read, restore, remove), so screens reset their text. */
     val generation: Int = 0,
-)
+) {
+    /** Every item has a whole spool count of at least 1 (Preview is blocked otherwise). */
+    val countsValid: Boolean
+        get() = items.all { ((it["count"] as? JsonPrimitive)?.intOrNull ?: 0) >= 1 }
+}
 
 /**
  * The add-spools flow. A draft (photos + choices + read result + edited items) is created at the first photo, saved
@@ -164,6 +168,7 @@ class AddViewModel(
                         d to store.get(d.id)?.photos.orEmpty()
                     }
                     if (draft == null) draft = d
+                    forgetFailedRead()
                     _state.update { it.copy(photos = photos, draftId = d.id) }
                     save()
                 } catch (e: CancellationException) {
@@ -184,20 +189,44 @@ class AddViewModel(
                     draft?.let { store.get(it.id)?.photos }.orEmpty()
                 }
             }
+            forgetFailedRead()
             _state.update { it.copy(photos = photos) }
         }
     }
 
-    fun setHint(text: String) = edit { it.copy(hint = text) }
+    fun setHint(text: String) {
+        if (text == _state.value.hint) return
+        forgetFailedRead()
+        edit { it.copy(hint = text) }
+    }
 
     /** Grams on the scale, spool included; only used for one opened spool. */
     fun setWeight(grams: Double?) = edit { it.copy(weight = grams, sealed = if (grams != null) false else it.sealed) }
 
     fun setSealed(sealed: Boolean) = edit { it.copy(sealed = sealed, weight = if (sealed) null else it.weight) }
 
-    fun clearTag() = edit { it.copy(tag = null) }
+    fun clearTag() = changeTag(null)
 
-    private fun setTag(uid: String) = edit { it.copy(tag = uid) }
+    /** Taps while a call is running are ignored, so the tag sent is the tag the user saw. */
+    private fun setTag(uid: String) {
+        if (_state.value.stage in BUSY) return
+        changeTag(uid)
+    }
+
+    /** A different tag changes what Read and Add do: a pending retry and any preview are no longer valid. */
+    private fun changeTag(uid: String?) {
+        if (uid == _state.value.tag) return
+        forgetFailedRead()
+        _state.update { it.copy(tag = uid).invalidated() }
+        save()
+    }
+
+    /** Photos, hint or tag changed: the server's kept copy of a failed read no longer matches. */
+    private fun forgetFailedRead() {
+        failedReadId = null
+        retryAction = null
+        _state.update { it.copy(error = null) }
+    }
 
     fun read() {
         val s = _state.value
@@ -234,7 +263,7 @@ class AddViewModel(
         _state.update {
             it.copy(
                 stage = Stage.Review, items = items, questions = res.questions, notices = notices,
-                tag = res.tag ?: it.tag, previewLines = emptyList(), error = null, generation = it.generation + 1,
+                previewLines = emptyList(), error = null, generation = it.generation + 1,
             )
         }
         save()
@@ -257,8 +286,11 @@ class AddViewModel(
     fun setNumber(index: Int, key: String, value: Double?) =
         editItem(index) { JsonObject(it + (key to (value?.let(::number) ?: JsonNull))) }
 
-    fun setCount(index: Int, count: Int?) =
-        editItem(index) { JsonObject(it + ("count" to (count?.let { c -> JsonPrimitive(c) } ?: JsonNull))) }
+    /** `gross` only applies to a single spool, so any other count drops it. */
+    fun setCount(index: Int, count: Int?) = editItem(index) {
+        val o = it + ("count" to (count?.let { c -> JsonPrimitive(c) } ?: JsonNull))
+        JsonObject(if (count != 1) o - "gross" else o)
+    }
 
     /** Blank leaves the location to the server's placement rules. */
     fun setLocation(index: Int, location: String) = editItem(index) {
@@ -272,26 +304,31 @@ class AddViewModel(
     }
 
     fun removeItem(index: Int) {
-        if (index !in _state.value.items.indices) return
+        if (index !in _state.value.items.indices || _state.value.stage in BUSY) return
         _state.update { s ->
-            s.copy(items = s.items.filterIndexed { i, _ -> i != index }, generation = s.generation + 1).unpreviewed()
+            s.copy(items = s.items.filterIndexed { i, _ -> i != index }, generation = s.generation + 1).invalidated()
         }
+        retryAction = null
         save()
     }
 
     private fun editItem(index: Int, change: (JsonObject) -> JsonObject) {
-        if (index !in _state.value.items.indices) return
-        _state.update { s -> s.copy(items = s.items.mapIndexed { i, o -> if (i == index) change(o) else o }).unpreviewed() }
+        if (index !in _state.value.items.indices || _state.value.stage in BUSY) return
+        _state.update { s -> s.copy(items = s.items.mapIndexed { i, o -> if (i == index) change(o) else o }).invalidated() }
+        retryAction = null
         save()
     }
 
-    /** Any edit after a preview needs a new preview before Add. */
-    private fun AddUiState.unpreviewed() =
-        if (stage == Stage.Preview) copy(stage = Stage.Review, previewLines = emptyList()) else this
+    /**
+     * Any edit makes a preview and a pending retry stale: back to Review (a new preview is needed before Add) and the
+     * error is cleared (callers also drop [retryAction]).
+     */
+    private fun AddUiState.invalidated() =
+        (if (stage == Stage.Preview) copy(stage = Stage.Review, previewLines = emptyList()) else this).copy(error = null)
 
     fun preview() {
         val s = _state.value
-        if (s.items.isEmpty() || s.stage != Stage.Review) return
+        if (s.items.isEmpty() || !s.countsValid || s.stage != Stage.Review) return
         runAdd(dryRun = true)
     }
 
@@ -320,11 +357,16 @@ class AddViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                val err = describe(e)
-                // Spoolman failed part-way: spools may exist now, so a fresh preview is needed before adding again.
-                val stage = if ((e as? ApiError)?.code == "spoolman_error") Stage.Review else back
+                val code = (e as? ApiError)?.code
+                var err = describe(e)
+                // A real add that may have written something (Spoolman failed part-way, or the reply was lost) needs a
+                // fresh preview before another real add; its retry is that preview, never a blind second write.
+                val mayHaveWritten = !dryRun && (code == "spoolman_error" || code == "offline")
+                if (!dryRun && code == "offline") err = err.copy(message = ADD_REPLY_LOST)
+                val stage = if (mayHaveWritten) Stage.Review else back
                 _state.update { it.copy(stage = stage, previewLines = if (stage == Stage.Review) emptyList() else it.previewLines) }
-                retryAction = { runAdd(dryRun) }
+                // Retries go through the stage guards of preview()/confirm(), so a later edit blocks a stale write.
+                retryAction = if (dryRun || mayHaveWritten) ::preview else ::confirm
                 showError(err)
             }
         }
@@ -340,13 +382,13 @@ class AddViewModel(
         action()
     }
 
-    /** After a tag conflict: forget the tag and repeat the step without it. */
+    /** After a tag conflict: forget the tag and preview again without it (a tag change always needs a new preview). */
     fun dropTagAndRetry() {
-        val action = retryAction ?: return
+        if (_state.value.error?.canDropTag != true) return
         retryAction = null
-        _state.update { it.copy(tag = null, error = null) }
+        _state.update { it.copy(tag = null).invalidated() }
         save()
-        action()
+        preview()
     }
 
     fun dismissError() {
@@ -408,6 +450,9 @@ class AddViewModel(
     companion object {
         const val MAX_PHOTOS = 8
         private val REQUIRED_TEXT = setOf("vendor", "name", "material")
+        private val BUSY = setOf(Stage.Reading, Stage.Previewing, Stage.Adding)
+        internal const val ADD_REPLY_LOST = "The connection to the server was lost while adding, so the spools may " +
+            "have been added. Check Spoolman before trying again; Retry first runs a new preview."
     }
 }
 

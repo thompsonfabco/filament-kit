@@ -89,7 +89,7 @@ fun ReviewScreen(
             }
         }
 
-        state.error?.let { ErrorCard(it, vm, onPairAgain) }
+        state.error?.let { ErrorCard(it, vm, onPairAgain, kept = state.draftId != null) }
         when (state.stage) {
             Stage.Previewing -> Busy("Checking…")
             Stage.Adding -> Busy("Adding to Spoolman…")
@@ -106,9 +106,12 @@ fun ReviewScreen(
                     Button(onClick = vm::confirm) { Text("Add $total spool${if (total == 1) "" else "s"}") }
                 }
             }
-            else -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = vm::backToPhotos) { Text("Back to photos") }
-                Button(onClick = vm::preview, enabled = state.items.isNotEmpty()) { Text("Preview") }
+            else -> {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = vm::backToPhotos) { Text("Back to photos") }
+                    Button(onClick = vm::preview, enabled = state.items.isNotEmpty() && state.countsValid) { Text("Preview") }
+                }
+                if (!state.countsValid) Text("Enter a spool count for every item.", style = MaterialTheme.typography.bodySmall)
             }
         }
     }

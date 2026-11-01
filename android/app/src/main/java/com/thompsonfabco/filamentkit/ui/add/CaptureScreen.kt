@@ -47,6 +47,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,6 +65,9 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -102,7 +106,7 @@ fun CaptureScreen(
             modifier = Modifier.fillMaxWidth(),
         )
 
-        state.error?.let { ErrorCard(it, vm, onPairAgain) }
+        state.error?.let { ErrorCard(it, vm, onPairAgain, kept = state.draftId != null) }
         if (reading) {
             Busy("Claude is reading ${state.photos.size} photo${if (state.photos.size == 1) "" else "s"}… (up to a minute)")
         } else {
@@ -221,6 +225,7 @@ private fun CameraCapture(onPhoto: (ByteArray) -> Unit) {
     var shotError by remember { mutableStateOf<String?>(null) }
     var provider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
     var shooting by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(lifecycleOwner) {
         try {
@@ -230,6 +235,8 @@ private fun CameraCapture(onPhoto: (ByteArray) -> Unit) {
             p.unbindAll()
             p.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, capture)
             problem = null
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             problem = "The camera could not be started: ${e.message ?: "no camera found"}"
         }
@@ -249,29 +256,46 @@ private fun CameraCapture(onPhoto: (ByteArray) -> Unit) {
             onClick = {
                 shooting = true
                 shotError = null
-                val file = File.createTempFile("shot", ".jpg", context.cacheDir)
-                capture.takePicture(
-                    ImageCapture.OutputFileOptions.Builder(file).build(),
-                    ContextCompat.getMainExecutor(context),
-                    object : ImageCapture.OnImageSavedCallback {
-                        override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                            shooting = false
-                            val bytes = file.readBytes()
-                            file.delete()
-                            onPhoto(bytes)
+                scope.launch {
+                    try {
+                        val file = withContext(Dispatchers.IO) { File.createTempFile("shot", ".jpg", context.cacheDir) }
+                        val bytes = try {
+                            takePicture(capture, file, context)
+                            withContext(Dispatchers.IO) { file.readBytes() }
+                        } finally {
+                            withContext(NonCancellable + Dispatchers.IO) { file.delete() }
                         }
-
-                        override fun onError(exception: ImageCaptureException) {
-                            shooting = false
-                            file.delete()
-                            shotError = "The photo failed: ${exception.message ?: "camera error"}. Try again."
-                        }
-                    },
-                )
+                        onPhoto(bytes)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        shotError = "The photo failed: ${e.message ?: "camera error"}. Try again."
+                    } finally {
+                        shooting = false
+                    }
+                }
             },
         ) { Text(if (shooting) "Taking photo…" else "Take photo") }
     }
 }
+
+/** Saves one shot into [file] (EXIF orientation set). Camera errors throw [ImageCaptureException]. */
+private suspend fun takePicture(capture: ImageCapture, file: File, context: Context): Unit =
+    suspendCancellableCoroutine { cont ->
+        capture.takePicture(
+            ImageCapture.OutputFileOptions.Builder(file).build(),
+            ContextCompat.getMainExecutor(context),
+            object : ImageCapture.OnImageSavedCallback {
+                override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+                    if (cont.isActive) cont.resume(Unit)
+                }
+
+                override fun onError(exception: ImageCaptureException) {
+                    if (cont.isActive) cont.resumeWithException(exception)
+                }
+            },
+        )
+    }
 
 private suspend fun cameraProvider(context: Context): ProcessCameraProvider = suspendCancellableCoroutine { cont ->
     val future = ProcessCameraProvider.getInstance(context)
@@ -299,7 +323,7 @@ internal fun Busy(text: String) {
 
 /** The current problem, with the actions that fit it. */
 @Composable
-internal fun ErrorCard(error: AddError, vm: AddViewModel, onPairAgain: () -> Unit) {
+internal fun ErrorCard(error: AddError, vm: AddViewModel, onPairAgain: () -> Unit, kept: Boolean) {
     Card(
         Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
@@ -311,7 +335,7 @@ internal fun ErrorCard(error: AddError, vm: AddViewModel, onPairAgain: () -> Uni
                 Text("Certificate now: ${groups(error.actualFingerprint)}", style = MaterialTheme.typography.bodySmall)
             }
             error.detail?.let { Text("Server says: $it", style = MaterialTheme.typography.bodySmall) }
-            Text("Your photos and edits are kept.", style = MaterialTheme.typography.bodySmall)
+            if (kept) Text("Your photos and edits are kept.", style = MaterialTheme.typography.bodySmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (error.canRetry) Button(onClick = vm::retry) { Text("Retry") }
                 if (error.canDropTag) Button(onClick = vm::dropTagAndRetry) { Text("Add without the tag") }
