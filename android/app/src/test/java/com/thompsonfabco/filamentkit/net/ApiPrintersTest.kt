@@ -56,9 +56,9 @@ class ApiPrintersTest {
         assertTrue(p.configured)
         assertEquals("connected", p.state)
         assertEquals("hls", p.camera.kind)
-        assertEquals("RUNNING", p.summary.gcodeState)
-        assertEquals(42, p.summary.percent)
-        assertEquals(31, p.summary.remainingMin)
+        assertEquals("RUNNING", p.summary!!.gcodeState)
+        assertEquals(42, p.summary!!.percent)
+        assertEquals(31, p.summary!!.remainingMin)
         assertNull(list[1].model)
         assertNull(list[1].camera.kind)
         assertFalse(list[1].configured)
@@ -158,9 +158,21 @@ class ApiPrintersTest {
             "camera":{"kind":"hls"},"summary":{"gcode_state":"RUNNING","percent":42.0,"remaining_min":31,"job":"Benchy"}},
             {"id":"B","name":"B","serial":"B","summary":{"gcode_state":"IDLE","percent":0,"remaining_min":0,"job":null}}]}""")
         val list = api.printers()
-        assertEquals("Benchy", list[0].summary.job)
-        assertEquals(42, list[0].summary.percent)
-        assertNull(list[1].summary.job)
+        assertEquals("Benchy", list[0].summary!!.job)
+        assertEquals(42, list[0].summary!!.percent)
+        assertNull(list[1].summary!!.job)
+    }
+
+    @Test fun aPrinterWithoutASummaryDoesNotBreakTheList() = runBlocking {
+        json("""{"printers":[{"id":"A","name":"A","serial":"A","configured":true,"state":"connected","summary":null},
+            {"id":"B","name":"B","serial":"B","summary":{"gcode_state":"IDLE","percent":0,"remaining_min":0}}]}""")
+        val list = api.printers()
+        assertEquals(2, list.size)
+        assertNull(list[0].summary)
+        assertEquals("connected", list[0].state)
+        assertEquals("IDLE", list[1].summary!!.gcodeState)
+        json("""{"printer":{"id":"A","name":"A","serial":"A","state":"connected","summary":null}}""")
+        assertNull(api.addPrinter("A", "12345678", null).summary)
     }
 
     @Test fun printerDetailStatusMayBeNull() = runBlocking {

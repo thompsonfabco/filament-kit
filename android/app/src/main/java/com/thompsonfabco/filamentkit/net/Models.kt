@@ -89,7 +89,8 @@ data class Printer(
     val configured: Boolean = false,
     val state: String = "not_configured",
     val camera: PrinterCamera = PrinterCamera(),
-    val summary: PrinterSummary = PrinterSummary(),
+    /** Null when the server could not summarise the printer's report; the list then shows the state only. */
+    val summary: PrinterSummary? = null,
 )
 
 @Serializable

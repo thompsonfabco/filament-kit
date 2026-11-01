@@ -35,13 +35,16 @@ import java.util.concurrent.TimeUnit
  * each call so a re-discovered address or a re-pair takes effect without a new [Api].
  *
  * Failures: [ApiError] for every server error (a 401 is always code `unauthorized`) and `ApiError(0, "offline")` when
- * the server cannot be reached. A [FingerprintMismatch] propagates unchanged so the UI can ask for a re-pair.
+ * the server cannot be reached — or `ApiError(0, "local_network")` when it could not be reached because the app lacks
+ * the API 37 local network permission ([localNetworkMissing]). A failed write of the downloaded APK is
+ * `ApiError(0, "storage")`. A [FingerprintMismatch] propagates unchanged so the UI can ask for a re-pair.
  */
 class Api(
     /** Also used directly for the camera streams (Task 16), so they go through the same pinned TLS. */
     internal val client: OkHttpClient,
     private val baseUrl: () -> String,
     private val token: () -> String?,
+    private val localNetworkMissing: () -> Boolean = { LocalNetwork.missing() },
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -140,14 +143,10 @@ class Api(
             withContext(Dispatchers.IO) {
                 execute(request("app.apk", auth = false).get(), DOWNLOAD_S).use { resp ->
                     if (!resp.isSuccessful) throw errorFor(resp.code, resp.body.string())
-                    try {
-                        resp.body.byteStream().use { src -> part.outputStream().use { src.copyTo(it) } }
-                    } catch (e: IOException) {
-                        throw ApiError(0, "offline", "The connection to the server was lost: ${e.message}")
-                    }
+                    resp.body.byteStream().use { src -> copyToDisk(src, part) }
                 }
                 to.delete()
-                if (!part.renameTo(to)) throw IOException("Could not write ${to.name}")
+                if (!part.renameTo(to)) throw storageError("Could not write ${to.name}")
             }
         } finally {
             part.delete()
@@ -209,7 +208,7 @@ class Api(
             val text = try {
                 resp.body.string()
             } catch (e: IOException) {
-                throw ApiError(0, "offline", "The connection to the server was lost: ${e.message}")
+                throw offline("The connection to the server was lost: ${e.message}")
             }
             if (!resp.isSuccessful) throw errorFor(resp.code, text)
             try {
@@ -231,9 +230,36 @@ class Api(
         } catch (e: FingerprintMismatch) {
             throw e
         } catch (e: IOException) {
-            throw ApiError(0, "offline", "Could not reach the server: ${e.message ?: e.javaClass.simpleName}")
+            throw offline("Could not reach the server: ${e.message ?: e.javaClass.simpleName}")
         }
     }
+
+    /** A connection failure: `local_network` when the permission is missing (that is the real cause), else `offline`. */
+    private fun offline(message: String): ApiError =
+        if (localNetworkMissing()) ApiError(0, "local_network", LOCAL_NETWORK_MESSAGE) else ApiError(0, "offline", message)
+
+    /** Network read errors are `offline`; errors writing [part] (disk full, no folder) are `storage`. */
+    private fun copyToDisk(src: java.io.InputStream, part: File) {
+        try {
+            part.outputStream().use { out ->
+                val buf = ByteArray(64 * 1024)
+                while (true) {
+                    val n = try {
+                        src.read(buf)
+                    } catch (e: IOException) {
+                        throw offline("The connection to the server was lost: ${e.message}")
+                    }
+                    if (n < 0) break
+                    out.write(buf, 0, n)
+                }
+            }
+        } catch (e: IOException) {
+            throw storageError(e.message ?: e.javaClass.simpleName)
+        }
+    }
+
+    private fun storageError(detail: String) =
+        ApiError(0, "storage", "The update could not be saved on this phone (is there enough free space?): $detail")
 
     private fun errorFor(status: Int, text: String): ApiError {
         val obj = try {

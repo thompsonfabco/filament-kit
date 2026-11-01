@@ -6,6 +6,8 @@ import com.thompsonfabco.filamentkit.data.ServerConfig
 import com.thompsonfabco.filamentkit.data.SettingsStore
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
+import com.thompsonfabco.filamentkit.net.LOCAL_NETWORK_MESSAGE
+import com.thompsonfabco.filamentkit.net.LocalNetwork
 import com.thompsonfabco.filamentkit.pairing.parsePairingUri
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
@@ -39,15 +41,21 @@ fun groupFingerprint(fingerprint: String): String = fingerprint.chunked(4).joinT
 private val CODE = Regex("[0-9]{6}")
 private const val UNEXPECTED = "Unexpected response from the server"
 
+/** The scanned QR's token was not accepted when the app first used it. */
+const val QR_EXPIRED =
+    "This pairing code has expired or was already used. Run \"sudo filament-kit pair\" on the server again."
+
 /**
  * Pairing flows: QR scan, and manual entry (address, then the server's certificate fingerprint for the user to
  * confirm, then the 6-digit code). Nothing is sent to the server except the probe handshake until the user has
- * confirmed the fingerprint. [scope] defaults to the ViewModel's own; tests pass one.
+ * confirmed the fingerprint. [scope] defaults to the ViewModel's own; tests pass one. [localNetworkMissing] turns
+ * "can't reach the server" into the local network permission message when that permission is the cause.
  */
 class PairViewModel(
     private val settings: SettingsStore,
     private val backend: PairingBackend,
     scope: CoroutineScope? = null,
+    private val localNetworkMissing: () -> Boolean = { LocalNetwork.missing() },
 ) : ViewModel() {
     private val scope: CoroutineScope = scope ?: viewModelScope
     private val _state = MutableStateFlow(PairUi())
@@ -78,7 +86,7 @@ class PairViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                val text = if (e is IOException && e !is FingerprintMismatch) {
+                val text = if (e is IOException && e !is FingerprintMismatch && !localNetworkMissing()) {
                     "Could not reach $host on port $port. Check the address and that this phone is on the same network."
                 } else errorText(e)
                 _state.value = PairUi(step = Step.Address, host = host, port = port, error = text)
@@ -162,6 +170,17 @@ class PairViewModel(
                     }
                 }
                 if (winner == null) throw (mismatch ?: lastError ?: IOException("No address answered"))
+                // `info` needs no token; claim it now, before saving, or the server drops it after 10 minutes.
+                try {
+                    backend.claim(winner, payload.port, payload.fingerprint, payload.token)
+                } catch (e: ApiError) {
+                    if (e.code == "unauthorized") {
+                        _state.value = PairUi(step = Step.Choose, host = host, port = payload.port, error = QR_EXPIRED)
+                        return@launch
+                    }
+                    // Any other answer from the server means the token passed its check (and is now claimed).
+                    if (e.status <= 0) throw e
+                }
                 val ordered = listOf(winner) + endpoints.filter { it != winner }
                 settings.save(ServerConfig(ordered, payload.port, payload.fingerprint, payload.token, name))
                 _state.value = PairUi(step = Step.Done, host = host, port = payload.port)
@@ -194,6 +213,9 @@ class PairViewModel(
         else base.copy(error = errorText(e))
 
     private fun errorText(e: Exception): String = when {
+        e is ApiError && e.code == "local_network" -> LOCAL_NETWORK_MESSAGE
+        (e is ApiError && e.code == "offline" || e is IOException && e !is FingerprintMismatch) && localNetworkMissing() ->
+            LOCAL_NETWORK_MESSAGE
         e is ApiError && e.code == "offline" ->
             "Can't reach the server. Check that this phone is on the same network."
         e is ApiError -> e.message

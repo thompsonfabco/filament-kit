@@ -29,6 +29,8 @@ import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.ui.PlayerView
+import com.thompsonfabco.filamentkit.net.LOCAL_NETWORK_MESSAGE
+import com.thompsonfabco.filamentkit.net.LocalNetwork
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -111,5 +113,5 @@ private fun cameraErrorText(e: PlaybackException): String {
         }
         cause = cause.cause
     }
-    return "The camera stream was interrupted. Tap Try again."
+    return if (LocalNetwork.missing()) LOCAL_NETWORK_MESSAGE else "The camera stream was interrupted. Tap Try again."
 }
