@@ -165,8 +165,10 @@ def _write_items(sm, placed, vendors, fils, result, dry) -> None:
             _read_back(sm, sid)
             ids.append(sid)
         gross_note = f" (gross {it['gross']} - tare {tare})" if it.get("gross") is not None else ""
+        fid = f"F{f['id']} " if f.get("id") is not None else ""
+        id_note = f" {ids}" if not dry else ""
         result.lines.append(
-            f"F{f['id']} {vn} {it['name']} ({state}): {it['count']} spool(s) {ids} @ {it['location']}"
+            f"{fid}{vn} {it['name']} ({state}): {it['count']} spool(s){id_note} @ {it['location']}"
             f"{' (opened)' if opened else ''}, {remaining} g{gross_note}")
 
 

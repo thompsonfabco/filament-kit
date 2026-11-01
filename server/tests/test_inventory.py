@@ -57,6 +57,7 @@ def test_add_existing_filament_joins(sm, spoolman_fake_store):
 def test_add_dry_run_writes_nothing(sm, spoolman_fake_store):
     r = inventory.add_spools(sm, [item(count=3)], RULES, dry=True)
     assert r.dry and r.spool_ids == [] and r.lines
+    assert not any("None" in line for line in r.lines)  # no placeholder ids in the preview
     assert not spoolman_fake_store["vendors"] and not spoolman_fake_store["filaments"]
     assert not spoolman_fake_store["spools"]
 

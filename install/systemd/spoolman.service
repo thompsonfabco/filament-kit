@@ -8,6 +8,8 @@ Type=simple
 User=spoolman
 Group=spoolman
 WorkingDirectory=/opt/spoolman
+# Spoolman runs `alembic upgrade head` from PATH at startup
+Environment=PATH=/opt/spoolman/venv/bin:/usr/local/bin:/usr/bin:/bin
 Environment=SPOOLMAN_DIR_DATA=/var/lib/spoolman
 Environment=SPOOLMAN_DIR_BACKUPS=/var/lib/spoolman/backups
 Environment=SPOOLMAN_DIR_LOGS=/var/lib/spoolman

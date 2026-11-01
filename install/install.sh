@@ -105,6 +105,8 @@ else
         mv "$SPOOLMAN_OPT" "$SPOOLMAN_OPT.old"
     fi
     mv "$new" "$SPOOLMAN_OPT"
+    # the venv was built under $new: point its scripts (alembic, which Spoolman runs at startup) at the final path
+    grep -rlIZ -- "$new" "$SPOOLMAN_OPT/venv/bin" | xargs -0 -r sed -i "s|$new|$SPOOLMAN_OPT|g"
     rm -rf "$SPOOLMAN_OPT.old"
     printf '%s\n' "$SPOOLMAN_STAMP" > "$SPOOLMAN_MARKER"
     rm -rf "$tmp"
