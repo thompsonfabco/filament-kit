@@ -30,6 +30,7 @@ class Endpoints(stored: List<String>, private val port: Int) {
         val probeClient = client.newBuilder()
             .connectTimeout(PROBE_TIMEOUT_S, TimeUnit.SECONDS)
             .readTimeout(PROBE_TIMEOUT_S, TimeUnit.SECONDS)
+            .callTimeout(PROBE_TIMEOUT_S * 2, TimeUnit.SECONDS)
             .build()
         val tried = mutableSetOf<String>()
         var mismatch: FingerprintMismatch? = null
