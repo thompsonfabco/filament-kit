@@ -300,7 +300,7 @@ def _printers_session(monkeypatch, lines, code="ACCESS1234"):
 
 def test_printers_add_rename_remove(capsys, monkeypatch):
     from filament_kit.bridge import registry
-    assert _printers_session(monkeypatch, "5\n2\nOffice\n10.0.0.5\nSER1\n0\n0\n") == 0
+    assert _printers_session(monkeypatch, "5\n2\nOffice\n10.0.0.5\nSER1\n\n0\n0\n") == 0
     p = registry.load()["SER1"]
     assert (p.name, p.ip, p.access_code, p.configured) == ("Office", "10.0.0.5", "ACCESS1234", True)
     out = capsys.readouterr().out
@@ -365,10 +365,18 @@ def test_printers_add_rejects_bad_serial(capsys, monkeypatch):
 @pytest.mark.parametrize("code", ["1234-5678", "x" * 33, "côde12"])
 def test_printers_add_rejects_bad_access_code(capsys, monkeypatch, code):
     from filament_kit.bridge import registry
-    assert _printers_session(monkeypatch, "5\n2\nOffice\n10.0.0.5\nSER1\n0\n0\n", code=code) == 0
+    assert _printers_session(monkeypatch, "5\n2\nOffice\n10.0.0.5\nSER1\n\n0\n0\n", code=code) == 0
     assert registry.load() == {}
     out = capsys.readouterr().out
     assert "Access Code" in out and code not in out
+
+
+def test_printers_add_records_the_model_for_the_camera(capsys, monkeypatch):
+    # A printer added by hand never announces itself, so its model (which picks the camera kind) is asked for.
+    from filament_kit.bridge import models, registry
+    assert _printers_session(monkeypatch, "5\n2\nWorkshop\n10.0.0.6\nSER2\nH2D\n0\n0\n") == 0
+    p = registry.load()["SER2"]
+    assert p.model == "H2D" and models.camera_kind(p.model) == "hls"
 
 
 def test_pair_prints_grouped_certificate_fingerprint(capsys):
