@@ -23,23 +23,26 @@ class Discovery(context: Context) {
     /** Live list of resolved servers, re-emitted whenever one appears or disappears. */
     fun servers(): Flow<List<DiscoveredServer>> = callbackFlow {
         val found = LinkedHashMap<String, DiscoveredServer>()
-        val pending = Channel<NsdServiceInfo>(Channel.UNLIMITED)
+        val events = Channel<Event>(Channel.UNLIMITED)
 
-        // Older Android allows one resolve at a time, so resolve sequentially.
+        // One consumer owns `found`; older Android allows one resolve at a time, so resolve sequentially.
         launch {
-            for (info in pending) {
-                val resolved = resolve(info) ?: continue
-                val host = resolved.addresses().firstOrNull() ?: continue
-                found[resolved.serviceName] = DiscoveredServer(resolved.serviceName, host, resolved.port)
-                trySend(found.values.toList())
+            for (event in events) {
+                when (event) {
+                    is Event.Found -> {
+                        val resolved = withTimeoutOrNull(RESOLVE_TIMEOUT_MS) { resolve(event.info) } ?: continue
+                        val host = resolved.addresses().firstOrNull() ?: continue
+                        found[resolved.serviceName] = DiscoveredServer(resolved.serviceName, host, resolved.port)
+                        trySend(found.values.toList())
+                    }
+                    is Event.Lost -> if (found.remove(event.name) != null) trySend(found.values.toList())
+                }
             }
         }
 
         val listener = object : NsdManager.DiscoveryListener {
-            override fun onServiceFound(serviceInfo: NsdServiceInfo) { pending.trySend(serviceInfo) }
-            override fun onServiceLost(serviceInfo: NsdServiceInfo) {
-                if (found.remove(serviceInfo.serviceName) != null) trySend(found.values.toList())
-            }
+            override fun onServiceFound(serviceInfo: NsdServiceInfo) { events.trySend(Event.Found(serviceInfo)) }
+            override fun onServiceLost(serviceInfo: NsdServiceInfo) { events.trySend(Event.Lost(serviceInfo.serviceName)) }
             override fun onDiscoveryStarted(serviceType: String) = Unit
             override fun onDiscoveryStopped(serviceType: String) = Unit
             override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) { close() }
@@ -48,7 +51,7 @@ class Discovery(context: Context) {
         trySend(emptyList())
         nsd.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, listener)
         awaitClose {
-            pending.close()
+            events.close()
             try {
                 nsd.stopServiceDiscovery(listener)
             } catch (_: IllegalArgumentException) {
@@ -61,12 +64,27 @@ class Discovery(context: Context) {
     suspend fun hosts(): List<String> =
         withTimeoutOrNull(HOSTS_WAIT_MS) { servers().first { it.isNotEmpty() } }?.map { it.host }.orEmpty()
 
+    private sealed interface Event {
+        class Found(val info: NsdServiceInfo) : Event
+        class Lost(val name: String) : Event
+    }
+
     @Suppress("DEPRECATION")
     private suspend fun resolve(info: NsdServiceInfo): NsdServiceInfo? = suspendCancellableCoroutine { cont ->
-        nsd.resolveService(info, object : NsdManager.ResolveListener {
+        val listener = object : NsdManager.ResolveListener {
             override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) { if (cont.isActive) cont.resume(null) }
             override fun onServiceResolved(serviceInfo: NsdServiceInfo) { if (cont.isActive) cont.resume(serviceInfo) }
-        })
+        }
+        cont.invokeOnCancellation {
+            if (android.os.Build.VERSION.SDK_INT >= 34) {
+                try {
+                    nsd.stopServiceResolution(listener)
+                } catch (_: RuntimeException) {
+                    // not resolving any more
+                }
+            }
+        }
+        nsd.resolveService(info, listener)
     }
 
     @Suppress("DEPRECATION")
@@ -78,5 +96,6 @@ class Discovery(context: Context) {
     private companion object {
         const val SERVICE_TYPE = "_filamentkit._tcp"
         const val HOSTS_WAIT_MS = 3_000L
+        const val RESOLVE_TIMEOUT_MS = 5_000L
     }
 }
