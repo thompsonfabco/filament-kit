@@ -263,10 +263,45 @@ def _storage_menu(cfg: dict) -> None:
 def _pick_printer(printers: list) -> "registry.Printer | None":
     raw = _ask("Printer number: ")
     try:
-        return printers[int(raw.strip()) - 1] if raw and int(raw.strip()) >= 1 else None
+        n = int((raw or "").strip())
+        if n >= 1:
+            return printers[n - 1]
     except (ValueError, IndexError):
-        print("No such printer.")
-        return None
+        pass
+    print("No such printer.")
+    return None
+
+
+def _printers_action(choice: str, printers: list) -> None:
+    if choice == "1":
+        return
+    if choice == "2":
+        name = (_ask("Name: ") or "").strip()
+        ip = (_ask("IP address: ") or "").strip()
+        serial = (_ask("Serial number: ") or "").strip()
+        if not (name and ip and serial):
+            print("Name, IP address and serial number are all needed.")
+            return
+        code = getpass.getpass("Access Code (hidden): ").strip()
+        if not code:
+            print("No Access Code entered; nothing added.")
+            return
+        old = registry.load().get(serial)
+        registry.upsert(registry.Printer(serial, name, old.model if old else "", ip, code, True))
+        print(f"Added {name}.")
+    elif choice in ("3", "4"):
+        p = _pick_printer(printers)
+        if p is None:
+            return
+        if choice == "3":
+            name = (_ask("New name: ") or "").strip()
+            if name:
+                registry.rename(p.serial, name)
+        else:
+            registry.remove(p.serial)
+            print(f"Removed {p.name}.")
+    else:
+        print("Unknown choice.")
 
 
 def _printers_menu() -> None:
@@ -283,36 +318,10 @@ def _printers_menu() -> None:
         if choice is None or choice.strip() == "0":
             return
         choice = choice.strip()
-        if choice == "1":
-            continue
-        if choice == "2":
-            name = (_ask("Name: ") or "").strip()
-            ip = (_ask("IP address: ") or "").strip()
-            serial = (_ask("Serial number: ") or "").strip()
-            if not (name and ip and serial):
-                print("Name, IP address and serial number are all needed.")
-                continue
-            code = getpass.getpass("Access Code (hidden): ").strip()
-            if not code:
-                print("No Access Code entered; nothing added.")
-                continue
-            old = registry.load().get(serial)
-            registry.upsert(registry.Printer(serial, name, old.model if old else "", ip, code, True))
-            print(f"Added {name}.")
-        elif choice in ("3", "4"):
-            p = _pick_printer(printers)
-            if p is None:
-                continue
-            if choice == "3":
-                name = (_ask("New name: ") or "").strip()
-                if name:
-                    p.name = name
-                    registry.upsert(p)
-            else:
-                registry.remove(p.serial)
-                print(f"Removed {p.name}.")
-        else:
-            print("Unknown choice.")
+        try:
+            _printers_action(choice, printers)
+        except registry.RegistryError as e:
+            print(f"error: {e}")
 
 
 def cmd_config() -> int:
