@@ -357,4 +357,16 @@ class SpoolViewModelTest {
         vm.onTag("a")
         assertTrue((vm.state.value as SpoolUiState.Card).rev != r1)
     }
+
+    @Test fun openFromSearchShowsCardWithoutATagLookup() {
+        val vm = vm()
+        vm.open(spool(3, location = "Dry box"))
+        val c = vm.state.value as SpoolUiState.Card
+        assertEquals(3, c.spool.id)
+        assertEquals("Dry box", c.spool.location)
+        assertTrue(backend.calls.none { it.name == "tag" })
+        vm.askMarkEmpty()
+        vm.confirmEmpty()
+        assertEquals(3, backend.calls.last().args["id"])
+    }
 }
