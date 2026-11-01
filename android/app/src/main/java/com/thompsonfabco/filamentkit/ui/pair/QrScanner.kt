@@ -83,9 +83,19 @@ private fun CameraPreview(onResult: (String) -> Unit) {
     }
     val reported = remember { AtomicBoolean(false) }
     val currentOnResult by rememberUpdatedState(onResult)
+    val preview = remember { Preview.Builder().build() }
+    val analysis = remember {
+        ImageAnalysis.Builder().setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build()
+    }
+    val disposed = remember { AtomicBoolean(false) }
+    var provider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
 
     DisposableEffect(Unit) {
         onDispose {
+            disposed.set(true)
+            // Unbind only our own use cases; other screens (e.g. photo capture) may have theirs bound.
+            provider?.unbind(preview, analysis)
+            analysis.clearAnalyzer()
             scanner.close()
             executor.shutdown()
         }
@@ -95,13 +105,11 @@ private fun CameraPreview(onResult: (String) -> Unit) {
         modifier = Modifier.fillMaxSize(),
         factory = { ctx ->
             val view = PreviewView(ctx)
+            preview.surfaceProvider = view.surfaceProvider
             val future = ProcessCameraProvider.getInstance(ctx)
             future.addListener({
-                val provider = future.get()
-                val preview = Preview.Builder().build().also { it.surfaceProvider = view.surfaceProvider }
-                val analysis = ImageAnalysis.Builder()
-                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                    .build()
+                if (disposed.get()) return@addListener
+                val cameraProvider = future.get()
                 analysis.setAnalyzer(executor) { proxy ->
                     val image = proxy.image
                     if (image == null || reported.get()) {
@@ -115,11 +123,10 @@ private fun CameraPreview(onResult: (String) -> Unit) {
                             .addOnCompleteListener { proxy.close() }
                     }
                 }
-                provider.unbindAll()
-                provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
+                cameraProvider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
+                provider = cameraProvider
             }, ContextCompat.getMainExecutor(context))
             view
         },
     )
 }
-

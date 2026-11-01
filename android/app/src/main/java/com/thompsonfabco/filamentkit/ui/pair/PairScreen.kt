@@ -86,7 +86,7 @@ private fun ChooseStep(ui: PairUi, discovered: List<DiscoveredServer>, onScan: (
         Text("None found yet. You can still enter an address below.")
     } else {
         discovered.forEach { server ->
-            OutlinedButton(onClick = { vm.startManual(server.host, server.port) }, modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(onClick = { vm.startManual(server.host, server.port) }, enabled = !ui.busy, modifier = Modifier.fillMaxWidth()) {
                 Text("${server.name} (${server.host})")
             }
         }

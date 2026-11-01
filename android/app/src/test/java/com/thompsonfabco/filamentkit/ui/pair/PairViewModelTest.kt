@@ -20,7 +20,8 @@ private const val FP = "0123456789abcdef0123456789abcdef0123456789abcdef01234567
 
 private class FakeSettings : SettingsStore {
     var saved: ServerConfig? = null
-    override suspend fun save(config: ServerConfig) { saved = config }
+    var saves = 0
+    override suspend fun save(config: ServerConfig) { saved = config; saves++ }
     override suspend fun clear() { saved = null }
 }
 
@@ -28,7 +29,7 @@ private class FakeBackend : PairingBackend {
     val calls = mutableListOf<String>()
     var probeResult: () -> String = { FP }
     var pairResult: (String) -> String = { "token-1" }
-    var infoResult: () -> ServerInfo = { ServerInfo("Workshop server", "1", 1) }
+    var infoResult: (String) -> ServerInfo = { ServerInfo("Workshop server", "1", 1) }
 
     override suspend fun probe(host: String, port: Int): String {
         calls += "probe $host:$port"
@@ -42,7 +43,7 @@ private class FakeBackend : PairingBackend {
 
     override suspend fun info(host: String, port: Int, fingerprint: String, token: String?): ServerInfo {
         calls += "info"
-        return infoResult()
+        return infoResult(host)
     }
 }
 
@@ -123,7 +124,7 @@ class PairViewModelTest {
     }
 
     @Test fun nameFallsBackToHostWhenInfoFails() {
-        backend.infoResult = { throw ApiError(0, "offline", "x") }
+        backend.infoResult = { _ -> throw ApiError(0, "offline", "x") }
         vm.submitAddress("10.0.0.2", "")
         vm.confirmFingerprint()
         vm.submitCode("123456")
@@ -172,6 +173,7 @@ class PairViewModelTest {
             settings.saved,
         )
         assertEquals(listOf("info"), backend.calls)
+        assertEquals(1, settings.saves)
         assertEquals(Step.Done, ui.step)
     }
 
@@ -182,16 +184,33 @@ class PairViewModelTest {
         assertNull(settings.saved)
     }
 
-    @Test fun qrVerifyFailureForgetsTheSavedConfig() {
-        backend.infoResult = { throw ApiError(0, "offline", "Cannot reach") }
-        vm.onQrScanned(qr())
-        assertNull(settings.saved)
+    @Test fun qrVerifyFailureLeavesAnExistingConfigUntouchedAndSavesNothing() {
+        val existing = ServerConfig(listOf("old.local"), 8710, "a".repeat(64), "old-token", "Old")
+        settings.saved = existing
+        backend.infoResult = { _ -> throw ApiError(0, "offline", "Cannot reach") }
+        vm.onQrScanned(qr("192.168.1.5"))
+        assertEquals(existing, settings.saved)
+        assertEquals(0, settings.saves)
         assertEquals(Step.Choose, ui.step)
         assertNotNull(ui.error)
     }
 
+    @Test fun qrFallsBackToAnIpWhenTheNameFailsAndRemembersItFirst() {
+        backend.infoResult = { h -> if (h == "kit.local") throw ApiError(0, "offline", "x") else ServerInfo("Workshop server", "1", 1) }
+        vm.onQrScanned(qr("192.168.1.5", "10.0.0.9"))
+        assertEquals(listOf("info", "info"), backend.calls)
+        assertEquals(listOf("192.168.1.5", "kit.local", "10.0.0.9"), settings.saved?.endpoints)
+        assertEquals(1, settings.saves)
+        assertEquals(Step.Done, ui.step)
+    }
+
+    @Test fun qrParseErrorIsAFixedMessage() {
+        vm.onQrScanned("fkit://pair?h=x")
+        assertEquals("That is not a filament-kit pairing code", ui.error)
+    }
+
     @Test fun qrVerifyMismatchShowsBothFingerprints() {
-        backend.infoResult = { throw FingerprintMismatch(FP, "e".repeat(64)) }
+        backend.infoResult = { _ -> throw FingerprintMismatch(FP, "e".repeat(64)) }
         vm.onQrScanned(qr())
         assertEquals(Mismatch(FP, "e".repeat(64)), ui.mismatch)
         assertNull(settings.saved)

@@ -129,13 +129,13 @@ class PairViewModel(
         }
     }
 
-    /** A pairing QR was scanned: parse, save, then verify with `info()`; forget the config if it does not verify. */
+    /** A pairing QR was scanned: verify the addresses in order with `info()`, then save once; nothing is saved or cleared on failure. */
     fun onQrScanned(text: String) {
         if (_state.value.busy) return
         val payload = try {
             parsePairingUri(text)
         } catch (e: IllegalArgumentException) {
-            _state.value = PairUi(error = e.message ?: "That is not a filament-kit pairing code")
+            _state.value = PairUi(error = "That is not a filament-kit pairing code")
             return
         }
         confirmed = false
@@ -144,17 +144,26 @@ class PairViewModel(
         scope.launch {
             try {
                 val endpoints = (listOf(host) + payload.ips).distinct()
-                val config = ServerConfig(endpoints, payload.port, payload.fingerprint, payload.token, host)
-                settings.save(config)
-                try {
-                    val name = backend.info(host, payload.port, payload.fingerprint, payload.token).name
-                    settings.save(config.copy(name = name))
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    settings.clear()
-                    throw e
+                var mismatch: FingerprintMismatch? = null
+                var lastError: Exception? = null
+                var winner: String? = null
+                var name = host
+                for (candidate in endpoints) {
+                    try {
+                        name = backend.info(candidate, payload.port, payload.fingerprint, payload.token).name
+                        winner = candidate
+                        break
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: FingerprintMismatch) {
+                        if (mismatch == null) mismatch = e
+                    } catch (e: Exception) {
+                        lastError = e
+                    }
                 }
+                if (winner == null) throw (mismatch ?: lastError ?: IOException("No address answered"))
+                val ordered = listOf(winner) + endpoints.filter { it != winner }
+                settings.save(ServerConfig(ordered, payload.port, payload.fingerprint, payload.token, name))
                 _state.value = PairUi(step = Step.Done, host = host, port = payload.port)
             } catch (e: CancellationException) {
                 throw e
