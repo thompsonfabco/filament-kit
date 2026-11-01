@@ -18,7 +18,7 @@ from starlette.routing import Route
 
 from . import API_VERSION, __version__, config, intake, inventory, pairing, tags
 from .intake import CapReached, PhotoError, ReadCap, ReadError
-from .bridge import registry
+from .bridge import camera, registry
 from .bridge.connection import ACTIONS, Manager, NoReply, PrinterOffline, UnknownPrinter
 from .bridge.models import camera_kind
 from .inventory import AddFailed, TagConflict
@@ -230,10 +230,11 @@ def _printer_routes(printers) -> list[Route]:
 # ---- end printer routes ----------------------------------------------------------------------------------
 
 
-def create_app(sm: Spoolman | None = None, claude=None, printers=None) -> Starlette:
+def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hub=None) -> Starlette:
     cfg = config.load()
     sm = sm if sm is not None else Spoolman(cfg["spoolman_url"])
     printers = printers if printers is not None else Manager(spoolman=sm)  # started by __main__, not here
+    camera_hub = camera_hub if camera_hub is not None else camera.Hub()  # stopped by __main__'s lifespan
     cap = ReadCap(config.paths().state / "reads.json", cfg["reads_per_day"])
 
     def rules() -> dict:  # sync: call it from inside the threadpool
@@ -367,6 +368,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None) -> Starle
             Route("/api/locations", locations),
             Route("/app.apk", apk),
             *_printer_routes(printers),
+            *camera.routes(camera_hub, _authed),
         ],
         exception_handlers={HTTPException: http_error},
     )
