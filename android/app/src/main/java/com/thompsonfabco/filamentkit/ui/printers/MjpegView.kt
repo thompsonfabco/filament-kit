@@ -3,14 +3,18 @@ package com.thompsonfabco.filamentkit.ui.printers
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -20,17 +24,20 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.job
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import okhttp3.Call
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.IOException
-import kotlin.coroutines.coroutineContext
 
 /**
  * Splits a `multipart/x-mixed-replace` body into JPEG frames. Bytes may arrive in any split; [feed] returns every
@@ -131,16 +138,20 @@ class MjpegParser(boundary: String, private val maxFrameBytes: Int = 8 * 1024 * 
 fun MjpegView(client: OkHttpClient, url: String, headers: Map<String, String>, modifier: Modifier = Modifier) {
     var frame by remember(url) { mutableStateOf<Bitmap?>(null) }
     var error by remember(url) { mutableStateOf<String?>(null) }
-    LaunchedEffect(url) {
+    var attempt by remember(url) { mutableIntStateOf(0) }
+    LaunchedEffect(url, attempt) {
+        error = null
         error = try {
-            streamFrames(client, url, headers) { frame = it }
+            streamMjpeg(client, url, headers) { jpeg ->
+                BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size)?.let { bmp -> withContext(Dispatchers.Main) { frame = bmp } }
+            }
             "The camera stream ended."
         } catch (e: CancellationException) {
             throw e
         } catch (e: CameraHttpError) {
             PrinterHelp.cameraFix(e.code)
         } catch (e: Exception) {
-            "The camera stream was interrupted. Leave this screen and come back to try again."
+            "The camera stream was interrupted. Tap Try again."
         }
     }
     Box(modifier, contentAlignment = Alignment.Center) {
@@ -148,8 +159,12 @@ fun MjpegView(client: OkHttpClient, url: String, headers: Map<String, String>, m
             Image(it.asImageBitmap(), contentDescription = "Printer camera", modifier = Modifier.fillMaxWidth(),
                 contentScale = ContentScale.FillWidth)
         }
-        error?.let {
-            Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp))
+        error?.let { msg ->
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(msg, color = MaterialTheme.colorScheme.error)
+                OutlinedButton(onClick = { attempt++ }) { Text("Try again") }
+            }
         }
     }
 }
@@ -157,42 +172,64 @@ fun MjpegView(client: OkHttpClient, url: String, headers: Map<String, String>, m
 /** A non-2xx camera response; [code] is the server's error code (`camera_unavailable`, `not_configured`, ...). */
 class CameraHttpError(val status: Int, val code: String) : IOException("camera HTTP $status $code")
 
-private suspend fun streamFrames(
+/**
+ * Reads the MJPEG stream at [url] until it ends, handing the newest complete JPEG of each read to [onJpeg].
+ * Cancelling the caller closes the connection at once, even while a read is blocked.
+ */
+internal suspend fun streamMjpeg(
     client: OkHttpClient,
     url: String,
     headers: Map<String, String>,
-    onFrame: (Bitmap) -> Unit,
-) = withContext(Dispatchers.IO) {
+    onJpeg: suspend (ByteArray) -> Unit,
+): Unit = coroutineScope {
     val req = Request.Builder().url(url).apply { headers.forEach { (k, v) -> header(k, v) } }.build()
-    // an MJPEG stream never ends on its own: no read/call timeout, closed by cancelling the call
+    // an MJPEG stream never ends on its own: no call timeout, closed by cancelling the call
     val call = client.newBuilder().readTimeout(java.time.Duration.ofSeconds(30)).callTimeout(java.time.Duration.ZERO)
         .build().newCall(req)
-    val cancel = coroutineContext.job.invokeOnCompletion { call.cancel() }
+    // A blocked socket read ignores coroutine cancellation; this sibling cancels the call the moment the
+    // caller is cancelled, which fails the read and closes the response at once.
+    val closer = launch {
+        try {
+            awaitCancellation()
+        } finally {
+            call.cancel()
+        }
+    }
     try {
-        call.execute().use { resp ->
-            if (!resp.isSuccessful) {
-                val code = try {
-                    (Json.parseToJsonElement(resp.body.string()) as? JsonObject)?.get("error")?.jsonPrimitive?.content
-                } catch (_: Exception) {
-                    null
-                }
-                throw CameraHttpError(resp.code, code ?: "http_${resp.code}")
-            }
-            val boundary = MjpegParser.boundaryOf(resp.header("Content-Type").orEmpty()) ?: "frame"
-            val parser = MjpegParser(boundary)
-            val chunk = ByteArray(16 * 1024)
-            val input = resp.body.byteStream()
-            while (true) {
-                coroutineContext.ensureActive()
-                val n = input.read(chunk)
-                if (n < 0) break
-                // decode only the newest frame of each read
-                parser.feed(chunk, n).lastOrNull()?.let { jpeg ->
-                    BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size)?.let { bmp -> withContext(Dispatchers.Main) { onFrame(bmp) } }
-                }
+        withContext(Dispatchers.IO) {
+            try {
+                readStream(call, onJpeg)
+            } catch (e: IOException) {
+                // the closer's call.cancel() surfaces as an IOException; report it as the cancellation it is,
+                // or it would end the caller's job as a failure (and crash a LaunchedEffect)
+                ensureActive()
+                throw e
             }
         }
     } finally {
-        cancel.dispose()
+        closer.cancel()
+    }
+}
+
+private suspend fun CoroutineScope.readStream(call: Call, onJpeg: suspend (ByteArray) -> Unit) {
+    call.execute().use { resp ->
+        if (!resp.isSuccessful) {
+            val code = try {
+                (Json.parseToJsonElement(resp.body.string()) as? JsonObject)?.get("error")?.jsonPrimitive?.content
+            } catch (_: Exception) {
+                null
+            }
+            throw CameraHttpError(resp.code, code ?: "http_${resp.code}")
+        }
+        val boundary = MjpegParser.boundaryOf(resp.header("Content-Type").orEmpty()) ?: "frame"
+        val parser = MjpegParser(boundary)
+        val chunk = ByteArray(16 * 1024)
+        val input = resp.body.byteStream()
+        while (true) {
+            ensureActive()
+            val n = input.read(chunk)
+            if (n < 0) break
+            parser.feed(chunk, n).lastOrNull()?.let { onJpeg(it) }
+        }
     }
 }

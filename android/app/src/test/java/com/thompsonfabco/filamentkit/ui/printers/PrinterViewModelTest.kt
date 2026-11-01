@@ -259,6 +259,45 @@ class PrinterViewModelTest {
         assertFalse("the Access Code is never kept in state", vm.state.value.toString().contains("SECRET42"))
     }
 
+    @Test fun cancelAddReloadsTheList() = runTest(dispatcher) {
+        backend.list = listOf(printer(state = "not_configured", configured = false))
+        val vm = PrintersViewModel(backend)
+        vm.refresh(); runCurrent()
+        vm.openAdd(vm.state.value.printers[0])
+        backend.list = listOf(printer(state = "wrong_code"))
+        vm.cancelAdd(); runCurrent()
+        assertNull(vm.state.value.dialog)
+        assertEquals(2, backend.listCalls)
+        assertEquals("wrong_code", vm.state.value.printers[0].state)
+    }
+
+    @Test fun onePrintingSetForListStatusAndControls() {
+        for (g in listOf("RUNNING", "PAUSE", "PREPARE", "SLICING")) {
+            assertTrue(g, PrinterHelp.isPrinting(g))
+            assertTrue(g, PrinterUiState(printer = printer(), status = status(gcode = g)).printing)
+            assertNotNull(g, PrinterHelp.jobLine(PrinterSummary(g, 10, 5, "Benchy")))
+        }
+        for (g in listOf("IDLE", "FINISH", "FAILED", "UNKNOWN")) {
+            assertFalse(g, PrinterHelp.isPrinting(g))
+            assertFalse(g, PrinterUiState(printer = printer(), status = status(gcode = g)).printing)
+            assertNull(g, PrinterHelp.jobLine(PrinterSummary(g, 10, 5, "Benchy")))
+        }
+    }
+
+    @Test fun listLineShowsJobPercentAndTimeLeft() {
+        assertEquals("Benchy · 42% · 31 min left", PrinterHelp.jobLine(PrinterSummary("RUNNING", 42, 31, "Benchy")))
+        assertEquals("Benchy · 42% · 1 h 5 min left · paused", PrinterHelp.jobLine(PrinterSummary("PAUSE", 42, 65, "Benchy")))
+        assertEquals("42%", PrinterHelp.jobLine(PrinterSummary("RUNNING", 42, 0, null)))
+    }
+
+    @Test fun controlsOnlyWhenConnected() {
+        assertTrue(PrinterUiState(printer = printer(state = "connected"), status = status()).controlsEnabled)
+        for (s in listOf("needs_developer_mode", "offline", "wrong_code", "not_configured")) {
+            assertFalse(s, PrinterUiState(printer = printer(state = s), status = status()).controlsEnabled)
+        }
+        assertFalse(PrinterUiState(printer = printer(), status = status(), commandBusy = true).controlsEnabled)
+    }
+
     @Test fun addConnectedClosesDialogAndRefreshes() = runTest(dispatcher) {
         backend.list = listOf(printer(state = "not_configured", configured = false))
         val vm = PrintersViewModel(backend)

@@ -9,6 +9,7 @@ import com.thompsonfabco.filamentkit.net.FingerprintMismatch
 import com.thompsonfabco.filamentkit.net.Printer
 import com.thompsonfabco.filamentkit.net.PrinterDetail
 import com.thompsonfabco.filamentkit.net.PrinterStatus
+import com.thompsonfabco.filamentkit.net.PrinterSummary
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -82,6 +83,24 @@ object PrinterHelp {
     }
 
     const val UNEXPECTED = "Unexpected response from the server"
+
+    /** gcode_state values during which a print is under way (the server's `status.ACTIVE`). */
+    private val PRINTING = setOf("RUNNING", "PAUSE", "PREPARE", "SLICING")
+
+    fun isPrinting(gcodeState: String): Boolean = gcodeState in PRINTING
+
+    /** The list line while printing: "job · percent · time left" (", paused" when paused); null when idle. */
+    fun jobLine(s: PrinterSummary): String? {
+        if (!isPrinting(s.gcodeState)) return null
+        return listOfNotNull(
+            s.job?.ifBlank { null },
+            "${s.percent}%",
+            if (s.remainingMin > 0) "${formatMinutes(s.remainingMin)} left" else null,
+            if (s.gcodeState == "PAUSE") "paused" else null,
+        ).joinToString(" · ")
+    }
+
+    fun formatMinutes(min: Int): String = if (min >= 60) "${min / 60} h ${min % 60} min" else "$min min"
 }
 
 enum class StopStep { None, First, Second }
@@ -99,8 +118,11 @@ data class PrinterUiState(
     val mismatch: Pair<String, String>? = null,
 ) {
     val paused: Boolean get() = status?.gcodeState == "PAUSE"
-    val printing: Boolean get() = status?.gcodeState in ACTIVE
+    val printing: Boolean get() = status?.let { PrinterHelp.isPrinting(it.gcodeState) } == true
     val lightOn: Boolean get() = status?.light == "on"
+
+    /** Commands are offered only to a connected printer, one at a time. */
+    val controlsEnabled: Boolean get() = printer?.state == "connected" && !commandBusy
 
     /** The second Stop question, naming the printer and the job. */
     val stopQuestion: String?
@@ -110,10 +132,6 @@ data class PrinterUiState(
             if (job != null) "Really stop \"$job\" on $name? The print cannot be resumed."
             else "Really stop the print on $name? It cannot be resumed."
         }
-
-    private companion object {
-        val ACTIVE = setOf("RUNNING", "PAUSE", "PREPARE", "SLICING")
-    }
 }
 
 /**
@@ -267,7 +285,11 @@ class PrintersViewModel(private val backend: PrinterBackend) : ViewModel() {
         it.copy(dialog = AddDialog(serial = p.serial, name = if (p.name == p.serial) "" else p.name))
     }
 
-    fun cancelAdd() = _state.update { it.copy(dialog = null) }
+    /** Closes the dialog and reloads, since the printer's state may have changed meanwhile. */
+    fun cancelAdd() {
+        _state.update { it.copy(dialog = null) }
+        refresh()
+    }
 
     fun submitAdd(accessCode: String, name: String) {
         val d = _state.value.dialog ?: return

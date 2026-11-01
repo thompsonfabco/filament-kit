@@ -85,7 +85,7 @@ private fun PrinterRow(p: Printer, onClick: () -> Unit) {
                 Text(p.name, style = MaterialTheme.typography.titleMedium)
                 Text(listOfNotNull(p.model, PrinterHelp.stateLabel(p.state)).joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall)
-                jobLine(p)?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                PrinterHelp.jobLine(p.summary)?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                 if (!p.configured) Text("Tap to add this printer", color = MaterialTheme.colorScheme.primary)
                 else if (p.state == "wrong_code") Text("Tap to enter the Access Code again", color = MaterialTheme.colorScheme.primary)
             }
@@ -93,19 +93,6 @@ private fun PrinterRow(p: Printer, onClick: () -> Unit) {
     }
 }
 
-private fun jobLine(p: Printer): String? {
-    val s = p.summary
-    val verb = when (s.gcodeState) {
-        "RUNNING" -> "Printing"
-        "PREPARE" -> "Preparing"
-        "PAUSE" -> "Paused"
-        else -> return null
-    }
-    val left = if (s.remainingMin > 0) " · ${formatMinutes(s.remainingMin)} left" else ""
-    return "$verb ${s.percent}%$left"
-}
-
-internal fun formatMinutes(min: Int): String = if (min >= 60) "${min / 60} h ${min % 60} min" else "$min min"
 
 internal fun stateColor(state: String): Color = when (state) {
     "connected" -> Color(0xFF2E7D32)

@@ -43,6 +43,7 @@ import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
+import kotlin.math.roundToInt
 
 /** Where the camera streams come from: the app's pinned client, the stream URLs and the Bearer header. */
 class CameraSource(
@@ -102,7 +103,7 @@ fun PrinterScreen(viewModel: PrinterViewModel, camera: CameraSource, onBack: () 
             StatusBlock(status)
         }
 
-        Controls(state, viewModel, enabled = printer.state == "connected" || printer.state == "needs_developer_mode")
+        Controls(state, viewModel)
     }
 
     when (state.stopStep) {
@@ -147,12 +148,12 @@ private fun StatusBlock(s: PrinterStatus) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         val headline = listOf(s.stage.ifBlank { stateWord(s.gcodeState) }, s.job).filter { it.isNotBlank() }
         Text(headline.joinToString(" · "), style = MaterialTheme.typography.titleMedium)
-        if (s.gcodeState in setOf("RUNNING", "PAUSE", "PREPARE")) {
+        if (PrinterHelp.isPrinting(s.gcodeState)) {
             LinearProgressIndicator(progress = { s.percent / 100f }, modifier = Modifier.fillMaxWidth())
             Text(listOfNotNull(
                 "${s.percent}%",
                 if (s.layer != null && s.totalLayers != null) "layer ${s.layer} of ${s.totalLayers}" else null,
-                if (s.remainingMin > 0) "${formatMinutes(s.remainingMin)} left" else null,
+                if (s.remainingMin > 0) "${PrinterHelp.formatMinutes(s.remainingMin)} left" else null,
                 s.eta?.let { formatEta(it) }?.let { "done about $it" },
             ).joinToString(" · "))
         }
@@ -188,8 +189,8 @@ private fun AmsBlock(u: AmsUnit) {
 }
 
 @Composable
-private fun Controls(state: PrinterUiState, viewModel: PrinterViewModel, enabled: Boolean) {
-    val can = enabled && !state.commandBusy
+private fun Controls(state: PrinterUiState, viewModel: PrinterViewModel) {
+    val can = state.controlsEnabled
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(onClick = viewModel::pauseOrResume, enabled = can && state.printing) {
             Text(if (state.paused) "Resume" else "Pause")
@@ -210,12 +211,14 @@ private fun stateWord(gcode: String) = when (gcode) {
     "RUNNING" -> "Printing"
     "PAUSE" -> "Paused"
     "PREPARE" -> "Preparing"
+    "SLICING" -> "Slicing"
     else -> ""
 }
 
 private fun temp(t: Temp): String {
-    val cur = t.current?.let { "$it°C" } ?: "–"
-    return if (t.target != null && t.target > 0) "$cur → ${t.target}°C" else cur
+    val cur = t.current?.let { "${it.roundToInt()}°C" } ?: "–"
+    val target = t.target?.roundToInt()
+    return if (target != null && target > 0) "$cur → $target°C" else cur
 }
 
 private fun formatEta(iso: String): String? = try {
