@@ -377,7 +377,8 @@ class Manager:
         conn = self._conn(serial)
         r = conn.report() if conn is not None else {}
         s = status.summarize(r, [])
-        return {'gcode_state': s['gcode_state'], 'percent': s['percent'], 'remaining_min': s['remaining_min']}
+        return {'gcode_state': s['gcode_state'], 'percent': s['percent'], 'remaining_min': s['remaining_min'],
+                'job': s['job'] or None}
 
     def command(self, serial: str, action: str) -> dict:
         conn = self._conn(serial)

@@ -38,7 +38,8 @@ import java.util.concurrent.TimeUnit
  * the server cannot be reached. A [FingerprintMismatch] propagates unchanged so the UI can ask for a re-pair.
  */
 class Api(
-    private val client: OkHttpClient,
+    /** Also used directly for the camera streams (Task 16), so they go through the same pinned TLS. */
+    internal val client: OkHttpClient,
     private val baseUrl: () -> String,
     private val token: () -> String?,
 ) {
@@ -152,6 +153,40 @@ class Api(
             part.delete()
         }
     }
+
+    // ---- printers (Task 16) ------------------------------------------------------------------------------
+
+    suspend fun printers(): List<Printer> =
+        call(request("api", "printers").get()).jsonObject["printers"]?.jsonArray.orEmpty().map { decode(it) }
+
+    /** Sets up (or re-keys) a printer. [accessCode] goes only into this request body; it is never kept or logged. */
+    suspend fun addPrinter(serial: String, accessCode: String, name: String?): Printer {
+        val body = buildJsonObject {
+            put("serial", serial)
+            put("access_code", accessCode)
+            name?.takeIf { it.isNotBlank() }?.let { put("name", it) }
+        }
+        val printer = call(request("api", "printers").post(body.toBody())).jsonObject["printer"]
+            ?: throw ApiError(200, "bad_response", "The server did not return the printer")
+        return decode(printer)
+    }
+
+    suspend fun printer(id: String): PrinterDetail = decode(call(request("api", "printers", id).get()))
+
+    /** [action] is `pause`, `resume`, `stop`, `light_on` or `light_off`. */
+    suspend fun command(id: String, action: String): CommandResult {
+        val body = buildJsonObject { put("action", action) }
+        return decode(call(request("api", "printers", id, "command").post(body.toBody())))
+    }
+
+    fun cameraHlsUrl(id: String): String = request("api", "printers", id, "camera", "index.m3u8").build().url.toString()
+
+    fun cameraMjpegUrl(id: String): String = request("api", "printers", id, "camera.mjpeg").build().url.toString()
+
+    /** The Bearer header for requests the app builds itself (camera streams). */
+    fun authHeaders(): Map<String, String> = token()?.let { mapOf("Authorization" to "Bearer $it") }.orEmpty()
+
+    // ---- end printers --------------------------------------------------------------------------------------
 
     // --- plumbing ---
 
