@@ -1,9 +1,12 @@
 """Run the app API: `python -m filament_kit` (HTTPS on 0.0.0.0:<port>, one worker)."""
 import logging
+import sys
+import time
 from contextlib import asynccontextmanager
 
 import anyio.to_thread
 import uvicorn
+from uvicorn.main import STARTUP_FAILURE
 
 from . import config
 from .api import create_app
@@ -14,8 +17,27 @@ from .spoolman import Spoolman
 log = logging.getLogger(__name__)
 
 
-def _found(info: dict) -> None:
-    registry.detected(info["serial"], info["ip"], info.get("model", ""), info.get("name", ""))
+CONNECTED = {"connected", "needs_developer_mode"}  # Manager states with a live MQTT session
+REGISTRY_ERROR_EVERY = 60.0  # seconds between log lines about an unreadable printer registry
+
+
+def discovery_callback(manager):
+    """The SSDP listener's `on_found`. A configured printer the manager is connected to keeps its IP whatever an
+    announcement says (an announce from elsewhere cannot steer the Access Code to another host); the registry
+    logs every IP change of a configured printer. An unreadable registry is logged at most once a minute."""
+    last_error = [float("-inf")]
+
+    def found(info: dict) -> None:
+        serial = info["serial"]
+        keep = manager.state(serial) in CONNECTED
+        try:
+            registry.detected(serial, info["ip"], info.get("model", ""), info.get("name", ""), keep_ip=keep)
+        except registry.RegistryError as e:
+            now = time.monotonic()
+            if now - last_error[0] >= REGISTRY_ERROR_EVERY:
+                last_error[0] = now
+                log.error("printer discovery: %s", e)
+    return found
 
 
 def printer_lifespan(manager, listener_factory=discovery.Listener, camera_hub=None):
@@ -27,7 +49,7 @@ def printer_lifespan(manager, listener_factory=discovery.Listener, camera_hub=No
         listener = None
         try:
             try:
-                listener = listener_factory(_found).start()
+                listener = listener_factory(discovery_callback(manager)).start()
             except OSError as e:
                 log.warning("printer discovery is off: %s", e)
             manager.start()
@@ -62,7 +84,15 @@ class _Server(uvicorn.Server):
 
 
 def serve(app, hub, **kw) -> None:
-    _Server(uvicorn.Config(app, **kw), hub.begin_stop).run()
+    """Run uvicorn. A server that never started (port in use, bad certificate ...) exits with uvicorn's
+    STARTUP_FAILURE code 3 so systemd's `Restart=on-failure` retries; Ctrl-C ends quietly, as `uvicorn.run`."""
+    server = _Server(uvicorn.Config(app, **kw), hub.begin_stop)
+    try:
+        server.run()
+    except KeyboardInterrupt:
+        pass
+    if not server.started:
+        sys.exit(STARTUP_FAILURE)
 
 
 def main() -> None:

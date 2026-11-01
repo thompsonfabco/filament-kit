@@ -559,3 +559,40 @@ def test_mjpeg_source_with_unusable_code_stops_without_retrying(tmp_path, jpeg_p
         src.stop()
     assert state["auth"] == []
     assert bad not in caplog.text and "ValueError" in caplog.text
+
+
+# ---------------------------------------------------------------- final review
+
+def test_mjpeg_without_a_first_frame_is_503(printers, tmp_path, monkeypatch):
+    monkeypatch.setattr(camera, "HLS_START_WAIT", 0.5)
+    hub = camera.Hub(lookup=printers.get, runtime_dir=tmp_path / "run", idle_stop=0.1, jpeg_port=free_port())
+    try:
+        c = TestClient(Starlette(routes=camera.routes(hub, passthrough)))
+        r = c.get("/api/printers/P1/camera.mjpeg")
+        assert r.status_code == 503 and r.json()["error"] == "camera_unavailable"
+        assert hub._refs.get("P1") is None, "the viewer was counted out"
+        assert wait_until(lambda: not hub.running("P1"), 3)
+    finally:
+        hub.shutdown()
+
+
+def test_acquire_restarts_the_source_when_ip_or_code_changes(fake_hub, printers):
+    first = fake_hub.acquire("P1")
+    assert fake_hub.acquire("P1") is first                       # same target: shared
+    printers["P1"] = Printer("P1", "Garage P1S", "C12", "10.0.0.9", CODE, True)
+    second = fake_hub.acquire("P1")
+    assert second is not first and first.stopped == 1 and second.started == 1
+    printers["P1"] = Printer("P1", "Garage P1S", "C12", "10.0.0.9", "24681357", True)
+    third = fake_hub.acquire("P1")
+    assert third is not second and second.stopped == 1
+    assert fake_hub._refs["P1"] == 4
+
+
+def test_touch_hls_restarts_the_source_when_ip_or_code_changes(fake_hub, printers):
+    fake_hub.hls_window = 5
+    first = fake_hub.touch_hls("H1")
+    assert fake_hub.touch_hls("H1") is first
+    printers["H1"] = Printer("H1", "Office H2D", "O1D", "127.0.0.1", "24681357", True)
+    second = fake_hub.touch_hls("H1")
+    assert second is not first and first.stopped == 1 and second.alive()
+    assert fake_hub.running("H1")
