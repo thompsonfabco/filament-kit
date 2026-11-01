@@ -17,6 +17,7 @@ from starlette.responses import FileResponse, JSONResponse
 from starlette.routing import Route
 
 from . import API_VERSION, __version__, config, intake, inventory, pairing, tags
+from .bridge import camera
 from .intake import CapReached, PhotoError, ReadCap, ReadError
 from .inventory import AddFailed, TagConflict
 from .spoolman import Spoolman, SpoolmanError
@@ -126,9 +127,10 @@ def _apk_version() -> str | None:
         return None
 
 
-def create_app(sm: Spoolman | None = None, claude=None) -> Starlette:
+def create_app(sm: Spoolman | None = None, claude=None, camera_hub=None) -> Starlette:
     cfg = config.load()
     sm = sm if sm is not None else Spoolman(cfg["spoolman_url"])
+    camera_hub = camera_hub if camera_hub is not None else camera.Hub()
     cap = ReadCap(config.paths().state / "reads.json", cfg["reads_per_day"])
 
     def rules() -> dict:  # sync: call it from inside the threadpool
@@ -261,6 +263,7 @@ def create_app(sm: Spoolman | None = None, claude=None) -> Starlette:
             Route("/api/spools/{id:int}", spool_update, methods=["PATCH"]),
             Route("/api/locations", locations),
             Route("/app.apk", apk),
+            *camera.routes(camera_hub, _authed),
         ],
         exception_handlers={HTTPException: http_error},
     )

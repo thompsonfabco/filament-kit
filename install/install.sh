@@ -53,7 +53,7 @@ FIRST_INSTALL=1
 say "Installing system packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -q
-apt-get install -y python3-venv avahi-daemon qrencode curl unzip
+apt-get install -y python3-venv avahi-daemon qrencode curl unzip ffmpeg
 
 # ---------- 2. users ----------
 say "Creating service users"
