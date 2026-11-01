@@ -34,4 +34,4 @@ def stored(spool: dict) -> str | None:
         value = json.loads(raw)
     except (TypeError, ValueError):
         value = raw
-    return value or None
+    return value if isinstance(value, str) and value else None
