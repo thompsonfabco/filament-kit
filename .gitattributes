@@ -3,3 +3,4 @@
 *.service  text eol=lf
 *.timer    text eol=lf
 *.yml      text eol=lf
+*.bat      text eol=crlf
