@@ -6,6 +6,7 @@ import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
 import com.thompsonfabco.filamentkit.net.ReadResult
 import java.io.File
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -221,17 +222,172 @@ class AddViewModelTest {
         advanceUntilIdle()
 
         val s = vm.state.value
-        assertEquals("Can't reach the server. Check that this phone is on the same network as the server, then try again.", s.error!!.message)
+        // the reply may have been lost after a write: warn, and retry with a fresh preview, never a blind write
+        assertEquals(AddViewModel.ADD_REPLY_LOST, s.error!!.message)
         assertTrue(s.error.canRetry)
+        assertEquals(Stage.Review, s.stage)
         val draft = store.get(s.draftId!!)!!
         assertEquals("PLA+ Silver", draft.editedItems!![0].jsonObject["name"]!!.jsonPrimitive.content)
 
+        vm.retry()
+        advanceUntilIdle()
+        assertEquals(listOf(true, false, true), api.adds.map { it.dryRun })
+        assertEquals(Stage.Preview, vm.state.value.stage)
+
         api.addResults += AddResult(listOf(7), listOf("added"), false)
+        vm.confirm()
+        advanceUntilIdle()
+        assertEquals(listOf(true, false, true, false), api.adds.map { it.dryRun })
+        assertEquals(Stage.Done, vm.state.value.stage)
+        assertNull(store.get(s.draftId))
+    }
+
+    @Test fun retryAfterAFailedAddNeverWritesLaterEdits() = runTest(dispatcher) {
+        for (failure in listOf(ApiError(503, "spoolman_unreachable", "down"), ApiError(0, "offline", "gone"))) {
+            api.adds.clear()
+            val vm = vm()
+            readOne(vm, item())
+            vm.preview()
+            advanceUntilIdle()
+            api.addFailures += failure
+            vm.confirm()
+            advanceUntilIdle()
+            assertTrue(vm.state.value.error!!.canRetry)
+
+            vm.setText(0, "name", "Edited after the failure")
+            assertNull(vm.state.value.error)
+            vm.retry()
+            advanceUntilIdle()
+            vm.confirm()
+            advanceUntilIdle()
+            assertEquals(failure.code, listOf(true, false), api.adds.map { it.dryRun })
+        }
+    }
+
+    @Test fun realAddRetryRepeatsTheAddFromThePreview() = runTest(dispatcher) {
+        val vm = vm()
+        readOne(vm, item())
+        vm.preview()
+        advanceUntilIdle()
+        api.addFailures += ApiError(503, "spoolman_unreachable", "down")
+        vm.confirm()
+        advanceUntilIdle()
+        assertEquals(Stage.Preview, vm.state.value.stage)
+        api.addResults += AddResult(listOf(9), listOf("added"), false)
         vm.retry()
         advanceUntilIdle()
         assertEquals(listOf(true, false, false), api.adds.map { it.dryRun })
         assertEquals(Stage.Done, vm.state.value.stage)
-        assertNull(store.get(s.draftId))
+    }
+
+    @Test fun aNewTagAfterThePreviewNeedsANewPreview() = runTest(dispatcher) {
+        val vm = vm(initialTag = "1:1")
+        readOne(vm, item())
+        vm.preview()
+        advanceUntilIdle()
+        taps.emit("1:1") // the same tag again changes nothing
+        advanceUntilIdle()
+        assertEquals(Stage.Preview, vm.state.value.stage)
+        taps.emit("2:2")
+        advanceUntilIdle()
+        assertEquals(Stage.Review, vm.state.value.stage)
+        vm.confirm()
+        advanceUntilIdle()
+        assertEquals(listOf(true), api.adds.map { it.dryRun })
+
+        vm.preview()
+        advanceUntilIdle()
+        vm.clearTag()
+        assertEquals(Stage.Review, vm.state.value.stage)
+    }
+
+    @Test fun tapsWhileACallRunsAreIgnored() = runTest(dispatcher) {
+        val vm = vm(initialTag = "1:1")
+        advanceUntilIdle()
+        api.readResults += result(item(), tag = "9:9")
+        api.gate = CompletableDeferred()
+        vm.addPhoto(byteArrayOf(1))
+        advanceUntilIdle()
+        vm.read()
+        advanceUntilIdle()
+        assertEquals(Stage.Reading, vm.state.value.stage)
+        taps.emit("2:2")
+        advanceUntilIdle()
+        api.gate!!.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(Stage.Review, vm.state.value.stage)
+        assertEquals("1:1", vm.state.value.tag) // neither the tap during Reading nor the reply's tag replaced it
+
+        api.gate = CompletableDeferred()
+        vm.preview()
+        advanceUntilIdle()
+        taps.emit("3:3")
+        advanceUntilIdle()
+        api.gate!!.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(Stage.Preview, vm.state.value.stage)
+        assertEquals("1:1", vm.state.value.tag)
+        assertEquals("1:1", api.adds.single().tag)
+    }
+
+    @Test fun changingTheCountDropsGross() = runTest(dispatcher) {
+        val vm = vm()
+        vm.setWeight(812.5)
+        readOne(vm, item())
+        assertTrue("gross" in vm.state.value.items.single())
+        vm.setCount(0, 2)
+        vm.preview()
+        advanceUntilIdle()
+        assertFalse("gross" in sentItem())
+    }
+
+    @Test fun previewIsBlockedWhileACountIsMissing() = runTest(dispatcher) {
+        val vm = vm()
+        readOne(vm, item())
+        vm.setCount(0, null)
+        assertFalse(vm.state.value.countsValid)
+        vm.preview()
+        advanceUntilIdle()
+        assertTrue(api.adds.isEmpty())
+        vm.setCount(0, 1)
+        vm.preview()
+        advanceUntilIdle()
+        assertEquals(1, api.adds.size)
+    }
+
+    @Test fun changedPhotosOrHintForgetTheFailedRead() = runTest(dispatcher) {
+        val vm = vm()
+        vm.addPhoto(byteArrayOf(1))
+        advanceUntilIdle()
+        api.readFailures += ApiError(502, "rate_limited", "busy", buildJsonObject { put("read_id", "old") })
+        vm.read()
+        advanceUntilIdle()
+        vm.addPhoto(byteArrayOf(2))
+        advanceUntilIdle()
+        assertNull(vm.state.value.error)
+        vm.retry()
+        advanceUntilIdle()
+        assertTrue(api.retries.isEmpty())
+
+        api.readFailures += ApiError(502, "rate_limited", "busy", buildJsonObject { put("read_id", "old2") })
+        vm.read()
+        advanceUntilIdle()
+        vm.setHint("all grey")
+        vm.retry()
+        advanceUntilIdle()
+        assertTrue(api.retries.isEmpty())
+    }
+
+    @Test fun dropTagNeedsATagConflict() = runTest(dispatcher) {
+        val vm = vm(initialTag = "4:77")
+        readOne(vm, item())
+        api.addFailures += ApiError(503, "spoolman_unreachable", "down")
+        vm.preview()
+        advanceUntilIdle()
+        vm.dropTagAndRetry()
+        advanceUntilIdle()
+        assertEquals("4:77", vm.state.value.tag)
+        assertEquals(1, api.adds.size)
     }
 
     @Test fun weightOnASingleOpenedSpoolBecomesGross() = runTest(dispatcher) {
@@ -417,9 +573,12 @@ private class FakeIntakeApi : IntakeApi {
     val readFailures = ArrayDeque<Exception>()
     val addResults = ArrayDeque<AddResult>()
     val addFailures = ArrayDeque<Exception>()
+    /** When set, read/add wait for it (to act while a call is running). */
+    var gate: CompletableDeferred<Unit>? = null
 
     override suspend fun read(photos: List<ByteArray>, hint: String, tag: String?): ReadResult {
         reads += Read(photos, hint, tag)
+        gate?.await()
         readFailures.removeFirstOrNull()?.let { throw it }
         return readResults.removeFirst()
     }
@@ -432,6 +591,7 @@ private class FakeIntakeApi : IntakeApi {
 
     override suspend fun add(items: JsonArray, dryRun: Boolean, tag: String?): AddResult {
         adds += Add(items, dryRun, tag)
+        gate?.await()
         addFailures.removeFirstOrNull()?.let { throw it }
         return addResults.removeFirstOrNull() ?: AddResult(emptyList(), listOf("ok"), dryRun)
     }
