@@ -112,7 +112,8 @@ location); Claude model and daily cap; printers; library update schedule.
 - Kotlin + Jetpack Compose, minSdk 29 (Android 10), compiled against API 37.
 - **Pairing:** scan the installer's QR (ML Kit bundled barcode model, works without Google services); or pick
   a server found by NSD; or type host/IP (fingerprint confirm + pairing code). Settings can change or re-pair.
-- **Home:** Add spools · Printers · Search. A tag tap anywhere opens that spool's card if known; if unknown,
+- **Home:** Add spools · Printers · Search · Add profile (a hand-entered spec for a line the library lacks;
+  stored as a local addition, section 6). A tag tap anywhere opens that spool's card if known; if unknown,
   offers "link to a sealed spool" or "add as new".
 - **Add spools:** 1–8 label photos (CameraX, resized to ~1600 px before upload) → optional tag tap → weight in
   grams or "Sealed" → Read (server returns proposed spools, nothing written) → he edits brand, material, color,
