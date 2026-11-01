@@ -1,0 +1,8 @@
+[Unit]
+Description=filament-kit daily backup (Spoolman database, settings, state)
+
+[Service]
+Type=oneshot
+ExecStart=/opt/filament-kit/backup.sh
+Nice=10
+IOSchedulingClass=idle
