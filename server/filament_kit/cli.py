@@ -16,6 +16,7 @@ import urllib.request
 from pathlib import Path
 
 from . import config, pairing
+from .bridge import registry
 from .spoolman import Spoolman, SpoolmanError
 
 KEY_FILE = "anthropic_key"
@@ -259,6 +260,61 @@ def _storage_menu(cfg: dict) -> None:
             print("Unknown choice.")
 
 
+def _pick_printer(printers: list) -> "registry.Printer | None":
+    raw = _ask("Printer number: ")
+    try:
+        return printers[int(raw.strip()) - 1] if raw and int(raw.strip()) >= 1 else None
+    except (ValueError, IndexError):
+        print("No such printer.")
+        return None
+
+
+def _printers_menu() -> None:
+    while True:
+        printers = list(registry.load().values())
+        print("\nPrinters")
+        for i, p in enumerate(printers, 1):
+            state = "set up" if p.configured else "detected, not set up"
+            print(f"  {i}. {p.name}  {p.model}  {p.ip}  serial {p.serial}  ({state})")
+        if not printers:
+            print("  (none yet; printers on your network appear here once they announce themselves)")
+        print("  1) refresh list\n  2) add printer\n  3) rename\n  4) remove\n  0) back")
+        choice = _ask("> ")
+        if choice is None or choice.strip() == "0":
+            return
+        choice = choice.strip()
+        if choice == "1":
+            continue
+        if choice == "2":
+            name = (_ask("Name: ") or "").strip()
+            ip = (_ask("IP address: ") or "").strip()
+            serial = (_ask("Serial number: ") or "").strip()
+            if not (name and ip and serial):
+                print("Name, IP address and serial number are all needed.")
+                continue
+            code = getpass.getpass("Access Code (hidden): ").strip()
+            if not code:
+                print("No Access Code entered; nothing added.")
+                continue
+            old = registry.load().get(serial)
+            registry.upsert(registry.Printer(serial, name, old.model if old else "", ip, code, True))
+            print(f"Added {name}.")
+        elif choice in ("3", "4"):
+            p = _pick_printer(printers)
+            if p is None:
+                continue
+            if choice == "3":
+                name = (_ask("New name: ") or "").strip()
+                if name:
+                    p.name = name
+                    registry.upsert(p)
+            else:
+                registry.remove(p.serial)
+                print(f"Removed {p.name}.")
+        else:
+            print("Unknown choice.")
+
+
 def cmd_config() -> int:
     cfg = config.load()
     while True:
@@ -267,6 +323,7 @@ def cmd_config() -> int:
               "  2) storage\n"
               f"  3) Claude model       {cfg['model']}, {cfg['reads_per_day']} reads/day\n"
               "  4) Anthropic key\n"
+              "  5) Printers\n"
               "  0) save and exit")
         choice = _ask("> ")
         if choice is None or choice.strip() == "0":
@@ -292,6 +349,8 @@ def cmd_config() -> int:
                 print("Key saved.")
             else:
                 print("No key entered; unchanged.")
+        elif choice == "5":
+            _printers_menu()
         else:
             print("Unknown choice.")
     config.save(cfg)
