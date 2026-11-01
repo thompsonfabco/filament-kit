@@ -33,14 +33,14 @@ class UpdaterTest {
     @Before fun setUp() = Dispatchers.setMain(StandardTestDispatcher(scheduler))
     @After fun tearDown() = Dispatchers.resetMain()
 
-    private class FakeSource(var apkVersion: String?) : UpdateSource {
+    private class FakeSource(var apkVersion: String?, var api: Int = 1) : UpdateSource {
         var infoCalls = 0
         var infoError: Exception? = null
         val downloads = mutableListOf<File>()
         override suspend fun info(): ServerInfo {
             infoCalls++
             infoError?.let { throw it }
-            return ServerInfo("kit", "1.0", 1, apkVersion)
+            return ServerInfo("kit", "1.0", api, apkVersion)
         }
         override suspend fun downloadApk(to: File) {
             downloads += to
@@ -91,6 +91,17 @@ class UpdaterTest {
         assertEquals(7, u.state.value.available)
     }
 
+    @Test fun aServerWithANewerApiAsksForAnAppUpdate() {
+        val u = updater(FakeSource("7", api = SUPPORTED_API + 1))
+        scheduler.runCurrent()
+        assertTrue(u.state.value.serverTooNew)
+        assertEquals(7, u.state.value.available)
+
+        val same = updater(FakeSource(null, api = SUPPORTED_API))
+        scheduler.runCurrent()
+        assertFalse(same.state.value.serverTooNew)
+    }
+
     @Test fun checksOnStartAndAgainDaily() {
         val source = FakeSource("5")
         val u = updater(source)
@@ -117,7 +128,7 @@ class UpdaterTest {
         val router = PairRouter()
         updater(source, router = router)
         scheduler.runCurrent()
-        assertEquals(PairNotice.Unpaired, router.notice.value)
+        assertTrue(router.notice.value is PairNotice.Unpaired)
         assertEquals("This phone was unpaired from the server", UNPAIRED_MESSAGE)
         assertEquals(1, router.requests.value)
     }

@@ -288,6 +288,18 @@ class PrinterViewModelTest {
         assertEquals("Benchy · 42% · 31 min left", PrinterHelp.jobLine(PrinterSummary("RUNNING", 42, 31, "Benchy")))
         assertEquals("Benchy · 42% · 1 h 5 min left · paused", PrinterHelp.jobLine(PrinterSummary("PAUSE", 42, 65, "Benchy")))
         assertEquals("42%", PrinterHelp.jobLine(PrinterSummary("RUNNING", 42, 0, null)))
+        assertNull(PrinterHelp.jobLine(null)) // no summary: the row shows the state only
+    }
+
+    @Test fun addOfAPrinterNotSeenYetShowsTheServersMessage() = runTest(dispatcher) {
+        backend.list = listOf(printer())
+        val vm = PrintersViewModel(backend)
+        vm.refresh(); runCurrent()
+        vm.openAdd(vm.state.value.printers[0])
+        backend.addError = ApiError(404, "not_found", "That printer hasn't been seen on the network yet")
+        vm.submitAdd("1", "")
+        runCurrent()
+        assertEquals("That printer hasn't been seen on the network yet", vm.state.value.dialog!!.error)
     }
 
     @Test fun controlsOnlyWhenConnected() {

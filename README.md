@@ -46,29 +46,44 @@ settings.
 
 1. On your phone, download `filament-kit.apk` from the same GitHub Releases page and open it. If the phone
    asks, allow "install unknown apps" for your browser.
-2. Open the filament-kit app and scan the QR code shown on the computer.
-   If the camera can't scan it, pick the server from the list in the app and type the 6-digit pairing code
-   instead.
-3. The code expires after a few minutes. To get a new one, run:
+2. On the server, run:
 
    ```
    sudo filament-kit pair
    ```
+
+   It prints a QR code, a 6-digit pairing code and the server's certificate fingerprint in the terminal.
+3. Open the filament-kit app. On Android 17 and newer, allow **Local network** access when Android asks; the app
+   can't find or reach the server without it (if you said no, the app shows **Allow** and, if Android stops
+   asking, **Open app settings**). Then scan the QR code from the terminal.
+   If the camera can't scan it, pick the server from the list in the app (or enter its address), check that the
+   fingerprint matches the one `sudo filament-kit pair` printed, and type the 6-digit code instead.
+4. The QR code and the code expire after a few minutes. If the app says the code has expired or was already
+   used, run `sudo filament-kit pair` again.
 
 ## Building the Android app release (owner, Windows PC)
 
 The app is signed with a key that lives only on your PC. Android only installs an update over an installed app
 if it is signed with the **same** key, so losing the key means everyone has to uninstall and reinstall the app.
 
-1. Once: `powershell -File tools\android_keystore.ps1`. It creates `%LOCALAPPDATA%\filament-kit\release.jks` and
-   a random password stored (encrypted with Windows DPAPI) in `%LOCALAPPDATA%\filament-kit\keystore.pw.dpapi`.
-   You never type or see the password. It refuses to overwrite an existing keystore.
-2. Each release: `bash tools/make_release.sh` (Git Bash). It builds and signs the app and puts `app/filament-kit.apk`
-   and `app/version.txt` into the tarball.
+1. Once: `powershell -ExecutionPolicy Bypass -File tools\android_keystore.ps1`. It creates
+   `%LOCALAPPDATA%\filament-kit\release.jks` and a random password stored (encrypted with Windows DPAPI) in
+   `%LOCALAPPDATA%\filament-kit\keystore.pw.dpapi`. You never type or see the password. It refuses to overwrite an
+   existing keystore. It uses `keytool` from `JAVA_HOME` if set, otherwise from `<local path>`.
+2. Each release: pick the app's version code and run, in Git Bash,
+   `FK_VERSION_CODE=<n> bash tools/make_release.sh`. It builds and signs the app with that versionCode and puts
+   `app/filament-kit.apk` and `app/version.txt` (containing the same number) into the tarball.
+   **Bump the version code for every app release**: use the previous release's number plus one (it must be a whole
+   number above 0 and must never go down; without `FK_VERSION_CODE` it is `1`). Phones only offer the update when
+   the server's `version.txt` is higher than the installed app's versionCode, and Android refuses to install a
+   lower one. Without the keystore, no app is built and any old `app-release.apk` is deleted, so a tarball never
+   carries a stale app.
 3. **Back up both** `release.jks` **and** `keystore.pw.dpapi` together, somewhere safe and off this PC. A DPAPI
    file only decrypts on this Windows account on this PC, so also make a portable backup:
-   `powershell -File tools\android_keystore.ps1 -Export D:\safe\filament-kit-keystore.bak`
-   (you type a passphrase; remember it). On another PC restore it with `-Import <file>`.
+   `powershell -ExecutionPolicy Bypass -File tools\android_keystore.ps1 -Export D:\safe\filament-kit-keystore.bak`
+   (you type a passphrase of at least 12 characters; remember it). On another PC restore it with
+   `-Import <file>`. The `FK_BACKUP_PASSPHRASE` environment variable is for test automation only; never use it for
+   a real backup.
 4. `-Forget` deletes the keystore and the password file (it asks first).
 
 ## Everyday commands

@@ -35,7 +35,7 @@ fun PairScreen(
     onPaired: () -> Unit,
     modifier: Modifier = Modifier,
     scanner: @Composable (onResult: (String) -> Unit, onClose: () -> Unit) -> Unit = { onResult, onClose ->
-        QrScanner(onResult = onResult, onClose = onClose)
+        QrScanner(onResult = onResult, onClose = onClose, onEnterAddress = { onClose(); viewModel.startManual() })
     },
 ) {
     val ui by viewModel.state.collectAsState()
@@ -75,7 +75,7 @@ fun PairScreen(
 
 @Composable
 private fun ChooseStep(ui: PairUi, discovered: List<DiscoveredServer>, onScan: () -> Unit, vm: PairViewModel) {
-    Text("On the server, open the pairing page and scan its QR code with this phone.")
+    Text("On the server, run \"sudo filament-kit pair\", then scan the QR code it prints in the terminal with this phone.")
     Button(onClick = onScan, enabled = !ui.busy, modifier = Modifier.fillMaxWidth()) {
         Text(if (ui.busy) "Connecting..." else "Scan QR code")
     }

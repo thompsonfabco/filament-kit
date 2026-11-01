@@ -17,6 +17,13 @@ interface PairingBackend {
 
     /** `GET /api/info` over a client pinned to [fingerprint]. */
     suspend fun info(host: String, port: Int, fingerprint: String, token: String?): ServerInfo
+
+    /**
+     * One authenticated call (`GET /api/printers`) with a scanned QR [token]: the server marks the token claimed on
+     * its first authenticated use and drops unclaimed QR tokens after 10 minutes. Throws [ApiError] `unauthorized`
+     * when the server no longer accepts the token.
+     */
+    suspend fun claim(host: String, port: Int, fingerprint: String, token: String)
 }
 
 class NetPairingBackend : PairingBackend {
@@ -28,6 +35,10 @@ class NetPairingBackend : PairingBackend {
 
     override suspend fun info(host: String, port: Int, fingerprint: String, token: String?): ServerInfo =
         api(host, port, fingerprint, token).info()
+
+    override suspend fun claim(host: String, port: Int, fingerprint: String, token: String) {
+        api(host, port, fingerprint, token).printers()
+    }
 
     private fun api(host: String, port: Int, fingerprint: String, token: String?) =
         Api(pinnedClient(fingerprint), { "https://${if (':' in host) "[$host]" else host}:$port" }, { token })

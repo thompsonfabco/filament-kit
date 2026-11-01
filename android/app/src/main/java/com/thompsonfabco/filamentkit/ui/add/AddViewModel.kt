@@ -9,8 +9,10 @@ import com.thompsonfabco.filamentkit.net.AddResult
 import com.thompsonfabco.filamentkit.net.Api
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
+import com.thompsonfabco.filamentkit.net.LOCAL_NETWORK_MESSAGE
 import com.thompsonfabco.filamentkit.net.ReadResult
 import com.thompsonfabco.filamentkit.tags.TagEvents
+import com.thompsonfabco.filamentkit.ui.isValidWeight
 import java.io.File
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -75,6 +77,19 @@ data class AddError(
     val actualFingerprint: String? = null,
 )
 
+/**
+ * A real add failed after it may have written to Spoolman: [spoolIds] are the spools the server reported as created
+ * (a partial `spoolman_error`); empty when the reply was lost and nothing is known.
+ */
+data class AddedBefore(val spoolIds: List<Long>) {
+    val note: String
+        get() = if (spoolIds.isEmpty()) {
+            "The last add may have gone through: the connection was lost before the server answered."
+        } else {
+            "Spools already added: ${spoolIds.joinToString { "#$it" }}"
+        }
+}
+
 data class AddUiState(
     val stage: Stage = Stage.Capture,
     val draftId: String? = null,
@@ -94,6 +109,10 @@ data class AddUiState(
     val error: AddError? = null,
     /** Bumped when items or fields are replaced wholesale (read, restore, remove), so screens reset their text. */
     val generation: Int = 0,
+    /** A real add may already have written spools; the next real add needs [AddViewModel.addAgain]. */
+    val addedBefore: AddedBefore? = null,
+    /** The "I checked — add again" warning is open (Add was tapped while [addedBefore] is set). */
+    val askAddAgain: Boolean = false,
 ) {
     /** Every item has a whole spool count of at least 1 (Preview is blocked otherwise). */
     val countsValid: Boolean
@@ -201,7 +220,10 @@ class AddViewModel(
     }
 
     /** Grams on the scale, spool included; only used for one opened spool. */
-    fun setWeight(grams: Double?) = edit { it.copy(weight = grams, sealed = if (grams != null) false else it.sealed) }
+    fun setWeight(grams: Double?) {
+        val g = grams?.takeIf(::isValidWeight) // NaN, Infinity, 0 or less never reach the draft
+        edit { it.copy(weight = g, sealed = if (g != null) false else it.sealed) }
+    }
 
     fun setSealed(sealed: Boolean) = edit { it.copy(sealed = sealed, weight = if (sealed) null else it.weight) }
 
@@ -283,8 +305,11 @@ class AddViewModel(
         editItem(index) { JsonObject(it + (key to el)) }
     }
 
-    fun setNumber(index: Int, key: String, value: Double?) =
+    /** Weights (`net`, `tare`, `gross`); a value that is not finite and above 0 is ignored. */
+    fun setNumber(index: Int, key: String, value: Double?) {
+        if (value != null && !isValidWeight(value)) return
         editItem(index) { JsonObject(it + (key to (value?.let(::number) ?: JsonNull))) }
+    }
 
     /** `gross` only applies to a single spool, so any other count drops it. */
     fun setCount(index: Int, count: Int?) = editItem(index) {
@@ -332,10 +357,26 @@ class AddViewModel(
         runAdd(dryRun = true)
     }
 
+    /** The real add. After an add that may already have written spools, this only opens the "add again?" warning. */
     fun confirm() {
-        if (_state.value.stage != Stage.Preview) return
+        val s = _state.value
+        if (s.stage != Stage.Preview) return
+        if (s.addedBefore != null) {
+            _state.update { it.copy(askAddAgain = true) }
+            return
+        }
         runAdd(dryRun = false)
     }
+
+    /** "I checked — add again" in the warning: the real add, once. */
+    fun addAgain() {
+        val s = _state.value
+        if (!s.askAddAgain) return
+        _state.update { it.copy(askAddAgain = false) }
+        if (s.stage == Stage.Preview) runAdd(dryRun = false)
+    }
+
+    fun cancelAddAgain() = _state.update { it.copy(askAddAgain = false) }
 
     private fun runAdd(dryRun: Boolean) {
         val s = _state.value
@@ -364,7 +405,19 @@ class AddViewModel(
                 val mayHaveWritten = !dryRun && (code == "spoolman_error" || code == "offline")
                 if (!dryRun && code == "offline") err = err.copy(message = ADD_REPLY_LOST)
                 val stage = if (mayHaveWritten) Stage.Review else back
-                _state.update { it.copy(stage = stage, previewLines = if (stage == Stage.Review) emptyList() else it.previewLines) }
+                // Spools may exist now: a partial Spoolman failure (ids known) or a lost reply (unknown).
+                val created = (e as? ApiError)?.let(::partialIds).orEmpty()
+                val warn = !dryRun && (code == "offline" || (code == "spoolman_error" && created.isNotEmpty()))
+                _state.update {
+                    it.copy(
+                        stage = stage,
+                        previewLines = if (stage == Stage.Review) emptyList() else it.previewLines,
+                        addedBefore = if (warn) {
+                            AddedBefore((it.addedBefore?.spoolIds.orEmpty() + created).distinct())
+                        } else it.addedBefore,
+                    )
+                }
+                if (warn) save()
                 // Retries go through the stage guards of preview()/confirm(), so a later edit blocks a stale write.
                 retryAction = if (dryRun || mayHaveWritten) ::preview else ::confirm
                 showError(err)
@@ -420,6 +473,7 @@ class AddViewModel(
         val next = d.copy(
             hint = s.hint, tag = s.tag, weightGrams = s.weight, sealed = s.sealed, readResult = readResult,
             editedItems = if (s.items.isEmpty() && readResult == null) null else JsonArray(s.items),
+            addedBefore = s.addedBefore?.spoolIds,
         )
         draft = next
         saves.value = next
@@ -442,6 +496,7 @@ class AddViewModel(
                 stage = if (items != null) Stage.Review else Stage.Capture,
                 draftId = d.id, photos = d.photos, hint = d.hint, tag = d.tag ?: it.tag, weight = d.weightGrams,
                 sealed = d.sealed, questions = res?.questions.orEmpty(), items = items.orEmpty(),
+                addedBefore = d.addedBefore?.let(::AddedBefore),
                 generation = it.generation + 1,
             )
         }
@@ -483,6 +538,10 @@ internal fun number(v: Double): JsonPrimitive =
 
 internal fun grams(v: Double): String = number(v).content
 
+/** The ids of spools a failed `spoolman_error` add had already created. */
+internal fun partialIds(e: ApiError): List<Long> = (e.extra["partial_spool_ids"] as? JsonArray).orEmpty()
+    .mapNotNull { (it as? JsonPrimitive)?.longOrNull }
+
 /** Maps a failure to a plain-English [AddError]. */
 internal fun describe(e: Exception): AddError = when (e) {
     is FingerprintMismatch -> AddError(
@@ -501,6 +560,7 @@ private fun describeApi(e: ApiError): AddError {
             "Can't reach the server. Check that this phone is on the same network as the server, then try again.",
             canRetry = true,
         )
+        "local_network" -> AddError(LOCAL_NETWORK_MESSAGE, canRetry = true)
         "unauthorized" -> AddError("This phone is no longer paired with the server. Pair it again.", pairAgain = true)
         "daily_cap" -> AddError("Today's limit of label reads on the server is used up. Try again tomorrow.")
         "bad_key" -> claude("The server's Anthropic API key was rejected. Fix the key on the server, then retry.")
@@ -516,8 +576,7 @@ private fun describeApi(e: ApiError): AddError {
             "The server can't reach Spoolman. Check that Spoolman is running, then try again.", canRetry = true,
         )
         "spoolman_error" -> {
-            val ids = (e.extra["partial_spool_ids"] as? JsonArray).orEmpty()
-                .mapNotNull { (it as? JsonPrimitive)?.longOrNull }
+            val ids = partialIds(e)
             if (ids.isEmpty()) {
                 AddError("Spoolman reported an error; nothing was added. Check the values and try again.", detail = e.message)
             } else {

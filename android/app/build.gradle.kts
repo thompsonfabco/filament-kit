@@ -12,7 +12,11 @@ android {
         applicationId = "com.thompsonfabco.filamentkit"
         minSdk = 29
         targetSdk = 37
-        versionCode = 1
+        // The update check compares this with the server's app/version.txt; tools/make_release.sh passes the same
+        // FK_VERSION_CODE to this build and writes it to version.txt. Bump it for every app release (README).
+        versionCode = System.getenv("FK_VERSION_CODE")?.takeIf { it.isNotBlank() }?.let {
+            it.trim().toIntOrNull()?.takeIf { v -> v > 0 } ?: error("FK_VERSION_CODE must be a whole number above 0, got '$it'")
+        } ?: 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

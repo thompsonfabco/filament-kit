@@ -234,12 +234,85 @@ class AddViewModelTest {
         assertEquals(listOf(true, false, true), api.adds.map { it.dryRun })
         assertEquals(Stage.Preview, vm.state.value.stage)
 
+        // the reply was lost, so the next real add needs an explicit "I checked" first
+        assertEquals(AddedBefore(emptyList()), vm.state.value.addedBefore)
         api.addResults += AddResult(listOf(7), listOf("added"), false)
         vm.confirm()
+        advanceUntilIdle()
+        assertTrue(vm.state.value.askAddAgain)
+        assertEquals(listOf(true, false, true), api.adds.map { it.dryRun })
+        vm.addAgain()
         advanceUntilIdle()
         assertEquals(listOf(true, false, true, false), api.adds.map { it.dryRun })
         assertEquals(Stage.Done, vm.state.value.stage)
         assertNull(store.get(s.draftId))
+    }
+
+    @Test fun partialAddShowsTheIdsAndNeedsAnAcknowledgementBeforeAddingAgain() = runTest(dispatcher) {
+        val vm = vm()
+        readOne(vm, item(count = 3))
+        vm.preview()
+        advanceUntilIdle()
+        api.addFailures += ApiError(502, "spoolman_error", "spoolman failed part-way",
+            buildJsonObject { put("partial_spool_ids", JsonArray(listOf(Json.parseToJsonElement("12"), Json.parseToJsonElement("13")))) })
+        vm.confirm()
+        advanceUntilIdle()
+        assertEquals(AddedBefore(listOf(12L, 13L)), vm.state.value.addedBefore)
+        assertEquals("Spools already added: #12, #13", vm.state.value.addedBefore!!.note)
+
+        vm.preview()
+        advanceUntilIdle()
+        assertEquals(Stage.Preview, vm.state.value.stage)
+        vm.confirm()
+        advanceUntilIdle()
+        assertTrue(vm.state.value.askAddAgain)
+        vm.cancelAddAgain()
+        assertFalse(vm.state.value.askAddAgain)
+        assertEquals(listOf(true, false, true), api.adds.map { it.dryRun })
+
+        // still remembered when the draft is reopened later
+        val reopened = vm(draftId = vm.state.value.draftId)
+        advanceUntilIdle()
+        assertEquals(AddedBefore(listOf(12L, 13L)), reopened.state.value.addedBefore)
+
+        vm.confirm()
+        api.addResults += AddResult(listOf(14), listOf("added"), false)
+        vm.addAgain()
+        advanceUntilIdle()
+        assertEquals(listOf(true, false, true, false), api.adds.map { it.dryRun })
+        assertEquals(Stage.Done, vm.state.value.stage)
+    }
+
+    @Test fun addAgainWithoutTheDialogDoesNothing() = runTest(dispatcher) {
+        val vm = vm()
+        readOne(vm, item())
+        vm.preview()
+        advanceUntilIdle()
+        vm.addAgain()
+        advanceUntilIdle()
+        assertEquals(listOf(true), api.adds.map { it.dryRun })
+    }
+
+    @Test fun nonFiniteOrNonPositiveWeightsNeverReachTheDraft() = runTest(dispatcher) {
+        val vm = vm()
+        vm.setWeight(500.0)
+        for (bad in listOf(Double.NaN, Double.POSITIVE_INFINITY, 0.0, -4.0)) {
+            vm.setWeight(bad)
+            assertNull(vm.state.value.weight)
+        }
+        readOne(vm, item())
+        for (bad in listOf(Double.NaN, Double.NEGATIVE_INFINITY, 0.0)) {
+            vm.setNumber(0, "net", bad)
+            vm.setNumber(0, "gross", bad)
+        }
+        assertEquals(1000, vm.state.value.items[0]["net"]!!.jsonPrimitive.int)
+        assertFalse("gross" in vm.state.value.items[0])
+        // later saves still reach the draft
+        vm.setText(0, "name", "PLA+ Silver")
+        advanceUntilIdle()
+        val draft = store.get(vm.state.value.draftId!!)!!
+        assertNull(draft.weightGrams)
+        assertEquals("PLA+ Silver", draft.editedItems!![0].jsonObject["name"]!!.jsonPrimitive.content)
     }
 
     @Test fun retryAfterAFailedAddNeverWritesLaterEdits() = runTest(dispatcher) {

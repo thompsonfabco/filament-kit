@@ -7,10 +7,15 @@
   password stored via DPAPI in keystore.pw.dpapi. Refuses to overwrite an existing keystore.
   -Print   write the password to stdout (for make_release.sh; never log it)
   -Forget  delete the keystore AND the DPAPI password file (asks first; -Force skips the question)
-  -Export <path>  write a passphrase-protected backup (.zip-less single file) for another PC
+  -Export <path>  write a passphrase-protected backup (.zip-less single file) for another PC;
+                  the backup passphrase must be at least 12 characters
   -Import <path>  restore from such a backup (refuses to overwrite)
 The password is generated here (CSPRNG); you never type it. A DPAPI file only decrypts on this
 Windows account, so keep an -Export backup somewhere safe as well.
+
+  FK_BACKUP_PASSPHRASE (environment): TEST AUTOMATION ONLY. When set, -Export/-Import use it instead
+  of prompting. Never set it for a real backup: environment variables can be read by other processes
+  of this user and may end up in shell history or logs.
 #>
 [CmdletBinding()]
 param(
@@ -25,7 +30,12 @@ $ErrorActionPreference = 'Stop'
 $dir = Join-Path $env:LOCALAPPDATA 'filament-kit'
 $jks = Join-Path $dir 'release.jks'
 $pwFile = Join-Path $dir 'keystore.pw.dpapi'
+# Prefer the JDK in JAVA_HOME; the dev PC's JDK 21 is the fallback.
 $keytool = '<local path>\bin\keytool.exe'
+if ($env:JAVA_HOME -and (Test-Path (Join-Path $env:JAVA_HOME 'bin\keytool.exe'))) {
+    $keytool = Join-Path $env:JAVA_HOME 'bin\keytool.exe'
+}
+$MinPassphrase = 12
 
 function Read-StoredPassword {
     if (-not (Test-Path $pwFile)) { throw "No password file at $pwFile" }
@@ -78,7 +88,8 @@ if ($Forget) {
 if ($Export) {
     if (-not (Test-Path $jks) -or -not (Test-Path $pwFile)) { throw 'Nothing to export: keystore or password file missing.' }
     if (Test-Path $Export) { throw "Refusing to overwrite $Export" }
-    $pass = Read-Passphrase 'Backup passphrase (you will need it to restore)' -Confirm
+    $pass = Read-Passphrase "Backup passphrase, at least $MinPassphrase characters (you will need it to restore)" -Confirm
+    if ($pass.Length -lt $MinPassphrase) { throw "The backup passphrase must be at least $MinPassphrase characters; nothing was written." }
     # Passphrase-derived AES-256 key (PBKDF2-SHA256, 600k iterations); payload = JSON {jks b64, pw}.
     $payload = [Text.Encoding]::UTF8.GetBytes((@{
         jks = [Convert]::ToBase64String([IO.File]::ReadAllBytes($jks))
@@ -106,12 +117,23 @@ if ($Import) {
     $plainPass = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($pass))
     $kdf = New-Object Security.Cryptography.Rfc2898DeriveBytes($plainPass, [byte[]]$salt, 600000, [Security.Cryptography.HashAlgorithmName]::SHA256)
     $aes = [Security.Cryptography.Aes]::Create(); $aes.Key = $kdf.GetBytes(32); $aes.IV = [byte[]]$iv
-    try { $plain = $aes.CreateDecryptor().TransformFinalBlock([byte[]]$cipher, 0, $cipher.Length) }
+    # A wrong passphrase can still decrypt to padding-valid garbage, so the JSON/base64 checks belong here too.
+    try {
+        $plain = $aes.CreateDecryptor().TransformFinalBlock([byte[]]$cipher, 0, $cipher.Length)
+        $obj = [Text.Encoding]::UTF8.GetString($plain) | ConvertFrom-Json
+        if (-not $obj.jks -or -not $obj.pw) { throw 'incomplete backup' }
+        $jksBytes = [Convert]::FromBase64String($obj.jks)
+    }
     catch { throw 'Wrong passphrase or corrupted backup.' }
-    $obj = [Text.Encoding]::UTF8.GetString($plain) | ConvertFrom-Json
+    finally { $aes.Dispose() }
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
-    [IO.File]::WriteAllBytes($jks, [Convert]::FromBase64String($obj.jks))
+    # Password first: a keystore without its password file is useless, so never leave one behind.
     Save-Password $obj.pw
+    try { [IO.File]::WriteAllBytes($jks, $jksBytes) }
+    catch {
+        Remove-Item -LiteralPath $jks, $pwFile -Force -ErrorAction SilentlyContinue
+        throw "Could not write ${jks}: $($_.Exception.Message)"
+    }
     Write-Host "Restored $jks and the DPAPI password file."
     exit 0
 }
@@ -124,21 +146,31 @@ if (Test-Path $jks) {
 if (-not (Test-Path $keytool)) { Write-Error "keytool not found at $keytool"; exit 1 }
 New-Item -ItemType Directory -Force -Path $dir | Out-Null
 $pw = New-RandomPassword
+# Save the password BEFORE the keystore exists: a keystore whose password was never saved can never sign an
+# update. On any failure below, both files are removed so the next run starts clean.
+try { Save-Password $pw }
+catch {
+    Remove-Item -LiteralPath $pwFile -Force -ErrorAction SilentlyContinue
+    Write-Error "Could not save the keystore password ($($_.Exception.Message)); signing key NOT created."
+    exit 1
+}
 $env:FK_KS_GEN_PW = $pw
+$ok = $false
 try {
     $ErrorActionPreference = 'Continue'   # keytool writes progress to stderr
     & $keytool -genkeypair -keystore $jks -storetype PKCS12 -alias filament-kit `
         -keyalg RSA -keysize 4096 -validity 10000 -dname 'CN=filament-kit' `
         '-storepass:env' FK_KS_GEN_PW '-keypass:env' FK_KS_GEN_PW 2>$null | Out-Null
+    $code = $LASTEXITCODE
     $ErrorActionPreference = 'Stop'
-    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $jks)) {
-        Remove-Item -LiteralPath $jks -Force -ErrorAction SilentlyContinue
-        Write-Error "keytool failed (exit $LASTEXITCODE); signing key NOT created."
-        exit 1
-    }
-    Save-Password $pw
+    $ok = ($code -eq 0) -and (Test-Path $jks)
 } finally {
     Remove-Item Env:FK_KS_GEN_PW -ErrorAction SilentlyContinue
+    if (-not $ok) { Remove-Item -LiteralPath $jks, $pwFile -Force -ErrorAction SilentlyContinue }
+}
+if (-not $ok) {
+    Write-Error "keytool failed (exit $code); signing key NOT created."
+    exit 1
 }
 Write-Host "Created $jks (password stored via DPAPI in $pwFile; never printed)."
 Write-Host "BACK UP both files, and run -Export <path> for a copy that works on another PC."

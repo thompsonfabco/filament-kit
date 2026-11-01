@@ -42,6 +42,8 @@ class ServerSessionTest {
 
     private val router = PairRouter()
 
+    @Volatile private var localNetwork = true
+
     private fun session(configs: MutableStateFlow<ServerConfig?>, discovered: List<String> = emptyList()) = ServerSession(
         scope = scope,
         configs = configs,
@@ -49,7 +51,43 @@ class ServerSessionTest {
         discover = { discovered },
         router = router,
         clientFor = { fp: String -> built += fp; pinnedClient(fp) },
+        localNetworkGranted = { localNetwork },
     )
+
+    @Test fun withoutTheLocalNetworkPermissionNothingIsResolvedAndItIsNotOffline() {
+        val good = httpsServer(cert, "127.0.0.3").also { servers += it }
+        localNetwork = false
+        val configs = MutableStateFlow<ServerConfig?>(config(listOf("127.0.0.3"), good.port))
+        val s = session(configs)
+        await { s.connection.first { it == Connection.NeedsLocalNetwork } }
+        s.refresh()
+        assertEquals(Connection.NeedsLocalNetwork, s.connection.value)
+        assertEquals(0, good.requestCount)
+        assertTrue(saved.isEmpty())
+
+        localNetwork = true
+        s.refresh()
+        await { s.connection.first { it == Connection.Online("127.0.0.3") } }
+    }
+
+    @Test fun aLate401ForAnOldTokenDoesNotBlankTheNewOne() {
+        val good = httpsServer(cert, "127.0.0.3").also { servers += it }
+        val configs = MutableStateFlow<ServerConfig?>(config(listOf("127.0.0.3"), good.port, token = "new"))
+        val s = session(configs)
+        await { s.connection.first { it is Connection.Online } }
+
+        router.unauthorized("old")
+        assertEquals(PairNotice.Unpaired("old"), router.notice.value)
+        // give the session's collector time to act on it
+        runBlocking { kotlinx.coroutines.delay(300) }
+        assertEquals("new", s.config.value?.token)
+        assertTrue(saved.none { it.token.isBlank() })
+
+        runBlocking { s.api.value!!.locations() }
+        var req = good.takeRequest()
+        while (req.url.encodedPath != "/api/locations") req = good.takeRequest()
+        assertEquals("Bearer new", req.headers["Authorization"])
+    }
 
     private fun <T> await(block: suspend () -> T): T = runBlocking { withTimeout(15_000) { block() } }
 
@@ -130,7 +168,7 @@ class ServerSessionTest {
         await { s.connection.first { it is Connection.Online } }
         assertTrue(configs.value.isPaired())
 
-        router.report(ApiError(401, "unauthorized", "nope"))
+        router.unauthorized("revoked")
 
         val blanked = await { s.config.first { it?.token == "" } }!!
         assertEquals(listOf("127.0.0.3"), blanked.endpoints)

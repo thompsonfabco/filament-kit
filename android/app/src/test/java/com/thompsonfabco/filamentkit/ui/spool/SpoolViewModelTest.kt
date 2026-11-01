@@ -126,6 +126,24 @@ class SpoolViewModelTest {
         assertEquals(640.0, c.spool.remaining!!, 0.0)
     }
 
+    @Test fun nonFiniteOrNonPositiveWeightsAreNeverSent() {
+        backend.tagResult = spool(1)
+        val vm = vm()
+        vm.onTag("a")
+        for (bad in listOf(Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY, 0.0, -3.0)) vm.previewWeight(bad)
+        assertTrue(backend.calls.none { it.name == "update" })
+
+        backend.tagResult = null
+        vm.onTag("b:c")
+        backend.sealed = listOf(spool(2))
+        vm.startLink()
+        vm.search("sun")
+        vm.pick(2, Double.NaN)
+        vm.pick(2, Double.POSITIVE_INFINITY)
+        vm.pick(2, 0.0)
+        assertTrue(backend.calls.none { it.name == "link" })
+    }
+
     @Test fun markEmptySendsEmptyAfterConfirmation() {
         backend.tagResult = spool(1)
         val vm = vm()

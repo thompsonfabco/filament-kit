@@ -4,6 +4,7 @@ import com.thompsonfabco.filamentkit.data.ServerConfig
 import com.thompsonfabco.filamentkit.data.SettingsStore
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
+import com.thompsonfabco.filamentkit.net.LOCAL_NETWORK_MESSAGE
 import com.thompsonfabco.filamentkit.net.ServerInfo
 import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
@@ -44,6 +45,12 @@ private class FakeBackend : PairingBackend {
     override suspend fun info(host: String, port: Int, fingerprint: String, token: String?): ServerInfo {
         calls += "info"
         return infoResult(host)
+    }
+
+    var claimResult: (String) -> Unit = {}
+    override suspend fun claim(host: String, port: Int, fingerprint: String, token: String) {
+        calls += "claim $host $token"
+        claimResult(host)
     }
 }
 
@@ -172,7 +179,7 @@ class PairViewModelTest {
             ServerConfig(listOf("kit.local", "192.168.1.5", "10.0.0.9"), 8443, FP, "qr-token", "Workshop server"),
             settings.saved,
         )
-        assertEquals(listOf("info"), backend.calls)
+        assertEquals(listOf("info", "claim kit.local qr-token"), backend.calls)
         assertEquals(1, settings.saves)
         assertEquals(Step.Done, ui.step)
     }
@@ -198,10 +205,42 @@ class PairViewModelTest {
     @Test fun qrFallsBackToAnIpWhenTheNameFailsAndRemembersItFirst() {
         backend.infoResult = { h -> if (h == "kit.local") throw ApiError(0, "offline", "x") else ServerInfo("Workshop server", "1", 1) }
         vm.onQrScanned(qr("192.168.1.5", "10.0.0.9"))
-        assertEquals(listOf("info", "info"), backend.calls)
+        assertEquals(listOf("info", "info", "claim 192.168.1.5 qr-token"), backend.calls)
         assertEquals(listOf("192.168.1.5", "kit.local", "10.0.0.9"), settings.saved?.endpoints)
         assertEquals(1, settings.saves)
         assertEquals(Step.Done, ui.step)
+    }
+
+    @Test fun qrTokenTheServerNoLongerAcceptsSavesNothing() {
+        backend.claimResult = { throw ApiError(401, "unauthorized", "missing or revoked token") }
+        vm.onQrScanned(qr("192.168.1.5"))
+        assertNull(settings.saved)
+        assertEquals(0, settings.saves)
+        assertEquals(Step.Choose, ui.step)
+        assertEquals(QR_EXPIRED, ui.error)
+        assertTrue(ui.error!!.contains("sudo filament-kit pair"))
+    }
+
+    @Test fun qrClaimAnsweredWithAnotherServerErrorStillCountsAsClaimed() {
+        backend.claimResult = { throw ApiError(502, "printer_error", "printer lookup failed") }
+        vm.onQrScanned(qr())
+        assertEquals("qr-token", settings.saved?.token)
+        assertEquals(Step.Done, ui.step)
+    }
+
+    @Test fun qrClaimThatCannotReachTheServerSavesNothing() {
+        backend.claimResult = { throw ApiError(0, "offline", "gone") }
+        vm.onQrScanned(qr())
+        assertNull(settings.saved)
+        assertEquals(Step.Choose, ui.step)
+        assertNotNull(ui.error)
+    }
+
+    @Test fun localNetworkMissingExplainsThePermissionInsteadOfOffline() {
+        val blocked = PairViewModel(settings, backend, CoroutineScope(UnconfinedTestDispatcher()), localNetworkMissing = { true })
+        backend.probeResult = { throw IOException("EPERM") }
+        blocked.submitAddress("10.0.0.2", "")
+        assertEquals(LOCAL_NETWORK_MESSAGE, blocked.state.value.error)
     }
 
     @Test fun qrParseErrorIsAFixedMessage() {
