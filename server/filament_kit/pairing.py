@@ -110,6 +110,16 @@ def _new_token() -> str:
     return secrets.token_urlsafe(32)
 
 
+def _load_devices() -> list:
+    """Read devices, purging QR tokens never claimed within their window."""
+    now = time.time()
+    devs = _read("devices.json")
+    kept = [d for d in devs if d.get("claimed") is not None or d.get("expires", 0) > now]
+    if len(kept) != len(devs):
+        _write("devices.json", kept)
+    return kept
+
+
 def issue(device_hint: str = "") -> Pairing:
     cert = config.paths().etc / "cert.pem"
     if not cert.exists():
@@ -122,13 +132,15 @@ def issue(device_hint: str = "") -> Pairing:
     expires = now + TOKEN_TTL
     device_id = uuid.uuid4().hex[:12]
 
-    devs = _read("devices.json")
+    devs = _load_devices()
     devs.append({
         "id": device_id,
         "name": device_hint or "phone",
         "hash": _hash(token),
         "paired": now,
         "last_seen": None,
+        "expires": expires,
+        "claimed": None,
     })
     _write("devices.json", devs)
 
@@ -152,12 +164,13 @@ def redeem_code(code: str) -> str:
         raise PairingError("invalid, expired or locked pairing code")
     pending.remove(match)
     _write("pending.json", pending)
-    devs = _read("devices.json")
+    devs = _load_devices()
     token = _new_token()
     for d in devs:
         if d["id"] == match["device"]:
             d["hash"] = _hash(token)
             d["paired"] = now
+            d["claimed"] = now
             _write("devices.json", devs)
             return token
     raise PairingError("device for this code no longer exists")
@@ -165,17 +178,19 @@ def redeem_code(code: str) -> str:
 
 def check(token: str) -> str | None:
     h = _hash(token)
-    devs = _read("devices.json")
+    devs = _load_devices()
     for d in devs:
         if hmac.compare_digest(d["hash"], h):
             d["last_seen"] = time.time()
+            if d.get("claimed") is None:
+                d["claimed"] = d["last_seen"]
             _write("devices.json", devs)
             return d["id"]
     return None
 
 
 def revoke(device_id: str) -> bool:
-    devs = _read("devices.json")
+    devs = _load_devices()
     kept = [d for d in devs if d["id"] != device_id]
     if len(kept) == len(devs):
         return False
@@ -186,5 +201,5 @@ def revoke(device_id: str) -> bool:
 def devices() -> list[dict]:
     return [
         {k: d[k] for k in ("id", "name", "paired", "last_seen")}
-        for d in _read("devices.json")
+        for d in _load_devices()
     ]

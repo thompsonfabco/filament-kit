@@ -78,3 +78,20 @@ def test_revoke():
     assert pairing.check(p.token) is None
     assert pairing.revoke(dev) is False
     assert pairing.devices() == []
+
+
+def test_qr_token_unclaimed_expires(monkeypatch):
+    p = pairing.issue("a")
+    assert len(pairing.devices()) == 1
+    monkeypatch.setattr(pairing.time, "time", lambda: p.expires + 1)
+    assert pairing.check(p.token) is None
+    assert pairing.devices() == []
+
+
+def test_qr_token_claimed_stays_valid(monkeypatch):
+    p = pairing.issue("a")
+    dev = pairing.check(p.token)
+    assert dev is not None
+    monkeypatch.setattr(pairing.time, "time", lambda: p.expires + 1)
+    assert pairing.check(p.token) == dev
+    assert [d["id"] for d in pairing.devices()] == [dev]
