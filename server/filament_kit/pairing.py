@@ -115,12 +115,17 @@ def local_ips() -> list[str]:
     return list(dict.fromkeys(a for a in _candidate_ips() if _usable(a)))
 
 
-def make_cert(hostname: str, ips: list[str], dest: Path) -> str:
+def short_hostname() -> str:
+    """The host's own name without any domain: what avahi publishes as <name>.local."""
+    return socket.gethostname().split(".")[0]
+
+
+def make_cert(hostname: str, ips: list[str], dest: Path, extra_dns: list[str] = ()) -> str:
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
     key = ec.generate_private_key(ec.SECP256R1())
     name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, hostname)])
-    dns = list(dict.fromkeys([hostname, f"{hostname}.local", "localhost"]))
+    dns = list(dict.fromkeys([hostname, f"{hostname}.local", "localhost", *extra_dns]))
     sans: list[x509.GeneralName] = [x509.DNSName(n) for n in dns]
     sans += [x509.IPAddress(ipaddress.ip_address(ip)) for ip in dict.fromkeys(ips) if _usable(ip)]
     now = dt.datetime.now(dt.timezone.utc)
@@ -209,7 +214,7 @@ def issue(device_hint: str = "") -> Pairing:
 
     # server_name is only a display name; the phone finds the server by mDNS hostname or one of its IPs
     query = urllib.parse.urlencode(
-        {"h": f"{socket.gethostname()}.local", "p": port, "t": token, "fp": fp, "ip": local_ips()},
+        {"h": f"{short_hostname()}.local", "p": port, "t": token, "fp": fp, "ip": local_ips()},
         doseq=True,
     )
     return Pairing(token=token, code=code, expires=expires, qr=f"fkit://pair?{query}")

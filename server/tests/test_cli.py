@@ -257,6 +257,33 @@ def test_status_api_answering_ok(capsys, monkeypatch):
     assert seen == {"url": "https://127.0.0.1:8710/api/info", "timeout": 5, "verify": ssl.CERT_NONE}
 
 
+def test_cert_short_hostname_keeps_full_name_as_san(monkeypatch):
+    from cryptography import x509
+    monkeypatch.setattr(cli.socket, "gethostname", lambda: "fkbox.lan.example")
+    monkeypatch.setattr(pairing, "_candidate_ips", lambda: [])
+    assert cli.main(["cert"]) == 0
+    cert = x509.load_pem_x509_certificate((config.paths().etc / "cert.pem").read_bytes())
+    san = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+    assert cert.subject.rfc4514_string() == "CN=fkbox"
+    assert set(san.get_values_for_type(x509.DNSName)) == {"fkbox", "fkbox.local", "localhost", "fkbox.lan.example"}
+
+
+def test_status_api_bad_http_answer_fails(capsys, monkeypatch):
+    import http.client
+    _systemd_on(monkeypatch)
+    real_urlopen = cli.urllib.request.urlopen
+
+    def urlopen(url, timeout=None, context=None):
+        if not isinstance(url, str):
+            return real_urlopen(url, timeout=timeout)
+        raise http.client.BadStatusLine("garbage")
+
+    monkeypatch.setattr(cli.urllib.request, "urlopen", urlopen)
+    assert cli.main(["status"]) == 1
+    out = capsys.readouterr().out
+    assert "FAIL filament-kit API not answering" in out and "sudo journalctl -u filament-kit -n 50" in out
+
+
 def test_status_api_check_skipped_without_systemd(capsys):
     cli.main(["status"])
     out = capsys.readouterr().out

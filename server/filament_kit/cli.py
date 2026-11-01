@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import http.client
 import json
 import os
 import shutil
@@ -64,7 +65,7 @@ def _api_answers(port: int) -> tuple[bool, str]:
     try:
         with urllib.request.urlopen(url, timeout=5, context=ctx) as r:
             return r.status == 200, url
-    except (OSError, ValueError):
+    except (OSError, ValueError, http.client.HTTPException):
         return False, url
 
 
@@ -307,7 +308,8 @@ def cmd_cert() -> int:
         print(pairing.fingerprint(cert.read_bytes()))
         return 0
     cert.parent.mkdir(parents=True, exist_ok=True)
-    print(pairing.make_cert(socket.gethostname(), pairing.local_ips(), cert.parent))
+    full, short = socket.gethostname(), pairing.short_hostname()
+    print(pairing.make_cert(short, pairing.local_ips(), cert.parent, extra_dns=[full] if full != short else []))
     return 0
 
 

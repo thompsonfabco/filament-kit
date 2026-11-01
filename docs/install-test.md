@@ -28,9 +28,11 @@ sudo runuser -u filament-kit -- /opt/filament-kit/venv/bin/python -I -c \
 openssl x509 -in /etc/filament-kit/cert.pem -noout -subject -ext subjectAltName
 ```
 
-Expect the cert subject `CN=<hostname>`, SANs `<hostname>`, `<hostname>.local`, `localhost` and the host's
-LAN IPs (no 169.254.x.x). The QR payload has `h=<hostname>.local`, `p=8710`, `t=`, `fp=` and one `ip=` per
-LAN address.
+Here `<hostname>` is the short name (`hostname -s`). Expect the cert subject `CN=<hostname>`, SANs
+`<hostname>`, `<hostname>.local`, `localhost` (plus the full name if `hostname` prints one with a domain) and
+the host's LAN IPs (no 169.254.x.x). The QR payload has `h=<hostname>.local`, `p=8710`, `t=`, `fp=` and one
+`ip=` per LAN address. Note: `pairing.issue().qr` creates a real pending pairing, just like
+`sudo filament-kit pair`; its token and code stay valid for 10 minutes and then expire unused.
 
 Checks on the host:
 
