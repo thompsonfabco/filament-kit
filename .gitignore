@@ -7,3 +7,4 @@ android/app/build/
 android/local.properties
 *.apk
 dist/
+.superpowers/
