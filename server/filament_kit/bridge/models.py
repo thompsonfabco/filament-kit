@@ -1,31 +1,49 @@
-"""Printer model -> camera stream kind. Models arrive as SSDP product codes (`BL-P001`, `C12`, `O1D`) or as
-display names ("X1 Carbon", "P1S"); both are understood. The code table is best-effort (codes seen in the wild; O1E = H2S, N7 = P2S are
-unverified); an unknown code gives None, and the app then offers no camera."""
+"""Bambu printer models: the codes printers report (SSDP `DevModel.bambu.com`, MQTT `project_name`) and what
+camera each has.
+
+Codes from Bambu Studio `resources/printers/<model_id>.json` (`model_id`, `printer_type`, `display_name`).
+X1/X1 Carbon report their `printer_type` ("3DPrinter-X1", "3DPrinter-X1-Carbon") over SSDP; the others report
+the short code. Camera kinds follow ha-bambulab's CAMERA_RTSP / CAMERA_IMAGE feature sets: RTSPS on 322 for
+X1/X1E/H2/X2/P2S, a JPEG stream on TCP 6000 for P1/A1/A2L.
+"""
 from __future__ import annotations
 
-import re
+HLS = "hls"      # RTSPS stream that the relay turns into HLS
+MJPEG = "mjpeg"  # JPEG frames over TLS port 6000
 
-HLS = "hls"      # X1 series, H2 series, X2 series: RTSPS stream that a relay turns into HLS
-MJPEG = "mjpeg"  # P1 and A1 series: JPEG frames over TLS port 6000
+# code (upper case) -> (display name, camera kind)
+_MODELS: dict[str, tuple[str, str]] = {
+    "BL-P001": ("X1 Carbon", "hls"),
+    "3DPRINTER-X1-CARBON": ("X1 Carbon", "hls"),
+    "BL-P002": ("X1", "hls"),
+    "3DPRINTER-X1": ("X1", "hls"),
+    "C13": ("X1E", "hls"),
+    "O1D": ("H2D", "hls"),
+    "O1E": ("H2D Pro", "hls"),
+    "O1S": ("H2S", "hls"),
+    "O1C": ("H2C", "hls"),
+    "O1C2": ("H2C", "hls"),
+    "N6": ("X2D", "hls"),
+    "N7": ("P2S", "hls"),
+    "C11": ("P1P", "mjpeg"),
+    "C12": ("P1S", "mjpeg"),
+    "N1": ("A1 mini", "mjpeg"),
+    "N2S": ("A1", "mjpeg"),
+    "N9": ("A2L", "mjpeg"),
+}
 
-_HLS_CODES = {"bl-p001", "bl-p002", "c13", "o1d", "o1s", "o1c", "o1c2", "o1e", "o2d"}
-_MJPEG_CODES = {"c11", "c12", "n1", "n2s", "n7"}
-_HLS_NAME = re.compile(r"\b(x1|h2|x2)", re.I)
-_MJPEG_NAME = re.compile(r"\b(p1|a1)", re.I)
+# product names typed by hand (`filament-kit config` → Printers), with or without "Bambu Lab "
+_BY_NAME: dict[str, str] = {}
+for _code, (_name, _kind) in _MODELS.items():
+    _BY_NAME.setdefault(_name.upper().replace(" ", ""), _kind)
+_BY_NAME.update({"X1C": "hls", "X1CARBON": "hls", "A1MINI": "mjpeg", "H2DPRO": "hls"})
 
 
 def camera_kind(model: str | None) -> str | None:
-    """'hls', 'mjpeg', or None when the model is unknown."""
-    m = (model or "").strip().lower().replace("3dprinter-", "").replace("_", " ").replace("-", " ")
-    code = (model or "").strip().lower()
-    if not m:
-        return None
-    if code in _HLS_CODES:
-        return HLS
-    if code in _MJPEG_CODES:
-        return MJPEG
-    if _HLS_NAME.search(m):
-        return HLS
-    if _MJPEG_NAME.search(m):
-        return MJPEG
-    return None
+    """"hls" (RTSPS camera, relayed as HLS), "mjpeg" (port-6000 JPEG stream) or None (unknown model; the app
+    then offers no camera)."""
+    m = (model or "").strip().upper()
+    if m in _MODELS:
+        return _MODELS[m][1]
+    m = m.removeprefix("BAMBU LAB").replace(" ", "").replace("-", "")
+    return _BY_NAME.get(m)

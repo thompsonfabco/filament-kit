@@ -7,7 +7,7 @@ import uvicorn
 
 from . import config
 from .api import create_app
-from .bridge import discovery, registry
+from .bridge import camera, discovery, registry
 from .bridge.connection import Manager
 from .spoolman import Spoolman
 
@@ -18,9 +18,10 @@ def _found(info: dict) -> None:
     registry.detected(info["serial"], info["ip"], info.get("model", ""), info.get("name", ""))
 
 
-def printer_lifespan(manager, listener_factory=discovery.Listener):
+def printer_lifespan(manager, listener_factory=discovery.Listener, camera_hub=None):
     """Starlette lifespan: the printer connection manager and the SSDP listener live as long as the app.
-    A listener that cannot bind (port in use) is logged and skipped; printers already set up still work."""
+    A listener that cannot bind (port in use) is logged and skipped; printers already set up still work.
+    On the way out the camera hub (if given) stops every camera source, so no ffmpeg outlives the app."""
     @asynccontextmanager
     async def lifespan(app):
         listener = None
@@ -32,10 +33,36 @@ def printer_lifespan(manager, listener_factory=discovery.Listener):
             manager.start()
             yield
         finally:
-            await anyio.to_thread.run_sync(manager.stop)
-            if listener is not None:
-                await anyio.to_thread.run_sync(listener.stop)
+            try:
+                await anyio.to_thread.run_sync(manager.stop)
+                if listener is not None:
+                    await anyio.to_thread.run_sync(listener.stop)
+            finally:
+                if camera_hub is not None:
+                    await anyio.to_thread.run_sync(camera_hub.shutdown)
     return lifespan
+
+
+GRACEFUL_SHUTDOWN = 5  # seconds uvicorn waits for open connections (camera streams) before the lifespan exit
+
+
+class _Server(uvicorn.Server):
+    """uvicorn waits for open connections before running the lifespan shutdown, so an open MJPEG stream would
+    hold `systemctl stop`. The signal handler first tells the camera hub to end its streams."""
+
+    def __init__(self, config: uvicorn.Config, on_exit):
+        super().__init__(config)
+        self._on_exit = on_exit
+
+    def handle_exit(self, sig, frame) -> None:
+        try:
+            self._on_exit()
+        finally:
+            super().handle_exit(sig, frame)
+
+
+def serve(app, hub, **kw) -> None:
+    _Server(uvicorn.Config(app, **kw), hub.begin_stop).run()
 
 
 def main() -> None:
@@ -43,11 +70,12 @@ def main() -> None:
     etc = config.paths().etc
     sm = Spoolman(cfg["spoolman_url"])
     manager = Manager(spoolman=sm)
-    app = create_app(sm, printers=manager)
-    app.router.lifespan_context = printer_lifespan(manager)
+    hub = camera.Hub()  # reads ip / Access Code / model from the printer registry
+    app = create_app(sm, printers=manager, camera_hub=hub)
+    app.router.lifespan_context = printer_lifespan(manager, camera_hub=hub)
     # one worker only: the pairing and inventory locks are per process
-    uvicorn.run(app, host="0.0.0.0", port=cfg["port"], ssl_certfile=str(etc / "cert.pem"),
-                ssl_keyfile=str(etc / "key.pem"), workers=1)
+    serve(app, hub, host="0.0.0.0", port=cfg["port"], ssl_certfile=str(etc / "cert.pem"),
+          ssl_keyfile=str(etc / "key.pem"), workers=1, timeout_graceful_shutdown=GRACEFUL_SHUTDOWN)
 
 
 if __name__ == "__main__":
