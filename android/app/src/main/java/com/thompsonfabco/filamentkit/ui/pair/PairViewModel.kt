@@ -179,6 +179,12 @@ class PairViewModel(
         _state.value = PairUi()
     }
 
+    /** Another screen hit a changed server certificate: show both fingerprints until the user chooses "Pair again". */
+    fun showMismatch(expected: String, actual: String) {
+        confirmed = false
+        _state.value = PairUi(mismatch = Mismatch(expected, actual))
+    }
+
     private fun fail(step: Step, message: String, host: String, port: Int) {
         _state.value = PairUi(step = step, host = host, port = port, error = message)
     }

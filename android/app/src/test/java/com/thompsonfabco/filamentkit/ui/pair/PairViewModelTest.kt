@@ -226,4 +226,12 @@ class PairViewModelTest {
         assertEquals("pat.local", ui.host)
         assertEquals(8443, ui.port)
     }
+
+    @Test fun showMismatchFromElsewhereShowsBothFingerprintsAndPairAgainClearsIt() {
+        vm.showMismatch("old", "new")
+        assertEquals(Mismatch("old", "new"), ui.mismatch)
+        assertEquals(Step.Choose, ui.step)
+        vm.pairAgain()
+        assertNull(ui.mismatch)
+    }
 }
