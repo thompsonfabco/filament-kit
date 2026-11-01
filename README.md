@@ -48,7 +48,8 @@ settings.
    asks, allow "install unknown apps" for your browser.
 2. Open the filament-kit app and scan the QR code shown on the computer.
    If the camera can't scan it, pick the server from the list in the app and type the 6-digit pairing code
-   instead.
+   instead. The computer also prints the server's **certificate fingerprint** in groups of four characters;
+   check that it matches the one the app shows.
 3. The code expires after a few minutes. To get a new one, run:
 
    ```
@@ -80,11 +81,28 @@ Run these in a Terminal on the Ubuntu computer.
 | `sudo filament-kit status` | Checks that everything works. Anything failing shows a `fix:` line telling you what to do. |
 | `sudo filament-kit pair` | Shows a new QR code to pair another phone. |
 | `sudo filament-kit unpair` | Lists paired phones. `sudo filament-kit unpair <id>` removes one. |
-| `sudo filament-kit config` | Settings menu: display name, storage locations, Claude model and daily limit, API key. |
+| `sudo filament-kit config` | Settings menu: display name, storage locations, Claude model and daily limit, API key, printers. |
 
 Your spool inventory (Spoolman) is also in a web browser on any computer at home:
 `http://<computer name>.local:7912`, where `<computer name>` is the Ubuntu computer's own name (type
 `hostname` in a Terminal to see it). The installer prints this address at the end.
+
+## Bambu Lab printers
+
+The server finds Bambu Lab printers by listening for the announcements they send on your home network. For
+that to work:
+
+- The Ubuntu computer must be on the **same network segment** as the printers: the same router or switch and
+  the same Wi-Fi / LAN, not a separate guest network or VLAN. Announcements do not cross routers.
+- If the computer runs a firewall (for example `ufw`), allow incoming **UDP ports 2021 and 1990** from your
+  home network, for example `sudo ufw allow from 192.168.1.0/24 to any port 2021,1990 proto udp` (use your
+  own network's range).
+- A server inside **WSL**, a virtual machine with NAT networking, or a container without host networking does
+  not receive the announcements. Add the printers by hand there: `sudo filament-kit config` → **Printers** →
+  **add printer**, and enter the name, IP address, serial number and Access Code shown on the printer's screen.
+
+A printer appears in the app once it has been seen on the network (or added by hand with its IP address); you
+then enter its Access Code in the app to set it up.
 
 A backup of your spools and settings is made every night in `/var/backups/filament-kit` (the last 14 days are
 kept).

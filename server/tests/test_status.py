@@ -2,6 +2,8 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+import pytest
+
 from filament_kit.bridge import status
 
 DATA = Path(__file__).parent / "data"
@@ -110,3 +112,36 @@ def test_summarize_idle_and_older_printers():
 def test_summarize_empty_report():
     s = status.summarize({}, [])
     assert s["gcode_state"] == "UNKNOWN" and s["temps"]["nozzle"] == [] and s["temps"]["chamber"] is None
+
+
+# ---------- final review: odd report items never raise ----------
+
+ODD_REPORTS = [
+    None, [], "text", {"gcode_state": ["RUNNING"]}, {"gcode_state": {"x": 1}},
+    {"hms": [{"attr": "x", "code": None}, {"attr": -1, "code": 2 ** 40}, "str", 5]},
+    {"hms": "not a list"}, {"hms": {"attr": 1}},
+    {"lights_report": 7}, {"lights_report": [{"node": ["a"], "mode": "on"}, "x"]},
+    {"device": "x"}, {"device": {"extruder": "x"}}, {"device": {"extruder": {"info": "x"}}},
+    {"device": {"extruder": {"info": [5, None, {"id": "a", "temp": "hot"}, {"id": [1], "temp": 2 ** 40}]}}},
+    {"device": {"bed": "x", "ctc": {"info": 3}}}, {"device": {"bed": {"info": {"temp": float("inf")}}}},
+    {"ams": "x"}, {"ams": {"ams": "x"}}, {"ams": {"ams": [5, None, {"id": "z"}, {"id": 10 ** 9, "tray": []}]}},
+    {"ams": {"ams": [{"id": -3, "tray": [{"id": 0}]}, {"id": 0, "tray": "x"}]}},
+    {"ams": {"ams": [{"id": 0, "tray": [None, 7, {"id": 1, "tray_type": 5, "tray_color": 123}]}]}},
+    {"ams": {"tray_now": [1]}},
+    {"gcode_state": "RUNNING", "mc_remaining_time": 10 ** 15, "mc_percent": float("inf"), "stg_cur": "x"},
+    {"gcode_state": "RUNNING", "mc_remaining_time": float("nan"), "layer_num": float("inf")},
+    {"subtask_name": 7}, {"subtask_name": ["x"]},
+]
+
+
+@pytest.mark.parametrize("report", ODD_REPORTS)
+def test_summarize_never_raises_on_odd_reports(report):
+    spools = [{"id": "x", "location": 5, "filament": "x"}, None, {"id": 2, "filament": {"vendor": "v"}}]
+    s = status.summarize(report, spools, printer_name="Shop")
+    assert set(s) >= {"gcode_state", "percent", "remaining_min", "ams", "hms", "temps"}
+    assert isinstance(s["gcode_state"], str) and isinstance(s["percent"], int)
+
+
+def test_hms_code_tolerates_bad_values():
+    assert status.hms_code({"attr": "x", "code": None}) == "0000_0000_0000_0000"
+    assert status.hms_code({"attr": -1, "code": 0}) == "FFFF_FFFF_0000_0000"

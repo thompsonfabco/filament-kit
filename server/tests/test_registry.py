@@ -98,3 +98,37 @@ def test_corrupt_file_reads_empty_and_is_never_overwritten(env, caplog):
         with pytest.raises(registry.RegistryError):
             call()
     assert f.read_text() == "{not json"
+
+
+# ---------- final review: root-run CLI must leave files the service user can read ----------
+
+def _as_root(monkeypatch):
+    calls = []
+    monkeypatch.setattr(os, "geteuid", lambda: 0, raising=False)
+    monkeypatch.setattr(os, "chown", lambda path, uid, gid: calls.append((os.fspath(path), uid, gid)),
+                        raising=False)
+    return calls
+
+
+def test_root_write_gives_file_to_state_dir_owner(env, monkeypatch):
+    (env / "state").mkdir()
+    st = os.stat(env / "state")
+    calls = _as_root(monkeypatch)
+    registry.upsert(Printer("S1", access_code="x", configured=True))
+    temps = [c for c in calls if os.path.basename(c[0]).startswith("printers.json.")]
+    assert temps and all(c[1:] == (st.st_uid, st.st_gid) for c in temps), calls
+
+
+def test_non_root_write_does_not_chown(env, monkeypatch):
+    calls = _as_root(monkeypatch)
+    monkeypatch.setattr(os, "geteuid", lambda: 1000, raising=False)
+    registry.upsert(Printer("S1"))
+    assert calls == []
+
+
+@pytest.mark.skipif(os.name == "nt", reason="no cross-process lock file on Windows")
+def test_root_lock_file_given_to_state_dir_owner(env, monkeypatch):
+    (env / "state").mkdir()
+    calls = _as_root(monkeypatch)
+    registry.load()
+    assert any(os.path.basename(c[0]) == "printers.lock" for c in calls), calls

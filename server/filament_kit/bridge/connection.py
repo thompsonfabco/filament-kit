@@ -224,8 +224,9 @@ class PrinterConnection:
             return [('print', {'command': action, 'param': ''})]
         mode = action[len('light_'):]
         nodes = ['chamber_light']
+        lights = self.report().get('lights_report')
         if any(isinstance(l, dict) and l.get('node') == 'chamber_light2'
-               for l in self.report().get('lights_report') or []):
+               for l in (lights if isinstance(lights, list) else [])):
             nodes.append('chamber_light2')     # printers with a second chamber light report it
         return [('system', {'command': 'ledctrl', 'led_node': n, 'led_mode': mode, 'led_on_time': 500,
                             'led_off_time': 500, 'loop_times': 0, 'interval_time': 0}) for n in nodes]
@@ -297,12 +298,13 @@ class Manager:
     def sync(self) -> None:
         """Reconcile connections with the registry: start new ones, drop removed ones, reconnect on IP/code change."""
         printers = registry.load()
+        stale: list[PrinterConnection] = []
         with self._lock:
             self._printers = printers
             for serial, conn in list(self._conns.items()):
                 p = printers.get(serial)
                 if p is None or not self._usable(p) or not conn.same_target(p):
-                    conn.stop()
+                    stale.append(conn)
                     del self._conns[serial]
                 else:
                     conn.name = p.name
@@ -311,6 +313,8 @@ class Manager:
                     conn = PrinterConnection(p, self._factory, self.port)
                     self._conns[serial] = conn
                     conn.start()
+        for conn in stale:  # a slow disconnect must not block state reads and commands for other printers
+            conn.stop()
 
     def start(self, interval: float = 15) -> None:
         """Sync now, then every `interval` s (picks up CLI edits) and nudge quiet printers with a pushall."""
@@ -333,9 +337,10 @@ class Manager:
         if self._thread:
             self._thread.join(timeout=5)
         with self._lock:
-            for conn in self._conns.values():
-                conn.stop()
+            conns = list(self._conns.values())
             self._conns.clear()
+        for conn in conns:
+            conn.stop()
 
     def _conn(self, serial: str) -> PrinterConnection | None:
         with self._lock:
