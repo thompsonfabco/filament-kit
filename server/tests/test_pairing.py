@@ -169,6 +169,11 @@ def test_qr_host_is_hostname_not_display_name(monkeypatch):
     assert q["h"] == ["fkbox.local"] and q["p"] == ["8710"]
 
 
+def test_qr_uses_short_hostname(monkeypatch):
+    monkeypatch.setattr(pairing.socket, "gethostname", lambda: "fkbox.lan.example")
+    assert _qr(pairing.issue())["h"] == ["fkbox.local"]
+
+
 def test_qr_has_ip_params_without_link_local(monkeypatch):
     monkeypatch.setattr(pairing, "_candidate_ips",
                         lambda: ["127.0.0.1", "169.254.3.4", "192.168.1.9", "fe80::1", "10.0.0.2", "192.168.1.9"])
@@ -220,7 +225,7 @@ def test_revoke_races_check(monkeypatch):
         t.join()
     assert not errors
     assert pairing.check(p.token) is None
-    for f in config.paths().state.iterdir():
+    for f in config.paths().state.glob("*.json"):  # pairing.lock (POSIX) is empty and not JSON
         json.loads(f.read_text())
 
 
