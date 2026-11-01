@@ -1,0 +1,41 @@
+{
+  "print": {
+    "command": "push_status",
+    "msg": 1,
+    "sequence_id": "1",
+    "mc_percent": 43,
+    "mc_remaining_time": 73,
+    "layer_num": 121,
+    "ams": {
+      "ams": [
+        {
+          "id": "0",
+          "tray": [
+            {
+              "id": "0",
+              "remain": 89
+            },
+            {
+              "id": "1"
+            },
+            {
+              "id": "2"
+            },
+            {
+              "id": "3"
+            }
+          ]
+        },
+        {
+          "id": "128",
+          "tray": [
+            {
+              "id": "0"
+            }
+          ]
+        }
+      ]
+    },
+    "hms": []
+  }
+}
