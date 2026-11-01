@@ -51,6 +51,8 @@ def _to_response(e: Exception) -> JSONResponse:
         if e.status is None:
             return _err(503, "spoolman_unreachable",
                         "Spoolman is not reachable; check that the spoolman service is running")
+        if e.status == 404:
+            return _err(404, "not_found", f"not found in Spoolman: {e}")
         return _err(502, "spoolman_error", str(e))
     if isinstance(e, ValueError):
         return _err(400, "bad_request", str(e))
@@ -169,7 +171,7 @@ def create_app(sm: Spoolman | None = None, claude=None) -> Starlette:
     @_authed
     async def intake_add(request: Request):
         body = await _json(request)
-        dry = _opt(body, "dry_run", bool, False)
+        dry = _opt(body, "dry_run", bool, True)
         uid = _opt(body, "tag", str) or None
         r = await run_in_threadpool(inventory.add_and_link, sm, body.get("items"), rules(), dry, uid)
         return JSONResponse({"spool_ids": r.spool_ids, "lines": r.lines, "dry": r.dry})
@@ -187,7 +189,7 @@ def create_app(sm: Spoolman | None = None, claude=None) -> Starlette:
         spool = await run_in_threadpool(functools.partial(
             inventory.open_spool, sm, request.path_params["id"], tag, rules(),
             gross=_opt(body, "gross", float), location=_opt(body, "location", str),
-            force=_opt(body, "force", bool, False), dry=_opt(body, "dry_run", bool, False)))
+            force=_opt(body, "force", bool, False), dry=_opt(body, "dry_run", bool, True)))
         return JSONResponse({"spool": spool})
 
     @_authed
@@ -196,7 +198,7 @@ def create_app(sm: Spoolman | None = None, claude=None) -> Starlette:
         spool = await run_in_threadpool(functools.partial(
             inventory.update_spool, sm, request.path_params["id"], gross=_opt(body, "gross", float),
             remaining=_opt(body, "remaining", float), location=_opt(body, "location", str),
-            empty=_opt(body, "empty", bool, False), dry=_opt(body, "dry_run", bool, False)))
+            empty=_opt(body, "empty", bool, False), dry=_opt(body, "dry_run", bool, True)))
         return JSONResponse({"spool": spool})
 
     @_authed
