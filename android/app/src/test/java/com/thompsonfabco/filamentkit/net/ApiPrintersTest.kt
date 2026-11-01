@@ -114,8 +114,8 @@ class ApiPrintersTest {
         assertEquals(200, s.totalLayers)
         assertEquals("2026-11-01T14:10-05:00", s.eta)
         assertEquals(2, s.temps.nozzle.size)
-        assertEquals(220, s.temps.nozzle[0].current)
-        assertEquals(60, s.temps.bed!!.target)
+        assertEquals(220.0, s.temps.nozzle[0].current!!, 0.001)
+        assertEquals(60.0, s.temps.bed!!.target!!, 0.001)
         assertNull(s.temps.chamber)
         assertEquals("ams_ht", s.ams[1].kind)
         val slot = s.ams[0].slots[0]
@@ -127,6 +127,40 @@ class ApiPrintersTest {
         assertEquals("on", s.light)
         assertEquals(1761990000L, s.updated)
         assertEquals("/api/printers/0948AB", take().url.encodedPath)
+    }
+
+    @Test fun printerDetailAcceptsDecimalAndStringNumbers() = runBlocking {
+        // Bambu reports carry decimals (bed_temper 64.0, 25.5) and numeric strings; none may fail the status
+        json("""{"printer":$printerJson,"status":{"gcode_state":"RUNNING","percent":42.0,"layer":12.0,
+            "total_layers":"200","remaining_min":31.0,"updated":1761990000.5,
+            "temps":{"nozzle":[{"current":25.5,"target":0}],"bed":{"current":64.0,"target":60},
+                     "chamber":{"current":"28.5","target":null}},
+            "ams":[{"unit":0.0,"label":"A","kind":"ams","slots":[{"slot":1.0,"label":"A2","type":"PLA","color_hex":"",
+                "active":false,"spool":{"id":7.0,"name":"x","material":"PLA","color_hex":"","remaining_weight":"812.5"}}]}]}}""")
+        val s = api.printer("0948AB").status!!
+        assertEquals(25.5, s.temps.nozzle[0].current!!, 0.001)
+        assertEquals(0.0, s.temps.nozzle[0].target!!, 0.001)
+        assertEquals(64.0, s.temps.bed!!.current!!, 0.001)
+        assertEquals(60.0, s.temps.bed.target!!, 0.001)
+        assertEquals(28.5, s.temps.chamber!!.current!!, 0.001)
+        assertNull(s.temps.chamber.target)
+        assertEquals(42, s.percent)
+        assertEquals(12, s.layer)
+        assertEquals(200, s.totalLayers)
+        assertEquals(31, s.remainingMin)
+        assertEquals(1, s.ams[0].slots[0].slot)
+        assertEquals(7, s.ams[0].slots[0].spool!!.id)
+        assertEquals(812.5, s.ams[0].slots[0].spool!!.remainingWeight!!, 0.001)
+    }
+
+    @Test fun listSummaryCarriesTheJob() = runBlocking {
+        json("""{"printers":[{"id":"A","name":"A","serial":"A","configured":true,"state":"connected",
+            "camera":{"kind":"hls"},"summary":{"gcode_state":"RUNNING","percent":42.0,"remaining_min":31,"job":"Benchy"}},
+            {"id":"B","name":"B","serial":"B","summary":{"gcode_state":"IDLE","percent":0,"remaining_min":0,"job":null}}]}""")
+        val list = api.printers()
+        assertEquals("Benchy", list[0].summary.job)
+        assertEquals(42, list[0].summary.percent)
+        assertNull(list[1].summary.job)
     }
 
     @Test fun printerDetailStatusMayBeNull() = runBlocking {

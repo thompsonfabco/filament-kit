@@ -45,8 +45,8 @@ class FakeManager:
         return self.state(serial)
 
     def summary(self, serial):
-        return {"gcode_state": "RUNNING", "percent": 42, "remaining_min": 30} if self.state(serial) == "connected" \
-            else {"gcode_state": "UNKNOWN", "percent": 0, "remaining_min": 0}
+        return {"gcode_state": "RUNNING", "percent": 42, "remaining_min": 30, "job": "bracket"} if self.state(serial) == "connected" \
+            else {"gcode_state": "UNKNOWN", "percent": 0, "remaining_min": 0, "job": None}
 
     def status(self, serial):
         return self.statuses.get(serial)
@@ -99,7 +99,7 @@ def test_list_merges_detected_and_configured(client, mgr):
     a = by[SERIAL]
     assert a == {"id": SERIAL, "name": "Shop P1S", "model": "C12", "serial": SERIAL, "ip": "10.0.0.5",
                  "configured": True, "state": "connected", "camera": {"kind": "mjpeg"},
-                 "summary": {"gcode_state": "RUNNING", "percent": 42, "remaining_min": 30}}
+                 "summary": {"gcode_state": "RUNNING", "percent": 42, "remaining_min": 30, "job": "bracket"}}
     b = by["00M00B222222222"]
     assert b["configured"] is False and b["state"] == "not_configured" and b["camera"] == {"kind": "hls"}
     assert b["summary"]["percent"] == 0

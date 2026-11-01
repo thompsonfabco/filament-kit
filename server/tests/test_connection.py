@@ -201,7 +201,8 @@ def test_reports_merge_into_status(manager, clients):
     assert s["percent"] == 43 and s["stage"] == "Heatbed preheating"
     assert s["ams"][0]["slots"][0]["type"] == "PLA"
     assert s["updated"] is not None
-    assert manager.summary("S1") == {"gcode_state": "RUNNING", "percent": 43, "remaining_min": 73}
+    assert manager.summary("S1") == {"gcode_state": "RUNNING", "percent": 43, "remaining_min": 73,
+                                      "job": "bracket_v3"}
 
 
 def test_status_joins_spools_from_spoolman(clients):
@@ -420,3 +421,7 @@ def _free_port():
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
+
+
+def test_summary_job_is_none_without_a_job(manager):
+    assert manager.summary("NOPE") == {"gcode_state": "UNKNOWN", "percent": 0, "remaining_min": 0, "job": None}
