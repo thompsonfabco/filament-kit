@@ -1,0 +1,26 @@
+[Unit]
+Description=Spoolman filament inventory (v0.27.0)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=spoolman
+Group=spoolman
+WorkingDirectory=/opt/spoolman
+Environment=SPOOLMAN_DIR_DATA=/var/lib/spoolman
+Environment=SPOOLMAN_DIR_BACKUPS=/var/lib/spoolman/backups
+Environment=SPOOLMAN_DIR_LOGS=/var/lib/spoolman
+Environment=SPOOLMAN_HOST=0.0.0.0
+Environment=SPOOLMAN_PORT=7912
+ExecStart=/opt/spoolman/venv/bin/python -m uvicorn spoolman.main:app --host 0.0.0.0 --port 7912
+Restart=on-failure
+RestartSec=5
+ProtectSystem=strict
+ReadWritePaths=/var/lib/spoolman
+ProtectHome=yes
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

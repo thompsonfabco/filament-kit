@@ -87,7 +87,10 @@ code; data is kept unless `--purge`.
 
 ### Security
 
-- QR payload: host, port, pairing token, certificate SHA-256 fingerprint. The app pins that certificate.
+- QR payload `fkit://pair?h=<hostname>.local&p=<port>&t=<token>&fp=<sha256>&ip=<a>&ip=<b>...`: the host's own
+  mDNS name (never the display name `server_name`, which is only shown in `/api/info` and `status`), port, pairing
+  token, certificate SHA-256 fingerprint, plus one `ip=` per current LAN IPv4 (no loopback, no 169.254.x.x). The
+  app pins that certificate.
 - Manual host entry: app shows the fingerprint for confirmation, then asks for a 6-digit pairing code shown by
   `sudo filament-kit pair`.
 - `sudo filament-kit pair` issues a new token/QR; `unpair` revokes a device. Tokens are stored hashed.
