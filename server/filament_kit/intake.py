@@ -249,12 +249,19 @@ def read_labels(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | Non
     return out
 
 
+def is_kept(read_id: str) -> bool:
+    """True when a failed read's photos are still kept (expired reads are swept first)."""
+    if not isinstance(read_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", read_id):
+        return False
+    _sweep_failed()
+    return (_failed_dir() / read_id).is_dir()
+
+
 def retry(read_id: str, sm: Spoolman, client=None) -> dict:
     """Re-run a failed read from its kept photos."""
-    _sweep_failed()
-    d = _failed_dir() / read_id
-    if not re.fullmatch(r"[A-Za-z0-9_-]+", read_id) or not d.is_dir():
+    if not is_kept(read_id):
         raise ReadError("not_found", "those photos are no longer kept (24 h); send them again")
+    d = _failed_dir() / read_id
     images = [p.read_bytes() for p in sorted(d.glob("photo*.jpg"), key=lambda p: int(p.stem[5:]))]
     try:
         meta = json.loads((d / "meta.json").read_text(encoding="utf-8"))
