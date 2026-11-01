@@ -60,6 +60,13 @@ avahi-browse -rt _filamentkit._tcp                   # (needs avahi-utils) lists
 curl -s http://KIT_TEST_HOST:7912/api/v1/info        # Spoolman version 0.27.0
 ```
 
+Printer discovery needs the test host on the **same L2 segment** as the printers (same switch / Wi-Fi, no
+router in between) and, if a host firewall is on, inbound **UDP 2021 and 1990** allowed
+(`sudo ufw allow from <LAN range> to any port 2021,1990 proto udp`). A WSL or NAT-networked host never receives
+the printer announcements: add printers there by hand with `sudo filament-kit config` → Printers → add printer
+(name, IP, serial, Access Code), and expect `POST /api/printers` for a never-seen printer to answer 404
+`not_found` ("That printer hasn't been seen on the network yet").
+
 ## 3. Pair and add a spool through the API
 
 Use the pairing code from step 1 (or `sudo filament-kit pair` for a new one):

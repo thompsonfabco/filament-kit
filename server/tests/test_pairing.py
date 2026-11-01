@@ -248,3 +248,22 @@ def test_two_processes_do_not_lose_updates():
         assert pr.exitcode == 0
     devs = pairing.devices()
     assert len(devs) == 45 and {d["name"] for d in devs} == {"keep"}
+
+
+# ---------- final review: root-run CLI must leave files the service user can read ----------
+
+def test_root_state_write_gives_file_to_state_dir_owner(tmp_path, monkeypatch):
+    import os as _os
+    monkeypatch.setenv("FK_STATE", str(tmp_path / "st"))
+    (tmp_path / "st").mkdir()
+    st = _os.stat(tmp_path / "st")
+    calls = []
+    monkeypatch.setattr(_os, "geteuid", lambda: 0, raising=False)
+    monkeypatch.setattr(_os, "chown", lambda p, u, g: calls.append((_os.fspath(p), u, g)), raising=False)
+    pairing._write("devices.json", [])
+    assert any(_os.path.basename(c[0]).startswith("devices.json.") and c[1:] == (st.st_uid, st.st_gid)
+               for c in calls), calls
+    if _os.name != "nt":
+        calls.clear()
+        pairing.devices()
+        assert any(_os.path.basename(c[0]) == "pairing.lock" for c in calls), calls

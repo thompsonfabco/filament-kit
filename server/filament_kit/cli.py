@@ -144,6 +144,9 @@ def cmd_pair() -> int:
         print(f"error: {e}", file=sys.stderr)
         return 1
     print(_qr_text(pr.qr))
+    fp = pairing.fingerprint((config.paths().etc / "cert.pem").read_bytes())
+    print("Certificate fingerprint (check it matches the phone):")
+    print("  " + " ".join(fp[i:i + 4] for i in range(0, len(fp), 4)))
     print(f"Pairing code: {pr.code}")
     print(f"Expires at {time.strftime('%H:%M:%S', time.localtime(pr.expires))} "
           f"(in {max(0, int(pr.expires - time.time()) // 60)} min)")
@@ -282,9 +285,16 @@ def _printers_action(choice: str, printers: list) -> None:
         if not (name and ip and serial):
             print("Name, IP address and serial number are all needed.")
             return
+        if not registry.SERIAL.fullmatch(serial):
+            print(f"Not added: {registry.BAD_SERIAL}.")
+            return
         code = getpass.getpass("Access Code (hidden): ").strip()
         if not code:
             print("No Access Code entered; nothing added.")
+            return
+        problem = registry.check_fields(serial, code)
+        if problem:
+            print(f"Not added: {problem}.")
             return
         old = registry.load().get(serial)
         registry.upsert(registry.Printer(serial, name, old.model if old else "", ip, code, True))

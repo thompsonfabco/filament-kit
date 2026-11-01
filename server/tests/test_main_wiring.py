@@ -14,6 +14,9 @@ class Mgr:
     def stop(self):
         self.events.append("stop")
 
+    def state(self, serial):
+        return "not_configured"
+
 
 def test_lifespan_starts_and_stops_listener_and_manager(tmp_path, monkeypatch):
     monkeypatch.setenv("FK_STATE", str(tmp_path))
@@ -174,3 +177,101 @@ def test_exit_signal_ends_camera_streams_before_uvicorn_drains():
     server = m._Server(m.uvicorn.Config(lambda scope, receive, send: None), hub.begin_stop)
     server.handle_exit(15, None)
     assert hub.stopping.is_set() and server.should_exit
+
+
+# ---------- final review ----------
+
+import logging  # noqa: E402
+
+import pytest  # noqa: E402
+
+
+def _fake_server(monkeypatch, started, raise_kbi=False):
+    def run(self):
+        self.started = started
+        if raise_kbi:
+            raise KeyboardInterrupt
+    monkeypatch.setattr(m._Server, "run", run)
+
+
+def test_serve_exits_3_when_uvicorn_never_started(monkeypatch):
+    _fake_server(monkeypatch, started=False)
+    hub = camera.Hub(lookup=lambda s: None)
+    with pytest.raises(SystemExit) as e:
+        m.serve(lambda scope, receive, send: None, hub)
+    assert e.value.code == 3
+
+
+def test_serve_returns_normally_after_a_clean_run_or_ctrl_c(monkeypatch):
+    hub = camera.Hub(lookup=lambda s: None)
+    _fake_server(monkeypatch, started=True)
+    m.serve(lambda scope, receive, send: None, hub)
+    _fake_server(monkeypatch, started=True, raise_kbi=True)
+    m.serve(lambda scope, receive, send: None, hub)
+
+
+class StateMgr:
+    def __init__(self, states):
+        self.states = states
+
+    def state(self, serial):
+        return self.states.get(serial, "not_configured")
+
+
+def _configured(serial="S1", ip="10.0.0.5"):
+    registry.upsert(registry.Printer(serial, "Mine", "O1D", ip, "SECRET99", True))
+
+
+@pytest.mark.parametrize("state", ["connected", "needs_developer_mode"])
+def test_announce_cannot_move_a_connected_printer(tmp_path, monkeypatch, caplog, state):
+    monkeypatch.setenv("FK_STATE", str(tmp_path))
+    _configured()
+    cb = m.discovery_callback(StateMgr({"S1": state}))
+    with caplog.at_level(logging.WARNING):
+        cb({"serial": "S1", "ip": "10.0.0.66", "model": "O1D", "name": "x"})
+    assert registry.load()["S1"].ip == "10.0.0.5"
+    warn = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert warn and "S1" in warn[0].getMessage() and "10.0.0.5" in warn[0].getMessage() \
+        and "10.0.0.66" in warn[0].getMessage()
+    assert "SECRET99" not in caplog.text
+
+
+@pytest.mark.parametrize("state", ["offline", "wrong_code"])
+def test_announce_moves_a_configured_printer_that_is_not_connected_and_warns(tmp_path, monkeypatch, caplog,
+                                                                              state):
+    monkeypatch.setenv("FK_STATE", str(tmp_path))
+    _configured()
+    cb = m.discovery_callback(StateMgr({"S1": state}))
+    with caplog.at_level(logging.WARNING):
+        cb({"serial": "S1", "ip": "10.0.0.66"})
+    assert registry.load()["S1"].ip == "10.0.0.66"
+    msg = " ".join(r.getMessage() for r in caplog.records if r.levelno == logging.WARNING)
+    assert "S1" in msg and "10.0.0.5" in msg and "10.0.0.66" in msg and "SECRET99" not in caplog.text
+
+
+def test_announce_same_ip_or_unconfigured_printer_does_not_warn(tmp_path, monkeypatch, caplog):
+    monkeypatch.setenv("FK_STATE", str(tmp_path))
+    _configured()
+    cb = m.discovery_callback(StateMgr({"S1": "connected"}))
+    with caplog.at_level(logging.WARNING):
+        cb({"serial": "S1", "ip": "10.0.0.5"})
+        cb({"serial": "N1", "ip": "10.0.0.7"})
+        cb({"serial": "N1", "ip": "10.0.0.8"})
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert registry.load()["N1"].ip == "10.0.0.8"
+
+
+def test_corrupt_registry_logged_at_most_once_a_minute(tmp_path, monkeypatch, caplog):
+    monkeypatch.setenv("FK_STATE", str(tmp_path))
+    (tmp_path / "printers.json").write_text("{broken")
+    clock = [1000.0]
+    monkeypatch.setattr(m.time, "monotonic", lambda: clock[0])
+    cb = m.discovery_callback(StateMgr({}))
+    with caplog.at_level(logging.DEBUG):
+        for _ in range(5):
+            cb({"serial": "S1", "ip": "10.0.0.5"})       # must not raise
+        clock[0] += 61
+        cb({"serial": "S1", "ip": "10.0.0.5"})
+    errs = [r for r in caplog.records if r.levelno >= logging.ERROR and r.name == m.log.name]
+    assert len(errs) == 2 and all(r.exc_info is None for r in errs)
+    assert (tmp_path / "printers.json").read_text() == "{broken"

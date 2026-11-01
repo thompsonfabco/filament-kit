@@ -425,3 +425,42 @@ def _free_port():
 
 def test_summary_job_is_none_without_a_job(manager):
     assert manager.summary("NOPE") == {"gcode_state": "UNKNOWN", "percent": 0, "remaining_min": 0, "job": None}
+
+
+# ---------- final review: a slow stop during a re-key must not block state reads ----------
+
+def test_state_reads_do_not_block_while_a_stale_connection_stops():
+    release = threading.Event()
+    entered = threading.Event()
+    made = []
+
+    class SlowStop(FakeClient):
+        def disconnect(self):
+            if self.host == "10.0.0.5":
+                entered.set()
+                release.wait(5)
+            super().disconnect()
+
+    def factory(cid):
+        c = SlowStop(cid)
+        made.append(c)
+        return c
+    m = Manager(client_factory=factory)
+    try:
+        add("S1", "10.0.0.5")
+        add("S2", "10.0.0.6", name="Other")
+        m.sync()
+        add("S1", "10.0.0.9")                       # re-key: S1's old connection is stopped
+        t = threading.Thread(target=m.sync)
+        t.start()
+        assert entered.wait(5)
+        t0 = time.monotonic()
+        assert m.state("S2") == "offline"
+        assert m.state("S1") in ("offline", "not_configured")
+        assert time.monotonic() - t0 < 0.5
+        release.set()
+        t.join(5)
+        assert [c.host for c in made] == ["10.0.0.5", "10.0.0.6", "10.0.0.9"]
+    finally:
+        release.set()
+        m.stop()

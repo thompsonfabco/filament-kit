@@ -140,9 +140,17 @@ def _printer_view(p: registry.Printer, printers) -> dict:
         state = printers.state(p.serial)
         if state == "not_configured":  # configured, but the manager has no connection for it (yet)
             state = "offline"
+    try:
+        summary = printers.summary(p.serial)
+    except Exception:  # noqa: BLE001 - one odd report must not fail the whole printer list
+        log.exception("printer %s: cannot summarize its report", p.serial)
+        summary = None
     return {"id": p.serial, "name": p.name or p.serial, "model": p.model, "serial": p.serial, "ip": p.ip,
             "configured": p.configured, "state": state, "camera": {"kind": camera_kind(p.model)},
-            "summary": printers.summary(p.serial)}
+            "summary": summary}
+
+
+NOT_SEEN = "That printer hasn't been seen on the network yet"
 
 
 def _printer_routes(printers) -> list[Route]:
@@ -167,14 +175,19 @@ def _printer_routes(printers) -> list[Route]:
         if not isinstance(code, str) or not code.strip():
             raise BadRequest("access_code is required")
         name = _opt(body, "name", str)
-        serial = serial.strip()
+        serial, code = serial.strip(), code.strip()
+        problem = registry.check_fields(serial, code)
+        if problem:
+            raise BadRequest(problem)
 
         def run() -> dict | None:
             old = registry.load().get(serial)
+            if old is None or not old.ip:  # the Access Code would have nowhere to go
+                raise HTTPException(404, NOT_SEEN)
             # a connected printer keeps its code; a wrong-code or offline one is re-keyed with the new one
             replace = old is not None and old.configured and printers.state(serial) != "connected"
             try:
-                p = registry.set_code(serial, code.strip(), name, replace=replace)
+                p = registry.set_code(serial, code, name, replace=replace)
             except registry.AlreadyConfigured:
                 return None
             printers.sync()
@@ -196,6 +209,14 @@ def _printer_routes(printers) -> list[Route]:
 
     @_authed
     async def printer_command(request: Request):
+        """`POST /api/printers/{id}/command {action}`. The success body nests the Manager's result inside the
+        route's own envelope, and the app parses exactly this shape:
+
+            {"ok": true,                      # the request reached the printer and it answered
+             "reply": {"ok": <bool>,          # every reply said "success" (false: refused, see reply.reply)
+                       "reply": {...}}}       # the printer's raw reply object (result, reason, err_code ...)
+
+        Errors: 400 `bad_request` (unknown action), 404 `not_found`, 409 `printer_offline`, 504 `no_reply`."""
         serial = request.path_params["id"]
         action = (await _json(request)).get("action")
         if action not in ACTIONS:
