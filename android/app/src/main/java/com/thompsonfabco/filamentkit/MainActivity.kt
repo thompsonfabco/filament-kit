@@ -252,7 +252,14 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
             )
         }
 
-        composable(Routes.PRINTERS) { PrintersEntry() }
+        composable(Routes.PRINTERS) {
+            val a = api
+            if (a == null) {
+                NotPaired { nav.navigateClearing(Routes.PAIR) }
+                return@composable
+            }
+            PrintersEntry(a, onPairAgain = app.router::pairAgain)
+        }
     }
 
     // The spool card, over whatever screen is open (not over pairing or the add flow).
