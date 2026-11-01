@@ -43,6 +43,28 @@ def printer_lifespan(manager, listener_factory=discovery.Listener, camera_hub=No
     return lifespan
 
 
+GRACEFUL_SHUTDOWN = 5  # seconds uvicorn waits for open connections (camera streams) before the lifespan exit
+
+
+class _Server(uvicorn.Server):
+    """uvicorn waits for open connections before running the lifespan shutdown, so an open MJPEG stream would
+    hold `systemctl stop`. The signal handler first tells the camera hub to end its streams."""
+
+    def __init__(self, config: uvicorn.Config, on_exit):
+        super().__init__(config)
+        self._on_exit = on_exit
+
+    def handle_exit(self, sig, frame) -> None:
+        try:
+            self._on_exit()
+        finally:
+            super().handle_exit(sig, frame)
+
+
+def serve(app, hub, **kw) -> None:
+    _Server(uvicorn.Config(app, **kw), hub.begin_stop).run()
+
+
 def main() -> None:
     cfg = config.load()
     etc = config.paths().etc
@@ -52,8 +74,8 @@ def main() -> None:
     app = create_app(sm, printers=manager, camera_hub=hub)
     app.router.lifespan_context = printer_lifespan(manager, camera_hub=hub)
     # one worker only: the pairing and inventory locks are per process
-    uvicorn.run(app, host="0.0.0.0", port=cfg["port"], ssl_certfile=str(etc / "cert.pem"),
-                ssl_keyfile=str(etc / "key.pem"), workers=1)
+    serve(app, hub, host="0.0.0.0", port=cfg["port"], ssl_certfile=str(etc / "cert.pem"),
+          ssl_keyfile=str(etc / "key.pem"), workers=1, timeout_graceful_shutdown=GRACEFUL_SHUTDOWN)
 
 
 if __name__ == "__main__":
