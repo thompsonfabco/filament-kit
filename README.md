@@ -55,6 +55,22 @@ settings.
    sudo filament-kit pair
    ```
 
+## Building the Android app release (owner, Windows PC)
+
+The app is signed with a key that lives only on your PC. Android only installs an update over an installed app
+if it is signed with the **same** key, so losing the key means everyone has to uninstall and reinstall the app.
+
+1. Once: `powershell -File tools\android_keystore.ps1`. It creates `%LOCALAPPDATA%\filament-kit\release.jks` and
+   a random password stored (encrypted with Windows DPAPI) in `%LOCALAPPDATA%\filament-kit\keystore.pw.dpapi`.
+   You never type or see the password. It refuses to overwrite an existing keystore.
+2. Each release: `bash tools/make_release.sh` (Git Bash). It builds and signs the app and puts `app/filament-kit.apk`
+   and `app/version.txt` into the tarball.
+3. **Back up both** `release.jks` **and** `keystore.pw.dpapi` together, somewhere safe and off this PC. A DPAPI
+   file only decrypts on this Windows account on this PC, so also make a portable backup:
+   `powershell -File tools\android_keystore.ps1 -Export D:\safe\filament-kit-keystore.bak`
+   (you type a passphrase; remember it). On another PC restore it with `-Import <file>`.
+4. `-Forget` deletes the keystore and the password file (it asks first).
+
 ## Everyday commands
 
 Run these in a Terminal on the Ubuntu computer.

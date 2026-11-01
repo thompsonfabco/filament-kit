@@ -2,8 +2,7 @@
 # Build the release tarball dist/filament-kit-<version>.tar.gz.
 # Works on Linux and on the Windows dev PC under Git Bash.
 # Contents: install.sh, uninstall.sh, install/ (units, avahi, helper scripts),
-# the filament_kit wheel, and app/filament-kit.apk (+ app/version.txt) when an
-# Android release build is present.
+# the filament_kit wheel, and app/filament-kit.apk + app/version.txt (signed Android release build).
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -43,23 +42,47 @@ chmod 755 "$stage/install.sh" "$stage/uninstall.sh" "$stage/install/backup.sh" \
     "$stage/install/filament-kit-cli.sh"
 
 # ---------- Android app (optional) ----------
+# Signed release build runs when the keystore env is set (FK_KEYSTORE + FK_KEYSTORE_PASSWORD), or on the
+# Windows dev PC when tools/android_keystore.ps1 has created the keystore; the password goes only into an
+# env var of this process (never echoed, never on a command line).
+if [ -z "${FK_KEYSTORE:-}" ] && command -v powershell >/dev/null 2>&1 && command -v cygpath >/dev/null 2>&1; then
+    localapp=$(powershell -NoProfile -Command 'Write-Output $env:LOCALAPPDATA' | tr -d '\r')
+    default_ks="$localapp\filament-kit\release.jks"
+    if [ -f "$(cygpath -u "$default_ks")" ]; then
+        FK_KEYSTORE=$(cygpath -m "$default_ks")
+        FK_KEYSTORE_PASSWORD=$(powershell -NoProfile -File tools/android_keystore.ps1 -Print | tr -d '\r') \
+            || { echo "error: could not read the keystore password" >&2; exit 1; }
+        export FK_KEYSTORE FK_KEYSTORE_PASSWORD
+    fi
+fi
 apk_dir="android/app/build/outputs/apk/release"
+if [ -n "${FK_KEYSTORE:-}" ]; then
+    [ -n "${FK_KEYSTORE_PASSWORD:-}" ] || { echo "error: FK_KEYSTORE set without FK_KEYSTORE_PASSWORD" >&2; exit 1; }
+    if [ -z "${JAVA_HOME:-}" ] && [ -d /g/Android/jdk-21.0.13+9 ]; then
+        export JAVA_HOME=/g/Android/jdk-21.0.13+9
+    fi
+    rm -f "$apk_dir"/*.apk
+    (cd android && ./gradlew --no-daemon assembleRelease) \
+        || { echo "error: assembleRelease failed; release NOT signed or packaged" >&2; exit 1; }
+else
+    echo "FK_KEYSTORE not set; skipping the Android release build"
+fi
 apk=""
-for candidate in "$apk_dir/filament-kit.apk" "$apk_dir/app-release.apk"; do
+for candidate in "$apk_dir/app-release.apk"; do
     if [ -f "$candidate" ]; then
         apk="$candidate"
         break
     fi
 done
 if [ -n "$apk" ]; then
+    version_code=$(sed -n 's/^[[:space:]]*versionCode = \([0-9]*\).*$/\1/p' android/app/build.gradle.kts | head -n1)
+    [ -n "$version_code" ] || { echo "error: no versionCode in android/app/build.gradle.kts" >&2; exit 1; }
     mkdir -p "$stage/app"
     cp "$apk" "$stage/app/filament-kit.apk"
-    if [ -f "$apk_dir/version.txt" ]; then
-        cp "$apk_dir/version.txt" "$stage/app/version.txt"
-    fi
-    echo "including app: $apk"
+    printf '%s\n' "$version_code" > "$stage/app/version.txt"
+    echo "including app: $apk (versionCode $version_code)"
 else
-    echo "no Android release build found in $apk_dir; tarball has no app/"
+    echo "no signed Android release build found in $apk_dir; tarball has no app/"
 fi
 
 # ---------- tarball ----------
