@@ -2,6 +2,7 @@
 import logging
 from contextlib import asynccontextmanager
 
+import anyio.to_thread
 import uvicorn
 
 from . import config
@@ -24,16 +25,16 @@ def printer_lifespan(manager, listener_factory=discovery.Listener):
     async def lifespan(app):
         listener = None
         try:
-            listener = listener_factory(_found).start()
-        except OSError as e:
-            log.warning("printer discovery is off: %s", e)
-        manager.start()
-        try:
+            try:
+                listener = listener_factory(_found).start()
+            except OSError as e:
+                log.warning("printer discovery is off: %s", e)
+            manager.start()
             yield
         finally:
-            manager.stop()
+            await anyio.to_thread.run_sync(manager.stop)
             if listener is not None:
-                listener.stop()
+                await anyio.to_thread.run_sync(listener.stop)
     return lifespan
 
 
