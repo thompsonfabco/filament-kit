@@ -35,7 +35,8 @@ class FakeManager:
         self.synced += 1
         for p in registry.load().values():
             if p.configured:
-                self.states.setdefault(p.serial, self.settle)
+                if self.states.get(p.serial) != "connected":
+                    self.states[p.serial] = self.settle
 
     def state(self, serial):
         return self.states.get(serial, "not_configured")
@@ -137,6 +138,59 @@ def test_add_duplicate_is_409(client, mgr):
     assert registry.load()[SERIAL].access_code == CODE
 
 
+@pytest.mark.parametrize("state", ["wrong_code", "offline", "not_configured"])
+def test_add_existing_replaces_code_unless_connected(client, mgr, state):
+    add_configured(mgr, state=state)
+    mgr.settle = "connected"
+    r = client.post("/api/printers", json={"serial": SERIAL, "access_code": "87654321"})
+    assert "87654321" not in r.text
+    assert r.status_code == 200 and r.json()["printer"]["state"] == "connected"
+    p = registry.load()[SERIAL]
+    assert p.access_code == "87654321" and p.name == "Shop P1S"   # name kept when none is given
+
+
+def test_add_existing_replaces_name_only_when_given(client, mgr):
+    add_configured(mgr, state="wrong_code")
+    r = client.post("/api/printers", json={"serial": SERIAL, "access_code": "87654321", "name": "Bench"})
+    assert r.status_code == 200 and r.json()["printer"]["name"] == "Bench"
+    assert registry.load()[SERIAL].name == "Bench"
+
+
+def test_add_connected_keeps_code(client, mgr):
+    add_configured(mgr, state="connected")
+    r = client.post("/api/printers", json={"serial": SERIAL, "access_code": "87654321", "name": "Bench"})
+    assert r.status_code == 409 and r.json()["error"] == "exists"
+    p = registry.load()[SERIAL]
+    assert p.access_code == CODE and p.name == "Shop P1S"
+
+
+def test_wrong_code_printer_rekeyed_with_real_manager(monkeypatch):
+    import threading
+    from filament_kit.api import FIRST_STATE_WAIT  # noqa: F401
+    from filament_kit.bridge.connection import Manager
+    from test_connection import FakeClient
+    monkeypatch.setattr("filament_kit.api.FIRST_STATE_WAIT", 3.0)
+
+    class Client(FakeClient):
+        def connect_async(self, host, port, keepalive):
+            super().connect_async(host, port, keepalive)
+            rc = 0 if self.password == "24681357" else 5
+            threading.Timer(0.05, lambda: self.connected(rc)).start()
+
+    m = Manager(client_factory=Client)
+    try:
+        c = TestClient(create_app(object(), printers=m))
+        c.headers["Authorization"] = "Bearer " + pairing.redeem_code(pairing.issue().code)
+        registry.detected(SERIAL, "10.0.0.5", "C12", "P1S")
+        r = c.post("/api/printers", json={"serial": SERIAL, "access_code": "13572468"})
+        assert r.status_code == 200 and r.json()["printer"]["state"] == "wrong_code"
+        r = c.post("/api/printers", json={"serial": SERIAL, "access_code": "24681357"})
+        assert r.status_code == 200 and r.json()["printer"]["state"] == "connected"
+        assert "24681357" not in r.text
+    finally:
+        m.stop()
+
+
 @pytest.mark.parametrize("body", [{}, {"serial": SERIAL}, {"serial": "", "access_code": CODE},
                                   {"serial": SERIAL, "access_code": 5},
                                   {"serial": SERIAL, "access_code": CODE, "name": 3}])
@@ -170,7 +224,8 @@ def test_command_ok_and_logged(client, mgr, caplog):
     assert r.status_code == 200 and r.json() == {"ok": True, "reply": {"command": "pause"}}
     assert mgr.sent == [(SERIAL, "pause")]
     text = "\n".join(caplog.messages)
-    assert SERIAL in text and "pause" in text and "ok" in text and "device" in text and CODE not in text
+    device = pairing.devices()[0]["id"]
+    assert f"device_id={device} serial={SERIAL} action=pause result=ok" in text and CODE not in text
 
 
 def test_command_offline_409_no_reply_504(client, mgr):
@@ -197,6 +252,6 @@ def test_command_unknown_printer_and_bad_action(client, mgr):
 @pytest.mark.parametrize("model,kind", [("BL-P001", "hls"), ("3DPrinter-X1-Carbon", "hls"), ("O1D", "hls"),
                                         ("H2D", "hls"), ("X2D", "hls"), ("C11", "mjpeg"), ("C12", "mjpeg"),
                                         ("N1", "mjpeg"), ("A1 mini", "mjpeg"), ("P1S", "mjpeg"),
-                                        ("", None), ("Unknown9", None), (None, None)])
+                                        ("", None), ("Unknown9", None), ("ZZ9", None), (None, None)])
 def test_camera_kind(model, kind):
     assert camera_kind(model) == kind

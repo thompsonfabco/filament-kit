@@ -171,13 +171,12 @@ def _printer_routes(printers) -> list[Route]:
 
         def run() -> dict | None:
             old = registry.load().get(serial)
-            if old is not None and old.configured:
+            # a connected printer keeps its code; a wrong-code or offline one is re-keyed with the new one
+            replace = old is not None and old.configured and printers.state(serial) != "connected"
+            try:
+                p = registry.set_code(serial, code.strip(), name, replace=replace)
+            except registry.AlreadyConfigured:
                 return None
-            p = old or registry.Printer(serial=serial)
-            p.access_code = code.strip()
-            p.configured = True
-            p.name = (name or "").strip() or p.name or serial
-            registry.upsert(p)
             printers.sync()
             printers.wait_settled(serial, FIRST_STATE_WAIT)
             return _printer_view(p, printers)

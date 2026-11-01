@@ -54,3 +54,45 @@ def test_lifespan_survives_listener_bind_failure(tmp_path, monkeypatch):
             pass
     asyncio.run(run())
     assert mgr.events == ["start", "stop"]
+
+
+def test_main_installs_lifespan_hook(tmp_path, monkeypatch):
+    for n in ("etc", "state", "opt"):
+        (tmp_path / n).mkdir()
+        monkeypatch.setenv(f"FK_{n.upper()}", str(tmp_path / n))
+    seen = {}
+    monkeypatch.setattr(m.uvicorn, "run", lambda app, **kw: seen.update(app=app, kw=kw))
+    m.main()
+    ctx = seen["app"].router.lifespan_context
+    assert ctx.__qualname__.startswith("printer_lifespan")
+
+
+def test_manager_start_failure_does_not_leak_listener(tmp_path, monkeypatch):
+    monkeypatch.setenv("FK_STATE", str(tmp_path))
+    events = []
+
+    class L:
+        def __init__(self, cb):
+            pass
+
+        def start(self):
+            return self
+
+        def stop(self):
+            events.append("lx")
+
+    class Bad(Mgr):
+        def start(self):
+            raise RuntimeError("boom")
+
+        def stop(self):
+            events.append("mx")
+
+    async def run():
+        async with m.printer_lifespan(Bad(), listener_factory=L)(None):
+            pass
+    try:
+        asyncio.run(run())
+    except RuntimeError:
+        pass
+    assert events == ["mx", "lx"]
