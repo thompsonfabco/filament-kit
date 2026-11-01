@@ -56,7 +56,14 @@ fun SpoolHost(
                 LinkSealedScreen(s, viewModel)
             is SpoolUiState.Failed -> {
                 Text(s.message, color = MaterialTheme.colorScheme.error)
-                OutlinedButton(onClick = onClose) { Text("Close") }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    s.retryTag?.let { t -> Button(onClick = { viewModel.onTag(t) }) { Text("Try again") } }
+                    OutlinedButton(onClick = onClose) { Text("Close") }
+                }
+            }
+            SpoolUiState.Unauthorized -> {
+                Text("This phone is no longer paired with the server.", color = MaterialTheme.colorScheme.error)
+                Button(onClick = onPairAgain) { Text("Pair again") }
             }
             is SpoolUiState.Mismatch -> {
                 Text("The server's certificate changed.", style = MaterialTheme.typography.titleMedium)
@@ -96,7 +103,7 @@ private fun parseHex(hex: String?): Color {
 
 @Composable
 private fun SpoolCard(card: SpoolUiState.Card, vm: SpoolViewModel, onClose: () -> Unit) {
-    var gross by remember(card.spool.id) { mutableStateOf("") }
+    var gross by remember(card.rev) { mutableStateOf("") }
     SpoolSummaryRow(card.spool)
     card.message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
 
