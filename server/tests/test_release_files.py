@@ -163,7 +163,8 @@ def test_uninstall_uses_modules_units_and_cleans_station():
     text = _read("install/uninstall.sh")
     assert "modules units" in text
     assert "/etc/systemd/system/filament-kit-station.service.d" in text
-    assert "/etc/udev/rules.d/99-filament-kit-station.rules" in text
+    assert "/etc/udev/rules.d/99-zz-filament-kit-station.rules" in text
+    assert "/etc/udev/rules.d/99-filament-kit-station.rules" in text        # the old name, from before C-I1
     # spec section 4: the station user owns no data, so every uninstall removes it, after its unit is gone
     i_user = text.index("userdel filament-kit-station")
     assert text.index("for u in $UNITS") < i_user < text.index('if [ "$PURGE" -eq 1 ]; then\n    rm -rf')
