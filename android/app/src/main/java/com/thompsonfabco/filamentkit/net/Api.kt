@@ -141,7 +141,7 @@ class Api(
         val part = File(to.parentFile, to.name + ".part")
         try {
             withContext(Dispatchers.IO) {
-                execute(request("app.apk", auth = false).get(), DOWNLOAD_S).use { resp ->
+                execute(request("app.apk", auth = false).get().build(), DOWNLOAD_S).use { resp ->
                     if (!resp.isSuccessful) throw errorFor(resp.code, resp.body.string())
                     resp.body.byteStream().use { src -> copyToDisk(src, part) }
                 }
@@ -274,13 +274,14 @@ class Api(
     }
 
     private suspend fun call(req: Request.Builder, timeoutS: Long? = null): JsonElement = withContext(Dispatchers.IO) {
-        execute(req, timeoutS).use { resp ->
+        val request = req.build()
+        execute(request, timeoutS).use { resp ->
             val text = try {
                 resp.body.string()
             } catch (e: IOException) {
                 throw offline("The connection to the server was lost: ${e.message}")
             }
-            if (!resp.isSuccessful) throw errorFor(resp.code, text)
+            if (!resp.isSuccessful) throw errorFor(resp.code, text, request.header("Authorization"))
             try {
                 json.parseToJsonElement(text)
             } catch (_: Exception) {
@@ -290,13 +291,13 @@ class Api(
     }
 
     /** Runs the call; connection failures become `offline`, a [FingerprintMismatch] is rethrown as-is. */
-    private fun execute(req: Request.Builder, timeoutS: Long?): Response {
+    private fun execute(req: Request, timeoutS: Long?): Response {
         val c = if (timeoutS == null) client else client.newBuilder()
             .readTimeout(timeoutS, TimeUnit.SECONDS)
             .callTimeout(timeoutS, TimeUnit.SECONDS)
             .build()
         try {
-            return c.newCall(req.build()).execute()
+            return c.newCall(req).execute()
         } catch (e: FingerprintMismatch) {
             throw e
         } catch (e: IOException) {
@@ -331,7 +332,8 @@ class Api(
     private fun storageError(detail: String) =
         ApiError(0, "storage", "The update could not be saved on this phone (is there enough free space?): $detail")
 
-    private fun errorFor(status: Int, text: String): ApiError {
+    /** [auth] is the request's Authorization header; a 401 keeps its token in [ApiError.sentToken]. */
+    private fun errorFor(status: Int, text: String, auth: String? = null): ApiError {
         val obj = try {
             json.parseToJsonElement(text) as? JsonObject
         } catch (_: Exception) {
@@ -340,7 +342,8 @@ class Api(
         val code = if (status == 401) "unauthorized" else obj?.get("error")?.jsonPrimitive?.contentOrNull ?: genericCode(status)
         val message = obj?.get("message")?.jsonPrimitive?.contentOrNull ?: "The server returned an error ($status)"
         val extra = JsonObject(obj.orEmpty().filterKeys { it != "error" && it != "message" })
-        return ApiError(status, code, message, extra)
+        val sent = if (status == 401) auth?.removePrefix("Bearer ")?.trim()?.ifBlank { null } else null
+        return ApiError(status, code, message, extra, sent)
     }
 
     private fun genericCode(status: Int) = when {
