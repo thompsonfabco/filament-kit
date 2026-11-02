@@ -47,7 +47,7 @@ DEFAULTS: dict = {
                 "speech": True, "camera": "auto", "panel_flash": True},
     # merge-ops: web unit, remote access, orders file, tag readers, slot service, slicer/presets/intake extras
     "web": {"port": 8101, "public_url": None,
-            "lan": ["192.168.0.0/16", "10.0.0.0/8", "172.16.0.0/12"]},
+            "lan": ["192.168.0.0/16", "10.0.0.0/8"]},   # not 172.16/12: Docker's bridges live there (A-M6)
     "remote": {"hostname": None, "acme_window": None, "email": None},
     "orders": {"file": None},
     "tag_sources": [],          # [{"name": str, "url": str}]: extra readers speaking the lasttag shape
