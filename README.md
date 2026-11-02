@@ -119,6 +119,8 @@ Use either way. Both install what the new mode needs, start it, and stop what it
   server's address. Then **0) back** and **0) save and exit**.
 - `sudo filament-kit modules set <mode>`, for example `sudo filament-kit modules set all-in-one`. For the station
   mode, add the server's address: `sudo filament-kit modules set station --server 192.0.2.10`.
+  A mode never turns `web`, `remote` or `orders` on or off: the ones you turned on stay on, unless the new mode
+  lacks a module they need (then they go off, and the command says so).
 - One module at a time: `sudo filament-kit modules enable <name>` or `sudo filament-kit modules disable <name>`,
   for example `sudo filament-kit modules disable printers`. `sudo filament-kit modules list` shows the names and
   which are on.
