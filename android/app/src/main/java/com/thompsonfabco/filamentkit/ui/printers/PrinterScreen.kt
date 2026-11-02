@@ -58,11 +58,22 @@ class CameraSource(
  * The camera is shown only while the screen is started, so the stream is closed when the app goes to the background.
  */
 @Composable
-fun PrinterScreen(viewModel: PrinterViewModel, camera: CameraSource, onBack: () -> Unit, onPairAgain: () -> Unit) {
+fun PrinterScreen(
+    viewModel: PrinterViewModel,
+    tools: PrinterToolsViewModel,
+    camera: CameraSource,
+    onBack: () -> Unit,
+    onPairAgain: () -> Unit,
+) {
     val state by viewModel.state.collectAsState()
-    LifecycleStartEffect(viewModel) {
+    val toolsState by tools.state.collectAsState()
+    LifecycleStartEffect(viewModel, tools) {
         viewModel.start()
-        onStopOrDispose { viewModel.stop() }
+        tools.start()
+        onStopOrDispose {
+            viewModel.stop()
+            tools.stop()
+        }
     }
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     val visible = lifecycle.isAtLeast(Lifecycle.State.STARTED)
@@ -73,11 +84,11 @@ fun PrinterScreen(viewModel: PrinterViewModel, camera: CameraSource, onBack: () 
             TextButton(onClick = onBack) { Text("Back") }
             Text(state.printer?.name ?: "Printer", style = MaterialTheme.typography.headlineSmall)
         }
-        state.mismatch?.let { (expected, actual) ->
+        (state.mismatch ?: toolsState.mismatch)?.let { (expected, actual) ->
             MismatchNotice(expected, actual, onPairAgain)
             return@Column
         }
-        if (state.unauthorized) {
+        if (state.unauthorized || toolsState.unauthorized) {
             UnpairedNotice(onPairAgain)
             return@Column
         }
@@ -104,6 +115,32 @@ fun PrinterScreen(viewModel: PrinterViewModel, camera: CameraSource, onBack: () 
         }
 
         Controls(state, viewModel)
+
+        SlotMapping(toolsState, tools, canStart = printer.state == "connected" && !state.printing)
+        FilamentUsed(toolsState, tools)
+    }
+
+    if (toolsState.confirmMap) {
+        AlertDialog(
+            onDismissRequest = tools::cancelMap,
+            title = { Text("Map slots?") },
+            text = {
+                Text("This briefly changes each AMS slot's colour on the printer, one slot at a time, and runs a " +
+                    "short job that does not heat or move anything. Every slot is set back afterwards. The printer " +
+                    "must be idle.")
+            },
+            confirmButton = { Button(onClick = tools::confirmMap) { Text("Map slots") } },
+            dismissButton = { TextButton(onClick = tools::cancelMap) { Text("Cancel") } },
+        )
+    }
+    toolsState.undoTarget?.let { e ->
+        AlertDialog(
+            onDismissRequest = tools::cancelUndo,
+            title = { Text("Undo this?") },
+            text = { Text("${UsageHelp.line(e)} goes back onto the spool.") },
+            confirmButton = { Button(onClick = tools::confirmUndo) { Text("Undo") } },
+            dismissButton = { TextButton(onClick = tools::cancelUndo) { Text("Keep") } },
+        )
     }
 
     when (state.stopStep) {
@@ -202,6 +239,58 @@ private fun Controls(state: PrinterUiState, viewModel: PrinterViewModel) {
     }
     if (state.commandBusy) Text("Waiting for the printer…")
     state.commandMessage?.let { Text(it) }
+}
+
+@Composable
+private fun SlotMapping(s: ToolsUiState, tools: PrinterToolsViewModel, canStart: Boolean) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("Slot mapping", style = MaterialTheme.typography.titleMedium)
+        s.observeNotice?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+        val m = s.map
+        when (m?.state) {
+            "running" -> {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                Text(m.step.ifBlank { "Mapping slots…" })
+            }
+            "done" -> Text(if (m.calibrated) "Slots mapped (${m.slots.size})" else "Slot mapping finished")
+            "failed" -> Text(listOf("Slot mapping failed", m.step).filter { it.isNotBlank() }.joinToString(": "),
+                color = MaterialTheme.colorScheme.error)
+            else -> Unit
+        }
+        m?.problems?.forEach { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+        s.mapMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        OutlinedButton(onClick = tools::askMap, enabled = canStart && !s.mapRunning && !s.mapBusy) {
+            Text(if (m?.state == "done" || m?.state == "failed") "Map slots again" else "Map slots")
+        }
+    }
+}
+
+@Composable
+private fun FilamentUsed(s: ToolsUiState, tools: PrinterToolsViewModel) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("Filament used (last 7 days)", style = MaterialTheme.typography.titleMedium)
+        s.usageMessage?.let { Text(it) }
+        if (s.usageLoaded && s.usage.isEmpty()) Text("Nothing logged.")
+        s.usage.forEach { e ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.weight(1f)) {
+                    Text(UsageHelp.line(e), style = MaterialTheme.typography.bodyMedium)
+                    Text(listOfNotNull(formatWhen(e.at), UsageHelp.note(e)).joinToString(" · "),
+                        style = MaterialTheme.typography.bodySmall)
+                }
+                if (UsageHelp.canUndo(e)) {
+                    TextButton(onClick = { tools.askUndo(e) }, enabled = !s.undoBusy) { Text("Undo") }
+                }
+            }
+        }
+    }
+}
+
+private fun formatWhen(iso: String): String? = try {
+    OffsetDateTime.parse(iso).atZoneSameInstant(ZoneId.systemDefault())
+        .format(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.SHORT))
+} catch (_: Exception) {
+    iso.ifBlank { null }
 }
 
 private fun stateWord(gcode: String) = when (gcode) {

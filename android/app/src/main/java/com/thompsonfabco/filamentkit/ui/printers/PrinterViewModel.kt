@@ -32,11 +32,15 @@ interface PrinterBackend {
     suspend fun command(id: String, action: String): CommandResult
 }
 
-class ApiPrinterBackend(private val api: Api) : PrinterBackend {
+class ApiPrinterBackend(private val api: Api) : PrinterBackend, PrinterToolsBackend {
     override suspend fun printers() = api.printers()
     override suspend fun addPrinter(serial: String, accessCode: String, name: String?) = api.addPrinter(serial, accessCode, name)
     override suspend fun printer(id: String) = api.printer(id)
     override suspend fun command(id: String, action: String) = api.command(id, action)
+    override suspend fun startMap(id: String) = api.startMap(id)
+    override suspend fun mapStatus(id: String) = api.mapStatus(id)
+    override suspend fun usage(id: String, days: Int) = api.usage(id, days)
+    override suspend fun undoUsage(entryId: String) = api.undoUsage(entryId)
 }
 
 /** Plain-English texts for printer states and errors. */
@@ -48,9 +52,18 @@ object PrinterHelp {
         "offline" -> "Offline"
         "wrong_code" -> "Wrong Access Code"
         "needs_developer_mode" -> "Needs Developer Mode"
+        "cert_changed" -> "Certificate changed"
         "not_configured" -> "Not set up"
         else -> state
     }
+
+    /**
+     * Deliberately does not push the user to re-add: re-adding while an impostor holds the printer's address would
+     * trust the impostor's certificate.
+     */
+    const val CERT_CHANGED = "The printer's certificate changed. This usually clears by itself when the printer comes " +
+        "back at its usual address. Add it again with its Access Code only if you expected this (factory reset or a " +
+        "new mainboard)."
 
     /** What the user should do about [state], or null when nothing is wrong. */
     fun fix(state: String): String? = when (state) {
@@ -61,6 +74,7 @@ object PrinterHelp {
         "offline" -> "The server cannot reach the printer. Check that the printer is turned on and connected to " +
             "the same network."
         "not_configured" -> "This printer is not set up yet. Tap it and enter its Access Code."
+        "cert_changed" -> CERT_CHANGED
         else -> null
     }
 
@@ -79,8 +93,20 @@ object PrinterHelp {
         "no_reply" -> "The printer did not answer in time. Try again."
         "not_found" -> "The server does not know this printer."
         "exists" -> "This printer is already set up."
+        "printer_busy" -> "The printer is printing. Try again when it's idle."
+        "cert_changed" -> CERT_CHANGED
+        "needs_developer_mode" -> fix("needs_developer_mode")!!
+        "no_preset" -> "No preset for this filament on this printer yet — profiles come next"
+        "write_refused" -> "The printer refused the change"
+        "already_running" -> "Slot mapping is already running."
+        "too_old" -> "Older than 7 days, can't undo"
+        "already_undone" -> "This one was already undone."
+        "nothing_to_undo" -> "Nothing was taken off a spool for this one"
         else -> e.message
     }
+
+    /** Errors of a slot or usage action: a 404 names what is missing (printer, slot, spool or entry) in its own words. */
+    fun actionMessage(e: ApiError): String = if (e.code == "not_found") e.message else message(e)
 
     /** Errors of "Add printer": a 404 means the server has not seen that printer on the network yet (its own words). */
     fun addMessage(e: ApiError): String = if (e.code == "not_found") e.message else message(e)
