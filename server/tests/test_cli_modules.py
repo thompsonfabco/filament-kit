@@ -185,3 +185,67 @@ def test_enable_station_server_off_needs_address(applied, capsys):
     assert cli.main(["modules", "enable", "station"]) == 1
     assert cli.main(["modules", "enable", "station", "--server", "10.0.0.5"]) == 0
     assert config.load()["station"]["allow"] == ["10.0.0.5"]
+
+
+def test_disable_station_after_all_in_one_drops_local_url(applied):
+    config.save(modules.set_mode(config.load(), "all-in-one"))
+    assert cli.main(["modules", "disable", "station"]) == 0
+    assert config.load()["station"].get("url") is None
+
+
+def test_config_menu_mode_server_after_all_in_one_drops_local_url(applied, monkeypatch):
+    config.save(modules.set_mode(config.load(), "all-in-one"))
+    _stdin(monkeypatch, "6\nm\n1\n0\n0\n")  # 1 = server
+    assert cli.main(["config"]) == 0
+    assert config.load()["station"].get("url") is None
+
+
+def test_disable_station_keeps_remote_url(applied):
+    cfg = config.load()
+    cfg["station"]["url"] = "http://station.localdomain:5003"
+    config.save(cfg)
+    assert cli.main(["modules", "disable", "library"]) == 0
+    assert config.load()["station"]["url"] == "http://station.localdomain:5003"
+
+
+def _real_plan_fake_apply(monkeypatch):
+    """Real plan (validate + resolve); execute/finish recorded; name resolution always fails."""
+    import socket
+    def nope(*a, **kw):
+        raise socket.gaierror(-2, "Name or service not known")
+    monkeypatch.setattr(apply.socket, "getaddrinfo", nope)
+    ran = []
+    monkeypatch.setattr(apply, "execute", lambda actions, **kw: ran.append(actions))
+    monkeypatch.setattr(apply, "finish", lambda cfg, **kw: None)
+    return ran
+
+
+def test_set_refused_by_plan_leaves_config_untouched(monkeypatch, capsys):
+    ran = _real_plan_fake_apply(monkeypatch)
+    before = (config.paths().etc / "config.json").read_bytes() if (config.paths().etc / "config.json").exists() else None
+    assert cli.main(["modules", "set", "station", "--server", "badname"]) == 1
+    err = capsys.readouterr().err
+    assert "cannot resolve" in err and "fix:" in err
+    after = (config.paths().etc / "config.json").read_bytes() if (config.paths().etc / "config.json").exists() else None
+    assert after == before and ran == []
+
+
+def test_enable_refused_by_plan_leaves_config_untouched(monkeypatch, capsys):
+    cfg = config.load()
+    cfg["modules"] = {n: n == "backup" for n in modules.MODULES}
+    config.save(cfg)
+    before = (config.paths().etc / "config.json").read_bytes()
+    ran = _real_plan_fake_apply(monkeypatch)
+    assert cli.main(["modules", "enable", "station", "--server", "badname"]) == 1
+    assert "fix:" in capsys.readouterr().err
+    assert (config.paths().etc / "config.json").read_bytes() == before and ran == []
+
+
+def test_config_menu_refused_by_plan_leaves_config_untouched(monkeypatch, capsys):
+    config.save(config.load())
+    before = (config.paths().etc / "config.json").read_bytes()
+    ran = _real_plan_fake_apply(monkeypatch)
+    _stdin(monkeypatch, "6\nm\n2\nbadname\n0\n0\n")  # 2 = station mode, server "badname"
+    assert cli.main(["config"]) == 1
+    assert "fix:" in capsys.readouterr().err
+    assert (config.paths().etc / "config.json").read_bytes() == before and ran == []

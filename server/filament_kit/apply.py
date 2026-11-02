@@ -96,10 +96,10 @@ def station_dropin(cfg: dict, addresses: list[str]) -> str:
 def _resolve_all(cfg: dict, resolve: Callable[[str], list[str]]) -> list[str]:
     st = config._merge(config.DEFAULTS["station"], cfg.get("station") or {})
     addrs: list[str] = []
-    for host in st["allow"]:
+    for host in st.get("allow") or []:
         try:
             found = resolve(host)
-        except OSError as e:
+        except (OSError, UnicodeError) as e:  # a malformed name ('a..b') fails in the idna codec
             raise ModuleError(
                 f"cannot resolve station.allow host {host!r} ({e}); "
                 "fix: check the name, or use the server's IP address") from e
@@ -342,7 +342,12 @@ def _server_setup(ex: _Exec, arg: str) -> None:
     """install.sh steps 5-6 (Ruling F): first-run questions, key, certificate, avahi file."""
     from . import cli  # cli imports apply; import here, not at module load
     etc = config.paths().etc
-    if "server_name" not in _raw_config() and _tty():
+    if "server_name" not in _raw_config() and not _tty():
+        # nobody to ask: keep the default, so a later apply at a keyboard asks no first-run questions
+        cfg = config.load()
+        cfg["server_name"] = socket.gethostname()
+        config.save(cfg)
+    elif "server_name" not in _raw_config():
         print("\n==> First-time setup")
         default_name = socket.gethostname()
         name = _ask(f"Display name shown in the phone app (any text) [{default_name}]: ").strip()
@@ -413,7 +418,10 @@ def _step(ex: _Exec, a: Action) -> None:
     elif k == "alsa_unmute":
         _alsa_unmute(ex)
     elif k == "disable":
-        ex.ok(["systemctl", "disable", "--now", arg])  # a unit that was never installed is fine
+        # A unit that was never installed needs nothing; asking systemd anyway prints
+        # "Failed to disable unit ... does not exist" on every apply. Its failure stays harmless.
+        if _under(ex.root, f"/etc/systemd/system/{arg}").exists():
+            ex.ok(["systemctl", "disable", "--now", arg])
     elif k == "daemon_reload":
         ex.cmd(["systemctl", "daemon-reload"])
     elif k == "enable":

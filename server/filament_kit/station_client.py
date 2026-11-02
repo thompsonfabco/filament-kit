@@ -1,8 +1,9 @@
 """Read-only client for an intake station's `GET /state` (filament-ops station/intake_station.py).
 
-The state comes back as the station sent it: `{"tag": {...}|null, "scale": {...}|null, "last_weight": {...}|null,
-"held": ...}`. After a failure the client refuses straight away for `backoff` seconds, so a dead station costs
-the app one quick 503 per call instead of a connect timeout (same policy as filament-mcp).
+The state comes back as the station sent it: `{"tag": {...}, "scale": {...}|null, "last_weight": {...}|null,
+"panel": ...}` ("held" sits inside "tag" and "last_weight"). After a failure the client refuses straight away
+for `backoff` seconds, so a dead station costs the app one quick 503 per call instead of a connect timeout (same
+policy as filament-mcp).
 """
 from __future__ import annotations
 

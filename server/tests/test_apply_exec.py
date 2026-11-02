@@ -104,11 +104,22 @@ def test_enable_kinds(tmp_path):
                            "systemctl enable b.path", "systemctl restart b.path"]
 
 
-def test_disable_missing_unit_is_not_an_error(tmp_path):
-    run = Recorder(fail=("disable",))
+def test_disable_missing_unit_runs_nothing(tmp_path):
+    # final review: systemd prints "Failed to disable unit ... does not exist" on every server-mode apply
+    run = Recorder()
     apply.execute([Action("disable", "gone.service"), Action("daemon_reload")],
                   run=run, resources=_res(tmp_path), root=tmp_path)
-    assert run.texts() == ["systemctl disable --now gone.service", "systemctl daemon-reload"]
+    assert run.texts() == ["systemctl daemon-reload"]
+
+
+def test_disable_present_unit_runs_and_failure_is_harmless(tmp_path):
+    unit = tmp_path / "etc/systemd/system/old.service"
+    unit.parent.mkdir(parents=True)
+    unit.write_text("[Unit]\n", encoding="utf-8")
+    run = Recorder(fail=("disable",))
+    apply.execute([Action("disable", "old.service"), Action("daemon_reload")],
+                  run=run, resources=_res(tmp_path), root=tmp_path)
+    assert run.texts() == ["systemctl disable --now old.service", "systemctl daemon-reload"]
 
 
 def test_user_created_only_when_missing(tmp_path):
@@ -203,8 +214,10 @@ def test_server_setup_no_tty_writes_avahi_and_cert(tmp_path, monkeypatch):
     texts = run.texts()
     assert "systemctl enable --now avahi-daemon" in texts
     assert "systemctl reload avahi-daemon" in texts
-    # no TTY: nothing asked, no server_name written
-    assert "server_name" not in json.loads((config.paths().etc / "config.json").read_text(encoding="utf-8"))
+    # no TTY: nothing asked; the default name is saved so a later TTY apply asks no first-run questions
+    raw = json.loads((config.paths().etc / "config.json").read_text(encoding="utf-8"))
+    assert raw["server_name"] == apply.socket.gethostname()
+    assert raw["port"] == 9000
     assert not (config.paths().etc / "anthropic_key").exists()
 
 
@@ -304,6 +317,7 @@ def test_cli_modules_apply_invalid_config(monkeypatch, capsys):
 
 
 def test_prints_reach_the_output_before_each_command(tmp_path, monkeypatch):
+    monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)  # a dry run would print instead of calling run
     # Piped to a file (install.sh > log) stdout is block-buffered; the "==>" lines must still come
     # before the output of the command they announce.
     class Buffered:

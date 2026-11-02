@@ -492,9 +492,17 @@ def cmd_config() -> int:
             _modules_menu(cfg)
         else:
             print("Unknown choice.")
+    changed = _module_state(cfg) != before
+    if changed:
+        if not _require_root():
+            return 1
+        err = _plan_error(cfg)
+        if err:
+            print(f"error: {err}\nNothing was saved.", file=sys.stderr)
+            return 1
     config.save(cfg)
     print("Saved.")
-    if _module_state(cfg) != before:
+    if changed:
         # the apply restarts what changed, so it replaces the plain restart
         return _run_apply(pairing=False)
     _restart_service()
@@ -943,6 +951,8 @@ def _change_module(cfg: dict, name: str, want_on: bool, *, confirm=None, ask_add
             on -= set(deps)
         on.discard(name)
     new = _with_modules(cfg, on)
+    if not {"server", "station"} <= on:
+        modules.drop_local_station_link(new)
     if want_on and name == "station":
         if "server" in on:
             _link_station(new)
@@ -984,7 +994,21 @@ def cmd_modules_list() -> int:
     return 0
 
 
+def _plan_error(cfg: dict) -> str | None:
+    """apply.plan's refusal (validation or name resolution) for `cfg`, or None. No side effects:
+    checked before config.json is saved, so a refused change leaves the settings as they were."""
+    try:
+        apply.plan(cfg)
+    except modules.ModuleError as e:
+        return str(e)
+    return None
+
+
 def _save_and_apply(cfg: dict) -> int:
+    err = _plan_error(cfg)
+    if err:
+        print(f"error: {err}\nNothing was changed.", file=sys.stderr)
+        return 1
     config.save(cfg)
     return _run_apply(pairing=False)
 

@@ -247,8 +247,8 @@ All steps passed after the fixes below. Details: `.superpowers/sdd/2026-11-02-mo
 
 ### Harmless output to expect
 
-- A first install in `station` mode prints `Failed to disable unit: Unit spoolman.service does not exist` (and
-  the same for the other server units): apply turns off the units of every module that is off, installed or not.
+- (Fixed in the final review: apply no longer asks systemd to disable a unit whose file is not installed, so
+  `Failed to disable unit: Unit ... does not exist` no longer appears in `station` or `server` mode.)
 - Turning modules off prints systemd's "The unit files have no installation config" note for the companion
   `.service` units of the timers and the build path.
 - The station probes print `id: 'filament-kit-station': no such user`, `dpkg-query: package 'brltty' is not

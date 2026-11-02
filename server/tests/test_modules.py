@@ -89,3 +89,15 @@ def test_station_without_server_needs_non_loopback_allow():
         validate(cfg)
     cfg["station"]["allow"] = ["127.0.0.1", "192.0.2.10"]
     validate(cfg)
+
+
+@pytest.mark.parametrize("mode", ["server", "station"])
+def test_leaving_all_in_one_drops_the_local_station_link(mode):
+    # spec section 3: without a local station beside the server the url is unset (409 module_off)
+    cfg = set_mode(set_mode({}, "all-in-one"), mode)
+    assert cfg["station"].get("url") is None
+
+
+def test_set_mode_keeps_a_remote_station_url():
+    cfg = set_mode({"station": {"url": "http://station.localdomain:5003"}}, "server")
+    assert cfg["station"]["url"] == "http://station.localdomain:5003"
