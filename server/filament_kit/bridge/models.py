@@ -33,17 +33,41 @@ _MODELS: dict[str, tuple[str, str]] = {
 }
 
 # product names typed by hand (`filament-kit config` → Printers), with or without "Bambu Lab "
-_BY_NAME: dict[str, str] = {}
+_BY_NAME: dict[str, str] = {}  # normalized name -> display name
 for _code, (_name, _kind) in _MODELS.items():
-    _BY_NAME.setdefault(_name.upper().replace(" ", ""), _kind)
-_BY_NAME.update({"X1C": "hls", "X1CARBON": "hls", "A1MINI": "mjpeg", "H2DPRO": "hls"})
+    _BY_NAME.setdefault(_name.upper().replace(" ", ""), _name)
+_BY_NAME.update({"X1C": "X1 Carbon", "X1CARBON": "X1 Carbon", "A1MINI": "A1 mini", "H2DPRO": "H2D Pro"})
+_KIND_BY_NAME: dict[str, str] = {name: kind for name, kind in _MODELS.values()}
+
+# chamber heating limit in °C by display name; X2D assumed H2D-like until checked; others have no heated chamber
+_CHAMBER_MAX: dict[str, int] = {"H2D": 65, "H2D Pro": 65, "H2S": 65, "H2C": 65, "X2D": 65, "X1E": 60}
+
+
+def _display_name(model: str | None) -> str | None:
+    """The product display name for a reported code or a typed name, or None."""
+    m = (model or "").strip().upper()
+    if m in _MODELS:
+        return _MODELS[m][0]
+    m = m.removeprefix("BAMBU LAB").replace(" ", "").replace("-", "")
+    return _BY_NAME.get(m)
 
 
 def camera_kind(model: str | None) -> str | None:
     """"hls" (RTSPS camera, relayed as HLS), "mjpeg" (port-6000 JPEG stream) or None (unknown model; the app
     then offers no camera)."""
-    m = (model or "").strip().upper()
-    if m in _MODELS:
-        return _MODELS[m][1]
-    m = m.removeprefix("BAMBU LAB").replace(" ", "").replace("-", "")
-    return _BY_NAME.get(m)
+    name = _display_name(model)
+    return _KIND_BY_NAME.get(name) if name else None
+
+
+def printer_preset_name(model: str | None) -> str | None:
+    """The Bambu Studio printer name ("Bambu Lab H2D", "Bambu Lab X1 Carbon") used in `compatible_printers`, or
+    None for an unknown model."""
+    name = _display_name(model)
+    return f"Bambu Lab {name}" if name else None
+
+
+def chamber_max(model: str | None) -> int | None:
+    """Highest chamber temperature (°C) the printer can hold, or None when it has no heated chamber or is
+    unknown."""
+    name = _display_name(model)
+    return _CHAMBER_MAX.get(name) if name else None

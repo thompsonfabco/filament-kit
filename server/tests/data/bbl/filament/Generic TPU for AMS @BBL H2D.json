@@ -1,0 +1,16 @@
+{
+    "type": "filament",
+    "name": "Generic TPU for AMS @BBL H2D",
+    "inherits": "fdm_filament_common",
+    "from": "system",
+    "filament_id": "GFU02",
+    "setting_id": "GFSU02_10",
+    "instantiation": "true",
+    "filament_type": [
+        "TPU-AMS"
+    ],
+    "compatible_printers": [
+        "Bambu Lab H2D 0.4 nozzle",
+        "Bambu Lab H2D 0.6 nozzle"
+    ]
+}

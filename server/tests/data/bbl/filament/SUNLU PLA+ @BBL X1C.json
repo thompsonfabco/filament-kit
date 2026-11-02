@@ -1,0 +1,18 @@
+{
+    "type": "filament",
+    "name": "SUNLU PLA+ @BBL X1C",
+    "inherits": "fdm_filament_pla",
+    "from": "system",
+    "filament_id": "GFSNL03",
+    "setting_id": "GFSSNL03_00",
+    "instantiation": "true",
+    "filament_vendor": [
+        "SUNLU"
+    ],
+    "filament_type": [
+        "PLA"
+    ],
+    "compatible_printers": [
+        "Bambu Lab X1 Carbon 0.4 nozzle"
+    ]
+}
