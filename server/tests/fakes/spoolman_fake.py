@@ -175,6 +175,19 @@ def app(store: dict[str, Any] | None = None) -> Starlette:
             apply_weights(s, b)
         return JSONResponse(_spool_view(store, s))
 
+    async def spool_use(request: Request):
+        """Spoolman's `PUT /spool/{id}/use {use_weight}`: used_weight += use_weight (negative gives it back)."""
+        s = store["spools"].get(int(request.path_params["id"]))
+        if not s:
+            return _err("Spool not found", 404)
+        b = await request.json()
+        w = b.get("use_weight")
+        if not isinstance(w, (int, float)) or isinstance(w, bool):
+            return _err("use_weight must be a number", 422)
+        store.setdefault("uses", []).append((s["id"], w))
+        apply_weights(s, {"used_weight": s.get("used_weight", 0) + w})
+        return JSONResponse(_spool_view(store, s))
+
     async def fields(request: Request):
         entity = request.path_params["entity"]
         if entity not in store["fields"]:
@@ -203,6 +216,7 @@ def app(store: dict[str, Any] | None = None) -> Starlette:
         Route("/api/v1/filament/{id:int}", filament_one),
         Route("/api/v1/spool", spools, methods=["GET", "POST"]),
         Route("/api/v1/spool/{id:int}", spool_one, methods=["GET", "PATCH"]),
+        Route("/api/v1/spool/{id:int}/use", spool_use, methods=["PUT"]),
         Route("/api/v1/field/{entity}", fields),
         Route("/api/v1/field/{entity}/{key}", field_create, methods=["POST"]),
     ])

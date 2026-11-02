@@ -60,6 +60,13 @@ class Spoolman:
     def patch(self, path: str, body: Any) -> Any:
         return self._request("PATCH", path, body)
 
+    def put(self, path: str, body: Any) -> Any:
+        return self._request("PUT", path, body)
+
+    def use(self, spool_id: int, grams: float) -> Any:
+        """Record `grams` used from a spool (`PUT /spool/{id}/use`); negative grams give them back (undo)."""
+        return self.put(f"spool/{int(spool_id)}/use", {"use_weight": grams})
+
     def ping(self) -> str:
         return self.get("info")["version"]
 

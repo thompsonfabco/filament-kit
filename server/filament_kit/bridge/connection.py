@@ -94,7 +94,8 @@ class _Waiter:
 
 
 class PrinterConnection:
-    def __init__(self, printer: registry.Printer, client_factory: Callable, port: int = PORT):
+    def __init__(self, printer: registry.Printer, client_factory: Callable, port: int = PORT,
+                 listeners: list[Callable] | None = None):
         self.serial = printer.serial
         self.name = printer.name
         self.ip = printer.ip
@@ -112,6 +113,8 @@ class PrinterConnection:
         self._pending: dict[str, _Waiter] = {}
         self._seq = itertools.count(int(time.time()) % 100000)
         self._stopping = False
+        self._fresh = False          # no report with `gcode_state` seen yet since the last connect
+        self._listeners = listeners if listeners is not None else []
         self.client = None
 
     def __repr__(self) -> str:
@@ -185,6 +188,7 @@ class PrinterConnection:
 
     def _on_connect(self, client, userdata, flags, rc, properties=None):
         if _rc_ok(rc):
+            self._fresh = True
             self._set_state('connected')
             client.subscribe(f"device/{self.serial}/report", qos=0)
             self.request_pushall()
@@ -223,7 +227,15 @@ class PrinterConnection:
             with self._changed:
                 self._report = status.merge(self._report, pr)
                 self.updated = time.time()
+                report, first = self._report, self._fresh
+                if 'gcode_state' in pr:
+                    self._fresh = False
                 self._changed.notify_all()
+            for fn in list(self._listeners):
+                try:
+                    fn(self.serial, report, first)
+                except Exception:
+                    log.exception("printer %s: report listener failed", self.serial)
 
     def _wake_pending(self) -> None:
         for w in list(self._pending.values()):
@@ -397,6 +409,14 @@ class Manager:
         self._spools_lock = threading.Lock()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+        self._listeners: list[Callable] = []
+
+    def add_listener(self, fn: Callable[[str, dict, bool], None]) -> None:
+        """Call `fn(serial, report, first)` after every report from any printer, on that printer's MQTT thread
+        (keep it quick; hand slow work to a thread of your own). `report` is the merged report (do not change
+        it); `first` is true for the reports after a (re)connect up to and including the first one that carries
+        `gcode_state`: what they show happened while nobody watched (usage tracking must not settle it)."""
+        self._listeners.append(fn)
 
     @staticmethod
     def _usable(p: registry.Printer) -> bool:
@@ -417,7 +437,7 @@ class Manager:
                     conn.name = p.name
             for serial, p in printers.items():
                 if serial not in self._conns and self._usable(p):
-                    conn = PrinterConnection(p, self._factory, self.port)
+                    conn = PrinterConnection(p, self._factory, self.port, self._listeners)
                     self._conns[serial] = conn
                     conn.start()
         for conn in stale:  # a slow disconnect must not block state reads and commands for other printers
