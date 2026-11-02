@@ -1,0 +1,188 @@
+name: release
+# A tag v<x.y.z> builds and publishes one release: the server tarball (with the signed APK inside),
+# the signed APK on its own, and the PC sync installer. The tag must equal __version__ of both the
+# server and pc-sync. The APK is signed from the repository secrets FK_KEYSTORE_B64 (the keystore,
+# base64) and FK_KEYSTORE_PASSWORD; without them the release fails (never an unsigned APK).
+on:
+  push:
+    tags:
+      - 'v*'
+permissions:
+  contents: read
+jobs:
+  version:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      code: ${{ steps.check.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the tag against __version__
+        id: check
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          server=$(sed -n 's/^__version__ = "\(.*\)"\r\{0,1\}$/\1/p' server/filament_kit/__init__.py)
+          sync=$(sed -n 's/^__version__ = "\(.*\)"\r\{0,1\}$/\1/p' pc-sync/fksync/__init__.py)
+          if [ "$version" != "$server" ] || [ "$version" != "$sync" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match __version__ (server $server, pc-sync $sync)"
+            exit 1
+          fi
+          # versionCode = MAJOR*10000 + MINOR*100 + PATCH, so MINOR and PATCH stay below 100.
+          # Pre-release tags (v0.3.0-rc1) are rejected on purpose: the formula has no room for them,
+          # and an rc's versionCode would equal the final release's, so phones would not update to it.
+          if ! [[ "$version" =~ ^(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]?)\.(0|[1-9][0-9]?)$ ]]; then
+            echo "::error::version $version is not MAJOR.MINOR.PATCH with MINOR and PATCH below 100"
+            exit 1
+          fi
+          code=$(( BASH_REMATCH[1] * 10000 + BASH_REMATCH[2] * 100 + BASH_REMATCH[3] ))
+          if [ "$code" -le 0 ]; then
+            echo "::error::versionCode $code must be above 0"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "version $version, versionCode $code"
+
+  server:
+    needs: version
+    runs-on: ubuntu-24.04
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install the wheel builder
+        run: pip install build
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: android-actions/setup-android@v3
+        with:
+          # as android.yml: AGP downloads the platform and build-tools it needs itself
+          packages: 'platform-tools'
+          log-accepted-android-sdk-licenses: false
+
+      - name: Keystore
+        env:
+          FK_KEYSTORE_B64: ${{ secrets.FK_KEYSTORE_B64 }}
+          FK_KEYSTORE_PASSWORD: ${{ secrets.FK_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$FK_KEYSTORE_B64" ] || [ -z "$FK_KEYSTORE_PASSWORD" ]; then
+            echo "::error::the secrets FK_KEYSTORE_B64 and FK_KEYSTORE_PASSWORD are required; no unsigned release is built"
+            exit 1
+          fi
+          ks="$RUNNER_TEMP/filament-kit-release.jks"
+          (umask 077 && printf '%s' "$FK_KEYSTORE_B64" | base64 -d > "$ks")
+          if [ ! -s "$ks" ]; then
+            echo "::error::FK_KEYSTORE_B64 did not decode to a keystore"
+            exit 1
+          fi
+          echo "FK_KEYSTORE=$ks" >> "$GITHUB_ENV"
+
+      - name: Build the tarball and the signed APK
+        env:
+          FK_KEYSTORE_PASSWORD: ${{ secrets.FK_KEYSTORE_PASSWORD }}
+          FK_VERSION_CODE: ${{ needs.version.outputs.code }}
+        run: |
+          bash tools/make_release.sh
+          tarball="dist/filament-kit-$VERSION.tar.gz"
+          # Gradle names an unsigned release build app-release-unsigned.apk: this file is the signed one.
+          apk="android/app/build/outputs/apk/release/app-release.apk"
+          test -f "$tarball" || { echo "::error::$tarball was not built"; exit 1; }
+          test -f "$apk" || { echo "::error::no signed APK at $apk"; exit 1; }
+          tar -xzOf "$tarball" "filament-kit-$VERSION/app/filament-kit.apk" > "$RUNNER_TEMP/staged.apk"
+          cmp "$apk" "$RUNNER_TEMP/staged.apk" || { echo "::error::the tarball's app/filament-kit.apk is not this build"; exit 1; }
+          cp "$apk" dist/filament-kit.apk
+
+      - name: Remove the keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/filament-kit-release.jks"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: server
+          path: |
+            dist/filament-kit-${{ needs.version.outputs.version }}.tar.gz
+            dist/filament-kit.apk
+          if-no-files-found: error
+
+  sync:
+    needs: version
+    runs-on: windows-2022
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Tests
+        run: |
+          pip install "./pc-sync[test]"
+          pytest pc-sync/tests
+
+      - name: PyInstaller
+        run: |
+          pip install pyinstaller==6.11.1
+          pyinstaller --noconfirm pc-sync/fksync.spec
+          $out = ./dist/filament-kit-sync/filament-kit-sync.exe --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($out -ne "filament-kit-sync $env:VERSION") {
+            Write-Output "::error::the built exe reports '$out', expected filament-kit-sync $env:VERSION"
+            exit 1
+          }
+
+      - name: Inno Setup
+        run: |
+          $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
+          if (-not $iscc) { $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
+          if (-not (Test-Path -LiteralPath $iscc)) {
+            choco install innosetup --no-progress -y
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          if (-not (Test-Path -LiteralPath $iscc)) {
+            Write-Output "::error::ISCC.exe not found after installing Inno Setup"
+            exit 1
+          }
+          & $iscc "/DAppVersion=$env:VERSION" pc-sync/installer/filament-kit-sync.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path -LiteralPath "dist/filament-kit-sync-setup-$env:VERSION.exe")) {
+            Write-Output "::error::dist/filament-kit-sync-setup-$env:VERSION.exe was not built"
+            exit 1
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sync
+          path: dist/filament-kit-sync-setup-${{ needs.version.outputs.version }}.exe
+          if-no-files-found: error
+
+  publish:
+    needs: [version, server, sync]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+          files: |
+            dist/filament-kit-${{ needs.version.outputs.version }}.tar.gz
+            dist/filament-kit.apk
+            dist/filament-kit-sync-setup-${{ needs.version.outputs.version }}.exe

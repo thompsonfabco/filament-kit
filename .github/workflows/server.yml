@@ -17,8 +17,15 @@ jobs:
       - name: Install
         run: pip install "./server[test]"
 
+      # the pc-sync suite (and the end-to-end test with the server) needs pc-sync in place
+      - name: Install pc-sync
+        run: pip install "./pc-sync[test]"
+
       - name: Tests
         run: pytest server/tests
+
+      - name: pc-sync tests
+        run: pytest pc-sync/tests
 
       - name: Shellcheck
         run: shellcheck install/*.sh tools/*.sh
