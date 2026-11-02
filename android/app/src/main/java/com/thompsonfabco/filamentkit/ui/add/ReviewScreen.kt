@@ -41,7 +41,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.thompsonfabco.filamentkit.net.ParentList
 import com.thompsonfabco.filamentkit.ui.parseWeight
+import com.thompsonfabco.filamentkit.ui.profile.ParentField
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -87,7 +89,7 @@ fun ReviewScreen(
         val editable = state.stage == Stage.Review || state.stage == Stage.Preview
         state.items.forEachIndexed { i, item ->
             key(state.generation, i) {
-                ItemCard(i, item, state.locations, vm, editable)
+                ItemCard(i, item, state.locations, state.parents, vm, editable)
             }
         }
 
@@ -160,7 +162,14 @@ private fun DoneSection(state: AddUiState, vm: AddViewModel, onDone: () -> Unit)
 }
 
 @Composable
-private fun ItemCard(index: Int, item: JsonObject, locations: List<String>, vm: AddViewModel, enabled: Boolean) {
+private fun ItemCard(
+    index: Int,
+    item: JsonObject,
+    locations: List<String>,
+    parents: Map<String, ParentList>,
+    vm: AddViewModel,
+    enabled: Boolean,
+) {
     val estimates = (item["estimates"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull }.toSet()
     fun label(text: String, key: String) = if (key in estimates) "$text (estimated)" else text
     val count = item.int("count")
@@ -181,7 +190,14 @@ private fun ItemCard(index: Int, item: JsonObject, locations: List<String>, vm: 
 
             TextField(label("Vendor", "vendor"), item.str("vendor"), enabled) { vm.setText(index, "vendor", it) }
             TextField(label("Name", "name"), item.str("name"), enabled) { vm.setText(index, "name", it) }
+            TextField(label("Line", "line"), item.str("line"), enabled) { vm.setText(index, "line", it) }
             TextField(label("Material", "material"), item.str("material"), enabled) { vm.setText(index, "material", it) }
+            ParentField(item.str("bambu_parent").orEmpty(), item.str("material")?.let { parents[it] }, enabled) {
+                vm.setParent(index, it)
+            }
+            if (item.bool("line_exists") == true) {
+                Text("The Bambu Studio parent applies to every colour of this line.", style = MaterialTheme.typography.bodySmall)
+            }
             TextField(label("Colour (hex)", "color_hex"), item.str("color_hex"), enabled) { vm.setText(index, "color_hex", it) }
             NumberField(label("Spools", "count"), item.num("count"), enabled, whole = true) {
                 vm.setCount(index, it?.toInt())

@@ -10,6 +10,8 @@ import com.thompsonfabco.filamentkit.net.Api
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
 import com.thompsonfabco.filamentkit.net.LOCAL_NETWORK_MESSAGE
+import com.thompsonfabco.filamentkit.net.ParentList
+import com.thompsonfabco.filamentkit.net.Proposal
 import com.thompsonfabco.filamentkit.net.ReadResult
 import com.thompsonfabco.filamentkit.tags.TagEvents
 import com.thompsonfabco.filamentkit.ui.isValidWeight
@@ -17,6 +19,8 @@ import java.io.File
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -49,12 +53,20 @@ interface IntakeApi {
     suspend fun add(items: JsonArray, dryRun: Boolean, tag: String?): AddResult
     suspend fun locations(): List<String>
 
+    /** The line and Bambu parent the server would use; the defaults keep older fakes compiling (no proposal). */
+    suspend fun propose(vendor: String, line: String, material: String): Proposal =
+        throw ApiError(0, "not_supported", "No proposals")
+
+    suspend fun parents(material: String): ParentList = ParentList()
+
     companion object {
         fun of(api: Api): IntakeApi = object : IntakeApi {
             override suspend fun read(photos: List<ByteArray>, hint: String, tag: String?) = api.read(photos, hint, tag)
             override suspend fun retry(readId: String) = api.retry(readId)
             override suspend fun add(items: JsonArray, dryRun: Boolean, tag: String?) = api.add(items, dryRun, tag)
             override suspend fun locations() = api.locations()
+            override suspend fun propose(vendor: String, line: String, material: String) = api.propose(vendor, line, material)
+            override suspend fun parents(material: String) = api.parents(material)
         }
     }
 }
@@ -113,6 +125,8 @@ data class AddUiState(
     val addedBefore: AddedBefore? = null,
     /** The "I checked — add again" warning is open (Add was tapped while [addedBefore] is set). */
     val askAddAgain: Boolean = false,
+    /** Bambu Studio parents per material (for the parent dropdown); a material missing here is not loaded yet. */
+    val parents: Map<String, ParentList> = emptyMap(),
 ) {
     /** Every item has a whole spool count of at least 1 (Preview is blocked otherwise). */
     val countsValid: Boolean
@@ -146,6 +160,9 @@ class AddViewModel(
     private val saves = MutableStateFlow<Draft?>(null)
     /** Serialises photo adds/removes so two quick shots cannot create two drafts. */
     private val photoLock = Mutex()
+    /** The pending (debounced) proposal per item index; cancelled by the next edit of that item. */
+    private val proposalJobs = mutableMapOf<Int, Job>()
+    private val parentsLoading = mutableSetOf<String>()
 
     init {
         viewModelScope.launch(io) {
@@ -289,6 +306,7 @@ class AddViewModel(
             )
         }
         save()
+        loadParentsForItems()
     }
 
     fun backToPhotos() = _state.update { it.copy(stage = Stage.Capture, previewLines = emptyList(), error = null) }
@@ -303,6 +321,78 @@ class AddViewModel(
         val v = if (key == "color_hex") value.trim().removePrefix("#").uppercase() else value
         val el: JsonElement = if (v.isBlank() && key !in REQUIRED_TEXT) JsonNull else JsonPrimitive(v)
         editItem(index) { JsonObject(it + (key to el)) }
+        if (key in LINE_KEYS) scheduleProposal(index)
+    }
+
+    /**
+     * The Bambu Studio parent for this item's line. A picked parent is kept when a later edit re-proposes; blank
+     * forgets the pick and lets the server propose one again.
+     */
+    fun setParent(index: Int, value: String) {
+        if (value.isBlank()) {
+            editItem(index) { JsonObject(it - PICKED + ("bambu_parent" to JsonNull)) }
+            scheduleProposal(index)
+        } else {
+            editItem(index) { JsonObject(it + ("bambu_parent" to JsonPrimitive(value)) + (PICKED to JsonPrimitive(true))) }
+        }
+    }
+
+    /**
+     * After a pause of [PROPOSE_DEBOUNCE_MS] (a newer edit restarts it), asks the server which line and parent these
+     * values give: `line_exists` is always updated, the parent only when the user has not picked one. An answer for
+     * values that changed meanwhile, or a failure, changes nothing (the proposal is only a help).
+     */
+    private fun scheduleProposal(index: Int) {
+        proposalJobs.remove(index)?.cancel()
+        proposalJobs[index] = viewModelScope.launch {
+            delay(PROPOSE_DEBOUNCE_MS)
+            val asked = _state.value.items.getOrNull(index) ?: return@launch
+            val material = asked.text("material")
+            if (!material.isNullOrBlank()) loadParents(material)
+            val vendor = asked.text("vendor")
+            val line = asked.text("line")
+            if (vendor.isNullOrBlank() || line.isNullOrBlank() || material.isNullOrBlank()) return@launch
+            val p = try {
+                api.propose(vendor, line, material)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                return@launch
+            }
+            val now = _state.value.items.getOrNull(index) ?: return@launch
+            if (LINE_KEYS.any { now.text(it) != asked.text(it) }) return@launch
+            var next = now + ("line_exists" to JsonPrimitive(p.exists))
+            if ((now[PICKED] as? JsonPrimitive)?.booleanOrNull != true) {
+                next = next + ("bambu_parent" to (p.bambuParent?.let(::JsonPrimitive) ?: JsonNull)) +
+                    ("parent_source" to JsonPrimitive(p.parentSource))
+            }
+            if (JsonObject(next) != now) editItem(index) { JsonObject(next) }
+        }
+    }
+
+    private fun loadParentsForItems() {
+        _state.value.items.mapNotNull { it.text("material")?.takeIf(String::isNotBlank) }.distinct().forEach { m ->
+            viewModelScope.launch { loadParents(m) }
+        }
+    }
+
+    /** Loads the parent list for [material] once; a failure leaves it unloaded (the field stays free text). */
+    private suspend fun loadParents(material: String) {
+        if (material in _state.value.parents || !parentsLoading.add(material)) return
+        try {
+            val list = api.parents(material)
+            _state.update { it.copy(parents = it.parents + (material to list)) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+        } finally {
+            parentsLoading.remove(material)
+        }
+    }
+
+    private fun cancelProposals() {
+        proposalJobs.values.forEach { it.cancel() }
+        proposalJobs.clear()
     }
 
     /** Weights (`net`, `tare`, `gross`); a value that is not finite and above 0 is ignored. */
@@ -330,6 +420,7 @@ class AddViewModel(
 
     fun removeItem(index: Int) {
         if (index !in _state.value.items.indices || _state.value.stage in BUSY) return
+        cancelProposals() // indices shift
         _state.update { s ->
             s.copy(items = s.items.filterIndexed { i, _ -> i != index }, generation = s.generation + 1).invalidated()
         }
@@ -384,7 +475,7 @@ class AddViewModel(
         _state.update { it.copy(stage = if (dryRun) Stage.Previewing else Stage.Adding, error = null) }
         viewModelScope.launch {
             try {
-                val res = api.add(JsonArray(s.items), dryRun, s.tag)
+                val res = api.add(JsonArray(s.items.map { JsonObject(it - PICKED) }), dryRun, s.tag)
                 if (dryRun) {
                     _state.update { it.copy(stage = Stage.Preview, previewLines = res.lines) }
                 } else {
@@ -455,7 +546,8 @@ class AddViewModel(
         readResult = null
         failedReadId = null
         retryAction = null
-        _state.update { AddUiState(locations = it.locations, generation = it.generation + 1) }
+        cancelProposals()
+        _state.update { AddUiState(locations = it.locations, parents = it.parents, generation = it.generation + 1) }
     }
 
     private fun showError(e: AddError) = _state.update { it.copy(error = e) }
@@ -500,10 +592,15 @@ class AddViewModel(
                 generation = it.generation + 1,
             )
         }
+        loadParentsForItems()
     }
 
     companion object {
         const val MAX_PHOTOS = 8
+        internal const val PROPOSE_DEBOUNCE_MS = 500L
+        /** App-only item key (kept in the draft, never sent): the user picked this item's Bambu parent. */
+        internal const val PICKED = "app_parent_picked"
+        private val LINE_KEYS = listOf("vendor", "line", "material")
         private val REQUIRED_TEXT = setOf("vendor", "name", "material")
         private val BUSY = setOf(Stage.Reading, Stage.Previewing, Stage.Adding)
         internal const val ADD_REPLY_LOST = "The connection to the server was lost while adding, so the spools may " +
@@ -531,6 +628,9 @@ internal fun applyCaptureChoices(
         items to listOf("The weight (${grams(weight)} g) was not filled in: it is only used for one opened spool.")
     }
 }
+
+/** A text value of an item (null when missing, JSON null or not a string). */
+private fun JsonObject.text(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
 
 /** Whole numbers stay integers in the JSON (and on screen). */
 internal fun number(v: Double): JsonPrimitive =
