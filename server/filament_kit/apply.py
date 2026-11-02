@@ -27,6 +27,7 @@ from .modules import MODULES, ModuleError
 
 SPOOLMAN_INFO = "http://127.0.0.1:7912/api/v1/info"
 STATION_UNIT = "filament-kit-station.service"
+WEB_UNIT = "filament-kit-web.service"
 DROPIN = "/etc/systemd/system/filament-kit-station.service.d/kit.conf"
 UDEV_RULE = "/etc/udev/rules.d/99-filament-kit-station.rules"
 UDEV_TEXT = (
@@ -136,6 +137,8 @@ def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) ->
         if name in on:
             for unit in MODULES[name].units:
                 acts += [A("install_unit", u) for u in _unit_files(unit)]
+    if "web" in on:
+        acts.append(A("install_unit", WEB_UNIT))
     if "station" in on:
         acts += [
             A("user", ("filament-kit-station", "dialout,audio")),
@@ -148,8 +151,10 @@ def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) ->
             A("install_file", (DROPIN, station_dropin(cfg, addrs), "0644", "root:root")),
             A("install_unit", STATION_UNIT),
         ]
+    # An opt-in module nobody ever configured is not mentioned (the legacy plan stays as it was).
+    configured = cfg.get("modules") or {}
     for name, mod in MODULES.items():
-        if name not in on:
+        if name not in on and (name not in modules.OPT_IN or name in configured):
             for unit in mod.units:
                 acts += [A("disable", u) for u in _unit_files(unit)]
     acts.append(A("daemon_reload"))
@@ -163,6 +168,8 @@ def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) ->
     for name in ("presets", "library", "backup"):
         if name in on:
             acts += [A("enable", u) for u in MODULES[name].units]
+    if "web" in on:
+        acts.append(A("enable", WEB_UNIT))
     if "station" in on:
         acts.append(A("enable", STATION_UNIT))
     if "presets" in on:
