@@ -298,10 +298,11 @@ def test_prints_reporting_task_id_0_all_settle(rig, sd, spoolman_fake_store):
     assert len(usage.entries(SERIAL, 7)) == 6
 
 
-def test_our_calibration_job_is_not_settled(rig, sd, spoolman_fake_store):
+@pytest.mark.parametrize("name", [f"fk-calib-{SERIAL}", f"fk-calib-{SERIAL}-1a2b3c"])   # old name, per-run name
+def test_our_calibration_job_is_not_settled(rig, sd, spoolman_fake_store, name):
     calibrate()
     r = rig()
-    r.print_job(job=dict(JOB, subtask_name=f"fk-calib-{SERIAL}", task_id="0", mapping=[0, 1, 128]))
+    r.print_job(job=dict(JOB, subtask_name=name, task_id="0", mapping=[0, 1, 128]))
     assert spoolman_fake_store.get("uses", []) == [] and usage.entries(SERIAL, 7) == []
     put(sd, "/cache/bracket_v3_plate_1.gcode.3mf", build_3mf(TWO_COLOUR))
     r.push({"gcode_state": "IDLE"})

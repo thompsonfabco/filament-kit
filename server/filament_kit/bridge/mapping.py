@@ -28,7 +28,8 @@ Outcome (a job that ends `failed` never leaves a trusted map):
     just proved for the loaded ones), `calibrated: true, observe: false`;
   - calibration inconsistent or refused -> the same slots, default global ids, `calibrated: false, observe:
     true` (filament use is only logged), the reason in problems;
-  - a calibration that could not restore a slot (`CalibResult.restored` false) -> `failed`, the map saved
+  - a calibration that left something changed (`CalibResult.restored` false: a filament left loaded in the
+    toolhead; the calibration writes no slot, so a slot changed meanwhile is only reported) -> `failed`, the map saved
     with `calibrated: false, observe: true` even when the decoding was consistent.
 Slots the slot test did not confirm are left out of the map and listed in problems.
 

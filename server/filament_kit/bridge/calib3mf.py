@@ -16,11 +16,17 @@ while the job is watched, a nozzle or bed TARGET temperature above the snapshot'
 sends `stop`. After the job, a `tray_now` other than the snapshot's is the problem "printer left a filament
 loaded in the toolhead" and `restored` is false.
 
-Never act on a print that is not ours: `stop` (watchdog, timeout, never started, should_stop, Ctrl-C) is sent only
-while the latest report's `subtask_name` is our `job_name(serial)`. Another print that starts while we watch
-(someone at the touchscreen or in Bambu Studio) ends the watch with "the printer started another job; calibration
-abandoned": it is not stopped, our file is still deleted and the slots are restored at once (slot settings are
-metadata; the slot test restores during a print start too), and its filament load is not held against us.
+Never act on a print that is not ours: each run sends its own `subtask_name`, `run_name(serial)` =
+`fk-calib-<serial>-<nonce>` (the file keeps the fixed `job_name(serial)`), and `stop` (watchdog, timeout, never
+started, should_stop, Ctrl-C) is sent only while the latest report's `subtask_name` is this run's name. A report
+still naming an earlier run (or anything else) is never ours. Another print that starts while we watch (someone at
+the touchscreen or in Bambu Studio) ends the watch with "the printer started another job; calibration abandoned":
+it is not stopped, our file is still deleted, and its filament load is not held against us.
+
+Never overwrite a slot setting someone else changed: the calibration writes no slot, so its slot step after the
+job (`_check_slots`) only compares every loaded slot with the snapshot and reports a slot that changed meanwhile
+("left as is"); it never writes one, as `snapshot.restore` for a calibration snapshot. `restored` true means we
+left nothing changed (false only for a filament left loaded in the toolhead).
 
 The print command, modelled on what Bambu Studio sends in LAN mode (to be confirmed on the owner's H2D, Task 9):
 
@@ -30,7 +36,7 @@ The print command, modelled on what Bambu Studio sends in LAN mode (to be confir
         "url": "ftp:///cache/fk-calib-<serial>.gcode.3mf",
         "file": "",
         "md5": "",
-        "subtask_name": "fk-calib-<serial>",
+        "subtask_name": "fk-calib-<serial>-<nonce>",
         "project_id": "0", "profile_id": "0", "task_id": "0", "subtask_id": "0",
         "bed_type": "auto",
         "use_ams": true,
@@ -52,6 +58,7 @@ import hashlib
 import io
 import json
 import logging
+import secrets
 import time
 import zipfile
 from dataclasses import dataclass, field
@@ -66,7 +73,6 @@ log = logging.getLogger(__name__)
 JOB_TIMEOUT = 120.0        # seconds from the print command to the end of the job
 SNAPSHOT_TIMEOUT = 10.0
 STOP_TIMEOUT = 20.0
-RESTORE_TIMEOUT = 20.0
 BUSY = ('RUNNING', 'PAUSE', 'PREPARE', 'SLICING')
 ENDED = ('FINISH', 'FAILED')
 REFUSED = "printer refused the calibration job"
@@ -76,6 +82,12 @@ _ZIP_TIME = (2026, 1, 1, 0, 0, 0)
 
 def job_name(serial: str) -> str:
     return f"fk-calib-{serial}"
+
+
+def run_name(serial: str) -> str:
+    """This run's `subtask_name`: unique per run, so a report naming an earlier run is never taken for ours. It
+    keeps the `fk-calib-` prefix that usage skips (`usage.CALIB_PREFIX`)."""
+    return f"{job_name(serial)}-{secrets.token_hex(3)}"
 
 
 def remote_path(serial: str) -> str:
@@ -92,7 +104,8 @@ class CalibResult:
     tray_now: list[str] = field(default_factory=list)         # each `ams.tray_now` seen during the job
     skipped: list[str] = field(default_factory=list)          # empty slots, not part of the job
     cert_changed: bool = False
-    restored: bool = True     # every slot the restore step had to put back was confirmed back (true: none changed)
+    restored: bool = True     # we left nothing changed (false: a filament left loaded in the toolhead)
+    job: str = ""             # this run's subtask_name (`run_name`)
     other_job: bool = False   # another print started while we watched: abandoned, never stopped
 
 
@@ -193,15 +206,15 @@ def build(slots: list[str]) -> bytes:
     return buf.getvalue()
 
 
-def payload(serial: str, ams_mapping: list[int]) -> dict:
-    """The `project_file` print command (see the module docstring)."""
+def payload(serial: str, ams_mapping: list[int], name: str | None = None) -> dict:
+    """The `project_file` print command (see the module docstring); `name` = this run's `run_name`."""
     return {"print": {
         "command": "project_file",
         "param": GCODE,
         "url": f"ftp://{remote_path(serial)}",
         "file": "",
         "md5": "",
-        "subtask_name": job_name(serial),
+        "subtask_name": name or job_name(serial),
         "project_id": "0", "profile_id": "0", "task_id": "0", "subtask_id": "0",
         "bed_type": "auto",
         "use_ams": True,
@@ -332,6 +345,7 @@ def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None
         res.problems.append(f"cannot save the slot snapshot ({type(e).__name__}: {e}); the job was not started")
         _delete(printer, path, res)
         return res
+    res.job = run_name(serial)
     try:
         _job(manager, serial, res, labels, sent, snap, should_stop)
     except Exception as e:      # e.g. the MQTT connection was lost while watching the job
@@ -341,16 +355,12 @@ def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None
     except BaseException:       # Ctrl-C with no handler installed: stop our job (only ours), then restore
         log.warning("printer %s: calibration job interrupted; stopping it if it is ours", serial)
         res.consistent = False
-        _stop_ours(manager, serial)
+        _stop_ours(manager, serial, res.job)
         raise
     finally:
         _delete(printer, path, res)
-        try:
-            _restore(manager, serial, slotmap, trays0, res)
-        except Exception as e:
-            res.restored = False
-            res.problems.append(f"could not restore the slots ({type(e).__name__})")
-        if res.restored:            # every slot confirmed back: the snapshot on disk is done with
+        _check_slots(manager, serial, slotmap, trays0, res)
+        if res.restored:            # we changed nothing: the snapshot on disk is done with
             try:
                 snapshot.clear(serial)
             except OSError:
@@ -418,19 +428,19 @@ def _wait(manager, serial: str, pred, timeout: float, should_stop) -> dict | Non
             return r
 
 
-def _ours(report: dict | None, serial: str) -> bool:
-    return isinstance(report, dict) and _s(report.get('subtask_name')) == job_name(serial)
+def _ours(report: dict | None, name: str) -> bool:
+    return bool(name) and isinstance(report, dict) and _s(report.get('subtask_name')) == name
 
 
-def _stop_ours(manager, serial: str) -> bool | None:
-    """`stop` our own job: sent only while the latest report names our job (`_ours`). True once a report shows
+def _stop_ours(manager, serial: str, name: str) -> bool | None:
+    """`stop` our own job: sent only while the latest report names this run (`name`, `_ours`). True once a report shows
     the printer no longer busy, False if that was not confirmed, None when nothing was sent (not our job, or no
     report)."""
     try:
         latest = manager.wait_report(serial, lambda r: True, LATEST_TIMEOUT)
     except Exception:
         return None
-    if not _ours(latest, serial):
+    if not _ours(latest, name):
         log.info("printer %s: no stop sent: the printer shows %r, not our job", serial,
                  _s((latest or {}).get('subtask_name')))
         return None
@@ -456,13 +466,13 @@ def _stop(manager, serial: str) -> bool:
 
 def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[int], snap: dict,
          should_stop=None) -> None:
-    name = job_name(serial)
+    name = res.job or run_name(serial)
     stopping = should_stop or (lambda: False)
     if stopping():
         res.problems.append("interrupted: mapping was stopped before the calibration job")
         return
     try:
-        reply = manager.publish(serial, payload(serial, sent))
+        reply = manager.publish(serial, payload(serial, sent, name))
     except Exception as e:      # offline / no reply raised by the Manager
         res.problems.append(f"cannot send the calibration job ({type(e).__name__})")
         return
@@ -519,17 +529,17 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
         return
     if st['trip'] is not None:
         log.warning("printer %s: calibration job tripped: %s", serial, st['trip'])
-        res.problems.append(st['trip'] + _stopped_text(_stop_ours(manager, serial)))
+        res.problems.append(st['trip'] + _stopped_text(_stop_ours(manager, serial, name)))
         res.consistent = False
         return
     if not st['started']:
-        stopped = _stop_ours(manager, serial)   # best effort: ours may still start after we gave up on it
+        stopped = _stop_ours(manager, serial, name)   # best effort: ours may still start after we gave up on it
         res.problems.append(f"the printer did not start the calibration job within {JOB_TIMEOUT:.0f} s"
                             + ("" if stopped is None else _stopped_text(stopped)))
         return
     if st['final'] is None:
         res.problems.append(f"the calibration job did not finish within {JOB_TIMEOUT:.0f} s"
-                            + _stopped_text(_stop_ours(manager, serial)))
+                            + _stopped_text(_stop_ours(manager, serial, name)))
         return
     if st['final'] != 'FINISH':
         res.problems.append(f"the calibration job ended as {st['final']} on the printer")
@@ -600,44 +610,23 @@ def _delete(printer: registry.Printer, path: str, res: CalibResult) -> None:
         res.problems.append(f"could not delete {path}: {type(e).__name__}")
 
 
-def _restore(manager, serial: str, slotmap: SlotMap, trays0: dict, res: CalibResult) -> None:
-    """Put back every loaded slot whose settings differ from the snapshot; verify from the next report."""
+def _check_slots(manager, serial: str, slotmap: SlotMap, trays0: dict, res: CalibResult) -> None:
+    """After the job: compare every loaded slot with the snapshot and report one that changed meanwhile. The
+    calibration writes no slot, so a change was made by someone else (another print, Studio, the touchscreen, an
+    RFID read): it is left as is and never written, and `restored` stays true (we changed nothing)."""
     try:
-        now = _trays(manager.wait_report(serial, lambda r: True, SNAPSHOT_TIMEOUT) or {})
+        r = manager.wait_report(serial, lambda r: True, SNAPSHOT_TIMEOUT)
     except Exception:
-        now = {}
-    pending: list[tuple[str, tuple[int, int], dict]] = []
+        r = None
+    if r is None:
+        res.problems.append("could not check the slots after the calibration (no report); nothing was written "
+                            "to them")
+        return
+    now = _trays(r)
     for label, slot in slotmap.slots.items():
         key = _key(slot)
         t0 = trays0.get(key) if key else None
-        if not _loaded(t0) or (key in now and _same(t0, now[key])):
-            continue
-        try:
-            reply = manager.set_slot(serial, key[0], key[1], _setting(t0))
-        except Exception as e:
-            res.restored = False
-            res.problems.append(f"{label}: could not restore the slot ({type(e).__name__})")
-            continue
-        if reply is not None and not _ok(reply):
-            res.restored = False
-            res.problems.append(f"{label}: the printer refused to restore the slot")
-            continue
-        pending.append((label, key, t0))
-    if not pending:
-        return
-    last: dict = {}
-
-    def restored(r: dict) -> bool:
-        last['trays'] = _trays(r)
-        return all(_same(t0, last['trays'].get(key)) for _, key, t0 in pending)
-
-    try:
-        ok = manager.wait_report(serial, restored, RESTORE_TIMEOUT) is not None
-    except Exception:
-        ok = False
-    if not ok:
-        seen = last.get('trays', {})
-        for label, key, t0 in pending:
-            if not _same(t0, seen.get(key)):
-                res.restored = False
-                res.problems.append(f"{label}: restore not confirmed by the printer")
+        if _loaded(t0) and not _same(t0, now.get(key)):
+            log.info("printer %s: slot %s changed during the calibration (not by us); left as is", serial, label)
+            res.problems.append(f"{label}: its setting changed on the printer during the calibration (not by "
+                                f"filament-kit); left as is")
