@@ -117,7 +117,7 @@ install -m 755 "$RES/filament-kit-cli.sh" /usr/local/bin/filament-kit
 # Units, the avahi file and the Spoolman script: `modules apply` installs them from here.
 rm -rf "$OPT/resources"
 install -d -m 755 "$OPT/resources"
-cp -R "$RES/systemd" "$RES/avahi" "$OPT/resources/"
+cp -R "$RES/systemd" "$RES/avahi" "$RES/remote" "$OPT/resources/"
 install -m 755 "$RES/spoolman.sh" "$OPT/resources/spoolman.sh"
 if [ -f "$HERE/app/filament-kit.apk" ]; then
     install -d -m 755 "$OPT/app"
