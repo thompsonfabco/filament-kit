@@ -66,6 +66,8 @@ done
 
 install -d -m 750 -o spoolman -g spoolman "$SPOOLMAN_DATA"
 install -d -m 750 -o filament-kit -g filament-kit "$STATE"
+# presets (live upload, builds), the updated library, and local library additions
+install -d -m 750 -o filament-kit -g filament-kit "$STATE/profiles" "$STATE/library" "$STATE/library-local"
 # setgid: files the CLI later writes here as root (config.json, key) keep the
 # filament-kit group, so the service can still read them.
 install -d -m 2750 -o root -g filament-kit "$ETC"
@@ -203,6 +205,10 @@ install -m 644 "$RES/systemd/spoolman.service" /etc/systemd/system/spoolman.serv
 install -m 644 "$RES/systemd/filament-kit.service" /etc/systemd/system/filament-kit.service
 install -m 644 "$RES/systemd/filament-kit-backup.service" /etc/systemd/system/filament-kit-backup.service
 install -m 644 "$RES/systemd/filament-kit-backup.timer" /etc/systemd/system/filament-kit-backup.timer
+install -m 644 "$RES/systemd/filament-kit-library.service" /etc/systemd/system/filament-kit-library.service
+install -m 644 "$RES/systemd/filament-kit-library.timer" /etc/systemd/system/filament-kit-library.timer
+install -m 644 "$RES/systemd/filament-kit-build.service" /etc/systemd/system/filament-kit-build.service
+install -m 644 "$RES/systemd/filament-kit-build.path" /etc/systemd/system/filament-kit-build.path
 port=$("$VENV/bin/python" -I -c 'from filament_kit import config; print(int(config.load()["port"]))')
 sed "s|<port>8710</port>|<port>$port</port>|" "$RES/avahi/filament-kit.service" > /etc/avahi/services/filament-kit.service
 chmod 644 /etc/avahi/services/filament-kit.service
@@ -224,9 +230,11 @@ done
 [ "$ok" -eq 1 ] || die "Spoolman did not answer on port 7912; see: journalctl -u spoolman"
 
 /usr/local/bin/filament-kit ensure-fields
-systemctl enable filament-kit filament-kit-backup.timer
+systemctl enable filament-kit filament-kit-backup.timer filament-kit-library.timer filament-kit-build.path
 systemctl restart filament-kit
-systemctl start filament-kit-backup.timer
+systemctl start filament-kit-backup.timer filament-kit-library.timer
+# restart, not start: an upgrade re-reads the path unit
+systemctl restart filament-kit-build.path
 
 # ---------- 8. check and pair ----------
 say "Waiting for filament-kit to start"
@@ -236,6 +244,11 @@ for _ in $(seq 1 30); do
     fi
     sleep 1
 done
+
+# One build now, so presets exist without waiting for a rebuild request. Before the PC sync has uploaded
+# the Bambu Studio presets this only prints what to do next; it never stops the install.
+say "Building presets"
+/usr/local/bin/filament-kit profiles build || true
 
 say "Status"
 /usr/local/bin/filament-kit status || echo "Some checks failed; follow the 'fix:' lines above."
