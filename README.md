@@ -147,7 +147,9 @@ printer.
   mapping says so: set the filament of any slot showing such a red again (on the printer or in Bambu Studio),
   then delete the file and map again.
 - The calibration job is stopped at once if the printer starts heating or loading a filament, and a filament
-  left loaded in the toolhead afterwards is reported.
+  left loaded in the toolhead afterwards is reported. Only the calibration job itself is ever stopped: if
+  someone starts another print meanwhile (touchscreen or Bambu Studio), mapping gives up on the calibration and
+  leaves that print alone.
 - Loading a spool and mapping never run at the same time on one printer; the second one is refused with "try
   again".
 
