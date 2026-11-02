@@ -485,3 +485,17 @@ def test_nil_edit_the_build_carried_is_not_late(tmp_path):
     _manifest(build2, inapp={"A": {"nozzle_temperature": ["225", "nil"]}})
     with pytest.raises(installer.Refused):
         env.install(build2)
+
+
+# --- final review minor: suffixes match case-insensitively (as the server) -----------------------------
+
+def test_upper_case_suffixes_count(tmp_path):
+    env = Env(tmp_path, live={"B": (_preset("B"), _info())})
+    (env.live / "A.JSON").write_text(json.dumps(_preset("A")), encoding="utf-8")
+    env.snapshot({"A": _preset("A"), "B": _preset("B")})
+    assert installer._names(env.live) == ["A", "B"]
+    sysp = {"name": "Generic PLA @BBL H2D", "filament_start_gcode": SYS_GCODE}
+    (env.folders.system_filament / "Generic PLA upper.JSON").write_text(json.dumps(sysp), encoding="utf-8")
+    assert installer._key(SYS_GCODE) in installer.trusted_gcode(env.folders.system_filament)
+    res = env.install(env.build({"B": _preset("B", filament_start_gcode=SYS_GCODE)}))
+    assert res.stale == ["A"]                         # still in the app, no longer built

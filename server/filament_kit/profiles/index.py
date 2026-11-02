@@ -108,7 +108,7 @@ def preset_for(filament: dict, model: str, nozzle_mm: float) -> PresetRef | None
     lo, hi = _int(row.get("nozzle_temp_min")), _int(row.get("nozzle_temp_max"))
     if not (isinstance(fid, str) and generate.ID_RE.fullmatch(fid)):
         return None
-    if not (isinstance(name, str) and name.strip() and not generate.BAD_NAME.search(name)) or name in (".", ".."):
+    if not generate.safe_name(name):
         return None
     if lo is None or hi is None or not (isinstance(ftype, str) and ftype):
         return None
