@@ -18,6 +18,7 @@ from __future__ import annotations
 import datetime
 import json
 import logging
+import math
 from dataclasses import dataclass, field
 
 from . import config, library, locks, placement, tags
@@ -85,7 +86,8 @@ def _is_int(v) -> bool:
 
 
 def _is_num(v) -> bool:
-    return isinstance(v, (int, float)) and not isinstance(v, bool)
+    """A real, finite number (not a bool; NaN and infinity would slip past every < and > check)."""
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
 
 
 _OPT_NUM = ("nozzle", "bed", "price_per_kg", "gross")
