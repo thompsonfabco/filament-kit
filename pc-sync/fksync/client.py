@@ -16,6 +16,7 @@ import socket
 import ssl
 import urllib.parse
 from dataclasses import dataclass, field
+from typing import Callable
 
 DEFAULT_PORT = 8710
 _FP = re.compile(r"^[0-9a-fA-F]{64}$")
@@ -101,14 +102,20 @@ def leaf_fingerprint(sock: ssl.SSLSocket) -> str:
     return hashlib.sha256(der or b"").hexdigest()
 
 
-def fetch_fingerprint(host: str, port: int, timeout: float = 10) -> str:
-    """The fingerprint of the certificate host:port presents (TLS handshake only; nothing is sent)."""
+def fetch_peer(host: str, port: int, timeout: float = 10) -> tuple[str, str]:
+    """(fingerprint, IP actually connected to) for host:port (TLS handshake only; nothing is sent)."""
     try:
         with socket.create_connection((host, port), timeout=timeout) as raw:
+            ip = raw.getpeername()[0]
             with _context().wrap_socket(raw, server_hostname=host) as tls:
-                return leaf_fingerprint(tls)
+                return leaf_fingerprint(tls), ip
     except (OSError, ssl.SSLError) as e:
         raise Offline(f"could not reach {host}:{port} ({e})") from None
+
+
+def fetch_fingerprint(host: str, port: int, timeout: float = 10) -> str:
+    """The fingerprint of the certificate host:port presents (TLS handshake only; nothing is sent)."""
+    return fetch_peer(host, port, timeout)[0]
 
 
 class _Mismatch(Exception):
@@ -131,7 +138,8 @@ class _PinnedConnection(http.client.HTTPSConnection):
 
 
 class Client:
-    def __init__(self, cfg: dict, token: str | None, timeout: float = 60):
+    def __init__(self, cfg: dict, token: str | None, timeout: float = 60,
+                 log: Callable[[str], None] | None = None):
         self.host = cfg["host"]
         self.port = int(cfg.get("port") or DEFAULT_PORT)
         self.fp = str(cfg["fp"]).lower()
@@ -141,6 +149,7 @@ class Client:
         self._token = token
         self.timeout = timeout
         self._good: str | None = None
+        self._log = log
 
     def __repr__(self):  # never show the token
         return f"Client({self.host}:{self.port})"
@@ -154,13 +163,14 @@ class Client:
 
     def _request(self, method: str, path: str, body: bytes | None = None, ctype: str | None = None,
                  *, raw: bool = False, auth: bool = True):
-        mismatch, offline = None, []
+        mismatch, mismatched, offline = None, [], []
         for addr in self._addresses():
             conn = _PinnedConnection(addr, self.port, self.fp, self.timeout)
             try:
                 conn.connect()
             except _Mismatch as e:
                 mismatch = mismatch or e.actual
+                mismatched.append(addr)
                 conn.close()
                 continue
             except (OSError, ssl.SSLError) as e:
@@ -182,6 +192,9 @@ class Client:
             finally:
                 conn.close()
             self._good = addr
+            if mismatched and self._log:
+                for bad in mismatched:
+                    self._log(f"certificate mismatch on {bad}, using {addr}")
             return self._result(status, data, raw)
         if mismatch:
             raise CertChanged(self.fp, mismatch)

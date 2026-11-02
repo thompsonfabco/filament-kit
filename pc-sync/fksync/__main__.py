@@ -99,7 +99,7 @@ def cmd_pair(dirs: store.AppDirs) -> int:
         _out(f"That address does not work: {e}.")
         return 1
     try:
-        fp = client.fetch_fingerprint(host, port)
+        fp, ip = client.fetch_peer(host, port)
     except client.Offline as e:
         _out(f"Could not reach the server: {e}")
         return 1
@@ -112,7 +112,7 @@ def cmd_pair(dirs: store.AppDirs) -> int:
     if not re.fullmatch(r"[0-9]{6}", code):
         _out("The code is the 6 digits shown by 'sudo filament-kit pair'. Not paired.")
         return 1
-    cfg = {"host": host, "port": port, "fp": fp, "ips": []}
+    cfg = {"host": host, "port": port, "fp": fp, "ips": [ip]}  # the IP connected to: fallback if the name stops resolving
     try:
         token = client.Client(cfg, None, timeout=20).pair(code)
     except client.ApiError as e:
@@ -138,7 +138,7 @@ def cmd_run(dirs: store.AppDirs, appdata: Path, quiet: bool) -> int:
                         echo(f"This PC is not paired; run '{APP} pair'.")
                     return 1
                 folders = studio.locate(appdata, cfg)
-                c = client.Client(cfg, token)
+                c = client.Client(cfg, token, log=lambda m: store.log(dirs, m))
                 outcome = sync.run_once(c, folders, dirs, running=studio.running, now=time.time(), echo=echo)
             except studio.NotFound as e:
                 return _fail(dirs, echo, e.message)
@@ -146,7 +146,12 @@ def cmd_run(dirs: store.AppDirs, appdata: Path, quiet: bool) -> int:
                 if e.status == 401:
                     return _fail(dirs, echo, f"the server no longer accepts this PC (unpaired?); run '{APP} pair'")
                 return _fail(dirs, echo, str(e))
-            except (client.Offline, client.CertChanged) as e:
+            except client.Offline as e:  # the PC is away from home, the server is off: try next run
+                store.log(dirs, f"warning: {e}")
+                if echo:
+                    echo(f"warning: {e}")
+                return 0
+            except client.CertChanged as e:
                 return _fail(dirs, echo, str(e))
             except Exception as e:  # noqa: BLE001 - the scheduled task logs it and retries next run
                 return _fail(dirs, echo, f"{type(e).__name__}: {e}")

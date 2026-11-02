@@ -1,3 +1,4 @@
+import hashlib
 import io
 import json
 import zipfile
@@ -32,6 +33,7 @@ class FakeClient:
         self.zip = build_zip
         self.calls = []
         self.fail = {}
+        self.hash_override = {}
 
     def _maybe_fail(self, name):
         exc = self.fail.get(name)
@@ -48,7 +50,10 @@ class FakeClient:
         self._maybe_fail("upload")
         with zipfile.ZipFile(io.BytesIO(data)) as zf:
             names = zf.namelist()
-        self.st[f"{kind}_hash"] = f"uploaded:{len(names)}"
+            h = hashlib.sha256()
+            for n in sorted(names):
+                h.update(n.encode() + b"\0" + hashlib.sha256(zf.read(n)).digest())
+        self.st[f"{kind}_hash"] = self.hash_override.get(kind) or h.hexdigest()
         self.uploaded = getattr(self, "uploaded", {})
         self.uploaded[kind] = names
         return {f"{kind}_hash": self.st[f"{kind}_hash"]}
@@ -180,7 +185,7 @@ def test_backup_stamp_sorts_by_time(env, monkeypatch):
     folders, dirs = env
     seen = []
 
-    def fake_install(build_dir, folders, dirs, *, running, stamp_now):
+    def fake_install(build_dir, folders, dirs, *, running, stamp_now, before_write=None):
         seen.append(stamp_now)
         raise installer.Refused("nope")
 
@@ -195,7 +200,7 @@ def test_stale_presets_logged_one_line(env):
     folders, dirs = env
     live = _hashes(folders)[0]
 
-    def fake_install(build_dir, folders, dirs, *, running, stamp_now):
+    def fake_install(build_dir, folders, dirs, *, running, stamp_now, before_write=None):
         return installer.InstallResult(installed=["X"], stale=["Old A", "Old B"], backup=dirs.backups / "b")
 
     c = FakeClient(_synced_state(folders, build={"stamp": STAMP, "live_hash": live}), _build_zip(live_hash=live))
@@ -211,7 +216,7 @@ def test_refused(env, code, outcome):
     folders, dirs = env
     live = _hashes(folders)[0]
 
-    def fake_install(build_dir, folders, dirs, *, running, stamp_now):
+    def fake_install(build_dir, folders, dirs, *, running, stamp_now, before_write=None):
         raise installer.Refused(f"because reason-{code}", code)
 
     c = FakeClient(_synced_state(folders, build={"stamp": STAMP, "live_hash": live}), _build_zip(live_hash=live))
@@ -248,11 +253,12 @@ def test_unexpected_install_oserror_propagates_then_next_run_finishes(env):
     live = _hashes(folders)[0]
     calls = []
 
-    def crashing_install(build_dir, folders, dirs, *, running, stamp_now):
+    def crashing_install(build_dir, folders, dirs, *, running, stamp_now, before_write=None):
         calls.append(build_dir)
+        before_write(installer._backup(folders.user_filament, dirs.backups, stamp_now))
         # one preset written, then the disk fails before the snapshot swap
-        (folders.user_filament / "base" / "Acme PLA @BBL H2D.json").write_text(
-            (build_dir / "base" / "Acme PLA @BBL H2D.json").read_text(encoding="utf-8"), encoding="utf-8")
+        (folders.user_filament / "base" / "Acme PLA @BBL H2D.json").write_bytes(
+            (build_dir / "base" / "Acme PLA @BBL H2D.json").read_bytes())
         raise OSError("disk full")
 
     c = FakeClient(_synced_state(folders, build={"stamp": STAMP, "live_hash": live}), _build_zip(live_hash=live))
@@ -297,3 +303,97 @@ def test_too_large_upload_is_refused_before_sending(env, monkeypatch):
         _run(c, folders, dirs)
     assert "too large" in str(ei.value)
     assert not [x for x in c.calls if x[0] == "upload"]
+
+
+def test_resume_refused_when_a_new_preset_was_edited_after_the_crash(env):
+    folders, dirs = env
+    live = _hashes(folders)[0]
+    new_name = "Acme PETG @BBL H2D"
+    presets = {"Acme PLA @BBL H2D": dict(PRESET, nozzle_temperature=["220"]),
+               new_name: dict(PRESET, name=new_name, filament_type=["PETG"], filament_id="P7654321")}
+
+    def crashing_install(build_dir, folders, dirs, *, running, stamp_now, before_write=None):
+        before_write(installer._backup(folders.user_filament, dirs.backups, stamp_now))
+        # the preset that is new in this build is written, then the disk fails
+        (folders.user_filament / "base" / f"{new_name}.json").write_bytes(
+            (build_dir / "base" / f"{new_name}.json").read_bytes())
+        raise OSError("disk full")
+
+    c = FakeClient(_synced_state(folders, build={"stamp": STAMP, "live_hash": live}),
+                   _build_zip(live_hash=live, presets=presets))
+    with pytest.raises(OSError):
+        _run(c, folders, dirs, install=crashing_install)
+    marker = json.loads(sync.marker_path(dirs).read_text())
+    assert marker["stamp"] == STAMP and (dirs.backups / marker["backup"]).is_dir()
+    # edited in Bambu Studio before the next run
+    target = folders.user_filament / "base" / f"{new_name}.json"
+    edited = dict(presets[new_name], nozzle_temperature=["245"])
+    target.write_text(json.dumps(edited), encoding="utf-8")
+    c.calls.clear()
+    assert _run(c, folders, dirs, now=T0 + 600) == "rebuild_requested"
+    assert json.loads(target.read_text(encoding="utf-8")) == edited
+    assert not sync.marker_path(dirs).exists()
+    here = _hashes(folders)[0]
+    assert ("upload", "live", folders.user_id) in c.calls and ("rebuild", here) in c.calls
+    assert not [x for x in c.calls if x[0] == "installed"]
+    assert "edited" in _log(dirs)
+
+
+def test_rejected_upload_backs_off_6h_for_the_same_hash(env):
+    folders, dirs = env
+    st = _synced_state(folders)
+    st["live_hash"] = None
+    c = FakeClient(st)
+    c.fail["upload"] = client.ApiError(413, "too_large", "live zip over 32 MiB")
+    assert _run(c, folders, dirs) == "no_build"
+    rec = json.loads(dirs.state.read_text())["rejected"]["live"]
+    assert rec == {"kind": "live", "hash": _hashes(folders)[0], "at": T0,
+                   "error": "413 too_large: live zip over 32 MiB"}
+    assert "413" in _log(dirs)
+
+    def n():
+        return len([x for x in c.calls if x[0] == "upload"])
+
+    assert n() == 1
+    _run(c, folders, dirs, now=T0 + 3600)
+    assert n() == 1                                   # same hash, within 6 h: not sent again
+    _run(c, folders, dirs, now=T0 + sync.UPLOAD_BACKOFF + 1)
+    assert n() == 2                                   # after 6 h: tried again
+    # a changed folder is tried at once
+    (folders.user_filament / "base" / "Extra.json").write_text("{}", encoding="utf-8")
+    _run(c, folders, dirs, now=T0 + sync.UPLOAD_BACKOFF + 60)
+    assert n() == 3
+    c.fail.clear()
+    (folders.user_filament / "base" / "Extra2.json").write_text("{}", encoding="utf-8")
+    _run(c, folders, dirs, now=T0 + sync.UPLOAD_BACKOFF + 120)
+    assert n() == 4
+    assert "live" not in json.loads(dirs.state.read_text()).get("rejected", {})
+
+
+def test_upload_backoff_is_6_hours():
+    assert sync.UPLOAD_BACKOFF == 6 * 3600
+
+
+def test_server_hash_differs_logged_once_not_reuploaded_and_accepted(env):
+    folders, dirs = env
+    st = _synced_state(folders)
+    st["live_hash"] = None
+    c = FakeClient(st)
+    c.hash_override["live"] = "f" * 64
+    _run(c, folders, dirs)
+    _run(c, folders, dirs, now=T0 + 60)
+    assert len([x for x in c.calls if x == ("upload", "live", folders.user_id)]) == 1
+    assert len([ln for ln in _log(dirs).splitlines() if "differs" in ln]) == 1
+    # a build the server made from that upload is installable
+    c.st["build"] = {"stamp": STAMP, "live_hash": "f" * 64}
+    c.zip = _build_zip(live_hash="f" * 64)
+    assert _run(c, folders, dirs, now=T0 + 120) == "installed"
+
+
+def test_other_owner_short_circuits_before_sending(env):
+    folders, dirs = env
+    st = _synced_state(folders)
+    st.update(owner="other-pc", you="dev1", live_hash=None)
+    c = FakeClient(st)
+    assert _run(c, folders, dirs) == "other_pc"
+    assert c.calls == [("state",)]
