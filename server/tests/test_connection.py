@@ -486,3 +486,29 @@ def test_publish_offline_or_unknown_raises(manager, clients):
         manager.set_slot("S1", 0, 0, SETTING)
     with pytest.raises(UnknownPrinter):
         manager.publish("S9", {"print": {"command": "x"}})
+
+
+# ---------------------------------------------------------------- M2 / M5 (final review)
+
+def test_status_join_uses_the_serial_for_an_unnamed_printer(clients):
+    class FakeSpoolman:
+        def get(self, path):
+            return [{"id": 7, "location": "S1 – AMS A1", "remaining_weight": 100,
+                     "filament": {"name": "Red", "material": "PLA", "vendor": {"name": "Acme"}}}]
+
+    m = Manager(client_factory=lambda cid: clients.append(FakeClient(cid)) or clients[-1], spoolman=FakeSpoolman())
+    try:
+        add(name="")
+        m.sync()
+        clients[0].connected(0)
+        clients[0].deliver(json.loads((DATA / "h2d_pushall.json").read_text()))
+        assert m.status("S1")["ams"][0]["slots"][0]["spool"]["id"] == 7
+    finally:
+        m.stop()
+
+
+def test_sequence_ids_start_at_a_random_value(monkeypatch):
+    seen = []
+    monkeypatch.setattr(connection.secrets, "randbelow", lambda n: seen.append(n) or 4242)
+    conn = connection.PrinterConnection(Printer("S1", "x", "O1D", "10.0.0.5", CODE, True), FakeClient)
+    assert next(conn._seq) == 4242 and seen and seen[0] >= 10 ** 6

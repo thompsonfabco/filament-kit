@@ -29,6 +29,14 @@ class PrinterBusy(Exception):
     """The printer is running, paused, preparing or slicing a job (the gcode_state is the message)."""
 
 
+class NoStatus(PrinterOffline):
+    """Connected, but the printer has not reported its `gcode_state` yet: not known to be idle."""
+
+    def __init__(self, serial: str):
+        super().__init__("no status from the printer yet; try again in a few seconds")
+        self.serial = serial
+
+
 @dataclass
 class SlotTestResult:
     confirmed: dict[str, dict] = field(default_factory=dict)   # label -> {ams_id, tray_id}
@@ -46,10 +54,13 @@ class _Target:
 
 
 def check_idle(manager, serial: str) -> None:
-    """Raise PrinterOffline / PrinterBusy unless the printer may be changed now."""
+    """Raise PrinterOffline (NoStatus: no `gcode_state` reported yet) / PrinterBusy unless the printer may be
+    changed now."""
     if manager.state(serial) not in ONLINE:
         raise PrinterOffline(serial)
-    gs = manager.summary(serial)['gcode_state']
+    gs = manager.summary(serial).get('gcode_state')
+    if not isinstance(gs, str) or gs in ('', 'UNKNOWN'):
+        raise NoStatus(serial)
     if gs in status.ACTIVE:
         raise PrinterBusy(gs)
 

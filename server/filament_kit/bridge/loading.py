@@ -231,7 +231,7 @@ def load(manager, sm, serial: str, label: str, spool_id, dry: bool, *, preset_fo
     """Load spool `spool_id` into slot `label` of printer `serial` (see the module docstring)."""
     preset_for = preset_for or profiles.preset_for
     p = _printer(serial)
-    name = p.name or p.serial
+    name = registry.display_name(p)
     spool = _spool(sm, spool_id)
     slottest.check_idle(manager, serial)
     report = manager.wait_report(serial, lambda r: True, 0)
@@ -292,7 +292,7 @@ def load(manager, sm, serial: str, label: str, spool_id, dry: bool, *, preset_fo
 def unload(manager, sm, serial: str, label: str, dry: bool, *, sealed_location: str = SEALED) -> dict:
     """Take the spool(s) in slot `label` of printer `serial` back to their previous location, in Spoolman only."""
     p = _printer(serial)
-    name = p.name or p.serial
+    name = registry.display_name(p)
     loc = status.location(name, label)
     report = manager.wait_report(serial, lambda r: True, 0) if manager is not None else None
     addr = _address(serial, report or {}, label)

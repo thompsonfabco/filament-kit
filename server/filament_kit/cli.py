@@ -458,7 +458,7 @@ def cmd_printer_map(serial: str, manager_factory) -> int:
     if p is None or not p.configured:
         _err_line(f"no printer {serial} is set up (see: sudo filament-kit config, Printers)")
         return 1
-    print(f"Mapping the slots of {p.name or serial}. Each slot's colour changes briefly and the printer runs a "
+    print(f"Mapping the slots of {registry.display_name(p)}. Each slot's colour changes briefly and the printer runs a "
           f"job with no heating and no motion.")
     m = manager_factory(serial)
     stopped = []
@@ -484,8 +484,10 @@ def cmd_printer_map(serial: str, manager_factory) -> int:
             _err_line("slot mapping is already running for this printer")
             return 1
         except mapping.CertChanged:
-            _err_line("the printer's certificate changed; add it again with its Access Code "
-                      "(or, if you trust the new one, run: sudo filament-kit printer unpin " + serial + ")")
+            _err_line("the printer's certificate changed. If you reset the printer or its mainboard was replaced, "
+                      "add it again with its Access Code (or run: sudo filament-kit printer unpin " + serial + "). "
+                      "If not, something else may be answering at the printer's address: check the printer's IP "
+                      "before re-adding")
             return 1
         except PrinterBusy as e:
             _err_line(f"the printer is busy ({e}); try again once it is idle")

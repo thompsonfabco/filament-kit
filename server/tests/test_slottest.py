@@ -310,3 +310,16 @@ def test_busy_abort_still_restores_a_slot_hit_by_a_misaddressed_write(rig):
     assert res.restored is True
     assert no_test_colour_left(printer)
     assert_back_to_original(printer)
+
+
+def test_check_idle_needs_a_status_from_the_printer():
+    """M1: a connected printer that has not reported its gcode_state yet is not idle."""
+    class M:
+        def state(self, serial):
+            return "connected"
+
+        def summary(self, serial):
+            return {"gcode_state": "UNKNOWN", "percent": 0, "remaining_min": 0, "job": None}
+    with pytest.raises(slottest.NoStatus) as e:
+        slottest.check_idle(M(), SERIAL)
+    assert isinstance(e.value, PrinterOffline) and "no status from the printer yet" in str(e.value)

@@ -85,7 +85,9 @@ class CertChangedError(CameraError):
     status, code = 409, "cert_changed"
 
 
-CERT_CHANGED = "The printer's certificate changed — add it again with its Access Code"
+CERT_CHANGED = ("The printer's certificate changed. If you reset the printer or its mainboard was replaced, add it "
+                "again with its Access Code. If not, something else may be answering at the printer's address — "
+                "check the printer's IP before re-adding.")
 
 
 # ---------------------------------------------------------------- RTSPS relay (X1 / H2 / X2 / P2S)

@@ -454,7 +454,7 @@ def settle(serial: str, job: dict, pct: float, spoolman) -> list[dict]:
         label = None
         if g is not None and g >= 0:
             label = labels.get(g) if smap.calibrated else _guess_label(g)
-        here = spools.get(status.location(p.name, label), []) if label else []
+        here = spools.get(status.location(registry.display_name(p), label), []) if label else []
         spool = here[0] if len(here) == 1 else None
         entry = {'job': name, 'grams': grams, 'spool_id': spool.get('id') if spool else None, 'slot': label,
                  'observe': observe}

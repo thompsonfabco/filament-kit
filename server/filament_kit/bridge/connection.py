@@ -41,6 +41,7 @@ AUTH_REFUSED = {4, 5, 134, 135}  # CONNACK bad user/password, not authorized (MQ
 DEVELOPER_MODE_REASON = re.compile(r'verify|auth|permission|denied|developer', re.I)
 DEVELOPER_MODE_ERR_CODES = {84033543}   # Bambu: "mqtt message verify failed" (LAN-only without Developer Mode)
 ACTIONS = ('pause', 'resume', 'stop', 'light_on', 'light_off')
+SEQ_RANGE = 1_000_000_000        # sequence ids start at a random number below this
 STICKY = ('wrong_code', 'cert_changed')   # states only a new code / re-add clears; a drop does not reset them
 
 
@@ -97,7 +98,7 @@ class PrinterConnection:
     def __init__(self, printer: registry.Printer, client_factory: Callable, port: int = PORT,
                  listeners: list[Callable] | None = None):
         self.serial = printer.serial
-        self.name = printer.name
+        self.name = registry.display_name(printer)
         self.ip = printer.ip
         self._code = printer.access_code
         self._printer = replace(printer)     # own copy: tlspin records the pin on it
@@ -111,7 +112,8 @@ class PrinterConnection:
         self._developer_mode_needed = False
         self._settled = threading.Event()
         self._pending: dict[str, _Waiter] = {}
-        self._seq = itertools.count(int(time.time()) % 100000)
+        # a random start, so two sessions (the service and `printer map`) never reuse each other's sequence ids
+        self._seq = itertools.count(secrets.randbelow(SEQ_RANGE))
         self._stopping = False
         self._fresh = False          # no report with `gcode_state` seen yet since the last connect
         self._listeners = listeners if listeners is not None else []
@@ -439,7 +441,7 @@ class Manager:
                     stale.append(conn)
                     del self._conns[serial]
                 else:
-                    conn.name = p.name
+                    conn.name = registry.display_name(p)
             for serial, p in printers.items():
                 if serial not in self._conns and self._usable(p):
                     conn = PrinterConnection(p, self._factory, self.port, self._listeners)
