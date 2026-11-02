@@ -267,7 +267,11 @@ def auth_settings(public_url: str) -> AuthSettings:
 # ---------- passphrase + lockout ----------
 
 def hash_passphrase(text: str) -> str:
-    """'salt_hex digest_hex', salted scrypt (the format ops set_passphrase.py writes)."""
+    """'salt_hex digest_hex', salted scrypt (the format ops set_passphrase.py writes). ValueError for a passphrase
+    shorter than MIN_PASSPHRASE characters: the login form faces the LAN, and five guesses per ten minutes only
+    hold against a passphrase worth guessing."""
+    if len(text or "") < MIN_PASSPHRASE:
+        raise ValueError(f"the passphrase must be at least {MIN_PASSPHRASE} characters")
     salt = secrets.token_bytes(16)
     return f"{salt.hex()} {hashlib.scrypt(text.encode(), salt=salt, **SCRYPT).hex()}"
 
@@ -343,11 +347,11 @@ def lan_only(app: Any, lan_cidrs: Iterable[str]) -> Any:
 
 
 def login_routes(store: Store, public_url: str, passphrase_file: Path | str, *, lan_cidrs: Iterable[str] = (),
-                 lockout: Lockout | None = None) -> list[Route]:
+                 lockout: Lockout) -> list[Route]:
     """The /login page that turns a pending /authorize request into a code. It checks the LAN itself too (with no
-    lan_cidrs only loopback counts as home). Pass the web app's Lockout so both forms share one failure count."""
+    lan_cidrs only loopback counts as home). `lockout` is the web app's own Lockout, so both forms share one
+    failure count (required: a private count per form would double the guesses)."""
     nets, origin = parse_lan(lan_cidrs), _origin(public_url)
-    lockout = lockout if lockout is not None else Lockout()
 
     async def login(request: Request) -> Response:
         if not is_lan(request.client.host if request.client else "", nets):

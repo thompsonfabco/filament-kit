@@ -729,6 +729,9 @@ def test_open_spool_gross_and_remaining_conflict_and_negative(sm):
     for bad in (True, "40", 101):
         with pytest.raises(ValueError):
             inventory.open_spool(sm, s["id"], UID, RULES, humidity=bad, dry=False)
+    for bad in (True, "600", [1]):                          # remaining must be a number too
+        with pytest.raises(ValueError, match="remaining"):
+            inventory.open_spool(sm, s["id"], UID, RULES, remaining=bad, dry=False)
     assert tags.stored(sm.get(f"spool/{s['id']}")) is None   # refused before linking
 
 
