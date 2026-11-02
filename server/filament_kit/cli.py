@@ -862,10 +862,17 @@ def cmd_modules_units() -> int:
     return 0
 
 
+def _require_root() -> bool:
+    """False (with a hint) when not root; checked before anything is saved."""
+    if not _no_systemd() and hasattr(os, "geteuid") and os.geteuid() != 0:
+        print("error: run as root: sudo filament-kit modules <command>", file=sys.stderr)
+        return False
+    return True
+
+
 def _run_apply(*, pairing: bool = True) -> int:
     """Plan, execute and finish for the saved config. `pairing` shows the QR code at the end."""
-    if not _no_systemd() and hasattr(os, "geteuid") and os.geteuid() != 0:
-        print("error: run as root: sudo filament-kit modules apply", file=sys.stderr)
+    if not _require_root():
         return 1
     cfg = config.load()
     try:
@@ -911,7 +918,8 @@ def _link_station(cfg: dict) -> None:
     st["url"] = "http://127.0.0.1:5003"
 
 
-def _change_module(cfg: dict, name: str, want_on: bool, *, confirm=None, ask_address=None) -> str | None:
+def _change_module(cfg: dict, name: str, want_on: bool, *, confirm=None, ask_address=None,
+                   server: str | None = None) -> str | None:
     """Turn `name` on/off in `cfg` (in place). Returns an error text, or None when changed.
 
     `confirm(text) -> bool` is asked before dependents go off too (None: refuse).
@@ -937,7 +945,9 @@ def _change_module(cfg: dict, name: str, want_on: bool, *, confirm=None, ask_add
     if want_on and name == "station":
         if "server" in on:
             _link_station(new)
-        elif ask_address is not None:
+        elif server:
+            new.setdefault("station", {})["allow"] = [server]
+        elif _server_addr_missing(new) and ask_address is not None:
             addr = ask_address()
             if addr is None:
                 return "station needs the server's address; unchanged"
@@ -949,6 +959,12 @@ def _change_module(cfg: dict, name: str, want_on: bool, *, confirm=None, ask_add
     cfg.clear()
     cfg.update(new)
     return None
+
+
+def _server_addr_missing(cfg: dict) -> bool:
+    """True when station.allow holds only loopback (an existing real address is kept)."""
+    allow = (cfg.get("station") or {}).get("allow") or []
+    return not any(str(e).strip() not in ("127.0.0.1", "localhost", "::1") for e in allow)
 
 
 def _tty_confirm(text: str) -> bool:
@@ -972,9 +988,25 @@ def _save_and_apply(cfg: dict) -> int:
     return _run_apply(pairing=False)
 
 
-def cmd_modules_set(mode: str) -> int:
+def _server_addr_error(addr: str) -> str | None:
+    try:
+        modules.validate({"modules": {"station": True}, "station": {"allow": [addr]}})
+    except modules.ModuleError as e:
+        return str(e)
+    return None
+
+
+def cmd_modules_set(mode: str, server: str | None = None) -> int:
+    if not _require_root():
+        return 1
     try:
         cfg = modules.set_mode(config.load(), mode)
+        if server:
+            err = _server_addr_error(server)
+            if err:
+                raise modules.ModuleError(err)
+            if mode == "station":
+                cfg["station"]["allow"] = [server]
         modules.validate(cfg)
     except modules.ModuleError as e:
         print(f"error: {e}", file=sys.stderr)
@@ -982,9 +1014,16 @@ def cmd_modules_set(mode: str) -> int:
     return _save_and_apply(cfg)
 
 
-def cmd_modules_toggle(name: str, want_on: bool) -> int:
+def cmd_modules_toggle(name: str, want_on: bool, server: str | None = None) -> int:
+    if not _require_root():
+        return 1
     cfg = config.load()
-    err = _change_module(cfg, name, want_on, confirm=_tty_confirm)
+    if server:
+        err = _server_addr_error(server)
+        if err:
+            print(f"error: {err}", file=sys.stderr)
+            return 1
+    err = _change_module(cfg, name, want_on, confirm=_tty_confirm, server=server)
     if err:
         print(f"error: {err}", file=sys.stderr)
         return 1
@@ -1093,8 +1132,10 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
     mdsub.add_parser("list", help="show each module on/off and the mode")
     ms = mdsub.add_parser("set", help="switch to an install mode and apply (root)")
     ms.add_argument("mode", choices=list(modules.MODES))
+    ms.add_argument("--server", help="the kit server's name or IP (station mode)")
     me = mdsub.add_parser("enable", help="turn a module on and apply (root)")
     me.add_argument("name")
+    me.add_argument("--server", help="the kit server's name or IP (when enabling station without a server)")
     mx = mdsub.add_parser("disable", help="turn a module off and apply; its data is kept (root)")
     mx.add_argument("name")
     mdsub.add_parser("units", help="print every systemd unit of every module, one per line")
@@ -1138,8 +1179,9 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
         if args.modules_cmd == "list":
             return cmd_modules_list()
         if args.modules_cmd == "set":
-            return cmd_modules_set(args.mode)
+            return cmd_modules_set(args.mode, args.server)
         if args.modules_cmd in ("enable", "disable"):
-            return cmd_modules_toggle(args.name, args.modules_cmd == "enable")
+            return cmd_modules_toggle(args.name, args.modules_cmd == "enable",
+                                      getattr(args, "server", None))
         return cmd_modules_apply()
     return cmd_ensure_fields()

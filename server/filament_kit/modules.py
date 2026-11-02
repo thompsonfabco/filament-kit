@@ -122,7 +122,14 @@ def validate(cfg: dict) -> None:
             raise ModuleError(
                 "server without the spoolman module needs spoolman_url "
                 f"pointing at a remote Spoolman (got {url!r})")
-    for entry in (cfg.get("station") or {}).get("allow") or []:
+    allow = (cfg.get("station") or {}).get("allow") or []
+    for entry in allow:
         if _bad_allow(entry):
             raise ModuleError(
                 f"station.allow entry {entry!r} must be a single address or host name")
+    # A station without a local server answers the server's machine; loopback alone would answer nobody.
+    if "station" in on and "server" not in on:
+        if not any(str(e).strip() not in _LOCAL_HOSTS for e in allow):
+            raise ModuleError(
+                "station without the server module needs the server's address in station.allow; "
+                "fix: pass --server <name-or-IP> (modules set station --server X)")

@@ -81,3 +81,11 @@ def test_default_config_validates():
 def test_dependents():
     assert dependents("server", MODES["server"]) == ["ai_intake", "printers", "presets"]
     assert dependents("server", frozenset({"server"})) == []
+
+
+def test_station_without_server_needs_non_loopback_allow():
+    cfg = {"modules": {"station": True}, "station": {"allow": ["127.0.0.1"]}}
+    with pytest.raises(ModuleError, match="--server"):
+        validate(cfg)
+    cfg["station"]["allow"] = ["127.0.0.1", "192.0.2.10"]
+    validate(cfg)
