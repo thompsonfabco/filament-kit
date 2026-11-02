@@ -20,7 +20,7 @@ if [ "$PURGE" -eq 1 ]; then
     [ "$answer" = purge ] || { echo "Cancelled; nothing removed."; exit 1; }
 fi
 
-UNITS="filament-kit-backup.timer filament-kit-backup.service filament-kit.service spoolman.service"
+UNITS="filament-kit-build.path filament-kit-build.service filament-kit-library.timer filament-kit-library.service filament-kit-backup.timer filament-kit-backup.service filament-kit.service spoolman.service"
 for u in $UNITS; do
     systemctl disable --now "$u" 2>/dev/null || true
     rm -f "/etc/systemd/system/$u"

@@ -38,7 +38,8 @@ Checks on the host:
 
 ```
 sudo filament-kit status; echo "exit=$?"                     # every line OK, exit=0
-systemctl is-active spoolman filament-kit filament-kit-backup.timer   # active x3
+systemctl is-active spoolman filament-kit filament-kit-backup.timer filament-kit-library.timer filament-kit-build.path   # active x5
+systemctl list-timers filament-kit-backup.timer filament-kit-library.timer   # both listed, each with a NEXT time
 sudo sh -c 'stat -c "%U:%G %a %n" /etc/filament-kit /etc/filament-kit/* /var/lib/filament-kit /var/lib/spoolman'
 ```
 
@@ -50,6 +51,21 @@ The key must not appear anywhere it should not:
 
 ```
 sudo journalctl -b | grep -c sk-ant- ; history | grep -c sk-ant-      # both 0
+```
+
+### Library and presets
+
+```
+sudo filament-kit library update
+#   prints the library version; while the filament-library repo is private, a warning "using bundled version N"
+sudo systemctl start filament-kit-library.service; systemctl is-failed filament-kit-library.service
+#   "inactive" (not "failed"), also while the repo is private
+sudo filament-kit profiles build
+#   before any PC sync has uploaded: prints the "install and pair the PC sync" message, makes no build
+sudo sh -c 'stat -c "%U:%G %a %n" /var/lib/filament-kit/profiles /var/lib/filament-kit/library /var/lib/filament-kit/library-local'
+#   filament-kit:filament-kit 750 x3
+sudo -u filament-kit touch /var/lib/filament-kit/profiles/rebuild-request
+sleep 3; journalctl -u filament-kit-build.service -n 5 --no-pager   # the build service ran once
 ```
 
 ## 2. Network checks (from another machine on the LAN)
@@ -117,6 +133,7 @@ still answering `200`, and `/var/lib/filament-kit/devices.json` valid JSON
 sudo systemctl start filament-kit-backup.service
 sudo ls -l /var/backups/filament-kit                  # <today>.tar.gz
 sudo tar -tzf /var/backups/filament-kit/$(date +%F).tar.gz   # ./spoolman.db, etc/filament-kit/..., var/lib/filament-kit/...
+sudo tar -tzf /var/backups/filament-kit/$(date +%F).tar.gz | grep -cE 'profiles/live/system|library/versions|profiles/builds/[^/]*\.tmp'   # 0
 ```
 
 ## 5. Upgrade (re-run)
