@@ -419,6 +419,37 @@ def test_interrupted_install_values_are_not_inapp_edits(tmp_path, server, monkey
         assert pc.preset(n)["filament_density"] == ["1.35"], n            # the half-install's 1.31 is not "his"
 
 
+def test_failed_reupload_after_a_reported_install_is_sent_next_run(tmp_path, server, monkeypatch):
+    """S32 + round 3: the install is reported, the live re-upload fails; builds wait for the PC's next sync, which
+    sends the owed live upload, and the build then runs with no false in-app edits."""
+    _, sm = server
+    pc, _ = installed_first_build(tmp_path, server, monkeypatch)
+    _density(sm, 1.31)
+    builds.request_rebuild("spoolman changed")
+    b2 = build(sm)
+    real = pc.client.upload
+
+    def offline(*a, **kw):
+        raise fkclient.Offline("server unreachable (test)")
+    monkeypatch.setattr(pc.client, "upload", offline)
+    with pytest.raises(fkclient.Offline):
+        pc.run()
+    monkeypatch.setattr(pc.client, "upload", real)
+    assert pc.client.state()["installed"]["stamp"] == b2["stamp"]
+    _density(sm, 1.35)
+    builds.request_rebuild("spoolman changed")
+    r = builds.run_build(sm)
+    assert r["waiting"] is True and r["error"] == builds.WAIT_LIVE
+    assert pc.run() in ("uploaded", "up_to_date")
+    assert sync.load_state(pc.dirs).get("live_owed") is None
+    b3 = build(sm)
+    m3 = manifest(b3["stamp"])
+    assert m3["edits"] == [] and m3["inapp"] == {}, m3["edits"]
+    assert pc.run() == "installed"
+    for p in m3["presets"]:
+        assert pc.preset(p["name"])["filament_density"] == ["1.35"], p["name"]
+
+
 # ---------- uploads the server refuses ----------
 
 def test_unparsable_system_preset_is_a_problem_not_a_refusal(tmp_path, server, monkeypatch):

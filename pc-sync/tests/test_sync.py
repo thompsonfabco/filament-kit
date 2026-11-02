@@ -290,7 +290,10 @@ def test_report_retried_when_installed_call_failed(env):
     out = _run(c, folders, dirs, now=T0 + 600)
     assert ("installed", STAMP) in c.calls
     assert not [x for x in c.calls if x[0] == "build"]  # not installed a second time
-    assert out == "up_to_date"
+    # round 3: the live upload the install owed follows the report, even with equal hashes
+    assert out == "uploaded"
+    names = [x[0] for x in c.calls]
+    assert names.index("installed") < names.index("upload")
 
 
 def test_too_large_upload_is_refused_before_sending(env, monkeypatch):
@@ -374,6 +377,28 @@ def test_failed_report_skips_the_live_upload_and_is_sent_first_next_run(env):
     names = [x[0] for x in c.calls]
     assert ("installed", STAMP) in c.calls and "upload" in names
     assert names.index("installed") < names.index("upload")
+
+
+def test_live_upload_owed_after_an_install_is_sent_even_when_the_hashes_match(env):
+    """Round 3: the report went through, the re-upload failed; the next run must send live although the server's
+    hash equals this PC's (the install left the folder byte-identical), or the server waits forever (S32)."""
+    folders, dirs = env
+    live = _hashes(folders)[0]
+    c = FakeClient(_synced_state(folders, build={"stamp": STAMP, "live_hash": live}), _build_zip(live_hash=live))
+    c.fail["upload"] = client.Offline("server unreachable")
+    with pytest.raises(client.Offline):
+        _run(c, folders, dirs)
+    assert ("installed", STAMP) in c.calls
+    assert json.loads(dirs.state.read_text())["live_owed"] is True
+    c.fail.clear()
+    c.st["live_hash"] = _hashes(folders)[0]                  # equal hashes: no upload would be "needed"
+    c.calls.clear()
+    assert _run(c, folders, dirs, now=T0 + 600) == "uploaded"
+    assert ("upload", "live", folders.user_id) in c.calls
+    assert "live_owed" not in json.loads(dirs.state.read_text())
+    c.calls.clear()
+    assert _run(c, folders, dirs, now=T0 + 1200) == "up_to_date"
+    assert not [x for x in c.calls if x[0] == "upload"]
 
 
 def test_studio_info_rewrites_and_own_presets_do_not_ask_for_a_rebuild(env):
