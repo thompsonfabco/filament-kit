@@ -248,7 +248,9 @@ def _ok(reply: dict) -> bool:
 
 def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None = None) -> CalibResult:
     """Run the calibration job on an idle, connected printer (see the module docstring). Never raises for
-    printer-side trouble: everything lands in `CalibResult.problems`."""
+    printer-side trouble: everything lands in `CalibResult.problems`. Once the upload was attempted, the file is
+    always deleted (best effort, over a new session; skipped only for a changed leaf) and, once the job was sent,
+    the slots are always restored, whatever went wrong in between."""
     res = CalibResult()
     if manager.state(serial) != 'connected':
         res.problems.append('printer_offline')
@@ -292,14 +294,23 @@ def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None
         res.problems.append('cert_changed')
         return res
     except ftps.FtpsError as e:
+        # a STOR that died midway (or whose final reply was lost) may have left a partial or complete file
         res.problems.append(f"cannot upload the calibration job: {e}")
+        _delete(printer, path, res)
         return res
 
     try:
         _job(manager, serial, res, labels, sent, snap)
+    except Exception as e:      # e.g. the MQTT connection was lost while watching the job
+        log.warning("printer %s: calibration job interrupted (%s)", serial, type(e).__name__)
+        res.consistent = False
+        res.problems.append(f"the calibration job was interrupted: connection lost ({type(e).__name__})")
     finally:
         _delete(printer, path, res)
-        _restore(manager, serial, slotmap, trays0, res)
+        try:
+            _restore(manager, serial, slotmap, trays0, res)
+        except Exception as e:
+            res.problems.append(f"could not restore the slots ({type(e).__name__})")
     log.info("printer %s: calibration %s; decoding %s; problems %s", serial,
              "consistent" if res.consistent else "not consistent", res.decoding, res.problems)
     return res
@@ -383,6 +394,8 @@ def _delete(printer: registry.Printer, path: str, res: CalibResult) -> None:
         res.problems.append(f"could not delete {path}: cert_changed")
     except ftps.FtpsError as e:
         res.problems.append(f"could not delete {path}: {e}")
+    except Exception as e:      # never let a delete failure skip the slot restore
+        res.problems.append(f"could not delete {path}: {type(e).__name__}")
 
 
 def _restore(manager, serial: str, slotmap: SlotMap, trays0: dict, res: CalibResult) -> None:
