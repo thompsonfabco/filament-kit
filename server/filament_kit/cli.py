@@ -1,4 +1,4 @@
-"""Command line: status, pair, unpair, config, cert, ensure-fields, printer map / unpin, library."""
+"""Command line: status, pair, unpair, config, cert, ensure-fields, printer map / unpin, library, profiles."""
 from __future__ import annotations
 
 import argparse
@@ -16,8 +16,9 @@ import time
 import urllib.request
 from pathlib import Path
 
-from . import config, library, pairing
+from . import config, inventory, library, pairing
 from .bridge import registry
+from .profiles import builds, lines as lines_mod
 from .spoolman import Spoolman, SpoolmanError
 
 KEY_FILE = "anthropic_key"
@@ -122,7 +123,63 @@ def cmd_status(client_factory) -> int:
     print(f"--   display name: {cfg['server_name']}")
     print(f"--   paired devices: {len(pairing.devices())}")
     print(f"--   reads used today: {_reads_today()} of {cfg['reads_per_day']}")
+    good &= _profile_status_lines()
     return 0 if good else 1
+
+
+def _library_status_lines() -> None:
+    st = library.status()
+    source = st["source"]
+    if source == "updated":
+        at = (library._pointer("current.json") or {}).get("at")
+        if isinstance(at, (int, float)) and not isinstance(at, bool):
+            source = f"updated {time.strftime('%Y-%m-%d', time.localtime(at))}"
+    n = st["local"]
+    print(f"--   library version {st['version']} ({source}), {n} local addition{'' if n == 1 else 's'}")
+    lc = st["last_check"]
+    if lc is not None and not lc["ok"]:
+        # a warning, not a failure: the bundled or last good version stays in use
+        print(f"--   library update: {lc['error']}")
+
+
+def _attempt_failed(st: dict) -> str | None:
+    """The last build attempt's error, unless it only waited for the first PC sync (a normal state)."""
+    la = st.get("last_attempt") or {}
+    if la.get("ok") is False and la.get("error") and la["error"] != builds.NO_SYSTEM:
+        return str(la["error"])
+    return None
+
+
+def _profile_status_lines() -> bool:
+    good = True
+    try:
+        _library_status_lines()
+    except Exception as e:  # noqa: BLE001 - status reports, it does not crash
+        print(f"--   library: could not be read ({e.__class__.__name__}: {e})")
+    try:
+        st = builds.status()
+    except Exception as e:  # noqa: BLE001
+        return _line(False, f"profiles: status could not be read ({e.__class__.__name__}: {e})",
+                     "sudo journalctl -u filament-kit-build -n 50")
+    b = st.get("build")
+    error = _attempt_failed(st)
+    if error is not None:
+        good &= _line(False, f"profiles: last build failed: {error}; "
+                             + (f"using build {b['stamp']}" if b else "no good build yet"),
+                      "sudo journalctl -u filament-kit-build -n 50")
+    elif b:
+        good &= _line(True, f"profiles: build {b['stamp']}, {st.get('presets', 0)} presets for "
+                            f"{st.get('lines', 0)} lines ({b.get('problems', 0)} problems)")
+    else:
+        print("--   profiles: no build yet (waiting for the PC sync)")
+    pc = st.get("pc")
+    if pc:
+        inst = st.get("installed")
+        print(f"--   PC sync: last upload {_fmt_time(pc.get('last_upload'))}, "
+              + (f"installed build {inst['stamp']}" if inst else "no build installed yet"))
+    else:
+        print("--   PC sync: not set up (see README: Pair your PC)")
+    return good
 
 
 # ---------- pair / unpair ----------
@@ -138,15 +195,22 @@ def _qr_text(payload: str) -> str:
     return payload
 
 
-def cmd_pair() -> int:
+def cmd_pair(pc: bool = False) -> int:
     try:
-        pr = pairing.issue()
+        pr = pairing.issue(device_hint="pc") if pc else pairing.issue()
     except pairing.PairingError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
-    print(_qr_text(pr.qr))
-    fp = pairing.fingerprint((config.paths().etc / "cert.pem").read_bytes())
-    print("Certificate fingerprint (check it matches the phone):")
+    if pc:
+        # the PC has no QR scanner: the link is pasted into filament-kit-sync (printed by design, never logged)
+        print("Link for filament-kit-sync (paste it when asked):")
+        print(pr.qr)
+        fp = pairing.fingerprint((config.paths().etc / "cert.pem").read_bytes())
+        print("Certificate fingerprint (check it matches the one the PC shows):")
+    else:
+        print(_qr_text(pr.qr))
+        fp = pairing.fingerprint((config.paths().etc / "cert.pem").read_bytes())
+        print("Certificate fingerprint (check it matches the phone):")
     print("  " + " ".join(fp[i:i + 4] for i in range(0, len(fp), 4)))
     print(f"Pairing code: {pr.code}")
     print(f"Expires at {time.strftime('%H:%M:%S', time.localtime(pr.expires))} "
@@ -155,6 +219,8 @@ def cmd_pair() -> int:
 
 
 def _fmt_time(t) -> str:
+    if isinstance(t, str):
+        return t
     return time.strftime("%Y-%m-%d %H:%M", time.localtime(t)) if t else "never"
 
 
@@ -536,13 +602,8 @@ def cmd_printer_unpin(serial: str) -> int:
 # ---------- library ----------
 
 def _request_rebuild(reason: str) -> None:
-    """Ask for a profile rebuild. `filament_kit.profiles.builds` arrives with the profile builder; until then
-    there is nothing to rebuild and this does nothing."""
-    try:
-        from .profiles.builds import request_rebuild
-    except ImportError:
-        return
-    request_rebuild(reason)
+    """Ask for a profile rebuild (filament-kit-build.path starts the build)."""
+    builds.request_rebuild(reason)
 
 
 def _library_line(st: dict) -> str:
@@ -632,11 +693,113 @@ def cmd_library_add(source: str) -> int:
     return 0
 
 
-def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=None) -> int:
+# ---------- profiles ----------
+
+def _default_spoolman() -> Spoolman:
+    return Spoolman(config.load()["spoolman_url"])
+
+
+def cmd_profiles_build(sm_factory) -> int:
+    r = builds.run_build(sm_factory())
+    if r.get("waiting"):
+        # waiting for the first PC sync is a normal state: the build unit must not show as failed
+        print(f"{r.get('error') or builds.NO_SYSTEM} (see README: Pair your PC)")
+        return 0
+    if not r.get("ok"):
+        _err_line(f"build failed: {r.get('error')}; the last good build stays in use "
+                  f"(see: sudo journalctl -u filament-kit-build -n 50)")
+        return 1
+    c = builds.current() or {}
+    problems = r.get("problems") or []
+    print(f"build {r['stamp']}: {c.get('presets', 0)} presets, {len(problems)} "
+          f"problem{'' if len(problems) == 1 else 's'}")
+    for prob in problems:
+        print(f"  problem: {prob}")
+    return 0
+
+
+def cmd_profiles_status() -> int:
+    st = builds.status()
+    b, la, inst, pc = st["build"], st["last_attempt"], st["installed"], st["pc"]
+    print(f"lines: {st['lines']}")
+    if b:
+        print(f"build: {b['stamp']} ({_fmt_time(b.get('created'))}), {st['presets']} presets, "
+              f"{b.get('problems', 0)} problems")
+    else:
+        print("build: no build yet")
+    if la:
+        state = "ok" if la.get("ok") else ("waiting" if la.get("error") == builds.NO_SYSTEM else "failed")
+        print(f"last attempt: {_fmt_time(la.get('at'))} {state}"
+              + (f": {la['error']}" if la.get("error") and not la.get("ok") else ""))
+    print(f"installed on the PC: {inst['stamp']} ({_fmt_time(inst.get('at'))})" if inst
+          else "installed on the PC: nothing yet")
+    print(f"PC sync: device {pc['device_id']}, last upload {_fmt_time(pc.get('last_upload'))}" if pc
+          else "PC sync: not set up (see README: Pair your PC)")
+    for name in st["stale"]:
+        print(f"  delete in Bambu Studio: {name}")
+    for prob in st["problems"]:
+        print(f"  problem: {prob}")
+    return 0
+
+
+def cmd_profiles_lines() -> int:
+    try:
+        ls = lines_mod.load()
+    except lines_mod.LineStoreError as e:
+        _err_line(e.message)
+        return 1
+    c = builds.current()
+    per_line: dict[str, int] = {}
+    for row in ((builds.manifest(c["stamp"]) or {}).get("presets", []) if c else []):
+        if isinstance(row, dict) and isinstance(row.get("line_id"), str):
+            per_line[row["line_id"]] = per_line.get(row["line_id"], 0) + 1
+    if not ls:
+        print("no lines yet (they are made from the Spoolman filaments at the next build or intake)")
+    for lid in sorted(ls):
+        line = ls[lid]
+        parent = f"{line.bambu_parent} ({line.parent_source})" if line.bambu_parent else "none"
+        ids = ", ".join(str(i) for i in line.filaments) or "-"
+        print(f"{lid}  {line.vendor} {line.product}  {line.material}  parent {parent}  "
+              f"filaments {ids}  presets {per_line.get(lid, 0)}")
+    return 0
+
+
+def cmd_profiles_set_parent(line_id: str, parent: str) -> int:
+    parent = parent.strip()
+    try:
+        if not parent:
+            raise ValueError("give the name of a Bambu Studio system preset")
+        inventory.check_line_text("set-parent", "parent", parent)
+        inventory.check_parent(parent, inventory.system_store())
+    except ValueError as e:
+        _err_line(str(e))
+        return 1
+    try:
+        line = lines_mod.set_parent_saved(line_id, parent)
+    except KeyError:
+        _err_line(f"no line {line_id} (see: sudo filament-kit profiles lines)")
+        return 1
+    except lines_mod.LineStoreError as e:
+        _err_line(e.message)
+        return 1
+    print(f"line {line.line_id}: parent {line.bambu_parent} (set by you)")
+    _request_rebuild(f"parent of line {line.line_id} set")
+    return 0
+
+
+def cmd_profiles_restore_deleted() -> int:
+    builds.restore_deleted_next()
+    _request_rebuild("restore presets deleted in Bambu Studio")
+    print("the next build brings back the presets deleted in Bambu Studio; a build was requested")
+    return 0
+
+
+def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=None, sm_factory=None) -> int:
     ap = argparse.ArgumentParser(prog="filament-kit")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("status", help="check services, Spoolman, key, certificate")
-    sub.add_parser("pair", help="show a QR code and code to pair a phone")
+    pp = sub.add_parser("pair", help="show a QR code and code to pair a phone (--pc: a link for the PC sync)")
+    pp.add_argument("--pc", action="store_true", help="pair the Windows PC sync: print the link, no QR code")
     up = sub.add_parser("unpair", help="list or remove paired phones")
     up.add_argument("device_id", nargs="?")
     sub.add_parser("config", help="interactive settings menu")
@@ -656,12 +819,21 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
     lsub.add_parser("rollback", help="go back to the library version before the last update")
     la = lsub.add_parser("add", help="add or replace a local entry from a JSON file ('-' reads stdin)")
     la.add_argument("file")
+    pf = sub.add_parser("profiles", help="the generated Bambu Studio presets: build, status, lines, parents")
+    pfsub = pf.add_subparsers(dest="profiles_cmd", required=True)
+    pfsub.add_parser("build", help="build the presets now (needs the PC sync to have run once)")
+    pfsub.add_parser("status", help="show the last build, the PC sync and the problems")
+    pfsub.add_parser("lines", help="list the product lines and their Bambu Studio parents")
+    sp = pfsub.add_parser("set-parent", help="set the Bambu Studio system preset a line is built from")
+    sp.add_argument("line_id")
+    sp.add_argument("parent")
+    pfsub.add_parser("restore-deleted", help="bring back the presets deleted in Bambu Studio at the next build")
     args = ap.parse_args(argv)
 
     if args.cmd == "status":
         return cmd_status(client_factory or _default_client)
     if args.cmd == "pair":
-        return cmd_pair()
+        return cmd_pair(pc=args.pc)
     if args.cmd == "unpair":
         return cmd_unpair(args.device_id)
     if args.cmd == "config":
@@ -680,4 +852,14 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
         if args.library_cmd == "rollback":
             return cmd_library_rollback()
         return cmd_library_add(args.file)
+    if args.cmd == "profiles":
+        if args.profiles_cmd == "build":
+            return cmd_profiles_build(sm_factory or _default_spoolman)
+        if args.profiles_cmd == "status":
+            return cmd_profiles_status()
+        if args.profiles_cmd == "lines":
+            return cmd_profiles_lines()
+        if args.profiles_cmd == "set-parent":
+            return cmd_profiles_set_parent(args.line_id, args.parent)
+        return cmd_profiles_restore_deleted()
     return cmd_ensure_fields()
