@@ -234,9 +234,11 @@ class Client:
     def state(self) -> dict:
         return self._request("GET", "/api/sync/state")
 
-    def upload(self, kind: str, data: bytes, user_id: str | None = None) -> dict:
+    def upload(self, kind: str, data: bytes, user_id: str | None = None, partial: str | None = None) -> dict:
+        """`partial` (live only): the stamp of a build whose install stopped part-way in this folder (S28)."""
         if kind == "live":
-            path = "/api/sync/live" + (f"?{urllib.parse.urlencode({'user_id': user_id})}" if user_id else "")
+            q = {k: v for k, v in (("user_id", user_id), ("partial", partial)) if v}
+            path = "/api/sync/live" + (f"?{urllib.parse.urlencode(q)}" if q else "")
         elif kind == "system":
             path = "/api/sync/system"
         else:

@@ -483,3 +483,167 @@ def test_meta_is_a_public_copy():
     assert m["system_presets"] == len(TG.presets()) and m["owner"] == "a"
     m["owner"] = "x"
     assert builds.meta()["owner"] == "a"
+
+
+# ---------- rulings S28 (partial installs) and S29a (bad system presets) ----------
+
+def _live_zip_of(build_stamp: str, *, edit=None) -> bytes:
+    """The live folder as the PC would upload it: a copy of a build's presets (`edit` = {name: {k: v}})."""
+    base = profiles_dir() / "builds" / build_stamp / "base"
+    files = {}
+    for p in sorted(base.iterdir()):
+        data = p.read_bytes()
+        if p.suffix == ".json" and edit and p.stem in edit:
+            cfg = json.loads(data)
+            cfg.update(edit[p.stem])
+            data = json.dumps(cfg).encode()
+        files[f"base/{p.name}"] = data
+    return zip_of(files)
+
+
+def test_partial_upload_is_stored_used_kept_and_cleared(env):
+    synced(env)
+    b1 = builds.run_build(env, now=TG.NOW)["stamp"]
+    builds.record_installed(b1, "a")
+    tick()
+    builds.store_upload("live", io.BytesIO(_live_zip_of(b1)), device_id="a", user_id="1")   # re-upload (S32)
+    env.filaments = [dict(f, density=1.31) for f in SUNLU]
+    b2 = builds.run_build(env, now=TG.NOW + 1)["stamp"]
+    # the install of b2 stopped after the 0.4 preset; the PC uploads live with partial=b2
+    name = TG.sunlu(TG.H2D, "0.4")
+    half = json.loads((profiles_dir() / "builds" / b2 / "base" / f"{name}.json").read_text(encoding="utf-8"))
+    builds.store_upload("live", io.BytesIO(_live_zip_of(b1, edit={name: half})), device_id="a", user_id="1",
+                        partial=b2)
+    assert builds.meta()["partial"] == b2
+    with pytest.raises(errors.ProfileError) as e:
+        builds.store_upload("live", io.BytesIO(_live_zip_of(b1)), device_id="a", user_id="1", partial="../x")
+    assert e.value.status == 400
+    env.filaments = [dict(f, density=1.35) for f in SUNLU]
+    b3 = builds.run_build(env, now=TG.NOW + 2)["stamp"]
+    m3 = builds.manifest(b3)
+    assert not any("filament_density" in x for x in m3["edits"]), m3["edits"]
+    cfg = json.loads((profiles_dir() / "builds" / b3 / "base" / f"{name}.json").read_text(encoding="utf-8"))
+    assert cfg["filament_density"] == ["1.35"]
+    # retention keeps the partial build while it is named
+    for i in range(3, 10):
+        builds.run_build(env, now=TG.NOW + i)
+    assert (profiles_dir() / "builds" / b2).is_dir()
+    builds.record_installed(builds.current()["stamp"], "a")
+    assert "partial" not in builds.meta()
+
+
+def test_partial_without_its_build_is_ignored(env):
+    synced(env)
+    b1 = builds.run_build(env, now=TG.NOW)["stamp"]
+    builds.store_upload("live", io.BytesIO(_live_zip_of(b1)), device_id="a", user_id="1",
+                        partial="20990101-000000")
+    assert builds.run_build(env, now=TG.NOW + 1)["ok"] is True
+
+
+def test_unparsable_system_preset_is_a_problem_not_a_refusal(env):
+    files = {f"{n}.json": json.dumps(cfg) for n, cfg in TG.presets().items()}
+    files.update({"broken.json": "{not json", "list.json": "[1, 2]"})
+    h = builds.store_upload("system", io.BytesIO(zip_of(files)), device_id="a")
+    system = profiles_dir() / "live" / "system"
+    assert h == builds.tree_hash(system) and (system / "broken.json").is_file()   # hash equals the PC's
+    assert builds.meta()["system_presets"] == len(TG.presets())
+    r = builds.run_build(env, now=TG.NOW)
+    assert r["ok"] is True
+    assert any(p.startswith("broken.json: unreadable") for p in r["problems"]), r["problems"]
+    assert any(p.startswith("list.json: not a JSON object") for p in r["problems"]), r["problems"]
+    assert builds.manifest(r["stamp"])["presets"]
+    # structure checks still refuse the whole zip, and the live folder stays strict
+    with pytest.raises(builds.BadZip):
+        builds.store_upload("system", io.BytesIO(zip_of(dict(files, **{"../x.json": "{}"}))), device_id="a")
+    with pytest.raises(builds.BadZip):
+        builds.store_upload("live", io.BytesIO(zip_of({"base/x.json": "{not json"})), device_id="a", user_id="1")
+
+
+# ---------- ruling S32: an install newer than the last live upload ----------
+
+def tick():
+    """Let the clock move on, so upload, build, install and request times are strictly ordered."""
+    t = time.time()
+    while time.time() <= t + 0.002:
+        time.sleep(0.001)
+
+
+def test_build_waits_for_live_after_an_install_then_runs_without_false_edits(env):
+    synced(env)
+    b1 = builds.run_build(env, now=TG.NOW)["stamp"]
+    builds.store_upload("live", io.BytesIO(_live_zip_of(b1)), device_id="a", user_id="1")   # pre-install live
+    env.filaments = [dict(f, density=1.31) for f in SUNLU]
+    tick()
+    b2 = builds.run_build(env, now=TG.NOW + 1)["stamp"]
+    tick()
+    builds.record_installed(b2, "a")              # the report went through, the live re-upload did not
+    tick()
+    builds.request_rebuild("spoolman changed")
+    env.filaments = [dict(f, density=1.35) for f in SUNLU]
+    tick()
+    r = builds.run_build(env, now=TG.NOW + 2)
+    assert r["ok"] is False and r["waiting"] is True and r["stamp"] is None
+    assert r["error"] == builds.WAIT_LIVE == "waiting for the PC's next sync"
+    assert builds.current()["stamp"] == b2                                   # nothing new, nothing failed
+    assert builds.status()["last_attempt"]["error"] == builds.WAIT_LIVE
+    assert builds.state_view("a")["rebuild_requested"] is not None          # the request stays pending
+    before = (profiles_dir() / "rebuild-request").read_bytes()
+    # the PC's next sync uploads the post-install live folder: the request is renewed, the build runs
+    tick()
+    builds.store_upload("live", io.BytesIO(_live_zip_of(b2)), device_id="a", user_id="1")
+    assert (profiles_dir() / "rebuild-request").read_bytes() != before
+    tick()
+    r = builds.run_build(env, now=TG.NOW + 3)
+    assert r["ok"] is True, r
+    m = builds.manifest(r["stamp"])
+    assert m["edits"] == [] and m["inapp"] == {}, m["edits"]
+    name = TG.sunlu(TG.H2D, "0.4")
+    cfg = json.loads((profiles_dir() / "builds" / r["stamp"] / "base" / f"{name}.json").read_text(encoding="utf-8"))
+    assert cfg["filament_density"] == ["1.35"]
+    assert builds.state_view("a")["rebuild_requested"] is None
+
+
+def test_set_state_is_one_locked_read_modify_write(env, monkeypatch):
+    """Round 3: two writers of build-state.json never lose each other's key."""
+    import threading
+    seen = []
+    real = builds._state
+
+    def slow_state():
+        st = real()
+        seen.append(1)
+        time.sleep(0.05)                        # widen the window between read and write
+        return st
+    monkeypatch.setattr(builds, "_state", slow_state)
+    ts = [threading.Thread(target=builds._set_state, kwargs={k: True}) for k in ("one", "two")]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join()
+    monkeypatch.setattr(builds, "_state", real)
+    st = builds._state()
+    assert st.get("one") is True and st.get("two") is True and len(seen) == 2
+
+
+def test_status_says_the_pc_must_sync_while_waiting_on_live(env, capsys):
+    from filament_kit import cli
+    synced(env)
+    b1 = builds.run_build(env, now=TG.NOW)["stamp"]
+    builds.store_upload("live", io.BytesIO(_live_zip_of(b1)), device_id="a", user_id="1")
+    tick()
+    builds.record_installed(b1, "a")
+    assert builds.run_build(env, now=TG.NOW + 1)["error"] == builds.WAIT_LIVE
+    capsys.readouterr()
+    assert cli.main(["profiles", "status"]) == 0
+    out = capsys.readouterr().out
+    assert "waiting: waiting for the PC's next sync" in out
+    assert "the PC sync has to run once" in out
+
+
+def test_live_upload_without_a_waiting_build_requests_nothing(env):
+    synced(env)
+    b1 = builds.run_build(env, now=TG.NOW)["stamp"]
+    builds.run_build(env, now=TG.NOW)                          # handles the system upload's request
+    assert builds.state_view("a")["rebuild_requested"] is None
+    builds.store_upload("live", io.BytesIO(_live_zip_of(b1)), device_id="a", user_id="1")
+    assert builds.state_view("a")["rebuild_requested"] is None

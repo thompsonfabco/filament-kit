@@ -81,6 +81,7 @@ def server(tmp_path, monkeypatch):
     yield port, sm
     uv.should_exit = True
     t.join(timeout=10)
+    assert not t.is_alive(), "the uvicorn thread did not stop"
 
 
 # ---------- the PC ----------
@@ -126,8 +127,8 @@ class Pc:
 
 
 def system_copy(tmp_path) -> Path:
-    """The fixture system presets without broken.json (the server refuses a zip with a non-JSON .json; see
-    test_unparsable_system_preset_is_refused_and_not_resent)."""
+    """The fixture system presets without broken.json (an unparsable system preset is only a store problem, see
+    test_unparsable_system_preset_is_a_problem_not_a_refusal; the flows here need no problem line for it)."""
     dest = tmp_path / "bbl-src"
     shutil.copytree(BBL, dest)
     (dest / "broken.json").unlink()
@@ -158,13 +159,12 @@ def choose_parent(port: int, fp: str, parent: str) -> None:
 
 
 def uploaded_then_rebuild(pc: Pc) -> None:
-    """The edit goes up, but the installed build stays current (no rebuild is asked for by the PC); a rebuild is
-    then requested (POST /api/sync/rebuild), as a Spoolman change or the app would."""
-    assert pc.run() == "uploaded"
+    """The in-app change goes up and, although the installed build is current, the PC asks for a rebuild itself
+    (ruling S29b: its live hash differs from the one the install left)."""
+    assert pc.run() == "rebuild_requested"
     st = pc.client.state()
     assert st["live_hash"] == builds.tree_hash(pc.folders.user_filament)
-    assert pc.client.rebuild(st["live_hash"]) == {"requested": True}
-    assert pc.client.state()["rebuild_requested"]["live_hash"] == st["live_hash"]
+    assert st["rebuild_requested"]["live_hash"] == st["live_hash"]
 
 
 def paired_pc(tmp_path, server, monkeypatch, name="pc1") -> Pc:
@@ -323,10 +323,6 @@ def test_full_cycle(tmp_path, server, monkeypatch):
     assert pc.run() == "up_to_date"
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "BUG (Task 13): an in-app edit is carried into exactly one build. In-app edits are found only as "
-    "diff(installed snapshot, live); once the build carrying the edit is installed, the snapshot holds the edited "
-    "value too, so the next build sees no diff and writes the parent/spec value back over the owner's edit"))
 def test_inapp_edit_survives_a_second_rebuild(tmp_path, server, monkeypatch):
     _, sm = server
     pc, _ = installed_first_build(tmp_path, server, monkeypatch)
@@ -390,10 +386,6 @@ def test_interrupted_install_is_resumed(tmp_path, server, monkeypatch):
     assert pc.run() == "up_to_date"
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "BUG (Task 13): after an interrupted install whose resume is declined (a later in-app edit), the half-new live "
-    "folder is diffed against the server's last *recorded* install (B1), so values the crashed install of B2 "
-    "already wrote are carried into B3 as in-app edits and beat the newer Spoolman value"))
 def test_interrupted_install_values_are_not_inapp_edits(tmp_path, server, monkeypatch):
     _, sm = server
     pc, _ = installed_first_build(tmp_path, server, monkeypatch)
@@ -427,18 +419,53 @@ def test_interrupted_install_values_are_not_inapp_edits(tmp_path, server, monkey
         assert pc.preset(n)["filament_density"] == ["1.35"], n            # the half-install's 1.31 is not "his"
 
 
+def test_failed_reupload_after_a_reported_install_is_sent_next_run(tmp_path, server, monkeypatch):
+    """S32 + round 3: the install is reported, the live re-upload fails; builds wait for the PC's next sync, which
+    sends the owed live upload, and the build then runs with no false in-app edits."""
+    _, sm = server
+    pc, _ = installed_first_build(tmp_path, server, monkeypatch)
+    _density(sm, 1.31)
+    builds.request_rebuild("spoolman changed")
+    b2 = build(sm)
+    real = pc.client.upload
+
+    def offline(*a, **kw):
+        raise fkclient.Offline("server unreachable (test)")
+    monkeypatch.setattr(pc.client, "upload", offline)
+    with pytest.raises(fkclient.Offline):
+        pc.run()
+    monkeypatch.setattr(pc.client, "upload", real)
+    assert pc.client.state()["installed"]["stamp"] == b2["stamp"]
+    _density(sm, 1.35)
+    builds.request_rebuild("spoolman changed")
+    r = builds.run_build(sm)
+    assert r["waiting"] is True and r["error"] == builds.WAIT_LIVE
+    assert pc.run() in ("uploaded", "up_to_date")
+    assert sync.load_state(pc.dirs).get("live_owed") is None
+    b3 = build(sm)
+    m3 = manifest(b3["stamp"])
+    assert m3["edits"] == [] and m3["inapp"] == {}, m3["edits"]
+    assert pc.run() == "installed"
+    for p in m3["presets"]:
+        assert pc.preset(p["name"])["filament_density"] == ["1.35"], p["name"]
+
+
 # ---------- uploads the server refuses ----------
 
-def test_unparsable_system_preset_is_refused_and_not_resent(tmp_path, server, monkeypatch):
-    """The unmodified fixture folder holds broken.json: the server refuses the whole system zip (400 bad_zip), the
-    PC records the refusal and does not send that version again within the back-off; no build can be made."""
+def test_unparsable_system_preset_is_a_problem_not_a_refusal(tmp_path, server, monkeypatch):
+    """Ruling S29a: the unmodified fixture folder holds broken.json; the server takes the system zip, keeps the
+    file (the hashes agree, so it is not sent again) and the builds list it as a store problem."""
     port, sm = server
     pc = Pc(tmp_path / "pc1", port, BBL)
     assert pc.pair(monkeypatch, pairing.issue("pc").code) == 0
-    assert pc.run() == "uploaded"                  # the live folder went up
-    rej = sync.load_state(pc.dirs)["rejected"]["system"]
-    assert rej["hash"] == builds.tree_hash(pc.folders.system_filament) and "bad_zip" in rej["error"]
+    assert pc.run() == "uploaded"
+    assert "rejected" not in sync.load_state(pc.dirs)
     st = pc.client.state()
-    assert st["system_hash"] is None and st["live_hash"] is not None
+    assert st["system_hash"] == builds.tree_hash(pc.folders.system_filament) and st["live_hash"] is not None
     assert pc.run() == "no_build"
-    assert builds.run_build(sm).get("waiting") is True
+    r = build(sm)
+    assert any(p.startswith("broken.json: unreadable") for p in r["problems"]), r["problems"]
+    choose_parent(port, store.load_config(pc.dirs)["fp"], "Generic PLA")
+    r = build(sm)
+    assert manifest(r["stamp"])["presets"]
+    assert pc.run() == "installed"

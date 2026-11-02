@@ -2,7 +2,9 @@
 
 State, all under `state/profiles/`:
   live/user/, live/system/   the PC sync's last good uploads (user filament folder, `system/BBL/filament`)
-  live/meta.json             {owner, user_id, live_hash, live_at, system_hash, system_at, system_presets}
+  live/meta.json             {owner, user_id, live_hash, live_at, system_hash, system_at, system_presets,
+                             partial}; `partial` = a build whose install stopped part-way on the PC (ruling S28,
+                             `PUT /api/sync/live?partial=<stamp>`), cleared by the next install report
   builds/<stamp>/            one build: BUILD.json (the manifest) + base/<name>.json|.info
   builds/*.tmp               a build or upload in progress; removed by the next build
   current.json               the last good build {stamp, created, live_hash, presets, problems}
@@ -12,24 +14,30 @@ State, all under `state/profiles/`:
   rebuild-request            written by `request_rebuild`; watched by filament-kit-build.path (PathModified).
                              The builder only ever READS it; what was handled is kept in build-state.json.
   restore-deleted            flag: the next build brings back presets deleted in the app (consumed by it)
-  build.lock, live.lock      cross-process locks (fcntl; thread locks only where fcntl is missing)
+  build.lock, live.lock,     cross-process locks (fcntl; thread locks only where fcntl is missing);
+  state.lock                 state.lock guards the read-modify-write of build-state.json
 
 Uploads (Decision "sync uploads", Review Focus 1): the body is streamed into a temp file and refused with 413 as
 soon as it passes the cap (MAX_LIVE / MAX_SYSTEM), before reading further. The zip is then checked entry by
 entry before anything is extracted (at most MAX_ENTRIES entries, relative POSIX names only: no absolute path,
 drive letter, backslash, `..`, empty or `.` part; no symlink; a directory entry must be empty; only `.json` and
 `.info` files; no two names equal when casefolded; declared sizes within MAX_FILE / MAX_TOTAL), extracted inside
-a temp dir while counting the real bytes, and every `.json` must parse. Only then is the live folder swapped
+a temp dir while counting the real bytes, and every live `.json` must parse. A system `.json` that does not parse
+(or is not an object) is kept and reported as a store problem by the builds (ruling S29a). Only then is the live folder swapped
 (under live.lock); a refused upload leaves the previous live folder as it was.
 
 One sync PC (Decision): the first paired device that uploads becomes the owner; other devices get 409
 `other_pc` until the owner is unpaired (it is then no longer in `pairing.devices()`).
 
 Builds (Decision "build trigger and retention"): `run_build` holds build.lock, builds into builds/<stamp>.tmp,
-renames it, saves the lines, writes deleted.json and then current.json. Any exception leaves current.json (the
-last good build) untouched. With no system presets uploaded yet it ends cleanly with `waiting: True`. It runs
+renames it, saves the lines, writes deleted.json and then current.json. The installed build (and the partial one,
+if any) is the in-app edit snapshot; its BUILD.json `inapp` is the record of edits that last (ruling S27). Any exception leaves current.json (the
+last good build) untouched. With no system presets uploaded yet it ends cleanly with `waiting: True`. So it does
+(ruling S32, WAIT_LIVE) when the install the PC reported is newer than its last live upload: the live folder then
+predates the install and would read the old values as in-app edits. That wait leaves the rebuild request pending
+(build-state `wait_live`); the next live upload renews the request, so the build runs on fresh live data. It runs
 again (at most MAX_RUNS times in all) while the rebuild request is newer than the run's start. The newest KEEP
-builds plus the installed one are kept.
+builds plus the installed one (and a partial one still named in meta.json) are kept.
 """
 from __future__ import annotations
 
@@ -75,6 +83,7 @@ SUFFIXES = (".json", ".info")
 STAMP_RE = re.compile(r"\d{8}-\d{6}(?:-[1-9]\d{0,5})?")
 USER_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
 NO_SYSTEM = "no Bambu Studio system presets yet: install and pair the PC sync"
+WAIT_LIVE = "waiting for the PC's next sync"
 _BAD_PART = re.compile(r'[<>:"|?*\x00-\x1f\x7f]')
 _DRIVE = re.compile(r"[A-Za-z]:")
 
@@ -210,9 +219,11 @@ def _state() -> dict:
 
 
 def _set_state(**changes) -> None:
-    st = _state()
-    st.update(changes)
-    _write_json(_dir() / "build-state.json", st)
+    """Read-modify-write of build-state.json under state.lock (builds and uploads both write it)."""
+    with _locked("state.lock"):
+        st = _state()
+        st.update(changes)
+        _write_json(_dir() / "build-state.json", st)
 
 
 def _installed() -> dict | None:
@@ -310,8 +321,10 @@ def _receive(src: BinaryIO, dest: Path, cap: int) -> int:
     return total
 
 
-def _extract(zpath: Path, tree: Path) -> int:
-    """Check every entry, then extract into `tree` counting the real bytes; returns the number of .json files."""
+def _extract(zpath: Path, tree: Path, *, strict_json: bool = True) -> int:
+    """Check every entry, then extract into `tree` counting the real bytes; returns the number of .json files
+    holding a JSON object. With strict_json a .json that does not parse refuses the zip; without it (the system
+    presets) the file is kept and left for the store to report."""
     try:
         zf = zipfile.ZipFile(zpath)
     except (zipfile.BadZipFile, zipfile.LargeZipFile, OSError, ValueError, EOFError) as e:
@@ -360,11 +373,14 @@ def _extract(zpath: Path, tree: Path) -> int:
                             raise BadZip(f"entry {rel!r}: more data than declared or over the limits")
                         w.write(chunk)
                 if rel.casefold().endswith(".json"):
-                    jsons += 1
                     try:
-                        json.loads(dest.read_bytes().decode("utf-8"))
+                        data = json.loads(dest.read_bytes().decode("utf-8"))
                     except (UnicodeDecodeError, ValueError):
-                        raise BadZip(f"entry {rel!r} is not valid JSON") from None
+                        if strict_json:
+                            raise BadZip(f"entry {rel!r} is not valid JSON") from None
+                        continue
+                    if isinstance(data, dict) or strict_json:
+                        jsons += 1
             return jsons
         except BadZip:
             raise
@@ -401,13 +417,18 @@ def sweep_uploads(now: float | None = None) -> None:
             _rmtree(p)
 
 
-def store_upload(kind: str, src: BinaryIO, *, device_id: str, user_id: str | None = None) -> str:
+def store_upload(kind: str, src: BinaryIO, *, device_id: str, user_id: str | None = None,
+                 partial: str | None = None) -> str:
     """Store the PC sync's zip of its user filament folder (`live`, into `live/user/`) or of Bambu Studio's
-    `system/BBL/filament` (`system`, into `live/system/`) and return its tree hash. Claims the sync owner. Raises OtherPc, BadZip or TooLarge; then nothing changed."""
+    `system/BBL/filament` (`system`, into `live/system/`) and return its tree hash. Claims the sync owner.
+    `partial` (live only) names the build whose install stopped part-way in this live folder (ruling S28).
+    Raises OtherPc, BadZip or TooLarge; then nothing changed."""
     if kind not in ("live", "system"):
         raise ValueError(f"unknown upload kind {kind!r}")
     if user_id is not None and not USER_ID.fullmatch(user_id):
         raise ProfileError(400, "bad_request", "user_id may only have letters, digits, - and _ (at most 64)")
+    if partial is not None and (kind != "live" or not isinstance(partial, str) or not STAMP_RE.fullmatch(partial)):
+        raise ProfileError(400, "bad_request", "partial must be a build stamp (live uploads only)")
     check_owner(device_id)                      # refuse before reading the body
     cap = MAX_LIVE if kind == "live" else MAX_SYSTEM
     make_state_dir(_dir())
@@ -417,7 +438,7 @@ def store_upload(kind: str, src: BinaryIO, *, device_id: str, user_id: str | Non
         zpath = tmp / "upload.zip"
         _receive(src, zpath, cap)
         tree = tmp / "tree"
-        jsons = _extract(zpath, tree)
+        jsons = _extract(zpath, tree, strict_json=kind == "live")
         h = tree_hash(tree)
         with _locked("live.lock"):
             check_owner(device_id)
@@ -438,10 +459,16 @@ def store_upload(kind: str, src: BinaryIO, *, device_id: str, user_id: str | Non
             if kind == "live":
                 if user_id is not None:
                     meta["user_id"] = user_id
+                if partial is not None:
+                    meta["partial"] = partial
                 meta.update(live_hash=h, live_at=now)
+                renew = bool(_state().get("wait_live"))
             else:
                 meta.update(system_hash=h, system_at=now, system_presets=jsons)
             _write_json(_live() / "meta.json", meta)
+        if kind == "live" and renew:            # a build waited for this upload (S32)
+            _set_state(wait_live=False)
+            request_rebuild("live upload after an install", h)
         return h
     finally:
         _rmtree(tmp)
@@ -516,6 +543,9 @@ def _prune() -> None:
     cur = current()
     if cur:
         keep.add(cur["stamp"])
+    part = _meta().get("partial")
+    if isinstance(part, str):
+        keep.add(part)
     for name in dirs:
         if name not in keep:
             _rmtree(root / name)
@@ -554,12 +584,23 @@ def _build_once(sm, now: float) -> dict:
                 shutil.copytree(user, live_copy)
                 live = generate.Live(live_copy, str(meta.get("user_id") or ""))
             installed = _installed()
+            part = meta.get("partial")
+            live_at = meta.get("live_at")
+            if installed and isinstance(live_at, (int, float)) and isinstance(installed.get("at"), (int, float)) \
+                    and installed["at"] > live_at:
+                # the PC reported an install but has not uploaded the live folder since (S32)
+                _set_state(last_attempt={"at": now, "ok": False, "error": WAIT_LIVE}, wait_live=True)
+                return {"stamp": None, "ok": False, "error": WAIT_LIVE, "problems": [], "waiting": True,
+                        "keep_request": True}
         lib = library_mod.load()
         filaments = sm.get("filament")
         if not isinstance(filaments, list):
             raise ValueError("Spoolman returned no filament list")
         models = [p.model for p in registry.load().values() if p.model]
         snapshot = root / installed["stamp"] if installed and (root / installed["stamp"]).is_dir() else None
+        # a build whose install stopped part-way (S28): only while it is kept and is not the installed one
+        partial = (root / part if isinstance(part, str) and STAMP_RE.fullmatch(part)
+                   and (root / part / "BUILD.json").is_file() and part != (installed or {}).get("stamp") else None)
         before = _read_obj(_dir() / "deleted.json").get("deleted_before")
         deleted_before = {n for n in before if isinstance(n, str)} if isinstance(before, list) else set()
         restore_flag = _dir() / "restore-deleted"
@@ -568,7 +609,8 @@ def _build_once(sm, now: float) -> dict:
             ls = lines_mod.load()
             manifest, new_lines = generate.build_all(
                 filaments=filaments, models=models, store=store, library=lib, lines=ls, live=live,
-                snapshot=snapshot, deleted_before=deleted_before, restore_deleted=restore, out_dir=tmp, now=now)
+                snapshot=snapshot, deleted_before=deleted_before, restore_deleted=restore, out_dir=tmp, now=now,
+                partial=partial)
             problems = list(store.problems) + [p for p in manifest.get("problems", []) if p not in store.problems]
             manifest.update(stamp=stamp, created=now, live_hash=meta.get("live_hash"),
                             system_hash=meta.get("system_hash"), user_id=meta.get("user_id"), problems=problems,
@@ -605,12 +647,15 @@ def _build_once(sm, now: float) -> dict:
 
 def run_build(sm, *, now: float | None = None) -> dict:
     """Build every preset (see the module docstring); returns {stamp, ok, error, problems} of the last run, plus
-    `waiting: True` when no system presets were uploaded yet (a clean end, not a crash)."""
+    `waiting: True` when no system presets were uploaded yet, or the PC's live folder predates its reported
+    install (WAIT_LIVE; a clean end, not a crash)."""
     with _locked("build.lock"):
         result: dict = {}
         for _ in range(MAX_RUNS):
             started = time.time()
             result = _build_once(sm, now if now is not None else started)
+            if result.pop("keep_request", False):
+                break                           # the request stays pending until fresh live data (S32)
             _set_state(handled={"started": started})
             if result.get("waiting"):
                 break
@@ -668,6 +713,10 @@ def record_installed(stamp: str, device_id: str) -> dict:
             raise _not_found(f"no build {stamp!r}")
         at = time.time()
         _write_json(_dir() / "installed.json", {"stamp": stamp, "at": at, "device_id": device_id})
+        meta = _meta()
+        if "partial" in meta:                   # a finished install ends the partial one (S28)
+            meta.pop("partial")
+            _write_json(_live() / "meta.json", meta)
         return {"stamp": stamp, "at": at}
 
 

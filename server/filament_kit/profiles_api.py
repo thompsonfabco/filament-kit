@@ -3,7 +3,8 @@
 `routes(authed, sm)` returns the routes; `authed` is api.`_authed`, so every route needs the Bearer token, sets
 `request.state.device` and turns a `ProfileError` into `{"error", "message", **extra}`.
 
-Uploads (`PUT /api/sync/live|system`): the owner is checked before the body is read (409 `other_pc`), a declared
+Uploads (`PUT /api/sync/live|system`; live takes `user_id` and, after a half-finished install, `partial=<stamp>`,
+ruling S28): the owner is checked before the body is read (409 `other_pc`), a declared
 Content-Length over the cap is refused at once (413), then `request.stream()` is read by `builds.store_upload`
 in the threadpool through a small blocking reader, which stops at the cap (never `await request.body()`).
 
@@ -214,7 +215,7 @@ def _parents(material: str) -> dict:
 # ---------- routes ----------
 
 def routes(authed, sm) -> list[Route]:
-    async def upload(request: Request, kind: str, user_id: str | None):
+    async def upload(request: Request, kind: str, user_id: str | None, partial: str | None = None):
         device = request.state.device
         cap = builds.MAX_LIVE if kind == "live" else builds.MAX_SYSTEM
         declared = request.headers.get("content-length")
@@ -227,7 +228,7 @@ def routes(authed, sm) -> list[Route]:
         reader = _StreamReader(request)
 
         def run() -> str:
-            h = builds.store_upload(kind, reader, device_id=device, user_id=user_id)
+            h = builds.store_upload(kind, reader, device_id=device, user_id=user_id, partial=partial)
             if kind == "system":
                 builds.request_rebuild("system upload")
             return h
@@ -242,7 +243,10 @@ def routes(authed, sm) -> list[Route]:
         user_id = request.query_params.get("user_id")
         if user_id is not None and not USER_ID.fullmatch(user_id):
             raise _bad("user_id may only have letters, digits, - and _ (at most 64)")
-        h = await upload(request, "live", user_id)
+        partial = request.query_params.get("partial")
+        if partial is not None and not builds.STAMP_RE.fullmatch(partial):
+            raise _bad("partial must be a build stamp")
+        h = await upload(request, "live", user_id, partial)
         return JSONResponse({"live_hash": h})
 
     @authed

@@ -119,6 +119,19 @@ def test_live_upload_bad_user_id(c, uid):
     assert not live_files().exists()
 
 
+@pytest.mark.parametrize("part, status", [("20270115-080000", 200), ("20270115-080000-2", 200), ("x", 400),
+                                          ("../20270115-080000", 400), ("", 400)])
+def test_live_upload_partial_stamp(c, part, status):
+    """Ruling S28: `partial` (optional, a build stamp) is stored with the live upload; anything else is a 400."""
+    tok = token()
+    r = put_zip(c, tok, "live", zip_of({"base/x.json": "{}"}), "?user_id=1&partial=" + part)
+    assert r.status_code == status, r.text
+    if status == 200:
+        assert builds.meta()["partial"] == part
+    else:
+        assert r.json()["error"] == "bad_request" and not live_files().exists()
+
+
 def test_system_upload_counts_and_requests_rebuild(c):
     tok = token()
     r = put_zip(c, tok, "system", system_zip())

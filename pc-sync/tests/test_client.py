@@ -82,6 +82,9 @@ def test_matching_fp_works_and_sends_token(certs):
                                              "/api/sync/live?user_id=123"]
         assert reqs[1]["auth"] == "Bearer secret-token"
         assert reqs[3]["method"] == "PUT" and reqs[3]["type"] == "application/zip" and reqs[3]["body"] == b"zip"
+        # ruling S28: the stamp of a half-finished install rides along as `partial`
+        assert c.upload("live", b"zip", user_id="123", partial="20261102-010203") == {"live_hash": "h"}
+        assert srv.requests[-1]["path"] == "/api/sync/live?user_id=123&partial=20261102-010203"
 
 
 def test_wrong_fp_cert_changed_and_no_bytes_sent(certs):
