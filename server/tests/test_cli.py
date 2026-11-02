@@ -587,3 +587,30 @@ def test_profiles_status_and_restore_deleted(capsys, monkeypatch):
 def test_import_guard_removed():
     import inspect
     assert "ImportError" not in inspect.getsource(cli._request_rebuild)
+
+
+def test_profiles_lines_shows_orca_parent_and_set_parent_orca(capsys, monkeypatch):
+    import io as _io
+
+    import test_builds as TB
+    lib = library_mod.load()
+    lines_mod.ensure_saved("ELEGOO", "PETG HF", "PETG", bambu_parent=None, library=lib, store=None)
+    assert cli.main(["profiles", "lines"]) == 0
+    assert "orca Generic PETG (material)" in capsys.readouterr().out
+    asked = []
+    monkeypatch.setattr(builds, "request_rebuild", lambda reason, live_hash=None: asked.append(reason))
+    assert cli.main(["profiles", "set-parent", "elegoo--petg-hf", "Overture PLA Pro", "--orca"]) == 0
+    assert "Orca parent Overture PLA Pro (set by you)" in capsys.readouterr().out
+    line = lines_mod.load()["elegoo--petg-hf"]
+    assert (line.orca_parent, line.orca_parent_source) == ("Overture PLA Pro", "user")
+    assert line.parent_source == "library" and asked
+    assert cli.main(["profiles", "lines"]) == 0
+    assert "orca Overture PLA Pro (user)" in capsys.readouterr().out
+    # with an Orca store uploaded the name is checked against its library index
+    TB.pair("a")
+    builds.store_upload("orca_system", _io.BytesIO(TB.orca_system_zip()), device_id="a")
+    assert cli.main(["profiles", "set-parent", "elegoo--petg-hf", "No Such", "--orca"]) == 1
+    assert "not an Orca Slicer library preset" in capsys.readouterr().err
+    assert cli.main(["profiles", "set-parent", "elegoo--petg-hf", "Generic PETG @System", "--orca"]) == 1
+    assert "@" in capsys.readouterr().err
+    assert lines_mod.load()["elegoo--petg-hf"].orca_parent == "Overture PLA Pro"
