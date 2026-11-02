@@ -165,14 +165,20 @@ def test_install_both_trees_then_report_and_upload_both(env):
     assert "Orca Slicer" in _log(dirs)
 
 
-def test_orca_live_newer_than_build_asks_for_rebuild(env):
+def test_orca_live_newer_than_build_asks_for_rebuild_but_installs_bambu_studio(env):
+    """Ruling Z: the Orca hash never gates the Bambu Studio install; the orca/ tree waits for a matching build."""
     folders, orca, dirs = env
     live = _hashes(folders, orca)[0]
     c = OrcaClient(_state(folders, orca, build={"stamp": STAMP, "live_hash": live, "orca_live_hash": "older"}),
-                   _zip(live_hash=live))
-    assert _run(c, folders, orca, dirs) == "rebuild_requested"
-    assert ("rebuild", live) in c.calls and not [x for x in c.calls if x[0] == "build"]
+                   _zip(live_hash=live, orca_live_hash="older"))
+    assert _run(c, folders, orca, dirs) == "installed"
+    assert ("rebuild", live) in c.calls
     assert c.rebuild_orca == [_hashes(folders, orca)[2]]           # Ruling O: both live hashes
+    assert json.loads((folders.user_filament / "base" / "Acme PLA @BBL H2D.json").read_text())[
+        "nozzle_temperature"] == ["220"]
+    assert json.loads((orca.user_filament / f"{N}.json").read_text())["nozzle_temperature"] == ["215"]
+    assert "Orca presets not installed this run" in _log(dirs)
+    assert not (dirs.installed / "orca").exists()
 
 
 def test_orca_edit_after_install_asks_for_rebuild(env):
@@ -258,3 +264,126 @@ def test_orca_unreadable_opc_does_not_stop_the_bambu_sync(env, monkeypatch):
     assert _run(c, folders, orca, dirs) == "uploaded"
     assert _uploads(c) == ["live"]
     assert "Orca Slicer not synced this run" in _log(dirs) and "Permission denied" in _log(dirs)
+
+
+def _matching(folders, orca):
+    live, _, olive, _ = _hashes(folders, orca)
+    return live, olive
+
+
+def test_orca_pack_failure_skips_the_orca_install_and_backs_off(env, monkeypatch):
+    """Ruling Z: the Orca live folder cannot be packed (too large): Bambu Studio installs, orca/ does not, and
+    the Orca pack is not tried again for 6 h (orca_live_owed included)."""
+    folders, orca, dirs = env
+    live, olive = _matching(folders, orca)
+    st = _state(folders, orca, build={"stamp": STAMP, "live_hash": live, "orca_live_hash": olive})
+    st["orca_live_hash"] = "server-has-another"
+    c = OrcaClient(st, _zip(live_hash=live, orca_live_hash=olive))
+    real, tries = sync.zips.pack, []
+
+    def pack(root, max_bytes=None):
+        if root == orca.user_filament:
+            tries.append(root)
+            raise sync.zips.TooLarge(f"{root} is too large to upload")
+        return real(root, max_bytes)
+
+    monkeypatch.setattr(sync.zips, "pack", pack)
+    assert _run(c, folders, orca, dirs) == "installed"
+    assert json.loads((orca.user_filament / f"{N}.json").read_text())["nozzle_temperature"] == ["215"]
+    assert "Orca presets not installed this run" in _log(dirs)
+    assert "orca_live" not in _uploads(c) and tries
+    st2 = sync.load_state(dirs)
+    st2["orca_live_owed"] = True
+    sync._save_state(dirs, st2)
+    tries.clear()
+    c.calls.clear()
+    _run(c, folders, orca, dirs, now=T0 + 60)
+    assert not tries and "orca_live" not in _uploads(c)          # backed off, owed or not
+    tries.clear()
+    _run(c, folders, orca, dirs, now=T0 + sync.UPLOAD_BACKOFF + 61)
+    assert tries                                                   # tried again after 6 h
+
+
+def test_orca_upload_refused_backs_off_and_bambu_studio_still_installs(env):
+    """Ruling Z: a 400 on the Orca live upload: no orca/ install, no rebuild asked for Orca, Bambu Studio
+    installed; orca_live_owed never bypasses the 6 h backoff."""
+    folders, orca, dirs = env
+    live, olive = _matching(folders, orca)
+    st = _state(folders, orca, build={"stamp": STAMP, "live_hash": live, "orca_live_hash": "older"})
+    st["orca_live_hash"] = "older"
+    c = OrcaClient(st, _zip(live_hash=live, orca_live_hash="older"))
+    c.fail_kind["orca_live"] = client.ApiError(400, "bad_zip", "no")
+    assert _run(c, folders, orca, dirs) == "installed"
+    assert not [x for x in c.calls if x[0] == "rebuild"]
+    assert json.loads((folders.user_filament / "base" / "Acme PLA @BBL H2D.json").read_text())[
+        "nozzle_temperature"] == ["220"]
+    assert json.loads((orca.user_filament / f"{N}.json").read_text())["nozzle_temperature"] == ["215"]
+    assert "Orca presets not installed this run" in _log(dirs)
+    st2 = sync.load_state(dirs)
+    st2["orca_live_owed"] = True
+    sync._save_state(dirs, st2)
+    c.st.update(installed={"stamp": STAMP})
+    c.calls.clear()
+    assert _run(c, folders, orca, dirs, now=T0 + 60) in ("up_to_date", "uploaded")
+    assert "orca_live" not in _uploads(c)
+
+
+# ---------- Ruling AB: the install report says which trees went in ----------
+
+def test_install_report_names_both_trees(env):
+    folders, orca, dirs = env
+    live, olive = _matching(folders, orca)
+    c = OrcaClient(_state(folders, orca, build={"stamp": STAMP, "live_hash": live, "orca_live_hash": olive}),
+                   _zip(live_hash=live, orca_live_hash=olive))
+    assert _run(c, folders, orca, dirs) == "installed"
+    assert c.trees == [["base", "orca"]]
+
+
+def test_install_report_names_base_only_when_orca_did_not_go_in(env):
+    folders, orca, dirs = env
+    live = _hashes(folders, orca)[0]
+    c = OrcaClient(_state(folders, orca, build={"stamp": STAMP, "live_hash": live, "orca_live_hash": "older"}),
+                   _zip(live_hash=live, orca_live_hash="older"))
+    assert _run(c, folders, orca, dirs) == "installed"
+    assert c.trees == [["base"]]
+
+
+def test_resumed_install_reports_the_trees_it_was_started_with(env):
+    folders, orca, dirs = env
+    live = _hashes(folders, orca)[0]
+
+    def crashing_install(build_dir, folders, dirs, *, running, stamp_now, before_write=None, orca=None,
+                         orca_running=None):
+        assert orca is None                                    # started base/ only
+        backup = installer._backup(folders.user_filament, dirs.backups, stamp_now)
+        before_write(backup)
+        raise OSError("disk full")
+
+    c = OrcaClient(_state(folders, orca, build={"stamp": STAMP, "live_hash": live, "orca_live_hash": "older"}),
+                   _zip(live_hash=live, orca_live_hash="older"))
+    with pytest.raises(OSError):
+        _run(c, folders, orca, dirs, install=crashing_install)
+    assert json.loads(sync.marker_path(dirs).read_text())["orca"] is False
+    assert _run(c, folders, orca, dirs, now=T0 + 60) == "installed"
+    assert c.trees == [["base"]]
+    assert json.loads((orca.user_filament / f"{N}.json").read_text())["nozzle_temperature"] == ["215"]
+
+
+def test_owed_report_keeps_its_trees(env):
+    folders, orca, dirs = env
+    live, olive = _matching(folders, orca)
+    c = OrcaClient(_state(folders, orca, build={"stamp": STAMP, "live_hash": live, "orca_live_hash": olive}),
+                   _zip(live_hash=live, orca_live_hash=olive))
+    c.fail_kind = {}
+    real = c.installed
+
+    def failing(stamp, trees=None):
+        raise client.ApiError(503, "unavailable", "down")
+
+    c.installed = failing
+    with pytest.raises(client.ApiError):
+        _run(c, folders, orca, dirs)
+    assert sync.load_state(dirs)["report_trees"] == ["base", "orca"]
+    c.installed = real
+    _run(c, folders, orca, dirs, now=T0 + 60)
+    assert c.trees[0] == ["base", "orca"] and "report_trees" not in sync.load_state(dirs)

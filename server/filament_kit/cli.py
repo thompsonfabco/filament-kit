@@ -816,7 +816,7 @@ def cmd_profiles_lines() -> int:
         return 1
     c = builds.current()
     per_line: dict[str, int] = {}
-    for row in ((builds.manifest(c["stamp"]) or {}).get("presets", []) if c else []):
+    for row in builds.bambu_rows(builds.manifest(c["stamp"]) if c else None):
         if isinstance(row, dict) and isinstance(row.get("line_id"), str):
             per_line[row["line_id"]] = per_line.get(row["line_id"], 0) + 1
     if not ls:

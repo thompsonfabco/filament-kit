@@ -68,8 +68,9 @@ class FakeClient:
         self._maybe_fail("build")
         return self.zip
 
-    def installed(self, stamp):
+    def installed(self, stamp, trees=None):
         self.calls.append(("installed", stamp))
+        self.trees = getattr(self, "trees", []) + [trees]
         self._maybe_fail("installed")
         self.st["installed"] = {"stamp": stamp, "at": 1}
         return {"installed": {"stamp": stamp, "at": 1}}

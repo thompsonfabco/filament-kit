@@ -46,10 +46,17 @@ Orca Slicer (`orca` given: this PC has it; None: everything above, Bambu Studio 
     support would ignore `target=orca` and take the zip as the Bambu Studio live folder). Without it, or after a
     404 for a target=orca upload, Orca is skipped quietly: one log line, `state.json` `orca.note` (shown by
     `status`), retried after UPLOAD_BACKOFF for a 404.
-  - A build whose `orca_live_hash` is not this PC's Orca live hash asks for a rebuild like the Bambu one; an
-    Orca preset changed since the install (dirs.installed/orca) does too. The install puts the build's orca/
-    tree into Orca's folder (installer), and an interrupted one is resumed only when Orca's presets are
-    untouched as well. One `installed(stamp)` report covers both trees.
+  - Orca never holds up Bambu Studio (Ruling Z). An Orca upload the server refused (400/413) or that could not
+    be packed (too large, unreadable) is not tried again for UPLOAD_BACKOFF, `orca_live_owed` included; while
+    the Orca live folder is not on the server, Orca is not synced this run. A build whose `orca_live_hash` is not
+    this PC's Orca live hash asks for a rebuild, but its Bambu Studio presets are installed all the same; its
+    orca/ tree is installed only when Orca is synced this run and the build was made from exactly these Orca
+    presets (else "Orca presets not installed this run" is logged). An Orca preset changed since the install
+    (dirs.installed/orca) asks for a rebuild too. An interrupted install is resumed with the trees it was
+    started with (marker `orca`), and only when Orca's presets are untouched as well. One `installed(stamp,
+    trees)` report covers both trees and says which went in (["base"] or ["base", "orca"], Ruling AB: the
+    server diffs the Orca folder against the last build whose orca/ was installed); a report still owed after
+    a crash keeps its trees (`state.json` `report_trees`).
 
 Every outcome and the stale-preset list are logged in one line each. Errors other than an install
 refusal, a rejected upload or `409 other_pc` propagate (the caller logs them; the next run retries).
@@ -137,10 +144,18 @@ class _Run:
         rec = (self.st.get("uploaded") or {}).get(kind) or {}
         if rec.get("local") == here and rec.get("server") and rec.get("server") == server_hash:
             return False  # the server hashes our upload differently; already logged, nothing new to send
+        return not self._backed_off(kind, here)
+
+    def _backed_off(self, kind: str, here: str | None) -> bool:
+        """This version (`here`) of `kind` was refused or could not be packed less than UPLOAD_BACKOFF ago (a record
+        without a hash: the pack failed before hashing; any version waits)."""
         rej = (self.st.get("rejected") or {}).get(kind) or {}
-        if rej.get("hash") == here and self.now - float(rej.get("at") or 0) < UPLOAD_BACKOFF:
-            return False
-        return True
+        return bool(rej) and rej.get("hash") in (None, here) and self.now - float(rej.get("at") or 0) < UPLOAD_BACKOFF
+
+    def _failed(self, kind: str, here: str | None, err: str) -> None:
+        """An Orca upload that could not be made (pack too large, unreadable): backed off like a refusal."""
+        self.st.setdefault("rejected", {})[kind] = {"kind": kind, "hash": here, "at": self.now, "error": err}
+        self.save()
 
     def _partial(self) -> str | None:
         p = self.st.get("partial") or {}
@@ -186,10 +201,14 @@ class _Run:
         here = tree_hash(self.f.user_filament)
         self._send("live", zips.pack(self.f.user_filament, LIVE_MAX), here)
         if self.orca_on and self.o is not None:
+            h = None
             try:
-                data, h = zips.pack(self.o.user_filament, LIVE_MAX), tree_hash(self.o.user_filament)
-            except (zips.TooLarge, OSError) as e:   # orca_live_owed stays set: the next run sends it
-                self.log(f"Orca Slicer live presets not uploaded this run: {e}")
+                h = tree_hash(self.o.user_filament)
+                data = zips.pack(self.o.user_filament, LIVE_MAX)
+            except (zips.TooLarge, OSError) as e:   # orca_live_owed stays set, but backed off like a refusal
+                self._failed("orca_live", h, str(e))
+                self.log(f"Orca Slicer live presets not uploaded: {e}; not tried again for "
+                         f"{UPLOAD_BACKOFF // 3600} h")
                 return
             self._send("orca_live", data, h)
 
@@ -236,16 +255,24 @@ class _Run:
                    if self._needs_upload("system", system, server.get("system_hash")) else None)
         orca = []
         if self.orca_on:
+            kind, h = "orca_live", None
             try:
-                olive = tree_hash(self.o.user_filament)
-                if (self.st.get("orca_live_owed")
-                        or self._needs_upload("orca_live", olive, server.get("orca_live_hash"))):
+                h = olive = tree_hash(self.o.user_filament)
+                owed = self.st.get("orca_live_owed") and not self._backed_off("orca_live", olive)
+                if owed or self._needs_upload("orca_live", olive, server.get("orca_live_hash")):
                     orca.append(("orca_live", zips.pack(self.o.user_filament, LIVE_MAX), olive))
-                osys_zip, osys = zips.orca_system(self.o, SYSTEM_MAX)
-                if self._needs_upload("orca_system", osys, server.get("orca_system_hash")):
-                    orca.append(("orca_system", osys_zip, osys))
+                elif server.get("orca_live_hash") != olive and self._backed_off("orca_live", olive):
+                    self.orca_on = False        # refused not long ago: Orca is not synced until it is retried
+                    self.log("Orca Slicer not synced this run: its live presets were refused or could not be "
+                             f"sent less than {UPLOAD_BACKOFF // 3600} h ago")
+                kind, h = "orca_system", None
+                if self.orca_on and not self._backed_off("orca_system", None):
+                    osys_zip, osys = zips.orca_system(self.o, SYSTEM_MAX)
+                    if self._needs_upload("orca_system", osys, server.get("orca_system_hash")):
+                        orca.append(("orca_system", osys_zip, osys))
             except (zips.TooLarge, OSError) as e:   # an Orca problem (size, unreadable .opc or folder) must
-                self.log(f"Orca Slicer not synced this run: {e}")   # not stop the Bambu Studio sync
+                self._failed(kind, h, str(e))       # not stop the Bambu Studio sync; backed off like a refusal
+                self.log(f"Orca Slicer not synced this run: {e}; not tried again for {UPLOAD_BACKOFF // 3600} h")
                 self.orca_on, orca = False, []
         if live_zip is not None:
             self._send("live", live_zip, here)
@@ -254,6 +281,8 @@ class _Run:
         for kind, data, h in orca:
             if self.orca_on:                # a 404 on orca_live turns Orca off for the rest of this run
                 self._send(kind, data, h)
+                if kind == "orca_live" and self._backed_off("orca_live", h):
+                    self.orca_on = False    # refused now (400/413): the server has no Orca live presets of ours
         return here
 
     def accepted_hashes(self, here: str, kind: str = "live") -> set[str]:
@@ -292,16 +321,19 @@ class _Run:
 
     # --- install --------------------------------------------------------------------------
 
-    def report(self, stamp: str) -> None:
+    def report(self, stamp: str, trees: list[str] | None = None) -> None:
+        trees = list(trees) if trees else ["base"]
         self.st["report"] = stamp
+        self.st["report_trees"] = trees
         self.save()
         try:
-            self.c.installed(stamp)
+            self.c.installed(stamp, trees)
         except ApiError as e:
             if e.status != 404:
                 raise
             self.log(f"build {stamp} is no longer on the server; its install was not recorded there")
         self.st.pop("report", None)
+        self.st.pop("report_trees", None)
         self.save()
 
     def _download(self, stamp: str, work: Path):
@@ -313,16 +345,19 @@ class _Run:
         except ValueError as e:
             return None, f"build {stamp}: {e}"
 
-    def _write_marker(self, stamp: str, backup: Path) -> None:
-        store._write_atomic(marker_path(self.d),
-                            json.dumps({"stamp": stamp, "backup": backup.name, "at": self.now}).encode())
+    def _write_marker(self, stamp: str, backup: Path, with_orca: bool) -> None:
+        store._write_atomic(marker_path(self.d), json.dumps(
+            {"stamp": stamp, "backup": backup.name, "at": self.now, "orca": with_orca}).encode())
 
-    def _install(self, stamp: str, build_dir: Path, resuming: bool) -> str:
-        orca_kw = {"orca": self.o, "orca_running": self.orca_running} if self.o is not None else {}
+    def _install(self, stamp: str, build_dir: Path, resuming: bool, with_orca: bool = True) -> str:
+        """Install the build; its orca/ tree only `with_orca` (and when this PC has Orca Slicer)."""
+        with_orca = with_orca and self.o is not None
+        orca_kw = {"orca": self.o, "orca_running": self.orca_running} if with_orca else {}
         try:
             res = self.install_fn(build_dir, self.f, self.d, running=self.running,
                                   stamp_now=time.strftime("%Y%m%d-%H%M%S", time.localtime(self.now)),
-                                  before_write=lambda backup: self._write_marker(stamp, backup), **orca_kw)
+                                  before_write=lambda backup: self._write_marker(stamp, backup, with_orca),
+                                  **orca_kw)
         except installer.Refused as e:
             if e.code == "studio_running":
                 if not resuming:
@@ -344,7 +379,9 @@ class _Run:
             self.st["stale_orca"] = stale_orca
         self.st["installed"] = {"stamp": stamp, "at": self.now}
         self.st.pop("requested", None)
+        trees = ["base", "orca"] if with_orca and (build_dir / "orca").is_dir() else ["base"]
         self.st["report"] = stamp
+        self.st["report_trees"] = trees
         self.st["live_owed"] = True             # until upload_live() succeeds (S32)
         if installed_orca:
             self.st["orca_live_owed"] = True
@@ -355,7 +392,7 @@ class _Run:
         if stale_orca:
             self.log(f"{len(stale_orca)} Orca Slicer presets are no longer generated; delete them in Orca Slicer: "
                      + ", ".join(stale_orca))
-        self.report(stamp)                  # first: a failed report must not leave the new live folder uploaded
+        self.report(stamp, trees)           # first: a failed report must not leave the new live folder uploaded
         self.upload_live()
         orca = f", {len(installed_orca)} Orca Slicer presets" if installed_orca else ""
         return self.finish("installed", f"installed build {stamp} ({len(res.installed)} presets{orca}, "
@@ -367,11 +404,15 @@ class _Run:
             build_dir, meta = self._download(stamp, work)
             if build_dir is None:
                 return self.finish("refused", meta)
-            orca_ok = self.orca_accepted()
-            if (meta.get("stamp") not in (None, stamp) or meta.get("live_hash") not in (None, *accepted)
-                    or (orca_ok is not None and meta.get("orca_live_hash") not in (None, *orca_ok))):
+            if meta.get("stamp") not in (None, stamp) or meta.get("live_hash") not in (None, *accepted):
                 return self.finish("refused", f"build {stamp}: its BUILD.json does not match the server's state")
-            return self._install(stamp, build_dir, resuming=False)
+            orca_ok = self.orca_accepted()
+            with_orca = orca_ok is not None and meta.get("orca_live_hash") in orca_ok
+            if not with_orca and self.o is not None and (build_dir / "orca").is_dir():
+                why = ("Orca Slicer is not synced this run" if orca_ok is None
+                       else "the build was not made from your current Orca Slicer presets")
+                self.log(f"Orca presets not installed this run ({why}); Bambu Studio presets are")
+            return self._install(stamp, build_dir, resuming=False, with_orca=with_orca)
         finally:
             shutil.rmtree(work, ignore_errors=True)
 
@@ -403,7 +444,7 @@ class _Run:
                     continue  # untouched since the backup (missing in both also matches)
                 edited.append(p.stem)
             edited_orca = []
-            if self.o is not None and (build_dir / "orca").is_dir():
+            if self.o is not None and (build_dir / "orca").is_dir() and marker.get("orca", True) is not False:
                 obackup = self.d.orca_backups / str(marker.get("backup") or "\0missing")
                 for p in sorted((build_dir / "orca").glob("*.json")):
                     now = _read_bytes(self.o.user_filament / p.name)
@@ -420,7 +461,7 @@ class _Run:
                 self.log(f"interrupted install of build {stamp} not resumed: " + "; ".join(where))
                 return None
             self.log(f"finishing the interrupted install of build {stamp}")
-            return self._install(stamp, build_dir, resuming=True)
+            return self._install(stamp, build_dir, resuming=True, with_orca=marker.get("orca", True) is not False)
         finally:
             shutil.rmtree(work, ignore_errors=True)
 
@@ -474,7 +515,7 @@ class _Run:
 
         pending = self.st.get("report")
         if pending:
-            self.report(pending)
+            self.report(pending, self.st.get("report_trees"))
             server = self.c.state()
 
         here = self.uploads(server)
@@ -500,15 +541,16 @@ class _Run:
                 return self.finish("uploaded", f"build {stamp} is installed; the server has your latest presets")
             return self.finish("up_to_date", f"build {stamp} is installed")
         accepted = self.accepted_hashes(here)
-        orca_ok = self.orca_accepted()
-        if build.get("live_hash") not in accepted or (
-                orca_ok is not None and build.get("orca_live_hash") is not None
-                and build["orca_live_hash"] not in orca_ok):
+        if build.get("live_hash") not in accepted:  # only Bambu Studio gates the install (Ruling Z)
             if self.request(here):
                 return self.finish("rebuild_requested",
                                    f"build {stamp} predates your latest {self._apps()} presets; asked for a rebuild")
             return self.finish("waiting", f"waiting for the rebuild asked at "
                                           f"{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(self.st['requested']['at']))}")
+        orca_ok = self.orca_accepted()
+        if orca_ok is not None and "orca_live_hash" in build and build["orca_live_hash"] not in orca_ok \
+                and self.request(here):
+            self.log(f"build {stamp} predates your latest Orca Slicer presets; asked for a rebuild")
         return self.install(stamp, accepted)
 
     def _apps(self) -> str:
