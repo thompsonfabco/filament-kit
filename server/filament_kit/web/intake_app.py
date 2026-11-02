@@ -27,7 +27,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from starlette.routing import Route
 
-from .. import config, intake, modules
+from .. import config, intake, modules, tagsources
 from ..intake import CapReached, ReadCap, ReadError
 from ..station_client import StationClient
 from . import auth, mcp_tools
@@ -294,7 +294,6 @@ class IntakeApp:
                     state = st.state()
                 except Exception:  # noqa: BLE001 - a dead station only hides the scale
                     state = None
-            from .. import tagsources
             t = tagsources.latest(self.tools.cfg()) or {}
             key = (t.get("nfc_id"), t.get("read_at_unix"))
             if self.tag_cache.get("key") != key:  # the Spoolman lookup only when a new tap arrives
