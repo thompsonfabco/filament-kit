@@ -51,13 +51,17 @@ predates the install and would read the old values as in-app edits. That wait le
 again (at most MAX_RUNS times in all) while the rebuild request is newer than the run's start. The newest KEEP
 builds plus the installed one (and a partial one still named in meta.json) are kept.
 
-The Orca target (Task 6, Ruling O) is on when config `slicer_printers` lists a printer, `presets_orca` is true
-or Orca system presets were uploaded; off, a build is byte for byte what it was before the Orca target. On, the
-build also writes `orca/` (generate.OrcaTarget: Orca's own live folder, snapshot `orca/` tree, `orca_partial`,
-`orca_deleted_before`, the owner's Orca record), BUILD.json gains `orca_live_hash`, `orca_system_hash`,
-`orca_user_id`, `orca_inapp`, `orca_deleted`, `orca_restored`, `orca_stale` and a `target` on every preset row,
-and the S32 wait also covers the Orca live folder (when the installed build has an Orca tree and Orca's live
-folder predates the install; an Orca live upload renews the request like a Bambu Studio one).
+The Orca target (Task 6, Ruling O) is on when config `slicer_printers` lists a printer or `presets_orca` is true
+(Ruling X: an uploaded Orca store alone changes nothing); off, a build is byte for byte what it was before the
+Orca target. On, the build also writes `orca/` (generate.OrcaTarget: the Orca live folder, the snapshot's
+`orca/` tree, `orca_partial`, `orca_deleted_before`, the owner's Orca record), BUILD.json gains
+`orca_live_hash`, `orca_system_hash`, `orca_user_id`, `orca_inapp`, `orca_deleted`, `orca_restored`,
+`orca_stale` and a `target` on every preset row,
+and the S32 wait also covers the Orca live folder, but only while the PC is syncing Orca: the installed build
+has an Orca tree, the Orca live folder predates this install yet was uploaded after the install before it
+(installed.json `prev_at`), and the Bambu Studio live folder came less than ORCA_GRACE seconds ago if it already
+followed the install (an Orca upload that keeps failing never stalls the builds). An Orca live upload renews a
+waiting request like a Bambu Studio one. A new sync PC forgets the old one's Orca live upload (S34).
 """
 from __future__ import annotations
 
@@ -96,6 +100,7 @@ MAX_ENTRIES = 20_000
 MAX_FILE = 4 << 20
 MAX_TOTAL = 512 << 20
 MAX_RUNS = 3
+ORCA_GRACE = 30 * 60            # S32: how long a build waits for an Orca live upload after the Bambu Studio one
 KEEP = 5
 CHUNK = 64 * 1024
 MAX_PART = 255                  # bytes in one path part of an upload entry
@@ -360,6 +365,8 @@ def _forget_old_pc(meta: dict) -> None:
             pass
     meta.pop("partial", None)
     meta.pop("orca_partial", None)
+    for key in ("orca_live_at", "orca_live_hash", "orca_user_id"):   # the old PC's Orca: never waited for (I1)
+        meta.pop(key, None)
 
 
 def _rmtree(path: Path) -> None:
@@ -714,9 +721,9 @@ def _filament_map(manifest: dict) -> dict[str, str]:
 
 
 def _orca_config() -> dict | None:
-    """The Orca printers asked for in config: {"bambu": presets_orca, "slicer": slicer_printers}, or None when
-    neither is set (then the build is Bambu Studio only, unless Orca system presets were uploaded). An unreadable
-    config is taken as no Orca printers: it never stops the Bambu Studio build."""
+    """The Orca printers asked for in config: {"bambu": presets_orca, "slicer": slicer_printers, "nozzles":
+    presets_orca_nozzles}, or None when neither printer key is set (then the build is Bambu Studio only, Ruling
+    X). An unreadable config is taken as no Orca printers: it never stops the Bambu Studio build."""
     try:
         cfg = config.load()
     except (OSError, ValueError):
@@ -724,13 +731,31 @@ def _orca_config() -> dict | None:
     slicer = cfg.get("slicer_printers")
     slicer = slicer if isinstance(slicer, list) else ([slicer] if slicer else [])
     bambu = cfg.get("presets_orca") is True
-    return {"bambu": bambu, "slicer": slicer} if bambu or slicer else None
+    return {"bambu": bambu, "slicer": slicer, "nozzles": cfg.get("presets_orca_nozzles")} \
+        if bambu or slicer else None
 
 
 def _predates_install(installed: dict | None, live_at) -> bool:
     """The PC reported an install after its last upload of this live folder (S32)."""
     return bool(installed) and isinstance(live_at, (int, float)) and isinstance(installed.get("at"), (int, float)) \
         and installed["at"] > live_at
+
+
+def _wait_for_orca(installed: dict | None, meta: dict, folder: Path | None) -> bool:
+    """S32 for the Orca live folder (fix I1): only while the PC is syncing Orca. The Orca live folder predates
+    this install, was uploaded after the previous one (installed.json `prev_at`; any upload for a first install)
+    and the installed build has an Orca tree; once the Bambu Studio live folder followed the install, the Orca one
+    is waited for at most ORCA_GRACE seconds."""
+    olive = meta.get("orca_live_at")
+    if not _predates_install(installed, olive) or folder is None or not _has_orca_tree(folder):
+        return False
+    prev = installed.get("prev_at")
+    if isinstance(prev, (int, float)) and olive <= prev:
+        return False                            # no Orca upload since the previous install: not syncing Orca
+    live_at = meta.get("live_at")
+    if isinstance(live_at, (int, float)) and live_at > installed["at"] and time.time() - live_at > ORCA_GRACE:
+        return False                            # the Orca upload did not follow the Bambu Studio one
+    return True
 
 
 def _has_orca_tree(folder: Path) -> bool:
@@ -769,16 +794,15 @@ def _build_once(sm, now: float) -> dict:
                 live = generate.Live(live_copy, str(meta.get("user_id") or ""))
             installed = _installed()
             part = meta.get("partial")
-            ostore = orca_store()
-            orca_on = orca_printers is not None or ostore is not None
+            orca_on = orca_printers is not None         # Ruling X: config only
+            ostore = orca_store() if orca_on else None
             orca_live = None
             ouser = _live() / "orca" / "user"
             if orca_on and ouser.is_dir():
                 shutil.copytree(ouser, orca_copy)
                 orca_live = generate.Live(orca_copy, str(meta.get("orca_user_id") or ""), sub="")
             if _predates_install(installed, meta.get("live_at")) or (
-                    orca_on and _predates_install(installed, meta.get("orca_live_at"))
-                    and _has_orca_tree(root / installed["stamp"])):
+                    orca_on and _wait_for_orca(installed, meta, root / installed["stamp"] if installed else None)):
                 # the PC reported an install but has not uploaded the live folder since (S32; the Orca live
                 # folder too when the installed build has an Orca tree)
                 _set_state(last_attempt={"at": now, "ok": False, "error": WAIT_LIVE}, wait_live=True)
@@ -801,7 +825,8 @@ def _build_once(sm, now: float) -> dict:
         orca = None
         if orca_on:
             want = orca_printers or {}
-            oprinters, oproblems = generate.orca_printers(models if want.get("bambu") else [], want.get("slicer", []))
+            oprinters, oproblems = generate.orca_printers(models if want.get("bambu") else [], want.get("slicer", []),
+                                                          bambu_nozzles=want.get("nozzles"))
             opart = meta.get("orca_partial")
             obefore = _read_obj(_dir() / "deleted.json").get("orca_deleted_before")
             oe = owner_edits or {}
@@ -811,7 +836,8 @@ def _build_once(sm, now: float) -> dict:
                          and (root / opart / "BUILD.json").is_file() and opart != (installed or {}).get("stamp")
                          else None),
                 deleted_before={n for n in obefore if isinstance(n, str)} if isinstance(obefore, list) else set(),
-                owner_edits={"inapp": oe.get("orca_inapp"), "notes": oe.get("orca_notes")} if owner_edits else None)
+                owner_edits={"inapp": oe.get("orca_inapp"), "notes": oe.get("orca_notes")} if owner_edits else None,
+                user_id=str(meta.get("orca_user_id") or ""))
         with lines_mod.locked():
             ls = lines_mod.load()
             manifest, new_lines = generate.build_all(
@@ -835,10 +861,11 @@ def _build_once(sm, now: float) -> dict:
             lines_mod.save(new_lines)
         deleted = {"deleted_before": manifest.get("deleted", [])}
         cur = {"stamp": stamp, "created": now, "live_hash": meta.get("live_hash"),
-               "presets": len(manifest.get("presets", [])), "problems": len(problems)}
+               "presets": len(bambu_rows(manifest)), "problems": len(problems)}
         if orca is not None:
             deleted["orca_deleted_before"] = manifest.get("orca_deleted", [])
             cur["orca_live_hash"] = meta.get("orca_live_hash")
+            cur["orca_presets"] = len(manifest.get("presets", [])) - cur["presets"]
         _write_json(_dir() / "deleted.json", deleted)
         _write_json(_dir() / "current.json", cur)
         if restore:
@@ -902,6 +929,14 @@ def manifest(stamp: str) -> dict | None:
     return m if isinstance(m, dict) else None
 
 
+def bambu_rows(manifest: dict | None) -> list[dict]:
+    """A build's Bambu Studio preset rows (a row without `target` predates the Orca target): what preset counts
+    count (fix M2); Orca rows are counted apart."""
+    rows = (manifest or {}).get("presets")
+    return [p for p in rows if isinstance(p, dict) and p.get("target", generate.BAMBU_STUDIO)
+            == generate.BAMBU_STUDIO] if isinstance(rows, list) else []
+
+
 def build_zip(stamp: str) -> bytes:
     """`BUILD.json` + `base/<name>.json|.info` (+ the flat `orca/<name>.json|.info` tree) of a kept build;
     ProfileError 404 for an unknown stamp."""
@@ -933,7 +968,11 @@ def record_installed(stamp: str, device_id: str) -> dict:
                 and (_builds() / stamp / "BUILD.json").is_file()):
             raise _not_found(f"no build {stamp!r}")
         at = time.time()
-        _write_json(_dir() / "installed.json", {"stamp": stamp, "at": at, "device_id": device_id})
+        rec = {"stamp": stamp, "at": at, "device_id": device_id}
+        prev = _installed()                     # the install before this one (the Orca S32 wait, fix I1)
+        if prev and isinstance(prev.get("at"), (int, float)) and prev.get("device_id") == device_id:
+            rec["prev_at"] = prev["at"]
+        _write_json(_dir() / "installed.json", rec)
         meta = _meta()
         if "partial" in meta or "orca_partial" in meta:     # a finished install ends the partial one (S28)
             meta.pop("partial", None)
@@ -994,7 +1033,7 @@ def status() -> dict:
     meta = _meta()
     o = owner()
     ups = [t for t in (meta.get("live_at"), meta.get("system_at")) if isinstance(t, (int, float))]
-    return {"lines": n_lines, "presets": len(m.get("presets", [])), "build": _build_view(),
+    return {"lines": n_lines, "presets": len(bambu_rows(m)), "build": _build_view(),
             "last_attempt": _attempt_view(), "installed": _installed_view(),
             "pc": {"device_id": o, "last_upload": max(ups) if ups else None} if o else None,
             "stale": list(m.get("stale", [])), "problems": list(m.get("problems", []))[:20]}

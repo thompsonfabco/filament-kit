@@ -587,7 +587,8 @@ class OrcaPrinter:
     name: str                   # the printer Orca knows: "Bambu Lab H2D", or the configured "Sovol SV08 MAX"
     label: str                  # in preset names: "<line> @<label> <nozzle>" ("H2D", "SV08 MAX")
     bambu: bool                 # parents from Orca's BBL system presets; nozzles from them, per line
-    nozzles: list[str]          # a configured printer's nozzles
+    nozzles: list[str]          # a configured printer's nozzles; for a Bambu printer the allowed ones ([]: all
+                                # the store lists but 0.2, as ops made them: Ruling W)
     compat: dict[str, str]      # nozzle -> compatible_printers entry (a configured printer's own preset names)
     chamber: int | None = None
 
@@ -609,6 +610,7 @@ class OrcaTarget:
     partial: Path | None = None
     deleted_before: set[str] | None = None
     owner_edits: dict | None = None
+    user_id: str = ""           # Orca's user id as the PC sync reported it (the .info user_id without a live folder)
 
 
 def _label(name: str) -> str:
@@ -617,13 +619,24 @@ def _label(name: str) -> str:
     return name.split(" ", 1)[1] if " " in name.strip() else name
 
 
-def orca_printers(models: list[str], slicer_printers: list) -> tuple[list[OrcaPrinter], list[str]]:
+def orca_printers(models: list[str], slicer_printers: list,
+                  bambu_nozzles: list | None = None) -> tuple[list[OrcaPrinter], list[str]]:
     """(the Orca printers, problems): the Bambu `models` (pass the registry's when `presets_orca` is on, else
     []), then each valid `slicer_printers` entry {"name", "slicer": "orca", "nozzles": [...], optional "label",
-    optional "compatible_printers": {nozzle: printer preset name}}. A bad entry is a problem line."""
+    optional "compatible_printers": {nozzle: printer preset name}}. A bad entry is a problem line.
+    `bambu_nozzles` (config `presets_orca_nozzles`) limits the Bambu printers' Orca nozzles; None: every nozzle
+    the Orca store lists except 0.2 (Ruling W: ops made Orca H2D presets for 0.4/0.6/0.8 only)."""
     out: list[OrcaPrinter] = []
     problems: list[str] = []
     seen: set[str] = set()
+    allowed: list[str] = []
+    if bambu_nozzles is not None:
+        if isinstance(bambu_nozzles, list) and all(isinstance(n, str) and _NOZZLE.fullmatch(n)
+                                                   for n in bambu_nozzles):
+            allowed = list(dict.fromkeys(bambu_nozzles))
+        else:
+            problems.append("config presets_orca_nozzles must be a list of sizes such as 0.4; the default "
+                            "(all but 0.2) is used")
     for m in models:
         name = models_mod.printer_preset_name(m)
         if name is None:
@@ -631,7 +644,7 @@ def orca_printers(models: list[str], slicer_printers: list) -> tuple[list[OrcaPr
             continue
         if name not in seen:
             seen.add(name)
-            out.append(OrcaPrinter(name, _label(name), True, [], {}, models_mod.chamber_max(m)))
+            out.append(OrcaPrinter(name, _label(name), True, list(allowed), {}, models_mod.chamber_max(m)))
     for i, e in enumerate(slicer_printers or []):
         where = f"config slicer_printers[{i}]"
         if not isinstance(e, dict):
@@ -763,7 +776,8 @@ def _build_orca_line(line: Line, fs: list[dict], ids: list[int], *, t: OrcaTarge
         if p.bambu:
             if line.bambu_parent is None:
                 continue                                # reported by lines.problems
-            sizes = store.bbl.nozzles_for(line.bambu_parent, p.name)
+            sizes = [n for n in store.bbl.nozzles_for(line.bambu_parent, p.name)
+                     if (n in p.nozzles if p.nozzles else n != "0.2")]
             if not sizes:
                 problems.append(f"{line.line_id}: no Orca Slicer {line.bambu_parent!r} system preset lists "
                                 f"{p.name}; no Orca Slicer {p.label} presets")
@@ -801,7 +815,8 @@ def _build_orca_line(line: Line, fs: list[dict], ids: list[int], *, t: OrcaTarge
             parent = f"{line.orca_parent}{SYSTEM}" if line.orca_parent else None
             lib_row = store.library.get(parent) if parent is not None else None
             if lib_row is None:
-                why = f"Orca parent {parent!r} is not in the uploaded Orca Slicer system presets" if parent                     else "no Orca parent"
+                why = (f"Orca parent {parent!r} is not in the uploaded Orca Slicer system presets" if parent
+                       else "no Orca parent")
                 problems.append(f"{name}: {why}; skipped (set one: filament-kit profiles set-parent "
                                 f"{line.line_id} <parent> --orca)")
                 continue
@@ -894,7 +909,8 @@ def _build_orca_preset(line: Line, name: str, p: OrcaPrinter, nozzle: str, paren
         problems.append(f"{name}: skipped ({'; '.join(errs)})")
         return None
     # 6. files
-    info = {"sync_info": "", "user_id": t.live.user_id if t.live is not None else "", "setting_id": "",
+    info = {"sync_info": "", "user_id": (t.live.user_id if t.live is not None else "") or t.user_id,
+            "setting_id": "",
             "base_id": base_id if isinstance(base_id, str) else "", "updated_time": int(now)}
     sid = (live_info or {}).get("setting_id")
     if sid:

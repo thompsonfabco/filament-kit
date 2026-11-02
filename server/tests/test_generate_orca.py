@@ -39,8 +39,8 @@ def ostore(bbl_presets=None) -> orca.OrcaStore:
 
 
 def target(tmp_path, *, store="default", slicer=(SV08,), presets_orca=False, models=TG.MODELS, live=None,
-           snapshot=None, partial=None, deleted_before=(), owner_edits=None):
-    printers, problems = G.orca_printers(models if presets_orca else [], list(slicer))
+           snapshot=None, partial=None, deleted_before=(), owner_edits=None, bambu_nozzles=None):
+    printers, problems = G.orca_printers(models if presets_orca else [], list(slicer), bambu_nozzles=bambu_nozzles)
     return G.OrcaTarget(store=ostore() if store == "default" else store, printers=printers, problems=problems,
                         live=live, snapshot=snapshot, partial=partial, deleted_before=set(deleted_before),
                         owner_edits=owner_edits)
@@ -176,7 +176,7 @@ def test_rechoose_orca_at_build_time(tmp_path):
 # ---------- Bambu printers (presets_orca) ----------
 
 def test_bambu_printers_get_orca_presets_inheriting_the_bbl_system_preset(tmp_path):
-    m, _ = build(tmp_path, slicer=(), presets_orca=True)
+    m, _ = build(tmp_path, slicer=(), presets_orca=True, bambu_nozzles=["0.2", "0.4", "0.6", "0.8"])     # 0.2 only when asked for
     assert onames(m) == sorted([h2d(n) for n in ("0.2", "0.4", "0.6", "0.8")] + ["SUNLU PLA+ 2.0 @P1S 0.4"])
     cfg = oread(tmp_path, h2d("0.4"))
     assert cfg["inherits"] == "Bambu PLA Tough+ @BBL H2D"
@@ -199,7 +199,8 @@ def test_bambu_orca_parent_missing_for_a_nozzle_is_a_problem(tmp_path):
     p = orca_bbl()
     del p["Bambu PLA Tough+ @BBL H2D 0.2 nozzle"]
     p["Bambu PLA Tough+ @BBL H2D"]["compatible_printers"] = TG.cp(TG.H2D, "0.2", "0.4", "0.6", "0.8")
-    m, _ = build(tmp_path, t=target(tmp_path, store=ostore(p), slicer=(), presets_orca=True))
+    m, _ = build(tmp_path, t=target(tmp_path, store=ostore(p), slicer=(), presets_orca=True,
+                                       bambu_nozzles=["0.2", "0.4", "0.6", "0.8"]))
     assert h2d("0.2") in onames(m)
     p["Bambu PLA Tough+ @BBL H2D"]["inherits"] = "missing @base"           # the parent no longer resolves
     m, _ = build(tmp_path, t=target(tmp_path, store=ostore(p), slicer=(), presets_orca=True), out="o2")
@@ -311,3 +312,22 @@ def test_local_library_orca_parent_wins_in_the_merged_entry():
     lib = {"vendor": "SUNLU", "product": "PLA+ 2.0", "orca_parent": "Generic PLA", "fields": {}}
     loc = {"vendor": "SUNLU", "product": "PLA+ 2.0", "orca_parent": "SUNLU PLA+ 2.0", "fields": {}}
     assert values.merged_entry(Lookup(lib, loc))["orca_parent"] == "SUNLU PLA+ 2.0"
+
+
+def test_bambu_orca_nozzles_skip_0_2_unless_configured(tmp_path):
+    m, _ = build(tmp_path, slicer=(), presets_orca=True)
+    assert h2d("0.2") not in onames(m) and h2d("0.4") in onames(m)
+    printers, problems = G.orca_printers(TG.MODELS, [], bambu_nozzles=["0.2", "0.8"])
+    assert problems == []
+    m, _ = build(tmp_path, out="o2", t=G.OrcaTarget(store=ostore(), printers=printers, problems=problems))
+    assert onames(m) == [h2d("0.2"), h2d("0.8")]
+    _p, problems = G.orca_printers(TG.MODELS, [], bambu_nozzles=["big"])
+    assert any("presets_orca_nozzles" in p for p in problems)
+
+
+def test_info_user_id_without_an_orca_live_upload(tmp_path):
+    """M4: with no Orca live folder the .info user_id is the one the PC sync reported (meta orca_user_id)."""
+    t = target(tmp_path)
+    t.user_id = OUSER
+    build(tmp_path, t=t)
+    assert oinfo(tmp_path, sv08("0.4"))["user_id"] == OUSER
