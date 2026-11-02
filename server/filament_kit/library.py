@@ -57,9 +57,10 @@ LOCAL_HOST = re.compile(r"http://(127\.0\.0\.1|localhost):\d{1,5}/.*")
 
 # ---------- fl.py port ----------
 
-TOP_KEYS = ["schema_version", "vendor", "product", "material", "colors", "bambu_parent", "fields",
+TOP_KEYS = ["schema_version", "vendor", "product", "material", "colors", "bambu_parent", "orca_parent", "fields",
             "published_ranges", "conflicts", "source_quality", "sources", "updated"]
-REQUIRED = [k for k in TOP_KEYS if k != "bambu_parent"]
+PARENT_KEYS = ("bambu_parent", "orca_parent")     # optional; orca_parent = OrcaFilamentLibrary base name (Task 3)
+REQUIRED = [k for k in TOP_KEYS if k not in PARENT_KEYS]
 LOCAL_OPTIONAL = ("sources", "source_quality", "conflicts", "colors", "updated", "published_ranges")
 REQUIRED_LOCAL = [k for k in REQUIRED if k not in LOCAL_OPTIONAL]
 FIELD_KEYS = ["nozzle_temperature_range_low", "nozzle_temperature_range_high", "filament_density",
@@ -127,11 +128,13 @@ def validate(entry: dict, *, local: bool = False) -> list[str]:
             errs.append(f"unknown top-level key '{k}'")
     if "schema_version" in entry and entry["schema_version"] != SCHEMA_VERSION:
         errs.append(f"schema_version must be {SCHEMA_VERSION}")
-    for k in ("vendor", "product", "material", "bambu_parent"):
+    for k in ("vendor", "product", "material", *PARENT_KEYS):
         if k in entry and not (isinstance(entry[k], str) and entry[k].strip()):
             errs.append(f"'{k}' must be a non-empty string")
     if isinstance(entry.get("bambu_parent"), str) and "@" in entry["bambu_parent"]:
         errs.append("bambu_parent must not carry an '@<printer>' suffix")
+    if isinstance(entry.get("orca_parent"), str) and "@" in entry["orca_parent"]:
+        errs.append("orca_parent must not carry an '@' suffix (give the base name, without ' @System')")
     for k in ("vendor", "product"):
         if isinstance(entry.get(k), str) and not slug(entry[k]):
             errs.append(f"'{k}' has no filesystem-safe characters")
