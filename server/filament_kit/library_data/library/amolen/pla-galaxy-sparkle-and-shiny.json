@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "vendor": "AMOLEN",
+  "product": "PLA Galaxy / Sparkle & Shiny",
+  "material": "PLA",
+  "colors": [
+    "Galaxy-Blue Purple Fuchsia",
+    "Galaxy-Shiny Polarized Multicolor"
+  ],
+  "bambu_parent": "Bambu PLA Galaxy",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.20"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "30-65",
+    "_drying": "55+/-5C 6-8h",
+    "filament_retraction_length": "0.8-1.2",
+    "filament_retraction_speed": "35-45",
+    "_print_speed": "< 250 mm/s",
+    "_vitrification": "56-60 (Tg)",
+    "_vicat": "56-60",
+    "_hdt_0.45MPa": "54-58",
+    "_notes": "Glitter/sparkle-filled PLA."
+  },
+  "conflicts": [
+    "nozzle 210-240C (https://www.amolen.com/products/pla-galaxy-pack, variety-pack page)"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.amolen.com/products/pla-galaxy",
+    "https://www.amolen.com/products/pla-galaxy-pack"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "Transparent PLA",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Translucent",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "225"
+    ],
+    "filament_density": [
+      "1.24"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "45-55",
+    "fan_min_speed/fan_max_speed": "50-100",
+    "_print_speed": "50-350 mm/s (TDS)",
+    "_drying": "40-50C 4-6h (TDS)",
+    "_enclosure": "No (TDS)",
+    "_min_nozzle": "0.15",
+    "_hdt": "60 (HDT B, ISO 75)",
+    "_vitrification": "60 (Tg, DSC)",
+    "_ams": "Product page: compatible with all AMS systems.",
+    "_notes": "Melting temperature 175C (DSC). Higher temperature and lower speed give clearer parts (TDS). Food-contact approved raw materials."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://formfutura.com/web/content/315381?download=true",
+    "https://formfutura.com/filaments/transparent-pla"
+  ],
+  "updated": "2026-11-01"
+}

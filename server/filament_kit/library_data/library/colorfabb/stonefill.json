@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "vendor": "ColorFabb",
+  "product": "stoneFill",
+  "material": "PLA",
+  "colors": [
+    "Light Gray",
+    "Red Brick",
+    "Moss Green"
+  ],
+  "bambu_parent": "Bambu PLA Marble",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "195"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "_print_speed": "40-100 mm/s",
+    "_vitrification": "55 (Tg)",
+    "_diameter_tolerance": "+/-0.05",
+    "_drying": "Page: requires drying from time to time to reduce stringing and oozing (no temp/time given)",
+    "_notes": "Biobased PLA blend mimicking stone; page says it contains no stone powder. No TDS or density published. Nominal diameter not printed on the cited page (variant selector not readable), so filament_diameter is left out."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://colorfabb.com/stonefill-light-gray"
+  ],
+  "updated": "2026-11-01"
+}

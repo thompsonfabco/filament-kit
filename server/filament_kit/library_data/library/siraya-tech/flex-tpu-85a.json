@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "Siraya Tech",
+  "product": "Flex TPU 85A",
+  "material": "TPU",
+  "colors": [
+    "Black",
+    "White",
+    "Clear",
+    "Green"
+  ],
+  "bambu_parent": "Bambu TPU 85A",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "225"
+    ],
+    "filament_density": [
+      "1.16"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "20-50",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "1800-3600 mm/min",
+    "_print_speed": "30-90 mm/s",
+    "_drying": "50-65C 4-6h (oven; TDS says a filament dryer is not recommended)",
+    "_vicat": "76 (ISO 306)",
+    "_hardness": "85A (ISO 7619)",
+    "_min_nozzle": ">0.2 mm; best results with 0.4 mm",
+    "_ams": "Not stated in TDS; 85A TPU is generally too soft for AMS - feed externally. TDS recommends direct drive with the spool mounted above the extruder.",
+    "_notes": "TDS: short melt zones may need 215-225C, long melt zones 200-210C; black often prints slightly cooler than white. Melting point 200C. Cooling fan on. ISO 10993-5/-10/-23 biocompatibility tested. Diameter not stated on TDS."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://siraya.tech/pages/siraya-tech-fibreheart-flex-tpu-85a-tds",
+    "https://siraya.tech/products/flex-tpu-85a-filament"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "vendor": "Siraya Tech",
+  "product": "Fibreheart TPU-GF",
+  "material": "TPU-GF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Generic TPU for AMS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.32"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "40-60",
+    "fan_min_speed/fan_max_speed": "20-50",
+    "filament_retraction_length": "0.8-1.5 (direct drive); 2.0-4.0 (Bowden)",
+    "filament_retraction_speed": "25-35",
+    "_print_speed": "30-100",
+    "_drying": "50-60C 6h+",
+    "_hardened_nozzle_required": "yes",
+    "_colors_note": "Pass 1 recorded bare colour names, not full Spoolman names; match on vendor+product."
+  },
+  "conflicts": [
+    "[pass 1] User guide spec block 220-250C / 30-80 mm/s vs TDS 240-270C / 30-100",
+    "[pass 1] AMS 2 compatibility contradicts between TDS and guide"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://siraya.tech/pages/fibreheart-tpu-gf-filament-tds",
+    "https://siraya.tech/pages/fibreheart-tpu-gf-filament-user-guide"
+  ],
+  "updated": "2026-11-01"
+}

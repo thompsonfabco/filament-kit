@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "vendor": "Inland",
+  "product": "PETG",
+  "material": "PETG",
+  "colors": [
+    "White",
+    "Black",
+    "Yellow",
+    "Red",
+    "Purple",
+    "Gray",
+    "Dark Gray",
+    "Silver",
+    "Translucent Blue",
+    "Translucent Red",
+    "Translucent Green",
+    "Translucent Magenta"
+  ],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "Values from the White 1.75 mm and Black 2.85 mm key features (microcenter.com, read via search index; direct fetch 403); same ranges for 2.85 mm. Mix of cardboard and plastic spools by colour. Density not published."
+  },
+  "conflicts": [
+    "nozzle_temperature_range: 220-245 (bed 70) (Translucent Green listing) - https://www.microcenter.com/product/606542/inland-175mm-petg-3d-printer-filament-1kg-(22-lbs)-cardboard-spool-translucent-green",
+    "nozzle_temperature_range_high: 240 (Gray listing (230-240) per search snippet) - https://www.microcenter.com/quickView/503749/inland-175mm-gray-petg-3d-printer-filament---1kg-spool-(22-lbs)",
+    "bed_all_plates: No heated bed needed (Older Amazon-listing copy on a deal aggregator) - https://dealnews.com/products/Inland/Inland-1-75-mm-White-PETG-3-D-Printer-Filament-Dimensional-Accuracy-0-03-mm-1-kg-Spool-2-2-lbs/329312.html"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.microcenter.com/product/503741/inland-175mm-petg-3d-printer-filament-1kg-(22-lbs)-cardboard-spool-white",
+    "https://www.microcenter.com/product/485882/inland-285mm-black-petg-3d-printer-filament---1kg-(22lbs)"
+  ],
+  "updated": "2026-11-01"
+}

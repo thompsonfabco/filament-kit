@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "vendor": "Spectrum",
+  "product": "S-Flex 90A",
+  "material": "TPU",
+  "colors": [],
+  "bambu_parent": "Bambu TPU 90A",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.22"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-70",
+    "_print_speed": "15-50 mm/s",
+    "_cooling": "YES (up to 100%)",
+    "_enclosure": "not necessary",
+    "_hardened_nozzle_required": "not necessary",
+    "_hardness": "90A (DIN 53505)"
+  },
+  "conflicts": [
+    "Official product page (https://spectrumfilaments.com/en/filament/s-flex-90a/) lists bed 0-50, print speed 15-70 mm/s; TDS dated 06-04-2022 values kept in fields/published_ranges."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://spectrumfilaments.com/wp-content/uploads/2022/05/en_tds_spectrum_sflex_90a.pdf",
+    "https://spectrumfilaments.com/en/filament/s-flex-90a/"
+  ],
+  "updated": "2026-11-01"
+}

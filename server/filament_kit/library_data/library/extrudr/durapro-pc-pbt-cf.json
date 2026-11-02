@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "vendor": "Extrudr",
+  "product": "DuraPro PC/PBT CF",
+  "material": "PC",
+  "colors": [],
+  "bambu_parent": "Generic PC",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "265"
+    ],
+    "nozzle_temperature_range_high": [
+      "295"
+    ],
+    "filament_max_volumetric_speed": [
+      "18"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "110",
+    "fan_min_speed/fan_max_speed": "0-30%",
+    "_print_speed": "max. 250 mm/s",
+    "_enclosure": "yes",
+    "_hardened_nozzle_required": "yes",
+    "_min_nozzle": "0.5 mm (catalogue settings are given for a 0.5 mm nozzle)",
+    "_vicat": "130 (VICAT A, catalogue feature list)",
+    "_notes": "PC/PBT blend with carbon fibre. Density left unset: this product's properties table in the catalogue repeats the DuraPro PA12 table (1.01 g/cm3, Vicat 142), so it was not used. Bambu Studio has no PC/PBT system preset, so Generic PC is used. Diameter not stated in the catalogue, so filament_diameter is left unset."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://s3.extrudr.com/extrudr-media/product-catalogue/extrudr-Produktkatalog_EN.pdf"
+  ],
+  "updated": "2026-11-01"
+}

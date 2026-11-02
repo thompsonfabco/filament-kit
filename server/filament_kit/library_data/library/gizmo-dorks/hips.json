@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "vendor": "Gizmo Dorks",
+  "product": "HIPS",
+  "material": "HIPS",
+  "colors": [
+    "HIPS Black"
+  ],
+  "bambu_parent": "Generic HIPS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_soluble": [
+      "1"
+    ],
+    "filament_is_support": [
+      "1"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "110",
+    "_diameter_tolerance": "+/-0.05 (roundness +/-0.07)",
+    "_notes": "Dissolves in limonene (not acetone); commonly used as dissolvable support with ABS."
+  },
+  "conflicts": [
+    "[pass 2] Gizmo Dorks Amazon listings: nozzle 225-250C, bed 80-110C, +/-0.03 mm.",
+    "[merge] published_ranges._diameter_tolerance: pass 6 value \"+/-0.05 (roundness +/-0.07)\" replaced earlier value \"+/-0.05\"",
+    "[pass 6] Amazon B00FG7BWDQ (search snippet) states diameter +/-0.05 and roundness +/-0.07; pass 5 recorded +/-0.03 from Amazon; newer Gray listing B08LKCP1C9 states +/-0.02.",
+    "[pass 6] Older Amazon colour listings (Gray B00GU2O56C; Amazon.ca Purple B00GU2NU8G) state 210-230C; pass 5 recorded Amazon 225-250C with bed 80-110C. gizmodorks.com (230-250C, bed 110C) kept as primary.",
+    "[pass 6] filament_soluble set because the brand states limonene dissolves HIPS; it is not water-soluble."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://gizmodorks.com/hips-3d-printer-filament/",
+    "https://www.amazon.com/Gizmo-Dorks-Filament-Printers-1-75mm/dp/B08MTSB2W9",
+    "https://www.amazon.com/Gizmo-Dorks-1-75mm-Filament-Printers/dp/B00FG7BWDQ",
+    "https://www.amazon.ca/Gizmo-Dorks-2-85mm-Filament-Printers/dp/B00GU2NU8G"
+  ],
+  "updated": "2026-11-08"
+}

@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "vendor": "Protopasta",
+  "product": "High Density Stainless Steel HTPLA",
+  "material": "PLA",
+  "colors": [
+    "Stainless Steel"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "24"
+    ]
+  },
+  "published_ranges": {
+    "_nozzle_by_speed": "200C @ up to 24 mm3/s (EX10 blog, Bambu P1S 0.4 steel nozzle)",
+    "_annealing": "100C (200-225F) for 10+ minutes; heat resistance up to 150C after treatment, with associated shrink",
+    "_notes": "70 wt% 400-series stainless steel (most magnetic HTPLA). No TDS, SDS density or Material Data Table row; only a single print temperature published, so nozzle range is left out of fields. Metal-filled and printed with a steel nozzle in EX10; Protopasta does not state a nozzle requirement for this line."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://proto-pasta.com/blogs/stories/endless-exploration-ex10-september-2025-high-density-metal-htpla",
+    "https://proto-pasta.com/products/high-density-steel-filled-htpla"
+  ],
+  "updated": "2026-11-01"
+}

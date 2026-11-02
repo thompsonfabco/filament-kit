@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "Volcano PLA 150C",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "195"
+    ],
+    "nozzle_temperature_range_high": [
+      "225"
+    ],
+    "filament_density": [
+      "1.2"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "45-65",
+    "fan_min_speed/fan_max_speed": "50-100",
+    "_print_speed": "25-200 mm/s (TDS)",
+    "_drying": "not necessary (TDS)",
+    "_enclosure": "Not necessary (TDS)",
+    "_min_nozzle": "0.15",
+    "_hdt": "110 (HDT B, ISO 75)",
+    "_vicat": "140 (ISO 306)",
+    "_notes": "Long-term heat resistance 150C without load and without annealing (in-house). Crystallization temp 105C, melting point 170C (DSC). Semi-matte finish."
+  },
+  "conflicts": [
+    "Product page heat bed 45-60C vs TDS 45-65C."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://formfutura.com/web/content/275229?download=true",
+    "https://formfutura.com/filaments/volcano-pla-150c"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "ELEGOO",
+  "product": "PETG-GF",
+  "material": "PETG-GF",
+  "colors": [
+    "Glass Fiber Black",
+    "Glass Fiber Grey",
+    "Glass Fiber White"
+  ],
+  "bambu_parent": "Bambu PETG-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.30"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "65-75 (depends on printer and build plate type)",
+    "chamber_temperatures": "25-50",
+    "_drying": "60C 8h (+/-5C)",
+    "_drying_required": "Required",
+    "_min_nozzle": "0.4",
+    "_hardened_nozzle_required": "yes (hardened steel nozzle listed)",
+    "_enclosure": "not required",
+    "_plates": "Textured/Smooth PEI or Other Plates; glue recommended",
+    "_max_print_speed": "< 220 mm/s",
+    "_vicat": "83",
+    "_hdt_0.45MPa": "74",
+    "_notes": "Glass-fibre filled. bambu_parent is the closest fibre-filled PETG system preset (no PETG-GF preset exists). Melting temperature 226C; melt index 18.5 +/- 3.5 g/10 min; print and store at <=20% RH sealed with desiccant."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://us.elegoo.com/products/petg-gf-filament-1-75mm-colored-1kg"
+  ],
+  "updated": "2026-11-01"
+}

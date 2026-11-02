@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "PLA-HF",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.24"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "45-65",
+    "fan_max_speed": "100",
+    "_drying": "50C 8-12h",
+    "_max_print_speed": "<900 (varies by machine)",
+    "_hdt_0.45MPa": "52.45",
+    "_notes": "eSUN PLA-HF (high flow) TDS v1.0 Feb 2026. Nozzle sizes 0.2/0.4/0.6/0.8 mm; PEI plate. Diameter not stated in TDS."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://assets.spoolscout.com/tds-sds/esun/tds/esun-pla-hf-tds-v1.0-2026-02.pdf",
+    "https://www.spoolscout.com/data-sheets/esun/pla-pla-hf"
+  ],
+  "updated": "2026-11-01"
+}

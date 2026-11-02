@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "ThermaX HTS1",
+  "material": "Support",
+  "colors": [],
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "365"
+    ],
+    "nozzle_temperature_range_high": [
+      "390"
+    ],
+    "filament_density": [
+      "1.37"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_is_support": [
+      "1"
+    ],
+    "filament_soluble": [
+      "0"
+    ]
+  },
+  "published_ranges": {
+    "_vitrification": "225 (Tg, DSC)",
+    "_hdt_1.8MPa": "205",
+    "_notes": "Values from MatterHackers listing 'ThermaX HTS High Temp Support' (out of stock); official page unreachable (HTTP 429). Break-away support for PEEK, PEKK and Ultem. Bed temps up to 160C; heated chamber required for best results (max 225C). Beyond Bambu Lab printer nozzle limits."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://www.matterhackers.com/store/l/3dxtech-thermax-hts-high-temp-support-material-05kg/sk/MUR6KR2J"
+  ],
+  "updated": "2026-11-01"
+}

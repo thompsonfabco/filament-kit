@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "vendor": "Fiberlogy",
+  "product": "PEI 9085",
+  "material": "PEI",
+  "colors": [
+    "Natural",
+    "Black"
+  ],
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "350"
+    ],
+    "nozzle_temperature_range_high": [
+      "380"
+    ],
+    "filament_density": [
+      "1.34"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "160",
+    "chamber_temperatures": ">80",
+    "fan_min_speed/fan_max_speed": "0-25",
+    "_drying": "120C 6h",
+    "_enclosure": "heated enclosed chamber >80C essential",
+    "_hdt_0.45MPa": "169 (ISO 75)",
+    "_hdt_1.8MPa": "152 (ISO 75)",
+    "_vicat": "173 (ISO 306)",
+    "_notes": "Requires a printer designed for PEEK/PEKK/PEI-class materials; beyond Bambu X1/P1 hotend and bed limits. Higher drying temperatures may warp the spool. Bed: smooth PEI, textured PEI, glass + Kapton tape or Magigoo PRO HT. No matching Bambu Studio system preset; bambu_parent omitted."
+  },
+  "conflicts": [
+    "_notes: temperature resistance 'up to 180C' (description) vs 'up to 190C' (feature list) (source: https://fiberlogy.com/en/filaments/pei-en/pei-9085-en/)"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://fiberlogy.com/en/filaments/pei-en/pei-9085-en/"
+  ],
+  "updated": "2026-11-01"
+}

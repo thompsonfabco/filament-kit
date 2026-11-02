@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "Flashforge",
+  "product": "PC",
+  "material": "PC",
+  "colors": [],
+  "bambu_parent": "Bambu PC",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100-120",
+    "fan_min_speed/fan_max_speed": "0-50",
+    "filament_retraction_length": "0.3-2",
+    "filament_retraction_speed": "30-50",
+    "_print_speed": "40-60 mm/s (50 recommended); travel 60-120 mm/s",
+    "_nozzle_recommended": "250C",
+    "_bed_recommended": "110C",
+    "_drying": "80C >=12h (hot dry air oven)",
+    "_annealing": "post-print 100C 1-3h to increase strength (TDS)",
+    "_density": "1.2-1.21 g/cm3 (ISO 1183); published as a range only, so filament_density left unset",
+    "_hdt_0.45MPa": "123 (ISO 75, 0.455 MPa)",
+    "_ambient_temperature": "40-70C",
+    "_min_nozzle": "TDS: 0.4/0.6 mm (0.4 recommended)",
+    "_notes": "BPA-free modified PC; TDS says it is printable on printers without a heated chamber, yet lists 40-70C ambient. Continuous service temperature 130C. Water absorption 0.8%. Self-supporting. TDS dated 2022-02-23. Current retail availability not confirmed because the store catalogue pages were blocked."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://after-support.flashforge.jp/uploads/datasheet/tds/PC_TDS_EN.pdf"
+  ],
+  "updated": "2026-11-01"
+}

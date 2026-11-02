@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "vendor": "QIDI Tech",
+  "product": "UltraPA",
+  "material": "PA",
+  "colors": [],
+  "bambu_parent": "Generic PA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "260"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_density": [
+      "1.21"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-80 (PEI or PVP glue)",
+    "fan_min_speed/fan_max_speed": "20%-60%",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "1800-3600 mm/min",
+    "_drying": "80-100C 4-6h",
+    "_print_speed": "30-120 mm/s",
+    "_hdt_0.45MPa": "79.6 (filament guide)",
+    "_annealing": "80-100C 4-8h (filament guide)",
+    "_min_nozzle": "0.4",
+    "_notes": "Sold as 'UltraPA Nylon Filament (PPA)'. Melt 231C, water absorption 2.10%. Product page HDT 72.5C, load not stated. Product page lists brass nozzles as not recommended; filament guide says all nozzle materials. Keep <15% RH."
+  },
+  "conflicts": [
+    "filament guide: nozzle material 'All Material' vs product page brass not recommended (https://qidi3d.com/pages/choose-the-right-filament-3d-filaments-guide-for-qidi-printers)"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://drive.google.com/file/d/1jmsVT1VEDuBnvCmDz2Kv86LoPw0sGFFU/view",
+    "https://qidi3d.com/products/qidi-nylon-filament-ultrapa",
+    "https://qidi3d.com/pages/choose-the-right-filament-3d-filaments-guide-for-qidi-printers"
+  ],
+  "updated": "2026-11-01"
+}

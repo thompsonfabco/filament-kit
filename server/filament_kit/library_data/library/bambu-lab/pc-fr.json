@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "Bambu Lab",
+  "product": "PC FR",
+  "material": "PC",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu PC FR",
+  "fields": {
+    "filament_density": [
+      "1.18"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "chamber_temperatures": "45-60",
+    "_drying": "oven 80C 8h; heatbed 90-100C 12h",
+    "_nozzle_sizes": "0.2,0.4,0.6,0.8",
+    "_hdt": "113",
+    "_annealing": "85-100C 6-12h",
+    "_colors_note": "Pass 1 recorded bare colour names, not full Spoolman names; match on vendor+product.",
+    "_vitrification": "114 (Vicat)"
+  },
+  "conflicts": [
+    "[pass 1] Density/Vicat/HDT from reseller quoting Bambu",
+    "[pass 1] Nozzle/bed ranges not retrieved"
+  ],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://wiki.bambulab.com/filament-acc/abs-asa-pc/4adf3c9827a0475d8777e9b8cfd11fbe.pdf",
+    "https://manuals.plus/m/3fcf4c83b6d2696a90f0547442f172b4ef68bb875a5a1a3fead7f3954e8ea58e",
+    "https://shop3duniverse.com/products/bambu-lab-pc-fr-flame-retardant-polycarbonate-1-75mm-1kg"
+  ],
+  "updated": "2026-11-01"
+}

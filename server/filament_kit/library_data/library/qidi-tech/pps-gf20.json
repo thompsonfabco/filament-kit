@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "vendor": "QIDI Tech",
+  "product": "PPS-GF20",
+  "material": "PPS-GF",
+  "colors": [
+    "Gray"
+  ],
+  "bambu_parent": "Generic PPS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "310"
+    ],
+    "nozzle_temperature_range_high": [
+      "350"
+    ],
+    "filament_density": [
+      "1.36"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80-90",
+    "chamber_temperatures": "room temperature",
+    "fan_min_speed/fan_max_speed": "off",
+    "_drying": "100C 10h (TDS); 100C 8-10h (product page)",
+    "_print_speed": "up to 250 mm/s (TDS); 20-150 mm/s (product page)",
+    "_vitrification": "95.0 (Tg)",
+    "_vicat": "272.5",
+    "_hdt_0.45MPa": "236.3",
+    "_annealing": "130C 10h",
+    "_hardened_nozzle_required": "yes (hardened steel/bimetal/tungsten carbide; brass not recommended)",
+    "_min_nozzle": "0.4",
+    "_ams": "QIDI BOX compatible per QIDI",
+    "_notes": "Melt 279.6C. Flame retardancy V0. 750 g spool. No PPS-GF preset in Bambu Studio; Generic PPS used."
+  },
+  "conflicts": [
+    "product page: nozzle 300-350C, bed 80-100C (https://qidi3d.com/products/pps-gf20)"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://drive.google.com/file/d/13fkWXJpT4IpjIFlmNUgOdwIsaMPlIddV/view",
+    "https://qidi3d.com/products/pps-gf20",
+    "https://qidi3d.com/pages/choose-the-right-filament-3d-filaments-guide-for-qidi-printers"
+  ],
+  "updated": "2026-11-01"
+}

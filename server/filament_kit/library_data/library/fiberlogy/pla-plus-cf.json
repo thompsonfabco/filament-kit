@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "Fiberlogy",
+  "product": "PLA+CF",
+  "material": "PLA-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu PLA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.26"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60",
+    "fan_min_speed/fan_max_speed": "75-100",
+    "_drying": "50C 6h",
+    "_enclosure": "not required",
+    "_fiber_content": "10% carbon fiber",
+    "_hardened_nozzle_required": "yes - highly abrasive, hardened steel or ruby nozzle required",
+    "_hdt_0.45MPa": "137 (annealed, ISO 75)",
+    "_vicat": "89 (annealed, ISO 306)",
+    "_notes": "Bed surfaces: smooth PEI, textured PEI, glass. Described as designed for high-speed printing (no speed figure given)."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://fiberlogy.com/en/filaments/pla-en/placf-en/"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "vendor": "Kingroon",
+  "product": "ABS",
+  "material": "ABS",
+  "colors": [
+    "Black",
+    "White",
+    "Gray",
+    "Blue",
+    "Green",
+    "Orange",
+    "Pink",
+    "Red",
+    "Silver",
+    "Yellow"
+  ],
+  "bambu_parent": "Bambu ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.05"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80-100",
+    "chamber_temperatures": "45-60",
+    "fan_min_speed/fan_max_speed": "0-80%",
+    "filament_retraction_length": "0.8-1.4",
+    "filament_retraction_speed": "20-40",
+    "_drying": "80C 8h",
+    "_max_print_speed": "<300 mm/s",
+    "_min_nozzle": "0.2",
+    "_enclosure": "chamber 45-60 C recommended",
+    "_hdt_0.45MPa": "87",
+    "_vicat": "94",
+    "_annealing": "80-90C 6-12h",
+    "_notes": "TDS V1.0: Engineering Plate / High Temperature Plate / Textured PEI with glue; HDT 1.8 MPa 84 C; PC+ABS spool rated 90 C. kingroon.com handle says 'abs-carbon-fiber' but the product is plain ABS in solid colours. Verification 2026-11-01: fields and plate/chamber/fan/retraction ranges confirmed against the TDS PDF; kingroon.com / kingroon3d.com product pages returned HTTP 429, so page-derived notes and conflicts were not re-checked."
+  },
+  "conflicts": [
+    "kingroon.com legacy 'ABS 3D Printer Filament 1.75mm (FRESH)' page: nozzle 240-270, bed 80-120, print speed 50-100 mm/s"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://wiki.kingroon.com/kingroon_abs_technical_data_sheet_v1.0.pdf",
+    "https://kingroon.com/products/2kg-pack-abs-3d-printer-filament-fresh"
+  ],
+  "updated": "2026-11-01"
+}

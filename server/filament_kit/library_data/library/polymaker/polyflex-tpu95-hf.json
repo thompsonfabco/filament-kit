@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "vendor": "Polymaker",
+  "product": "PolyFlex TPU95-HF",
+  "material": "TPU",
+  "colors": [
+    "Black",
+    "White",
+    "Clear",
+    "Translucent Red"
+  ],
+  "bambu_parent": "Bambu TPU 95A HF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.16"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "25-50",
+    "fan_max_speed": "ON",
+    "filament_retraction_length": "3-6",
+    "filament_retraction_speed": "40-60",
+    "_print_speed": "30-100",
+    "_drying": "70C 8h",
+    "_enclosure": "not needed",
+    "_hardness": "95A (Shore, ISO 7619-1)"
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://wiki.polymaker.com/polymaker-products/polymaker-filaments/prime-materials/flexible-tpu/polyflex-tm-tpu95-hf",
+    "https://cdn.shopify.com/s/files/1/0548/7299/7945/files/PolyFlex_TPU95_HF_TDS_EN_V5.4.pdf",
+    "https://shop.polymaker.com/products/polyflex-tpu95-hf"
+  ],
+  "updated": "2026-11-01"
+}

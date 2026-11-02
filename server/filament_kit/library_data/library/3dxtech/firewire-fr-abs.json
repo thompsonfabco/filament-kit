@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "Firewire FR-ABS",
+  "material": "ABS",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100-110",
+    "_drying": "80C 4h",
+    "_diameter_tolerance": "+/-0.05",
+    "_enclosure": "Heated chamber recommended",
+    "_notes": "Values from MatterHackers (authorized reseller) listing; official page unreachable (HTTP 429). Flame retardant: UL94 V-0 at 1.5mm; V-0, 5VB at 2.0/2.5/3.0mm. Thermal properties 'up to 95C' (method not stated). Bed prep Magigoo. Density/Tg not found."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://www.matterhackers.com/store/l/3dxtech-firewire-flame-retardant-abs/sk/MH501GJQ"
+  ],
+  "updated": "2026-11-01"
+}

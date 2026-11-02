@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "vendor": "ColorFabb",
+  "product": "PETG Economy",
+  "material": "PETG",
+  "colors": [],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "235"
+    ],
+    "nozzle_temperature_range_high": [
+      "255"
+    ],
+    "filament_density": [
+      "1.28"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-80",
+    "fan_min_speed/fan_max_speed": "75-100",
+    "_print_speed": "30-50 mm/s",
+    "_hdt_0.45MPa": "65 (HDT-B, ISO 75)",
+    "_vitrification": "70 (Tg, DSC ISO 11357)",
+    "_diameter_tolerance": "+/-0.05 (1.75 mm; TDS 'max. roundness deviation'), +/-0.1 (2.85 mm)",
+    "_notes": "TDS v1.0. High fan for aesthetics, least cooling for layer adhesion. Spools 750/2200/4500/8000 g."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://downloads.colorfabb.com/public.php/dav/files/rtfDDRCa723Xdor/Technical%20Data%20Sheets/Co-Polyester/colorFabb%20PETG/TDS_E_ColorFabb_PETG_Economy.pdf"
+  ],
+  "updated": "2026-11-01"
+}

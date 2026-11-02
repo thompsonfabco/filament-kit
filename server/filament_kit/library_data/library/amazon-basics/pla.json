@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "vendor": "Amazon Basics",
+  "product": "PLA",
+  "material": "PLA",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_notes": "Amazon listing (B07SZLYWS2) gives no nozzle/bed temperatures, density or tolerance; it states 'no heated bed required', low-warp. Official manual PDF (manuals.plus copy, B09YRD4ZTW / B07SZLYWS2) was 403 and not read. Third-party review (All3DP 2019) quotes manufacturer 190-220 nozzle / 45-55 bed, not used because not an official source. No Amazon Basics system preset in Bambu Studio; parent chosen by material."
+  },
+  "conflicts": [],
+  "source_quality": "brand_amazon_listing",
+  "sources": [
+    "https://www.amazon.com/dp/B07SZLYWS2"
+  ],
+  "updated": "2026-11-01"
+}

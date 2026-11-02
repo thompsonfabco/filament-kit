@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "vendor": "SUNLU",
+  "product": "PP",
+  "material": "PP",
+  "colors": [
+    "Natural"
+  ],
+  "bambu_parent": "Generic PP",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "filament_retraction_length": "0.8-1.2mm",
+    "filament_retraction_speed": "30-40mm/s",
+    "_nozzle_by_speed": "210-230C @ <=30mm/s",
+    "_drying": "50C (drying time not published)",
+    "_hdt_0.45MPa": "58.5±3",
+    "_moulding_shrinkage": "1.5%",
+    "_hardness": "54.5 (Shore, TDS)",
+    "_notes": "Bed 50-60C 'when using 3M adhesive to bond PP sheets'; TDS plate: PP platform with glue. Density published as '/' (not given)."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://media.sunlu.com/prod/20260413/fbfe6e74-b29f-4f0f-a9b3-84aaa6b2fc85.pdf?filename=TDS",
+    "https://www.sunlu.com/products/pp-filament-3d"
+  ],
+  "updated": "2026-11-01"
+}

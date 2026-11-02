@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "vendor": "Kexcelled",
+  "product": "K5 ABS",
+  "material": "ABS",
+  "colors": [],
+  "bambu_parent": "Bambu ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_density": [
+      "1.05"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80-100",
+    "_melt_temperature": "~180 (ISO 11357)",
+    "_hdt_0.45MPa": "85",
+    "_vicat": "98 (10N)",
+    "_print_speed": "200 mm/s",
+    "_cooling_fan": "0-50%",
+    "_bed_surface": "Tape or glue",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "TDS 'THE K5 ABS' rev 05, 12/11/2024; settings based on a 0.4mm nozzle. Also 2.85mm (+/-0.03). TDS gives no enclosure or drying spec."
+  },
+  "conflicts": [
+    "Nozzle 220-250, print speed 40-80mm/s (older TDS 'ABS K5' rev 04, 12/01/2022, reseller copy): https://3dprinteq.dk/wp-content/uploads/KEXCELLED-ABS-K5-Technical-Date-Sheet-EN.pdf"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0958/0111/4939/files/THE_K5_ABS_TDS.pdf"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "vendor": "GEEETECH",
+  "product": "Matte PLA",
+  "material": "PLA",
+  "colors": [
+    "Black",
+    "White",
+    "Olive Green",
+    "Grey",
+    "Brown",
+    "Orange",
+    "Blue",
+    "Green",
+    "Skin",
+    "Light Grey",
+    "Dark Grey",
+    "Navy Blue",
+    "Stone Grey",
+    "Terracotta"
+  ],
+  "bambu_parent": "Bambu PLA Matte",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-70",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "Official GEEETECH store page (support.geeetech.com, PLA Matte Black). Vacuum sealed with desiccant. No density, speed or AMS statement from GEEETECH (AMS use only reported in a customer review)."
+  },
+  "conflicts": [
+    "Some reseller listings (3djake.ch, newer colours e.g. Light Grey/Brown) state 185-215C nozzle, 25-60C bed and Bambu Lab AMS compatibility; not an official source, not used."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://support.geeetech.com/pla-matte-black-3d-printer-filament-175mm-1kgroll-p-1267.html",
+    "https://support.geeetech.com/filament-matte-pla-c-83_142.html"
+  ],
+  "updated": "2026-11-01"
+}

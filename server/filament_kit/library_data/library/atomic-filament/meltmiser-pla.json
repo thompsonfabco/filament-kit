@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "vendor": "Atomic Filament",
+  "product": "MeltMiser PLA",
+  "material": "PLA",
+  "colors": [
+    "Black",
+    "White"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.25"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_vitrification": "55-60 (Tg, Atomic PLA SDS)",
+    "_diameter_tolerance": "+/-0.02",
+    "_ams": "AMS compatible (1 kg)",
+    "_notes": "Atomic's economy PLA line (virgin NatureWorks Ingeo PLA, no specialised additives). No bed temperature published. Density/Tg from the generic Atomic PLA SDS."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://atomicfilament.com/products/meltmiser-white-pla",
+    "https://atomicfilament.com/products/3-5kg-meltmiser-black-pla-filament",
+    "https://cdn.shopify.com/s/files/1/0778/8857/files/Atomic-PLA-SDS-8-2021.pdf?v=1628017942"
+  ],
+  "updated": "2026-11-01"
+}

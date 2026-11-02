@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "vendor": "Push Plastic",
+  "product": "Carbon Fiber ABS",
+  "material": "ABS-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.02"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100-120",
+    "_drying": "60C 4h",
+    "_enclosure": "Heated enclosure not required (per print-settings sheet)",
+    "_print_speed": "40mm/s (preferred: 0.6mm nozzle, 0.4mm layer, 235C extruder, 110C bed)",
+    "_hardened_nozzle_required": "yes - carbon fiber is abrasive, use a hardened steel nozzle",
+    "_hdt": "105 (ASTM D648, printed specimens; load not stated)",
+    "_notes": "Preferred parameters use a 0.6mm nozzle. Bambu Studio has no ABS-CF system preset; Bambu ABS used as nearest. CF filament may be brittle in the AMS. Colour assumed black. Fiber loading not stated in the TDS or print-settings sheet."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0260/7421/files/CFABS_print_settings.pdf",
+    "https://cdn.shopify.com/s/files/1/0260/7421/files/Push_Plastic_CF_ABS_Technical_Data_sheet_fa9bc359-10e2-4ae5-9cdd-853a2b165d73.pdf",
+    "https://www.pushplastic.com/products/carbon-fiber-abs-filament-1-75mm-500g"
+  ],
+  "updated": "2026-11-01"
+}

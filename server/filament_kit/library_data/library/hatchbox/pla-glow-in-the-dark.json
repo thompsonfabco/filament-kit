@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "vendor": "Hatchbox",
+  "product": "PLA Glow in the Dark",
+  "material": "PLA",
+  "colors": [
+    "Green",
+    "Blue",
+    "White",
+    "Red"
+  ],
+  "bambu_parent": "Bambu PLA Glow",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "180"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "Product pages: 'Print Temperature - 180C - 220C', 'No Heating Bed Required', dimensional accuracy +/- 0.03mm. Glow pigments are typically abrasive but Hatchbox publishes no hardened-nozzle guidance. Also sold in 3.00 mm. Verified 2026-11-01 against the product pages' Shopify JSON/HTML."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.hatchbox3d.com/products/3d-pla-1kg1-75-glow",
+    "https://www.hatchbox3d.com/products/3d-pla-1kg1-75-g-blu"
+  ],
+  "updated": "2026-11-01"
+}

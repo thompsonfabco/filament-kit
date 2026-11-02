@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "vendor": "DEEPLEE",
+  "product": "PLA+ 2.0",
+  "material": "PLA",
+  "colors": [
+    "PLA+ 2.0 Sunflower Yellow"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "35-65",
+    "_print_speed": "30-300",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "Amazon bullet: 'nozzle temperature of 200-230 C, a bed temperature of 35-65 C and a print speed of 30-300 mm/s'. MPN US-SO-DP-SPP011. DEEPLEE trademark (US 99093685, filed 2025-03-20) is owned by Shenzhen Elegoo Technology Co., Ltd. No density, drying or volumetric speed published."
+  },
+  "conflicts": [
+    "[pass 4] Amazon listing B0F66GKGVY: brand Deeplee but sold by YES-TECH, not the DeepleeDirect brand store that sells the other DEEPLEE lines. The same 200-230C / 35-65C / 30-300 mm/s text appears on a Newegg listing (seller BlissElectro).",
+    "[pass 4] Spool label says 190-230C; listing says 200-230C.",
+    "[pass 4] ELEGOO 3D Official Store eBay.de multi-material DEEPLEE listing (127432711413, includes PLA+ 2.0) gives one listing-wide spec set: nozzle 190-220C, bed 50-65C, 30-70 mm/s. It is not material-specific, so it was not used."
+  ],
+  "source_quality": "brand_amazon_listing",
+  "sources": [
+    "https://www.amazon.com/dp/B0F66GKGVY",
+    "https://www.newegg.com/p/298-00N0-001U3",
+    "https://markinton.com/trademark/deeplee-99093685"
+  ],
+  "updated": "2026-11-01"
+}

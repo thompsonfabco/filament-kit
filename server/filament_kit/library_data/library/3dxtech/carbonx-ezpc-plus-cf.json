@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "CarbonX ezPC+CF",
+  "material": "PC-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu PC",
+  "fields": {
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_drying": "120C 4h",
+    "_hardened_nozzle_required": "yes (abrasion-resistant, e.g. hardened steel)",
+    "_min_nozzle": "0.4",
+    "_notes": "MatterHackers listing gives single values only, no range: printing temperature 275C, bed 95C (bed prep PEI tape, Kapton or glue on glass); dry at 120C for at least 4 hours. No nozzle range published in sources read, so nozzle fields left empty. Official page unreachable (HTTP 429). No Bambu PC-CF preset; parent is Bambu PC."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://www.matterhackers.com/store/l/3dxtech-carbonx-black-ezpccf-filament/sk/MKWN4KHH"
+  ],
+  "updated": "2026-11-01"
+}

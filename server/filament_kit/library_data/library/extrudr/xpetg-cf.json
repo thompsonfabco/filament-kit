@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "vendor": "Extrudr",
+  "product": "XPETG CF",
+  "material": "PETG-CF",
+  "colors": [],
+  "bambu_parent": "Bambu PETG-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.29"
+    ],
+    "filament_max_volumetric_speed": [
+      "10"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-90",
+    "fan_min_speed/fan_max_speed": "20-50%",
+    "_print_speed": "20-200 mm/s",
+    "_enclosure": "for larger components",
+    "_hardened_nozzle_required": "yes",
+    "_min_nozzle": "0.5 mm (catalogue settings are given for a 0.5 mm nozzle)",
+    "_vicat": "85 (Vicat A, ISO 306)",
+    "_hdt_0.45MPa": "69 (HDT/B, ISO 75)",
+    "_notes": "Carbon-fibre PETG; UL94 V-2 at 3.2 mm. Diameter not stated in the catalogue, so filament_diameter is left unset."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://s3.extrudr.com/extrudr-media/product-catalogue/extrudr-Produktkatalog_EN.pdf"
+  ],
+  "updated": "2026-11-01"
+}

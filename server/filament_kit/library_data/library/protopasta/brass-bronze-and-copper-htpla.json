@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "vendor": "Protopasta",
+  "product": "Brass, Bronze & Copper HTPLA",
+  "material": "PLA",
+  "colors": [
+    "Brass",
+    "Bronze",
+    "Copper"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "195"
+    ],
+    "nozzle_temperature_range_high": [
+      "200"
+    ],
+    "filament_density": [
+      "2.3"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "24"
+    ]
+  },
+  "published_ranges": {
+    "_nozzle_by_speed": "200C @ 24 mm3/s (Material Data Table); 195C @ 2-3 mm3/s, 20-30 mm/s (TDS, Ultimaker S5 profile)",
+    "_bed": "55C plate (Material Data Table); 60C heated bed (TDS)",
+    "_hardened_nozzle_required": "Hard steel nozzle + gears recommended (Material Data Table)",
+    "_vitrification": "approx. 60 (Tg onset, TDS)",
+    "_annealing": "95-110C for 10+ minutes; pre-scale x/y 101.5%, z 99% (TDS)",
+    "_notes": "Metal powder fill, max particle 250 microns; min bend diameter 30 mm. Avoid printing below 3 mm3/s; replace tubing more often. fields low/high are the TDS and Material Data Table single values."
+  },
+  "conflicts": [
+    "Density: 2.5 g/cc in the Copper Alloy HTPLA SDS (https://cdn.shopify.com/s/files/1/0717/9095/files/HTPLA_Copper_Alloy.pdf) vs approx. 2.3 g/cc in the TDS"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0717/9095/files/TDS__BrassBronzeCopper_HTPLA_1.0.0.pdf",
+    "https://proto-pasta.com/pages/material-data-table",
+    "https://cdn.shopify.com/s/files/1/0717/9095/files/HTPLA_Copper_Alloy.pdf"
+  ],
+  "updated": "2026-11-01"
+}

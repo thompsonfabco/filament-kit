@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "AquaSolve - PVA",
+  "material": "PVA",
+  "colors": [],
+  "bambu_parent": "Bambu PVA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "180"
+    ],
+    "nozzle_temperature_range_high": [
+      "205"
+    ],
+    "filament_density": [
+      "1.23"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_soluble": [
+      "1"
+    ],
+    "filament_is_support": [
+      "1"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "0-60",
+    "fan_min_speed/fan_max_speed": "0-30",
+    "_min_nozzle": "0.15",
+    "_notes": "Linked TDS (256478) is Formfutura's own AquaSolve PVA TDS v2 (29 October 2015): print temp 180-205C, SG 1.23. Product page: do not exceed 225C (PVA crystallizes); PVA must not sit long in a hot idle nozzle. Experience level Expert.",
+    "_vicat": "60.2 (ISO 306 VST/A/50)"
+  },
+  "conflicts": [
+    "Product page print temp 190-210C vs TDS v2 180-205C."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://formfutura.com/filaments/aquasolve-pva",
+    "https://formfutura.com/web/content/256478?download=true"
+  ],
+  "updated": "2026-11-01"
+}

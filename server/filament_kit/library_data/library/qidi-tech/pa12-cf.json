@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "vendor": "QIDI Tech",
+  "product": "PA12-CF",
+  "material": "PA12-CF",
+  "colors": [],
+  "bambu_parent": "Generic PA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "280"
+    ],
+    "nozzle_temperature_range_high": [
+      "300"
+    ],
+    "filament_density": [
+      "1.09"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "40-70 (PVP glue)",
+    "fan_min_speed/fan_max_speed": "off",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "1800-3600 mm/min",
+    "_drying": "80-100C 4-6h",
+    "_print_speed": "30-120 mm/s",
+    "_hdt_0.45MPa": "138.2 (filament guide)",
+    "_annealing": "100C 8h (TDS); 80-100C 4-8h also stated",
+    "_hardened_nozzle_required": "yes (hardened steel/bimetal; brass not recommended)",
+    "_min_nozzle": "0.4",
+    "_ams": "keep <15% RH; product page lists no multi-colour system",
+    "_notes": "TDS v5.0 (12.2023), whose body text also says 'PA612-CF'. Melt 167C. Water absorption 2.46%. HDT 1.8MPa 78.4C unannealed / 99.6C annealed. No QIDI preset in Bambu Studio; Generic PA-CF used."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://drive.google.com/file/d/1okRIgdMGYnvKH9blOvPHu6OqeKzVnhgz/view",
+    "https://qidi3d.com/products/qidi-carbon-fiber-filament-pa12-cf",
+    "https://qidi3d.com/pages/choose-the-right-filament-3d-filaments-guide-for-qidi-printers"
+  ],
+  "updated": "2026-11-01"
+}

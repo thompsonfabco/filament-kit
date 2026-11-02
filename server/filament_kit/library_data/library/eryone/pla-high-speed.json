@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "PLA High-Speed",
+  "material": "PLA",
+  "colors": [
+    "Skin Color",
+    "White",
+    "Gray",
+    "Black",
+    "Signal Gray",
+    "Agate Gray"
+  ],
+  "bambu_parent": "Generic PLA High Speed",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "55-70",
+    "_print_speed": "30-100 (page prints '30-100m')",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "Product page: Print Temperature 190-220C, Recommended Printing Temperature 210-220C. No line-specific TDS: the files page links 'PLA High-Speed' to ERYONE-PLA_HP-TDS.pdf, which is titled Hyper-Speed PLA+ (see conflicts). Density not published for this line."
+  },
+  "conflicts": [
+    "nozzle_temperature: 190-230 (https://cdn.shopify.com/s/files/1/0252/0412/9841/files/ERYONE-PLA_HP-TDS.pdf (Hyper-Speed PLA+ TDS linked as 'PLA High-Speed' on the files page))",
+    "bed_all_plates: 35-60 (https://cdn.shopify.com/s/files/1/0252/0412/9841/files/ERYONE-PLA_HP-TDS.pdf)"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://eryone3d.com/products/pla-high-speed-filament",
+    "https://eryone3d.com/pages/filament-files"
+  ],
+  "updated": "2026-11-01"
+}

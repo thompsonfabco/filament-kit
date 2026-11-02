@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "SUNLU",
+  "product": "PA6-GF",
+  "material": "PA6-GF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu PA6-GF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "270"
+    ],
+    "nozzle_temperature_range_high": [
+      "290"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-70 (glue)",
+    "_print_speed": "50-120",
+    "_drying": "110C 4h",
+    "_hardened_nozzle_required": "yes",
+    "_hdt": "205.2+/-3",
+    "_colors_note": "Pass 1 recorded bare colour names, not full Spoolman names; match on vendor+product."
+  },
+  "conflicts": [
+    "[pass 1] Bed 60-70 vs 50-70",
+    "[pass 1] HDT 205.2 vs 214"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://uk.store.sunlu.com/products/sunlu-pa6-gf-3d-printer-filament-pa6-with-25-glass-fiber-content-high-temp-resistance-417-f-214-c"
+  ],
+  "updated": "2026-11-01"
+}

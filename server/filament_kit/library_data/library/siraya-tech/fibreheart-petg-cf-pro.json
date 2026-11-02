@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "vendor": "Siraya Tech",
+  "product": "Fibreheart PETG-CF Pro",
+  "material": "PETG-CF",
+  "colors": [
+    "High Flow Black"
+  ],
+  "bambu_parent": "Bambu PETG-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.3"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "25"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-80",
+    "fan_max_speed": "Off or very low (10-20%)",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "1800-2400 mm/min (approx. 30-40 mm/s)",
+    "_print_speed": "30-300 mm/s",
+    "_drying": "70-80C 4-6h",
+    "_diameter_tolerance": "+/-0.02",
+    "_hdt_0.45MPa": "75 (Method B)",
+    "_vicat": "85 (ISO 306)",
+    "_vitrification": "68 (Tg, ASTM D3418)",
+    "_fiber_content": "10% short-cut carbon fiber",
+    "_hardened_nozzle_required": "yes (carbon-hardened, hardened steel or higher)",
+    "_min_nozzle": "0.4 mm (0.4-1.0 mm)",
+    "_enclosure": "Not mandatory, recommended",
+    "_notes": "SKU ST3031, sold as 'PETG-CF Pro HF'. HDT @1.80 MPa 69 (Method A). Do not over-squish first layer (clog risk); keep retraction < 3 mm. Max flow 25 mm3/s from product page (nozzle not stated).",
+    "_ams": "Compatible (product page FAQ: rigid enough for AMS loading)"
+  },
+  "conflicts": [
+    "Product page states HDT 76C; TDS gives 75C @0.45 MPa / 69C @1.80 MPa: https://siraya.tech/products/fibreheart-petg-cf-pro-hf-high-speed-carbon-fiber-petg",
+    "Product page spec table gives diameter 1.75+/-0.2 mm; TDS gives 1.75+/-0.02 mm: https://siraya.tech/products/fibreheart-petg-cf-pro-hf-high-speed-carbon-fiber-petg"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://siraya.tech/pages/fibreheart-petg-cf-pro-filament-technical-data-tds",
+    "https://siraya.tech/products/fibreheart-petg-cf-pro-hf-high-speed-carbon-fiber-petg"
+  ],
+  "updated": "2026-11-01"
+}

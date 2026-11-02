@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "vendor": "Fiberlogy",
+  "product": "PLA FiberSatin",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.2"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60",
+    "_drying": "40C 4h",
+    "_enclosure": "not required",
+    "_hdt_0.45MPa": "55 (ASTM D648)",
+    "_vitrification": "55-60 (Tg, DSC)",
+    "_notes": "Bed surfaces: smooth PEI, textured PEI, glass; strong adhesion, use adhesive or masking tape. Page lists '75-100%' under printing parameters (labelled humidity; other Fiberlogy PLA pages give this figure as airflow). Swelling at the nozzle is normal."
+  },
+  "conflicts": [
+    "bed_all_plates: 50 (source: official TDS https://fiberlogy.com/app/uploads/2026/08/FIBERLOGY_FIBERSATIN_TDS.pdf)"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://fiberlogy.com/en/filaments/pla-en/pla-fibersatin-en/"
+  ],
+  "updated": "2026-11-01"
+}

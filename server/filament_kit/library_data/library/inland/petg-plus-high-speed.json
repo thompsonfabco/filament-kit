@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "vendor": "Inland",
+  "product": "PETG+ High Speed",
+  "material": "PETG",
+  "colors": [
+    "Black",
+    "Blue",
+    "Red",
+    "Transparent Green"
+  ],
+  "bambu_parent": "Bambu PETG HF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80",
+    "_ams": "Cardboard spool.",
+    "_notes": "Titled 'PETG+ High Speed' / 'PETGHigh Speed' on Micro Center (read via search index; direct fetch 403). No max print speed published. Density not published.",
+    "_diameter_tolerance": "+/-0.02"
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.microcenter.com/product/670216/inland-175mm-petg-high-speed-3d-printer-filament-10-kg-(22-lbs)-cardboard-spool-black",
+    "https://www.microcenter.com/product/670223/inland-175mm-petghigh-speed-3d-printer-filament-10-kg-(22-lbs)-cardboard-spool-transparent-green"
+  ],
+  "updated": "2026-11-01"
+}

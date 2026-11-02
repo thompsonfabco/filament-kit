@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "vendor": "OVERTURE",
+  "product": "Super PLA+",
+  "material": "PLA",
+  "colors": [
+    "Orange",
+    "Black",
+    "Light Gray",
+    "White",
+    "Red",
+    "Pink",
+    "Sakura Pink",
+    "Light Brown",
+    "Yellow",
+    "Green",
+    "Dark Blue",
+    "Purple"
+  ],
+  "bambu_parent": "Overture PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.21"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "25-60",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "20-40",
+    "overhang_fan_threshold": "60 (threshold overhang angle, degrees)",
+    "_print_speed": "40-60 mm/s",
+    "_vicat": "62.8 (ISO 306)",
+    "_notes": "TDS v5.1 (Jul 2024): impact-modified PLA+ (notched Charpy 36.6 kJ/m2 vs 3.1 for OVERTURE PLA); melt index 7.3 g/10min (210C 2.16kg); melting temp 149C (DSC); cooling fan on; based on 0.4 mm nozzle. bambu_parent is the brand's plain PLA preset (no Overture PLA+ preset in Bambu Studio)."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://overture3d.com/cdn/shop/files/OVERTURE_SUPER_PLA__TDS_EN_V5.1_fff22cb0-35bb-4889-9e0a-f8bbb914a865.pdf",
+    "https://overture3d.com/products/overture-super-pla-3d-printer-filament-1-75mm"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "vendor": "Extrudr",
+  "product": "Flex Medium ESD",
+  "material": "TPU",
+  "colors": [],
+  "bambu_parent": "Generic TPU",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.20"
+    ],
+    "filament_max_volumetric_speed": [
+      "3.2"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50",
+    "fan_min_speed/fan_max_speed": "60-100%",
+    "_print_speed": "max. 50 mm/s",
+    "_enclosure": "no",
+    "_hardened_nozzle_required": "no",
+    "_hardness": "A92 (properties table, DIN 53.505)",
+    "_notes": "ESD TPU, electrostatic resistance 0.7-0.9 MOhm. Density is the published specific gravity (20 C) of 1,20. Catalogue print settings are for a 0.4 mm nozzle. Diameter not stated in the catalogue, so filament_diameter is left unset."
+  },
+  "conflicts": [
+    "Shore hardness: properties table A92 vs feature list 'Shore Hardness A95' (same catalogue page)."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://s3.extrudr.com/extrudr-media/product-catalogue/extrudr-Produktkatalog_EN.pdf"
+  ],
+  "updated": "2026-11-01"
+}

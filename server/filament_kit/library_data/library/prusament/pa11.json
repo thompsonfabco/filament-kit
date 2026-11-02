@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "vendor": "Prusament",
+  "product": "PA11",
+  "material": "PA11",
+  "colors": [
+    "Natural"
+  ],
+  "bambu_parent": "Generic PA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "265"
+    ],
+    "nozzle_temperature_range_high": [
+      "285"
+    ],
+    "filament_density": [
+      "1.02"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "10"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-110",
+    "chamber_temperatures": "50-60",
+    "_fan_speed": "15-20",
+    "_hdt_0.45MPa": "58.7 (ISO 75)",
+    "_hdt_1.80MPa": "49.9 (ISO 75)",
+    "_diameter_tolerance": "+/-0.02",
+    "_drying": "90C 6-8h (product page, if exposure history uncertain)",
+    "_enclosure": "required; chamber 55 +/- 5 C",
+    "_notes": "TDS prints nozzle '275 +/- 10', bed '100 +/- 10', chamber '55 +/- 5'. Bed: PA Nylon sheet. Standard 0.4 mm brass nozzle OK (not abrasive). High odour; active filtration recommended. Product page: 122.5 C resistance after annealing."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://storage.googleapis.com/prusa3d-content-prod-14e8-wordpress-prusament-prod/2026/08/2d2145fc-pa11_tds_eng.pdf",
+    "https://prusament.com/materials/prusament-pa11/"
+  ],
+  "updated": "2026-11-01"
+}

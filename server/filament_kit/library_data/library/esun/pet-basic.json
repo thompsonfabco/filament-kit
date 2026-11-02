@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "PET-Basic",
+  "material": "PET",
+  "colors": [],
+  "bambu_parent": "Generic PETG",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_density": [
+      "1.28"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-90",
+    "fan_min_speed/fan_max_speed": "40-70",
+    "_drying": "60C >8h",
+    "_print_speed": "<250",
+    "_hdt_0.45MPa": "70",
+    "_notes": "eSUN PET-Basic TDS v2.0 Jul 2025. Nozzle sizes 0.2/0.4/0.6/0.8 mm. No PET system preset in Bambu Studio; Generic PETG used as nearest. Diameter not stated in TDS."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://assets.spoolscout.com/tds-sds/esun/tds/esun-pet-basic-tds-v2.0-2025-07.pdf",
+    "https://www.spoolscout.com/data-sheets/esun/pet-pet-basic"
+  ],
+  "updated": "2026-11-01"
+}

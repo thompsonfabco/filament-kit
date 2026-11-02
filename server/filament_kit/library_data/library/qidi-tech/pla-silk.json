@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "vendor": "QIDI Tech",
+  "product": "PLA Silk",
+  "material": "PLA",
+  "colors": [
+    "Silver",
+    "Gold",
+    "Blue",
+    "Green",
+    "Pink",
+    "Rose Red",
+    "Bronze"
+  ],
+  "bambu_parent": "Bambu PLA Silk",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.24"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60 (with glue)",
+    "textured_plate_temp": "45-60 (filament guide)",
+    "cool_plate_temp": "30-45 (filament guide)",
+    "_drying": "50C 4-6h (product page); 45-50C 4-6h (filament guide)",
+    "_print_speed": "40-200 mm/s",
+    "_vicat": "60",
+    "_hdt_0.45MPa": "53 (filament guide)",
+    "_ams": "QIDI BOX compatible per QIDI",
+    "_notes": "Product page lists hardened steel nozzles as not recommended. Melt 160C. Keep <15% RH. TDS PDF is image-only and was not used."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://qidi3d.com/products/silk-pla-rapido-filament",
+    "https://qidi3d.com/pages/choose-the-right-filament-3d-filaments-guide-for-qidi-printers"
+  ],
+  "updated": "2026-11-01"
+}

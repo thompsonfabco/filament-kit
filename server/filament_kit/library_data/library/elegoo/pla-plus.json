@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "ELEGOO",
+  "product": "PLA+",
+  "material": "PLA",
+  "colors": [
+    "Red",
+    "Neon Green",
+    "Yellow"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.30"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "35-65",
+    "chamber_temperatures": "20-45",
+    "_drying": "50+/-5C 8h",
+    "_hdt_0.45MPa": "56",
+    "_diameter_tolerance": "+/-0.02",
+    "_colors_note": "Pass 1 recorded bare colour names, not full Spoolman names; match on vendor+product.",
+    "_vitrification": "63 (Vicat)"
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.elegoo.com/products/elegoo-pla-plus-3d-printer-filament-1-75mm-colored-1kg",
+    "https://us.elegoo.com/products/pla-plus-filament-1-75mm-black-10kg",
+    "https://us.elegoo.com/products/elegoo-pla-plus-3d-printer-filament-1-75mm-colored-1kg"
+  ],
+  "updated": "2026-11-01"
+}

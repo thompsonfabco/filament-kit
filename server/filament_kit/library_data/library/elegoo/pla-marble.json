@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "vendor": "ELEGOO",
+  "product": "PLA Marble",
+  "material": "PLA",
+  "colors": [
+    "Marble",
+    "Marble Brick Red",
+    "Marble Cement Grey"
+  ],
+  "bambu_parent": "Bambu PLA Marble",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_density": [
+      "1.23"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "35-65 (depends on printer and build plate type)",
+    "chamber_temperatures": "20-45",
+    "_drying": "50C 8h (+/-5C)",
+    "_drying_required": "Recommended",
+    "_min_nozzle": "0.4",
+    "_hardened_nozzle_required": "yes (hardened steel nozzle listed)",
+    "_enclosure": "not required",
+    "_plates": "Textured/Smooth PEI or Other Plates; glue not required",
+    "_max_print_speed": "< 200 mm/s",
+    "_vicat": "62",
+    "_hdt_0.45MPa": "57",
+    "_notes": "Melting temperature 158C; melt index 14.7 +/- 1.4 g/10 min; print and store at <=20% RH sealed with desiccant."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://us.elegoo.com/products/pla-marble"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "vendor": "SUNLU",
+  "product": "PVA",
+  "material": "PVA",
+  "colors": [
+    "Transparent Yellow"
+  ],
+  "bambu_parent": "Bambu PVA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.01"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_soluble": [
+      "1"
+    ],
+    "filament_is_support": [
+      "1"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "<70",
+    "filament_retraction_length": "0.8-1.2mm",
+    "filament_retraction_speed": "30-40mm/s",
+    "_nozzle_by_speed": "200-210C @ 50-100mm/s; 210-230C @ 100-200mm/s",
+    "_hdt_0.45MPa": "55",
+    "_vicat": "65",
+    "_notes": "Water-soluble support. Density 1.01 is from the product page; the TDS prints a range 1.01-1.28. TDS: Textured PEI plate with glue. Drying temperature published as '/'."
+  },
+  "conflicts": [
+    "Density: TDS prints 1.01-1.28 (product page 1.01) - https://media.sunlu.com/prod/20260330/6f3c0e89-fa56-46b2-ab3d-601ee6b70cf9.pdf?filename=TDS"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://media.sunlu.com/prod/20260330/6f3c0e89-fa56-46b2-ab3d-601ee6b70cf9.pdf?filename=TDS",
+    "https://www.sunlu.com/products/pva-water-soluble-filament"
+  ],
+  "updated": "2026-11-01"
+}

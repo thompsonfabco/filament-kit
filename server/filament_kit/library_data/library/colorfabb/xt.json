@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "vendor": "ColorFabb",
+  "product": "XT",
+  "material": "PETG",
+  "colors": [
+    "Black",
+    "White",
+    "Clear",
+    "Light Gray",
+    "Dark Gray",
+    "Light Blue",
+    "Light Green"
+  ],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.27"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-70",
+    "fan_min_speed/fan_max_speed": "0-50",
+    "_print_speed": "40-70 mm/s",
+    "_hdt_0.45MPa": "65 (HDT-B, ISO 75)",
+    "_diameter_tolerance": "+/-0.05 (1.75 mm; TDS 'max. roundness deviation'), +/-0.1 (2.85 mm)",
+    "_notes": "colorFabb_XT co-polyester TDS v1.0. Least fan for strength, more for detail. Product page: continuous service temp 75 C; FDA food-contact compliant."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://downloads.colorfabb.com/public.php/dav/files/rtfDDRCa723Xdor/Technical%20Data%20Sheets/Co-Polyester/colorFabb_XT/TDS_E_ColorFabb_XT_2.pdf",
+    "https://colorfabb.com/xt-clear"
+  ],
+  "updated": "2026-11-01"
+}

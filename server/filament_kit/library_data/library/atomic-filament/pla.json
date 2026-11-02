@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "vendor": "Atomic Filament",
+  "product": "PLA",
+  "material": "PLA",
+  "colors": [
+    "Black",
+    "Bright White",
+    "Deep Black",
+    "Extreme JET Black",
+    "Gray",
+    "Light Gray",
+    "Gun Metal Gray",
+    "Starlight Gray",
+    "Cosmic Graphite",
+    "Metallic Silver",
+    "Bronze Metallic",
+    "True Gold",
+    "Perfect Red",
+    "Dark Cherry Red",
+    "Perfect Orange",
+    "Perfect Yellow",
+    "Perfect Blue",
+    "Royal Blue",
+    "Navy Blue",
+    "Baby Blue",
+    "Turquoise",
+    "Perfect Purple",
+    "Pastel Lilac",
+    "Hot Pink",
+    "Pearly Peach",
+    "Khaki",
+    "Majestic Brown",
+    "Olive Drab Green",
+    "Pine Green",
+    "Minty Green",
+    "RepRap Green",
+    "Neon Green UV Reactive",
+    "Neon Orange UV Reactive",
+    "Neon Yellow UV Reactive",
+    "Clear / Natural",
+    "Translucent Smoke Black",
+    "Translucent Sapphire Blue",
+    "Translucent Midnight Blue",
+    "Translucent Bright Orange",
+    "Translucent Neon Green UV Reactive",
+    "Fluorescent Translucent Neon Hot Pink UV Reactive",
+    "Gemstone Ruby Red Translucent",
+    "Amethyst Violet Gemstone Translucent",
+    "Aqua Gemstone Translucent",
+    "Emerald Green Gemstone Translucent",
+    "Golden Blood Diamond Translucent",
+    "Rose Gold Metallic Translucent",
+    "Starry Night Translucent",
+    "Tropical Sea Iridescent Translucent",
+    "Pearlescent Blue",
+    "Pearlescent Translucent Neon Green UV Reactive",
+    "Candy Apple Golden Pearl",
+    "Mysterious Abyss Pearl",
+    "Marble",
+    "Black Marble",
+    "Shamrock Sparkle",
+    "Indigo Golden Sparkle Translucent",
+    "Bug Eyes Shade-Shifting",
+    "Chameleon Coastline Shade-Shifting",
+    "Groovy Purple Shade-Shifting",
+    "Too Good to be Blue Shade-Shifting",
+    "MICROPOLITAN Bright White"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.25"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "_vitrification": "55-60 (Tg, Atomic PLA SDS)",
+    "_diameter_tolerance": "+/-0.02",
+    "_enclosure": "no enclosure required (Black / Bright White PLA pages)",
+    "_ams": "1 kg spools sold as AMS compatible (FAQ: all 1 kg rolls designed for AMS)",
+    "_notes": "Resin: virgin NatureWorks Ingeo PLA (some colours + Atomic additive / Pro additive package). Out of round 0.02 mm or less. Density 1.25 (relative density) and Tg 55-60C are from the generic 'Atomic Filament - PLA based 3D Filament' SDS (rev 08/03/2021), not a TDS. Bed 50-60C is printed only on the Black and Bright White PLA pages; most colour pages give no bed temperature. Atomic FAQ: all colours print nearly identically with the same temperature profiles, so marble, sparkle, pearl, translucent and shade-shifting colours are folded into this line. Also sold in 3.5 kg and 2.85 mm (Black, Bright White). No drying spec published for PLA."
+  },
+  "conflicts": [
+    "Black and Bright White PLA pages (https://atomicfilament.com/products/black-pla-filament, https://atomicfilament.com/products/bright-white-pla-filament) give nozzle 190-220C; ~150 other PLA colour/sample pages give 190-230C (used in fields)."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://atomicfilament.com/products/black-pla-filament",
+    "https://atomicfilament.com/products/bright-white-pla-filament",
+    "https://atomicfilament.com/products/black-marble-pla-filament",
+    "https://cdn.shopify.com/s/files/1/0778/8857/files/Atomic-PLA-SDS-8-2021.pdf?v=1628017942",
+    "https://atomicfilament.com/pages/atomic-filament-faq"
+  ],
+  "updated": "2026-11-01"
+}

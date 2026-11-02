@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "vendor": "LADUALFILA",
+  "product": "PLA+",
+  "material": "PLA",
+  "colors": [
+    "PLA+ Bone White"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "40-60",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "Brand Amazon listing only (sold by LADUALFILA, MPN LA001-BONE, model LA001). Plastic spool. 'Thoroughly dried and vacuum-sealed' is a factory pre-dry, not a user drying spec. No density, drying, speed or fan values published."
+  },
+  "conflicts": [
+    "[pass 4] No brand website could be read: ladualfila.com refused automated fetches (robots) and the session proxy blocks it, and web search found no indexed brand pages."
+  ],
+  "source_quality": "brand_amazon_listing",
+  "sources": [
+    "https://www.amazon.com/dp/B0HBKCY9CT"
+  ],
+  "updated": "2026-11-01"
+}

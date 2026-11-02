@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "SOVOL",
+  "product": "PLA Basic",
+  "material": "PLA",
+  "colors": [
+    "Black",
+    "White"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "_print_speed": "50-300",
+    "filament_retraction_length": "0.5-1 (direct drive)",
+    "_notes": "sovol3d.com 'Sovol PLA 3D Filament 2KG' spec table (re-read directly 2026-11-01): Nozzle Temp 200-240C, Bed Temp 50-60C, Printing Speed 50-300mm/s, Retraction Bowden 4-6mm / Direct Drive 0.5-1mm, Diameter 1.75mm. sovol.tech names the line 'Sovol PLA Basic' (1KG/2KG); its specs there are image-only. No density, tolerance, drying or fan values published."
+  },
+  "conflicts": [
+    "Search-engine extraction of the same sovol3d.com 2KG listing reports embedded product data with a 190-210C nozzle range (not visible in the spec table); spec table 200-240C kept."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.sovol3d.com/products/sovol-2-rolls-1-75mm-1kg-pla-filament-white-2",
+    "https://www.sovol3d.com/products/10kg-bundle-sale-sovol-1-75mm-pla-black-white-3d-printing-filaments",
+    "https://www.sovol.tech/products/sovol-pla-basic-filament-1.75mm"
+  ],
+  "updated": "2026-11-01"
+}

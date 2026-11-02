@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "vendor": "Prusament",
+  "product": "PETG Carbon Fiber",
+  "material": "PETG-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu PETG-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "255"
+    ],
+    "nozzle_temperature_range_high": [
+      "275"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80-100",
+    "_diameter_tolerance": "+/-0.02",
+    "_hardened_nozzle_required": "yes (product page)",
+    "_notes": "Product page prints nozzle '265+/-10' and bed '90+/-10' (converted to ranges) and tolerance +/-0.02 mm. Not suitable for small parts (product page). Official TDS is only published inside a >10 MB zip that could not be read, so density/diameter/fan/HDT were left out."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://prusament.com/materials/prusament-petg-carbon-fiber/"
+  ],
+  "updated": "2026-11-01"
+}

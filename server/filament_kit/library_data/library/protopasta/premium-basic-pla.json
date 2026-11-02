@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "Protopasta",
+  "product": "Premium Basic PLA",
+  "material": "PLA",
+  "colors": [
+    "Natural",
+    "White",
+    "Black",
+    "Black Recycled"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.2"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "12"
+    ]
+  },
+  "published_ranges": {
+    "_nozzle_by_speed": "220C @ 6 mm3/s; 240C @ 12 mm3/s (Material Data Table)",
+    "_bed": "55C plate (Material Data Table)",
+    "_notes": "Product page: 220C with 'Generic PLA' settings or 240C with 'Bambu PLA Basic' settings on Bambu printers. Black Recycled PLA (RPLA) shares the same Material Data Table row. Density from PLA/HTPLA Colors SDS."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://proto-pasta.com/products/back-to-basics-black-4043d-pla",
+    "https://proto-pasta.com/pages/material-data-table",
+    "https://cdn.shopify.com/s/files/1/0717/9095/files/PLA_Colors.pdf"
+  ],
+  "updated": "2026-11-01"
+}

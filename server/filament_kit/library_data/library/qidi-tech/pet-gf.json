@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "vendor": "QIDI Tech",
+  "product": "PET-GF",
+  "material": "PET-GF",
+  "colors": [
+    "Black",
+    "Brown"
+  ],
+  "bambu_parent": "Bambu PET-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "280"
+    ],
+    "nozzle_temperature_range_high": [
+      "320"
+    ],
+    "filament_density": [
+      "1.38"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-80 (PEI or PVP glue)",
+    "fan_min_speed/fan_max_speed": "off",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "1800-3600 mm/min",
+    "_drying": "100-120C 4-6h (TDS); 100-120C 4-8h (product page)",
+    "_print_speed": "30-120 mm/s (TDS); 30-200 mm/s (product page)",
+    "_hdt_0.45MPa": "120.3",
+    "_annealing": "100C 8h (TDS test); 80-100C 4-8h (suggestion)",
+    "_hardened_nozzle_required": "yes (hardened steel/bimetal/tungsten carbide; brass not recommended); heater block >=12 mm",
+    "_min_nozzle": "0.4",
+    "_notes": "Melt 251C, water absorption 0.5%. HDT 1.80MPa 99.1C. Brittle when factory-dried (high glass-fibre content). Product page lists PC plate as not recommended. No Bambu PET-GF preset; Bambu PET-CF used as closest."
+  },
+  "conflicts": [
+    "product page: nozzle 260-320C, bed 80C, HDT 86.7C, Vicat 148.8C (https://qidi3d.com/products/pet-gf-filament)"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://drive.google.com/file/d/1CNaYMGfX1r2KB4XcxMRhV43BWfWcu8By/view",
+    "https://qidi3d.com/products/pet-gf-filament",
+    "https://qidi3d.com/pages/choose-the-right-filament-3d-filaments-guide-for-qidi-printers"
+  ],
+  "updated": "2026-11-01"
+}

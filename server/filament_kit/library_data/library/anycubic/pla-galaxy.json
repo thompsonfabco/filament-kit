@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "vendor": "Anycubic",
+  "product": "PLA Galaxy",
+  "material": "PLA",
+  "colors": [
+    "Galaxy Blue",
+    "Galaxy Purple",
+    "Galaxy Green",
+    "Galaxy Brown"
+  ],
+  "bambu_parent": "Bambu PLA Galaxy",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.23"
+    ],
+    "filament_max_volumetric_speed": [
+      "12"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-65",
+    "_drying": "55-60C 6-8h",
+    "_print_speed": "40-260 mm/s",
+    "_vicat": "56",
+    "_hdt_0.45MPa": "53",
+    "_min_nozzle": "0.4",
+    "_notes": "Official product page spec table (no TDS link on the page; ACE compatible, recommended nozzle 0.4 mm or above; cooling time 10 s). Diameter not stated in the spec table."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.anycubic.com/products/pla-galaxy"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "PETG",
+  "material": "PETG",
+  "colors": [
+    "Black",
+    "Gray",
+    "White",
+    "Red",
+    "Orange",
+    "Blue",
+    "Yellow",
+    "Transparent",
+    "TRANS Red",
+    "TRANS Blue"
+  ],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.25"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "75-80",
+    "_drying": "80C 12h",
+    "_print_speed": "30-80mm/s",
+    "_vicat": "78 (ASTM D1525)",
+    "_hdt": "67 (ASTM D648; load not stated)",
+    "_vitrification": "68 (Tg, DSC 10C/min)",
+    "_diameter_tolerance": "+/-0.03",
+    "_bottom_printing_temperature": "230-250",
+    "_enclosure": "enclosed printing/open printing",
+    "_notes": "TDS titled 'Standard PETG'."
+  },
+  "conflicts": [
+    "bed_all_plates: 70-85 (https://eryone3d.com/products/petg)",
+    "nozzle_temperature: 215-230 (https://eryone3d.com/products/petg (older description text))",
+    "bed_all_plates: 80-100 (https://eryone3d.com/products/petg (older description text))"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0252/0412/9841/files/ERYONE-PETG-TDS.pdf",
+    "https://eryone3d.com/products/petg"
+  ],
+  "updated": "2026-11-01"
+}

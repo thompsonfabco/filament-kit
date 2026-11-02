@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "vendor": "Atomic Filament",
+  "product": "Carbon Fiber PETG",
+  "material": "PETG-CF",
+  "colors": [
+    "Extreme Black",
+    "Dark Blue Extreme",
+    "Dark Cherry Extreme",
+    "Smoke Blue Extreme",
+    "Stone Gray Extreme"
+  ],
+  "bambu_parent": "Bambu PETG-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "265"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80 +/-10",
+    "_hardened_nozzle_required": "yes - wear-resistant nozzle (mildly abrasive)",
+    "_min_nozzle": "0.4",
+    "_fiber_content": "USA-made milled carbon fiber, not powder (percentage not published)",
+    "_diameter_tolerance": "+/-0.02",
+    "_ams": "1 kg spool sold as AMS compatible; CF is mildly abrasive",
+    "_notes": "Engineering-grade PETG (PETG PRO) with milled carbon fibre. No density or Tg published for the CF grade. Also sold in 3.5 kg and 2.85 mm (Extreme Black). Atomic FAQ gives 65C 8-16h drying for PETG generally; not recorded here as it is not CF-specific."
+  },
+  "conflicts": [
+    "Extreme Black 1 kg / 3.5 kg pages give bed 60-78C (https://atomicfilament.com/products/carbon-fiber-black-petg-pro-ams-compatible); Extreme Black sample coil gives 60-79C; colour pages (Dark Cherry, Dark Blue, Stone Gray, Smoke Blue) give 80C +/-10 (used).",
+    "Smoke Blue Carbon Fiber Extreme PETG page gives nozzle 238-265C (https://atomicfilament.com/products/smoke-blue-carbon-fiber-extreme-petg)."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://atomicfilament.com/products/carbon-fiber-black-petg-pro-ams-compatible",
+    "https://atomicfilament.com/products/dark-cherry-carbon-fiber-extreme-petg",
+    "https://atomicfilament.com/products/sample-coil-petg-carbon-fiber-stone-gray-petg",
+    "https://atomicfilament.com/pages/atomic-filament-faq"
+  ],
+  "updated": "2026-11-01"
+}

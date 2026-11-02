@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "PLA Matte High-Speed",
+  "material": "PLA",
+  "colors": [
+    "Off white",
+    "Black",
+    "Ice Blue",
+    "White",
+    "Light gray",
+    "Navy blue",
+    "Olive green",
+    "Twisted - Zebra Stone",
+    "Twisted - Arctic Blue"
+  ],
+  "bambu_parent": "Bambu PLA Matte",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_density": [
+      "1.25"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "55-70",
+    "_drying": "65-75C 12h",
+    "_print_speed": "30-500mm/s",
+    "_vicat": "54 (ASTM D1525)",
+    "_hdt": "55 (ASTM D648; load not stated)",
+    "_diameter_tolerance": "+/-0.03",
+    "_bottom_printing_temperature": "190-220",
+    "_enclosure": "open printing/closed printing",
+    "_notes": "TDS titled 'Hyper Speed Matte PLA'. Matte High-Speed Gradient Multi-Color / Triple-Color / Rock Rainbow listings print the same 190-220 / 55-70 / 30-500mm/s / 65-75C 12h table."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0252/0412/9841/files/ERYONE-HP_Matte_PLA-TDS.pdf",
+    "https://eryone3d.com/products/high-speed-matte-pla-filament",
+    "https://eryone3d.com/products/matte-dual-color-high-speed-pla"
+  ],
+  "updated": "2026-11-01"
+}

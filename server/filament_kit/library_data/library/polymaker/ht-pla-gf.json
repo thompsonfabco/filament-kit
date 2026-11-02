@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "vendor": "Polymaker",
+  "product": "HT-PLA-GF",
+  "material": "PLA-GF",
+  "colors": [
+    "Power Tool Red",
+    "Black",
+    "White",
+    "Grey",
+    "Blue",
+    "Army Green",
+    "Power Tool Yellow",
+    "Power Tool Green",
+    "Power Tool Teal"
+  ],
+  "bambu_parent": "Bambu PLA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.337"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "25-60",
+    "fan_max_speed": "ON",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "20-40",
+    "_print_speed": "up to 350",
+    "_drying": "60C 6h",
+    "_enclosure": "not needed",
+    "_vitrification": "59.76 (Tg, DSC, as printed)",
+    "_vicat": "148.9 as printed; 148.3 annealed",
+    "_hdt_0.45MPa": "75.5 as printed; 114.7 annealed",
+    "_hdt_1.8MPa": "59.7 as printed; 84 annealed",
+    "_annealing": "80-100C (100C recommended), 20-30 min (30 min recommended)",
+    "_hardened_nozzle_required": "yes (TDS: hardened nozzle & print annealing; wiki: hardened steel or ruby nozzle)",
+    "_fiber_content": "12% glass fibre (TDS)",
+    "_min_nozzle": "0.2 mm works (wiki FAQ)",
+    "_notes": "bambu_parent is the closest filled-PLA preset (no PLA-GF system preset exists)."
+  },
+  "conflicts": [
+    "Wiki main text: anneal 30 min at 80-100C; wiki table note: 30 min at 80-90C"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://wiki.polymaker.com/polymaker-products/polymaker-filaments/prime-materials/functional-pla/ht-pla-gf",
+    "https://cdn.shopify.com/s/files/1/0548/7299/7945/files/Polymaker_HT-PLA-GF_TDS_EN_V1.1.pdf",
+    "https://shop.polymaker.com/products/polymaker-ht-pla-gf"
+  ],
+  "updated": "2026-11-01"
+}

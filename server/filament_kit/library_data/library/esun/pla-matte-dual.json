@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "PLA-Matte Dual",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Matte",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "215"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.174"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "45-60",
+    "fan_max_speed": "100",
+    "_print_speed": "40-300",
+    "_notes": "eSUN PLA-Matte Dual TDS v4.0 May 2024. TDS note: matte filament is softer, do not over-tighten extruder tension. HDT printed as N/A in TDS. Diameter not stated in TDS."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://assets.spoolscout.com/tds-sds/esun/tds/esun-pla-matte-dual-tds-v4.0-2024-05.pdf",
+    "https://www.spoolscout.com/data-sheets/esun/pla-pla-matte-dual"
+  ],
+  "updated": "2026-11-01"
+}

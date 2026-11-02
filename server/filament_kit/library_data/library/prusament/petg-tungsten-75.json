@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "vendor": "Prusament",
+  "product": "PETG Tungsten 75%",
+  "material": "PETG",
+  "colors": [
+    "75%"
+  ],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-90",
+    "_fan_speed": "50 (TDS); product page says cooling not recommended",
+    "_max_print_speed": "up to 200 mm/s",
+    "_hdt_0.45MPa": "94 (ISO 75)",
+    "_hdt_1.80MPa": "86 (ISO 75)",
+    "_diameter_tolerance": "+/-0.03",
+    "_hardened_nozzle_required": "yes; tungsten highly abrasive",
+    "_notes": "TDS density 4 g/cm3 (Prusa Polymers method) - omitted from fields because the library validator caps filament_density at 3.0; set it manually (flow/weight calculations depend on it). TDS prints nozzle '260 +/- 10', bed '80 +/- 10'. Radiation-shielding filament (HVL 1.402 mm at 99mTc 140 keV)."
+  },
+  "conflicts": [
+    "Cooling: TDS fan 50%; product page says cooling not recommended (https://prusament.com/materials/prusament-petg-tungsten-75/)"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://prusament.com/wp-content/uploads/2023/03/TDS_Prusament-PETG-Tungsten-75_EN-1.pdf",
+    "https://prusament.com/materials/prusament-petg-tungsten-75/"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "PP",
+  "material": "PP",
+  "colors": [
+    "Black",
+    "White"
+  ],
+  "bambu_parent": "Generic PP",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "0.95"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-80",
+    "_drying": "50-60C 8h",
+    "_print_speed": "30-100mm/s",
+    "_vicat": "55-63 (ASTM D1525)",
+    "_hdt": "55 (ASTM D648; load not stated)",
+    "_bottom_printing_temperature": "220-240",
+    "_enclosure": "closed printing",
+    "_notes": "TDS titled 'Standard PP'; recommends specialised PP printing glue on the bed. 900g spool."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0252/0412/9841/files/ERYONE-PP-TDS.pdf",
+    "https://eryone3d.com/products/pp-filament"
+  ],
+  "updated": "2026-11-01"
+}

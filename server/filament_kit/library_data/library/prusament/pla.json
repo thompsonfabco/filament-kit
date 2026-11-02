@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "vendor": "Prusament",
+  "product": "PLA",
+  "material": "PLA",
+  "colors": [
+    "Noctua Beige",
+    "Noctua Brown",
+    "Pistachio Green",
+    "Chalky Blue",
+    "Anthracite Grey",
+    "Prusa Orange",
+    "Pristine White",
+    "Vanilla White",
+    "Pineapple Yellow",
+    "Natural",
+    "Galaxy Red",
+    "Lipstick Red",
+    "Galaxy Purple",
+    "Azure Blue",
+    "Prusa Pro Green",
+    "Army Green",
+    "Simply Green",
+    "Opal Green",
+    "Galaxy Green",
+    "Premium Mystic Green",
+    "Gentleman's Grey",
+    "Marble Grey",
+    "Gravity Grey",
+    "Galaxy Silver",
+    "Pearl Mouse",
+    "Premium Mystic Brown",
+    "Prusa Galaxy Black",
+    "Jet Black"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "40-60",
+    "_fan_speed": "100",
+    "_enclosure": "not required",
+    "_notes": "Product page prints nozzle '210 +/- 10' (fields = 200-220), bed 40-60, fan 100%, temperature resistance 55 C (metric not stated). Print surfaces listed: PEI, glass plate, painter's tape, glue stick. Official TDS is only published inside a >10 MB zip that could not be read, so density/diameter/HDT/tolerance were left out."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://prusament.com/materials/pla/"
+  ],
+  "updated": "2026-11-01"
+}

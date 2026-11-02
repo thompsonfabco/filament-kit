@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "vendor": "Fillamentum",
+  "product": "ASA CF10 Carbon",
+  "material": "ASA-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu ASA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "275"
+    ],
+    "filament_density": [
+      "1.04"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-105",
+    "fan_min_speed/fan_max_speed": "0-20",
+    "_nozzle_by_speed": "guide 2025: basic 245-260 (bed 80-105, 30-50 mm/s, fan 0-20%), high-speed printers setup 250-275 (bed 90-105); product page 245-275 (bed 80-105, fan 20%)",
+    "_print_speed": "30-50 mm/s",
+    "_drying": "80C 3h",
+    "_vitrification": "65 (Tg, ISO 11357)",
+    "_vicat": "90 (ISO 306)",
+    "_hardened_nozzle_required": "Yes: guide says hardened steel / ruby or wear-resistant nozzle is necessary.",
+    "_fiber_content": "Carbon fibres (percentage not stated in cited sources).",
+    "_enclosure": "Guide: heated chamber / enclosure not needed but recommended; if no heated chamber, preheat enclosure to 50 C for at least 30 min.",
+    "_hardness": "74 Shore D",
+    "_diameter_tolerance": "+/-0.10",
+    "_notes": "TDS updated 1/2025. Temperature resistance 90 C. 600 g + 230 g spool."
+  },
+  "conflicts": [
+    "Nozzle: product page gives a single 245-275 C range.",
+    "Bed: product page and guide basic setup give 80-105 C."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://fillamentum.com/wp-content/uploads/2025/01/TDS_ASA-CF10-Carbon_EN_13012025.pdf",
+    "https://fillamentum.com/wp-content/uploads/2025/08/3D_PRINTING_GUIDE_ASA_CF10_CARBON_2025.pdf",
+    "https://shop.fillamentum.com/products/asa_cf10"
+  ],
+  "updated": "2026-11-01"
+}

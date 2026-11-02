@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "CHCKX",
+  "product": "PP-CF",
+  "material": "PP-CF",
+  "colors": [
+    "PP-CF Black"
+  ],
+  "bambu_parent": "Generic PP-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80-110",
+    "_plates": "use PP filament-specific adhesive",
+    "_print_speed": "30-100",
+    "_hardened_nozzle_required": "yes",
+    "_min_nozzle": "0.4",
+    "_notes": "Listing: use PP filament-specific adhesive to prevent non-sticking or edge warping; use a hardened steel nozzle (>=0.4 mm) instead of brass. No density, drying, fibre % or chamber values published."
+  },
+  "conflicts": [
+    "[pass 4] Seller is 'suzhouxuxiangxincailiaokejiyouxiangongsi' (same seller on every CHCKX listing; brand field CHCKX), not a named brand store.",
+    "[pass 4] chckx.net is a 'concept demonstration site' built by a marketing agency (Assista Marketing) with Amazon affiliate links; it is not treated as an official source. It gives no PP-CF numbers, only family guidance (hardened steel nozzle 0.4 mm or larger, dry box) and says TDS 'available on request'."
+  ],
+  "source_quality": "brand_amazon_listing",
+  "sources": [
+    "https://www.amazon.com/dp/B0GC653YCH"
+  ],
+  "updated": "2026-11-01"
+}

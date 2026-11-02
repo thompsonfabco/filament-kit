@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "Spectrum",
+  "product": "rPLA",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "215"
+    ],
+    "filament_density": [
+      "1.24"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "40-50",
+    "_print_speed": "30-90 mm/s",
+    "_cooling": "YES (up to 100%)",
+    "_enclosure": "not necessary",
+    "_hardened_nozzle_required": "not necessary",
+    "_vicat": "55 (ISO 306)",
+    "_vitrification": "55-60 (Tg, DSC)",
+    "_ams": "Cardboard spool: wrap/trim edges before AMS use."
+  },
+  "conflicts": [
+    "Official product page (https://spectrumfilaments.com/en/filament/r-pla/) lists nozzle 185-230, bed 0-50, print speed 40-200 mm/s; TDS dated 06-04-2022 values kept in fields/published_ranges."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://spectrumfilaments.com/wp-content/uploads/2022/05/en_tds_spectrum_rpla.pdf",
+    "https://spectrumfilaments.com/en/filament/r-pla/"
+  ],
+  "updated": "2026-11-01"
+}

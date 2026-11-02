@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "vendor": "Kingroon",
+  "product": "PLA Basic",
+  "material": "PLA",
+  "colors": [
+    "Black",
+    "White",
+    "Gray",
+    "Blue",
+    "Red",
+    "Green",
+    "Yellow",
+    "Orange",
+    "Purple",
+    "Pink",
+    "Silver",
+    "Skin",
+    "Transparent",
+    "Brown",
+    "Cyan",
+    "Apple Green",
+    "Light Apricot",
+    "Light Pink",
+    "Lilac Purple",
+    "Meteor Silver",
+    "Mint Green",
+    "Retro Red",
+    "Sakura Pink",
+    "Sea Blue",
+    "Turquoise Green",
+    "Vibrant Orange",
+    "Wood"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.24"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "35-45",
+    "chamber_temperatures": "25-45",
+    "filament_retraction_length": "0.6-1.0",
+    "filament_retraction_speed": "20-40",
+    "_drying": "50C 8h",
+    "_max_print_speed": "<300 mm/s",
+    "_nozzle_by_speed": "TDS: 190-230 (any speed <300 mm/s); kingroon3d.com PLA Basic page: 50-100 mm/s at 195-205, 100-300 mm/s at 205-220",
+    "_min_nozzle": "0.2",
+    "_hdt_0.45MPa": "57",
+    "_vicat": "57",
+    "_vitrification": "60 (Tg, DSC)",
+    "_notes": "TDS V1.0 (2025/12/1): bed types Cool Plate / High Temperature Plate / Textured PEI with glue; cooling fan on; storage <20% RH; ABS spool rated 70 C, 200 x 67 mm; HDT 1.8 MPa 54 C; melting 160 C; max overhang 55 deg, max bridge 30 mm. Product page drying also lists AMS 2 Pro / AMS HT 55C 8h and X1 heatbed 60-70C 12h. The older 'KINGROON PLA Filament 1.75mm' bulk listing shows the same page values as the PLA Basic page and is treated as the same line. Verification 2026-11-01: fields and plate/chamber/fan/retraction ranges confirmed against the TDS PDF; kingroon.com / kingroon3d.com product pages returned HTTP 429, so page-derived notes and conflicts were not re-checked."
+  },
+  "conflicts": [
+    "kingroon.com PLA Basic product page: nozzle 190-210, bed 50-70, fan 100%, density 1.23 g/cm3, HDT 53 C (0.45 MPa)",
+    "kingroon.com 'KINGROON PLA Filament 1.75mm' (10kg) page: nozzle 190-210, bed 50-70, density 1.23 g/cm3"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://wiki.kingroon.com/kingroon_pla_basic_technical_data_sheet_v1.0.pdf",
+    "https://kingroon.com/products/kingroon-pla-basic",
+    "https://kingroon.com/products/10kg-pla-filament-1-75mm",
+    "https://kingroon3d.com/products/kingroon-pla-basic"
+  ],
+  "updated": "2026-11-01"
+}

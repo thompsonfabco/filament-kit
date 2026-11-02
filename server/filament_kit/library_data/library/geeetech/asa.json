@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "vendor": "GEEETECH",
+  "product": "ASA",
+  "material": "ASA",
+  "colors": [
+    "Black",
+    "White",
+    "Grey",
+    "Blue",
+    "Green",
+    "Orange",
+    "Purple"
+  ],
+  "bambu_parent": "Bambu ASA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80-110",
+    "_enclosure": "Recommended (enclosed printer or enclosure cover)",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "Official GEEETECH store page (ASA Black): 'heat-resistant up to 100C' (metric not named, not a Tg/HDT value). GEEETECH wiki ASA section: fan 40-50%, no fan on initial layer, brim/skirt. No density published."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://support.geeetech.com/asa-black-3d-printer-filament-175mm-1kgroll-p-1740.html",
+    "https://support.geeetech.com/filament-asa-c-83_180.html",
+    "https://wiki.geeetech.com/index.php/Filament"
+  ],
+  "updated": "2026-11-01"
+}

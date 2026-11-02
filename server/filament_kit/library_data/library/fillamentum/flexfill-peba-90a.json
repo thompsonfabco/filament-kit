@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "vendor": "Fillamentum",
+  "product": "Flexfill PEBA 90A",
+  "material": "PEBA",
+  "colors": [
+    "Black Transparent",
+    "Blue Transparent",
+    "Natural",
+    "Red Transparent",
+    "Yellow Transparent"
+  ],
+  "bambu_parent": "Generic TPU",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "225"
+    ],
+    "nozzle_temperature_range_high": [
+      "245"
+    ],
+    "filament_density": [
+      "1.0"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-90",
+    "fan_min_speed/fan_max_speed": "0-50",
+    "_print_speed": "20-40 mm/s (TDS); 40-120 mm/s (product page)",
+    "_drying": "70C 5h",
+    "_hardness": "90 Shore A",
+    "_enclosure": "Guide: heated chamber / enclosure recommended.",
+    "_diameter_tolerance": "+/-0.10",
+    "_notes": "Polyether block amide. TDS: mirror/glass bed with PVA glue or Magigoo PA; PEI can be challenging; fast cooling makes it brittle. Bambu parent is only the closest flexible preset (no PEBA preset). 500 g + 230 g spool."
+  },
+  "conflicts": [
+    "Bed: product page gives 90-105 C.",
+    "Fan: product page gives 0-15 %.",
+    "Drying: printing guide gives 70 C 3 h; TDS and drying table give 70 C 5 h."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://fillamentum.com/wp-content/uploads/2020/10/TDS_Flexfill-PEBA-90A_EN.pdf",
+    "https://shop.fillamentum.com/products/flexfill-peba-90a-yellow-transparent",
+    "https://fillamentum.com/wp-content/uploads/2020/10/FI_Printing_Guide_Flexfill-PEBA-90A.pdf",
+    "https://fillamentum.com/wp-content/uploads/2023/10/Recommendation-for-filament-processing_drying_EN_12102023.pdf"
+  ],
+  "updated": "2026-11-01"
+}

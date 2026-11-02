@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "vendor": "SUNLU",
+  "product": "High Speed ABS",
+  "material": "ABS",
+  "colors": [
+    "Midnight"
+  ],
+  "bambu_parent": "Generic ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "260"
+    ],
+    "nozzle_temperature_range_high": [
+      "290"
+    ],
+    "filament_density": [
+      "1.046"
+    ],
+    "filament_shrink": [
+      "99.2%"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-100",
+    "filament_retraction_length": "0.8-1.2",
+    "filament_retraction_speed": "30-40",
+    "_nozzle_by_speed": "260-280@50-300; 280-290@300-350",
+    "_hdt": "93+/-3",
+    "_colors_note": "Pass 1 recorded bare colour names, not full Spoolman names; match on vendor+product.",
+    "_vitrification": "80 (Vicat)"
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.sunlu.com/products/high-speed-abs-filament"
+  ],
+  "updated": "2026-11-01"
+}

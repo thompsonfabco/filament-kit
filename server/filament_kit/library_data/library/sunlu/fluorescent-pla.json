@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "vendor": "SUNLU",
+  "product": "Fluorescent PLA",
+  "material": "PLA",
+  "colors": [
+    "PLA Fluorescent Orange",
+    "PLA Fluorescent Red",
+    "PLA Fluorescent Yellow"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.23"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "_plates": "glue required if bed unheated; no glue at 50-60C",
+    "_nozzle_by_speed": "200-210C@50-100mm/s; 210-240C@100-200mm/s",
+    "_drying": "50C",
+    "_print_speed": "50-200",
+    "filament_shrink": "99.5%-99.7% (published 0.3-0.5%)",
+    "_hdt": "55+/-5",
+    "_belongs_to_line": "SUNLU PLA",
+    "_vitrification": "54 (Vicat)"
+  },
+  "conflicts": [
+    "[pass 2] SUNLU Amazon Fluorescent store page: nozzle 200-230C, bed 50-65C, speed 50-100 mm/s."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.sunlu.com/products/sunlu-pla-filament-neon-transparent-color-collection",
+    "https://www.amazon.com/stores/SUNLU/page/4F5DE916-63D6-4379-9D34-F1CCAB28D4CB"
+  ],
+  "updated": "2026-11-01"
+}

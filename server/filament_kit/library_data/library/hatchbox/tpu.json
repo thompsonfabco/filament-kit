@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "vendor": "Hatchbox",
+  "product": "TPU",
+  "material": "TPU",
+  "colors": [
+    "Black",
+    "Gray Blue",
+    "Blue",
+    "Gold",
+    "Red",
+    "Natural",
+    "Cool Gray",
+    "Forest Green",
+    "Dark Yellow",
+    "Light Purple",
+    "Purple",
+    "Peacock Blue",
+    "Yellow",
+    "Mint Green",
+    "Midnight Purple"
+  ],
+  "bambu_parent": "Bambu TPU 95A",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "235"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_hardness": "Shore 95A",
+    "_diameter_tolerance": "+/-0.03",
+    "_ams": "95A TPU: not AMS-friendly in general; feed externally unless Bambu confirms for the specific printer.",
+    "_notes": "Product pages: 'Print Temperature - 190C - 235C', Shore 95A, dimensional accuracy +/- 0.03mm, no heated bed required. No bed, speed or retraction values published. Verified 2026-11-01 against the product pages' Shopify JSON/HTML."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.hatchbox3d.com/products/3d-tpu-1kg1-75-blk",
+    "https://www.hatchbox3d.com/products/3d-tpu-1kg1-75-red"
+  ],
+  "updated": "2026-11-01"
+}

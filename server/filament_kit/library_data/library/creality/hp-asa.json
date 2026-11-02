@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "Creality",
+  "product": "HP-ASA",
+  "material": "ASA",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu ASA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80-110",
+    "_environment_temp": "60-90",
+    "_print_speed": "30-60 mm/s",
+    "_enclosure": "Creality: for fully enclosed printers, otherwise an enclosure is needed.",
+    "_notes": "Creality filament parameter reference table (2024-12-23): recommended 250C nozzle, 80C bed, 50 mm/s. K2 Plus table: 260C/90C, 50C chamber, 14 mm3/s (printer profile values). Store name 'Creality HP ASA'."
+  },
+  "conflicts": [
+    "Print speed: EU store product page (https://store.creality.com/eu/products/creality-hp-asa) says 'Print Speed Up to 200mm/s' vs 30-60 mm/s in the parameter table."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.creality.com/uk/blogs/basics/creality-filaments-parameter-reference-table",
+    "https://store.creality.com/blogs/all/creality-3d-printer-filaments-type-parameter",
+    "https://store.creality.com/eu/products/creality-hp-asa"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "vendor": "SUNLU",
+  "product": "PEEK",
+  "material": "PEEK",
+  "colors": [
+    "Natural"
+  ],
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "420"
+    ],
+    "nozzle_temperature_range_high": [
+      "420"
+    ],
+    "filament_density": [
+      "1.1965"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "110-120",
+    "filament_retraction_length": "1-1.5mm",
+    "filament_retraction_speed": "30-40mm/s",
+    "_nozzle_by_speed": "390C @ 30mm/s; 420C @ 60mm/s",
+    "_drying": "110-140C 4-6h",
+    "_hdt_0.45MPa": "147",
+    "_vitrification": "143 (Tg, ISO 11357-2)",
+    "_moulding_shrinkage": "1%",
+    "_hardness": "83 (Shore, TDS)",
+    "_notes": "Published nozzle temps (390/420C) exceed the hotend limits of current Bambu Lab printers; not printable on them. Plate: carbon platform with glue; raft distance 0.4-0.6mm; supports PVA. No Bambu Studio PEEK preset; bambu_parent omitted."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://media.sunlu.com/prod/20260413/ddb6b06d-707f-4226-9c00-cc16ef778873.pdf?filename=TDS",
+    "https://www.sunlu.com/products/peek-high-performance-filament"
+  ],
+  "updated": "2026-11-01"
+}

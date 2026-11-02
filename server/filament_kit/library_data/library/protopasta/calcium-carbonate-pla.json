@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "vendor": "Protopasta",
+  "product": "Calcium Carbonate PLA",
+  "material": "PLA",
+  "colors": [
+    "White"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "filament_density": [
+      "1.5"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_notes": "60% calcium carbonate PLA (bone-simulating for medical imaging), based on HFPLA. Product page: dry and decrease temperature to minimize stringing. Material Data Table row lists Generic PLA profile but no temperatures. Density from SDS. No print temperatures published."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://proto-pasta.com/pages/material-data-table",
+    "https://cdn.shopify.com/s/files/1/0717/9095/files/PLA_CaCO3_60_SDS.pdf",
+    "https://proto-pasta.com/products/calcium-carbonate-pla-composite"
+  ],
+  "updated": "2026-11-01"
+}

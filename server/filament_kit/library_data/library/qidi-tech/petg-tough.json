@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "vendor": "QIDI Tech",
+  "product": "PETG-Tough",
+  "material": "PETG",
+  "colors": [
+    "Black",
+    "White",
+    "Red",
+    "Orange",
+    "Yellow",
+    "Blue",
+    "Green"
+  ],
+  "bambu_parent": "Bambu PETG HF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.27"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-80",
+    "textured_plate_temp": "70-80 (filament guide)",
+    "fan_min_speed/fan_max_speed": "0-50%",
+    "filament_retraction_length": "1-5",
+    "filament_retraction_speed": "1800-3600 mm/min",
+    "_drying": "60-65C 6-8h (filament guide)",
+    "_print_speed": "30-300 mm/s",
+    "_vitrification": "80 (Tg)",
+    "_hdt_0.45MPa": "70",
+    "_ams": "QIDI BOX compatible per QIDI",
+    "_notes": "TDS calls it ToughPETG-HF. HDT 1.8MPa 65C. Bonds very strongly to PC build plates: increase first-layer gap on large flat parts. Nozzle 0.2-1.0 mm."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://drive.google.com/file/d/1pZBYR_rltVcBqjzHaLWGf34gtX2Uq-LC/view",
+    "https://qidi3d.com/products/qidi-tech-petg-tough-filament",
+    "https://qidi3d.com/pages/choose-the-right-filament-3d-filaments-guide-for-qidi-printers"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "vendor": "Spectrum",
+  "product": "The Filament ASA",
+  "material": "ASA",
+  "colors": [],
+  "bambu_parent": "Bambu ASA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "265"
+    ],
+    "filament_density": [
+      "1.07"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "75-100",
+    "_cooling": "0-20%",
+    "_enclosure": "recommended for larger prints",
+    "_hardened_nozzle_required": "No",
+    "_vicat": "92 (D1525)",
+    "_notes": "TDS features line states VICAT 93C while the property table states 92C."
+  },
+  "conflicts": [
+    "Official product page (https://spectrumfilaments.com/en/filament/the-filament-asa/) lists nozzle 235-265; TDS dated 23-07-2025 values kept in fields/published_ranges."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://spectrumfilaments.com/wp-content/uploads/2025/09/en_tds_the_filament_asa.pdf",
+    "https://spectrumfilaments.com/en/filament/the-filament-asa/"
+  ],
+  "updated": "2026-11-01"
+}

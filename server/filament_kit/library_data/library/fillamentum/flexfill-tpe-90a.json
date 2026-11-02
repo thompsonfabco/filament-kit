@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "Fillamentum",
+  "product": "Flexfill TPE 90A",
+  "material": "TPE",
+  "colors": [
+    "Natural",
+    "Light Grey",
+    "Sky Blue",
+    "Signal Red",
+    "Traffic Black"
+  ],
+  "bambu_parent": "Generic TPU",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "225"
+    ],
+    "nozzle_temperature_range_high": [
+      "245"
+    ],
+    "filament_density": [
+      "1.15"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "_drying": "80C 2h",
+    "_hardness": "90 Shore A",
+    "_diameter_tolerance": "+/-0.10",
+    "_ams": "Product page: direct drive extruder highly recommended.",
+    "_notes": "Polyolefinic TPE (polyolefin + SEBS); density 1.15 g/cm3 from the Flexfill comparison table on the product page. Magigoo PP recommended for adhesion. Sensitive to stress whitening. Bambu parent is only the closest flexible preset. 500 g + 230 g spool. No TDS link on the page."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://shop.fillamentum.com/products/flexfill-tpe-90a-traffic-black",
+    "https://fillamentum.com/wp-content/uploads/2023/10/Recommendation-for-filament-processing_drying_EN_12102023.pdf"
+  ],
+  "updated": "2026-11-01"
+}

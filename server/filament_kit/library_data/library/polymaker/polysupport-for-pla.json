@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "vendor": "Polymaker",
+  "product": "PolySupport for PLA",
+  "material": "PLA",
+  "colors": [
+    "Pearl White"
+  ],
+  "bambu_parent": "Bambu Support For PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.22"
+    ],
+    "filament_is_support": [
+      "1"
+    ],
+    "filament_soluble": [
+      "0"
+    ],
+    "filament_max_volumetric_speed": [
+      "12"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "25-60",
+    "fan_max_speed": "ON",
+    "_print_speed": "50-150",
+    "_drying": "55C 6h",
+    "_enclosure": "not needed",
+    "_ams": "Spools roll in the AMS, but Polymaker recommends a multi-nozzle printer (IDEX/tool changer) to avoid clogs when mixing materials.",
+    "_notes": "Breakaway support for PLA. Max volumetric 12 mm3/s from the wiki (slower recommended). Material type of the support itself is not stated on the TDS; 'PLA' is the material it supports. Sold in 1.75 and 2.85 mm."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://wiki.polymaker.com/polymaker-products/polymaker-filaments/specialty-filament/polysupport-tm-for-pla",
+    "https://cdn.shopify.com/s/files/1/0548/7299/7945/files/PolySupport_TDS_EN_V5.4.pdf",
+    "https://shop.polymaker.com/products/polysupport-for-pla"
+  ],
+  "updated": "2026-11-01"
+}

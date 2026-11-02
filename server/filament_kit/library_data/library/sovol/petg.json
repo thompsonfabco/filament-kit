@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "vendor": "SOVOL",
+  "product": "PETG",
+  "material": "PETG",
+  "colors": [
+    "Gradient Blue",
+    "Gradient Purple",
+    "Gradient Green",
+    "Yellow",
+    "Clear Blue",
+    "Army Green",
+    "Silver Gray",
+    "Green",
+    "White",
+    "Black"
+  ],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-80",
+    "_print_speed": "50-250",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "Nozzle 230-250C, bed 60-80C, speed 50-250mm/s from the sovol3d.com PETG product specification table (confirmed via search-engine extraction of the 'Sovol PETG 3D Printer Filament 6KG' / sovol-petg-3d-filaments-2kg page; sovol3d.com returned HTTP 429 to direct fetches). Tolerance and 1.75mm from Sovol's own Amazon listing title (read directly, B0FMXRV2LY: 'Dimensional Accuracy +/- 0.03 mm'). No density, drying or fan values published."
+  },
+  "conflicts": [
+    "sovol3d.com 'Sovol PETG 3D Filaments' listing description block: Nozzle Temperature 220C, Platform Temperature 70C, speed 150 mm/s (search-engine extraction); main spec table 230-250C / 60-80C kept."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.sovol3d.com/products/sovol-petg-3d-filaments-gradient-blue",
+    "https://www.sovol3d.com/products/sovol-petg-3d-filaments-gradient-purple",
+    "https://www.sovol3d.com/products/sovol-petg-3d-filaments-2kg",
+    "https://www.amazon.com/dp/B0FMXRV2LY"
+  ],
+  "updated": "2026-11-01"
+}

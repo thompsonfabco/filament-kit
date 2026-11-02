@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "vendor": "ColorFabb",
+  "product": "varioShore PEBA 45D/90A",
+  "material": "PEBA",
+  "colors": [],
+  "bambu_parent": "Generic TPU",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.03"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60",
+    "fan_max_speed": "100",
+    "_print_speed": "50 mm/s",
+    "_hardness": "45D / 90A (ISO 7619-1)",
+    "_vitrification": "-55 (Tg, DSC ISO 11357)",
+    "_diameter_tolerance": "+/-0.05 (TDS 'max. roundness deviation')",
+    "_notes": "TDS v1.0. Active-foaming PEBA: unfoamed 210 C at 100% flow, foamed 250 C at 55% flow (fields span these two printed values). Density 1.03 and melting temp 147 C footnoted in TDS. Bed surface: adhesion spray (3D lac). 600 g spools. No PEBA preset in Bambu Studio; Generic TPU is the nearest flexible parent."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://downloads.colorfabb.com/public.php/dav/files/rtfDDRCa723Xdor/Technical%20Data%20Sheets/PEBA/VARIOSHORE%20PEBA%2045D-90A/TDS_varioShore_PEBA45D.pdf"
+  ],
+  "updated": "2026-11-01"
+}

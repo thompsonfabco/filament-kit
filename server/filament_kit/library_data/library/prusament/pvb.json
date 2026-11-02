@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "vendor": "Prusament",
+  "product": "PVB",
+  "material": "PVB",
+  "colors": [
+    "Natural",
+    "Light Yellow",
+    "Prusa Orange",
+    "Dark Blue",
+    "Bright Green",
+    "Smoky Black"
+  ],
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "205"
+    ],
+    "nozzle_temperature_range_high": [
+      "225"
+    ],
+    "filament_density": [
+      "1.10"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-80",
+    "_fan_speed": "100",
+    "_max_print_speed": "up to 200 mm/s",
+    "_hdt_0.45MPa": "63 (ISO 75)",
+    "_hdt_1.80MPa": "58 (ISO 75)",
+    "_diameter_tolerance": "+/-0.03",
+    "_drying": "60C 4-8h (TDS: max 60 C, duration depends on wetness; product page: 4 h at 60 C)",
+    "_notes": "TDS prints nozzle '215 +/- 10', bed '75 +/- 5'. IPA-smoothable (soluble in isopropyl alcohol). No PVB system preset in Bambu Studio, so bambu_parent omitted. Bed: smooth PEI, satin."
+  },
+  "conflicts": [
+    "Bed: product page says 65-85 C (https://prusament.com/materials/prusament-pvb/); TDS says 75 +/- 5 C"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://prusament.com/wp-content/uploads/2022/10/PVB_Prusament_TDS_2021_10_EN.pdf",
+    "https://prusament.com/materials/prusament-pvb/"
+  ],
+  "updated": "2026-11-01"
+}

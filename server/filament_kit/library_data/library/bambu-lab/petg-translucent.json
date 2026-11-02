@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "vendor": "Bambu Lab",
+  "product": "PETG Translucent",
+  "material": "PETG",
+  "colors": [],
+  "bambu_parent": "Bambu PETG Translucent",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.25"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "65-75 (glue)",
+    "chamber_temperatures": "35-50",
+    "fan_min_speed/fan_max_speed": "0-60%",
+    "filament_retraction_length": "0.8-1.4",
+    "filament_retraction_speed": "30-60",
+    "_print_speed": "<220 mm/s",
+    "_drying": "oven 65C 8h; X1 heatbed 75-85C 12h",
+    "_min_nozzle": "TDS lists nozzle sizes 0.2, 0.4, 0.6, 0.8 mm",
+    "_vitrification": "70 (Tg, DSC 10C/min)",
+    "_vicat": "79 (ISO 306)",
+    "_hdt_0.45MPa": "74",
+    "_hdt_1.8MPa": "68",
+    "_annealing": "TDS advises against annealing prints that are not of very simple shape",
+    "_notes": "TDS V1.0 (reseller-hosted copy at additive-x.com). Plates: Engineering, High Temperature or Textured PEI. Storage <20% RH. ABS spool (70C resistance). Max overhang ~70 deg, bridging ~30 mm."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://www.additive-x.com/shop/mpattachments/file/viewonline/id/796/product_id/2557"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "vendor": "JAYO",
+  "product": "PLA Twinkling",
+  "material": "PLA",
+  "colors": [
+    "Black",
+    "Blue"
+  ],
+  "bambu_parent": "Bambu PLA Sparkle",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "205"
+    ],
+    "nozzle_temperature_range_high": [
+      "215"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-65",
+    "_print_speed": "50-100 mm/s",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "Official spec table: Print Temp 205-215C; Platform Temp 'Depends on the platform: No need or 50-65C'; Print Speed 50-100mm/s; Tensile 6-11kgf; MFR 7-9g/10min (190C, 2.16kg); ~330 m per 1.1 kg. Glitter-filled PLA. No density published."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.jayo3d.com/products/reusable-spooljayo-pla-twinkling-reusable-spool-1-1kg-3d-printing-filament"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "PLA Carbon Fiber",
+  "material": "PLA",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu PLA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_density": [
+      "1.24"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-70",
+    "_drying": "65-75C 12h",
+    "_print_speed": "30-100mm/s",
+    "_vicat": "69 (ASTM D1525)",
+    "_hdt": "54 (ASTM D648; load not stated)",
+    "_vitrification": "63 (Tg, DSC 10C/min)",
+    "_bottom_printing_temperature": "190-220",
+    "_enclosure": "Supports open printing, sealing effect is better",
+    "_notes": "TDS titled PLA-CF. Carbon-fibre filled; the TDS does not state a nozzle requirement or fibre content."
+  },
+  "conflicts": [
+    "bed_all_plates: 60-80 (https://eryone3d.com/products/pla-carbon-fiber-filament (description text; spec table says 60-70))"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0252/0412/9841/files/ERYONE-PLA-CF-TDS.pdf",
+    "https://eryone3d.com/products/pla-carbon-fiber-filament"
+  ],
+  "updated": "2026-11-01"
+}

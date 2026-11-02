@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "vendor": "Polymaker",
+  "product": "Fiberon PPS-CF10",
+  "material": "PPS-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Generic PPS-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "310"
+    ],
+    "nozzle_temperature_range_high": [
+      "350"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80-90",
+    "chamber_temperatures": "room temp",
+    "fan_max_speed": "0 (OFF)",
+    "filament_retraction_length": "3 (direct drive)",
+    "filament_retraction_speed": "40",
+    "_print_speed": "up to 300",
+    "_drying": "100C 10h",
+    "_annealing": "125C 16h",
+    "_hardened_nozzle_required": "yes",
+    "_vicat": "267.5",
+    "_hdt_0.45": "252.5",
+    "_colors_note": "Pass 1 recorded bare colour names, not full Spoolman names; match on vendor+product.",
+    "_vitrification": "97.7 (Tg)"
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://shop.polymaker.com/products/fiberon-pps-cf10",
+    "https://fiberon.polymaker.com/product/pps-cf10/",
+    "https://us-wholesale.polymaker.com/products/fiberon-pps-cf10"
+  ],
+  "updated": "2026-11-01"
+}

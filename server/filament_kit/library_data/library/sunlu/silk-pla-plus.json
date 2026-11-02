@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "SUNLU",
+  "product": "Silk PLA+",
+  "material": "PLA",
+  "colors": [
+    "Silk PLA+ Tri-Color Black Gold Purple"
+  ],
+  "bambu_parent": "Generic PLA Silk",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.23"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "_print_speed": "50-200",
+    "filament_shrink": "99.7%-99.9% (published 0.1-0.3%)",
+    "filament_retraction_length": "0.8-1.2",
+    "filament_retraction_speed": "30-40",
+    "_drying": "50C",
+    "_hdt": "57+/-3",
+    "_vitrification": "54 (Vicat)"
+  },
+  "conflicts": [
+    "[pass 2] Spool label: 205-230C by speed tier."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.sunlu.com/products/silk-pla-plus-tri-color-filament",
+    "https://store.sunlu.com/products/over-3kg-bundle-sales-1-75mm-sunlu-multi-color-silk-3d-printer-filament-1kg-roll-dual-color-tri-color-silk-filament"
+  ],
+  "updated": "2026-11-01"
+}

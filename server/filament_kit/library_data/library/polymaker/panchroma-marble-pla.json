@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "vendor": "Polymaker",
+  "product": "Panchroma Marble PLA",
+  "material": "PLA",
+  "colors": [
+    "Marble White",
+    "Marble Slate Grey",
+    "Marble Brick",
+    "Marble Limestone",
+    "Marble Sandstone"
+  ],
+  "bambu_parent": "PolyTerra PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.37"
+    ],
+    "filament_max_volumetric_speed": [
+      "24"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "25-60",
+    "fan_max_speed": "ON",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "20-40",
+    "_print_speed": "up to 300",
+    "_drying": "55C 6h (only if absorbed moisture)",
+    "_enclosure": "not needed",
+    "_vicat": "62 (TDS 'Matte' column)",
+    "_ams": "Polymaker wiki: hardened Panchroma spool edges roll well in the AMS.",
+    "_notes": "Formerly PolyTerra Marble PLA. Density/Vicat are the TDS 'Matte' column (wiki assigns it to the Panchroma Matte profile). Slightly abrasive like Matte. Density 1.37 g/cm3 is the Panchroma TDS V2.1 'Matte' group value; max volumetric speed is the wiki value (0.4 mm nozzle)."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://wiki.polymaker.com/polymaker-products/polymaker-filaments/panchroma-tm/panchroma-tm-marble-pla",
+    "https://cdn.shopify.com/s/files/1/0548/7299/7945/files/TDS_PANCHROMA_V2.pdf",
+    "https://shop.polymaker.com/products/marble-pla"
+  ],
+  "updated": "2026-11-01"
+}

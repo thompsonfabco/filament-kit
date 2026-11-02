@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "vendor": "Creality",
+  "product": "CR-TPU",
+  "material": "TPU",
+  "colors": [],
+  "bambu_parent": "Generic TPU",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50",
+    "_print_speed": "10-50 mm/s",
+    "_ams": "Creality says use with a direct-drive extruder; Shore hardness not published, so AMS suitability unknown.",
+    "_notes": "Creality filament parameter reference table (2024-12-23): recommended 225C nozzle, 50C bed, 15 mm/s. K2 Plus table: 220C/40C, 2 mm3/s (printer profile values)."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.creality.com/uk/blogs/basics/creality-filaments-parameter-reference-table",
+    "https://store.creality.com/blogs/all/creality-3d-printer-filaments-type-parameter"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "vendor": "Gizmo Dorks",
+  "product": "POM",
+  "material": "POM",
+  "colors": [
+    "POM White"
+  ],
+  "bambu_parent": "Generic PP",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100-130",
+    "_print_speed": "30 mm/s",
+    "_plates": "prefers wood or cellulose based platforms",
+    "_enclosure": "enclosed chamber should be used (POM warps a lot)",
+    "_diameter_tolerance": "+/-0.03 mm",
+    "_notes": "All-metal hotend; do not keep above 230C (degrades, may release formaldehyde). Store in airtight container with desiccant."
+  },
+  "conflicts": [
+    "[pass 2] Gizmo Dorks Amazon listing: bed 110C.",
+    "[merge] published_ranges._print_speed: pass 5 value \"30 mm/s\" replaced earlier value \"30\"",
+    "[merge] published_ranges._enclosure: pass 5 value \"enclosed chamber should be used (POM warps a lot)\" replaced earlier value \"recommended (Amazon listing)\"",
+    "[merge] published_ranges._diameter_tolerance: pass 5 value \"+/-0.03 mm\" replaced earlier value \"+/-0.03\"",
+    "[merge] published_ranges._plates: pass 5 value \"prefers wood or cellulose based platforms\" replaced earlier value \"drywall joint tape, wood or cellulose surface\"",
+    "[merge] published_ranges._notes: pass 5 value \"All-metal hotend; do not keep above 230C (degrades, may release formaldehyde). Store in airtight container with desiccant.\" replaced earlier value \"Use all-metal hotend; do not keep above 230C (formaldehyde).\"",
+    "[pass 5] Amazon listing bullets state a single bed value of 110C vs 100-130C on gizmodorks.com and in the 1.75 mm Amazon.ca listing description",
+    "[pass 5] Enclosure recommendation also stated on Gizmo Dorks' 1.75 mm Amazon.ca listing B00LAJNBAG and the 2.85 mm Amazon listing B08LK69N1D (read from search snippets)"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://gizmodorks.com/acetal-3d-printer-filament/",
+    "https://www.amazon.com/Gizmo-Dorks-2-85mm-Printer-Filament/dp/B08LK69N1D",
+    "https://gizmodorks.com/acetal-filament-200-g-spool/"
+  ],
+  "updated": "2026-11-01"
+}

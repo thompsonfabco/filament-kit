@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "PLA Luminous",
+  "material": "PLA",
+  "colors": [
+    "Green",
+    "Blue",
+    "Orange-yellow",
+    "Orange-red",
+    "Purple",
+    "Firefly green",
+    "Rainbow",
+    "Neon Rainbow",
+    "Colorful Rainbow"
+  ],
+  "bambu_parent": "Bambu PLA Glow",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "180"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_density": [
+      "1.25"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "55-70",
+    "_drying": "65-75C 12h",
+    "_print_speed": "30-500mm/s",
+    "_vicat": "54 (ASTM D1525)",
+    "_diameter_tolerance": "+/-0.03",
+    "_bottom_printing_temperature": "190-220",
+    "_enclosure": "open printing/closed printing",
+    "_notes": "TDS titled 'Glow in the dark PLA'. Product page warns PLA is likely to degrade if printing temperature exceeds 225C."
+  },
+  "conflicts": [
+    "nozzle_temperature: 190-220 (https://eryone3d.com/products/glow-in-the-dark-pla)",
+    "_print_speed: 30-60mm/s (https://eryone3d.com/products/glow-in-the-dark-pla)"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0252/0412/9841/files/ERYONE-Glow_in_the_dark_PLA-TDS.pdf",
+    "https://eryone3d.com/products/glow-in-the-dark-pla"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "vendor": "Spectrum",
+  "product": "The Filament PLA HS",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "225"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.24"
+    ]
+  },
+  "published_ranges": {
+    "_nozzle_by_speed": "standard: 190-220; high speed: 225-250",
+    "bed_all_plates": "40-55",
+    "_cooling": "Up to 100%",
+    "_enclosure": "not necessary",
+    "_hardened_nozzle_required": "No",
+    "_notes": "TDS: high speed printing up to 600 mm/s."
+  },
+  "conflicts": [
+    "Official product page (https://spectrumfilaments.com/en/filament/the-filament-pla-hs/) lists nozzle 185-250, bed 0-50; TDS dated 23-09-2024 values kept in fields/published_ranges."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://spectrumfilaments.com/wp-content/uploads/2024/11/eng_tds_the_filament_pla_hs.pdf",
+    "https://spectrumfilaments.com/en/filament/the-filament-pla-hs/"
+  ],
+  "updated": "2026-11-01"
+}

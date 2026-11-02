@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "vendor": "Spectrum",
+  "product": "The Filament PETG Lite",
+  "material": "PETG",
+  "colors": [],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "235"
+    ],
+    "nozzle_temperature_range_high": [
+      "255"
+    ],
+    "filament_density": [
+      "1.29"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60",
+    "_cooling": "75-100%",
+    "_enclosure": "not necessary",
+    "_hardened_nozzle_required": "No"
+  },
+  "conflicts": [
+    "Official product page (https://spectrumfilaments.com/en/filament/the-filament-petg-lite/) lists bed 60-80; TDS dated 23-07-2025 values kept in fields/published_ranges."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://spectrumfilaments.com/wp-content/uploads/2025/09/en_tds_the_filament_petg_lite.pdf",
+    "https://spectrumfilaments.com/en/filament/the-filament-petg-lite/"
+  ],
+  "updated": "2026-11-01"
+}

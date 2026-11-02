@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "TPU High-Speed",
+  "material": "TPU",
+  "colors": [
+    "Solid black",
+    "Solid white",
+    "Solid gray",
+    "Transparent",
+    "Transparent blue",
+    "Transparent red"
+  ],
+  "bambu_parent": "Bambu TPU 95A HF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_density": [
+      "1.22"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "0-60",
+    "_drying": "80-90C 12h",
+    "_max_print_speed": "300mm/s",
+    "_hardness": "95A",
+    "_bottom_printing_temperature": "200-220",
+    "_enclosure": "Open printing / closed printing",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "TDS titled 'Hyper Speed TPU'; says to increase retraction distance to reduce stringing. Product page: Heated Bed 55-70C (PEI), Glass Bed 0-60C."
+  },
+  "conflicts": [
+    "bed_all_plates: 55-70 (heated bed / PEI) (https://eryone3d.com/products/tpu-high-speed-filament)"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0252/0412/9841/files/ERYONE-HP_TPU-TDS.pdf",
+    "https://eryone3d.com/products/tpu-high-speed-filament"
+  ],
+  "updated": "2026-11-01"
+}

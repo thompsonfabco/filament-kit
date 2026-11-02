@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "CarbonFil CF03",
+  "material": "PETG-CF",
+  "colors": [],
+  "bambu_parent": "Bambu PETG-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_density": [
+      "1.29"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "75-85",
+    "fan_min_speed/fan_max_speed": "0-50",
+    "_min_nozzle": "0.6 (product page)",
+    "_fiber_content": "circa 3% carbon fibre (TDS)",
+    "_hdt": "77 (TDS, method listed as ISO 306)",
+    "_notes": "Aesthetic carbon finish on PETG. Print temps/bed/fan from product page (TDS has none); layer height >= 0.2 mm; high-speed printing compatible."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://formfutura.com/filaments/carbonfil-cf03",
+    "https://formfutura.com/web/content/256494?download=true"
+  ],
+  "updated": "2026-11-01"
+}

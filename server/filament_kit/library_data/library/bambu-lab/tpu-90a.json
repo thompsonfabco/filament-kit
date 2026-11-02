@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "vendor": "Bambu Lab",
+  "product": "TPU 90A",
+  "material": "TPU",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu TPU 90A",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.24"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "hot_plate_temp": "30-35",
+    "textured_plate_temp": "30-35",
+    "chamber_temperatures": "25-45",
+    "_print_speed": "<200",
+    "_drying": "oven 70C 8h; heatbed 90C 16h",
+    "_nozzle_sizes_supported": "0.4,0.6,0.8",
+    "_not_supported": "0.2, High Flow nozzle",
+    "_ams": "AMS HT only",
+    "_colors_note": "Pass 1 recorded bare colour names, not full Spoolman names; match on vendor+product."
+  },
+  "conflicts": [
+    "[pass 1] Reseller guide value 220-240C vs TDS 200-250C"
+  ],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://cdn03.plentyone.com/ioseuwg7moqp/propertyItems/4501293/Bambu_TPU_90A_Technical_Data_Sheet_582bf8f6-1f0a-474c-aeda-9e72af3689dc.pdf",
+    "https://us.store.bambulab.com/products/tpu-85a-tpu-90a",
+    "https://www.matterhackers.com/store/l/bambu-lab-tpu-90a-filament-175mm-1kg/sk/M62YC4L5"
+  ],
+  "updated": "2026-11-01"
+}

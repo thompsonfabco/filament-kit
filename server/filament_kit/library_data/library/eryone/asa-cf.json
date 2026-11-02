@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "ASA-CF",
+  "material": "ASA-CF",
+  "colors": [
+    "Black",
+    "Purple red",
+    "Olive green",
+    "Blue",
+    "Dark gray"
+  ],
+  "bambu_parent": "Bambu ASA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_density": [
+      "1.17"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-110",
+    "_drying": "80C 4h",
+    "_print_speed": "30-100mm/s",
+    "_vicat": "108 (ASTM D1525)",
+    "_hdt": "86 (ASTM D648; load not stated)",
+    "_bottom_printing_temperature": "240-280",
+    "_enclosure": "Box Sealing Print",
+    "_notes": "TDS does not state fibre content or nozzle requirement."
+  },
+  "conflicts": [
+    "nozzle_temperature: 210-250 (https://eryone3d.com/products/asa-filament (combined ASA & ASA-CF listing))",
+    "bed_all_plates: 60-100 (https://eryone3d.com/products/asa-filament)"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0252/0412/9841/files/ERYONE-ASA-CF-TDS.pdf",
+    "https://eryone3d.com/products/asa-filament"
+  ],
+  "updated": "2026-11-01"
+}

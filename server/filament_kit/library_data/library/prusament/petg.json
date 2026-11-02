@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "vendor": "Prusament",
+  "product": "PETG",
+  "material": "PETG",
+  "colors": [
+    "Sky Blue",
+    "Anthracite Grey",
+    "Urban Grey",
+    "Signal White",
+    "Clear",
+    "Mango Yellow",
+    "Yellow Gold",
+    "Prusa Orange",
+    "Prusa Orange Transparent",
+    "Terracotta Light",
+    "Carmine Red Transparent",
+    "Lipstick Red",
+    "Shimmering Violet",
+    "Ultramarine Blue Transparent",
+    "Chalky Blue",
+    "Ocean Blue",
+    "Prusa Pro Green",
+    "Jungle Green",
+    "Pistachio Green",
+    "Neon Green Transparent",
+    "Matte Black",
+    "Prusa Galaxy Black",
+    "Jet Black"
+  ],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.27"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-90",
+    "_fan_speed": "50",
+    "_max_print_speed": "up to 200 mm/s",
+    "_hdt_0.45MPa": "68 (ISO 75)",
+    "_hdt_1.80MPa": "68 (ISO 75)",
+    "_diameter_tolerance": "+/-0.02",
+    "_enclosure": "not required",
+    "_notes": "TDS prints nozzle '250 +/- 10', bed '80 +/- 10'. Smooth PEI needs glue stick as separator. Product page: no/low fan for first layers."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://storage.googleapis.com/prusa3d-content-prod-14e8-wordpress-prusament-prod/2023/10/9f8d2165-tds_prusament-petg_n_en.pdf",
+    "https://prusament.com/materials/prusament-petg/"
+  ],
+  "updated": "2026-11-01"
+}

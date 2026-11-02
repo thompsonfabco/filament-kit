@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "ReForm - rTPU 95A",
+  "material": "TPU",
+  "colors": [],
+  "bambu_parent": "Bambu TPU 95A",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.21"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-80",
+    "fan_min_speed/fan_max_speed": "30-100",
+    "_print_speed": "20-60 mm/s (TDS)",
+    "_drying": "50-70C 24h (TDS)",
+    "_enclosure": "Not necessary (TDS); dry box yes",
+    "_hardness": "95A",
+    "_min_nozzle": "0.15",
+    "_notes": "Recycled TPU. TDS heat resistance 74C (DSC), melting point 165C."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://formfutura.com/web/content/288450?download=true",
+    "https://formfutura.com/filaments/reform-rtpu-95a"
+  ],
+  "updated": "2026-11-01"
+}

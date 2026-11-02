@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "vendor": "QIDI Tech",
+  "product": "PLA Matte Rapido",
+  "material": "PLA",
+  "colors": [
+    "Black",
+    "White",
+    "Tech Gray",
+    "Ash Gray",
+    "Warm Gray",
+    "Olive Green",
+    "Navy Blue",
+    "Malt Clay",
+    "Kraft"
+  ],
+  "bambu_parent": "Bambu PLA Matte",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "textured_plate_temp": "45-60 (filament guide)",
+    "cool_plate_temp": "30-45 (filament guide)",
+    "fan_min_speed/fan_max_speed": "50-100%",
+    "_drying": "50-55C 4-6h (filament guide)",
+    "_print_speed": "40-80 mm/s (filament guide)",
+    "_hdt_0.45MPa": "58 (filament guide)",
+    "_ams": "QIDI BOX compatible per QIDI",
+    "_notes": "Nozzle range, fan and HDT from the filament guide; product page prints no settings table. TDS PDF text could not be read, so no TDS-only values (density, Tg, Vicat, bed range) are kept."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://qidi3d.com/products/qidi-tech-pla-matte-filament",
+    "https://qidi3d.com/pages/choose-the-right-filament-3d-filaments-guide-for-qidi-printers"
+  ],
+  "updated": "2026-11-01"
+}

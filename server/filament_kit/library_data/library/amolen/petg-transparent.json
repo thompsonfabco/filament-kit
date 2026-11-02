@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "vendor": "AMOLEN",
+  "product": "PETG Transparent",
+  "material": "PETG",
+  "colors": [
+    "Sky Blue",
+    "Pink",
+    "Orange",
+    "Transparent",
+    "Multicolor Rainbow",
+    "Green"
+  ],
+  "bambu_parent": "Bambu PETG Translucent",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.26"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "30-65",
+    "_drying": "65+/-5C 6-8h",
+    "filament_retraction_length": "0.8-1.2",
+    "filament_retraction_speed": "25-40",
+    "_print_speed": "< 110 mm/s",
+    "_vitrification": "78-82 (Tg)",
+    "_vicat": "82-85",
+    "_hdt_0.45MPa": "70-74",
+    "_diameter_tolerance": "+/-0.03 (variety-pack page)"
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.amolen.com/products/petg-transparent",
+    "https://www.amolen.com/products/petg-transparent-pack"
+  ],
+  "updated": "2026-11-01"
+}

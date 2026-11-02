@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/thompsonfabco/filament-library/schema/entry.schema.json",
+  "title": "Filament library entry (one brand + product line)",
+  "description": "Schema version 1. tools/validate.py enforces this plus the numeric sanity checks noted below.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "vendor", "product", "material", "colors", "fields", "published_ranges",
+               "conflicts", "source_quality", "sources", "updated"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "vendor": {"type": "string", "minLength": 1},
+    "product": {"type": "string", "minLength": 1},
+    "material": {"type": "string", "minLength": 1},
+    "colors": {"type": "array", "items": {"type": "string"}},
+    "bambu_parent": {
+      "description": "Bambu Studio system filament preset name, without the '@BBL <printer>' suffix.",
+      "type": "string", "minLength": 1, "pattern": "^[^@]+$"
+    },
+    "fields": {
+      "description": "Slicer values as Bambu Studio one-element string arrays. temperature_vitrification is never allowed.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "nozzle_temperature_range_low": {"$ref": "#/$defs/one", "description": "C, 150-450"},
+        "nozzle_temperature_range_high": {"$ref": "#/$defs/one", "description": "C, 150-450, >= low"},
+        "filament_density": {"$ref": "#/$defs/one", "description": "g/cm3, 0.5-3.0"},
+        "filament_diameter": {"$ref": "#/$defs/one", "description": "mm, 1.75 or 2.85"},
+        "filament_soluble": {"type": "array", "items": {"enum": ["0", "1"]}, "minItems": 1, "maxItems": 1},
+        "filament_is_support": {"type": "array", "items": {"enum": ["0", "1"]}, "minItems": 1, "maxItems": 1},
+        "filament_shrink": {"type": "array", "items": {"type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?%$"},
+                            "minItems": 1, "maxItems": 1},
+        "filament_max_volumetric_speed": {"$ref": "#/$defs/one", "description": "mm3/s, only if published"}
+      }
+    },
+    "published_ranges": {
+      "description": "Published bounds copied as printed, plus '_'-prefixed notes.",
+      "type": "object",
+      "propertyNames": {
+        "anyOf": [
+          {"pattern": "^_"},
+          {"enum": ["bed_all_plates", "cool_plate_temp", "hot_plate_temp", "textured_plate_temp",
+                    "chamber_temperatures", "fan_max_speed", "fan_min_speed/fan_max_speed",
+                    "filament_retraction_length", "filament_retraction_speed", "overhang_fan_threshold",
+                    "filament_shrink"]}
+        ]
+      },
+      "additionalProperties": {"type": "string", "minLength": 1}
+    },
+    "conflicts": {"type": "array", "items": {"type": "string"}},
+    "source_quality": {"enum": ["official_tds", "official_page", "brand_amazon_listing", "reseller_tds_copy"]},
+    "sources": {"type": "array", "minItems": 1, "items": {"type": "string", "pattern": "^https?://"}},
+    "updated": {"type": "string", "format": "date"}
+  },
+  "$defs": {
+    "one": {"type": "array", "items": {"type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?$"},
+            "minItems": 1, "maxItems": 1}
+  }
+}

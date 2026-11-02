@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "vendor": "SUNLU",
+  "product": "PETG Glow",
+  "material": "PETG",
+  "colors": [
+    "PETG Glow In The Dark Red"
+  ],
+  "bambu_parent": "Generic PETG",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.27"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-80",
+    "_nozzle_by_speed": "235-245C@50-100mm/s; 245-250C@100-200mm/s",
+    "filament_shrink": "99.5%-99.9% (published 0.1-0.5%)",
+    "filament_retraction_length": "0.8-1.2",
+    "filament_retraction_speed": "30-40",
+    "_drying": "60-65C 1-4h",
+    "_hdt": "70+/-5",
+    "_hardness": "80D",
+    "_print_speed": "<300",
+    "_vitrification": "71 (Vicat)"
+  },
+  "conflicts": [
+    "[pass 2] Store page by-speed tiers (235-250C) conflict with product/store table 240-260C; table used for low/high."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.sunlu.com/products/petg-glow-in-the-dark",
+    "https://store.sunlu.com/products/petg-glow-in-the-dark-luminous-3d-printer-filament-1kg"
+  ],
+  "updated": "2026-11-01"
+}

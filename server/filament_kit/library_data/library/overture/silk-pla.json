@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "vendor": "OVERTURE",
+  "product": "Silk PLA",
+  "material": "PLA",
+  "colors": [
+    "Silk Gold",
+    "Silk Copper",
+    "Silk Gray",
+    "Silk Silver",
+    "Silk White",
+    "Silk Red",
+    "Silk Fresh Red",
+    "Silk Neon Green",
+    "Silk Green",
+    "Silk Purple",
+    "Silk Blue",
+    "Silk Gold-Silver",
+    "Silk Green-Silver",
+    "Silk Blue-Silver",
+    "Silk Magenta-Gold",
+    "Silk Red-Gold",
+    "Silk Green-Magenta",
+    "Silk Blue-Yellow",
+    "Silk Green-Blue",
+    "Silk Purple-Gold",
+    "Silk Caramel",
+    "Silk Tiger Eye",
+    "Silk Tropic",
+    "Silk Glacier Flash",
+    "Silk Purple Chrome",
+    "Silk Lime Surge",
+    "Silk Evergreen Bronze",
+    "Silk Golden Ember",
+    "Silk Chrome Gray",
+    "Silk Periwinkle",
+    "Silk Lettuce Tomato",
+    "Silk Copper Shore",
+    "Silk Punch Pink",
+    "Silk Parakeet",
+    "Silk Vaporwave",
+    "Light Gold"
+  ],
+  "bambu_parent": "Bambu PLA Silk",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_density": [
+      "1.19"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "20-40",
+    "overhang_fan_threshold": "60 (threshold overhang angle, degrees)",
+    "_print_speed": "30-70 mm/s",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "TDS v5.1 (Jul 2024): Vicat N/A; melt index 12.8 g/10min (190C 2.16kg); melting temp 153C (DSC); cooling fan on; textured PEI / OVERTURE Build Surface, optional PVA glue; based on 0.4 mm nozzle. Gradient/dual-colour silk spools sold as the same line."
+  },
+  "conflicts": [
+    "Nozzle: product page says 190-230C (https://overture3d.com/products/overture-silk-pla-3d-printer-filament-1-75mm); TDS says 200-220C (kept).",
+    "Bed: product page says 'no heated bed required'; TDS says 50-60C (kept)."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://overture3d.com/cdn/shop/files/OVERTURE_SILK_PLA_TDS_EN_V5.1_09e26446-13ed-49b4-a85f-b8a460d8b16e.pdf",
+    "https://overture3d.com/products/overture-silk-pla-3d-printer-filament-1-75mm"
+  ],
+  "updated": "2026-11-01"
+}

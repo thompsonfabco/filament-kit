@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "vendor": "Polymaker",
+  "product": "PolyMax PETG",
+  "material": "PETG",
+  "colors": [
+    "Black",
+    "White"
+  ],
+  "bambu_parent": "PolyLite PETG",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.24"
+    ],
+    "filament_max_volumetric_speed": [
+      "15"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-80",
+    "fan_min_speed/fan_max_speed": "OFF-20%",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "20-40",
+    "_print_speed": "50-100",
+    "_drying": "65C 6h",
+    "_enclosure": "not needed",
+    "_vitrification": "79 (Tg, DSC)",
+    "_vicat": "82",
+    "_hdt_0.45MPa": "76",
+    "_hdt_1.8MPa": "72",
+    "_ams": "Polymaker wiki: spools redesigned so all Polymaker products spin well in the AMS.",
+    "_notes": "Max volumetric speed: wiki says print at 15 mm3/s or lower."
+  },
+  "conflicts": [
+    "Wiki print-settings table: printing speed 30-50 mm/s (TDS: 50-100 mm/s)"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://wiki.polymaker.com/polymaker-products/polymaker-filaments/prime-materials/petg/polymax-tm-petg",
+    "https://cdn.shopify.com/s/files/1/0548/7299/7945/files/PolyMax_PETG_TDS_EN_V5.4.pdf",
+    "https://shop.polymaker.com/products/polymax-petg"
+  ],
+  "updated": "2026-11-01"
+}

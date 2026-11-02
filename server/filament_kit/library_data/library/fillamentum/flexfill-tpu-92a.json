@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "vendor": "Fillamentum",
+  "product": "Flexfill TPU 92A",
+  "material": "TPU",
+  "colors": [
+    "Luminous Green",
+    "Natural",
+    "Traffic Black"
+  ],
+  "bambu_parent": "Generic TPU",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.20"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "fan_min_speed/fan_max_speed": "70-100",
+    "_print_speed": "20-30 mm/s (TDS); 15-30 mm/s (product page)",
+    "_drying": "80C 3h",
+    "_hardness": "92 Shore A",
+    "_ams": "TDS: direct extruder type only. Soft TPU; not stated as AMS-compatible.",
+    "_diameter_tolerance": "+/-0.10",
+    "_notes": "Drying table: maximum 3 drying cycles of 3 h for Flexfill TPU (yellowing). Guide: 80 C 3-4 h. 500 g + 230 g spool; 2.85 mm also sold."
+  },
+  "conflicts": [
+    "Hardness: TDS (26/08/2019) gives 91 Shore A (ISO 7619); product page gives 92 Shore A."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://fillamentum.com/wp-content/uploads/2020/10/Technical-Data-Sheet_Flexfill-TPU-92A_26082019.pdf",
+    "https://shop.fillamentum.com/products/flexfill-tpu-92a-traffic-black",
+    "https://fillamentum.com/wp-content/uploads/2020/10/FI_Printing_Guide_Flexfill-TPU.pdf",
+    "https://fillamentum.com/wp-content/uploads/2023/10/Recommendation-for-filament-processing_drying_EN_12102023.pdf"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "vendor": "Protopasta",
+  "product": "Flexible TPU",
+  "material": "TPU",
+  "colors": [
+    "Clear",
+    "Recycled Black"
+  ],
+  "bambu_parent": "Generic TPU",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_nozzle_by_speed": "240C up to 8 mm3/s; 260C up to 12 mm3/s; 280C up to 24 mm3/s (overheats at 2 mm3/s) (EX3 blog, Bambu P1S 0.4 steel nozzle)",
+    "_hardness": "about 98A",
+    "_bed": "No bed heat required; Magigoo to avoid permanent bond",
+    "_drying": "Overnight recommended (product page; no temperature published)",
+    "_notes": "Product page: 'Printing starting at 240 C'. Holds shape to about 200C. No density published."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://proto-pasta.com/products/clear-flexible-tpu",
+    "https://proto-pasta.com/blogs/stories/endless-exploration-ex3-july-2024-tpe-tpu-materials"
+  ],
+  "updated": "2026-11-01"
+}

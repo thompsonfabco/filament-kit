@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "PETG-CF",
+  "material": "PETG-CF",
+  "colors": [
+    "Black",
+    "Dark gray",
+    "Olive green",
+    "Blue",
+    "Purple red",
+    "Orange",
+    "Grass green"
+  ],
+  "bambu_parent": "Bambu PETG-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.25"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "75-80",
+    "_drying": "80C 12h",
+    "_print_speed": "30-80mm/s",
+    "_vicat": "85 (ASTM D1525)",
+    "_hdt": "68 (ASTM D648; load not stated)",
+    "_vitrification": "68 (Tg, DSC 10C/min)",
+    "_fiber_content": "approx. 15% carbon fiber",
+    "_bottom_printing_temperature": "230-250",
+    "_enclosure": "open printing/closed printing",
+    "_notes": "TDS does not state a nozzle requirement. Sold as PETG Carbon Fiber."
+  },
+  "conflicts": [
+    "nozzle_temperature: 200-240 (https://eryone3d.com/products/petg-carbon-fiber-filament (FAQ text))",
+    "bed_all_plates: 70-90 / 75-85 (https://eryone3d.com/products/petg-carbon-fiber-filament (FAQ text / header))"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0252/0412/9841/files/ERYONE-PETG-CF-TDS.pdf",
+    "https://eryone3d.com/products/petg-carbon-fiber-filament"
+  ],
+  "updated": "2026-11-01"
+}

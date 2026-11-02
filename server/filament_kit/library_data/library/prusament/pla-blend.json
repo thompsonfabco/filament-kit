@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "vendor": "Prusament",
+  "product": "PLA Blend",
+  "material": "PLA",
+  "colors": [
+    "Pearl White",
+    "Oh My Gold",
+    "Viva La Bronze",
+    "Ms. Pink",
+    "Royal Blue",
+    "Lime Green",
+    "My Silverness"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "40-60",
+    "_fan_speed": "100",
+    "_notes": "Sold on the Prusament PLA page as '(Blend)' colours; that page prints nozzle '210 +/- 10' (fields = 200-220), bed 40-60, fan 100% with no separate Blend values. The Blend TDS is only published inside a >10 MB zip that could not be read, so density/diameter/HDT/tolerance were left out."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://prusament.com/materials/pla/"
+  ],
+  "updated": "2026-11-01"
+}

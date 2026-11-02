@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "vendor": "Fiberlogy",
+  "product": "PCTG+GF",
+  "material": "PCTG-GF",
+  "colors": [
+    "Black",
+    "Natural"
+  ],
+  "bambu_parent": "Generic PCTG",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.31"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100",
+    "fan_min_speed/fan_max_speed": "0-25",
+    "_drying": "60C 4h",
+    "_enclosure": "not required",
+    "_fiber_content": "10% glass fiber",
+    "_hardened_nozzle_required": "yes - highly abrasive, hardened steel or ruby nozzle required",
+    "_hdt_0.45MPa": "76 (ISO 75)",
+    "_hdt_1.8MPa": "64 (ISO 75)",
+    "_ams": "Compatible with BambuLab AMS (new spool system)",
+    "_notes": "Bed: smooth PEI + adhesive, textured PEI, glass + adhesive; strong adhesion."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://fiberlogy.com/en/filaments/pctg-en/pctggf-en/"
+  ],
+  "updated": "2026-11-01"
+}

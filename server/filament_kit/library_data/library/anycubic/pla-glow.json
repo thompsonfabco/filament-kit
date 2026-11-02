@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "vendor": "Anycubic",
+  "product": "PLA Glow",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Glow",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.26"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "12"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "55-65",
+    "fan_max_speed": "100%",
+    "filament_retraction_speed": "40",
+    "_drying": "60-65C 6-8h",
+    "_print_speed": "50-200 mm/s",
+    "_vitrification": "56 (Tg, ISO 11357-1)",
+    "_vicat": "55.1 (ISO 306, 10N)",
+    "_hdt_0.45MPa": "53",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "TDS V3.0. TDS also gives extrusion multiplier 0.96, cooling time 8 s. Glow (phosphorescent) fillers are abrasive in general; Anycubic does not state a hardened-nozzle requirement. Diameter/tolerance from the product page legacy table. Product page: ACE compatible, recommended nozzle 0.4 mm or above."
+  },
+  "conflicts": [
+    "Product page legacy 'Filament Parameters' table (store.anycubic.com/products/pla-glow): Nozzle Temperature 200-210C, Hotbed Temperature 50-80C, Density 1.25g+/-0.05g/cm3",
+    "Product page 'Specification' table (store.anycubic.com/products/pla-glow): Heated Bed Temperature 60-70C (TDS: 55-65), Recommended Printing Speed 50-250 mm/s (TDS: 50-200), Vicat 64C (TDS: 55.1), HDT 0.45MPa 55C (TDS: 53)"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0685/7578/9245/files/ANYCUBIC_TDS_PLA_Glow_V3.0.pdf",
+    "https://store.anycubic.com/products/pla-glow"
+  ],
+  "updated": "2026-11-01"
+}

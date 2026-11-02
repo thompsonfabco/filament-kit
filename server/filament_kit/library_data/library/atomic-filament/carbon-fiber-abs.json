@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "vendor": "Atomic Filament",
+  "product": "Carbon Fiber ABS",
+  "material": "ABS-CF",
+  "colors": [
+    "Ultra Black"
+  ],
+  "bambu_parent": "Bambu ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "235"
+    ],
+    "nozzle_temperature_range_high": [
+      "255"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "115 +/-10",
+    "_hardened_nozzle_required": "yes - hardened or wear-resistant nozzle (abrasive)",
+    "_enclosure": "use an enclosure and appropriate ventilation",
+    "_fiber_content": "milled carbon fiber (percentage not published)",
+    "_ams": "sold as AMS compatible (1 kg); CF is abrasive",
+    "_notes": "Virgin ABS resin + milled carbon fibre + ultra black pigment. No density or Tg published for the CF grade. Bambu Studio has no Bambu ABS-CF preset; Bambu ABS used as the closest. Atomic FAQ gives 80C 4-8h drying for ASA/ABS generally; not recorded here as it is not CF-specific."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://atomicfilament.com/products/carbon-fiber-ultra-black-abs",
+    "https://atomicfilament.com/products/3-5kg-carbon-fiber-ultra-black-abs",
+    "https://atomicfilament.com/pages/atomic-filament-faq"
+  ],
+  "updated": "2026-11-01"
+}

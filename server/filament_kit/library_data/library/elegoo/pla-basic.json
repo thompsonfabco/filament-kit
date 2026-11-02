@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "vendor": "ELEGOO",
+  "product": "PLA Basic",
+  "material": "PLA",
+  "colors": [
+    "Black",
+    "Red",
+    "Yellow",
+    "Cyan",
+    "Purple",
+    "Cocoa Brown",
+    "Hot Pink",
+    "Sunflower Yellow",
+    "Cobalt Blue",
+    "Apple Green",
+    "Turquoise Green",
+    "White",
+    "Grey",
+    "Beige",
+    "Pink",
+    "Translucent",
+    "Green",
+    "Misty Blue",
+    "Orange"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.2"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "35-65 (depends on printer and build plate type)",
+    "chamber_temperatures": "20-45",
+    "_drying": "50C 8h (+/-5C)",
+    "_drying_required": "Recommended",
+    "_min_nozzle": "0.2",
+    "_enclosure": "not required",
+    "_plates": "Textured/Smooth PEI or Other Plates; glue not required",
+    "_max_print_speed": "< 270 mm/s",
+    "_vicat": "64",
+    "_hdt_0.45MPa": "59",
+    "_notes": "Sold as spool-free refill or with spool. Melting temperature 160C; melt index 16.1 +/- 1.7 g/10 min; print and store at <=20% RH sealed with desiccant."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://us.elegoo.com/products/pla-basic-filament-1-75mm-colored-1kg"
+  ],
+  "updated": "2026-11-01"
+}

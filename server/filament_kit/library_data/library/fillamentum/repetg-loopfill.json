@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "vendor": "Fillamentum",
+  "product": "rePETG Loopfill",
+  "material": "PETG",
+  "colors": [
+    "Luminous Yellow",
+    "Sky Blue",
+    "Traffic Black",
+    "Traffic Red",
+    "Traffic White"
+  ],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "255"
+    ],
+    "nozzle_temperature_range_high": [
+      "285"
+    ],
+    "filament_density": [
+      "1.27"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "65-80",
+    "fan_min_speed/fan_max_speed": "0-40",
+    "_nozzle_by_speed": "basic 230-275 (40-60 mm/s, bed 65-75, fan 0-30%); high-speed printers setup 255-285 (100-300 mm/s, fan 0-40%); matte finish 235-255 [product page; PETG print guide 1/2026 linked from it gives bed 65-80 for high-speed/matte]",
+    "_print_speed": "40-60 mm/s basic; 100-300 mm/s high-speed setup",
+    "_drying": "65C 4h",
+    "_vitrification": "80 (Tg, ISO 11357)",
+    "_vicat": "85 (ISO 306)",
+    "_diameter_tolerance": "+/-0.05",
+    "_ams": "Product page lists the line as AMS-compatible.",
+    "_notes": "100% recycled PETG from medical production; temperature resistance up to 80 C (TDS 11/2025). Drying is from the PETG print guide (1/2026) linked on the rePETG page; rePETG is not in the 2023 drying table. 1 kg + 210 g spool."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://fillamentum.com/wp-content/uploads/2026/01/TDS_rePETG-Loopfill_EN_13112025.pdf",
+    "https://shop.fillamentum.com/products/repetg-loopfill-traffic-black",
+    "https://fillamentum.com/wp-content/uploads/2026/01/PRINT_GUIDE_PETG_1_2026_.pdf"
+  ],
+  "updated": "2026-11-01"
+}

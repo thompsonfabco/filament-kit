@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "vendor": "ELEGOO",
+  "product": "ASA-CF",
+  "material": "ASA-CF",
+  "colors": [
+    "Carbon Fiber Black",
+    "Carbon Fiber Grey",
+    "Carbon Fiber Red",
+    "Carbon Fiber Blue",
+    "Carbon Fiber Green",
+    "Carbon Fiber Sand"
+  ],
+  "bambu_parent": "Bambu ASA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_density": [
+      "1.13"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-100 (depends on printer and build plate type)",
+    "chamber_temperatures": "45-60",
+    "_drying": "80C 8h (+/-5C)",
+    "_drying_required": "Required",
+    "_min_nozzle": "0.4",
+    "_hardened_nozzle_required": "yes (hardened steel nozzle listed)",
+    "_enclosure": "required",
+    "_plates": "Textured/Smooth PEI or Other Plates; glue required",
+    "_max_print_speed": "< 250 mm/s",
+    "_vicat": "106",
+    "_hdt_0.45MPa": "108",
+    "_notes": "Carbon-fibre filled. Melting temperature 208C; melt index 4.8 +/- 0.5 g/10 min; print and store at <=20% RH sealed with desiccant."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://us.elegoo.com/products/asa-cf"
+  ],
+  "updated": "2026-11-01"
+}

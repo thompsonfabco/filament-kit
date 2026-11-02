@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "vendor": "Bambu Lab",
+  "product": "PETG-CF",
+  "material": "PETG-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu PETG-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.25"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "65-75",
+    "chamber_temperatures": "35-50",
+    "filament_retraction_length": "0.6-1.0",
+    "filament_retraction_speed": "20-40",
+    "_print_speed": "<200",
+    "_drying": "oven 65C 8h",
+    "_hardened_nozzle_required": "yes",
+    "_nozzle_sizes": "0.4,0.6,0.8",
+    "_colors_note": "Pass 1 recorded bare colour names, not full Spoolman names; match on vendor+product.",
+    "_vitrification": "68 (Tg)"
+  },
+  "conflicts": [
+    "[pass 1] Chamber 35-50 (V3) vs 25-45 (V2)",
+    "[pass 1] Fan 100% (V2 TDS) vs 0-40% (guide)",
+    "[pass 1] Bed 65-75 (TDS) vs 60-80 (guide)",
+    "[pass 1] Density from reseller TDS quote"
+  ],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://get3d.pl/wp-content/uploads/2023/10/Bambu_PETG-CF_Technical_Data_Sheet_V2.pdf",
+    "https://www.additive-x.com/shop/pub/media/mageplaza/product_attachments/attachment_file/b/a/bambu_petg-cf-technical_data_sheet_4.pdf",
+    "https://bambulab.com/en/filament/petg-cf",
+    "https://www.crea3d.com/en/filaments/1308-bambu-petg-cf.html"
+  ],
+  "updated": "2026-11-01"
+}

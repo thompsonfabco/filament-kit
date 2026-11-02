@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "Prusament",
+  "product": "PP Glass Fiber",
+  "material": "PP-GF",
+  "colors": [
+    "Natural"
+  ],
+  "bambu_parent": "Generic PP-GF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "235"
+    ],
+    "nozzle_temperature_range_high": [
+      "255"
+    ],
+    "filament_density": [
+      "1.12"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "85-105",
+    "_fan_speed": "0 (100 for bridges)",
+    "_max_print_speed": "up to 50 mm/s",
+    "_hdt_0.45MPa": "138.3 (ISO 75)",
+    "_hdt_1.80MPa": "112.6 (ISO 75)",
+    "_diameter_tolerance": "+/-0.04",
+    "_hardened_nozzle_required": "yes; glass fibre highly abrasive",
+    "_drying": "not necessary (product page)",
+    "_enclosure": "not required (product page)",
+    "_notes": "TDS prints nozzle '245 +/- 10', bed '95 +/- 10'. Bed: PP sheet (or smooth PEI with PP tape). Standard Bambu plates are not a PP surface."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://storage.googleapis.com/prusa3d-content-prod-14e8-wordpress-prusament-prod/2025/07/512923fd-tds_pp_glass_fiber_en.pdf",
+    "https://prusament.com/materials/prusament-pp-glass-fiber/"
+  ],
+  "updated": "2026-11-01"
+}

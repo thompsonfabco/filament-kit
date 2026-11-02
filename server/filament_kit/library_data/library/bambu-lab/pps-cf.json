@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "vendor": "Bambu Lab",
+  "product": "PPS-CF",
+  "material": "PPS-CF",
+  "colors": [],
+  "bambu_parent": "Bambu PPS-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "310"
+    ],
+    "nozzle_temperature_range_high": [
+      "340"
+    ],
+    "filament_density": [
+      "1.26"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100-120 (glue)",
+    "chamber_temperatures": "60-90",
+    "fan_min_speed/fan_max_speed": "0-40%",
+    "filament_retraction_length": "0.8-1.4",
+    "filament_retraction_speed": "20-40",
+    "_print_speed": "<100 mm/s",
+    "_drying": "oven 100-140C 8-12h; X1 heatbed 110-120C 12h",
+    "_min_nozzle": "TDS lists nozzle sizes 0.4, 0.6 (recommended), 0.8 mm",
+    "_diameter_tolerance": "+/-0.05",
+    "_vitrification": "100 (Tg, DSC 10C/min)",
+    "_vicat": "268 (ISO 306)",
+    "_hdt_0.45MPa": "264",
+    "_hdt_1.8MPa": "235",
+    "_annealing": "180-220C 6-12h",
+    "_enclosure": "Chamber 60-90C (specimens printed on X1E at 60C chamber)",
+    "_ams": "Cardboard spool (145C resistance), 0.75 kg",
+    "_notes": "TDS V1.0. Plates: Smooth / Textured PEI. Support: none listed. Specimens: X1E, nozzle 320C, 60 mm/s, bed 110C. Identical PDF on two cdn.shopify.com paths and an additive-x copy."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0584/7236/6216/files/Bambu_PPS-CF_Technical_Data_Sheet.pdf",
+    "https://cdn.shopify.com/s/files/1/0224/5205/files/Bambu_PPS-CF_Technical_Data_Sheet.pdf"
+  ],
+  "updated": "2026-11-01"
+}

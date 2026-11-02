@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "Spectrum",
+  "product": "PC CF",
+  "material": "PC-CF",
+  "colors": [],
+  "bambu_parent": "Generic PC",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "270"
+    ],
+    "nozzle_temperature_range_high": [
+      "290"
+    ],
+    "filament_density": [
+      "1.22"
+    ]
+  },
+  "published_ranges": {
+    "_bed": ">80 (as printed)",
+    "_cooling": "0-20%",
+    "_enclosure": "recommended for larger prints",
+    "_hardened_nozzle_required": "Yes",
+    "_vicat": "150 (D1525)",
+    "_drying": "75C 6h",
+    "_fiber_content": "10% carbon fibre",
+    "_notes": "Dry box: Yes."
+  },
+  "conflicts": [
+    "Official product page (https://spectrumfilaments.com/en/filament/pc-cf/) lists nozzle 270-320, bed 90-130; TDS dated 05-10-2024 values kept in fields/published_ranges."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://spectrumfilaments.com/wp-content/uploads/2024/11/en_tds_spectrum_pc_cf.pdf",
+    "https://spectrumfilaments.com/en/filament/pc-cf/"
+  ],
+  "updated": "2026-11-01"
+}

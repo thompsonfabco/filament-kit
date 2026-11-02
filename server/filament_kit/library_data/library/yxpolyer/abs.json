@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "vendor": "yxpolyer",
+  "product": "ABS",
+  "material": "ABS",
+  "colors": [
+    "ABS Transparent Blue",
+    "ABS Transparent Green"
+  ],
+  "bambu_parent": "Generic ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100-110",
+    "_max_print_speed": "200 mm/s (up to)",
+    "_diameter_tolerance": "+/-0.04",
+    "_notes": "Low odor ABS. PC spool supports high-temperature drying. Brand comparison table rates ABS moisture absorption 'Medium'.",
+    "_drying": "60-70C 8h+",
+    "_ams": "AMS compatible",
+    "_enclosure": "Sibling Clear ABS listing: 'Indoor-Friendly for Enclosed Printers'"
+  },
+  "conflicts": [
+    "[pass 4] An undated earlier listing note says 210-260C; yxpolyer.com product pages and the current Amazon listing say 220C as the low end. 220-260C used.",
+    "[pass 4] Tolerance +/-0.04 mm comes from the page meta description only.",
+    "[merge] published_ranges._max_print_speed: pass 6 value \"200 mm/s (up to)\" replaced earlier value \"200\"",
+    "[merge] published_ranges._notes: pass 6 value \"Low odor ABS. PC spool supports high-temperature drying. Brand comparison table rates ABS moisture absorption 'Medium'.\" replaced earlier value \"yxpolyer.com: 'Recommended print temperature: 220-260C; bed temperature: 100-110C'; 'prints easily from 220C and supports speeds up to 200 mm/s'. Low-odor ABS+, AMS compatible, PC spool 'supports high-temperature drying' (no drying values). No density published.\"",
+    "[pass 6] Drying 60-70C for 8+ hours is from the YXPOLYER brand comparison table ('ABS' column) shown in the Refill PLA+ listing B0HH8KYDYJ; search-result snippet.",
+    "[pass 6] +/-0.04mm is from the yxpolyer.com ABS page meta description.",
+    "[pass 6] Enclosure wording is from sibling listing YXPOLYER Clear ABS B0H2C89R13 (search snippet), not from the Transparent Blue or Green listings.",
+    "[pass 6] Amazon B0F1FQSXFN values (up to 200 mm/s, low odor, moisture absorption Medium) are from a search-result snippet; seller YXPOLYER US."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://yxpolyer.com/products/abs-transparent-blue",
+    "https://yxpolyer.com/products/abs-transparent-green",
+    "https://www.amazon.com/dp/B0F1FQSXFN",
+    "https://www.amazon.com/ABS-Filament-Transparent-AMS-Compatible-Resistance/dp/B0F1FQSXFN",
+    "https://www.amazon.com/YXPOLYER-Refill-PLA-Filament-Printer/dp/B0HH8KYDYJ",
+    "https://www.amazon.com/YXPOLYER-Transparent-Indoor-Friendly-AMS-Compatible-Beginners/dp/B0H2C89R13"
+  ],
+  "updated": "2026-11-01"
+}

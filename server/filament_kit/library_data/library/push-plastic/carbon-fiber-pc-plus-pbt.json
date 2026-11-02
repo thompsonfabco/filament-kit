@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "vendor": "Push Plastic",
+  "product": "Carbon Fiber PC+PBT",
+  "material": "PC-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Generic PC",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.18"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100-120",
+    "_drying": "60C 4h",
+    "_enclosure": "Heated enclosure recommended",
+    "_print_speed": "40mm/s (preferred: 0.6mm nozzle, 0.4mm layer, 255C extruder, 90C bed)",
+    "_hardened_nozzle_required": "yes - carbon fiber is abrasive, use a hardened steel nozzle",
+    "_notes": "Density is the TDS 'Specific Gravity, ASTM D792' value 1.18 (the TDS header wrongly reads 'Polyethylene Terephthalate Glycol Comonomer'). TDS gives no HDT and no fiber loading. Preferred parameters list a 90C bed, below the sheet's own 100-120 bed range. Colour assumed black."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0260/7421/files/CFPCPBT_print_settings.pdf",
+    "https://cdn.shopify.com/s/files/1/0260/7421/files/CF_PC_PBT_TDS.pdf",
+    "https://www.pushplastic.com/products/carbon-fiber-pc-pbt-filament-1-75mm-500g"
+  ],
+  "updated": "2026-11-01"
+}

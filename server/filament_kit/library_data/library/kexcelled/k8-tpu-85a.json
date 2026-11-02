@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "vendor": "Kexcelled",
+  "product": "K8 TPU 85A",
+  "material": "TPU",
+  "colors": [],
+  "bambu_parent": "Bambu TPU 85A",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "30-50",
+    "_density": "1.17-1.19 g/cm3 (ISO 1183)",
+    "_hardness": "80A (TDS, GB/T 531.1); product name says 85A",
+    "_print_speed": "30 mm/s",
+    "_cooling_fan": "ON, 50%-100%",
+    "_bed_surface": "PEI frosted board",
+    "_diameter_tolerance": "+/-0.05",
+    "_notes": "TDS 'THE K8 TPU 85A' rev 06, 27/02/2025 (soft TPU, resilience 53%); settings based on a 0.4mm nozzle. Soft TPU: generally not suited to AMS feeding (not stated on the TDS). Also 2.85mm (+/-0.05). HDT/Vicat not determined. Density is a range, so filament_density left unset. No drying spec published."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0958/0111/4939/files/THE_K8_TPU_85A_TDS.pdf"
+  ],
+  "updated": "2026-11-01"
+}

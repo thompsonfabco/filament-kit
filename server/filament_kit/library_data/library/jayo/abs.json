@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "JAYO",
+  "product": "ABS",
+  "material": "ABS",
+  "colors": [
+    "Black",
+    "White",
+    "Blue",
+    "Green",
+    "Gray",
+    "Orange",
+    "Red",
+    "Yellow"
+  ],
+  "bambu_parent": "Bambu ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80-120",
+    "_print_speed": "50-100 mm/s",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "Official 'JAYO ABS Print Parameters': Print Temp 240-270C, Hot Bed 80-120C, Print Speed 50-100mm/s, elongation at break 25%, Melt Index 12-19g/10min. The reusable-spool ABS page additionally gives retraction distance 5mm and retraction speed 50mm/s (with different temps, see conflicts). Enclosure not mentioned by JAYO. No density published."
+  },
+  "conflicts": [
+    "Official reusable-spool ABS page (store.jayo3d.com/products/moq-5-jayo-abs-1kg-3d-printer-filament-1-75mm-white-3d-printing-wear-resistance): nozzle 250-260C, platform 80-100C, speed 40-60mm/s, retraction 5mm @ 50mm/s"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.jayo3d.com/products/jayo-abs-3d-printer-filament-cardboard-spool",
+    "https://store.jayo3d.com/products/moq-5-jayo-abs-1kg-3d-printer-filament-1-75mm-white-3d-printing-wear-resistance"
+  ],
+  "updated": "2026-11-01"
+}

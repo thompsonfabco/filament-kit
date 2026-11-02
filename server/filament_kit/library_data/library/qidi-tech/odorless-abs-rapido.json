@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "vendor": "QIDI Tech",
+  "product": "Odorless-ABS Rapido",
+  "material": "ABS",
+  "colors": [
+    "Black",
+    "White",
+    "Red",
+    "Purple",
+    "Gray",
+    "Blue",
+    "Green",
+    "Silver",
+    "Yellow"
+  ],
+  "bambu_parent": "Bambu ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.05"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100-110",
+    "chamber_temperatures": "60-80",
+    "fan_min_speed/fan_max_speed": "Off-30%",
+    "filament_retraction_length": "1-5",
+    "filament_retraction_speed": "1800-3600 mm/min",
+    "_drying": "70-80C 4-6h",
+    "_print_speed": "30-120 mm/s (TDS); 80-300 mm/s (product page)",
+    "_hdt_0.45MPa": "92",
+    "_enclosure": "closed chamber; heated chamber 60-80C",
+    "_ams": "QIDI BOX compatible per QIDI",
+    "_notes": "TDS v5.2 (07.2023) titled 'QIDI ABS Odorless'. HDT 1.8MPa 86C. Recommended support: QIDI S-White."
+  },
+  "conflicts": [
+    "product page: heated chamber 55-80C, fan 0-60%, speed 80-300 mm/s (https://qidi3d.com/products/qidi-tech-odorless-abs-rapido-filament)"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://drive.google.com/file/d/1kYU0OG7lyUkgXvhFc5_USYzFIEwSnB2-/view",
+    "https://qidi3d.com/products/qidi-tech-odorless-abs-rapido-filament",
+    "https://qidi3d.com/pages/choose-the-right-filament-3d-filaments-guide-for-qidi-printers"
+  ],
+  "updated": "2026-11-01"
+}

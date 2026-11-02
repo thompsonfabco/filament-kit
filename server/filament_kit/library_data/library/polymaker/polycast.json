@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "vendor": "Polymaker",
+  "product": "PolyCast",
+  "material": "PVB",
+  "colors": [
+    "Natural"
+  ],
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_density": [
+      "1.1"
+    ],
+    "filament_max_volumetric_speed": [
+      "15"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "25-70",
+    "fan_max_speed": "ON",
+    "_print_speed": "50-200",
+    "_drying": "50C 12h",
+    "_enclosure": "not needed",
+    "_vitrification": "70 (Tg, DSC)",
+    "_vicat": "67",
+    "_hdt_0.45MPa": "67",
+    "_hdt_1.8MPa": "53",
+    "_ams": "Polymaker wiki: spools redesigned so all Polymaker products spin well in the AMS.",
+    "_notes": "PVB for investment casting. No PVB system preset in Bambu Studio, so bambu_parent omitted. Density measured at 21.5C. Sold in 1.75 and 2.85 mm."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://wiki.polymaker.com/polymaker-products/polymaker-filaments/specialty-filament/polycast-tm-pvb",
+    "https://cdn.shopify.com/s/files/1/0548/7299/7945/files/PolyCast_TDS_EN_V5.4.pdf",
+    "https://shop.polymaker.com/products/polycast"
+  ],
+  "updated": "2026-11-01"
+}

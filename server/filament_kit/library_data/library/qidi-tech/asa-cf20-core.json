@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "vendor": "QIDI Tech",
+  "product": "ASA-CF20 Core",
+  "material": "ASA-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu ASA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_density": [
+      "1.06"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100-110",
+    "fan_min_speed/fan_max_speed": "0-20%",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "1800-3600 mm/min",
+    "_drying": "60-70C 4-6h (TDS, product page); 80C 4-6h (filament guide)",
+    "_print_speed": "30-250 mm/s",
+    "_hdt_0.45MPa": "101.1",
+    "_fiber_content": "20% carbon fibre core (skin-core co-extrusion)",
+    "_hardened_nozzle_required": "yes (hardened steel/bimetal/tungsten carbide; brass not recommended)",
+    "_min_nozzle": "0.4",
+    "_ams": "QIDI BOX compatible per QIDI",
+    "_notes": "TDS v5.0 (12.2023). HDT 1.8MPa 95.8C. Nozzle 0.4-1.0 mm; heater block >=12 mm recommended."
+  },
+  "conflicts": [
+    "product page: bed 90-100C (https://qidi3d.com/products/asa-cf20-core)",
+    "filament guide: bed 90-110C (https://qidi3d.com/pages/choose-the-right-filament-3d-filaments-guide-for-qidi-printers)"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://drive.google.com/file/d/1vSsvLE2CUd1k0O8zc4o5uIytzRfH-057/view",
+    "https://qidi3d.com/products/asa-cf20-core",
+    "https://qidi3d.com/pages/choose-the-right-filament-3d-filaments-guide-for-qidi-printers"
+  ],
+  "updated": "2026-11-01"
+}

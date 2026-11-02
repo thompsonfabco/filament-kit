@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "ThermaX PPSU",
+  "material": "PPSU",
+  "colors": [
+    "Natural"
+  ],
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "360"
+    ],
+    "nozzle_temperature_range_high": [
+      "390"
+    ],
+    "filament_density": [
+      "1.29"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "140-160",
+    "_drying": "120C 4h",
+    "_diameter_tolerance": "+/-0.05",
+    "_enclosure": "Print inside a heated enclosure",
+    "_notes": "Values from MatterHackers listing; official page unreachable (HTTP 429). All-metal extruder, no cooling fan; PEI tape / polyimide tape / sanded FR4 / perfboard bed. Beyond Bambu Lab printer nozzle limits."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://www.matterhackers.com/store/l/3dxtech-thermax-natural-ppsu-filament-175mm-05kg/sk/M28PMF4L"
+  ],
+  "updated": "2026-11-01"
+}

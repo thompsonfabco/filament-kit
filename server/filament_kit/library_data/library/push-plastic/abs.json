@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "vendor": "Push Plastic",
+  "product": "ABS",
+  "material": "ABS",
+  "colors": [
+    "Army Green",
+    "Beige",
+    "Black",
+    "Bronze Metallic",
+    "Brown",
+    "Dark Grey",
+    "Desert Tan",
+    "Flat Dark Earth",
+    "Gold Metallic",
+    "Green",
+    "Light Grey",
+    "Light Teal",
+    "Lime Green",
+    "Magenta",
+    "Natural",
+    "Ocean Blue",
+    "Orange",
+    "Pink",
+    "Purple",
+    "Red",
+    "Silver Metallic",
+    "Ultra Blue",
+    "White",
+    "Yellow"
+  ],
+  "bambu_parent": "Bambu ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.03"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100-120",
+    "_drying": "60C 4h",
+    "_enclosure": "Heated enclosure recommended",
+    "_print_speed": "45-55mm/s (preferred: 0.4mm nozzle, 0.2mm layer, 230C extruder, 110C bed)",
+    "_hdt": "93.7 (ASTM D648, printed specimens; load not stated)",
+    "_notes": "Push Plastic print-settings sheet: larger nozzles, higher volumetric flow and faster speeds need higher nozzle temps. No diameter tolerance or max volumetric speed published. Diameter from the cited 1.75mm product listing (page not readable at check time)."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0260/7421/files/ABS_print_settings.pdf",
+    "https://cdn.shopify.com/s/files/1/0260/7421/files/Push_Plastic_ABS_Technical_Data_sheet_8f0e2174-914e-4312-8018-fb4d1a5d2e9b.pdf",
+    "https://www.pushplastic.com/products/abs-filament-1-75mm-1kg"
+  ],
+  "updated": "2026-11-01"
+}

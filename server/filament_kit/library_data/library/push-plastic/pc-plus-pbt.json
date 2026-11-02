@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "vendor": "Push Plastic",
+  "product": "PC+PBT",
+  "material": "PC",
+  "colors": [
+    "Black",
+    "Natural",
+    "Orange",
+    "Red",
+    "Silver Metallic",
+    "Ultra Blue",
+    "White"
+  ],
+  "bambu_parent": "Generic PC",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "245"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.20"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-120",
+    "_drying": "60C 4h",
+    "_enclosure": "Heated enclosure recommended",
+    "_print_speed": "45-55mm/s (preferred: 0.4mm nozzle, 0.2mm layer, 250C extruder, 110C bed)",
+    "_hdt": "106 (ASTM D648, printed specimens; load not stated)",
+    "_notes": "Polycarbonate + polybutylene terephthalate blend; shrinks/warps on cooling - use adhesive, higher temps or brim/raft. No Bambu Studio PC/PBT preset; Generic PC used as nearest."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0260/7421/files/PCPBT_print_settings.pdf",
+    "https://cdn.shopify.com/s/files/1/0260/7421/files/Push_Plastic_PC_PBT_Technical_Data_sheet_4358a3fc-90a8-40d6-b231-0b064cde3ffc.pdf",
+    "https://www.pushplastic.com/products/pc-pbt-filament-1-75mm-1kg"
+  ],
+  "updated": "2026-11-01"
+}

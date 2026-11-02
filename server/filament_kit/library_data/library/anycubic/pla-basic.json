@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "vendor": "Anycubic",
+  "product": "PLA Basic",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.24"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "12"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "55-65",
+    "fan_max_speed": "100%",
+    "filament_retraction_speed": "40",
+    "_drying": "45-50C 6-8h",
+    "_print_speed": "50-200 mm/s",
+    "_vitrification": "61.2 (Tg, ISO 11357-1)",
+    "_vicat": "55 (ISO 306, 10N)",
+    "_hdt_0.45MPa": "54",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "TDS V3.0 (named 'Anycubic PLA'; sold as PLA Basic). TDS also gives extrusion multiplier 0.98, cooling time 8 s, min print speed 20 mm/s; values based on 0.4 mm nozzle. Diameter 1.75 and tolerance from the product page legacy parameter table. Reusable/refill spool system (ACE)."
+  },
+  "conflicts": [
+    "Product page legacy 'Filament Parameters' table (store.anycubic.com/products/pla-filament): Nozzle Temperature 200-210C, Hotbed Temperature 50-80C, Density 1.25g+/-0.05g/cm3",
+    "Product page 'Specification' table (store.anycubic.com/products/pla-filament): Heated Bed Temperature printed as '55-56' (TDS: 55-65), Melting Point 168C (TDS: 166)"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0685/7578/9245/files/ANYCUBIC_TDS_PLA_V3.0.pdf",
+    "https://store.anycubic.com/products/pla-filament"
+  ],
+  "updated": "2026-11-01"
+}

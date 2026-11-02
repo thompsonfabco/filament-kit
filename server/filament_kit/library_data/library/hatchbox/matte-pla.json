@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "vendor": "Hatchbox",
+  "product": "Matte PLA",
+  "material": "PLA",
+  "colors": [
+    "Black",
+    "White",
+    "Gray",
+    "Brown",
+    "Kraft",
+    "Orange",
+    "Cool Mint",
+    "Baby Pink",
+    "Navy",
+    "Light Lavender",
+    "Soft Purple",
+    "Lemon Yellow",
+    "Ash Gray"
+  ],
+  "bambu_parent": "Bambu PLA Matte",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "Product pages spec bullets: 'Print Temperature - 210C - 230C', 'No Heating Bed Required', dimensional accuracy +/- 0.03mm. Verified 2026-11-01 against the product pages' Shopify JSON/HTML."
+  },
+  "conflicts": [
+    "Same Hatchbox Matte PLA product pages, meta description: Recommended Extrusion/Nozzle Temperature 180-220 C (appears to be shared PLA template text)"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.hatchbox3d.com/products/3d-pla-1kg1-75-mat-wht",
+    "https://www.hatchbox3d.com/products/3d-pla-1kg1-75-mat-lmylw",
+    "https://www.hatchbox3d.com/collections/pla-1-75mm.atom"
+  ],
+  "updated": "2026-11-01"
+}

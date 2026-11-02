@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "vendor": "Spectrum",
+  "product": "THE FILAMENT HT-PLA",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "195"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_density": [
+      "1.2"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "40-50",
+    "_cooling": "40-80%",
+    "_enclosure": "not necessary",
+    "_hardened_nozzle_required": "No",
+    "_vicat": "140 (TDS, method listed as DSC)"
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://spectrumfilaments.com/wp-content/uploads/2025/09/en_tds_the_filament_ht_pla.pdf",
+    "https://spectrumfilaments.com/en/filament/the-filament-ht-pla/"
+  ],
+  "updated": "2026-11-01"
+}

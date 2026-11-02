@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "vendor": "Atomic Filament",
+  "product": "Hi-Flow Pro PLA",
+  "material": "PLA",
+  "colors": [
+    "Black",
+    "Light Gray"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "180"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.25"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_vitrification": "55-60 (Tg, Atomic PLA SDS)",
+    "_diameter_tolerance": "+/-0.02",
+    "_ams": "AMS compatible (1 kg)",
+    "_notes": "Virgin NatureWorks Ingeo PLA + Atomic Pro (Hi-Flow & Impact) additive package. Maker claims 'twice the flow of regular PLA at the same temperature' and reduced viscosity/backpressure; no max volumetric speed published. No bed temperature published. Density/Tg from the generic Atomic PLA SDS. No Bambu high-flow PLA preset exists; Bambu PLA Basic used as the closest (consider raising max volumetric speed after testing)."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://atomicfilament.com/products/black-hi-flow-pro-pla-filament",
+    "https://atomicfilament.com/products/light-gray-hi-flow-pro-pla-filament",
+    "https://cdn.shopify.com/s/files/1/0778/8857/files/Atomic-PLA-SDS-8-2021.pdf?v=1628017942"
+  ],
+  "updated": "2026-11-01"
+}

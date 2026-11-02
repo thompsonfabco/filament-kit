@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "ApolloX",
+  "material": "ASA",
+  "colors": [],
+  "bambu_parent": "Bambu ASA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "235"
+    ],
+    "nozzle_temperature_range_high": [
+      "255"
+    ],
+    "filament_density": [
+      "1.11"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-110",
+    "fan_min_speed/fan_max_speed": "0-50",
+    "_enclosure": "Yes, 40C (product page)",
+    "_min_nozzle": "0.15",
+    "_vicat": "98 (ISO 306 VST/A/50)",
+    "_diameter_tolerance": "+/-0.05 (1.75 mm), +/-0.10 (2.85 mm)",
+    "_notes": "Modified ASA. TDS v1 dated 22 April 2016; bed/fan/enclosure from product page."
+  },
+  "conflicts": [
+    "Product page print temp 230-280C vs TDS (2016) 235-255C."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://formfutura.com/web/content/256142?download=true",
+    "https://formfutura.com/filaments/apollox"
+  ],
+  "updated": "2026-11-01"
+}

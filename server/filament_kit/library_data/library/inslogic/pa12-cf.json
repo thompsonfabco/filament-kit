@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "vendor": "Inslogic",
+  "product": "PA12-CF",
+  "material": "PA12-CF",
+  "colors": [
+    "PA12-CF Black"
+  ],
+  "bambu_parent": "Generic PA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "260"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_density": [
+      "1.0466"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "textured_plate_temp": "60-70",
+    "_nozzle_by_speed": "260-280C@50-100mm/s",
+    "_drying": "90C 12h; 110C 4h",
+    "_fiber_content": "20% CF",
+    "_nozzle_sizes_supported": "0.4,0.6",
+    "_fan": "70%",
+    "_hdt": "176 (TDS) / 177 (Amazon)",
+    "_hardness": "79D",
+    "_diameter_tolerance": "+/-0.03",
+    "_vitrification": "65 (Tg)"
+  },
+  "conflicts": [
+    "[pass 2] Heat resistance 176C (TDS/product page) vs 177C HDT (Amazon).",
+    "[pass 2] TDS copy hosted on a reseller domain (psgsm.net); values match inslogic3d.com."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://www.inslogic3d.com/products/inslogic-pa12-cf-filament",
+    "https://store.inslogic3d.com/products/pa12-cf-filament",
+    "https://f00.psgsm.net/product/925440/technical-datasheet-inslogic-pa12-cf.pdf",
+    "https://www.amazon.com/Inslogic-Filament-260-280%C2%B0C-Resistant-Functional/dp/B0DZMYRQNH"
+  ],
+  "updated": "2026-11-01"
+}

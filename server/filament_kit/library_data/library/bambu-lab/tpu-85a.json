@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "vendor": "Bambu Lab",
+  "product": "TPU 85A",
+  "material": "TPU",
+  "colors": [
+    "Orange"
+  ],
+  "bambu_parent": "Bambu TPU 85A",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.18"
+    ]
+  },
+  "published_ranges": {
+    "hot_plate_temp": "30-35",
+    "textured_plate_temp": "30-35",
+    "fan_min_speed/fan_max_speed": "50-100",
+    "_print_speed": "<=80",
+    "_drying": "oven 70C 8h; heatbed 90C 16h",
+    "_nozzle_sizes_supported": "0.6,0.8",
+    "_not_supported": "0.2, 0.4, High Flow",
+    "_nozzle_material": "hardened or stainless",
+    "_colors_note": "Pass 1 recorded bare colour names, not full Spoolman names; match on vendor+product."
+  },
+  "conflicts": [
+    "[pass 1] Density from reseller quoting TDS"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://bambulab.com/en-us/filament/tpu-85a",
+    "https://shop3duniverse.com/products/bambu-lab-tpu-90a-1-75mm-1kg",
+    "https://www.3dsaga.com/en/products/bambu-lab-tpu-90a"
+  ],
+  "updated": "2026-11-01"
+}

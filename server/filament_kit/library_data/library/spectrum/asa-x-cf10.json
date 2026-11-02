@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "vendor": "Spectrum",
+  "product": "ASA-X CF10",
+  "material": "ASA-CF",
+  "colors": [],
+  "bambu_parent": "Bambu ASA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "235"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.1"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-110",
+    "_print_speed": "30-70 mm/s",
+    "_cooling": "0-20%",
+    "_enclosure": "not necessary",
+    "_hardened_nozzle_required": "recommended",
+    "_vicat": "101.6 (ISO 306)",
+    "_fiber_content": "10% carbon fibre"
+  },
+  "conflicts": [
+    "Official product page (https://spectrumfilaments.com/en/filament/asa-x-cf10/) lists nozzle 240-270, bed 80-100, print speed 30-150 mm/s; TDS dated 06-04-2022 values kept in fields/published_ranges."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://spectrumfilaments.com/wp-content/uploads/2022/10/en_tds_spectrum_asax_cf10.pdf",
+    "https://spectrumfilaments.com/en/filament/asa-x-cf10/"
+  ],
+  "updated": "2026-11-01"
+}

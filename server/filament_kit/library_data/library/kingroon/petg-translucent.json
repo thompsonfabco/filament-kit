@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "vendor": "Kingroon",
+  "product": "PETG Translucent",
+  "material": "PETG",
+  "colors": [],
+  "bambu_parent": "Bambu PETG Translucent",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.25"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "65-75",
+    "chamber_temperatures": "35-50",
+    "fan_min_speed/fan_max_speed": "0-60%",
+    "filament_retraction_length": "0.8-1.4",
+    "filament_retraction_speed": "30-60",
+    "_drying": "65C 8h",
+    "_max_print_speed": "<220 mm/s",
+    "_min_nozzle": "0.2",
+    "_hdt_0.45MPa": "74",
+    "_vicat": "79",
+    "_vitrification": "70 (Tg, DSC)",
+    "_notes": "TDS V1.0: Engineering Plate / High Temperature Plate / Textured PEI with glue; HDT 1.8 MPa 68 C; melting 228 C; annealing not recommended (60-70 C 6-12 h if done). No kingroon.com product page found for this line."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://wiki.kingroon.com/kingroon_petg_translucent_technical_data_sheet_v1.0.pdf"
+  ],
+  "updated": "2026-11-01"
+}

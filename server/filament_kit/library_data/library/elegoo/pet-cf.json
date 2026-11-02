@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "vendor": "ELEGOO",
+  "product": "PET-CF",
+  "material": "PET-CF",
+  "colors": [
+    "Carbon Fiber Black"
+  ],
+  "bambu_parent": "Bambu PET-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "260"
+    ],
+    "nozzle_temperature_range_high": [
+      "290"
+    ],
+    "filament_density": [
+      "1.32"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-110 (depends on printer and build plate type)",
+    "chamber_temperatures": "45-60",
+    "_drying": "80C 8h (+/-5C)",
+    "_drying_required": "Required",
+    "_min_nozzle": "0.4",
+    "_hardened_nozzle_required": "yes (hardened steel nozzle listed)",
+    "_enclosure": "required",
+    "_plates": "Textured/Smooth PEI or Other Plates; glue required",
+    "_max_print_speed": "< 100 mm/s",
+    "_vicat": "112 (after annealing at 100 °C for 8h)",
+    "_hdt_0.45MPa": "194 (after annealing at 100 °C for 8h)",
+    "_notes": "Carbon-fibre filled. Melting temperature 255C; melt index 50.2 +/- 3.6 g/10 min; print and store at <=20% RH sealed with desiccant."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://us.elegoo.com/products/pet-cf"
+  ],
+  "updated": "2026-11-01"
+}

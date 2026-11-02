@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "Fiberlogy",
+  "product": "FiberFlex Aero",
+  "material": "TPU",
+  "colors": [
+    "Natural",
+    "White",
+    "Gray",
+    "Black"
+  ],
+  "bambu_parent": "Generic TPU",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "235"
+    ],
+    "filament_density": [
+      "1.16"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "30-70",
+    "fan_min_speed/fan_max_speed": "50-75",
+    "_drying": "60C 4h",
+    "_enclosure": "not required",
+    "_hdt_0.45MPa": "70 (ASTM D648, unfoamed)",
+    "_notes": "Foaming TPU: expands when heated, up to ~50% less material use depending on foaming; density is for the unfoamed state - flow must be calibrated per temperature. Bed: smooth PEI, glass."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://fiberlogy.com/en/filaments/flex-en/fiberflex-aero-en/"
+  ],
+  "updated": "2026-11-01"
+}

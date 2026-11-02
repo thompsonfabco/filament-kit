@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "vendor": "JAYO",
+  "product": "Silk PLA+",
+  "material": "PLA",
+  "colors": [
+    "Bronze",
+    "Light Gold",
+    "Gold",
+    "Candy Dandy",
+    "Red Copper",
+    "Brass",
+    "Purple",
+    "Silver",
+    "Gray",
+    "Red",
+    "White",
+    "Orange",
+    "Blue",
+    "Green",
+    "Yellow",
+    "Pink",
+    "Black"
+  ],
+  "bambu_parent": "Bambu PLA Silk",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-80",
+    "_print_speed": "40-80 mm/s",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "Official Silk PLA+ page: Nozzle 200-230C, Heated Bed 60-80C. JAYO's 'PLA Silk Print Parameters' block (mystery-box listing) agrees (200-230C, 60-80C) and adds Print Speed 40-80mm/s, Melt Index 4-8g/10min. Single-colour shiny silk; multi-colour and rainbow silk are separate entries. No density published."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.jayo3d.com/products/moq-5-rolls-jayo-silk-pla-1-1kg-reusable-spool-1-75mm-filament-3d-printer-consumables-1-1kg-spool-shiny-metallic",
+    "https://store.jayo3d.com/products/moq-5-jayo-silk-pla-1-75mm-filament-3d-printer-consumables-1-1kg-spool-shiny-metallic",
+    "https://store.jayo3d.com/products/jayo-fdm-filament-printing-mystery-box-5-rolls-of-random-colors-filament"
+  ],
+  "updated": "2026-11-01"
+}

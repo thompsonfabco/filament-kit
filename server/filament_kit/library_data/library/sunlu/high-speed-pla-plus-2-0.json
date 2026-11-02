@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "vendor": "SUNLU",
+  "product": "High Speed PLA+ 2.0",
+  "material": "PLA",
+  "colors": [
+    "Olive Green",
+    "Orange",
+    "Pink",
+    "Yellow",
+    "Black",
+    "Green"
+  ],
+  "bambu_parent": "Bambu PLA Tough+",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.27"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "filament_retraction_length": "0.8-1.2",
+    "filament_retraction_speed": "30-40",
+    "_nozzle_by_speed": "200-215C@50-150mm/s; 215-230C@150-300mm/s",
+    "_hdt": "56.5+/-3",
+    "_colors_note": "Pass 1 recorded bare colour names, not full Spoolman names; match on vendor+product."
+  },
+  "conflicts": [
+    "[pass 1] Table max 300 mm/s vs headline 600 mm/s"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.sunlu.com/products/high-speed-pla-plus-2-0-filament"
+  ],
+  "updated": "2026-11-01"
+}

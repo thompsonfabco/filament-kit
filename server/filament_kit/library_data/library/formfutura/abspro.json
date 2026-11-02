@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "ABSpro",
+  "material": "ABS",
+  "colors": [],
+  "bambu_parent": "Bambu ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "255"
+    ],
+    "filament_density": [
+      "1.05"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100-110",
+    "fan_min_speed/fan_max_speed": "0-50",
+    "_print_speed": "25-100 mm/s (TDS regular speed); page: Medium, 'High Speed Compatible 150mm'",
+    "_min_nozzle": "0.15",
+    "_drying": "50-60C 12h (TDS: recommended)",
+    "_notes": "Linked TDS (254657) is Formfutura's own ABSpro TDS (updated 23-8-2024); it describes ABSpro as a PC-ABS blend. Nozzle 230-255C, bed 100-110C, fan 0-50%, SG 1.05 match page and TDS. Page flow ~106%, retraction ~5 mm, experience level Expert.",
+    "_enclosure": "Yes (TDS); page recommends a temperature-controlled build chamber for larger prints",
+    "_hdt": "85 (HDT A, ASTM D648)",
+    "_vicat": "93 (ASTM D1525)"
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://formfutura.com/filaments/abspro",
+    "https://formfutura.com/web/content/254657?download=true"
+  ],
+  "updated": "2026-11-01"
+}

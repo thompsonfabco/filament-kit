@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "vendor": "AMOLEN",
+  "product": "PLA Metal",
+  "material": "PLA",
+  "colors": [
+    "Metal Iron"
+  ],
+  "bambu_parent": "Bambu PLA Metal",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.25"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "30-65",
+    "_drying": "55+/-5C 6-8h",
+    "filament_retraction_length": "0.8-1.2",
+    "filament_retraction_speed": "35-45",
+    "_print_speed": "< 200 mm/s",
+    "_vitrification": "60 (Tg)",
+    "_vicat": "62",
+    "_hdt_0.45MPa": "62",
+    "_notes": "Metal-look PLA (single 1 kg colour listed: Metal Iron)."
+  },
+  "conflicts": [
+    "nozzle 180-210C, tolerance +/-0.02 (https://www.amolen.com/products/pla-metal-like-pack-4x200g, 'PLA Metal-Like Variety Pack' page; same formulation not confirmed)"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.amolen.com/products/pla-metal",
+    "https://www.amolen.com/products/pla-metal-like-pack-4x200g"
+  ],
+  "updated": "2026-11-01"
+}

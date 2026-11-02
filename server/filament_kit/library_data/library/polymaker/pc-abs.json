@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "vendor": "Polymaker",
+  "product": "PC-ABS",
+  "material": "PC",
+  "colors": [
+    "Black",
+    "White"
+  ],
+  "bambu_parent": "Generic PC",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.1"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-105",
+    "chamber_temperatures": "90-100 (actively heated, minimum 90 per wiki)",
+    "fan_max_speed": "0 (OFF)",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "20-40",
+    "_print_speed": "50-250",
+    "_drying": "75C 6h",
+    "_annealing": "90C 2h",
+    "_enclosure": "required, heated chamber",
+    "_vitrification": "109 (Tg, DSC)",
+    "_vicat": "135",
+    "_hdt_0.45MPa": "112",
+    "_hdt_1.8MPa": "106",
+    "_ams": "Polymaker wiki: spools redesigned so all Polymaker products spin well in the AMS.",
+    "_notes": "Material is a PC/ABS blend; no PC-ABS system preset in Bambu Studio, so Generic PC is the parent. Build surface: textured PEI (glue when needed). Sold in 1.75 and 2.85 mm."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://wiki.polymaker.com/polymaker-products/polymaker-filaments/prime-materials/polycarbonate/polymaker-tm-pc-abs",
+    "https://cdn.shopify.com/s/files/1/0548/7299/7945/files/Polymaker_PC_ABS_TDS_EN_V5.4.pdf",
+    "https://shop.polymaker.com/products/polymaker-pc-abs"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "vendor": "Siraya Tech",
+  "product": "Flex TPU 95A",
+  "material": "TPU",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu TPU 95A",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.16"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "20-50",
+    "filament_retraction_length": "1-5",
+    "filament_retraction_speed": "1800-3600 mm/min",
+    "_print_speed": "30-120 mm/s",
+    "_drying": "50-65C 4-6h",
+    "_vicat": "99 (ISO 306)",
+    "_hardness": "95A (ISO 7619)",
+    "_min_nozzle": "0.2 mm (best results 0.4 mm)",
+    "_notes": "Melting point 200C. Cooling fan on. User guide: shorter melt zones 210-230C, longer melt zones 200-210C; black often prints slightly cooler than white. ISO 10993-5/-10/-23 biocompatibility tested. Direct drive recommended. Diameter not stated on TDS."
+  },
+  "conflicts": [
+    "Siraya blog 'TPU 95A HF Best Quality Slicer Settings' gives nozzle 220-240C, bed 30-40C and drying 70-90C 8-12h (blog, not TDS): https://siraya.tech/blogs/news/tpu-95a-hf-best-quality-slicer-settings"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://siraya.tech/pages/siraya-tech-fibreheart-flex-tpu-95a-tds",
+    "https://siraya.tech/pages/flex-tpu-95a-filament-user-guide",
+    "https://siraya.tech/products/siraya-tech-flex-tpu-95a-filament"
+  ],
+  "updated": "2026-11-01"
+}

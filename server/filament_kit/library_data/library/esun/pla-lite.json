@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "PLA-Lite",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Lite",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.23"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "45-60",
+    "fan_max_speed": "100",
+    "_print_speed": "40-100",
+    "_hdt_0.45MPa": "53",
+    "_notes": "eSUN PLA-Lite (ePLA-Lite) TDS v4.0 Apr 2024. HDT 53C (0.45MPa) per TDS. Diameter not stated in TDS."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://assets.spoolscout.com/tds-sds/esun/tds/esun-pla-lite-tds-v4.0-2024-04.pdf",
+    "https://www.spoolscout.com/data-sheets/esun/pla-epla-lite"
+  ],
+  "updated": "2026-11-01"
+}

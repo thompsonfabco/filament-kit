@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "vendor": "JAYO",
+  "product": "PLA Galaxy",
+  "material": "PLA",
+  "colors": [
+    "Galaxy Green",
+    "Stardust Purple",
+    "Starlit Flow"
+  ],
+  "bambu_parent": "Bambu PLA Galaxy",
+  "fields": {
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "Glitter/sparkle PLA. Official page gives only diameter and 0.02 mm accuracy. Nozzle/bed temps and density NOT sourced; JAYO does not state whether the glitter is abrasive."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.jayo3d.com/products/reusable-spooljayo-pla-galaxy-3d-printer-filament-1-75mm-glitter-sparkle-pla-colorful-twinkling-1-1kg-galaxy-green-black-purple-for-fdm-printer"
+  ],
+  "updated": "2026-11-01"
+}

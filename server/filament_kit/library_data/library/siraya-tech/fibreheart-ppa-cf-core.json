@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "vendor": "Siraya Tech",
+  "product": "Fibreheart PPA-CF Core",
+  "material": "PPA-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu PPA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "280"
+    ],
+    "nozzle_temperature_range_high": [
+      "320"
+    ],
+    "filament_density": [
+      "1.23"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80",
+    "fan_max_speed": "0 (off)",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "1800-3600 mm/min",
+    "_print_speed": "30-120 mm/s",
+    "_drying": "80-100C 4-6h (oven, only if moist)",
+    "_hdt_0.45MPa": "97 unannealed / 199 annealed (Method B); Method A 84 / 126",
+    "_vicat": "238 (ISO 306)",
+    "_vitrification": "80 (Tg, ASTM D3418)",
+    "_fiber_content": "25% carbon fiber (core-shell)",
+    "_hardened_nozzle_required": "yes (hardened steel)",
+    "_min_nozzle": "0.4 mm (0.4-1.0 mm)",
+    "_notes": "Printer needs at least a 12 mm thick heater block (sealing box). Melting point 239C. Raft separation 0.08-0.12 mm. PEI with glue stick/PVP. Store <15% RH. Bambu Lab print profiles published by Siraya.",
+    "_ams": "Not compatible (product page FAQ: brittle, may break in AMS feed tubes)"
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://siraya.tech/pages/siraya-tech-fibreheart-ppa-cf-core-tds",
+    "https://siraya.tech/products/siraya-tech-fibreheart-ppa-nylon-based-paht-cf-core-3d-printing-filament"
+  ],
+  "updated": "2026-11-01"
+}

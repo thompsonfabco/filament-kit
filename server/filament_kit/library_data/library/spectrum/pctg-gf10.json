@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "vendor": "Spectrum",
+  "product": "PCTG GF10",
+  "material": "PCTG",
+  "colors": [],
+  "bambu_parent": "Generic PCTG",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.31"
+    ]
+  },
+  "published_ranges": {
+    "_bed": "> 50 (as printed)",
+    "_print_speed": "30-80 mm/s",
+    "_cooling": "50-85%",
+    "_enclosure": "not necessary",
+    "_hardened_nozzle_required": "recommended",
+    "_vicat": "77",
+    "_fiber_content": "10% glass fibre"
+  },
+  "conflicts": [
+    "Official product page (https://spectrumfilaments.com/en/filament/pctg-gf10/) lists bed 60-80, print speed 30-150 mm/s; TDS dated 06-04-2022 values kept in fields/published_ranges."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://spectrumfilaments.com/wp-content/uploads/2022/10/en_tds_spectrum_pctg_gf10.pdf",
+    "https://spectrumfilaments.com/en/filament/pctg-gf10/"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "ThermaX PEI 9085",
+  "material": "PEI",
+  "colors": [
+    "Natural"
+  ],
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "350"
+    ],
+    "nozzle_temperature_range_high": [
+      "380"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "140-160",
+    "_drying": "120C 4h",
+    "_vitrification": "186 (Tg)",
+    "_diameter_tolerance": "+/-0.05",
+    "_notes": "Values from MatterHackers listing 'ThermaX PEI 9085 Blend'; official page unreachable (HTTP 429). All-metal extruder, no cooling fan, starting speed 1000 mm/min, PEI tape / sanded FR4 / perfboard bed. Beyond Bambu Lab printer nozzle limits."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://www.matterhackers.com/store/l/3dxtech-thermax-pei-9085-blend-3d-filament-175mm-05kg/sk/MXUMG8UX"
+  ],
+  "updated": "2026-11-01"
+}

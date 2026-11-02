@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "PLA Silk Rainbow",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Silk",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_density": [
+      "1.23"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "55-70",
+    "_drying": "65-75C 12h",
+    "_print_speed": "30-100mm/s",
+    "_vicat": "54 (ASTM D1525)",
+    "_hdt": "53 (ASTM D648; load not stated)",
+    "_bottom_printing_temperature": "190-220",
+    "_enclosure": "Open Printing/closed printing"
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0252/0412/9841/files/ERYONE-Silk_Raibow_PLA-TDS.pdf",
+    "https://eryone3d.com/products/macaron-rainbow-pla-filament"
+  ],
+  "updated": "2026-11-01"
+}
