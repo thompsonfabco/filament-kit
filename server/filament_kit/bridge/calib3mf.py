@@ -11,10 +11,22 @@ SlotMap (the mapping job does).
 
 Watchdog (the gcode never heats or loads, so either means the printer is doing something we did not ask for):
 while the job is watched, a nozzle or bed TARGET temperature above the snapshot's (`nozzle_target_temper`,
-`bed_target_temper`; for the H2D's packed `device.extruder.info[].temp` / `device.bed.info.temp` any change of
-the decoded target) or an `ams.tray_now` other than the snapshot's sends `stop` at once. After the job, a
-`tray_now` other than the snapshot's is the problem "printer left a filament loaded in the toolhead" and
-`restored` is false. A job that never started still gets a best-effort `stop`.
+`bed_target_temper`, and the decoded target of the H2D's packed `device.extruder.info[].temp` /
+`device.bed.info.temp`; a drop never counts) or an `ams.tray_now` other than the snapshot's ends the watch and
+sends `stop`. After the job, a `tray_now` other than the snapshot's is the problem "printer left a filament
+loaded in the toolhead" and `restored` is false.
+
+Never act on a print that is not ours: each run sends its own `subtask_name`, `run_name(serial)` =
+`fk-calib-<serial>-<nonce>` (the file keeps the fixed `job_name(serial)`), and `stop` (watchdog, timeout, never
+started, should_stop, Ctrl-C) is sent only while the latest report's `subtask_name` is this run's name. A report
+still naming an earlier run (or anything else) is never ours. Another print that starts while we watch (someone at
+the touchscreen or in Bambu Studio) ends the watch with "the printer started another job; calibration abandoned":
+it is not stopped, our file is still deleted, and its filament load is not held against us.
+
+Never overwrite a slot setting someone else changed: the calibration writes no slot, so its slot step after the
+job (`_check_slots`) only compares every loaded slot with the snapshot and reports a slot that changed meanwhile
+("left as is"); it never writes one, as `snapshot.restore` for a calibration snapshot. `restored` true means we
+left nothing changed (false only for a filament left loaded in the toolhead).
 
 The print command, modelled on what Bambu Studio sends in LAN mode (to be confirmed on the owner's H2D, Task 9):
 
@@ -24,7 +36,7 @@ The print command, modelled on what Bambu Studio sends in LAN mode (to be confir
         "url": "ftp:///cache/fk-calib-<serial>.gcode.3mf",
         "file": "",
         "md5": "",
-        "subtask_name": "fk-calib-<serial>",
+        "subtask_name": "fk-calib-<serial>-<nonce>",
         "project_id": "0", "profile_id": "0", "task_id": "0", "subtask_id": "0",
         "bed_type": "auto",
         "use_ams": true,
@@ -46,6 +58,7 @@ import hashlib
 import io
 import json
 import logging
+import secrets
 import time
 import zipfile
 from dataclasses import dataclass, field
@@ -60,7 +73,6 @@ log = logging.getLogger(__name__)
 JOB_TIMEOUT = 120.0        # seconds from the print command to the end of the job
 SNAPSHOT_TIMEOUT = 10.0
 STOP_TIMEOUT = 20.0
-RESTORE_TIMEOUT = 20.0
 BUSY = ('RUNNING', 'PAUSE', 'PREPARE', 'SLICING')
 ENDED = ('FINISH', 'FAILED')
 REFUSED = "printer refused the calibration job"
@@ -70,6 +82,12 @@ _ZIP_TIME = (2026, 1, 1, 0, 0, 0)
 
 def job_name(serial: str) -> str:
     return f"fk-calib-{serial}"
+
+
+def run_name(serial: str) -> str:
+    """This run's `subtask_name`: unique per run, so a report naming an earlier run is never taken for ours. It
+    keeps the `fk-calib-` prefix that usage skips (`usage.CALIB_PREFIX`)."""
+    return f"{job_name(serial)}-{secrets.token_hex(3)}"
 
 
 def remote_path(serial: str) -> str:
@@ -86,7 +104,9 @@ class CalibResult:
     tray_now: list[str] = field(default_factory=list)         # each `ams.tray_now` seen during the job
     skipped: list[str] = field(default_factory=list)          # empty slots, not part of the job
     cert_changed: bool = False
-    restored: bool = True     # every slot the restore step had to put back was confirmed back (true: none changed)
+    restored: bool = True     # we left nothing changed (false: a filament left loaded in the toolhead)
+    job: str = ""             # this run's subtask_name (`run_name`)
+    other_job: bool = False   # another print started while we watched: abandoned, never stopped
 
 
 # ---------------------------------------------------------------- the 3MF
@@ -186,15 +206,15 @@ def build(slots: list[str]) -> bytes:
     return buf.getvalue()
 
 
-def payload(serial: str, ams_mapping: list[int]) -> dict:
-    """The `project_file` print command (see the module docstring)."""
+def payload(serial: str, ams_mapping: list[int], name: str | None = None) -> dict:
+    """The `project_file` print command (see the module docstring); `name` = this run's `run_name`."""
     return {"print": {
         "command": "project_file",
         "param": GCODE,
         "url": f"ftp://{remote_path(serial)}",
         "file": "",
         "md5": "",
-        "subtask_name": job_name(serial),
+        "subtask_name": name or job_name(serial),
         "project_id": "0", "profile_id": "0", "task_id": "0", "subtask_id": "0",
         "bed_type": "auto",
         "use_ams": True,
@@ -325,25 +345,28 @@ def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None
         res.problems.append(f"cannot save the slot snapshot ({type(e).__name__}: {e}); the job was not started")
         _delete(printer, path, res)
         return res
+    res.job = run_name(serial)
     try:
         _job(manager, serial, res, labels, sent, snap, should_stop)
     except Exception as e:      # e.g. the MQTT connection was lost while watching the job
         log.warning("printer %s: calibration job interrupted (%s)", serial, type(e).__name__)
         res.consistent = False
         res.problems.append(f"the calibration job was interrupted: connection lost ({type(e).__name__})")
+    except BaseException:       # Ctrl-C with no handler installed: stop our job (only ours), then restore
+        log.warning("printer %s: calibration job interrupted; stopping it if it is ours", serial)
+        res.consistent = False
+        _stop_ours(manager, serial, res.job)
+        raise
     finally:
         _delete(printer, path, res)
-        try:
-            _restore(manager, serial, slotmap, trays0, res)
-        except Exception as e:
-            res.restored = False
-            res.problems.append(f"could not restore the slots ({type(e).__name__})")
-        if res.restored:            # every slot confirmed back: the snapshot on disk is done with
+        _check_slots(manager, serial, slotmap, trays0, res)
+        if res.restored:            # we changed nothing: the snapshot on disk is done with
             try:
                 snapshot.clear(serial)
             except OSError:
                 log.exception("printer %s: cannot delete the slot snapshot", serial)
-        _left_loaded(manager, serial, snap, res)
+        if not res.other_job:   # another print's filament load is not ours to report
+            _left_loaded(manager, serial, snap, res)
     log.info("printer %s: calibration %s; decoding %s; problems %s", serial,
              "consistent" if res.consistent else "not consistent", res.decoding, res.problems)
     return res
@@ -352,14 +375,16 @@ def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None
 POLL = 0.5                 # seconds between stop checks while a stoppable wait runs
 ONLINE = ('connected', 'needs_developer_mode')
 LEFT_LOADED = "printer left a filament loaded in the toolhead"
-HEATING = "the printer began heating during the calibration job; it was stopped"
-LOADING = "the printer began loading a filament during the calibration job; it was stopped"
+HEATING = "the printer began heating during the calibration job"
+LOADING = "the printer began loading a filament during the calibration job"
+OTHER_JOB = "the printer started another job; calibration abandoned"
+LATEST_TIMEOUT = 1.0       # seconds to get the latest report before deciding on a `stop`
 
 
 def heater_targets(report: dict) -> dict[str, tuple[str, int]]:
-    """Every nozzle / bed TARGET temperature in a report: name -> (kind, value). kind "plain" (a target field:
-    only a rise counts) or "packed" (an H2D `device.*.info[].temp` packed (target << 16) | current: any change of
-    the decoded target counts, the current part is ignored)."""
+    """Every nozzle / bed TARGET temperature in a report: name -> (kind, value). kind "plain" (a target field) or
+    "packed" (an H2D `device.*.info[].temp` packed (target << 16) | current: the decoded target, the current part
+    is ignored)."""
     p = _d(report)
     out: dict[str, tuple[str, int]] = {}
     for k in ('nozzle_target_temper', 'bed_target_temper'):
@@ -378,10 +403,10 @@ def heater_targets(report: dict) -> dict[str, tuple[str, int]]:
 
 
 def heating(before: dict, report: dict) -> str | None:
-    """The name of a heater whose target rose (plain) or changed (packed) since `before`; None if none did."""
+    """The name of a heater whose target rose since `before`; None if none did. Only a rise counts, for packed
+    targets too: a drop (the owner preheated, the firmware zeroes it when a job starts) is no heating."""
     for name, (kind, v) in heater_targets(report).items():
-        old = before.get(name, (kind, 0))[1]
-        if (kind == 'plain' and v > old) or (kind == 'packed' and v != old):
+        if v > before.get(name, (kind, 0))[1]:
             return name
     return None
 
@@ -403,8 +428,34 @@ def _wait(manager, serial: str, pred, timeout: float, should_stop) -> dict | Non
             return r
 
 
+def _ours(report: dict | None, name: str) -> bool:
+    return bool(name) and isinstance(report, dict) and _s(report.get('subtask_name')) == name
+
+
+def _stop_ours(manager, serial: str, name: str) -> bool | None:
+    """`stop` our own job: sent only while the latest report names this run (`name`, `_ours`). True once a report shows
+    the printer no longer busy, False if that was not confirmed, None when nothing was sent (not our job, or no
+    report)."""
+    try:
+        latest = manager.wait_report(serial, lambda r: True, LATEST_TIMEOUT)
+    except Exception:
+        return None
+    if not _ours(latest, name):
+        log.info("printer %s: no stop sent: the printer shows %r, not our job", serial,
+                 _s((latest or {}).get('subtask_name')))
+        return None
+    return _stop(manager, serial)
+
+
+def _stopped_text(stopped: bool | None) -> str:
+    if stopped is None:
+        return "; our job was not running on the printer, so nothing was stopped; calibration abandoned"
+    return "; the calibration job was stopped" if stopped else "; the stop was not confirmed"
+
+
 def _stop(manager, serial: str) -> bool:
-    """Best-effort `stop`; true once a report shows the printer no longer busy."""
+    """Best-effort `stop` (callers go through `_stop_ours`); true once a report shows the printer no longer
+    busy."""
     try:
         manager.publish(serial, {"print": {"command": "stop", "param": ""}})
         return manager.wait_report(serial, lambda r: _s(r.get('gcode_state')).upper() not in BUSY,
@@ -415,13 +466,13 @@ def _stop(manager, serial: str) -> bool:
 
 def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[int], snap: dict,
          should_stop=None) -> None:
-    name = job_name(serial)
+    name = res.job or run_name(serial)
     stopping = should_stop or (lambda: False)
     if stopping():
         res.problems.append("interrupted: mapping was stopped before the calibration job")
         return
     try:
-        reply = manager.publish(serial, payload(serial, sent))
+        reply = manager.publish(serial, payload(serial, sent, name))
     except Exception as e:      # offline / no reply raised by the Manager
         res.problems.append(f"cannot send the calibration job ({type(e).__name__})")
         return
@@ -432,12 +483,17 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
 
     before = (_s(snap.get('gcode_state')).upper(), _s(snap.get('subtask_name')), _s(snap.get('task_id')))
     heaters0, tray0 = heater_targets(snap), _tray_now(snap)
-    st = {'started': False, 'final': None, 'trip': None}
+    st = {'started': False, 'final': None, 'trip': None, 'other': None}
 
     def watch(r: dict) -> bool:
-        # the watchdog first, whether or not the job is seen as started: no heating, no filament load, ever
+        gs, sub = _s(r.get('gcode_state')).upper(), _s(r.get('subtask_name'))
+        # another print started (not ours, not the one the printer showed before): never touch it
+        if sub != name and gs in BUSY and (sub, _s(r.get('task_id'))) != before[1:]:
+            st['other'] = sub or '?'
+            return True
+        # the watchdog, whether or not the job is seen as started: no heating, no filament load, ever
         if stopping():
-            st['trip'] = "interrupted: mapping was stopped; the calibration job was stopped"
+            st['trip'] = "interrupted: mapping was stopped"
             return True
         h = heating(heaters0, r)
         if h is not None:
@@ -447,7 +503,6 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
         if tn is not None and tn != tray0:
             st['trip'] = f"{LOADING} (tray_now {tray0} -> {tn})"
             return True
-        gs, sub = _s(r.get('gcode_state')).upper(), _s(r.get('subtask_name'))
         if not st['started']:
             if sub != name:
                 return False
@@ -466,20 +521,25 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
         return False
 
     _wait(manager, serial, watch, JOB_TIMEOUT, should_stop)
+    if st['other'] is not None:
+        log.warning("printer %s: another job (%s) started; calibration abandoned, that job left alone", serial,
+                    st['other'])
+        res.other_job, res.consistent = True, False
+        res.problems.append(f"{OTHER_JOB} (the printer is running {st['other']!r}; it was not stopped)")
+        return
     if st['trip'] is not None:
         log.warning("printer %s: calibration job tripped: %s", serial, st['trip'])
-        stopped = _stop(manager, serial)
-        res.problems.append(st['trip'] + ("" if stopped else " (the stop was not confirmed)"))
+        res.problems.append(st['trip'] + _stopped_text(_stop_ours(manager, serial, name)))
         res.consistent = False
         return
     if not st['started']:
-        _stop(manager, serial)       # best effort: it may still start after we gave up on it
-        res.problems.append(f"the printer did not start the calibration job within {JOB_TIMEOUT:.0f} s")
+        stopped = _stop_ours(manager, serial, name)   # best effort: ours may still start after we gave up on it
+        res.problems.append(f"the printer did not start the calibration job within {JOB_TIMEOUT:.0f} s"
+                            + ("" if stopped is None else _stopped_text(stopped)))
         return
     if st['final'] is None:
-        stopped = _stop(manager, serial)
-        res.problems.append(f"the calibration job did not finish within {JOB_TIMEOUT:.0f} s; "
-                            + ("it was stopped" if stopped else "it could not be stopped"))
+        res.problems.append(f"the calibration job did not finish within {JOB_TIMEOUT:.0f} s"
+                            + _stopped_text(_stop_ours(manager, serial, name)))
         return
     if st['final'] != 'FINISH':
         res.problems.append(f"the calibration job ended as {st['final']} on the printer")
@@ -499,6 +559,28 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
             res.problems.append(f"{label}: sent slot {sent[i]}, the printer reported {v}")
             mismatch = True
     res.consistent = st['final'] == 'FINISH' and not mismatch
+
+
+def delete_leftover(serial: str, printer: registry.Printer | None = None) -> list[str]:
+    """Best effort: delete the job file a killed calibration left on the printer (`remote_path`). Returns the
+    problems (none when it is gone, or was never there); never raises."""
+    path = remote_path(serial)
+    try:
+        if printer is None:
+            printer = registry.load().get(serial)
+        if printer is None or not printer.configured or not printer.access_code:
+            return ["not_configured"]
+        with ftps.Client(printer) as c:
+            try:
+                c.delete(path)
+            except ftps.FtpsError as e:
+                if "550" not in str(e):          # 550: no such file, nothing left to delete
+                    return [f"could not delete {path}: {e}"]
+        return []
+    except tlspin.CertChanged:
+        return [f"could not delete {path}: cert_changed"]
+    except Exception as e:
+        return [f"could not delete {path}: {type(e).__name__}"]
 
 
 def _left_loaded(manager, serial: str, snap: dict, res: CalibResult) -> None:
@@ -528,44 +610,23 @@ def _delete(printer: registry.Printer, path: str, res: CalibResult) -> None:
         res.problems.append(f"could not delete {path}: {type(e).__name__}")
 
 
-def _restore(manager, serial: str, slotmap: SlotMap, trays0: dict, res: CalibResult) -> None:
-    """Put back every loaded slot whose settings differ from the snapshot; verify from the next report."""
+def _check_slots(manager, serial: str, slotmap: SlotMap, trays0: dict, res: CalibResult) -> None:
+    """After the job: compare every loaded slot with the snapshot and report one that changed meanwhile. The
+    calibration writes no slot, so a change was made by someone else (another print, Studio, the touchscreen, an
+    RFID read): it is left as is and never written, and `restored` stays true (we changed nothing)."""
     try:
-        now = _trays(manager.wait_report(serial, lambda r: True, SNAPSHOT_TIMEOUT) or {})
+        r = manager.wait_report(serial, lambda r: True, SNAPSHOT_TIMEOUT)
     except Exception:
-        now = {}
-    pending: list[tuple[str, tuple[int, int], dict]] = []
+        r = None
+    if r is None:
+        res.problems.append("could not check the slots after the calibration (no report); nothing was written "
+                            "to them")
+        return
+    now = _trays(r)
     for label, slot in slotmap.slots.items():
         key = _key(slot)
         t0 = trays0.get(key) if key else None
-        if not _loaded(t0) or (key in now and _same(t0, now[key])):
-            continue
-        try:
-            reply = manager.set_slot(serial, key[0], key[1], _setting(t0))
-        except Exception as e:
-            res.restored = False
-            res.problems.append(f"{label}: could not restore the slot ({type(e).__name__})")
-            continue
-        if reply is not None and not _ok(reply):
-            res.restored = False
-            res.problems.append(f"{label}: the printer refused to restore the slot")
-            continue
-        pending.append((label, key, t0))
-    if not pending:
-        return
-    last: dict = {}
-
-    def restored(r: dict) -> bool:
-        last['trays'] = _trays(r)
-        return all(_same(t0, last['trays'].get(key)) for _, key, t0 in pending)
-
-    try:
-        ok = manager.wait_report(serial, restored, RESTORE_TIMEOUT) is not None
-    except Exception:
-        ok = False
-    if not ok:
-        seen = last.get('trays', {})
-        for label, key, t0 in pending:
-            if not _same(t0, seen.get(key)):
-                res.restored = False
-                res.problems.append(f"{label}: restore not confirmed by the printer")
+        if _loaded(t0) and not _same(t0, now.get(key)):
+            log.info("printer %s: slot %s changed during the calibration (not by us); left as is", serial, label)
+            res.problems.append(f"{label}: its setting changed on the printer during the calibration (not by "
+                                f"filament-kit); left as is")
