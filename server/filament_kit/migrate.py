@@ -54,6 +54,7 @@ from .profiles.lines import Line
 from .spoolman import Spoolman, SpoolmanError
 
 SPOOLMAN_VERSION = "0.27.0"         # install/spoolman.sh SPOOLMAN_VERSION: one database schema on both sides
+SPOOLMAN_REVISION = "fe4970567bb3"  # its alembic head (migrations/versions/2026_08_13_1000-fe4970567bb3_tags.py)
 STEPS = ("spoolman", "lines", "presets", "web", "config")
 # what the owner calibrated in the apps (ops gen.py FLOW/PA/NOZZLE/PLATE keys); Orca uses the same names
 CALIBRATED = ("filament_flow_ratio", "enable_pressure_advance", "pressure_advance", "filament_max_volumetric_speed",
@@ -161,6 +162,17 @@ class Bundle:
         finally:
             db.close()
 
+    def revision(self) -> str | None:
+        """The database's alembic schema revision, None when it has none."""
+        db = self._db()
+        try:
+            row = db.execute("select version_num from alembic_version").fetchone()
+        except sqlite3.Error:
+            return None
+        finally:
+            db.close()
+        return row[0] if row else None
+
     def filaments(self) -> dict[int, dict]:
         """Spoolman API-shaped filaments: {id, name, material, vendor: {name}, extra: {key: JSON text}}."""
         db = self._db()
@@ -238,8 +250,10 @@ def _nil(v) -> bool:
 
 
 class _Ctx:
-    def __init__(self, apply: bool, out: Callable[[str], None], library, replace_spoolman: bool, sm):
+    def __init__(self, apply: bool, out: Callable[[str], None], library, replace_spoolman: bool, sm,
+                 allow_unknown_spoolman: bool = False):
         self.apply, self.out, self.library, self.replace_spoolman = apply, out, library, replace_spoolman
+        self.allow_unknown_spoolman = allow_unknown_spoolman
         self.sm = sm
         self.errors = 0
         self.stamp = time.strftime("%Y%m%d-%H%M%S")
@@ -262,13 +276,15 @@ class _Ctx:
     def verb(self, would: str, did: str) -> str:
         return did if self.apply else f"would {would}"
 
-    def backup(self, path: Path, name: str | None = None) -> None:
+    def backup(self, path: Path, name: str | None = None) -> Path | None:
         if not path.exists():
-            return
+            return None
         if self._backups is None:
             self._backups = config.paths().backups / f"migrate-ops-{self.stamp}"
             self._backups.mkdir(parents=True, exist_ok=True, mode=0o700)
-        shutil.copy2(path, self._backups / (name or path.name))
+        dest = self._backups / (name or path.name)
+        shutil.copy2(path, dest)
+        return dest
 
     def done(self, bundle: Bundle, step: str) -> bool:
         return step in ((self.record.get("bundles") or {}).get(bundle.id) or {})
@@ -297,6 +313,11 @@ class _Ctx:
     def start(self, unit: str) -> None:
         if unit in self.stopped:
             self.systemctl("start", unit)
+            self.stopped.remove(unit)
+
+    def hold(self, unit: str) -> None:
+        """Leave a stopped unit stopped at the end of the run."""
+        if unit in self.stopped:
             self.stopped.remove(unit)
 
     def restart_rest(self) -> None:
@@ -336,6 +357,15 @@ def _wait_spoolman(sm, seconds: float = 120) -> bool:
 
 # ---------- 1. Spoolman ----------
 
+def _copy_db(b: Bundle, dest: Path) -> None:
+    src, dst = b._db(), sqlite3.connect(dest)
+    try:
+        src.backup(dst)
+    finally:
+        src.close()
+        dst.close()
+
+
 def step_spoolman(b: Bundle, ctx: _Ctx) -> None:
     S = "spoolman"
     m = b.manifest.get("spoolman") or {}
@@ -347,6 +377,17 @@ def step_spoolman(b: Bundle, ctx: _Ctx) -> None:
     if m.get("version") and m.get("version") != SPOOLMAN_VERSION:
         ctx.fail(S, f"the bundle comes from Spoolman {m.get('version')}; the kit runs {SPOOLMAN_VERSION}: upgrade the "
                     f"ops Spoolman to {SPOOLMAN_VERSION} and export again")
+        return
+    # the database's own schema revision decides (the manifest's version is None when Spoolman was stopped)
+    rev = b.revision()
+    if rev is None and not ctx.allow_unknown_spoolman:
+        ctx.fail(S, f"the bundle's database has no schema revision (alembic_version), so its Spoolman version is "
+                    f"unknown; the kit runs {SPOOLMAN_VERSION} (revision {SPOOLMAN_REVISION}). Pass "
+                    f"--allow-unknown-spoolman only if you know it came from Spoolman {SPOOLMAN_VERSION}")
+        return
+    if rev is not None and rev != SPOOLMAN_REVISION:
+        ctx.fail(S, f"the bundle's database is at schema revision {rev}, not {SPOOLMAN_REVISION} (Spoolman "
+                    f"{SPOOLMAN_VERSION}): upgrade the ops Spoolman to {SPOOLMAN_VERSION} and export again")
         return
     target = _spoolman_dir() / "spoolman.db"
     what = f"{have['spool']} spools, {have['filament']} filaments, {have['vendor']} vendors"
@@ -365,23 +406,33 @@ def step_spoolman(b: Bundle, ctx: _Ctx) -> None:
         return
     ctx.stop_services()
     target.parent.mkdir(parents=True, exist_ok=True)
+    saved: list[tuple[Path, Path]] = []
     for suffix in ("", "-wal", "-shm"):
         p = target.with_name(target.name + suffix)
         if p.exists():
-            ctx.backup(p)
+            saved.append((p, ctx.backup(p)))
             p.unlink()
     tmp = target.with_name(target.name + ".migrate.tmp")
-    src, dst = b._db(), sqlite3.connect(tmp)
     try:
-        src.backup(dst)
-    finally:
-        src.close()
-        dst.close()
-    os.chmod(tmp, 0o640)
-    _chown(tmp, "spoolman", "spoolman")
-    os.replace(tmp, target)
-    if _db_counts(target) != (have["spool"], have["filament"]):
-        ctx.fail(S, f"{target} does not hold the bundle's counts after the copy; restore it from the backup")
+        _copy_db(b, tmp)
+        os.chmod(tmp, 0o640)
+        _chown(tmp, "spoolman", "spoolman")
+        os.replace(tmp, target)
+        if _db_counts(target) != (have["spool"], have["filament"]):
+            raise ValueError("the copy does not hold the bundle's counts")
+    except Exception as e:  # noqa: BLE001 - never start Spoolman on a wrong or missing database
+        tmp.unlink(missing_ok=True)
+        target.unlink(missing_ok=True)
+        for live, bak in saved:
+            shutil.copy2(bak, live)
+        if saved:
+            ctx.fail(S, f"copying the database failed ({e.__class__.__name__}: {e}); the previous database was put "
+                        f"back from {saved[0][1]}")
+        else:
+            ctx.hold("spoolman")
+            ctx.fail(S, f"copying the database failed ({e.__class__.__name__}: {e}); there was no database before, "
+                        f"so Spoolman is left stopped. Fix the cause and run --apply again, or start it empty: "
+                        f"sudo systemctl start spoolman")
         return
     ctx.start("spoolman")
     ctx.mark(b, S)
@@ -755,11 +806,11 @@ def step_config(b: Bundle, ctx: _Ctx) -> None:
 # ---------- entry ----------
 
 def run(bundle, *, apply: bool = False, library=None, out: Callable[[str], None] = print,
-        replace_spoolman: bool = False, sm=None) -> int:
+        replace_spoolman: bool = False, sm=None, allow_unknown_spoolman: bool = False) -> int:
     """Migrate (or, without `apply`, report what would be migrated); 0 when every step went through."""
     lib = library if library is not None else library_mod.load()
     sm = sm if sm is not None else Spoolman(config.load().get("spoolman_url") or "http://127.0.0.1:7912", timeout=10)
-    ctx = _Ctx(apply, out, lib, replace_spoolman, sm)
+    ctx = _Ctx(apply, out, lib, replace_spoolman, sm, allow_unknown_spoolman)
     try:
         with open_bundle(bundle) as b:
             out(f"filament-ops bundle {b.id} ({'with' if b.manifest.get('secrets') else 'without'} secrets)")

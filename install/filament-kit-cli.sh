@@ -15,6 +15,10 @@ case "${1:-}" in
         exec "$BIN" "$@"
         ;;
 esac
+# `web passphrase` writes the root-owned passphrase file (and refuses unless root); `web status` reads as the user.
+if [ "${1:-}" = web ] && [ "${2:-}" = passphrase ]; then
+    exec "$BIN" "$@"
+fi
 
 if [ "$(id -u)" -eq 0 ]; then
     # `library add <file>`: the service user may not be able to read a file in the caller's home folder,

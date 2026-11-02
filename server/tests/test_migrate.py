@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import sqlite3
+import sys
 import tarfile
 import time
 from pathlib import Path
@@ -58,7 +59,7 @@ def _write(path: Path, obj) -> None:
     path.with_suffix(".info").write_text("sync_info = \nsetting_id = PS123\n", encoding="utf-8")
 
 
-def make_bundle(root: Path, *, secrets: bool = True) -> Path:
+def make_bundle(root: Path, *, secrets: bool = True, revision: str | None = migrate.SPOOLMAN_REVISION) -> Path:
     b = root / "ops-bundle"
     b.mkdir(parents=True)
     (b / "lines.py").write_text(LINES_PY, encoding="utf-8")
@@ -72,6 +73,9 @@ def make_bundle(root: Path, *, secrets: bool = True) -> Path:
                      "create table filament (id integer primary key, name text, vendor_id integer, material text);"
                      "create table spool (id integer primary key, filament_id integer);"
                      "create table filament_field (filament_id integer, key text, value text);")
+    if revision is not None:
+        db.executescript(f"create table alembic_version (version_num text not null);"
+                         f"insert into alembic_version values ('{revision}');")
     vendors = {v: i + 1 for i, v in enumerate(dict.fromkeys(f[1] for f in FILAMENTS))}
     db.executemany("insert into vendor (id, name) values (?, ?)", [(i, v) for v, i in vendors.items()])
     db.executemany("insert into filament values (?, ?, ?, ?)", [(i, n, vendors[v], m) for i, v, n, m in FILAMENTS])
@@ -534,3 +538,171 @@ def test_a_filament_the_kit_grouped_elsewhere_moves_to_its_ops_line(env, lib):
     assert ls[lines_mod.line_id_for("SUNLU", "PLA+ 2.0")].filaments == [1, 2]
     assert ls[other.line_id].filaments == []                     # lines are never deleted, only emptied
     assert f"filaments [1] moved from {other.line_id}" in text
+
+
+# ---------- fix round 1: version guard, failures ----------
+
+def test_spoolman_version_comes_from_the_database_when_the_manifest_has_none(env, lib):
+    b = make_bundle(env / "bundle")
+    m = json.loads((b / "MANIFEST.json").read_text())
+    m["spoolman"]["version"] = None                         # exported with Spoolman stopped
+    (b / "MANIFEST.json").write_text(json.dumps(m))
+    code, text = run(b, lib, apply=True)
+    assert code == 0, text
+    assert (env / "spoolman" / "spoolman.db").exists()
+
+
+def test_spoolman_other_schema_revision_is_refused(env, lib):
+    b = make_bundle(env / "bundle", revision="0123456789ab")
+    m = json.loads((b / "MANIFEST.json").read_text())
+    m["spoolman"]["version"] = None
+    (b / "MANIFEST.json").write_text(json.dumps(m))
+    code, text = run(b, lib, apply=True)
+    assert code == 1 and "0123456789ab" in text
+    assert not (env / "spoolman" / "spoolman.db").exists()
+
+
+def test_spoolman_without_a_revision_needs_the_override(env, lib):
+    b = make_bundle(env / "bundle", revision=None)
+    code, text = run(b, lib, apply=True)
+    assert code == 1 and "--allow-unknown-spoolman" in text
+    assert not (env / "spoolman" / "spoolman.db").exists()
+    code, text = run(b, lib, apply=True, allow_unknown_spoolman=True)
+    assert code == 0, text
+    assert (env / "spoolman" / "spoolman.db").exists()
+
+
+def test_manifest_and_database_counts_must_agree(env, lib):
+    b = make_bundle(env / "bundle")
+    m = json.loads((b / "MANIFEST.json").read_text())
+    m["spoolman"]["spool"] = 999
+    (b / "MANIFEST.json").write_text(json.dumps(m))
+    code, text = run(b, lib, apply=True)
+    assert code == 1 and "999" in text and "export again" in text
+    assert not (env / "spoolman" / "spoolman.db").exists()
+
+
+def test_one_failing_step_does_not_stop_the_others(env, lib):
+    b = make_bundle(env / "bundle", revision="0123456789ab")
+    code, text = run(b, lib, apply=True)
+    assert code == 1 and "[spoolman] ERROR" in text
+    assert len(lines_mod.load()) == 4                       # lines, presets, web and config still ran
+    assert (env / "state" / "profiles" / "owner-edits.json").exists()
+    assert (env / "state" / "web" / "oauth.json").exists()
+    assert config.load()["presets_orca"] is True
+    assert "step(s) failed" in text
+
+
+class _Units:
+    """systemctl stand-in: every kit unit is active; records stop/start."""
+
+    def __init__(self):
+        self.calls: list[tuple[str, ...]] = []
+
+    def method(self):
+        def systemctl(ctx, *args):
+            self.calls.append(args)
+            return 0
+        return systemctl
+
+    def started(self) -> list[str]:
+        return [a[1] for a in self.calls if a[0] == "start"]
+
+
+@pytest.fixture
+def units(monkeypatch):
+    u = _Units()
+    monkeypatch.setattr(migrate, "_no_systemd", lambda: False)
+    monkeypatch.setattr(migrate._Ctx, "systemctl", u.method())
+    monkeypatch.setattr(migrate, "_wait_spoolman", lambda sm, seconds=120: True)
+    return u
+
+
+def _broken_copy(b, dest):
+    Path(dest).write_bytes(b"half a database")
+    raise OSError("disk full")
+
+
+def test_failed_copy_puts_the_previous_database_back_and_restarts(env, lib, units, monkeypatch):
+    b = make_bundle(env / "bundle")
+    prev = env / "spoolman" / "spoolman.db"
+    sqlite3.connect(prev).close()
+    before = prev.read_bytes()
+    monkeypatch.setattr(migrate, "_copy_db", _broken_copy)
+    code, text = run(b, lib, apply=True)
+    assert code == 1 and "put back" in text
+    assert prev.read_bytes() == before
+    assert not list((env / "spoolman").glob("*.tmp"))
+    assert "spoolman" in units.started()                     # on the database it had before
+    assert ("stop", "spoolman") in units.calls
+
+
+def test_failed_copy_with_no_previous_database_leaves_spoolman_stopped(env, lib, units, monkeypatch):
+    b = make_bundle(env / "bundle")
+    monkeypatch.setattr(migrate, "_copy_db", _broken_copy)
+    code, text = run(b, lib, apply=True)
+    assert code == 1 and "left stopped" in text and "sudo systemctl start spoolman" in text
+    assert not (env / "spoolman" / "spoolman.db").exists()
+    assert "spoolman" not in units.started()
+    assert {"filament-kit", "filament-kit-web"} <= set(units.started())   # the rest comes back
+
+
+def test_count_mismatch_after_the_copy_is_a_failure_too(env, lib, units, monkeypatch):
+    b = make_bundle(env / "bundle")
+    real = migrate._db_counts
+    monkeypatch.setattr(migrate, "_db_counts", lambda p: (0, 0) if Path(p).exists() else real(p))
+    code, text = run(b, lib, apply=True)
+    assert code == 1 and "does not hold the bundle's counts" in text
+    assert "spoolman" not in units.started()
+
+
+def test_cli_passes_the_spoolman_flags(env, monkeypatch):
+    seen = {}
+    monkeypatch.setattr(cli, "_is_root", lambda: True)
+    monkeypatch.setattr(migrate, "run", lambda bundle, **kw: seen.update(kw) or 0)
+    assert cli.main(["migrate-ops", "x.tar.gz", "--apply", "--replace-spoolman", "--allow-unknown-spoolman"]) == 0
+    assert seen == {"apply": True, "replace_spoolman": True, "allow_unknown_spoolman": True}
+
+
+@pytest.mark.skipif(os.name == "nt", reason="the export runs on the Linux VM (bash + python3)")
+def test_export_reads_a_wal_database_left_by_a_killed_spoolman(tmp_path):
+    import signal
+    import subprocess
+    src = make_bundle(tmp_path / "src")
+    data = tmp_path / "db"
+    data.mkdir()
+    db = data / "spoolman.db"
+    child = subprocess.Popen([sys.executable, "-c", f"""
+import sqlite3, shutil, time
+shutil.copyfile({str(src / 'spoolman.db')!r}, {str(db)!r})
+c = sqlite3.connect({str(db)!r}); c.execute("pragma journal_mode=wal"); c.execute("pragma wal_autocheckpoint=0")
+c.executemany("insert into spool values (?, 1)", [(i,) for i in range(100, 140)]); c.commit()
+print("ready", flush=True); time.sleep(60)
+"""], stdout=subprocess.PIPE, text=True)
+    assert child.stdout.readline().strip() == "ready"
+    os.kill(child.pid, signal.SIGKILL)
+    child.wait()
+    assert (data / "spoolman.db-wal").stat().st_size > 0
+    before = snapshot(data)
+    for d in ("etc", "state", "opt", "srv"):
+        (tmp_path / d).mkdir()
+    out = tmp_path / "b.tar.gz"
+    env = {**os.environ, "OPS_ETC": str(tmp_path / "etc"), "OPS_STATE": str(tmp_path / "state"),
+           "OPS_OPT": str(tmp_path / "opt"), "OPS_DATA": str(tmp_path / "srv"), "OPS_EXPORT_NOT_ROOT": "1"}
+    script = Path(__file__).resolve().parents[2] / "tools" / "export_ops.sh"
+    r = subprocess.run(["bash", str(script), "--no-secrets", "--spoolman-db", str(db), str(out)], env=env,
+                       capture_output=True, text=True, timeout=120)
+    assert r.returncode == 0, r.stderr
+    assert snapshot(data) == before                            # db, -wal and -shm untouched
+    with migrate.open_bundle(out) as b:
+        assert b.counts()["spool"] == len(SPOOLS) + 40         # the frames in the -wal are in the bundle
+        assert b.manifest["spoolman"]["spool"] == len(SPOOLS) + 40
+        assert b.revision() == migrate.SPOOLMAN_REVISION
+
+
+def test_variant_source_never_takes_a_stale_live_preset_over_the_installed_one():
+    live, inst = {"filament_extruder_variant": V3}, {"filament_extruder_variant": V3[:2]}
+    assert generate._variant_source(live, inst, True) == V3
+    assert generate._variant_source(live, inst, False) == V3[:2]          # Ruling Z: stale live not used
+    assert generate._variant_source(live, None, False) == V3              # first install after migrate-ops
+    assert generate._variant_source(None, None, True) is None

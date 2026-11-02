@@ -14,7 +14,9 @@ Rule for every step: never `cat`, `less` or paste a secret file (`/etc/filament-
 
 ## 0. Before you start (desktop, 10 minutes)
 
-1. Check the kit release tarball and the PC sync setup (`filament-kit-sync-setup-<version>.exe`) are at hand.
+1. Check the kit release tarball and the PC sync setup (`filament-kit-sync-setup-<version>.exe`) are at hand,
+   and copy the tarball to the VM: `scp filament-kit-<version>.tar.gz spoolman-vm:` (it lands in the owner's home
+   folder there; the commands below run from that folder).
 2. On the VM, note what runs now (for the rollback):
    ```
    systemctl list-units --no-pager 'filament*' Spoolman.service smbd.service nginx.service h2d-*.service
@@ -35,8 +37,10 @@ tar xzf filament-kit-<version>.tar.gz
 sudo bash filament-kit-<version>/install/export_ops.sh /root/ops-bundle.tar.gz
 ```
 
-The export only reads (the database through sqlite's backup API) and writes the one bundle file (root, 600). It
-prints the spool, filament and preset counts: expect about 296 spools, 213 filaments, 413 Bambu Studio and ~700
+The export only reads (the database through sqlite's backup API; a database Spoolman left in WAL mode is read
+from a private copy of it and its `-wal`, so nothing in Spoolman's folder is touched) and writes the one bundle
+file (root, 600). It refuses a WAL database while Spoolman still runs. It prints the spool, filament and preset
+counts: expect about 296 spools, 213 filaments, 413 Bambu Studio and ~700
 Orca presets. The bundle holds the passphrase hash, `oauth.json` and the Anthropic key; it never holds the H2D
 token.
 
@@ -60,7 +64,8 @@ rollback). Skip the Anthropic key question if the installer asks: the migration 
 **Check:** `sudo filament-kit status` (Spoolman answers; the key line may FAIL until 1.3).
 
 **Rollback:** `sudo ./uninstall.sh` (keeps data), then 1.1's rollback plus
-`sudo systemctl enable Spoolman.service filament-mcp.service filament-regen.path`.
+`sudo systemctl enable Spoolman.service filament-mcp.service filament-regen.path`. If 1.3 got as far as the orders
+drop-in, remove it as well (1.3's rollback).
 
 ### 1.3 Migrate
 
@@ -78,7 +83,12 @@ nozzle and plate temperatures of every live preset plus your note lines; the OAu
 and the Anthropic key; config (placement, locations, tare hints, the SV08 MAX tag reader, the station, the H2D
 slot service, the orders file, the SV08 MAX and H2D Orca printers, `web.public_url`, `remote.hostname`, the
 certbot window); and the H2D as a model-only printer (no address, no Access Code: the kit never connects to it,
-the entry only makes the H2D presets). Running it again changes nothing.
+the entry only makes the H2D presets). Running it again changes nothing. If the printers module's discovery
+later sees the real H2D on the LAN, the app lists a second, "detected, not set up" H2D row next to `ops-h2d`;
+the presets are made once per model either way. Remove the placeholder from the app's printer list then, or
+leave it.
+The step refuses a bundle whose database is not at Spoolman 0.27.0's schema revision (`fe4970567bb3`), read from
+the database itself (the manifest has no version when Spoolman was stopped for the export).
 
 Then the H2D token (never printed) and the orders exporter (it now writes into the kit's state folder; the ops
 path is inside `filament-mcp`'s private folder, which the kit's user cannot read, and goes away with ops):
@@ -105,8 +115,10 @@ amazon-mcp side; see section 4.)
 - `sudo ls -l /var/lib/filament-kit/filament_orders.json` is `root filament-kit`, fresh time.
 - The H2D tools: `curl -s http://127.0.0.1:8105/api/state` still answers (owner service, unchanged).
 
-**Rollback:** `sudo systemctl stop filament-kit spoolman`, then 1.2's rollback. Spools added in the kit since
-then are in `/var/lib/spoolman/spoolman.db` only: copy them over by hand if any.
+**Rollback:** remove the orders drop-in first, so the exporter writes the ops file again:
+`sudo rm -r /etc/systemd/system/filament-orders.service.d && sudo systemctl daemon-reload`. Then
+`sudo systemctl stop filament-kit spoolman`, then 1.2's rollback. Spools added in the kit since then are in
+`/var/lib/spoolman/spoolman.db` only: copy them over by hand if any.
 
 ### 1.4 Web unit and orders (same port 8101: the ops nginx route keeps working)
 
@@ -122,7 +134,10 @@ signed in; tap a tag on the SV08 MAX reader and see it in the Open spool tab. In
 connector for `preset_status` and `printer_slots`: it answers without a new sign-in.
 
 **Rollback:** `sudo filament-kit modules disable web` (and `orders`), then
-`sudo systemctl start filament-mcp.service` (port 8101 is free again; the route is unchanged).
+`sudo systemctl start filament-mcp.service` (port 8101 is free again; the route is unchanged). The ops server
+still has its old `oauth.json`: the kit rotated Claude's refresh token since, so Claude has to sign in again
+(the passphrase is the same). To avoid that, copy the kit's store back first (same format):
+`sudo install -m 600 -o filament-mcp -g filament-mcp /var/lib/filament-kit/web/oauth.json /var/lib/filament-mcp/oauth.json`.
 
 ### 1.5 Remote access (the kit takes over nginx and certbot)
 
@@ -149,16 +164,35 @@ migration set both; pfSense forwards port 80 only from 03:00 to 03:30).
 `https://mcp.example.com/h2d/` and `/printer/` still answer; the claude.ai connector works from outside.
 
 **The certificate.** The ops lineage (`spoolman-mcp.example.com`) keeps renewing with the ops hook
-(`/usr/local/sbin/filament-acme-hook`, which opens the nft `acme` chain) until the kit has its own: at the next
-window, the owner opens port 80 in nftables (`filament-kit remote firewall` prints the rule; the kit never changes
-the firewall), runs `sudo filament-kit remote issue`, and closes it again. After that succeeds:
+(`/usr/local/sbin/filament-acme-hook`) until the kit has its own. That hook is the only thing that opens port 80
+on the VM today: its `pre` step turns the nft `acme` chain to accept and its `post` step back to drop. The kit's
+hooks never touch the firewall, so once the ops hook is gone **port 80 must stay open to certbot on the VM for
+good**, or every renewal fails. pfSense already forwards port 80 only from 03:00 to 03:30 (schedule ACME), so
+that is safe. The owner makes this change themselves (the kit only documents it), one of:
+- switch the acme chain to accept for good: `sudo nft flush chain inet filament acme && sudo nft add rule inet
+  filament acme accept`, and the same in `/etc/nftables.d-filament.nft` so it survives a reboot; or
+- a permanent `tcp dport 80 accept` in the input chain (`filament-kit remote firewall` prints it).
+
+Then, at the next window (03:00-03:30): `sudo filament-kit remote issue`. After it succeeds:
 `sudo certbot delete --cert-name spoolman-mcp.example.com` and `sudo rm /usr/local/sbin/filament-acme-hook`
 (the old `spoolman-mcp` name is no longer served; nothing uses it since 2026-10-30).
 
-**Rollback:** `sudo filament-kit modules disable remote`, then
-`sudo ln -s /etc/nginx/sites-available/mcp-router /etc/nginx/sites-enabled/mcp-router`,
-`sudo cp -a /root/ops-router/mcp-route /usr/local/sbin/ && sudo cp -a /root/ops-router/mcp.d/. /etc/nginx/mcp.d/`,
-`sudo cp /root/ops-router/mcp-proxy.conf /etc/nginx/ && sudo nginx -t && sudo systemctl reload nginx`.
+**Check (certificate):** in the following window, `sudo certbot renew --dry-run` succeeds for
+`mcp.example.com`; `sudo certbot certificates` lists only that lineage; `systemctl list-timers certbot.timer`
+shows 03:10.
+
+**Rollback:** `sudo filament-kit modules disable remote`. That removes only the kit's own files: its router
+conf `/etc/nginx/conf.d/filament-kit-router.conf` (without which the ops router can load again), its certbot
+deploy hook `/etc/letsencrypt/renewal-hooks/deploy/filament-kit` and its `filament` route; nginx, certbot, the
+certificate and the other routes stay. Then put the ops pieces back:
+```
+sudo ln -s /etc/nginx/sites-available/mcp-router /etc/nginx/sites-enabled/mcp-router
+sudo cp -a /root/ops-router/mcp-route /usr/local/sbin/ && sudo cp -a /root/ops-router/mcp.d/. /etc/nginx/mcp.d/
+sudo cp /root/ops-router/mcp-proxy.conf /etc/nginx/ && sudo nginx -t && sudo systemctl reload nginx
+```
+If the ops hook or lineage was already removed, renewals stay on the kit's lineage (its deploy hook is gone:
+copy the renewed cert into `/etc/mcp-router/tls` by hand, or re-issue with the ops hook). If the acme chain was
+switched to accept, the owner may switch it back to drop.
 
 ### 1.6 Optional hardening (the owner's firewall)
 

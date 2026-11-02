@@ -142,6 +142,16 @@ def test_wrapper_runs_modules_as_root():
     assert re.search(r"^\s+config \| cert \| modules \| remote \| migrate-ops\)\s*$", text, re.M)
 
 
+def test_wrapper_runs_web_passphrase_as_root():
+    """`web passphrase` writes /etc/filament-kit/web_passphrase (root:filament-kit 640) and refuses unless root:
+    the wrapper must not drop to the service user for it (other `web` commands still do)."""
+    text = _read("install/filament-kit-cli.sh")
+    assert re.search(r'^if \[ "\$\{1:-\}" = web \] && \[ "\$\{2:-\}" = passphrase \]; then\s*$', text, re.M)
+    i = text.index('= passphrase ]')
+    assert 'exec "$BIN" "$@"' in text[i:i + 120]
+    assert i < text.index("runuser")
+
+
 def test_uninstall_uses_modules_units_and_cleans_station():
     text = _read("install/uninstall.sh")
     assert "modules units" in text

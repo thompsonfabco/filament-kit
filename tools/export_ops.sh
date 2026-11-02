@@ -27,7 +27,7 @@ fi
 command -v python3 >/dev/null || { echo "error: python3 is needed" >&2; exit 1; }
 
 PROG=$(cat <<'PY'
-import io, json, os, socket, sqlite3, subprocess, sys, tarfile, time, urllib.request
+import io, json, os, shutil, socket, sqlite3, subprocess, sys, tarfile, tempfile, time, urllib.request
 
 args = sys.argv[1:]
 secrets, db_arg, out = True, None, None
@@ -63,8 +63,9 @@ def regen_config():
 
 
 def spoolman_db():
+    """(database path, the systemd unit that runs it or None)."""
     if db_arg:
-        return db_arg
+        return db_arg, None
     for unit in ("Spoolman.service", "spoolman.service"):
         try:
             show = subprocess.run(["systemctl", "show", "-p", "User", "-p", "Environment", unit],
@@ -74,7 +75,7 @@ def spoolman_db():
         props = dict(l.split("=", 1) for l in show.splitlines() if "=" in l)
         for kv in props.get("Environment", "").split():
             if kv.startswith("SPOOLMAN_DIR_DATA="):
-                return os.path.join(kv.split("=", 1)[1], "spoolman.db")
+                return os.path.join(kv.split("=", 1)[1], "spoolman.db"), unit
         user = props.get("User")
         if user:
             import pwd
@@ -84,21 +85,45 @@ def spoolman_db():
                 continue
             cand = os.path.join(home, ".local", "share", "spoolman", "spoolman.db")
             if os.path.isfile(cand):
-                return cand
+                return cand, unit
     sys.exit("error: Spoolman database not found; pass --spoolman-db PATH")
 
 
-def db_copy(path):
-    """Online backup into memory (consistent while Spoolman writes), then serialized: no file is written."""
-    src = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+def _backup_to_memory(uri):
+    src = sqlite3.connect(uri, uri=True)
     dst = sqlite3.connect(":memory:")
     try:
         src.backup(dst)
         counts = {t: dst.execute(f"select count(*) from {t}").fetchone()[0] for t in ("spool", "filament", "vendor")}
-        return dst.serialize(), counts
+        try:
+            rev = dst.execute("select version_num from alembic_version").fetchone()
+        except sqlite3.Error:
+            rev = None
+        return dst.serialize(), counts, rev[0] if rev else None
     finally:
         src.close()
         dst.close()
+
+
+def db_copy(path, unit):
+    """(database bytes, counts, alembic revision): sqlite's online backup into memory, then serialized.
+    A rollback-journal database is read in place (consistent even while Spoolman writes). A WAL database with
+    a -wal file (Spoolman stopped without a checkpoint, e.g. killed) is read from a private copy of the db and
+    its -wal in a temp dir, so the frames in the -wal are included and sqlite never touches the live files (a
+    read-only open still rewrites -shm). That copy is only consistent with Spoolman stopped: refused otherwise."""
+    wal = path + "-wal"
+    if not (os.path.isfile(wal) and os.path.getsize(wal) > 0):
+        return _backup_to_memory(f"file:{path}?mode=ro")
+    if unit and subprocess.run(["systemctl", "is-active", "--quiet", unit]).returncode == 0:
+        sys.exit(f"error: {path} has a -wal file and {unit} is running: stop it first "
+                 f"(sudo systemctl stop {unit}), then export")
+    tmp = tempfile.mkdtemp(prefix="ops-export-", dir="/dev/shm" if os.path.isdir("/dev/shm") else None)
+    try:
+        for suffix in ("", "-wal"):
+            shutil.copyfile(path + suffix, os.path.join(tmp, "spoolman.db" + suffix))
+        return _backup_to_memory(f"file:{os.path.join(tmp, 'spoolman.db')}?mode=ro")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def spoolman_version():
@@ -126,16 +151,17 @@ if secrets:
                   "secrets/anthropic_key": os.path.join(ETC, "anthropic_key")})
 trees = {"presets/installed": os.path.join(data, "installed"), "presets/live": os.path.join(data, "live")}
 
-db_path = spoolman_db()
-db_bytes, counts = db_copy(db_path)
+db_path, db_unit = spoolman_db()
+db_bytes, counts, revision = db_copy(db_path, db_unit)
 manifest = {"format": 1, "created": int(time.time()), "host": socket.gethostname(), "secrets": secrets,
             "sources": {**files, **trees, "spoolman.db": db_path}, "spoolman": {"version": spoolman_version(),
-            **counts}, "orders_file": orders, "missing": [], "presets": {}}
+            "revision": revision, **counts}, "orders_file": orders, "missing": [], "presets": {}}
 
 if out == "-":
     fh = sys.stdout.buffer
 else:
     fd = os.open(out, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)   # it may hold secrets: root only
+    os.fchmod(fd, 0o600)                    # O_CREAT's mode does not apply to a file that already existed
     fh = os.fdopen(fd, "wb")
 P = "ops-bundle/"
 
