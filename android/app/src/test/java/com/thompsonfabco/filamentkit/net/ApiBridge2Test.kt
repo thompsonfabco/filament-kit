@@ -139,10 +139,12 @@ class ApiBridge2Test {
     }
 
     @Test fun unloadPostsDryRun() = runBlocking {
-        json("""{"spool":{"id":7},"slot":{"label":"A1","ams_id":0,"tray_id":0},"location":"Shelf 2"}""")
+        json("""{"spool":{"id":7},"slot":{"label":"A1","ams_id":0,"tray_id":0},"location":"Shelf 2",
+            "moved_back":[{"id":7,"location":"Shelf 2"}]}""")
         val r = api.unload("0948AB", "A1", dryRun = true)
         assertEquals("Shelf 2", r.location)
         assertEquals("A1", r.slot.label)
+        assertEquals(listOf(MovedBack(7, "Shelf 2")), r.movedBack)
         val req = take()
         assertEquals("/api/printers/0948AB/slots/A1/unload", req.url.encodedPath)
         assertTrue(req.bodyJson()["dry_run"]!!.jsonPrimitive.boolean)

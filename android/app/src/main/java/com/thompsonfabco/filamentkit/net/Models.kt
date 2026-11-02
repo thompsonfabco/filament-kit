@@ -127,7 +127,7 @@ data class AmsSlot(
     val spool: SlotSpool? = null,
 )
 
-/** [kind] is `ams` or `ams_ht`. */
+/** [kind] is `ams`, `ams_ht` or `ext` (the external spool holder: one slot, label `Ext`). */
 @Serializable
 data class AmsUnit(@Serializable(with = LenientInt::class) val unit: Int, val label: String = "", val kind: String = "ams", val slots: List<AmsSlot> = emptyList())
 
@@ -223,9 +223,17 @@ internal object LenientBool : KSerializer<Boolean> {
     override fun serialize(encoder: Encoder, value: Boolean) = encoder.encodeBoolean(value)
 }
 
-/** `POST /api/printers/{id}/slots/{label}/unload`; [location] is where the spool goes back to. */
+/**
+ * `POST /api/printers/{id}/slots/{label}/unload`; [location] is where the spool goes back to. [movedBack] lists every
+ * spool that was at that slot's location and where each goes (usually just the one).
+ */
 @Serializable
-data class UnloadResult(val spool: JsonObject? = null, val slot: LoadSlot, val location: String = "")
+data class UnloadResult(
+    val spool: JsonObject? = null,
+    val slot: LoadSlot,
+    val location: String = "",
+    @SerialName("moved_back") val movedBack: List<MovedBack> = emptyList(),
+)
 
 /**
  * One line of `GET /api/printers/{id}/usage`. [id] may be sent as a number or a string; it is kept as text.
