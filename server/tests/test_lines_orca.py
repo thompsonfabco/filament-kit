@@ -170,9 +170,10 @@ def test_propose_includes_orca_parent(lib, ostore):
 
 
 def test_check_orca_parent(ostore):
-    lines.check_orca_parent("Overture PLA Pro", ostore)
-    lines.check_orca_parent("Anything", None)
-    lines.check_orca_parent("", ostore)
+    assert lines.check_orca_parent("Overture PLA Pro", ostore) == "Overture PLA Pro"
+    assert lines.check_orca_parent("  generic pla ", ostore) == "Generic PLA"      # the store's spelling (I1)
+    assert lines.check_orca_parent(" Anything ", None) == "Anything"                # no store: as given, stripped
+    assert lines.check_orca_parent("", ostore) == ""
     with pytest.raises(errors.ProfileError) as e:
         lines.check_orca_parent("Nope", ostore)
     assert (e.value.status, e.value.code, e.value.extra) == (400, "unknown_parent", {"parent": "Nope"})

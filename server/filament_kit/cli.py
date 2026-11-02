@@ -839,7 +839,7 @@ def cmd_profiles_set_parent(line_id: str, parent: str, orca: bool = False) -> in
                              else "give the name of a Bambu Studio system preset")
         inventory.check_line_text("set-parent", "parent", parent)
         if orca:
-            lines_mod.check_orca_parent(parent, builds.orca_store())
+            parent = lines_mod.check_orca_parent(parent, builds.orca_store())   # the store's spelling (fix I1)
         else:
             lines_mod.check_parent(parent, builds.system_store())
     except (ValueError, ProfileError) as e:
@@ -1150,12 +1150,14 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
     lsub.add_parser("rollback", help="go back to the library version before the last update")
     la = lsub.add_parser("add", help="add or replace a local entry from a JSON file ('-' reads stdin)")
     la.add_argument("file")
-    pf = sub.add_parser("profiles", help="the generated Bambu Studio presets: build, status, lines, parents")
+    _pf_help = "the generated Bambu Studio and Orca Slicer presets: build, status, lines, parents"
+    pf = sub.add_parser("profiles", help=_pf_help, description=_pf_help)
     pfsub = pf.add_subparsers(dest="profiles_cmd", required=True)
     pfsub.add_parser("build", help="build the presets now (needs the PC sync to have run once)")
     pfsub.add_parser("status", help="show the last build, the PC sync and the problems")
     pfsub.add_parser("lines", help="list the product lines and their Bambu Studio and Orca Slicer parents")
-    sp = pfsub.add_parser("set-parent", help="set the Bambu Studio system preset a line is built from")
+    sp = pfsub.add_parser("set-parent", help="set the Bambu Studio system preset (or with --orca the Orca Slicer "
+                                             "library preset) a line is built from")
     sp.add_argument("line_id")
     sp.add_argument("parent")
     sp.add_argument("--orca", action="store_true",

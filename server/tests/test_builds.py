@@ -781,7 +781,7 @@ def test_orca_system_upload_and_store(env):
     assert (dest / "OrcaFilamentLibrary" / "index.json").is_file()
     assert (dest / "BBL" / "filament" / "P1P" / "Bambu PLA Basic @BBL P1P.json").is_file()
     meta = builds.meta()
-    assert meta["orca_system_hash"] == h and meta["orca_system_presets"] == 10
+    assert meta["orca_system_hash"] == h and meta["orca_system_presets"] == 9 + 7
     assert "system_hash" not in meta and builds.system_store() is None
     s = builds.orca_store()
     assert "Generic PLA @System" in s.names()

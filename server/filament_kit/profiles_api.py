@@ -332,12 +332,12 @@ def routes(authed, sm) -> list[Route]:
                     raise ProfileError(404, "not_found", f"no line {lid!r}")
                 if parent is not None:
                     lines_mod.check_parent(parent, store)
-                if oparent is not None:
-                    lines_mod.check_orca_parent(oparent, ostore)
+                # the Orca store's own spelling: Orca resolves `inherits "<name> @System"` by exact name (fix I1)
+                canon = lines_mod.check_orca_parent(oparent, ostore) if oparent is not None else None
                 if parent is not None:
                     lines_mod.set_parent(ls, lid, parent)
-                if oparent is not None:
-                    lines_mod.set_parent(ls, lid, oparent, target="orca")
+                if canon is not None:
+                    lines_mod.set_parent(ls, lid, canon, target="orca")
                 line = ls[lid]
             builds.request_rebuild("line parent")
             return _line_view(line, _preset_counts())

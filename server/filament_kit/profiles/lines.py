@@ -291,13 +291,17 @@ def rechoose_orca(line: Line, orca_store: OrcaStore | None, *, library: Library 
     return line
 
 
-def check_orca_parent(parent: str, orca_store: OrcaStore | None) -> None:
-    """The gate on an Orca parent the user picks: with an Orca library index uploaded, `"<parent> @System"` must
-    be in it, else ProfileError 400 `unknown_parent`. With none yet any name is accepted (re-checked at build)."""
+def check_orca_parent(parent: str, orca_store: OrcaStore | None) -> str:
+    """The gate on an Orca parent the user picks; returns the name to store. With an Orca library index uploaded,
+    `"<parent> @System"` must be in it (compared casefolded) and the index's own spelling is returned, since Orca
+    resolves `inherits` by exact name; else ProfileError 400 `unknown_parent`. With none yet any name is accepted
+    as given, stripped (re-checked at build)."""
     parent = (parent or "").strip()
     known = _orca_library(orca_store)
-    if not known or not parent or parent.casefold() in known:
-        return
+    if not known or not parent:
+        return parent
+    if parent.casefold() in known:
+        return known[parent.casefold()]
     raise errors.ProfileError(400, "unknown_parent",
                               f"{parent!r} is not an Orca Slicer library preset "
                               f"(no {parent + SYSTEM!r} in the uploaded Orca system presets)", parent=parent)

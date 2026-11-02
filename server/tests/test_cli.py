@@ -549,7 +549,7 @@ def test_profiles_lines_and_set_parent(capsys, monkeypatch):
     out = capsys.readouterr().out
     assert "elegoo--petg-hf" in out and "Bambu PETG HF (library)" in out
     asked = []
-    monkeypatch.setattr(builds, "request_rebuild", lambda reason, live_hash=None: asked.append(reason))
+    monkeypatch.setattr(builds, "request_rebuild", lambda reason, live_hash=None, *, orca_live_hash=None: asked.append(reason))
     assert cli.main(["profiles", "set-parent", "elegoo--petg-hf", "Generic PETG"]) == 0
     line = lines_mod.load()["elegoo--petg-hf"]
     assert (line.bambu_parent, line.parent_source) == ("Generic PETG", "user")
@@ -569,7 +569,7 @@ def test_profiles_set_parent_unknown_with_store(capsys, monkeypatch):
     lines_mod.ensure_saved("ELEGOO", "PETG HF", "PETG", bambu_parent=None, library=lib, store=None)
     TB.pair("a")
     builds.store_upload("system", _io.BytesIO(TB.system_zip()), device_id="a")
-    monkeypatch.setattr(builds, "request_rebuild", lambda reason, live_hash=None: None)
+    monkeypatch.setattr(builds, "request_rebuild", lambda reason, live_hash=None, *, orca_live_hash=None: None)
     assert cli.main(["profiles", "set-parent", "elegoo--petg-hf", "No Such Preset"]) == 1
     assert "not a usable" in capsys.readouterr().err
     assert lines_mod.load()["elegoo--petg-hf"].parent_source == "library"
@@ -579,7 +579,7 @@ def test_profiles_status_and_restore_deleted(capsys, monkeypatch):
     assert cli.main(["profiles", "status"]) == 0
     assert "no build yet" in capsys.readouterr().out
     asked = []
-    monkeypatch.setattr(builds, "request_rebuild", lambda reason, live_hash=None: asked.append(reason))
+    monkeypatch.setattr(builds, "request_rebuild", lambda reason, live_hash=None, *, orca_live_hash=None: asked.append(reason))
     assert cli.main(["profiles", "restore-deleted"]) == 0
     assert (config.paths().state / "profiles" / "restore-deleted").exists() and asked
 
@@ -598,7 +598,7 @@ def test_profiles_lines_shows_orca_parent_and_set_parent_orca(capsys, monkeypatc
     assert cli.main(["profiles", "lines"]) == 0
     assert "orca Generic PETG (material)" in capsys.readouterr().out
     asked = []
-    monkeypatch.setattr(builds, "request_rebuild", lambda reason, live_hash=None: asked.append(reason))
+    monkeypatch.setattr(builds, "request_rebuild", lambda reason, live_hash=None, *, orca_live_hash=None: asked.append(reason))
     assert cli.main(["profiles", "set-parent", "elegoo--petg-hf", "Overture PLA Pro", "--orca"]) == 0
     assert "Orca parent Overture PLA Pro (set by you)" in capsys.readouterr().out
     line = lines_mod.load()["elegoo--petg-hf"]
@@ -614,3 +614,25 @@ def test_profiles_lines_shows_orca_parent_and_set_parent_orca(capsys, monkeypatc
     assert cli.main(["profiles", "set-parent", "elegoo--petg-hf", "Generic PETG @System", "--orca"]) == 1
     assert "@" in capsys.readouterr().err
     assert lines_mod.load()["elegoo--petg-hf"].orca_parent == "Overture PLA Pro"
+
+
+
+def test_profiles_set_parent_orca_canonical_spelling(capsys, monkeypatch):
+    import io as _io
+
+    import test_builds as TB
+    lines_mod.ensure_saved("ELEGOO", "PETG HF", "PETG", bambu_parent=None, library=library_mod.load(), store=None)
+    monkeypatch.setattr(builds, "request_rebuild", lambda reason, live_hash=None, *, orca_live_hash=None: None)
+    TB.pair("a")
+    builds.store_upload("orca_system", _io.BytesIO(TB.orca_system_zip()), device_id="a")
+    assert cli.main(["profiles", "set-parent", "elegoo--petg-hf", "generic petg", "--orca"]) == 0
+    assert "Orca parent Generic PETG (set by you)" in capsys.readouterr().out
+    assert lines_mod.load()["elegoo--petg-hf"].orca_parent == "Generic PETG"
+
+
+def test_profiles_help_mentions_orca(capsys):
+    with pytest.raises(SystemExit):
+        cli.main(["profiles", "--help"])
+    out = " ".join(capsys.readouterr().out.split())
+    assert "Bambu Studio and Orca Slicer presets" in out
+    assert "or with --orca the Orca Slicer library preset" in out
