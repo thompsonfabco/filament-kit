@@ -225,7 +225,7 @@ class PrinterConnection:
         pr = payload.get('print')
         if isinstance(pr, dict):
             with self._changed:
-                self._report = status.merge(self._report, pr)
+                self._report = status.merge_report(self._report, pr)
                 self.updated = time.time()
                 report, first = self._report, self._fresh
                 if 'gcode_state' in pr:
