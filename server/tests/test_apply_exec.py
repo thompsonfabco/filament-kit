@@ -96,6 +96,26 @@ def test_apt_batched_once(tmp_path):
     assert run.texts() == ["apt-get -o DPkg::Lock::Timeout=300 install -y -q unzip ffmpeg", "systemctl daemon-reload"]
 
 
+def test_apt_lean_is_its_own_install_without_recommends(tmp_path):
+    run = Recorder()
+    apply.execute([Action("apt", "unzip"), Action("apt_lean", "espeak-ng"), Action("apt_lean", "ffmpeg"),
+                   Action("daemon_reload")], run=run, resources=_res(tmp_path), root=tmp_path)
+    assert run.texts() == [
+        "apt-get -o DPkg::Lock::Timeout=300 install -y -q unzip",
+        "apt-get -o DPkg::Lock::Timeout=300 install -y -q --no-install-recommends espeak-ng ffmpeg",
+        "systemctl daemon-reload"]
+
+
+def test_apt_lean_is_its_own_install_without_recommends(tmp_path):
+    run = Recorder()
+    apply.execute([Action("apt", "unzip"), Action("apt_lean", "espeak-ng"), Action("apt_lean", "ffmpeg"),
+                   Action("daemon_reload")], run=run, resources=_res(tmp_path), root=tmp_path)
+    assert run.texts() == [
+        "apt-get -o DPkg::Lock::Timeout=300 install -y -q unzip",
+        "apt-get -o DPkg::Lock::Timeout=300 install -y -q --no-install-recommends espeak-ng ffmpeg",
+        "systemctl daemon-reload"]
+
+
 def test_enable_kinds(tmp_path):
     run = Recorder()
     apply.execute([Action("enable", "a.timer"), Action("enable", "b.path")],

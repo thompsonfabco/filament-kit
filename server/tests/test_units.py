@@ -82,7 +82,7 @@ def test_uninstall_fallback_lists_every_unit():
 
 
 STATION = {"User": "filament-kit-station", "Group": "filament-kit-station",
-           "SupplementaryGroups": "dialout audio",
+           "SupplementaryGroups": "dialout audio video",
            "ExecStart": "/opt/filament-kit/venv/bin/python -I -m filament_kit.station",
            "Restart": "always", "ProtectSystem": "strict", "ProtectHome": "yes", "PrivateTmp": "yes",
            "NoNewPrivileges": "yes", "CapabilityBoundingSet": "", "IPAddressDeny": "any"}

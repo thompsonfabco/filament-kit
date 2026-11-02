@@ -6,7 +6,7 @@ import logging
 import threading
 from http.server import ThreadingHTTPServer
 
-from . import beep, http, nfc, panel, scale
+from . import beep, camera, http, nfc, panel, scale, speech
 from . import state as st
 
 log = logging.getLogger("intake-station")
@@ -17,7 +17,8 @@ def main():
     s = st.settings
     log.info("scan beep: %s", (s["beep_device"] or beep.beep_device() or "no speaker output found")
              if s["beep"] else "off")
-    for fn in (panel.panel_loop, nfc.nfc_loop, scale.scale_loop):
+    log.info("camera: %s", camera.camera_dev() or "none found (looked again at each Hold)")
+    for fn in (panel.panel_loop, nfc.nfc_loop, scale.scale_loop, speech.speech_loop):
         threading.Thread(target=fn, daemon=True).start()
     ThreadingHTTPServer(("0.0.0.0", s["port"]), http.make_handler(st.view, s["allow"])).serve_forever()
 

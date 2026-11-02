@@ -20,6 +20,8 @@ def settings_from_env() -> dict:
         "active": int(os.environ.get("STATION_ACTIVE", "300")),  # a scan / weight counts this long (TAG_FRESH)
         "beep": os.environ.get("STATION_BEEP", "1") != "0",
         "beep_device": os.environ.get("STATION_BEEP_DEVICE", ""),
+        "speech": os.environ.get("STATION_SPEECH", "1") != "0",  # the panel talks (espeak-ng + ffmpeg)
+        "camera": os.environ.get("STATION_CAMERA", "auto"),  # webcam picture on Hold: auto | /dev/videoN | off
     }
 
 
@@ -29,7 +31,8 @@ MIN_GRAMS = 20  # an empty pan reads 0; anything under this isn't a spool
 
 lock = threading.Lock()
 state = {"tag": None, "tag_at": None, "scale": None, "scale_at": None, "last": None, "last_at": None,
-         "held": None, "held_at": None, "suppress": False, "blink_until": 0}
+         "held": None, "held_at": None, "suppress": False, "blink_until": 0, "air": None, "air_at": None,
+         "photo": None, "photo_at": None}
 # serial ports: the panel's (found by its HELLO) and the one nfcpy uses; neither probes the other's
 ports = {"panel": None, "nfc": None}
 probed = threading.Event()  # set once the panel search has looked at every port, so nfcpy picks the right one

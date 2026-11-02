@@ -106,7 +106,7 @@ def test_station_actions_and_first_build_last():
     kinds = [a.kind for a in acts]
     for k in ("remove_pkg", "disable_ext", "mask_sleep", "alsa_unmute", "udev_reload"):
         assert k in kinds
-    assert ("user", ("filament-kit-station", "dialout,audio")) in [(a.kind, a.arg) for a in acts]
+    assert ("user", ("filament-kit-station", "dialout,audio,video")) in [(a.kind, a.arg) for a in acts]
     assert kinds[-1] == "first_build"
     assert kinds.index("wait_http") < kinds.index("ensure_fields")
     rules = [a.arg for a in acts if a.kind == "install_file" and "udev" in a.arg[0]][0]
@@ -129,6 +129,52 @@ def test_dropin_beep_device_and_off():
     assert text.startswith("[Service]\n")
     assert "STATION_BEEP=0" in text and "STATION_BEEP_DEVICE=plughw:1,0" in text
     assert "STATION_BEEP_DEVICE" not in apply.station_dropin(_cfg(), ["127.0.0.1"])
+
+
+def test_dropin_speech_and_camera():
+    text = apply.station_dropin(_cfg(), ["127.0.0.1"])
+    assert "STATION_SPEECH=1" in text and "STATION_CAMERA=auto" in text
+    cfg = _cfg()
+    cfg["station"].update(speech=False, camera="/dev/video2")
+    text = apply.station_dropin(cfg, ["127.0.0.1"])
+    assert "STATION_SPEECH=0" in text and "STATION_CAMERA=/dev/video2" in text
+    cfg["station"]["camera"] = "off"
+    assert "STATION_CAMERA=off" in apply.station_dropin(cfg, ["127.0.0.1"])
+
+
+def test_station_apt_speech_and_camera_without_recommends():
+    acts = apply.plan(_mode("station"), resolve=lambda h: [h])
+    assert "alsa-utils" in _of(acts, "apt")
+    assert _of(acts, "apt_lean") == ["espeak-ng", "ffmpeg"]
+
+
+def test_lean_apt_skips_what_is_installed_in_full_anyway():
+    acts = apply.plan(set_mode(_cfg(), "all-in-one"), resolve=lambda h: [h])
+    assert "ffmpeg" in _of(acts, "apt")  # the printers module wants the full package
+    assert _of(acts, "apt_lean") == ["espeak-ng"]
+
+
+def test_dropin_speech_and_camera():
+    text = apply.station_dropin(_cfg(), ["127.0.0.1"])
+    assert "STATION_SPEECH=1" in text and "STATION_CAMERA=auto" in text
+    cfg = _cfg()
+    cfg["station"].update(speech=False, camera="/dev/video2")
+    text = apply.station_dropin(cfg, ["127.0.0.1"])
+    assert "STATION_SPEECH=0" in text and "STATION_CAMERA=/dev/video2" in text
+    cfg["station"]["camera"] = "off"
+    assert "STATION_CAMERA=off" in apply.station_dropin(cfg, ["127.0.0.1"])
+
+
+def test_station_apt_speech_and_camera_without_recommends():
+    acts = apply.plan(_mode("station"), resolve=lambda h: [h])
+    assert "alsa-utils" in _of(acts, "apt")
+    assert _of(acts, "apt_lean") == ["espeak-ng", "ffmpeg"]
+
+
+def test_lean_apt_skips_what_is_installed_in_full_anyway():
+    acts = apply.plan(set_mode(_cfg(), "all-in-one"), resolve=lambda h: [h])
+    assert "ffmpeg" in _of(acts, "apt")  # the printers module wants the full package
+    assert _of(acts, "apt_lean") == ["espeak-ng"]
 
 
 def test_bad_host_name_is_a_module_error_not_a_traceback():
