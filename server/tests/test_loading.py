@@ -88,7 +88,7 @@ def spool(sm, fil, location, prev=None):
 
 
 PRESET = profiles.PresetRef(filament_id="P8a1b2c3", name="SUNLU PLA+ Grey @Bambu Lab H2D 0.4 nozzle",
-                            nozzle_temp_min=200, nozzle_temp_max=230)
+                            nozzle_temp_min=200, nozzle_temp_max=230, filament_type="PLA", setting_id="PFUS9")
 
 
 class FakePresets:
@@ -127,6 +127,7 @@ def test_load_writes_the_slot_then_spoolman(rig, sm, fil):
     assert (w["ams_id"], w["tray_id"]) == (0, 1)
     assert w["tray_info_idx"] == "P8a1b2c3" and w["tray_color"] == "8A8C8EFF" and w["tray_type"] == "PLA"
     assert (w["nozzle_temp_min"], w["nozzle_temp_max"]) == (200, 230)
+    assert w["setting_id"] == "PFUS9"
     t = printer.tray(0, 1)
     assert t["tray_info_idx"] == "P8a1b2c3" and t["tray_color"] == "8A8C8EFF"
     got = sm.get(f"spool/{s['id']}")
@@ -135,6 +136,20 @@ def test_load_writes_the_slot_then_spoolman(rig, sm, fil):
     assert r["spool"]["id"] == s["id"] and r["spool"]["location"] == LOC_A2
     assert r["slot"] == {"label": "A2", "ams_id": 0, "tray_id": 1, "location": LOC_A2}
     assert r["preset"]["filament_id"] == "P8a1b2c3" and r["preset"]["name"] == PRESET.name
+    assert r["preset"]["filament_type"] == "PLA"
+
+
+def test_tray_type_is_the_preset_type(rig, sm, fil):
+    """tray_type is the preset's Bambu filament_type, not the Spoolman material; temps are the preset's ints."""
+    m, printer, client = rig
+    s = spool(sm, fil, "Rack 1")
+    ref = profiles.PresetRef(filament_id="P8a1b2c3", name="SUNLU PLA+ Grey @Bambu Lab H2D 0.4 nozzle",
+                             nozzle_temp_min=190, nozzle_temp_max=230, filament_type="PLA-CF", setting_id="")
+    r = loading.load(m, sm, SERIAL, "A2", s["id"], True, preset_for=FakePresets(ref))
+    cmd = r["command"]
+    assert cmd["tray_type"] == "PLA-CF" and cmd["setting_id"] == ""
+    assert (cmd["nozzle_temp_min"], cmd["nozzle_temp_max"]) == (190, 230)
+    assert type(cmd["nozzle_temp_min"]) is int and type(cmd["nozzle_temp_max"]) is int
 
 
 def test_dry_run_writes_nothing(rig, sm, fil, spoolman_fake_store):
@@ -157,12 +172,12 @@ def test_no_preset_refuses_and_sends_nothing(rig, sm, fil, spoolman_fake_store):
     before = copy.deepcopy(spoolman_fake_store["spools"])
     with pytest.raises(loading.NoPreset):
         loading.load(m, sm, SERIAL, "A2", s["id"], False, preset_for=FakePresets(None))
-    with pytest.raises(loading.NoPreset):        # the stub interface: no presets until the profiles plan lands
+    with pytest.raises(loading.NoPreset):        # the real preset_for: no build yet, so no preset
         loading.load(m, sm, SERIAL, "A2", s["id"], False)
     assert settings(client) == [] and spoolman_fake_store["spools"] == before
 
 
-def test_profiles_stub_returns_none():
+def test_preset_for_without_a_build_returns_none():
     assert profiles.preset_for({"id": 1}, "O1D", 0.4) is None
 
 
