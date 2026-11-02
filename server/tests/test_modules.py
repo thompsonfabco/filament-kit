@@ -14,10 +14,10 @@ def test_missing_modules_is_server_mode():
 
 def test_registry_order_and_modes():
     assert list(MODULES) == ["spoolman", "server", "ai_intake", "printers",
-                             "presets", "library", "backup", "station"]
+                             "presets", "library", "backup", "station", "web", "remote", "orders"]
     assert MODES["station"] == frozenset({"station"})
-    assert MODES["all-in-one"] == frozenset(MODULES)
-    assert MODES["server"] == frozenset(MODULES) - {"station"}
+    assert MODES["all-in-one"] == frozenset(MODULES) - {"web", "remote", "orders"}
+    assert MODES["server"] == frozenset(MODULES) - {"station", "web", "remote", "orders"}
 
 
 def test_mode_of_custom():
@@ -28,7 +28,7 @@ def test_set_mode_all_in_one_points_station_at_localhost():
     cfg = set_mode({"port": 1}, "all-in-one")
     assert cfg["station"]["url"] == "http://127.0.0.1:5003"
     assert cfg["station"]["allow"] == ["127.0.0.1"]
-    assert enabled(cfg) == frozenset(MODULES)
+    assert enabled(cfg) == MODES["all-in-one"]
     assert mode_of(enabled(cfg)) == "all-in-one"
 
 
@@ -101,3 +101,66 @@ def test_leaving_all_in_one_drops_the_local_station_link(mode):
 def test_set_mode_keeps_a_remote_station_url():
     cfg = set_mode({"station": {"url": "http://station.localdomain:5003"}}, "server")
     assert cfg["station"]["url"] == "http://station.localdomain:5003"
+
+
+# ---------- merge-ops Task 0: web / remote / orders ----------
+
+NEW = frozenset({"web", "remote", "orders"})
+
+
+def test_new_modules_registered():
+    assert MODULES["web"].units == ("filament-kit-web.service",)
+    assert MODULES["web"].depends == ("server",) and MODULES["web"].apt == ()
+    assert MODULES["remote"].depends == ("web",) and MODULES["remote"].units == ()
+    assert MODULES["remote"].apt == ("nginx", "certbot")
+    assert MODULES["orders"].depends == ("ai_intake",)
+
+
+def test_new_modules_off_by_default():
+    for name, members in MODES.items():
+        assert not members & NEW, name
+    assert not enabled({}) & NEW
+    cfg = set_mode({}, "all-in-one")
+    assert cfg["modules"]["web"] is False and mode_of(enabled(cfg)) == "all-in-one"
+
+
+def test_new_modules_dependencies():
+    with pytest.raises(ModuleError, match="web needs server"):
+        validate({"modules": {"web": True}, "spoolman_url": "http://sm.lan:7912"})
+    with pytest.raises(ModuleError, match="orders needs ai_intake"):
+        validate({"modules": {"server": True, "orders": True}, "spoolman_url": "http://sm.lan:7912",
+                  "orders": {"file": "/x"}})
+
+
+def test_remote_needs_https_public_url():
+    cfg = config._merge(config.DEFAULTS, {})
+    cfg["modules"] = {"spoolman": True, "server": True, "web": True, "remote": True}
+    for url in (None, "", "http://x.example/", "not a url"):
+        cfg["web"]["public_url"] = url
+        with pytest.raises(ModuleError, match="web.public_url"):
+            validate(cfg)
+    cfg["web"]["public_url"] = "https://kit.example.com"
+    validate(cfg)
+    cfg["modules"]["remote"] = False
+    cfg["web"]["public_url"] = None
+    validate(cfg)
+
+
+def test_orders_needs_file():
+    cfg = config._merge(config.DEFAULTS, {})
+    cfg["modules"] = {"spoolman": True, "server": True, "ai_intake": True, "orders": True}
+    with pytest.raises(ModuleError, match="orders.file"):
+        validate(cfg)
+    cfg["orders"]["file"] = "/var/lib/filament-kit/orders.json"
+    validate(cfg)
+
+
+def test_new_config_defaults():
+    d = config.DEFAULTS
+    assert d["web"]["port"] == 8101 and d["web"]["public_url"] is None
+    assert d["web"]["lan"] == ["192.168.0.0/16", "10.0.0.0/8", "172.16.0.0/12"]
+    assert d["remote"] == {"hostname": None, "acme_window": None, "email": None}
+    assert d["orders"] == {"file": None}
+    assert d["tag_sources"] == [] and d["slot_service"] is None and d["slicer_printers"] == []
+    assert d["presets_orca"] is False and d["web_instructions"] is None
+    assert d["intake"] == {"tare_hints": {}, "model": None}

@@ -97,7 +97,7 @@ def test_daemon_reload_once_before_enable():
 def test_ai_intake_key_question_follows_module():
     on = apply.plan({})
     assert _of(on, "server_setup") == ["key"]
-    cfg = _cfg(modules={n: n not in ("ai_intake", "station") for n in modules.MODULES})
+    cfg = _cfg(modules={n: n not in ("ai_intake", "station") and n not in modules.OPT_IN for n in modules.MODULES})
     assert _of(apply.plan(cfg), "server_setup") == [""]
 
 
@@ -144,3 +144,36 @@ def test_null_station_allow_plans():
     cfg["station"]["allow"] = None
     acts = apply.plan(cfg, resolve=lambda h: [h])
     assert any(a.kind == "install_file" and a.arg[0] == apply.DROPIN for a in acts)
+
+
+# ---------- merge-ops Task 0: web unit ----------
+
+def test_web_on_installs_and_enables_unit():
+    cfg = set_mode(_cfg(), "server")
+    cfg["modules"]["web"] = True
+    acts = apply.plan(cfg)
+    assert "filament-kit-web.service" in _of(acts, "install_unit")
+    en = _of(acts, "enable")
+    assert en.index("filament-kit-web.service") > en.index("filament-kit.service")
+    assert "filament-kit-web.service" not in _of(acts, "disable")
+    kinds = [a.kind for a in acts]
+    assert acts.index(apply.Action("install_unit", "filament-kit-web.service")) < kinds.index("daemon_reload")
+
+
+def test_web_explicitly_off_disables_unit():
+    acts = apply.plan(set_mode(_cfg(), "server"))
+    assert "filament-kit-web.service" in _of(acts, "disable")
+    assert "filament-kit-web.service" not in _of(acts, "install_unit")
+
+
+def test_legacy_plan_unchanged_by_new_modules():
+    # No `modules` key: nothing about web/remote/orders appears at all.
+    for a in apply.plan({}):
+        assert "web" not in str(a.arg) and "nginx" not in str(a.arg)
+
+
+def test_remote_adds_apt_packages():
+    cfg = set_mode(_cfg(), "server")
+    cfg["modules"].update(web=True, remote=True)
+    cfg["web"]["public_url"] = "https://kit.example.com"
+    assert {"nginx", "certbot"} <= set(_of(apply.plan(cfg), "apt"))
