@@ -57,6 +57,24 @@ def test_installer_is_per_user():
     assert r"DefaultDirName={localappdata}\Programs\filament-kit-sync" in text
 
 
+def test_installer_adds_app_to_user_path_once_and_removes_it():
+    text = _read("pc-sync/installer/filament-kit-sync.iss")
+    assert re.search(r"^ChangesEnvironment=yes\s*$", text, re.M)
+    reg = [ln for ln in text.splitlines() if ln.startswith("Root: HKCU;")]
+    assert len(reg) == 1, reg
+    entry = reg[0]
+    for part in ('Subkey: "Environment"', 'ValueType: expandsz', 'ValueName: "Path"',
+                 'ValueData: "{olddata};{app}"', "Check: NeedsAddPath(ExpandConstant('{app}'))"):
+        assert part in entry, part
+    assert "uninsdeletevalue" not in entry  # that would delete the user's whole PATH
+    assert "function NeedsAddPath(" in text
+    assert re.search(r"usUninstall then\s+RemovePath\(ExpandConstant\('\{app\}'\)\)", text)
+
+
+def test_release_publishes_with_generated_notes():
+    assert "generate_release_notes: true" in _read(".github/workflows/release.yml")
+
+
 def test_task_runs_every_ten_minutes():
     text = _read("pc-sync/installer/install_task.ps1")
     assert "-RepetitionInterval (New-TimeSpan -Minutes 10)" in text

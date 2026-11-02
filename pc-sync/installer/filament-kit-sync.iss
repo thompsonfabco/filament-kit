@@ -44,6 +44,9 @@ UninstallDisplayIcon={app}\{#ExeName}
 ; The task exe may be mid-run during an upgrade: close it rather than fail on a locked file.
 CloseApplications=yes
 RestartApplications=no
+; {app} is added to the per-user PATH (so `filament-kit-sync status` works in a new terminal):
+; tell Explorer to reload the environment after install and uninstall.
+ChangesEnvironment=yes
 
 [Files]
 Source: "{#DistDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -53,6 +56,10 @@ Source: "uninstall_task.ps1"; DestDir: "{app}"; Flags: ignoreversion
 [InstallDelete]
 ; Files of an older build that this build no longer has.
 Type: filesandordirs; Name: "{app}\_internal"
+
+[Registry]
+; Per-user PATH: append {app} once (NeedsAddPath); the uninstaller removes just that entry (RemovePath in [Code]).
+Root: HKCU; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; ValueData: "{olddata};{app}"; Check: NeedsAddPath(ExpandConstant('{app}')); Flags: preservestringtype
 
 [Icons]
 ; cmd /k keeps the window open so the result of pair/status stays readable.
@@ -68,3 +75,44 @@ Filename: "{cmd}"; Parameters: "/k """"{app}\{#ExeName}"" pair"""; WorkingDir: "
 
 [UninstallRun]
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ""{app}\uninstall_task.ps1"""; RunOnceId: "RemoveScheduledTask"; Flags: runhidden waituntilterminated
+
+[Code]
+// True when Dir is not yet an entry of the per-user PATH (case-insensitive, whole entries only).
+function NeedsAddPath(Dir: string): Boolean;
+var
+  Paths: string;
+begin
+  if not RegQueryStringValue(HKEY_CURRENT_USER, 'Environment', 'Path', Paths) then
+  begin
+    Result := True;
+    exit;
+  end;
+  Result := Pos(';' + Uppercase(Dir) + ';', ';' + Uppercase(Paths) + ';') = 0;
+end;
+
+// Removes the entry Dir from the per-user PATH, leaving every other entry as it was.
+procedure RemovePath(Dir: string);
+var
+  Paths, Needle: string;
+  P: Integer;
+begin
+  if not RegQueryStringValue(HKEY_CURRENT_USER, 'Environment', 'Path', Paths) then
+    exit;
+  Paths := ';' + Paths + ';';
+  Needle := ';' + Uppercase(Dir) + ';';
+  P := Pos(Needle, Uppercase(Paths));
+  if P = 0 then
+    exit;
+  Delete(Paths, P, Length(Needle) - 1);  // drop ";<Dir>", keep the following ";"
+  Paths := Copy(Paths, 2, Length(Paths) - 2);  // drop the ";" added at each end above
+  if (Paths = '') or (Paths = ';') then
+    RegDeleteValue(HKEY_CURRENT_USER, 'Environment', 'Path')
+  else
+    RegWriteExpandStringValue(HKEY_CURRENT_USER, 'Environment', 'Path', Paths);
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usUninstall then
+    RemovePath(ExpandConstant('{app}'));
+end;
