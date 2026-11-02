@@ -1,0 +1,14 @@
+# MCP server "@NAME@" -> 127.0.0.1:@PORT@   (written by mcp-route; public base https://@HOST@/@NAME@)
+location ^~ /@NAME@/ {
+    proxy_pass http://127.0.0.1:@PORT@/;              # trailing slash strips the /@NAME@ prefix
+    include /etc/nginx/mcp-proxy.conf;
+}
+# OAuth discovery lives at fixed root paths; RFC 9728 / RFC 8414 put the server's path after them
+location ^~ /.well-known/oauth-protected-resource/@NAME@/ {
+    proxy_pass http://127.0.0.1:@PORT@;               # no URI: path kept (the SDK registers it this way)
+    include /etc/nginx/mcp-proxy.conf;
+}
+location = /.well-known/oauth-authorization-server/@NAME@ {
+    proxy_pass http://127.0.0.1:@PORT@/.well-known/oauth-authorization-server;
+    include /etc/nginx/mcp-proxy.conf;
+}

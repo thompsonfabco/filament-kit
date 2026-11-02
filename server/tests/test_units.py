@@ -69,7 +69,7 @@ def test_build_path_unit():
 def test_install_ships_units_and_state_dirs():
     """install.sh copies the units as resources; `modules apply` installs and enables them (apply.plan)."""
     text = _text(INSTALL / "install.sh")
-    assert 'cp -R "$RES/systemd" "$RES/avahi" "$OPT/resources/"' in text
+    assert 'cp -R "$RES/systemd" "$RES/avahi" "$RES/remote" "$OPT/resources/"' in text
     assert ('install -d -m 750 -o filament-kit -g filament-kit '
             '"$STATE/profiles" "$STATE/library" "$STATE/library-local"') in text
 

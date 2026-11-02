@@ -1164,6 +1164,10 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
     mx = mdsub.add_parser("disable", help="turn a module off and apply; its data is kept (root)")
     mx.add_argument("name")
     mdsub.add_parser("units", help="print every systemd unit of every module, one per line")
+    rm_ = sub.add_parser("remote", help="remote access: get the certificate, show the firewall rules")
+    rmsub = rm_.add_subparsers(dest="remote_cmd", required=True)
+    rmsub.add_parser("issue", help="get the certificate with certbot (standalone on port 80) (root)")
+    rmsub.add_parser("firewall", help="print the firewall and port-forward rules to set up by hand")
     args = ap.parse_args(argv)
 
     if args.cmd == "status":
@@ -1198,6 +1202,10 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
         if args.profiles_cmd == "set-parent":
             return cmd_profiles_set_parent(args.line_id, args.parent)
         return cmd_profiles_restore_deleted()
+    if args.cmd == "remote":
+        from . import remote
+        cfg = config.load()
+        return remote.issue(cfg) if args.remote_cmd == "issue" else remote.firewall(cfg)
     if args.cmd == "modules":
         if args.modules_cmd == "units":
             return cmd_modules_units()

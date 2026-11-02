@@ -3,6 +3,7 @@
 *.service  text eol=lf
 *.timer    text eol=lf
 *.path     text eol=lf
+install/remote/* text eol=lf
 *.yml      text eol=lf
 *.bat      text eol=crlf
 gradlew    text eol=lf

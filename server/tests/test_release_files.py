@@ -133,7 +133,7 @@ def test_station_extra_in_pyproject():
 
 def test_wrapper_runs_modules_as_root():
     text = _read("install/filament-kit-cli.sh")
-    assert re.search(r"^\s+config \| cert \| modules\)\s*$", text, re.M)
+    assert re.search(r"^\s+config \| cert \| modules \| remote\)\s*$", text, re.M)
 
 
 def test_uninstall_uses_modules_units_and_cleans_station():
