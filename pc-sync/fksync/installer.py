@@ -9,13 +9,17 @@ Order (each check runs before anything is written):
      (unless more than a quarter of the installed presets vanished at once: an app reset);
   4. Bambu Studio must not be running; this is checked again right before the first write, and
      if it runs then nothing is written, not even the backup;
-  5. the user filament folder is backed up to dirs.backups/<stamp> (the 5 newest are kept);
-  6. each staged .json is copied in and its .info written, keeping a live cloud setting_id;
+  5. the user filament folder (which must exist) is backed up to dirs.backups/<stamp> (the 5
+     newest are kept); a backup that fails part-way is removed and the install refused;
+  6. each staged .json is copied in and its .info written, keeping a live cloud setting_id; every
+     file goes to a sibling `.<name>.fktmp` first and is renamed over the target, so a crash never
+     leaves a half-written preset (leftover temp files are removed at the start of this phase);
   7. nothing is ever deleted: presets no longer built but still live are returned as `stale`
      (they are deleted in the app, never on disk);
   8. dirs.installed is replaced with a copy of the build (temp dir + rename).
 """
 import json
+import os
 import shutil
 import tempfile
 from dataclasses import dataclass
@@ -28,6 +32,7 @@ from .studio import StudioFolders
 
 KEEP_BACKUPS = 5
 STUDIO_RUNNING = "Bambu Studio is running"
+TMP_SUFFIX = ".fktmp"
 
 
 class Refused(Exception):
@@ -54,11 +59,6 @@ def read_info(path: Path) -> dict:
                 k, v = line.split("=", 1)
                 d[k.strip()] = v.strip()
     return d
-
-
-def write_info(path: Path, d: dict) -> None:
-    with open(path, "w", encoding="utf-8", newline="\n") as f:
-        f.write("".join(f"{k} = {v}\n" for k, v in d.items()))
 
 
 def _key(v) -> str:
@@ -110,10 +110,42 @@ def _backup(user_filament: Path, backups: Path, stamp: str) -> Path:
     while dest.exists():
         n += 1
         dest = backups / f"{stamp}-{n}"
-    shutil.copytree(user_filament, dest)
+    try:
+        shutil.copytree(user_filament, dest)
+    except OSError as e:
+        shutil.rmtree(dest, ignore_errors=True)  # a partial backup must not count as one of the 5
+        raise Refused(f"could not back up {user_filament} to {dest} ({e}); nothing was installed") from None
     for old in sorted(p for p in backups.iterdir() if p.is_dir())[:-KEEP_BACKUPS]:
         shutil.rmtree(old)
     return dest
+
+
+def _write_live(target: Path, data: bytes) -> None:
+    """Write target via a sibling temp file + os.replace, so a live preset is never half-written."""
+    tmp = target.with_name(f".{target.name}{TMP_SUFFIX}")
+    try:
+        with open(tmp, "wb") as f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, target)
+    except BaseException:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise
+
+
+def _info_bytes(d: dict) -> bytes:
+    return "".join(f"{k} = {v}\n" for k, v in d.items()).encode("utf-8")
+
+
+def _remove_leftover_tmp(live: Path) -> None:
+    """Temp files a crashed earlier run left behind (only ours: dot-prefixed, .fktmp)."""
+    for p in live.iterdir():
+        if p.name.startswith(".") and p.name.endswith(TMP_SUFFIX) and p.is_file():
+            p.unlink()
 
 
 def _replace_installed(build_dir: Path, dirs: AppDirs) -> None:
@@ -188,6 +220,10 @@ def install(build_dir: Path, folders: StudioFolders, dirs: AppDirs, *,
     live_cf = {n.casefold() for n in live_names}
     stale = [n for n in before if n.casefold() not in staged_cf and n.casefold() in live_cf]
 
+    if not folders.user_filament.is_dir():
+        raise Refused(f"the Bambu Studio user filament folder {folders.user_filament} does not exist; open Bambu "
+                      "Studio once (and sign in, if you use an account), then run the sync again")
+
     # 4. right before the first write
     if running():
         raise Refused(STUDIO_RUNNING, "studio_running")
@@ -196,13 +232,15 @@ def install(build_dir: Path, folders: StudioFolders, dirs: AppDirs, *,
     backup = _backup(folders.user_filament, dirs.backups, stamp_now)
 
     # 6. copy presets, merging .info so a live cloud setting_id is kept
+    #    (each file is written to a temp file next to it, then renamed over it)
     live.mkdir(parents=True, exist_ok=True)
+    _remove_leftover_tmp(live)
     for name in staged:
-        shutil.copy2(stage / f"{name}.json", live / f"{name}.json")
+        _write_live(live / f"{name}.json", (stage / f"{name}.json").read_bytes())
         info, old_info = read_info(stage / f"{name}.info"), read_info(live / f"{name}.info")
         if old_info.get("setting_id") and not info.get("setting_id"):  # synced to the cloud since the build
             info.update(setting_id=old_info["setting_id"], base_id=old_info.get("base_id", ""), sync_info="update")
-        write_info(live / f"{name}.info", info)
+        _write_live(live / f"{name}.info", _info_bytes(info))
 
     # 7. nothing deleted; 8. snapshot
     _replace_installed(build_dir, dirs)
