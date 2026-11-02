@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "vendor": "Protopasta",
+  "product": "Glass Fiber PCTG",
+  "material": "PCTG",
+  "colors": [
+    "White"
+  ],
+  "bambu_parent": "Generic PCTG",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "255"
+    ],
+    "nozzle_temperature_range_high": [
+      "275"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_bed": "70+C (page text) / 80+C (page feature list)",
+    "_notes": "Product page: nozzle 255+C, 'We print up to 275 C, but 255 C is a good compromise'; processing from 255+C @ 2 mm3/s; start from Generic PETG or PCTG profile. Glass fiber is abrasive (wear-resistant nozzle advisable). No density or max flow published."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://proto-pasta.com/products/white-glass-fiber-pctg",
+    "https://proto-pasta.com/blogs/stories/endless-exploration-ex12-jan-2026-high-performance-pctg-composites"
+  ],
+  "updated": "2026-11-01"
+}

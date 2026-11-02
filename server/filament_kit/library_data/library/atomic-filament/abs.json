@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "vendor": "Atomic Filament",
+  "product": "ABS",
+  "material": "ABS",
+  "colors": [
+    "Black",
+    "Bright White",
+    "Gray",
+    "Light Gray",
+    "Gun Metal Gray",
+    "Natural",
+    "Army Green",
+    "Dark Cherry Red",
+    "Perfect Red",
+    "Perfect Orange",
+    "Perfect Blue",
+    "Royal Blue",
+    "Neon Green UV Reactive",
+    "Neon Yellow UV Reactive"
+  ],
+  "bambu_parent": "Bambu ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "235"
+    ],
+    "nozzle_temperature_range_high": [
+      "255"
+    ],
+    "filament_density": [
+      "1.06"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "115 +/-10",
+    "_drying": "80C 4-8h",
+    "_vitrification": "105 (Tg, Atomic ABS SDS)",
+    "_diameter_tolerance": "+/-0.02",
+    "_ams": "1 kg spools sold as AMS compatible",
+    "_notes": "Specific gravity 1.06 and Tg 105C from the 'Atomic Filament - ABS based 3D Filament' SDS (rev 08/03/2021); no ABS TDS published. Drying 80C 4-8h from the Atomic FAQ (ASA/ABS). Maker: less warp than typical ABS. Also sold in 3.5 kg."
+  },
+  "conflicts": [
+    "Gray, Gun Metal Gray and Black 3.5 kg pages and the Gray sample coil give nozzle 235-250C (https://atomicfilament.com/products/3-5kg-black-abs-filament); ~34 other ABS pages give 235-255C (used)."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://atomicfilament.com/products/black-abs-filament",
+    "https://atomicfilament.com/products/army-green-abs-filament",
+    "https://cdn.shopify.com/s/files/1/0778/8857/files/Atomic-ABS-SDS-2021.pdf?v=1628017942",
+    "https://atomicfilament.com/pages/atomic-filament-faq"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "vendor": "CHCKX",
+  "product": "PETG",
+  "material": "PETG",
+  "colors": [
+    "PETG Orange"
+  ],
+  "bambu_parent": "Generic PETG",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-80",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "Listing: 'Printing temperature 240-260C, Build plate temperature 70-80C'. No density, drying or speed published by the brand listing."
+  },
+  "conflicts": [
+    "[pass 4] Seller is 'suzhouxuxiangxincailiaokejiyouxiangongsi' (same seller on every CHCKX listing), not a named brand store.",
+    "[pass 4] Tolerance: single-spool title says +/-0.02 mm; bundle titles say +/-0.03 mm.",
+    "[pass 4] chckx.net (marketing-agency concept site with affiliate links, not official) shows nozzle 210-220C, bed 70-80C, density ~1.27 and fan 30-50%, explicitly marked 'industry-representative value'; not used. Its 210-220C conflicts with the listing's 240-260C.",
+    "[pass 4] A second CHCKX orange PETG listing (B0FLJW9SXY, 'Orange 2') gives the same 240-260C / 70-80C."
+  ],
+  "source_quality": "brand_amazon_listing",
+  "sources": [
+    "https://www.amazon.com/dp/B0FLK23WPM"
+  ],
+  "updated": "2026-11-01"
+}

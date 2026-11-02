@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "vendor": "Bambu Lab",
+  "product": "Support for PLA",
+  "material": "PLA-S",
+  "colors": [],
+  "bambu_parent": "Bambu Support For PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.22"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_is_support": [
+      "1"
+    ],
+    "filament_soluble": [
+      "0"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "35-45 (PVP glue)",
+    "chamber_temperatures": "25-45",
+    "fan_max_speed": "100%",
+    "filament_retraction_length": "0.6-1.0",
+    "filament_retraction_speed": "20-40",
+    "_print_speed": "<200 mm/s",
+    "_drying": "55C 8h",
+    "_ams": "Must be printed via AMS or a dual-extruder printer (breakaway interface)",
+    "_notes": "TDS V1.0. Breakaway support for PLA. Plates: Cool, High Temperature or Textured PEI. 0.5 kg spool. material 'PLA-S' follows Bambu Studio's support filament type naming (not stated in TDS). Bambu Studio also ships the older 'Bambu Support W' preset. PDF hosted on cdn.shopify.com."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0584/7236/6216/files/Bambu_Support_for_PLA_Technical_Data_Sheet.pdf"
+  ],
+  "updated": "2026-11-01"
+}

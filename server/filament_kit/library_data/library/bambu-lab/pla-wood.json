@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "vendor": "Bambu Lab",
+  "product": "PLA Wood",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Wood",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.21"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "35-45",
+    "chamber_temperatures": "25-45",
+    "filament_retraction_length": "0.6-1.0",
+    "filament_retraction_speed": "20-40",
+    "_drying": "55C 8h",
+    "_drying_x1_heatbed": "65-75C 12h",
+    "_max_print_speed": "<250 mm/s",
+    "_min_nozzle": "0.4",
+    "_vitrification": "54 (Tg, DSC 10C/min)",
+    "_vicat": "64 (ISO 306)",
+    "_hdt_0.45MPa": "60",
+    "_hdt_1.8MPa": "57",
+    "_melting_point": "156 (DSC)",
+    "_annealing": "50-60C 6-12h",
+    "_notes": "TDS V1.0. Nozzle sizes 0.4/0.6/0.8 mm (wood powder fill). Plates: Textured PEI Plate / Smooth PEI Plate; glue. Cooling fan on.",
+    "_diameter_tolerance": "+/-0.03"
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://store.bblcdn.com/s4/default/6fda0ae88e5a4e66bb5d58f2968eee42/Bambus_PLA_Wood_Technical_Data_Sheet.pdf"
+  ],
+  "updated": "2026-11-01"
+}

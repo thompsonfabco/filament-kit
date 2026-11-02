@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "vendor": "Polymaker",
+  "product": "PETG",
+  "material": "PETG",
+  "colors": [
+    "Black",
+    "Dark Grey",
+    "Silver",
+    "Grey",
+    "White",
+    "Pink",
+    "Magenta",
+    "Red",
+    "Orange",
+    "Green",
+    "Yellow",
+    "Lime",
+    "Dark Green",
+    "Teal",
+    "Electric Blue",
+    "Blue",
+    "Dark Blue",
+    "Purple",
+    "Dark Purple",
+    "Clear",
+    "Army Brown",
+    "Galaxy Black",
+    "Galaxy Dark Grey",
+    "Galaxy Blue",
+    "Galaxy Red"
+  ],
+  "bambu_parent": "PolyLite PETG",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.30"
+    ],
+    "filament_max_volumetric_speed": [
+      "22"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-70",
+    "fan_min_speed/fan_max_speed": "20-60%",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "20-40",
+    "_print_speed": "up to 300",
+    "_drying": "60C 6h",
+    "_enclosure": "not needed",
+    "_vitrification": "71.24 (Tg, DSC)",
+    "_vicat": "75",
+    "_hdt_0.45MPa": "69",
+    "_hdt_1.8MPa": "65",
+    "_ams": "Polymaker wiki: hardened spool edges roll well in the AMS.",
+    "_min_nozzle": "Galaxy colours: 0.4 mm or larger",
+    "_notes": "Polymaker PETG (new high-flow formula). Max volumetric speed: up to 22 mm3/s on stock Bambu hotend, up to 32 mm3/s with E3D high-flow hotend. Shop still sells an 'Old Formula' option; values here are for the new formula. Bambu PETG HF is a reasonable alternative parent."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://wiki.polymaker.com/polymaker-products/polymaker-filaments/prime-materials/petg/polymaker-tm-petg-new",
+    "https://cdn.shopify.com/s/files/1/0548/7299/7945/files/PETG_TDS_Polymaker_297e875c-5d38-4d2b-ba68-eef8916de183.pdf",
+    "https://shop.polymaker.com/products/petg"
+  ],
+  "updated": "2026-11-01"
+}

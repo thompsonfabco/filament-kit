@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "Matt PLA",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Matte",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "215"
+    ],
+    "nozzle_temperature_range_high": [
+      "235"
+    ],
+    "filament_density": [
+      "1.38"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "fan_min_speed/fan_max_speed": "50-100",
+    "_enclosure": "No (product page)",
+    "_min_nozzle": "0.15",
+    "_vicat": "57 (TDS, method not given)",
+    "_diameter_tolerance": "+/-0.05 (1.75 mm), +/-0.10 (2.85 mm)",
+    "_notes": "Bed and fan from product page."
+  },
+  "conflicts": [
+    "Product page print temp 215-230C vs TDS 215-235C.",
+    "Product page density 1.4 g/cc vs TDS specific gravity 1.38 g/cc (ISO 1183)."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://formfutura.com/web/content/256590?download=true",
+    "https://formfutura.com/filaments/matt-pla"
+  ],
+  "updated": "2026-11-01"
+}

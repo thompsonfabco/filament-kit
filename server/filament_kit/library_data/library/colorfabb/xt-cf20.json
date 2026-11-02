@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "vendor": "ColorFabb",
+  "product": "XT-CF20",
+  "material": "PETG-CF",
+  "colors": [],
+  "bambu_parent": "Bambu PETG-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.4"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-70",
+    "_print_speed": "40-70 mm/s",
+    "_fiber_content": "20% carbon fibre (Eastman Amphora AM1800 co-polyester base)",
+    "_diameter_tolerance": "+/-0.05 (1.75 mm; TDS 'max. roundness deviation'), +/-0.1 (2.85 mm)",
+    "_notes": "TDS v2.0. Fan printed as '0/50': least fan for strength, more for detail/overhangs. TDS does not state a nozzle requirement; carbon-fibre filled."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://downloads.colorfabb.com/public.php/dav/files/rtfDDRCa723Xdor/Technical%20Data%20Sheets/Co-Polyester/colorFabb_XT/TDS_colorFabb_XT-CF20.pdf"
+  ],
+  "updated": "2026-11-01"
+}

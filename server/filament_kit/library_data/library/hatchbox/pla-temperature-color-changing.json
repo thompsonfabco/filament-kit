@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "vendor": "Hatchbox",
+  "product": "PLA Temperature Color Changing",
+  "material": "PLA",
+  "colors": [
+    "Purple/Salmon Red/Orange",
+    "Green/Plasma Green"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "180"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "Purple/Salmon Red/Orange page: 'Print Temperature - 180C - 220C'; below 22 C purple, 22-31 C salmon red, above 31 C orange. 'Exclusive Release' temp-change filament: below 31 C green, above 31 C plasma green (page notes the label was printed incorrectly). No heated bed required; dimensional accuracy +/- 0.03mm. Verified 2026-11-01 against the product pages' Shopify JSON/HTML."
+  },
+  "conflicts": [
+    "Hatchbox Exclusive Release temp-change product page (https://www.hatchbox3d.com/products/exclusive-release-temperature-change-filament) and wholesale page (https://wholesale.hatchbox3d.com/products/exclusive-release-temperature-change-filament): Recommended Extrusion/Nozzle Temperature 180-210 C"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.hatchbox3d.com/products/pla-temperature-color-changing-purple-salmon-red-orange-1-75mm-1kg-spool",
+    "https://www.hatchbox3d.com/products/exclusive-release-temperature-change-filament"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "vendor": "GEEETECH",
+  "product": "TPU",
+  "material": "TPU",
+  "colors": [
+    "TPU Pink",
+    "TPU Red"
+  ],
+  "bambu_parent": "Generic TPU",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "_hardness": "95A",
+    "_diameter_tolerance": "+/-0.05 (geeetech.com product page, Oct 2026); +/-0.03 (support.geeetech.com, GEEETECH Amazon.com Gray listing)",
+    "_notes": "geeetech.com: compatible with short-range extrusion FDM 3D printers using 1.75mm filament (short feed path / direct drive). No explicit AMS, High Flow or minimum nozzle statement. Vacuum sealed with desiccant. SKU US700-001-1840."
+  },
+  "conflicts": [
+    "[pass 3] Older GEEETECH Amazon.ca listing copy (B09Q8R3F68) states 180-210C, bed 50-70C, 20-40 mm/s in one bullet and 195-230C, bed 40-60C in another.",
+    "[pass 3] Density 1.24 g/cm3 on geeetech.com product page is from a customer review, not GEEETECH; not used.",
+    "[merge] published_ranges._diameter_tolerance: pass 6 value \"+/-0.05 (geeetech.com product page, Oct 2026); +/-0.03 (support.geeetech.com, GEEETECH Amazon.com Gray listing)\" replaced earlier value \"+/-0.03\"",
+    "[pass 6] Diameter tolerance: geeetech.com product page now states +/-0.05mm; pass 5 and GEEETECH Amazon.com B0DG8HP2VD state +/-0.03mm; Amazon.ca B09XHMLCBW states +/-0.05mm (search snippet).",
+    "[pass 6] Density 1.24 g/cm3, max volumetric speed 3 mm3/s and drying 45-50C 6-8h appear only in a customer review on geeetech.com; not used.",
+    "[pass 6] Short-range extrusion restriction implies AMS feeding is not supported by the brand statement; not stated explicitly."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.geeetech.com/products/tpu-3d-printer-filament-1-75mm-1kg-roll",
+    "https://support.geeetech.com/tpu-white-3d-printer-filament-175mm-1kgroll-p-1321.html",
+    "https://www.amazon.com/Geeetech-Filament-Flexible-Consumables-Dimensional/dp/B0B7GN25V2",
+    "https://www.amazon.com/Geeetech-Filament-Flexible-Elasticity-Dimensional/dp/B0DG8HP2VD",
+    "https://www.amazon.ca/Geeetech-Filament-Flexible-Consumables-Dimensional/dp/B09XHMLCBW"
+  ],
+  "updated": "2026-11-01"
+}

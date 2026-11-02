@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "vendor": "CHCKX",
+  "product": "PETG-GF",
+  "material": "PETG-GF",
+  "colors": [
+    "PETG-GF Black"
+  ],
+  "bambu_parent": "Generic PETG",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "65-75",
+    "_print_speed": "30-200",
+    "_fiber_content": "10% GF"
+  },
+  "conflicts": [
+    "[pass 2] Temperatures taken from CHCKX's Green colour listing (B0GC537B6Y) of the same Glass Fiber PETG product, not from B0FLK28VR4."
+  ],
+  "source_quality": "brand_amazon_listing",
+  "sources": [
+    "https://www.amazon.com/CHCKX-Filament-Resistance-Durability-Stiffness/dp/B0GC537B6Y",
+    "https://www.amazon.com/CHCKX-Filament-Resistance-Durability-Stiffness/dp/B0GC4TBFGF"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "vendor": "Polymaker",
+  "product": "Fiberon PET-GF15",
+  "material": "PET-GF",
+  "colors": [
+    "Black",
+    "Dark Grey",
+    "Light Grey",
+    "White",
+    "Blue",
+    "Red"
+  ],
+  "bambu_parent": "Fiberon PET-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "280"
+    ],
+    "nozzle_temperature_range_high": [
+      "310"
+    ],
+    "filament_density": [
+      "1.43"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-80",
+    "chamber_temperatures": "room temperature",
+    "fan_max_speed": "0 (OFF)",
+    "_print_speed": "up to 250",
+    "_drying": "100C 10h",
+    "_annealing": "120C 16h",
+    "_hardened_nozzle_required": "yes",
+    "_fiber_content": "15% glass fibre (name)",
+    "_notes": "TDS text layer has the thermal table misaligned (values 231.6 / 201.4 / 422.8 / 232.6 / 87.3 C could not be matched to rows reliably), so Tg/Vicat/HDT are omitted. TDS: brass nozzle life about 9 h, keep below 20% RH; anneal only if >80C resistance is needed. bambu_parent is the brand's PET composite preset (CF, not GF)."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://wiki.polymaker.com/polymaker-products/polymaker-filaments/fiberon-tm/fiberon-tm-pet-gf15",
+    "https://fiberon.polymaker.com/wp-content/uploads/TDS_FIBERON-PET-GF15_V1.0_EN.pdf",
+    "https://shop.polymaker.com/products/fiberon-pet-gf15"
+  ],
+  "updated": "2026-11-01"
+}

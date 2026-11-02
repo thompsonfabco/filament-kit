@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "vendor": "SUNLU",
+  "product": "PC-ABS",
+  "material": "PC-ABS",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Generic PC",
+  "fields": {
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100-110",
+    "filament_retraction_length": "0.8-1.2",
+    "_hdt": "102+/-2",
+    "_colors_note": "Pass 1 recorded bare colour names, not full Spoolman names; match on vendor+product."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.sunlu.com/products/pc-abs-filament"
+  ],
+  "updated": "2026-11-01"
+}

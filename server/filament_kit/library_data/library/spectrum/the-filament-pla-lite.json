@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "vendor": "Spectrum",
+  "product": "The Filament PLA Lite",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Lite",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "195"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_density": [
+      "1.24"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "40-50",
+    "_cooling": "75-100%",
+    "_enclosure": "not necessary",
+    "_hardened_nozzle_required": "No"
+  },
+  "conflicts": [
+    "Official product page (https://spectrumfilaments.com/en/filament/the-filament-pla-lite/) lists nozzle 195-225; TDS dated 23-07-2025 values kept in fields/published_ranges."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://spectrumfilaments.com/wp-content/uploads/2025/09/en_tds_the_filament_pla_lite.pdf",
+    "https://spectrumfilaments.com/en/filament/the-filament-pla-lite/"
+  ],
+  "updated": "2026-11-01"
+}

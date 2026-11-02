@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "vendor": "QIDI Tech",
+  "product": "PLA Matte Basic",
+  "material": "PLA",
+  "colors": [
+    "Latte Brown",
+    "Sesame Black",
+    "Coconut White",
+    "Mint Blue",
+    "Malt Green",
+    "Peach Pink",
+    "Watermelon Red",
+    "Milky green"
+  ],
+  "bambu_parent": "Bambu PLA Matte",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.32"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "textured_plate_temp": "50-60 (filament guide)",
+    "cool_plate_temp": "35-45 (filament guide)",
+    "_drying": "50-55C 6-8h (product page); 50-60C 4-6h (filament guide)",
+    "_print_speed": "30-50 mm/s (TDS); 20-300 mm/s (product page)",
+    "_vitrification": "65.4 (Tg, DSC)",
+    "_vicat": "61.1 (X-Y) / 61.8 (Z)",
+    "_hdt_0.45MPa": "55.5 (X-Y) / 56.9 (Z)",
+    "_ams": "QIDI BOX compatible per QIDI",
+    "_notes": "HDT 1.8MPa 55 (X-Y) / 53.8 (Z). TDS cooling fan 0-10% (test-style settings). Water absorption 0.42%."
+  },
+  "conflicts": [
+    "product page: nozzle 190-240C, bed 30-60C with glue (https://qidi3d.com/products/pla-matte-basic)"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://drive.google.com/file/d/1pV5jG8blQE5CLxda3V22T1Z9Eve2ZZ7C/view",
+    "https://qidi3d.com/products/pla-matte-basic",
+    "https://qidi3d.com/pages/choose-the-right-filament-3d-filaments-guide-for-qidi-printers"
+  ],
+  "updated": "2026-11-01"
+}

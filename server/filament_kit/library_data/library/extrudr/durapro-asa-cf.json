@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "vendor": "Extrudr",
+  "product": "DuraPro ASA CF",
+  "material": "ASA-CF",
+  "colors": [],
+  "bambu_parent": "Bambu ASA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.14"
+    ],
+    "filament_max_volumetric_speed": [
+      "12"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "110",
+    "fan_min_speed/fan_max_speed": "0-30%",
+    "_print_speed": "20-200 mm/s",
+    "_enclosure": "yes",
+    "_hardened_nozzle_required": "yes",
+    "_min_nozzle": "0.5 mm (catalogue settings are given for a 0.5 mm nozzle)",
+    "_fiber_content": "12 %vol carbon fibre",
+    "_vicat": "101 (Vicat A, ASTM D1525, 4 mm wall)",
+    "_hdt_0.45MPa": "96 (HDT/B, ASTM D648)",
+    "_notes": "Bed adhesive recommended. Shrinkage 0.3%. UL94 HB. Diameter not stated in the catalogue, so filament_diameter is left unset."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://s3.extrudr.com/extrudr-media/product-catalogue/extrudr-Produktkatalog_EN.pdf"
+  ],
+  "updated": "2026-11-01"
+}

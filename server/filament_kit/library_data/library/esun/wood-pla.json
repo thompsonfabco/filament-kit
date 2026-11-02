@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "Wood PLA",
+  "material": "PLA",
+  "colors": [
+    "Wood PLA Cherry"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60",
+    "fan_max_speed": "100",
+    "_print_speed": "40-100",
+    "_hdt_0.45MPa": "45",
+    "_notes": "Active foaming PLA. TDS precautions: lower extruder temperature to reduce stringing; keep printing speed 20-30 mm/s. MFI 17 g/10min (190C/2.16kg).",
+    "_vitrification": "45 (HDT)"
+  },
+  "conflicts": [
+    "[pass 3] Other eSUN product copy states bed 45-60C and extruder 210-235C; TDS used.",
+    "[pass 3] Spool label states 190-210C.",
+    "[pass 3] Brand inferred from label format; not confirmed from listing B0D813CY1C.",
+    "[merge] density 0.7 not applied: the TDS describes eSUN's active-foaming wood PLA and the brand of this spool is unconfirmed; Spoolman keeps its existing density"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://www.esun3d.com/uploads/eSUN_Wood-Filament_TDS_V4.0.pdf",
+    "https://www.esun3d.com/news/7222"
+  ],
+  "updated": "2026-11-01"
+}

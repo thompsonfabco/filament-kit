@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "PETG+",
+  "material": "PETG",
+  "colors": [],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.27"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "75-90",
+    "fan_max_speed": "100",
+    "_drying": "60C >8h",
+    "_print_speed": "<=250",
+    "_hdt_0.45MPa": "70",
+    "_notes": "eSUN PETG+ TDS v1.0 Nov 2025. Density 1.27+/-0.01. Nozzle sizes 0.2/0.4/0.6/0.8 mm. Diameter not stated in TDS."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://assets.spoolscout.com/tds-sds/esun/tds/esun-petg-plus-tds-v1.0-2025-11.pdf",
+    "https://www.spoolscout.com/data-sheets/esun/petg-plus"
+  ],
+  "updated": "2026-11-01"
+}

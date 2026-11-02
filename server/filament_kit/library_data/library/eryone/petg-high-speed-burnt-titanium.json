@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "PETG High-Speed Burnt Titanium",
+  "material": "PETG",
+  "colors": [
+    "Green",
+    "Blue",
+    "Rose red",
+    "Dark gold",
+    "Blue purple"
+  ],
+  "bambu_parent": "Bambu PETG HF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.25"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "75-80",
+    "_drying": "65C 12h",
+    "_print_speed": "30-600mm/s",
+    "_vicat": "78 (ASTM D1525)",
+    "_hdt": "67 (ASTM D648; load not stated)",
+    "_vitrification": "68 (Tg, DSC 10C/min)",
+    "_bottom_printing_temperature": "230-250",
+    "_enclosure": "enclosed printing/open printing"
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0252/0412/9841/files/ERYONE-HP_Burnt_Titanium_PETG-TDS.pdf",
+    "https://eryone3d.com/products/petg-high-speed-burnt-titanium"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "vendor": "Protopasta",
+  "product": "High Strength Carbon Fiber PCTG",
+  "material": "PCTG",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Generic PCTG",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "255"
+    ],
+    "nozzle_temperature_range_high": [
+      "275"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_bed": "70+C (page text) / 80+C (page feature list)",
+    "_hardened_nozzle_required": "Not stated on the cited pages for this line; carbon fiber fill, and Protopasta's CF PLA/PETG rows recommend hard steel nozzle + gears",
+    "_notes": "Product page: nozzle 255+C, 'We print up to 275 C, but 255 C is a good compromise'; processing from 255+C @ 2 mm3/s; start from Generic PETG or PCTG profile. Higher CF % than High Impact version. No density or max flow published."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://proto-pasta.com/products/black-high-strength-carbon-fiber-pctg",
+    "https://proto-pasta.com/blogs/stories/endless-exploration-ex12-jan-2026-high-performance-pctg-composites"
+  ],
+  "updated": "2026-11-01"
+}

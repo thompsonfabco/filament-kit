@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "vendor": "Inland",
+  "product": "Silk PLA",
+  "material": "PLA",
+  "colors": [
+    "Silver",
+    "Gray",
+    "Blue",
+    "Black",
+    "Purple",
+    "Yellow",
+    "Orange",
+    "White",
+    "Green",
+    "Gold",
+    "Magenta",
+    "Pink"
+  ],
+  "bambu_parent": "Bambu PLA Silk",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-80",
+    "_diameter_tolerance": "+/-0.05",
+    "_notes": "Key features on multiple colour listings (microcenter.com, read via search index; direct fetch 403). High Speed Silk and Dual Color Silk are separate products not covered here. Density not published."
+  },
+  "conflicts": [
+    "nozzle_temperature_range_high: 230 (INLAND Silk (Silk Fusion) Amazon listing: 'Recommended Extrusion/Nozzle Temperature: 190°C - 230°C', bed 60-80, accuracy +/-0.05 in bullets but +/-0.03 in title; one Micro Center spec table also gives 190-230) - https://www.amazon.com/dp/B09FW2HVJJ"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.microcenter.com/product/611558/inland-silk-175mm-silver-pla-3d-printer-filament-1kg-spool-(22-lbs)",
+    "https://www.microcenter.com/product/623237/inland-175mm-blue-silk-pla-3d-printer-filament-1kg-spool-(22-lbs)",
+    "https://www.amazon.com/dp/B09FW2HVJJ"
+  ],
+  "updated": "2026-11-01"
+}

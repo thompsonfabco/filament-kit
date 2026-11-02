@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "vendor": "Atomic Filament",
+  "product": "Carbon Fiber ASA",
+  "material": "ASA-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu ASA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "110-120",
+    "_hardened_nozzle_required": "yes - hardened or wear-resistant nozzle (mildly abrasive)",
+    "_min_nozzle": "0.4 (0.5 recommended)",
+    "_enclosure": "heated build plate required; enclosure strongly recommended; ventilation",
+    "_fiber_content": "milled carbon fiber; ASA SDS lists carbon fiber 0-10%",
+    "_vitrification": "105 (Tg, Atomic ASA SDS - covers CF grades)",
+    "_diameter_tolerance": "+/-0.02",
+    "_ams": "1 kg sold as AMS compatible; CF is mildly abrasive",
+    "_notes": "Nozzle/bed from the CF ASA sample coil page and 3.5 kg page. The ASA SDS (which includes 0-10% CF) gives specific gravity '1.07~' but that is not CF-specific, so density is left out. Atomic FAQ ASA/ABS drying (80C 4-8h) not recorded: FAQ not CF-specific and not among this entry's sources."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://atomicfilament.com/products/carbon-fiber-black-asa",
+    "https://atomicfilament.com/products/carbon-fiber-black-asa-copy",
+    "https://atomicfilament.com/products/sample-coil-asa-carbon-fiber-black",
+    "https://cdn.shopify.com/s/files/1/0778/8857/files/Atomic-ASA-SDS-2025-ALL.pdf?v=1763749233"
+  ],
+  "updated": "2026-11-01"
+}

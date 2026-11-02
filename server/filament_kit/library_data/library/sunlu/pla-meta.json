@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "vendor": "SUNLU",
+  "product": "PLA Meta",
+  "material": "PLA",
+  "colors": [
+    "PLA Meta Ice Blue"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "185"
+    ],
+    "nozzle_temperature_range_high": [
+      "225"
+    ],
+    "filament_density": [
+      "1.21"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "_nozzle_by_speed": "185-195C@50-100mm/s; 195-225C@100-200mm/s",
+    "filament_shrink": "99.7%-99.9% (published 0.1-0.3%)",
+    "filament_retraction_length": "0.8-1.2",
+    "filament_retraction_speed": "30-40",
+    "_drying": "50C",
+    "_hdt": "57+/-3",
+    "_vitrification": "54 (Vicat)"
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.sunlu.com/products/pla-meta-filament",
+    "https://store.sunlu.com/products/over-6kg-bundle-sales-1-75mm-sunlu-pla-metamacaron-colors-3d-printer-filament-1kg-roll"
+  ],
+  "updated": "2026-11-01"
+}

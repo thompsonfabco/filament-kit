@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "vendor": "Spectrum",
+  "product": "GreenyHT",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_density": [
+      "1.54"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "0-45",
+    "_print_speed": "30-100 mm/s",
+    "_cooling": "50-85%",
+    "_enclosure": "not necessary",
+    "_hardened_nozzle_required": "recommended",
+    "_vicat": "98 (EN ISO 306)",
+    "_notes": "High-temperature bio-based PLA compound; TDS recommends ruby/hardened nozzle (product page says No)."
+  },
+  "conflicts": [
+    "Official product page (https://spectrumfilaments.com/en/filament/greenyht/) lists nozzle 185-230, bed 0-50, print speed 40-800 mm/s; TDS dated 06-04-2022 values kept in fields/published_ranges."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://spectrumfilaments.com/wp-content/uploads/2022/10/en_tds_spectrum_greenyht.pdf",
+    "https://spectrumfilaments.com/en/filament/greenyht/"
+  ],
+  "updated": "2026-11-01"
+}

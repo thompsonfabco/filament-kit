@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "CarbonX PA12+CF",
+  "material": "PA12-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu PA-CF",
+  "fields": {
+    "filament_density": [
+      "1.16"
+    ]
+  },
+  "published_ranges": {
+    "_vitrification": "158 (Tg, DSC)",
+    "_hdt_0.45MPa": "150",
+    "_notes": "3DXTech Tech Data Sheet Rev 1.0 (copy hosted by sic-components). Specimen print conditions only, no recommended range: 285C nozzle, 110C bed, 0.4mm nozzle, 0.25mm layers. Surface resistance >10^8 ohm/sq. No nozzle range found. Filament diameter not printed on the cited TDS (removed in source check)."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://datasheet.sic-components.com/CF_PA12_v1.pdf"
+  ],
+  "updated": "2026-11-01"
+}

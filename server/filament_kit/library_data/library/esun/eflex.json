@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "eFlex",
+  "material": "TPU",
+  "colors": [],
+  "bambu_parent": "Generic TPU",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.12"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "45-60",
+    "fan_max_speed": "100",
+    "_drying": "55C >4h",
+    "_print_speed": "20-50",
+    "_hardness": "87A",
+    "_ams": "not AMS/Bowden compatible: TDS says it cannot be printed with a remote (Bowden) extruder",
+    "_notes": "eSUN eFlex (transparent flexible TPU, 87A; spoolscout lists it as TPU-85A) TDS v4.0 Nov 2021. Diameter not stated in TDS."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://assets.spoolscout.com/tds-sds/esun/tds/esun-tpu-85a-tds-v4.0-2021-11.pdf",
+    "https://www.spoolscout.com/data-sheets/esun/tpu-tpu-85a-formerly-eflex-eflextpu-87a"
+  ],
+  "updated": "2026-11-01"
+}

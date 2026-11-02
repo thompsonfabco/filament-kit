@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "vendor": "Polymaker",
+  "product": "Fiberon PPS-GF20",
+  "material": "PPS-GF",
+  "colors": [
+    "Grey"
+  ],
+  "bambu_parent": "Generic PPS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "310"
+    ],
+    "nozzle_temperature_range_high": [
+      "350"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80-90",
+    "chamber_temperatures": "room temp",
+    "fan_max_speed": "0 (OFF)",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "20-40",
+    "_print_speed": "up to 250",
+    "_drying": "100C 10h",
+    "_annealing": "130C 10h",
+    "_hardened_nozzle_required": "yes",
+    "_vicat": "272.5",
+    "_hdt": "125.8 (1.8), 236.3 (0.45)",
+    "_colors_note": "Pass 1 recorded bare colour names, not full Spoolman names; match on vendor+product.",
+    "_vitrification": "95.0 (Tg)"
+  },
+  "conflicts": [
+    "[pass 1] Wiki: environment 25-80C vs TDS room temp",
+    "[pass 1] Product page bed 90C single value"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://fiberon.polymaker.com/wp-content/uploads/TDS_FIBERON-PPS-GF20_V1.1.pdf",
+    "https://shop.polymaker.com/products/fiberon-pps-gf20",
+    "https://wiki.polymaker.com/polymaker-products/polymaker-filaments/fiberon-tm/fiberon-tm-pps-gf20",
+    "https://manuals.plus/m/2a2f32e737ecae8509160bcadd33ab263c26cd8e7d6334f38e935890136b0c66"
+  ],
+  "updated": "2026-11-01"
+}

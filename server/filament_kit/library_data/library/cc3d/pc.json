@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "vendor": "CC3D",
+  "product": "PC",
+  "material": "PC",
+  "colors": [
+    "PC Green",
+    "PC Orange"
+  ],
+  "bambu_parent": "Generic PC",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "255"
+    ],
+    "nozzle_temperature_range_high": [
+      "265"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-105",
+    "_print_speed": "30-60 mm/s",
+    "_diameter_tolerance": "+/-0.05",
+    "_notes": "Modified PC, not 100% pure PC: about 50% PC + 45% PETG + 5% other materials. Heat resistance temperature 100C (listing wording, test method not stated)."
+  },
+  "conflicts": [
+    "[pass 4] Values come from woodartsupply.com pages that mirror the Amazon product description of B0D14HVP7B (Orange) and B0D14KK37Q (Green); this is a mirror of the brand listing's description, not a TDS. The live Amazon bullets show only 'withstands temperatures well over 110C'. Seller on Amazon is 'zhuopu new material' (manufacturer Hangzhou Zhuopu New Materials, CC3D's maker).",
+    "[pass 4] The mirrored description gives two nozzle ranges: 255-265C (Features) and 245-265C (Details); and two speeds: 30-60 mm/s (Features) and 30-90 mm/s (Details). The Details values are used.",
+    "[pass 4] No CC3D website or TDS was found.",
+    "[merge] fields.nozzle_temperature_range_low: pass 6 value [\"255\"] replaced earlier value [\"245\"]",
+    "[merge] published_ranges._print_speed: pass 6 value \"30-60 mm/s\" replaced earlier value \"30-90\"",
+    "[merge] published_ranges._notes: pass 6 value \"Modified PC, not 100% pure PC: about 50% PC + 45% PETG + 5% other materials. Heat resistance temperature 100C (listing wording, test method not stated).\" replaced earlier value \"Modified PC, NOT pure PC: '50% PC + 45% PETG + 5% Other Materials'. Withstands 110C. Part numbers C004109 (Orange), C004111 (Green). No density, drying, fan or enclosure values published.\"",
+    "[pass 6] All Amazon.ca B0D14KK37Q values are from a search-result snippet (fetch blocked by robots); seller not visible in snippet.",
+    "[pass 6] Reseller mirror (woodartsupply) of the brand description states 245-265C (and 255-265C elsewhere), 30-90 mm/s and withstands >110C.",
+    "[pass 6] PC Orange (B0D14HVP7B) treated as same listing family as PC Green; not separately verified.",
+    "[pass 6] CC3D Transparent PC on Walmart (250-265C, bed 105-120C) is a different listing; not used."
+  ],
+  "source_quality": "brand_amazon_listing",
+  "sources": [
+    "https://woodartsupply.com/products/cc3d-orange-pc-filament-1-75-mm-3d-printer-filament-1-kg-spool-2-2-lbs-dimensional-accuracy-0-05-mm-3d-printing-material-polycarbonate-orange",
+    "https://woodartsupply.com/products/cc3d-pc-filament-green-1-75-mm-3d-printer-filament-1-kg-spool-2-2-lbs-dimensional-accuracy-0-05-mm-3d-printing-material-polycarbonate-green",
+    "https://www.amazon.com/dp/B0D14HVP7B",
+    "https://www.amazon.com/dp/B0D14KK37Q",
+    "https://www.amazon.ca/CC3D-Filament-Dimensional-Accuracy-Polycarbonate/dp/B0D14KK37Q"
+  ],
+  "updated": "2026-11-01"
+}

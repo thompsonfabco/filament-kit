@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "vendor": "Polymaker",
+  "product": "PolySonic PLA Pro",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Generic PLA High Speed",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.23"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "30-60",
+    "fan_max_speed": "ON",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "20-40",
+    "_nozzle_by_speed": "classic 50-100 mm/s: 190-210; high-speed 100-300 mm/s: 210-230",
+    "_print_speed": "classic 50-100; high-speed 100-300",
+    "_max_print_speed": "300",
+    "_drying": "55C 6h",
+    "_enclosure": "not needed",
+    "_vitrification": "61 (Tg, DSC)",
+    "_vicat": "61",
+    "_hdt_0.45MPa": "55",
+    "_hdt_1.8MPa": "52",
+    "_ams": "Polymaker wiki: spools redesigned so all Polymaker products spin well in the AMS.",
+    "_notes": "fields hold the TDS high-speed range (highest). Wiki print-settings table gives the combined 190-230 C, bed 25-60 C. Not listed in the US Polymaker shop on 2026-11-01."
+  },
+  "conflicts": [
+    "Wiki print-settings table: bed 25-60 C (TDS: 30-60 C)"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://wiki.polymaker.com/polymaker-products/polymaker-filaments/prime-materials/functional-pla/polysonic-tm-pla-pro",
+    "https://cdn.shopify.com/s/files/1/0548/7299/7945/files/PolySonic_PLA_Pro_TDS_EN_V5.4.pdf"
+  ],
+  "updated": "2026-11-01"
+}

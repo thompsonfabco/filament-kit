@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "ePAHT-CF",
+  "material": "PAHT-CF",
+  "colors": [],
+  "bambu_parent": "Bambu PAHT-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "260"
+    ],
+    "nozzle_temperature_range_high": [
+      "300"
+    ],
+    "filament_density": [
+      "1.4"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "45-60",
+    "fan_max_speed": "0",
+    "_drying": "70C >12h",
+    "_print_speed": "40-100",
+    "_hdt_0.45MPa": "190",
+    "_fiber_content": "15% carbon fibre (PA6 base, with LUVOCOM)",
+    "_hardened_nozzle_required": "yes (hardened steel or ruby nozzle; hardened extruder gears preferred)",
+    "_ams": "stiff filament: avoid tight bends in the feed path",
+    "_notes": "eSUN ePAHT-CF TDS (file v4.01 Aug 2024; header Nov 2021 v4.0). TDS: continuous use 150C, short-term use 180C. Use with dry box (eBOX); skirt recommended. Diameter not stated in TDS."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://assets.spoolscout.com/tds-sds/esun/tds/esun-paht-cf-tds-v4.01-2024-08.pdf",
+    "https://www.spoolscout.com/data-sheets/esun/high-temperature-nylon-carbon-fiber-epaht-cf"
+  ],
+  "updated": "2026-11-01"
+}

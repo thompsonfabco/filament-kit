@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "vendor": "Bambu Lab",
+  "product": "PLA Tough+",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Tough+",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.21"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "35-65",
+    "chamber_temperatures": "25-45",
+    "filament_retraction_length": "0.6-1.0",
+    "filament_retraction_speed": "20-40",
+    "_drying": "55C 8h",
+    "_drying_x1_h2d_heatbed": "65-75C 12h",
+    "_drying_ams2pro_amsht": "55C 8h",
+    "_max_print_speed": "<300 mm/s",
+    "_vitrification": "61 (Tg, DSC 10C/min)",
+    "_vicat": "62 (ISO 306)",
+    "_hdt_0.45MPa": "61",
+    "_hdt_1.8MPa": "58",
+    "_melting_point": "151 (DSC)",
+    "_annealing": "50-60C 6-12h",
+    "_ams": "AMS, AMS 2 PRO, AMS HT, AMS Lite",
+    "_notes": "TDS V3.0. Nozzle sizes 0.2/0.4/0.6/0.8 mm. Plates: Textured PEI / Smooth PEI / Cool Plate SuperTack; glue recommended (glue stick/liquid glue). Cooling fan on."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://store.bblcdn.com/s1/default/788ce5d74ab94508a6e3fcfee11159a5/Bambu_PLA_Tough_Technical_Data_Sheet.pdf"
+  ],
+  "updated": "2026-11-01"
+}

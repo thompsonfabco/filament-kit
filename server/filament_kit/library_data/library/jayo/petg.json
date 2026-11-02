@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "vendor": "JAYO",
+  "product": "PETG",
+  "material": "PETG",
+  "colors": [
+    "PETG Black",
+    "PETG Gray",
+    "PETG Transparent",
+    "PETG Transparent Blue",
+    "PETG Transparent Green",
+    "PETG Transparent Orange",
+    "PETG Transparent Purple",
+    "PETG Transparent Red",
+    "PETG Transparent Yellow",
+    "PETG White"
+  ],
+  "bambu_parent": "Generic PETG",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "75-85",
+    "_print_speed": "50-100 mm/s",
+    "_diameter_tolerance": "+/-0.02 mm",
+    "_drying": "50C (time not stated)",
+    "_notes": "Nozzle, bed and speed from store.jayo3d.com (earlier pass). Drying from JAYO blog settings table for PETG."
+  },
+  "conflicts": [
+    "[pass 2] Spool label: 230-260C by speed tier.",
+    "[pass 2] JAYO 5 kg PETG page: 220-230C, bed 60-70C (different SKU).",
+    "[merge] published_ranges._print_speed: pass 5 value \"50-100 mm/s\" replaced earlier value \"50-100\"",
+    "[merge] published_ranges._diameter_tolerance: pass 5 value \"+/-0.02 mm\" replaced earlier value \"+/-0.02\"",
+    "[pass 5] JAYO blog settings table lists PETG nozzle 230-240C, bed 60-70C, fan 100%, 40-60 mm/s, retraction 5 mm @50 mm/s; store page values kept as primary"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.jayo3d.com/products/jayo-petg-3d-printing-filament-1-1kg",
+    "https://www.amazon.co.uk/JAYO-Filament-Printer-Dimensional-Accuracy/dp/B0BHQPJJ21",
+    "https://jayo3d.com/blogs/news/getting-optimal-3d-prints-settings-and-tips-for-different-filament-materials"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "vendor": "Inland",
+  "product": "Matte PLA",
+  "material": "PLA",
+  "colors": [
+    "White",
+    "Orange",
+    "Black",
+    "Ash Gray",
+    "Denim"
+  ],
+  "bambu_parent": "Bambu PLA Matte",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "25-60",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "Values from the Matte White and Matte Orange listings (microcenter.com, read via search index; direct fetch 403). Ranges vary by colour listing, see conflicts. Density not published."
+  },
+  "conflicts": [
+    "nozzle_temperature_range: 190-220 (bed 60-80, tolerance +/-0.05) (Ash Gray listing) - https://www.microcenter.com/product/675731/inland-175mm-matte-pla-3d-printer-filament-10-kg-(22-lbs)-spool-ash-gray",
+    "bed_all_plates: 60-80 (White listing recommended-settings section; its key features say 25-60) - https://www.microcenter.com/product/642922/inland-175mm-pla-matte-3d-printer-filament-10-kg-(22-lbs)-spool-white"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.microcenter.com/product/642922/inland-175mm-pla-matte-3d-printer-filament-10-kg-(22-lbs)-spool-white",
+    "https://www.microcenter.com/product/642917/inland-175mm-pla-matte-3d-printer-filament-10-kg-(22-lbs)-cardboard-spool-orange"
+  ],
+  "updated": "2026-11-01"
+}

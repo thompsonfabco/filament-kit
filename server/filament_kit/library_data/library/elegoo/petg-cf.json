@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "ELEGOO",
+  "product": "PETG-CF",
+  "material": "PETG-CF",
+  "colors": [
+    "Blue",
+    "Green",
+    "Purple",
+    "Red"
+  ],
+  "bambu_parent": "Generic PETG-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "65-75",
+    "chamber_temperatures": "25-50",
+    "_print_speed": "<220",
+    "_hardened_nozzle_required": "yes",
+    "_hdt_0.45MPa": "74",
+    "_colors_note": "Pass 1 recorded bare colour names, not full Spoolman names; match on vendor+product.",
+    "_vitrification": "83 (Vicat)"
+  },
+  "conflicts": [
+    "[pass 1] Drying 60+/-5C 8h (table) vs 70C 8h (notes)"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://eu.elegoo.com/products/petg-cf-filament-1-75mm-colored-1kg"
+  ],
+  "updated": "2026-11-01"
+}

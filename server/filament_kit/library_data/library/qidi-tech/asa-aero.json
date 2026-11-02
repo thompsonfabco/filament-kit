@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "vendor": "QIDI Tech",
+  "product": "ASA-Aero",
+  "material": "ASA",
+  "colors": [
+    "Black",
+    "Natural"
+  ],
+  "bambu_parent": "Bambu ASA-Aero",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80-110",
+    "chamber_temperatures": "40-70 (ambient)",
+    "fan_min_speed/fan_max_speed": "0-50%",
+    "filament_retraction_length": "off (recommended)",
+    "_drying": "70-80C 6-8h (filament guide)",
+    "_print_speed": "30-90 mm/s",
+    "_hdt_0.45MPa": "70",
+    "_min_nozzle": "0.4 (0.6+ recommended for thin walls without insulation)",
+    "_enclosure": "enclosed printer in a ventilated room",
+    "_notes": "Foaming ASA: foaming ratio set by nozzle temperature (up to 250%); TDS test specimens used 50% flow. TDS density 1.03 g/cm3 is measured by ISO 845 (cellular-plastics method), so it is not put in filament_density. HDT 1.8MPa 55C. Unavoidable stringing: turn retraction off."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://drive.google.com/file/d/15phWOoaQqLDTHUFiHklw-YodWG2iMFCh/view",
+    "https://qidi3d.com/products/qidi-tech-asa-areo-filament",
+    "https://qidi3d.com/pages/choose-the-right-filament-3d-filaments-guide-for-qidi-printers"
+  ],
+  "updated": "2026-11-01"
+}

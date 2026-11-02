@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "ABS+",
+  "material": "ABS",
+  "colors": [],
+  "bambu_parent": "Bambu ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.06"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "95-110",
+    "fan_max_speed": "0",
+    "_print_speed": "40-100",
+    "_hdt_0.45MPa": "73",
+    "_enclosure": "closed chamber recommended (high shrinkage)",
+    "_notes": "eSUN ABS+ TDS v4.0 Nov 2021. TDS: fan can be turned on to improve overhangs. Drying N/A in TDS. Diameter not stated in TDS."
+  },
+  "conflicts": [
+    "eSUN 3D Printing Material Datasheet (2019, https://cdn.shopify.com/s/files/1/1745/6181/files/eSUN_3D_Printing_Filament_Datasheet.pdf): ABS+ 220-260C, bed 90-110C, density 1.06, HDT 73C."
+  ],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://assets.spoolscout.com/tds-sds/esun/tds/esun-abs-plus-v4-tds.pdf",
+    "https://www.spoolscout.com/data-sheets/esun/abs-plus"
+  ],
+  "updated": "2026-11-01"
+}

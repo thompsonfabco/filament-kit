@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "vendor": "AMOLEN",
+  "product": "PETG Transparent Rainbow",
+  "material": "PETG",
+  "colors": [],
+  "bambu_parent": "Bambu PETG Translucent",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-70",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "Gradient translucent PETG. Page publishes only nozzle/bed/diameter/tolerance; its 210-240C nozzle / 50-70C bed differ from the PETG Transparent page (230-260C / 30-65C)."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.amolen.com/products/petg-transparent-rainbow"
+  ],
+  "updated": "2026-11-01"
+}

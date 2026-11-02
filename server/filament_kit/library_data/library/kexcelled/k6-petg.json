@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "vendor": "Kexcelled",
+  "product": "K6 PETG",
+  "material": "PETG",
+  "colors": [],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "245"
+    ],
+    "nozzle_temperature_range_high": [
+      "275"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-110",
+    "_density": "1.26-1.28 g/cm3 (ISO 1183)",
+    "_vitrification": "~66 (Tg, ISO 11357)",
+    "_hdt_0.45MPa": "102",
+    "_vicat": "111 (10N)",
+    "_print_speed": "100 mm/s",
+    "_cooling_fan": "0-50%",
+    "_bed_surface": "Tape or glue",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "TDS 'THE K6 PETG' rev 04, 20/02/2025 (high-heat PETG; note the 90-110C bed, well above standard PETG); settings based on a 0.4mm nozzle. Density is a range, so filament_density left unset. No drying spec published."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0958/0111/4939/files/THE_K6_PETG_TDS.pdf"
+  ],
+  "updated": "2026-11-01"
+}

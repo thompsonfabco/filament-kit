@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "vendor": "Creality",
+  "product": "Ender-PLA",
+  "material": "PLA",
+  "colors": [
+    "White",
+    "Black"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "No heating-60",
+    "_print_speed": "40-100 mm/s",
+    "_environment_temp": "<60",
+    "_notes": "Creality filament parameter reference table (2024-12-23): recommended 200C nozzle, 50C bed, 50 mm/s. Sold as a 2 kg value pack on the Creality store."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.creality.com/uk/blogs/basics/creality-filaments-parameter-reference-table",
+    "https://store.creality.com/products/ender-pla-value-pack-2-spools-pack"
+  ],
+  "updated": "2026-11-01"
+}

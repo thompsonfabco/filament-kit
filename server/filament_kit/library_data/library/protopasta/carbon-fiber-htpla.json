@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "vendor": "Protopasta",
+  "product": "Carbon Fiber HTPLA",
+  "material": "PLA",
+  "colors": [
+    "Black",
+    "Dark Gray",
+    "Light Gray"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.3"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "12"
+    ]
+  },
+  "published_ranges": {
+    "_nozzle_by_speed": "220C @ 6 mm3/s; 240C @ 12 mm3/s (Material Data Table); 205C @ 2-4 mm3/s, 20-40 mm/s (TDS, Ultimaker S5 profile)",
+    "_bed": "55C plate (Material Data Table); 60C heated bed (TDS)",
+    "_fiber_content": "10 wt% milled carbon fiber (TDS)",
+    "_hardened_nozzle_required": "Hard steel nozzle + gears recommended (Material Data Table)",
+    "_vitrification": "approx. 60 (Tg onset, TDS)",
+    "_annealing": "95-110C for 10+ minutes; pre-scale x/y 100.6%, z 99% (TDS)",
+    "_notes": "Max particle 0.15 mm; min bend diameter 40 mm. Replace tubing more often with rough filament. Protopasta names the Generic PLA profile."
+  },
+  "conflicts": [
+    "Density: 1.15 g/cc in the CF PLA/HTPLA SDS (https://cdn.shopify.com/s/files/1/0717/9095/files/PLA_HTPLA_CF.pdf) vs approx. 1.3 g/cc in the TDS"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0717/9095/files/TDS__CarbonFiber_HTPLA_1.0.1.pdf",
+    "https://proto-pasta.com/pages/material-data-table",
+    "https://cdn.shopify.com/s/files/1/0717/9095/files/PLA_HTPLA_CF.pdf"
+  ],
+  "updated": "2026-11-01"
+}

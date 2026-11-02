@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "vendor": "Creality",
+  "product": "Hyper PETG-CF",
+  "material": "PETG-CF",
+  "colors": [
+    "Black",
+    "Night Gray",
+    "Dusk Blue",
+    "Night Gray Tea",
+    "Rocks Red Milk",
+    "Timber Green",
+    "Phantom Purple"
+  ],
+  "bambu_parent": "Bambu PETG-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.24"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-90",
+    "fan_max_speed": "80%",
+    "_print_speed": "30-300 mm/s",
+    "_hardened_nozzle_required": "Hardened steel or other wear-resistant nozzle recommended",
+    "_notes": "Print surface: carbon-silicon crystal plate or PEI sheet. Tensile strength (X-Y) 44.9 MPa, elongation at break 8.7%, flexural strength 88.1 MPa. Sold with RFID tag (Creality CFS). Japanese store page lists different colour names (Danxia Red, Ancient Wood Green, Caramel Brown Coffee, Tea Brown) for the same line."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.creality.com/products/hyper-petg-cf-3d-printing-filament-1kg",
+    "https://store.creality.com/jp/products/hyper-petg-cf-3d-printing-filament"
+  ],
+  "updated": "2026-11-01"
+}

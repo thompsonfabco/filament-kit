@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "vendor": "GEEETECH",
+  "product": "PLA",
+  "material": "PLA",
+  "colors": [
+    "PLA New Purple",
+    "PLA Skin",
+    "PLA Transparent"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "180"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-70",
+    "filament_retraction_length": "2-3",
+    "filament_retraction_speed": "45",
+    "fan_max_speed": "100",
+    "_notes": "GEEETECH wiki generic 'Geeetech PLA' Cura settings: retraction 2-3 mm direct drive, 6 mm Bowden; initial layer fan 0%."
+  },
+  "conflicts": [
+    "[pass 3] Wiki gives generic Geeetech PLA settings, not per-colour values.",
+    "[pass 3] Not verified whether 'PLA Transparent' is a separate GEEETECH product."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://wiki.geeetech.com/index.php/Filament"
+  ],
+  "updated": "2026-11-01"
+}

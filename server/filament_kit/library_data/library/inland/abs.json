@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "vendor": "Inland",
+  "product": "ABS",
+  "material": "ABS",
+  "colors": [
+    "Black",
+    "Red",
+    "White",
+    "Silver"
+  ],
+  "bambu_parent": "Bambu ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80-110",
+    "_enclosure": "Not stated by Inland; ABS normally benefits from an enclosure.",
+    "_notes": "Values from the Black 1.75 mm plastic-spool listing (microcenter.com, read via search index; direct fetch 403). Newer cardboard-spool ABS colours (Neon Green, Galaxy Black) list 245-265 / 90-100 - see conflicts. Also sold in 2.85 mm. Density not published."
+  },
+  "conflicts": [
+    "bed_all_plates: 110 (Red and White listings give plate 110) - https://www.microcenter.com/product/485646/inland-175mm-red-abs-3d-printer-filament---1kg-spool-(22-lbs)",
+    "nozzle_temperature_range: 245-265 (bed 90-100, tolerance +/-0.05) (Neon Green and Galaxy Black cardboard-spool listings) - https://www.microcenter.com/product/675741/inland-175mm-abs-3d-printer-filament-10-kg-(22-lbs)-cardboard-spool-neon-green",
+    "nozzle_temperature_range: 230-260 (bed 110) (2.85 mm Black listing) - https://www.microcenter.com/product/486464/inland-285mm-black-abs-3d-printer-filament-1kg-spool-(22-lbs)",
+    "bed_all_plates: 110 (Black listing key features; its body text recommends 80-110) - https://www.microcenter.com/product/485643/inland-175mm-abs-3d-printer-filament-10-kg-(22-lbs)-spool-black",
+    "nozzle_temperature_range_low: 240 (Black listing specs section gives extrusion temperature 240-260) - https://www.microcenter.com/product/485643/inland-175mm-abs-3d-printer-filament-10-kg-(22-lbs)-spool-black"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.microcenter.com/product/485643/inland-175mm-abs-3d-printer-filament-10-kg-(22-lbs)-spool-black"
+  ],
+  "updated": "2026-11-01"
+}

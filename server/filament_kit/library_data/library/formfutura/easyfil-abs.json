@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "EasyFil ABS",
+  "material": "ABS",
+  "colors": [],
+  "bambu_parent": "Bambu ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "255"
+    ],
+    "filament_density": [
+      "1.05"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100",
+    "fan_min_speed/fan_max_speed": "0-35",
+    "_print_speed": "25-100 mm/s (TDS regular speed)",
+    "_drying": "40C 6h (TDS: not necessary; printed as 40 - 40 C)",
+    "_enclosure": "No (TDS)",
+    "_min_nozzle": "0.15",
+    "_hdt": "85 (HDT A, ASTM D648)",
+    "_vicat": "93 (ASTM D1525)",
+    "_notes": "TDS bed printed as '100 - 100 C'. TDS material/thermal values are identical to the TitanX TDS. Page flow ~104%."
+  },
+  "conflicts": [
+    "Product page density 1.03 g/cc vs TDS specific gravity 1.05 g/cm3."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://formfutura.com/web/content/256508?download=true",
+    "https://formfutura.com/filaments/easyfil-abs"
+  ],
+  "updated": "2026-11-01"
+}

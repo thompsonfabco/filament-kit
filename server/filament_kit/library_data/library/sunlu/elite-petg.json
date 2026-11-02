@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "SUNLU",
+  "product": "Elite PETG",
+  "material": "PETG",
+  "colors": [
+    "Elite PETG Mango Yellow"
+  ],
+  "bambu_parent": "Generic PETG",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "65-75",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "Amazon bullet: 'print our PETG filament with a nozzle temperature between 220-250C and a bed temperature between 65-75C. We recommend drying the filament before use' (no drying temperature or time given). Reusable spool, AMS / AMS Lite compatible per listing. MPN SUNLU-PETG, model SUNLU-PETG-Mango Yellow-RN, UPC 850070936248. 'Elite' appears only in the titles of some listings in this Amazon family. No density, drying spec or volumetric speed published."
+  },
+  "conflicts": [
+    "[pass 4] BRAND QUESTION: Amazon B0DQTXXSL8 brand and manufacturer fields are YOOPAI, seller is YOOPAI Direct; bullets and title say 'SUNLU Official PETG'. US YOOPAI trademarks (90418638, 90418665, 90418649, filed 2020-12-28, including class 17 3D printing filaments) are owned by Shenzhen Anmaisi Technology Co., Ltd. No source found showing SUNLU owns or authorizes YOOPAI or Anmaisi. Treat as a third-party listing.",
+    "[pass 4] No 'Elite PETG' page found on sunlu.com or store.sunlu.com. The sunlu.com 'Reusable Spool PETG 3D Printer Filament 1KG' page lists +/-0.05 mm tolerance and no temperatures.",
+    "[pass 4] Unofficial reseller copy pages titled 'SUNLU Elite PETG' (goshoptechnology / freshstores) give bed 75-85C and 50-100 mm/s; not used."
+  ],
+  "source_quality": "brand_amazon_listing",
+  "sources": [
+    "https://www.amazon.com/dp/B0DQTXXSL8",
+    "https://markinton.com/trademark/yoopai-90418665",
+    "https://www.sunlu.com/products/sunlu-petg-3d-printer-filament-1kg2-2lbs-reusable-masterspool-dimensional-accuracy-1-75mm-0-02mm"
+  ],
+  "updated": "2026-11-01"
+}

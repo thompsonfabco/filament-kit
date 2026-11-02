@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "PETG High-Speed",
+  "material": "PETG",
+  "colors": [
+    "Black",
+    "White",
+    "Gray",
+    "Transparent red",
+    "Transparent blue",
+    "Transparent",
+    "Yellow",
+    "Red",
+    "Orange",
+    "Blue"
+  ],
+  "bambu_parent": "Bambu PETG HF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_density": [
+      "1.28"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "75-80",
+    "_drying": "65-75C 12h",
+    "_print_speed": "30-600mm/s",
+    "_vicat": "70 (ASTM D1525)",
+    "_hdt": "69 (ASTM D648; load not stated)",
+    "_diameter_tolerance": "+/-0.03",
+    "_bottom_printing_temperature": "240-280",
+    "_enclosure": "supports open printing, sealing effect is better if sealed",
+    "_notes": "TDS titled 'Hyper Speed PETG'."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0252/0412/9841/files/ERYONE-HP_PETG-TDS.pdf",
+    "https://eryone3d.com/products/petg-high-speed-filament"
+  ],
+  "updated": "2026-11-01"
+}

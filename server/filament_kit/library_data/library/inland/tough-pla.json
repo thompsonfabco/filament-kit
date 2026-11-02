@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "vendor": "Inland",
+  "product": "Tough PLA",
+  "material": "PLA",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu PLA Tough",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "25-60",
+    "_notes": "Older listing; may be discontinued. Read via search index of microcenter.com (direct fetch 403). Density and tolerance not confirmed."
+  },
+  "conflicts": [
+    "bed_all_plates: 30-60 (same listing, specs section; key features say 25-60) - https://www.microcenter.com/product/623242/inland-175mm-tough-pla-3d-printer-filament-10-kg-(22-lbs)-spool-black"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.microcenter.com/product/623242/inland-175mm-tough-pla-3d-printer-filament-10-kg-(22-lbs)-spool-black"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "PLA-Silk Mystic",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Silk",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.23"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "45-60",
+    "fan_max_speed": "100",
+    "_print_speed": "40-100",
+    "_notes": "eSUN PLA-Silk Mystic (tri-colour silk, sold as eSilk-PLA Mystic) TDS v4.0 Nov 2022. HDT printed as N/A in TDS. Diameter not stated in TDS."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://assets.spoolscout.com/tds-sds/esun/tds/esun-pla-silk-mystic-tds-v4.0-2022-11.pdf",
+    "https://www.spoolscout.com/data-sheets/esun/pla-esilk-pla-mystic"
+  ],
+  "updated": "2026-11-01"
+}

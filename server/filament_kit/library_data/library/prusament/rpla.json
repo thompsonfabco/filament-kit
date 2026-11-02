@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "Prusament",
+  "product": "rPLA",
+  "material": "PLA",
+  "colors": [
+    "Algae Pigment",
+    "Corn Pigment",
+    "Wine Pigment",
+    "Risotto Pigment"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "195"
+    ],
+    "nozzle_temperature_range_high": [
+      "215"
+    ],
+    "filament_density": [
+      "1.24"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "40-60",
+    "_fan_speed": "100",
+    "_max_print_speed": "up to 200 mm/s",
+    "_hdt_0.45MPa": "61 (ISO 75)",
+    "_hdt_1.80MPa": "59 (ISO 75)",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "TDS (rPLA Natural Pigments) prints nozzle '205 +/- 10'. Bed types: smooth PEI, powder coated, satin."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://storage.googleapis.com/prusa3d-content-prod-14e8-wordpress-prusament-prod/2023/11/0eaa8597-prusament-rpla-natural-pigments-technical-data-sheet.pdf",
+    "https://prusament.com/materials/prusament-rpla/"
+  ],
+  "updated": "2026-11-01"
+}

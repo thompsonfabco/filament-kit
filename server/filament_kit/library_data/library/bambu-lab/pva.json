@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "vendor": "Bambu Lab",
+  "product": "PVA",
+  "material": "PVA",
+  "colors": [
+    "Clear"
+  ],
+  "bambu_parent": "Bambu PVA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.27"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_soluble": [
+      "1"
+    ],
+    "filament_is_support": [
+      "1"
+    ]
+  },
+  "published_ranges": {
+    "cool_plate_temp": "35-45 (glue)",
+    "hot_plate_temp": "35-45 (glue)",
+    "_print_speed": "<200",
+    "_drying": "oven 80C 8-12h; heatbed 90-100C 12h",
+    "_colors_note": "Pass 1 recorded bare colour names, not full Spoolman names; match on vendor+product."
+  },
+  "conflicts": [
+    "[pass 1] 0.2 mm nozzle: TDS lists it, store says not compatible",
+    "[pass 1] Drying 8-12h (TDS) vs 12h (store)"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://store.bblcdn.com/s7/default/868930e5a44944258586caa250cc8143/Bambu_PVA_Technical_Data_Sheet.pdf",
+    "https://us.store.bambulab.com/products/pva"
+  ],
+  "updated": "2026-11-01"
+}

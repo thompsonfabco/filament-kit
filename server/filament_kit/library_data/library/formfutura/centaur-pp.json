@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "Centaur PP",
+  "material": "PP",
+  "colors": [],
+  "bambu_parent": "Generic PP",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "245"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "0.89"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80-85",
+    "fan_min_speed/fan_max_speed": "0-50",
+    "_print_speed": "25- mm/s (upper bound blank in TDS); page: low/medium",
+    "_drying": "50-60C 24h (TDS: recommended)",
+    "_enclosure": "Yes (TDS)",
+    "_min_nozzle": "0.15",
+    "_hardness": "Shore D50 (product page)",
+    "_vicat": "103 (TDS)",
+    "_notes": "TDS melting temperature 170C. Page flow ~104%."
+  },
+  "conflicts": [
+    "Product page density 0.9 g/cc vs TDS density 0.89 g/cm3."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://formfutura.com/web/content/256498?download=true",
+    "https://formfutura.com/filaments/centaur-pp"
+  ],
+  "updated": "2026-11-01"
+}

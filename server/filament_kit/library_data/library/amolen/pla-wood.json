@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "vendor": "AMOLEN",
+  "product": "PLA Wood",
+  "material": "PLA",
+  "colors": [
+    "Rose Wood",
+    "Bamboo Wood",
+    "Walnut Wood",
+    "Tigerwood",
+    "Wood-white Oak",
+    "Wood-black Walnut",
+    "Ebony Wood"
+  ],
+  "bambu_parent": "Bambu PLA Wood",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "180"
+    ],
+    "nozzle_temperature_range_high": [
+      "210"
+    ],
+    "filament_density": [
+      "1.23"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "30-65",
+    "_drying": "55+/-5C 6-8h",
+    "filament_retraction_length": "1.0-1.5",
+    "filament_retraction_speed": "35-45",
+    "_print_speed": "< 250 mm/s",
+    "_vitrification": "60-63 (Tg)",
+    "_vicat": "62-65",
+    "_hdt_0.45MPa": "57-60",
+    "_diameter_tolerance": "+/-0.02 (variety-pack page)",
+    "_notes": "Wood-filled PLA."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.amolen.com/products/pla-wood",
+    "https://www.amolen.com/products/pla-wood-pack"
+  ],
+  "updated": "2026-11-01"
+}

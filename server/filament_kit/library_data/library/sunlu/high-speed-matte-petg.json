@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "vendor": "SUNLU",
+  "product": "High Speed Matte PETG",
+  "material": "PETG",
+  "colors": [
+    "Blue",
+    "Sky Blue",
+    "Grey",
+    "Pink",
+    "Orange",
+    "Green",
+    "White",
+    "Yellow"
+  ],
+  "bambu_parent": "Generic PETG HF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.28"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-80",
+    "filament_retraction_length": "0.8-1.2",
+    "filament_retraction_speed": "30-40",
+    "_max_print_speed": "<=400",
+    "_hdt": "70+/-2",
+    "_colors_note": "Pass 1 recorded bare colour names, not full Spoolman names; match on vendor+product."
+  },
+  "conflicts": [
+    "[pass 1] Speed <=400 (table) vs 600 (headline / UK store)"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.sunlu.com/products/high-speed-matte-petg-filament",
+    "https://uk.store.sunlu.com/products/high-speed-matte-petg-3d-printer-filament-1kg"
+  ],
+  "updated": "2026-11-01"
+}

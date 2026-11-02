@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "vendor": "Siraya Tech",
+  "product": "Flex TPU Air 95A",
+  "material": "TPU",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Generic TPU",
+  "fields": {
+    "filament_max_volumetric_speed": [
+      "12"
+    ]
+  },
+  "published_ranges": {
+    "_hardness": "Tunable 75A-95A by print temperature (95A before foaming)",
+    "_notes": "Actively foaming TPU: low temps = denser/tougher, high temps = softer/lighter, up to 50% weight reduction. No TDS published; nozzle/bed temperatures, density, diameter and drying not published on the product page."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://siraya.tech/products/flex-tpu-air-95a-filament"
+  ],
+  "updated": "2026-11-01"
+}

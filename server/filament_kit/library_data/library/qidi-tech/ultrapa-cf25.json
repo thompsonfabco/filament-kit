@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "vendor": "QIDI Tech",
+  "product": "UltraPA-CF25",
+  "material": "PPA-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu PPA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "300"
+    ],
+    "nozzle_temperature_range_high": [
+      "340"
+    ],
+    "filament_density": [
+      "1.23"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-80 (PEI or PVP glue)",
+    "fan_min_speed/fan_max_speed": "off",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "1800-3600 mm/min",
+    "_drying": "80-100C 4-6h",
+    "_print_speed": "30-120 mm/s (TDS); 30-200 mm/s (product page)",
+    "_hdt_0.45MPa": "96.1 unannealed / 196.9 annealed",
+    "_annealing": "100C 8h",
+    "_fiber_content": "25% carbon fibre (skin-core co-extrusion)",
+    "_hardened_nozzle_required": "yes (hardened steel/bimetal/tungsten carbide; brass not recommended)",
+    "_min_nozzle": "0.4",
+    "_ams": "not for QIDI BOX, AMS or other PTFE-fed multi-colour systems (product page)",
+    "_notes": "Sold as 'UltraPA-CF25 (PPA-CF25)'. TDS v5.0 (05.2023). Melt 237C, water absorption 1.09%. HDT 1.80MPa 83C unannealed / 124.2C annealed. Keep <15% RH."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://drive.google.com/file/d/1sj_ffiHJFT5iXPimBso-ESgJU3J3Y7yB/view",
+    "https://qidi3d.com/products/ultrapa-cf25-filament",
+    "https://qidi3d.com/pages/choose-the-right-filament-3d-filaments-guide-for-qidi-printers"
+  ],
+  "updated": "2026-11-01"
+}

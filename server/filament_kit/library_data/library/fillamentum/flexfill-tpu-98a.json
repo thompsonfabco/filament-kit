@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "vendor": "Fillamentum",
+  "product": "Flexfill TPU 98A",
+  "material": "TPU",
+  "colors": [
+    "Blue Transparent",
+    "Carrot Orange",
+    "Luminous Green",
+    "Metallic Grey",
+    "Natural",
+    "Pistachio Green",
+    "Powder Beige",
+    "Signal Red",
+    "Signal Yellow",
+    "Sky Blue",
+    "Traffic Black",
+    "Traffic White",
+    "Vertigo Grey"
+  ],
+  "bambu_parent": "Generic TPU",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.23"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "fan_min_speed/fan_max_speed": "70-100",
+    "_print_speed": "20-30 mm/s (TDS); 15-30 mm/s (product page)",
+    "_drying": "100C 3h",
+    "_hardness": "98 Shore A",
+    "_diameter_tolerance": "+/-0.10",
+    "_notes": "Semi-flexible TPU. Drying table (12 Oct 2023): 100 C 3 h, max 3 drying cycles of 3 h; guide: 100 C 3-4 h; will not dry effectively at 50 C. 500 g + 230 g spool; 2.85 mm also sold."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://fillamentum.com/wp-content/uploads/2020/10/Technical-Data-Sheet_Flexfill-TPU-98A_26082019.pdf",
+    "https://shop.fillamentum.com/products/flexfill-tpu-98a-carrot-orange",
+    "https://fillamentum.com/wp-content/uploads/2020/10/FI_Printing_Guide_Flexfill-TPU.pdf",
+    "https://fillamentum.com/wp-content/uploads/2023/10/Recommendation-for-filament-processing_drying_EN_12102023.pdf"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "vendor": "SUNLU",
+  "product": "TPU 90A",
+  "material": "TPU",
+  "colors": [
+    "Grey",
+    "Black",
+    "Red",
+    "Green",
+    "Sunny Orange",
+    "Azure",
+    "White"
+  ],
+  "bambu_parent": "Bambu TPU 90A",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.17"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "30-60",
+    "filament_retraction_length": "0.8mm",
+    "filament_retraction_speed": "40mm/s",
+    "_nozzle_by_speed": "220-240C @ 40mm/s (page: <=40mm/s)",
+    "_drying": "60-70C (drying time not published)",
+    "_hdt_0.45MPa": "36±2",
+    "_hardness": "90A±2",
+    "_diameter_tolerance": "+/-0.02",
+    "_ams": "SUNLU publishes no AMS statement; 90A is a soft TPU, check AMS suitability before loading.",
+    "_notes": "TDS density printed 1.17±0.02; raft distance 0.1-0.2mm; standard plate. Product page physical-property table appears to be copied from a PLA template (see conflicts)."
+  },
+  "conflicts": [
+    "Product page lists density 1.23, HDT 55±5, shrinkage 0.1-0.3%, Shore 80, Vicat 54, retraction speed <=40mm/s (TDS: 1.17±0.02, 36±2, -, 90A±2, -, 40mm/s) - https://www.sunlu.com/products/tpu-90a-flexible-filament"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://media.sunlu.com/prod/20260330/c7dd1bd8-a2c5-4908-bc1c-479ca23cbd3b.pdf?filename=TDS",
+    "https://www.sunlu.com/products/tpu-90a-flexible-filament"
+  ],
+  "updated": "2026-11-01"
+}

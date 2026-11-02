@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "ABS-GF",
+  "material": "ABS-GF",
+  "colors": [
+    "Black",
+    "White"
+  ],
+  "bambu_parent": "Bambu ABS-GF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_density": [
+      "1.1"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80-100",
+    "_drying": "60C 4h",
+    "_print_speed": "30-150mm/s",
+    "_hdt": "82 (ASTM D648; load not stated)",
+    "_vitrification": "104 (Tg, DSC 10C/min)",
+    "_fiber_content": "10% glass fiber",
+    "_enclosure": "Sealing print quality is better, supports open printing",
+    "_notes": "TDS titled 'Glass Fiber ABS'; sold as ABS Fiberglass."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0252/0412/9841/files/ERYONE-ABS-GF-TDS.pdf",
+    "https://eryone3d.com/products/abs-fiberglass-filament"
+  ],
+  "updated": "2026-11-01"
+}

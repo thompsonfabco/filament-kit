@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "PLA Rainbow",
+  "material": "PLA",
+  "colors": [
+    "Classical Rainbow",
+    "Lagoon Rainbow",
+    "Steampunk Rainbow"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "Product pages (Classical, Steampunk, Lagoon Rainbow) give print temperature 190-220C only. The Lagoon page swaps its bed and speed labels ('Heated Bed Temperature: 30-100mm/s', 'Printing Speed: 55-70C'), so no bed value is recorded. Density not published."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://eryone3d.com/products/pla-classical-rainbow",
+    "https://eryone3d.com/products/steampunk-rainbow",
+    "https://eryone3d.com/products/pla-lagoon-rainbow"
+  ],
+  "updated": "2026-11-01"
+}

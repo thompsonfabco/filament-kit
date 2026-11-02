@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "vendor": "TEQStone",
+  "product": "PETG",
+  "material": "PETG",
+  "colors": [
+    "PETG Green"
+  ],
+  "bambu_parent": "Generic PETG",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90 (single published value)",
+    "_diameter_tolerance": "+/-0.02 mm"
+  },
+  "conflicts": [
+    "[pass 5] Temperatures come from TEQStone's own amazon.de (B08GP3LZT1) and amazon.es (B08GPTJ41L, Black) PETG listings, not the US Green listing B0C9MBPR1G/B0CC51ZB3Y, which gives only +/-0.02 mm; flagged as same brand PETG line in another colour/region",
+    "[pass 5] Spool label states 220-260C vs published 220-250C"
+  ],
+  "source_quality": "brand_amazon_listing",
+  "sources": [
+    "https://www.amazon.de/-/en/TEQStone-Filament-Printers-Vacuum-Packaging/dp/B08GP3LZT1",
+    "https://www.amazon.es/TEQStone-Filamento-impresora-bol%C3%ADgrafos-embalaje/dp/B08GPTJ41L",
+    "https://www.amazon.com/TEQStone-Filament-Consistent-Diameter-Packaging/dp/B0C9MBPR1G"
+  ],
+  "updated": "2026-11-01"
+}

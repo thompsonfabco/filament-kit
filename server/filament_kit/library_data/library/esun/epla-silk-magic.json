@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "ePLA-Silk Magic",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Silk",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.256"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "45-60",
+    "fan_max_speed": "100",
+    "_print_speed": "40-100",
+    "_hdt_0.45MPa": "54.7",
+    "_notes": "eSUN ePLA-Silk Magic (dual-colour silk, sold as eSilk-PLA Magic) TDS v4.0 Nov 2024. Diameter not stated in TDS."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://assets.spoolscout.com/tds-sds/esun/tds/esun-pla-silk-magic-tds-v4.0-2024-11.pdf",
+    "https://www.spoolscout.com/data-sheets/esun/pla-esilk-pla-magic"
+  ],
+  "updated": "2026-11-01"
+}

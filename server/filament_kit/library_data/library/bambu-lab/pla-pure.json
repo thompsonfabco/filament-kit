@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "Bambu Lab",
+  "product": "PLA Pure",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Pure",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.24"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "35-65",
+    "chamber_temperatures": "25-40",
+    "filament_retraction_length": "0.4-0.8",
+    "filament_retraction_speed": "20-40",
+    "_drying": "50C 8h",
+    "_drying_printer_heatbed": "60-70C 12h (X1 / P / H2 series)",
+    "_drying_ams2pro_amsht": "45C 12h with filament inserted; 55C 8h not inserted",
+    "_redry_interval": "18 days",
+    "_max_print_speed": "<200 mm/s",
+    "_vitrification": "55 (Tg, DSC 10C/min)",
+    "_vicat": "63 (ISO 306)",
+    "_hdt_0.45MPa": "60",
+    "_hdt_1.8MPa": "56",
+    "_melting_point": "160 (DSC)",
+    "_ams": "AMS, AMS 2 PRO, AMS HT, AMS Lite",
+    "_notes": "TDS V1.0. EU food-contact-certified ingredients; glue NOT recommended (residue compromises contact safety; raise bed temp instead). Nozzle sizes 0.2/0.4/0.6/0.8 mm. Plates: Textured PEI / Smooth PEI / Cool Plate SuperTack. Cooling fan on. Max overhang 55 deg, max bridge 30 mm. TDS does not state filament diameter."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://store.bblcdn.com/s7/default/ecb663b46ebb4fb984786d33befb8d2f/PLA_Pure_TDS.pdf"
+  ],
+  "updated": "2026-11-01"
+}

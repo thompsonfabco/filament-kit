@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "PLA",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.2"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "45-60",
+    "fan_max_speed": "100",
+    "_print_speed": "40-100",
+    "_hdt_0.45MPa": "53",
+    "_notes": "eSUN PLA (standard) TDS v4.0 Nov 2021. HDT 53C (0.45MPa) per TDS. Diameter not stated in TDS."
+  },
+  "conflicts": [
+    "eSUN 3D Printing Material Datasheet (2019, https://cdn.shopify.com/s/files/1/1745/6181/files/eSUN_3D_Printing_Filament_Datasheet.pdf): PLA 190-220C, bed 60-80C, density 1.25, HDT 56C."
+  ],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://assets.spoolscout.com/tds-sds/esun/tds/esun-pla-tds-v4.0-2021-11.pdf",
+    "https://www.spoolscout.com/data-sheets/esun/pla"
+  ],
+  "updated": "2026-11-01"
+}

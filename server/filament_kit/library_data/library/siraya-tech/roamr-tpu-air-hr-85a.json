@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "vendor": "Siraya Tech",
+  "product": "Roamr TPU Air HR 85A",
+  "material": "TPU",
+  "colors": [
+    "Noir",
+    "Beige"
+  ],
+  "bambu_parent": "Generic TPU",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.05"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "35-50",
+    "fan_max_speed": "100",
+    "filament_retraction_length": "Off recommended",
+    "filament_retraction_speed": "Off recommended",
+    "_print_speed": "30-60 mm/s",
+    "_drying": "70-80C 4-6h",
+    "_diameter_tolerance": "+/-0.03",
+    "_min_nozzle": "0.4 mm (0.4-0.8 mm)",
+    "_enclosure": "No requirement",
+    "_hardness": "83A @230C down to 70A @260C (0.4 mm nozzle table)",
+    "_notes": "Foaming footwear TPU, 800 g spool. Flow ratio, 0.4 mm nozzle: 93% @230C, 83% @240C, 72% @250C, 62% @260C (TDS 0.6 mm table repeats the same values at 220-250C). Brass nozzle OK. Print from a dry box (<15% RH). MFI 8 g/10min. Product page currently lists only Noir; TDS lists Noir and Beige."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://siraya.tech/pages/roamr-tpu-air-hr-85a-tds",
+    "https://siraya.tech/products/roamr-tpu-air-hr-85a-filament"
+  ],
+  "updated": "2026-11-01"
+}

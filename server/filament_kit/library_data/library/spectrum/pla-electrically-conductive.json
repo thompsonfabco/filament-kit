@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "vendor": "Spectrum",
+  "product": "PLA Electrically Conductive",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.35"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "40-50",
+    "_cooling": "Up to 100%",
+    "_enclosure": "Not necessary",
+    "_hardened_nozzle_required": "Yes",
+    "_drying": "50C 6h",
+    "_notes_cnt": "Carbon-nanotube filled; TDS states higher extrusion temperature improves conductivity."
+  },
+  "conflicts": [
+    "Official product page (https://spectrumfilaments.com/en/filament/pla-electrically-conductive/) lists bed 40-60; TDS dated 20-07-2025 values kept in fields/published_ranges."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://spectrumfilaments.com/wp-content/uploads/2025/09/en_tds_spectrum_pla_conductive.pdf",
+    "https://spectrumfilaments.com/en/filament/pla-electrically-conductive/"
+  ],
+  "updated": "2026-11-01"
+}

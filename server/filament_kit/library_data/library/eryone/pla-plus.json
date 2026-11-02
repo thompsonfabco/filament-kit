@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "PLA+",
+  "material": "PLA",
+  "colors": [
+    "Black",
+    "Army green",
+    "Blue",
+    "White",
+    "Red",
+    "Gray",
+    "Green",
+    "Cool white",
+    "Ivory white",
+    "Olive green",
+    "Skin",
+    "Yellow",
+    "Orange"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_density": [
+      "1.23"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "55-70",
+    "_drying": "65-75C 12h",
+    "_print_speed": "30-100mm/s",
+    "_vicat": "54 (ASTM D1525)",
+    "_hdt": "53 (ASTM D648; load not stated)",
+    "_diameter_tolerance": "+/-0.03",
+    "_bottom_printing_temperature": "190-220",
+    "_enclosure": "Open printing/closed printing"
+  },
+  "conflicts": [
+    "nozzle_temperature: 200-230 (https://eryone3d.com/products/pla (FAQ text; spec table and TDS say 190-220))"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0252/0412/9841/files/ERYONE-PLA-plus_TDS.pdf",
+    "https://eryone3d.com/products/pla"
+  ],
+  "updated": "2026-11-01"
+}

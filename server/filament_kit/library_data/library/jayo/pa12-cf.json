@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "vendor": "JAYO",
+  "product": "PA12-CF",
+  "material": "PA12-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu PA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "260"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-70",
+    "_print_speed": "60-100 mm/s",
+    "_fiber_content": "~20% chopped carbon fiber (~80% PA12)",
+    "_hdt": "~176 (HDT, load not stated)",
+    "_annealing": "80-130C 5-12h",
+    "_hardened_nozzle_required": "Works best with hardened steel nozzles (abrasive)",
+    "_notes": "Official page values. Bambu PA-CF is Bambu's PA12-based CF; Polymaker's 'Fiberon PA12-CF' preset also exists. PA spool heat-resistant to 110C. No drying spec or density published."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.jayo3d.com/products/jayo-1kg-pa6-gf-nylon-glass-fiber-3d-printer-filament-1-75mm-wear-resistant-copy"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "vendor": "Protopasta",
+  "product": "Matte Fiber HTPLA",
+  "material": "PLA",
+  "colors": [
+    "White",
+    "Gray",
+    "Black",
+    "Daffodil Wood",
+    "Mahogany Wood",
+    "Walnut Wood"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_density": [
+      "1.14"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "18"
+    ]
+  },
+  "published_ranges": {
+    "_nozzle_by_speed": "200C @ 12 mm3/s; 220C @ 18 mm3/s (Material Data Table); 195C @ 2-3 mm3/s, 25-45 mm/s (TDS, Ultimaker S5 profile)",
+    "_bed": "55C plate (Material Data Table); 60C heated bed (TDS)",
+    "_vitrification": "approx. 60 (Tg onset, TDS)",
+    "_annealing": "95-110C for 10+ minutes; pre-scale x/y 101.1%, z 99% (TDS)",
+    "_notes": "Plant fiber filled, not abrasive (no wear-resistant nozzle needed). Avoid printing below 3 mm3/s; replace tubing more often with rough filament (Material Data Table). Moisture sensitive: foams when wet, dry before use (EX9 blog). Max particle 0.1 mm; min bend diameter 35 mm. Flow 96% in TDS."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0717/9095/files/TDS__Matte_Fiber_HTPLA_1.0.0.pdf",
+    "https://proto-pasta.com/pages/material-data-table",
+    "https://cdn.shopify.com/s/files/1/0717/9095/files/HTPLA_MF.pdf",
+    "https://proto-pasta.com/blogs/stories/endless-exploration-ex9-july-2025-made-in-the-usa-glass-fiber-htpla"
+  ],
+  "updated": "2026-11-01"
+}

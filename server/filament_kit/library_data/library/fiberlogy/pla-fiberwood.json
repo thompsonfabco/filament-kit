@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "vendor": "Fiberlogy",
+  "product": "PLA FiberWood",
+  "material": "PLA",
+  "colors": [
+    "Brown",
+    "Natural",
+    "Black",
+    "Carmine",
+    "White"
+  ],
+  "bambu_parent": "Bambu PLA Wood",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "210"
+    ],
+    "filament_density": [
+      "1.30"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60",
+    "fan_min_speed/fan_max_speed": "75-100",
+    "_drying": "50C 6h",
+    "_enclosure": "not required",
+    "_hdt_0.45MPa": "50 (ISO 75)",
+    "_vicat": "65 (ISO 306)",
+    "_hardened_nozzle_required": "yes - highly abrasive, hardened steel or ruby nozzle required",
+    "_min_nozzle": "0.5",
+    "_notes": "Bed surfaces: smooth PEI, textured PEI, glass. Purge the extruder with plain PLA after each FiberWood print to reduce clogging."
+  },
+  "conflicts": [
+    "nozzle_temperature_range: 180-200 (source: official TDS https://fiberlogy.com/app/uploads/2026/08/FIBERLOGY_FIBERWOOD_TDS.pdf; product page prints 190-210)",
+    "bed_all_plates: 50-70 (source: official TDS https://fiberlogy.com/app/uploads/2026/08/FIBERLOGY_FIBERWOOD_TDS.pdf)"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://fiberlogy.com/en/filaments/pla-en/pla-fiberwood-en/"
+  ],
+  "updated": "2026-11-01"
+}

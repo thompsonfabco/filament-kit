@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "vendor": "AMOLEN",
+  "product": "PLA Glow",
+  "material": "PLA",
+  "colors": [
+    "PLA Glow in the Dark Yellow"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.24"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "30-65",
+    "_plates": "PEI, glass, textured; with or without glue",
+    "_drying": "55C 6-8h (55+/-5C)",
+    "filament_retraction_length": "0.8-1.2",
+    "filament_retraction_speed": "35-45",
+    "_fan": "On",
+    "_print_speed": "<120",
+    "_vicat": "60-63",
+    "_hdt_0.45MPa": "56-58",
+    "_notes": "amolen.com PLA Glow-in-the-Dark page. Density 1.24+/-0.02. Tg 60-63C, Vicat 60-63C, HDT 56-58C at 0.45 MPa, melting range 155-160C, MFI 8+/-2 (210C/2.16kg). Tensile 35+/-3 MPa, elongation 8+/-1.5%, flexural modulus 2600+/-150 MPa. Print humidity <20% RH. Brand Amazon bundle listing: contains 20% glow powder; glow filaments are 'a bit brittle'. No hardened-nozzle statement found."
+  },
+  "conflicts": [
+    "[pass 4] Yellow is not a selectable variant on the amolen.com PLA Glow page (only in a photo caption); the spool label (210-230C, bed 30-65C) matches this page exactly, so the page was used.",
+    "[pass 4] Amazon listing B0FL2GZSVF (Yellow) is a different AMOLEN product: 'Silk Glow Yellow', MPN 3DSLGLOWYL, which is the Yellow variant (SKU 3DSLGLOWYL) of amolen.com 'PLA Silk Glow In The Dark' (print 220-240C, bed 30-65C, +/-0.03 mm). That Amazon listing says 200-220C, bed 50-60C, 50-100 mm/s. The values in this entry are for PLA Glow and do not apply to Silk Glow.",
+    "[pass 4] Brand Amazon listing for standard glow PLA Orange (B0D87DQWCQ, same SKU #1-3DGLOWPORG as the amolen.com page) says 200-220C, bed 50-60C, 50-100 mm/s; the amolen.com spec block (210-230C, 30-65C) was preferred as the fuller spec.",
+    "[pass 4] Tolerance: +/-0.02 mm on most Amazon listings, +/-0.03 mm in the bundle bullets."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://amolen.com/products/pla-glow",
+    "https://www.amazon.com/dp/B0DKWX9M1S",
+    "https://www.amazon.com/dp/B0D87DQWCQ",
+    "https://www.amazon.com/dp/B0FL2GZSVF",
+    "https://www.amolen.com/products/pla-silk-basic-glow-in-the-dark-1-75mm-1kg-2-2lb"
+  ],
+  "updated": "2026-11-01"
+}

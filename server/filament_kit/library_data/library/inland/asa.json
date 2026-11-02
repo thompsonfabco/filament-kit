@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "vendor": "Inland",
+  "product": "ASA",
+  "material": "ASA",
+  "colors": [
+    "Jet Black",
+    "Yellow",
+    "Brown",
+    "Purple",
+    "Army Green",
+    "Orange",
+    "Green",
+    "Gray",
+    "Red",
+    "Dark Purple",
+    "Sparkle Blue",
+    "Sparkle Red",
+    "Sparkle Green"
+  ],
+  "bambu_parent": "Bambu ASA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "110",
+    "_diameter_tolerance": "+/-0.05",
+    "_notes": "Most colour listings give 220-260 / 110 (microcenter.com, read via search index; direct fetch 403). Dual Color ASA lists the same ranges. Some older listings reportedly describe it as PolyLite (Polymaker) ASA. Density not published."
+  },
+  "conflicts": [
+    "nozzle_temperature_range: 240-260 (bed 75-90) (Sparkle Red listing; its description references PolyLite) - https://www.microcenter.com/product/660584/inland-175mm-sparkle-red-asa-3d-printer-filament-1kg-spool-(22-lbs)"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.microcenter.com/product/675737/inland-175mm-asa-3d-printer-filament-10-kg-(22-lbs)-cardboard-spool-jet-black",
+    "https://www.microcenter.com/product/660564/inland-175mm-yellow-asa-3d-printer-filament-1kg-spool-(22-lbs)"
+  ],
+  "updated": "2026-11-01"
+}

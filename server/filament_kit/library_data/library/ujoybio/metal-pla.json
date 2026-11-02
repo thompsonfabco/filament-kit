@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "vendor": "UJOYBIO",
+  "product": "Metal PLA",
+  "material": "PLA",
+  "colors": [
+    "Metal PLA Silver"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "_max_print_speed": "up to 500 mm/s (if printer supports high-speed mode)",
+    "_diameter_tolerance": "+/-0.02 mm",
+    "_notes": "From the FAQ on the UJOYBIO US brand store Metal PLA 1KG page (Silver is a listed colour); page blocks automated fetch, values read from search-result snippets."
+  },
+  "conflicts": [
+    "[pass 5] Values from ujoybio3d.com brand store page, not the Amazon listing; amazon.com currently titles its Silver listing 'Metallic PLA Filament... Metallic Silk... Silver' (MPN Metallic-Silver-1kg); identity link is via the brand store product family",
+    "[pass 5] UJOYBIO Metallic Silk PLA listing B0G5XY87JN (different product) states density 1.32 g/cm3, HDT 55C, printing 210-220C, bed NO/40-60C; not used as values",
+    "[pass 5] UJOYBIO Amazon comparison table lists Metal PLA bed 60-65C and speed 50-400 mm/s vs FAQ 50-60C and up to 500 mm/s"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://ujoybio3d.com/products/ujoybio-metal-pla-3d-printing-filament-1-75-mm-1kg"
+  ],
+  "updated": "2026-11-08"
+}

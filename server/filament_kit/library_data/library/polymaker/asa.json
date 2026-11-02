@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "vendor": "Polymaker",
+  "product": "ASA",
+  "material": "ASA",
+  "colors": [
+    "Black",
+    "Jet Black",
+    "White",
+    "Grey",
+    "Blue",
+    "Red",
+    "Green",
+    "Orange",
+    "Yellow",
+    "Purple",
+    "Polymaker Teal",
+    "Natural",
+    "Army Green",
+    "Army Brown",
+    "Dark Grey",
+    "Pop Blue",
+    "Pop Pink",
+    "Pop Green",
+    "Dark Purple",
+    "Dark Gray Green",
+    "Olive Brown",
+    "Galaxy Black",
+    "Galaxy Blue",
+    "Galaxy Red",
+    "Galaxy Green"
+  ],
+  "bambu_parent": "PolyLite ASA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.13"
+    ],
+    "filament_max_volumetric_speed": [
+      "16"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "75-95",
+    "chamber_temperatures": "enclosure needed (ambient)",
+    "fan_max_speed": "0 (OFF)",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "20-40",
+    "_print_speed": "50-200",
+    "_drying": "70C 7h",
+    "_enclosure": "needed",
+    "_vitrification": "98 (Tg, DSC)",
+    "_vicat": "105",
+    "_hdt_0.45MPa": "103",
+    "_hdt_1.8MPa": "100",
+    "_ams": "Polymaker wiki: spools redesigned so all Polymaker products spin well in the AMS.",
+    "_notes": "Polymaker ASA is the renamed PolyLite ASA (same product per wiki and shop); the linked TDS is still titled PolyLite ASA V5.4. Galaxy colours are sold as a separate 'Polymaker Galaxy ASA' page and are included in colors."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://wiki.polymaker.com/polymaker-products/polymaker-filaments/prime-materials/abs-and-asa/polymaker-tm-asa",
+    "https://cdn.shopify.com/s/files/1/0548/7299/7945/files/PolyLite_ASA_TDS_EN_V5.4.pdf",
+    "https://shop.polymaker.com/products/asa",
+    "https://shop.polymaker.com/products/polymaker-galaxy-asa"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "vendor": "Siraya Tech",
+  "product": "Fibreheart PET-GF",
+  "material": "PET-GF",
+  "colors": [
+    "Flat Dark Earth",
+    "Olive Green",
+    "White",
+    "Black"
+  ],
+  "bambu_parent": "Bambu PET-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "300"
+    ],
+    "nozzle_temperature_range_high": [
+      "300"
+    ],
+    "filament_density": [
+      "1.3"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80",
+    "fan_max_speed": "0 (OFF)",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "1800-3600 mm/min",
+    "_print_speed": "30-120 mm/s",
+    "_max_volumetric_speed": "20 mm3/s at 320C",
+    "_drying": "100-120C 4-6h (only if moist)",
+    "_hdt_0.45MPa": "78 unannealed / 134.1 annealed (ISO 75 Method B)",
+    "_vicat": "150 (ISO 306)",
+    "_vitrification": "135 (Tg, ASTM D3418)",
+    "_fiber_content": "15% glass fiber",
+    "_hardened_nozzle_required": "yes (hardened steel or higher)",
+    "_min_nozzle": "0.4 mm (0.4-1.0 mm)",
+    "_enclosure": "Required (prevents warping and cracking)",
+    "_annealing": "95C 4h, parts packed in white aluminium oxide sand",
+    "_notes": "TDS gives a single nozzle temperature (300C), copied as both low and high. HDT Method A (1.80 MPa) 74 unannealed / 105 annealed. Raft separation 0.08-0.12 mm. Build surface PEI or PVP glue. Bambu PET-CF used as closest PET-based fibre preset (no PET-GF preset).",
+    "_ams": "Not recommended (product page FAQ: glass fiber makes filament brittle, can break in AMS feed path)"
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://siraya.tech/pages/fibreheart-pet-gf-tds",
+    "https://siraya.tech/products/siraya-tech-fibreheart-pet-gf-3dprintingfilament"
+  ],
+  "updated": "2026-11-01"
+}

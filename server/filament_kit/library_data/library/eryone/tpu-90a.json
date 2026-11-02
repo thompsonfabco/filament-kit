@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "TPU 90A",
+  "material": "TPU",
+  "colors": [
+    "Solid black",
+    "Solid white",
+    "Transparent",
+    "Gray",
+    "Transparent Blue",
+    "Transparent Red"
+  ],
+  "bambu_parent": "Bambu TPU 90A",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_bed_glass": "40-60",
+    "filament_retraction_length": "4-5",
+    "_print_speed": "15-40mm/s",
+    "_hardness": "90A",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "Product page only. Bed: PEI magnetic surface 55-70C, glass 40-60C. Density not published.",
+    "_bed_pei_magnetic": "55-70"
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://eryone3d.com/products/tpu-90a-flexible-filament"
+  ],
+  "updated": "2026-11-01"
+}

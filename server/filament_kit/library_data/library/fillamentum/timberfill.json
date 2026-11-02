@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "vendor": "Fillamentum",
+  "product": "Timberfill",
+  "material": "PLA",
+  "colors": [
+    "Champagne",
+    "Charcoal",
+    "Cinnamon",
+    "Light Wood Tone",
+    "Redheart",
+    "Rosewood",
+    "Southern Pine",
+    "Terracotta"
+  ],
+  "bambu_parent": "Bambu PLA Wood",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "170"
+    ],
+    "nozzle_temperature_range_high": [
+      "190"
+    ],
+    "filament_density": [
+      "1.26"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "40-55",
+    "fan_min_speed/fan_max_speed": "0-30",
+    "_nozzle_by_speed": "basic 170-190 (40-100 mm/s, fan 0-30%); high-speed printers setup 170-190 (40-200 mm/s, fan 0-80%) [product page + guide 8/2024]; TDS 2019 150-170",
+    "_print_speed": "40-100 mm/s basic; 40-200 mm/s high-speed setup",
+    "_drying": "50C 2h",
+    "_hdt_0.45MPa": "48 (ISO 75 method B)",
+    "_min_nozzle": "TDS: 0.5 mm recommended; guide 8/2024: 0.5/0.6 mm for 1.75 mm filament, 0.6/0.8 mm for 2.85 mm; product page: 0.5 mm for 1.75, 0.8 mm for 2.85.",
+    "_hardened_nozzle_required": "Advised, not required: guide says hardened steel or ruby nozzles are advised to reduce wear.",
+    "_fiber_content": "Wood fibres (blend of biopolymers, mostly PLA).",
+    "_diameter_tolerance": "+/-0.10",
+    "_ams": "Guide notes the filament is more brittle than standard PLA and can break in tight/long paths, including an AMS.",
+    "_notes": "Melting temperature 145-160 C (TDS). 750 g + 230 g spool. Fields follow the current product page and 2024 guide."
+  },
+  "conflicts": [
+    "Nozzle: TDS (03/01/2019) gives 150-170 C; product page and 2024 guide give 170-190 C.",
+    "Bed: TDS gives 50-60 C; product page and guide give 40-55 C."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://fillamentum.com/wp-content/uploads/2020/10/Technical-Data-Sheet_Timberfill_03012019.pdf",
+    "https://shop.fillamentum.com/products/timberfill-terracotta",
+    "https://fillamentum.com/wp-content/uploads/2024/11/3D_PRINT_GUIDE_TIMBERFILL_8_2024-1.pdf",
+    "https://fillamentum.com/wp-content/uploads/2023/10/Recommendation-for-filament-processing_drying_EN_12102023.pdf"
+  ],
+  "updated": "2026-11-01"
+}

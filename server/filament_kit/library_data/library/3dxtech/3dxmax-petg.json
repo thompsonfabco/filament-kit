@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "3DXMAX PETG",
+  "material": "PETG",
+  "colors": [],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.24"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-70",
+    "_print_speed": "50-70 mm/s",
+    "_vitrification": "80 (Tg, DSC)",
+    "_hdt_0.45MPa": "73",
+    "_notes": "3DXTech TDS Rev 2.1 (PDF hosted on a third-party Shopify CDN; may be an older revision - current 3dxtech.com unreachable, HTTP 429). TDS specimen print: 240C nozzle, 70C bed, hairspray on glass. FDA/REACH food-contact claim on TDS. Surface resistivity >10^13 ohm/sq. Filament diameter not printed on the cited TDS (removed in source check)."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0965/1648/files/PETG_Filament_v2.1.pdf"
+  ],
+  "updated": "2026-11-01"
+}

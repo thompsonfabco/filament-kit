@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "vendor": "ColorFabb",
+  "product": "PLA High Speed Pro",
+  "material": "PLA",
+  "colors": [
+    "Traffic White",
+    "Semi-Matte Traffic White",
+    "Jet Black",
+    "Semi-Matte Black",
+    "Light Grey",
+    "Telegrey 2",
+    "Iron Grey",
+    "Agate Grey",
+    "Pearl Dark Grey",
+    "Signal Green",
+    "Yellow Green",
+    "Turquoise Green"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "215"
+    ],
+    "nozzle_temperature_range_high": [
+      "225"
+    ],
+    "filament_density": [
+      "1.24"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "21"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "fan_max_speed": "100",
+    "_max_print_speed": "12-21 mm3/s advised volumetric print speed (TDS); field uses the top of that range",
+    "_hdt_0.45MPa": "57 (HDT-B, ISO 75)",
+    "_vitrification": "60 (Tg, DSC ISO 11357)",
+    "_diameter_tolerance": "+/-0.05",
+    "_notes": "TDS v1.0 (Nov 2024). 1.75 mm only, 1000 g spools. 'Semi-Matte' colours are sold within this line."
+  },
+  "conflicts": [
+    "Product page (colorfabb.com/pla-high-speed-pro-jet-black) lists density 1.21 g/cm3 vs TDS 1.24",
+    "Product page lists Tg -20 C (apparent page error) vs TDS 60 C"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://downloads.colorfabb.com/public.php/dav/files/rtfDDRCa723Xdor/Technical%20Data%20Sheets/PLA/colorFabb%20PLA%20High%20Speed%20PRO/TDS_colorFabb%20PLA%20High%20Speed%20PRO.pdf",
+    "https://colorfabb.com/pla-high-speed-pro-jet-black"
+  ],
+  "updated": "2026-11-01"
+}

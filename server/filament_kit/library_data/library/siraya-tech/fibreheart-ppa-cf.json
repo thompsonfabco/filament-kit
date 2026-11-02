@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "Siraya Tech",
+  "product": "Fibreheart PPA-CF",
+  "material": "PPA-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Generic PPA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "300"
+    ],
+    "nozzle_temperature_range_high": [
+      "320"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-90",
+    "fan_max_speed": "0 (OFF)",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "30-60 (1800-3600 mm/min)",
+    "_print_speed": "30-120",
+    "_drying": "100C 4-6h if moist",
+    "_hardened_nozzle_required": "yes",
+    "_colors_note": "Pass 1 recorded bare colour names, not full Spoolman names; match on vendor+product.",
+    "_max_volumetric_speed": "8-12 mm3/s (nozzle not stated; at 300-320C)"
+  },
+  "conflicts": [
+    "[pass 1] Reseller 280-320C matches PPA-CF Core, not PPA-CF"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://siraya.tech/pages/siraya-tech-fibreheart-paht-cf-ppa-based-tds",
+    "https://siraya.tech/pages/siraya-tech-fibreheart-ppa-cf-filament-user-manual"
+  ],
+  "updated": "2026-11-01"
+}

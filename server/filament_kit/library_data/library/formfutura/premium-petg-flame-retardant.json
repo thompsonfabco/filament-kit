@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "Premium PETG Flame Retardant",
+  "material": "PETG",
+  "colors": [],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "225"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.26"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-80",
+    "fan_min_speed/fan_max_speed": "75-100",
+    "_print_speed": "25-100 mm/s",
+    "_drying": "65C 12h (TDS: >= 12 hours at 65C)",
+    "_enclosure": "Not necessary (TDS)",
+    "_min_nozzle": "0.15",
+    "_hdt_0.45MPa": "63 (HDT B, ISO 75)",
+    "_hdt": "58 at 1.81 MPa (ISO 75)",
+    "_vicat": "70 (ISO 306)",
+    "_notes": "Meets UL 94 V0 (1.6 mm, equivalent lab test; not UL-listed). Oxygen index 35%."
+  },
+  "conflicts": [
+    "Product page print temp 250-270C vs TDS 225-270C."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://formfutura.com/web/content/263077?download=true",
+    "https://formfutura.com/filaments/premium-petg-flame-retardant"
+  ],
+  "updated": "2026-11-01"
+}

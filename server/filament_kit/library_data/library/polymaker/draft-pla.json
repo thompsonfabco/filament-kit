@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "vendor": "Polymaker",
+  "product": "Draft PLA",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "PolyLite PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.31"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "25-60",
+    "fan_max_speed": "ON",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "20-40",
+    "_print_speed": "50-300",
+    "_drying": "55C 6h",
+    "_enclosure": "not needed",
+    "_vitrification": "62 (Tg, DSC)",
+    "_vicat": "63",
+    "_hdt_0.45MPa": "59",
+    "_hdt_1.8MPa": "53",
+    "_ams": "Polymaker wiki: hardened spool edges roll well in the AMS.",
+    "_notes": "Not listed in the US Polymaker shop on 2026-11-01 (may be regional or being phased out); wiki uses the Panchroma Matte printing profile for it."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://wiki.polymaker.com/polymaker-products/polymaker-filaments/prime-materials/functional-pla/draft-pla",
+    "https://cdn.shopify.com/s/files/1/0548/7299/7945/files/Polymaker_Draft_PLA_TDS_EN_V5.4.pdf"
+  ],
+  "updated": "2026-11-01"
+}

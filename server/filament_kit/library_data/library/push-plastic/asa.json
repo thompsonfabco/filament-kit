@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "vendor": "Push Plastic",
+  "product": "ASA",
+  "material": "ASA",
+  "colors": [
+    "Black",
+    "Dark Grey",
+    "Green",
+    "Light Grey",
+    "Natural",
+    "Silver Metallic",
+    "Ultra Blue",
+    "White"
+  ],
+  "bambu_parent": "Bambu ASA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.06"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100-120",
+    "_drying": "60C 4h",
+    "_enclosure": "Heated enclosure recommended",
+    "_print_speed": "45-55mm/s (preferred: 0.4mm nozzle, 0.2mm layer, 230C extruder, 110C bed)",
+    "_hdt": "96 (ASTM D648, printed specimens; load not stated)",
+    "_notes": "ASA shrinks as it cools: higher bed temps, enclosure, brim/raft help. No diameter tolerance or max volumetric speed published."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0260/7421/files/ASA_print_settings.pdf",
+    "https://cdn.shopify.com/s/files/1/0260/7421/files/Push_Plastic_ASA_Technical_Data_sheet.pdf",
+    "https://www.pushplastic.com/products/asa-filament-1-75mm-1kg"
+  ],
+  "updated": "2026-11-01"
+}

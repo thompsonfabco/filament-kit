@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "vendor": "Bambu Lab",
+  "product": "PLA Translucent",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Translucent",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.22"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "35-65",
+    "chamber_temperatures": "25-45",
+    "filament_retraction_length": "0.6-1.0",
+    "filament_retraction_speed": "20-40",
+    "_drying": "50C 8h",
+    "_drying_x1_heatbed": "60-70C 12h",
+    "_max_print_speed": "<150 mm/s",
+    "_vitrification": "54 (Tg, DSC 10C/min)",
+    "_vicat": "61 (ISO 306)",
+    "_hdt_0.45MPa": "60",
+    "_hdt_1.8MPa": "55",
+    "_melting_point": "156 (DSC)",
+    "_annealing": "50-60C 6-12h",
+    "_notes": "TDS V3.0. Nozzle sizes 0.2/0.4/0.6/0.8 mm. Plates: Textured PEI / Smooth PEI / Cool Plate SuperTack; glue. Cooling fan on."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://store.bblcdn.com/s7/default/729a8bf233e9474db25c8d5be1e64a00/Bambu_PLA_Translucent_Technical_Data_Sheet.pdf"
+  ],
+  "updated": "2026-11-01"
+}

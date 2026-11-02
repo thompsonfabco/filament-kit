@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "vendor": "Anycubic",
+  "product": "PETG",
+  "material": "PETG",
+  "colors": [
+    "Black",
+    "White",
+    "Red",
+    "Blue",
+    "Forest Green",
+    "Texture Grey",
+    "Clear",
+    "Orange",
+    "Yellow",
+    "Grey",
+    "Dark Grey",
+    "Lake Blue",
+    "Purple",
+    "Green",
+    "Beige",
+    "Brown",
+    "Peanut Brown",
+    "Texture Silver",
+    "Pink",
+    "Cream",
+    "Lime Green"
+  ],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.23"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "12"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-70",
+    "fan_max_speed": "90%",
+    "filament_retraction_speed": "30",
+    "_drying": "55-65C 6-8h",
+    "_print_speed": "50-250 mm/s",
+    "_vitrification": "74.1 (Tg, ISO 11357-1)",
+    "_vicat": "72 (ISO 306, 10N)",
+    "_hdt_0.45MPa": "69",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "TDS V3.0. TDS also gives extrusion multiplier 0.96, cooling time 12 s. Diameter/tolerance from the product page legacy table. Store colour list also includes translucent colours, which are sold as the separate PETG Translucent line."
+  },
+  "conflicts": [
+    "Product page legacy tables (store.anycubic.com/products/petg-filament): Nozzle Temperature 230-240C, Printing Speed 40-60mm/s, Retraction Distance 0.8-1.5mm, Retraction Speed 70-90mm/s, Density 1.3g/cm3, Heat Deflection Temperature 63C"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0685/7578/9245/files/ANYCUBIC_TDS_PETG_V3.0.pdf",
+    "https://store.anycubic.com/products/petg-filament"
+  ],
+  "updated": "2026-11-01"
+}

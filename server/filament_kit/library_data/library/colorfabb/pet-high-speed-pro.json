@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "vendor": "ColorFabb",
+  "product": "PET High Speed Pro",
+  "material": "PET",
+  "colors": [
+    "Clear"
+  ],
+  "bambu_parent": "Bambu PETG HF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.32"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "21"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60",
+    "fan_max_speed": "100",
+    "_print_speed": "260 mm/s",
+    "_max_print_speed": "21 mm3/s (product page)",
+    "_vitrification": "67.6 (Tg, DSC ISO 11357)",
+    "_diameter_tolerance": "+/-0.03 (TDS 'max. roundness deviation')",
+    "_notes": "TDS v1.0 (temps, bed, fan, speed, Tg); density and volumetric flow from product page. Bed surface: adhesion spray (3D lac). Semi-rigid, low warp."
+  },
+  "conflicts": [
+    "Product page lists diameter tolerance +/-0.1 mm vs TDS max. roundness deviation +/-0.03"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://downloads.colorfabb.com/public.php/dav/files/rtfDDRCa723Xdor/Technical%20Data%20Sheets/Co-Polyester/PET/TDS_PET_HIGH-SPEED-PRO.pdf",
+    "https://colorfabb.com/pet-high-speed-pro-clear"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "vendor": "Atomic Filament",
+  "product": "Carbon Fiber PLA",
+  "material": "PLA-CF",
+  "colors": [
+    "Extreme Black"
+  ],
+  "bambu_parent": "Bambu PLA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_hardened_nozzle_required": "yes - hardened steel nozzle (mildly abrasive)",
+    "_min_nozzle": "0.4",
+    "_fiber_content": "USA-made milled carbon fiber (percentage not published)",
+    "_diameter_tolerance": "+/-0.03 (sample coil page)",
+    "_ams": "1 kg spool sold as AMS compatible; CF is mildly abrasive",
+    "_notes": "No density, bed temperature or Tg published for the CF grade (generic PLA SDS does not cover fibre fill, so its density is not used). Sample coil page: out of round 0.04 mm or less."
+  },
+  "conflicts": [
+    "Sample coil page (https://atomicfilament.com/products/sample-coil-pla-carbon-fiber-extreme-black) gives print temp 190-230C; 1 kg and 3.5 kg pages give 210-230C (used)."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://atomicfilament.com/products/carbon-fiber-extreme-pla-filament",
+    "https://atomicfilament.com/products/3-5kg-carbon-fiber-extreme-black-pla",
+    "https://atomicfilament.com/products/sample-coil-pla-carbon-fiber-extreme-black"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "vendor": "OVERTURE",
+  "product": "PLA Professional",
+  "material": "PLA",
+  "colors": [
+    "PLA Professional Orange"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "filament_density": [
+      "1.27"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_notes": "From TDS V5.1 (July 2024); brand on listing not confirmed; newer TDS may exist.",
+    "_vitrification": "63.9 (Vicat)"
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://wiki.overture3d.com/pla_professional_tds.pdf"
+  ],
+  "updated": "2026-11-01"
+}

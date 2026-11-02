@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "vendor": "XZN",
+  "product": "ASA",
+  "material": "ASA",
+  "colors": [
+    "ASA Black"
+  ],
+  "bambu_parent": "Generic ASA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80-110",
+    "_enclosure": "fully enclosed 3D printer recommended",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "Brand-store Amazon listing (MPN 700-001-2057, sold by XZN-US). Matches the spool label (240-270C, bed 80-110C)."
+  },
+  "conflicts": [
+    "[pass 4] No XZN website or TDS found; no density, drying, fan, chamber temperature or speed published.",
+    "[pass 4] The GEEETECH wiki ASA section gives identical 240-270C / bed 80-110C plus fan 40-50% and first layer fan 0%; those fan values were NOT applied because no source says the products are the same."
+  ],
+  "source_quality": "brand_amazon_listing",
+  "sources": [
+    "https://www.amazon.com/dp/B0FRS8MB8H"
+  ],
+  "updated": "2026-11-01"
+}

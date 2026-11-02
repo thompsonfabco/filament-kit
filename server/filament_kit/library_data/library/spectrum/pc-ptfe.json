@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "vendor": "Spectrum",
+  "product": "PC/PTFE",
+  "material": "PC",
+  "colors": [],
+  "bambu_parent": "Generic PC",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "265"
+    ],
+    "nozzle_temperature_range_high": [
+      "295"
+    ],
+    "filament_density": [
+      "1.32"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-120",
+    "_print_speed": "30-80 mm/s",
+    "_cooling": "0 - 10%",
+    "_enclosure": "recommended",
+    "_hardened_nozzle_required": "not necessary",
+    "_vicat": "145 (ISO 306)",
+    "_hdt_0.45MPa": "140 (ISO 75, annealed)",
+    "_hdt_1.8MPa": "130 (ISO 75, annealed)",
+    "_adhesive": "YES (Magigoo PC)"
+  },
+  "conflicts": [
+    "Official product page (https://spectrumfilaments.com/en/filament/pc-ptfe/) lists nozzle 270-320, bed 90-130; TDS dated 06-04-2022 values kept in fields/published_ranges."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://spectrumfilaments.com/wp-content/uploads/2021/12/en_tds_spectrum_pc_ptfe.pdf",
+    "https://spectrumfilaments.com/en/filament/pc-ptfe/"
+  ],
+  "updated": "2026-11-01"
+}

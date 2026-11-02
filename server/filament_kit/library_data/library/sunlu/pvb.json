@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "vendor": "SUNLU",
+  "product": "PVB",
+  "material": "PVB",
+  "colors": [
+    "Transparent Black",
+    "Transparent Red",
+    "Transparent Green",
+    "Transparent Blue"
+  ],
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.08"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "filament_retraction_length": "0.8-1.2mm",
+    "filament_retraction_speed": "30-40mm/s",
+    "_nozzle_by_speed": "200-210C @ 50-100mm/s; 210-230C @ 100-200mm/s",
+    "_drying": "50C (drying time not published)",
+    "_hdt_0.45MPa": "55.8±3",
+    "_vitrification": "70 (Tg, ISO 11357-2)",
+    "_vicat": "60",
+    "_moulding_shrinkage": "0.5-1.0%",
+    "_hardness": "82.5 (Shore, TDS)",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "No PVB or close preset in Bambu Studio's system list, so bambu_parent omitted. TDS: standard plate, no treatment."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://media.sunlu.com/prod/20260330/042608c3-25e5-4515-a83e-f2220185296c.pdf?filename=TDS",
+    "https://www.sunlu.com/products/pvb-filament"
+  ],
+  "updated": "2026-11-01"
+}

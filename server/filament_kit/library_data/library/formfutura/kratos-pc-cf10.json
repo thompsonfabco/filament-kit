@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "Kratos PC CF10",
+  "material": "PC-CF",
+  "colors": [],
+  "bambu_parent": "Bambu PC",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "270"
+    ],
+    "nozzle_temperature_range_high": [
+      "310"
+    ],
+    "filament_density": [
+      "1.22"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100-130",
+    "fan_min_speed/fan_max_speed": "0-25",
+    "_print_speed": "25-200 mm/s (TDS)",
+    "_drying": "75C 24h (TDS)",
+    "_enclosure": "Recommended (TDS); dry box recommended",
+    "_min_nozzle": "0.6 (TDS)",
+    "_fiber_content": "10% carbon fibre",
+    "_hardened_nozzle_required": "Recommended - ruby or hardened steel nozzle (TDS)",
+    "_hdt_0.45MPa": "140 (ASTM D648)",
+    "_hdt": "129 at 1.81 MPa (ASTM D648)",
+    "_vicat": "150 (ASTM D1525)",
+    "_notes": "No Bambu PC-CF preset exists; parent is Bambu PC."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://formfutura.com/web/content/256547?download=true",
+    "https://formfutura.com/filaments/kratos-pc-cf10"
+  ],
+  "updated": "2026-11-01"
+}

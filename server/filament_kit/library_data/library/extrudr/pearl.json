@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "vendor": "Extrudr",
+  "product": "Pearl",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_high": [
+      "210"
+    ],
+    "filament_density": [
+      "1.25"
+    ]
+  },
+  "published_ranges": {
+    "_nozzle_published": "140-210 (low bound 140 C is below the library's 150 C validation floor, so nozzle_temperature_range_low is left unset)",
+    "bed_all_plates": "20-60",
+    "fan_min_speed/fan_max_speed": "30-100%",
+    "_print_speed": "20-200 mm/s",
+    "_enclosure": "no",
+    "_hardened_nozzle_required": "no",
+    "_vicat": "58 (Vicat A, ISO 306, 4 mm wall)",
+    "_hdt_0.45MPa": "51 (HDT/B, ISO 75)",
+    "_notes": "Translucent pearl-look bio material. Shrinkage 0.67% (ISO 294-4). Nozzle range 140-210 C is as printed on both the product page and the overview table. Max volumetric speed not published. Catalogue print settings are for a 0.4 mm nozzle. Diameter not stated in the catalogue, so filament_diameter is left unset."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://s3.extrudr.com/extrudr-media/product-catalogue/extrudr-Produktkatalog_EN.pdf"
+  ],
+  "updated": "2026-11-01"
+}

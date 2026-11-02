@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "vendor": "Anycubic",
+  "product": "PETG-CF",
+  "material": "PETG-CF",
+  "colors": [
+    "PETG-CF Black",
+    "PETG-CF Indigo Blue",
+    "PETG-CF Syrup Brown"
+  ],
+  "bambu_parent": "Generic PETG-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.32"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "65-70",
+    "_drying": "60-65C 6-8h",
+    "_print_speed": "40-250",
+    "_min_nozzle": "0.4",
+    "_enclosure": "not required",
+    "_ams": "Anycubic ACE compatible",
+    "_hdt_0.45MPa": "67",
+    "_fiber_content": "CF (percentage not stated)",
+    "_notes": "Cooling time 6 s. Page says it runs smoothly with any hardened steel nozzle. Only Black (#2D2926) listed on page.",
+    "_vitrification": "74 (Vicat)",
+    "_max_volumetric_speed": "11 mm3/s (nozzle not stated; Maximum Volume Speed (Flow Rate) on Anycubic page)"
+  },
+  "conflicts": [
+    "[pass 2] Anycubic AU page lists bed 65-75C vs US store 65-70C."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.anycubic.com/products/petg-cf-filament",
+    "https://www.anycubic.au/products/petg-cf-filament"
+  ],
+  "updated": "2026-11-01"
+}

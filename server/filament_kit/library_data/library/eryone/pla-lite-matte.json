@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "PLA Lite Matte",
+  "material": "PLA",
+  "colors": [
+    "Black",
+    "White",
+    "Khaki",
+    "Bright Red",
+    "Classic Blue",
+    "Vibrant Yellow",
+    "Ultimate Gray",
+    "Greenery",
+    "Brown",
+    "Pink",
+    "Rainbow Candy",
+    "Sandstone"
+  ],
+  "bambu_parent": "Bambu PLA Matte",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "40-60",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "Product page 'Typical settings': nozzle 190-220C, bed optional 40-60C (no heated bed required). Page says lower density than standard PLA but gives no figure; brittler than PETG."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://eryone3d.com/products/pla-lite-matte-filament-1-75mm-0-03mm-1kg"
+  ],
+  "updated": "2026-11-01"
+}

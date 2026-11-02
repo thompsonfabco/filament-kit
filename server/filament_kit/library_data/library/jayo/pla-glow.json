@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "vendor": "JAYO",
+  "product": "PLA Glow",
+  "material": "PLA",
+  "colors": [
+    "Glow In The Dark Blue",
+    "Glow In The Dark Green",
+    "Glow In The Dark Red",
+    "Glow In The Dark Yellow",
+    "Glow In The Dark White (blue light)",
+    "Glow In The Dark White (green light)"
+  ],
+  "bambu_parent": "Bambu PLA Glow",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "210"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-65",
+    "_print_speed": "50-100 mm/s",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "Official PLA Glow page: nozzle 200-210C, bed 50-65C, 50-100mm/s. JAYO's EU Halloween bundle page references a 0.4 mm nozzle for its glow PLA. JAYO does not state abrasiveness/hardened-nozzle needs. The same listing also sells PETG Glow (no PETG-specific settings published). No density published."
+  },
+  "conflicts": [
+    "Official EU/US Halloween bundle pages (store.jayo3d.com/products/jayo-halloween-filament-bundle-5-rolls-eu): Glow-in-the-Dark PLA nozzle 200-230C, bed 50-65C, 50-100mm/s"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.jayo3d.com/products/moq-4-rolls-jayo-pla-glow-in-the-dark-luminous-3d-printer-filament-1-75mm-1-1kg",
+    "https://store.jayo3d.com/products/jayo-halloween-filament-bundle-5-rolls-eu"
+  ],
+  "updated": "2026-11-01"
+}

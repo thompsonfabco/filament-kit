@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "vendor": "Fiberlogy",
+  "product": "PETG Matte",
+  "material": "PETG",
+  "colors": [
+    "White",
+    "Gray",
+    "Graphite",
+    "Black",
+    "Red",
+    "Pastel Mint",
+    "Blue",
+    "Pastel Blue",
+    "Light Green",
+    "Pastel Yellow",
+    "Pastel Pink",
+    "Pastel Lilac",
+    "Green"
+  ],
+  "bambu_parent": "Bambu PETG Matte",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.29"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90",
+    "fan_min_speed/fan_max_speed": "0-25",
+    "_drying": "60C 4h",
+    "_enclosure": "not required",
+    "_hdt_0.45MPa": "68 (ISO 75)",
+    "_hdt_1.8MPa": "62 (ISO 75)",
+    "_vicat": "78 (ISO 306)",
+    "_vitrification": "80 (Tg, DSC)",
+    "_ams": "Compatible with BambuLab AMS (new spool system); Fiberlogy publishes a BambuLab profile",
+    "_notes": "Higher temperatures (250-270C) recommended especially for high-speed printing. Bed: smooth PEI + adhesive, textured PEI, glass + adhesive."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://fiberlogy.com/en/filaments/petg-en/petg-matte-en/"
+  ],
+  "updated": "2026-11-01"
+}

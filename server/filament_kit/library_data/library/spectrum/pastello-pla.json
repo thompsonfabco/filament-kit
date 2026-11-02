@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "vendor": "Spectrum",
+  "product": "Pastello PLA",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "185"
+    ],
+    "nozzle_temperature_range_high": [
+      "215"
+    ],
+    "filament_density": [
+      "1.30"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "0-60",
+    "_print_speed": "40-150 mm/s",
+    "_cooling": "YES (up to 100%)",
+    "_enclosure": "not necessary",
+    "_hardened_nozzle_required": "not necessary",
+    "_hdt_0.45MPa": "59 (ASTM D648)",
+    "_ams": "Cardboard spool: wrap/trim edges before AMS use."
+  },
+  "conflicts": [
+    "Official product page (https://spectrumfilaments.com/en/filament/pastello-pla/) lists nozzle 185-230, bed 0-50, print speed 40-200 mm/s; TDS dated 01-10-2023 values kept in fields/published_ranges."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://spectrumfilaments.com/wp-content/uploads/2023/10/en_tds_spectrum_pla_pastello.pdf",
+    "https://spectrumfilaments.com/en/filament/pastello-pla/"
+  ],
+  "updated": "2026-11-01"
+}

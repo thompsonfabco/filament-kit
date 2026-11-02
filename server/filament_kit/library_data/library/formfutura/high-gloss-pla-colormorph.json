@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "High Gloss PLA ColorMorph",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Silk",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "215"
+    ],
+    "nozzle_temperature_range_high": [
+      "245"
+    ],
+    "filament_density": [
+      "1.24"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60",
+    "fan_min_speed/fan_max_speed": "50-100",
+    "_enclosure": "No (product page)",
+    "_min_nozzle": "0.15",
+    "_notes": "Values from product page. The TDS linked on this page is the plain High Gloss PLA datasheet (210-240C), so it was not used for this line."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://formfutura.com/filaments/high-gloss-pla-colormorph"
+  ],
+  "updated": "2026-11-01"
+}

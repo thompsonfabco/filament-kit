@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "vendor": "Kexcelled",
+  "product": "K8 PA CF",
+  "material": "PA12-CF",
+  "colors": [],
+  "bambu_parent": "Bambu PAHT-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "270"
+    ],
+    "nozzle_temperature_range_high": [
+      "310"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-110",
+    "_density": "1.16-1.18 g/cm3 (ISO 1183)",
+    "_hdt_0.45MPa": "186",
+    "_vicat": "203 (10N)",
+    "_print_speed": "350 mm/s",
+    "_cooling_fan": "0%-50%",
+    "_bed_surface": "Tape or glue",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "TDS 'THE K8 PA CF' rev 03, 20/02/2025: carbon fibre reinforced polyamide 12. Settings based on a 0.4mm nozzle. Fibre content, hardened-nozzle requirement and drying are not stated on the TDS. Nozzle high end (310C) exceeds X1/P1 series max (300C). Bambu PAHT-CF chosen as the PA12-based CF preset. Density is a range, so filament_density left unset."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0958/0111/4939/files/THE_K8_PA_CF_TDS.pdf"
+  ],
+  "updated": "2026-11-01"
+}

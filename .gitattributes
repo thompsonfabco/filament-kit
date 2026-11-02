@@ -5,3 +5,7 @@
 *.yml      text eol=lf
 *.bat      text eol=crlf
 gradlew    text eol=lf
+
+# The spec library snapshot and its test fixture are hashed byte for byte (index.json sha256).
+server/filament_kit/library_data/** -text
+server/tests/data/library/** -text

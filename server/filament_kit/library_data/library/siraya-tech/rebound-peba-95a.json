@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "vendor": "Siraya Tech",
+  "product": "Rebound PEBA 95A",
+  "material": "PEBA",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Generic TPU",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-100",
+    "fan_max_speed": "70-100 (moderate part cooling)",
+    "_print_speed": "30-120 mm/s",
+    "_drying": "50-60C at least 4-6h, before every print",
+    "_diameter_tolerance": "+/-0.05 (typical)",
+    "_vicat": "92 (ISO 306)",
+    "_hardness": "95A (ISO 7619)",
+    "_min_nozzle": "0.4 mm",
+    "_enclosure": "Highly recommended",
+    "_ams": "Not suitable for any AMS (too soft) - product page",
+    "_notes": "Nylon-elastomer copolymer, 800 g spool. Melting point 235C. Bed 100C for full-plate large prints. Flow often 93-96%. Retraction: TDS says minimal, start with low values of 0.4 mm. No Bambu PEBA preset exists; Generic TPU used as closest flexible parent."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://siraya.tech/pages/siraya-tech-rebound-peba-95a-tds",
+    "https://siraya.tech/products/fibreheart-rebound-peba-95a-black-elastic-filament"
+  ],
+  "updated": "2026-11-01"
+}

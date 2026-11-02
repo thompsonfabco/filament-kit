@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "PETG-GF",
+  "material": "PETG-GF",
+  "colors": [
+    "Black",
+    "White",
+    "Yellow",
+    "Orange",
+    "Purple"
+  ],
+  "bambu_parent": "Generic PETG",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_density": [
+      "1.33"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-70",
+    "_drying": "60-70C 4-8h",
+    "_print_speed": "30-150mm/s",
+    "_hdt": "80 (ASTM D648; load not stated)",
+    "_vitrification": "75 (Tg, DSC 10C/min)",
+    "_fiber_content": "10% glass fiber",
+    "_bottom_printing_temperature": "250-280",
+    "_enclosure": "closed printing",
+    "_notes": "Sold as PETG Fiberglass. No Bambu PETG-GF preset."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0252/0412/9841/files/ERYONE-PETG-GF-TDS.pdf",
+    "https://eryone3d.com/products/petg-fiberglass-filament"
+  ],
+  "updated": "2026-11-01"
+}

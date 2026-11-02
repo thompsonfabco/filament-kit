@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "vendor": "JAYO",
+  "product": "High Speed PLA+",
+  "material": "PLA",
+  "colors": [
+    "Pink",
+    "Black",
+    "Blue",
+    "Green",
+    "Gray",
+    "Olive Green",
+    "Orange",
+    "Red",
+    "White",
+    "Yellow"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_print_speed": "30-600 mm/s",
+    "_max_print_speed": "600 mm/s",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "Official page: 30-600mm/s, 180% improved heat dissipation, low shrinkage of 0.3%, 1.75 mm +/-0.02. It refers to 'the recommended printing temperature and speed' but publishes no temperatures in text (likely in images). Nozzle/bed temps and density NOT sourced."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.jayo3d.com/products/jayo-high-speed-pla-1-1kg-3d-printing-filament-bundle",
+    "https://store.jayo3d.com/products/jayo-high-speed-pla-1-1kg-reusable-spool-3d-printing-filament-bundle"
+  ],
+  "updated": "2026-11-01"
+}

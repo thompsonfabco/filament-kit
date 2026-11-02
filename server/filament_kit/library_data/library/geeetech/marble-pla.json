@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "GEEETECH",
+  "product": "Marble PLA",
+  "material": "PLA",
+  "colors": [
+    "Marble Grey",
+    "Marble Brown",
+    "Marble Blue"
+  ],
+  "bambu_parent": "Bambu PLA Marble",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "185"
+    ],
+    "nozzle_temperature_range_high": [
+      "215"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "25-60",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "Official GEEETECH store page (PLA like Marble Grey); product named 'PLA like Marble'. Spool 200 mm flange, 56 mm hub hole, 64 mm width. No density published. GEEETECH wiki (generic Marble PLA material section, not this product page) warns of nozzle wear and recommends a wear-resistant nozzle."
+  },
+  "conflicts": [
+    "GEEETECH wiki (Marble PLA section): nozzle 200-230C, bed 50-60C - https://wiki.geeetech.com/index.php/Filament"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://support.geeetech.com/pla-like-marble-grey-3d-printer-filament-175mm-1kgroll-p-1213.html",
+    "https://support.geeetech.com/filament-like-marble-wood-c-83_157.html",
+    "https://wiki.geeetech.com/index.php/Filament"
+  ],
+  "updated": "2026-11-01"
+}

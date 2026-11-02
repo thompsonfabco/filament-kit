@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "vendor": "Hatchbox",
+  "product": "PLA Pro+",
+  "material": "PLA",
+  "colors": [
+    "Black",
+    "Beige",
+    "Bronze"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_notes": "Product pages: 'Print Temperature - 190C - 220C', 'No Heating Bed Required'. Product titles 'PLA PRO+'. Verified 2026-11-01 against the product pages' Shopify JSON/HTML."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.hatchbox3d.com/products/3d-plap-1kg1-75-blk",
+    "https://www.hatchbox3d.com/products/3d-plap-1kg1-75-bge",
+    "https://www.hatchbox3d.com/collections/pla-1-75mm.atom"
+  ],
+  "updated": "2026-11-01"
+}

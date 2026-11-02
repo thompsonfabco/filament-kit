@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "vendor": "Fiberlogy",
+  "product": "ABS+GF",
+  "material": "ABS-GF",
+  "colors": [
+    "Natural",
+    "Light Green",
+    "Red",
+    "Black",
+    "Gray"
+  ],
+  "bambu_parent": "Bambu ABS-GF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "270"
+    ],
+    "nozzle_temperature_range_high": [
+      "285"
+    ],
+    "filament_density": [
+      "1.12"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90",
+    "fan_min_speed/fan_max_speed": "10-30",
+    "_drying": "60C 4h",
+    "_enclosure": "recommended",
+    "_hardened_nozzle_required": "yes - highly abrasive, hardened steel or ruby nozzle required",
+    "_hdt_0.45MPa": "90 (ISO 75)",
+    "_hdt_1.8MPa": "80 (ISO 75)",
+    "_vicat": "95 (ISO 306)",
+    "_ams": "Compatible with BambuLab AMS (new spool system); Fiberlogy publishes a BambuLab profile",
+    "_notes": "Overhang cooling fan 70-80%. Increased risk of spontaneous cracking: unload after every print. Bed: smooth PEI + adhesive, textured PEI, glass + adhesive."
+  },
+  "conflicts": [
+    "nozzle_temperature_range: 270-295 (source: official TDS https://fiberlogy.com/app/uploads/2026/05/FIBERLOGY_ABSGF_TDS.pdf; product page prints 270-285)"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://fiberlogy.com/en/filaments/abs-en/absgf-en/"
+  ],
+  "updated": "2026-11-01"
+}

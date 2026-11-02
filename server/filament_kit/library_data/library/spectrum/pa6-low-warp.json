@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "Spectrum",
+  "product": "PA6 Low Warp",
+  "material": "PA",
+  "colors": [],
+  "bambu_parent": "Generic PA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_density": [
+      "1.15"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "85-100",
+    "_print_speed": "30-70 mm/s",
+    "_cooling": "0 - 30%",
+    "_enclosure": "recommended",
+    "_hardened_nozzle_required": "not necessary",
+    "_drying": "60C 12h",
+    "_hdt": "60 (ISO 75-1/-2)",
+    "_melt": "185 (DSC)"
+  },
+  "conflicts": [
+    "Official product page (https://spectrumfilaments.com/en/filament/pa6-low-wrap/) lists nozzle 240-280, bed 60-80, print speed 40-200 mm/s; TDS dated 06-04-2022 values kept in fields/published_ranges."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://spectrumfilaments.com/wp-content/uploads/2021/09/en_tds_spectrum_pa6_low_warp.pdf",
+    "https://spectrumfilaments.com/en/filament/pa6-low-wrap/"
+  ],
+  "updated": "2026-11-01"
+}

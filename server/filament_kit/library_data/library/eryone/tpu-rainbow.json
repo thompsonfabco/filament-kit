@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "TPU Rainbow",
+  "material": "TPU",
+  "colors": [
+    "Aurora Rainbow",
+    "Sea Glass Rainbow"
+  ],
+  "bambu_parent": "Generic TPU",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "0-60",
+    "_print_speed": "15-40mm/s",
+    "_diameter_tolerance": "+/-0.05",
+    "_notes": "Product page only (0.5kg). Bed may be unheated. Hardness and density not published."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://eryone3d.com/products/tpu-rainbow"
+  ],
+  "updated": "2026-11-01"
+}

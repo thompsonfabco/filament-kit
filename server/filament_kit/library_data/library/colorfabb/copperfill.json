@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "vendor": "ColorFabb",
+  "product": "copperFill",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Metal",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "195"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "_print_speed": "40-100 mm/s",
+    "_hdt_0.45MPa": "49 (HDT-B, ISO 75)",
+    "_diameter_tolerance": "+/-0.05 (1.75 mm; TDS 'max. roundness deviation'), +/-0.1 (2.85 mm)",
+    "_notes": "TDS v1.0. Copper-metal-filled PLA (density 4). Cooling fan: 'On'. TDS: decrease flow slightly (4-8%). Bed: glass plate, glue stick, tape. TDS density 4 g/cm3 (ISO 1183) is outside the library validator range, so it is kept here and not in fields."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://downloads.colorfabb.com/public.php/dav/files/rtfDDRCa723Xdor/Technical%20Data%20Sheets/PLA/colorFabb%20PLA%20specialFill/TDS_E%20ColorFabb%20CopperFill.pdf"
+  ],
+  "updated": "2026-11-01"
+}

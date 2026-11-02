@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "vendor": "Polymaker",
+  "product": "PolyLite PETG",
+  "material": "PETG",
+  "colors": [],
+  "bambu_parent": "PolyLite PETG",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.25"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-80",
+    "fan_max_speed": "OFF-20%",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "20-40",
+    "_print_speed": "50-100 mm/s",
+    "_drying": "65C 6h",
+    "_vitrification": "81 (Tg, DSC 10C/min)",
+    "_vicat": "84",
+    "_hdt_0.45MPa": "78",
+    "_enclosure": "Not needed",
+    "_notes": "TDS V5.4. Build surface PC and textured PEI, glue when needed. HDT 1.8 MPa 75 C. Light transmission 90% (GB/T 2410). Polymaker recommends PolyBox and storage in the resealable bag. Being discontinued and replaced by Polymaker PETG (new formula); still sold as 'Old Formula' on the Polymaker PETG page. Diameter not stated on TDS."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0548/7299/7945/files/PolyLite_PETG_TDS_EN_V5.4.pdf?v=1731954068",
+    "https://wiki.polymaker.com/polymaker-products/more-about-our-products/documents/technical-data-sheets/petg-pet/polylite-tm-petg",
+    "https://shop.polymaker.com/products/petg"
+  ],
+  "updated": "2026-11-01"
+}

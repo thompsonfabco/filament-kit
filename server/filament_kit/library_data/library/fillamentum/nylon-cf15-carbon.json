@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "vendor": "Fillamentum",
+  "product": "Nylon CF15 Carbon",
+  "material": "PA-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu PA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "235"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.08"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80-105",
+    "fan_min_speed/fan_max_speed": "0",
+    "_print_speed": "20-30 mm/s (TDS); 30-50 mm/s (product page)",
+    "_drying": "80C 4h",
+    "_hardened_nozzle_required": "Yes: TDS says hardened steel nozzles are recommended; guide says wear-resistant nozzles highly recommended.",
+    "_fiber_content": "Milled carbon fibres, 15 % (printing guide).",
+    "_enclosure": "TDS: cover around printer; guide: heated chamber / enclosure recommended.",
+    "_diameter_tolerance": "+/-0.10",
+    "_notes": "Melting temperature 160 C (TDS). Density 1.08 g/cm3 at 20 C (0.96 at 235 C). Brim recommended. 600 g + 230 g spool."
+  },
+  "conflicts": [
+    "Bed: product page and printing guide give 80-110 C.",
+    "Drying: printing guide gives 80 C 3 h; drying table (12 Oct 2023) gives 80 C 4 h."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://fillamentum.com/wp-content/uploads/2020/10/Technical-Data-Sheet_Nylon-CF15-Carbon_03012019.pdf",
+    "https://shop.fillamentum.com/products/nylon-cf15-carbon",
+    "https://fillamentum.com/wp-content/uploads/2020/10/FI_Printing_Guide_Nylon_CF15_Carbon.pdf",
+    "https://fillamentum.com/wp-content/uploads/2023/10/Recommendation-for-filament-processing_drying_EN_12102023.pdf"
+  ],
+  "updated": "2026-11-01"
+}

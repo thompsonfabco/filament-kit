@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "ABS",
+  "material": "ABS",
+  "colors": [
+    "Black",
+    "White"
+  ],
+  "bambu_parent": "Bambu ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.04"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "95-110",
+    "fan_max_speed": "100%",
+    "_print_speed": "40-100mm/s",
+    "_hdt": "78 (GB/T 1634; load not stated)",
+    "_drying": "N/A (TDS)",
+    "_enclosure": "Large shrinkage: print in printers with closed chamber",
+    "_notes": "Older-format TDS (Simplify3D test conditions, 0.4mm nozzle)."
+  },
+  "conflicts": [
+    "nozzle_temperature: 210-250 (https://eryone3d.com/products/abs-filament (generic 'Recommended processing temperature'))",
+    "bed_all_plates: 60-100 (https://eryone3d.com/products/abs-filament)",
+    "_diameter_tolerance: +/-0.05 (title) vs +/-0.03 (other listings) (https://eryone3d.com/products/abs-filament)"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0252/0412/9841/files/ERYOE_--ABS_-TDS_EN.pdf",
+    "https://eryone3d.com/products/abs-filament"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "vendor": "OVERTURE",
+  "product": "PLA+",
+  "material": "PLA",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Overture PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ]
+  },
+  "published_ranges": {
+    "_max_print_speed": "<300",
+    "_drying": "50C 7h",
+    "_colors_note": "Pass 1 recorded bare colour names, not full Spoolman names; match on vendor+product."
+  },
+  "conflicts": [
+    "[pass 1] Bed: table '25-26' vs FAQ 50-60",
+    "[pass 1] Nozzle: table 190-230 vs FAQ 200-220",
+    "[pass 1] Fan published as '100C' (typo)"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://overture3d.com/products/overture-pla-plus-3d-printer-filament-1-75mm"
+  ],
+  "updated": "2026-11-01"
+}

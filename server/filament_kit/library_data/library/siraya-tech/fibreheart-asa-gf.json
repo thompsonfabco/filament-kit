@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "vendor": "Siraya Tech",
+  "product": "Fibreheart ASA-GF",
+  "material": "ASA-GF",
+  "colors": [
+    "Black",
+    "White"
+  ],
+  "bambu_parent": "Bambu ASA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.1"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100-110",
+    "chamber_temperatures": "60-80",
+    "filament_retraction_length": "1-5",
+    "filament_retraction_speed": "1800-3600 mm/min",
+    "_drying": "70-80C 4-6h (only if moist)",
+    "_hdt_0.45MPa": "98 (Method B); Method A 94",
+    "_vicat": "105 (ISO 306)",
+    "_vitrification": "106 (Tg)",
+    "_fiber_content": "10% chopped glass fiber",
+    "_hardened_nozzle_required": "yes (hardened steel)",
+    "_min_nozzle": "0.4 mm",
+    "_enclosure": "Enclosed and heated to 60-80C to avoid warping",
+    "_notes": "Melting point 225C. Build surface glass, PEI or PC film. Print speed and fan not published. No Bambu ASA-GF preset; Bambu ASA-CF used as closest fibre-filled ASA parent.",
+    "_ams": "Not recommended (product page FAQ: glass fiber makes filament brittle)"
+  },
+  "conflicts": [
+    "Product page states HDT 92-97C (1.8-0.45 MPa); TDS gives 94/98C (Method A/B): https://siraya.tech/products/siraya-tech-fibreheart-asa-gf-filament"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://siraya.tech/pages/siraya-tech-fibreheart-asa-gf-tds",
+    "https://siraya.tech/products/siraya-tech-fibreheart-asa-gf-filament"
+  ],
+  "updated": "2026-11-01"
+}

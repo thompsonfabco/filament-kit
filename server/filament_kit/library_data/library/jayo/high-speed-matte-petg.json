@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "vendor": "JAYO",
+  "product": "High Speed Matte PETG",
+  "material": "PETG",
+  "colors": [
+    "White",
+    "Red",
+    "Mint Green",
+    "Sky Blue",
+    "Pink",
+    "Orange",
+    "Blue",
+    "Yellow",
+    "Black",
+    "Gray",
+    "Green"
+  ],
+  "bambu_parent": "Bambu PETG Matte",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "260"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-80",
+    "_nozzle_by_speed": "50-100 mm/s: 205-215C; 100-300 mm/s: 240-250C; 300-600 mm/s: 260-270C",
+    "_print_speed": "50-600 mm/s",
+    "_max_print_speed": "600 mm/s",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "Official parameter block: speed-matched nozzle temps (fields hold the highest, 300-600 mm/s range). Bed: 'not heated with glue, heated 70-80C can not be coated with glue'. Spec block says net 1KG/roll though sold as 1.1 kg. No density published."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.jayo3d.com/products/jayo-high-speed-matte-petg-1-1kg-3d-printing-filament-resuable-spool",
+    "https://store.jayo3d.com/products/jayo-high-speed-matte-petg-1kg-3d-printing-filament-bundle"
+  ],
+  "updated": "2026-11-01"
+}

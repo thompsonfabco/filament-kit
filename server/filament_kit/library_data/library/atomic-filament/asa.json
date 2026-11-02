@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "vendor": "Atomic Filament",
+  "product": "ASA",
+  "material": "ASA",
+  "colors": [
+    "Black",
+    "Bright White",
+    "Natural",
+    "Cool Gray",
+    "Dark Gray",
+    "Army Green",
+    "Perfect Red",
+    "Perfect Orange",
+    "Perfect Yellow",
+    "Perfect Blue",
+    "Royal Blue",
+    "Neon Green UV Reactive Opaque"
+  ],
+  "bambu_parent": "Bambu ASA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.07"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-110",
+    "_drying": "80C 4-8h",
+    "_vitrification": "105 (Tg, Atomic ASA SDS)",
+    "_enclosure": "enclosure strongly recommended; avoid part cooling fans and drafts",
+    "_diameter_tolerance": "+/-0.02",
+    "_ams": "1 kg spools sold as AMS compatible",
+    "_notes": "Specific gravity printed as '1.07~' and Tg 105C in the 'Atomic Filament - ASA based 3D Filament' SDS (rev 11/21/2025). Product pages: heat resistance rated to 105C; UV stabilised (HALS). Drying 80C 4-8h from the Atomic FAQ (ASA/ABS). Several 1 kg colour pages carry no temperatures; values from Black ASA (GSA) page and ASA sample coil pages."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://atomicfilament.com/products/black-asa-filament-ams-compatible-copy",
+    "https://atomicfilament.com/products/sample-coil-bright-white-asa-filament",
+    "https://cdn.shopify.com/s/files/1/0778/8857/files/Atomic-ASA-SDS-2025-ALL.pdf?v=1763749233",
+    "https://atomicfilament.com/pages/atomic-filament-faq"
+  ],
+  "updated": "2026-11-01"
+}

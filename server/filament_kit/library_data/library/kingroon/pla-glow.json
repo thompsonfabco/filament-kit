@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "vendor": "Kingroon",
+  "product": "PLA Glow",
+  "material": "PLA",
+  "colors": [
+    "Glow in Dark"
+  ],
+  "bambu_parent": "Bambu PLA Glow",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.26"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "35-45",
+    "chamber_temperatures": "25-45",
+    "filament_retraction_length": "0.6-1.0",
+    "filament_retraction_speed": "20-40",
+    "_drying": "55C 8h",
+    "_max_print_speed": "<250 mm/s",
+    "_min_nozzle": "0.4",
+    "_hdt_0.45MPa": "55",
+    "_vicat": "56",
+    "_vitrification": "55 (Tg, DSC)",
+    "_notes": "TDS V1.0: luminous-powder additive; nozzle sizes 0.4/0.6/0.8 only; Cool Plate / High Temperature Plate / Textured PEI with glue; HDT 1.8 MPa 52 C; melting 155 C; PC+ABS spool rated 90 C. Sold as 'Glow in Dark PLA'. Verification 2026-11-01: fields and plate/chamber/fan/retraction ranges confirmed against the TDS PDF; kingroon.com / kingroon3d.com product pages returned HTTP 429, so page-derived notes and conflicts were not re-checked."
+  },
+  "conflicts": [
+    "kingroon.com Glow in Dark PLA page: nozzle 200-220, bed 50-70, density 1.23, HDT 53 C (0.45 MPa), drying 50C 8h",
+    "kingroon3d.com PLA Glow-in-the-dark page: nozzle 200-220, bed 50-70, density 1.23"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://wiki.kingroon.com/kingroon_pla_glow_technical_data_sheet_v1.0.pdf",
+    "https://kingroon.com/products/kingroon-glow-in-dark-pla",
+    "https://kingroon3d.com/products/kingroon-pla-glow-in-the-dark-3d-printer-filament"
+  ],
+  "updated": "2026-11-01"
+}

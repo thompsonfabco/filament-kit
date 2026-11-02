@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "CarbonFil",
+  "material": "PETG-CF",
+  "colors": [],
+  "bambu_parent": "Bambu PETG-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "275"
+    ],
+    "filament_density": [
+      "1.32"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80-90",
+    "fan_min_speed/fan_max_speed": "0-50",
+    "_print_speed": "25-70 mm/s (TDS regular speed)",
+    "_drying": "40-60C 12h (TDS: recommended)",
+    "_enclosure": "Yes (TDS)",
+    "_min_nozzle": "0.4 (product page)",
+    "_fiber_content": "15% carbon fibre (TDS)",
+    "_hardened_nozzle_required": "Recommended - page warns carbon fibres are abrasive and accelerate brass nozzle wear",
+    "_vicat": "80 (ISO 306)"
+  },
+  "conflicts": [
+    "Product page density 1.19 g/cc vs TDS specific gravity 1.32 g/cm3.",
+    "Product page says 10% carbon fibre vs TDS 15%."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://formfutura.com/web/content/256493?download=true",
+    "https://formfutura.com/filaments/carbonfil"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "PA",
+  "material": "PA",
+  "colors": [
+    "Black",
+    "White",
+    "Transparent"
+  ],
+  "bambu_parent": "Generic PA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100-120",
+    "_print_speed": "30-50mm/s",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "From the combined 'Nylon & Nylon-CF&GF (PA6 & PA12)' product page, which prints one settings block for all variants; it does not say whether plain nylon is PA6 or PA12. No TDS for unfilled nylon. Density not published."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://eryone3d.com/products/nylon-filament"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "vendor": "Protopasta",
+  "product": "High Impact Carbon Fiber HTPETG",
+  "material": "PETG",
+  "colors": [
+    "Galaxy Black"
+  ],
+  "bambu_parent": "Generic PETG-CF",
+  "fields": {
+    "nozzle_temperature_range_high": [
+      "300"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "18"
+    ]
+  },
+  "published_ranges": {
+    "_nozzle_by_speed": "300C up to 18 mm3/s, 6 mm3/s chosen for full melt (EX14 blog, Bambu X/P-series standard flow nozzle); Prusa MK4S: 230C, customer reported 260-280C",
+    "_bed": "100+C (product page); 100C on Bambu, up to 120C on Prusa (EX14 blog)",
+    "_hardened_nozzle_required": "Hard steel nozzle required (EX14 blog)",
+    "_enclosure": "Enclosure recommended if possible (EX14 blog)",
+    "_drying": "Crucial to dry before printing (EX14 blog; no temp/time published)",
+    "_notes": "Lower CF % than High Strength version (more flex). No low nozzle bound or density published."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://proto-pasta.com/products/galaxy-black-high-impact-carbon-fiber-htpetg",
+    "https://proto-pasta.com/blogs/stories/endless-exploration-ex14-may-2026-high-temp-petg"
+  ],
+  "updated": "2026-11-01"
+}

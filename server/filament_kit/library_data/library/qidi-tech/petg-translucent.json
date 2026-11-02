@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "vendor": "QIDI Tech",
+  "product": "PETG Translucent",
+  "material": "PETG",
+  "colors": [
+    "Clear",
+    "Black",
+    "Blue",
+    "Red"
+  ],
+  "bambu_parent": "Bambu PETG Translucent",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.26"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-80",
+    "textured_plate_temp": "70-80 (filament guide)",
+    "cool_plate_temp": "60-80 (filament guide)",
+    "_drying": "55-65C 4-6h (product page); 60-65C 4-6h (filament guide)",
+    "_print_speed": "30-50 mm/s (TDS); 20-250 mm/s (product page)",
+    "_vitrification": "81.6 (Tg, DSC)",
+    "_vicat": "78.0 (X-Y) / 77.3 (Z)",
+    "_hdt_0.45MPa": "74.8 (X-Y) / 72.9 (Z)",
+    "_ams": "QIDI BOX compatible per QIDI",
+    "_notes": "The PETG Translucent TDS carries the same property values as the PETG Basic TDS. TDS cooling fan 0-10%."
+  },
+  "conflicts": [
+    "product page: nozzle 240-280C (https://qidi3d.com/products/petg-translucent)"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://drive.google.com/file/d/10A7Zl8_IBLmiHwkZsO67hjo9VSYjEcbv/view",
+    "https://qidi3d.com/products/petg-translucent",
+    "https://qidi3d.com/pages/choose-the-right-filament-3d-filaments-guide-for-qidi-printers"
+  ],
+  "updated": "2026-11-01"
+}

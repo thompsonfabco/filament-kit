@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "Bulk PETG",
+  "material": "PETG",
+  "colors": [],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "235"
+    ],
+    "nozzle_temperature_range_high": [
+      "255"
+    ],
+    "filament_density": [
+      "1.29"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80-90",
+    "fan_min_speed/fan_max_speed": "0-50",
+    "_print_speed": "25-200 mm/s (TDS)",
+    "_drying": "recommended (TDS, no temperature/time given)",
+    "_enclosure": "Not necessary (TDS)",
+    "_min_nozzle": "0.15",
+    "_hdt": "79 (ASTM D648)",
+    "_ams": "TDS: 1 kg spools (recycled PP) are compatible with all AMS systems.",
+    "_notes": "TDS melting point 200C."
+  },
+  "conflicts": [
+    "Product page print temp 230-255C vs TDS 235-255C (product page spec table also shows Bulk PLA values: SG 1.24, HDT 58C)."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://formfutura.com/web/content/273965?download=true",
+    "https://formfutura.com/filaments/bulk-petg"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "ASA+",
+  "material": "ASA",
+  "colors": [],
+  "bambu_parent": "Bambu ASA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_density": [
+      "1.06"
+    ],
+    "filament_max_volumetric_speed": [
+      "10"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100-110",
+    "fan_min_speed/fan_max_speed": "10-50",
+    "_print_speed": "0-250",
+    "_hdt_0.45MPa": "95.5",
+    "_notes": "eSUN ASA+ TDS v1.0 Jun 2024 (page footer also reads Dec.2023 Version 1.0; eSUN catalogue page lists it as eASA). Max volumetric flow 10 mm3/s from the TDS print-test block (Bambu P1S 0.4 mm). Diameter not stated in TDS."
+  },
+  "conflicts": [
+    "eSUN 3D Printing Material Datasheet (2019, https://cdn.shopify.com/s/files/1/1745/6181/files/eSUN_3D_Printing_Filament_Datasheet.pdf): eASA 220-260C, bed 90-110C, density 1.00, HDT 54C (earlier eASA formulation)."
+  ],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://assets.spoolscout.com/tds-sds/esun/tds/esun-asa-plus-tds-v1.0-2024-06.pdf",
+    "https://www.spoolscout.com/data-sheets/esun/asa-easa"
+  ],
+  "updated": "2026-11-01"
+}

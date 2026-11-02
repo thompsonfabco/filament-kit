@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "ePC",
+  "material": "PC",
+  "colors": [],
+  "bambu_parent": "Bambu PC",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.12"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80-120",
+    "fan_max_speed": "0",
+    "_drying": "70C >6h",
+    "_print_speed": "20-50",
+    "_hdt_0.45MPa": "80",
+    "_enclosure": "printer with chamber required (high shrinkage)",
+    "_notes": "eSUN ePC TDS v4.0 Nov 2021. Use with dry box (eBOX). Diameter not stated in TDS."
+  },
+  "conflicts": [
+    "eSUN 3D Printing Material Datasheet (2019, https://cdn.shopify.com/s/files/1/1745/6181/files/eSUN_3D_Printing_Filament_Datasheet.pdf): ePC 230-260C, bed 80-90C, density 1.12, HDT 80C."
+  ],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://assets.spoolscout.com/tds-sds/esun/tds/esun-pc-tds-v4.0-2021-11.pdf",
+    "https://www.spoolscout.com/data-sheets/esun/pc-epc"
+  ],
+  "updated": "2026-11-01"
+}

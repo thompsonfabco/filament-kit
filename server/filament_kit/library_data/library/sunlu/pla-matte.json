@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "vendor": "SUNLU",
+  "product": "PLA Matte",
+  "material": "PLA",
+  "colors": [
+    "Grey",
+    "White",
+    "Black",
+    "Red",
+    "Yellow",
+    "Green",
+    "Pink",
+    "Bone White",
+    "Oak",
+    "Clay",
+    "Sunny Orange",
+    "Sprout Green",
+    "Olive Green",
+    "Ocean Blue",
+    "Klein Blue",
+    "Lavender Purple",
+    "Red Yellow (Dual-Color)"
+  ],
+  "bambu_parent": "SUNLU PLA Matte",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "215"
+    ],
+    "nozzle_temperature_range_high": [
+      "245"
+    ],
+    "filament_density": [
+      "1.31"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "filament_retraction_length": "0.8-1.2mm",
+    "filament_retraction_speed": "30-40mm/s",
+    "_nozzle_by_speed": "205-215C @ 50-100mm/s; 215-245C @ 100-230mm/s",
+    "_drying": "50C (drying time not published)",
+    "_hdt_0.45MPa": "55±5",
+    "_vitrification": "58.8 (Tg, ISO 11357-2)",
+    "_vicat": "54",
+    "_moulding_shrinkage": "0.1-0.3%",
+    "_hardness": "83 (Shore, TDS)",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "PLA Matte Dual-Color has an identical TDS/page spec table, so it is folded into this line. TDS: Textured PEI plate, no treatment; supports PVA."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://media.sunlu.com/prod/20260330/b42c1ff4-b3d1-42e4-82a3-b85523647407.pdf?filename=TDS",
+    "https://www.sunlu.com/products/pla-matte-filament",
+    "https://media.sunlu.com/prod/20260330/a47cd225-7892-4788-9c73-bd27bfd791f5.pdf?filename=TDS",
+    "https://www.sunlu.com/products/pla-matte-dual-color-filament"
+  ],
+  "updated": "2026-11-01"
+}

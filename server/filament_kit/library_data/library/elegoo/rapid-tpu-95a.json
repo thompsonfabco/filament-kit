@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "vendor": "ELEGOO",
+  "product": "Rapid TPU 95A",
+  "material": "TPU",
+  "colors": [
+    "Black",
+    "White",
+    "Red"
+  ],
+  "bambu_parent": "Bambu TPU 95A HF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.27"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "30-45 (depends on printer and build plate type)",
+    "chamber_temperatures": "20-45",
+    "_drying": "70C 8h (+/-5C)",
+    "_drying_required": "Required",
+    "_min_nozzle": "0.4",
+    "_enclosure": "not required",
+    "_plates": "Textured/Smooth PEI or Other Plates; glue recommended",
+    "_max_print_speed": "< 200 mm/s",
+    "_hardness": "95A",
+    "_notes": "Listing: prints 3x faster than standard TPU 95A. Flexible: check AMS compatibility before loading (Bambu AMS not rated for most TPU). Melting temperature 190C; melt index 48.3 +/- 5.1 g/10 min; print and store at <=20% RH sealed with desiccant."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://us.elegoo.com/products/rapid-tpu-filament-1-75mm-colored-1kg"
+  ],
+  "updated": "2026-11-01"
+}

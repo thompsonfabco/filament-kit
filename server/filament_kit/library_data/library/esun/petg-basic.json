@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "PETG-Basic",
+  "material": "PETG",
+  "colors": [],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "filament_density": [
+      "1.27"
+    ],
+    "filament_max_volumetric_speed": [
+      "4"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70",
+    "fan_max_speed": "100",
+    "_drying": "60C (duration not stated in TDS)",
+    "_print_speed": "250",
+    "_hdt_0.45MPa": "73.8 (XY) / 68.1 (Z)",
+    "_notes": "eSUN PETG-Basic TDS v1.0 Jul 2024. Nozzle temperature printed as a single value 250C (+/-5C), not a range, so nozzle range fields left empty. Nozzle 0.4 mm; PEI plate with glue spray. Max volumetric flow 4 mm3/s from the TDS print-test block (Bambu P1S 0.4 mm). Diameter not stated in TDS."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://assets.spoolscout.com/tds-sds/esun/tds/esun-petg-basic-tds-v1.0-2024-07.pdf",
+    "https://www.spoolscout.com/data-sheets/esun/petg-petg-basic"
+  ],
+  "updated": "2026-11-01"
+}

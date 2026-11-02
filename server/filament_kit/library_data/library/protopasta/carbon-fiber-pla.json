@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "vendor": "Protopasta",
+  "product": "Carbon Fiber PLA",
+  "material": "PLA",
+  "colors": [
+    "Black (The Original Carbon Fiber Composite PLA)",
+    "Black (Recycled Carbon Fiber PLA)"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.15"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "12"
+    ]
+  },
+  "published_ranges": {
+    "_nozzle_by_speed": "220C @ 6 mm3/s; 240C @ 12 mm3/s (Material Data Table row 'Carbon Fiber PLAs': CFP1, HTP2-CF)",
+    "_bed": "55C plate (Material Data Table)",
+    "_hardened_nozzle_required": "Hard steel nozzle + gears recommended (Material Data Table)",
+    "_notes": "No CFP1-specific TDS; Protopasta links the Carbon Fiber HTPLA TDS for this row. Density from the CF PLA/HTPLA SDS, which also covers Recycled Carbon Fiber PLA (RPLA-CF); Recycled CF PLA product page: wear resistant nozzle recommended. Replace tubing more often with rough filament."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://proto-pasta.com/pages/material-data-table",
+    "https://cdn.shopify.com/s/files/1/0717/9095/files/PLA_HTPLA_CF.pdf",
+    "https://proto-pasta.com/products/carbon-fiber-recycled-pla"
+  ],
+  "updated": "2026-11-01"
+}

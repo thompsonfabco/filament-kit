@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "vendor": "ColorFabb",
+  "product": "woodFill",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Wood",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.18"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "fan_max_speed": "100",
+    "_print_speed": "40-60 mm/s",
+    "_vicat": "60 (VST, ISO 306)",
+    "_diameter_tolerance": "+/-0.05 (1.75 mm; TDS 'max. roundness deviation'), +/-0.1 (2.85 mm)",
+    "_notes": "TDS v1.0. Wood-fibre filled PLA/PHA. 650 g spools."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://downloads.colorfabb.com/public.php/dav/files/rtfDDRCa723Xdor/Technical%20Data%20Sheets/PLA/colorFabb%20PLA%20specialFill/TDS_E%20colorFabb%20woodFill.pdf"
+  ],
+  "updated": "2026-11-01"
+}

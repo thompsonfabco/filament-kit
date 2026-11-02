@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "vendor": "Spectrum",
+  "product": "Prografen PLA Graphene Light",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "0-50",
+    "_print_speed": "40-1000 mm/s",
+    "_cooling": "Up to 100%",
+    "_enclosure": "not necessary",
+    "_hardened_nozzle_required": "No",
+    "_notes": "No TDS linked on the official page; values from the product page only."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://spectrumfilaments.com/en/filament/prografen-pla-graphene-light/"
+  ],
+  "updated": "2026-11-01"
+}

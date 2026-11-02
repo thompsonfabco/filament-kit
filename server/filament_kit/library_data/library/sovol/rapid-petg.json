@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "vendor": "SOVOL",
+  "product": "Rapid PETG",
+  "material": "PETG",
+  "colors": [
+    "Lavender Purple",
+    "Sky Blue"
+  ],
+  "bambu_parent": "Bambu PETG HF",
+  "fields": {
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "Sold on Amazon by Sovol as 'Rapid PETG' / 'High Speed PETG Filaments' (titles read directly, B0H1H3MJFH and B0H1HDW1S5: 1.75mm, 'Dimensional Accuracy +/- 0.03 mm'). No speed figure, nozzle, bed, density or drying values could be read: listing bullets not served to fetch and sovol3d.com rate-limited."
+  },
+  "conflicts": [],
+  "source_quality": "brand_amazon_listing",
+  "sources": [
+    "https://www.amazon.com/dp/B0H1H3MJFH",
+    "https://www.amazon.com/dp/B0H1HDW1S5"
+  ],
+  "updated": "2026-11-01"
+}

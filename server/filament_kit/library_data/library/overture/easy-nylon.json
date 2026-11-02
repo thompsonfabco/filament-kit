@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "vendor": "OVERTURE",
+  "product": "Easy Nylon",
+  "material": "PA",
+  "colors": [
+    "Black",
+    "Gray"
+  ],
+  "bambu_parent": "Generic PA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "245"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.12"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50",
+    "filament_retraction_length": "3-6",
+    "filament_retraction_speed": "40-60",
+    "overhang_fan_threshold": "55 (threshold overhang angle, degrees)",
+    "_print_speed": "30-70 mm/s",
+    "_vicat": "181.2 (ISO 306)",
+    "_hardened_nozzle_required": "Highly recommended (TDS: brass nozzle abrasion happens quite often; use hardened steel or ruby).",
+    "_annealing": "70C 2h after printing (TDS recommendation)",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "TDS v5.1 (Jul 2024): PA6/PA66 copolymer; melt index 13.0 g/10min (260C 1.2kg); melting temp 187.7C (DSC); cooling fan off; build surface PA film / PI film / textured PEI with PVP glue (product page says PVA-based glue); store and use below 20% RH; based on 0.4 mm nozzle. No drying temperature/time published."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://overture3d.com/cdn/shop/files/OVERTURE_EASY_NYLON_TDS_EN_V5.1_b6ce0042-6686-42dd-a5ab-696d2cc734b8.pdf",
+    "https://overture3d.com/products/easy-nylon-filament"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "eABS-CF",
+  "material": "ABS-CF",
+  "colors": [],
+  "bambu_parent": "Generic ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.06"
+    ],
+    "filament_max_volumetric_speed": [
+      "4"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100-110",
+    "fan_max_speed": "0",
+    "_print_speed": "0-200",
+    "_hdt_0.45MPa": "94.9",
+    "_notes": "eSUN eABS-CF TDS v1.0 Jul 2024. Fibre percentage and hardened-nozzle requirement not stated in TDS (carbon-fibre filled: hardened nozzle advisable). No Bambu ABS-CF system preset found. Max volumetric flow 4 mm3/s from the TDS print-test block (Bambu P1S 0.4 mm). Diameter not stated in TDS."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://assets.spoolscout.com/tds-sds/esun/tds/esun-abs-cf-tds-v1.0-2024-07.pdf",
+    "https://www.spoolscout.com/data-sheets/esun/abs-abs-cf"
+  ],
+  "updated": "2026-11-01"
+}

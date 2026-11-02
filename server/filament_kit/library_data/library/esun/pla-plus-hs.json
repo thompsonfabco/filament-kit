@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "PLA+HS",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.24"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "45-60",
+    "fan_max_speed": "100",
+    "_print_speed": "50-350",
+    "_hdt_0.45MPa": "54",
+    "_drying": "N/A (not published)",
+    "_notes": "eSUN ePLA+HS TDS v4.0 July 2023 (high-speed PLA+). Diameter not stated in TDS."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://assets.spoolscout.com/tds-sds/esun/tds/esun-pla-plus-hs-tds-v4.0-2023-07.pdf",
+    "https://www.spoolscout.com/data-sheets/esun/pla-plahs"
+  ],
+  "updated": "2026-11-01"
+}

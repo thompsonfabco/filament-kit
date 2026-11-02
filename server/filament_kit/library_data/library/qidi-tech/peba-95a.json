@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "QIDI Tech",
+  "product": "PEBA 95A",
+  "material": "PEBA",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Generic TPU",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.01"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-100",
+    "fan_min_speed/fan_max_speed": "50-100%",
+    "filament_retraction_length": "0.4-1",
+    "filament_retraction_speed": "1800-3600 mm/min",
+    "_drying": "70-75C 4-6h",
+    "_print_speed": "30-120 mm/s (TDS); 20-120 mm/s (product page)",
+    "_vicat": "102.8",
+    "_hardness": "95A",
+    "_ams": "QIDI BOX not recommended (product page)",
+    "_notes": "0.8 mm nozzles not recommended (product page). Water absorption 1.56%. 800 g spool. No PEBA preset in Bambu Studio; Generic TPU used."
+  },
+  "conflicts": [
+    "product page: bed 35-75C (https://qidi3d.com/products/peba-95a)"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://drive.google.com/file/d/1CTL1aygDhydbHMgTHiBGwZgC340mUf7b/view",
+    "https://qidi3d.com/products/peba-95a",
+    "https://qidi3d.com/pages/choose-the-right-filament-3d-filaments-guide-for-qidi-printers"
+  ],
+  "updated": "2026-11-01"
+}

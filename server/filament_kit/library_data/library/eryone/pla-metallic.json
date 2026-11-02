@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "PLA Metallic",
+  "material": "PLA",
+  "colors": [
+    "Copper",
+    "Iron",
+    "Stainless Steel",
+    "Wolfram"
+  ],
+  "bambu_parent": "Bambu PLA Metal",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "55-70",
+    "_print_speed": "20-80mm/s",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "Product page only; no TDS. Page says 'with abrasive resistance' and can be polished; density not published. Spool: inner diameter 57mm, outer 200mm, height 64mm."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://eryone3d.com/products/pla-metallic-filament"
+  ],
+  "updated": "2026-11-01"
+}

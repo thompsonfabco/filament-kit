@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "vendor": "Fillamentum",
+  "product": "CPE CF112 Carbon",
+  "material": "PETG-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu PETG-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.16"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-85",
+    "fan_min_speed/fan_max_speed": "0-15",
+    "_print_speed": "20-40 mm/s (TDS); 30-50 mm/s (product page)",
+    "_drying": "75C 5h",
+    "_hardened_nozzle_required": "Yes: guide says hardened steel / ruby or wear-resistant nozzle is necessary (milled carbon fibres).",
+    "_fiber_content": "Milled carbon fibres, 12.5 % (printing guide).",
+    "_enclosure": "Guide: heated chamber / enclosure not needed.",
+    "_diameter_tolerance": "+/-0.10",
+    "_notes": "Co-polyester based on CPE HG100 with carbon fibre; temperature stability up to 100 C. TDS: higher part cooling fan speed recommended only for bridges/overhangs."
+  },
+  "conflicts": [
+    "Diameter tolerance: product page gives +/-0.05 mm.",
+    "Drying: printing guide gives 75 C 3 h; drying table (12 Oct 2023) gives 75 C 5 h."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://fillamentum.com/wp-content/uploads/2020/10/TDS_CPE-CF112-Carbon.pdf",
+    "https://shop.fillamentum.com/products/cpe-cf112-carbon",
+    "https://fillamentum.com/wp-content/uploads/2020/10/FI_Printing_Guide_CPE-CF112-Carbon.pdf",
+    "https://fillamentum.com/wp-content/uploads/2023/10/Recommendation-for-filament-processing_drying_EN_12102023.pdf"
+  ],
+  "updated": "2026-11-01"
+}

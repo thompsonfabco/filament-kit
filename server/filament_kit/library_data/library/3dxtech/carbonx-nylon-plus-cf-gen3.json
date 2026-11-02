@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "CarbonX Nylon+CF [Gen3]",
+  "material": "PA-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu PA6-CF",
+  "fields": {
+    "filament_density": [
+      "1.17"
+    ]
+  },
+  "published_ranges": {
+    "_vitrification": "70 (Tg, DSC)",
+    "_hdt_0.45MPa": "147",
+    "_notes": "3DXTech TDS Rev 3.0 (German-language copy hosted by Conrad, SKU NYL3010500BK0, 'CarbonX CF PA6'). TDS gives specimen print conditions only, no recommended range: 275C nozzle, 80C bed, 0.4mm nozzle. Older Gen2 TDS Rev 2.1 (semi-aromatic PA copolymer) listed 255-275 nozzle / 90-100 bed / 50-80 mm/s and HDT 147, density 1.17 - different generation, not used in fields. Surface resistance >10^9 ohm/sq. Filament diameter not printed on the cited TDS (removed in source check)."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://asset.conrad.com/media10/add/160267/c1/-/gl/002543874DS00/tehnicni-podatki-2543874-3d-xtech-nyl3010500bk0-carbonx-cf-polyamid-pa6-3d-tiskalnik-filament-pa-poliamid-odporno-na-kemikalije-175-mm-500-g-c.pdf",
+    "https://cdn.shopify.com/s/files/1/0987/4280/files/Carbon_Fiber_NYLON_Filament_v2.2.pdf"
+  ],
+  "updated": "2026-11-01"
+}

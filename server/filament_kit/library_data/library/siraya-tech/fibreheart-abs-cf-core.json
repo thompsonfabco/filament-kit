@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "vendor": "Siraya Tech",
+  "product": "Fibreheart ABS-CF Core",
+  "material": "ABS-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu ABS-GF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_density": [
+      "1.06"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100-110",
+    "chamber_temperatures": "60-80 (if heated chamber)",
+    "fan_max_speed": "0-20",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "1800-3600 mm/min",
+    "_print_speed": "30-200 mm/s",
+    "_drying": "60-70C 4-6h (only if damp)",
+    "_hdt_0.45MPa": "91 (Method B); Method A (1.80 MPa) 84",
+    "_vicat": "99 (ISO 306)",
+    "_vitrification": "101 (Tg, DMA)",
+    "_fiber_content": "20% core-concentrated carbon fiber (core-shell)",
+    "_hardened_nozzle_required": "yes (hardened steel)",
+    "_min_nozzle": "0.4 mm (0.4-1.0 mm)",
+    "_enclosure": "Highly recommended",
+    "_notes": "Minimum heating block thickness 12 mm. Very high speeds may affect the core-shell structure: raise temperature or slow down if surface degrades. PEI film, optional glue/PVP. Bambu Lab print profiles published by Siraya. No Bambu ABS-CF preset; Bambu ABS-GF used as closest fibre-filled ABS parent.",
+    "_ams": "Not recommended (product page FAQ: brittle CF can break in AMS feed path)"
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://siraya.tech/pages/siraya-tech-fibreheart-abs-cf-core-tds",
+    "https://siraya.tech/products/siraya-tech-fibreheart-abs-cf-core-3d-filament-fdm-printing"
+  ],
+  "updated": "2026-11-01"
+}

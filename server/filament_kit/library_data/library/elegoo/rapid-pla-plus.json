@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "vendor": "ELEGOO",
+  "product": "Rapid PLA Plus",
+  "material": "PLA",
+  "colors": [
+    "Black",
+    "White",
+    "Grey",
+    "Blue",
+    "Green",
+    "Red",
+    "Orange",
+    "Yellow",
+    "Silver",
+    "Brown",
+    "Beige"
+  ],
+  "bambu_parent": "Generic PLA High Speed",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.23"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "35-65 (depends on printer and build plate type)",
+    "chamber_temperatures": "20-45",
+    "_drying": "50C 8h (+/-5C)",
+    "_drying_required": "Recommended",
+    "_min_nozzle": "0.2",
+    "_enclosure": "not required",
+    "_plates": "Textured/Smooth PEI or Other Plates; glue not required",
+    "_max_print_speed": "< 600 mm/s",
+    "_vicat": "62",
+    "_hdt_0.45MPa": "57",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "High-speed PLA+ (up to 600 mm/s per listing). Cardboard spool: check edges before AMS use. Melting temperature 160C; melt index 10.7 +/- 1.5 g/10 min; print and store at <=20% RH sealed with desiccant."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://us.elegoo.com/products/elegoo-rapid-pla-plus-filament-1-75mm-colored-1kg"
+  ],
+  "updated": "2026-11-01"
+}

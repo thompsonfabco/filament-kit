@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "vendor": "Spectrum",
+  "product": "PEBA",
+  "material": "PEBA",
+  "colors": [],
+  "bambu_parent": "Generic TPU",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.02"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "0-50",
+    "_print_speed": "15-70 mm/s",
+    "_cooling": "up to 100%",
+    "_enclosure": "not necessary",
+    "_hardened_nozzle_required": "No",
+    "_hardness": "92A / 43D (ISO 868)",
+    "_notes": "Polyether block amide flexible; no PEBA preset in Bambu Studio, Generic TPU used as closest. Dry box recommended."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://spectrumfilaments.com/wp-content/uploads/2025/11/en_tds_spectrum_peba.pdf",
+    "https://spectrumfilaments.com/en/filament/peba/"
+  ],
+  "updated": "2026-11-01"
+}

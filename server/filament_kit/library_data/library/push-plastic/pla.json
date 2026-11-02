@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "vendor": "Push Plastic",
+  "product": "PLA",
+  "material": "PLA",
+  "colors": [
+    "PLA Black"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.24"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "30-70",
+    "_notes": "TDS v1.0: made from NatureWorks 4043D; density 1.24 g/cc (D1505). Print settings PDF (0.4 mm nozzle, 0.2 mm layer) also lists a preferred 215C nozzle / 60C bed and says larger nozzles, higher flow and faster speeds need higher temps. Push Plastic's PLA SDS is the NatureWorks Ingeo 4043D SDS (Tg 55-60C, melt 150-180C, SG 1.25). The factory seconds page says seconds may be underweight and vary in colour/texture, 'still high-quality filament', and some spools may not be AMS compatible.",
+    "_drying": "50C 2h",
+    "_print_speed": "45-55",
+    "_hdt": "54.1 (ASTM D648, load not stated)",
+    "_enclosure": "heated enclosure not required; sealed enclosure may cause heat creep",
+    "_fan": "layer cooling essential; turn up part cooling fan (no % given)",
+    "_plates": "adhesion: hairspray, glue stick or higher bed temp"
+  },
+  "conflicts": [
+    "[pass 3] Reseller page reproducing Push Plastic's recommended print settings; pushplastic.com not reached in this pass.",
+    "[merge] fields.nozzle_temperature_range_low: pass 4 value [\"210\"] replaced earlier value [\"200\"]",
+    "[merge] fields.nozzle_temperature_range_high: pass 4 value [\"230\"] replaced earlier value [\"220\"]",
+    "[merge] published_ranges.bed_all_plates: pass 4 value \"30-70\" replaced earlier value \"60\"",
+    "[merge] published_ranges._notes: pass 4 value \"TDS v1.0: made from NatureWorks 4043D; density 1.24 g/cc (D1505). Print settings PDF (0.4 mm nozzle, 0.2 mm layer) also lists a preferred 215C nozzle / 60C bed and says larger nozzles, higher flow and faster speeds need higher temps. Push Plastic's PLA SDS is the NatureWorks Ingeo 4043D SDS (Tg 55-60C, melt 150-180C, SG 1.25). The factory seconds page says seconds may be underweight and vary in colour/texture, 'still high-quality filament', and some spools may not be AMS compatible.\" replaced earlier value \"Made in the USA with 100% virgin materials. Factory seconds assumed same material as first-quality PLA.\"",
+    "[pass 4] Factory seconds page does not explicitly state the material is identical to first-quality PLA; it describes seconds as slightly off (weight, colour/texture). Values here are from Push Plastic's standard PLA TDS and print settings.",
+    "[pass 4] Reseller pages differ: top3dshop.com lists 205-225C and bed 0-60C; the earlier pass's reseller copy had 200-220C, bed 60C. Push Plastic's own print settings PDF (210-230C, bed 30-70C) is used.",
+    "[pass 4] NatureWorks 4043D SDS hosted by Push Plastic gives SG 1.25 vs Push Plastic TDS density 1.24; TDS value used."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://ultimate3dprintingstore.com/products/push-plastics-pla",
+    "https://cdn.shopify.com/s/files/1/0260/7421/files/Push_Plastic_PLA_Technical_Data_sheet.pdf",
+    "https://cdn.shopify.com/s/files/1/0260/7421/files/PLA_std_print_settings.pdf?v=1683905833",
+    "https://www.pushplastic.com/pages/print-settings",
+    "https://www.pushplastic.com/pages/learn",
+    "https://cdn.shopify.com/s/files/1/0260/7421/files/SDS_NatureWorks_Ingeo-4043D_pdf_4.pdf",
+    "https://www.pushplastic.com/products/factory-seconds-filament"
+  ],
+  "updated": "2026-11-08"
+}

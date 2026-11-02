@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "vendor": "Fiberlogy",
+  "product": "PETG ESD",
+  "material": "PETG",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "265"
+    ],
+    "filament_density": [
+      "1.3"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "85",
+    "fan_min_speed/fan_max_speed": "0-25",
+    "_drying": "60C 4h",
+    "_enclosure": "recommended",
+    "_min_nozzle": "0.6 (recommended, to avoid clogging from nanoparticles)",
+    "_hdt_0.45MPa": "75 (ISO 75)",
+    "_vitrification": "85 (Tg, DSC)",
+    "_ams": "Compatible with BambuLab AMS (new spool system)",
+    "_notes": "ESD: volume resistivity 10^5-10^7 ohm*cm, surface resistivity 10^5-10^8 ohm. Filament surface is not smooth (nanoparticles). Raise temperature if the nozzle clogs. Bed: smooth PEI + adhesive, textured PEI, glass + adhesive."
+  },
+  "conflicts": [
+    "_enclosure: does not require a heated chamber (source: marketing description on https://fiberlogy.com/en/filaments/petg-en/petg-esd-en/)"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://fiberlogy.com/en/filaments/petg-en/petg-esd-en/"
+  ],
+  "updated": "2026-11-01"
+}

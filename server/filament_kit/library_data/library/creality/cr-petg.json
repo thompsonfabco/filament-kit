@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "vendor": "Creality",
+  "product": "CR-PETG",
+  "material": "PETG",
+  "colors": [
+    "CR-PETG White"
+  ],
+  "bambu_parent": "Generic PETG",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-100",
+    "chamber_temperatures": "room temp",
+    "_print_speed": "40-80",
+    "_drying": "60C 8-12h",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "Creality universal filament spec table: 240C recommended start, 90C bed reference, no chamber requirement, 50 mm/s recommended. Drying is Creality's general PETG reference for its dryers."
+  },
+  "conflicts": [
+    "[pass 3] Creality Amazon listing B0D4Q1221L states 220-250C and bed 70-80C.",
+    "[pass 3] Drying value is Creality's general PETG drying reference, not a CR-PETG-specific TDS."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.creality.com/blogs/all/creality-3d-printer-filaments-type-parameter",
+    "https://store.creality.com/blogs/basics/petg-filament-guide-settings-strength-stringing-best-uses",
+    "https://www.creality3dofficial.eu/products/cr-petg-3d-printing-filament-1kg",
+    "https://www.amazon.com/CREALITY-3D-No-Tangling-Performance-Dimensional/dp/B0B2J96NP5"
+  ],
+  "updated": "2026-11-01"
+}

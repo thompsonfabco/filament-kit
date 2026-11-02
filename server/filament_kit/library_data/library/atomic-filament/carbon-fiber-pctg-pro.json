@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "vendor": "Atomic Filament",
+  "product": "Carbon Fiber PCTG PRO",
+  "material": "PCTG-CF",
+  "colors": [
+    "Extreme Black"
+  ],
+  "bambu_parent": "Generic PCTG",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "255"
+    ],
+    "nozzle_temperature_range_high": [
+      "272"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80 +/-10",
+    "_hardened_nozzle_required": "yes - wear-resistant nozzle suitable for abrasive filament",
+    "_fiber_content": "milled carbon fiber (percentage not published)",
+    "_diameter_tolerance": "+/-0.02",
+    "_ams": "sold as AMS compatible (1 kg); CF is abrasive",
+    "_notes": "No density, Tg or minimum nozzle size published for the CF grade. Bambu Studio has no PCTG-CF preset; Generic PCTG used as parent - apply the hardened-nozzle requirement manually."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://atomicfilament.com/products/carbon-fiber-extreme-black-pctg-pro",
+    "https://atomicfilament.com/products/sample-coil-carbon-fiber-black-pctg-filament"
+  ],
+  "updated": "2026-11-01"
+}

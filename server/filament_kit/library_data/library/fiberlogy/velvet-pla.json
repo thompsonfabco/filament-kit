@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "Fiberlogy",
+  "product": "Velvet PLA",
+  "material": "PLA",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu PLA Matte",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.27"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-70",
+    "fan_min_speed/fan_max_speed": "75-100",
+    "_drying": "50C 4h",
+    "_enclosure": "not required",
+    "_hdt_0.45MPa": "55 (ISO 75)",
+    "_vicat": "63 (method printed as ISO 75)",
+    "_notes": "Bed surface: PEI. No special nozzle required. Limited edition."
+  },
+  "conflicts": [
+    "_hdt_0.45MPa: 53 (ISO 75) (source: official TDS https://fiberlogy.com/app/uploads/2026/07/FIBERLOGY_VELVET-PLA_TDS-1-3.pdf)"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://fiberlogy.com/en/filaments/pla-en/velvet-pla-en/"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "vendor": "Push Plastic",
+  "product": "High Heat+Tough PLA",
+  "material": "PLA",
+  "colors": [
+    "Black",
+    "Dark Grey",
+    "Green",
+    "Natural",
+    "Red",
+    "Silver Metallic",
+    "Ultra Blue",
+    "White"
+  ],
+  "bambu_parent": "Bambu PLA Tough",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "215"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.22"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-80",
+    "_drying": "50C 2h",
+    "_enclosure": "Not required (sealed enclosure may cause heat creep)",
+    "_print_speed": "45-55mm/s with part cooling ON (preferred: 0.4mm nozzle, 0.2mm layer, 220C extruder, 70C bed)",
+    "_annealing": "80-130C for 15min-2h (print-settings sheet); parts may deform slightly",
+    "_hdt": "95.3 (ASTM D648, printed specimens; load and annealing state not stated)",
+    "_notes": "Made from NatureWorks Ingeo 3D870 (TDS). Turn part cooling up."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0260/7421/files/HHtoughPLA_print_settings.pdf",
+    "https://cdn.shopify.com/s/files/1/0260/7421/files/TechnicalDataSheet_3D870_monofilament_pdf.pdf",
+    "https://www.pushplastic.com/products/high-heat-tough-pla-filament-1-75mm-1kg"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "vendor": "Inland",
+  "product": "ASA Carbon Fiber",
+  "material": "ASA-CF",
+  "colors": [
+    "Dark Grey"
+  ],
+  "bambu_parent": "Bambu ASA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "260"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-100",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "0.5 kg spool. Read via search index of microcenter.com (direct fetch 403). A separate Inland-listed 'Fiberon ASA-CF08' (Light Gray, 705077) gives the same 260-280 / 90-100 and HDT 103 C @0.45 MPa, but it is not confirmed to be the same product, so the HDT is not recorded here. Hardened-nozzle requirement not stated; CF fill is normally abrasive."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.microcenter.com/product/705078/inland-175mm-asa-carbon-fiber-3d-printer-filament-05-kg-(11-lbs)-spool-dark-grey"
+  ],
+  "updated": "2026-11-01"
+}

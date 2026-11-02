@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "vendor": "Prusament",
+  "product": "PETG Magnetite 40%",
+  "material": "PETG",
+  "colors": [
+    "Grey"
+  ],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "265"
+    ],
+    "nozzle_temperature_range_high": [
+      "275"
+    ],
+    "filament_density": [
+      "1.82"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-110",
+    "_fan_speed": "10-20",
+    "_max_print_speed": "up to 100 mm/s",
+    "_hdt_0.45MPa": "93 (ISO 75)",
+    "_hdt_1.80MPa": "90 (ISO 75)",
+    "_diameter_tolerance": "+/-0.03",
+    "_hardened_nozzle_required": "yes; magnetite particles highly abrasive",
+    "_notes": "TDS prints nozzle '270 +/- 5', bed '100 +/- 10'. Bed: satin or powder-coated/textured sheet."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://storage.googleapis.com/prusa3d-content-prod-14e8-wordpress-prusament-prod/2025/01/7cdc9586-technical-data-sheet-2.pdf",
+    "https://prusament.com/materials/prusament-petg-magnetite-40/"
+  ],
+  "updated": "2026-11-01"
+}

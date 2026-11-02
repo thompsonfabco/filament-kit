@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "vendor": "JAYO",
+  "product": "PA6-CF",
+  "material": "PA6-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu PA6-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "270"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-70",
+    "_print_speed": "50-100 mm/s",
+    "_fiber_content": "~20% chopped carbon fiber (~80% PA6)",
+    "_hdt": "209 (HDT, load not stated)",
+    "_annealing": "80-130C 5-12h",
+    "_hardened_nozzle_required": "Works best with hardened steel nozzles (abrasive)",
+    "_notes": "Official page values. Spool is PA plastic, heat-resistant to 110C. Nylon is hygroscopic but JAYO publishes no drying spec. No density published."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.jayo3d.com/products/jayo-1kg-pa6-cf-nylon-carbon-fiber-3d-printer-filament-1-75mm-heat-resistant"
+  ],
+  "updated": "2026-11-01"
+}

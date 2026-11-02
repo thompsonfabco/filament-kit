@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "vendor": "Polymaker",
+  "product": "Panchroma Matte PLA",
+  "material": "PLA",
+  "colors": [
+    "Matte Charcoal Black",
+    "Matte Cotton White",
+    "Matte Army Beige",
+    "Matte Army Brown",
+    "Matte Earth Brown",
+    "Matte Muted White",
+    "Matte Pastel Peanut",
+    "Matte Wood Brown",
+    "Matte Pastel Peach",
+    "Matte Sunrise Orange",
+    "Matte Pastel Banana",
+    "Matte Army Light Green",
+    "Matte Savannah Yellow",
+    "Matte Lime Green",
+    "Matte Army Dark Green",
+    "Matte Pastel Mint",
+    "Matte Muted Green",
+    "Matte Forest Green",
+    "Matte Arctic Teal",
+    "Matte Pastel Ice",
+    "Matte Sapphire Blue",
+    "Matte Army Blue",
+    "Matte Muted Blue",
+    "Matte Fossil Grey",
+    "Matte Lavender Purple",
+    "Matte Muted Purple",
+    "Matte Pastel Candy",
+    "Matte Sakura Pink",
+    "Matte Pastel Watermelon",
+    "Matte Lava Red",
+    "Matte Army Red",
+    "Matte Muted Red",
+    "Matte Army Purple",
+    "Matte Ash Grey",
+    "Matte Electric Indigo",
+    "Matte Pastel Periwinkle",
+    "Matte Lotus Pink",
+    "Matte Sky Blue",
+    "Matte Sunshine Yellow",
+    "Matte Grass Green",
+    "Matte Seafoam Green",
+    "Matte Raspberry Blue",
+    "Matte Wine Burgundy",
+    "Matte Emerald Green",
+    "Matte Muted Moss",
+    "Matte Muted Teal",
+    "Matte Muted Mauve",
+    "Matte Muted Terracotta",
+    "Matte Pastel Coral",
+    "Matte Pastel Beige",
+    "Matte Electric Magenta"
+  ],
+  "bambu_parent": "PolyTerra PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.37"
+    ],
+    "filament_max_volumetric_speed": [
+      "24"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "25-60",
+    "fan_max_speed": "ON",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "20-40",
+    "_print_speed": "up to 300",
+    "_drying": "55C 6h (only if absorbed moisture)",
+    "_enclosure": "not needed",
+    "_vicat": "62 (TDS 'Matte' column)",
+    "_ams": "Polymaker wiki: hardened Panchroma spool edges roll well in the AMS.",
+    "_notes": "Same product as the former PolyTerra PLA (renamed). Slightly more abrasive than gloss PLA; Polymaker suggests a hardened nozzle only for heavy use. Polymaker advises against the Anycubic ACE Pro for this line. Gradient Matte colours are sold on a separate page. Density 1.37 g/cm3 is the Panchroma TDS V2.1 'Matte' group value; max volumetric speed is the wiki value (0.4 mm nozzle)."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://wiki.polymaker.com/polymaker-products/polymaker-filaments/panchroma-tm/panchroma-tm-matte-pla",
+    "https://cdn.shopify.com/s/files/1/0548/7299/7945/files/TDS_PANCHROMA_V2.pdf",
+    "https://shop.polymaker.com/products/matte-pla"
+  ],
+  "updated": "2026-11-01"
+}

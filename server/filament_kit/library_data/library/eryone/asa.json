@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "ASA",
+  "material": "ASA",
+  "colors": [
+    "Black",
+    "White"
+  ],
+  "bambu_parent": "Bambu ASA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.05"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "75-90",
+    "_drying": "80-90C 12h",
+    "_print_speed": "30-50mm/s",
+    "_vicat": "106 (ASTM D1525)",
+    "_hdt": "95 (ASTM D648; load not stated)",
+    "_enclosure": "Box Sealing Print"
+  },
+  "conflicts": [
+    "nozzle_temperature: 210-250 (https://eryone3d.com/products/asa-filament (generic 'Recommended processing temperature'))",
+    "bed_all_plates: 60-100 (https://eryone3d.com/products/asa-filament)"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0252/0412/9841/files/ERYONE-ASA-TDS.pdf",
+    "https://eryone3d.com/products/asa-filament"
+  ],
+  "updated": "2026-11-01"
+}

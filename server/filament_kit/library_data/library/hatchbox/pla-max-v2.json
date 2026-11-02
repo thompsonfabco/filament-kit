@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "vendor": "Hatchbox",
+  "product": "PLA Max V2",
+  "material": "PLA",
+  "colors": [
+    "Black",
+    "White",
+    "Teal",
+    "Sage Green",
+    "Sea Breeze",
+    "Peach",
+    "Pecan Brown",
+    "Neon Red",
+    "Mint Green",
+    "Laker Gold",
+    "Flesh",
+    "Dark Red",
+    "Dark Blue",
+    "Coral",
+    "Hot Pink",
+    "Olive Green",
+    "Mustard",
+    "Green",
+    "Midnight Purple"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "210"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_ams": "Product page: 'Updated spool size for AMS compatibility'.",
+    "_notes": "Product pages: 'Print Temperature - 190C - 210C', improved vacuum seal, 'Enhanced Strength and Durability'. Verified 2026-11-01 against the product pages' Shopify JSON."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.hatchbox3d.com/products/hb-pla-max-teal",
+    "https://www.hatchbox3d.com/products/black-pla-max-v2-filament-1-75mm-1kg-spool",
+    "https://www.hatchbox3d.com/collections/pla-1-75mm.atom"
+  ],
+  "updated": "2026-11-01"
+}

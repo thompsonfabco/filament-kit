@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "vendor": "ColorFabb",
+  "product": "rPETG",
+  "material": "PETG",
+  "colors": [
+    "Burnt Amber"
+  ],
+  "bambu_parent": "Bambu PETG Translucent",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "255"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-80",
+    "fan_max_speed": "100",
+    "_notes": "Recycled PETG, translucent. Page prints approximate values ('~230-255 C' nozzle, '~60-80 C' bed), fan 'up to 100%', layer height ~0.05-0.30 mm. No density, Tg or TDS published. Nominal diameter not printed on the cited page (variant selector not readable), so filament_diameter is left out."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://colorfabb.com/rpetg-burnt-amber"
+  ],
+  "updated": "2026-11-01"
+}

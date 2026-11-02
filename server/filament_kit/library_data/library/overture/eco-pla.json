@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "vendor": "OVERTURE",
+  "product": "Eco PLA",
+  "material": "PLA",
+  "colors": [
+    "Midnight Black"
+  ],
+  "bambu_parent": "Overture PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_density": [
+      "1.30"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-70",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "20-40",
+    "overhang_fan_threshold": "60 (threshold overhang angle, degrees)",
+    "_print_speed": "30-70 mm/s",
+    "_vicat": "63.3 (ISO 306)",
+    "_notes": "TDS v5.1 (Jul 2024): contains recycled PLA; melt index 15.9 g/10min (210C 2.16kg); melting temp 161.5C (DSC); cooling fan on; based on 0.4 mm nozzle. Overture product page (overture3d.com/products/overture-eco-pla-filament-1-75mm-1) now redirects to the homepage (checked 2026-11-01). Diameter not printed in the TDS, so filament_diameter left out."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://overture3d.com/cdn/shop/files/OVERTURE__ECO_PLA_TDS_EN_V5.1_2ca514f6-4635-4375-8af2-fc6597c90eab.pdf"
+  ],
+  "updated": "2026-11-01"
+}

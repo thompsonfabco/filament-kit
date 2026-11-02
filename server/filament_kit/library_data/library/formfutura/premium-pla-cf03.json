@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "Premium PLA CF03",
+  "material": "PLA-CF",
+  "colors": [],
+  "bambu_parent": "Bambu PLA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_density": [
+      "1.24"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "fan_min_speed/fan_max_speed": "5-100",
+    "_min_nozzle": "0.6 (product page)",
+    "_fiber_content": "circa 3% carbon fibre (TDS)",
+    "_hardened_nozzle_required": "No - TDS: can be printed with brass nozzles",
+    "_hdt": "55 (ASTM E2092)",
+    "_notes": "Aesthetic carbon look, not structural CF. Page: layer height >= 0.2 mm, high-speed printing compatible. TDS melting point 210C. Print temps from product page (TDS has none)."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://formfutura.com/filaments/premium-pla-cf03",
+    "https://formfutura.com/web/content/256615?download=true"
+  ],
+  "updated": "2026-11-01"
+}

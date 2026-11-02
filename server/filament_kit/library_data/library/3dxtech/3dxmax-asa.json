@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "3DXMAX ASA",
+  "material": "ASA",
+  "colors": [
+    "Black",
+    "Dark Gray",
+    "Natural",
+    "White",
+    "Green",
+    "Red",
+    "Reflex Blue"
+  ],
+  "bambu_parent": "Bambu ASA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "235"
+    ],
+    "nozzle_temperature_range_high": [
+      "255"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-110",
+    "_drying": "80C 4h",
+    "_vitrification": "105 (Tg)",
+    "_diameter_tolerance": "+/-0.05",
+    "_enclosure": "Heated chamber recommended",
+    "_notes": "Values from MatterHackers (authorized reseller) listing reproducing 3DXTech print recommendations; official 3dxtech.com product page could not be read (HTTP 429). Listing notes: lower bed 10-20C after first few layers; bed prep Magigoo. Also sold in 2.85mm. Density not published in the sources read."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://www.matterhackers.com/store/l/3dxtech-3dxmax-asa-filament-1kg/sk/MWC5RKCP"
+  ],
+  "updated": "2026-11-01"
+}

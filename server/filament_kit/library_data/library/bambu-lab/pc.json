@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "vendor": "Bambu Lab",
+  "product": "PC",
+  "material": "PC",
+  "colors": [],
+  "bambu_parent": "Bambu PC",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "260"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_density": [
+      "1.20"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-110 (glue)",
+    "chamber_temperatures": "45-60",
+    "fan_min_speed/fan_max_speed": "0-60%",
+    "filament_retraction_length": "0.8-1.4",
+    "filament_retraction_speed": "20-40",
+    "_print_speed": "300 mm/s",
+    "_drying": "oven 80C 8h; X1 heatbed 90-100C 12h",
+    "_min_nozzle": "TDS V3.0 lists nozzle sizes 0.2, 0.4, 0.6, 0.8 mm",
+    "_vitrification": "145 (Tg, DSC 10C/min)",
+    "_vicat": "119 (ISO 306)",
+    "_hdt_0.45MPa": "112 (as printed; 1.8MPa value is listed higher)",
+    "_hdt_1.8MPa": "117",
+    "_annealing": "85-100C 6-12h",
+    "_enclosure": "Chamber 45-60C recommended",
+    "_notes": "TDS V3.0 (V2.0 same printing values; V2.0 says PVP glue). Plates: Engineering, High Temperature or Textured PEI. Max overhang ~70 deg, bridging ~40 mm. PDFs hosted on cdn.shopify.com."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0645/5876/0155/files/Bambu_PC_Technical_Data_Sheet.pdf",
+    "https://cdn.shopify.com/s/files/1/0584/7236/6216/files/Bambu_PC_Technical_Data_Sheet.pdf"
+  ],
+  "updated": "2026-11-01"
+}

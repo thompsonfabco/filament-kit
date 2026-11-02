@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "PETG",
+  "material": "PETG",
+  "colors": [
+    "PETG Gold"
+  ],
+  "bambu_parent": "Generic PETG",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.27"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "75-90",
+    "_plates": "PEI",
+    "fan_max_speed": "100",
+    "_print_speed": "<150",
+    "_drying": "60C >8h",
+    "_nozzle_sizes_supported": "0.2,0.4,0.6,0.8",
+    "_hdt_0.45MPa": "64",
+    "_vitrification": "64 (HDT)"
+  },
+  "conflicts": [
+    "[pass 3] Spool label states 230-250C.",
+    "[pass 3] Older eSUN copy states drying 65C >3h.",
+    "[pass 3] Not verified whether 'Gold' is standard eSUN PETG or a metallic/silk variant."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://www.esun3d.com/media/esun/catalog/certification/product/PETG/eSUN_PETG_Filament_TDS_1.pdf",
+    "https://www.esun3d.com/petg-product"
+  ],
+  "updated": "2026-11-01"
+}

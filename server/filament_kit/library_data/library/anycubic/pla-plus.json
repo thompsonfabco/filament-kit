@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "vendor": "Anycubic",
+  "product": "PLA+",
+  "material": "PLA",
+  "colors": [
+    "Black",
+    "Orange",
+    "Beige",
+    "White",
+    "Texture Grey",
+    "Bright Red",
+    "Blue",
+    "Texture Silver",
+    "Spring Leaf"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.21"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "12"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "55-65",
+    "fan_max_speed": "100%",
+    "filament_retraction_speed": "30",
+    "_drying": "45-50C 6-8h",
+    "_print_speed": "50-200 mm/s",
+    "_vitrification": "54.2 (Tg, ISO 11357-1)",
+    "_vicat": "52 (ISO 306, 10N)",
+    "_hdt_0.45MPa": "50",
+    "_diameter_tolerance": "+/-0.02",
+    "_min_nozzle": "0.2",
+    "_enclosure": "Not required",
+    "_notes": "TDS V3.0. TDS also gives extrusion multiplier 0.96, cooling time 8 s (product page says 9 s). UK product page: recommended nozzle size >=0.2 mm, all nozzle types, no hotbed glue required, ACE/ACE Pro compatible."
+  },
+  "conflicts": [
+    "Product page legacy 'Filament Parameters' table (store.anycubic.com/products/pla-plus-filament, also uk.anycubic3d.com): Density 1.23g/cm3, Heat Deflection Temperature 53C, Melting Point 164C"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0698/1235/5357/files/ANYCUBIC_TDS_PLA__V3.0.pdf",
+    "https://uk.anycubic3d.com/products/pla-plus-filament"
+  ],
+  "updated": "2026-11-01"
+}

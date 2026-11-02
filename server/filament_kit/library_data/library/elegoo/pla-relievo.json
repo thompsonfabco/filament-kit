@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "ELEGOO",
+  "product": "PLA Relievo",
+  "material": "PLA",
+  "colors": [
+    "PLA Relievo Cyan"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.26"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "35-65 (depends on printer and build plate type)",
+    "chamber_temperatures": "20-45",
+    "_drying": "55C 8h",
+    "_min_nozzle": "0.2",
+    "_enclosure": "not required",
+    "_plates": "Textured/Smooth PEI or other plates; glue not required",
+    "_vicat": "62",
+    "_hdt_0.45MPa": "57",
+    "_max_print_speed": "<300 mm/s",
+    "_notes": "Sold by ELEGOO as PLA CMYK, colour Rilievo Cyan. Melting temperature 158C; melt index 8.1 +/-1.5 g/10min; print and store at <=20% RH sealed with desiccant."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://eu.elegoo.com/en-es/products/pla-cmyk",
+    "https://us.amazon.com/ELEGOO-Filament-Lithophane-Dimensional-Accuracy/dp/B0GZW95T4H"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "vendor": "Spectrum",
+  "product": "PCTG Premium",
+  "material": "PCTG",
+  "colors": [],
+  "bambu_parent": "Generic PCTG",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.23"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-100",
+    "_print_speed": "40-110 mm/s",
+    "_cooling": "YES (up to 100%)",
+    "_enclosure": "not necessary",
+    "_hardened_nozzle_required": "not necessary",
+    "_vicat": "88 (TDS)",
+    "_notes": "No parameter table on the current product page; TDS only."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://spectrumfilaments.com/wp-content/uploads/2022/05/en_tds_spectrum_pctg.pdf",
+    "https://spectrumfilaments.com/en/filament/pctg-premium/"
+  ],
+  "updated": "2026-11-01"
+}

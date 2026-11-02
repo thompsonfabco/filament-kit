@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "vendor": "Prusament",
+  "product": "PC Blend Carbon Fiber",
+  "material": "PC-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu PC",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "275"
+    ],
+    "nozzle_temperature_range_high": [
+      "295"
+    ],
+    "filament_density": [
+      "1.22"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100-120",
+    "_fan_speed": "0 (0-20; 20% for bridges)",
+    "_max_print_speed": "up to 200 mm/s",
+    "_hdt_0.45MPa": "114 (ISO 75)",
+    "_hdt_1.80MPa": "106 (ISO 75)",
+    "_diameter_tolerance": "+/-0.04",
+    "_hardened_nozzle_required": "yes; high abrasivity",
+    "_enclosure": "not needed (product page)",
+    "_drying": "not needed before printing (product page)",
+    "_annealing": "140C 120 min, cool to room temperature; up to 130 C resistance, shrinkage <1% (product page)",
+    "_notes": "TDS prints nozzle '285 +/- 10', bed '110 +/- 10'. Cooling decreases interlayer adhesion. Breakable filament (watch AMS/feeder paths)."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://prusament.com/wp-content/uploads/2023/04/TDS_Prusament-PCCF_2023_EN.pdf",
+    "https://prusament.com/materials/prusament-pc-blend-carbon-fiber/"
+  ],
+  "updated": "2026-11-01"
+}

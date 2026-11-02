@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "vendor": "Anycubic",
+  "product": "PLA Silk",
+  "material": "PLA",
+  "colors": [
+    "Shiny Gold",
+    "Blue",
+    "Christmas Green",
+    "Rainbow",
+    "Silver",
+    "Pink",
+    "Christmas Red",
+    "Purple",
+    "Gold",
+    "Copper",
+    "White",
+    "Green"
+  ],
+  "bambu_parent": "Bambu PLA Silk",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.22"
+    ],
+    "filament_max_volumetric_speed": [
+      "12"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "55-65",
+    "fan_max_speed": "100%",
+    "filament_retraction_speed": "40",
+    "_drying": "55-65C 6-8h",
+    "_print_speed": "50-250 mm/s",
+    "_vitrification": "55.6 (Tg, ISO 11357-1)",
+    "_vicat": "54 (ISO 306, 10N)",
+    "_hdt_0.45MPa": "53",
+    "_min_nozzle": "0.4",
+    "_notes": "TDS V3.0. TDS also gives extrusion multiplier 0.95, cooling time 8 s. Product page: ACE compatible, recommended nozzle 0.4 mm or above. Diameter not stated in TDS. Dual/Tri-colour silk is sold as a separate product (PLA Silk Dual/Tri-Color)."
+  },
+  "conflicts": [
+    "Product page spec table (store.anycubic.com/products/silk-pla-filament): Maximum Volume Speed 8 mm3/s (TDS: 12); Heated Bed Temperature printed as '55-56' (TDS: 55-65)"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0245/5519/2380/files/ANYCUBIC_TDS_PLA_silk_V3.0.pdf",
+    "https://store.anycubic.com/products/silk-pla-filament"
+  ],
+  "updated": "2026-11-01"
+}

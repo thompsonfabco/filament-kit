@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "vendor": "Atomic Filament",
+  "product": "Flame Retardant ABS FR15U",
+  "material": "ABS",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "235"
+    ],
+    "nozzle_temperature_range_high": [
+      "255"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "115 +/-10",
+    "_diameter_tolerance": "+/-0.02",
+    "_ams": "1 kg sold as AMS compatible",
+    "_enclosure": "strong chemical odor when printing: use proper ventilation and air exchange at all times",
+    "_notes": "Resin: SABIC CYCOLAC FR15U ABS, resin meets UL V-0. Atomic links SABIC's resin TDS, which could not be fetched (HTTP 406), so no density/HDT recorded (resin density is not the generic ABS SDS value). Sample coil page: ovality +/-0.05 mm or better."
+  },
+  "conflicts": [
+    "3.5 kg page and sample coil page give 240-255C (https://atomicfilament.com/products/3-5kg-flame-retardant-sabic-fr15u-black-abs, https://atomicfilament.com/products/sample-coil-abs-flame-retardant-sabic-fr15u-black); 1 kg page gives 235-255C (used)."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://atomicfilament.com/products/flame-retardant-black-abs-filament",
+    "https://atomicfilament.com/products/3-5kg-flame-retardant-sabic-fr15u-black-abs"
+  ],
+  "updated": "2026-11-01"
+}

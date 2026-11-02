@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "vendor": "Creality",
+  "product": "Ender-PLA+",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "No heating-60",
+    "_print_speed": "40-100 mm/s",
+    "_environment_temp": "<60",
+    "_notes": "Creality filament parameter reference table (2024-12-23): recommended 200C nozzle, 50C bed, 50 mm/s. K2 Plus table lists it as 'EN PLA+': 220C/50C, 14 mm3/s (printer profile values). Not seen on the current US Creality store filament collection."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.creality.com/uk/blogs/basics/creality-filaments-parameter-reference-table",
+    "https://store.creality.com/blogs/all/creality-k2-plus-filament-parameters-settings"
+  ],
+  "updated": "2026-11-01"
+}

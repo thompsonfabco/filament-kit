@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "vendor": "Extrudr",
+  "product": "Flax",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "180"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.45"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "20-60",
+    "fan_min_speed/fan_max_speed": "30-100%",
+    "_print_speed": "20-200 mm/s",
+    "_enclosure": "no",
+    "_hardened_nozzle_required": "no",
+    "_vicat": "48 (Vicat A, ISO 306, 4 mm wall)",
+    "_notes": "Mineral-filled bio material; sandstone-like surface at higher temperatures. Adhesive not required. Max volumetric speed not published. Catalogue print settings are for a 0.4 mm nozzle, max 50% layer height. Diameter not stated in the catalogue, so filament_diameter is left unset."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://s3.extrudr.com/extrudr-media/product-catalogue/extrudr-Produktkatalog_EN.pdf"
+  ],
+  "updated": "2026-11-01"
+}

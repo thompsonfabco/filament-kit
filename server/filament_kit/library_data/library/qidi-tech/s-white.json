@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "vendor": "QIDI Tech",
+  "product": "S-White",
+  "material": "Support",
+  "colors": [
+    "White"
+  ],
+  "bambu_parent": "Bambu Support For PA PET",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "260"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_density": [
+      "1.16"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_is_support": [
+      "1"
+    ],
+    "filament_soluble": [
+      "0"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-80 (PVP glue)",
+    "fan_min_speed/fan_max_speed": "off",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "1800-3600 mm/min",
+    "_drying": "80-100C 4-6h",
+    "_print_speed": "30-120 mm/s (TDS); 30-90 mm/s (product page)",
+    "_notes": "Quick-remove breakaway support for PA12-CF, PET-CF/GF, ABS-GF25, ASA, ABS and TPU. TDS v3.0 (03.2023): support Z distance 0 mm, X/Y offset 0.3-0.6 mm, support infill 15-20%. Melt 168C, water absorption 0.4%."
+  },
+  "conflicts": [
+    "product page: nozzle 280-300C, bed 40-80C (https://qidi3d.com/products/qidi-tech-s-white-support-filament)"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://drive.google.com/file/d/1SmKn9yDfEWdgjZGdPaeDpQ8je57Egjdh/view",
+    "https://qidi3d.com/products/qidi-tech-s-white-support-filament",
+    "https://qidi3d.com/pages/choose-the-right-filament-3d-filaments-guide-for-qidi-printers"
+  ],
+  "updated": "2026-11-01"
+}
