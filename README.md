@@ -46,14 +46,45 @@ settings.
 
 1. On your phone, download `filament-kit.apk` from the same GitHub Releases page and open it. If the phone
    asks, allow "install unknown apps" for your browser.
-2. Open the filament-kit app and scan the QR code shown on the computer.
-   If the camera can't scan it, pick the server from the list in the app and type the 6-digit pairing code
-   instead.
-3. The code expires after a few minutes. To get a new one, run:
+2. On the server, run:
 
    ```
    sudo filament-kit pair
    ```
+
+   It prints a QR code, a 6-digit pairing code and the server's certificate fingerprint in the terminal.
+3. Open the filament-kit app. On Android 17 and newer, allow **Local network** access when Android asks; the app
+   can't find or reach the server without it (if you said no, the app shows **Allow** and, if Android stops
+   asking, **Open app settings**). Then scan the QR code from the terminal.
+   If the camera can't scan it, pick the server from the list in the app (or enter its address), check that the
+   fingerprint matches the one `sudo filament-kit pair` printed, and type the 6-digit code instead.
+4. The QR code and the code expire after a few minutes. If the app says the code has expired or was already
+   used, run `sudo filament-kit pair` again.
+
+## Building the Android app release (owner, Windows PC)
+
+The app is signed with a key that lives only on your PC. Android only installs an update over an installed app
+if it is signed with the **same** key, so losing the key means everyone has to uninstall and reinstall the app.
+
+1. Once: `powershell -ExecutionPolicy Bypass -File tools\android_keystore.ps1`. It creates
+   `%LOCALAPPDATA%\filament-kit\release.jks` and a random password stored (encrypted with Windows DPAPI) in
+   `%LOCALAPPDATA%\filament-kit\keystore.pw.dpapi`. You never type or see the password. It refuses to overwrite an
+   existing keystore. It uses `keytool` from `JAVA_HOME` if set, otherwise from `G:\Android\jdk-21.0.13+9`.
+2. Each release: pick the app's version code and run, in Git Bash,
+   `FK_VERSION_CODE=<n> bash tools/make_release.sh`. It builds and signs the app with that versionCode and puts
+   `app/filament-kit.apk` and `app/version.txt` (containing the same number) into the tarball.
+   **Bump the version code for every app release**: use the previous release's number plus one (it must be a whole
+   number above 0 and must never go down; without `FK_VERSION_CODE` it is `1`). Phones only offer the update when
+   the server's `version.txt` is higher than the installed app's versionCode, and Android refuses to install a
+   lower one. Without the keystore, no app is built and any old `app-release.apk` is deleted, so a tarball never
+   carries a stale app.
+3. **Back up both** `release.jks` **and** `keystore.pw.dpapi` together, somewhere safe and off this PC. A DPAPI
+   file only decrypts on this Windows account on this PC, so also make a portable backup:
+   `powershell -ExecutionPolicy Bypass -File tools\android_keystore.ps1 -Export D:\safe\filament-kit-keystore.bak`
+   (you type a passphrase of at least 12 characters; remember it). On another PC restore it with
+   `-Import <file>`. The `FK_BACKUP_PASSPHRASE` environment variable is for test automation only; never use it for
+   a real backup.
+4. `-Forget` deletes the keystore and the password file (it asks first).
 
 ## Everyday commands
 
@@ -64,11 +95,28 @@ Run these in a Terminal on the Ubuntu computer.
 | `sudo filament-kit status` | Checks that everything works. Anything failing shows a `fix:` line telling you what to do. |
 | `sudo filament-kit pair` | Shows a new QR code to pair another phone. |
 | `sudo filament-kit unpair` | Lists paired phones. `sudo filament-kit unpair <id>` removes one. |
-| `sudo filament-kit config` | Settings menu: display name, storage locations, Claude model and daily limit, API key. |
+| `sudo filament-kit config` | Settings menu: display name, storage locations, Claude model and daily limit, API key, printers. |
 
 Your spool inventory (Spoolman) is also in a web browser on any computer at home:
 `http://<computer name>.local:7912`, where `<computer name>` is the Ubuntu computer's own name (type
 `hostname` in a Terminal to see it). The installer prints this address at the end.
+
+## Bambu Lab printers
+
+The server finds Bambu Lab printers by listening for the announcements they send on your home network. For
+that to work:
+
+- The Ubuntu computer must be on the **same network segment** as the printers: the same router or switch and
+  the same Wi-Fi / LAN, not a separate guest network or VLAN. Announcements do not cross routers.
+- If the computer runs a firewall (for example `ufw`), allow incoming **UDP ports 2021 and 1990** from your
+  home network, for example `sudo ufw allow from 192.168.1.0/24 to any port 2021,1990 proto udp` (use your
+  own network's range).
+- A server inside **WSL**, a virtual machine with NAT networking, or a container without host networking does
+  not receive the announcements. Add the printers by hand there: `sudo filament-kit config` → **Printers** →
+  **add printer**, and enter the name, IP address, serial number and Access Code shown on the printer's screen.
+
+A printer appears in the app once it has been seen on the network (or added by hand with its IP address); you
+then enter its Access Code in the app to set it up.
 
 A backup of your spools and settings is made every night in `/var/backups/filament-kit` (the last 14 days are
 kept).
