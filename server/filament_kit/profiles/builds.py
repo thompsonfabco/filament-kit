@@ -169,6 +169,41 @@ def _meta() -> dict:
     return _read_obj(_live() / "meta.json")
 
 
+def meta() -> dict:
+    """A copy of the live upload's meta.json (owner, user_id, live/system hashes, times, system_presets), read under
+    live.lock so it never sees a half-done upload."""
+    with _locked("live.lock"):
+        return dict(_meta())
+
+
+# ---------- the uploaded system store (one definition for every caller) ----------
+
+_store_cache: dict = {}
+_store_cache_lock = threading.Lock()
+
+
+def system_store() -> Store | None:
+    """The uploaded Bambu Studio system presets (`system/BBL/filament`), or None when none are uploaded.
+
+    A store is uploaded exactly when meta.json has a `system_hash` and the folder holds at least one preset. The
+    store is cached by (folder, system_hash). On a cache miss the raw files are read under live.lock (so an upload
+    swap can't interleave) and parsed after it is released."""
+    folder = _live() / "system"
+    with _locked("live.lock"):
+        h = _meta().get("system_hash")
+        key = (str(folder), h)
+        with _store_cache_lock:
+            if _store_cache.get("key") == key:
+                return _store_cache["store"]
+        files = Store.read(folder) if h else []
+    store = Store.parse(files) if files else None
+    if store is not None and not store.names():
+        store = None
+    with _store_cache_lock:
+        _store_cache.update(key=key, store=store)
+    return store
+
+
 def _state() -> dict:
     return _read_obj(_dir() / "build-state.json")
 

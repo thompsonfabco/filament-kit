@@ -442,7 +442,7 @@ def test_add_and_link_spoolman_error_while_linking_reports_created_spool(sm, mon
 # ---------- Task 7b: product lines on add ----------
 
 from filament_kit import config  # noqa: E402
-from filament_kit.profiles import errors as profile_errors, lines as lines_mod  # noqa: E402
+from filament_kit.profiles import builds, errors as profile_errors, lines as lines_mod  # noqa: E402
 
 
 def _request_file():
@@ -515,12 +515,115 @@ def test_unknown_parent_with_store_is_refused(sm, spoolman_fake_store):
 
 def test_known_parent_with_store_is_accepted(sm):
     _upload_store()
-    store = inventory.system_store()
-    parent = next(n for n in sorted(store.bases()) if lines_mod._usable(store, n))
+    store = builds.system_store()
+    parent = next(n for n in sorted(store.bases()) if lines_mod.usable(store, n))
     inventory.add_and_link(sm, [_hf(bambu_parent=parent)], RULES, dry=False, uid=None)
     assert lines_mod.load()["elegoo--petg-hf"].bambu_parent == parent
 
 
 def test_no_store_any_parent_accepted(sm):
-    assert inventory.system_store() is None
+    assert builds.system_store() is None
     inventory.add_and_link(sm, [_hf(bambu_parent="Typo Preset")], RULES, dry=False, uid=None)
+
+
+# ---------- Task 7c: one store definition, edited lines on existing filaments, lines after a failed link ----------
+
+def test_inventory_has_no_own_store_or_parent_check():
+    import inspect
+
+    from filament_kit import intake
+    assert not hasattr(inventory, "system_store") and not hasattr(inventory, "check_parent")
+    assert not hasattr(inventory, "UnknownParent")
+    assert "inventory" not in inspect.getsource(intake).split("log = ")[0]
+
+
+def test_system_folder_without_hash_is_no_store(sm):
+    """Same definition as the profiles API: a store is uploaded only when meta.json has a system_hash."""
+    import test_generate as TG
+    folder = config.paths().state / "profiles" / "live" / "system"
+    folder.mkdir(parents=True)
+    for n, cfg in TG.presets().items():
+        (folder / f"{n}.json").write_text(json.dumps(cfg), encoding="utf-8")
+    inventory.add_and_link(sm, [_hf(bambu_parent="Typo Preset")], RULES, dry=False, uid=None)
+    assert lines_mod.load()["elegoo--petg-hf"].bambu_parent == "Typo Preset"
+
+
+def _existing(spoolman_fake_store, sm, line=None):
+    inventory.add_and_link(sm, [_hf(line=line, bambu_parent=None)], RULES, dry=False, uid=None)
+    (f,) = spoolman_fake_store["filaments"].values()
+    return f
+
+
+def test_edited_line_on_existing_filament_sets_its_extra_line(sm, spoolman_fake_store):
+    f = _existing(spoolman_fake_store, sm, line=None)
+    assert "line" not in f["extra"]
+    r = inventory.add_and_link(sm, [_hf(line="PETG High Flow", bambu_parent=None)], RULES, dry=False, uid=None)
+    assert json.loads(f["extra"]["line"]) == "PETG High Flow"
+    assert any(f"F{f['id']}" in ln and "line set to PETG High Flow" in ln for ln in r.lines)
+    assert "elegoo--petg-high-flow" in lines_mod.load()
+    assert len(spoolman_fake_store["filaments"]) == 1 and len(spoolman_fake_store["spools"]) == 2
+
+
+def test_edited_line_replaces_a_different_extra_line(sm, spoolman_fake_store):
+    f = _existing(spoolman_fake_store, sm, line="PETG HF")
+    f["extra"]["nozzle_range"] = json.dumps("230-260")
+    inventory.add_and_link(sm, [_hf(line="PETG HF Pro", bambu_parent=None)], RULES, dry=False, uid=None)
+    assert json.loads(f["extra"]["line"]) == "PETG HF Pro"
+    assert json.loads(f["extra"]["nozzle_range"]) == "230-260"      # other extra fields are kept
+
+
+def test_same_line_on_existing_filament_writes_nothing(sm, spoolman_fake_store):
+    f = _existing(spoolman_fake_store, sm, line="PETG HF")
+    before = json.dumps(f, sort_keys=True)
+    r = inventory.add_and_link(sm, [_hf(line="petg hf", bambu_parent=None)], RULES, dry=False, uid=None)
+    assert json.dumps(f, sort_keys=True) == before
+    assert not any("line set to" in ln for ln in r.lines)
+
+
+def test_derived_line_on_existing_filament_writes_nothing(sm, spoolman_fake_store):
+    """The read proposes the derived line for an existing filament without extra.line: sending it back unedited
+    must not pin the filament."""
+    inventory.add_and_link(sm, [item(name="PLA+ 2.0 Grey")], RULES, dry=False, uid=None)
+    (f,) = spoolman_fake_store["filaments"].values()
+    inventory.add_and_link(sm, [item(name="PLA+ 2.0 Grey", line="PLA+ 2.0")], RULES, dry=False, uid=None)
+    assert "line" not in f["extra"]
+
+
+def test_edited_line_dry_run_only_reports(sm, spoolman_fake_store):
+    f = _existing(spoolman_fake_store, sm, line=None)
+    r = inventory.add_and_link(sm, [_hf(line="PETG High Flow", bambu_parent=None)], RULES, dry=True, uid=None)
+    assert "line" not in f["extra"]
+    assert any("would set line to PETG High Flow" in ln for ln in r.lines)
+
+
+def test_lines_recorded_when_the_tag_link_fails(sm, spoolman_fake_store, monkeypatch):
+    def patch(path, body):
+        raise SpoolmanError("down", status=None)
+
+    monkeypatch.setattr(sm, "patch", patch)
+    with pytest.raises(inventory.AddFailed) as e:
+        inventory.add_and_link(sm, [_hf(sealed=False)], RULES, dry=False, uid=UID)
+    assert len(e.value.partial.spool_ids) == 1
+    line = lines_mod.load()["elegoo--petg-hf"]
+    assert line.bambu_parent == "Generic PETG"
+    assert json.loads(_request_file().read_text(encoding="utf-8"))["reason"] == "intake"
+
+
+def test_lines_recorded_only_for_items_added_before_spoolman_failed(sm, spoolman_fake_store, monkeypatch):
+    real_post = sm.post
+    spools = []
+
+    def post(path, body):
+        if path == "spool":
+            spools.append(body)
+            if len(spools) == 2:
+                raise SpoolmanError("down", status=None)
+        return real_post(path, body)
+
+    monkeypatch.setattr(sm, "post", post)
+    second = item(vendor="ACME", name="PLA Matte Red", material="PLA", line="PLA Matte")
+    with pytest.raises(inventory.AddFailed) as e:
+        inventory.add_and_link(sm, [_hf(), second], RULES, dry=False, uid=None)
+    assert len(e.value.partial.spool_ids) == 1
+    ls = lines_mod.load()
+    assert "elegoo--petg-hf" in ls and "acme--pla-matte" not in ls

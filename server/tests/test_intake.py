@@ -275,3 +275,44 @@ def test_line_kept_within_add_limits(sm):
                          line="PETG HF @BBL H2D " + "x" * 200)
     it = read_labels(sm, [JPEG], "", None, client=FakeClaude(r))["items"][0]
     assert it["line"] == "PETG HF"
+
+
+def test_fallback_line_drops_the_colour(sm, monkeypatch):
+    """Task 7c: when the proposal fails, the line falls back to the product (name without colour), not the name."""
+    from filament_kit.profiles import lines
+
+    def boom():
+        raise lines.LineStoreError("lines.json is unusable")
+
+    monkeypatch.setattr(lines, "load", boom)
+    r = recorded()
+    r["items"][0].update(existing_filament_id=None, vendor="SUNLU", name="PLA+ 2.0 Grey", line=" ")
+    it = read_labels(sm, [JPEG], "", None, client=FakeClaude(r))["items"][0]
+    assert it["line"] == "PLA+ 2.0" and it["parent_source"] == "none" and it["bambu_parent"] is None
+
+
+def test_fallback_line_empty_when_no_product_is_known(sm, monkeypatch):
+    from filament_kit import library
+    from filament_kit.profiles import lines
+
+    def boom():
+        raise OSError("library unreadable")
+
+    monkeypatch.setattr(library, "load", boom)
+    r = recorded()
+    r["items"][0].update(existing_filament_id=None, vendor="NoName", name="Silk Rainbow", line="")
+    it = read_labels(sm, [JPEG], "", None, client=FakeClaude(r))["items"][0]
+    assert it["line"] == "" and it["parent_source"] == "none"
+
+
+def test_fallback_line_empty_when_the_library_has_no_prefix(sm, monkeypatch):
+    from filament_kit.profiles import lines
+
+    def boom():
+        raise lines.LineStoreError("lines.json is unusable")
+
+    monkeypatch.setattr(lines, "load", boom)
+    r = recorded()
+    r["items"][0].update(existing_filament_id=None, vendor="NoName", name="Silk Rainbow", line="")
+    it = read_labels(sm, [JPEG], "", None, client=FakeClaude(r))["items"][0]
+    assert it["line"] == ""

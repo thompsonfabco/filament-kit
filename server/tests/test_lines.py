@@ -577,3 +577,32 @@ def test_filament_in_two_lines_is_reported_and_dropped_from_the_later_one(lib, s
     saved = {r["line_id"]: r["filaments"] for r in json.loads(p.read_text(encoding="utf-8"))["lines"]}
     assert saved == {"acme--pla": [3], "xzn--petg": [1, 2]}
     assert not any("listed in lines" in s for s in lines.problems(lines.load()))
+
+
+# ---------- Task 7c: one parent gate, one text limit ----------
+
+def test_check_parent_gate(store):
+    from filament_kit.profiles.errors import ProfileError
+    usable = next(b for b in sorted(store.bases()) if lines.usable(store, b))
+    lines.check_parent(usable, store)
+    lines.check_parent("No Such Preset", None)          # no store uploaded yet: anything, re-checked at build
+    lines.check_parent("", store)                       # blank: nothing to check
+    lines.check_parent("   ", store)
+    with pytest.raises(ProfileError) as e:
+        lines.check_parent("No Such Preset", store)
+    assert (e.value.status, e.value.code, e.value.extra) == (400, "unknown_parent", {"parent": "No Such Preset"})
+    assert "not a usable Bambu Studio system preset" in e.value.message
+    assert not isinstance(e.value, ValueError)
+
+
+@pytest.mark.parametrize("value, problem", [
+    ("PETG HF", None), ("  " + "x" * 100 + "  ", None), ("x" * 101, "is longer than 100 characters"),
+    ("PETG @BBL H2D", "may not contain '@'"), (5, "must be text"),
+])
+def test_text_problem(value, problem):
+    got = lines.text_problem(value)
+    assert got == problem if problem is None else problem in got
+
+
+def test_text_problem_at_allowed_when_asked():
+    assert lines.text_problem("a@b", at_ok=True) is None

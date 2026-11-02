@@ -398,3 +398,19 @@ def test_chunked_upload_streams_into_store(c):
     r = c.put("/api/sync/live", content=body(), headers={**auth(tok), "Content-Type": "application/zip"})
     assert r.status_code == 200 and r.json()["live_hash"] == builds.tree_hash(live_files())
     assert (live_files() / "base" / "x.info").is_file()
+
+
+def test_patch_unknown_parent_same_error_as_intake(c, sm):
+    """Task 7c: PATCH and the intake add share lines.check_parent: same code, message and `parent` field."""
+    tok = token()
+    built(c, tok, sm)
+    r = c.patch(f"/api/profiles/lines/{LID}", json={"bambu_parent": "Bambu Nothing"}, headers=auth(tok))
+    assert r.status_code == 400
+    body = r.json()
+    assert body["error"] == "unknown_parent" and body["parent"] == "Bambu Nothing"
+    assert "not a usable Bambu Studio system preset" in body["message"]
+
+
+def test_profiles_api_uses_the_shared_store_loader():
+    from filament_kit import profiles_api
+    assert not hasattr(profiles_api, "system_store") and not hasattr(profiles_api, "_store_cache")
