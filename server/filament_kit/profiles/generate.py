@@ -794,10 +794,11 @@ def _build_orca_line(line: Line, fs: list[dict], ids: list[int], *, t: OrcaTarge
                                 f"{p.name}; no Orca Slicer {p.label} presets")
                 continue
             if not sizes:
+                rule = (f"config presets_orca_nozzles ({', '.join(p.nozzles)}) leaves out" if p.nozzles
+                        else "Orca presets for Bambu printers leave out by default (all but 0.2)")
                 problems.append(f"{line.line_id}: the Orca Slicer {line.bambu_parent!r} system presets list "
-                                f"{p.name} only with nozzle {', '.join(listed)}, which presets_orca_nozzles leaves "
-                                f"out ({', '.join(p.nozzles) if p.nozzles else 'default: all but 0.2'}); no Orca "
-                                f"Slicer {p.label} presets")
+                                f"{p.name} only with nozzle {', '.join(listed)}, which {rule}; no Orca Slicer "
+                                f"{p.label} presets")
                 continue
         else:
             sizes = p.nozzles

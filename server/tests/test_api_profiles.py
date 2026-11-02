@@ -209,10 +209,16 @@ def test_build_download_and_installed(c, sm):
 
     r = c.post("/api/sync/installed", json={"stamp": "20990101-000000"}, headers=auth(tok))
     assert r.status_code == 404 and r.json()["error"] == "not_found"
-    r = c.post("/api/sync/installed", json={"stamp": stamp}, headers=auth(tok))
+    r = c.post("/api/sync/installed", json={"stamp": stamp, "trees": ["orca"]}, headers=auth(tok))
+    assert r.status_code == 400
+    r = c.post("/api/sync/installed", json={"stamp": stamp, "trees": ["base", "orca"]}, headers=auth(tok))
+    assert r.status_code == 200
+    assert builds._read_obj(config.paths().state / "profiles" / "installed.json")["orca_stamp"] == stamp
+    r = c.post("/api/sync/installed", json={"stamp": stamp}, headers=auth(tok))     # an older PC sync
     assert r.status_code == 200
     inst = r.json()["installed"]
     assert inst["stamp"] == stamp and ISO.fullmatch(inst["at"])
+    assert builds._read_obj(config.paths().state / "profiles" / "installed.json")["orca_stamp"] == stamp  # kept
 
     st = c.get("/api/sync/state", headers=auth(tok)).json()
     assert st["installed"] == inst

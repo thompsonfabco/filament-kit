@@ -299,8 +299,9 @@ def routes(authed, sm) -> list[Route]:
         stamp = body.get("stamp")
         if not isinstance(stamp, str):
             raise _bad("stamp is required")
+        trees = body.get("trees")               # Ruling AB: ["base"] | ["base", "orca"]; absent = ["base"]
         inst = await run_in_threadpool(_audit, "sync installed", device,
-                                       lambda: builds.record_installed(stamp, device), stamp=stamp)
+                                       lambda: builds.record_installed(stamp, device, trees), stamp=stamp)
         return JSONResponse({"installed": _iso_at(inst)})
 
     @authed
