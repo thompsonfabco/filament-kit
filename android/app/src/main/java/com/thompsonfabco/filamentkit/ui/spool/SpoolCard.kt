@@ -41,13 +41,28 @@ fun SpoolHost(
     onStartAdd: (tag: String?) -> Unit,
     onPairAgain: () -> Unit,
     onClose: () -> Unit,
+    loadVm: LoadViewModel? = null,
 ) {
     val state by viewModel.state.collectAsState()
+    val loadState = loadVm?.state?.collectAsState()?.value ?: LoadUiState.Closed
     Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        val s0 = state
+        if (loadVm != null && loadState != LoadUiState.Closed && s0 is SpoolUiState.Card) {
+            LoadFlow(
+                state = loadState,
+                vm = loadVm,
+                onDone = { done ->
+                    loadVm.close()
+                    done.spoolJson?.let(viewModel::open)
+                },
+                onPairAgain = onPairAgain,
+            )
+            return@Column
+        }
         when (val s = state) {
             SpoolUiState.Idle -> Unit
             SpoolUiState.Loading -> Text("Looking up tag…")
-            is SpoolUiState.Card -> SpoolCard(s, viewModel, onClose)
+            is SpoolUiState.Card -> SpoolCard(s, viewModel, onClose, onLoad = loadVm?.let { vm -> { vm.start(s.spool) } })
             is SpoolUiState.UnknownTag -> UnknownTagChoice(
                 onLink = viewModel::startLink,
                 onAddNew = { onStartAdd(s.tag) },
@@ -103,7 +118,7 @@ private fun parseHex(hex: String?): Color {
 }
 
 @Composable
-private fun SpoolCard(card: SpoolUiState.Card, vm: SpoolViewModel, onClose: () -> Unit) {
+private fun SpoolCard(card: SpoolUiState.Card, vm: SpoolViewModel, onClose: () -> Unit, onLoad: (() -> Unit)?) {
     var gross by remember(card.rev) { mutableStateOf("") }
     SpoolSummaryRow(card.spool)
     card.message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
@@ -124,6 +139,7 @@ private fun SpoolCard(card: SpoolUiState.Card, vm: SpoolViewModel, onClose: () -
         OutlinedButton(onClick = vm::openMove) { Text("Move") }
         OutlinedButton(onClick = vm::askMarkEmpty) { Text("Mark empty") }
     }
+    onLoad?.let { Button(onClick = it, modifier = Modifier.fillMaxWidth()) { Text("Load into printer") } }
 
     card.weightPreview?.let { p ->
         Text(

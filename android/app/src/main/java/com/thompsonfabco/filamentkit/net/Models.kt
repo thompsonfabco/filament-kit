@@ -76,7 +76,8 @@ data class PrinterSummary(
 )
 
 /**
- * One printer. [state] is `connected`, `offline`, `wrong_code`, `needs_developer_mode` or `not_configured`;
+ * One printer. [state] is `connected`, `offline`, `wrong_code`, `needs_developer_mode`, `cert_changed` (its TLS
+ * certificate is not the one first seen; no Access Code is sent to it) or `not_configured`;
  * [id] is the serial. The Access Code is never part of this.
  */
 @Serializable
@@ -153,6 +154,102 @@ data class PrinterDetail(val printer: Printer, val status: PrinterStatus? = null
 /** `POST /api/printers/{id}/command`; [reply] is the server's `{ok, reply}` result for the printer's answer. */
 @Serializable
 data class CommandResult(val ok: Boolean = false, val reply: JsonElement? = null)
+
+// ---- bridge part 2: slot mapping, loading, filament used (route-contract.md) ---------------------------
+
+@Serializable
+data class MapSlot(
+    val label: String,
+    @Serializable(with = LenientNullableInt::class) @SerialName("ams_id") val amsId: Int? = null,
+    @Serializable(with = LenientNullableInt::class) @SerialName("tray_id") val trayId: Int? = null,
+    @Serializable(with = LenientNullableInt::class) val global: Int? = null,
+)
+
+/** `GET /api/printers/{id}/map`. [state] is `none`, `running`, `done` or `failed`; [observe]: usage is logged only. */
+@Serializable
+data class MapStatus(
+    val state: String = "none",
+    val step: String = "",
+    val slots: List<MapSlot> = emptyList(),
+    val calibrated: Boolean = false,
+    val observe: Boolean = false,
+    val problems: List<String> = emptyList(),
+)
+
+@Serializable
+data class LoadSlot(
+    val label: String,
+    @Serializable(with = LenientNullableInt::class) @SerialName("ams_id") val amsId: Int? = null,
+    @Serializable(with = LenientNullableInt::class) @SerialName("tray_id") val trayId: Int? = null,
+)
+
+/** The owner's own Bambu Studio preset the slot is set to. */
+@Serializable
+data class PresetRef(@SerialName("filament_id") val filamentId: String = "", val name: String = "")
+
+/**
+ * `POST /api/printers/{id}/slots/{label}/load`. A dry run says what would happen ([confirmed] false, no [problems]);
+ * after a real load [confirmed] is false while the printer has not reported the new setting yet.
+ */
+@Serializable
+data class LoadResult(
+    val spool: JsonObject? = null,
+    val slot: LoadSlot,
+    val preset: PresetRef? = null,
+    @Serializable(with = LenientDouble::class) @SerialName("nozzle_mm") val nozzleMm: Double? = null,
+    @SerialName("nozzle_assumed") val nozzleAssumed: Boolean = false,
+    /** A dry run may send null here; read as false. */
+    @Serializable(with = LenientBool::class) val confirmed: Boolean = false,
+    val problems: List<String> = emptyList(),
+    /** Spools now in that slot that go back to their previous place (not in the contract; shown when sent). */
+    @SerialName("moved_back") val movedBack: List<MovedBack> = emptyList(),
+)
+
+@Serializable
+data class MovedBack(@Serializable(with = LenientNullableInt::class) val id: Int? = null, val location: String = "")
+
+/** true / false; null or anything else reads as false. */
+internal object LenientBool : KSerializer<Boolean> {
+    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("LenientBool", PrimitiveKind.BOOLEAN)
+    override fun deserialize(decoder: Decoder): Boolean {
+        val el = (decoder as? JsonDecoder ?: throw SerializationException("JSON only")).decodeJsonElement()
+        return (el as? JsonPrimitive)?.takeIf { it !is JsonNull }?.content == "true"
+    }
+    override fun serialize(encoder: Encoder, value: Boolean) = encoder.encodeBoolean(value)
+}
+
+/** `POST /api/printers/{id}/slots/{label}/unload`; [location] is where the spool goes back to. */
+@Serializable
+data class UnloadResult(val spool: JsonObject? = null, val slot: LoadSlot, val location: String = "")
+
+/**
+ * One line of `GET /api/printers/{id}/usage`. [id] may be sent as a number or a string; it is kept as text.
+ * [observe]: only logged, nothing was taken off a spool. [error] is a code when the deduction could not be made.
+ */
+@Serializable
+data class UsageEntry(
+    @Serializable(with = TextId::class) val id: String,
+    val at: String = "",
+    val job: String? = null,
+    @Serializable(with = LenientDouble::class) val grams: Double? = null,
+    @Serializable(with = LenientNullableInt::class) @SerialName("spool_id") val spoolId: Int? = null,
+    val slot: String? = null,
+    val observe: Boolean = false,
+    val undone: Boolean = false,
+    val error: String? = null,
+)
+
+/** A JSON string or number, read as text. */
+internal object TextId : KSerializer<String> {
+    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("TextId", PrimitiveKind.STRING)
+    override fun deserialize(decoder: Decoder): String {
+        val el = (decoder as? JsonDecoder ?: throw SerializationException("JSON only")).decodeJsonElement()
+        return (el as? JsonPrimitive)?.takeIf { it !is JsonNull }?.content ?: throw SerializationException("id missing")
+    }
+    override fun serialize(encoder: Encoder, value: String) = encoder.encodeString(value)
+}
+
+// ---- end bridge part 2 ---------------------------------------------------------------------------------
 
 /*
  * Printer numbers pass through from Bambu reports, which mix integers, decimals (`64.0`, `25.5`) and numeric strings

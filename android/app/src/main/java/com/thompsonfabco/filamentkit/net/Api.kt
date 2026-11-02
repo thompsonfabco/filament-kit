@@ -185,6 +185,41 @@ class Api(
     /** The Bearer header for requests the app builds itself (camera streams). */
     fun authHeaders(): Map<String, String> = token()?.let { mapOf("Authorization" to "Bearer $it") }.orEmpty()
 
+    // ---- bridge part 2 -------------------------------------------------------------------------------------
+
+    /** Starts the slot test + calibration job; 409 `already_running` while one runs. */
+    suspend fun startMap(id: String): String =
+        call(request("api", "printers", id, "map").post(ByteArray(0).toRequestBody(null)))
+            .jsonObject["job_id"]?.jsonPrimitive?.contentOrNull
+            ?: throw ApiError(200, "bad_response", "The server did not return a job")
+
+    suspend fun mapStatus(id: String): MapStatus = decode(call(request("api", "printers", id, "map").get()))
+
+    suspend fun load(id: String, label: String, spoolId: Int, dryRun: Boolean): LoadResult {
+        val body = buildJsonObject {
+            put("spool_id", spoolId)
+            put("dry_run", dryRun)
+        }
+        return decode(call(request("api", "printers", id, "slots", label, "load").post(body.toBody())))
+    }
+
+    suspend fun unload(id: String, label: String, dryRun: Boolean): UnloadResult {
+        val body = buildJsonObject { put("dry_run", dryRun) }
+        return decode(call(request("api", "printers", id, "slots", label, "unload").post(body.toBody())))
+    }
+
+    /** Newest first (the server's order). */
+    suspend fun usage(id: String, days: Int = 7): List<UsageEntry> {
+        val req = request("api", "printers", id, "usage") { addQueryParameter("days", days.toString()) }
+        return call(req.get()).jsonObject["entries"]?.jsonArray.orEmpty().map { decode(it) }
+    }
+
+    suspend fun undoUsage(entryId: String): UsageEntry {
+        val entry = call(request("api", "usage", entryId, "undo").post(ByteArray(0).toRequestBody(null)))
+            .jsonObject["entry"] ?: throw ApiError(200, "bad_response", "The server did not return the entry")
+        return decode(entry)
+    }
+
     // ---- end printers --------------------------------------------------------------------------------------
 
     // --- plumbing ---

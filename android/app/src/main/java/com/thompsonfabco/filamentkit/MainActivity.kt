@@ -125,6 +125,7 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
 
     // App-wide, one per Api (owned by AppViewModel; replaced when the pinned client changes).
     val spoolVm by app.spool.current.collectAsStateWithLifecycle()
+    val loadVm by app.load.current.collectAsStateWithLifecycle()
     val updater by app.updater.current.collectAsStateWithLifecycle()
     val online = connection is Connection.Online
     LaunchedEffect(updater, online) {
@@ -137,6 +138,7 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
         if (pairRequests > app.handledPairRequests) {
             app.handledPairRequests = pairRequests
             spoolVm?.dismiss()
+            loadVm?.close()
             if (nav.currentDestination?.route != Routes.PAIR) nav.navigateClearing(Routes.PAIR)
         }
     }
@@ -144,8 +146,12 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
     // Tag taps open the spool card anywhere except pairing and the add flow (AddViewModel takes taps itself).
     val tapVm = spoolVm
     val tapsOn = tapVm != null && route != null && route != Routes.PAIR && route != Routes.ADD
-    LaunchedEffect(tapVm, tapsOn) {
-        if (tapsOn) TagEvents.taps.collect { tapVm.onTag(it) }
+    LaunchedEffect(tapVm, loadVm, tapsOn) {
+        if (tapsOn) TagEvents.taps.collect {
+            // a new tap replaces the open card and any load flow on it, except while a load is being written:
+            // then the tap is ignored so the user sees that write's result
+            if (loadVm?.close() != false) tapVm.onTag(it)
+        }
     }
 
     NavHost(nav, startDestination = start) {
@@ -281,20 +287,25 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
     spoolVm?.let { vm ->
         val spoolState by vm.state.collectAsStateWithLifecycle()
         if (spoolState != SpoolUiState.Idle && route != Routes.ADD && route != Routes.PAIR) {
-            Dialog(onDismissRequest = vm::dismiss) {
+            // Not while a load is being written: the dialog stays until the user has seen the result.
+            val close = {
+                if (loadVm?.close() != false) vm.dismiss()
+            }
+            Dialog(onDismissRequest = close) {
                 Surface(shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.verticalScroll(rememberScrollState())) {
                         SpoolHost(
                             viewModel = vm,
                             onStartAdd = { tag ->
-                                vm.dismiss()
+                                close()
                                 nav.navigate(Routes.add(tag = tag))
                             },
                             onPairAgain = {
-                                vm.dismiss()
+                                close()
                                 app.router.pairAgain()
                             },
-                            onClose = vm::dismiss,
+                            onClose = close,
+                            loadVm = loadVm,
                         )
                     }
                 }

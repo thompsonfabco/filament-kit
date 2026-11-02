@@ -9,7 +9,9 @@ import com.thompsonfabco.filamentkit.drafts.Draft
 import com.thompsonfabco.filamentkit.drafts.DraftStore
 import com.thompsonfabco.filamentkit.net.Discovery
 import com.thompsonfabco.filamentkit.net.LocalNetwork
+import com.thompsonfabco.filamentkit.ui.spool.ApiLoadBackend
 import com.thompsonfabco.filamentkit.ui.spool.ApiSpoolBackend
+import com.thompsonfabco.filamentkit.ui.spool.LoadViewModel
 import com.thompsonfabco.filamentkit.ui.spool.SpoolViewModel
 import com.thompsonfabco.filamentkit.update.ApkInstaller
 import com.thompsonfabco.filamentkit.update.UpdateSource
@@ -39,6 +41,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** The spool card, one per [ServerSession.api] (cleared when the pinned client changes or the server is forgotten). */
     val spool = ApiOwned(viewModelScope, session.api, SpoolViewModel::class) { SpoolViewModel(ApiSpoolBackend(it)) }
+
+    /** "Load into printer" from the spool card, one per [ServerSession.api] like [spool]. */
+    val load = ApiOwned(viewModelScope, session.api, LoadViewModel::class) { LoadViewModel(ApiLoadBackend(it)) }
 
     /** The update checker, one per [ServerSession.api]; its daily loop stops with the old client. */
     val updater = ApiOwned(viewModelScope, session.api, Updater::class) { api ->
@@ -72,6 +77,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         spool.close()
+        load.close()
         updater.close()
     }
 
