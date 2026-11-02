@@ -31,7 +31,10 @@ One sync PC (Decision): the first paired device that uploads becomes the owner; 
 Builds (Decision "build trigger and retention"): `run_build` holds build.lock, builds into builds/<stamp>.tmp,
 renames it, saves the lines, writes deleted.json and then current.json. The installed build (and the partial one,
 if any) is the in-app edit snapshot; its BUILD.json `inapp` is the record of edits that last (ruling S27). Any exception leaves current.json (the
-last good build) untouched. With no system presets uploaded yet it ends cleanly with `waiting: True`. It runs
+last good build) untouched. With no system presets uploaded yet it ends cleanly with `waiting: True`. So it does
+(ruling S32, WAIT_LIVE) when the install the PC reported is newer than its last live upload: the live folder then
+predates the install and would read the old values as in-app edits. That wait leaves the rebuild request pending
+(build-state `wait_live`); the next live upload renews the request, so the build runs on fresh live data. It runs
 again (at most MAX_RUNS times in all) while the rebuild request is newer than the run's start. The newest KEEP
 builds plus the installed one (and a partial one still named in meta.json) are kept.
 """
@@ -79,6 +82,7 @@ SUFFIXES = (".json", ".info")
 STAMP_RE = re.compile(r"\d{8}-\d{6}(?:-[1-9]\d{0,5})?")
 USER_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
 NO_SYSTEM = "no Bambu Studio system presets yet: install and pair the PC sync"
+WAIT_LIVE = "waiting for the PC's next sync"
 _BAD_PART = re.compile(r'[<>:"|?*\x00-\x1f\x7f]')
 _DRIVE = re.compile(r"[A-Za-z]:")
 
@@ -453,9 +457,13 @@ def store_upload(kind: str, src: BinaryIO, *, device_id: str, user_id: str | Non
                 if partial is not None:
                     meta["partial"] = partial
                 meta.update(live_hash=h, live_at=now)
+                renew = bool(_state().get("wait_live"))
             else:
                 meta.update(system_hash=h, system_at=now, system_presets=jsons)
             _write_json(_live() / "meta.json", meta)
+        if kind == "live" and renew:            # a build waited for this upload (S32)
+            _set_state(wait_live=False)
+            request_rebuild("live upload after an install", h)
         return h
     finally:
         _rmtree(tmp)
@@ -572,6 +580,13 @@ def _build_once(sm, now: float) -> dict:
                 live = generate.Live(live_copy, str(meta.get("user_id") or ""))
             installed = _installed()
             part = meta.get("partial")
+            live_at = meta.get("live_at")
+            if installed and isinstance(live_at, (int, float)) and isinstance(installed.get("at"), (int, float)) \
+                    and installed["at"] > live_at:
+                # the PC reported an install but has not uploaded the live folder since (S32)
+                _set_state(last_attempt={"at": now, "ok": False, "error": WAIT_LIVE}, wait_live=True)
+                return {"stamp": None, "ok": False, "error": WAIT_LIVE, "problems": [], "waiting": True,
+                        "keep_request": True}
         lib = library_mod.load()
         filaments = sm.get("filament")
         if not isinstance(filaments, list):
@@ -627,12 +642,15 @@ def _build_once(sm, now: float) -> dict:
 
 def run_build(sm, *, now: float | None = None) -> dict:
     """Build every preset (see the module docstring); returns {stamp, ok, error, problems} of the last run, plus
-    `waiting: True` when no system presets were uploaded yet (a clean end, not a crash)."""
+    `waiting: True` when no system presets were uploaded yet, or the PC's live folder predates its reported
+    install (WAIT_LIVE; a clean end, not a crash)."""
     with _locked("build.lock"):
         result: dict = {}
         for _ in range(MAX_RUNS):
             started = time.time()
             result = _build_once(sm, now if now is not None else started)
+            if result.pop("keep_request", False):
+                break                           # the request stays pending until fresh live data (S32)
             _set_state(handled={"started": started})
             if result.get("waiting"):
                 break

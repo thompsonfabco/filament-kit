@@ -504,8 +504,9 @@ def _live_zip_of(build_stamp: str, *, edit=None) -> bytes:
 def test_partial_upload_is_stored_used_kept_and_cleared(env):
     synced(env)
     b1 = builds.run_build(env, now=TG.NOW)["stamp"]
-    builds.store_upload("live", io.BytesIO(_live_zip_of(b1)), device_id="a", user_id="1")
     builds.record_installed(b1, "a")
+    tick()
+    builds.store_upload("live", io.BytesIO(_live_zip_of(b1)), device_id="a", user_id="1")   # re-upload (S32)
     env.filaments = [dict(f, density=1.31) for f in SUNLU]
     b2 = builds.run_build(env, now=TG.NOW + 1)["stamp"]
     # the install of b2 stopped after the 0.4 preset; the PC uploads live with partial=b2
@@ -556,3 +557,56 @@ def test_unparsable_system_preset_is_a_problem_not_a_refusal(env):
         builds.store_upload("system", io.BytesIO(zip_of(dict(files, **{"../x.json": "{}"}))), device_id="a")
     with pytest.raises(builds.BadZip):
         builds.store_upload("live", io.BytesIO(zip_of({"base/x.json": "{not json"})), device_id="a", user_id="1")
+
+
+# ---------- ruling S32: an install newer than the last live upload ----------
+
+def tick():
+    """Let the clock move on, so upload, build, install and request times are strictly ordered."""
+    t = time.time()
+    while time.time() <= t + 0.002:
+        time.sleep(0.001)
+
+
+def test_build_waits_for_live_after_an_install_then_runs_without_false_edits(env):
+    synced(env)
+    b1 = builds.run_build(env, now=TG.NOW)["stamp"]
+    builds.store_upload("live", io.BytesIO(_live_zip_of(b1)), device_id="a", user_id="1")   # pre-install live
+    env.filaments = [dict(f, density=1.31) for f in SUNLU]
+    tick()
+    b2 = builds.run_build(env, now=TG.NOW + 1)["stamp"]
+    tick()
+    builds.record_installed(b2, "a")              # the report went through, the live re-upload did not
+    tick()
+    builds.request_rebuild("spoolman changed")
+    env.filaments = [dict(f, density=1.35) for f in SUNLU]
+    tick()
+    r = builds.run_build(env, now=TG.NOW + 2)
+    assert r["ok"] is False and r["waiting"] is True and r["stamp"] is None
+    assert r["error"] == builds.WAIT_LIVE == "waiting for the PC's next sync"
+    assert builds.current()["stamp"] == b2                                   # nothing new, nothing failed
+    assert builds.status()["last_attempt"]["error"] == builds.WAIT_LIVE
+    assert builds.state_view("a")["rebuild_requested"] is not None          # the request stays pending
+    before = (profiles_dir() / "rebuild-request").read_bytes()
+    # the PC's next sync uploads the post-install live folder: the request is renewed, the build runs
+    tick()
+    builds.store_upload("live", io.BytesIO(_live_zip_of(b2)), device_id="a", user_id="1")
+    assert (profiles_dir() / "rebuild-request").read_bytes() != before
+    tick()
+    r = builds.run_build(env, now=TG.NOW + 3)
+    assert r["ok"] is True, r
+    m = builds.manifest(r["stamp"])
+    assert m["edits"] == [] and m["inapp"] == {}, m["edits"]
+    name = TG.sunlu(TG.H2D, "0.4")
+    cfg = json.loads((profiles_dir() / "builds" / r["stamp"] / "base" / f"{name}.json").read_text(encoding="utf-8"))
+    assert cfg["filament_density"] == ["1.35"]
+    assert builds.state_view("a")["rebuild_requested"] is None
+
+
+def test_live_upload_without_a_waiting_build_requests_nothing(env):
+    synced(env)
+    b1 = builds.run_build(env, now=TG.NOW)["stamp"]
+    builds.run_build(env, now=TG.NOW)                          # handles the system upload's request
+    assert builds.state_view("a")["rebuild_requested"] is None
+    builds.store_upload("live", io.BytesIO(_live_zip_of(b1)), device_id="a", user_id="1")
+    assert builds.state_view("a")["rebuild_requested"] is None
