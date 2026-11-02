@@ -358,8 +358,8 @@ Then run `sudo filament-kit profiles build` (or wait for the next sync).
   presets. `filament-kit-sync status` on the PC shows the Orca folder it uses.
 - The same rules as for Bambu Studio apply: your edits in Orca Slicer are kept, and presets are deleted in Orca
   Slicer, never on disk.
-- `sudo filament-kit profiles status` counts the Bambu Studio and Orca presets together, and lists a problem
-  when, for example, an Orca parent is not in your Orca Slicer.
+- `sudo filament-kit profiles status` shows the last build (its count is the Bambu Studio presets) and the
+  problems of both slicers, for example a line whose Orca parent is not in your Orca Slicer.
 
 ## Spec library updates
 
@@ -539,7 +539,7 @@ like. It stays signed in for 30 days.
 ### What only works at home
 
 The sign-in pages (`/authorize`, `/login`) and the whole phone web app answer only addresses from your home
-network. Elsewhere they show a "home network only" page. Claude's servers reach the connector itself
+network. Elsewhere they say that sign-in is only available from the home network. Claude's servers reach the connector itself
 (`/mcp` and the token exchange) from the internet, so sign Claude in from home once. The home network is the
 private address ranges by default; set your own in `"web": {"lan": ["192.168.1.0/24"]}`. Five wrong passphrases
 lock the sign-in for 10 minutes.
@@ -659,7 +659,10 @@ sudo ./uninstall.sh
 This removes the programs (Spoolman and the intake station too, with the station's user and udev rule) but
 **keeps** your spools, settings and backups, so a later install picks up where you left off, in the same mode.
 The station's computer changes (brltty, ModemManager, sleep, audio) stay; see
-[What the installer changes on the computer](#what-the-installer-changes-on-the-computer) to undo them. To delete everything, including all spool data and backups:
+[What the installer changes on the computer](#what-the-installer-changes-on-the-computer) to undo them. With
+[Remote access](#remote-access) on, it also removes the kit's router file, its route and its certbot hook; nginx,
+certbot, the certificate and any other routes stay (remove them with `apt` if nothing else uses them). To delete
+everything, including all spool data and backups:
 
 ```
 sudo ./uninstall.sh --purge
