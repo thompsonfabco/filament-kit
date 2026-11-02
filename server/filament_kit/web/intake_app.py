@@ -176,17 +176,19 @@ class IntakeApp:
             return self._html(HOME_ONLY, 403)
         if request.headers.get("origin") != self.origin:
             return self._html("<main><p>Sign in from the intake page itself.</p></main>", 403)
-        if self.lockout.blocked():
+        attempt = self.lockout.attempt()        # counted before the check (A-M1)
+        if attempt is None:
             return self._html("<main><p>Too many wrong passphrases. Wait 10 minutes.</p></main>", 429)
         form = await request.form()
         ok = await anyio.to_thread.run_sync(auth.check_passphrase, str(form.get("passphrase", "")),
                                             self.passphrase_file)
         back = f"<p><a href='{html.escape(self.base, quote=True)}'>Try again</a></p></main>"
+        if ok is not False:                     # right, or no passphrase set: not a wrong guess
+            self.lockout.release(attempt)
         if ok is None:
             return self._html("<main class=login><p>No passphrase is set on the server yet (run: filament-kit web "
                               "passphrase).</p>" + back, 503)
         if not ok:
-            self.lockout.fail()
             return self._html("<main class=login><p>Wrong passphrase.</p>" + back, 401)
         tok = await anyio.to_thread.run_sync(self.store.new_session)
         r = RedirectResponse(self.base, 303)
