@@ -53,7 +53,20 @@ class _ImplicitFTP_TLS(ftplib.FTP_TLS):
         conn, size = ftplib.FTP.ntransfercmd(self, cmd, rest)
         if self._prot_p:
             conn = self.context.wrap_socket(conn, session=self.sock.session)
+            conn.unwrap = _quiet_unwrap(conn.unwrap)
         return conn, size
+
+
+def _quiet_unwrap(unwrap):
+    """A data channel the printer closes without sending anything (an empty listing) can fail its TLS shutdown
+    (`SHUTDOWN_WHILE_IN_INIT`). The shutdown proves nothing: ftplib still reads the 226 on the control channel,
+    which says whether the transfer worked."""
+    def quiet():
+        try:
+            return unwrap()
+        except (ssl.SSLError, OSError):
+            return None
+    return quiet
 
 
 class Client:

@@ -51,12 +51,17 @@ data class AddResult(
     val dry: Boolean = true,
 )
 
-/** A failed call: the server's `{error, message, ...}` body, or `status` 0 / code `offline` when it could not be reached. */
+/**
+ * A failed call: the server's `{error, message, ...}` body, or `status` 0 / code `offline` when it could not be reached.
+ * [sentToken] is the bearer token a rejected (401) request carried, so a late 401 for an old token can be told apart
+ * from one for the current token; it is never part of the message.
+ */
 class ApiError(
     val status: Int,
     val code: String,
     override val message: String,
     val extra: JsonObject = JsonObject(emptyMap()),
+    val sentToken: String? = null,
 ) : Exception(message)
 
 // ---- printer models (Task 16) ------------------------------------------------------------------------
@@ -122,7 +127,7 @@ data class AmsSlot(
     val spool: SlotSpool? = null,
 )
 
-/** [kind] is `ams` or `ams_ht`. */
+/** [kind] is `ams`, `ams_ht` or `ext` (the external spool holder: one slot, label `Ext`). */
 @Serializable
 data class AmsUnit(@Serializable(with = LenientInt::class) val unit: Int, val label: String = "", val kind: String = "ams", val slots: List<AmsSlot> = emptyList())
 
@@ -218,9 +223,17 @@ internal object LenientBool : KSerializer<Boolean> {
     override fun serialize(encoder: Encoder, value: Boolean) = encoder.encodeBoolean(value)
 }
 
-/** `POST /api/printers/{id}/slots/{label}/unload`; [location] is where the spool goes back to. */
+/**
+ * `POST /api/printers/{id}/slots/{label}/unload`; [location] is where the spool goes back to. [movedBack] lists every
+ * spool that was at that slot's location and where each goes (usually just the one).
+ */
 @Serializable
-data class UnloadResult(val spool: JsonObject? = null, val slot: LoadSlot, val location: String = "")
+data class UnloadResult(
+    val spool: JsonObject? = null,
+    val slot: LoadSlot,
+    val location: String = "",
+    @SerialName("moved_back") val movedBack: List<MovedBack> = emptyList(),
+)
 
 /**
  * One line of `GET /api/printers/{id}/usage`. [id] may be sent as a number or a string; it is kept as text.

@@ -1,5 +1,7 @@
 package com.thompsonfabco.filamentkit.ui.printers
 
+import com.thompsonfabco.filamentkit.net.AmsSlot
+import com.thompsonfabco.filamentkit.net.AmsUnit
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.CommandResult
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
@@ -8,6 +10,10 @@ import com.thompsonfabco.filamentkit.net.PrinterCamera
 import com.thompsonfabco.filamentkit.net.PrinterDetail
 import com.thompsonfabco.filamentkit.net.PrinterStatus
 import com.thompsonfabco.filamentkit.net.PrinterSummary
+import com.thompsonfabco.filamentkit.net.LoadSlot
+import com.thompsonfabco.filamentkit.net.MovedBack
+import com.thompsonfabco.filamentkit.net.SlotSpool
+import com.thompsonfabco.filamentkit.net.UnloadResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -72,6 +78,15 @@ class PrinterViewModelTest {
             commands += action
             commandError?.let { throw it }
             return commandResult
+        }
+        val unloads = mutableListOf<Pair<String, Boolean>>()
+        var unloadError: Exception? = null
+        var unloadResult = UnloadResult(slot = LoadSlot("A1", 0, 0), location = "Shelf 2",
+            movedBack = listOf(MovedBack(7, "Shelf 2")))
+        override suspend fun unload(id: String, label: String, dryRun: Boolean): UnloadResult {
+            unloads += label to dryRun
+            unloadError?.let { throw it }
+            return unloadResult
         }
     }
 
@@ -334,6 +349,94 @@ class PrinterViewModelTest {
         vm.submitAdd("1", "")
         runCurrent()
         assertTrue(vm.state.value.dialog!!.error!!.contains("already set up"))
+    }
+
+    // --- unload ---
+
+    private val a1 = AmsSlot(0, "A1", "PLA", "CC2222", spool = SlotSpool(7, "Acme Basic Black", "PLA", "cc2222", 812.0))
+    private val ext = AmsSlot(0, "Ext", "PETG", "00FF00", spool = SlotSpool(5, "Acme PETG Green", "PETG", "00ff00", 300.0))
+
+    private fun withSlots() {
+        backend.detail = PrinterDetail(printer(), status(gcode = "IDLE").copy(ams = listOf(
+            AmsUnit(0, "A", "ams", listOf(a1, AmsSlot(1, "A2"))),
+            AmsUnit(254, "Ext", "ext", listOf(ext)),
+        )))
+    }
+
+    @Test fun unloadAsksWithTheDryRunsLocationThenUnloads() = runTest(dispatcher) {
+        withSlots()
+        val vm = vm()
+        vm.start(); runCurrent()
+        vm.askUnload(a1)
+        runCurrent()
+        assertEquals(listOf("A1" to true), backend.unloads)
+        assertEquals("Unload Acme Basic Black from slot A1? It goes back to Shelf 2.", vm.state.value.unloadAsk!!.question)
+        val calls = backend.printerCalls
+        vm.confirmUnload()
+        runCurrent()
+        assertEquals(listOf("A1" to true, "A1" to false), backend.unloads)
+        assertNull(vm.state.value.unloadAsk)
+        assertNull(vm.state.value.slotBusy)
+        assertEquals(listOf("Unloaded Acme Basic Black from slot A1.", "Moved back: Acme Basic Black → Shelf 2"),
+            vm.state.value.slotMessage)
+        assertTrue("the status is fetched again", backend.printerCalls > calls)
+        vm.stop()
+    }
+
+    @Test fun cancellingUnloadSendsOnlyTheDryRun() = runTest(dispatcher) {
+        withSlots()
+        val vm = vm()
+        vm.start(); runCurrent()
+        vm.askUnload(a1); runCurrent()
+        vm.cancelUnload()
+        vm.confirmUnload(); runCurrent()
+        assertEquals(listOf("A1" to true), backend.unloads)
+        assertNull(vm.state.value.unloadAsk)
+        // an empty slot (no inventory spool) offers nothing
+        vm.askUnload(AmsSlot(1, "A2"))
+        runCurrent()
+        assertEquals(1, backend.unloads.size)
+        vm.stop()
+    }
+
+    @Test fun unloadErrorsUseTheServersWordsForNotFound() = runTest(dispatcher) {
+        withSlots()
+        backend.unloadError = ApiError(404, "not_found", "no spool is in Garage H2D slot A1")
+        val vm = vm()
+        vm.start(); runCurrent()
+        vm.askUnload(a1); runCurrent()
+        assertNull(vm.state.value.unloadAsk)
+        assertEquals(listOf("no spool is in Garage H2D slot A1"), vm.state.value.slotMessage)
+        assertNull(vm.state.value.slotBusy)
+        backend.unloadError = ApiError(409, "already_running", "x")
+        vm.askUnload(a1); runCurrent()
+        assertEquals(listOf(PrinterHelp.message(ApiError(409, "already_running", ""))), vm.state.value.slotMessage)
+        vm.stop()
+    }
+
+    @Test fun theExternalHolderUnloadsLikeASlot() = runTest(dispatcher) {
+        withSlots()
+        backend.unloadResult = UnloadResult(slot = LoadSlot("Ext", 254, 0), location = "Sealed stock",
+            movedBack = listOf(MovedBack(5, "Sealed stock")))
+        val vm = vm()
+        vm.start(); runCurrent()
+        vm.askUnload(ext); runCurrent()
+        assertEquals("Unload Acme PETG Green from the external spool holder? It goes back to Sealed stock.",
+            vm.state.value.unloadAsk!!.question)
+        vm.confirmUnload(); runCurrent()
+        assertEquals(listOf("Ext" to true, "Ext" to false), backend.unloads)
+        assertEquals("Moved back: Acme PETG Green → Sealed stock", vm.state.value.slotMessage[1])
+        vm.stop()
+    }
+
+    @Test fun unitTitlesAndSlotNames() {
+        assertEquals("External spool holder", PrinterHelp.unitTitle(AmsUnit(254, "Ext", "ext")))
+        assertEquals("AMS HT HT-A", PrinterHelp.unitTitle(AmsUnit(128, "HT-A", "ams_ht")))
+        assertEquals("AMS A", PrinterHelp.unitTitle(AmsUnit(0, "A", "ams")))
+        assertEquals("the external spool holder", PrinterHelp.slotName("Ext"))
+        assertEquals("slot B3", PrinterHelp.slotName("B3"))
+        assertEquals("Moved back: #3 → Shelf 1", PrinterHelp.movedBackLine(null, 3, "Shelf 1"))
+        assertEquals("spool #9", PrinterHelp.spoolName(SlotSpool(9)))
     }
 
     @Test fun blankCodeIsNotSent() = runTest(dispatcher) {

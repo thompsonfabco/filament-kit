@@ -15,6 +15,16 @@ class WeightsTest {
         }
     }
 
+    @Test fun tareMustBeMoreThanZero() {
+        assertEquals("Empty spool weight must be more than 0 g", tareProblem("0"))
+        assertEquals(TARE_PROBLEM, tareProblem("-12"))
+        assertEquals(TARE_PROBLEM, tareProblem("abc"))
+        assertNull("blank = unknown", tareProblem(""))
+        assertNull(tareProblem("  "))
+        assertNull(tareProblem("213"))
+        assertNull(tareProblem("0.5"))
+    }
+
     @Test fun validWeightRejectsNonFiniteAndNonPositive() {
         assertTrue(isValidWeight(0.1))
         assertFalse(isValidWeight(0.0))

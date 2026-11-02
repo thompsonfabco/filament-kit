@@ -89,6 +89,19 @@ def test_summarize_ams_labels_and_spool_join():
     assert ht["slots"][0]["spool"]["id"] == 8
 
 
+def test_summarize_lists_the_external_spool_holder():
+    report = {"ams": {"ams": [], "tray_now": "254"},
+              "vt_tray": {"id": "254", "tray_type": "PETG", "tray_color": "00FF00FF", "tray_info_idx": "GFG00"}}
+    s = status.summarize(report, [spool(5, "Office H2D – AMS Ext", name="PETG Green")], printer_name="Office H2D")
+    (ext,) = s["ams"]
+    assert (ext["unit"], ext["label"], ext["kind"]) == (254, "Ext", "ext")
+    (slot,) = ext["slots"]
+    assert (slot["label"], slot["type"], slot["color_hex"], slot["active"]) == ("Ext", "PETG", "00FF00", True)
+    assert slot["spool"]["id"] == 5
+    # no vt_tray in the report: no Ext unit; an odd id falls back to 254
+    assert status.summarize({"ams": {"ams": []}}, [])["ams"] == []
+    assert status.summarize({"vt_tray": {"id": "x"}}, [])["ams"][0]["unit"] == 254
+
 def test_labels_for_more_units():
     assert status.unit_label(3) == ("D", "ams")
     assert status.slot_label(3, 3) == "D4"
