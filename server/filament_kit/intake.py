@@ -187,6 +187,25 @@ def load_orders(cfg: dict) -> list[dict] | None:
     return [o for o in items if isinstance(o, dict)] if isinstance(items, list) else []
 
 
+def read_context(cfg: dict, sm: Spoolman, station=None, *, app_tag: bool = False) -> dict:
+    """The reader context of one label read, for `read_labels(**read_context(...))`; the kit server's
+    /api/intake/read and the web app's read both use it. `orders`: the order history, only when the `orders`
+    module is on and `orders.file` exists (else None: no orders block). `station_state`: the station's GET /state
+    through `station` (a StationClient, None without a station); a dead station gives None. `fresh_tag`: the
+    newest reader tap when fresh and on no spool; skipped when the app sent its own tag (`app_tag`), which wins."""
+    path = (cfg.get("orders") or {}).get("file")
+    orders = load_orders(cfg) if path and Path(path).is_file() else None
+    station_state = None
+    if station is not None and getattr(station, "url", None):
+        from .station_client import StationUnreachable
+        try:
+            station_state = station.state()
+        except StationUnreachable as e:      # the read goes on without the scale
+            log.info("station: %s", e)
+    fresh = None if app_tag else tagsources.fresh_unknown_tag(cfg, sm)
+    return {"orders": orders, "station_state": station_state, "fresh_tag": fresh}
+
+
 def filter_orders(orders: list[dict], fils: list[dict]) -> list[dict]:
     """Only purchases not inventoried yet, newest first: a line whose ASIN is already in a filament's comment (its
     price line) is in Spoolman, unless the title is a bundle (MULTI), whose other colours are still to come.

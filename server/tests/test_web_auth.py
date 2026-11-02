@@ -86,6 +86,7 @@ def _client_info(redirects=(CB,), name="Claude", issued_at=None):
 
 
 def _app(store, passfile, lockout=None):
+    lockout = lockout if lockout is not None else auth.Lockout()
     s = auth.auth_settings(PUBLIC)
     routes = create_auth_routes(auth.Provider(store, PUBLIC), issuer_url=s.issuer_url,
                                 client_registration_options=s.client_registration_options,
@@ -381,7 +382,8 @@ def test_login_only_answers_lan(store, passfile):
         assert c.get("/login", params={"req": "x"}).status_code == 403
         r = c.post("/login", data={"req": "x", "passphrase": PASS}, headers={"Origin": ORIGIN})
         assert r.status_code == 403
-    routes = auth.login_routes(store, PUBLIC, passfile, lan_cidrs=LAN)  # its own check, without the wrapper
+    routes = auth.login_routes(store, PUBLIC, passfile, lan_cidrs=LAN,
+                               lockout=auth.Lockout())  # its own check, without the wrapper
     with TestClient(Starlette(routes=routes), client=AWAY) as c:
         assert c.get("/login", params={"req": "x"}).status_code == 403
     with TestClient(Starlette(routes=routes), client=("127.0.0.1", 1)) as c:
@@ -610,6 +612,19 @@ def test_hash_passphrase_format_and_check(tmp_path):
     assert auth.check_passphrase(PASS, f) is True
     assert auth.check_passphrase(PASS + "x", f) is False
     assert auth.check_passphrase("", f) is False
+
+
+def test_hash_passphrase_refuses_short_ones():
+    for short in ("", "elevenchars", " " * 11, "x" * (auth.MIN_PASSPHRASE - 1)):
+        with pytest.raises(ValueError, match="at least 12"):
+            auth.hash_passphrase(short)
+    assert auth.MIN_PASSPHRASE == 12
+    auth.hash_passphrase("x" * auth.MIN_PASSPHRASE)  # exactly 12 is fine
+
+
+def test_login_routes_need_a_lockout(store, passfile):
+    with pytest.raises(TypeError):
+        auth.login_routes(store, PUBLIC, passfile, lan_cidrs=LAN)  # the shared Lockout is required
 
 
 def test_check_passphrase_reads_ops_file(tmp_path):
