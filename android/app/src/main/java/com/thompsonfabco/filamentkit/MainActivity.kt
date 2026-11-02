@@ -40,6 +40,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.thompsonfabco.filamentkit.net.ProfileStatus
 import com.thompsonfabco.filamentkit.session.AppViewModel
 import com.thompsonfabco.filamentkit.session.Connection
 import com.thompsonfabco.filamentkit.session.PairNotice
@@ -59,6 +60,9 @@ import com.thompsonfabco.filamentkit.ui.pair.NetPairingBackend
 import com.thompsonfabco.filamentkit.ui.pair.PairScreen
 import com.thompsonfabco.filamentkit.ui.pair.PairViewModel
 import com.thompsonfabco.filamentkit.ui.printers.PrintersEntry
+import com.thompsonfabco.filamentkit.ui.profile.AddProfileScreen
+import com.thompsonfabco.filamentkit.ui.profile.AddProfileViewModel
+import com.thompsonfabco.filamentkit.ui.profile.ProfileApi
 import com.thompsonfabco.filamentkit.ui.search.SearchScreen
 import com.thompsonfabco.filamentkit.ui.search.SearchViewModel
 import com.thompsonfabco.filamentkit.ui.settings.SettingsScreen
@@ -95,6 +99,7 @@ private object Routes {
     const val SEARCH = "search"
     const val SETTINGS = "settings"
     const val PRINTERS = "printers"
+    const val ADD_PROFILE = "profile/add"
     const val ADD = "add?tag={tag}&draft={draft}"
 
     fun add(tag: String? = null, draft: String? = null): String {
@@ -203,12 +208,24 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
             LaunchedEffect(Unit) { app.refreshDrafts() }
             val drafts by app.draftList.collectAsStateWithLifecycle()
             val update = updater?.state?.collectAsStateWithLifecycle()?.value ?: UpdateUi()
+            // Read each time Home is shown while online; null (card says "not available") when it cannot be read.
+            val presets by produceState<ProfileStatus?>(null, api, online) {
+                val a = api
+                value = if (a == null || !online) null else try {
+                    a.profileStatus()
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    null
+                }
+            }
             HomeScreen(
                 serverName = config?.name.orEmpty(),
                 connection = connection,
                 drafts = drafts,
                 update = update,
                 onAddSpools = { nav.navigate(Routes.add()) },
+                onAddProfile = { nav.navigate(Routes.ADD_PROFILE) },
                 onSearch = { nav.navigate(Routes.SEARCH) },
                 onPrinters = { nav.navigate(Routes.PRINTERS) },
                 onSettings = { nav.navigate(Routes.SETTINGS) },
@@ -217,6 +234,8 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
                 onReviewCertificate = app.router::pairAgain,
                 onInstallUpdate = { updater?.install() },
                 onConfirmInstall = { updater?.confirmInstall() },
+                presets = presets,
+                showPresets = api != null,
                 localNetworkPanel = { LocalNetworkPanel(localNetwork) },
                 extra = { if (BuildConfig.DEBUG) SimulateTag() },
             )
@@ -261,6 +280,22 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
                 vm = addVm,
                 onClose = { nav.popBackStack() },
                 onDone = { nav.popBackStack(Routes.HOME, inclusive = false) },
+                onPairAgain = app.router::pairAgain,
+            )
+        }
+
+        composable(Routes.ADD_PROFILE) {
+            val a = api
+            if (a == null) {
+                NotPaired { nav.navigateClearing(Routes.PAIR) }
+                return@composable
+            }
+            val profileVm: AddProfileViewModel = viewModel(factory = viewModelFactory {
+                initializer { AddProfileViewModel(ProfileApi.of(a)) }
+            })
+            AddProfileScreen(
+                vm = profileVm,
+                onBack = { nav.popBackStack() },
                 onPairAgain = app.router::pairAgain,
             )
         }

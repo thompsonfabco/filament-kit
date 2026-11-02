@@ -97,7 +97,8 @@ object PrinterHelp {
         "printer_busy" -> "The printer is printing. Try again when it's idle."
         "cert_changed" -> CERT_CHANGED
         "needs_developer_mode" -> fix("needs_developer_mode")!!
-        "no_preset" -> "No preset for this filament on this printer yet — profiles come next"
+        "no_preset" -> "No preset for this filament on this printer yet. It is made at the next preset build; " +
+            "see Presets on the home screen."
         "write_refused" -> "The printer refused the change"
         "already_running" -> "Slot mapping or a load is in progress on this printer. Try again in a moment."
         "too_old" -> "Older than 7 days, can't undo"

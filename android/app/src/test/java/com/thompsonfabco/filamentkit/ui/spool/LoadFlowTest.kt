@@ -153,7 +153,10 @@ class LoadFlowTest {
         val vm = loadVm()
         vm.toPreview()
         val s = vm.state.value as LoadUiState.PickSlot
-        assertEquals("No preset for this filament on this printer yet — profiles come next", s.error)
+        assertEquals(
+            "No preset for this filament on this printer yet. It is made at the next preset build; see Presets on the home screen.",
+            s.error,
+        )
     }
 
     @Test fun busyPrinterSaysTryWhenIdle() = runTest(dispatcher) {
