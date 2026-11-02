@@ -84,7 +84,8 @@ def _bridge_error(e: Exception) -> JSONResponse | None:
     if isinstance(e, usage.UsageError):
         return _err(e.status, e.code, str(e))
     if isinstance(e, mapping.AlreadyRunning):
-        return _err(409, "already_running", "slot mapping is already running for this printer")
+        return _err(409, "already_running", "slot mapping is in progress for this printer; try again when it "
+                                            "has finished")
     if isinstance(e, mapping.CertChanged):
         return _err(409, "cert_changed", CERT_CHANGED)
     if isinstance(e, PrinterBusy):
@@ -304,6 +305,12 @@ def _bridge_routes(printers, mapper: mapping.Mapper, sm) -> list[Route]:
         if printers.state(serial) == "cert_changed":
             raise mapping.CertChanged(serial)
 
+    def not_mapping(serial: str) -> None:
+        """Slot mapping changes the slots (test colours, the calibration job): no load or unload meanwhile, also
+        when `filament-kit printer map` runs it in another process (dry runs too: the slots are in flux)."""
+        if mapper.in_progress(serial):
+            raise mapping.AlreadyRunning(serial)
+
     def sealed() -> str:
         return config.load()["placement"].get("sealed_location") or loading.SEALED
 
@@ -349,8 +356,7 @@ def _bridge_routes(printers, mapper: mapping.Mapper, sm) -> list[Route]:
         def run() -> dict:
             known(serial)
             not_cert_changed(serial)
-            if not dry and mapper.running(serial):
-                raise PrinterBusy("slot mapping is running")
+            not_mapping(serial)
             try:
                 r = loading.load(printers, sm, serial, label, spool_id, dry, sealed_location=sealed())
             except loading.SlotWriteFailed as e:
@@ -373,6 +379,7 @@ def _bridge_routes(printers, mapper: mapping.Mapper, sm) -> list[Route]:
 
         def run() -> dict:
             known(serial)
+            not_mapping(serial)
             r = loading.unload(printers, sm, serial, label, dry, sealed_location=sealed())
             first = next((m for m in r["moved_back"] if m["id"] == r["spool"].get("id")), None)
             return {**r, "location": first["location"] if first else r["spool"].get("location")}

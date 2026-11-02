@@ -6,7 +6,8 @@ starts it with `ams_mapping` = filament i -> the slot's candidate global id (`am
 `JOB_TIMEOUT` s) for the job to start and end, records the `mapping` and `ams.tray_now` the printer reports, and
 compares the reported mapping with what was sent. Afterwards (always) the file is deleted and every slot whose
 settings changed since the start is set back from the snapshot taken at the start and the restore is verified
-from the next report. It does not save a SlotMap (the mapping job does).
+from the next report (`CalibResult.restored` false when any slot was not confirmed back). It does not save a
+SlotMap (the mapping job does).
 
 The print command, modelled on what Bambu Studio sends in LAN mode (to be confirmed on the owner's H2D, Task 9):
 
@@ -77,6 +78,7 @@ class CalibResult:
     tray_now: list[str] = field(default_factory=list)         # each `ams.tray_now` seen during the job
     skipped: list[str] = field(default_factory=list)          # empty slots, not part of the job
     cert_changed: bool = False
+    restored: bool = True     # every slot the restore step had to put back was confirmed back (true: none changed)
 
 
 # ---------------------------------------------------------------- the 3MF
@@ -310,6 +312,7 @@ def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None
         try:
             _restore(manager, serial, slotmap, trays0, res)
         except Exception as e:
+            res.restored = False
             res.problems.append(f"could not restore the slots ({type(e).__name__})")
     log.info("printer %s: calibration %s; decoding %s; problems %s", serial,
              "consistent" if res.consistent else "not consistent", res.decoding, res.problems)
@@ -413,9 +416,11 @@ def _restore(manager, serial: str, slotmap: SlotMap, trays0: dict, res: CalibRes
         try:
             reply = manager.set_slot(serial, key[0], key[1], _setting(t0))
         except Exception as e:
+            res.restored = False
             res.problems.append(f"{label}: could not restore the slot ({type(e).__name__})")
             continue
         if reply is not None and not _ok(reply):
+            res.restored = False
             res.problems.append(f"{label}: the printer refused to restore the slot")
             continue
         pending.append((label, key, t0))
@@ -435,4 +440,5 @@ def _restore(manager, serial: str, slotmap: SlotMap, trays0: dict, res: CalibRes
         seen = last.get('trays', {})
         for label, key, t0 in pending:
             if not _same(t0, seen.get(key)):
+                res.restored = False
                 res.problems.append(f"{label}: restore not confirmed by the printer")

@@ -466,7 +466,7 @@ def cmd_printer_map(serial: str, manager_factory) -> int:
     if v["state"] == "done":
         print("Done, but the slot numbering was not confirmed: filament use is only logged (observe mode).")
     else:
-        print("Mapping failed. Until mapping succeeds, filament use is only logged.")
+        print("Mapping failed. Until mapping succeeds, filament use is only logged (observe mode).")
     return 1
 
 

@@ -4,16 +4,21 @@
 thread (the CLI). One job per printer at a time (`AlreadyRunning`, also across processes on Linux through a lock
 file), refused before anything is touched unless the printer is in the registry (`UnknownPrinter`), its leaf
 matches the pin (state `cert_changed` -> `CertChanged`), connected (`PrinterOffline`) and idle (`PrinterBusy`).
+`in_progress(serial)` says whether a job runs for that printer in this or another process (the API refuses
+loading and unloading meanwhile).
 
-Outcome:
-  - slot test could not put every slot back -> `failed`, problems name each slot; nothing saved, the slot map
-    stays as it was; also `failed` when no slot was confirmed (offline, busy, Developer Mode ...);
+Outcome (a job that ends `failed` never leaves a trusted map):
+  - slot test could not put every slot back -> `failed`, problems name each slot, no calibration; the saved
+    slot map keeps its slots but is downgraded to `calibrated: false, observe: true` (a slot may still hold a
+    test colour, so what the map says can no longer be trusted); also `failed` when no slot was confirmed
+    (offline, busy, Developer Mode ...) or the job broke, again with the saved map downgraded;
   - calibration consistent -> SlotMap of the confirmed slots, global ids from the calibration's decoding (a
     confirmed slot the calibration skipped, i.e. an empty one, keeps `ams.default_global`, which the decoding
     just proved for the loaded ones), `calibrated: true, observe: false`;
   - calibration inconsistent or refused -> the same slots, default global ids, `calibrated: false, observe:
     true` (filament use is only logged), the reason in problems;
-  - a calibration that could not restore a slot -> the map is saved as above, but the job is `failed`.
+  - a calibration that could not restore a slot (`CalibResult.restored` false) -> `failed`, the map saved
+    with `calibrated: false, observe: true` even when the decoding was consistent.
 Slots the slot test did not confirm are left out of the map and listed in problems.
 
 Progress (`view`): in memory while the job runs, and in `state/printers/<serial>/mapping.json` (state, step,
@@ -147,9 +152,12 @@ def check_ready(manager, serial: str) -> None:
     slottest.check_idle(manager, serial)
 
 
-def _restore_failed(problems: list[str]) -> bool:
-    """calib3mf reports slots it could not put back as sentences that all mention "restore"."""
-    return any("restore" in p for p in problems)
+def _distrust(serial: str) -> None:
+    """After a failed restore: keep the saved map's slots, but never as a trusted (calibrated) map."""
+    m = ams.load_map(serial)
+    if m.calibrated or not m.observe:
+        m.calibrated, m.observe = False, True
+        ams.save_map(serial, m)
 
 
 class Mapper:
@@ -193,9 +201,14 @@ class Mapper:
         return self.view(serial)
 
     def running(self, serial: str) -> bool:
+        """A job runs for `serial` in this process."""
         with self._lock:
             j = self._jobs.get(serial)
             return j is not None and j.state == "running"
+
+    def in_progress(self, serial: str) -> bool:
+        """A job runs for `serial` in this process or another one (`filament-kit printer map`)."""
+        return self.running(serial) or _ProcessLock.held_elsewhere(serial)
 
     # ---------------------------------------------------------------- the job
     def _run(self, serial: str, job: _Job, plock: _ProcessLock, on_step) -> None:
@@ -213,6 +226,10 @@ class Mapper:
             log.exception("mapping %s: job failed", serial)
             job.state = "failed"
             job.problems.append(f"error: mapping failed ({type(e).__name__}: {e})")
+            try:
+                _distrust(serial)
+            except Exception:
+                log.exception("mapping %s: cannot downgrade the slot map", serial)
         finally:
             if job.state == "running":   # defensive: never leave a finished job "running"
                 job.state = "failed"
@@ -228,6 +245,7 @@ class Mapper:
         def fail(problems: list[str]) -> None:
             job.problems = list(problems)
             job.state = "failed"
+            _distrust(serial)
 
         try:
             st = slottest.run(self._m, serial, step)
@@ -247,20 +265,22 @@ class Mapper:
         step("Running the calibration job (no heating, no motion)")
         cr = calib3mf.run(self._m, serial, smap)
         problems = list(st.problems) + list(cr.problems)
-        if cr.consistent:
+        if cr.consistent and cr.restored:
             for lab, s in smap.slots.items():
                 if lab in cr.decoding:
                     s["global_id"] = cr.decoding[lab]
             smap.calibrated, smap.observe = True, False
         else:
             smap.calibrated, smap.observe = False, True
-            if not cr.problems:
+            if not cr.restored:
+                problems.append("the calibration could not confirm that every slot was put back")
+            elif not cr.problems:
                 problems.append("the calibration job did not confirm the slot numbering")
             problems.append(OBSERVE_NOTE)
         step("Saving the slot map")
         ams.save_map(serial, smap)
         job.problems = problems
-        job.state = "failed" if _restore_failed(cr.problems) else "done"
+        job.state = "done" if cr.restored else "failed"
 
     # ---------------------------------------------------------------- progress
     def view(self, serial: str) -> dict:

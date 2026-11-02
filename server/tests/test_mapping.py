@@ -134,6 +134,7 @@ def test_refused_calibration_is_observe_mode(stubs, problem):
 
 
 def test_slot_test_restore_failure_fails_the_job(stubs, calls):
+    """A failed job never leaves a trusted map: an earlier calibrated map is downgraded to observe mode."""
     ams.save_map(SERIAL, ams.SlotMap(slots={"A1": {"ams_id": 0, "tray_id": 0, "global_id": 0}},
                                      calibrated=True, observe=False))
     stubs["st"] = SlotTestResult(confirmed={"A1": {"ams_id": 0, "tray_id": 0}}, restored=False,
@@ -142,22 +143,45 @@ def test_slot_test_restore_failure_fails_the_job(stubs, calls):
     assert v["state"] == "failed"
     assert "A1: restore not confirmed (...)" in v["problems"] and "A2: not restored (printer_offline)" in v["problems"]
     assert calls["calib"] == []                        # no calibration after a failed restore
-    assert ams.load_map(SERIAL).calibrated is True     # the earlier map is left alone
+    saved = ams.load_map(SERIAL)
+    assert saved.calibrated is False and saved.observe is True
+    assert saved.slots == {"A1": {"ams_id": 0, "tray_id": 0, "global_id": 0}}   # its slots kept, untrusted
+    assert v["calibrated"] is False and v["observe"] is True
+
+
+def test_slot_test_restore_failure_without_earlier_map(stubs):
+    stubs["st"] = SlotTestResult(restored=False, problems=["A1: not restored (printer_offline)"])
+    v = mapping.Mapper(FakeManager()).run(SERIAL)
+    assert v["state"] == "failed" and v["calibrated"] is False and v["observe"] is True
+    assert ams.load_map(SERIAL).calibrated is False
 
 
 def test_calibration_restore_failure_fails_the_job(stubs):
-    stubs["calib"] = CalibResult(decoding={"A1": 0, "A2": 1, "HT-A": 128}, consistent=True,
+    stubs["calib"] = CalibResult(decoding={"A1": 0, "A2": 1, "HT-A": 128}, consistent=True, restored=False,
                                  problems=["A2: restore not confirmed by the printer"])
     v = mapping.Mapper(FakeManager()).run(SERIAL)
     assert v["state"] == "failed" and "A2: restore not confirmed by the printer" in v["problems"]
+    assert v["calibrated"] is False and v["observe"] is True
+    saved = ams.load_map(SERIAL)
+    assert saved.calibrated is False and saved.observe is True and set(saved.slots) == set(CONFIRMED)
+
+
+def test_restore_flag_not_problem_text_decides(stubs):
+    stubs["calib"] = CalibResult(decoding={"A1": 0, "A2": 1, "HT-A": 128}, consistent=True, restored=True,
+                                 problems=["could not delete /cache/x: restore of nothing"])
+    v = mapping.Mapper(FakeManager()).run(SERIAL)
+    assert v["state"] == "done" and v["calibrated"] is True
 
 
 def test_no_confirmed_slot_fails(stubs, calls):
+    ams.save_map(SERIAL, ams.SlotMap(slots={"A1": {"ams_id": 0, "tray_id": 0, "global_id": 0}},
+                                     calibrated=True, observe=False))
     stubs["st"] = SlotTestResult(confirmed={}, needs_developer_mode=True,
                                  problems=["needs_developer_mode: turn on Developer Mode", "A1: not confirmed"])
     v = mapping.Mapper(FakeManager()).run(SERIAL)
     assert v["state"] == "failed" and v["problems"][0].startswith("needs_developer_mode")
     assert calls["calib"] == []
+    assert v["calibrated"] is False and v["observe"] is True           # a failed job leaves no trusted map
 
 
 def test_unconfirmed_slots_listed_but_calibration_runs(stubs, calls):
@@ -255,6 +279,31 @@ def test_job_in_another_process_blocks_and_shows_running(stubs):
         assert m.view(SERIAL)["state"] == "running"
         fcntl.flock(other.fileno(), fcntl.LOCK_UN)
     assert mapping.Mapper(FakeManager()).view(SERIAL)["state"] == "failed"   # its holder is gone
+
+
+def test_in_progress_sees_this_process_job(stubs):
+    gate = threading.Event()
+    stubs["gate"] = gate
+    m = mapping.Mapper(FakeManager())
+    assert m.in_progress(SERIAL) is False
+    m.start(SERIAL)
+    assert m.in_progress(SERIAL) is True
+    gate.set()
+    wait_done(m)
+    assert m.in_progress(SERIAL) is False
+
+
+@pytest.mark.skipif(mapping.fcntl is None, reason="cross-process lock needs fcntl (Linux)")
+def test_in_progress_sees_another_process_job(stubs):
+    fcntl = mapping.fcntl
+    d = config.paths().state / "printers" / SERIAL
+    d.mkdir(parents=True, exist_ok=True)
+    m = mapping.Mapper(FakeManager())
+    with open(d / mapping.LOCK_FILE, "a") as other:          # `filament-kit printer map` in another process
+        fcntl.flock(other.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        assert m.in_progress(SERIAL) is True
+        fcntl.flock(other.fileno(), fcntl.LOCK_UN)
+    assert m.in_progress(SERIAL) is False
 
 
 def test_corrupt_status_file_reads_as_none(stubs):
