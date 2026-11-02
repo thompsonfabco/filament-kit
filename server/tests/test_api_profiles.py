@@ -245,8 +245,8 @@ def test_profiles_status(c, sm):
     r = c.get("/api/profiles/status", headers=auth(tok))
     assert r.status_code == 200
     body = r.json()
-    assert set(body) == {"lines", "presets", "build", "last_attempt", "installed", "pc", "library", "stale",
-                         "problems"}
+    assert set(body) == {"lines", "presets", "orca_presets", "build", "last_attempt", "installed", "pc", "library",
+                         "stale", "orca_stale", "problems"}
     assert body["pc"] is None and body["build"] is None and body["lines"] == 0
     assert set(body["library"]) == {"version", "source", "local", "last_check"}
     assert body["library"]["source"] in ("bundled", "updated")

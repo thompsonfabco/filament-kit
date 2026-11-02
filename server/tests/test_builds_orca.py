@@ -491,3 +491,31 @@ def test_new_sync_pc_keeps_migrated_orca_owner_edits_after_a_base_only_install(o
     r = builds.run_build(orca_cfg, now=TG.NOW + 1)
     assert r["ok"] is True, r
     assert builds.manifest(r["stamp"])["orca_inapp"] == seeded["orca_inapp"]
+
+
+def test_profiles_status_counts_orca_presets_and_stale(orca_cfg, capsys):
+    """C-I5: `profiles status` (CLI and /api/profiles/status) shows the Orca preset count and the Orca presets
+    to delete in Orca Slicer (runbook 3.3 checks the count)."""
+    from filament_kit import cli, profiles_api
+    TB.synced(orca_cfg)
+    orca_synced()
+    r = builds.run_build(orca_cfg, now=TG.NOW)
+    n_orca = len([p for p in builds.manifest(r["stamp"])["presets"] if p["target"] == "orca"])
+    assert n_orca > 0
+    st = builds.status()
+    assert st["orca_presets"] == n_orca and st["orca_stale"] == []
+    view = profiles_api._status_view()
+    assert view["orca_presets"] == n_orca and view["orca_stale"] == []
+    assert cli.main(["profiles", "status"]) == 0
+    out = capsys.readouterr().out
+    assert f"{st['presets']} presets, {n_orca} Orca presets, 0 Orca stale" in out
+
+
+def test_profiles_status_without_the_orca_target_has_no_orca_count(env, capsys):
+    from filament_kit import cli
+    TB.synced(env)
+    builds.run_build(env, now=TG.NOW)
+    st = builds.status()
+    assert st["orca_presets"] is None and st["orca_stale"] == []
+    assert cli.main(["profiles", "status"]) == 0
+    assert "Orca" not in capsys.readouterr().out.split("\n")[1]

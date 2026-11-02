@@ -1048,7 +1048,11 @@ def status() -> dict:
     meta = _meta()
     o = owner()
     ups = [t for t in (meta.get("live_at"), meta.get("system_at")) if isinstance(t, (int, float))]
-    return {"lines": n_lines, "presets": len(bambu_rows(m)), "build": _build_view(),
+    rows = m.get("presets") if isinstance(m.get("presets"), list) else []
+    # C-I5: the Orca count (None: the build has no Orca target) and the Orca presets to delete in Orca Slicer
+    orca_presets = len([p for p in rows if isinstance(p, dict) and p.get("target") == generate.ORCA])         if "orca_live_hash" in m else None
+    return {"lines": n_lines, "presets": len(bambu_rows(m)), "orca_presets": orca_presets, "build": _build_view(),
             "last_attempt": _attempt_view(), "installed": _installed_view(),
             "pc": {"device_id": o, "last_upload": max(ups) if ups else None} if o else None,
-            "stale": list(m.get("stale", [])), "problems": list(m.get("problems", []))[:20]}
+            "stale": list(m.get("stale", [])), "orca_stale": list(m.get("orca_stale", [])),
+            "problems": list(m.get("problems", []))[:20]}

@@ -180,8 +180,8 @@ def _status_view() -> dict:
     lib = library_mod.status()
     v["library"] = {"version": lib.get("version"), "source": lib.get("source"), "local": lib.get("local"),
                     "last_check": _iso_at(lib.get("last_check"))}
-    return {k: v[k] for k in ("lines", "presets", "build", "last_attempt", "installed", "pc", "library", "stale",
-                              "problems")}
+    return {k: v[k] for k in ("lines", "presets", "orca_presets", "build", "last_attempt", "installed", "pc",
+                              "library", "stale", "orca_stale", "problems")}
 
 
 def _preset_counts() -> dict[str, int]:
