@@ -388,7 +388,8 @@ class _Run:
             self.st["stale_orca"] = stale_orca
         self.st.pop("requested", None)
         trees = ["base", "orca"] if with_orca and (build_dir / "orca").is_dir() else ["base"]
-        self.st["installed"] = {"stamp": stamp, "at": self.now, "trees": trees}
+        # orca_synced: Orca was synced and the build made from its presets (its orca/ in, or it had none)
+        self.st["installed"] = {"stamp": stamp, "at": self.now, "trees": trees, "orca_synced": bool(with_orca)}
         self.st["report"] = stamp
         self.st["report_trees"] = trees
         self.st["live_owed"] = True             # until upload_live() succeeds (S32)
@@ -571,7 +572,7 @@ class _Run:
         snapshot has an orca/ tree, which before B-I1 it only had when the Orca tree went in)."""
         inst = self.st.get("installed") or {}
         if inst.get("stamp") == stamp and isinstance(inst.get("trees"), list):
-            return "orca" in inst["trees"]
+            return "orca" in inst["trees"] or inst.get("orca_synced") is True   # a build without orca/: settled
         return (self.d.installed / "orca").is_dir()
 
     def _orca_catch_up(self, stamp: str, build: dict, here: str) -> str | None:

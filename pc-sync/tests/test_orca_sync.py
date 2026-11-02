@@ -482,3 +482,29 @@ def test_installed_build_whose_orca_tree_did_not_go_in_installs_it_once_orca_syn
     c.calls.clear()
     assert _run(c, folders, orca, dirs, now=T0 + sync.UPLOAD_BACKOFF + 120) in ("up_to_date", "uploaded")
     assert not [x for x in c.calls if x[0] in ("rebuild", "installed")]
+
+
+def test_catch_up_of_a_build_without_an_orca_tree_happens_once(env, monkeypatch):
+    """A build made from these Orca presets that has no orca/ tree (no Orca printers yet): the catch-up installs it
+    once with Orca considered, then the build counts as settled (no install on every run)."""
+    folders, orca, dirs = env
+    live, olive = _matching(folders, orca)
+    st = _state(folders, orca, build={"stamp": STAMP, "live_hash": live, "orca_live_hash": olive})
+    st["orca_live_hash"] = "server-has-another"
+    c = OrcaClient(st, _zip(live_hash=live, orca_live_hash=olive, orca={}))
+    real = sync.zips.pack
+
+    def pack(root, max_bytes=None):
+        if root == orca.user_filament:
+            raise sync.zips.TooLarge(f"{root} is too large to upload")
+        return real(root, max_bytes)
+
+    monkeypatch.setattr(sync.zips, "pack", pack)
+    assert _run(c, folders, orca, dirs) == "installed"
+    monkeypatch.setattr(sync.zips, "pack", real)
+    t = T0 + sync.UPLOAD_BACKOFF + 60
+    assert _run(c, folders, orca, dirs, now=t) == "installed"          # the catch-up, Orca considered
+    c.st["orca_live_hash"] = treehash.tree_hash(orca.user_filament)
+    c.calls.clear()
+    assert _run(c, folders, orca, dirs, now=t + 60) in ("up_to_date", "uploaded")
+    assert not [x for x in c.calls if x[0] in ("installed", "build")]
