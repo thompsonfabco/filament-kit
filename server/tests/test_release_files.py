@@ -164,6 +164,22 @@ def test_uninstall_uses_modules_units_and_cleans_station():
     assert "for u in filament-kit spoolman; do" in purge
 
 
+def test_uninstall_removes_the_kits_remote_files():
+    """Task 9 (WSL): uninstall left the kit's router conf, its deploy hook and its route (to a port nothing serves
+    any more). Like `modules disable remote` (Ruling AF): only the kit's own files; nginx, certbot, the certificate,
+    mcp-route and other routes stay. The certbot timer drop-in goes with --purge."""
+    from filament_kit import remote
+    text = _read("install/uninstall.sh")
+    i = text.index("# remote:")
+    block = text[i:text.index("rm -rf /opt/filament-kit")]
+    for path in (remote.ROUTER_CONF, remote.DEPLOY_HOOK_FILE, remote.KIT_ROUTES):
+        assert path in block, path
+    assert f"{remote.ROUTE_DIR}/$n.conf" in block and remote.MARK in block       # only routes mcp-route wrote
+    assert "nginx -t" in block and "systemctl reload nginx" in block
+    purge = text[text.index('if [ "$PURGE" -eq 1 ]; then\n    rm -rf'):]
+    assert remote.TIMER_DROPIN in purge
+
+
 def test_install_server_flag_and_usage():
     text = _read("install/install.sh")
     assert "[--mode server|station|all-in-one] [--server NAME-OR-IP]" in text

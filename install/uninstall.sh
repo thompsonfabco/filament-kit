@@ -49,10 +49,39 @@ fi
 rm -f /etc/avahi/services/filament-kit.service
 systemctl reload avahi-daemon 2>/dev/null || true
 rm -f /usr/local/bin/filament-kit
+# remote: the kit's own nginx and certbot files, as `modules disable remote` removes them: its routes (only files
+# mcp-route wrote), its router conf and its deploy hook. nginx, certbot, the certificate (/etc/mcp-router/tls),
+# mcp-route, its hook and other routes stay.
+REMOTE_GONE=0
+if [ -f /etc/mcp-router/kit-routes ]; then
+    for n in $(cat /etc/mcp-router/kit-routes); do
+        case "$n" in *[!a-z0-9-]*|"") continue ;; esac
+        if [ -f "/etc/nginx/mcp.d/$n.conf" ] && grep -q 'written by mcp-route' "/etc/nginx/mcp.d/$n.conf"; then
+            rm -f "/etc/nginx/mcp.d/$n.conf" && REMOTE_GONE=1
+        fi
+    done
+    rm -f /etc/mcp-router/kit-routes
+fi
+for f in /etc/nginx/conf.d/filament-kit-router.conf /etc/letsencrypt/renewal-hooks/deploy/filament-kit; do
+    [ -e "$f" ] && rm -f "$f" && REMOTE_GONE=1
+done
+if [ "$REMOTE_GONE" -eq 1 ]; then
+    if command -v nginx >/dev/null 2>&1 && nginx -t -q 2>/dev/null && systemctl is-active -q nginx; then
+        systemctl reload nginx || true
+    fi
+    echo "Removed the kit's router conf, route and certbot deploy hook. nginx, certbot, the certificate in"
+    echo "/etc/mcp-router and mcp-route were left; remove them with apt and rm if nothing else uses them."
+fi
 rm -rf /opt/filament-kit /opt/spoolman /opt/spoolman.new /opt/spoolman.old
 
 if [ "$PURGE" -eq 1 ]; then
     rm -rf /etc/filament-kit /var/lib/filament-kit /var/lib/spoolman /var/backups/filament-kit
+    # the certbot timer pin (remote.acme_window) is a setting of the kit's
+    if [ -f /etc/systemd/system/certbot.timer.d/acme-window.conf ]; then
+        rm -f /etc/systemd/system/certbot.timer.d/acme-window.conf
+        rmdir /etc/systemd/system/certbot.timer.d 2>/dev/null || true
+        systemctl daemon-reload
+    fi
     for u in filament-kit spoolman; do
         if id -u "$u" >/dev/null 2>&1; then
             userdel "$u" || true
