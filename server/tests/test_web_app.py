@@ -42,6 +42,17 @@ READ = {"questions": ["which grey?"], "items": [{
     "sealed": True, "sealed_reason": "in bag", "line": "PETG"}]}
 
 
+@pytest.fixture(autouse=True)
+def _sse_not_shutting_down():
+    """sse_starlette keeps a process-wide "server is exiting" flag that its uvicorn hook sets on handle_exit
+    (test_main_wiring calls it); once set, every SSE reply closes at once. A real process only sets it on its
+    own shutdown, so reset it for these tests."""
+    from sse_starlette.sse import AppStatus
+    AppStatus.should_exit = False
+    yield
+    AppStatus.should_exit = False
+
+
 @pytest.fixture
 def readers():
     data = readers_fake.new_data()
