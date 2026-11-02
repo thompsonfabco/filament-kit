@@ -297,3 +297,102 @@ internal object ReadTag : KSerializer<String?> {
     override fun serialize(encoder: Encoder, value: String?) =
         (encoder as JsonEncoder).encodeJsonElement(if (value == null) JsonNull else JsonPrimitive(value))
 }
+
+// ---- stage 4: profiles, library and PC sync status (global-constraints "Sync and profiles API contract") ------
+
+/** The newest good build: [presets] preset files, [problems] lines skipped or reported. [created] is a server time. */
+@Serializable
+data class BuildInfo(
+    val stamp: String = "",
+    @SerialName("live_hash") val liveHash: String? = null,
+    @Serializable(with = LenientText::class) val created: String? = null,
+    @Serializable(with = LenientInt::class) val presets: Int = 0,
+    @Serializable(with = LenientInt::class) val problems: Int = 0,
+)
+
+/** The last build run; [error] says why it failed when [ok] is false. */
+@Serializable
+data class BuildAttempt(
+    @Serializable(with = LenientText::class) val at: String? = null,
+    @Serializable(with = LenientBool::class) val ok: Boolean = false,
+    val error: String? = null,
+)
+
+/** The build the sync PC last installed into Bambu Studio. */
+@Serializable
+data class InstalledInfo(val stamp: String = "", @Serializable(with = LenientText::class) val at: String? = null)
+
+/** The paired PC that syncs Bambu Studio. */
+@Serializable
+data class PcInfo(
+    @SerialName("device_id") val deviceId: String = "",
+    @Serializable(with = LenientText::class) @SerialName("last_upload") val lastUpload: String? = null,
+)
+
+/** The spec library: [source] `bundled` or `updated`; [local] the owner's own additions. */
+@Serializable
+data class LibraryInfo(
+    @Serializable(with = LenientText::class) val version: String? = null,
+    val source: String = "bundled",
+    @Serializable(with = LenientInt::class) val local: Int = 0,
+    @SerialName("last_check") val lastCheck: BuildAttempt? = null,
+)
+
+/** `GET /api/profiles/status`. [stale]: presets no longer generated, to delete in Bambu Studio. */
+@Serializable
+data class ProfileStatus(
+    @Serializable(with = LenientInt::class) val lines: Int = 0,
+    @Serializable(with = LenientInt::class) val presets: Int = 0,
+    val build: BuildInfo? = null,
+    @SerialName("last_attempt") val lastAttempt: BuildAttempt? = null,
+    val installed: InstalledInfo? = null,
+    val pc: PcInfo? = null,
+    val library: LibraryInfo? = null,
+    val stale: List<String> = emptyList(),
+    val problems: List<String> = emptyList(),
+)
+
+/** One product line (`GET /api/profiles/lines`); [bambuParent] is null when no parent was found. */
+@Serializable
+data class ProfileLine(
+    @SerialName("line_id") val lineId: String,
+    val vendor: String = "",
+    val product: String = "",
+    val material: String = "",
+    @SerialName("bambu_parent") val bambuParent: String? = null,
+    @SerialName("parent_source") val parentSource: String = "none",
+    @SerialName("spoolman_ids") val spoolmanIds: List<Int> = emptyList(),
+    @Serializable(with = LenientInt::class) val presets: Int = 0,
+)
+
+/** `POST /api/profiles/propose`: the line and parent the server would use; [exists] when the line is known. */
+@Serializable
+data class Proposal(
+    @SerialName("line_id") val lineId: String = "",
+    val line: String = "",
+    @SerialName("bambu_parent") val bambuParent: String? = null,
+    @SerialName("parent_source") val parentSource: String = "none",
+    val exists: Boolean = false,
+)
+
+/** `GET /api/profiles/parents`; [synced] false while the PC has not uploaded Bambu Studio's system presets. */
+@Serializable
+data class ParentList(val parents: List<String> = emptyList(), val synced: Boolean = false)
+
+/** `POST /api/library/local` (201). */
+@Serializable
+data class LocalEntryResult(val entry: JsonObject = JsonObject(emptyMap()), @SerialName("line_id") val lineId: String = "")
+
+/** A string or a number (times may be ISO text or epoch seconds), read as text; null stays null. */
+@OptIn(ExperimentalSerializationApi::class)
+internal object LenientText : KSerializer<String?> {
+    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("LenientText", PrimitiveKind.STRING).nullable
+    override fun deserialize(decoder: Decoder): String? {
+        val el = (decoder as? JsonDecoder ?: throw SerializationException("JSON only")).decodeJsonElement()
+        return (el as? JsonPrimitive)?.takeIf { it !is JsonNull }?.content
+    }
+    override fun serialize(encoder: Encoder, value: String?) =
+        (encoder as JsonEncoder).encodeJsonElement(if (value == null) JsonNull else JsonPrimitive(value))
+}
+
+// ---- end stage 4 -----------------------------------------------------------------------------------------------

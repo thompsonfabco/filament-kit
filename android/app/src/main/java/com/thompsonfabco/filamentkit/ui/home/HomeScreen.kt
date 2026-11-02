@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.thompsonfabco.filamentkit.drafts.Draft
+import com.thompsonfabco.filamentkit.net.ProfileStatus
 import com.thompsonfabco.filamentkit.session.Connection
 import com.thompsonfabco.filamentkit.update.UpdateUi
 import java.text.DateFormat
@@ -41,6 +42,7 @@ fun HomeScreen(
     drafts: List<Draft>,
     update: UpdateUi,
     onAddSpools: () -> Unit,
+    onAddProfile: () -> Unit,
     onSearch: () -> Unit,
     onPrinters: () -> Unit,
     onSettings: () -> Unit,
@@ -50,6 +52,9 @@ fun HomeScreen(
     onInstallUpdate: () -> Unit,
     onConfirmInstall: () -> Unit,
     modifier: Modifier = Modifier,
+    /** The Presets card; null while the status is unknown. [showPresets] false hides the card (not paired yet). */
+    presets: ProfileStatus? = null,
+    showPresets: Boolean = true,
     /** Shown while [connection] is [Connection.NeedsLocalNetwork] (explanation, Allow, Open app settings). */
     localNetworkPanel: @Composable () -> Unit = {},
     extra: @Composable () -> Unit = {},
@@ -64,9 +69,11 @@ fun HomeScreen(
         UpdateBanner(update, onInstallUpdate, onConfirmInstall)
 
         Button(onClick = onAddSpools, modifier = Modifier.fillMaxWidth()) { Text("Add spools") }
+        OutlinedButton(onClick = onAddProfile, modifier = Modifier.fillMaxWidth()) { Text("Add profile") }
         Button(onClick = onSearch, modifier = Modifier.fillMaxWidth()) { Text("Search") }
         Button(onClick = onPrinters, modifier = Modifier.fillMaxWidth()) { Text("Printers") }
         OutlinedButton(onClick = onSettings, modifier = Modifier.fillMaxWidth()) { Text("Settings") }
+        if (showPresets) PresetsCard(presets)
 
         if (drafts.isNotEmpty()) {
             Text("Unfinished adds", style = MaterialTheme.typography.titleMedium)

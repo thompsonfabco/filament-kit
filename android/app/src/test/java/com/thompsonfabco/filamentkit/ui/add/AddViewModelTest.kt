@@ -4,6 +4,8 @@ import com.thompsonfabco.filamentkit.drafts.DraftStore
 import com.thompsonfabco.filamentkit.net.AddResult
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
+import com.thompsonfabco.filamentkit.net.ParentList
+import com.thompsonfabco.filamentkit.net.Proposal
 import com.thompsonfabco.filamentkit.net.ReadResult
 import java.io.File
 import kotlinx.coroutines.CompletableDeferred
@@ -12,6 +14,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -20,7 +23,9 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.double
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
@@ -633,6 +638,127 @@ class AddViewModelTest {
         assertEquals(900.0, s.weight!!, 0.0)
         assertEquals(1, s.photos.size)
     }
+
+    // ---------- product line and Bambu parent (stage 4 Task 9) ----------
+
+    private fun lineItem(parent: String? = "Generic PLA", exists: Boolean = false) = JsonObject(
+        item() + mapOf(
+            "line" to JsonPrimitive("PLA+"),
+            "bambu_parent" to (parent?.let(::JsonPrimitive) ?: JsonNull),
+            "parent_source" to JsonPrimitive("material"),
+            "line_exists" to JsonPrimitive(exists),
+        ),
+    )
+
+    private fun proposal(parent: String?, exists: Boolean = false, source: String = "material") =
+        Proposal("sunlu--pla-plus", "PLA+", parent, source, exists)
+
+    private fun JsonObject.text(key: String): String? = (this[key] as? JsonPrimitive)?.contentOrNull
+
+    @Test fun parentsForEachMaterialAreLoadedAfterTheRead() = runTest(dispatcher) {
+        api.parentLists["PLA"] = ParentList(listOf("Generic PLA", "SUNLU PLA+"), synced = true)
+        val vm = vm()
+        readOne(vm, lineItem())
+        assertEquals(ParentList(listOf("Generic PLA", "SUNLU PLA+"), true), vm.state.value.parents["PLA"])
+        assertEquals(listOf("PLA"), api.parentCalls)
+    }
+
+    @Test fun anEditReProposesAfterAPauseAndTakesTheProposedParent() = runTest(dispatcher) {
+        val vm = vm()
+        readOne(vm, lineItem())
+        api.proposals += proposal("SUNLU PLA+ HS", exists = true, source = "brand")
+        vm.setText(0, "line", "PLA+ H")
+        advanceTimeBy(200)
+        vm.setText(0, "line", "PLA+ HS")
+        advanceTimeBy(400)
+        assertTrue("debounced: nothing yet", api.proposeCalls.isEmpty())
+        advanceUntilIdle()
+        assertEquals(listOf(Triple("SUNLU", "PLA+ HS", "PLA")), api.proposeCalls)
+        val it = vm.state.value.items.single()
+        assertEquals("SUNLU PLA+ HS", it.text("bambu_parent"))
+        assertEquals("brand", it.text("parent_source"))
+        assertEquals("true", it.text("line_exists"))
+        assertEquals("the typed line is kept", "PLA+ HS", it.text("line"))
+    }
+
+    @Test fun aPickedParentIsKeptWhenTheMaterialChangesTheProposal() = runTest(dispatcher) {
+        api.parentLists["PETG"] = ParentList(listOf("Generic PETG"), synced = true)
+        val vm = vm()
+        readOne(vm, lineItem())
+        vm.setParent(0, "SUNLU PLA+")
+        advanceUntilIdle()
+        api.proposeCalls.clear()
+        api.proposals += proposal("Generic PETG")
+        vm.setText(0, "material", "PETG")
+        advanceUntilIdle()
+        assertEquals(listOf(Triple("SUNLU", "PLA+", "PETG")), api.proposeCalls)
+        assertEquals("SUNLU PLA+", vm.state.value.items.single().text("bambu_parent"))
+        assertEquals("parents of the new material are loaded", listOf("Generic PETG"), vm.state.value.parents["PETG"]!!.parents)
+    }
+
+    @Test fun clearingThePickedParentLetsTheProposalChooseAgain() = runTest(dispatcher) {
+        val vm = vm()
+        readOne(vm, lineItem())
+        vm.setParent(0, "SUNLU PLA+")
+        api.proposals += proposal("Generic PLA")
+        vm.setParent(0, "")
+        advanceUntilIdle()
+        assertEquals("Generic PLA", vm.state.value.items.single().text("bambu_parent"))
+    }
+
+    @Test fun aFailedProposalChangesNothing() = runTest(dispatcher) {
+        val vm = vm()
+        readOne(vm, lineItem())
+        vm.setText(0, "material", "PLA Matte")
+        advanceUntilIdle() // the fake has no proposal queued: it fails
+        assertEquals(1, api.proposeCalls.size)
+        assertEquals("Generic PLA", vm.state.value.items.single().text("bambu_parent"))
+        assertNull(vm.state.value.error)
+    }
+
+    @Test fun aProposalForValuesThatChangedSinceIsDropped() = runTest(dispatcher) {
+        val vm = vm()
+        readOne(vm, lineItem())
+        val gate = CompletableDeferred<Unit>()
+        api.proposeGate = gate
+        vm.setText(0, "material", "PETG")
+        advanceUntilIdle() // propose is waiting on the gate
+        api.proposeGate = null
+        api.proposals += proposal("Generic ABS")
+        vm.setText(0, "material", "ABS") // the PETG answer is now stale; this edit cancels it
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals("Generic ABS", vm.state.value.items.single().text("bambu_parent"))
+    }
+
+    @Test fun addSendsLineAndParentButNotTheAppMarker() = runTest(dispatcher) {
+        val vm = vm()
+        readOne(vm, lineItem())
+        vm.setText(0, "line", "PLA+ 2.0")
+        vm.setParent(0, "SUNLU PLA+ 2.0")
+        api.proposals += proposal("Generic PLA")
+        advanceUntilIdle()
+        vm.preview()
+        advanceUntilIdle()
+        val sent = sentItem()
+        assertEquals("PLA+ 2.0", sent.text("line"))
+        assertEquals("SUNLU PLA+ 2.0", sent.text("bambu_parent"))
+        assertFalse(sent.keys.any { it.startsWith("app_") })
+        assertEquals("keep me", sent.text("future_field"))
+    }
+
+    @Test fun aPickSurvivesReopeningTheDraft() = runTest(dispatcher) {
+        val first = vm()
+        readOne(first, lineItem())
+        first.setParent(0, "SUNLU PLA+")
+        advanceUntilIdle()
+        val again = vm(draftId = first.state.value.draftId!!)
+        advanceUntilIdle()
+        api.proposals += proposal("Generic PETG")
+        again.setText(0, "material", "PETG")
+        advanceUntilIdle()
+        assertEquals("SUNLU PLA+", again.state.value.items.single().text("bambu_parent"))
+    }
 }
 
 private class FakeIntakeApi : IntakeApi {
@@ -670,4 +796,21 @@ private class FakeIntakeApi : IntakeApi {
     }
 
     override suspend fun locations(): List<String> = listOf("Shelf A", "Shelf B")
+
+    val proposeCalls = mutableListOf<Triple<String, String, String>>()
+    val proposals = ArrayDeque<Proposal>()
+    var proposeGate: CompletableDeferred<Unit>? = null
+    val parentLists = mutableMapOf<String, ParentList>()
+    val parentCalls = mutableListOf<String>()
+
+    override suspend fun propose(vendor: String, line: String, material: String): Proposal {
+        proposeCalls += Triple(vendor, line, material)
+        proposeGate?.await()
+        return proposals.removeFirstOrNull() ?: throw ApiError(0, "offline", "down")
+    }
+
+    override suspend fun parents(material: String): ParentList {
+        parentCalls += material
+        return parentLists[material] ?: ParentList(emptyList(), synced = false)
+    }
 }
