@@ -1,4 +1,5 @@
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -271,3 +272,112 @@ def test_bad_build_json_refused(tmp_path):
     with pytest.raises(installer.Refused):
         env.install(build)
     assert not env.dirs.backups.exists()
+
+
+# --- fix round 1: atomic live writes, failed backups, missing user folder -------------------------
+
+def _valid_json_files(folder: Path) -> dict[str, dict]:
+    return {p.name: json.loads(p.read_text(encoding="utf-8")) for p in folder.glob("*.json")}
+
+
+def test_failure_mid_copy_never_leaves_a_half_written_preset(tmp_path, monkeypatch):
+    old = {n: _preset(n, nozzle_temperature=["210", "210"]) for n in ("A", "B", "C")}
+    env = Env(tmp_path, live={n: (d, _info()) for n, d in old.items()})
+    new = {n: _preset(n, nozzle_temperature=["230", "230"], filament_notes="x" * 5000) for n in ("A", "B", "C")}
+    build = env.build(new)
+
+    real_open = open
+    writes = []
+
+    class Torn:
+        """A file whose 3rd write target (B.json) gets half its bytes, then the disk is 'full'."""
+        def __init__(self, f, fail):
+            self.f, self.fail = f, fail
+
+        def write(self, data):
+            if self.fail:
+                self.f.write(data[: len(data) // 2])
+                self.f.flush()
+                raise OSError(28, "No space left on device")
+            return self.f.write(data)
+
+        def __getattr__(self, a):
+            return getattr(self.f, a)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            self.f.close()
+
+    def fake_open(file, mode="r", *a, **kw):
+        f = real_open(file, mode, *a, **kw)
+        if "w" in mode and Path(file).parent == env.live:
+            writes.append(Path(file).name)
+            return Torn(f, fail=len(writes) == 3)
+        return f
+
+    monkeypatch.setattr("builtins.open", fake_open)
+    with pytest.raises(OSError):
+        env.install(build)
+    monkeypatch.undo()
+
+    assert writes[2].startswith(".") and writes[2].endswith(".fktmp")  # never the live file itself
+    got = _valid_json_files(env.live)  # every live preset still parses
+    assert got["A.json"] == new["A"]  # renamed in before the failure
+    assert got["B.json"] == old["B"] and got["C.json"] == old["C"]  # untouched
+    assert not [p for p in env.live.iterdir() if p.name.endswith(".fktmp")]
+    assert not env.dirs.installed.exists()  # the snapshot is only replaced after a full install
+
+    # the next run completes the install
+    env.install(build, stamp="20261102-020000")
+    assert _valid_json_files(env.live) == {f"{n}.json": d for n, d in new.items()}
+
+
+def test_leftover_tmp_removed_only_after_second_studio_check(tmp_path):
+    env = Env(tmp_path, live={"A": (_preset("A"), _info())})
+    leftover = env.live / ".A.json.fktmp"
+    leftover.write_text("{half", encoding="utf-8")
+    build = env.build({"A": _preset("A", nozzle_temperature=["230", "230"])})
+    answers = iter([False, True])
+    with pytest.raises(installer.Refused):
+        env.install(build, running=lambda: next(answers))
+    assert leftover.exists()  # Studio was running: nothing touched
+    env.install(build)
+    assert not leftover.exists()
+    assert json.loads((env.live / "A.json").read_text(encoding="utf-8"))["nozzle_temperature"] == ["230", "230"]
+
+
+def test_failed_backup_is_removed_and_install_refused(tmp_path, monkeypatch):
+    env = Env(tmp_path, live={"A": (_preset("A"), _info())})
+    for i in range(5):
+        (env.dirs.backups / f"20261101-00000{i}").mkdir(parents=True)
+    before = _all_files(env.folders.user_filament)
+    real_copytree = installer.shutil.copytree
+
+    def full_disk(src, dst, *a, **kw):
+        Path(dst).mkdir(parents=True)
+        (Path(dst) / "partial.json").write_text("{", encoding="utf-8")
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(installer.shutil, "copytree", full_disk)
+    with pytest.raises(installer.Refused) as e:
+        env.install(env.build({"A": _preset("A", nozzle_temperature=["230", "230"])}), stamp="20261102-010000")
+    monkeypatch.setattr(installer.shutil, "copytree", real_copytree)
+    assert e.value.code == "refused"
+    assert "back up" in e.value.reason and "nothing was installed" in e.value.reason
+    assert sorted(p.name for p in env.dirs.backups.iterdir()) == [f"20261101-00000{i}" for i in range(5)]
+    assert _all_files(env.folders.user_filament) == before
+    assert not env.dirs.installed.exists()
+
+
+def test_missing_user_filament_folder_refused_cleanly(tmp_path):
+    env = Env(tmp_path)
+    shutil.rmtree(env.folders.user_filament)
+    with pytest.raises(installer.Refused) as e:
+        env.install(env.build({"A": _preset("A")}))
+    assert e.value.code == "refused"
+    assert "does not exist" in e.value.reason and str(env.folders.user_filament) in e.value.reason
+    assert not env.folders.user_filament.exists()
+    assert not env.dirs.backups.exists()
+    assert not env.dirs.installed.exists()
