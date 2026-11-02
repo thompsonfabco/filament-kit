@@ -6,10 +6,10 @@ State, all under `state/profiles/`:
   live/orca/system/          Orca's system presets (kind `orca_system`, Ruling L): `BBL/filament/**.json` from
                              `%APPDATA%\\OrcaSlicer\\system\\BBL\\filament\\` + `OrcaFilamentLibrary/index.json`
   live/meta.json             {owner, user_id, live_hash, live_at, system_hash, system_at, system_presets,
-                             partial, orca_user_id, orca_live_hash, orca_live_at, orca_system_hash,
+                             partial, orca_user_id, orca_live_hash, orca_live_at, orca_partial, orca_system_hash,
                              orca_system_at, orca_system_presets}; `partial` = a build whose install stopped
                              part-way on the PC (ruling S28, `PUT /api/sync/live?partial=<stamp>`), cleared by the
-                             next install report
+                             next install report; `orca_partial` the same for the Orca tree (Ruling O)
   builds/<stamp>/            one build: BUILD.json (the manifest) + base/<name>.json|.info
   builds/*.tmp               a build or upload in progress; removed by the next build
   current.json               the last good build {stamp, created, live_hash, presets, problems}
@@ -344,6 +344,7 @@ def _forget_old_pc(meta: dict) -> None:
         except FileNotFoundError:
             pass
     meta.pop("partial", None)
+    meta.pop("orca_partial", None)
 
 
 def _rmtree(path: Path) -> None:
@@ -539,17 +540,18 @@ def store_upload(kind: str, src: BinaryIO, *, device_id: str, user_id: str | Non
       system       Bambu Studio's `system/BBL/filament`       -> live/system/
       orca_live    Orca Slicer's user `filament/` folder      -> live/orca/user/
       orca_system  `BBL/filament/**.json` + `OrcaFilamentLibrary/index.json` (Ruling L) -> live/orca/system/
-    `user_id` (the slicer's user folder id) is kept for the two live kinds. `partial` (Bambu Studio live only)
-    names the build whose install stopped part-way in this live folder (ruling S28). Raises OtherPc, BadZip or
-    TooLarge; then nothing changed."""
+    `user_id` (the slicer's user folder id) is kept for the two live kinds. `partial` (live kinds only) names the
+    build whose install stopped part-way in this live folder (ruling S28; meta `orca_partial` for orca_live, Ruling
+    O). Raises OtherPc, BadZip or TooLarge; then nothing changed."""
     if kind not in KINDS:
         raise ValueError(f"unknown upload kind {kind!r}")
     sub, cap, strict, prefix = KINDS[kind]
     is_live = kind in ("live", "orca_live")
     if user_id is not None and not USER_ID.fullmatch(user_id):
         raise ProfileError(400, "bad_request", "user_id may only have letters, digits, - and _ (at most 64)")
-    if partial is not None and (kind != "live" or not isinstance(partial, str) or not STAMP_RE.fullmatch(partial)):
-        raise ProfileError(400, "bad_request", "partial must be a build stamp (Bambu Studio live uploads only)")
+    if partial is not None and (kind not in ("live", "orca_live") or not isinstance(partial, str)
+                                or not STAMP_RE.fullmatch(partial)):
+        raise ProfileError(400, "bad_request", "partial must be a build stamp (live uploads only)")
     check_owner(device_id)                      # refuse before reading the body
     make_state_dir(_dir())
     sweep_uploads()
@@ -585,7 +587,7 @@ def store_upload(kind: str, src: BinaryIO, *, device_id: str, user_id: str | Non
                 if user_id is not None:
                     meta[prefix + "user_id"] = user_id
                 if partial is not None:
-                    meta["partial"] = partial
+                    meta[prefix + "partial"] = partial
                 meta.update({prefix + "live_hash": h, prefix + "live_at": now})
                 # S32 waits on the Bambu Studio live folder; the Orca side joins the builds in Task 6
                 renew = kind == "live" and bool(_state().get("wait_live"))
@@ -602,15 +604,16 @@ def store_upload(kind: str, src: BinaryIO, *, device_id: str, user_id: str | Non
 
 # ---------- rebuild requests ----------
 
-def request_rebuild(reason: str, live_hash: str | None = None) -> None:
-    """Ask for a build: (re)write `profiles/rebuild-request`, which filament-kit-build.path watches."""
+def request_rebuild(reason: str, live_hash: str | None = None, *, orca_live_hash: str | None = None) -> None:
+    """Ask for a build: (re)write `profiles/rebuild-request`, which filament-kit-build.path watches. The hashes
+    are the PC's live folders the request was made from (Bambu Studio, Orca: Ruling O)."""
     make_state_dir(_dir())
-    data = {"at": time.time(), "reason": str(reason), "live_hash": live_hash}
+    data = {"at": time.time(), "reason": str(reason), "live_hash": live_hash, "orca_live_hash": orca_live_hash}
     _write_atomic(_request_path(), (json.dumps(data) + "\n").encode("utf-8"), 0o644, state_owned=True)
 
 
 def _request() -> dict | None:
-    """The rebuild request as read (never changed here): {at, live_hash}; `at` is the later of its own time and
+    """The rebuild request as read (never changed here): {at, live_hash, orca_live_hash}; `at` is the later of its own time and
     the file's mtime, so a bare `touch` counts too."""
     path = _request_path()
     try:
@@ -620,8 +623,9 @@ def _request() -> dict | None:
     data = _read_obj(path)
     at = data.get("at")
     at = float(at) if isinstance(at, (int, float)) and not isinstance(at, bool) else 0.0
-    lh = data.get("live_hash")
-    return {"at": max(at, st.st_mtime), "live_hash": lh if isinstance(lh, str) else None}
+    lh, olh = data.get("live_hash"), data.get("orca_live_hash")
+    return {"at": max(at, st.st_mtime), "live_hash": lh if isinstance(lh, str) else None,
+            "orca_live_hash": olh if isinstance(olh, str) else None}
 
 
 def _pending_request() -> dict | None:
@@ -669,9 +673,10 @@ def _prune() -> None:
     cur = current()
     if cur:
         keep.add(cur["stamp"])
-    part = _meta().get("partial")
-    if isinstance(part, str):
-        keep.add(part)
+    for key in ("partial", "orca_partial"):
+        part = _meta().get(key)
+        if isinstance(part, str):
+            keep.add(part)
     for name in dirs:
         if name not in keep:
             _rmtree(root / name)
@@ -841,8 +846,9 @@ def record_installed(stamp: str, device_id: str) -> dict:
         at = time.time()
         _write_json(_dir() / "installed.json", {"stamp": stamp, "at": at, "device_id": device_id})
         meta = _meta()
-        if "partial" in meta:                   # a finished install ends the partial one (S28)
-            meta.pop("partial")
+        if "partial" in meta or "orca_partial" in meta:     # a finished install ends the partial one (S28)
+            meta.pop("partial", None)
+            meta.pop("orca_partial", None)
             _write_json(_live() / "meta.json", meta)
         try:                                    # the installed build's own record carries them from now on (S34)
             (_dir() / OWNER_EDITS).unlink()
@@ -880,7 +886,8 @@ def state_view(device_id: str) -> dict:
             "orca_live_hash": meta.get("orca_live_hash"), "orca_system_hash": _system_hash(meta, "orca_system"),
             "build": _build_view(),
             "last_attempt": _attempt_view(), "installed": _installed_view(),
-            "rebuild_requested": {"at": req["at"], "live_hash": req["live_hash"]} if req else None}
+            "rebuild_requested": {"at": req["at"], "live_hash": req["live_hash"],
+                                  "orca_live_hash": req["orca_live_hash"]} if req else None}
 
 
 def status() -> dict:

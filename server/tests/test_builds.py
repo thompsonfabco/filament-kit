@@ -813,7 +813,9 @@ def test_orca_uploads_check_owner_and_rules(env):
         with pytest.raises(builds.BadZip):
             builds.store_upload("orca_live", io.BytesIO(zip_of({bad: "{}"})), device_id="a")
     with pytest.raises(errors.ProfileError):
-        builds.store_upload("orca_live", io.BytesIO(zip_of({"a.json": "{}"})), device_id="a", partial="20261102-080000")
+        builds.store_upload("orca_system", io.BytesIO(orca_system_zip()), device_id="a", partial="20261102-080000")
+    with pytest.raises(errors.ProfileError):
+        builds.store_upload("orca_live", io.BytesIO(zip_of({"a.json": "{}"})), device_id="a", partial="nope")
     with pytest.raises(ValueError):
         builds.store_upload("cura", io.BytesIO(b""), device_id="a")
 
@@ -824,3 +826,30 @@ def test_orca_store_none_when_folder_gone(env):
     shutil.rmtree(profiles_dir() / "live" / "orca" / "system")
     assert builds.orca_store() is None
     assert builds.state_view("a")["orca_system_hash"] is None
+
+
+def test_orca_live_partial_kept_like_live(env):
+    """Ruling O: `partial` on an orca_live upload is stored (meta `orca_partial`), keeps that build from pruning,
+    is cleared by the next install report and when the sync PC changes."""
+    synced(env)
+    stamp = builds.run_build(env, now=TG.NOW)["stamp"]
+    builds.store_upload("orca_live", io.BytesIO(zip_of({"a.json": "{}"})), device_id="a", partial=stamp)
+    assert builds.meta()["orca_partial"] == stamp and "partial" not in builds.meta()
+    for i in range(builds.KEEP + 1):
+        builds.request_rebuild("again")
+        assert builds.run_build(env, now=TG.NOW + 60 * (i + 1))["ok"]
+    assert (profiles_dir() / "builds" / stamp).is_dir()
+    builds.record_installed(builds.current()["stamp"], "a")
+    assert "orca_partial" not in builds.meta()
+    builds.store_upload("orca_live", io.BytesIO(zip_of({"a.json": "{}"})), device_id="a", partial=stamp)
+    pair("b")                                   # a gets unpaired; b becomes the sync PC
+    builds.store_upload("orca_live", io.BytesIO(zip_of({"a.json": "{}"})), device_id="b")
+    assert "orca_partial" not in builds.meta()
+
+
+def test_rebuild_request_carries_orca_live_hash(env):
+    builds.request_rebuild("pc sync", "a" * 64, orca_live_hash="b" * 64)
+    view = builds.state_view("a")["rebuild_requested"]
+    assert (view["live_hash"], view["orca_live_hash"]) == ("a" * 64, "b" * 64)
+    builds.request_rebuild("pc sync", "a" * 64)
+    assert builds.state_view("a")["rebuild_requested"]["orca_live_hash"] is None

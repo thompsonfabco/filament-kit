@@ -472,9 +472,25 @@ def test_bambu_target_is_the_default(c):
     assert r.status_code == 200 and live_files().is_dir()
 
 
-def test_orca_live_partial_refused(c):
+@pytest.mark.parametrize("part, status", [("20270115-080000", 200), ("x", 400), ("", 400)])
+def test_orca_live_partial(c, part, status):
+    """Ruling O: orca_live takes `partial` exactly like live."""
     tok = token()
-    r = put_zip(c, tok, "live", zip_of({"a.json": "{}"}), "?target=orca&partial=20270115-080000")
+    r = put_zip(c, tok, "live", zip_of({"a.json": "{}"}), "?target=orca&partial=" + part)
+    assert r.status_code == status, r.text
+    if status == 200:
+        assert builds.meta()["orca_partial"] == part and "partial" not in builds.meta()
+    else:
+        assert r.json()["error"] == "bad_request"
+
+
+def test_rebuild_with_orca_live_hash(c):
+    tok = token()
+    r = c.post("/api/sync/rebuild", json={"live_hash": "a" * 64, "orca_live_hash": "b" * 64}, headers=auth(tok))
+    assert r.status_code == 202
+    req = c.get("/api/sync/state", headers=auth(tok)).json()["rebuild_requested"]
+    assert (req["live_hash"], req["orca_live_hash"]) == ("a" * 64, "b" * 64)
+    r = c.post("/api/sync/rebuild", json={"orca_live_hash": "B" * 64}, headers=auth(tok))
     assert r.status_code == 400 and r.json()["error"] == "bad_request"
 
 

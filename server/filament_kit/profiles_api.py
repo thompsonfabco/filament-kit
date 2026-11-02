@@ -5,7 +5,7 @@
 
 Uploads (`PUT /api/sync/live|system`; live takes `user_id` and, after a half-finished install, `partial=<stamp>`,
 ruling S28; `target=orca` stores Orca Slicer's folders instead, kinds `orca_live` / `orca_system`, Ruling L, and
-`partial` is Bambu Studio only): the owner is checked before the body is read (409 `other_pc`), a declared
+`partial` works the same, Ruling O): the owner is checked before the body is read (409 `other_pc`), a declared
 Content-Length over the cap is refused at once (413), then `request.stream()` is read by `builds.store_upload`
 in the threadpool through a small blocking reader, which stops at the cap (never `await request.body()`).
 
@@ -257,8 +257,8 @@ def routes(authed, sm) -> list[Route]:
         if user_id is not None and not USER_ID.fullmatch(user_id):
             raise _bad("user_id may only have letters, digits, - and _ (at most 64)")
         partial = request.query_params.get("partial")
-        if partial is not None and (orca or not builds.STAMP_RE.fullmatch(partial)):
-            raise _bad("partial must be a build stamp (Bambu Studio uploads only)")
+        if partial is not None and not builds.STAMP_RE.fullmatch(partial):
+            raise _bad("partial must be a build stamp")
         h = await upload(request, "orca_live" if orca else "live", user_id, partial)
         return JSONResponse({"live_hash": h})
 
@@ -274,13 +274,14 @@ def routes(authed, sm) -> list[Route]:
     async def sync_rebuild(request: Request):
         device = request.state.device
         body = await _json(request)
-        lh = body.get("live_hash")
-        if lh is not None and not (isinstance(lh, str) and HASH_RE.fullmatch(lh)):
-            raise _bad("live_hash must be a sha256 hex digest")
+        lh, olh = body.get("live_hash"), body.get("orca_live_hash")       # orca_live_hash: Ruling O
+        for key, v in (("live_hash", lh), ("orca_live_hash", olh)):
+            if v is not None and not (isinstance(v, str) and HASH_RE.fullmatch(v)):
+                raise _bad(f"{key} must be a sha256 hex digest")
 
         def run() -> None:
             builds.check_owner(device)
-            builds.request_rebuild("pc sync", lh)
+            builds.request_rebuild("pc sync", lh, orca_live_hash=olh)
         await run_in_threadpool(_audit, "sync rebuild", device, run)
         return JSONResponse({"requested": True}, status_code=202)
 
