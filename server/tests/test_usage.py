@@ -255,13 +255,80 @@ def test_3mf_not_found_logs_an_error_and_writes_nothing(rig, sd, spoolman_fake_s
     assert e["grams"] is None and e["slot"] is None
 
 
-def test_3mf_found_by_name_match_in_a_listing(rig, sd, spoolman_fake_store):
+def test_3mf_found_by_name_ignoring_case(rig, sd, spoolman_fake_store):
     calibrate()
-    put(sd, "/cache/bracket_v3 (2)_plate_1.gcode.3mf", build_3mf(TWO_COLOUR))
+    put(sd, "/cache/Bracket_V3_plate_1.gcode.3MF", build_3mf(TWO_COLOUR))
     put(sd, "/cache/zzz.gcode.3mf", build_3mf({1: [(1, "x", "PLA", "#000000", 500.0)]}))
     r = rig()
     r.print_job()
     assert used(spoolman_fake_store, A2) == 21.92
+
+
+def test_a_similar_name_is_another_job(rig, sd, spoolman_fake_store):
+    calibrate()
+    put(sd, "/bracket_v3.gcode.3mf", build_3mf(TWO_COLOUR))         # job "bracket" must not take this one
+    put(sd, "/cache/bracket_v3_plate_1.gcode.3mf", build_3mf(TWO_COLOUR))
+    put(sd, "/cache/my bracket.gcode.3mf", build_3mf(TWO_COLOUR))
+    r = rig()
+    r.print_job(job=dict(JOB, subtask_name="bracket"))
+    assert spoolman_fake_store.get("uses", []) == []
+    (e,) = usage.entries(SERIAL, 7)
+    assert e["error"] == "file_not_found" and e["job"] == "bracket"
+
+
+def test_nlst_match_is_exact_but_case_blind():
+    names = ["/bracket_v3.gcode.3mf", "/cache/BRACKET_plate_2.gcode.3mf", "/Bracket.gcode.3mf",
+             "/cache/bracket.gcode.3mf", "/bracket (2).gcode.3mf"]
+    assert usage.nlst_match(names, "bracket", "2") == "/cache/BRACKET_plate_2.gcode.3mf"
+    assert usage.nlst_match(names, "bracket", "1") == "/Bracket.gcode.3mf"         # / before /cache
+    assert usage.nlst_match(names, "bracket", None) == "/Bracket.gcode.3mf"
+    assert usage.nlst_match(names, "brack", None) is None
+    assert usage.nlst_match(["/bracket_v3.gcode.3mf"], "bracket", None) is None
+
+
+def test_prints_reporting_task_id_0_all_settle(rig, sd, spoolman_fake_store):
+    calibrate()
+    put(sd, "/cache/bracket_v3_plate_1.gcode.3mf", build_3mf(TWO_COLOUR))
+    r = rig()
+    for _ in range(2):                                   # LAN / SD-card / touchscreen prints report "0"
+        r.print_job(job=dict(JOB, task_id="0"))
+        r.push({"gcode_state": "IDLE"})
+    r.print_job(job={k: v for k, v in JOB.items() if k != "task_id"})
+    assert used(spoolman_fake_store, A2) == round(3 * 21.92, 2)
+    assert len(usage.entries(SERIAL, 7)) == 6
+
+
+def test_our_calibration_job_is_not_settled(rig, sd, spoolman_fake_store):
+    calibrate()
+    r = rig()
+    r.print_job(job=dict(JOB, subtask_name=f"fk-calib-{SERIAL}", task_id="0", mapping=[0, 1, 128]))
+    assert spoolman_fake_store.get("uses", []) == [] and usage.entries(SERIAL, 7) == []
+    put(sd, "/cache/bracket_v3_plate_1.gcode.3mf", build_3mf(TWO_COLOUR))
+    r.push({"gcode_state": "IDLE"})
+    r.print_job(job=dict(JOB, task_id="0"))                # a real print afterwards still settles
+    assert used(spoolman_fake_store, A2) == 21.92
+
+
+def test_two_spools_claiming_one_slot_write_nothing_for_it(rig, sd, spoolman_fake_store, sm):
+    calibrate()
+    sm.patch(f"spool/{SHELF}", {"location": f"{NAME} {DASH} AMS HT-A"})
+    put(sd, "/cache/bracket_v3_plate_1.gcode.3mf", build_3mf(TWO_COLOUR))
+    r = rig()
+    r.print_job()
+    assert spoolman_fake_store["uses"] == [(A2, 21.92)]
+    e = next(e for e in usage.entries(SERIAL, 7) if e["slot"] == "HT-A")
+    assert e["error"] == "ambiguous_spool" and e["spool_id"] is None and e["grams"] == 9.6
+    with pytest.raises(usage.NothingToUndo):
+        usage.undo(e["id"], sm)
+
+
+def test_an_archived_spool_at_the_slot_does_not_count(rig, sd, spoolman_fake_store, sm):
+    calibrate()
+    sm.patch(f"spool/{SHELF}", {"location": f"{NAME} {DASH} AMS HT-A", "archived": True})
+    put(sd, "/cache/bracket_v3_plate_1.gcode.3mf", build_3mf(TWO_COLOUR))
+    r = rig()
+    r.print_job()
+    assert used(spoolman_fake_store, HTA) == 9.6 and used(spoolman_fake_store, SHELF) == 0
 
 
 def test_multi_plate_project_uses_the_printed_plate(rig, sd, spoolman_fake_store):
