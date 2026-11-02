@@ -31,6 +31,7 @@ class FakeFtps:
         self.data_conns = 0
         self.refused_data = 0
         self.connections = 0
+        self.drop_stor = False          # True: a STOR leaves a partial file and the connection drops midway
         fake = self
 
         ctx = SSL.Context(SSL.TLS_SERVER_METHOD)
@@ -64,6 +65,12 @@ class FakeFtps:
 
             def process_command(self, cmd, *args, **kwargs):
                 fake.commands.append(cmd)
+                if cmd == "STOR" and fake.drop_stor:
+                    path = self.fs.ftp2fs(self.fs.ftpnorm(args[0]))
+                    with open(path, "wb") as fh:
+                        fh.write(b"PK partial")
+                    self.close()
+                    return
                 if cmd in ("MLSD", "MLST"):
                     self.respond("500 Unknown command")
                     return

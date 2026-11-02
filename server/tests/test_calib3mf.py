@@ -62,6 +62,9 @@ class FakeManager:
         self.set_slots: list[tuple] = []
         self.conn_state = "connected"
         self.file_at_start = None
+        self.raise_on_wait: set[int] = set()     # 1-based wait_report calls that raise (connection lost)
+        self.raise_on_publish = False
+        self.waits = 0
 
     def state(self, serial):
         assert serial == SERIAL
@@ -69,6 +72,11 @@ class FakeManager:
 
     def wait_report(self, serial, predicate, timeout):
         assert serial == SERIAL and 0 < timeout <= 120
+        self.waits += 1
+        if self.waits in self.raise_on_wait:
+            while self.queue:                   # the reports so far arrived, then the connection dropped
+                self.report = status.merge(self.report, self.queue.pop(0))
+            raise ConnectionError("connection lost")
         if predicate(self.report):
             return self.report
         while self.queue:
@@ -80,6 +88,8 @@ class FakeManager:
     def publish(self, serial, payload):
         assert serial == SERIAL
         self.published.append(copy.deepcopy(payload))
+        if self.raise_on_publish:
+            raise ConnectionError("connection lost")
         pr = payload["print"]
         if pr["command"] == "stop":
             self.queue.append({"gcode_state": "FAILED"})
@@ -281,3 +291,65 @@ def test_ftps_leaf_mismatch_is_cert_changed(fake_ftp, printer):
     assert r.problems == ["cert_changed"]
     assert m.published == []
     assert "PASS" not in fake_ftp.commands
+
+
+# ---------------------------------------------------------------- cleanup always happens (fix round 1)
+
+def test_upload_dropped_midway_file_still_deleted(fake_ftp, printer):
+    fake_ftp.drop_stor = True
+    m = FakeManager(fake_ftp.root)
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert r.consistent is False
+    assert any("cannot upload" in p for p in r.problems)
+    assert m.published == []
+    assert "DELE" in fake_ftp.commands                                         # a delete was attempted
+    assert not (fake_ftp.root / "cache" / FILE).exists()                       # the partial file is gone
+
+
+def test_delete_crash_does_not_skip_restore(fake_ftp, printer, monkeypatch):
+    def boom(self, path):
+        raise RuntimeError("unexpected")
+    monkeypatch.setattr(ftps.Client, "delete", boom)
+    m = FakeManager(fake_ftp.root, "clobber")
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert any("could not delete" in p for p in r.problems)
+    assert [s[:2] for s in m.set_slots] == [(0, 0)]                            # restored anyway
+    assert not any("restore" in p for p in r.problems)
+
+
+def test_restore_crash_is_a_problem(fake_ftp, printer):
+    m = FakeManager(fake_ftp.root, "clobber")
+    def boom(*a):
+        raise RuntimeError("unexpected")
+    m.set_slot = boom
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert any("A1" in p and "restore" in p for p in r.problems)
+    assert not (fake_ftp.root / "cache" / FILE).exists()
+
+
+def test_publish_raises(fake_ftp, printer):
+    m = FakeManager(fake_ftp.root)
+    m.raise_on_publish = True
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert r.consistent is False
+    assert any("cannot send the calibration job" in p for p in r.problems)
+    assert not (fake_ftp.root / "cache" / FILE).exists()
+
+
+def test_wait_report_raises_during_job(fake_ftp, printer):
+    m = FakeManager(fake_ftp.root, "clobber")
+    m.raise_on_wait = {2}                                   # 1 = snapshot, 2 = watching the job
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))      # must not raise
+    assert r.consistent is False
+    assert any("lost" in p for p in r.problems)
+    assert not (fake_ftp.root / "cache" / FILE).exists()
+    assert [s[:2] for s in m.set_slots] == [(0, 0)]                            # still restored
+
+
+def test_wait_report_raises_everywhere_after_snapshot(fake_ftp, printer):
+    m = FakeManager(fake_ftp.root, "clobber")
+    m.raise_on_wait = set(range(2, 20))
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))      # must not raise
+    assert r.consistent is False
+    assert not (fake_ftp.root / "cache" / FILE).exists()
+    assert any("restore not confirmed" in p for p in r.problems)
