@@ -220,16 +220,19 @@ def _write_items(sm, placed, vendors, fils, result, dry) -> None:
 
 def _join_line(sm: Spoolman, f: dict, it: dict, result: AddResult, dry: bool) -> None:
     """The item's `line` names another line than the existing filament's own (`extra.line`, else the product
-    derived from its name): it was edited in the app, so set the filament's `extra.line` (other extra fields
-    kept) and the filament moves to that line at the next grouping. The same line, or no line, writes nothing."""
+    derived from its name): it was edited in the app (the label read always sends the filament's own line), so
+    set the filament's `extra.line` (other extra fields kept) and the filament moves to that line at the next
+    grouping. The same line, no line, or no library to derive the filament's line from, writes nothing."""
     want = it.get("line").strip() if isinstance(it.get("line"), str) else ""
     if not want:
         return
     vendor = it["vendor"]
     try:
         have = lines_mod.product_of({**f, "vendor": {"name": vendor}}, library.load())
-    except Exception:  # noqa: BLE001 - no library: compare with the filament's own extra.line or its name
-        have = lines_mod._extra_line(f) or (f.get("name") or "")
+    except Exception:  # noqa: BLE001 - no library: only a set extra.line is known; else the line is unknown
+        have = lines_mod._extra_line(f)
+        if not have:
+            return
     if lines_mod.line_id_for(vendor, want) == lines_mod.line_id_for(vendor, have):
         return
     fid = f"F{f['id']} " if f.get("id") is not None else ""

@@ -316,3 +316,48 @@ def test_fallback_line_empty_when_the_library_has_no_prefix(sm, monkeypatch):
     r["items"][0].update(existing_filament_id=None, vendor="NoName", name="Silk Rainbow", line="")
     it = read_labels(sm, [JPEG], "", None, client=FakeClaude(r))["items"][0]
     assert it["line"] == ""
+
+
+def _add_read_item(sm, it):
+    from filament_kit import inventory
+    rules = {"pla_location": "Rack 1", "box_prefix": "Storage box ", "box_count": 2, "overflow": "Overflow",
+             "sealed_location": "Sealed stock"}
+    keep = {k: it[k] for k in ("vendor", "name", "material", "net", "tare", "density", "count", "line")}
+    return inventory.add_and_link(sm, [keep], rules, dry=False, uid=None)
+
+
+def test_existing_filament_read_line_is_ignored_and_add_sends_no_patch(sm, spoolman_fake_store, monkeypatch):
+    """Fix round 1: an existing filament with no extra.line takes its derived line, never Claude's read line, so
+    an unedited add can't move it."""
+    r = recorded()
+    r["items"][0]["line"] = "PETG Something Else"
+    it = read_labels(sm, [JPEG], "", None, client=FakeClaude(r))["items"][0]
+    assert it["existing_filament_id"] == 1 and it["line"] == "PETG"
+    patches = []
+    real = sm.patch
+    monkeypatch.setattr(sm, "patch", lambda path, body: patches.append(path) or real(path, body))
+    _add_read_item(sm, it)
+    assert not [p for p in patches if p.startswith("filament/")]
+    assert "line" not in (spoolman_fake_store["filaments"][1].get("extra") or {})
+
+
+def test_existing_filament_no_patch_when_the_library_fails(sm, spoolman_fake_store, monkeypatch):
+    """The library-failure branch: with no extra.line the filament's line is unknown, so nothing is written."""
+    from filament_kit import library
+    r = recorded()
+    r["items"][0]["line"] = "PETG Something Else"
+    it = read_labels(sm, [JPEG], "", None, client=FakeClaude(r))["items"][0]
+    it["line"] = "PETG Something Else"            # as if edited in the app
+    real_load = library.load
+
+    def boom():
+        raise OSError("library unreadable")
+
+    monkeypatch.setattr(library, "load", boom)
+    patches = []
+    real = sm.patch
+    monkeypatch.setattr(sm, "patch", lambda path, body: patches.append(path) or real(path, body))
+    _add_read_item(sm, it)
+    assert not [p for p in patches if p.startswith("filament/")]
+    assert "line" not in (spoolman_fake_store["filaments"][1].get("extra") or {})
+    monkeypatch.setattr(library, "load", real_load)
