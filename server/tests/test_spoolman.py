@@ -6,7 +6,7 @@ import pytest
 from filament_kit.spoolman import Spoolman, SpoolmanError
 from conftest import free_port
 
-NAMES = ["nfc_id", "prev_location", "nozzle_range", "bed_range", "line"]
+NAMES = ["nfc_id", "prev_location", "box_humidity", "humidity_checked", "nozzle_range", "bed_range", "line"]
 
 
 def test_ping_returns_version(spoolman_url):
@@ -17,8 +17,11 @@ def test_ensure_fields_idempotent(spoolman_url, spoolman_fake_store):
     sm = Spoolman(spoolman_url)
     assert sorted(sm.ensure_fields()) == sorted(NAMES)
     assert sm.ensure_fields() == []
-    assert {f["key"] for f in spoolman_fake_store["fields"]["spool"]} == {"nfc_id", "prev_location"}
+    assert {f["key"] for f in spoolman_fake_store["fields"]["spool"]} == {"nfc_id", "prev_location", "box_humidity",
+                                                                          "humidity_checked"}
     assert {f["key"] for f in spoolman_fake_store["fields"]["filament"]} == {"nozzle_range", "bed_range", "line"}
+    types = {f["key"]: f["field_type"] for f in spoolman_fake_store["fields"]["spool"]}
+    assert (types["box_humidity"], types["humidity_checked"]) == ("float", "datetime")
 
 
 def test_unreachable_raises():
