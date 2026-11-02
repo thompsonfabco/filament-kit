@@ -14,8 +14,9 @@ def entry(fields=None, ranges=None, **top):
 def apply(cfg, e, template=None, nozzle="0.4", chamber_max=None, material=None):
     log = []
     cfg.setdefault("name", "Acme PLA @Bambu Lab H2D 0.4 nozzle")
+    extra = {"material": material} if material is not None else {}
     V.apply_library(cfg, e, template=template or {}, printer="Bambu Lab H2D", nozzle=nozzle,
-                    chamber_max=chamber_max, log=log)
+                    chamber_max=chamber_max, log=log, **extra)
     return log
 
 
@@ -209,3 +210,53 @@ def test_apply_spoolman_bed_range_density_cost():
     cfg = {}
     keys = V.apply_spoolman(cfg, V.SpoolmanValues(None, None, 0, None, None, None, ""), variants=[STD], template={})
     assert cfg == {} and keys == set()
+
+
+# ---------- fix round 1 ----------
+
+def test_variant_without_offset_uses_clamped_cfg_not_raw_parent():
+    e = entry({"nozzle_temperature_range_low": ["190"], "nozzle_temperature_range_high": ["230"]})
+    template = {"nozzle_temperature": ["nil", "260"], "filament_extruder_variant": [STD, HF]}
+    cfg = {"name": "Acme PLA @Bambu Lab H2D 0.4 nozzle"}
+    apply(cfg, e, template=template)
+    assert cfg["nozzle_temperature"] == ["nil", "230"]
+    sv = V.SpoolmanValues(material="PLA", density=None, cost=0, nozzle=215, bed=None, nozzle_range=None, colors="")
+    keys = V.apply_spoolman(cfg, sv, variants=[STD, HF], template=template)
+    assert cfg["nozzle_temperature"] == ["215", "230"]
+    log = []
+    V.report_outside(cfg, e, keys, log)
+    assert log == []
+    # no cfg value and no usable parent value: the Spoolman standard value, never "nil"
+    cfg = {}
+    V.apply_spoolman(cfg, sv, variants=[STD, HF], template={"nozzle_temperature": ["nil", "nil"]})
+    assert cfg["nozzle_temperature"] == ["215", "215"]
+
+
+def test_chamber_capped_when_published_low_above_printer_max():
+    cfg = {}
+    log = apply(cfg, entry(ranges={"chamber_temperatures": "70-90"}), template={"chamber_temperatures": ["80"]},
+                chamber_max=65)
+    assert cfg["chamber_temperatures"] == ["65"]
+    assert log
+
+
+def test_hardened_from_line_material_without_entry():
+    cfg = {}
+    V.apply_library(cfg, None, template={}, printer="H2D", nozzle="0.4", chamber_max=None, log=[],
+                    material="PETG-CF")
+    assert cfg == {"required_nozzle_HRC": ["40"]}
+    cfg = {}
+    apply(cfg, entry(material="PETG"), template={}, material="PETG-CF")
+    assert cfg["required_nozzle_HRC"] == ["40"]
+    cfg = {}
+    V.apply_library(cfg, None, template={}, printer="H2D", nozzle="0.4", chamber_max=None, log=[], material="PLA")
+    assert cfg == {}
+
+
+def test_non_finite_values_never_clamped_or_written():
+    assert V._value("nan") is None and V._value("inf") is None and V._value("-inf") is None
+    e = entry({"nozzle_temperature_range_low": ["190"], "nozzle_temperature_range_high": ["230"]})
+    cfg = {}
+    apply(cfg, e, template={"nozzle_temperature": ["nan", "inf"]})
+    assert "nozzle_temperature" not in cfg
+    assert "nan" not in str(cfg)

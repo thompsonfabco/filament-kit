@@ -15,6 +15,7 @@ from __future__ import annotations
 import collections
 import copy
 import json
+import math
 import re
 import statistics
 from dataclasses import dataclass
@@ -77,9 +78,10 @@ def _num(v) -> float | None:
 def _value(v) -> float | None:
     """A preset value as a number ("97%" -> 97), or None for "nil", "" and other text."""
     try:
-        return float(str(v).strip().rstrip("%"))
+        x = float(str(v).strip().rstrip("%"))
     except ValueError:
         return None
+    return x if math.isfinite(x) else None   # "nan" / "inf" are not values
 
 
 def _mode(xs):
@@ -165,10 +167,10 @@ def temps_for_variants(key: str, variants: list[str], template: dict | None, sv_
     return out
 
 
-def _template_value(template: dict | None, key: str, i: int):
-    t = (template or {}).get(key)
-    if isinstance(t, list) and i < len(t) and t[i] not in ("nil", "", None):
-        return t[i]
+def _list_number(values, i: int):
+    """values[i] when it is a valid finite number, else None."""
+    if isinstance(values, list) and i < len(values) and _value(values[i]) is not None:
+        return values[i]
     return None
 
 
@@ -180,7 +182,11 @@ def apply_spoolman(cfg: dict, sv: SpoolmanValues, *, variants: list[str], templa
         if any(vals.values()):
             out = []
             for i, var in enumerate(variants):
-                v = vals.get(var) or _template_value(template, key, i) or vals.get(STD)
+                # no Spoolman value for this variant: the (already clamped) cfg value, then the parent's,
+                # then the Spoolman standard value; the first two lie inside any published bound, so only
+                # Spoolman-derived values can ever be reported by report_outside
+                v = (vals.get(var) or _list_number(cfg.get(key), i) or _list_number((template or {}).get(key), i)
+                     or vals.get(STD))
                 out.append(str(v))
             cfg[key] = out
             keys.add(key)
@@ -323,10 +329,16 @@ def _bounds(entry: dict | None) -> list:
 # ---------- applying the entry ----------
 
 def apply_library(cfg: dict, entry: dict | None, *, template: dict, printer: str, nozzle: str,
-                  chamber_max: int | None, log: list[str]) -> None:
-    """Apply the merged library entry to cfg (in place; port of spec.apply). Every value cfg or the template holds
-    at this point came from the Bambu parent, so out-of-range values are clamped to the nearest published bound.
+                  chamber_max: int | None, log: list[str], material: str | None = None) -> None:
+    """Apply the merged library entry to cfg (in place; port of spec.apply).
+
+    Order: call this FIRST, before apply_spoolman and inapp.keep_edits. It clamps every value cfg or the template
+    holds, assuming they all came from the Bambu parent; Spoolman and in-app values set later are never clamped.
+    `material` is the line's material (from Spoolman or the line); Task 5 must always pass it. Hardened material
+    sets required_nozzle_HRC ["40"] even when `entry` is None (a line known only from Spoolman).
     `printer` names the printer in log lines when cfg has no name yet."""
+    if hardened(entry, material) or hardened(None, (entry or {}).get("material")):
+        cfg["required_nozzle_HRC"] = ["40"]
     if not entry:
         return
     f, pr = _fields(entry), _ranges(entry)
@@ -372,8 +384,7 @@ def apply_library(cfg: dict, entry: dict | None, *, template: dict, printer: str
     if r and chamber_max is not None:
         key = "chamber_temperatures" if "chamber_temperatures" in (template or cfg) else "chamber_temperature"
         top = min(r[1], chamber_max)
-        if r[0] <= top:
-            clamp(key, r[0], top, skip_zero=True)  # 0 = no chamber control
+        clamp(key, min(r[0], top), top, skip_zero=True)  # 0 = no chamber control; above the printer max -> max
     r = rng(pr.get("filament_shrink"))
     if r:
         clamp("filament_shrink", r[0], r[1], pct=True)
@@ -390,8 +401,6 @@ def apply_library(cfg: dict, entry: dict | None, *, template: dict, printer: str
     cap = _mvs_cap(entry)
     if cap is not None and nozzle == "0.4":
         clamp("filament_max_volumetric_speed", 0, cap)
-    if hardened(entry, entry.get("material")):
-        cfg["required_nozzle_HRC"] = ["40"]
 
 
 def report_outside(cfg: dict, entry: dict | None, keys: set[str], log: list[str]) -> None:
