@@ -10,7 +10,8 @@
      `profiles.preset_for(filament, model, nozzle_mm)`; None -> `NoPreset`, nothing sent. Never a Generic
      preset, never an invented id: `tray_info_idx` is the preset's `filament_id`;
   3. `ams_filament_setting` (`Manager.set_slot`): `tray_info_idx`, `tray_color` (Spoolman `color_hex` + "FF"),
-     `tray_type` (the filament's material), nozzle temps from the preset; then the next reports must show it
+     `tray_type` (the preset's Bambu filament_type, not the Spoolman material), `setting_id` (the preset's,
+     from the live upload, else ""), nozzle temps from the preset (ints); then the next reports must show it
      (CONFIRM_TIMEOUT). A refused write raises `SlotWriteFailed` and Spoolman is untouched; a write that is not
      confirmed in time is reported (`confirmed: false`, `problems`), not raised, and Spoolman is still updated;
   4. Spoolman (under the inventory lock): every other spool at "<printer name> – AMS <label>" goes back to its
@@ -223,7 +224,7 @@ def _target_patch(s: dict, loc: str) -> dict:
 
 def _preset_view(p: profiles.PresetRef) -> dict:
     return {"filament_id": p.filament_id, "name": p.name, "nozzle_temp_min": p.nozzle_temp_min,
-            "nozzle_temp_max": p.nozzle_temp_max}
+            "nozzle_temp_max": p.nozzle_temp_max, "filament_type": p.filament_type}
 
 
 def load(manager, sm, serial: str, label: str, spool_id, dry: bool, *, preset_for=None,
@@ -251,8 +252,8 @@ def load(manager, sm, serial: str, label: str, spool_id, dry: bool, *, preset_fo
         raise NoPreset(f"no preset of yours for Spoolman filament {fil.get('id')} ({what}) on {p.model or name} "
                        f"with a {nozzle:g} mm nozzle; slot left unchanged")
     setting = {"tray_info_idx": preset.filament_id, "tray_color": _colour(fil),
-               "tray_type": status._s(fil.get("material")), "tray_sub_brands": "",
-               "nozzle_temp_min": preset.nozzle_temp_min or 0, "nozzle_temp_max": preset.nozzle_temp_max or 0}
+               "tray_type": preset.filament_type, "tray_sub_brands": "", "setting_id": preset.setting_id,
+               "nozzle_temp_min": preset.nozzle_temp_min, "nozzle_temp_max": preset.nozzle_temp_max}
     result = {"slot": slot, "preset": _preset_view(preset), "dry_run": bool(dry), "problems": [],
               "nozzle_mm": nozzle, "nozzle_assumed": assumed}
 
