@@ -8,7 +8,7 @@ import anyio.to_thread
 import uvicorn
 from uvicorn.main import STARTUP_FAILURE
 
-from . import config
+from . import config, modules
 from .api import create_app
 from .bridge import camera, discovery, mapping, registry, usage
 from .bridge.connection import Manager
@@ -80,6 +80,18 @@ def printer_lifespan(manager, listener_factory=discovery.Listener, camera_hub=No
     return lifespan
 
 
+class _NoHub:
+    """Stands in for the camera hub when `printers` is off: nothing to end on a signal."""
+
+    def begin_stop(self) -> None:
+        pass
+
+
+@asynccontextmanager
+async def _idle_lifespan(app):
+    yield
+
+
 GRACEFUL_SHUTDOWN = 5  # seconds uvicorn waits for open connections (camera streams) before the lifespan exit
 
 
@@ -126,13 +138,20 @@ def main() -> None:
     _log_to_journal()
     cfg = config.load()
     etc = config.paths().etc
+    on = modules.enabled(cfg)
     sm = Spoolman(cfg["spoolman_url"])
-    manager = Manager(spoolman=sm)
-    tracker = usage.Tracker(manager, sm)   # listens before the manager connects: sees every first report
-    hub = camera.Hub(printer_state=manager.state)  # ip / Access Code / model / pin from the registry
-    mapper = mapping.Mapper(manager)               # one per process: the app's routes and the lifespan share it
-    app = create_app(sm, printers=manager, camera_hub=hub, mapper=mapper)
-    app.router.lifespan_context = printer_lifespan(manager, camera_hub=hub, tracker=tracker, mapper=mapper)
+    if "printers" in on:
+        manager = Manager(spoolman=sm)
+        tracker = usage.Tracker(manager, sm)   # listens before the manager connects: sees every first report
+        hub = camera.Hub(printer_state=manager.state)  # ip / Access Code / model / pin from the registry
+        mapper = mapping.Mapper(manager)               # one per process: the app's routes and the lifespan share it
+        app = create_app(sm, printers=manager, camera_hub=hub, mapper=mapper, enabled_modules=on)
+        app.router.lifespan_context = printer_lifespan(manager, camera_hub=hub, tracker=tracker, mapper=mapper)
+    else:
+        # no bridge at all: the printer routes answer 409 module_off and never reach these stand-ins
+        hub = _NoHub()
+        app = create_app(sm, printers=object(), camera_hub=hub, mapper=object(), enabled_modules=on)
+        app.router.lifespan_context = _idle_lifespan
     # one worker only: the pairing and inventory locks are per process
     serve(app, hub, host="0.0.0.0", port=cfg["port"], ssl_certfile=str(etc / "cert.pem"),
           ssl_keyfile=str(etc / "key.pem"), workers=1, timeout_graceful_shutdown=GRACEFUL_SHUTDOWN)
