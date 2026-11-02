@@ -27,6 +27,15 @@ A preset name the PC sync could not use as a file name (`safe_name`, its own rul
 the PC refuses a build zip holding one.
 
 One line with odd data, or one bad preset, is skipped with a problem line; the rest of the build goes on.
+
+Orca Slicer (Task 6): with `orca` given, `build_all` also writes the flat tree `out_dir/orca/` (see the Orca
+section at the end: names `<line> @SV08 MAX 0.4` / `<line> @H2D 0.4` as filament-ops gen.py made them, presets
+that inherit their system parent and write only what differs, never "nil", never G-code of their own), re-checks
+every line's Orca parent against the uploaded Orca store (`lines.rechoose_orca`), and adds a `target`
+("bambu_studio" | "orca") to every preset row plus `orca_inapp`, `orca_deleted`, `orca_restored`, `orca_stale`
+(in-app edits, deletions and restores are kept per target: the same rules, apart). An Orca preset whose parent
+is not in the uploaded Orca store is a problem line and is not written. Without `orca` the manifest is exactly
+what it was before the Orca target.
 """
 from __future__ import annotations
 
