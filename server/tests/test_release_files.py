@@ -107,6 +107,12 @@ def test_release_copies_spoolman_script():
     assert '"$stage/install/spoolman.sh"' in text  # made executable in the stage
 
 
+def test_release_ships_the_ops_export_script():
+    text = _read("tools/make_release.sh")
+    assert 'cp tools/export_ops.sh "$stage/install/"' in text
+    assert '"$stage/install/export_ops.sh"' in text  # made executable in the stage
+
+
 def test_install_hands_over_to_modules_apply():
     text = _read("install/install.sh")
     assert "exec /usr/local/bin/filament-kit modules apply" in text
@@ -133,7 +139,7 @@ def test_station_extra_in_pyproject():
 
 def test_wrapper_runs_modules_as_root():
     text = _read("install/filament-kit-cli.sh")
-    assert re.search(r"^\s+config \| cert \| modules \| remote\)\s*$", text, re.M)
+    assert re.search(r"^\s+config \| cert \| modules \| remote \| migrate-ops\)\s*$", text, re.M)
 
 
 def test_uninstall_uses_modules_units_and_cleans_station():
