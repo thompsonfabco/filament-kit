@@ -135,3 +135,54 @@ def test_profiles_package_keeps_interface():
     from filament_kit import profiles
     assert profiles.preset_for({}, "H2D", 0.4) is None
     assert profiles.PresetRef
+
+
+@pytest.mark.parametrize("bad", [
+    {"inherits": ["B"]}, {"inherits": {"x": 1}}, {"inherits": 5},
+    {"include": "fdm_x"}, {"include": [["fdm_x"]]}, {"include": [{"a": 1}]}, {"include": {"a": 1}},
+])
+def test_malformed_inherits_or_include_raises_bblerror(tmp_path, bad):
+    _write(tmp_path, "B", {"name": "B", "instantiation": "false", "filament_type": ["PLA"]})
+    _write(tmp_path, "Bad @BBL H2D", {"name": "Bad @BBL H2D", "instantiation": "true", "filament_type": ["PLA"],
+                                      **bad})
+    _write(tmp_path, "Good @BBL H2D", {"name": "Good @BBL H2D", "inherits": "B", "instantiation": "true",
+                                       "filament_vendor": ["Generic"]})
+    store = bbl.Store.load(tmp_path)
+    with pytest.raises(bbl.BblError):
+        store.resolve("Bad @BBL H2D")
+    assert store.bases() == ["Good"]                      # one bad preset never breaks the store
+    assert store.bases("PLA") == ["Good"]
+    assert store.vendor_bases("generic", "PLA") == ["Good"]
+    assert any("Bad @BBL H2D" in p for p in store.problems)
+
+
+def test_deep_chain_is_capped(tmp_path):
+    for i in range(1500):
+        _write(tmp_path, f"P{i}", {"name": f"P{i}", "inherits": f"P{i + 1}" if i < 1499 else "",
+                                   "filament_type": ["PLA"]})
+    _write(tmp_path, "Deep @BBL H2D", {"name": "Deep @BBL H2D", "inherits": "P0", "instantiation": "true"})
+    _write(tmp_path, "Ok @BBL H2D", {"name": "Ok @BBL H2D", "inherits": "P1490", "instantiation": "true"})
+    store = bbl.Store.load(tmp_path)
+    with pytest.raises(bbl.BblError, match="deep"):
+        store.resolve("Deep @BBL H2D")
+    assert store.bases("PLA") == ["Ok"]
+    assert any("Deep @BBL H2D" in p for p in store.problems)
+
+
+def test_chain_of_32_is_allowed_33_is_not(tmp_path):
+    for i in range(40):
+        _write(tmp_path, f"P{i}", {"name": f"P{i}", "inherits": f"P{i + 1}" if i < 39 else ""})
+    store = bbl.Store.load(tmp_path)
+    store.resolve("P8")          # 32 presets in the chain: P8..P39
+    with pytest.raises(bbl.BblError):
+        bbl.Store.load(tmp_path).resolve("P7")   # 33
+
+
+def test_try_records_unexpected_errors_once(tmp_path, monkeypatch):
+    _write(tmp_path, "X @BBL H2D", {"name": "X @BBL H2D", "instantiation": "true"})
+    store = bbl.Store.load(tmp_path)
+    monkeypatch.setattr(store, "_resolve", lambda n, s: (_ for _ in ()).throw(TypeError("boom")))
+    assert store.bases() == []
+    assert store.bases() == []
+    assert [p for p in store.problems if "X @BBL H2D" in p] == [p for p in store.problems if "boom" in p]
+    assert len([p for p in store.problems if "X @BBL H2D" in p]) == 1

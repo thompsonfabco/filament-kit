@@ -16,6 +16,7 @@ from pathlib import Path
 
 STD = "Direct Drive Standard"
 HF = "Direct Drive High Flow"
+MAX_DEPTH = 32  # presets in one inherits/include chain; real Bambu chains are under 10
 
 
 class BblError(Exception):
@@ -43,6 +44,7 @@ class Store:
         self._raw: dict[str, dict] = dict(presets or {})
         self.problems: list[str] = list(problems or [])
         self._cache: dict[str, dict] = {}
+        self._bad: set[str] = set()  # presets already reported in `problems` by `_try`
 
     @classmethod
     def load(cls, folder: Path) -> "Store":
@@ -82,14 +84,23 @@ class Store:
             return self._cache[name]
         if name in stack:
             raise BblError(f"inheritance cycle: {' -> '.join(stack + (name,))}")
+        if len(stack) >= MAX_DEPTH:
+            raise BblError(f"{stack[0]!r}: inheritance chain too deep (over {MAX_DEPTH} presets)")
         if name not in self._raw:
             if stack:
                 raise BblError(f"{stack[-1]!r} refers to missing system preset {name!r}")
             raise BblError(f"unknown system preset {name!r}")
         j = self._raw[name]
+        parent = j.get("inherits")
+        if parent is not None and not isinstance(parent, str):
+            raise BblError(f"{name!r}: inherits is not a string")
+        includes = j.get("include")
+        if includes is not None and (not isinstance(includes, list)
+                                     or not all(isinstance(i, str) for i in includes)):
+            raise BblError(f"{name!r}: include is not a list of names")
         here = stack + (name,)
-        cfg = self._resolve(j["inherits"], here) if j.get("inherits") else {}
-        for inc in j.get("include") or []:
+        cfg = self._resolve(parent, here) if parent else {}
+        for inc in includes or []:
             cfg = merge(self._resolve(inc, here), cfg)
         cfg = merge(j, cfg)
         cfg.pop("include", None)
@@ -97,9 +108,13 @@ class Store:
         return cfg
 
     def _try(self, name: str) -> dict | None:
+        """The resolved preset, or None (reported once in `problems`): one bad upload never breaks the store."""
         try:
             return self._resolve(name, ())
-        except BblError:
+        except (BblError, RecursionError, TypeError) as e:
+            if name not in self._bad:
+                self._bad.add(name)
+                self.problems.append(f"{name}: cannot resolve ({e.__class__.__name__}: {e})")
             return None
 
     @staticmethod
