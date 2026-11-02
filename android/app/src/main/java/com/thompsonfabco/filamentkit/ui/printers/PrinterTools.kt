@@ -96,6 +96,8 @@ class PrinterToolsViewModel(
 
     private var poll: Job? = null
     private var visible = false
+    /** Bumped when a map job is started: a poll begun before that (e.g. the screen's first one) never writes state. */
+    private var generation = 0
 
     fun start() {
         visible = true
@@ -118,6 +120,10 @@ class PrinterToolsViewModel(
     fun confirmMap() {
         if (_state.value.mapBusy) return
         _state.update { it.copy(confirmMap = false, mapBusy = true, mapMessage = null) }
+        // an older poll still in flight would report the state from before this job (and then stop polling)
+        generation++
+        poll?.cancel()
+        poll = null
         viewModelScope.launch {
             var started = false
             guard(onError = { msg -> _state.update { it.copy(mapMessage = msg) } }) {
@@ -137,20 +143,32 @@ class PrinterToolsViewModel(
      * Fetches the map state; keeps polling while it is running and the screen is visible. A failed fetch (network
      * blip) is retried with a doubling wait capped at [MAX_BACKOFF_MS], so a short outage mid-job does not leave the
      * screen stuck on "running"; an unpaired phone or a changed server certificate stops it. [start] re-arms it.
+     * [force] (after starting a job) replaces any poll already running, and that older poll's answer is dropped.
      */
     private fun follow(force: Boolean = false) {
         if (!visible && !force) return
-        if (poll?.isActive == true) return
+        if (force) {      // a job was just started: whatever poll runs now began before it
+            generation++
+            poll?.cancel()
+        } else if (poll?.isActive == true) return
+        val mine = generation
         poll = viewModelScope.launch {
             var failures = 0
             var pollError: String? = null
             while (true) {
                 var keep = false
+                var stale = false
                 val ok = guard(onError = { msg ->
-                    pollError = msg
-                    _state.update { it.copy(mapMessage = msg) }
+                    if (mine == generation) {
+                        pollError = msg
+                        _state.update { it.copy(mapMessage = msg) }
+                    }
                 }) {
                     val m = backend.mapStatus(id)
+                    if (mine != generation) {
+                        stale = true
+                        return@guard
+                    }
                     _state.update { s ->
                         // clear only a message this loop's own failure put there
                         s.copy(map = m, mapMessage = if (pollError != null && s.mapMessage == pollError) null else s.mapMessage)
@@ -159,7 +177,7 @@ class PrinterToolsViewModel(
                     keep = m.state == "running"
                 }
                 val s = _state.value
-                if (s.unauthorized || s.mismatch != null || !visible) break
+                if (stale || mine != generation || s.unauthorized || s.mismatch != null || !visible) break
                 if (ok) {
                     if (!keep) break
                     failures = 0
