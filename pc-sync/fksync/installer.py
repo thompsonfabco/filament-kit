@@ -139,7 +139,8 @@ def untrusted_gcode(new: dict, live: dict | None, trusted: set[str]) -> list[str
     return keys
 
 
-def _backup(user_filament: Path, backups: Path, stamp: str) -> Path:
+def _backup(user_filament: Path, backups: Path, stamp: str, prune: bool = True) -> Path:
+    """Copy user_filament to backups/<stamp>[-n]; `prune` then keeps the KEEP_BACKUPS newest."""
     backups.mkdir(parents=True, exist_ok=True)
     dest, n = backups / stamp, 1
     while dest.exists():
@@ -150,9 +151,14 @@ def _backup(user_filament: Path, backups: Path, stamp: str) -> Path:
     except OSError as e:
         shutil.rmtree(dest, ignore_errors=True)  # a partial backup must not count as one of the 5
         raise Refused(f"could not back up {user_filament} to {dest} ({e}); nothing was installed") from None
+    if prune:
+        _prune(backups)
+    return dest
+
+
+def _prune(backups: Path) -> None:
     for old in sorted(p for p in backups.iterdir() if p.is_dir())[:-KEEP_BACKUPS]:
         shutil.rmtree(old)
-    return dest
 
 
 def _write_live(target: Path, data: bytes) -> None:
@@ -317,15 +323,18 @@ def install(build_dir: Path, folders: StudioFolders, dirs: AppDirs, *,
         raise Refused(ORCA_RUNNING, "studio_running")
 
     # 5. backups (the Orca one under the same name, so a marker naming one finds both)
-    backup = _backup(folders.user_filament, dirs.backups, stamp_now)
+    #    old backups are pruned only once both exist, so a failed Orca backup costs no Bambu one
+    backup = _backup(folders.user_filament, dirs.backups, stamp_now, prune=False)
     backup_orca = None
     if o is not None:
         shutil.rmtree(dirs.orca_backups / backup.name, ignore_errors=True)  # ours, from an attempt in the same second
         try:
-            backup_orca = _backup(orca.user_filament, dirs.orca_backups, backup.name)
+            backup_orca = _backup(orca.user_filament, dirs.orca_backups, backup.name, prune=False)
         except Refused:
             shutil.rmtree(backup, ignore_errors=True)
             raise
+        _prune(dirs.orca_backups)
+    _prune(dirs.backups)
     if before_write is not None:
         before_write(backup)
 

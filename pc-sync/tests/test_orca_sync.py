@@ -28,6 +28,10 @@ class OrcaClient(FakeClient):
             raise exc
         return super().upload(kind, data, user_id, partial)
 
+    def rebuild(self, live_hash, orca_live_hash=None):
+        self.rebuild_orca = getattr(self, "rebuild_orca", []) + [orca_live_hash]
+        return super().rebuild(live_hash)
+
 
 @pytest.fixture
 def env(tmp_path):
@@ -168,6 +172,7 @@ def test_orca_live_newer_than_build_asks_for_rebuild(env):
                    _zip(live_hash=live))
     assert _run(c, folders, orca, dirs) == "rebuild_requested"
     assert ("rebuild", live) in c.calls and not [x for x in c.calls if x[0] == "build"]
+    assert c.rebuild_orca == [_hashes(folders, orca)[2]]           # Ruling O: both live hashes
 
 
 def test_orca_edit_after_install_asks_for_rebuild(env):
@@ -227,3 +232,29 @@ def test_orca_too_large_does_not_stop_the_bambu_sync(env, monkeypatch):
     assert _run(c, folders, orca, dirs) == "uploaded"
     assert _uploads(c) == ["live"]
     assert "Orca Slicer not synced this run" in _log(dirs)
+
+
+def test_orca_live_upload_names_the_partial_build(env):
+    folders, orca, dirs = env
+    st = _state(folders, orca)
+    st.update(live_hash=None, orca_live_hash=None)
+    c = OrcaClient(st)
+    sync._save_state(dirs, {"partial": {"stamp": STAMP, "at": T0}})
+    _run(c, folders, orca, dirs)
+    assert ("upload", "orca_live", None, STAMP) in c.calls
+    assert ("upload", "live", folders.user_id, STAMP) in c.calls
+
+
+def test_orca_unreadable_opc_does_not_stop_the_bambu_sync(env, monkeypatch):
+    folders, orca, dirs = env
+    st = _state(folders, orca)
+    st.update(live_hash=None, orca_system_hash=None)
+    c = OrcaClient(st)
+
+    def broken(opc):
+        raise PermissionError(13, "Permission denied", str(opc))
+
+    monkeypatch.setattr(sync.zips, "library_index", broken)
+    assert _run(c, folders, orca, dirs) == "uploaded"
+    assert _uploads(c) == ["live"]
+    assert "Orca Slicer not synced this run" in _log(dirs) and "Permission denied" in _log(dirs)

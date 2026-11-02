@@ -247,3 +247,23 @@ def test_run_with_orca_and_an_old_server_sends_nothing_for_orca(srv, paths, caps
 def test_status_without_orca(paths, capsys):
     assert _main(paths, "status") == 0
     assert "Orca Slicer:     not found on this PC" in capsys.readouterr().out
+
+
+def test_stale_orca_pins_warn_and_fall_back(srv, paths, capsys):
+    appdata, local, _ = paths
+    orca_fixture.make(appdata)
+    assert _main(paths, "pair", stdin=_link(srv) + chr(10)) == 0
+    dirs = _dirs(paths)
+    cfg = store.load_config(dirs)
+    cfg.update(orca_install=str(local / "OrcaSlicer 2.4.0"), orca_user_id="gone-user")   # Orca moved on
+    store.save_config(dirs, cfg)
+    capsys.readouterr()
+    assert _main(paths, "run") == 0
+    out = capsys.readouterr().out
+    assert "warning:" in out and "Ignoring the Orca Slicer pin" in out
+    assert "error" not in out.lower()
+    assert "Ignoring the Orca Slicer pin" in dirs.log_file.read_text(encoding="utf-8")
+    assert _main(paths, "status") == 0
+    out = capsys.readouterr().out
+    assert "Ignoring the Orca Slicer pin" in out
+    assert "Orca Slicer:     user " + orca_fixture.USER_ID in out and "(pinned in the config)" not in out
