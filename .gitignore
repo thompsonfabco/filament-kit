@@ -20,3 +20,4 @@ android/.idea/
 
 # pc-sync shared tool venv
 pc-sync/.venv/
+.pio/
