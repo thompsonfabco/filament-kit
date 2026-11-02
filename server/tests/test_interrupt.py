@@ -382,6 +382,65 @@ def test_thread_start_failure_releases_the_lock(rig, monkeypatch, stub_jobs):
     assert mp.view(SERIAL)["state"] == "failed"
 
 
+def test_abort_takes_no_lock(rig):
+    """Minor: a signal handler calls abort while the main thread holds the Mapper's lock (in _begin, view):
+    abort must not wait for that lock."""
+    m, printer, _ = rig
+    mp = mapping.Mapper(m)
+    done = threading.Event()
+    with mp._lock:
+        t = threading.Thread(target=lambda: (mp.abort(SERIAL), done.set()), daemon=True)
+        t.start()
+        assert done.wait(2), "abort blocked on the Mapper's lock"
+
+
+def test_abort_before_the_job_stops_the_next_job_before_anything_is_touched(rig, stub_jobs):
+    m, printer, _ = rig
+    mp = mapping.Mapper(m)
+    mp.abort(SERIAL)
+    v = mp.run(SERIAL)
+    assert v["state"] == "failed" and stub_jobs["st"] == 0 and printer.writes == []
+    v = mp.run(SERIAL)                                    # the request was used up by that job
+    assert v["state"] == "done" and stub_jobs["st"] == 1
+
+
+@pytest.fixture
+def leftover_spy(monkeypatch):
+    calls = []
+    monkeypatch.setattr(calib3mf, "delete_leftover", lambda serial, printer=None: calls.append(serial) or [])
+    return calls
+
+
+def calibration_snapshot(printer):
+    snapshot.save(SERIAL, "calibration", [{"label": "A1", "ams_id": 0, "tray_id": 0,
+                                           "setting": dict(printer.tray(0, 0))}])
+
+
+def test_next_job_deletes_a_killed_calibrations_file(rig, stub_jobs, leftover_spy):
+    """Minor: kill -9 mid-calibration left /cache/fk-calib-<serial>.gcode.3mf: the next job deletes it."""
+    m, printer, _ = rig
+    calibration_snapshot(printer)
+    assert mapping.Mapper(m).run(SERIAL)["state"] == "done"
+    assert leftover_spy == [SERIAL] and not snapshot.pending(SERIAL)
+
+
+def test_next_job_after_a_slot_test_snapshot_does_not_touch_ftps(rig, stub_jobs, leftover_spy):
+    m, printer, _ = rig
+    leave_test_colours(printer)
+    assert m.wait_report(SERIAL, lambda r: r["ams"]["ams"][0]["tray"][1]["tray_color"] == "FA0200FF", 2)
+    mapping.Mapper(m).run(SERIAL)
+    assert leftover_spy == []
+
+
+def test_service_start_deletes_a_killed_calibrations_file(rig, leftover_spy):
+    m, printer, _ = rig
+    calibration_snapshot(printer)
+    mp = mapping.Mapper(m)
+    mp.recover_pending(wait=5)
+    mp.shutdown(10)
+    assert leftover_spy == [SERIAL] and not snapshot.pending(SERIAL)
+
+
 def test_interrupted_text_says_test_colours_may_remain():
     assert "test colour" in mapping.INTERRUPTED and "next run" in mapping.INTERRUPTED
 
@@ -407,6 +466,30 @@ def test_cli_signal_aborts_restores_then_exits_non_zero(rig, monkeypatch, capsys
     assert signal.getsignal(signal.SIGINT) is before       # handlers put back
     out = capsys.readouterr().out
     assert "stopped" in out.lower()
+
+
+@pytest.mark.parametrize("err", [RuntimeError("reentrant call inside <_io.BufferedWriter name='<stdout>'>"),
+                                 OSError(5, "Input/output error")])
+def test_cli_signal_aborts_even_when_its_message_cannot_be_printed(rig, monkeypatch, err):
+    """Minor: the handler aborts first; a print that fails (reentrant, or EIO after SIGHUP) loses nothing."""
+    m, printer, _ = rig
+    seen = {}
+
+    def st_run(manager, serial, on_step, should_stop=None):
+        signal.getsignal(signal.SIGINT)(signal.SIGINT, None)
+        seen["stop"] = should_stop()
+        return slottest.SlotTestResult(problems=["interrupted: mapping was stopped; slot test stopped"])
+    monkeypatch.setattr(slottest, "run", st_run)
+    monkeypatch.setattr(m, "stop", lambda: None)
+    real = print
+
+    def flaky(*a, **k):
+        if a and "Stopping" in str(a[0]):
+            raise err
+        return real(*a, **k)
+    monkeypatch.setattr(cli, "print", flaky, raising=False)
+    rc = cli.main(["printer", "map", SERIAL], manager_factory=lambda s: m)
+    assert seen["stop"] is True and rc != 0
 
 
 # ---------------------------------------------------------------- calibration snapshot
