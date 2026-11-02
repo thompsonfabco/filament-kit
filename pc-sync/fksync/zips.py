@@ -1,6 +1,6 @@
 """Zips for the sync API: pack a preset folder for upload, unpack a server build safely.
 
-pack() is deterministic: the same files give the same bytes (sorted names, fixed timestamps
+pack() refuses (TooLarge) a folder over the upload limits before zipping it, and is deterministic: the same files give the same bytes (sorted names, fixed timestamps
 and attributes), so it never depends on mtimes.
 
 unpack_build() accepts only `BUILD.json` and `base/<name>.json|.info` with a safe <name>,
@@ -19,22 +19,59 @@ from pathlib import Path
 from .treehash import preset_files
 
 MAX_BUILD_UNCOMPRESSED = 64 * 1024 * 1024
+# upload limits (Decision "Sync uploads"); the server refuses anything over them with 413
+LIVE_MAX = 32 << 20
+SYSTEM_MAX = 64 << 20
+MAX_ENTRIES = 20_000
+MAX_FILE = 4 << 20
+MAX_TOTAL = 512 << 20
 _FIXED_TIME = (1980, 1, 1, 0, 0, 0)
 _CHUNK = 64 * 1024
 _BAD_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f\x7f]')
 _RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
 
 
-def pack(root: Path) -> bytes:
+class TooLarge(ValueError):
+    """A folder is over the server's upload limits; nothing was sent."""
+
+
+def pack(root: Path, max_bytes: int | None = None) -> bytes:
+    """Zip every .json/.info file under root. TooLarge when the folder breaks an upload limit
+    (MAX_ENTRIES files, MAX_FILE per file, MAX_TOTAL uncompressed, max_bytes for the zip)."""
+    root = Path(root)
+    files = preset_files(root)
+    if len(files) > MAX_ENTRIES:
+        raise TooLarge(f"{root} is too large to upload: {len(files)} files (the server takes at most {MAX_ENTRIES})")
+    total = 0
+    for rel, path in files:
+        size = path.stat().st_size
+        if size > MAX_FILE:
+            raise TooLarge(f"{root} is too large to upload: {rel} is {_mib(size)} "
+                           f"(the server takes at most {_mib(MAX_FILE)} per file)")
+        total += size
+    if total > MAX_TOTAL:
+        raise TooLarge(f"{root} is too large to upload: {_mib(total)} uncompressed "
+                       f"(the server takes at most {_mib(MAX_TOTAL)})")
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for rel, path in preset_files(root):
+        for rel, path in files:
             info = zipfile.ZipInfo(rel, date_time=_FIXED_TIME)
             info.compress_type = zipfile.ZIP_DEFLATED
             info.create_system = 0
             info.external_attr = 0
-            zf.writestr(info, path.read_bytes())
-    return buf.getvalue()
+            data = path.read_bytes()
+            if len(data) > MAX_FILE:  # grew since the stat
+                raise TooLarge(f"{root} is too large to upload: {rel} is over {_mib(MAX_FILE)}")
+            zf.writestr(info, data)
+    data = buf.getvalue()
+    if max_bytes is not None and len(data) > max_bytes:
+        raise TooLarge(f"{root} is too large to upload: the zip is {_mib(len(data))} "
+                       f"(the server takes at most {_mib(max_bytes)})")
+    return data
+
+
+def _mib(n: int) -> str:
+    return f"{n / (1 << 20):.1f} MiB"
 
 
 def _safe_name(name: str) -> bool:

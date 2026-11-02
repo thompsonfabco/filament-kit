@@ -116,3 +116,28 @@ def test_unpack_build_refuses_nonempty_dest(tmp_path):
     with pytest.raises(ValueError):
         zips.unpack_build(_zip({"BUILD.json": BUILD}), dest)
     assert sorted(p.name for p in dest.iterdir()) == ["keep.txt"]
+
+
+def test_pack_enforces_upload_limits(tmp_path, monkeypatch):
+    root = tmp_path / "live"
+    _write(root, {"a.json": b"{}", "base/b.json": b"x" * 100, "base/b.info": b"y"})
+    assert zips.pack(root, max_bytes=1 << 20)
+    with pytest.raises(zips.TooLarge, match="too large"):
+        zips.pack(root, max_bytes=10)
+    monkeypatch.setattr(zips, "MAX_FILE", 50)
+    with pytest.raises(zips.TooLarge, match="b.json"):
+        zips.pack(root)
+    monkeypatch.setattr(zips, "MAX_FILE", 4 << 20)
+    monkeypatch.setattr(zips, "MAX_ENTRIES", 2)
+    with pytest.raises(zips.TooLarge, match="3 files"):
+        zips.pack(root)
+    monkeypatch.setattr(zips, "MAX_ENTRIES", 20000)
+    monkeypatch.setattr(zips, "MAX_TOTAL", 50)
+    with pytest.raises(zips.TooLarge):
+        zips.pack(root)
+    assert issubclass(zips.TooLarge, ValueError)
+
+
+def test_upload_limit_values():
+    assert (zips.MAX_FILE, zips.MAX_ENTRIES, zips.MAX_TOTAL) == (4 << 20, 20000, 512 << 20)
+    assert (zips.LIVE_MAX, zips.SYSTEM_MAX) == (32 << 20, 64 << 20)

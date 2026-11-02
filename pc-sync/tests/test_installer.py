@@ -381,3 +381,28 @@ def test_missing_user_filament_folder_refused_cleanly(tmp_path):
     assert not env.folders.user_filament.exists()
     assert not env.dirs.backups.exists()
     assert not env.dirs.installed.exists()
+
+
+def test_before_write_gets_backup_before_any_live_write(tmp_path):
+    old_a = _preset("A", nozzle_temperature=["210", "210"])
+    env = Env(tmp_path, live={"A": (old_a, _info())})
+    build = env.build({"A": _preset("A"), "B": _preset("B", filament_id="P0000001")})
+    seen = []
+
+    def before_write(backup):
+        seen.append((backup, json.loads((env.live / "A.json").read_text(encoding="utf-8")),
+                     (env.live / "B.json").exists()))
+
+    res = installer.install(build, env.folders, env.dirs, running=lambda: False, stamp_now="20261102-020000",
+                            before_write=before_write)
+    assert seen == [(res.backup, old_a, False)]
+    assert res.backup.is_dir()
+
+
+def test_before_write_not_called_when_refused(tmp_path):
+    env = Env(tmp_path)
+    seen = []
+    with pytest.raises(installer.Refused):
+        installer.install(env.build({"A": _preset("A")}), env.folders, env.dirs, running=lambda: True,
+                          stamp_now="20261102-020000", before_write=seen.append)
+    assert seen == []
