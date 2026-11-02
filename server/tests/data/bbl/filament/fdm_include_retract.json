@@ -1,0 +1,9 @@
+{
+    "type": "filament",
+    "name": "fdm_include_retract",
+    "from": "system",
+    "instantiation": "false",
+    "filament_retraction_length": [
+        "0.8"
+    ]
+}

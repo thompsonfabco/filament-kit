@@ -1,0 +1,8 @@
+{
+    "type": "filament",
+    "name": "Generic PETG @base",
+    "inherits": "fdm_filament_petg",
+    "from": "system",
+    "filament_id": "GFG99",
+    "instantiation": "false"
+}
