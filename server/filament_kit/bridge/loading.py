@@ -4,9 +4,11 @@
   1. the printer must be in the registry, the spool in Spoolman (not archived), the printer connected and idle
      (`slottest.check_idle`: the same rule as the slot test), the slot known (the calibrated slot map's address,
      else the report's AMS units: A1-D4, HT-A..., Ext);
-  2. nozzle size from the report's top-level `nozzle_diameter`; preset = `profiles.preset_for(filament, model,
-     nozzle_mm)`; None (or no nozzle size) -> `NoPreset`, nothing sent. Never a Generic preset, never an
-     invented id: `tray_info_idx` is the preset's `filament_id`;
+  2. nozzle size: the report's top-level `nozzle_diameter`, else `device.nozzle.info[].diameter` of the slot's
+     extruder (bits 8-11 of the unit's `info`; id 0 when the report does not say), else 0.4 with
+     `nozzle_assumed: true` in the result (never refused for a missing size); preset =
+     `profiles.preset_for(filament, model, nozzle_mm)`; None -> `NoPreset`, nothing sent. Never a Generic
+     preset, never an invented id: `tray_info_idx` is the preset's `filament_id`;
   3. `ams_filament_setting` (`Manager.set_slot`): `tray_info_idx`, `tray_color` (Spoolman `color_hex` + "FF"),
      `tray_type` (the filament's material), nozzle temps from the preset; then the next reports must show it
      (CONFIRM_TIMEOUT). A refused write raises `SlotWriteFailed` and Spoolman is untouched; a write that is not
@@ -25,7 +27,7 @@ command, so it works whatever the printer is doing): every spool at that slot's 
 prev_location (or "Sealed stock").
 
 Both return `{spool, slot: {label, ams_id, tray_id, location}, preset, dry_run, moved_back: [{id, location}]}`;
-load adds `confirmed` (None on a dry run), `problems` and, on a dry run, `command`.
+load adds `confirmed` (None on a dry run), `problems`, `nozzle_mm`, `nozzle_assumed` and, on a dry run, `command`.
 
 Errors (the API maps them):
   NoPreset                     -> 409 no_preset
@@ -49,6 +51,7 @@ from .connection import PrinterOffline, UnknownPrinter
 log = logging.getLogger(__name__)
 
 CONFIRM_TIMEOUT = 10.0            # seconds for a report to show the new slot setting
+DEFAULT_NOZZLE = 0.4              # assumed when the report gives no nozzle size (`nozzle_assumed: true`)
 SEALED = "Sealed stock"
 SLOT_MARK = f" {status.DASH} AMS "   # every printer-slot location contains this
 
@@ -108,13 +111,46 @@ def _address(serial: str, report: dict, label: str) -> tuple[int, int] | None:
     return None
 
 
-def _nozzle(report: dict) -> float | None:
-    v = status._d(report).get("nozzle_diameter")
+def _mm(v) -> float | None:
     try:
         n = float(v)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
     return n if n > 0 else None
+
+
+def _extruder(report: dict, ams_id: int) -> int | None:
+    """The extruder an AMS unit feeds, when the report says so: bits 8-11 of the unit's hex `info` (H2D/X2D, as
+    Home Assistant's bambulab integration reads it). None when the report does not say (or for the Ext holder)."""
+    for u in status._l(status._d(status._d(report).get("ams")).get("ams")):
+        if status._int(u.get("id")) == ams_id:
+            info = u.get("info")
+            if isinstance(info, str) and info.strip():
+                try:
+                    return (int(info, 16) >> 8) & 0xF
+                except ValueError:
+                    return None
+            return None
+    return None
+
+
+def _nozzle(report: dict, ams_id: int) -> tuple[float, bool]:
+    """(nozzle mm, assumed) for the slot's unit (ruling R10): the top-level `nozzle_diameter`; else
+    `device.nozzle.info[].diameter` of the unit's extruder (id 0 when the report does not say which); else 0.4,
+    assumed."""
+    p = status._d(report)
+    n = _mm(p.get("nozzle_diameter"))
+    if n is not None:
+        return n, False
+    infos = status._l(status._d(status._d(p.get("device")).get("nozzle")).get("info"))
+    ex = _extruder(report, ams_id)
+    want = 0 if ex is None else ex
+    for e in infos:
+        if status._int(e.get("id")) == want:
+            n = _mm(e.get("diameter"))
+            if n is not None:
+                return n, False
+    return DEFAULT_NOZZLE, True
 
 
 def _colour(filament: dict) -> str:
@@ -203,9 +239,7 @@ def load(manager, sm, serial: str, label: str, spool_id, dry: bool, *, preset_fo
     loc = status.location(name, label)
     slot = {"label": label, "ams_id": ams_id, "tray_id": tray_id, "location": loc}
     fil = spool.get("filament") or {}
-    nozzle = _nozzle(report)
-    if nozzle is None:
-        raise NoPreset(f"{name} did not report its nozzle diameter, so no preset can be chosen; slot left unchanged")
+    nozzle, assumed = _nozzle(report, ams_id)
     preset = preset_for(fil, p.model, nozzle)
     if preset is None:
         what = f"{status._s((fil.get('vendor') or {}).get('name'))} {status._s(fil.get('name'))}".strip()
@@ -214,7 +248,8 @@ def load(manager, sm, serial: str, label: str, spool_id, dry: bool, *, preset_fo
     setting = {"tray_info_idx": preset.filament_id, "tray_color": _colour(fil),
                "tray_type": status._s(fil.get("material")), "tray_sub_brands": "",
                "nozzle_temp_min": preset.nozzle_temp_min or 0, "nozzle_temp_max": preset.nozzle_temp_max or 0}
-    result = {"slot": slot, "preset": _preset_view(preset), "dry_run": bool(dry), "problems": []}
+    result = {"slot": slot, "preset": _preset_view(preset), "dry_run": bool(dry), "problems": [],
+              "nozzle_mm": nozzle, "nozzle_assumed": assumed}
 
     if dry:
         with inventory._LOCK:
