@@ -18,7 +18,7 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["pytest", "httpx", "pyftpdlib>=2.0", "pyopenssl>=24"]  # pyftpdlib + pyopenssl: the fake printer FTPS server
-station = ["nfcpy==1.0.4", "pyserial>=3.5"]
+station = ["nfcpy==1.0.4", "pyserial>=3.5", "esptool==5.6.0"]
 web = ["mcp>=2.3"]  # only filament_kit.web imports it; the server process never does
 
 [project.scripts]
