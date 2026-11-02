@@ -367,7 +367,10 @@ def test_instructions_without_boxes_or_hints():
     assert "'Storage box NN'" not in text and "'Overflow'" in text and "200" in text
 
 
-def test_kit_api_pairs_itself_once_and_renews_a_revoked_token(env):
+def test_kit_api_pairs_once_and_an_unpair_is_loud_until_the_next_start(env, caplog):
+    import logging
+    import os
+    import stat
     from starlette.applications import Starlette
     from starlette.responses import JSONResponse
     from starlette.routing import Route
@@ -383,16 +386,31 @@ def test_kit_api_pairs_itself_once_and_renews_a_revoked_token(env):
         return JSONResponse({"printers": []})
     with readers_fake.Served(Starlette(routes=[Route("/api/printers", printers)]), free_port()) as url:
         kit = slots.KitApi(base_url=url)
-        assert kit.get("/api/printers") == {"printers": []}
+        kit.ensure_paired()                                                    # at start
         tok_file = tmp_path / "state" / "web" / "kit_token"
         first = tok_file.read_text(encoding="utf-8").strip()
         assert [d["name"] for d in pairing.devices()] == ["web (MCP)"]
-        kit.get("/api/printers")
+        if os.name != "nt":
+            assert stat.S_IMODE(tok_file.stat().st_mode) == 0o600
+        assert kit.get("/api/printers") == {"printers": []}
+        kit.ensure_paired()
         assert tok_file.read_text(encoding="utf-8").strip() == first          # reused, not re-paired
+        assert len(pairing.devices()) == 1
+        # the owner unpairs it: a clear error (logged and shown), no silent re-pair while running
         pairing.revoke(pairing.devices()[0]["id"])
-        assert kit.get("/api/printers") == {"printers": []}                    # 401 -> paired again once
+        with caplog.at_level(logging.ERROR, logger="filament_kit"):
+            with pytest.raises(Problem, match="unpaired"):
+                kit.get("/api/printers")
+        assert any("web (MCP)" in r.getMessage() and "restart" in r.getMessage() for r in caplog.records)
+        with pytest.raises(Problem, match="unpaired"):
+            kit.get("/api/printers")                                           # stays refused
+        assert pairing.devices() == [] and not tok_file.exists()
+        # the next start pairs again
+        again = slots.KitApi(base_url=url)
+        again.ensure_paired()
+        assert again.get("/api/printers") == {"printers": []}
+        assert [d["name"] for d in pairing.devices()] == ["web (MCP)"]
         assert tok_file.read_text(encoding="utf-8").strip() != first
-        assert seen[-2] is None and seen[-1] is not None
 
 
 # ---------- Orca parents (Task 3's data model) ----------

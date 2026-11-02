@@ -320,3 +320,27 @@ def test_logout_ends_session(app, store):
         assert store.check_session(tok)
         r = c.post("/intake/logout", headers={"Origin": ORIGIN}, follow_redirects=False)
         assert r.status_code == 303 and not store.check_session(tok)
+
+
+def test_start_pairs_for_the_bridge_and_skips_it_with_a_slot_service(env, monkeypatch):
+    from filament_kit import pairing
+    from filament_kit.web import slots
+    pairing.make_cert("fkhost", [], config.paths().etc)
+    cfg = config.load()                                          # printers on, no slot_service
+    kit = web_main.kit_api_at_start(cfg)
+    assert isinstance(kit, slots.KitApi)
+    assert [d["name"] for d in pairing.devices()] == ["web (MCP)"]
+    assert (config.paths().state / "web" / "kit_token").is_file()
+    cfg["slot_service"] = {"state_url": "http://x/api/state", "set_url": "http://x/set", "token_file": "/x"}
+    assert web_main.kit_api_at_start(cfg) is None
+    cfg["slot_service"] = None
+    cfg["modules"]["printers"] = False
+    assert web_main.kit_api_at_start(cfg) is None
+
+
+def test_start_survives_a_pairing_failure(env, caplog):
+    import logging
+    # no server certificate: pairing fails; logged, the unit still starts
+    with caplog.at_level(logging.ERROR, logger="filament_kit"):
+        assert web_main.kit_api_at_start(config.load()) is not None
+    assert any("cannot pair" in r.getMessage() for r in caplog.records)

@@ -11,8 +11,11 @@ import sys
 
 import uvicorn
 
-from .. import config
+from .. import config, modules
+from . import slots
 from .app import NotConfigured, build_app
+
+log = logging.getLogger("filament_kit.web")
 
 TRUSTED_PROXY = "127.0.0.1"
 
@@ -32,11 +35,25 @@ def uvicorn_options(cfg: dict) -> dict:
             "forwarded_allow_ips": TRUSTED_PROXY, "server_header": False, "log_level": "info", "workers": 1}
 
 
+def kit_api_at_start(cfg: dict):
+    """With no slot_service and the printers module on, the printer tools use the kit server's API: pair with it
+    now (or reuse the saved token), so an earlier unpair is healed by this start and a failure shows in the log."""
+    svc = cfg.get("slot_service")
+    if (isinstance(svc, dict) and svc.get("state_url")) or "printers" not in modules.enabled(cfg):
+        return None
+    kit = slots.KitApi()
+    try:
+        kit.ensure_paired()
+    except Exception as e:  # noqa: BLE001 - the rest of the unit works without printer slots
+        log.error("cannot pair with the kit server for the printer slot tools: %s: %s", type(e).__name__, e)
+    return kit
+
+
 def main() -> int:
     _log_to_journal()
     cfg = config.load()
     try:
-        app = build_app(cfg)
+        app = build_app(cfg, kit_api=kit_api_at_start(cfg))
     except NotConfigured as e:
         print(f"filament-kit web: {e}", file=sys.stderr)
         return 2

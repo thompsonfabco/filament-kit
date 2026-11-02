@@ -6,12 +6,15 @@ Two backends, picked by config:
   the orchestrator picks the user's exact preset, sets Spoolman and releases the slot's previous spool.
 - else, with the `printers` module on: the kit's bridge, through the kit server's own API on 127.0.0.1 (the server
   process owns the printer connections; a second MQTT session from this process would compete with it). The web
-  process pairs itself once like a phone, in-process, and keeps that token in `FK_STATE/web/kit_token` (0600).
+  process pairs itself once like a phone, in-process (device 'web (MCP)'), at start, and keeps that token in
+  `FK_STATE/web/kit_token` (0600). If the owner unpairs it, slot calls fail with a clear error (logged once) and
+  the token file is dropped, so the next start pairs again.
 """
 from __future__ import annotations
 
 import http.client
 import json
+import logging
 import re
 import ssl
 import threading
@@ -23,7 +26,12 @@ from .. import config, pairing
 from ..profiles import builds
 from .errors import Problem
 
+log = logging.getLogger(__name__)
+
 TIMEOUT_STATE, TIMEOUT_SET = 10, 20
+DEVICE_NAME = "web (MCP)"
+UNPAIRED = (f"the kit server no longer accepts this web unit (the device '{DEVICE_NAME}' was unpaired); "
+            "restart it to pair again: sudo systemctl restart filament-kit-web")
 OPS_NOTE = "spool = the Spoolman spool assigned by an NFC tap or printer_set_slot (null: never assigned)"
 
 
@@ -154,6 +162,7 @@ class KitApi:
         self.base = (base_url or f"https://127.0.0.1:{cfg['port']}").rstrip("/")
         self._context = context
         self._lock = threading.Lock()
+        self._refused = False
 
     def _ctx(self) -> ssl.SSLContext | None:
         if self._context is None and self.base.startswith("https:"):
@@ -166,41 +175,59 @@ class KitApi:
     def _token_file() -> Path:
         return config.paths().state / "web" / "kit_token"
 
-    def _token(self, renew: bool = False) -> str:
-        """This process's own pairing token (a device named 'web (MCP)'), made in-process on first use."""
+    def ensure_paired(self) -> None:
+        """Read this process's token, or pair as the device 'web (MCP)' when there is none (called at start)."""
+        self._token()
+
+    def _token(self) -> str:
+        """This process's own pairing token (device 'web (MCP)'), made in-process when the file is missing and
+        kept in FK_STATE/web/kit_token (0600). Never renewed while running: see `_refused`."""
         with self._lock:
+            if self._refused:
+                raise SlotError(UNPAIRED)
             f = self._token_file()
-            if not renew:
-                try:
-                    tok = f.read_text(encoding="utf-8").strip()
-                    if tok:
-                        return tok
-                except OSError:
-                    pass
-            tok = pairing.issue("web (MCP)").token
+            try:
+                tok = f.read_text(encoding="utf-8").strip()
+                if tok:
+                    return tok
+            except OSError:
+                pass
+            tok = pairing.issue(DEVICE_NAME).token
             pairing.check(tok)                   # claims the device, like a phone's first call
             pairing.make_state_dir(f.parent)
             pairing._write_atomic(f, (tok + "\n").encode("utf-8"), 0o600, state_owned=True)
+            log.info("paired with the kit server as %r", DEVICE_NAME)
             return tok
 
+    def _refuse(self) -> None:
+        """The kit server refused the token: the owner unpaired 'web (MCP)'. Say so loudly, drop the token so the
+        next start pairs again, and refuse until then (re-pairing behind the owner's back would undo the unpair)."""
+        with self._lock:
+            if not self._refused:
+                log.error("the kit server refused this web unit's pairing token (the device %r was unpaired?); "
+                          "printer slots are off until the next start, which pairs again: "
+                          "sudo systemctl restart filament-kit-web", DEVICE_NAME)
+            self._refused = True
+            self._token_file().unlink(missing_ok=True)
+
     def _call(self, method: str, path: str, body: dict | None = None):
-        for renew in (False, True):              # an unpaired token is replaced once
-            data = json.dumps(body).encode() if body is not None else None
-            req = urllib.request.Request(self.base + path, data=data, method=method, headers={
-                "Authorization": f"Bearer {self._token(renew)}", "Content-Type": "application/json"})
+        data = json.dumps(body).encode() if body is not None else None
+        req = urllib.request.Request(self.base + path, data=data, method=method, headers={
+            "Authorization": f"Bearer {self._token()}", "Content-Type": "application/json"})
+        try:
+            return _http_json(req, 30, self._ctx())
+        except urllib.error.HTTPError as e:
             try:
-                return _http_json(req, 30, self._ctx())
-            except urllib.error.HTTPError as e:
-                try:
-                    err = json.loads(e.read() or b"{}")
-                except ValueError:
-                    err = {}
-                if e.code == 401 and not renew:
-                    continue
-                raise SlotError(err.get("message") or f"the kit server answered {e.code}") from None
-            except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError) as e:
-                raise SlotError(f"the kit server ({self.base}) is not reachable: {e}") from None
-        raise SlotError("the kit server refused this process's pairing token")
+                err = json.loads(e.read() or b"{}")
+            except ValueError:
+                err = {}
+            if e.code == 401:
+                self._refuse()
+                raise SlotError(UNPAIRED) from None
+            raise SlotError((err.get("message") if isinstance(err, dict) else None)
+                            or f"the kit server answered {e.code}") from None
+        except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError) as e:
+            raise SlotError(f"the kit server ({self.base}) is not reachable: {e}") from None
 
     def get(self, path: str):
         return self._call("GET", path)
