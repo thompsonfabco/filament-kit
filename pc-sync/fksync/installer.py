@@ -74,7 +74,7 @@ def _key(v) -> str:
 def _names(folder: Path) -> list[str]:
     if not folder.is_dir():
         return []
-    return sorted(p.stem for p in folder.iterdir() if p.suffix == ".json" and p.is_file())
+    return sorted(p.stem for p in folder.iterdir() if p.suffix.casefold() == ".json" and p.is_file())
 
 
 def _load_or_none(path: Path) -> dict | None:
@@ -95,7 +95,7 @@ def trusted_gcode(system_filament: Path, *more: Path) -> set[str]:
         if not folder.is_dir():
             continue
         for f in folder.iterdir():
-            if f.suffix == ".json" and f.is_file():
+            if f.suffix.casefold() == ".json" and f.is_file():
                 try:
                     d = inapp.load(f)
                 except (OSError, UnicodeDecodeError, ValueError):

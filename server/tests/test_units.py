@@ -39,7 +39,10 @@ def test_build_service():
     svc = _unit("filament-kit-build.service")["Service"]
     assert svc["ExecStart"] == "/opt/filament-kit/venv/bin/filament-kit profiles build"
     assert svc["IPAddressDeny"] == "any"
-    assert svc["IPAddressAllow"] == "localhost"
+    # final review: a LAN spoolman_url must work in builds too; the same allowlist as the main service
+    main = _unit("filament-kit.service")["Service"]
+    assert svc["IPAddressAllow"] == main["IPAddressAllow"]
+    assert "192.168.0.0/16" in svc["IPAddressAllow"].split() and "localhost" in svc["IPAddressAllow"].split()
 
 
 def test_library_service_has_no_ip_lines():

@@ -20,7 +20,11 @@ half-finished install, from the partial build's, whose values then never count a
 does not take their absence from Bambu Studio for a deletion made after the build.
 
 A saved line's filament_id never changes (ruling S12). Only a line created in this run takes the filament_id of an
-existing preset of the same name made in the app; for a saved line that preset is reported and replaced.
+existing preset of the same name made in the app, or of its installed presets (lines.json was lost); for a saved
+line that preset is reported and replaced.
+
+A preset name the PC sync could not use as a file name (`safe_name`, its own rule) is skipped with a problem line:
+the PC refuses a build zip holding one.
 
 One line with odd data, or one bad preset, is skipped with a problem line; the rest of the build goes on.
 """
@@ -40,7 +44,11 @@ from .bbl import Store, _first
 from .lines import BS_VALID, Line, LineSet
 
 ID_RE = re.compile(r"^P[0-9a-f]{7}$")
-BAD_NAME = re.compile(r'[\\/:*?"<>|]')
+# the PC sync's rule for a preset file name (pc-sync zips._safe_name, for <name>.json and <name>.info): one name it
+# refuses would make it refuse the whole build zip
+_BAD_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f\x7f]')
+_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
+MAX_FILE_NAME = 200                             # characters of <name>.json, as the PC counts them
 POP = ("type", "instantiation", "setting_id", "description", "renamed_from", "is_custom_defined", "inherits",
        "filament_id", "compatible_printers")
 TV = "temperature_vitrification"
@@ -105,7 +113,27 @@ def _snapshot_names(snapshot: Path | None) -> set[str]:
     return {p.stem for p in base.iterdir() if p.is_file() and p.suffix.casefold() == ".json"}
 
 
+def _snapshot_fid(snapshot: Path | None, snap_names: set[str], name: str):
+    """The filament_id of the installed copy of preset `name` (matched casefolded), or None."""
+    if snapshot is None:
+        return None
+    key = name.casefold()
+    real = next((n for n in snap_names if n.casefold() == key), None)
+    return (_read_json(Path(snapshot) / "base" / f"{real}.json") or {}).get("filament_id") if real else None
+
+
 # ---------- checks ----------
+
+def safe_name(name) -> bool:
+    """True when `name` + ".json" / ".info" is a file name the PC sync accepts (the same rule as pc-sync
+    zips._safe_name): no control or reserved characters, no leading dot or space, no trailing dot or space, not a
+    reserved Windows device name, at most MAX_FILE_NAME characters with the suffix."""
+    if not isinstance(name, str) or not name or len(name) + len(".json") > MAX_FILE_NAME:
+        return False
+    if _BAD_CHARS.search(name) or name.startswith(".") or name[0] == " " or name[-1] in " .":
+        return False
+    return name.split(".")[0].upper().rstrip() not in _RESERVED
+
 
 def preset_name(line: Line, printer: str, nozzle: str) -> str:
     return f"{line.vendor} {line.product} @{printer} {nozzle} nozzle"
@@ -156,8 +184,8 @@ def check_preset(cfg: dict, parent_cfg: dict, *, edited: dict | None = None) -> 
     if tv != inapp.norm(parent_cfg.get(TV)) and not (edited and TV in edited and tv == inapp.norm(edited[TV])):
         errs.append(f"{TV} differs from the parent's")
     name = cfg.get("name")
-    if not isinstance(name, str) or not name.strip() or BAD_NAME.search(name):
-        errs.append(f"name {name!r} has characters a file name cannot hold")
+    if not safe_name(name):
+        errs.append(f"name {name!r} cannot be a file name on the PC")
     return errs
 
 
@@ -330,7 +358,8 @@ def build_all(*, filaments: list[dict], models: list[str], store: Store, library
 def _build_line(line: Line, fs: list[dict], ids: list[int], *, printers, store: Store, library: Library,
                 live_preset, live_names, snap_cf, ls: LineSet, snapshot, seen_live, snap_names, deleted_before,
                 restore, reset, base_out: Path, user_id: str, now: float, problems, clamps, edits,
-                deleted, planned: set[str], new_line: bool, restored: list[str] | None = None, recorded: dict[str, dict], partial: Path | None,
+                deleted, planned: set[str], new_line: bool, restored: list[str] | None = None,
+                recorded: dict[str, dict], partial: Path | None,
                 carried: dict[str, dict]) -> list[dict]:
     if line.bambu_parent is None:
         return []                                   # reported by lines.problems
@@ -343,6 +372,7 @@ def _build_line(line: Line, fs: list[dict], ids: list[int], *, printers, store: 
     btype = lines_mod.bs_type(material)
 
     plan = []
+    unsafe: set[str] = set()
     for printer, chamber in printers:
         sizes = store.nozzles_for(line.bambu_parent, printer)
         if not sizes:
@@ -352,14 +382,30 @@ def _build_line(line: Line, fs: list[dict], ids: list[int], *, printers, store: 
         for nozzle in sizes:
             if (nozzle == "0.2" and abrasive) or nozzle in bad:
                 continue
+            if not safe_name(preset_name(line, printer, nozzle)):
+                unsafe.add(preset_name(line, printer, nozzle))
+                continue
             plan.append((printer, chamber, nozzle, preset_name(line, printer, nozzle)))
             planned.add(plan[-1][3].casefold())
+    for name in sorted(unsafe):                 # only these presets are skipped; the PC would refuse the whole zip
+        problems.append(f"{name!r} cannot be a file name on the PC (check the vendor and line name); skipped")
 
     # an existing preset of the same name made in the app (not installed by us): keep its filament_id
-    # (only for a line created in this run: a saved line's filament_id never changes)
+    # (only for a line created in this run: a saved line's filament_id never changes). A line created in this run
+    # whose presets were installed (lines.json was lost) takes the installed presets' filament_id.
     taken = lines_mod._taken_fids(ls)
     for _p, _c, _n, name in plan:
-        if name not in live_names or name.casefold() in snap_cf:
+        if name.casefold() in snap_cf:
+            if not new_line:
+                continue
+            fid = _snapshot_fid(snapshot, snap_names, name)
+            if isinstance(fid, str) and ID_RE.fullmatch(fid) and fid != line.filament_id and fid not in taken:
+                edits.append(f"{line.line_id}: filament_id {line.filament_id} -> {fid} (taken from the installed "
+                             f"preset {name})")
+                line.filament_id = fid
+                new_line = False
+            continue
+        if name not in live_names:
             continue
         j, _info = live_preset(name)
         fid = (j or {}).get("filament_id")
