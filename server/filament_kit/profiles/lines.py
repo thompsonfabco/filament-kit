@@ -20,9 +20,11 @@ recorded line unless its `extra.line` is set and names another line (the move is
 deleted, members or not.
 
 State: `state/profiles/lines.json` = `{"version": 1, "lines": [Line, ...]}` (atomic, state-owned). A missing file
-is an empty set; an unreadable or invalid file is renamed to `lines.json.corrupt-<ts>` and `LineStoreError` is
-raised (never an empty set that the next save would write over every filament_id). A row that fails validation
-is kept as it is, saved back unchanged, and reported in `problems`.
+is an empty set; a file that cannot be read (permissions, I/O) raises `LineStoreError` and stays in place; a file
+that is not a lines file (bad UTF-8, bad JSON, no lines list) is renamed to `lines.json.corrupt-<ts>` and
+`LineStoreError` is raised (never an empty set that the next save would write over every filament_id). A row that
+fails validation is kept as it is, saved back unchanged, and reported in `problems`. A filament listed in two lines
+stays in the first (file order); the later membership is reported and dropped on the next save.
 
 Concurrency: every load -> change -> save must run inside `locked()` (or `transaction()`, which loads and saves
 in it); `ensure_saved`, `set_parent_saved` and `group_saved` do. The pure `ensure`/`set_parent`/`group` work on
@@ -427,15 +429,17 @@ def _corrupt(path: Path, why: str):
 
 
 def load() -> LineSet:
-    """The saved lines; an empty set when lines.json is missing. Raises LineStoreError (after moving the file
-    aside) when it is unreadable or not a lines file."""
+    """The saved lines; an empty set when lines.json is missing. Raises LineStoreError when it cannot be read
+    (left in place) or is not a lines file (moved aside first)."""
     path = _path()
     try:
         raw = path.read_bytes()
     except FileNotFoundError:
         return LineSet()
     except OSError as e:
-        _corrupt(path, f"unreadable: {e.__class__.__name__}")
+        # a read failure (permissions, I/O, a directory) says nothing about the content: leave the file in place
+        raise LineStoreError(f"lines.json could not be read ({e.__class__.__name__}); left in place",
+                             moved=None) from None
     try:
         data = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, ValueError) as e:
@@ -450,6 +454,18 @@ def load() -> LineSet:
             out.invalid.append(r)
         else:
             out[line.line_id] = line
+    owner: dict[int, str] = {}                  # a filament listed in two lines stays in the first (file order)
+    for line in out.values():
+        keep = []
+        for i in line.filaments:
+            first = owner.setdefault(i, line.line_id)
+            if first == line.line_id:
+                keep.append(i)
+            else:
+                a, b = sorted((first, line.line_id))
+                _note(out, f"filament {i} is listed in lines {a} and {b}; kept in {first}, "
+                           f"dropped from {line.line_id} on the next save")
+        line.filaments = keep
     return out
 
 
