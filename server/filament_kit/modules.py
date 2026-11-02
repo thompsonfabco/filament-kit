@@ -48,12 +48,21 @@ MODULES: dict[str, Module] = {m.name: m for m in (
        units=("filament-kit-backup.timer",)),
     _m("station", "Station", "USB scale and PN532 reader, read-only HTTP",
        units=("filament-kit-station.service",), apt=("alsa-utils",)),
+    _m("web", "Web", "Browser UI and the MCP endpoint, on top of the server",
+       units=("filament-kit-web.service",), depends=("server",)),
+    _m("remote", "Remote access", "Public https name for the web UI (nginx, certbot)",
+       depends=("web",), apt=("nginx", "certbot")),
+    _m("orders", "Orders", "Order history file for the shop tools",
+       depends=("ai_intake",)),
 )}
 
+# Switched on by hand (modules set / config menu), never by a mode: a mode is the kit as it was.
+OPT_IN = frozenset({"web", "remote", "orders"})
+
 MODES: dict[str, frozenset[str]] = {
-    "server": frozenset(MODULES) - {"station"},
+    "server": frozenset(MODULES) - {"station"} - OPT_IN,
     "station": frozenset({"station"}),
-    "all-in-one": frozenset(MODULES),
+    "all-in-one": frozenset(MODULES) - OPT_IN,
 }
 
 _LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
@@ -134,6 +143,12 @@ def validate(cfg: dict) -> None:
             raise ModuleError(
                 "server without the spoolman module needs spoolman_url "
                 f"pointing at a remote Spoolman (got {url!r})")
+    if "remote" in on:
+        pu = urlparse(str((cfg.get("web") or {}).get("public_url") or ""))
+        if pu.scheme != "https" or not pu.hostname:
+            raise ModuleError("remote needs web.public_url set to the https address people will use")
+    if "orders" in on and not (cfg.get("orders") or {}).get("file"):
+        raise ModuleError("orders needs orders.file (the order history file)")
     allow = (cfg.get("station") or {}).get("allow") or []
     for entry in allow:
         if _bad_allow(entry):

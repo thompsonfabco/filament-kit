@@ -1,0 +1,25 @@
+[Unit]
+Description=filament-kit web UI and MCP endpoint
+After=network-online.target filament-kit.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=filament-kit
+Group=filament-kit
+WorkingDirectory=/var/lib/filament-kit
+ExecStart=/opt/filament-kit/venv/bin/python -I -m filament_kit.web
+Restart=on-failure
+RestartSec=5
+ProtectSystem=strict
+ReadWritePaths=/var/lib/filament-kit
+ProtectHome=yes
+NoNewPrivileges=yes
+PrivateTmp=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+IPAddressDeny=any
+IPAddressAllow=localhost 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 160.79.104.0/21 2607:6bc0::/48
+
+[Install]
+WantedBy=multi-user.target
