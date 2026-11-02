@@ -256,9 +256,11 @@ def _printers(models: list[str], problems: list[str]) -> list[tuple[str, int | N
 def build_all(*, filaments: list[dict], models: list[str], store: Store, library: Library,
               lines: dict[str, Line], live: Live | None, snapshot: Path | None, deleted_before: set[str],
               restore_deleted: bool, out_dir: Path, now: float,
-              partial: Path | None = None) -> tuple[dict, dict[str, Line]]:
+              partial: Path | None = None, owner_edits: dict | None = None) -> tuple[dict, dict[str, Line]]:
     """Build every preset into `out_dir/base`; returns (manifest, updated lines). `snapshot` = the installed
-    build's folder; `partial` = a build whose install stopped part-way (its values in live are not edits)."""
+    build's folder; `partial` = a build whose install stopped part-way (its values in live are not edits);
+    `owner_edits` = {inapp: {preset: {key: value}}, notes: {preset: [lines]}} saved when the sync PC changed
+    (ruling S34): with no snapshot and no partial build it is the record of the owner's edits and note lines."""
     out_dir = Path(out_dir)
     base_out = out_dir / "base"
     base_out.mkdir(parents=True, exist_ok=True)
@@ -267,6 +269,16 @@ def build_all(*, filaments: list[dict], models: list[str], store: Store, library
     edits: list[str] = []
     carried: dict[str, dict] = {}
     recorded = _recorded(partial) if partial is not None else _recorded(snapshot)
+    kept_notes: dict[str, list[str]] = {}
+    if snapshot is None and isinstance(owner_edits, dict):
+        if partial is None:
+            rec = owner_edits.get("inapp")
+            recorded = {n: v for n, v in rec.items() if isinstance(n, str) and isinstance(v, dict)} \
+                if isinstance(rec, dict) else {}
+        nts = owner_edits.get("notes")
+        if isinstance(nts, dict):
+            kept_notes = {n: [x for x in v if isinstance(x, str)] for n, v in nts.items()
+                          if isinstance(n, str) and isinstance(v, list)}
 
     live_names = live.names() if live is not None else set()
     snap_names = _snapshot_names(snapshot)
@@ -331,7 +343,7 @@ def build_all(*, filaments: list[dict], models: list[str], store: Store, library
                                 base_out=base_out, user_id=live.user_id if live is not None else "", now=now,
                                 problems=problems, clamps=clamps, edits=edits, deleted=deleted,
                                 restored=restored, planned=planned, new_line=lid in new_lines, recorded=recorded,
-                                partial=partial, carried=carried)
+                                partial=partial, carried=carried, kept_notes=kept_notes)
         except OSError:
             raise
         except Exception as e:  # one odd line never breaks the build
@@ -360,7 +372,7 @@ def _build_line(line: Line, fs: list[dict], ids: list[int], *, printers, store: 
                 restore, reset, base_out: Path, user_id: str, now: float, problems, clamps, edits,
                 deleted, planned: set[str], new_line: bool, restored: list[str] | None = None,
                 recorded: dict[str, dict], partial: Path | None,
-                carried: dict[str, dict]) -> list[dict]:
+                carried: dict[str, dict], kept_notes: dict[str, list[str]] | None = None) -> list[dict]:
     if line.bambu_parent is None:
         return []                                   # reported by lines.problems
     sv = values.spoolman_values(fs)
@@ -436,7 +448,8 @@ def _build_line(line: Line, fs: list[dict], ids: list[int], *, printers, store: 
             row = _build_preset(line, name, printer, chamber, nozzle, parent, sv, material, btype, entry, ids,
                                 store=store, live_preset=live_preset, snapshot=snapshot, base_out=base_out,
                                 user_id=user_id, now=now, problems=problems, clamps=clamps, edits=edits,
-                                recorded=recorded.get(name), partial=partial, carried=carried)
+                                recorded=recorded.get(name), partial=partial, carried=carried,
+                                notes=(kept_notes or {}).get(name))
         except OSError:
             raise
         except Exception as e:
@@ -452,7 +465,7 @@ def _build_line(line: Line, fs: list[dict], ids: list[int], *, printers, store: 
 def _build_preset(line: Line, name: str, printer: str, chamber, nozzle: str, parent: str, sv, material, btype,
                   entry, ids, *, store: Store, live_preset, snapshot, base_out: Path, user_id: str, now: float,
                   problems, clamps, edits, recorded: dict | None = None, partial: Path | None = None,
-                  carried: dict[str, dict] | None = None) -> dict | None:
+                  carried: dict[str, dict] | None = None, notes: list[str] | None = None) -> dict | None:
     # 1. the flattened parent
     parent_cfg = store.resolve(parent)
     cfg = copy.deepcopy(parent_cfg)
@@ -481,7 +494,7 @@ def _build_preset(line: Line, name: str, printer: str, chamber, nozzle: str, par
     installed = _read_json(Path(snapshot) / "base" / f"{name}.json") if snapshot is not None else None
     live_cfg, live_info = live_preset(name)
     half = _read_json(Path(partial) / "base" / f"{name}.json") if partial is not None else None
-    mine = inapp.keep_edits(cfg, installed, live_cfg, edits, recorded=recorded, partial=half)
+    mine = inapp.keep_edits(cfg, installed, live_cfg, edits, recorded=recorded, partial=half, notes=notes)
     taken = set(mine)
     protected |= taken
     _fill_nil(cfg, name, edits)

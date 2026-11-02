@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from filament_kit import config, library, pairing, profiles
+from filament_kit.profiles import inapp as inapp_mod
 from filament_kit.bridge import registry
 from filament_kit.bridge.registry import Printer
 from filament_kit.profiles import builds, errors, generate as G
@@ -674,7 +675,7 @@ def test_new_sync_pc_starts_like_a_first_install(env):
     r = builds.run_build(env, now=TG.NOW + 1)
     assert r["ok"] is True, r
     m = builds.manifest(r["stamp"])
-    assert m["deleted"] == [] and m["inapp"] == {}
+    assert m["deleted"] == [] and m["inapp"] == builds.manifest(b1)["inapp"]   # the owner's record is kept (S34)
     assert names[0] in {p["name"] for p in m["presets"]}
 
 
@@ -707,3 +708,45 @@ def test_system_hash_is_null_without_the_system_folder(env, how):
     synced(env)                                                 # the PC's next run re-uploads them
     assert builds.state_view("a")["system_hash"] is not None
     assert builds.system_store() is not None
+
+
+# ---------- ruling S34: re-pairing (a new device id) keeps the owner's edits and notes ----------
+
+def test_repaired_pc_keeps_the_owners_inapp_edits_and_notes(env):
+    """Every pairing makes a new device id, so re-pairing the same PC is an owner change. The old installed build's
+    in-app record and note lines belong to the owner: the next build carries them although the new PC has no
+    install snapshot and its fresh Bambu Studio folder holds only generated presets."""
+    synced(env)
+    b1 = builds.run_build(env, now=TG.NOW)["stamp"]
+    builds.record_installed(b1, "a")
+    tick()
+    name = TG.sunlu(TG.H2D, "0.4")
+    cfg = json.loads((profiles_dir() / "builds" / b1 / "base" / f"{name}.json").read_text(encoding="utf-8"))
+    flow = ["0.91"] * len(cfg["filament_flow_ratio"])
+    notes = cfg["filament_notes"].replace("Spoolman filament ids", "dry 8 h first\nSpoolman filament ids")
+    builds.store_upload("live", io.BytesIO(_live_zip_of(b1, edit={name: {"filament_flow_ratio": flow,
+                                                                        "filament_notes": notes}})),
+                        device_id="a", user_id="1")
+    b2 = builds.run_build(env, now=TG.NOW + 1)["stamp"]
+    assert builds.manifest(b2)["inapp"][name] == {"filament_flow_ratio": flow}
+    builds.record_installed(b2, "a")
+    tick()
+    builds.store_upload("live", io.BytesIO(_live_zip_of(b2)), device_id="a", user_id="1")
+    pair("b")                                       # re-paired: the same PC under a new device id
+    builds.store_upload("live", io.BytesIO(_live_zip_of(b1)), device_id="b", user_id="1")   # fresh folder
+    assert builds.state_view("b")["installed"] is None
+    b3 = builds.run_build(env, now=TG.NOW + 2)
+    assert b3["ok"] is True, b3
+    m3 = builds.manifest(b3["stamp"])
+    assert m3["deleted"] == [] and m3["inapp"][name] == {"filament_flow_ratio": flow}
+    got = json.loads((profiles_dir() / "builds" / b3["stamp"] / "base" / f"{name}.json").read_text(encoding="utf-8"))
+    assert got["filament_flow_ratio"] == flow
+    lines_ = got["filament_notes"].splitlines()
+    assert lines_[-3:-1] == [inapp_mod.MARK, "dry 8 h first"] and lines_[-1].startswith("Spoolman filament ids:")
+    # once the new PC installs that build, its record carries them on (owner-edits.json is no longer needed)
+    builds.record_installed(b3["stamp"], "b")
+    assert not (profiles_dir() / "owner-edits.json").exists()
+    tick()
+    builds.store_upload("live", io.BytesIO(_live_zip_of(b3["stamp"])), device_id="b", user_id="1")
+    b4 = builds.run_build(env, now=TG.NOW + 3)["stamp"]
+    assert builds.manifest(b4)["inapp"][name] == {"filament_flow_ratio": flow}
