@@ -1,0 +1,79 @@
+"""What the owner changed in Bambu Studio since the last install (path-free port of filament-ops inapp.py).
+
+The PC sync keeps an exact copy of the last installed build; a key whose live value differs from that copy was
+edited in the app (calibration, temps, ...) and is carried into the next build. A generated preset that was
+installed but is gone from the app was deleted there and stays deleted until restored. Note lines the owner typed
+are kept below MARK.
+
+IGNORE, norm, diff and is_reset must stay identical to pc-sync/fksync/inapp.py (a server test compares them).
+"""
+from __future__ import annotations
+
+MARK = "Your notes (kept when the profiles are regenerated):"
+IDS_PREFIX = "Spoolman filament ids:"
+# bookkeeping the apps or the generator own; never treated as an edit
+IGNORE = {"name", "inherits", "from", "version", "filament_settings_id", "filament_id", "updated_time", "setting_id",
+          "user_id", "base_id", "is_custom_defined", "instantiation", "filament_notes", "compatible_printers"}
+
+
+def norm(v):
+    return [str(x) for x in v] if isinstance(v, list) else str(v)
+
+
+def notes_text(v) -> str:
+    return "\n".join(str(x) for x in v) if isinstance(v, list) else (v or "")
+
+
+def diff(installed: dict, live: dict) -> dict:
+    """{key: live value} for every key the app changed or added."""
+    return {k: v for k, v in live.items() if k not in IGNORE and (k not in installed or norm(v) != norm(installed[k]))}
+
+
+def user_notes(installed: dict, live: dict) -> list[str]:
+    """Note lines the owner wrote: everything below MARK, plus lines that were not in the installed notes;
+    never the generated `Spoolman filament ids:` line."""
+    lines = notes_text(live.get("filament_notes")).splitlines()
+    kept = []
+    if MARK in lines:
+        kept, lines = lines[lines.index(MARK) + 1:], lines[:lines.index(MARK)]
+    old = set(notes_text(installed.get("filament_notes")).splitlines())
+    out = kept + [line for line in lines if line.strip() and line not in old and line not in kept]
+    return [line for line in out if not line.startswith(IDS_PREFIX)]
+
+
+def keep_edits(cfg: dict, installed: dict | None, live: dict | None, log: list[str]) -> set[str]:
+    """Carry what the owner changed in the app since the last install into cfg (in place); returns the keys taken
+    from live. Their note lines go below MARK, before a trailing `Spoolman filament ids:` line if cfg has one."""
+    if installed is None or live is None:
+        return set()
+    taken = set()
+    for k, v in diff(installed, live).items():
+        if norm(cfg.get(k)) != norm(v):
+            log.append(f"{cfg.get('name')}: {k} {cfg.get(k)} -> {v} (your in-app value, kept)")
+        cfg[k] = v
+        taken.add(k)
+    mine = user_notes(installed, live)
+    if mine:
+        lines = notes_text(cfg.get("filament_notes")).splitlines()
+        tail = [lines.pop()] if lines and lines[-1].startswith(IDS_PREFIX) else []
+        cfg["filament_notes"] = "\n".join(lines + [MARK] + mine + tail)
+        log.append(f"{cfg.get('name')}: filament_notes, {len(mine)} line(s) you wrote (kept)")
+    return taken
+
+
+def is_reset(snapshot: set[str], live: set[str]) -> bool:
+    """More than a quarter of the installed presets vanished at once: an app reset, not deletions."""
+    snap = {n.casefold() for n in snapshot}
+    have = {n.casefold() for n in live}
+    return bool(snap) and len(snap - have) > len(snap) / 4
+
+
+def deleted(name: str, *, snapshot: set[str], live: set[str], before: set[str], reset: bool, restore: bool) -> bool:
+    """True if this generated preset was deleted in the app (port of gen.gone): it was deleted before, or it was
+    installed and is gone from the app now. Never during an app reset or a restore. Names match casefolded."""
+    if restore or reset:
+        return False
+    key = name.casefold()
+    was_installed = key in {n.casefold() for n in snapshot}
+    in_app = key in {n.casefold() for n in live}
+    return key in {n.casefold() for n in before} or (was_installed and not in_app)
