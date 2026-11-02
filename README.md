@@ -347,6 +347,10 @@ the `station` module, on the server computer (`all-in-one`) or on a second compu
 - Optional: the **button panel** (Hold and Discard buttons, lamps and a buzzer on a Wemos D1 mini). How to
   build and flash it: [station/PANEL.md](station/PANEL.md).
 - Optional: a speaker (USB or the computer's headphone socket) for the scan beep when there is no panel.
+- Optional, with the panel: a **BME280** sensor for room temperature and humidity, a small speaker on the panel
+  (it says things like "Held, 1042 grams") and a **USB webcam** that takes a picture of the spool when you press
+  Hold. All of it is in [station/PANEL.md](station/PANEL.md). The station installs `espeak-ng` and `ffmpeg` for
+  the speech and the picture, and its user joins the `video` group to read the camera.
 
 ### What the installer changes on the computer
 
@@ -372,9 +376,14 @@ hand: `sudo systemctl unmask sleep.target suspend.target hibernate.target hybrid
   the reader gets the first USB serial port.
 - A scan beeps on the panel's buzzer, or, without a panel, through a USB speaker or the headphone socket
   (`STATION_BEEP`).
+- With the panel, Hold and Discard also speak (`"speech"`), and Hold takes a picture with the webcam
+  (`"camera"`). `curl http://127.0.0.1:5003/state` then shows `"air"` (the BME280 reading) and `"photo"`, and the
+  picture itself is at `/photo`. The station only answers GET requests, and only the addresses it allows.
 - These settings are in `/etc/filament-kit/config.json` under `"station"`: `"nfc_device"` (`"auto"`, or a
-  device such as `"tty:USB0:pn532"`), `"beep"` (`true` or `false`) and `"beep_device"` (empty for automatic, or
-  an ALSA device such as `"plughw:1,0"`). After a change, run `sudo filament-kit modules apply`.
+  device such as `"tty:USB0:pn532"`), `"beep"` (`true` or `false`), `"beep_device"` (empty for automatic, or
+  an ALSA device such as `"plughw:1,0"`), `"speech"` (`true` or `false`) and `"camera"` (`"auto"` for the first
+  USB camera, a device such as `"/dev/video0"`, or `"off"`). After a change, run
+  `sudo filament-kit modules apply`.
 
 ### Is it working?
 

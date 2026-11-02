@@ -117,8 +117,13 @@ install -m 755 "$RES/filament-kit-cli.sh" /usr/local/bin/filament-kit
 # Units, the avahi file and the Spoolman script: `modules apply` installs them from here.
 rm -rf "$OPT/resources"
 install -d -m 755 "$OPT/resources"
-cp -R "$RES/systemd" "$RES/avahi" "$OPT/resources/"
+cp -R "$RES/systemd" "$RES/avahi" "$RES/remote" "$OPT/resources/"
 install -m 755 "$RES/spoolman.sh" "$OPT/resources/spoolman.sh"
+# The button panel's firmware (a binary and its VERSION): the station reflashes a panel on another version.
+# In a release tarball it is install/panel/, in a source checkout station/panel/firmware/.
+if [ -d "$RES/panel" ]; then PANEL_FW_SRC="$RES/panel"; else PANEL_FW_SRC="$HERE/../station/panel/firmware"; fi
+install -d -m 755 "$OPT/resources/panel"
+install -m 644 "$PANEL_FW_SRC/intake-panel.bin" "$PANEL_FW_SRC/VERSION" "$OPT/resources/panel/"
 if [ -f "$HERE/app/filament-kit.apk" ]; then
     install -d -m 755 "$OPT/app"
     install -m 644 "$HERE/app/filament-kit.apk" "$OPT/app/filament-kit.apk"

@@ -128,12 +128,12 @@ def test_spoolman_sha_only_in_spoolman_script():
 
 def test_station_extra_in_pyproject():
     text = _read("server/pyproject.toml")
-    assert re.search(r'^station = \["nfcpy==1\.0\.4", "pyserial>=3\.5"\]\s*$', text, re.M)
+    assert re.search(r'^station = \["nfcpy==1\.0\.4", "pyserial>=3\.5", "esptool==5\.6\.0"\]\s*$', text, re.M)
 
 
 def test_wrapper_runs_modules_as_root():
     text = _read("install/filament-kit-cli.sh")
-    assert re.search(r"^\s+config \| cert \| modules\)\s*$", text, re.M)
+    assert re.search(r"^\s+config \| cert \| modules \| remote\)\s*$", text, re.M)
 
 
 def test_uninstall_uses_modules_units_and_cleans_station():

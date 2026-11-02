@@ -10,7 +10,7 @@ set -euo pipefail
 BIN=/opt/filament-kit/venv/bin/filament-kit
 
 case "${1:-}" in
-    config | cert | modules)
+    config | cert | modules | remote)
         exec "$BIN" "$@"
         ;;
 esac

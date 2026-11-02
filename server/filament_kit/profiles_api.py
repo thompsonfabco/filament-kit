@@ -4,7 +4,8 @@
 `request.state.device` and turns a `ProfileError` into `{"error", "message", **extra}`.
 
 Uploads (`PUT /api/sync/live|system`; live takes `user_id` and, after a half-finished install, `partial=<stamp>`,
-ruling S28): the owner is checked before the body is read (409 `other_pc`), a declared
+ruling S28; `target=orca` stores Orca Slicer's folders instead, kinds `orca_live` / `orca_system`, Ruling L, and
+`partial` works the same, Ruling O): the owner is checked before the body is read (409 `other_pc`), a declared
 Content-Length over the cap is refused at once (413), then `request.stream()` is read by `builds.store_upload`
 in the threadpool through a small blocking reader, which stops at the cap (never `await request.body()`).
 
@@ -197,7 +198,18 @@ def _preset_counts() -> dict[str, int]:
 def _line_view(line: lines_mod.Line, counts: dict[str, int]) -> dict:
     return {"line_id": line.line_id, "vendor": line.vendor, "product": line.product, "material": line.material,
             "bambu_parent": line.bambu_parent, "parent_source": line.parent_source,
+            "orca_parent": line.orca_parent, "orca_parent_source": line.orca_parent_source,
             "spoolman_ids": list(line.filaments), "presets": counts.get(line.line_id, 0)}
+
+
+def _target(request: Request) -> str:
+    """`?target=` of an upload: absent or `bambu` (Bambu Studio), `orca` (Orca Slicer); else 400."""
+    t = request.query_params.get("target")
+    if t is None or t == "bambu":
+        return "bambu"
+    if t == "orca":
+        return "orca"
+    raise _bad("target must be bambu or orca")
 
 
 def _parents(material: str) -> dict:
@@ -217,7 +229,7 @@ def _parents(material: str) -> dict:
 def routes(authed, sm) -> list[Route]:
     async def upload(request: Request, kind: str, user_id: str | None, partial: str | None = None):
         device = request.state.device
-        cap = builds.MAX_LIVE if kind == "live" else builds.MAX_SYSTEM
+        cap = builds.KINDS[kind][1]
         declared = request.headers.get("content-length")
 
         def precheck() -> None:                 # before a byte of the body is read
@@ -229,8 +241,8 @@ def routes(authed, sm) -> list[Route]:
 
         def run() -> str:
             h = builds.store_upload(kind, reader, device_id=device, user_id=user_id, partial=partial)
-            if kind == "system":
-                builds.request_rebuild("system upload")
+            if kind in ("system", "orca_system"):
+                builds.request_rebuild(f"{kind.replace('_', ' ')} upload")
             return h
         return await run_in_threadpool(_audit, f"sync upload {kind}", device, run)
 
@@ -240,32 +252,36 @@ def routes(authed, sm) -> list[Route]:
 
     @authed
     async def sync_live(request: Request):
+        orca = _target(request) == "orca"
         user_id = request.query_params.get("user_id")
         if user_id is not None and not USER_ID.fullmatch(user_id):
             raise _bad("user_id may only have letters, digits, - and _ (at most 64)")
         partial = request.query_params.get("partial")
         if partial is not None and not builds.STAMP_RE.fullmatch(partial):
             raise _bad("partial must be a build stamp")
-        h = await upload(request, "live", user_id, partial)
+        h = await upload(request, "orca_live" if orca else "live", user_id, partial)
         return JSONResponse({"live_hash": h})
 
     @authed
     async def sync_system(request: Request):
-        h = await upload(request, "system", None)
-        presets = await run_in_threadpool(lambda: builds.meta().get("system_presets"))
+        kind = "orca_system" if _target(request) == "orca" else "system"
+        h = await upload(request, kind, None)
+        key = builds.KINDS[kind][3] + "system_presets"
+        presets = await run_in_threadpool(lambda: builds.meta().get(key))
         return JSONResponse({"system_hash": h, "presets": int(presets or 0)})
 
     @authed
     async def sync_rebuild(request: Request):
         device = request.state.device
         body = await _json(request)
-        lh = body.get("live_hash")
-        if lh is not None and not (isinstance(lh, str) and HASH_RE.fullmatch(lh)):
-            raise _bad("live_hash must be a sha256 hex digest")
+        lh, olh = body.get("live_hash"), body.get("orca_live_hash")       # orca_live_hash: Ruling O
+        for key, v in (("live_hash", lh), ("orca_live_hash", olh)):
+            if v is not None and not (isinstance(v, str) and HASH_RE.fullmatch(v)):
+                raise _bad(f"{key} must be a sha256 hex digest")
 
         def run() -> None:
             builds.check_owner(device)
-            builds.request_rebuild("pc sync", lh)
+            builds.request_rebuild("pc sync", lh, orca_live_hash=olh)
         await run_in_threadpool(_audit, "sync rebuild", device, run)
         return JSONResponse({"requested": True}, status_code=202)
 
@@ -303,15 +319,26 @@ def routes(authed, sm) -> list[Route]:
         device = request.state.device
         lid = request.path_params["line_id"]
         body = await _json(request)
-        parent = _text(body, "bambu_parent", at_ok=False)
+        # `bambu_parent` and/or `orca_parent` (Task 3); at least one
+        parent = _text(body, "bambu_parent", at_ok=False) if "bambu_parent" in body or "orca_parent" not in body \
+            else None
+        oparent = _text(body, "orca_parent", at_ok=False) if "orca_parent" in body else None
 
         def run() -> dict:
-            store = builds.system_store()
+            store = builds.system_store() if parent is not None else None
+            ostore = builds.orca_store() if oparent is not None else None
             with lines_mod.transaction() as ls:
                 if lid not in ls:
                     raise ProfileError(404, "not_found", f"no line {lid!r}")
-                lines_mod.check_parent(parent, store)
-                line = lines_mod.set_parent(ls, lid, parent)
+                if parent is not None:
+                    lines_mod.check_parent(parent, store)
+                # the Orca store's own spelling: Orca resolves `inherits "<name> @System"` by exact name (fix I1)
+                canon = lines_mod.check_orca_parent(oparent, ostore) if oparent is not None else None
+                if parent is not None:
+                    lines_mod.set_parent(ls, lid, parent)
+                if canon is not None:
+                    lines_mod.set_parent(ls, lid, canon, target="orca")
+                line = ls[lid]
             builds.request_rebuild("line parent")
             return _line_view(line, _preset_counts())
         line = await run_in_threadpool(_audit, "line parent", device, run, line=lid)
@@ -332,7 +359,8 @@ def routes(authed, sm) -> list[Route]:
 
         def run() -> dict:
             return lines_mod.propose(vendor, line, material, library=library_mod.load(),
-                                     store=builds.system_store(), lines=lines_mod.load())
+                                     store=builds.system_store(), lines=lines_mod.load(),
+                                     orca_store=builds.orca_store())
         return JSONResponse(await run_in_threadpool(run))
 
     @authed
