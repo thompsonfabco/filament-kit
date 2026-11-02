@@ -18,6 +18,7 @@ from __future__ import annotations
 import datetime
 import json
 import logging
+import math
 from dataclasses import dataclass, field
 
 from . import config, library, locks, placement, tags
@@ -85,7 +86,8 @@ def _is_int(v) -> bool:
 
 
 def _is_num(v) -> bool:
-    return isinstance(v, (int, float)) and not isinstance(v, bool)
+    """A real, finite number (not a bool; NaN and infinity would slip past every < and > check)."""
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
 
 
 _OPT_NUM = ("nozzle", "bed", "price_per_kg", "gross")
@@ -393,8 +395,10 @@ def open_spool(sm: Spoolman, spool_id: int, uid: str, rules: dict, *, gross: flo
     uid = tags.normalize_uid(uid)
     if gross is not None and remaining is not None:
         raise ValueError("give only one of gross or remaining")
-    if remaining is not None and remaining < 0:
-        raise ValueError("remaining cannot be negative")
+    if remaining is not None and (not _is_num(remaining) or remaining < 0):
+        raise ValueError("remaining must be a number of grams, not negative")
+    if gross is not None and not _is_num(gross):
+        raise ValueError("gross must be a number of grams")
     if humidity is not None and (not _is_num(humidity) or not 0 <= humidity <= 100):
         raise ValueError("humidity must be a percentage (0-100)")
     with _LOCK:

@@ -144,10 +144,12 @@ def validate(cfg: dict) -> None:
             raise ModuleError(
                 "server without the spoolman module needs spoolman_url "
                 f"pointing at a remote Spoolman (got {url!r})")
-    if "remote" in on:
+    if "web" in on or "remote" in on:  # Ruling AA: the web unit is the OAuth issuer, remote or not
         pu = urlparse(str((cfg.get("web") or {}).get("public_url") or ""))
         if pu.scheme != "https" or not pu.hostname:
-            raise ModuleError("remote needs web.public_url set to the https address people will use")
+            who = "web" if "web" in on else "remote"
+            raise ModuleError(f"{who} needs web.public_url set to the https address people will use "
+                              "(e.g. https://mcp.example.com/filament)")
     if "orders" in on and not (cfg.get("orders") or {}).get("file"):
         raise ModuleError("orders needs orders.file (the order history file)")
     allow = (cfg.get("station") or {}).get("allow") or []

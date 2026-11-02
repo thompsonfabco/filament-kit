@@ -196,6 +196,7 @@ def test_null_station_allow_plans():
 def test_web_on_installs_and_enables_unit():
     cfg = set_mode(_cfg(), "server")
     cfg["modules"]["web"] = True
+    cfg["web"] = {**cfg.get("web", {}), "public_url": "https://kit.example.com/filament"}  # Ruling AA
     acts = apply.plan(cfg)
     assert "filament-kit-web.service" in _of(acts, "install_unit")
     en = _of(acts, "enable")

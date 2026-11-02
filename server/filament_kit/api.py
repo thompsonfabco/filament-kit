@@ -469,6 +469,14 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
     station: list = [None, None]  # [url, client]: the client (and its back-off) lives as long as the url does
     cap = ReadCap(config.paths().state / "reads.json", cfg["reads_per_day"])
 
+    def station_client() -> StationClient | None:  # sync: one client (and back-off) per station url
+        url = (config.load().get("station") or {}).get("url")
+        if not url:
+            return None
+        if station[0] != url:
+            station[:] = [url, StationClient(url)]
+        return station[1]
+
     def rules() -> dict:  # sync: call it from inside the threadpool
         return config.load()["placement"]
 
@@ -506,7 +514,8 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         def run() -> dict:
             cap.take()
             try:
-                return intake.read_labels(sm, images, hint[:MAX_HINT], uid, claude)
+                ctx = intake.read_context(config.load(), sm, station_client(), app_tag=uid is not None)
+                return intake.read_labels(sm, images, hint[:MAX_HINT], uid, claude, **ctx)
             except SpoolmanError:  # Spoolman down: the catalog fetch failed before Claude was called
                 cap.refund()
                 raise
@@ -521,7 +530,8 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
                 return intake.retry(read_id, sm, claude)
             cap.take()
             try:
-                return intake.retry(read_id, sm, claude)
+                return intake.retry(read_id, sm, claude, orders=intake.read_context(
+                    config.load(), sm, None, app_tag=True)["orders"])
             except SpoolmanError:  # Spoolman down: the catalog fetch failed before Claude was called
                 cap.refund()
                 raise
@@ -578,13 +588,11 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
 
     @_authed
     async def station_state(request: Request):
-        url = (config.load().get("station") or {}).get("url")
-        if not url:
+        client = await run_in_threadpool(station_client)
+        if client is None:
             return _module_off("station")
-        if station[0] != url:
-            station[:] = [url, StationClient(url)]
         try:
-            return JSONResponse(await run_in_threadpool(station[1].state))
+            return JSONResponse(await run_in_threadpool(client.state))
         except StationUnreachable as e:
             log.warning("station: %s", e)
             return _err(503, "station_unreachable", "the intake station is not reachable")

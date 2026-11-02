@@ -142,7 +142,20 @@ def test_remote_needs_https_public_url():
     cfg["web"]["public_url"] = "https://kit.example.com"
     validate(cfg)
     cfg["modules"]["remote"] = False
+    cfg["modules"]["web"] = False
     cfg["web"]["public_url"] = None
+    validate(cfg)                                    # neither web nor remote: no URL needed
+
+
+def test_web_needs_https_public_url():
+    # Ruling AA: the web unit is the OAuth issuer, so it needs its public address even without remote
+    cfg = config._merge(config.DEFAULTS, {})
+    cfg["modules"] = {"spoolman": True, "server": True, "web": True}
+    for url in (None, "", "http://x.example/", "not a url", "https://"):
+        cfg["web"]["public_url"] = url
+        with pytest.raises(ModuleError, match="web needs web.public_url"):
+            validate(cfg)
+    cfg["web"]["public_url"] = "https://kit.example.com/filament"
     validate(cfg)
 
 
