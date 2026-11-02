@@ -107,6 +107,12 @@ def test_release_copies_spoolman_script():
     assert '"$stage/install/spoolman.sh"' in text  # made executable in the stage
 
 
+def test_release_ships_the_ops_export_script():
+    text = _read("tools/make_release.sh")
+    assert 'cp tools/export_ops.sh "$stage/install/"' in text
+    assert '"$stage/install/export_ops.sh"' in text  # made executable in the stage
+
+
 def test_install_hands_over_to_modules_apply():
     text = _read("install/install.sh")
     assert "exec /usr/local/bin/filament-kit modules apply" in text
@@ -133,7 +139,17 @@ def test_station_extra_in_pyproject():
 
 def test_wrapper_runs_modules_as_root():
     text = _read("install/filament-kit-cli.sh")
-    assert re.search(r"^\s+config \| cert \| modules \| remote\)\s*$", text, re.M)
+    assert re.search(r"^\s+config \| cert \| modules \| remote \| migrate-ops\)\s*$", text, re.M)
+
+
+def test_wrapper_runs_web_passphrase_as_root():
+    """`web passphrase` writes /etc/filament-kit/web_passphrase (root:filament-kit 640) and refuses unless root:
+    the wrapper must not drop to the service user for it (other `web` commands still do)."""
+    text = _read("install/filament-kit-cli.sh")
+    assert re.search(r'^if \[ "\$\{1:-\}" = web \] && \[ "\$\{2:-\}" = passphrase \]; then\s*$', text, re.M)
+    i = text.index('= passphrase ]')
+    assert 'exec "$BIN" "$@"' in text[i:i + 120]
+    assert i < text.index("runuser")
 
 
 def test_uninstall_uses_modules_units_and_cleans_station():
