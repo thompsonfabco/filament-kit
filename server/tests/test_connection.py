@@ -9,85 +9,10 @@ import pytest
 from filament_kit.bridge import connection, registry
 from filament_kit.bridge.connection import Manager, NoReply, PrinterOffline, UnknownPrinter
 from filament_kit.bridge.registry import Printer
-from fakes.fake_certs import FakeTlsSock, Leaf
+from fakes.fake_paho import LEAF, FakeClient, FakePrinter, Msg  # noqa: F401  (re-exported for other tests)
 
 DATA = Path(__file__).parent / "data"
 CODE = "13572468"
-LEAF = Leaf()                       # the default printer leaf (no CN): pins for any serial
-
-
-class Msg:
-    def __init__(self, topic, payload):
-        self.topic, self.payload = topic, json.dumps(payload).encode()
-
-
-class FakeClient:
-    """Stands in for paho.mqtt.client.Client; the test drives its callbacks."""
-
-    def __init__(self, client_id):
-        self.client_id = client_id
-        self.published, self.subscribed, self.calls = [], [], []
-        self.host = self.port = self.keepalive = None
-        self.username = self.password = None
-        self.reconnect_delay = None
-        self.on_connect = self.on_disconnect = self.on_message = self.on_connect_fail = None
-        self.on_socket_open = None
-        self.responder = None          # fn(topic, payload_dict) -> reply payload dict | None
-
-    def username_pw_set(self, username, password):
-        self.username, self.password = username, password
-
-    def tls_set_context(self, ctx):
-        self.tls = ctx
-
-    def reconnect_delay_set(self, min_delay, max_delay):
-        self.reconnect_delay = (min_delay, max_delay)
-
-    def connect_async(self, host, port, keepalive):
-        self.host, self.port, self.keepalive = host, port, keepalive
-        self.calls.append("connect_async")
-
-    def loop_start(self):
-        self.calls.append("loop_start")
-
-    def loop_stop(self):
-        self.calls.append("loop_stop")
-
-    def disconnect(self):
-        self.calls.append("disconnect")
-
-    def subscribe(self, topic, qos=0):
-        self.subscribed.append(topic)
-
-    def publish(self, topic, payload, qos=0):
-        body = json.loads(payload)
-        self.published.append((topic, body))
-        if self.responder:
-            reply = self.responder(topic, body)
-            if reply is not None:
-                threading.Timer(0.02, self.deliver, args=(reply,)).start()
-
-    # test helpers
-    def socket_open(self, der=None) -> bool:
-        """What paho does after the TLS handshake and before CONNECT; False = the attempt failed (OSError)."""
-        if self.on_socket_open is not None:
-            try:
-                self.on_socket_open(self, None, FakeTlsSock(LEAF.der if der is None else der))
-            except OSError:
-                if self.on_connect_fail:
-                    self.on_connect_fail(self, None)
-                return False
-        return True
-
-    def connected(self, rc=0, der=None):
-        if self.socket_open(der):
-            self.on_connect(self, None, {}, rc, None)
-
-    def dropped(self, rc=7):
-        self.on_disconnect(self, None, {}, rc, None)
-
-    def deliver(self, payload, serial=None):
-        self.on_message(self, None, Msg(f"device/{serial or 'x'}/report", payload))
 
 
 @pytest.fixture(autouse=True)
@@ -482,3 +407,82 @@ def test_state_reads_do_not_block_while_a_stale_connection_stops():
     finally:
         release.set()
         m.stop()
+
+
+# ---------------------------------------------------------------- publish / set_slot / wait_report (part 2)
+SETTING = {"tray_info_idx": "Pa735293", "tray_color": "1a1a1aff", "tray_type": "PETG",
+           "nozzle_temp_min": "235", "nozzle_temp_max": 250}
+
+
+def connected_printer(manager, clients, report=None):
+    add()
+    manager.sync()
+    c = clients[0]
+    printer = FakePrinter(c, report or {"gcode_state": "IDLE",
+                                        "ams": {"ams": [{"id": "0", "tray": [{"id": "0"}, {"id": "2"}]}]}})
+    c.connected(0)
+    assert manager.wait_report("S1", lambda r: "ams" in r, 2) is not None
+    return c, printer
+
+
+def test_set_slot_publishes_the_owners_ams_filament_setting_shape(manager, clients):
+    c, printer = connected_printer(manager, clients)
+    reply = manager.set_slot("S1", 0, 2, SETTING)
+    topic, body = [(t, b) for t, b in c.published if "print" in b][-1]
+    assert topic == "device/S1/request"
+    pr = body["print"]
+    assert pr == {"command": "ams_filament_setting", "ams_id": 0, "tray_id": 2, "tray_info_idx": "Pa735293",
+                  "tray_color": "1A1A1AFF", "tray_type": "PETG", "tray_sub_brands": "",
+                  "nozzle_temp_min": 235, "nozzle_temp_max": 250, "setting_id": "",
+                  "sequence_id": pr["sequence_id"]}
+    assert isinstance(pr["sequence_id"], str) and pr["sequence_id"].isdigit()
+    assert reply["result"] == "success" and reply["sequence_id"] == pr["sequence_id"]
+
+
+def test_wait_report_returns_merged_report_once_predicate_holds(manager, clients):
+    c, printer = connected_printer(manager, clients)
+
+    def shows(r):
+        trays = r["ams"]["ams"][0]["tray"]
+        return any(t.get("tray_info_idx") == "Pa735293" for t in trays)
+    assert manager.wait_report("S1", shows, 0.05) is None                 # not yet: times out
+    manager.set_slot("S1", 0, 2, SETTING)
+    r = manager.wait_report("S1", shows, 2)
+    assert r is not None and r["ams"]["ams"][0]["tray"][1]["tray_color"] == "1A1A1AFF"
+    assert r["gcode_state"] == "IDLE"                                     # merged, not just the delta
+
+
+def test_wait_report_returns_none_when_the_connection_drops(manager, clients):
+    c, printer = connected_printer(manager, clients)
+    threading.Timer(0.1, c.dropped).start()
+    t0 = time.monotonic()
+    assert manager.wait_report("S1", lambda r: False, 5) is None
+    assert time.monotonic() - t0 < 2
+    assert manager.wait_report("S9", lambda r: True, 0.1) is None         # unknown printer: nothing to wait on
+
+
+def test_publish_without_reply_returns_none_and_fills_sequence_id(manager, clients, monkeypatch):
+    monkeypatch.setattr(connection, "COMMAND_TIMEOUT", 0.1)
+    c, printer = connected_printer(manager, clients)
+    assert manager.publish("S1", {"print": {"command": "project_file", "param": "x"}}) is None
+    body = c.published[-1][1]["print"]
+    assert body["command"] == "project_file" and body["sequence_id"].isdigit()
+
+
+def test_publish_refused_for_developer_mode_flags_state(manager, clients):
+    c, printer = connected_printer(manager, clients)
+    printer.refuse[(0, 2)] = {"result": "fail", "reason": "mqtt message verify failed"}
+    reply = manager.set_slot("S1", 0, 2, SETTING)
+    assert reply["result"] == "fail"
+    assert manager.state("S1") == "needs_developer_mode"
+    assert manager.set_slot("S1", 0, 0, SETTING)["result"] == "success"
+    assert manager.state("S1") == "connected"
+
+
+def test_publish_offline_or_unknown_raises(manager, clients):
+    add()
+    manager.sync()
+    with pytest.raises(PrinterOffline):
+        manager.set_slot("S1", 0, 0, SETTING)
+    with pytest.raises(UnknownPrinter):
+        manager.publish("S9", {"print": {"command": "x"}})

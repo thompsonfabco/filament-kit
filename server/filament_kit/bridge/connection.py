@@ -7,6 +7,9 @@ paho. A changed leaf: state `cert_changed`, the code is withdrawn, paho stops re
 again with its code (which clears the pin).
 Reports on `device/<serial>/report` are deep-merged into one state; commands go to `device/<serial>/request` and
 the printer's reply is matched by `sequence_id`. Ported from the owner's single-printer remote (`remote.py`).
+`publish` sends any command and returns the reply; `set_slot` builds on it with the owner's proven
+`ams_filament_setting` payload (`h2d-filament-scanner/orchestrator/server.py`); `wait_report` waits until the merged
+report satisfies a condition (how a write is confirmed: a later report shows it).
 
 The Access Code is never logged and never part of a repr."""
 from __future__ import annotations
@@ -99,7 +102,8 @@ class PrinterConnection:
         self._printer = replace(printer)     # own copy: tlspin records the pin on it
         self._factory = client_factory
         self._port = port
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
+        self._changed = threading.Condition(self._lock)   # notified on every report and every state change
         self._report: dict = {}
         self.updated: float | None = None
         self._state = 'offline'
@@ -156,6 +160,8 @@ class PrinterConnection:
             log.info("printer %s (%s): %s", self.serial, self.ip, state)
         self._state = state
         self._settled.set()
+        with self._changed:
+            self._changed.notify_all()
 
     def wait_settled(self, timeout: float) -> str:
         self._settled.wait(timeout)
@@ -214,18 +220,37 @@ class PrinterConnection:
                     w.event.set()
         pr = payload.get('print')
         if isinstance(pr, dict):
-            with self._lock:
+            with self._changed:
                 self._report = status.merge(self._report, pr)
                 self.updated = time.time()
+                self._changed.notify_all()
 
     def _wake_pending(self) -> None:
         for w in list(self._pending.values()):
             w.event.set()
+        with self._changed:
+            self._changed.notify_all()
 
     # ---------------------------------------------------------------- reports
     def report(self) -> dict:
         with self._lock:
             return self._report
+
+    def wait_report(self, predicate: Callable[[dict], bool], timeout: float) -> dict | None:
+        """The merged report as soon as `predicate(report)` is true: checked on the current report, then after each
+        report delta. None after `timeout` s, or at once when the connection is not (or no longer) connected.
+        `predicate` runs under the connection's lock: keep it a quick pure function of the report."""
+        deadline = time.monotonic() + timeout
+        with self._changed:
+            while True:
+                if self._state != 'connected' or self._stopping:
+                    return None
+                if predicate(self._report):
+                    return self._report
+                left = deadline - time.monotonic()
+                if left <= 0:
+                    return None
+                self._changed.wait(left)
 
     def request_pushall(self) -> None:
         c = self.client
@@ -245,6 +270,49 @@ class PrinterConnection:
             nodes.append('chamber_light2')     # printers with a second chamber light report it
         return [('system', {'command': 'ledctrl', 'led_node': n, 'led_mode': mode, 'led_on_time': 500,
                             'led_off_time': 500, 'loop_times': 0, 'interval_time': 0}) for n in nodes]
+
+    def publish(self, payload: dict, timeout: float) -> dict | None:
+        """Send one command (`{"print": {...}}`, `{"system": {...}}` ...) and wait for the printer's reply.
+
+        A `sequence_id` is added unless the body has one. Returns the reply body (the object under `print`/`system`
+        carrying `result`, matched by `sequence_id`) or None if no reply came within `timeout` s: some commands get
+        no reply, so None is not a failure by itself; confirm the effect with `wait_report`. A reply whose `result`
+        is not "success" is returned as is; one refused for Developer Mode also turns the state into
+        `needs_developer_mode` (a later success clears it). Raises PrinterOffline if not connected or if the
+        connection drops while waiting. A full report is requested shortly afterwards."""
+        if not isinstance(payload, dict) or len(payload) != 1:
+            raise ValueError("payload must have exactly one top-level key")
+        (top, body), = payload.items()
+        if not isinstance(body, dict):
+            raise ValueError("payload body must be an object")
+        if self._state != 'connected' or self.client is None:
+            raise PrinterOffline(self.serial)
+        body = dict(body)
+        sid = str(body.get('sequence_id') or next(self._seq))
+        body['sequence_id'] = sid
+        w = _Waiter()
+        self._pending[sid] = w
+        try:
+            self.client.publish(f"device/{self.serial}/request", json.dumps({top: body}), qos=1)
+            w.event.wait(timeout)
+        finally:
+            self._pending.pop(sid, None)
+        t = threading.Timer(PUSHALL_AFTER_COMMAND, self.request_pushall)
+        t.daemon = True
+        t.start()
+        reply = w.reply
+        if reply is None:
+            if self._state != 'connected':
+                raise PrinterOffline(self.serial)
+            return None
+        if _developer_mode_refusal(reply):
+            if not self._developer_mode_needed:
+                log.warning("printer %s: %s refused (%s); Developer Mode needed",
+                            self.serial, body.get('command'), reply.get('reason'))
+            self._developer_mode_needed = True
+        elif str(reply.get('result', '')).lower() == 'success':
+            self._developer_mode_needed = False
+        return reply
 
     def command(self, action: str, timeout: float) -> dict:
         if action not in ACTIONS:
@@ -288,6 +356,30 @@ class PrinterConnection:
         else:
             reply = next(r for r in replies if str(r.get('result', '')).lower() != 'success')
         return {'ok': ok, 'reply': reply}
+
+
+def slot_setting(ams_id: int, tray_id: int, setting: dict) -> dict:
+    """The `ams_filament_setting` command exactly as the owner's orchestrator sends it (verified on the H2D);
+    `publish` adds the `sequence_id`.
+
+    `setting`: `tray_info_idx`, `tray_color` (RRGGBBAA, sent upper-case), `tray_type`, `nozzle_temp_min`,
+    `nozzle_temp_max` (ints; the report's strings are accepted, missing = 0), optional `tray_sub_brands`,
+    `setting_id` (default "")."""
+    def temp(k):
+        try:
+            return int(setting.get(k) or 0)
+        except (TypeError, ValueError):
+            return 0
+    return {"print": {
+        "command": "ams_filament_setting",
+        "ams_id": int(ams_id), "tray_id": int(tray_id),
+        "tray_info_idx": str(setting.get('tray_info_idx') or ''),
+        "tray_color": str(setting.get('tray_color') or '').upper(),
+        "tray_type": str(setting.get('tray_type') or ''),
+        "tray_sub_brands": str(setting.get('tray_sub_brands') or ''),
+        "nozzle_temp_min": temp('nozzle_temp_min'), "nozzle_temp_max": temp('nozzle_temp_max'),
+        "setting_id": str(setting.get('setting_id') or ''),
+    }}
 
 
 class Manager:
@@ -400,11 +492,34 @@ class Manager:
         return {'gcode_state': s['gcode_state'], 'percent': s['percent'], 'remaining_min': s['remaining_min'],
                 'job': s['job'] or None}
 
-    def command(self, serial: str, action: str) -> dict:
+    def _live(self, serial: str) -> PrinterConnection:
         conn = self._conn(serial)
         if conn is None:
             p = self._printers.get(serial)
             if p is not None and p.configured:
                 raise PrinterOffline(serial)
             raise UnknownPrinter(serial)
-        return conn.command(action, COMMAND_TIMEOUT)
+        return conn
+
+    def command(self, serial: str, action: str) -> dict:
+        return self._live(serial).command(action, COMMAND_TIMEOUT)
+
+    def publish(self, serial: str, payload: dict, timeout: float | None = None) -> dict | None:
+        """Send any command to a printer: the reply body, or None if it did not reply within `timeout` s (default
+        COMMAND_TIMEOUT); see `PrinterConnection.publish`. Raises UnknownPrinter / PrinterOffline. A command that
+        changes the printer is the caller's to gate on the printer being idle."""
+        return self._live(serial).publish(payload, COMMAND_TIMEOUT if timeout is None else timeout)
+
+    def set_slot(self, serial: str, ams_id: int, tray_id: int, setting: dict,
+                 timeout: float | None = None) -> dict | None:
+        """Write one AMS slot's filament setting (`slot_setting`); returns the reply as `publish` does. A reply with
+        `result` "success" means accepted, not applied: confirm it with `wait_report` (a later report shows it)."""
+        return self.publish(serial, slot_setting(ams_id, tray_id, setting), timeout)
+
+    def wait_report(self, serial: str, predicate: Callable[[dict], bool], timeout: float) -> dict | None:
+        """Wait up to `timeout` s for the printer's merged report to satisfy `predicate` and return that report;
+        None on timeout, or at once when the printer is unknown, not connected or drops."""
+        conn = self._conn(serial)
+        if conn is None:
+            return None
+        return conn.wait_report(predicate, timeout)
