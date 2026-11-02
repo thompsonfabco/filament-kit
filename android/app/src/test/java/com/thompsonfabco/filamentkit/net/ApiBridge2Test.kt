@@ -152,7 +152,7 @@ class ApiBridge2Test {
         json("""{"entries":[{"id":"e2","at":"2026-11-01T14:10:00-05:00","job":"Benchy","grams":12.5,"spool_id":7,
             "slot":"A1","observe":false,"undone":false},
             {"id":17,"at":"2026-10-31T09:00:00-05:00","job":"Cube","grams":null,"spool_id":null,"slot":null,
-            "observe":true,"undone":false,"error":"no_spool"}]}""")
+            "observe":true,"undone":false,"error":"ambiguous_spool"}]}""")
         val list = api.usage("0948AB", days = 7)
         assertEquals(2, list.size)
         assertEquals("e2", list[0].id)
@@ -164,7 +164,7 @@ class ApiBridge2Test {
         assertNull(list[1].grams)
         assertNull(list[1].spoolId)
         assertTrue(list[1].observe)
-        assertEquals("no_spool", list[1].error)
+        assertEquals("ambiguous_spool", list[1].error)
         val req = take()
         assertEquals("GET", req.method)
         assertEquals("/api/printers/0948AB/usage", req.url.encodedPath)

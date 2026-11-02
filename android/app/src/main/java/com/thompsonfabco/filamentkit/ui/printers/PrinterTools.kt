@@ -43,14 +43,21 @@ object UsageHelp {
         e.undone -> "undone"
         e.error != null -> reason(e.error)
         e.observe -> "logged only"
+        e.spoolId == null -> "no spool in that slot, nothing taken off"
         else -> null
     }
 
-    private fun reason(code: String): String = when (code) {
-        "no_spool" -> "not taken off a spool: no spool was loaded in that slot"
-        "no_slot" -> "not taken off a spool: the slot was not known"
-        "spoolman_failed", "spoolman" -> "not taken off a spool: the inventory could not be updated"
-        else -> "not taken off a spool (${code.replace('_', ' ')})"
+    /** The server's codes (route-contract addendum); an unknown one still gets a readable line. */
+    private fun reason(code: String): String = "not taken off a spool: " + when (code) {
+        "file_not_found" -> "print file not found on the printer"
+        "no_slice_info" -> "the print file has no filament amounts"
+        "plate_not_found" -> "the printed plate was not in the print file"
+        "printer_unreachable" -> "the printer could not be reached"
+        "cert_changed" -> "the printer's certificate changed"
+        "spoolman_unreachable" -> "the inventory could not be reached"
+        "spoolman_failed" -> "the inventory refused the change"
+        "ambiguous_spool" -> "two spools are set to that slot"
+        else -> code.replace('_', ' ')
     }
 }
 
@@ -124,20 +131,41 @@ class PrinterToolsViewModel(
         }
     }
 
-    /** Fetches the map state; keeps polling while it is running (and the screen is visible). */
+    /**
+     * Fetches the map state; keeps polling while it is running and the screen is visible. A failed fetch (network
+     * blip) is retried with a doubling wait capped at [MAX_BACKOFF_MS], so a short outage mid-job does not leave the
+     * screen stuck on "running"; an unpaired phone or a changed server certificate stops it. [start] re-arms it.
+     */
     private fun follow(force: Boolean = false) {
         if (!visible && !force) return
         if (poll?.isActive == true) return
         poll = viewModelScope.launch {
+            var failures = 0
+            var pollError: String? = null
             while (true) {
                 var keep = false
-                val ok = guard(onError = { msg -> _state.update { it.copy(mapMessage = msg) } }) {
+                val ok = guard(onError = { msg ->
+                    pollError = msg
+                    _state.update { it.copy(mapMessage = msg) }
+                }) {
                     val m = backend.mapStatus(id)
-                    _state.update { it.copy(map = m) }
+                    _state.update { s ->
+                        // clear only a message this loop's own failure put there
+                        s.copy(map = m, mapMessage = if (pollError != null && s.mapMessage == pollError) null else s.mapMessage)
+                    }
+                    pollError = null
                     keep = m.state == "running"
                 }
-                if (!ok || !keep || !visible) break
-                delay(pollMs)
+                val s = _state.value
+                if (s.unauthorized || s.mismatch != null || !visible) break
+                if (ok) {
+                    if (!keep) break
+                    failures = 0
+                    delay(pollMs)
+                } else {
+                    failures++
+                    delay(minOf(pollMs shl minOf(failures, 10), MAX_BACKOFF_MS))
+                }
             }
         }
     }
@@ -195,5 +223,6 @@ class PrinterToolsViewModel(
 
     private companion object {
         const val DAYS = 7
+        const val MAX_BACKOFF_MS = 30_000L
     }
 }

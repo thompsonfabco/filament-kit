@@ -148,8 +148,9 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
     val tapsOn = tapVm != null && route != null && route != Routes.PAIR && route != Routes.ADD
     LaunchedEffect(tapVm, loadVm, tapsOn) {
         if (tapsOn) TagEvents.taps.collect {
-            loadVm?.close() // a new tap replaces the open card, and any load flow on it
-            tapVm.onTag(it)
+            // a new tap replaces the open card and any load flow on it, except while a load is being written:
+            // then the tap is ignored so the user sees that write's result
+            if (loadVm?.close() != false) tapVm.onTag(it)
         }
     }
 
@@ -286,9 +287,9 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
     spoolVm?.let { vm ->
         val spoolState by vm.state.collectAsStateWithLifecycle()
         if (spoolState != SpoolUiState.Idle && route != Routes.ADD && route != Routes.PAIR) {
+            // Not while a load is being written: the dialog stays until the user has seen the result.
             val close = {
-                loadVm?.close()
-                vm.dismiss()
+                if (loadVm?.close() != false) vm.dismiss()
             }
             Dialog(onDismissRequest = close) {
                 Surface(shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth()) {

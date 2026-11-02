@@ -170,6 +170,7 @@ class LoadViewModel(private val backend: LoadBackend) : ViewModel() {
 
     /** One step back: preview → slots → printers. */
     fun back() {
+        if (writing) return
         job?.cancel()
         when (val s = _state.value) {
             is LoadUiState.Preview -> _state.value = LoadUiState.PickSlot(s.spool, s.printer, slots ?: emptyList())
@@ -178,9 +179,18 @@ class LoadViewModel(private val backend: LoadBackend) : ViewModel() {
         }
     }
 
-    fun close() {
+    /**
+     * True while the real (non-dry-run) load is in flight. The POST may already have reached the server, so the
+     * flow is not cancelled then: [close] and [back] are ignored and the user gets to see the result.
+     */
+    val writing: Boolean get() = (_state.value as? LoadUiState.Preview)?.busy == true
+
+    /** Closes the flow; returns false (and does nothing) while [writing]. */
+    fun close(): Boolean {
+        if (writing) return false
         job?.cancel()
         _state.value = LoadUiState.Closed
+        return true
     }
 
     private fun spoolOf(s: LoadUiState): SpoolSummary? = when (s) {
