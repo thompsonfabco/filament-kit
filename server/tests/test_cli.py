@@ -288,3 +288,102 @@ def test_status_api_check_skipped_without_systemd(capsys):
     cli.main(["status"])
     out = capsys.readouterr().out
     assert "api/info" not in out and f"display name: {config.load()['server_name']}" in out
+
+
+# ---------- printers menu ----------
+
+def _printers_session(monkeypatch, lines, code="ACCESS1234"):
+    monkeypatch.setattr(sys, "stdin", io.StringIO(lines))
+    monkeypatch.setattr("getpass.getpass", lambda prompt="": code)
+    return cli.main(["config"])
+
+
+def test_printers_add_rename_remove(capsys, monkeypatch):
+    from filament_kit.bridge import registry
+    assert _printers_session(monkeypatch, "5\n2\nOffice\n10.0.0.5\nSER1\n\n0\n0\n") == 0
+    p = registry.load()["SER1"]
+    assert (p.name, p.ip, p.access_code, p.configured) == ("Office", "10.0.0.5", "ACCESS1234", True)
+    out = capsys.readouterr().out
+    assert "ACCESS1234" not in out
+
+    assert _printers_session(monkeypatch, "5\n3\n1\nShed\n0\n0\n") == 0
+    assert registry.load()["SER1"].name == "Shed"
+    assert registry.load()["SER1"].access_code == "ACCESS1234"
+
+    assert _printers_session(monkeypatch, "5\n4\n1\n0\n0\n") == 0
+    assert registry.load() == {}
+    assert "ACCESS1234" not in capsys.readouterr().out
+
+
+def test_printers_list_shows_detected_without_code(capsys, monkeypatch):
+    from filament_kit.bridge import registry
+    registry.detected("DET1", "10.0.0.9", "C11", "Found one")
+    registry.upsert(registry.Printer("CFG1", "Mine", "O1D", "10.0.0.2", "SECRETCODE", True))
+    assert _printers_session(monkeypatch, "5\n1\n0\n0\n") == 0
+    out = capsys.readouterr().out
+    assert "Found one" in out and "Mine" in out and "SECRETCODE" not in out
+    assert "not set up" in out
+
+
+def test_printers_add_rejects_blank_fields(capsys, monkeypatch):
+    from filament_kit.bridge import registry
+    assert _printers_session(monkeypatch, "5\n2\n\n10.0.0.5\n\n0\n0\n") == 0
+    assert registry.load() == {}
+
+
+def test_config_menu_lists_printers_entry(capsys, monkeypatch):
+    monkeypatch.setattr(sys, "stdin", io.StringIO("0\n"))
+    cli.main(["config"])
+    assert "5) Printers" in capsys.readouterr().out
+
+
+def test_printers_bad_number_says_no_such_printer(capsys, monkeypatch):
+    from filament_kit.bridge import registry
+    registry.upsert(registry.Printer("S1", "A", configured=True))
+    assert _printers_session(monkeypatch, "5\n4\n0\n4\n-1\n4\n9\n4\nx\n0\n0\n") == 0
+    assert capsys.readouterr().out.count("No such printer.") == 4
+    assert "S1" in registry.load()
+
+
+def test_printers_corrupt_file_reports_error_and_keeps_it(capsys, monkeypatch, env):
+    f = env / "state" / "printers.json"
+    f.write_text("garbage")
+    assert _printers_session(monkeypatch, "5\n2\nA\n1.2.3.4\nS1\n0\n0\n") == 0
+    assert "unreadable" in capsys.readouterr().out
+    assert f.read_text() == "garbage"
+
+
+# ---------- final review ----------
+
+def test_printers_add_rejects_bad_serial(capsys, monkeypatch):
+    from filament_kit.bridge import registry
+    assert _printers_session(monkeypatch, "5\n2\nOffice\n10.0.0.5\nbad serial!\n0\n0\n") == 0
+    assert registry.load() == {}
+    assert "serial" in capsys.readouterr().out.lower()
+
+
+@pytest.mark.parametrize("code", ["1234-5678", "x" * 33, "côde12"])
+def test_printers_add_rejects_bad_access_code(capsys, monkeypatch, code):
+    from filament_kit.bridge import registry
+    assert _printers_session(monkeypatch, "5\n2\nOffice\n10.0.0.5\nSER1\n\n0\n0\n", code=code) == 0
+    assert registry.load() == {}
+    out = capsys.readouterr().out
+    assert "Access Code" in out and code not in out
+
+
+def test_printers_add_records_the_model_for_the_camera(capsys, monkeypatch):
+    # A printer added by hand never announces itself, so its model (which picks the camera kind) is asked for.
+    from filament_kit.bridge import models, registry
+    assert _printers_session(monkeypatch, "5\n2\nWorkshop\n10.0.0.6\nSER2\nH2D\n0\n0\n") == 0
+    p = registry.load()["SER2"]
+    assert p.model == "H2D" and models.camera_kind(p.model) == "hls"
+
+
+def test_pair_prints_grouped_certificate_fingerprint(capsys):
+    _cert()
+    fp = pairing.fingerprint((config.paths().etc / "cert.pem").read_bytes())
+    assert cli.main(["pair"]) == 0
+    out = capsys.readouterr().out
+    grouped = " ".join(fp[i:i + 4] for i in range(0, len(fp), 4))
+    assert "Certificate fingerprint (check it matches the phone):" in out
+    assert grouped in out and len(grouped.split(" ")) == 16

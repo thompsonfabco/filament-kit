@@ -13,6 +13,7 @@ dependencies = [
     "python-multipart",
     "anthropic>=2.3.0",  # fallbacks= on beta.messages.create
     "cryptography>=44",
+    "paho-mqtt>=2.0",
 ]
 
 [project.optional-dependencies]

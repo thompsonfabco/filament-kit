@@ -13,6 +13,9 @@ Restart=on-failure
 RestartSec=5
 ProtectSystem=strict
 ReadWritePaths=/var/lib/filament-kit
+# camera HLS segments (tmpfs, /run/filament-kit/cam/<serial>); $RUNTIME_DIRECTORY points here
+RuntimeDirectory=filament-kit
+RuntimeDirectoryMode=0750
 ProtectHome=yes
 NoNewPrivileges=yes
 PrivateTmp=yes

@@ -47,7 +47,7 @@ def _locked():
             return
         state = config.paths().state
         state.mkdir(parents=True, exist_ok=True)
-        with open(state / "pairing.lock", "a") as fh:
+        with open_lock(state / "pairing.lock") as fh:
             fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
             try:
                 yield
@@ -72,7 +72,29 @@ def fingerprint(cert_pem: bytes) -> str:
     return cert.fingerprint(hashes.SHA256()).hex()
 
 
-def _write_atomic(path: Path, data: bytes, mode: int) -> None:
+def give_to_state_owner(path) -> None:
+    """Run as root (`sudo filament-kit config`), a new state file would belong to root and the service user
+    could not read it: hand it to the owner of the state directory instead. A no-op for everyone else."""
+    if getattr(os, "geteuid", lambda: -1)() != 0:
+        return
+    st = os.stat(config.paths().state)
+    os.chown(path, st.st_uid, st.st_gid)
+
+
+def open_lock(path: Path):
+    """Open (creating if needed) a lock file in the state directory, owned like the state directory."""
+    fh = open(path, "a")
+    try:
+        give_to_state_owner(path)
+    except BaseException:
+        fh.close()
+        raise
+    return fh
+
+
+def _write_atomic(path: Path, data: bytes, mode: int, state_owned: bool = False) -> None:
+    """Write via a temp file and a rename. `state_owned`: a state file, handed to the state directory's owner
+    before the rename when running as root."""
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".", suffix=".tmp")
     try:
         with os.fdopen(fd, "wb") as fh:
@@ -80,6 +102,8 @@ def _write_atomic(path: Path, data: bytes, mode: int) -> None:
             fh.flush()
             os.fsync(fh.fileno())
         os.chmod(tmp, mode)
+        if state_owned:
+            give_to_state_owner(tmp)
         os.replace(tmp, path)
     except BaseException:
         if os.path.exists(tmp):
@@ -162,7 +186,7 @@ def _read(name: str) -> list:
 def _write(name: str, obj: list) -> None:
     state = config.paths().state
     state.mkdir(parents=True, exist_ok=True)
-    _write_atomic(state / name, json.dumps(obj, indent=2).encode("utf-8"), 0o600)
+    _write_atomic(state / name, json.dumps(obj, indent=2).encode("utf-8"), 0o600, state_owned=True)
 
 
 def _hash(token: str) -> str:
