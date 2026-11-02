@@ -107,8 +107,8 @@ fi
 rm -f "$FK_MARKER"
 [ -x "$VENV/bin/python" ] || python3 -m venv "$VENV"
 "$VENV/bin/python" -m pip install -q --upgrade pip
-# [station]: any module can be switched on later without the tarball
-"$VENV/bin/python" -m pip install -q --upgrade "$WHEEL[station]"
+# [station,web]: any module can be switched on later without the tarball
+"$VENV/bin/python" -m pip install -q --upgrade "$WHEEL[station,web]"
 # Same version number on a rebuild: make sure the new code is in place.
 "$VENV/bin/python" -m pip install -q --force-reinstall --no-deps "$WHEEL"
 "$VENV/bin/python" -m compileall -q "$VENV/lib" >/dev/null || true

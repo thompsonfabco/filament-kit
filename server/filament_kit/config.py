@@ -44,6 +44,17 @@ DEFAULTS: dict = {
     "library": {"url": None, "schedule": "daily"},
     "station": {"url": None, "allow": ["127.0.0.1"], "port": 5003,
                 "nfc_device": "auto", "beep": True, "beep_device": ""},
+    # merge-ops: web unit, remote access, orders file, tag readers, slot service, slicer/presets/intake extras
+    "web": {"port": 8101, "public_url": None,
+            "lan": ["192.168.0.0/16", "10.0.0.0/8", "172.16.0.0/12"]},
+    "remote": {"hostname": None, "acme_window": None, "email": None},
+    "orders": {"file": None},
+    "tag_sources": [],          # [{"name": str, "url": str}]: extra readers speaking the lasttag shape
+    "slot_service": None,       # {"state_url", "set_url", "token_file"}
+    "slicer_printers": [],
+    "presets_orca": False,
+    "intake": {"tare_hints": {}, "model": None},
+    "web_instructions": None,
 }
 
 
