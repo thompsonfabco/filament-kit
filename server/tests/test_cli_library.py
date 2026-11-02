@@ -137,3 +137,74 @@ def test_rollback_ok(capsys, monkeypatch, rebuilds):
     assert cli.main(["library", "rollback"]) == 0
     assert "library version 3" in capsys.readouterr().out
     assert len(rebuilds) == 1
+
+
+# ---------- fix round 1 ----------
+
+def _404_update(monkeypatch):
+    def opener(req, timeout=None):
+        raise urllib.error.HTTPError(req.full_url, 404, "Not Found", {}, io.BytesIO(b""))
+    real = library.update
+    monkeypatch.setattr(library, "update", lambda url=None, **k: real(url, opener=opener, **k))
+
+
+def test_scheduled_404_is_a_warning(capsys, monkeypatch, rebuilds):
+    _404_update(monkeypatch)
+    assert cli.main(["library", "update", "--scheduled"]) == 0
+    err = capsys.readouterr().err
+    assert err.startswith("warning: ") and "404" in err and "may be private" in err
+    assert rebuilds == []
+
+
+def test_manual_404_fails(capsys, monkeypatch):
+    _404_update(monkeypatch)
+    assert cli.main(["library", "update"]) == 1
+    assert "warning" not in capsys.readouterr().err
+
+
+def test_scheduled_500_fails(capsys, monkeypatch):
+    monkeypatch.setattr(library, "update",
+                        lambda url=None, **k: library.UpdateResult(False, 2, 0, "index.json: HTTP 500", 500))
+    assert cli.main(["library", "update", "--scheduled"]) == 1
+
+
+def test_scheduled_404_detected_by_status_not_text(capsys, monkeypatch):
+    monkeypatch.setattr(library, "update", lambda url=None, **k: library.UpdateResult(
+        False, 2, 0, "x: HTTP 404; the library repository may be private; using version 2", None))
+    assert cli.main(["library", "update", "--scheduled"]) == 1
+
+
+class _Recorder:
+    def __init__(self, size):
+        self.size = size
+        self.asked = []
+
+    def read(self, n=-1):
+        self.asked.append(n)
+        return b"{" * (self.size if n < 0 else min(n, self.size))
+
+
+def test_add_stdin_reads_at_most_the_limit(capsys, monkeypatch):
+    buf = _Recorder(10 * 2**20)
+    monkeypatch.setattr(sys, "stdin", types.SimpleNamespace(buffer=buf))
+    assert cli.main(["library", "add", "-"]) == 1
+    assert buf.asked == [library.LOCAL_LIMIT + 1]
+    assert "larger than 256 KiB" in capsys.readouterr().err
+
+
+def test_add_file_too_large(tmp_path, capsys):
+    f = tmp_path / "big.json"
+    f.write_bytes(b" " * (library.LOCAL_LIMIT + 1))
+    assert cli.main(["library", "add", str(f)]) == 1
+    assert "larger than 256 KiB" in capsys.readouterr().err
+    assert library.load().local_count == 0
+
+
+def test_status_prints_sanitized_url(capsys):
+    cfg = config.load()
+    cfg["library"]["url"] = "https://user:pw@mirror.example/lib/?token=s3cret#frag"
+    config.save(cfg)
+    assert cli.main(["library", "status"]) == 0
+    out = capsys.readouterr().out
+    assert "url: https://mirror.example/lib/\n" in out
+    assert "s3cret" not in out and "pw@" not in out and "frag" not in out

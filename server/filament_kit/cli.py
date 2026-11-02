@@ -572,6 +572,11 @@ def cmd_library_update(scheduled: bool) -> int:
         _err_line(str(e))
         return 1
     if r.error:
+        if scheduled and r.http_status in library.PRIVATE_STATUSES:
+            # the repository may simply not be public yet: the timer run is not a failure, the bundled
+            # or last good version stays in use
+            print(f"warning: {r.error}", file=sys.stderr)
+            return 0
         _err_line(r.error)
         return 1
     if not r.changed:
@@ -595,13 +600,21 @@ def cmd_library_rollback() -> int:
 
 
 def cmd_library_add(source: str) -> int:
+    limit = library.LOCAL_LIMIT
     try:
         if source == "-":
-            data = sys.stdin.buffer.read() if hasattr(sys.stdin, "buffer") else sys.stdin.read().encode("utf-8")
+            if hasattr(sys.stdin, "buffer"):
+                data = sys.stdin.buffer.read(limit + 1)
+            else:
+                data = sys.stdin.read(limit + 1).encode("utf-8")
         else:
-            data = Path(source).read_bytes()
+            with open(source, "rb") as fh:
+                data = fh.read(limit + 1)
     except OSError as e:
         _err_line(f"cannot read {source}: {e.strerror or e}")
+        return 1
+    if len(data) > limit:
+        _err_line(f"entry not added: larger than {limit // 1024} KiB")
         return 1
     try:
         entry, line = library.add_local(data)
