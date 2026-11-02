@@ -43,7 +43,7 @@ Do these steps on the Ubuntu computer, in a Terminal window.
      boxes now (you can also change them later).
    - **Anthropic API key**: paste the key and press Enter. Nothing shows while you type or paste; that is on
      purpose.
-5. At the end the installer prints a status list (every line should start with `OK`) and a **QR code** with a
+5. At the end the installer prints a status list (no line should start with `FAIL`) and a **QR code** with a
    pairing code underneath.
 
 The installer takes a few minutes. You can run it again at any time; it never deletes your spools or
