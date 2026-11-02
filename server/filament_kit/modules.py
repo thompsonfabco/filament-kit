@@ -74,6 +74,16 @@ def mode_of(on: frozenset[str]) -> str:
     return "custom"
 
 
+def drop_local_station_link(cfg: dict) -> None:
+    """Unset station.url (in place) when it is the loopback link to a local station; a remote url stays.
+
+    Without both server and station on, that link points at a station that is stopped: status would
+    FAIL and /api/station answer 503, where spec section 3 wants the url unset (409 module_off)."""
+    st = cfg.get("station")
+    if isinstance(st, dict) and st.get("url") and urlparse(str(st["url"])).hostname in _LOCAL_HOSTS:
+        st["url"] = None
+
+
 def set_mode(cfg: dict, mode: str) -> dict:
     """Copy of cfg with `mode`'s module set (and the station link for all-in-one)."""
     if mode not in MODES:
@@ -84,6 +94,8 @@ def set_mode(cfg: dict, mode: str) -> dict:
         st = out.setdefault("station", {})
         st["allow"] = ["127.0.0.1"]
         st["url"] = "http://127.0.0.1:5003"
+    else:
+        drop_local_station_link(out)
     return out
 
 

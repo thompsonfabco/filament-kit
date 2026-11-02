@@ -129,3 +129,18 @@ def test_dropin_beep_device_and_off():
     assert text.startswith("[Service]\n")
     assert "STATION_BEEP=0" in text and "STATION_BEEP_DEVICE=plughw:1,0" in text
     assert "STATION_BEEP_DEVICE" not in apply.station_dropin(_cfg(), ["127.0.0.1"])
+
+
+def test_bad_host_name_is_a_module_error_not_a_traceback():
+    # 'a..b' makes the idna codec raise UnicodeError, not OSError
+    cfg = modules.set_mode({"station": {}}, "station")
+    cfg["station"]["allow"] = ["a..b"]
+    with pytest.raises(ModuleError, match="fix:"):
+        apply.plan(cfg)
+
+
+def test_null_station_allow_plans():
+    cfg = modules.set_mode({}, "all-in-one")
+    cfg["station"]["allow"] = None
+    acts = apply.plan(cfg, resolve=lambda h: [h])
+    assert any(a.kind == "install_file" and a.arg[0] == apply.DROPIN for a in acts)

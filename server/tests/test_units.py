@@ -128,3 +128,10 @@ def test_readme_final_review_points():
     assert "PC" in row and "phones" in row
     lib = readme[readme.index("## Spec library updates"):readme.index("## Troubleshooting")]
     assert '"schedule": "off"' in lib and "rollback" in lib and "next" in lib
+
+
+def test_server_unit_does_not_pull_in_spoolman():
+    # final review: with the spoolman module off, a local Spoolman must stay stopped; order only
+    unit = _unit("filament-kit.service")["Unit"]
+    assert "spoolman.service" not in unit["Wants"].split()
+    assert "spoolman.service" in unit["After"].split()

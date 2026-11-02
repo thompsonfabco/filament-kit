@@ -64,11 +64,13 @@ for the mode on the first install:
 | `server` (1, the default) | Spoolman, the server, AI label reading, printers, presets, library, backup | One computer runs the kit. This is the kit as it always was. |
 | `station` (2) | Only the intake station (USB scale and NFC reader) | The station is a second computer and the server runs on another one. It asks for the **server's address**. |
 | `all-in-one` (3) | Everything, station included | The scale and reader are plugged into the server computer. |
-| `custom` (4) | The modules you pick one by one | You know which parts you want. |
+| `custom` (4) | The modules you pick one by one, at the installer's question or later with `sudo filament-kit modules enable/disable` | You know which parts you want. |
 
 A station-only computer needs no API key, certificate or Spoolman.
 
-You can also give the mode on the command line, so the installer asks no mode question:
+You can also give the mode on the command line, so the installer asks no mode question. `--mode` takes
+`server`, `station` or `all-in-one`; for `custom`, answer 4 at the question or switch modules afterwards with
+`sudo filament-kit modules enable <module>` and `sudo filament-kit modules disable <module>`:
 
 ```
 sudo ./install.sh --mode server
@@ -416,7 +418,7 @@ sudo ./uninstall.sh
 This removes the programs (Spoolman and the intake station too, with the station's user and udev rule) but
 **keeps** your spools, settings and backups, so a later install picks up where you left off, in the same mode.
 The station's computer changes (brltty, ModemManager, sleep, audio) stay; see
-[Intake station](#what-the-installer-changes-on-the-computer) to undo them. To delete everything, including all spool data and backups:
+[What the installer changes on the computer](#what-the-installer-changes-on-the-computer) to undo them. To delete everything, including all spool data and backups:
 
 ```
 sudo ./uninstall.sh --purge
