@@ -331,3 +331,12 @@ def test_info_user_id_without_an_orca_live_upload(tmp_path):
     t.user_id = OUSER
     build(tmp_path, t=t)
     assert oinfo(tmp_path, sv08("0.4"))["user_id"] == OUSER
+
+
+def test_presets_orca_nozzles_empty_or_excluding_everything_is_a_clear_problem(tmp_path):
+    _p, problems = G.orca_printers(TG.MODELS, [], bambu_nozzles=[])
+    assert any("presets_orca_nozzles must be a non-empty list" in p for p in problems)
+    m, _ = build(tmp_path, slicer=(), presets_orca=True, bambu_nozzles=["1.0"])
+    assert onames(m) == []
+    assert any("leaves out (1.0)" in p and "Bambu Lab H2D only with nozzle 0.2, 0.4, 0.6, 0.8" in p
+               for p in m["problems"]), m["problems"]
