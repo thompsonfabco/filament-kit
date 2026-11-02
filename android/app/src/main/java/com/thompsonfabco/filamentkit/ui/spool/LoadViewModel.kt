@@ -1,0 +1,219 @@
+package com.thompsonfabco.filamentkit.ui.spool
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.thompsonfabco.filamentkit.net.AmsSlot
+import com.thompsonfabco.filamentkit.net.Api
+import com.thompsonfabco.filamentkit.net.ApiError
+import com.thompsonfabco.filamentkit.net.FingerprintMismatch
+import com.thompsonfabco.filamentkit.net.LoadResult
+import com.thompsonfabco.filamentkit.net.Printer
+import com.thompsonfabco.filamentkit.net.PrinterDetail
+import com.thompsonfabco.filamentkit.ui.printers.PrinterHelp
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonObject
+import java.math.BigDecimal
+
+/** The calls "Load into printer" needs; [ApiLoadBackend] adapts [Api], tests pass a fake. */
+interface LoadBackend {
+    suspend fun printers(): List<Printer>
+    suspend fun printer(id: String): PrinterDetail
+    suspend fun load(id: String, label: String, spoolId: Int, dryRun: Boolean): LoadResult
+}
+
+class ApiLoadBackend(private val api: Api) : LoadBackend {
+    override suspend fun printers() = api.printers()
+    override suspend fun printer(id: String) = api.printer(id)
+    override suspend fun load(id: String, label: String, spoolId: Int, dryRun: Boolean) = api.load(id, label, spoolId, dryRun)
+}
+
+sealed interface LoadUiState {
+    data object Closed : LoadUiState
+
+    /** [printers] is null while loading. */
+    data class PickPrinter(val spool: SpoolSummary, val printers: List<Printer>? = null, val error: String? = null) : LoadUiState
+
+    /** [slots] (every AMS slot the printer reports) is null while loading. */
+    data class PickSlot(
+        val spool: SpoolSummary,
+        val printer: Printer,
+        val slots: List<AmsSlot>? = null,
+        val error: String? = null,
+        val busy: Boolean = false,
+    ) : LoadUiState
+
+    /** The dry run's answer, as [lines]; confirm sends the real load. */
+    data class Preview(
+        val spool: SpoolSummary,
+        val printer: Printer,
+        val label: String,
+        val result: LoadResult,
+        val lines: List<String>,
+        val busy: Boolean = false,
+        val error: String? = null,
+    ) : LoadUiState
+
+    /** [spool]/[spoolJson] are the spool as the server now has it (null if it did not say). */
+    data class Done(
+        val printer: Printer,
+        val label: String,
+        val lines: List<String>,
+        val spool: SpoolSummary?,
+        val spoolJson: JsonObject?,
+    ) : LoadUiState
+
+    data object Unauthorized : LoadUiState
+    data class Mismatch(val expected: String, val actual: String) : LoadUiState
+}
+
+/** Texts of the load flow. */
+object LoadHelp {
+    const val NOT_CONFIRMED = "The printer accepted it but hasn't shown the change yet"
+
+    fun previewLines(spool: SpoolSummary, printer: Printer, r: LoadResult): List<String> = buildList {
+        add("Load ${spool.title()} into ${printer.name}, slot ${r.slot.label}")
+        add(r.preset?.name?.ifBlank { null }?.let { "Preset: $it" } ?: "Preset: none")
+        val mm = r.nozzleMm?.let(::mm)
+        when {
+            r.nozzleAssumed -> add("Nozzle size not reported by the printer; assuming ${mm ?: "0.4"} mm")
+            mm != null -> add("Nozzle: $mm mm")
+        }
+        r.movedBack.filter { it.id != spool.id }.forEach { m ->
+            add("Spool #${m.id ?: "?"} now in ${r.slot.label} goes back to ${m.location.ifBlank { "its previous place" }}")
+        }
+        addAll(r.problems)
+    }
+
+    fun doneLines(printer: Printer, r: LoadResult): List<String> = buildList {
+        if (r.confirmed) {
+            add("Loaded into ${printer.name}, slot ${r.slot.label}")
+        } else {
+            add("Sent to ${printer.name}, slot ${r.slot.label}")
+            add(NOT_CONFIRMED)
+        }
+        addAll(r.problems)
+    }
+
+    fun slotLine(s: AmsSlot): String = listOfNotNull(
+        s.label,
+        s.type.ifBlank { "empty" },
+        s.spool?.name?.ifBlank { null },
+    ).joinToString(" · ")
+
+    private fun SpoolSummary.title() = "$brand $name".trim().ifBlank { "spool #$id" }
+
+    private fun mm(v: Double): String = BigDecimal.valueOf(v).stripTrailingZeros().toPlainString()
+}
+
+/**
+ * "Load into printer" from the spool card: [start] → printer list → [pickPrinter] → slot list → [pickSlot] (dry run)
+ * → [confirm] (real load). Errors keep the user on the step they were on, with a message.
+ */
+class LoadViewModel(private val backend: LoadBackend) : ViewModel() {
+    private val _state = MutableStateFlow<LoadUiState>(LoadUiState.Closed)
+    val state: StateFlow<LoadUiState> = _state.asStateFlow()
+
+    private var job: Job? = null
+    private var printers: List<Printer>? = null
+    private var slots: List<AmsSlot>? = null
+
+    fun start(spool: SpoolSummary) {
+        printers = null
+        slots = null
+        _state.value = LoadUiState.PickPrinter(spool)
+        op(onError = { LoadUiState.PickPrinter(spool, emptyList(), it) }) {
+            val list = backend.printers().filter { it.configured }
+            printers = list
+            _state.value = LoadUiState.PickPrinter(spool, list)
+        }
+    }
+
+    fun pickPrinter(printer: Printer) {
+        val spool = spoolOf(_state.value) ?: return
+        slots = null
+        _state.value = LoadUiState.PickSlot(spool, printer)
+        op(onError = { LoadUiState.PickSlot(spool, printer, emptyList(), it) }) {
+            val d = backend.printer(printer.id)
+            val all = d.status?.ams.orEmpty().flatMap { it.slots }.filter { it.label.isNotBlank() }
+            slots = all
+            _state.value = LoadUiState.PickSlot(spool, d.printer, all,
+                error = if (d.status == null) "No live status from the printer yet, so its slots aren't known." else null)
+        }
+    }
+
+    /** Previews loading into [label] (dry run). */
+    fun pickSlot(label: String) {
+        val s = _state.value as? LoadUiState.PickSlot ?: return
+        if (s.busy) return
+        _state.value = s.copy(busy = true, error = null)
+        op(onError = { s.copy(busy = false, error = it) }) {
+            val r = backend.load(s.printer.id, label, s.spool.id, dryRun = true)
+            _state.value = LoadUiState.Preview(s.spool, s.printer, label, r, LoadHelp.previewLines(s.spool, s.printer, r))
+        }
+    }
+
+    fun confirm() {
+        val p = _state.value as? LoadUiState.Preview ?: return
+        if (p.busy) return
+        _state.value = p.copy(busy = true, error = null)
+        op(onError = { p.copy(busy = false, error = it) }) {
+            val r = backend.load(p.printer.id, p.label, p.spool.id, dryRun = false)
+            _state.value = LoadUiState.Done(p.printer, p.label, LoadHelp.doneLines(p.printer, r),
+                r.spool?.toSpoolSummary(), r.spool)
+        }
+    }
+
+    /** One step back: preview → slots → printers. */
+    fun back() {
+        if (writing) return
+        job?.cancel()
+        when (val s = _state.value) {
+            is LoadUiState.Preview -> _state.value = LoadUiState.PickSlot(s.spool, s.printer, slots ?: emptyList())
+            is LoadUiState.PickSlot -> _state.value = LoadUiState.PickPrinter(s.spool, printers ?: emptyList())
+            else -> close()
+        }
+    }
+
+    /**
+     * True while the real (non-dry-run) load is in flight. The POST may already have reached the server, so the
+     * flow is not cancelled then: [close] and [back] are ignored and the user gets to see the result.
+     */
+    val writing: Boolean get() = (_state.value as? LoadUiState.Preview)?.busy == true
+
+    /** Closes the flow; returns false (and does nothing) while [writing]. */
+    fun close(): Boolean {
+        if (writing) return false
+        job?.cancel()
+        _state.value = LoadUiState.Closed
+        return true
+    }
+
+    private fun spoolOf(s: LoadUiState): SpoolSummary? = when (s) {
+        is LoadUiState.PickPrinter -> s.spool
+        is LoadUiState.PickSlot -> s.spool
+        is LoadUiState.Preview -> s.spool
+        else -> null
+    }
+
+    private fun op(onError: (String) -> LoadUiState, block: suspend () -> Unit) {
+        job?.cancel()
+        job = viewModelScope.launch {
+            try {
+                block()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: FingerprintMismatch) {
+                _state.value = LoadUiState.Mismatch(e.expected, e.actual)
+            } catch (e: ApiError) {
+                _state.value = if (e.code == "unauthorized") LoadUiState.Unauthorized else onError(PrinterHelp.actionMessage(e))
+            } catch (e: Exception) {
+                _state.value = onError(PrinterHelp.UNEXPECTED)
+            }
+        }
+    }
+}

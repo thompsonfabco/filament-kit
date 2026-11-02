@@ -96,7 +96,7 @@ private fun PrinterRow(p: Printer, onClick: () -> Unit) {
 
 internal fun stateColor(state: String): Color = when (state) {
     "connected" -> Color(0xFF2E7D32)
-    "wrong_code" -> Color(0xFFC62828)
+    "wrong_code", "cert_changed" -> Color(0xFFC62828)
     "needs_developer_mode" -> Color(0xFFF9A825)
     else -> Color(0xFF9E9E9E)
 }

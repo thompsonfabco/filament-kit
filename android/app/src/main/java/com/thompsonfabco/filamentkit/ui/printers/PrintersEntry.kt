@@ -23,9 +23,10 @@ fun PrintersEntry(api: Api, onPairAgain: () -> Unit) {
     } else {
         BackHandler { openId = null }
         val vm = viewModel(key = "printer-$apiKey-$id") { PrinterViewModel(backend, id) }
+        val tools = viewModel(key = "printer-tools-$apiKey-$id") { PrinterToolsViewModel(backend, id) }
         val camera = remember(api, id) {
             CameraSource(api.client, api.cameraHlsUrl(id), api.cameraMjpegUrl(id), api.authHeaders())
         }
-        PrinterScreen(vm, camera, onBack = { openId = null }, onPairAgain = onPairAgain)
+        PrinterScreen(vm, tools, camera, onBack = { openId = null }, onPairAgain = onPairAgain)
     }
 }
