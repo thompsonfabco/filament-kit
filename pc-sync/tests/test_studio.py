@@ -108,3 +108,14 @@ def test_never_touches_real_appdata(tmp_path):
         assert value.is_relative_to(tmp_path.resolve()), key
         if REAL_ENV[key]:
             assert value != Path(REAL_ENV[key]).resolve()
+
+
+def test_locate_ignores_newer_conf_of_a_root_without_user_folder(tmp_path):
+    appdata = tmp_path / "appdata"
+    stable = studio_fixture.make(appdata, variant="BambuStudio", user_id="111")
+    beta_root = appdata / "BambuStudioBeta"
+    beta_root.mkdir()
+    (beta_root / "BambuStudio.conf").write_text("{}", encoding="utf-8")
+    _age(stable.root / "BambuStudio.conf", 3600)
+    got = studio.locate(appdata)
+    assert got.variant == "BambuStudio" and got.user_id == "111"
