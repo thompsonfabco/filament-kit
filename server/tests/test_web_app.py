@@ -344,3 +344,60 @@ def test_start_survives_a_pairing_failure(env, caplog):
     with caplog.at_level(logging.ERROR, logger="filament_kit"):
         assert web_main.kit_api_at_start(config.load()) is not None
     assert any("cannot pair" in r.getMessage() for r in caplog.records)
+
+
+# ---------- fix round 1 ----------
+
+def test_web_numbers_and_line_bodies_are_checked(app, sm):
+    with _client(app) as c:
+        _sign_in(c)
+        post = {"headers": {"Origin": ORIGIN}}
+        for bad in ("nan", "inf", "-Infinity"):
+            r = c.post("/intake/api/open", json={"spool": 1, "gross": bad, "dry_run": True}, **post)
+            assert r.status_code == 400 and "gross" in r.json()["error"], bad
+        for path, body in (("line_add", {}), ("line_add", {"line": "X", "ids": "1"}),
+                           ("line_add", {"line": 5, "ids": [1]}), ("line_new", {"name": "A B", "ids": [1]}),
+                           ("line_new", {"name": "A B", "vendor": "A", "ids": [True], "bs_template": "x"})):
+            r = c.post(f"/intake/api/{path}", json=body, **post)
+            assert r.status_code == 400, (path, body, r.text)
+
+
+def test_web_unexpected_errors_are_generic(app, monkeypatch, caplog):
+    import logging
+    from filament_kit.web import mcp_tools as mt
+
+    def boom(self, *a, **kw):
+        raise KeyError("secret detail")
+    monkeypatch.setattr(mt.Tools, "find_spools", boom)
+    with _client(app) as c:
+        _sign_in(c)
+        with caplog.at_level(logging.ERROR, logger="filament_kit"):
+            r = c.get("/intake/api/find")
+    assert r.status_code == 500 and "secret detail" not in r.text
+    assert any("intake" in rec.getMessage() for rec in caplog.records)
+
+
+def test_web_read_refunds_only_when_claude_was_not_reached(app, sm, fake, monkeypatch):
+    from anthropic import APIConnectionError  # noqa: F401 - only for the error type below
+    from filament_kit.spoolman import SpoolmanError
+    reads = config.paths().state / "reads.json"
+
+    def count():
+        return len(json.loads(reads.read_text())) if reads.exists() else 0
+    with _client(app) as c:
+        _sign_in(c)
+        post = {"headers": {"Origin": ORIGIN}}
+        photo = [("photos", ("a.jpg", JPEG, "image/jpeg"))]
+        fake.raises = RuntimeError("Claude blew up after the call")       # Claude was reached: no refund
+        assert c.post("/intake/api/read", files=photo, **post).status_code == 500
+        assert count() == 1
+        fake.raises = None
+        orig = sm.get
+
+        def down(path, *a, **kw):
+            if "filament" in path:
+                raise SpoolmanError("spoolman_unreachable", status=None)
+            return orig(path, *a, **kw)
+        monkeypatch.setattr(sm, "get", down)                             # catalog fetch fails: refunded
+        r = c.post("/intake/api/read", files=photo, **post)
+        assert r.status_code == 400 and count() == 1

@@ -1162,7 +1162,14 @@ def cmd_web_passphrase() -> int:
             fh.flush()
             os.fsync(fh.fileno())
         os.chmod(tmp, 0o640)          # O_CREAT's mode does not apply to a leftover tmp file
-        shutil.chown(tmp, user="root", group="filament-kit")
+        try:
+            shutil.chown(tmp, user="root", group="filament-kit")
+        except (LookupError, OSError) as e:
+            tmp.unlink(missing_ok=True)
+            print(f"error: cannot give {dest} to the filament-kit group ({e}); nothing was changed\n"
+                  "     fix: install the kit first (it creates the filament-kit user and group), "
+                  "or: sudo groupadd --system filament-kit", file=sys.stderr)
+            return 1
         os.replace(tmp, dest)
     except BaseException:
         tmp.unlink(missing_ok=True)
@@ -1193,8 +1200,9 @@ def cmd_web_status() -> int:
         print(f"     connector: {public}/mcp   phone app: {public}/intake")
     ok &= _line((config.paths().etc / WEB_PASSPHRASE).is_file(), "sign-in passphrase is set",
                 "sudo filament-kit web passphrase")
-    up, why = _web_health(int(web.get("port") or 8101))
-    ok &= _line(up, f"web unit answers on 127.0.0.1:{web.get('port')}" + ("" if up else f" ({why})"),
+    port = int(web.get("port") or config.DEFAULTS["web"]["port"])
+    up, why = _web_health(port)
+    ok &= _line(up, f"web unit answers on 127.0.0.1:{port}" + ("" if up else f" ({why})"),
                 "sudo systemctl restart filament-kit-web; journalctl -u filament-kit-web")
     try:
         d = json.loads((config.paths().state / "web" / "oauth.json").read_text(encoding="utf-8"))
@@ -1202,8 +1210,12 @@ def cmd_web_status() -> int:
         live = sum(1 for v in (d.get("refresh") or {}).values() if (v.get("expires_at") or 0) > now)
         print(f"     connectors: {len(d.get('clients') or {})} registered, {live} signed in; "
               f"phone sessions: {len(d.get('sessions') or {})}")
-    except (OSError, ValueError, AttributeError):
+    except FileNotFoundError:
         print("     connectors: none signed in yet")
+    except PermissionError:
+        print("     connectors: cannot read (run as root)")
+    except (OSError, ValueError, AttributeError) as e:
+        print(f"     connectors: cannot read the OAuth state ({type(e).__name__})")
     svc = cfg.get("slot_service")
     slots = ("slot_service" if isinstance(svc, dict) and svc.get("state_url") else
              "the kit's printer bridge" if "printers" in on else "none")

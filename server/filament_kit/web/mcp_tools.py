@@ -59,8 +59,10 @@ class SpoolItem(BaseModel):
     gross: Annotated[float | None, Field(description="opened spool's scale weight incl. spool (count 1): "
                                                      "remaining = gross - tare")] = None
     spool_note: Annotated[str | None, Field(description="appended to each spool's comment")] = None
-    line: Annotated[str | None, Field(description="product line without the colour, e.g. 'PLA+ 2.0'")] = None
-    bambu_parent: Annotated[str | None, Field(description="Bambu Studio base preset for a new line")] = None
+    line: Annotated[str | None, Field(description="only for a new filament: its product line without the colour, "
+                                                    "e.g. 'PLA+ 2.0' (ignored for an existing filament)")] = None
+    bambu_parent: Annotated[str | None, Field(description="only for a new filament: the Bambu Studio base preset "
+                                                            "for its new line (ignored for an existing filament)")] = None
 
 
 def _num(v) -> float | int | None:
@@ -115,10 +117,16 @@ class Tools:
             e["spools"].sort(key=lambda s: s["spool_id"])
         return {"matches": len(res), "filaments": res[:MAX_FILAMENTS], "truncated": len(res) > MAX_FILAMENTS}
 
-    def add_spools(self, items: list[dict], dry_run: bool = True, link_tag: str | None = None) -> dict:
+    def add_spools(self, items: list[dict], dry_run: bool = True, link_tag: str | None = None, *,
+                   new_filaments_only_lines: bool = False) -> dict:
         """Add spools (vendor + name reuse an existing filament). `link_tag` (the web app): the tag a label read
-        saw; it is linked to the one opened spool only while it is still the readers' last tap."""
+        saw; it is linked to the one opened spool only while it is still the readers' last tap.
+        `new_filaments_only_lines` (the MCP path, Ruling AC): `line` / `bambu_parent` are dropped from items that
+        match an existing filament, so a routine add never moves that filament to another preset line (the web
+        app sends the label read's own line, which is the filament's, and keeps them)."""
         notes: list[str] = []
+        if new_filaments_only_lines and isinstance(items, list):
+            items = self._drop_lines_of_existing(items)
         uid = None
         if link_tag:
             uid = tags.normalize_uid(str(link_tag))
@@ -132,6 +140,16 @@ class Tools:
         if r.dry:
             notes.append("dry run: nothing written. Show the user, then call again with dry_run=false.")
         return {"output": "\n".join(r.lines + notes), "exit_code": 0, "spool_ids": r.spool_ids, "dry": r.dry}
+
+    def _drop_lines_of_existing(self, items: list) -> list:
+        have = {(((f.get("vendor") or {}).get("name") or "").lower(), (f.get("name") or "").lower())
+                for f in self.sm.get("filament")}
+        out = []
+        for it in items:
+            if isinstance(it, dict) and (str(it.get("vendor", "")).lower(), str(it.get("name", "")).lower()) in have:
+                it = {k: v for k, v in it.items() if k not in ("line", "bambu_parent")}
+            out.append(it)
+        return out
 
     def tag_state(self) -> dict:
         """The newest tap on any reader, the spool it is linked to, and spools whose tag is one byte apart."""
@@ -218,8 +236,12 @@ class Tools:
     def _slot_backend(self):
         cfg = self.cfg()
         svc = cfg.get("slot_service")
-        if isinstance(svc, dict) and svc.get("state_url"):
-            return "service", svc
+        if svc is not None:
+            if isinstance(svc, dict) and svc.get("state_url") and svc.get("set_url"):
+                return "service", svc
+            log.error("config slot_service is set but lacks state_url or set_url; the printer slot tools are off")
+            raise Problem("config slot_service is incomplete: it needs state_url and set_url (and token_file); "
+                          "fix config.json, or remove slot_service to use the printers module")
         if "printers" in modules.enabled(cfg):
             if self._kit is None:
                 self._kit = slots.KitApi()
@@ -263,7 +285,7 @@ def error_text(e: BaseException) -> str | None:
         return "Spoolman is not reachable" if e.status is None else str(e)
     if isinstance(e, ProfileError):
         return e.message
-    if isinstance(e, (ValueError, KeyError)):
+    if isinstance(e, ValueError):        # Problem, and the validation in inventory / intake / tags
         return str(e) or type(e).__name__
     return None
 
@@ -296,7 +318,8 @@ def instructions(cfg: dict) -> str:
         "NEW SPOOLS from label photos: find_spools first (same vendor + product + colour already there? then reuse "
         "its exact vendor+name so spools join it). Then add_spools with dry_run=true, show the user, then "
         f"dry_run=false. A spool already out of its bag/box: sealed=false (no SEALED comment; {place}). Name new "
-        "colours like their siblings ('<Line> <Colour>'); material PLA for every PLA variant. " + tares +
+        "colours like their siblings ('<Line> <Colour>'); material PLA for every PLA variant. Set line (and "
+        "bambu_parent) only for a new filament; a reused filament keeps its own line. " + tares +
         " Densities: PLA 1.24, PETG 1.27, ABS 1.04, ASA 1.07, TPU 1.21, PC 1.20. "
         f"Storage locations: {locs} ('{sealed}' is the default for sealed spools). Then refresh presets (below).",
         "OPENING A SPOOL: the user taps its NFC tag on a reader first, then sends name/photo, weight, location, "
@@ -350,7 +373,8 @@ def register(mcp, tools: Tools) -> None:
         """Add new spools. A filament with the same vendor + name is reused, otherwise created (with its vendor).
         Run with dry_run=true, show the user, then dry_run=false. New filaments then join a preset line
         (preset_status)."""
-        return await call(tools.add_spools, [item_dict(i) for i in items], dry_run)
+        return await call(tools.add_spools, [item_dict(i) for i in items], dry_run, None,
+                          new_filaments_only_lines=True)
 
     @mcp.tool(annotations=read)
     async def tag_state() -> str:
@@ -391,7 +415,9 @@ def register(mcp, tools: Tools) -> None:
 
     @mcp.tool(annotations=write)
     async def add_filaments_to_line(line: str, filament_ids: list[int]) -> str:
-        """Add Spoolman filament ids to an existing preset line (same brand + product line). Refuses duplicates."""
+        """Put Spoolman filament ids into an existing preset line (same brand). This moves a filament out of any
+        other line it is in, and pins it here by setting its Spoolman extra.line to this line (later builds keep
+        it here). Refuses a filament already in this line or of another brand."""
         return await call(tools.add_filaments_to_line, line, filament_ids)
 
     @mcp.tool(annotations=write)
@@ -432,4 +458,6 @@ def register(mcp, tools: Tools) -> None:
     mcp.tool(name="printer_set_slot", description=set_doc, annotations=write)(_set)
     # ops names, kept so a connector that learned them keeps working
     mcp.tool(name="h2d_slots", description=slots_doc + " (Same as printer_slots.)", annotations=read)(_slots)
-    mcp.tool(name="h2d_set_slot", description=set_doc + " (Same as printer_set_slot.)", annotations=write)(_h2d_set)
+    mcp.tool(name="h2d_set_slot", annotations=write,
+             description=set_doc + " (Same as printer_set_slot. 'EXT-L' / 'EXT-R' work only with the "
+                                   "slot_service backend; the kit bridge names the external slot 'Ext'.)")(_h2d_set)
