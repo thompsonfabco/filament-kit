@@ -11,3 +11,5 @@ gradlew    text eol=lf
 # The spec library snapshot and its test fixture are hashed byte for byte (index.json sha256).
 server/filament_kit/library_data/** -text
 server/tests/data/library/** -text
+# The family build golden files are compared byte for byte (test_builds_orca.py).
+server/tests/data/golden/** -text
