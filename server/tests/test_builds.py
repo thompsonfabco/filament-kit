@@ -750,3 +750,106 @@ def test_repaired_pc_keeps_the_owners_inapp_edits_and_notes(env):
     builds.store_upload("live", io.BytesIO(_live_zip_of(b3["stamp"])), device_id="b", user_id="1")
     b4 = builds.run_build(env, now=TG.NOW + 3)["stamp"]
     assert builds.manifest(b4)["inapp"][name] == {"filament_flow_ratio": flow}
+
+
+# ---------- Task 3: Orca upload kinds (Ruling L) ----------
+
+ORCA_SYS = Path(__file__).parent / "data" / "orca" / "system"
+
+
+def orca_system_zip() -> bytes:
+    return zip_of({p.relative_to(ORCA_SYS).as_posix(): p.read_bytes()
+                   for p in sorted(ORCA_SYS.rglob("*.json"))})
+
+
+def test_orca_live_upload_goes_to_live_orca_user(env):
+    data = zip_of({"SUNLU PLA+ 2.0 @SV08 MAX 0.4.json": "{}", "SUNLU PLA+ 2.0 @SV08 MAX 0.4.info": "x\n"})
+    h = builds.store_upload("orca_live", io.BytesIO(data), device_id="a", user_id="f790a1c6-1")
+    dest = profiles_dir() / "live" / "orca" / "user"
+    assert h == builds.tree_hash(dest) and (dest / "SUNLU PLA+ 2.0 @SV08 MAX 0.4.info").is_file()
+    meta = builds.meta()
+    assert (meta["orca_live_hash"], meta["orca_user_id"], meta["owner"]) == (h, "f790a1c6-1", "a")
+    assert "live_hash" not in meta and "user_id" not in meta           # the Bambu Studio side is untouched
+    assert not (profiles_dir() / "live" / "user").exists()
+
+
+def test_orca_system_upload_and_store(env):
+    assert builds.orca_store() is None
+    h = builds.store_upload("orca_system", io.BytesIO(orca_system_zip()), device_id="a")
+    dest = profiles_dir() / "live" / "orca" / "system"
+    assert h == builds.tree_hash(dest)
+    assert (dest / "OrcaFilamentLibrary" / "index.json").is_file()
+    assert (dest / "BBL" / "filament" / "P1P" / "Bambu PLA Basic @BBL P1P.json").is_file()
+    meta = builds.meta()
+    assert meta["orca_system_hash"] == h and meta["orca_system_presets"] == 9 + 7
+    assert "system_hash" not in meta and builds.system_store() is None
+    s = builds.orca_store()
+    assert "Generic PLA @System" in s.names()
+    assert s.system_parent_for("Bambu Lab H2D", "0.6", "Bambu PLA Basic") == "Bambu PLA Basic @BBL H2D 0.6 nozzle"
+    assert builds.orca_store() is s                                      # cached by hash
+    st = builds.state_view("a")
+    assert (st["orca_system_hash"], st["orca_live_hash"], st["system_hash"]) == (h, None, None)
+
+
+def test_orca_system_keeps_bad_json_for_the_store(env):
+    data = zip_of({"BBL/filament/ok.json": json.dumps({"name": "ok"}), "BBL/filament/bad.json": "{"})
+    builds.store_upload("orca_system", io.BytesIO(data), device_id="a")
+    assert any("bad.json" in p for p in builds.orca_store().problems)
+
+
+def test_orca_live_bad_json_refused_and_previous_kept(env):
+    builds.store_upload("orca_live", io.BytesIO(zip_of({"a.json": "{}"})), device_id="a")
+    with pytest.raises(builds.BadZip):
+        builds.store_upload("orca_live", io.BytesIO(zip_of({"b.json": "{"})), device_id="a")
+    assert (profiles_dir() / "live" / "orca" / "user" / "a.json").is_file()
+
+
+def test_orca_uploads_check_owner_and_rules(env):
+    builds.store_upload("orca_live", io.BytesIO(zip_of({"a.json": "{}"})), device_id="a")
+    pair("a", "b")
+    with pytest.raises(builds.OtherPc):
+        builds.store_upload("orca_system", io.BytesIO(orca_system_zip()), device_id="b")
+    for bad in ("../x.json", "x.exe"):
+        with pytest.raises(builds.BadZip):
+            builds.store_upload("orca_live", io.BytesIO(zip_of({bad: "{}"})), device_id="a")
+    with pytest.raises(errors.ProfileError):
+        builds.store_upload("orca_system", io.BytesIO(orca_system_zip()), device_id="a", partial="20261102-080000")
+    with pytest.raises(errors.ProfileError):
+        builds.store_upload("orca_live", io.BytesIO(zip_of({"a.json": "{}"})), device_id="a", partial="nope")
+    with pytest.raises(ValueError):
+        builds.store_upload("cura", io.BytesIO(b""), device_id="a")
+
+
+def test_orca_store_none_when_folder_gone(env):
+    builds.store_upload("orca_system", io.BytesIO(orca_system_zip()), device_id="a")
+    import shutil
+    shutil.rmtree(profiles_dir() / "live" / "orca" / "system")
+    assert builds.orca_store() is None
+    assert builds.state_view("a")["orca_system_hash"] is None
+
+
+def test_orca_live_partial_kept_like_live(env):
+    """Ruling O: `partial` on an orca_live upload is stored (meta `orca_partial`), keeps that build from pruning,
+    is cleared by the next install report and when the sync PC changes."""
+    synced(env)
+    stamp = builds.run_build(env, now=TG.NOW)["stamp"]
+    builds.store_upload("orca_live", io.BytesIO(zip_of({"a.json": "{}"})), device_id="a", partial=stamp)
+    assert builds.meta()["orca_partial"] == stamp and "partial" not in builds.meta()
+    for i in range(builds.KEEP + 1):
+        builds.request_rebuild("again")
+        assert builds.run_build(env, now=TG.NOW + 60 * (i + 1))["ok"]
+    assert (profiles_dir() / "builds" / stamp).is_dir()
+    builds.record_installed(builds.current()["stamp"], "a")
+    assert "orca_partial" not in builds.meta()
+    builds.store_upload("orca_live", io.BytesIO(zip_of({"a.json": "{}"})), device_id="a", partial=stamp)
+    pair("b")                                   # a gets unpaired; b becomes the sync PC
+    builds.store_upload("orca_live", io.BytesIO(zip_of({"a.json": "{}"})), device_id="b")
+    assert "orca_partial" not in builds.meta()
+
+
+def test_rebuild_request_carries_orca_live_hash(env):
+    builds.request_rebuild("pc sync", "a" * 64, orca_live_hash="b" * 64)
+    view = builds.state_view("a")["rebuild_requested"]
+    assert (view["live_hash"], view["orca_live_hash"]) == ("a" * 64, "b" * 64)
+    builds.request_rebuild("pc sync", "a" * 64)
+    assert builds.state_view("a")["rebuild_requested"]["orca_live_hash"] is None

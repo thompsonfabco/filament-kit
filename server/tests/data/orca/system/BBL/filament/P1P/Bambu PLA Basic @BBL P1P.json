@@ -1,0 +1,32 @@
+{
+	"type": "filament",
+	"name": "Bambu PLA Basic @BBL P1P",
+	"inherits": "Bambu PLA Basic @base",
+	"from": "system",
+	"setting_id": "GFSA04_10",
+	"instantiation": "true",
+	"filament_flow_ratio": [
+		"0.98",
+		"0.98"
+	],
+	"filament_max_volumetric_speed": [
+		"21",
+		"21"
+	],
+	"filament_extruder_variant": [
+		"Direct Drive Standard",
+		"Direct Drive High Flow"
+	],
+	"hot_plate_temp": [
+		"65"
+	],
+	"nozzle_temperature": [
+		"220",
+		"220"
+	],
+	"compatible_printers": [
+		"Bambu Lab P1P 0.4 nozzle",
+		"Bambu Lab P1P 0.6 nozzle",
+		"Bambu Lab P1P 0.8 nozzle"
+	]
+}
