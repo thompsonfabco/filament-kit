@@ -2,6 +2,8 @@ package com.thompsonfabco.filamentkit.ui.printers
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.thompsonfabco.filamentkit.net.AmsSlot
+import com.thompsonfabco.filamentkit.net.AmsUnit
 import com.thompsonfabco.filamentkit.net.Api
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.CommandResult
@@ -10,6 +12,8 @@ import com.thompsonfabco.filamentkit.net.Printer
 import com.thompsonfabco.filamentkit.net.PrinterDetail
 import com.thompsonfabco.filamentkit.net.PrinterStatus
 import com.thompsonfabco.filamentkit.net.PrinterSummary
+import com.thompsonfabco.filamentkit.net.SlotSpool
+import com.thompsonfabco.filamentkit.net.UnloadResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -30,6 +34,7 @@ interface PrinterBackend {
     suspend fun addPrinter(serial: String, accessCode: String, name: String?): Printer
     suspend fun printer(id: String): PrinterDetail
     suspend fun command(id: String, action: String): CommandResult
+    suspend fun unload(id: String, label: String, dryRun: Boolean): UnloadResult
 }
 
 class ApiPrinterBackend(private val api: Api) : PrinterBackend, PrinterToolsBackend {
@@ -37,6 +42,7 @@ class ApiPrinterBackend(private val api: Api) : PrinterBackend, PrinterToolsBack
     override suspend fun addPrinter(serial: String, accessCode: String, name: String?) = api.addPrinter(serial, accessCode, name)
     override suspend fun printer(id: String) = api.printer(id)
     override suspend fun command(id: String, action: String) = api.command(id, action)
+    override suspend fun unload(id: String, label: String, dryRun: Boolean) = api.unload(id, label, dryRun)
     override suspend fun startMap(id: String) = api.startMap(id)
     override suspend fun mapStatus(id: String) = api.mapStatus(id)
     override suspend fun usage(id: String, days: Int) = api.usage(id, days)
@@ -133,6 +139,31 @@ object PrinterHelp {
     }
 
     fun formatMinutes(min: Int): String = if (min >= 60) "${min / 60} h ${min % 60} min" else "$min min"
+
+    /** The external spool holder's slot label (the server's `Ext`). */
+    const val EXT = "Ext"
+
+    /** "AMS A", "AMS HT HT-A", "External spool holder". */
+    fun unitTitle(u: AmsUnit): String = when (u.kind) {
+        "ext" -> "External spool holder"
+        "ams_ht" -> "AMS HT ${u.label}"
+        else -> "AMS ${u.label}"
+    }
+
+    /** "slot A1", or "the external spool holder" for `Ext`. */
+    fun slotName(label: String): String = if (label == EXT) "the external spool holder" else "slot $label"
+
+    /** A slot's spool as the user knows it: its name, else "spool #id". */
+    fun spoolName(s: SlotSpool): String = s.name.ifBlank { "spool #${s.id ?: "?"}" }
+
+    /** "Moved back: Acme Basic Black → Shelf 2" ([name] null: "#3"). */
+    fun movedBackLine(name: String?, id: Int?, location: String): String =
+        "Moved back: ${name?.ifBlank { null } ?: "#${id ?: "?"}"} → ${location.ifBlank { "its previous place" }}"
+}
+
+/** The "Unload?" question for one slot, asked after its dry run said where the spool goes. */
+data class UnloadAsk(val label: String, val spool: String, val location: String) {
+    val question: String get() = "Unload $spool from ${PrinterHelp.slotName(label)}? It goes back to $location."
 }
 
 enum class StopStep { None, First, Second }
@@ -148,6 +179,11 @@ data class PrinterUiState(
     val stopStep: StopStep = StopStep.None,
     val unauthorized: Boolean = false,
     val mismatch: Pair<String, String>? = null,
+    /** The slot whose unload is being checked or sent (one at a time). */
+    val slotBusy: String? = null,
+    val unloadAsk: UnloadAsk? = null,
+    /** The last unload's result, or why it failed. */
+    val slotMessage: List<String> = emptyList(),
 ) {
     val paused: Boolean get() = status?.gcodeState == "PAUSE"
     val printing: Boolean get() = status?.let { PrinterHelp.isPrinting(it.gcodeState) } == true
@@ -223,6 +259,48 @@ class PrinterViewModel(
 
     fun dismissCommandMessage() = _state.update { it.copy(commandMessage = null) }
 
+    // --- unload (Spoolman only: the printer's slot setting is left as it is) ---
+
+    /** Asks where [slot]'s spool would go (dry run), then opens the confirm question. */
+    fun askUnload(slot: AmsSlot) {
+        val spool = slot.spool ?: return
+        if (_state.value.slotBusy != null) return
+        _state.update { it.copy(slotBusy = slot.label, slotMessage = emptyList(), unloadAsk = null) }
+        viewModelScope.launch {
+            guard(onError = ::slotError, describe = PrinterHelp::actionMessage) {
+                val r = backend.unload(id, slot.label, dryRun = true)
+                val where = r.location.ifBlank { r.movedBack.firstOrNull()?.location.orEmpty() }
+                val ask = UnloadAsk(slot.label, PrinterHelp.spoolName(spool), where.ifBlank { "its previous place" })
+                _state.update { it.copy(unloadAsk = ask) }
+            }
+            _state.update { it.copy(slotBusy = null) }
+        }
+    }
+
+    fun cancelUnload() = _state.update { it.copy(unloadAsk = null) }
+
+    fun confirmUnload() {
+        val ask = _state.value.unloadAsk ?: return
+        if (_state.value.slotBusy != null) return
+        _state.update { it.copy(unloadAsk = null, slotBusy = ask.label) }
+        viewModelScope.launch {
+            var done = false
+            guard(onError = ::slotError, describe = PrinterHelp::actionMessage) {
+                val r = backend.unload(id, ask.label, dryRun = false)
+                _state.update { it.copy(slotMessage = unloadLines(ask, r, names())) }
+                done = true
+            }
+            if (done) refresh() // the slot now shows no spool
+            _state.update { it.copy(slotBusy = null) }
+        }
+    }
+
+    private fun slotError(msg: String) = _state.update { it.copy(slotMessage = listOf(msg)) }
+
+    /** Spool names by id, from the slots the status shows. */
+    private fun names(): Map<Int, String> = _state.value.status?.ams.orEmpty().flatMap { it.slots }
+        .mapNotNull { s -> s.spool?.let { sp -> sp.id?.let { id -> id to PrinterHelp.spoolName(sp) } } }.toMap()
+
     private fun send(action: String) {
         if (_state.value.commandBusy) return
         _state.update { it.copy(commandBusy = true, commandMessage = null) }
@@ -235,7 +313,11 @@ class PrinterViewModel(
         }
     }
 
-    private suspend fun guard(onError: (String) -> Unit, block: suspend () -> Unit): Boolean {
+    private suspend fun guard(
+        onError: (String) -> Unit,
+        describe: (ApiError) -> String = PrinterHelp::message,
+        block: suspend () -> Unit,
+    ): Boolean {
         try {
             block()
         } catch (e: CancellationException) {
@@ -250,7 +332,7 @@ class PrinterViewModel(
                 stop()
                 return false
             }
-            onError(PrinterHelp.message(e))
+            onError(describe(e))
         } catch (e: Exception) {
             onError(PrinterHelp.UNEXPECTED)
         }
@@ -258,6 +340,13 @@ class PrinterViewModel(
     }
 
     companion object {
+        /** "Unloaded Acme Basic Black from slot A1." then where each spool went. */
+        fun unloadLines(ask: UnloadAsk, r: UnloadResult, names: Map<Int, String>): List<String> = buildList {
+            add("Unloaded ${ask.spool} from ${PrinterHelp.slotName(ask.label)}.")
+            if (r.movedBack.isEmpty()) add(PrinterHelp.movedBackLine(ask.spool, null, r.location))
+            r.movedBack.forEach { m -> add(PrinterHelp.movedBackLine(m.id?.let(names::get), m.id, m.location)) }
+        }
+
         private val DONE = mapOf(
             "pause" to "Pause", "resume" to "Resume", "stop" to "Stop", "light_on" to "Light on", "light_off" to "Light off",
         )

@@ -34,6 +34,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.currentStateAsState
+import com.thompsonfabco.filamentkit.net.AmsSlot
 import com.thompsonfabco.filamentkit.net.AmsUnit
 import com.thompsonfabco.filamentkit.net.Printer
 import com.thompsonfabco.filamentkit.net.PrinterStatus
@@ -111,7 +112,7 @@ fun PrinterScreen(
         if (status == null) {
             Text("No live status from the printer yet.")
         } else {
-            StatusBlock(status)
+            StatusBlock(status, state, viewModel)
         }
 
         Controls(state, viewModel)
@@ -131,6 +132,17 @@ fun PrinterScreen(
             },
             confirmButton = { Button(onClick = tools::confirmMap) { Text("Map slots") } },
             dismissButton = { TextButton(onClick = tools::cancelMap) { Text("Cancel") } },
+        )
+    }
+    state.unloadAsk?.let { ask ->
+        AlertDialog(
+            onDismissRequest = viewModel::cancelUnload,
+            title = { Text("Unload?") },
+            text = {
+                Text(ask.question + " Only the inventory changes; the printer's slot setting stays as it is.")
+            },
+            confirmButton = { Button(onClick = viewModel::confirmUnload) { Text("Unload") } },
+            dismissButton = { TextButton(onClick = viewModel::cancelUnload) { Text("Cancel") } },
         )
     }
     toolsState.undoTarget?.let { e ->
@@ -181,7 +193,7 @@ private fun CameraBox(printer: Printer, camera: CameraSource, visible: Boolean) 
 }
 
 @Composable
-private fun StatusBlock(s: PrinterStatus) {
+private fun StatusBlock(s: PrinterStatus, state: PrinterUiState, viewModel: PrinterViewModel) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         val headline = listOf(s.stage.ifBlank { stateWord(s.gcodeState) }, s.job).filter { it.isNotBlank() }
         Text(headline.joinToString(" · "), style = MaterialTheme.typography.titleMedium)
@@ -200,15 +212,17 @@ private fun StatusBlock(s: PrinterStatus) {
             t.bed?.let { add("Bed ${temp(it)}") }
             t.chamber?.let { add("Chamber ${temp(it)}") }
         }.joinToString(" · "), style = MaterialTheme.typography.bodyMedium)
-        s.ams.forEach { AmsBlock(it) }
+        s.ams.forEach { AmsBlock(it, state.slotBusy, onUnload = viewModel::askUnload) }
+        state.slotMessage.forEach { Text(it) }
         s.hms.forEach { Text(it.text.ifBlank { "Printer alert ${it.code}" }, color = MaterialTheme.colorScheme.error) }
     }
 }
 
 @Composable
-private fun AmsBlock(u: AmsUnit) {
+/** One AMS unit (or the external holder); a slot holding an inventory spool offers Unload. */
+private fun AmsBlock(u: AmsUnit, busy: String?, onUnload: (AmsSlot) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(if (u.kind == "ams_ht") "AMS HT ${u.label}" else "AMS ${u.label}", style = MaterialTheme.typography.titleSmall)
+        Text(PrinterHelp.unitTitle(u), style = MaterialTheme.typography.titleSmall)
         u.slots.forEach { slot ->
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Spacer(Modifier.size(16.dp).clip(CircleShape).background(hexColor(slot.colorHex)))
@@ -219,7 +233,12 @@ private fun AmsBlock(u: AmsUnit) {
                     spool?.name?.ifBlank { null },
                     spool?.remainingWeight?.let { "${it.toInt()} g left" },
                     if (slot.active) "in use" else null,
-                ).joinToString(" · "), style = MaterialTheme.typography.bodySmall)
+                ).joinToString(" · "), style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                if (spool != null) {
+                    TextButton(onClick = { onUnload(slot) }, enabled = busy == null) {
+                        Text(if (busy == slot.label) "Checking…" else "Unload")
+                    }
+                }
             }
         }
     }

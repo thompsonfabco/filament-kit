@@ -71,12 +71,29 @@ sealed interface LoadUiState {
     data class Mismatch(val expected: String, val actual: String) : LoadUiState
 }
 
+/**
+ * Closing the spool card (its Done, a new tag tap, a trip to the Pair screen): closes the load flow [load] and then
+ * calls [dismissCard], except while a real load is being written; then both stay so the user sees its result (also
+ * when coming back from pairing again).
+ */
+fun closeSpoolCard(load: LoadViewModel?, dismissCard: () -> Unit) {
+    if (load?.close() != false) dismissCard()
+}
+
 /** Texts of the load flow. */
 object LoadHelp {
     const val NOT_CONFIRMED = "The printer accepted it but hasn't shown the change yet"
 
+    /** The real load failed in a way that says nothing about whether it reached the printer. */
+    const val CHECK_PRINTER = "The connection dropped while loading, so the app can't tell if it worked. Check the " +
+        "printer's slot and the spool's location before trying again."
+
+    /** A 401 to the real load: the server refused it before doing anything (e.g. the pairing changed meanwhile). */
+    const val NOT_SENT_PAIRING = "Not loaded: the server did not accept this phone's pairing at that moment. " +
+        "Nothing was changed. If you have paired again, tap Load to try again."
+
     fun previewLines(spool: SpoolSummary, printer: Printer, r: LoadResult): List<String> = buildList {
-        add("Load ${spool.title()} into ${printer.name}, slot ${r.slot.label}")
+        add("Load ${spool.title()} into ${printer.name}, ${PrinterHelp.slotName(r.slot.label)}")
         add(r.preset?.name?.ifBlank { null }?.let { "Preset: $it" } ?: "Preset: none")
         val mm = r.nozzleMm?.let(::mm)
         when {
@@ -89,18 +106,27 @@ object LoadHelp {
         addAll(r.problems)
     }
 
-    fun doneLines(printer: Printer, r: LoadResult): List<String> = buildList {
-        if (r.confirmed) {
-            add("Loaded into ${printer.name}, slot ${r.slot.label}")
-        } else {
-            add("Sent to ${printer.name}, slot ${r.slot.label}")
-            add(NOT_CONFIRMED)
+    /**
+     * The result. [loadedId] is the spool just loaded (never listed as moved back); [names] are spool names by id
+     * (from the printer's slots) for the spools that went back to their previous place.
+     */
+    fun doneLines(printer: Printer, r: LoadResult, loadedId: Int? = null, names: Map<Int, String> = emptyMap()) =
+        buildList {
+            val where = PrinterHelp.slotName(r.slot.label)
+            if (r.confirmed) {
+                add("Loaded into ${printer.name}, $where")
+            } else {
+                add("Sent to ${printer.name}, $where")
+                add(NOT_CONFIRMED)
+            }
+            r.movedBack.filter { it.id == null || it.id != loadedId }.forEach { m ->
+                add(PrinterHelp.movedBackLine(m.id?.let(names::get), m.id, m.location))
+            }
+            addAll(r.problems)
         }
-        addAll(r.problems)
-    }
 
     fun slotLine(s: AmsSlot): String = listOfNotNull(
-        s.label,
+        if (s.label == PrinterHelp.EXT) "Ext (external spool holder)" else s.label,
         s.type.ifBlank { "empty" },
         s.spool?.name?.ifBlank { null },
     ).joinToString(" · ")
@@ -157,13 +183,29 @@ class LoadViewModel(private val backend: LoadBackend) : ViewModel() {
         }
     }
 
+    /**
+     * The real load. It is not cancelled by [close] / [back] or a re-pair: the flow stays open and shows the result.
+     * A 401 here (e.g. the pairing changed meanwhile) stays on the preview with [LoadHelp.NOT_SENT_PAIRING] instead
+     * of the "no longer paired" screen; a dropped connection says to check the printer ([LoadHelp.CHECK_PRINTER]).
+     */
     fun confirm() {
         val p = _state.value as? LoadUiState.Preview ?: return
         if (p.busy) return
         _state.value = p.copy(busy = true, error = null)
-        op(onError = { p.copy(busy = false, error = it) }) {
+        val names = slots.orEmpty().mapNotNull { s -> s.spool?.let { sp -> sp.id?.let { it to sp.name } } }.toMap()
+        op(
+            onError = { p.copy(busy = false, error = it) },
+            describe = { e ->
+                when (e.code) {
+                    "unauthorized" -> LoadHelp.NOT_SENT_PAIRING
+                    "offline", "local_network" -> LoadHelp.CHECK_PRINTER
+                    else -> PrinterHelp.actionMessage(e)
+                }
+            },
+            unauthorizedIsError = true,
+        ) {
             val r = backend.load(p.printer.id, p.label, p.spool.id, dryRun = false)
-            _state.value = LoadUiState.Done(p.printer, p.label, LoadHelp.doneLines(p.printer, r),
+            _state.value = LoadUiState.Done(p.printer, p.label, LoadHelp.doneLines(p.printer, r, p.spool.id, names),
                 r.spool?.toSpoolSummary(), r.spool)
         }
     }
@@ -200,7 +242,13 @@ class LoadViewModel(private val backend: LoadBackend) : ViewModel() {
         else -> null
     }
 
-    private fun op(onError: (String) -> LoadUiState, block: suspend () -> Unit) {
+    /** [unauthorizedIsError]: a 401 goes to [onError] (with [describe]'s text) instead of [LoadUiState.Unauthorized]. */
+    private fun op(
+        onError: (String) -> LoadUiState,
+        describe: (ApiError) -> String = PrinterHelp::actionMessage,
+        unauthorizedIsError: Boolean = false,
+        block: suspend () -> Unit,
+    ) {
         job?.cancel()
         job = viewModelScope.launch {
             try {
@@ -210,7 +258,8 @@ class LoadViewModel(private val backend: LoadBackend) : ViewModel() {
             } catch (e: FingerprintMismatch) {
                 _state.value = LoadUiState.Mismatch(e.expected, e.actual)
             } catch (e: ApiError) {
-                _state.value = if (e.code == "unauthorized") LoadUiState.Unauthorized else onError(PrinterHelp.actionMessage(e))
+                _state.value = if (e.code == "unauthorized" && !unauthorizedIsError) LoadUiState.Unauthorized
+                else onError(describe(e))
             } catch (e: Exception) {
                 _state.value = onError(PrinterHelp.UNEXPECTED)
             }

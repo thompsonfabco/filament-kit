@@ -10,11 +10,9 @@ from dataclasses import dataclass, field
 
 from .. import config
 from ..pairing import _write_atomic, make_state_dir
-from .status import HT_BASE, _d, _int, _l, _s, slot_label, unit_label
+from .status import EXT, EXT_ID, HT_BASE, _d, _int, _l, _s, slot_label, unit_label
 
 FILE = "slotmap.json"
-EXT = "Ext"
-EXT_ID = 254   # the external spool holder; a second nozzle's holder reports 255
 
 
 @dataclass

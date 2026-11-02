@@ -68,6 +68,7 @@ import com.thompsonfabco.filamentkit.ui.search.SearchViewModel
 import com.thompsonfabco.filamentkit.ui.settings.SettingsScreen
 import com.thompsonfabco.filamentkit.ui.spool.ApiSpoolBackend
 import com.thompsonfabco.filamentkit.ui.spool.SpoolHost
+import com.thompsonfabco.filamentkit.ui.spool.closeSpoolCard
 import com.thompsonfabco.filamentkit.ui.spool.SpoolUiState
 import com.thompsonfabco.filamentkit.ui.spool.SpoolViewModel
 import com.thompsonfabco.filamentkit.update.UpdateUi
@@ -142,8 +143,8 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
     LaunchedEffect(pairRequests) {
         if (pairRequests > app.handledPairRequests) {
             app.handledPairRequests = pairRequests
-            spoolVm?.dismiss()
-            loadVm?.close()
+            // a load being written keeps its card: it shows the result once pairing is done
+            closeSpoolCard(loadVm) { spoolVm?.dismiss() }
             if (nav.currentDestination?.route != Routes.PAIR) nav.navigateClearing(Routes.PAIR)
         }
     }
@@ -155,7 +156,7 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
         if (tapsOn) TagEvents.taps.collect {
             // a new tap replaces the open card and any load flow on it, except while a load is being written:
             // then the tap is ignored so the user sees that write's result
-            if (loadVm?.close() != false) tapVm.onTag(it)
+            closeSpoolCard(loadVm) { tapVm.onTag(it) }
         }
     }
 
@@ -323,9 +324,7 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
         val spoolState by vm.state.collectAsStateWithLifecycle()
         if (spoolState != SpoolUiState.Idle && route != Routes.ADD && route != Routes.PAIR) {
             // Not while a load is being written: the dialog stays until the user has seen the result.
-            val close = {
-                if (loadVm?.close() != false) vm.dismiss()
-            }
+            val close = { closeSpoolCard(loadVm, vm::dismiss) }
             Dialog(onDismissRequest = close) {
                 Surface(shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.verticalScroll(rememberScrollState())) {

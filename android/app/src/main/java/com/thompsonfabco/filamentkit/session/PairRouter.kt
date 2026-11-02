@@ -33,8 +33,14 @@ sealed interface PairNotice {
  * The app-wide "go to pairing" signal. Any 401 on an authenticated call, or a [report]ed `unauthorized` /
  * [FingerprintMismatch], bumps [requests] (the navigation host moves to the Pair screen) and sets [notice]
  * (what the Pair screen explains). [clear] after a successful pairing.
+ *
+ * A 401 routes only when the token its request was sent with is still [currentToken]: a late answer to a request
+ * sent before a re-pair finished is stale and ignored.
  */
 class PairRouter {
+    /** The token requests are sent with now (the session sets it); null = no check (every 401 routes). */
+    @Volatile var currentToken: (() -> String?)? = null
+
     private val _notice = MutableStateFlow<PairNotice?>(null)
     val notice: StateFlow<PairNotice?> = _notice.asStateFlow()
 
@@ -49,12 +55,21 @@ class PairRouter {
         when {
             e is FingerprintMismatch -> route(PairNotice.CertChanged(e.expected, e.actual))
             // Keep the token a call already reported (StateFlow conflation must not hide it from the session).
-            e is ApiError && e.code == "unauthorized" -> route(PairNotice.Unpaired((_notice.value as? PairNotice.Unpaired)?.token))
+            e is ApiError && e.code == "unauthorized" && !stale(e.sentToken) ->
+                route(PairNotice.Unpaired((_notice.value as? PairNotice.Unpaired)?.token))
         }
     }
 
-    /** The server answered 401 to a request sent with [sentToken]. */
-    fun unauthorized(sentToken: String) = route(PairNotice.Unpaired(sentToken))
+    /** The server answered 401 to a request sent with [sentToken]; ignored when that is no longer the token. */
+    fun unauthorized(sentToken: String) {
+        if (!stale(sentToken)) route(PairNotice.Unpaired(sentToken))
+    }
+
+    /** [sent] is a token other than the current one (a re-pair replaced it, or it was already revoked). */
+    private fun stale(sent: String?): Boolean {
+        val current = currentToken ?: return false
+        return sent != null && sent != current()
+    }
 
     /** A call saw another certificate; remembered so a later [pairAgain] can show both fingerprints. */
     fun noteMismatch(e: FingerprintMismatch) {

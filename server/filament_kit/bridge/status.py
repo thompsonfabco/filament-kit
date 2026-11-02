@@ -25,6 +25,8 @@ STAGES = {0: 'Printing', 1: 'Auto bed leveling', 2: 'Heatbed preheating', 3: 'Vi
 ACTIVE = {'RUNNING', 'PAUSE', 'PREPARE', 'SLICING'}
 HT_BASE = 128            # AMS HT units are addressed 128, 129, ... (one slot each, tray 0)
 DASH = '–'          # Spoolman locations are "<printer name> – AMS <label>" (en dash)
+EXT = 'Ext'              # the external spool holder (`vt_tray`): unit and slot label
+EXT_ID = 254             # its id; a second nozzle's holder reports 255
 
 
 def merge(full: dict, delta: dict) -> dict:
@@ -182,6 +184,14 @@ def _ams(p: dict, spools: list[dict], printer_name: str) -> list[dict]:
                           'active': now == f"{uid}:{tid}",
                           'spool': _spool_view(spool) if spool else None})
         units.append({'unit': uid, 'label': label, 'kind': kind, 'slots': slots})
+    vt = p.get('vt_tray')
+    if isinstance(vt, dict):        # the external spool holder, loadable like a slot (label "Ext", kind "ext")
+        gid = _int(vt.get('id'), EXT_ID)
+        spool = by_location.get(location(printer_name, EXT)) if printer_name else None
+        units.append({'unit': gid if gid is not None else EXT_ID, 'label': EXT, 'kind': 'ext',
+                      'slots': [{'slot': 0, 'label': EXT, 'type': _s(vt.get('tray_type')),
+                                 'color_hex': _s(vt.get('tray_color'))[:6], 'active': now == 'ext',
+                                 'spool': _spool_view(spool) if spool else None}]})
     return units
 
 

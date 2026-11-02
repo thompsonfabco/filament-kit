@@ -13,6 +13,7 @@ import com.thompsonfabco.filamentkit.net.PresetRef
 import com.thompsonfabco.filamentkit.net.Printer
 import com.thompsonfabco.filamentkit.net.PrinterDetail
 import com.thompsonfabco.filamentkit.net.PrinterStatus
+import com.thompsonfabco.filamentkit.net.SlotSpool
 import com.thompsonfabco.filamentkit.net.UsageEntry
 import com.thompsonfabco.filamentkit.ui.printers.PrinterHelp
 import com.thompsonfabco.filamentkit.ui.printers.PrinterToolsBackend
@@ -20,6 +21,8 @@ import com.thompsonfabco.filamentkit.ui.printers.PrinterToolsViewModel
 import com.thompsonfabco.filamentkit.ui.printers.UsageHelp
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -51,8 +54,12 @@ class LoadFlowTest {
     private val printer = Printer(id = "0948AB", name = "Garage H2D", model = "H2D", serial = "0948AB",
         configured = true, state = "connected")
     private val detail = PrinterDetail(printer, PrinterStatus(gcodeState = "IDLE", ams = listOf(
-        AmsUnit(0, "A", "ams", listOf(AmsSlot(0, "A1", "PLA", "FFFFFF"), AmsSlot(1, "A2"))),
+        AmsUnit(0, "A", "ams", listOf(
+            AmsSlot(0, "A1", "PLA", "FFFFFF", spool = SlotSpool(3, "Acme Basic Black", "PLA", "111111", 400.0)),
+            AmsSlot(1, "A2"),
+        )),
         AmsUnit(128, "HT-A", "ams_ht", listOf(AmsSlot(0, "HT-A", "PETG"))),
+        AmsUnit(254, "Ext", "ext", listOf(AmsSlot(0, "Ext", "TPU"))),
     )))
 
     private fun result(confirmed: Boolean = false, assumed: Boolean = true, problems: List<String> = emptyList()) =
@@ -101,7 +108,35 @@ class LoadFlowTest {
         vm.pickPrinter(printer)
         runCurrent()
         val slots = vm.state.value as LoadUiState.PickSlot
-        assertEquals(listOf("A1", "A2", "HT-A"), slots.slots!!.map { it.label })
+        assertEquals(listOf("A1", "A2", "HT-A", "Ext"), slots.slots!!.map { it.label })
+    }
+
+    @Test fun theExternalHolderCanBePickedLikeASlot() = runTest(dispatcher) {
+        load.preview = result().copy(slot = LoadSlot("Ext", 254, 0))
+        load.real = result(confirmed = true).copy(slot = LoadSlot("Ext", 254, 0))
+        val vm = loadVm()
+        vm.start(spool); runCurrent()
+        vm.pickPrinter(printer); runCurrent()
+        val ext = (vm.state.value as LoadUiState.PickSlot).slots!!.last()
+        assertEquals("Ext (external spool holder) · TPU", LoadHelp.slotLine(ext))
+        vm.pickSlot(ext.label); runCurrent()
+        assertEquals(Triple("Ext", 7, true), load.loads.last())
+        assertTrue((vm.state.value as LoadUiState.Preview).lines[0].endsWith("the external spool holder"))
+        vm.confirm(); runCurrent()
+        assertEquals(Triple("Ext", 7, false), load.loads.last())
+        assertEquals("Loaded into Garage H2D, the external spool holder", (vm.state.value as LoadUiState.Done).lines[0])
+    }
+
+    @Test fun doneListsTheSpoolsMovedBack() = runTest(dispatcher) {
+        load.real = result(confirmed = true).copy(movedBack = listOf(MovedBack(3, "Shelf 1"), MovedBack(9, ""),
+            MovedBack(7, "Garage H2D – AMS A1")))
+        val vm = loadVm()
+        vm.toPreview()
+        vm.confirm(); runCurrent()
+        val d = vm.state.value as LoadUiState.Done
+        // by name when the slot showed it, else by number; the spool just loaded is not listed
+        assertEquals(listOf("Loaded into Garage H2D, slot A1", "Moved back: Acme Basic Black → Shelf 1",
+            "Moved back: #9 → its previous place"), d.lines)
     }
 
     @Test fun loadPreviewsWithDryRunThenConfirms() = runTest(dispatcher) {
@@ -220,6 +255,51 @@ class LoadFlowTest {
         assertEquals(LoadUiState.Closed, vm.state.value)
     }
 
+    @Test fun pairingAgainDuringARealLoadKeepsTheCardForTheResult() = runTest(dispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        load.gate = gate
+        val vm = loadVm()
+        vm.toPreview()
+        vm.confirm(); runCurrent()
+        var cardDismissed = false
+        closeSpoolCard(vm) { cardDismissed = true } // what the app does on a trip to the Pair screen
+        assertFalse("the card stays while the load is written", cardDismissed)
+        assertTrue(vm.writing)
+        gate.complete(Unit); runCurrent()
+        assertTrue("the result shows once it arrives", vm.state.value is LoadUiState.Done)
+        closeSpoolCard(vm) { cardDismissed = true }
+        assertTrue(cardDismissed)
+        assertEquals(LoadUiState.Closed, vm.state.value)
+        // with no load flow at all the card just closes
+        var closed = false
+        closeSpoolCard(null) { closed = true }
+        assertTrue(closed)
+    }
+
+    @Test fun aRealLoadRefusedFor401StaysOnThePreviewSayingNothingChanged() = runTest(dispatcher) {
+        val vm = loadVm()
+        vm.toPreview()
+        load.loadError = ApiError(401, "unauthorized", "Token revoked")
+        vm.confirm(); runCurrent()
+        val p = vm.state.value as LoadUiState.Preview
+        assertEquals(LoadHelp.NOT_SENT_PAIRING, p.error)
+        assertFalse(p.busy)
+        // after pairing again, Load works from the same preview
+        load.loadError = null
+        vm.confirm(); runCurrent()
+        assertTrue(vm.state.value is LoadUiState.Done)
+    }
+
+    @Test fun aRealLoadCutOffSaysToCheckThePrinter() = runTest(dispatcher) {
+        val vm = loadVm()
+        vm.toPreview()
+        load.loadError = ApiError(0, "offline", "The connection to the server was lost")
+        vm.confirm(); runCurrent()
+        val p = vm.state.value as LoadUiState.Preview
+        assertEquals(LoadHelp.CHECK_PRINTER, p.error)
+        assertTrue(p.error!!.contains("Check the printer"))
+    }
+
     @Test fun closeDuringTheDryRunStillCancels() = runTest(dispatcher) {
         val vm = loadVm()
         vm.start(spool)
@@ -262,8 +342,16 @@ class LoadFlowTest {
             return "j-1"
         }
         var mapErrors = 0
+        /** When set, the next map fetch is held (and cannot be cancelled, like a blocking read) until it completes. */
+        var mapGate: CompletableDeferred<Unit>? = null
         override suspend fun mapStatus(id: String): MapStatus {
             mapCalls++
+            mapGate?.let { g ->
+                mapGate = null
+                val answer = last
+                withContext(NonCancellable) { g.await() }
+                return answer // what the printer said when this fetch was sent
+            }
             if (mapErrors > 0) {
                 mapErrors--
                 throw ApiError(0, "offline", "x")
@@ -310,6 +398,33 @@ class LoadFlowTest {
         val calls = tools.mapCalls
         advanceTimeBy(10_000)
         assertEquals("polling stops when done", calls, tools.mapCalls)
+        vm.stop()
+    }
+
+    @Test fun anOldPollAnsweringAfterConfirmDoesNotHideTheNewJob() = runTest(dispatcher) {
+        // the screen's first poll is still out (it will say the last job is done) when the user confirms a new map
+        tools.last = MapStatus(state = "done", calibrated = true)
+        val gate = CompletableDeferred<Unit>()
+        tools.mapGate = gate
+        val vm = toolsVm()
+        vm.start()
+        runCurrent()
+        assertEquals(1, tools.mapCalls)
+        vm.askMap()
+        tools.last = running("Testing A1")
+        vm.confirmMap()
+        runCurrent()
+        assertEquals(1, tools.starts)
+        assertEquals("Testing A1", vm.state.value.map!!.step)
+        gate.complete(Unit) // the old answer arrives late
+        runCurrent()
+        assertEquals("the stale 'done' is dropped", "running", vm.state.value.map!!.state)
+        val calls = tools.mapCalls
+        advanceTimeBy(2001)
+        assertTrue("the new job is still followed", tools.mapCalls > calls)
+        tools.statuses.add(MapStatus(state = "done", calibrated = true))
+        advanceTimeBy(2001)
+        assertEquals("done", vm.state.value.map!!.state)
         vm.stop()
     }
 
