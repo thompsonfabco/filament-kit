@@ -20,6 +20,8 @@ import com.thompsonfabco.filamentkit.ui.printers.PrinterToolsViewModel
 import com.thompsonfabco.filamentkit.ui.printers.UsageHelp
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -262,8 +264,16 @@ class LoadFlowTest {
             return "j-1"
         }
         var mapErrors = 0
+        /** When set, the next map fetch is held (and cannot be cancelled, like a blocking read) until it completes. */
+        var mapGate: CompletableDeferred<Unit>? = null
         override suspend fun mapStatus(id: String): MapStatus {
             mapCalls++
+            mapGate?.let { g ->
+                mapGate = null
+                val answer = last
+                withContext(NonCancellable) { g.await() }
+                return answer // what the printer said when this fetch was sent
+            }
             if (mapErrors > 0) {
                 mapErrors--
                 throw ApiError(0, "offline", "x")
@@ -310,6 +320,33 @@ class LoadFlowTest {
         val calls = tools.mapCalls
         advanceTimeBy(10_000)
         assertEquals("polling stops when done", calls, tools.mapCalls)
+        vm.stop()
+    }
+
+    @Test fun anOldPollAnsweringAfterConfirmDoesNotHideTheNewJob() = runTest(dispatcher) {
+        // the screen's first poll is still out (it will say the last job is done) when the user confirms a new map
+        tools.last = MapStatus(state = "done", calibrated = true)
+        val gate = CompletableDeferred<Unit>()
+        tools.mapGate = gate
+        val vm = toolsVm()
+        vm.start()
+        runCurrent()
+        assertEquals(1, tools.mapCalls)
+        vm.askMap()
+        tools.last = running("Testing A1")
+        vm.confirmMap()
+        runCurrent()
+        assertEquals(1, tools.starts)
+        assertEquals("Testing A1", vm.state.value.map!!.step)
+        gate.complete(Unit) // the old answer arrives late
+        runCurrent()
+        assertEquals("the stale 'done' is dropped", "running", vm.state.value.map!!.state)
+        val calls = tools.mapCalls
+        advanceTimeBy(2001)
+        assertTrue("the new job is still followed", tools.mapCalls > calls)
+        tools.statuses.add(MapStatus(state = "done", calibrated = true))
+        advanceTimeBy(2001)
+        assertEquals("done", vm.state.value.map!!.state)
         vm.stop()
     }
 
