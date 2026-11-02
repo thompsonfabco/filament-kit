@@ -21,9 +21,20 @@ from .bridge import registry
 from .profiles import builds, lines as lines_mod
 from .profiles.errors import ProfileError
 from .spoolman import Spoolman, SpoolmanError
+from .station_client import StationClient, StationUnreachable
 
 KEY_FILE = "anthropic_key"
-SERVICES = ("spoolman", "filament-kit")
+
+def services_for(on: frozenset[str]) -> tuple[str, ...]:
+    """systemd services that must be active for the modules that are on."""
+    out = []
+    if "spoolman" in on:
+        out.append("spoolman")
+    if "server" in on:
+        out.append("filament-kit")
+    if "station" in on:
+        out.append("filament-kit-station")
+    return tuple(out)
 
 
 def _no_systemd() -> bool:
@@ -73,58 +84,90 @@ def _api_answers(port: int) -> tuple[bool, str]:
         return False, url
 
 
+def _station_lines(url: str) -> bool:
+    try:
+        state = StationClient(url, backoff=0).state()
+    except StationUnreachable:
+        return _line(False, f"station not answering at {url}",
+                     f"check the station machine: sudo systemctl status filament-kit-station  (url {url})")
+    good = _line(True, f"station answering at {url}")
+    # a fresh station has seen neither the reader nor the scale: informational, not a failure
+    if not state.get("tag"):
+        print("--   station reader not seen")
+    if not state.get("scale") and not state.get("last_weight"):
+        print("--   station scale not seen")
+    return good
+
+
 def cmd_status(client_factory) -> int:
     cfg = config.load()
     p = config.paths()
+    on = modules.enabled(cfg)
     good = True
 
     if _no_systemd():
         print("--   service checks skipped (FK_NO_SYSTEMD=1)")
     else:
-        for svc in SERVICES:
+        for svc in services_for(on):
             try:
                 r = subprocess.run(["systemctl", "is-active", svc], capture_output=True, text=True, timeout=15)
                 active = r.stdout.strip() == "active"
             except (OSError, subprocess.SubprocessError):
                 active = False
             good &= _line(active, f"service {svc} active", f"sudo systemctl start {svc}")
-        ok, url = _api_answers(cfg["port"])
-        good &= _line(ok, f"filament-kit API {'answering' if ok else 'not answering'} at {url}",
-                      "sudo journalctl -u filament-kit -n 50")
+        if "server" in on:
+            ok, url = _api_answers(cfg["port"])
+            good &= _line(ok, f"filament-kit API {'answering' if ok else 'not answering'} at {url}",
+                          "sudo journalctl -u filament-kit -n 50")
 
-    try:
-        version = Spoolman(cfg["spoolman_url"]).ping()
-        good &= _line(True, f"Spoolman reachable at {cfg['spoolman_url']} (v{version})")
-    except SpoolmanError as e:
-        good &= _line(False, f"Spoolman not reachable at {cfg['spoolman_url']}: {e}",
-                      "sudo systemctl start spoolman")
-
-    keyfile = p.etc / KEY_FILE
-    try:
-        key = keyfile.read_text(encoding="utf-8").strip()
-    except OSError:
-        key = ""
-    if not key:
-        good &= _line(False, f"Anthropic key missing ({keyfile})", "run: sudo filament-kit config  (option 4)")
-    else:
+    if "server" in on or "spoolman" in on:
         try:
-            client_factory(key).models.list()
-            good &= _line(True, "Anthropic key accepted")
-        except Exception as e:  # noqa: BLE001 - any failure means the key/network is unusable
-            msg = str(e).replace(key, "***")
-            good &= _line(False, f"Anthropic key not accepted or API unreachable: {msg}",
-                          "run: sudo filament-kit config  (option 4) or check internet access")
+            version = Spoolman(cfg["spoolman_url"]).ping()
+            good &= _line(True, f"Spoolman reachable at {cfg['spoolman_url']} (v{version})")
+        except SpoolmanError as e:
+            good &= _line(False, f"Spoolman not reachable at {cfg['spoolman_url']}: {e}",
+                          "sudo systemctl start spoolman" if "spoolman" in on
+                          else "check that the remote Spoolman is running and spoolman_url is right")
 
-    cert = p.etc / "cert.pem"
-    if cert.exists():
-        good &= _line(True, f"certificate present, fingerprint {pairing.fingerprint(cert.read_bytes())}")
-    else:
-        good &= _line(False, f"certificate missing ({cert})", "run: sudo filament-kit cert")
+    if "ai_intake" in on:
+        keyfile = p.etc / KEY_FILE
+        try:
+            key = keyfile.read_text(encoding="utf-8").strip()
+        except OSError:
+            key = ""
+        if not key:
+            good &= _line(False, f"Anthropic key missing ({keyfile})", "run: sudo filament-kit config  (option 4)")
+        else:
+            try:
+                client_factory(key).models.list()
+                good &= _line(True, "Anthropic key accepted")
+            except Exception as e:  # noqa: BLE001 - any failure means the key/network is unusable
+                msg = str(e).replace(key, "***")
+                good &= _line(False, f"Anthropic key not accepted or API unreachable: {msg}",
+                              "run: sudo filament-kit config  (option 4) or check internet access")
 
-    print(f"--   display name: {cfg['server_name']}")
-    print(f"--   paired devices: {len(pairing.devices())}")
-    print(f"--   reads used today: {_reads_today()} of {cfg['reads_per_day']}")
-    good &= _profile_status_lines()
+    if "server" in on:
+        cert = p.etc / "cert.pem"
+        if cert.exists():
+            good &= _line(True, f"certificate present, fingerprint {pairing.fingerprint(cert.read_bytes())}")
+        else:
+            good &= _line(False, f"certificate missing ({cert})", "run: sudo filament-kit cert")
+
+    station_url = (cfg.get("station") or {}).get("url")
+    if station_url:
+        good &= _station_lines(station_url)
+
+    if "server" in on:
+        print(f"--   display name: {cfg['server_name']}")
+        print(f"--   paired devices: {len(pairing.devices())}")
+        print(f"--   reads used today: {_reads_today()} of {cfg['reads_per_day']}")
+    if "presets" in on:
+        good &= _profile_status_lines()
+    elif "library" in on:
+        try:
+            _library_status_lines()
+        except Exception as e:  # noqa: BLE001 - status reports, it does not crash
+            print(f"--   library: could not be read ({e.__class__.__name__}: {e})")
     return 0 if good else 1
 
 
