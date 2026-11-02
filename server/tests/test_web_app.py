@@ -99,43 +99,15 @@ def _token(store) -> str:
 # ---------- MCP ----------
 
 def _mcp(app, token, fn):
-    async def main():
-        async with _lifespan(app):
-            async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app, client=AWAY),
-                                          base_url=ORIGIN, headers={"Authorization": f"Bearer {token}"}) as hc:
-                async with Client(streamable_http_client(ORIGIN + "/mcp", http_client=hc), mode="legacy") as c:
-                    return await fn(c)
-    return anyio.run(main)
-
-
-class _lifespan:
-    """Run the inner Starlette app's lifespan (the MCP session manager) around an ASGI test."""
-
-    def __init__(self, app):
-        self.app = app
-        self.queue_in: list = []
-
-    async def __aenter__(self):
-        self._send, self._recv = anyio.create_memory_object_stream(10)
-        self._out_send, self._out_recv = anyio.create_memory_object_stream(10)
-        self._tg = anyio.create_task_group()
-        await self._tg.__aenter__()
-
-        async def receive():
-            return await self._recv.receive()
-
-        async def send(msg):
-            await self._out_send.send(msg)
-        self._tg.start_soon(self.app, {"type": "lifespan", "asgi": {"version": "3.0"}, "state": {}}, receive, send)
-        await self._send.send({"type": "lifespan.startup"})
-        msg = await self._out_recv.receive()
-        assert msg["type"] == "lifespan.startup.complete", msg
-        return self
-
-    async def __aexit__(self, *exc):
-        await self._send.send({"type": "lifespan.shutdown"})
-        await self._out_recv.receive()
-        await self._tg.__aexit__(None, None, None)
+    """Run `fn(client)` against the app served by uvicorn on 127.0.0.1 (real HTTP + SSE and the app's own
+    lifespan); the Host header is the public host, as nginx passes it."""
+    async def main(url):
+        async with httpx2.AsyncClient(headers={"Authorization": f"Bearer {token}",
+                                               "Host": "mcp.example.test"}) as hc:
+            async with Client(streamable_http_client(url + "/mcp", http_client=hc), mode="legacy") as c:
+                return await fn(c)
+    with readers_fake.Served(app, free_port()) as url:
+        return anyio.run(main, url)
 
 
 def test_mcp_handshake_and_tools_list(app, store):
