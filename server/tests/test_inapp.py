@@ -57,7 +57,7 @@ def test_keep_edits_copies_changed_value():
     live = dict(LIVE, filament_notes=f"Summary\n{inapp.MARK}\nmine")
     log = []
     keys = inapp.keep_edits(cfg, dict(INSTALLED, filament_notes="Summary"), live, log)
-    assert keys == {"filament_flow_ratio", "pressure_advance"}
+    assert keys == {"filament_flow_ratio": ["0.95"]}         # pressure_advance equals the generated value (S27)
     assert cfg["filament_flow_ratio"] == ["0.95"]
     assert any("filament_flow_ratio" in line and "(your in-app value, kept)" in line for line in log)
     assert not any("pressure_advance" in line and "in-app value" in line for line in log)  # same value: no log
@@ -69,9 +69,40 @@ def test_keep_edits_copies_changed_value():
 
 def test_keep_edits_without_both_sides():
     cfg = {"name": "x", "filament_flow_ratio": ["0.98"]}
-    assert inapp.keep_edits(cfg, None, LIVE, []) == set()
-    assert inapp.keep_edits(cfg, INSTALLED, None, []) == set()
+    assert inapp.keep_edits(cfg, None, LIVE, []) == {}
+    assert inapp.keep_edits(cfg, INSTALLED, None, []) == {}
     assert cfg == {"name": "x", "filament_flow_ratio": ["0.98"]}
+
+
+def test_recorded_edits_last_and_drop_when_generated_again():
+    cfg = {"name": "x", "filament_flow_ratio": ["0.98"], "pressure_advance": ["0.02"], "hot_plate_temp": ["55"]}
+    installed = {"filament_flow_ratio": ["0.91"], "pressure_advance": ["0.04"], "hot_plate_temp": ["55"]}
+    recorded = {"filament_flow_ratio": ["0.91"], "pressure_advance": ["0.04"], "name": "ignored"}
+    # flow untouched since (kept from the record); pressure_advance set back to the generated value (dropped);
+    # hot_plate_temp changed now (a fresh edit)
+    live = {"filament_flow_ratio": ["0.91"], "pressure_advance": ["0.02"], "hot_plate_temp": ["60"]}
+    log = []
+    got = inapp.keep_edits(dict(cfg), installed, live, log, recorded=recorded)
+    assert got == {"filament_flow_ratio": ["0.91"], "hot_plate_temp": ["60"]}
+    assert any("pressure_advance is the generated value again" in line for line in log)
+    # changed again: the live value wins over the record
+    got = inapp.keep_edits(dict(cfg), installed, dict(live, filament_flow_ratio=["0.93"]), [], recorded=recorded)
+    assert got["filament_flow_ratio"] == ["0.93"]
+    # the live preset is gone (an app reset rebuilds it): the record is still his
+    out = dict(cfg)
+    assert inapp.keep_edits(out, installed, None, [], recorded=recorded) == {"filament_flow_ratio": ["0.91"],
+                                                                            "pressure_advance": ["0.04"]}
+    assert out["filament_flow_ratio"] == ["0.91"]
+
+
+def test_partial_build_values_are_not_edits():
+    cfg = {"name": "x", "filament_density": ["1.35"], "filament_flow_ratio": ["0.98"]}
+    installed = {"filament_density": ["1.24"], "filament_flow_ratio": ["0.98"]}
+    partial = {"filament_density": ["1.31"], "filament_flow_ratio": ["0.98"]}
+    live = {"filament_density": ["1.31"], "filament_flow_ratio": ["0.9"]}
+    assert inapp.keep_edits(dict(cfg), installed, live, [], partial=partial) == {"filament_flow_ratio": ["0.9"]}
+    assert inapp.keep_edits(dict(cfg), installed, live, []) == {"filament_density": ["1.31"],
+                                                               "filament_flow_ratio": ["0.9"]}
 
 
 def test_is_reset():

@@ -56,7 +56,7 @@ All routes need the Bearer token (`_authed`). Errors are `{"error", "message", .
 | Route | Body | Success | Errors |
 |---|---|---|---|
 | `GET /api/sync/state` | — | `{owner: str\|null, you: str, user_id: str\|null, live_hash: str\|null, system_hash: str\|null, build: {stamp, live_hash, created, presets: int, problems: int}\|null, last_attempt: {at, ok, error}\|null, installed: {stamp, at}\|null, rebuild_requested: {at, live_hash}\|null}` | — |
-| `PUT /api/sync/live?user_id=<[A-Za-z0-9_-]{1,64}>` | `application/zip` | `{live_hash}` | 400 `bad_zip`, 413 `too_large`, 409 `other_pc` |
+| `PUT /api/sync/live?user_id=<[A-Za-z0-9_-]{1,64}>[&partial=<stamp>]` | `application/zip` | `{live_hash}` | 400 `bad_zip` / `bad_request`, 413 `too_large`, 409 `other_pc` |
 | `PUT /api/sync/system` | `application/zip` | `{system_hash, presets: int}` | same |
 | `POST /api/sync/rebuild` | `{live_hash}` | 202 `{requested: true}` | 409 `other_pc` |
 | `GET /api/sync/build?stamp=<stamp>` | — | `application/zip`: `BUILD.json` + `base/<name>.json` + `base/<name>.info` | 404 `not_found` |
@@ -67,6 +67,8 @@ All routes need the Bearer token (`_authed`). Errors are `{"error", "message", .
 | `GET /api/profiles/parents?material=<m>` | — | `{parents: [str], synced: bool}` | — |
 | `POST /api/profiles/propose` | `{vendor, line, material}` | `{line_id, line, bambu_parent, parent_source, exists}` | 400 |
 | `POST /api/library/local` | an entry JSON object | 201 `{entry, line_id}` (+ rebuild request) | 400 `invalid_entry` with `problems: [str]` |
+
+Contract addendum (ruling S28): `partial` on `PUT /api/sync/live` (optional, a build stamp) names a build whose install stopped part-way on the PC. The server stores it with the live upload, does not count a live value equal to that build's value as an in-app edit, and clears it on the next `POST /api/sync/installed`.
 
 Intake: every `POST /api/intake/read` item also carries `line`, `bambu_parent`, `parent_source`, `line_exists`; `POST /api/intake/add` items accept optional `line` and `bambu_parent` (text ≤ 100, no `@`).
 

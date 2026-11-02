@@ -45,8 +45,8 @@ class FakeClient:
         self._maybe_fail("state")
         return json.loads(json.dumps(self.st))
 
-    def upload(self, kind, data, user_id=None):
-        self.calls.append(("upload", kind, user_id))
+    def upload(self, kind, data, user_id=None, partial=None):
+        self.calls.append(("upload", kind, user_id) + ((partial,) if partial else ()))
         self._maybe_fail("upload")
         with zipfile.ZipFile(io.BytesIO(data)) as zf:
             names = zf.namelist()
@@ -334,9 +334,48 @@ def test_resume_refused_when_a_new_preset_was_edited_after_the_crash(env):
     assert json.loads(target.read_text(encoding="utf-8")) == edited
     assert not sync.marker_path(dirs).exists()
     here = _hashes(folders)[0]
-    assert ("upload", "live", folders.user_id) in c.calls and ("rebuild", here) in c.calls
+    assert ("upload", "live", folders.user_id, STAMP) in c.calls and ("rebuild", here) in c.calls
     assert not [x for x in c.calls if x[0] == "installed"]
     assert "edited" in _log(dirs)
+    # ruling S28: the half-installed build is kept as dirs.partial and named in every live upload until an install
+    assert json.loads(dirs.state.read_text())["partial"]["stamp"] == STAMP
+    assert json.loads((dirs.partial / "BUILD.json").read_text())["stamp"] == STAMP
+    assert (dirs.partial / "base" / f"{new_name}.json").is_file()
+    target.write_text(json.dumps(dict(edited, nozzle_temperature=["246"])), encoding="utf-8")
+    c.calls.clear()
+    _run(c, folders, dirs, now=T0 + 2000)
+    assert ("upload", "live", folders.user_id, STAMP) in c.calls
+    # the rebuilt build carrying the edit installs; the partial build is then forgotten
+    here = _hashes(folders)[0]
+    rebuilt = {**presets, new_name: json.loads(target.read_text(encoding="utf-8"))}
+    stamp2 = "20261102-020000"
+    c.st["build"] = {"stamp": stamp2, "live_hash": here}
+    c.zip = _build_zip(stamp=stamp2, live_hash=here, presets=rebuilt)
+    c.calls.clear()
+    assert _run(c, folders, dirs, now=T0 + 3000) == "installed"
+    assert "partial" not in json.loads(dirs.state.read_text()) and not dirs.partial.exists()
+    uploads = [x for x in c.calls if x[0] == "upload"]
+    assert uploads == [("upload", "live", folders.user_id)]
+
+
+def test_rebuild_requested_after_an_inapp_edit_of_the_installed_build(env):
+    """Ruling S29b: the installed build is current, but the live folder changed since the install."""
+    folders, dirs = env
+    live = _hashes(folders)[0]
+    c = FakeClient(_synced_state(folders, build={"stamp": STAMP, "live_hash": live}), _build_zip(live_hash=live))
+    assert _run(c, folders, dirs) == "installed"
+    c.st["live_hash"] = _hashes(folders)[0]
+    assert _run(c, folders, dirs, now=T0 + 60) == "up_to_date"           # the install's own writes: no rebuild
+    target = folders.user_filament / "base" / "Acme PLA @BBL H2D.json"
+    target.write_text(json.dumps(dict(PRESET, nozzle_temperature=["230"])), encoding="utf-8")
+    here = _hashes(folders)[0]
+    c.calls.clear()
+    assert _run(c, folders, dirs, now=T0 + 120) == "rebuild_requested"
+    assert ("upload", "live", folders.user_id) in c.calls and ("rebuild", here) in c.calls
+    c.calls.clear()
+    assert _run(c, folders, dirs, now=T0 + 600) == "waiting"             # rate-limited as today
+    assert not [x for x in c.calls if x[0] == "rebuild"]
+    assert _run(c, folders, dirs, now=T0 + 120 + 15 * 60 + 1) == "rebuild_requested"
 
 
 def test_rejected_upload_backs_off_6h_for_the_same_hash(env):

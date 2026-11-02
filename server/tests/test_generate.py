@@ -85,12 +85,12 @@ SUNLU = [fil(17, "PLA+ 2.0 Grey"), fil(3, "PLA+ 2.0 Red")]
 
 
 def build(tmp_path, filaments, *, lib=None, store_presets=None, line_set=None, live=None, snapshot=None,
-          deleted_before=(), restore=False, out="out", models=MODELS):
+          deleted_before=(), restore=False, out="out", models=MODELS, partial=None):
     store = bbl.Store(store_presets or presets())
     return G.build_all(filaments=filaments, models=models, store=store, library=lib or make_lib(),
                        lines=line_set if line_set is not None else {}, live=live, snapshot=snapshot,
                        deleted_before=set(deleted_before), restore_deleted=restore, out_dir=tmp_path / out,
-                       now=NOW)
+                       now=NOW, partial=partial)
 
 
 def names(manifest):
@@ -490,3 +490,98 @@ def test_live_reads_presets_and_info(tmp_path):
     assert live.preset("X") == ({"a": 1}, {"setting_id": "PF1", "sync_info": ""})
     assert live.preset("Y") == (None, {})
     assert live.preset("Z") == (None, {})
+
+
+# ---------- ruling S27 / S28: in-app edits that last, partial installs ----------
+
+def _install_build(tmp_path, out, manifest, live_from=None):
+    """Install the build in `out`: the snapshot is its base/ + BUILD.json (as builds/<stamp>/ on the server); the
+    live folder becomes a copy of it unless `live_from` (an existing live folder) is kept as is."""
+    snap = tmp_path / f"snap-{out}"
+    shutil.copytree(tmp_path / out / "base", snap / "base")
+    (snap / "BUILD.json").write_text(json.dumps(manifest), encoding="utf-8")
+    live = tmp_path / f"live-{out}"
+    shutil.copytree(tmp_path / out / "base", live / "base")
+    return snap, G.Live(live, "1725623066")
+
+
+def _edit_live(live, name, **values):
+    p = live.root / "base" / f"{name}.json"
+    cfg = json.loads(p.read_text(encoding="utf-8"))
+    cfg.update(values)
+    p.write_text(json.dumps(cfg), encoding="utf-8")
+
+
+def _edited_once(tmp_path, flow):
+    """Build o1, install it, edit filament_flow_ratio of the 0.4 H2D preset, build o2 and install it."""
+    m1, ls = build(tmp_path, SUNLU, out="o1")
+    snap, live = _install_build(tmp_path, "o1", m1)
+    name = sunlu(H2D, "0.4")
+    _edit_live(live, name, filament_flow_ratio=flow)
+    m2, ls = build(tmp_path, SUNLU, line_set=ls, live=live, snapshot=snap, out="o2")
+    assert read(tmp_path, name, "o2")["filament_flow_ratio"] == flow
+    assert m2["inapp"][name] == {"filament_flow_ratio": flow}
+    snap2, live2 = _install_build(tmp_path, "o2", m2)
+    return name, ls, snap2, live2
+
+
+def test_inapp_edit_persists_across_three_builds(tmp_path):
+    flow = ["0.91", "0.91"]
+    name, ls, snap, live = _edited_once(tmp_path, flow)
+    filaments = [dict(f, density=1.30) for f in SUNLU]            # a later, unrelated reason to rebuild
+    m3, ls = build(tmp_path, filaments, line_set=ls, live=live, snapshot=snap, out="o3")
+    new = read(tmp_path, name, "o3")
+    assert new["filament_flow_ratio"] == flow and new["filament_density"] == ["1.3"]
+    assert m3["inapp"][name] == {"filament_flow_ratio": flow}
+    assert read(tmp_path, sunlu(H2D, "0.6"), "o3")["filament_flow_ratio"] == ["0.98", "0.98"]
+    snap3, live3 = _install_build(tmp_path, "o3", m3)
+    m4, _ = build(tmp_path, filaments, line_set=ls, live=live3, snapshot=snap3, out="o4")
+    assert read(tmp_path, name, "o4")["filament_flow_ratio"] == flow
+    assert m4["inapp"][name] == {"filament_flow_ratio": flow}
+
+
+def test_inapp_edit_reverted_to_generated_is_dropped(tmp_path):
+    name, ls, snap, live = _edited_once(tmp_path, ["0.91", "0.91"])
+    _edit_live(live, name, filament_flow_ratio=["0.98", "0.98"])     # the owner typed the generated value back
+    m3, ls = build(tmp_path, SUNLU, line_set=ls, live=live, snapshot=snap, out="o3")
+    assert read(tmp_path, name, "o3")["filament_flow_ratio"] == ["0.98", "0.98"]
+    assert name not in m3["inapp"]
+    snap3, live3 = _install_build(tmp_path, "o3", m3)
+    newer = presets()                                               # a Bambu Studio update changes the parent
+    newer["Bambu PLA Tough+ @BBL H2D"]["filament_flow_ratio"] = ["0.96", "nil"]
+    m4, _ = build(tmp_path, SUNLU, store_presets=newer, line_set=ls, live=live3, snapshot=snap3, out="o4")
+    assert read(tmp_path, name, "o4")["filament_flow_ratio"] == ["0.96", "0.96"]   # no longer protected
+    assert name not in m4["inapp"]
+
+
+def test_inapp_edit_changed_again_takes_the_new_value(tmp_path):
+    name, ls, snap, live = _edited_once(tmp_path, ["0.91", "0.91"])
+    _edit_live(live, name, filament_flow_ratio=["0.93", "0.93"], pressure_advance=["0.03"])
+    m3, ls = build(tmp_path, SUNLU, line_set=ls, live=live, snapshot=snap, out="o3")
+    assert read(tmp_path, name, "o3")["filament_flow_ratio"] == ["0.93", "0.93"]
+    assert m3["inapp"][name] == {"filament_flow_ratio": ["0.93", "0.93"], "pressure_advance": ["0.03"]}
+    snap3, live3 = _install_build(tmp_path, "o3", m3)
+    m4, _ = build(tmp_path, SUNLU, line_set=ls, live=live3, snapshot=snap3, out="o4")
+    assert m4["inapp"][name] == {"filament_flow_ratio": ["0.93", "0.93"], "pressure_advance": ["0.03"]}
+
+
+def test_partial_install_values_are_not_inapp_edits(tmp_path):
+    m1, ls = build(tmp_path, SUNLU, out="o1")
+    snap, live = _install_build(tmp_path, "o1", m1)
+    first, second = sunlu(H2D, "0.4"), sunlu(H2D, "0.6")
+    _edit_live(live, second, filament_flow_ratio=["0.92", "0.92"])          # an edit carried by o2
+    m2, ls = build(tmp_path, [dict(f, density=1.31) for f in SUNLU], line_set=ls, live=live, snapshot=snap,
+                   out="o2")
+    (tmp_path / "o2" / "BUILD.json").write_text(json.dumps(m2), encoding="utf-8")
+    # o2's install crashed after writing `first` and `second`; the server still has o1 as installed
+    for n in (first, second):
+        shutil.copy(tmp_path / "o2" / "base" / f"{n}.json", live.root / "base" / f"{n}.json")
+    third = sunlu(H2D, "0.8")
+    _edit_live(live, third, filament_density=["1.31"])          # typed by the owner: equals o2's value, not an edit
+    m3, _ = build(tmp_path, [dict(f, density=1.35) for f in SUNLU], line_set=ls, live=live, snapshot=snap,
+                  out="o3", partial=tmp_path / "o2")
+    for n in (first, second, third):
+        assert read(tmp_path, n, "o3")["filament_density"] == ["1.35"], n
+    assert not any("filament_density" in e for e in m3["edits"]), m3["edits"]
+    assert read(tmp_path, second, "o3")["filament_flow_ratio"] == ["0.92", "0.92"]    # o2's edit still kept
+    assert m3["inapp"] == {second: {"filament_flow_ratio": ["0.92", "0.92"]}}

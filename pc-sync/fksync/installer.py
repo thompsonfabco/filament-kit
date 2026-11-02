@@ -6,7 +6,9 @@ Order (each check runs before anything is written):
      system filament presets, or the live preset's current value (the builder never writes G-code
      of its own);
   3. a preset edited or deleted in Bambu Studio after the build was made refuses the install
-     (unless more than a quarter of the installed presets vanished at once: an app reset);
+     (unless more than a quarter of the installed presets vanished at once: an app reset); a live
+     value equal to the copy in dirs.partial (a build whose install stopped part-way, ruling S28) was
+     written by that install, not typed in the app, so it is not an edit (the server agrees);
   4. Bambu Studio must not be running; this is checked again right before the first write, and
      if it runs then nothing is written, not even the backup;
   5. the user filament folder (which must exist) is backed up to dirs.backups/<stamp> (the 5
@@ -179,6 +181,7 @@ def install(build_dir: Path, folders: StudioFolders, dirs: AppDirs, *,
     stage = build_dir / "base"
     live = folders.user_filament / "base"
     snap = dirs.installed / "base"
+    half = dirs.partial / "base"
 
     # 1. staged names
     staged = _names(stage)
@@ -208,7 +211,9 @@ def install(build_dir: Path, folders: StudioFolders, dirs: AppDirs, *,
             if not reset:
                 stop.append(f"{name}: deleted in Bambu Studio after the build was made")
             continue
-        late = [k for k, v in inapp.diff(old, now).items() if inapp.norm(new[name].get(k)) != inapp.norm(v)]
+        part = _load_or_none(half / f"{name}.json") if half.is_dir() else None
+        late = [k for k, v in inapp.diff(old, now).items() if inapp.norm(new[name].get(k)) != inapp.norm(v)
+                and not (part is not None and k in part and inapp.norm(part[k]) == inapp.norm(v))]
         if late:
             stop.append(f"{name}: edited in Bambu Studio after the build was made ({', '.join(late)})")
     if unsafe:
