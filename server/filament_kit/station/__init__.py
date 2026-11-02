@@ -2,6 +2,7 @@
 
 GET /state    -> {"tag": {...as /last-tag...}, "scale": {"grams", "status", "unit", "stable", "age_seconds"} | null,
                   "last_weight": {"grams", "age_seconds", "held"} | null, "panel": "/dev/ttyUSBn" | null,
+                  "panel_version": "2" | null,
                   "air": {"temp_c", "rh", "hpa", "age_seconds"} | null, "photo": {"url", "taken_at", "age_seconds"} | null}
                  scale = the latest report; last_weight = the latest stable reading above 20 g (the DYMO shuts itself
                  off after a few idle minutes, and the spool may be off the scale by the time the photos go in);
@@ -15,7 +16,9 @@ owner's filament-mcp reads a kit station unchanged):
 - `scale`: a USB HID postal scale (DYMO M10/M25/S-series, vendor 0922) read from /dev/hidraw*;
 - `nfc`: a PN532 through nfcpy; tag ids via `tags.format_uid` (nfc2klipper's form, matching Spoolman's extra.nfc_id);
 - `panel`: the optional button panel (station/panel/ + PANEL.md in the repo), a D1 mini on USB serial with a buzzer
-  and lit Hold / Discard buttons, found by its HELLO; the reader gets the other ttyUSB port (NFC_DEVICE=auto);
+  and lit Hold / Discard buttons, found by its HELLO; the reader gets the other ttyUSB port (NFC_DEVICE=auto).
+  A panel on other firmware than the bundled one is reflashed with esptool (STATION_PANEL_FLASH=0 stops that);
+- `wire`: the one write path to the panel, shared by panel, beep and speech;
 - `beep`: without the panel, a scan beeps through ALSA (aplay);
 - `speech`: the panel speaks ("Held, 1042 grams"): espeak-ng, cut to 8 kHz by ffmpeg, streamed to its speaker (else
   played on the beep output); STATION_SPEECH=0 turns it off;

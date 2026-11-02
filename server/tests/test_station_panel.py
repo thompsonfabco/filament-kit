@@ -14,7 +14,7 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
-from filament_kit.station import air, beep, camera, nfc, panel, speech
+from filament_kit.station import air, beep, camera, nfc, panel, speech, wire
 from filament_kit.station import http as station_http
 from filament_kit.station import state as st
 
@@ -97,12 +97,12 @@ def test_air_garbage_ignored():
 
 def test_panel_send_text_and_bytes():
     ser = st.panel["ser"] = Ser()
-    assert panel.panel_send("L 1 0") and panel.panel_send(b"A 2\n\x01\x02")
+    assert wire.panel_send("L 1 0") and wire.panel_send(b"A 2\n\x01\x02")
     assert ser.out == b"L 1 0\nA 2\n\x01\x02"
 
 
 def test_panel_send_without_panel():
-    assert panel.panel_send(b"A 1\n\x00") is False
+    assert wire.panel_send(b"A 1\n\x00") is False
 
 
 # --- speech --------------------------------------------------------------------------------------------------------
@@ -183,6 +183,34 @@ def test_speech_without_panel_plays_on_the_beep_output(monkeypatch):
     monkeypatch.setattr(beep, "beep_device", lambda: None)
     speech.speak("Discarded")
     assert calls == []
+
+
+def test_speech_loop_survives_aplay_trouble(monkeypatch):
+    """aplay missing or hung must not end the speech thread: the next phrase is still spoken."""
+    spoken = []
+
+    def speak(text):
+        spoken.append(text)
+        if len(spoken) == 1:
+            raise subprocess.TimeoutExpired("aplay", 15)
+        if len(spoken) == 2:
+            raise FileNotFoundError("aplay")
+        raise SystemExit  # ends the loop thread's run in the test
+    monkeypatch.setattr(speech, "speak", speak)
+    done = threading.Event()
+
+    def run():
+        try:
+            speech.speech_loop()
+        except SystemExit:
+            done.set()
+    threading.Thread(target=run, daemon=True).start()
+    for text in ("a", "b", "c"):
+        speech.say(text)
+        deadline = time.time() + 5
+        while len(spoken) < "abc".index(text) + 1 and time.time() < deadline:
+            time.sleep(0.01)
+    assert done.wait(5) and spoken == ["a", "b", "c"]
 
 
 def test_speak_survives_a_missing_synth_or_ffmpeg(monkeypatch):
@@ -341,7 +369,7 @@ def _serve(view, allow):
 
 def _raw(now, **kw):
     s = {"tag": "4:aa:bb", "tag_at": now - 5, "scale": None, "scale_at": None, "last": None, "last_at": None,
-         "held": 1098.0, "held_at": now - 3, "suppress": False, "blink_until": 0, "panel": "/dev/ttyUSB1",
+         "held": 1098.0, "held_at": now - 3, "suppress": False, "blink_until": 0, "panel": "/dev/ttyUSB1", "panel_version": "2",
          "air": None, "air_at": None, "photo": None, "photo_at": None}
     s.update(kw)
     return s
@@ -364,7 +392,8 @@ def test_state_air_and_photo():
         s = json.loads(_fetch(base + "/state")[2])
         assert s["air"] == {"temp_c": 21.43, "rh": 45.2, "hpa": 1013.25, "age_seconds": 2}
         assert s["photo"] == {"url": "/photo", "taken_at": station_http.iso(now - 1), "age_seconds": 1}
-        assert set(s) == {"tag", "scale", "last_weight", "panel", "air", "photo"}
+        assert set(s) == {"tag", "scale", "last_weight", "panel", "panel_version", "air", "photo"}
+        assert s["panel_version"] == "2"
         assert s["last_weight"] == {"grams": 1098.0, "age_seconds": 3, "held": True}
     finally:
         srv.shutdown()

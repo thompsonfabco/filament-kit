@@ -1,3 +1,7 @@
+> In filament-kit the station is installed as the `station` module (`filament-kit modules`), runs as
+> `filament-kit-station.service` from `filament_kit.station`, and this firmware lives in `station/panel/` of the
+> filament-kit repo. Paths and service names below are from filament-ops.
+
 # Intake station button panel
 
 Optional front panel for the intake station: a Wemos D1 mini (ESP-12F) on the station PC's USB, a 3-wire passive
@@ -101,17 +105,25 @@ swap between boots. The service finds the panel by its HELLO and gives nfcpy the
 
 ## Build, flash and test
 
-PlatformIO on the desktop (`py -3 -m platformio`). Plug the D1 mini into the desktop, then:
+The station keeps the panel's firmware current itself. `panel/firmware/intake-panel.bin` and `panel/firmware/VERSION`
+ship with the service, installed to `/opt/intake-station/panel/`. When the panel's HELLO reports a different version,
+the service flashes the bundled build over USB with esptool, then finds the panel again. It tries once per bundled
+version per run; if the flash doesn't take, it logs that and uses the panel as it is. `STATION_PANEL_FLASH=0` turns
+this off. `/state` shows the running version as `panel_version`.
 
-```
-cd C:\CODING\filament-ops\station\panel
-py -3 -m platformio run -t upload
-```
+To ship a firmware change:
 
-PlatformIO picks the COM port itself (add `--upload-port COMn` if there are several). Then move the board to the
-station's USB and restart the service (`sudo systemctl restart intake-station`). The journal shows
-`button panel on /dev/ttyUSBn`. `install_station.sh` installs espeak-ng and ffmpeg and gives the service the `video`
-group for the webcam.
+1. Edit `panel/src/`, and bump `VERSION` in `main.cpp`.
+2. Run `sh panel/build.sh`. It builds with PlatformIO (`py -3 -m platformio`) and refreshes `panel/firmware/`.
+3. Deploy with `sh install_station.sh intake-station`. The service restarts and reflashes the panel within seconds.
+   The journal shows `flashing button panel on /dev/ttyUSBn with firmware N`, then
+   `button panel on /dev/ttyUSBn (firmware N)`.
+
+The first flash of a new board, or a board whose firmware won't answer, is done on the desktop. Plug it in and run
+`py -3 -m platformio run -t upload` in `panel/` (add `--upload-port COMn` if there are several ports). Even a board
+that won't boot can be reflashed this way, because the CH340 resets it into the ESP8266's ROM bootloader.
+`install_station.sh` also installs espeak-ng and ffmpeg, esptool in the venv, and gives the service the `video` group
+for the webcam.
 
 Offline tests (Linux / WSL):
 
