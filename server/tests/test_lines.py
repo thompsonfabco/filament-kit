@@ -267,15 +267,272 @@ def test_lines_roundtrip_atomic(lib, store):
     assert not list(folder.glob("*.tmp"))
 
 
-def test_load_skips_broken_rows():
-    folder = config.paths().state / "profiles"
-    folder.mkdir(parents=True)
-    good = {"line_id": "xzn--petg", "vendor": "XZN", "product": "PETG", "material": "PETG",
+
+
+# ---------- fix round 1: corrupt files, invalid rows, locking ----------
+
+GOOD_ROW = {"line_id": "xzn--petg", "vendor": "XZN", "product": "PETG", "material": "PETG",
             "bambu_parent": "Generic PETG", "parent_source": "material", "filament_id": "P0123abc",
             "created": "2026-11-02T00:00:00Z"}
-    rows = [good, {"line_id": "bad"}, dict(good, line_id="x--y", filament_id="GFL99"),
-            dict(good, line_id="a--b", parent_source="weird"), "junk"]
-    (folder / "lines.json").write_text(json.dumps({"version": 1, "lines": rows}), encoding="utf-8")
-    assert list(lines.load()) == ["xzn--petg"]
-    (folder / "lines.json").write_text("{not json", encoding="utf-8")
-    assert lines.load() == {}
+
+
+def _lines_file() -> Path:
+    folder = config.paths().state / "profiles"
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder / "lines.json"
+
+
+@pytest.mark.parametrize("raw", [b"{not json", b"\xff\xfe", b'{"version": 1, "lines": 5}', b"[1, 2]"])
+def test_corrupt_lines_file_moved_aside_and_raises(raw):
+    p = _lines_file()
+    p.write_bytes(raw)
+    with pytest.raises(lines.LineStoreError) as ei:
+        lines.load()
+    from filament_kit.profiles import errors
+    assert isinstance(ei.value, errors.ProfileError)
+    assert (ei.value.status, ei.value.code) == (500, "lines_corrupt")
+    assert not p.exists()
+    aside = list(p.parent.glob("lines.json.corrupt-*"))
+    assert len(aside) == 1 and aside[0].read_bytes() == raw
+    assert ei.value.extra["moved"] == aside[0].name
+
+
+def test_corrupt_file_aborts_transaction_without_writing():
+    p = _lines_file()
+    p.write_text("{oops", encoding="utf-8")
+    with pytest.raises(lines.LineStoreError):
+        with lines.transaction() as ls:
+            ls["never"] = None
+    assert not p.exists()                       # nothing wrote an empty set over the moved-aside file
+
+
+def test_missing_file_is_empty_set():
+    got = lines.load()
+    assert got == {} and isinstance(got, lines.LineSet) and got.invalid == []
+
+
+def test_invalid_rows_kept_reported_and_their_fids_reserved(lib, store, monkeypatch):
+    p = _lines_file()
+    rows = [GOOD_ROW, {"line_id": "bad", "filament_id": "P00000aa"},
+            dict(GOOD_ROW, line_id="x--y", filament_id="GFL99"),
+            dict(GOOD_ROW, line_id="a--b", parent_source="weird"), "junk", dict(GOOD_ROW, vendor="dup")]
+    p.write_text(json.dumps({"version": 1, "lines": rows}), encoding="utf-8")
+    ls = lines.load()
+    assert list(ls) == ["xzn--petg"] and ls["xzn--petg"].vendor == "XZN"
+    assert ls.invalid == rows[1:]
+    probs = lines.problems(ls)
+    assert sum("invalid row kept" in s for s in probs) == 5 and any("(bad)" in s for s in probs)
+    draws = iter(["00000aa", "0123abc", "00000bb"])
+    monkeypatch.setattr(lines.secrets, "token_hex", lambda n: next(draws) + "0")
+    new = lines.ensure(ls, "SUNLU", "PLA+", "PLA", bambu_parent=None, library=lib, store=store, used_fids=set())
+    assert new.filament_id == "P00000bb"       # neither the invalid row's id nor a valid line's
+    lines.save(ls)
+    saved = json.loads(p.read_text(encoding="utf-8"))["lines"]
+    assert saved[2:] == rows[1:]               # invalid rows written back unchanged, after the valid lines
+    assert [r["line_id"] for r in saved[:2]] == ["sunlu--pla-plus", "xzn--petg"]
+
+
+def test_old_rows_without_members_load():
+    _lines_file().write_text(json.dumps({"version": 1, "lines": [GOOD_ROW]}), encoding="utf-8")
+    assert lines.load()["xzn--petg"].filaments == []
+
+
+class _FakeFcntl:
+    LOCK_EX, LOCK_UN = 2, 8
+
+    def __init__(self):
+        self.calls = []
+
+    def flock(self, fd, op):
+        self.calls.append(op)
+
+
+def test_locked_uses_flock_on_lines_lock_and_is_reentrant(monkeypatch, lib, store):
+    fake = _FakeFcntl()
+    monkeypatch.setattr(lines, "fcntl", fake)
+    with lines.locked():
+        assert (config.paths().state / "profiles" / "lines.lock").is_file()
+        with lines.locked():                   # nested: no second flock (it would block on Linux)
+            pass
+        assert fake.calls == [fake.LOCK_EX]
+    assert fake.calls == [fake.LOCK_EX, fake.LOCK_UN]
+    fake.calls.clear()
+    lines.ensure_saved("XZN", "PETG", "PETG", bambu_parent=None, library=lib, store=store)
+    assert fake.calls == [fake.LOCK_EX, fake.LOCK_UN]
+
+
+def test_saved_helpers_serialize_threads(lib, store):
+    import threading
+    errs = []
+
+    def work(i):
+        try:
+            lines.ensure_saved("Vend", f"Line {i}", "PLA", bambu_parent=None, library=lib, store=store)
+        except Exception as e:  # pragma: no cover - reported below
+            errs.append(e)
+
+    ts = [threading.Thread(target=work, args=(i,)) for i in range(8)]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join()
+    assert not errs
+    got = lines.load()
+    assert sorted(got) == sorted(f"vend--line-{i}" for i in range(8))
+    assert len({l.filament_id for l in got.values()}) == 8
+    assert lines.set_parent_saved("vend--line-0", "Generic PLA").parent_source == "user"
+    assert lines.load()["vend--line-0"].parent_source == "user"
+    with pytest.raises(KeyError):
+        lines.set_parent_saved("nope--nope", "Generic PLA")
+
+
+# ---------- fix round 1: line stability (S12) ----------
+
+def test_group_records_members_and_library_update_does_not_move(store):
+    lib_a = make_lib(_local("Acme", "PLA", "PLA"))
+    f1 = _fil(1, "PLA Matte Black", vendor="Acme")
+    g, ls = lines.group_saved([f1], library=lib_a, store=store)
+    assert list(g) == ["acme--pla"] and ls["acme--pla"].filaments == [1]
+    lib_b = make_lib(_local("Acme", "PLA", "PLA"), _local("Acme", "PLA Matte", "PLA"))
+    f2 = _fil(2, "PLA Matte Red", vendor="Acme")
+    g, ls = lines.group_saved([f1, f2], library=lib_b, store=store)
+    assert [f["id"] for f in g["acme--pla"]] == [1]          # the longer prefix does not move filament 1
+    assert [f["id"] for f in g["acme--pla-matte"]] == [2]    # a new filament takes the longer one
+    assert not any("moved" in s for s in lines.problems(ls))
+
+
+def test_explicit_extra_line_moves_and_reports(store):
+    lib_a = make_lib(_local("Acme", "PLA", "PLA"))
+    f1 = _fil(1, "PLA Matte Black", vendor="Acme")
+    lines.group_saved([f1], library=lib_a, store=store)
+    fid = lines.load()["acme--pla"].filament_id
+    f1 = _fil(1, "PLA Matte Black", vendor="Acme", line="PLA Matte")
+    g, ls = lines.group_saved([f1], library=lib_a, store=store)
+    assert list(g) == ["acme--pla-matte"]
+    assert ls["acme--pla-matte"].filaments == [1]
+    assert ls["acme--pla"].filaments == [] and ls["acme--pla"].filament_id == fid   # kept, never deleted
+    assert any("filament 1 moved from line acme--pla to acme--pla-matte" in s for s in lines.problems(ls))
+    saved = lines.load()
+    assert saved["acme--pla"].filaments == [] and saved["acme--pla-matte"].filaments == [1]
+    # the same extra.line as the recorded line is no move
+    g, ls = lines.group_saved([f1], library=lib_a, store=store)
+    assert list(g) == ["acme--pla-matte"] and not any("moved" in s for s in lines.problems(ls))
+
+
+def test_archived_member_stays_recorded(lib, store):
+    f1 = _fil(1, "PETG Black", vendor="XZN", material="PETG", line="PETG")
+    lines.group_saved([f1], library=lib, store=store)
+    f1["archived"] = True
+    g, ls = lines.group_saved([f1], library=lib, store=store)
+    assert g == {} and ls["xzn--petg"].filaments == [1]
+
+
+# ---------- fix round 1: line_id collisions, empty slugs ----------
+
+def test_two_names_sharing_a_line_id_are_reported(lib, store):
+    ls = lines.LineSet()
+    a = lines.ensure(ls, "Acme", "PLA & Silk", "PLA", bambu_parent=None, library=lib, store=store, used_fids=set())
+    b = lines.ensure(ls, "Acme", "PLA and Silk", "PLA", bambu_parent=None, library=lib, store=store,
+                     used_fids=set())
+    assert a is b and a.line_id == "acme--pla-and-silk"
+    assert any("two names share line acme--pla-and-silk" in s for s in lines.problems(ls))
+    lines.ensure(ls, "ACME", "pla & silk", "PLA", bambu_parent=None, library=lib, store=store, used_fids=set())
+    assert sum("two names share" in s for s in lines.problems(ls)) == 1
+
+
+def test_empty_slug_parts_get_hash_ids(lib):
+    import hashlib
+    ls = lines.LineSet()
+    line = lines.ensure(ls, "Acme", "***", "PLA", bambu_parent=None, library=lib, store=None, used_fids=set())
+    assert line.line_id == "acme--x" + hashlib.sha1("***".encode()).hexdigest()[:6]
+    jp = "日本"
+    assert lines.line_id_for(jp, "PLA") == "x" + hashlib.sha1(jp.encode()).hexdigest()[:6] + "--pla"
+    assert lines.line_id_for("Acme", "***") != lines.line_id_for("Acme", "###")
+    assert library.line_id("Acme", "***") == "acme--"                  # library.line_id unchanged
+    assert lines.propose("Acme", "***", "PLA", library=lib, store=None, lines=ls)["exists"] is True
+
+
+# ---------- fix round 1: Generic step from the store (S9), "+" (S10), rechoose (S13) ----------
+
+def _store(tmp_path, presets: dict) -> bbl.Store:
+    folder = tmp_path / "bbl-x"
+    folder.mkdir()
+    for name, data in presets.items():
+        (folder / f"{name}.json").write_text(json.dumps(data), encoding="utf-8")
+    return bbl.Store.load(folder)
+
+
+def _preset(vendor, ftype, printers=("Bambu Lab H2D 0.4 nozzle",)):
+    return {"instantiation": "true", "filament_vendor": [vendor], "filament_type": [ftype],
+            "compatible_printers": list(printers)}
+
+
+def test_generic_tpu_prefers_for_ams(lib, tmp_path):
+    s = _store(tmp_path, {"Generic TPU @BBL H2D": _preset("Generic", "TPU"),
+                          "Generic TPU for AMS @BBL H2D": _preset("Generic", "TPU-AMS")})
+    assert lines.choose_parent("XZN", "TPU", "TPU", library=lib, store=s) == ("Generic TPU for AMS", "material")
+    assert lines.choose_parent("XZN", "TPU-GF", "TPU-GF", library=lib, store=s) == \
+        ("Generic TPU for AMS", "material")
+
+
+def test_generic_from_fixture_store_real_types(lib, store):
+    # the fixture's "Generic TPU for AMS" has filament_type TPU-AMS; TPU-GF maps to TPU-AMS
+    assert lines.choose_parent("XZN", "TPU-GF", "TPU-GF", library=lib, store=store) == \
+        ("Generic TPU for AMS", "material")
+    assert lines.choose_parent("XZN", "TPU", "TPU", library=lib, store=store) == ("Generic TPU for AMS", "material")
+    assert lines.choose_parent("XZN", "PLA-CF", "PLA-CF", library=lib, store=store) == ("Generic PLA-CF", "material")
+
+
+def test_generic_needs_generic_vendor(lib, tmp_path):
+    s = _store(tmp_path, {"Generic PLA @BBL H2D": _preset("Bambu Lab", "PLA"),   # named Generic, wrong vendor
+                          "Other PLA @BBL H2D": _preset("Other", "PLA")})
+    assert lines.choose_parent("XZN", "Silk", "PLA", library=lib, store=s) == (None, "none")
+
+
+def test_generic_plain_name_before_others(lib, tmp_path):
+    s = _store(tmp_path, {"Generic PLA Silk @BBL H2D": _preset("Generic", "PLA"),
+                          "Generic PLA @BBL H2D": _preset("Generic", "PLA"),
+                          "Generic PLA High Speed @BBL H2D": _preset("Generic", "PLA")})
+    assert lines.choose_parent("XZN", "Silk", "PLA", library=lib, store=s) == ("Generic PLA", "material")
+
+
+def test_store_without_generic_gives_none(lib, tmp_path):
+    s = _store(tmp_path, {"Bambu PETG HF @BBL H2D": _preset("Bambu Lab", "PETG")})
+    assert lines.choose_parent("XZN", "PETG", "PETG", library=lib, store=s) == (None, "none")
+
+
+def test_plus_is_not_dropped_in_brand_match(lib, tmp_path):
+    s = _store(tmp_path, {"SUNLU PLA @BBL H2D": _preset("SUNLU", "PLA"),
+                          "SUNLU PLA+ @BBL H2D": _preset("SUNLU", "PLA")})
+    assert lines.choose_parent("SUNLU", "PLA", "PLA", library=lib, store=s) == ("SUNLU PLA", "brand")
+    assert lines.choose_parent("SUNLU", "PLA+", "PLA", library=lib, store=s) == ("SUNLU PLA+", "brand")
+
+
+def test_rechoose(lib, store, tmp_path):
+    ls = lines.LineSet()
+    static = lines.ensure(ls, "XZN", "TPU-GF", "TPU-GF", bambu_parent=None, library=lib, store=None,
+                          used_fids=set())
+    assert (static.bambu_parent, static.parent_source) == ("Generic TPU-AMS", "material")
+    empty = _store(tmp_path, {})
+    none = lines.ensure(ls, "XZN", "PLA", "PLA", bambu_parent=None, library=lib, store=empty, used_fids=set())
+    assert none.parent_source == "none"
+    user = lines.ensure(ls, "XZN", "PETG", "PETG", bambu_parent="Generic PLA", library=lib, store=None,
+                        used_fids=set())
+    fids = {k: l.filament_id for k, l in ls.items()}
+    assert lines.rechoose(static, store, library=lib) is static
+    assert (static.bambu_parent, static.parent_source) == ("Generic TPU for AMS", "material")
+    lines.rechoose(none, store, library=lib)
+    assert (none.bambu_parent, none.parent_source) == ("Generic PLA", "material")
+    lines.rechoose(user, store, library=lib)
+    assert (user.bambu_parent, user.parent_source) == ("Generic PLA", "user")
+    assert {k: l.filament_id for k, l in ls.items()} == fids
+    # without a library argument it loads the current one (bundled here)
+    lines.rechoose(none, None)
+    assert none.bambu_parent == "Generic PLA" and none.parent_source == "material"
+
+
+@pytest.mark.parametrize("raw", ["null", "5", "1.5", "true", "[\"PLA\"]", "{}"])
+def test_extra_line_non_string_json_is_ignored(lib, raw):
+    f = _fil(1, "PLA+ 2.0 Grey")
+    f["extra"]["line"] = raw
+    assert lines.product_of(f, lib) == "PLA+ 2.0"
