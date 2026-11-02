@@ -601,3 +601,40 @@ def test_partial_install_values_are_not_inapp_edits(tmp_path):
     assert not any("filament_density" in e for e in m3["edits"]), m3["edits"]
     assert read(tmp_path, second, "o3")["filament_flow_ratio"] == ["0.92", "0.92"]    # o2's edit still kept
     assert m3["inapp"] == {second: {"filament_flow_ratio": ["0.92", "0.92"]}}
+
+
+def test_app_reset_keeps_the_owners_note_lines(tmp_path):
+    """Final review C1: after an app reset (the live preset is gone) the rebuilt preset keeps his lines below MARK
+    and his recorded in-app values."""
+    m1, ls = build(tmp_path, EIGHT, out="o1")
+    snap, live = _install_build(tmp_path, "o1", m1)
+    name = sunlu(H2D, "0.4")
+    cfg = json.loads((live.root / "base" / f"{name}.json").read_text(encoding="utf-8"))
+    notes = cfg["filament_notes"].replace("Spoolman filament ids", "dry it first\nSpoolman filament ids")
+    _edit_live(live, name, filament_notes=notes, filament_flow_ratio=["0.91", "0.91"])
+    m2, ls = build(tmp_path, EIGHT, line_set=ls, live=live, snapshot=snap, out="o2")
+    snap2, live2 = _install_build(tmp_path, "o2", m2)
+    assert inapp.MARK in read(tmp_path, name, "o2")["filament_notes"]
+    for n in (name, sunlu(H2D, "0.6"), sunlu(H2D, "0.8")):          # 3 of 8 gone at once: an app reset
+        (live2.root / "base" / f"{n}.json").unlink()
+    m3, _ = build(tmp_path, EIGHT, line_set=ls, live=live2, snapshot=snap2, out="o3")
+    assert m3["deleted"] == [] and name in names(m3)
+    new = read(tmp_path, name, "o3")
+    lines_ = new["filament_notes"].splitlines()
+    assert lines_[-3:] == [inapp.MARK, "dry it first", "Spoolman filament ids: 3, 17"]
+    assert new["filament_flow_ratio"] == ["0.91", "0.91"]
+
+
+def test_half_install_note_lines_are_not_copied_below_mark(tmp_path):
+    """Final review I1: the partial build's summary line, written into live by the half-finished install, is not
+    taken for the owner's own line."""
+    m1, ls = build(tmp_path, SUNLU, out="o1")
+    snap, live = _install_build(tmp_path, "o1", m1)
+    name = sunlu(H2D, "0.4")
+    more = SUNLU + [fil(21, "PLA+ 2.0 Blue")]                       # the summary line names the colours
+    m2, ls = build(tmp_path, more, line_set=ls, live=live, snapshot=snap, out="o2")
+    (tmp_path / "o2" / "BUILD.json").write_text(json.dumps(m2), encoding="utf-8")
+    shutil.copy(tmp_path / "o2" / "base" / f"{name}.json", live.root / "base" / f"{name}.json")  # half install
+    m3, _ = build(tmp_path, more, line_set=ls, live=live, snapshot=snap, out="o3", partial=tmp_path / "o2")
+    assert inapp.MARK not in read(tmp_path, name, "o3")["filament_notes"]
+    assert not any("line(s) you wrote" in e for e in m3["edits"])
