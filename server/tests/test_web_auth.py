@@ -655,3 +655,69 @@ def test_lockout_window(clock):
     assert lock.blocked()
     clock.now += 201  # the first failure is now older than 600 s
     assert not lock.blocked()
+
+
+# ---------- A-M1: the lockout counts an attempt before the (slow) check ----------
+
+def test_lockout_attempts_are_counted_before_the_check():
+    import threading
+    lock = auth.Lockout()
+    gate = threading.Barrier(20)
+    got = []
+
+    def go():
+        gate.wait()
+        got.append(lock.attempt())
+
+    ts = [threading.Thread(target=go) for _ in range(20)]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join()
+    granted = [g for g in got if g is not None]
+    assert len(granted) == auth.LOCK_MAX and lock.blocked()
+    lock.release(granted[0])                  # a right passphrase does not count
+    assert not lock.blocked() and lock.attempt() is not None and lock.blocked()
+
+
+def test_parallel_wrong_passphrases_get_at_most_lock_max_checks(store, passfile, monkeypatch):
+    """Many sign-ins at once: each is counted before scrypt runs, so at most LOCK_MAX are ever checked."""
+    import threading
+    checks = []
+
+    def slow_wrong(text, path):
+        checks.append(text)
+        time.sleep(0.3)
+        return False
+
+    monkeypatch.setattr(auth, "check_passphrase", slow_wrong)
+    app = _app(store, passfile)
+    with TestClient(app, client=HOME) as c:
+        cid = _register(c).json()["client_id"]
+        r = c.get("/authorize", params={"response_type": "code", "client_id": cid, "redirect_uri": CB,
+                                        "code_challenge": _pkce()[1], "code_challenge_method": "S256",
+                                        "state": "s", "scope": "filament"}, follow_redirects=False)
+        rid = parse_qs(urlparse(r.headers["location"]).query)["req"][0]
+        codes = []
+
+        def post():
+            codes.append(c.post("/login", data={"req": rid, "passphrase": "guess"}, headers={"Origin": ORIGIN},
+                                follow_redirects=False).status_code)
+
+        ts = [threading.Thread(target=post) for _ in range(12)]
+        for t in ts:
+            t.start()
+        for t in ts:
+            t.join()
+    assert len(checks) <= auth.LOCK_MAX
+    assert sorted(codes) == [401] * len(checks) + [429] * (12 - len(checks))
+
+
+def test_right_passphrase_does_not_count_towards_the_lockout(store, passfile):
+    lock = auth.Lockout()
+    with TestClient(_app(store, passfile, lockout=lock), client=HOME) as c:
+        cid = _register(c).json()["client_id"]
+        for _ in range(auth.LOCK_MAX + 1):
+            r, _ = _sign_in(c, cid, _pkce()[1])
+            assert r.status_code == 302
+    assert not lock.blocked()

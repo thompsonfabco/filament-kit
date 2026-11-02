@@ -157,3 +157,15 @@ def test_fresh_unknown_tag(monkeypatch):
     assert tagsources.fresh_unknown_tag({}, _SM([])) is not None            # held on the panel
     monkeypatch.setattr(tagsources, "latest", lambda cfg: None)
     assert tagsources.fresh_unknown_tag({}, _SM([])) is None
+
+
+def test_only_http_and_https_sources_are_read(monkeypatch):
+    """A-M2: a tag source is fetched only over http(s) (urllib would also open file: and ftp: URLs)."""
+    seen = []
+    monkeypatch.setattr(tagsources, "_fetch", lambda url: seen.append(url) or None)
+    cfg = {"tag_sources": [{"name": "f", "url": "file:///etc/passwd"}, {"name": "ftp", "url": "ftp://x/y"},
+                           {"name": "ok", "url": "http://lasttag.localdomain:5002/last-tag"},
+                           {"name": "tls", "url": "HTTPS://reader.localdomain/last-tag"}],
+           "station": {"url": "file:///tmp"}}
+    tagsources.latest(cfg)
+    assert seen == ["http://lasttag.localdomain:5002/last-tag", "HTTPS://reader.localdomain/last-tag"]

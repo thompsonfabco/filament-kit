@@ -325,14 +325,13 @@ def test_remote_off_removes_the_kits_router_conf_and_deploy_hook(tmp_path, capsy
     other_conf = root / "etc/nginx/conf.d/other.conf"
     other_hook = root / "etc/letsencrypt/renewal-hooks/deploy/someone-else"
     cert = root / "etc/mcp-router/tls/fullchain.pem"
-    amazon = root / "etc/nginx/mcp.d/amazon.conf"
-    for f in (conf, hook, other_conf, other_hook, cert, amazon):
+    for f in (conf, hook, other_conf, other_hook, cert):     # no other route in mcp.d (C-I2: else the conf stays)
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text("x\n")
     run = Rec()
     apply.execute([Action("remote_off", "filament")], run=run, resources=INSTALL, root=root)
     assert not conf.exists() and not hook.exists()
-    assert other_conf.exists() and other_hook.exists() and cert.exists() and amazon.exists()
+    assert other_conf.exists() and other_hook.exists() and cert.exists()
     assert "nginx -t" in run.texts()
     assert not any("apt" in t or "remove" in t for t in run.texts())
     assert "router" in capsys.readouterr().out
@@ -342,3 +341,62 @@ def test_remote_off_with_nothing_installed_is_quiet(tmp_path):
     run = Rec()
     apply.execute([Action("remote_off", "filament")], run=run, resources=INSTALL, root=tmp_path / "root")
     assert "nginx -t" not in run.texts()
+
+
+# ---------- final review fixes ----------
+
+def test_remote_off_keeps_the_router_conf_while_other_routes_need_it(tmp_path, capsys):
+    """C-I2: on the owner's VM the kit's router conf is the only server block including /etc/nginx/mcp.d. While a
+    route file the kit did not add is there (amazon, h2d), turning remote off keeps the router conf and says so;
+    the kit's own route and deploy hook still go."""
+    root = tmp_path / "root"
+    conf = root / "etc/nginx/conf.d/filament-kit-router.conf"
+    hook = root / "etc/letsencrypt/renewal-hooks/deploy/filament-kit"
+    ours = root / "etc/nginx/mcp.d/filament.conf"
+    amazon = root / "etc/nginx/mcp.d/amazon.conf"
+    book = root / "etc/mcp-router/kit-routes"
+    for f in (conf, hook, amazon, book, ours):
+        f.parent.mkdir(parents=True, exist_ok=True)
+    conf.write_text("x\n")
+    hook.write_text("x\n")
+    ours.write_text('# MCP server "filament" (written by mcp-route)\n')
+    amazon.write_text('# MCP server "amazon" (written by mcp-route)\n')
+    book.write_text("filament\n")
+    run = Rec()
+    apply.execute([Action("remote_off", "filament")], run=run, resources=INSTALL, root=root)
+    assert conf.exists() and amazon.exists()
+    assert not ours.exists() and not hook.exists()
+    out = capsys.readouterr().out
+    assert "kept the kit's router conf" in out and "amazon" in out
+    assert "nginx -t" in run.texts()
+
+
+def test_uninstall_keeps_the_router_conf_while_other_routes_need_it():
+    """C-I2, uninstall.sh: the same rule as `remote` off (run for real on WSL)."""
+    text = (INSTALL / "uninstall.sh").read_text(encoding="utf-8")
+    block = text[text.index("# remote:"):text.index("rm -rf /opt/filament-kit")]
+    assert "OTHER_ROUTES" in block and "/etc/nginx/mcp.d/" in block
+    assert "kept the kit's router conf" in block
+
+
+def test_remote_install_restores_the_previous_router_conf_when_nginx_test_fails(tmp_path, capsys):
+    """C-I4: a router conf that fails `nginx -t` must not stay (every later nginx start would fail): the previous
+    one comes back, or none, and the step fails."""
+    root = tmp_path / "root"
+    conf = root / "etc/nginx/conf.d/filament-kit-router.conf"
+    proxy = root / "etc/nginx/mcp-proxy.conf"
+
+    def run(cmd):
+        if cmd[:2] == ["nginx", "-t"]:
+            raise subprocess.CalledProcessError(1, cmd)
+
+    with pytest.raises(apply.ApplyError):
+        apply.execute([Action("remote_install", "fk.example.org")], run=run, resources=INSTALL, root=root)
+    assert not conf.exists() and not proxy.exists()
+    assert f"removed {remote.ROUTER_CONF}, {remote.PROXY_CONF} again" in capsys.readouterr().out
+    conf.write_text("OLD ROUTER\n")
+    proxy.write_text("OLD PROXY\n")
+    with pytest.raises(apply.ApplyError):
+        apply.execute([Action("remote_install", "fk.example.org")], run=run, resources=INSTALL, root=root)
+    assert conf.read_text() == "OLD ROUTER\n" and proxy.read_text() == "OLD PROXY\n"
+    assert f"put back the previous {remote.ROUTER_CONF}, {remote.PROXY_CONF}" in capsys.readouterr().out

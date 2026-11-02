@@ -29,7 +29,10 @@ SPOOLMAN_INFO = "http://127.0.0.1:7912/api/v1/info"
 STATION_UNIT = "filament-kit-station.service"
 WEB_UNIT = "filament-kit-web.service"
 DROPIN = "/etc/systemd/system/filament-kit-station.service.d/kit.conf"
-UDEV_RULE = "/etc/udev/rules.d/99-filament-kit-station.rules"
+# udev applies rules in file-name order and the last GROUP= wins: the name sorts after the ops station's
+# 99-intake-station.rules (C-I1). OLD_UDEV_RULE is the kit's name before that; apply removes it.
+UDEV_RULE = "/etc/udev/rules.d/99-zz-filament-kit-station.rules"
+OLD_UDEV_RULE = "/etc/udev/rules.d/99-filament-kit-station.rules"
 UDEV_TEXT = (
     "# DYMO scale: let the station user read it without being root\n"
     'SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0922", GROUP="filament-kit-station", MODE="0640"\n'
@@ -160,6 +163,7 @@ def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) ->
     if "station" in on:
         acts += [
             A("user", ("filament-kit-station", "dialout,audio,video")),
+            A("remove_file", OLD_UDEV_RULE),
             A("install_file", (UDEV_RULE, UDEV_TEXT, "0644", "root:root")),
             A("udev_reload"),
             A("remove_pkg", "brltty"),
@@ -223,6 +227,7 @@ _HINTS = {
     "spoolman_fetch": f"see the Spoolman messages above, then {_AGAIN}",
     "install_unit": "run ./install.sh again (the unit files live in /opt/filament-kit/resources)",
     "install_file": f"check the disk is writable, then {_AGAIN}",
+    "remove_file": "remove it by hand: sudo rm <arg>",
     "enable": "see: journalctl -u <arg>",
     "daemon_reload": "see: journalctl -b",
     "udev_reload": "see: journalctl -b -u systemd-udevd",
@@ -433,7 +438,13 @@ def _server_setup(ex: _Exec, arg: str) -> None:
 
 
 def _remote_install(ex: _Exec, host: str) -> None:
-    """Router files, certbot hooks and a placeholder certificate so nginx starts before certbot has run."""
+    """Router files, certbot hooks and a placeholder certificate so nginx starts before certbot has run. When
+    `nginx -t` fails, the router conf and proxy conf go back to what they were (or away), so a bad conf never
+    stops every later nginx start (C-I4); the step then fails."""
+    before = {}
+    for dest in (remote.ROUTER_CONF, remote.PROXY_CONF):
+        f = _under(ex.root, dest)
+        before[dest] = f.read_bytes() if f.exists() else None
     conf = remote.read_resource(ex.resources, "mcp-router.conf").replace("@HOST@", host)
     ex.write(remote.ROUTER_CONF, conf.encode("utf-8"), 0o644)
     for name, dest, mode in (("mcp-proxy.conf", remote.PROXY_CONF, 0o644),
@@ -457,7 +468,21 @@ def _remote_install(ex: _Exec, host: str) -> None:
                 "-subj", f"/CN={host}", "-addext", f"subjectAltName=DNS:{host}",
                 "-keyout", str(key), "-out", str(cert)])
         ex.cmd(["chmod", "600", str(key)])
-    ex.cmd(["nginx", "-t"])
+    try:
+        ex.cmd(["nginx", "-t"])
+    except (subprocess.CalledProcessError, OSError):
+        back, gone = [], []
+        for dest, old in before.items():
+            f = _under(ex.root, dest)
+            if old is None:
+                f.unlink(missing_ok=True)
+                gone.append(dest)
+            else:
+                f.write_bytes(old)
+                back.append(dest)
+        print("nginx -t failed: " + "; ".join(([f"put back the previous {', '.join(back)}"] if back else [])
+                                               + ([f"removed {', '.join(gone)} again"] if gone else [])))
+        raise
 
 
 def _remote_route(ex: _Exec, name: str, port: int) -> None:
@@ -472,10 +497,20 @@ def _remote_route(ex: _Exec, name: str, port: int) -> None:
     book.write_text(name + "\n", encoding="utf-8")
 
 
+def _other_routes(ex: _Exec, name: str) -> list[str]:
+    """Route files in mcp.d this kit did not add (not `name`, not in kit-routes): e.g. the owner's amazon and h2d
+    routes, which only the kit's router conf serves once the ops router is gone (C-I2)."""
+    book = _under(ex.root, remote.KIT_ROUTES)
+    ours = {name, *(book.read_text(encoding="utf-8").split() if book.exists() else [])}
+    d = _under(ex.root, remote.ROUTE_DIR)
+    return sorted(f.stem for f in d.glob("*.conf") if f.stem not in ours) if d.is_dir() else []
+
+
 def _remote_off(ex: _Exec, name: str) -> None:
     """Remove the kit's own remote files: the route file mcp-route made for this kit, the kit's router conf (a
     default_server on 443 that would keep any other router from loading) and its certbot deploy hook (Ruling
-    AF). nginx, certbot, the certificate, mcp-route and other routes stay."""
+    AF). nginx, certbot, the certificate, mcp-route and other routes stay. While mcp.d holds routes the kit did
+    not add, the router conf stays too: it is what serves them (C-I2)."""
     gone = []
     f = _under(ex.root, f"{remote.ROUTE_DIR}/{name}.conf")
     if f.exists():
@@ -484,8 +519,14 @@ def _remote_off(ex: _Exec, name: str) -> None:
         else:
             f.unlink()
             gone.append(f"the {name} route")
-    for path, what in ((remote.ROUTER_CONF, "the kit's router conf"),
-                       (remote.DEPLOY_HOOK_FILE, "the kit's certbot deploy hook")):
+    others = _other_routes(ex, name)
+    files = [(remote.DEPLOY_HOOK_FILE, "the kit's certbot deploy hook")]
+    if not others:
+        files.insert(0, (remote.ROUTER_CONF, "the kit's router conf"))
+    elif _under(ex.root, remote.ROUTER_CONF).exists():
+        print(f"Remote is off; kept the kit's router conf {remote.ROUTER_CONF}: it serves the other routes in "
+              f"{remote.ROUTE_DIR} ({', '.join(others)}). Remove it by hand once nothing needs them.")
+    for path, what in files:
         p = _under(ex.root, path)
         if p.exists():
             p.unlink()
@@ -514,6 +555,10 @@ def _step(ex: _Exec, a: Action) -> None:
     elif k == "install_file":
         dest, content, mode, owner = arg
         ex.write(dest, content.encode("utf-8"), int(mode, 8), owner)
+    elif k == "remove_file":
+        f = _under(ex.root, arg)
+        if f.exists():
+            f.unlink()
     elif k == "server_setup":
         _server_setup(ex, arg)
     elif k == "udev_reload":
@@ -608,7 +653,7 @@ def execute(actions: list[Action], *, run: Callable[[list[str]], None] = run_che
         i += 1
     # Spec section 5: the station's system changes stay when the module is turned off; say so once.
     station_on = any(a.kind == "install_file" and a.arg[0] == UDEV_RULE for a in actions)
-    if not station_on and _under(ex.root, UDEV_RULE).exists():
+    if not station_on and (_under(ex.root, UDEV_RULE).exists() or _under(ex.root, OLD_UDEV_RULE).exists()):
         print("Station is off: brltty removal, ModemManager, suspend masking and audio levels "
               "were left as they are.")
 

@@ -636,3 +636,17 @@ def test_profiles_help_mentions_orca(capsys):
     out = " ".join(capsys.readouterr().out.split())
     assert "Bambu Studio and Orca Slicer presets" in out
     assert "or with --orca the Orca Slicer library preset" in out
+
+
+# ---------- C-M7: a root-only file read as another user ----------
+
+@pytest.mark.parametrize("argv", [["modules", "list"], ["remote", "firewall"], ["migrate-ops", "bundle.tar.gz"]])
+def test_unreadable_config_says_run_with_sudo(argv, monkeypatch, capsys):
+    def denied(*a, **k):
+        raise PermissionError(13, "Permission denied", "/etc/filament-kit/config.json")
+
+    monkeypatch.setattr(config, "load", denied)
+    assert cli.main(argv) == 1
+    err = capsys.readouterr().err
+    assert "/etc/filament-kit/config.json" in err and f"sudo filament-kit {argv[0]}" in err
+    assert "Traceback" not in err

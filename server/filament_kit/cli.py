@@ -786,7 +786,9 @@ def cmd_profiles_status() -> int:
     b, la, inst, pc = st["build"], st["last_attempt"], st["installed"], st["pc"]
     print(f"lines: {st['lines']}")
     if b:
-        print(f"build: {b['stamp']} ({_fmt_time(b.get('created'))}), {st['presets']} presets, "
+        orca = (f"{st['orca_presets']} Orca presets, {len(st['orca_stale'])} Orca stale, "
+                if st.get("orca_presets") is not None else "")
+        print(f"build: {b['stamp']} ({_fmt_time(b.get('created'))}), {st['presets']} presets, {orca}"
               f"{b.get('problems', 0)} problems")
     else:
         print("build: no build yet")
@@ -804,6 +806,8 @@ def cmd_profiles_status() -> int:
           else "PC sync: not set up (see README: Pair your PC)")
     for name in st["stale"]:
         print(f"  delete in Bambu Studio: {name}")
+    for name in st.get("orca_stale", []):
+        print(f"  delete in Orca Slicer: {name}")
     for prob in st["problems"]:
         print(f"  problem: {prob}")
     return 0
@@ -1237,6 +1241,19 @@ def cmd_migrate_ops(bundle: str, apply_: bool, replace_spoolman: bool, allow_unk
 
 
 def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=None, sm_factory=None) -> int:
+    """The CLI. A root-only file (/etc/filament-kit/config.json and the like) read as another user is one line
+    saying to run it with sudo, not a traceback (C-M7)."""
+    try:
+        return _main(argv, client_factory=client_factory, manager_factory=manager_factory, sm_factory=sm_factory)
+    except PermissionError as e:
+        args = list(sys.argv[1:] if argv is None else argv)
+        where = f"{e.filename}: " if e.filename else ""
+        print(f"error: {where}permission denied; run it with sudo: sudo filament-kit {' '.join(args)}".rstrip(),
+              file=sys.stderr)
+        return 1
+
+
+def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory=None, sm_factory=None) -> int:
     ap = argparse.ArgumentParser(prog="filament-kit")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("status", help="check services, Spoolman, key, certificate")
