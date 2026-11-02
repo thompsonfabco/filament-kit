@@ -177,3 +177,34 @@ def test_new_config_defaults():
     assert d["tag_sources"] == [] and d["slot_service"] is None and d["slicer_printers"] == []
     assert d["presets_orca"] is False and d["web_instructions"] is None
     assert d["intake"] == {"tare_hints": {}, "model": None}
+
+
+# ---------- C-I3: a mode change keeps the opt-in modules switched on by hand ----------
+
+def _with_opt_in(**on):
+    cfg = set_mode({}, "server")
+    cfg["modules"].update(on)
+    return cfg
+
+
+def test_set_mode_keeps_hand_enabled_opt_in_modules():
+    cfg = set_mode(_with_opt_in(web=True, remote=True, orders=True), "all-in-one", say=lambda m: None)
+    assert {"web", "remote", "orders"} <= enabled(cfg)
+    assert enabled(cfg) - {"web", "remote", "orders"} == MODES["all-in-one"]
+    again = set_mode(cfg, "server", say=lambda m: None)
+    assert {"web", "remote", "orders"} <= enabled(again)
+
+
+def test_set_mode_drops_opt_in_modules_whose_dependencies_go_and_says_so():
+    said = []
+    cfg = set_mode(_with_opt_in(web=True, remote=True, orders=True), "station", say=said.append)
+    assert enabled(cfg) == MODES["station"]
+    assert len(said) == 1 and all(n in said[0] for n in ("web", "remote", "orders"))
+    validate(dict(cfg, station={"allow": ["10.0.0.5"]}))
+
+
+def test_set_mode_never_turns_opt_in_modules_on():
+    said = []
+    assert enabled(set_mode({}, "all-in-one", say=said.append)) == MODES["all-in-one"]
+    assert enabled(set_mode(_with_opt_in(web=False), "server", say=said.append)) == MODES["server"]
+    assert said == []
