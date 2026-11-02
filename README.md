@@ -412,7 +412,7 @@ working:
 - **Sleep, suspend and hibernate are turned off** (masked). An idle Ubuntu desktop otherwise goes to sleep and
   the station stops answering.
 - **Audio outputs are unmuted** at 80% and saved, so the scan beep can be heard.
-- A **udev rule** (`/etc/udev/rules.d/99-filament-kit-station.rules`) lets the station read the DYMO scale
+- A **udev rule** (`/etc/udev/rules.d/99-zz-filament-kit-station.rules`) lets the station read the DYMO scale
   without running as root.
 
 Turning the station off again, or switching to another mode, leaves these changes as they are. To undo them by
@@ -593,7 +593,9 @@ timer then runs only at that time. Outside the window port 80 can stay closed.
 phone browsers work with that.
 
 Turning `remote` off removes only the kit's own router file, its certbot hook and its route. nginx, certbot,
-the certificate and any other routes stay.
+the certificate and any other routes stay. While `/etc/nginx/mcp.d` still holds routes the kit did not add, the
+router file stays too, because it is what serves them; the kit says so, and you remove it by hand once nothing
+needs those routes.
 
 ## Order history
 
@@ -663,11 +665,13 @@ This removes the programs (Spoolman and the intake station too, with the station
 The station's computer changes (brltty, ModemManager, sleep, audio) stay; see
 [What the installer changes on the computer](#what-the-installer-changes-on-the-computer) to undo them. With
 [Remote access](#remote-access) on, it also removes the kit's router file, its route and its certbot hook; nginx,
-certbot, the certificate and any other routes stay (remove them with `apt` if nothing else uses them). To delete
-everything, including all spool data and backups:
+certbot, the certificate and any other routes stay (remove them with `apt` if nothing else uses them). The
+router file stays while other routes in `/etc/nginx/mcp.d` need it (it says so). To delete everything, including
+all spool data and backups:
 
 ```
 sudo ./uninstall.sh --purge
 ```
 
-It asks you to type `purge` to confirm.
+It asks you to type `purge` to confirm. `--purge` also removes the certbot timer drop-in
+`/etc/systemd/system/certbot.timer.d/acme-window.conf` (the `remote.acme_window` setting).

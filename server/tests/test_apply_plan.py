@@ -113,6 +113,19 @@ def test_station_actions_and_first_build_last():
     assert 'ATTRS{idVendor}=="0922"' in rules[1]
 
 
+def test_station_udev_rule_sorts_after_the_ops_rule_and_replaces_the_old_name():
+    """C-I1: udev applies rules in file-name order and the last GROUP= wins: the kit's rule must sort after the
+    ops `99-intake-station.rules`; the kit's old name is removed before the new rule goes in."""
+    acts = apply.plan(set_mode(_cfg(), "all-in-one"), resolve=lambda h: [h])
+    name = apply.UDEV_RULE.rsplit("/", 1)[1]
+    assert name > "99-intake-station.rules" and name > "99-filament-kit-station.rules"
+    assert apply.UDEV_RULE.startswith("/etc/udev/rules.d/")
+    pairs = [(a.kind, a.arg if isinstance(a.arg, (str, type(None))) else a.arg[0]) for a in acts]
+    gone = pairs.index(("remove_file", "/etc/udev/rules.d/99-filament-kit-station.rules"))
+    kinds = [k for k, _ in pairs]
+    assert gone < pairs.index(("install_file", apply.UDEV_RULE)) < kinds.index("udev_reload")
+
+
 def test_remote_spoolman_server():
     cfg = _cfg(spoolman_url="http://spoolman.home.arpa:7912",
                modules={"server": True})

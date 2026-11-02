@@ -39,10 +39,12 @@ sudo bash filament-kit-<version>/install/export_ops.sh /root/ops-bundle.tar.gz
 
 The export only reads (the database through sqlite's backup API; a database Spoolman left in WAL mode is read
 from a private copy of it and its `-wal`, so nothing in Spoolman's folder is touched) and writes the one bundle
-file (root, 600). It refuses a WAL database while Spoolman still runs. It prints the spool, filament and preset
-counts: expect about 296 spools, 213 filaments, 413 Bambu Studio and ~700
-Orca presets. The bundle holds the passphrase hash, `oauth.json` and the Anthropic key; it never holds the H2D
-token.
+file (root, 600). It refuses a WAL database while Spoolman still runs. It ends with one line like
+`bundle: {'spool': 296, 'filament': 213, 'vendor': ...} from <database>; presets {'presets/installed': N,
+'presets/live': M}; secrets included`: expect about 296 spools and 213 filaments. N and M are **files** per tree
+(a `.json` and a `.info` per preset: 413 Bambu Studio plus ~700 Orca presets), each a little over 2200; a
+`missing` part at the end names anything left out. The bundle holds the passphrase hash, `oauth.json` and the
+Anthropic key; it never holds the H2D token.
 
 **Check:** `sudo tar tzf /root/ops-bundle.tar.gz | grep -c presets/` is over 4000; the counts printed match
 Spoolman's web page from before.
@@ -167,6 +169,15 @@ sudo nginx -t && sudo /usr/local/sbin/mcp-route ls
 `remote.hostname` is `mcp.example.com` and `remote.acme_window` is `03:10 America/New_York` (the
 migration set both; pfSense forwards port 80 only from 03:00 to 03:30).
 
+From now on the kit's router conf `/etc/nginx/conf.d/filament-kit-router.conf` is the only server block that
+includes `/etc/nginx/mcp.d`: it serves the amazon, amazon-ext and h2d routes as well. Turning `remote` off, or
+uninstalling the kit, keeps that file while those routes are there (it says so); remove it by hand only once
+nothing needs them.
+
+Each certificate renewal by the kit stops nginx for the few seconds certbot needs port 80 (certbot runs
+standalone; the kit's hooks stop and start nginx), so the amazon, amazon-ext and h2d routes are down for that
+moment too, inside the 03:10 window.
+
 **Check:** from the LAN: `curl -s https://mcp.example.com/health` (router ok),
 `curl -s https://mcp.example.com/filament/health` (ok), the amazon connector and
 `https://mcp.example.com/h2d/` and `/printer/` still answer; the claude.ai connector works from outside.
@@ -189,11 +200,13 @@ Then, at the next window (03:00-03:30): `sudo filament-kit remote issue`. After 
 `mcp.example.com`; `sudo certbot certificates` lists only that lineage; `systemctl list-timers certbot.timer`
 shows 03:10.
 
-**Rollback:** `sudo filament-kit modules disable remote`. That removes only the kit's own files: its router
-conf `/etc/nginx/conf.d/filament-kit-router.conf` (without which the ops router can load again), its certbot
+**Rollback:** `sudo filament-kit modules disable remote`. That removes only the kit's own files: its certbot
 deploy hook `/etc/letsencrypt/renewal-hooks/deploy/filament-kit` and its `filament` route; nginx, certbot, the
-certificate and the other routes stay. Then put the ops pieces back:
+certificate and the other routes stay. Its router conf `/etc/nginx/conf.d/filament-kit-router.conf` stays too,
+because the amazon and h2d routes are still in `/etc/nginx/mcp.d` (the command says so); remove it by hand right
+before the ops router goes back (both are the default server on 443). Then put the ops pieces back:
 ```
+sudo rm /etc/nginx/conf.d/filament-kit-router.conf
 sudo ln -s /etc/nginx/sites-available/mcp-router /etc/nginx/sites-enabled/mcp-router
 sudo cp -a /root/ops-router/mcp-route /usr/local/sbin/ && sudo cp -a /root/ops-router/mcp.d/. /etc/nginx/mcp.d/
 sudo cp -a /root/ops-router/route.template /etc/mcp-router/
@@ -217,16 +230,41 @@ The ops `inet filament` output chain limits uid `filament-mcp` only. The kit's u
 
 ## 2. Station PC (192.0.2.11, `intake.home.arpa`)
 
-1. Stop the old service: `sudo systemctl disable --now intake-station.service` (it holds port 5003).
-2. Install the kit in station mode, pointing at the VM:
+1. Copy the release tarball to the station PC and unpack it there (the steps below run from that folder):
+   `scp filament-kit-<version>.tar.gz intake.home.arpa:`, then on the station PC
+   `tar xzf filament-kit-<version>.tar.gz && cd filament-kit-<version>`.
+2. Stop the old service and move its udev rule aside (the ops rule `99-intake-station.rules` gives the scale to
+   group `intake-station`, which the kit's station user is not in):
+   ```
+   sudo systemctl disable --now intake-station.service          # it holds port 5003
+   sudo mv /etc/udev/rules.d/99-intake-station.rules /root/99-intake-station.rules.ops
+   sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=hidraw
+   ```
+   The kit's own rule, `99-zz-filament-kit-station.rules`, sorts after the ops one, so the kit's group wins even
+   if the ops rule comes back; moving it aside keeps one owner per device.
+3. **The panel firmware.** On its first start the kit's station writes its bundled firmware to the SV08 MAX
+   panel when the panel runs another version (about a minute; the panel restarts). To leave the panel's firmware
+   as it is, set `station.panel_flash` to false **before** installing (the installer keeps the settings it finds
+   and adds the rest):
+   ```
+   sudo install -d -m 750 /etc/filament-kit
+   echo '{"station": {"panel_flash": false}}' | sudo tee /etc/filament-kit/config.json >/dev/null
+   ```
+4. Install the kit in station mode, pointing at the VM:
    `sudo ./install.sh --mode station --server spoolman.home.arpa`.
-3. Leave the scale switched on (it must be on to enumerate).
+5. Leave the scale switched on (it must be on to enumerate).
 
 **Check:** from the VM, `curl -s http://intake.home.arpa:5003/state` shows the scale and tag; on the
 VM `sudo filament-kit status` has the station OK; a tag tapped at the station shows in the phone app's Open spool
-tab within 3 s, with the scale weight.
+tab within 3 s, with the scale weight. On the station PC, `ls -l /dev/hidraw*` shows the scale's node in group
+`filament-kit-station`.
 
-**Rollback:** `sudo ./uninstall.sh`, then `sudo systemctl enable --now intake-station.service`.
+**Rollback:** `sudo ./uninstall.sh`, then put the ops rule back and start the old service:
+```
+sudo mv /root/99-intake-station.rules.ops /etc/udev/rules.d/99-intake-station.rules
+sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=hidraw
+sudo systemctl enable --now intake-station.service
+```
 
 ## 3. Desktop (Windows, Bambu Studio and Orca Slicer)
 
@@ -258,8 +296,9 @@ problems; Bambu Studio and Orca Slicer show the presets with the same names.
 
 **Rollback:** unpair the PC (`sudo filament-kit unpair <id>` on the VM), uninstall the PC sync, then
 `Enable-ScheduledTask -TaskName 'Filament preset sync'` and (if retired) `sudo systemctl enable --now smbd`. The
-slicers' folders keep the kit's last install until fpsync installs the next ops build, which needs 1.1's
-rollback first.
+slicers' folders keep the kit's last install until fpsync installs the next ops build, and that needs the ops
+side running on the VM again: the whole VM chain backwards, 1.5's rollback, then 1.4's, 1.3's, 1.2's and 1.1's,
+in that order (each rollback assumes the later steps are undone).
 
 ## 4. After a week of normal use
 
@@ -268,6 +307,9 @@ rollback first.
 - Keep `export_filament_orders.py` (move it next to amazon-mcp, change its group to `filament-kit` and drop the
   `ExecStartPost` line) before removing the `filament-mcp` user and group.
 - Delete `/root/ops-bundle.tar.gz` (it holds secrets).
+- The kit's router conf serves the amazon, amazon-ext and h2d routes too. If the kit is ever removed from the
+  VM, `uninstall.sh` keeps that router conf while those routes are in `/etc/nginx/mcp.d` (it says so); give them
+  another router before removing it by hand.
 
 ## 5. Rehearsal (no live changes)
 
