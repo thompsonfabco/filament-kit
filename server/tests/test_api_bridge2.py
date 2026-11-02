@@ -131,13 +131,13 @@ def client(mgr, sm, mapper):
 def stubs(monkeypatch):
     cfg = {"gate": None, "calib": None}
 
-    def st_run(manager, serial, on_step):
+    def st_run(manager, serial, on_step, should_stop=None):
         on_step("Reading the AMS slots")
         if cfg["gate"] is not None:
             cfg["gate"].wait(5)
         return SlotTestResult(confirmed={"A1": {"ams_id": 0, "tray_id": 0}, "A2": {"ams_id": 0, "tray_id": 1}})
 
-    def calib_run(manager, serial, slotmap):
+    def calib_run(manager, serial, slotmap, should_stop=None):
         if cfg["calib"] is not None:
             return cfg["calib"]
         return CalibResult(decoding={"A1": 0, "A2": 1}, consistent=True)

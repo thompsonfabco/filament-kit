@@ -7,6 +7,7 @@ import http.client
 import json
 import os
 import shutil
+import signal
 import socket
 import ssl
 import subprocess
@@ -424,6 +425,31 @@ def _err_line(text: str) -> None:
     print(f"error: {text}", file=sys.stderr)
 
 
+STOP_SIGNALS = ("SIGINT", "SIGTERM", "SIGHUP")
+
+
+def _on_stop_signals(handler) -> dict:
+    """Install `handler` for Ctrl-C / SIGTERM / SIGHUP; returns the previous handlers (for `_restore_signals`)."""
+    old = {}
+    for name in STOP_SIGNALS:
+        sig = getattr(signal, name, None)
+        if sig is None:
+            continue
+        try:
+            old[sig] = signal.signal(sig, handler)
+        except (ValueError, OSError):      # not the main thread, or not settable here
+            pass
+    return old
+
+
+def _restore_signals(old: dict) -> None:
+    for sig, h in old.items():
+        try:
+            signal.signal(sig, h)
+        except (ValueError, OSError):
+            pass
+
+
 def cmd_printer_map(serial: str, manager_factory) -> int:
     from .bridge import mapping
     from .bridge.connection import PrinterOffline, UnknownPrinter
@@ -435,12 +461,25 @@ def cmd_printer_map(serial: str, manager_factory) -> int:
     print(f"Mapping the slots of {p.name or serial}. Each slot's colour changes briefly and the printer runs a "
           f"job with no heating and no motion.")
     m = manager_factory(serial)
+    stopped = []
     try:
         m.sync()
         m.wait_settled(serial, CONNECT_WAIT)
         m.wait_report(serial, lambda r: "gcode_state" in r, REPORT_WAIT)
+        mapper = mapping.Mapper(m)
+
+        def on_signal(signum, frame):
+            # Ctrl-C, a closed terminal (SIGHUP) or SIGTERM mid-job: stop cooperatively so every slot is put back
+            if not stopped:
+                print("\n  Stopping: putting the slots back first (this takes a few seconds) ...", flush=True)
+            stopped.append(signum)
+            mapper.abort(serial)
+        old = _on_stop_signals(on_signal)
         try:
-            v = mapping.Mapper(m).run(serial, on_step=lambda t: print(f"  {t}", flush=True))
+            v = mapper.run(serial, on_step=lambda t: print(f"  {t}", flush=True))
+        except mapping.LoadRunning:
+            _err_line("a spool is being loaded into this printer; try again in a moment")
+            return 1
         except mapping.AlreadyRunning:
             _err_line("slot mapping is already running for this printer")
             return 1
@@ -454,12 +493,18 @@ def cmd_printer_map(serial: str, manager_factory) -> int:
         except (PrinterOffline, UnknownPrinter):
             _err_line("the printer is offline (or its Access Code is wrong); check that it is on and on the network")
             return 1
+        finally:
+            _restore_signals(old)
     finally:
         m.stop()
     for s in v["slots"]:
         print(f"  {s['label']}: AMS {s['ams_id']} tray {s['tray_id']} -> printer slot {s['global']}")
     for prob in v["problems"]:
         print(f"  problem: {prob}")
+    if stopped:
+        print("Mapping stopped. Any slot listed above as not restored may still hold a test colour; the next "
+              "mapping run restores it first.")
+        return 130 if stopped[0] == getattr(signal, "SIGINT", None) else 1
     if v["state"] == "done" and v["calibrated"]:
         print("Done: slots mapped; filament use is now taken off the spools in Spoolman.")
         return 0
