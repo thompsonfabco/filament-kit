@@ -15,11 +15,20 @@ parent the owner did not set. A system preset gated only by `compatible_printers
 `compatible_printers`) never yields a build parent, so it is not chosen; a line left with no parent keeps
 `parent_source "none"` and shows in `problems`.
 
+Orca parent (Task 3, Ruling L): `orca_parent` is the base name of an OrcaFilamentLibrary `@System` preset that
+the line's Orca presets inherit (`"<orca_parent> @System"`), with its own `orca_parent_source`. Steps
+(`choose_orca_parent`): (1) the library's `orca_parent` (a local entry's wins) if the uploaded Orca library index
+has it; (2) brand: a `"<vendor> <product> @System"` preset (casefold); (3) material: `Generic <Orca type> @System`,
+else the first `Generic ... @System` of that type in the index. With no Orca store (or one without a library
+index) the hint is taken as is, else the static `Generic <type>`. Orca presets for Bambu printers inherit the BBL
+system preset of the line's Bambu parent instead (`OrcaStore.system_parent_for`).
+
 Line stability (ruling S12): each line records its member Spoolman filament ids. `group` keeps a filament in its
 recorded line unless its `extra.line` is set and names another line (the move is reported). Lines are never
 deleted, members or not.
 
-State: `state/profiles/lines.json` = `{"version": 1, "lines": [Line, ...]}` (atomic, state-owned). A missing file
+State: `state/profiles/lines.json` = `{"version": 2, "lines": [Line, ...]}` (atomic, state-owned); a version 1
+file (no Orca fields) reads with `orca_parent` None and is saved as version 2. A missing file
 is an empty set; a file that cannot be read (permissions, I/O) raises `LineStoreError` and stays in place; a file
 that is not a lines file (bad UTF-8, bad JSON, no lines list) is renamed to `lines.json.corrupt-<ts>` and
 `LineStoreError` is raised (never an empty set that the next save would write over every filament_id). A row that
@@ -53,6 +62,7 @@ from ..library import Library
 from ..pairing import _write_atomic, make_state_dir, open_lock
 from . import errors
 from .bbl import Store, _first
+from .orca import SYSTEM, OrcaStore
 
 # ports of filament-ops lines.py BS_TYPE and gen.py BS_VALID
 BS_TYPE = {"PA12-CF": "PA-CF", "PA6-GF": "PA-GF", "PAHT-CF": "PA-CF", "PAHT-GF": "PPA-GF", "PC-CF": "PC",
@@ -60,12 +70,15 @@ BS_TYPE = {"PA12-CF": "PA-CF", "PA6-GF": "PA-GF", "PAHT-CF": "PA-CF", "PAHT-GF":
 BS_VALID = {"ABS", "ABS-GF", "ASA", "ASA-AERO", "ASA-CF", "BVOH", "EVA", "HIPS", "PA", "PA-CF", "PA-GF", "PA6-CF",
             "PC", "PCTG", "PE", "PE-CF", "PET-CF", "PETG", "PETG-CF", "PHA", "PLA", "PLA-AERO", "PLA-CF", "PP",
             "PP-CF", "PP-GF", "PPA-CF", "PPA-GF", "PPS", "PPS-CF", "PVA", "TPU", "TPU-AMS"}
+# port of filament-ops lines.py ORCA_TYPE: Spoolman material -> Orca filament_type where they differ
+ORCA_TYPE = {"TPU-GF": "TPU", "PPS-GF": "PPS"}
 # Bambu type -> the store filament_types its Generic preset may carry ("Generic TPU for AMS" is "TPU-AMS")
 GENERIC_TYPES = {"TPU": ("TPU", "TPU-AMS"), "TPU-AMS": ("TPU-AMS", "TPU")}
 
 SOURCES = ("library", "brand", "material", "user", "none")
 FID = re.compile(r"P[0-9a-f]{7}")
-FILE_VERSION = 1
+FILE_VERSION = 2
+TARGETS = ("bambu", "orca")
 
 
 class LineStoreError(errors.ProfileError):
@@ -86,6 +99,8 @@ class Line:
     filament_id: str
     created: str
     filaments: list[int] = field(default_factory=list)   # member Spoolman filament ids, ascending
+    orca_parent: str | None = None      # OrcaFilamentLibrary base name (without " @System")
+    orca_parent_source: str = "none"    # one of SOURCES
 
 
 class LineSet(dict):
@@ -107,6 +122,12 @@ def bs_type(material: str) -> str:
     """The Bambu Studio filament_type for a Spoolman material: mapped, else upper-cased (even if not in BS_VALID)."""
     m = (material or "").strip().upper()
     return BS_TYPE.get(m, m)
+
+
+def orca_type(material: str) -> str:
+    """The Orca filament_type for a Spoolman material: ORCA_TYPE, else upper-cased."""
+    m = (material or "").strip().upper()
+    return ORCA_TYPE.get(m, m)
 
 
 def _norm(text: str) -> str:
@@ -158,10 +179,10 @@ def text_problem(value, *, at_ok: bool = False) -> str | None:
     return None
 
 
-def _hint(vendor: str, product: str, library: Library) -> str | None:
+def _hint(vendor: str, product: str, library: Library, key: str = "bambu_parent") -> str | None:
     look = library.lookup(vendor, product)
     for entry in (look.local, look.library):
-        p = (entry or {}).get("bambu_parent")
+        p = (entry or {}).get(key)
         if isinstance(p, str) and p.strip():
             return p.strip()
     return None
@@ -224,6 +245,68 @@ def rechoose(line: Line, store: Store | None, *, library: Library | None = None)
     return line
 
 
+# ---------- Orca parent choice ----------
+
+def _orca_library(orca_store: OrcaStore | None) -> dict[str, str]:
+    """casefolded base name -> the index's spelling of every `@System` preset; {} without a library index."""
+    if orca_store is None:
+        return {}
+    out: dict[str, str] = {}
+    for n in sorted(orca_store.library_names()):
+        if n.endswith(SYSTEM):
+            out.setdefault(n[: -len(SYSTEM)].casefold(), n[: -len(SYSTEM)])
+    return out
+
+
+def choose_orca_parent(line: Line, orca_store: OrcaStore | None, *,
+                       library: Library) -> tuple[str | None, str]:
+    """(orca_parent, source) for `line`: library hint -> same-name `@System` -> Generic by Orca type."""
+    otype = orca_type(line.material)
+    hint = _hint(line.vendor, line.product, library, "orca_parent")
+    known = _orca_library(orca_store)
+    if not known:
+        if hint is not None:
+            return hint, "library"
+        return (f"Generic {otype}", "material") if otype else (None, "none")
+    if hint is not None and hint.casefold() in known:
+        return known[hint.casefold()], "library"
+    same = f"{line.vendor.strip()} {line.product.strip()}".casefold()
+    if same in known:
+        return known[same], "brand"
+    if not otype:
+        return None, "none"
+    plain = f"Generic {otype}".casefold()
+    if plain in known:
+        return known[plain], "material"
+    typed = sorted(b for b in known.values() if b.casefold().startswith("generic ")
+                   and str((orca_store.parent(b + SYSTEM) or {}).get("filament_type") or "").upper() == otype)
+    return (typed[0], "material") if typed else (None, "none")
+
+
+def rechoose_orca(line: Line, orca_store: OrcaStore | None, *, library: Library | None = None) -> Line:
+    """Re-run the Orca parent steps for a line whose Orca parent the owner did not set."""
+    if line.orca_parent_source != "user":
+        lib = library if library is not None else library_mod.load()
+        line.orca_parent, line.orca_parent_source = choose_orca_parent(line, orca_store, library=lib)
+    return line
+
+
+def check_orca_parent(parent: str, orca_store: OrcaStore | None) -> str:
+    """The gate on an Orca parent the user picks; returns the name to store. With an Orca library index uploaded,
+    `"<parent> @System"` must be in it (compared casefolded) and the index's own spelling is returned, since Orca
+    resolves `inherits` by exact name; else ProfileError 400 `unknown_parent`. With none yet any name is accepted
+    as given, stripped (re-checked at build)."""
+    parent = (parent or "").strip()
+    known = _orca_library(orca_store)
+    if not known or not parent:
+        return parent
+    if parent.casefold() in known:
+        return known[parent.casefold()]
+    raise errors.ProfileError(400, "unknown_parent",
+                              f"{parent!r} is not an Orca Slicer library preset "
+                              f"(no {parent + SYSTEM!r} in the uploaded Orca system presets)", parent=parent)
+
+
 # ---------- lines ----------
 
 def _now() -> str:
@@ -246,22 +329,27 @@ def _taken_fids(lines: dict) -> set[str]:
 
 
 def propose(vendor: str, product: str, material: str, *, library: Library, store: Store | None,
-            lines: dict[str, Line]) -> dict:
+            lines: dict[str, Line], orca_store: OrcaStore | None = None) -> dict:
     vendor, product = (vendor or "").strip(), (product or "").strip()
     lid = line_id_for(vendor, product)
     have = lines.get(lid)
     if have is not None:
         return {"line_id": lid, "line": have.product, "bambu_parent": have.bambu_parent,
-                "parent_source": have.parent_source, "exists": True}
+                "parent_source": have.parent_source, "orca_parent": have.orca_parent,
+                "orca_parent_source": have.orca_parent_source, "exists": True}
     parent, source = choose_parent(vendor, product, material, library=library, store=store)
-    return {"line_id": lid, "line": product, "bambu_parent": parent, "parent_source": source, "exists": False}
+    probe = Line(lid, vendor, product, (material or "").strip(), parent, source, "P0000000", "")
+    oparent, osource = choose_orca_parent(probe, orca_store, library=library)
+    return {"line_id": lid, "line": product, "bambu_parent": parent, "parent_source": source,
+            "orca_parent": oparent, "orca_parent_source": osource, "exists": False}
 
 
 def ensure(lines: dict[str, Line], vendor: str, product: str, material: str, *, bambu_parent: str | None,
-           library: Library, store: Store | None, used_fids: set[str]) -> Line:
-    """The line for (vendor, product), created if missing. A given `bambu_parent` that differs from the line's
-    (or, for a new line, from the chosen one) is set with source "user". Run under `locked()` when the set is
-    saved afterwards."""
+           library: Library, store: Store | None, used_fids: set[str], orca_store: OrcaStore | None = None,
+           orca_parent: str | None = None) -> Line:
+    """The line for (vendor, product), created if missing (its Orca parent chosen against `orca_store`). A given
+    `bambu_parent` / `orca_parent` that differs from the line's (or, for a new line, from the chosen one) is set
+    with source "user". Run under `locked()` when the set is saved afterwards."""
     vendor, product = (vendor or "").strip(), (product or "").strip()
     lid = line_id_for(vendor, product)
     line = lines.get(lid)
@@ -270,17 +358,27 @@ def ensure(lines: dict[str, Line], vendor: str, product: str, material: str, *, 
         fid = new_filament_id(used_fids | _taken_fids(lines))
         used_fids.add(fid)
         line = Line(lid, vendor, product, (material or "").strip(), parent, source, fid, _now())
+        line.orca_parent, line.orca_parent_source = choose_orca_parent(line, orca_store, library=library)
         lines[lid] = line
     elif (_norm(vendor), _norm(product)) != (_norm(line.vendor), _norm(line.product)):
         _note(lines, f"two names share line {lid}: {line.vendor} {line.product!s} and {vendor} {product}")
     if bambu_parent is not None and bambu_parent.strip() and bambu_parent.strip() != line.bambu_parent:
         line.bambu_parent, line.parent_source = bambu_parent.strip(), "user"
+    if orca_parent is not None and orca_parent.strip() and orca_parent.strip() != line.orca_parent:
+        line.orca_parent, line.orca_parent_source = orca_parent.strip(), "user"
     return line
 
 
-def set_parent(lines: dict[str, Line], line_id: str, parent: str) -> Line:
+def set_parent(lines: dict[str, Line], line_id: str, parent: str, *, target: str = "bambu") -> Line:
+    """Set the line's Bambu Studio parent (`target="bambu"`) or its Orca library parent (`"orca"`), source
+    "user". KeyError for an unknown line, ValueError for an unknown target."""
+    if target not in TARGETS:
+        raise ValueError(f"unknown parent target {target!r}")
     line = lines[line_id]                       # KeyError when unknown
-    line.bambu_parent, line.parent_source = parent, "user"
+    if target == "orca":
+        line.orca_parent, line.orca_parent_source = parent, "user"
+    else:
+        line.bambu_parent, line.parent_source = parent, "user"
     return line
 
 
@@ -425,9 +523,10 @@ def locked():
 def _row(r) -> Line | None:
     if not isinstance(r, dict):
         return None
+    optional = {"filaments": [], "orca_parent": None, "orca_parent_source": "none"}   # v1 rows lack the Orca pair
     try:
-        line = Line(**{f.name: r[f.name] for f in fields(Line) if f.name != "filaments"},
-                    filaments=r.get("filaments", []))
+        line = Line(**{f.name: r[f.name] if f.name not in optional else r.get(f.name, optional[f.name])
+                       for f in fields(Line)})
     except KeyError:
         return None
     text = (line.line_id, line.vendor, line.product, line.material, line.filament_id, line.created)
@@ -436,6 +535,9 @@ def _row(r) -> Line | None:
     if not (line.bambu_parent is None or isinstance(line.bambu_parent, str)):
         return None
     if line.parent_source not in SOURCES or not FID.fullmatch(line.filament_id):
+        return None
+    if not (line.orca_parent is None or isinstance(line.orca_parent, str)) \
+            or line.orca_parent_source not in SOURCES:
         return None
     if not (isinstance(line.filaments, list)
             and all(isinstance(i, int) and not isinstance(i, bool) for i in line.filaments)):
@@ -523,9 +625,9 @@ def ensure_saved(vendor: str, product: str, material: str, *, bambu_parent: str 
                       used_fids=set())
 
 
-def set_parent_saved(line_id: str, parent: str) -> Line:
+def set_parent_saved(line_id: str, parent: str, *, target: str = "bambu") -> Line:
     with transaction() as ls:
-        return set_parent(ls, line_id, parent)
+        return set_parent(ls, line_id, parent, target=target)
 
 
 def group_saved(filaments: list[dict], *, library: Library,
