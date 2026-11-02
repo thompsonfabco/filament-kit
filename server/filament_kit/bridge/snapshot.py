@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 import time
 from typing import Callable
 
@@ -30,21 +29,12 @@ log = logging.getLogger(__name__)
 FILE = "slottest-snapshot.json"
 CONFIRM_TIMEOUT = 20.0
 ONLINE = ('connected', 'needs_developer_mode')
-TEST_PREFIXES = ("FA", "FB", "FC", "FD", "FE", "F9", "F8", "F7")
-_TEST = re.compile(r"(FA|FB|FC|FD|FE|F9|F8|F7)([0-9A-F]{2})00FF")
 
 
 def path(serial: str):
     if not isinstance(serial, str) or not registry.SERIAL.fullmatch(serial):
         raise ValueError(f"bad serial {serial!r}")
     return config.paths().state / "printers" / serial / FILE
-
-
-def looks_like_test_colour(colour: str, n_slots: int) -> bool:
-    """`colour` has the slot test's shape (`<prefix><nn>00FF`, nn = 1..n_slots): it may be a test colour an
-    interrupted run left behind, so it is never taken as a slot's original colour."""
-    m = _TEST.fullmatch((colour or "").upper())
-    return m is not None and 1 <= int(m.group(2), 16) <= max(n_slots, 1)
 
 
 def save(serial: str, kind: str, slots: list[dict], test_colours=()) -> None:
@@ -159,8 +149,10 @@ def restore(manager, serial: str, on_step: Callable[[str], None] | None = None,
     if snap is None:
         return []
     if snap.get("corrupt"):
-        return [f"the saved slot snapshot ({FILE}) cannot be read; check every slot's filament on the printer, "
-                f"then delete that file"]
+        return [f"the saved slot snapshot cannot be read, so the slots an interrupted mapping changed are unknown. "
+                f"Test colours look like near-pure red FAnn00FF (the first two digits F7 to FE): set the filament "
+                f"of any slot showing such a colour again, on the printer or in Bambu Studio, then delete "
+                f"{path(serial)} and map again"]
     if manager.state(serial) not in ONLINE:
         return ["printer_offline: cannot restore the slots of an interrupted mapping"]
     report = manager.wait_report(serial, lambda r: True, 0)

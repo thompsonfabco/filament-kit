@@ -236,13 +236,15 @@ COLLIDING["ams"]["ams"][0]["tray"][1]["tray_color"] = "FA0300FF"       # A2 hold
 
 
 @pytest.mark.parametrize("report", [COLLIDING])
-def test_slot_already_holding_a_test_colour_refuses_the_test(rig, report):
-    """C1 (final review): a test-colour-shaped colour may be a leftover of an interrupted run, so it is never taken
-    as the slot's original: the test refuses before writing anything and names the slots."""
+def test_slot_already_holding_its_default_test_colour_gets_another(rig, report):
+    """R3: a real near-red spool (a test-colour-shaped colour) is mapped like any other slot; the test colours
+    avoid every colour a slot holds, so no report confirms a write by coincidence."""
     m, printer, c = rig
     res = slottest.run(m, SERIAL, lambda s: None)
-    assert printer.writes == [] and res.confirmed == {}
-    assert [p.split(":")[0] for p in res.problems] == ["A1", "A2"]
+    assert res.restored is True and res.problems == [] and len(res.confirmed) == 6
+    colours = expected_colours(report)
+    assert colours[0] == "FB0100FF" and colours[2] == "FB0300FF"
+    assert [w["tray_color"] for w in printer.writes[:6]] == colours
     assert printer.tray(0, 0)["tray_color"] == "FA0100FF" and printer.tray(0, 1)["tray_color"] == "FA0300FF"
 
 

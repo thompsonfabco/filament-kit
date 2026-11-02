@@ -142,7 +142,7 @@ def run(manager, serial: str, on_step: Callable[[str], None],
     Returns the result; a problem never goes unreported: every slot not confirmed and every slot not confirmed
     restored has a line. The snapshot is saved to disk (`snapshot.save`) before the first write and deleted after
     a confirmed restore; the restore runs whatever stops the test (a KeyboardInterrupt too, re-raised afterwards).
-    A slot whose colour looks like a leftover test colour refuses the test (it is never taken as the original)."""
+    The test colours avoid every colour a slot holds (`pick_test_colour`), so a real near-red spool is mapped too."""
     def step(text: str) -> None:
         try:
             on_step(text)
@@ -165,14 +165,9 @@ def run(manager, serial: str, on_step: Callable[[str], None],
         for s in u.slots:
             targets.append(_Target(s.label, u.ams_id, s.tray_id, _snapshot(_raw_tray(report, u, s))))
     by_label = {t.label: t for t in targets}
-    leftovers = [t for t in targets if snapshot.looks_like_test_colour(t.snap['tray_color'], len(targets))]
-    for t in leftovers:
-        res.problems.append(f"{t.label}: its colour {t.snap['tray_color']} looks like a test colour left by an "
-                            f"interrupted mapping, so it is not taken as the slot's own; set that slot's filament "
-                            f"again (on the printer or with Load into printer), then map again")
-    if leftovers:
-        return res
-    taken = {t.snap['tray_color'] for t in targets if t.snap['tray_color']}   # never pick a colour a slot holds
+    # a slot's colour is its own even when it looks like a test colour (a real near-red spool): an interrupted
+    # run is covered by the snapshot on disk, which `snapshot.pending` above already made the caller restore
+    taken ={t.snap['tray_color'] for t in targets if t.snap['tray_color']}   # never pick a colour a slot holds
     plan: list[str] = []                 # the test colour of each target, in test order
     for n in range(1, len(targets) + 1):
         c = pick_test_colour(n, taken)

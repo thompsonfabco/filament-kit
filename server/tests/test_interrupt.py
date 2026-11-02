@@ -129,14 +129,16 @@ def test_snapshot_cannot_be_saved_nothing_is_written(rig, monkeypatch):
     assert any("snapshot" in p for p in res.problems)
 
 
-def test_leftover_test_colour_is_never_taken_as_original(rig):
-    """A slot showing a test-colour-shaped colour (left by an interrupted run) refuses the test: nothing written."""
+def test_real_near_red_spool_is_mapped_not_refused(rig):
+    """R3: a slot whose real colour has the test-colour shape no longer locks mapping out; the test picks a test
+    colour that no slot holds and puts the near-red colour back afterwards."""
     m, printer, _ = rig
-    printer.push({"vt_tray": dict(REPORT["vt_tray"], tray_color="FA0300FF")})
-    assert m.wait_report(SERIAL, lambda r: r["vt_tray"]["tray_color"] == "FA0300FF", 2)
+    printer.push({"vt_tray": dict(REPORT["vt_tray"], tray_color="FA0600FF")})
+    assert m.wait_report(SERIAL, lambda r: r["vt_tray"]["tray_color"] == "FA0600FF", 2)
     res = slottest.run(m, SERIAL, lambda t: None)
-    assert printer.writes == [] and res.confirmed == {}
-    assert any("Ext" in p and "test colour" in p for p in res.problems)
+    assert res.restored is True and len(res.confirmed) == 6, res.problems
+    assert "FA0600FF" not in colours_written(printer)[:6]
+    assert printer.tray(254, 0)["tray_color"] == "FA0600FF"
     assert not snapshot.pending(SERIAL)
 
 
@@ -149,12 +151,18 @@ def test_slot_test_refuses_while_a_snapshot_is_pending(rig):
     assert snapshot.pending(SERIAL)
 
 
-def test_looks_like_test_colour():
-    assert snapshot.looks_like_test_colour("FA0300FF", 6)
-    assert snapshot.looks_like_test_colour("fb0100ff", 6)
-    assert not snapshot.looks_like_test_colour("FA0700FF", 6)     # beyond the slot count
-    assert not snapshot.looks_like_test_colour("FA0300FE", 6)
-    assert not snapshot.looks_like_test_colour("FF0000FF", 6)
+def test_corrupt_snapshot_says_what_test_colours_look_like_and_where_the_file_is(rig):
+    """R3: an unreadable snapshot names the shape of the test colours and the file to delete."""
+    m, printer, _ = rig
+    f = snapshot.path(SERIAL)
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text("{not json", encoding="utf-8")
+    probs = snapshot.restore(m, SERIAL)
+    assert len(probs) == 1, probs
+    p = probs[0]
+    assert "FAnn00FF" in p and "F7" in p and "FE" in p and "red" in p
+    assert "Studio" in p and str(f) in p and "delete" in p
+    assert printer.writes == [] and snapshot.pending(SERIAL)
 
 
 # ---------------------------------------------------------------- the snapshot file + mapping

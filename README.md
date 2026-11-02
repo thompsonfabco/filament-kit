@@ -140,9 +140,10 @@ printer.
   the server keeps a note of every slot's original setting (`/var/lib/filament-kit/printers/<serial>/slottest-snapshot.json`);
   the next mapping run, or the server when it starts and the printer is idle, puts those slots back before
   doing anything else. A mapping refuses to start while that restore is not confirmed.
-- A slot whose colour looks like a mapping test colour (`FA0100FF`, `FA0200FF` ... a red with no blue) is never
-  taken as the slot's own colour: mapping refuses and names the slot. Set that slot's filament again on the
-  printer (or with **Load into printer**), then map again.
+- Test colours are near-pure reds, `FAnn00FF` (the first two digits F7 to FE). Mapping picks test colours that
+  no slot holds, so a real spool of such a red is mapped like any other. If the note file cannot be read,
+  mapping says so: set the filament of any slot showing such a red again (on the printer or in Bambu Studio),
+  then delete the file and map again.
 - The calibration job is stopped at once if the printer starts heating or loading a filament, and a filament
   left loaded in the toolhead afterwards is reported.
 - Loading a spool and mapping never run at the same time on one printer; the second one is refused with "try
