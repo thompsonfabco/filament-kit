@@ -216,3 +216,62 @@ def test_cap_refund_gives_back_newest(tmp_path):
     cap.refund()
     cap.refund()  # never below empty
     assert json.loads(f.read_text()) == []
+
+
+# ---------- Task 7b: product line at intake ----------
+
+def test_schema_and_rules_ask_for_line():
+    from filament_kit.intake import ITEM_PROPS
+    assert ITEM_PROPS["line"] == {"type": "string"}
+    assert "line" in SCHEMA["properties"]["items"]["items"]["required"]
+    assert "line: the product line as printed, without the colour (e.g. 'PLA+ 2.0', 'PETG HF')" in RULES
+    assert "for an existing filament copy its line from the catalog" in RULES
+
+
+def test_read_without_line_gets_derived_line_and_parent(sm):
+    r = recorded()
+    assert "line" not in r["items"][0]
+    fake = FakeClaude(r)
+    it = read_labels(sm, [JPEG], "", None, client=fake)["items"][0]
+    # existing filament F1 "PETG Grey" has no extra.line: the longest SUNLU library product prefixing its name
+    assert it["line"] == "PETG"
+    assert (it["bambu_parent"], it["parent_source"], it["line_exists"]) == ("SUNLU PETG", "library", False)
+    assert "F1 | SUNLU | PETG Grey | PETG | net 1000 | tare 213 | density 1.27 | 8A8D8F | line -" \
+        in fake.calls[0]["messages"][0]["content"][0]["text"]
+
+
+def test_new_filament_line_from_claude_and_existing_line(sm):
+    from filament_kit import library
+    from filament_kit.profiles import lines
+    lines.ensure_saved("ELEGOO", "PETG HF", "PETG", bambu_parent="Generic PETG", library=library.load(),
+                       store=None)
+    r = recorded()
+    r["items"][0].update(existing_filament_id=None, vendor="ELEGOO", name="PETG HF Black", line="PETG HF")
+    it = read_labels(sm, [JPEG], "", None, client=FakeClaude(r))["items"][0]
+    assert (it["line"], it["bambu_parent"], it["parent_source"], it["line_exists"]) == \
+        ("PETG HF", "Generic PETG", "user", True)
+
+
+def test_existing_filament_takes_its_extra_line(sm, spoolman_fake_store):
+    spoolman_fake_store["filaments"][1]["extra"] = {"line": json.dumps("PETG 2.0")}
+    r = recorded()
+    r["items"][0]["line"] = "Something Else"
+    fake = FakeClaude(r)
+    it = read_labels(sm, [JPEG], "", None, client=fake)["items"][0]
+    assert it["line"] == "PETG 2.0" and it["line_exists"] is False
+    assert "| line PETG 2.0" in fake.calls[0]["messages"][0]["content"][0]["text"]
+
+
+def test_new_filament_empty_line_is_derived(sm):
+    r = recorded()
+    r["items"][0].update(existing_filament_id=None, vendor="SUNLU", name="PLA+ 2.0 Grey", line=" ")
+    it = read_labels(sm, [JPEG], "", None, client=FakeClaude(r))["items"][0]
+    assert it["line"] == "PLA+ 2.0" and it["parent_source"] == "library"
+
+
+def test_line_kept_within_add_limits(sm):
+    r = recorded()
+    r["items"][0].update(existing_filament_id=None, vendor="ELEGOO", name="PETG HF Black",
+                         line="PETG HF @BBL H2D " + "x" * 200)
+    it = read_labels(sm, [JPEG], "", None, client=FakeClaude(r))["items"][0]
+    assert it["line"] == "PETG HF"

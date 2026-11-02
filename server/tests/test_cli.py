@@ -387,3 +387,203 @@ def test_pair_prints_grouped_certificate_fingerprint(capsys):
     grouped = " ".join(fp[i:i + 4] for i in range(0, len(fp), 4))
     assert "Certificate fingerprint (check it matches the phone):" in out
     assert grouped in out and len(grouped.split(" ")) == 16
+
+
+# ---------- Task 7b: profiles, pair --pc, status lines ----------
+
+import time  # noqa: E402
+
+from filament_kit import library as library_mod  # noqa: E402
+from filament_kit.profiles import builds, lines as lines_mod  # noqa: E402
+
+
+def _spoolman_cfg(url):
+    cfg = config.load()
+    cfg["spoolman_url"] = url
+    config.save(cfg)
+
+
+def test_profiles_build_waiting_exits_0_with_message(capsys, spoolman_url):
+    _spoolman_cfg(spoolman_url)
+    assert cli.main(["profiles", "build"]) == 0
+    out = capsys.readouterr()
+    assert "install and pair the PC sync" in out.out
+    assert "see README: Pair your PC" in out.out
+    assert "FAIL" not in out.out and out.err == ""
+
+
+def test_profiles_build_ok_prints_stamp(capsys, monkeypatch, spoolman_url):
+    _spoolman_cfg(spoolman_url)
+    seen = {}
+
+    def run_build(sm):
+        seen["sm"] = sm
+        return {"stamp": "20261102-080100", "ok": True, "error": None, "problems": ["a: no parent"]}
+
+    monkeypatch.setattr(builds, "run_build", run_build)
+    monkeypatch.setattr(builds, "current", lambda: {"stamp": "20261102-080100", "presets": 12, "problems": 1})
+    assert cli.main(["profiles", "build"]) == 0
+    out = capsys.readouterr().out
+    assert "build 20261102-080100" in out and "12 presets" in out
+    assert "problem: a: no parent" in out
+    assert seen["sm"] is not None
+
+
+def test_profiles_build_failed_exits_1(capsys, monkeypatch, spoolman_url):
+    _spoolman_cfg(spoolman_url)
+    monkeypatch.setattr(builds, "run_build", lambda sm: {"stamp": None, "ok": False, "error": "ValueError: boom",
+                                                        "problems": []})
+    assert cli.main(["profiles", "build"]) == 1
+    assert "ValueError: boom" in capsys.readouterr().err
+
+
+def test_pair_pc_prints_link_not_qr(capsys, monkeypatch):
+    _cert()
+
+    def no_qr(name):
+        raise AssertionError("pair --pc must not make a QR code")
+
+    monkeypatch.setattr(cli.shutil, "which", no_qr)
+    assert cli.main(["pair", "--pc"]) == 0
+    out = capsys.readouterr().out
+    rows = out.splitlines()
+    i = rows.index("Link for filament-kit-sync (paste it when asked):")
+    assert rows[i + 1].startswith("fkit://pair?")
+    fp = pairing.fingerprint((config.paths().etc / "cert.pem").read_bytes())
+    assert " ".join(fp[j:j + 4] for j in range(0, len(fp), 4)) in out
+    pend = json.loads((config.paths().state / "pending.json").read_text())
+    assert f"Pairing code: {pend[0]['code']}" in out
+    pairing.redeem_code(pend[0]["code"])
+    assert [d["name"] for d in pairing.devices()] == ["pc"]
+
+
+def _ok_client(key):
+    class Models:
+        def list(self):
+            return []
+
+    class Client:
+        models = Models()
+    return Client()
+
+
+def _status_setup(spoolman_url):
+    _spoolman_cfg(spoolman_url)
+    _cert()
+    (config.paths().etc / "anthropic_key").write_text("sk-ant-secret", encoding="utf-8")
+
+
+def _status_lines(capsys) -> list:
+    return capsys.readouterr().out.splitlines()
+
+
+def test_status_fresh_install_profiles_lines_no_fail(capsys, spoolman_url):
+    _status_setup(spoolman_url)
+    assert cli.main(["status"], client_factory=_ok_client) == 0
+    out = _status_lines(capsys)
+    assert not any(ln.startswith("FAIL") for ln in out)
+    v = library_mod.load().version
+    assert f"--   library version {v} (bundled), 0 local additions" in out
+    assert "--   profiles: no build yet (waiting for the PC sync)" in out
+    assert "--   PC sync: not set up (see README: Pair your PC)" in out
+
+
+def test_status_after_waiting_build_no_fail(capsys, spoolman_url):
+    _status_setup(spoolman_url)
+    assert cli.main(["profiles", "build"]) == 0
+    capsys.readouterr()
+    assert cli.main(["status"], client_factory=_ok_client) == 0
+    out = _status_lines(capsys)
+    assert not any(ln.startswith("FAIL") for ln in out)
+    assert "--   profiles: no build yet (waiting for the PC sync)" in out
+
+
+def _fake_profiles(monkeypatch, **st):
+    base = {"lines": 3, "presets": 0, "build": None, "last_attempt": None, "installed": None, "pc": None,
+            "stale": [], "problems": []}
+    base.update(st)
+    monkeypatch.setattr(builds, "status", lambda: base)
+
+
+def _fake_library(monkeypatch, source="bundled", local=2, last_check=None, at=None):
+    monkeypatch.setattr(library_mod, "status", lambda: {"version": 7, "source": source, "local": local,
+                                                        "url": "x", "last_check": last_check})
+    monkeypatch.setattr(library_mod, "_pointer", lambda name: {"dir": "7-x", "version": 7, "at": at}
+                        if name == "current.json" and at else None)
+
+
+def test_status_good_build_and_pc_sync(capsys, monkeypatch, spoolman_url):
+    _status_setup(spoolman_url)
+    up = time.mktime((2026, 11, 2, 8, 1, 0, 0, 0, -1))
+    _fake_profiles(monkeypatch, presets=12,
+                   build={"stamp": "20261102-080100", "live_hash": "h", "created": up, "presets": 12, "problems": 2},
+                   last_attempt={"at": up, "ok": True, "error": None},
+                   installed={"stamp": "20261102-080100", "at": up}, pc={"device_id": "d1", "last_upload": up})
+    _fake_library(monkeypatch, source="updated", at=up)
+    assert cli.main(["status"], client_factory=_ok_client) == 0
+    out = _status_lines(capsys)
+    assert "--   library version 7 (updated 2026-11-02), 2 local additions" in out
+    assert "OK   profiles: build 20261102-080100, 12 presets for 3 lines (2 problems)" in out
+    assert "--   PC sync: last upload 2026-11-02 08:01, installed build 20261102-080100" in out
+
+
+def test_status_failed_build_and_library_update_warning(capsys, monkeypatch, spoolman_url):
+    _status_setup(spoolman_url)
+    _fake_profiles(monkeypatch, presets=12,
+                   build={"stamp": "20261101-070000", "live_hash": "h", "created": 1.0, "presets": 12, "problems": 0},
+                   last_attempt={"at": 2.0, "ok": False, "error": "ValueError: boom"},
+                   pc={"device_id": "d1", "last_upload": None})
+    _fake_library(monkeypatch, last_check={"at": 1.0, "ok": False, "error": "HTTP 404: using bundled version 7"})
+    assert cli.main(["status"], client_factory=_ok_client) == 1
+    out = _status_lines(capsys)
+    assert "--   library update: HTTP 404: using bundled version 7" in out
+    i = out.index("FAIL profiles: last build failed: ValueError: boom; using build 20261101-070000")
+    assert out[i + 1] == "     fix: sudo journalctl -u filament-kit-build -n 50"
+    assert "--   PC sync: last upload never, no build installed yet" in out
+
+
+def test_profiles_lines_and_set_parent(capsys, monkeypatch):
+    lib = library_mod.load()
+    lines_mod.ensure_saved("ELEGOO", "PETG HF", "PETG", bambu_parent=None, library=lib, store=None)
+    assert cli.main(["profiles", "lines"]) == 0
+    out = capsys.readouterr().out
+    assert "elegoo--petg-hf" in out and "Bambu PETG HF (library)" in out
+    asked = []
+    monkeypatch.setattr(builds, "request_rebuild", lambda reason, live_hash=None: asked.append(reason))
+    assert cli.main(["profiles", "set-parent", "elegoo--petg-hf", "Generic PETG"]) == 0
+    line = lines_mod.load()["elegoo--petg-hf"]
+    assert (line.bambu_parent, line.parent_source) == ("Generic PETG", "user")
+    assert asked
+    assert cli.main(["profiles", "set-parent", "nope--x", "Generic PETG"]) == 1
+    assert "no line nope--x" in capsys.readouterr().err
+    assert cli.main(["profiles", "set-parent", "elegoo--petg-hf", "Generic PETG @BBL H2D"]) == 1
+    assert "@" in capsys.readouterr().err
+    assert lines_mod.load()["elegoo--petg-hf"].bambu_parent == "Generic PETG"
+
+
+def test_profiles_set_parent_unknown_with_store(capsys, monkeypatch):
+    import io as _io
+
+    import test_builds as TB
+    lib = library_mod.load()
+    lines_mod.ensure_saved("ELEGOO", "PETG HF", "PETG", bambu_parent=None, library=lib, store=None)
+    TB.pair("a")
+    builds.store_upload("system", _io.BytesIO(TB.system_zip()), device_id="a")
+    monkeypatch.setattr(builds, "request_rebuild", lambda reason, live_hash=None: None)
+    assert cli.main(["profiles", "set-parent", "elegoo--petg-hf", "No Such Preset"]) == 1
+    assert "not a usable" in capsys.readouterr().err
+    assert lines_mod.load()["elegoo--petg-hf"].parent_source == "library"
+
+
+def test_profiles_status_and_restore_deleted(capsys, monkeypatch):
+    assert cli.main(["profiles", "status"]) == 0
+    assert "no build yet" in capsys.readouterr().out
+    asked = []
+    monkeypatch.setattr(builds, "request_rebuild", lambda reason, live_hash=None: asked.append(reason))
+    assert cli.main(["profiles", "restore-deleted"]) == 0
+    assert (config.paths().state / "profiles" / "restore-deleted").exists() and asked
+
+
+def test_import_guard_removed():
+    import inspect
+    assert "ImportError" not in inspect.getsource(cli._request_rebuild)

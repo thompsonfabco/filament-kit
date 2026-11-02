@@ -437,3 +437,90 @@ def test_add_and_link_spoolman_error_while_linking_reports_created_spool(sm, mon
     with pytest.raises(inventory.AddFailed) as e:
         inventory.add_and_link(sm, [item(sealed=False)], RULES, dry=False, uid=UID)
     assert len(e.value.partial.spool_ids) == 1
+
+
+# ---------- Task 7b: product lines on add ----------
+
+from filament_kit import config  # noqa: E402
+from filament_kit.profiles import errors as profile_errors, lines as lines_mod  # noqa: E402
+
+
+def _request_file():
+    return config.paths().state / "profiles" / "rebuild-request"
+
+
+def _hf(**kw):
+    return item(**{"vendor": "ELEGOO", "name": "PETG HF Black", "material": "PETG", "tare": 154,
+                   "line": "PETG HF", "bambu_parent": "Generic PETG", **kw})
+
+
+def test_add_with_line_writes_extra_line_and_creates_line(sm, spoolman_fake_store):
+    inventory.add_and_link(sm, [_hf()], RULES, dry=False, uid=None)
+    (f,) = spoolman_fake_store["filaments"].values()
+    assert f["extra"]["line"] == "\"PETG HF\""
+    line = lines_mod.load()["elegoo--petg-hf"]
+    assert (line.bambu_parent, line.parent_source) == ("Generic PETG", "user")
+    req = json.loads(_request_file().read_text(encoding="utf-8"))
+    assert req["reason"] == "intake"
+
+
+def test_add_dry_run_writes_no_line_and_no_request(sm, spoolman_fake_store):
+    inventory.add_and_link(sm, [_hf()], RULES, dry=True, uid=None)
+    assert lines_mod.load() == {}
+    assert not _request_file().exists()
+    assert spoolman_fake_store["filaments"] == {}
+
+
+def test_add_without_line_derives_one(sm):
+    inventory.add_and_link(sm, [item(name="PLA+ 2.0 Grey")], RULES, dry=False, uid=None)
+    line = lines_mod.load()["sunlu--pla-plus-2-0"]
+    assert line.parent_source == "library"
+
+
+@pytest.mark.parametrize("bad", [{"bambu_parent": "X @BBL H2D"}, {"bambu_parent": "x" * 101},
+                                 {"line": "PETG @HF"}, {"line": "y" * 101}, {"bambu_parent": 5}])
+def test_line_and_parent_validated(sm, spoolman_fake_store, bad):
+    with pytest.raises(ValueError):
+        inventory.add_and_link(sm, [item(**bad)], RULES, dry=False, uid=None)
+    assert spoolman_fake_store["spools"] == {}
+
+
+def test_line_failure_never_fails_the_add(sm, spoolman_fake_store, monkeypatch, caplog):
+    def boom(*a, **k):
+        raise lines_mod.LineStoreError("lines.json is unusable")
+
+    monkeypatch.setattr(lines_mod, "load", boom)
+    r = inventory.add_and_link(sm, [_hf()], RULES, dry=False, uid=None)
+    assert len(r.spool_ids) == 1
+    assert "lines.json is unusable" in caplog.text
+
+
+def _upload_store():
+    import io
+
+    import test_builds as TB
+    TB.pair("a")
+    from filament_kit.profiles import builds
+    builds.store_upload("system", io.BytesIO(TB.system_zip()), device_id="a")
+
+
+def test_unknown_parent_with_store_is_refused(sm, spoolman_fake_store):
+    _upload_store()
+    for dry in (True, False):
+        with pytest.raises(profile_errors.ProfileError) as e:
+            inventory.add_and_link(sm, [_hf(bambu_parent="No Such Preset")], RULES, dry=dry, uid=None)
+        assert (e.value.status, e.value.code) == (400, "unknown_parent")
+    assert spoolman_fake_store["spools"] == {} and spoolman_fake_store["filaments"] == {}
+
+
+def test_known_parent_with_store_is_accepted(sm):
+    _upload_store()
+    store = inventory.system_store()
+    parent = next(n for n in sorted(store.bases()) if lines_mod._usable(store, n))
+    inventory.add_and_link(sm, [_hf(bambu_parent=parent)], RULES, dry=False, uid=None)
+    assert lines_mod.load()["elegoo--petg-hf"].bambu_parent == parent
+
+
+def test_no_store_any_parent_accepted(sm):
+    assert inventory.system_store() is None
+    inventory.add_and_link(sm, [_hf(bambu_parent="Typo Preset")], RULES, dry=False, uid=None)

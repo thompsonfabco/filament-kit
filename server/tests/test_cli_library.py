@@ -21,11 +21,10 @@ def env(tmp_path, monkeypatch):
 
 @pytest.fixture
 def rebuilds(monkeypatch):
-    """A stand-in for Task 6's filament_kit.profiles.builds; records request_rebuild calls."""
+    """Records `builds.request_rebuild` calls instead of writing the request file."""
+    from filament_kit.profiles import builds
     calls = []
-    mod = types.ModuleType("filament_kit.profiles.builds")
-    mod.request_rebuild = calls.append
-    monkeypatch.setitem(sys.modules, "filament_kit.profiles.builds", mod)
+    monkeypatch.setattr(builds, "request_rebuild", lambda reason, live_hash=None: calls.append(reason))
     return calls
 
 
