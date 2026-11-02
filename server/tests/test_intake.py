@@ -361,3 +361,142 @@ def test_existing_filament_no_patch_when_the_library_fails(sm, spoolman_fake_sto
     assert not [p for p in patches if p.startswith("filament/")]
     assert "line" not in (spoolman_fake_store["filaments"][1].get("extra") or {})
     monkeypatch.setattr(library, "load", real_load)
+
+
+# ---------- merge-ops: orders, tare hints, station weight -> gross, fresh tag ----------
+
+from filament_kit import intake as intake_mod  # noqa: E402
+
+ORDERS = [
+    {"order": "111-1", "date": "2026-10-01", "asin": "B0OLD", "title": "SUNLU PETG 1kg Grey", "qty": 1,
+     "unit_price": 18.99, "seller": "SUNLU"},
+    {"order": "111-2", "date": "2026-10-20", "asin": "B0NEW", "title": "ELEGOO PLA 1kg Black", "qty": 2,
+     "unit_price": 15.99, "seller": "ELEGOO"},
+    {"order": "111-3", "date": "2026-10-10", "asin": "B0BUN", "title": "SUNLU PLA 4 Pack Bundle 4kg", "qty": 1,
+     "unit_price": 49.99, "seller": "SUNLU"},
+]
+
+
+def _ordered(r):
+    for it in r["items"]:
+        it.update(order="111-2", price_per_kg=7.99512, price_line="Price: $8.00/kg - Amazon order 111-2 "
+                  "(2026-10-20): $15.99 / 2 kg, ASIN B0NEW")
+    return r
+
+
+def test_no_orders_keeps_rules_schema_and_block(sm):
+    fake = FakeClaude(recorded())
+    out = read_labels(sm, [JPEG], "", None, client=fake)
+    kw = fake.calls[0]
+    assert kw["system"] == RULES and kw["output_config"]["format"]["schema"] == SCHEMA
+    assert "Amazon" not in kw["messages"][0]["content"][0]["text"]
+    assert "order" not in out["items"][0] and out["scale"] is None
+
+
+def test_orders_block_rules_schema_and_filter(sm, spoolman_fake_store):
+    # B0OLD is already in a filament's price line (inventoried): dropped; the bundle B0BUN stays even though known
+    spoolman_fake_store["filaments"][1]["comment"] = "Price: $18.99/kg - Amazon order 111-1 (2026-10-01): " \
+                                                     "$18.99 / 1 kg, ASIN B0OLD | also B0BUN"
+    fake = FakeClaude(_ordered(recorded()))
+    out = read_labels(sm, [JPEG], "", None, client=fake, orders=ORDERS)
+    kw = fake.calls[0]
+    assert kw["system"].startswith(RULES) and kw["system"] != RULES
+    assert ("price_line = 'Price: $<price_per_kg>/kg - Amazon order <order> (<date>): $<unit price> / <kg> kg, "
+            "ASIN <asin>'") in kw["system"]
+    schema = kw["output_config"]["format"]["schema"]["properties"]["items"]["items"]
+    assert {"order", "price_per_kg", "price_line"} <= set(schema["required"])
+    assert SCHEMA["properties"]["items"]["items"]["required"] == list(intake_mod.ITEM_PROPS)  # base untouched
+    block = kw["messages"][0]["content"][0]
+    assert block["cache_control"] == {"type": "ephemeral"}
+    text = block["text"]
+    assert "B0OLD" not in text.split("Amazon filament orders")[1]
+    assert text.index("111-2") < text.index("111-3")            # newest first
+    assert "2026-10-20 | 111-2 | B0NEW | qty 2 | $15.99 | ELEGOO | ELEGOO PLA 1kg Black" in text
+    it = out["items"][0]
+    assert it["order"] == "111-2" and it["price_per_kg"] == 8.0 and it["price_line"].startswith("Price: $8.00/kg")
+
+
+def test_orders_empty_list_says_unavailable(sm):
+    fake = FakeClaude(_ordered(recorded()))
+    read_labels(sm, [JPEG], "", None, client=fake, orders=[])
+    assert "(order history unavailable)" in fake.calls[0]["messages"][0]["content"][0]["text"]
+
+
+def test_filter_orders_multi_pattern():
+    fils = [{"comment": "ASIN A1 ASIN A2 ASIN A3 ASIN A4"}]
+    rows = [{"date": "1", "order": "o", "asin": a, "title": t} for a, t in
+            (("A1", "PLA 2-pack"), ("A2", "PETG 1kg"), ("A3", "PLA 2.5kg spool"), ("A4", "Rainbow 10 colors"))
+            ] + [{"date": "2", "order": "p", "asin": None, "title": "no asin"}]
+    kept = [o["asin"] for o in intake_mod.filter_orders(rows, fils)]
+    assert kept == [None, "A1", "A3", "A4"]
+
+
+def test_tare_hints_from_config_reach_the_prompt(sm, tmp_path):
+    (tmp_path / "etc" / "config.json").write_text(json.dumps({"intake": {"tare_hints": {"Acme": 177,
+                                                                                         "SUNLU": 213}}}))
+    fake = FakeClaude(recorded())
+    read_labels(sm, [JPEG], "", None, client=fake)
+    text = fake.calls[0]["messages"][0]["content"][0]["text"]
+    assert "Acme 177 g" in text and "SUNLU 213 g" in text
+
+
+def _opened(r):
+    r["items"][0].update(sealed=False, sealed_reason="bare spool")
+    return r
+
+
+@pytest.mark.parametrize("weight, gross", [
+    ({"grams": 1100.5, "age_seconds": 20, "held": False}, 1100.5),
+    ({"grams": 1100.5, "age_seconds": 400, "held": False}, None),     # stale
+    ({"grams": 1100.5, "age_seconds": 400, "held": True}, 1100.5),    # held on the panel
+    ({"grams": 150, "age_seconds": 5, "held": False}, None),          # not above the tare (213)
+])
+def test_station_weight_becomes_gross(sm, weight, gross):
+    out = read_labels(sm, [JPEG], "", None, client=FakeClaude(_opened(recorded())),
+                      station_state={"tag": None, "last_weight": weight})
+    assert out["items"][0].get("gross") == gross
+    assert out["scale"] == (weight if weight["age_seconds"] <= 300 or weight["held"] else None)
+
+
+def test_station_weight_needs_one_opened_single_spool(sm):
+    st = {"last_weight": {"grams": 1100, "age_seconds": 5, "held": False}}
+    sealed = read_labels(sm, [JPEG], "", None, client=FakeClaude(recorded()), station_state=st)
+    assert "gross" not in sealed["items"][0]
+    r = _opened(recorded())
+    r["items"][0]["count"] = 2
+    assert "gross" not in read_labels(sm, [JPEG], "", None, client=FakeClaude(r), station_state=st)["items"][0]
+    r = _opened(recorded())
+    r["items"].append(dict(r["items"][0]))
+    out = read_labels(sm, [JPEG], "", None, client=FakeClaude(r), station_state=st)
+    assert all("gross" not in it for it in out["items"])
+
+
+def test_fresh_tag_forces_opened_and_then_gross(sm):
+    fake = FakeClaude(recorded())                                   # Claude says sealed: true
+    tag = {"nfc_id": "4:a1:b2:c3", "age_seconds": 12, "reader": "station", "held": False}
+    out = read_labels(sm, [JPEG], "", None, client=fake, fresh_tag=tag,
+                      station_state={"last_weight": {"grams": 1050, "age_seconds": 12, "held": False}})
+    it = out["items"][0]
+    assert it["sealed"] is False and "4:a1:b2:c3" in it["sealed_reason"] and "12 s" in it["sealed_reason"]
+    assert it["gross"] == 1050
+    assert out["tag"]["nfc_id"] == "4:a1:b2:c3" and out["tag"]["reader"] == "station"
+    text = " ".join(b.get("text", "") for b in fake.calls[0]["messages"][0]["content"])
+    assert "12 s before sending these photos" in text
+
+
+def test_fresh_tag_with_two_items_changes_nothing(sm):
+    r = recorded()
+    r["items"].append(dict(r["items"][0]))
+    out = read_labels(sm, [JPEG], "", None, client=FakeClaude(r),
+                      fresh_tag={"nfc_id": "4:a1:b2:c3", "age_seconds": 3, "reader": "printer"})
+    assert all(it["sealed"] is True for it in out["items"])
+
+
+def test_load_orders(tmp_path):
+    f = tmp_path / "orders.json"
+    cfg = {"modules": {"ai_intake": True, "orders": True}, "orders": {"file": str(f)}}
+    assert intake_mod.load_orders({"modules": {"orders": True}, "orders": {"file": None}}) is None
+    assert intake_mod.load_orders({"orders": {"file": str(f)}}) is None   # module off (server mode)
+    assert intake_mod.load_orders(cfg) == []                         # on, but the file is missing
+    f.write_text(json.dumps({"updated": "x", "items": ORDERS}))
+    assert intake_mod.load_orders(cfg) == ORDERS

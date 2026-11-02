@@ -122,3 +122,38 @@ def test_garbage_and_malformed_entries_ignored(fakes):
     bad = fakes(["not", "an", "object"])
     cfg = {"tag_sources": [{"name": "x", "url": bad.url}, {"name": "nourl"}, "junk", {"url": ""}]}
     assert tagsources.latest(cfg) is None
+
+
+# ---------- merge-ops: fresh unknown tag, station scale weight ----------
+
+class _SM:
+    def __init__(self, spools):
+        self.spools = spools
+
+    def get(self, path):
+        assert path.startswith("spool")
+        return self.spools
+
+
+def test_scale_weight_fresh_or_held():
+    assert tagsources.scale_weight(None) is None
+    assert tagsources.scale_weight({"last_weight": None}) is None
+    w = {"grams": 900, "age_seconds": 300, "held": False}
+    assert tagsources.scale_weight({"last_weight": w}) == w
+    assert tagsources.scale_weight({"last_weight": {**w, "age_seconds": 301}}) is None
+    assert tagsources.scale_weight({"last_weight": {**w, "age_seconds": 999, "held": True}})["grams"] == 900
+
+
+def test_fresh_unknown_tag(monkeypatch):
+    tag = {"nfc_id": "04:A1:B2:C3", "read_at_unix": 1, "age_seconds": 20, "reader": "station", "held": False}
+    monkeypatch.setattr(tagsources, "latest", lambda cfg: dict(tag))
+    linked = [{"id": 1, "extra": {"nfc_id": json.dumps("4:a1:b2:c3")}}]
+    assert tagsources.fresh_unknown_tag({}, _SM(linked)) is None            # already on a spool
+    got = tagsources.fresh_unknown_tag({}, _SM([]))
+    assert got["nfc_id"] == "4:a1:b2:c3" and got["age_seconds"] == 20 and got["reader"] == "station"
+    tag["age_seconds"] = 301
+    assert tagsources.fresh_unknown_tag({}, _SM([])) is None                # stale
+    tag["held"] = True
+    assert tagsources.fresh_unknown_tag({}, _SM([])) is not None            # held on the panel
+    monkeypatch.setattr(tagsources, "latest", lambda cfg: None)
+    assert tagsources.fresh_unknown_tag({}, _SM([])) is None
