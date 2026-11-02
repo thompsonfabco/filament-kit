@@ -425,6 +425,7 @@ def step_spoolman(b: Bundle, ctx: _Ctx) -> None:
         target.unlink(missing_ok=True)
         for live, bak in saved:
             shutil.copy2(bak, live)
+            _chown(live, "spoolman", "spoolman")       # the backup is root's; Spoolman starts on it again
         if saved:
             ctx.fail(S, f"copying the database failed ({e.__class__.__name__}: {e}); the previous database was put "
                         f"back from {saved[0][1]}")

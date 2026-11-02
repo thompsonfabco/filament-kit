@@ -7,11 +7,13 @@
 #
 #   ssh spoolman-vm 'sudo bash -s -- --no-secrets -' < tools/export_ops.sh > ops-bundle.tar.gz
 #
-# Usage: sudo bash export_ops.sh [--no-secrets] [--spoolman-db PATH] OUT.tar.gz|-
+# Usage: sudo bash export_ops.sh [--no-secrets] [--spoolman-db PATH [--force]] OUT.tar.gz|-
 #   --no-secrets   leave out the web passphrase hash, oauth.json and the Anthropic key (a rehearsal bundle);
 #                  the full bundle (with them) is for the owner's real cut-over only, root-only (600) on disk
 #   --spoolman-db  the Spoolman database (default: SPOOLMAN_DIR_DATA of Spoolman.service, else the service
 #                  user's ~/.local/share/spoolman/spoolman.db)
+#   --force        with --spoolman-db: export a WAL database (one with a -wal file) anyway. There is no unit
+#                  to check then, so give it only when the Spoolman using that database is stopped
 # The H2D slot service token is never exported: the runbook copies it on the VM itself.
 #
 # Bundle (tar.gz, everything under ops-bundle/): MANIFEST.json, lines.py, regen_config.json, server.json,
@@ -30,11 +32,13 @@ PROG=$(cat <<'PY'
 import io, json, os, shutil, socket, sqlite3, subprocess, sys, tarfile, tempfile, time, urllib.request
 
 args = sys.argv[1:]
-secrets, db_arg, out = True, None, None
+secrets, db_arg, out, force = True, None, None, False
 while args:
     a = args.pop(0)
     if a == "--no-secrets":
         secrets = False
+    elif a == "--force":
+        force = True
     elif a == "--spoolman-db":
         db_arg = args.pop(0) if args else sys.exit("error: --spoolman-db needs a path")
     elif out is None and (a == "-" or not a.startswith("-")):
@@ -42,7 +46,7 @@ while args:
     else:
         sys.exit(f"error: unknown argument {a!r}")
 if out is None:
-    sys.exit("usage: export_ops.sh [--no-secrets] [--spoolman-db PATH] OUT.tar.gz|-")
+    sys.exit("usage: export_ops.sh [--no-secrets] [--spoolman-db PATH [--force]] OUT.tar.gz|-")
 
 ETC = os.environ.get("OPS_ETC", "/etc/filament-mcp")
 STATE = os.environ.get("OPS_STATE", "/var/lib/filament-mcp")
@@ -117,6 +121,9 @@ def db_copy(path, unit):
     if unit and subprocess.run(["systemctl", "is-active", "--quiet", unit]).returncode == 0:
         sys.exit(f"error: {path} has a -wal file and {unit} is running: stop it first "
                  f"(sudo systemctl stop {unit}), then export")
+    if not unit and not force:          # --spoolman-db: no unit known, so nothing says Spoolman is stopped
+        sys.exit(f"error: {path} has a -wal file and no Spoolman unit was checked (--spoolman-db): stop the "
+                 f"Spoolman that uses it, then export again with --force")
     tmp = tempfile.mkdtemp(prefix="ops-export-", dir="/dev/shm" if os.path.isdir("/dev/shm") else None)
     try:
         for suffix in ("", "-wal"):

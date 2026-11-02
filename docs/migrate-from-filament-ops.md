@@ -147,9 +147,17 @@ The ops router and the kit router collide (both are the default server on 443, a
 `/etc/nginx/mcp-proxy.conf`. The certificate in `/etc/mcp-router/tls` (valid to 2027-01-28) is kept: the kit
 never replaces a real one.
 
+The kit overwrites some ops files when `remote` is turned on: `/usr/local/sbin/mcp-route`,
+`/etc/nginx/mcp-proxy.conf`, `/etc/mcp-router/route.template`, the `filament` route in `/etc/nginx/mcp.d/` and
+the certbot timer drop-in `/etc/systemd/system/certbot.timer.d/acme-window.conf`. It also adds
+`/etc/mcp-router/host` and `/etc/mcp-router/kit-routes`; it never touches `/etc/mcp-router/tls`. Save the
+overwritten ones first (the copy leaves the certificate's key where it is):
+
 ```
 sudo mkdir -p /root/ops-router && sudo cp -a /etc/nginx/sites-available/mcp-router /usr/local/sbin/mcp-route \
-    /etc/nginx/mcp.d /etc/nginx/mcp-proxy.conf /root/ops-router/
+    /etc/nginx/mcp.d /etc/nginx/mcp-proxy.conf /etc/mcp-router/route.template /root/ops-router/
+sudo cp -a /etc/systemd/system/certbot.timer.d/acme-window.conf /root/ops-router/ 2>/dev/null || true
+sudo ls /root/ops-router                               # mcp-router mcp-route mcp.d mcp-proxy.conf route.template ...
 sudo rm /etc/nginx/sites-enabled/mcp-router            # the ops router conf (the file in sites-available stays)
 sudo rm /usr/local/sbin/mcp-route                      # replaced by the kit's
 sudo filament-kit modules enable remote                # router conf, mcp-route, hooks; route filament -> 8101
@@ -188,11 +196,18 @@ certificate and the other routes stay. Then put the ops pieces back:
 ```
 sudo ln -s /etc/nginx/sites-available/mcp-router /etc/nginx/sites-enabled/mcp-router
 sudo cp -a /root/ops-router/mcp-route /usr/local/sbin/ && sudo cp -a /root/ops-router/mcp.d/. /etc/nginx/mcp.d/
+sudo cp -a /root/ops-router/route.template /etc/mcp-router/
+sudo test -f /root/ops-router/acme-window.conf && sudo cp -a /root/ops-router/acme-window.conf \
+    /etc/systemd/system/certbot.timer.d/ && sudo systemctl daemon-reload
 sudo cp /root/ops-router/mcp-proxy.conf /etc/nginx/ && sudo nginx -t && sudo systemctl reload nginx
 ```
-If the ops hook or lineage was already removed, renewals stay on the kit's lineage (its deploy hook is gone:
-copy the renewed cert into `/etc/mcp-router/tls` by hand, or re-issue with the ops hook). If the acme chain was
-switched to accept, the owner may switch it back to drop.
+`/etc/mcp-router/host` and `kit-routes` can stay (the ops pieces do not read them). If the ops hook or lineage
+was already removed, renewals stay on the kit's lineage and still reach `/etc/mcp-router/tls`: `remote issue`
+wrote `--deploy-hook /usr/local/sbin/filament-kit-acme-hook deploy` into that lineage's renewal conf, and the
+hook script and `/etc/mcp-router/host` stay when `remote` is turned off. Only the second copy of the hook (the
+file in `renewal-hooks/deploy/`) is gone; it matters only after a `certbot --expand`, which rewrites the renewal
+conf: then copy the renewed cert into `/etc/mcp-router/tls` by hand, or turn `remote` on again. If the acme
+chain was switched to accept, the owner may switch it back to drop.
 
 ### 1.6 Optional hardening (the owner's firewall)
 
