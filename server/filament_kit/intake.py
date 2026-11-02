@@ -2,6 +2,9 @@
 
 Photos are checked (JPEG, <= 3 MB, 1-8), counted against a persisted daily cap, and sent with a cached catalog
 block of the vendors and filaments already in Spoolman. Failed reads keep their photos for 24 h so the app can retry.
+
+Every item also gets its product `line` (an existing filament's `extra.line` wins; an empty answer is derived from
+the name as `lines.product_of` does) and the line's proposal: `bambu_parent`, `parent_source` and `line_exists`.
 """
 from __future__ import annotations
 
@@ -12,11 +15,16 @@ import re
 import secrets
 import shutil
 import threading
+import logging
 import time
 from pathlib import Path
 
-from . import config
+from . import config, library
+from .inventory import system_store
+from .profiles import lines
 from .spoolman import Spoolman
+
+log = logging.getLogger(__name__)
 
 MAX_PHOTOS, MAX_PHOTO_BYTES = 8, 3 * 1024 * 1024
 KEEP_FAILED_SECONDS = 24 * 3600
@@ -55,7 +63,9 @@ Brand: when the label has no readable brand, identify it from the spool itself (
 pattern, label layout, colours, typography: e.g. SUNLU's perforated spools and label style); put that brand in
 vendor and list 'vendor' in estimates. Use 'Unknown' only when the photos don't point to a brand.
 Temperatures: labels often give more than one range (normal and high-speed printing, or one per material grade).
-Use the highest one: nozzle_range and bed_range are the higher range, nozzle and bed its middle."""
+Use the highest one: nozzle_range and bed_range are the higher range, nozzle and bed its middle.
+line: the product line as printed, without the colour (e.g. 'PLA+ 2.0', 'PETG HF');
+for an existing filament copy its line from the catalog."""
 
 _S, _I = {"anyOf": [{"type": "string"}, {"type": "null"}]}, {"anyOf": [{"type": "integer"}, {"type": "null"}]}
 ITEM_PROPS = {"photos": {"type": "array", "items": {"type": "integer"}}, "existing_filament_id": _I,
@@ -63,7 +73,7 @@ ITEM_PROPS = {"photos": {"type": "array", "items": {"type": "integer"}}, "existi
               "color_hex": _S, "net": {"type": "number"}, "tare": {"type": "number"}, "density": {"type": "number"},
               "count": {"type": "integer"}, "nozzle": _I, "bed": _I, "nozzle_range": _S, "bed_range": _S, "lot": _S,
               "note": {"type": "string"}, "estimates": {"type": "array", "items": {"type": "string"}},
-              "sealed": {"type": "boolean"}, "sealed_reason": {"type": "string"}}
+              "sealed": {"type": "boolean"}, "sealed_reason": {"type": "string"}, "line": {"type": "string"}}
 SCHEMA = {"type": "object", "additionalProperties": False, "required": ["items", "questions"],
           "properties": {"questions": {"type": "array", "items": {"type": "string"}},
                          "items": {"type": "array", "items": {"type": "object", "additionalProperties": False,
@@ -184,12 +194,13 @@ def _call(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | None, cli
     catalog = "\n".join(
         f"F{f['id']} | {(f.get('vendor') or {}).get('name', '?')} | {f['name']} | {f.get('material')} | "
         f"net {f.get('weight')} | tare {f.get('spool_weight')} | density {f.get('density')} | {f.get('color_hex') or '-'}"
+        f" | line {lines._extra_line(f) or '-'}"
         for f in sorted(fils, key=lambda f: (((f.get("vendor") or {}).get("name") or "").lower(), f["name"].lower())))
     vlist = ", ".join(f"{v['name']} (empty spool {v.get('empty_spool_weight') or '?'} g)" for v in vendors)
     # reference data first and cached: it only changes with Spoolman, so a batch of reads pays for it once
     content = [{"type": "text", "cache_control": {"type": "ephemeral"},
                 "text": f"Vendors: {vlist}\n\nCatalog (id | vendor | name | material | net | tare | density | "
-                        f"hex):\n{catalog}"}]
+                        f"hex | line):\n{catalog}"}]
     for i, data in enumerate(images):
         content += [{"type": "text", "text": f"Photo {i}:"},
                     {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
@@ -237,6 +248,7 @@ def _call(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | None, cli
         hx = (it.get("color_hex") or "").lstrip("#").upper()
         it["color_hex"] = hx if len(hx) == 6 and all(c in "0123456789ABCDEF" for c in hx) else None
         it["count"] = max(1, int(it.get("count") or 1))
+    _add_lines(items, by_id)
     if tag and len(items) == 1:  # a fresh unknown tap is the user opening this very spool
         items[0].update(sealed=False, sealed_reason=f"new tag {tag_uid} tapped before the photos")
     out["tag"] = tag
@@ -245,6 +257,41 @@ def _call(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | None, cli
                     + (u.cache_creation_input_tokens or 0), "cached": u.cache_read_input_tokens or 0,
                     "output_tokens": u.output_tokens}
     return {"items": items, "questions": out.get("questions", []), "tag": out["tag"], "usage": out["usage"]}
+
+
+def _add_lines(items: list[dict], by_id: dict) -> None:
+    """Set each item's `line` and its proposal (`bambu_parent`, `parent_source`, `line_exists`). A failure here
+    (an unreadable lines.json, ...) keeps the read: the item then has no proposal (source "none")."""
+    for it in items:
+        f = by_id.get(it.get("existing_filament_id"))
+        known = lines._extra_line(f) if f else ""
+        if known:
+            it["line"] = known
+        elif not isinstance(it.get("line"), str) or not it["line"].strip():
+            it.pop("line", None)
+        else:
+            # the add accepts at most 100 characters without "@": keep what Claude read within that
+            it["line"] = it["line"].split("@", 1)[0].strip()[:100].strip()
+            if not it["line"]:
+                it.pop("line")
+    try:
+        lib = library.load()
+        store = system_store()
+        ls = lines.load()
+        for it in items:
+            it.setdefault("line", lines.product_of(
+                {"name": it.get("name") or "", "vendor": {"name": it.get("vendor") or ""}, "extra": {}}, lib))
+            p = lines.propose(it.get("vendor") or "", it["line"], it.get("material") or "", library=lib,
+                              store=store, lines=ls)
+            it.update(line=p["line"], bambu_parent=p["bambu_parent"], parent_source=p["parent_source"],
+                      line_exists=p["exists"])
+    except Exception as e:  # noqa: BLE001 - the label read itself succeeded
+        log.warning("label read: no line proposal (%s: %s)", e.__class__.__name__, e)
+        for it in items:
+            it.setdefault("line", (it.get("name") or "").strip())
+            it.setdefault("bambu_parent", None)
+            it.setdefault("parent_source", "none")
+            it.setdefault("line_exists", False)
 
 
 def read_labels(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | None, client=None,
