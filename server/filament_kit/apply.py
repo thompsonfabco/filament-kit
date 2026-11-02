@@ -233,7 +233,8 @@ _HINTS = {
     "remote_install": f"see the messages above (nginx -t shows config errors), then {_AGAIN}",
     "remote_route": "see: nginx -t and journalctl -u nginx; list routes with: sudo /usr/local/sbin/mcp-route ls",
     "remote_unpin": "remove it by hand: sudo rm /etc/systemd/system/certbot.timer.d/acme-window.conf",
-    "remote_off": "remove the route by hand: sudo /usr/local/sbin/mcp-route rm <arg>",
+    "remote_off": ("remove the kit's files by hand: sudo /usr/local/sbin/mcp-route rm <arg>; sudo rm "
+                   "/etc/nginx/conf.d/filament-kit-router.conf /etc/letsencrypt/renewal-hooks/deploy/filament-kit"),
     "ensure_fields": "check Spoolman answers, then: sudo filament-kit ensure-fields",
 }
 
@@ -472,15 +473,26 @@ def _remote_route(ex: _Exec, name: str, port: int) -> None:
 
 
 def _remote_off(ex: _Exec, name: str) -> None:
-    """Remove only the route file mcp-route made for this kit; other routes and nginx itself stay."""
+    """Remove the kit's own remote files: the route file mcp-route made for this kit, the kit's router conf (a
+    default_server on 443 that would keep any other router from loading) and its certbot deploy hook (Ruling
+    AF). nginx, certbot, the certificate, mcp-route and other routes stay."""
+    gone = []
     f = _under(ex.root, f"{remote.ROUTE_DIR}/{name}.conf")
-    if not f.exists():
+    if f.exists():
+        if remote.MARK not in f.read_text(encoding="utf-8", errors="replace"):
+            print(f"Remote is off; {f} was not written by the kit, so it was left in place.")
+        else:
+            f.unlink()
+            gone.append(f"the {name} route")
+    for path, what in ((remote.ROUTER_CONF, "the kit's router conf"),
+                       (remote.DEPLOY_HOOK_FILE, "the kit's certbot deploy hook")):
+        p = _under(ex.root, path)
+        if p.exists():
+            p.unlink()
+            gone.append(what)
+    if not gone:
         return
-    if remote.MARK not in f.read_text(encoding="utf-8", errors="replace"):
-        print(f"Remote is off; {f} was not written by the kit, so it was left in place.")
-        return
-    f.unlink()
-    print(f"Remote is off: removed the {name} route (nginx, certbot and other routes were left).")
+    print(f"Remote is off: removed {', '.join(gone)} (nginx, certbot, the certificate and other routes were left).")
     if ex.ok(["nginx", "-t"]):
         ex.ok(["systemctl", "reload", "nginx"])  # a stopped nginx needs nothing
 

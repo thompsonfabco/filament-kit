@@ -231,7 +231,7 @@ def test_cli_remote_firewall_only_prints(capsys):
 
 
 def test_wrapper_runs_remote_as_root():
-    assert "config | cert | modules | remote)" in (INSTALL / "filament-kit-cli.sh").read_text()
+    assert "config | cert | modules | remote | migrate-ops)" in (INSTALL / "filament-kit-cli.sh").read_text()
 
 
 def test_no_firewall_command_anywhere_in_the_remote_code_or_files():
@@ -314,3 +314,31 @@ def test_firewall_command_without_resources_prints_a_fix(monkeypatch, capsys):
     assert remote.firewall(_cfg()) == 1
     out = capsys.readouterr().out
     assert "error:" in out and "fix:" in out
+
+
+def test_remote_off_removes_the_kits_router_conf_and_deploy_hook(tmp_path, capsys):
+    """Ruling AF: off removes the kit's own router conf (a default_server on 443 that would block any other
+    router) and its certbot deploy hook; nginx, certbot, the certificate and other routes stay."""
+    root = tmp_path / "root"
+    conf = root / "etc/nginx/conf.d/filament-kit-router.conf"
+    hook = root / "etc/letsencrypt/renewal-hooks/deploy/filament-kit"
+    other_conf = root / "etc/nginx/conf.d/other.conf"
+    other_hook = root / "etc/letsencrypt/renewal-hooks/deploy/someone-else"
+    cert = root / "etc/mcp-router/tls/fullchain.pem"
+    amazon = root / "etc/nginx/mcp.d/amazon.conf"
+    for f in (conf, hook, other_conf, other_hook, cert, amazon):
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text("x\n")
+    run = Rec()
+    apply.execute([Action("remote_off", "filament")], run=run, resources=INSTALL, root=root)
+    assert not conf.exists() and not hook.exists()
+    assert other_conf.exists() and other_hook.exists() and cert.exists() and amazon.exists()
+    assert "nginx -t" in run.texts()
+    assert not any("apt" in t or "remove" in t for t in run.texts())
+    assert "router" in capsys.readouterr().out
+
+
+def test_remote_off_with_nothing_installed_is_quiet(tmp_path):
+    run = Rec()
+    apply.execute([Action("remote_off", "filament")], run=run, resources=INSTALL, root=tmp_path / "root")
+    assert "nginx -t" not in run.texts()
