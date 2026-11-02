@@ -397,8 +397,11 @@ def slot_setting(ams_id: int, tray_id: int, setting: dict) -> dict:
 class Manager:
     """Keeps one PrinterConnection per configured printer in the registry (`sync()`), serves status and commands."""
 
-    def __init__(self, client_factory: Callable = paho_client, spoolman=None, port: int = PORT):
+    def __init__(self, client_factory: Callable = paho_client, spoolman=None, port: int = PORT,
+                 only: set[str] | None = None):
+        """`only`: connect just these serials (the CLI's short-lived Manager for one printer); None = all."""
         self._factory = client_factory
+        self._only = set(only) if only is not None else None
         self._spoolman = spoolman
         self.port = port
         self._conns: dict[str, PrinterConnection] = {}
@@ -425,6 +428,8 @@ class Manager:
     def sync(self) -> None:
         """Reconcile connections with the registry: start new ones, drop removed ones, reconnect on IP/code change."""
         printers = registry.load()
+        if self._only is not None:
+            printers = {s: p for s, p in printers.items() if s in self._only}
         stale: list[PrinterConnection] = []
         with self._lock:
             self._printers = printers

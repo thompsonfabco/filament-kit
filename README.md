@@ -96,6 +96,8 @@ Run these in a Terminal on the Ubuntu computer.
 | `sudo filament-kit pair` | Shows a new QR code to pair another phone. |
 | `sudo filament-kit unpair` | Lists paired phones. `sudo filament-kit unpair <id>` removes one. |
 | `sudo filament-kit config` | Settings menu: display name, storage locations, Claude model and daily limit, API key, printers. |
+| `sudo filament-kit printer map <serial>` | Maps a printer's AMS slots (see [Map slots](#map-slots)), printing each step. |
+| `sudo filament-kit printer unpin <serial>` | Forgets a printer's pinned certificate; the next connection trusts the one it presents. |
 
 Your spool inventory (Spoolman) is also in a web browser on any computer at home:
 `http://<computer name>.local:7912`, where `<computer name>` is the Ubuntu computer's own name (type
@@ -117,6 +119,25 @@ that to work:
 
 A printer appears in the app once it has been seen on the network (or added by hand with its IP address); you
 then enter its Access Code in the app to set it up.
+
+### Map slots
+
+Before the server takes filament off your spools in Spoolman, it has to learn how the printer numbers its AMS
+slots. **Map slots** in the app (or `sudo filament-kit printer map <serial>` on the Ubuntu computer) does that:
+
+- It briefly changes each slot's colour on the printer to a test colour, checks which slot showed it, and puts
+  every slot back as it was.
+- It then runs a short calibration job that has **no heating and no motion** (only comments and a wait), so
+  the printer reports which slot it used for each filament. The job file is deleted afterwards.
+- The printer must be **idle** (not printing, paused or preparing) and online, or mapping is refused.
+
+Until mapping succeeds, filament use is **only logged** (you can see it in the app's usage list) and nothing is
+taken off your spools. If a slot could not be put back, mapping says which one so you can check it on the
+printer.
+
+If a printer's certificate changed (for example after a firmware update or a factory reset), the server stops
+talking to it. Add the printer again with its Access Code, or, if you are sure it is your printer, run
+`sudo filament-kit printer unpin <serial>`.
 
 A backup of your spools and settings is made every night in `/var/backups/filament-kit` (the last 14 days are
 kept).

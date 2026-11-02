@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import functools
 import logging
+import math
+import re
 
 from starlette.applications import Starlette
 from starlette.concurrency import run_in_threadpool
@@ -18,8 +20,9 @@ from starlette.routing import Route
 
 from . import API_VERSION, __version__, config, intake, inventory, pairing, tags
 from .intake import CapReached, PhotoError, ReadCap, ReadError
-from .bridge import camera, registry
-from .bridge.connection import ACTIONS, Manager, NoReply, PrinterOffline, UnknownPrinter
+from .bridge import camera, loading, mapping, registry, usage
+from .bridge.connection import ACTIONS, DEVELOPER_MODE_REASON, Manager, NoReply, PrinterOffline, UnknownPrinter
+from .bridge.slottest import PrinterBusy
 from .bridge.models import camera_kind
 from .inventory import AddFailed, TagConflict
 from .spoolman import Spoolman, SpoolmanError
@@ -63,10 +66,38 @@ def _to_response(e: Exception) -> JSONResponse:
         if e.status == 404:
             return _err(404, "not_found", f"not found in Spoolman: {e}")
         return _err(502, "spoolman_error", str(e))
+    bridge = _bridge_error(e)
+    if bridge is not None:
+        return bridge
     if isinstance(e, ValueError):
         return _err(400, "bad_request", str(e))
     log.error("internal error", exc_info=e)
     return _err(500, "internal", "internal error")
+
+
+OFFLINE = "the printer is offline; check that it is on and on the network"
+CERT_CHANGED = "The printer's certificate changed; add it again with its Access Code"
+
+
+def _bridge_error(e: Exception) -> JSONResponse | None:
+    """Slot mapping, loading and usage errors (route-contract.md); None for anything else."""
+    if isinstance(e, usage.UsageError):
+        return _err(e.status, e.code, str(e))
+    if isinstance(e, mapping.AlreadyRunning):
+        return _err(409, "already_running", "slot mapping is already running for this printer")
+    if isinstance(e, mapping.CertChanged):
+        return _err(409, "cert_changed", CERT_CHANGED)
+    if isinstance(e, PrinterBusy):
+        return _err(409, "printer_busy", f"the printer is busy ({e}); try again once it is idle")
+    if isinstance(e, PrinterOffline):
+        return _err(409, "printer_offline", OFFLINE)
+    if isinstance(e, loading.NoPreset):
+        return _err(409, "no_preset", str(e))
+    if isinstance(e, UnknownPrinter):
+        return _err(404, "not_found", "no such printer")
+    if isinstance(e, loading.NotFound):
+        return _err(404, "not_found", str(e))
+    return None
 
 
 def _handle(fn):
@@ -251,12 +282,157 @@ def _printer_routes(printers) -> list[Route]:
 # ---- end printer routes ----------------------------------------------------------------------------------
 
 
-def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hub=None) -> Starlette:
+# ---- slot mapping, loading and usage routes (route-contract.md) ------------------------------------------
+LABEL = re.compile(r"[A-Za-z0-9-]{1,16}")    # A1-D4, HT-A ..., Ext
+MAX_DAYS = 366.0
+
+
+def _bridge_routes(printers, mapper: mapping.Mapper, sm) -> list[Route]:
+    def known(serial: str) -> registry.Printer:
+        p = registry.load().get(serial)
+        if p is None:
+            raise UnknownPrinter(serial)
+        return p
+
+    def label_of(request: Request) -> str:
+        label = request.path_params["label"]
+        if not LABEL.fullmatch(label):
+            raise loading.NotFound(f"no slot {label!r}")
+        return label
+
+    def not_cert_changed(serial: str) -> None:
+        if printers.state(serial) == "cert_changed":
+            raise mapping.CertChanged(serial)
+
+    def sealed() -> str:
+        return config.load()["placement"].get("sealed_location") or loading.SEALED
+
+    def audit(what: str, device, result: str, **fields) -> None:
+        extra = " ".join(f"{k}={_safe(v)}" for k, v in fields.items())
+        log.info("%s device_id=%s %s result=%s", what, device, extra, result)
+
+    def audited(what: str, device, fn, **fields):
+        result = "ok"
+        try:
+            return fn()
+        except Exception as e:
+            result = type(e).__name__
+            raise
+        finally:
+            audit(what, device, result, **fields)
+
+    @_authed
+    async def map_start(request: Request):
+        serial = request.path_params["id"]
+        job = await run_in_threadpool(audited, "slot mapping", request.state.device,
+                                      lambda: mapper.start(serial), serial=serial)
+        return JSONResponse({"job_id": job}, status_code=202)
+
+    @_authed
+    async def map_get(request: Request):
+        serial = request.path_params["id"]
+
+        def build() -> dict:
+            known(serial)
+            return mapper.view(serial)
+        return JSONResponse(await run_in_threadpool(build))
+
+    @_authed
+    async def slot_load(request: Request):
+        serial, label = request.path_params["id"], label_of(request)
+        body = await _json(request)
+        spool_id = body.get("spool_id")
+        if not isinstance(spool_id, int) or isinstance(spool_id, bool):
+            raise BadRequest("spool_id must be a whole number")
+        dry = _opt(body, "dry_run", bool, True)
+
+        def run() -> dict:
+            known(serial)
+            not_cert_changed(serial)
+            if not dry and mapper.running(serial):
+                raise PrinterBusy("slot mapping is running")
+            try:
+                r = loading.load(printers, sm, serial, label, spool_id, dry, sealed_location=sealed())
+            except loading.SlotWriteFailed as e:
+                if printers.state(serial) == "needs_developer_mode" or DEVELOPER_MODE_REASON.search(str(e)):
+                    raise _Refused("needs_developer_mode",
+                                   f"{e}; turn on Developer Mode (LAN-only mode) on the printer and retry") from e
+                raise _Refused("write_refused", str(e)) from e
+            return {**r, "confirmed": bool(r.get("confirmed"))}
+        try:
+            r = await run_in_threadpool(audited, "slot load", request.state.device, run, serial=serial,
+                                        slot=label, spool=spool_id, dry_run=dry)
+        except _Refused as e:
+            return _err(409, e.code, e.message)
+        return JSONResponse(r)
+
+    @_authed
+    async def slot_unload(request: Request):
+        serial, label = request.path_params["id"], label_of(request)
+        dry = _opt(await _json(request), "dry_run", bool, True)
+
+        def run() -> dict:
+            known(serial)
+            r = loading.unload(printers, sm, serial, label, dry, sealed_location=sealed())
+            first = next((m for m in r["moved_back"] if m["id"] == r["spool"].get("id")), None)
+            return {**r, "location": first["location"] if first else r["spool"].get("location")}
+        return JSONResponse(await run_in_threadpool(audited, "slot unload", request.state.device, run,
+                                                    serial=serial, slot=label, dry_run=dry))
+
+    @_authed
+    async def usage_list(request: Request):
+        serial = request.path_params["id"]
+        raw = request.query_params.get("days", str(usage.UNDO_DAYS))
+        try:
+            days = float(raw)
+        except ValueError:
+            raise BadRequest("days must be a number") from None
+        if not math.isfinite(days) or not 0 <= days <= MAX_DAYS:
+            raise BadRequest(f"days must be between 0 and {MAX_DAYS:g}")
+
+        def build() -> list[dict]:
+            known(serial)
+            return usage.entries(serial, days)
+        return JSONResponse({"entries": await run_in_threadpool(build)})
+
+    @_authed
+    async def usage_undo(request: Request):
+        entry_id = request.path_params["entry_id"]
+        e = await run_in_threadpool(audited, "usage undo", request.state.device,
+                                    lambda: usage.undo(entry_id, sm), entry=entry_id)
+        return JSONResponse({"entry": e})
+
+    return [
+        Route("/api/printers/{id}/map", map_start, methods=["POST"]),
+        Route("/api/printers/{id}/map", map_get),
+        Route("/api/printers/{id}/slots/{label}/load", slot_load, methods=["POST"]),
+        Route("/api/printers/{id}/slots/{label}/unload", slot_unload, methods=["POST"]),
+        Route("/api/printers/{id}/usage", usage_list),
+        Route("/api/usage/{entry_id}/undo", usage_undo, methods=["POST"]),
+    ]
+
+
+def _safe(v) -> str:
+    """A path value for a log line: as is when it is plain (serials, labels, entry ids), else a placeholder."""
+    s = str(v)
+    return s if re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", s) else "<invalid>"
+
+
+class _Refused(Exception):
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code, self.message = code, message
+# ---- end slot mapping, loading and usage routes ----------------------------------------------------------
+
+
+def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hub=None,
+               mapper: mapping.Mapper | None = None) -> Starlette:
     cfg = config.load()
     sm = sm if sm is not None else Spoolman(cfg["spoolman_url"])
     printers = printers if printers is not None else Manager(spoolman=sm)  # started by __main__, not here
     # stopped by __main__'s lifespan; the Manager's `cert_changed` also refuses the camera
     camera_hub = camera_hub if camera_hub is not None else camera.Hub(printer_state=printers.state)
+    mapper = mapper if mapper is not None else mapping.Mapper(printers)
     cap = ReadCap(config.paths().state / "reads.json", cfg["reads_per_day"])
 
     def rules() -> dict:  # sync: call it from inside the threadpool
@@ -390,6 +566,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             Route("/api/locations", locations),
             Route("/app.apk", apk),
             *_printer_routes(printers),
+            *_bridge_routes(printers, mapper, sm),
             *camera.routes(camera_hub, _authed),
         ],
         exception_handlers={HTTPException: http_error},

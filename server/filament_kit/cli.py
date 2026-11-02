@@ -1,4 +1,4 @@
-"""Command line: status, pair, unpair, config, cert, ensure-fields."""
+"""Command line: status, pair, unpair, config, cert, ensure-fields, printer map / unpin."""
 from __future__ import annotations
 
 import argparse
@@ -404,7 +404,83 @@ def cmd_ensure_fields() -> int:
     return 0
 
 
-def main(argv: list[str] | None = None, *, client_factory=None) -> int:
+# ---------- printer map / unpin ----------
+# The CLI is its own process (run with sudo), like `config` it works on the registry and state files directly; it
+# has no API token. `printer map` therefore runs a short-lived Manager of its own, connected to that one printer
+# only, for the length of the job (a second MQTT session next to the service's). The service's slot-map readers
+# (loading, usage) read the saved map from disk, and its GET /map shows the result from the status file; the
+# lock file keeps the service and the CLI from mapping the same printer at once.
+
+CONNECT_WAIT = 20.0   # seconds for the CLI's connection to come up
+REPORT_WAIT = 10.0    # seconds for its first full report
+
+
+def _default_manager(serial: str):
+    from .bridge.connection import Manager
+    return Manager(only={serial})
+
+
+def _err_line(text: str) -> None:
+    print(f"error: {text}", file=sys.stderr)
+
+
+def cmd_printer_map(serial: str, manager_factory) -> int:
+    from .bridge import mapping
+    from .bridge.connection import PrinterOffline, UnknownPrinter
+    from .bridge.slottest import PrinterBusy
+    p = registry.load().get(serial)
+    if p is None or not p.configured:
+        _err_line(f"no printer {serial} is set up (see: sudo filament-kit config, Printers)")
+        return 1
+    print(f"Mapping the slots of {p.name or serial}. Each slot's colour changes briefly and the printer runs a "
+          f"job with no heating and no motion.")
+    m = manager_factory(serial)
+    try:
+        m.sync()
+        m.wait_settled(serial, CONNECT_WAIT)
+        m.wait_report(serial, lambda r: "gcode_state" in r, REPORT_WAIT)
+        try:
+            v = mapping.Mapper(m).run(serial, on_step=lambda t: print(f"  {t}", flush=True))
+        except mapping.AlreadyRunning:
+            _err_line("slot mapping is already running for this printer")
+            return 1
+        except mapping.CertChanged:
+            _err_line("the printer's certificate changed; add it again with its Access Code "
+                      "(or, if you trust the new one, run: sudo filament-kit printer unpin " + serial + ")")
+            return 1
+        except PrinterBusy as e:
+            _err_line(f"the printer is busy ({e}); try again once it is idle")
+            return 1
+        except (PrinterOffline, UnknownPrinter):
+            _err_line("the printer is offline (or its Access Code is wrong); check that it is on and on the network")
+            return 1
+    finally:
+        m.stop()
+    for s in v["slots"]:
+        print(f"  {s['label']}: AMS {s['ams_id']} tray {s['tray_id']} -> printer slot {s['global']}")
+    for prob in v["problems"]:
+        print(f"  problem: {prob}")
+    if v["state"] == "done" and v["calibrated"]:
+        print("Done: slots mapped; filament use is now taken off the spools in Spoolman.")
+        return 0
+    if v["state"] == "done":
+        print("Done, but the slot numbering was not confirmed: filament use is only logged (observe mode).")
+    else:
+        print("Mapping failed. Until mapping succeeds, filament use is only logged.")
+    return 1
+
+
+def cmd_printer_unpin(serial: str) -> int:
+    p = registry.load().get(serial)
+    if p is None or not registry.clear_pin(serial):
+        _err_line(f"no printer {serial}")
+        return 1
+    # the service's Manager notices the cleared pin at its next registry sync (within 15 s) and reconnects
+    print(f"Forgot the certificate of {p.name or serial}; the next connection trusts the one it presents.")
+    return 0
+
+
+def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=None) -> int:
     ap = argparse.ArgumentParser(prog="filament-kit")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("status", help="check services, Spoolman, key, certificate")
@@ -414,6 +490,12 @@ def main(argv: list[str] | None = None, *, client_factory=None) -> int:
     sub.add_parser("config", help="interactive settings menu")
     sub.add_parser("cert", help="create the server certificate if missing")
     sub.add_parser("ensure-fields", help="create the Spoolman extra fields")
+    pr = sub.add_parser("printer", help="printer tasks: map slots, forget a certificate")
+    psub = pr.add_subparsers(dest="printer_cmd", required=True)
+    pm = psub.add_parser("map", help="map the AMS slots (changes slot colours briefly, runs a no-motion job)")
+    pm.add_argument("serial")
+    pu = psub.add_parser("unpin", help="forget the printer's pinned TLS certificate")
+    pu.add_argument("serial")
     args = ap.parse_args(argv)
 
     if args.cmd == "status":
@@ -426,4 +508,8 @@ def main(argv: list[str] | None = None, *, client_factory=None) -> int:
         return cmd_config()
     if args.cmd == "cert":
         return cmd_cert()
+    if args.cmd == "printer":
+        if args.printer_cmd == "map":
+            return cmd_printer_map(args.serial, manager_factory or _default_manager)
+        return cmd_printer_unpin(args.serial)
     return cmd_ensure_fields()
