@@ -10,6 +10,8 @@ State, all under `state/profiles/`:
   current.json               the last good build {stamp, created, live_hash, presets, problems}
   installed.json             the build the sync PC installed {stamp, at, device_id}
   deleted.json               {deleted_before: [preset names deleted in the app]}
+  owner-edits.json           {stamp, inapp, notes}: the owner's in-app record and note lines of the old PC's
+                             installed build, kept when the sync PC changes (ruling S34) until the new PC installs
   build-state.json           {last_attempt: {at, ok, error}, handled: {at, started}} (the builder's own record)
   rebuild-request            written by `request_rebuild`; watched by filament-kit-build.path (PathModified).
                              The builder only ever READS it; what was handled is kept in build-state.json.
@@ -27,7 +29,9 @@ a temp dir while counting the real bytes, and every live `.json` must parse. A s
 (under live.lock); a refused upload leaves the previous live folder as it was.
 
 One sync PC (Decision): the first paired device that uploads becomes the owner; other devices get 409
-`other_pc` until the owner is unpaired (it is then no longer in `pairing.devices()`).
+`other_pc` until the owner is unpaired (it is then no longer in `pairing.devices()`). When the owner changes, the
+old PC's installed.json, deleted.json and meta `partial` are dropped (the new PC starts like a first install), and
+an installed.json written for another device than the owner is never read.
 
 Builds (Decision "build trigger and retention"): `run_build` holds build.lock, builds into builds/<stamp>.tmp,
 renames it, saves the lines, writes deleted.json and then current.json. The installed build (and the partial one,
@@ -65,7 +69,7 @@ from .. import config, pairing
 from .. import library as library_mod
 from ..bridge import registry
 from ..pairing import _write_atomic, make_state_dir, open_lock
-from . import generate, lines as lines_mod
+from . import generate, inapp as inapp_mod, lines as lines_mod
 from .bbl import Store
 from .errors import ProfileError
 
@@ -84,6 +88,7 @@ STAMP_RE = re.compile(r"\d{8}-\d{6}(?:-[1-9]\d{0,5})?")
 USER_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
 NO_SYSTEM = "no Bambu Studio system presets yet: install and pair the PC sync"
 WAIT_LIVE = "waiting for the PC's next sync"
+OWNER_EDITS = "owner-edits.json"
 _BAD_PART = re.compile(r'[<>:"|?*\x00-\x1f\x7f]')
 _DRIVE = re.compile(r"[A-Za-z]:")
 
@@ -187,6 +192,19 @@ def meta() -> dict:
 
 # ---------- the uploaded system store (one definition for every caller) ----------
 
+def _system_hash(meta: dict) -> str | None:
+    """meta.json's `system_hash`, but None when `live/system/` is missing or holds no preset .json (a backup
+    restored without it, final review I5): the PC then sees a mismatch and uploads its system presets again."""
+    h = meta.get("system_hash")
+    if not isinstance(h, str) or not h:
+        return None
+    try:
+        has = any(p.suffix.casefold() == ".json" and p.is_file() for p in (_live() / "system").rglob("*"))
+    except OSError:
+        has = False
+    return h if has else None
+
+
 _store_cache: dict = {}
 _store_cache_lock = threading.Lock()
 
@@ -195,12 +213,18 @@ def system_store() -> Store | None:
     """The uploaded Bambu Studio system presets (`live/system/`, the PC sync's upload of its
     `system/BBL/filament` folder), or None when none are uploaded.
 
-    A store is uploaded exactly when meta.json has a `system_hash` and the folder holds at least one preset. The
-    store is cached by (folder, system_hash). On a cache miss the raw files are read under live.lock (so an upload
-    swap can't interleave) and parsed after it is released."""
+    A store is uploaded exactly when meta.json has a `system_hash` and the folder holds at least one preset
+    (`_system_hash`). The
+    store is cached by (folder, system_hash). A cache hit takes no lock (meta.json is replaced atomically), so an
+    intake add never waits behind a build holding live.lock (final review I6). On a cache miss the raw files are
+    read under live.lock (so an upload swap can't interleave) and parsed after it is released."""
     folder = _live() / "system"
+    fast = (str(folder), _system_hash(_meta()))
+    with _store_cache_lock:
+        if fast[1] is not None and _store_cache.get("key") == fast:
+            return _store_cache["store"]
     with _locked("live.lock"):
-        h = _meta().get("system_hash")
+        h = _system_hash(_meta())
         key = (str(folder), h)
         with _store_cache_lock:
             if _store_cache.get("key") == key:
@@ -227,8 +251,62 @@ def _set_state(**changes) -> None:
 
 
 def _installed() -> dict | None:
+    """installed.json, or None; also None when it was written for another device than the sync PC (meta.json
+    `owner`): another PC's snapshot would turn its presets into false deletions and edits (final review I4)."""
     d = _read_obj(_dir() / "installed.json")
-    return d if isinstance(d.get("stamp"), str) and STAMP_RE.fullmatch(d["stamp"]) else None
+    if not (isinstance(d.get("stamp"), str) and STAMP_RE.fullmatch(d["stamp"])):
+        return None
+    return d if d.get("device_id") == _meta().get("owner") else None
+
+
+def _owner_record(stamp) -> dict | None:
+    """The owner's part of an installed build (ruling S34): its BUILD.json `inapp` record and, per preset, the note
+    lines below MARK. None when that build is gone."""
+    if not (isinstance(stamp, str) and STAMP_RE.fullmatch(stamp)):
+        return None
+    folder = _builds() / stamp
+    m = _read_json(folder / "BUILD.json")
+    if not isinstance(m, dict):
+        return None
+    rec = m.get("inapp")
+    if not isinstance(rec, dict):
+        rec = {}
+    rec = {n: v for n, v in rec.items() if isinstance(n, str) and isinstance(v, dict)}
+    notes = {}
+    base = folder / "base"
+    if base.is_dir():
+        for f in sorted(base.iterdir()):
+            if f.suffix.casefold() != ".json" or not f.is_file():
+                continue
+            cfg = _read_json(f)
+            if isinstance(cfg, dict):
+                mine = inapp_mod.user_notes(cfg, cfg)
+                if mine:
+                    notes[f.stem] = mine
+    return {"stamp": stamp, "inapp": rec, "notes": notes}
+
+
+def _owner_edits() -> dict | None:
+    d = _read_obj(_dir() / OWNER_EDITS)
+    return d or None
+
+
+def _forget_old_pc(meta: dict) -> None:
+    """A new sync PC (the owner changes; also the same PC re-paired, which gets a new device id): the old PC's
+    install snapshot (the basis for deletions and diffs), partial build and deletion record are dropped, so the new
+    PC starts like a first install. The owner's in-app record and note lines of the installed build are theirs,
+    not the PC's: they are kept in owner-edits.json (ruling S34) and carried by the next builds until the new PC
+    installs one. Called under live.lock before meta.json is written."""
+    raw = _read_obj(_dir() / "installed.json")
+    rec = _owner_record(raw.get("stamp"))
+    if rec is not None:
+        _write_json(_dir() / OWNER_EDITS, rec)
+    for name in ("installed.json", "deleted.json"):
+        try:
+            (_dir() / name).unlink()
+        except FileNotFoundError:
+            pass
+    meta.pop("partial", None)
 
 
 def _rmtree(path: Path) -> None:
@@ -455,6 +533,8 @@ def store_upload(kind: str, src: BinaryIO, *, device_id: str, user_id: str | Non
                 raise
             meta = _meta()
             now = time.time()
+            if meta.get("owner") != device_id and (meta.get("owner") or _dir().joinpath("installed.json").exists()):
+                _forget_old_pc(meta)
             meta["owner"] = device_id
             if kind == "live":
                 if user_id is not None:
@@ -601,6 +681,7 @@ def _build_once(sm, now: float) -> dict:
         # a build whose install stopped part-way (S28): only while it is kept and is not the installed one
         partial = (root / part if isinstance(part, str) and STAMP_RE.fullmatch(part)
                    and (root / part / "BUILD.json").is_file() and part != (installed or {}).get("stamp") else None)
+        owner_edits = _owner_edits() if snapshot is None else None     # S34: a re-paired / new sync PC
         before = _read_obj(_dir() / "deleted.json").get("deleted_before")
         deleted_before = {n for n in before if isinstance(n, str)} if isinstance(before, list) else set()
         restore_flag = _dir() / "restore-deleted"
@@ -610,7 +691,7 @@ def _build_once(sm, now: float) -> dict:
             manifest, new_lines = generate.build_all(
                 filaments=filaments, models=models, store=store, library=lib, lines=ls, live=live,
                 snapshot=snapshot, deleted_before=deleted_before, restore_deleted=restore, out_dir=tmp, now=now,
-                partial=partial)
+                partial=partial, owner_edits=owner_edits)
             problems = list(store.problems) + [p for p in manifest.get("problems", []) if p not in store.problems]
             manifest.update(stamp=stamp, created=now, live_hash=meta.get("live_hash"),
                             system_hash=meta.get("system_hash"), user_id=meta.get("user_id"), problems=problems,
@@ -717,6 +798,10 @@ def record_installed(stamp: str, device_id: str) -> dict:
         if "partial" in meta:                   # a finished install ends the partial one (S28)
             meta.pop("partial")
             _write_json(_live() / "meta.json", meta)
+        try:                                    # the installed build's own record carries them from now on (S34)
+            (_dir() / OWNER_EDITS).unlink()
+        except FileNotFoundError:
+            pass
         return {"stamp": stamp, "at": at}
 
 
@@ -745,7 +830,7 @@ def state_view(device_id: str) -> dict:
     meta = _meta()
     req = _pending_request()
     return {"owner": owner(), "you": device_id, "user_id": meta.get("user_id"),
-            "live_hash": meta.get("live_hash"), "system_hash": meta.get("system_hash"), "build": _build_view(),
+            "live_hash": meta.get("live_hash"), "system_hash": _system_hash(meta), "build": _build_view(),
             "last_attempt": _attempt_view(), "installed": _installed_view(),
             "rebuild_requested": {"at": req["at"], "live_hash": req["live_hash"]} if req else None}
 

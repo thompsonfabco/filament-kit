@@ -16,8 +16,15 @@ In-app edits last (rulings S27, S28; see profiles.inapp): the manifest's `inapp`
 values the build carried; the next build reads that record from the installed build's BUILD.json (or, after a
 half-finished install, from the partial build's, whose values then never count as edits).
 
+`restored` lists the presets a restore-deleted build brought back (deleted in the app before): the PC's installer
+does not take their absence from Bambu Studio for a deletion made after the build.
+
 A saved line's filament_id never changes (ruling S12). Only a line created in this run takes the filament_id of an
-existing preset of the same name made in the app; for a saved line that preset is reported and replaced.
+existing preset of the same name made in the app, or of its installed presets (lines.json was lost); for a saved
+line that preset is reported and replaced.
+
+A preset name the PC sync could not use as a file name (`safe_name`, its own rule) is skipped with a problem line:
+the PC refuses a build zip holding one.
 
 One line with odd data, or one bad preset, is skipped with a problem line; the rest of the build goes on.
 """
@@ -37,7 +44,11 @@ from .bbl import Store, _first
 from .lines import BS_VALID, Line, LineSet
 
 ID_RE = re.compile(r"^P[0-9a-f]{7}$")
-BAD_NAME = re.compile(r'[\\/:*?"<>|]')
+# the PC sync's rule for a preset file name (pc-sync zips._safe_name, for <name>.json and <name>.info): one name it
+# refuses would make it refuse the whole build zip
+_BAD_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f\x7f]')
+_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
+MAX_FILE_NAME = 200                             # characters of <name>.json, as the PC counts them
 POP = ("type", "instantiation", "setting_id", "description", "renamed_from", "is_custom_defined", "inherits",
        "filament_id", "compatible_printers")
 TV = "temperature_vitrification"
@@ -102,7 +113,27 @@ def _snapshot_names(snapshot: Path | None) -> set[str]:
     return {p.stem for p in base.iterdir() if p.is_file() and p.suffix.casefold() == ".json"}
 
 
+def _snapshot_fid(snapshot: Path | None, snap_names: set[str], name: str):
+    """The filament_id of the installed copy of preset `name` (matched casefolded), or None."""
+    if snapshot is None:
+        return None
+    key = name.casefold()
+    real = next((n for n in snap_names if n.casefold() == key), None)
+    return (_read_json(Path(snapshot) / "base" / f"{real}.json") or {}).get("filament_id") if real else None
+
+
 # ---------- checks ----------
+
+def safe_name(name) -> bool:
+    """True when `name` + ".json" / ".info" is a file name the PC sync accepts (the same rule as pc-sync
+    zips._safe_name): no control or reserved characters, no leading dot or space, no trailing dot or space, not a
+    reserved Windows device name, at most MAX_FILE_NAME characters with the suffix."""
+    if not isinstance(name, str) or not name or len(name) + len(".json") > MAX_FILE_NAME:
+        return False
+    if _BAD_CHARS.search(name) or name.startswith(".") or name[0] == " " or name[-1] in " .":
+        return False
+    return name.split(".")[0].upper().rstrip() not in _RESERVED
+
 
 def preset_name(line: Line, printer: str, nozzle: str) -> str:
     return f"{line.vendor} {line.product} @{printer} {nozzle} nozzle"
@@ -153,8 +184,8 @@ def check_preset(cfg: dict, parent_cfg: dict, *, edited: dict | None = None) -> 
     if tv != inapp.norm(parent_cfg.get(TV)) and not (edited and TV in edited and tv == inapp.norm(edited[TV])):
         errs.append(f"{TV} differs from the parent's")
     name = cfg.get("name")
-    if not isinstance(name, str) or not name.strip() or BAD_NAME.search(name):
-        errs.append(f"name {name!r} has characters a file name cannot hold")
+    if not safe_name(name):
+        errs.append(f"name {name!r} cannot be a file name on the PC")
     return errs
 
 
@@ -225,9 +256,11 @@ def _printers(models: list[str], problems: list[str]) -> list[tuple[str, int | N
 def build_all(*, filaments: list[dict], models: list[str], store: Store, library: Library,
               lines: dict[str, Line], live: Live | None, snapshot: Path | None, deleted_before: set[str],
               restore_deleted: bool, out_dir: Path, now: float,
-              partial: Path | None = None) -> tuple[dict, dict[str, Line]]:
+              partial: Path | None = None, owner_edits: dict | None = None) -> tuple[dict, dict[str, Line]]:
     """Build every preset into `out_dir/base`; returns (manifest, updated lines). `snapshot` = the installed
-    build's folder; `partial` = a build whose install stopped part-way (its values in live are not edits)."""
+    build's folder; `partial` = a build whose install stopped part-way (its values in live are not edits);
+    `owner_edits` = {inapp: {preset: {key: value}}, notes: {preset: [lines]}} saved when the sync PC changed
+    (ruling S34): with no snapshot and no partial build it is the record of the owner's edits and note lines."""
     out_dir = Path(out_dir)
     base_out = out_dir / "base"
     base_out.mkdir(parents=True, exist_ok=True)
@@ -236,6 +269,16 @@ def build_all(*, filaments: list[dict], models: list[str], store: Store, library
     edits: list[str] = []
     carried: dict[str, dict] = {}
     recorded = _recorded(partial) if partial is not None else _recorded(snapshot)
+    kept_notes: dict[str, list[str]] = {}
+    if snapshot is None and isinstance(owner_edits, dict):
+        if partial is None:
+            rec = owner_edits.get("inapp")
+            recorded = {n: v for n, v in rec.items() if isinstance(n, str) and isinstance(v, dict)} \
+                if isinstance(rec, dict) else {}
+        nts = owner_edits.get("notes")
+        if isinstance(nts, dict):
+            kept_notes = {n: [x for x in v if isinstance(x, str)] for n, v in nts.items()
+                          if isinstance(n, str) and isinstance(v, list)}
 
     live_names = live.names() if live is not None else set()
     snap_names = _snapshot_names(snapshot)
@@ -284,6 +327,7 @@ def build_all(*, filaments: list[dict], models: list[str], store: Store, library
     presets: list[dict] = []
     manifest_lines: dict[str, dict] = {}
     deleted: list[str] = []
+    restored: list[str] = []                # brought back by restore-deleted (the PC must not see a deletion)
     generated: set[str] = set()
     planned: set[str] = set()               # casefolded names planned this run, built or not
 
@@ -298,8 +342,8 @@ def build_all(*, filaments: list[dict], models: list[str], store: Store, library
                                 deleted_before=deleted_before, restore=restore_deleted, reset=reset,
                                 base_out=base_out, user_id=live.user_id if live is not None else "", now=now,
                                 problems=problems, clamps=clamps, edits=edits, deleted=deleted,
-                                planned=planned, new_line=lid in new_lines, recorded=recorded,
-                                partial=partial, carried=carried)
+                                restored=restored, planned=planned, new_line=lid in new_lines, recorded=recorded,
+                                partial=partial, carried=carried, kept_notes=kept_notes)
         except OSError:
             raise
         except Exception as e:  # one odd line never breaks the build
@@ -317,7 +361,8 @@ def build_all(*, filaments: list[dict], models: list[str], store: Store, library
     stale = sorted(n for n in snap_names if n.casefold() in live_cf and n.casefold() not in generated
                    and n.casefold() not in planned and not n.casefold().startswith(prefixes))
     manifest = {"presets": presets, "lines": manifest_lines, "problems": problems, "clamps": clamps,
-                "edits": edits, "inapp": dict(sorted(carried.items())), "deleted": sorted(deleted), "stale": stale,
+                "edits": edits, "inapp": dict(sorted(carried.items())), "deleted": sorted(deleted),
+                "restored": sorted(restored), "stale": stale,
                 "library_version": library.version}
     return manifest, ls
 
@@ -325,8 +370,9 @@ def build_all(*, filaments: list[dict], models: list[str], store: Store, library
 def _build_line(line: Line, fs: list[dict], ids: list[int], *, printers, store: Store, library: Library,
                 live_preset, live_names, snap_cf, ls: LineSet, snapshot, seen_live, snap_names, deleted_before,
                 restore, reset, base_out: Path, user_id: str, now: float, problems, clamps, edits,
-                deleted, planned: set[str], new_line: bool, recorded: dict[str, dict], partial: Path | None,
-                carried: dict[str, dict]) -> list[dict]:
+                deleted, planned: set[str], new_line: bool, restored: list[str] | None = None,
+                recorded: dict[str, dict], partial: Path | None,
+                carried: dict[str, dict], kept_notes: dict[str, list[str]] | None = None) -> list[dict]:
     if line.bambu_parent is None:
         return []                                   # reported by lines.problems
     sv = values.spoolman_values(fs)
@@ -338,6 +384,7 @@ def _build_line(line: Line, fs: list[dict], ids: list[int], *, printers, store: 
     btype = lines_mod.bs_type(material)
 
     plan = []
+    unsafe: set[str] = set()
     for printer, chamber in printers:
         sizes = store.nozzles_for(line.bambu_parent, printer)
         if not sizes:
@@ -347,14 +394,30 @@ def _build_line(line: Line, fs: list[dict], ids: list[int], *, printers, store: 
         for nozzle in sizes:
             if (nozzle == "0.2" and abrasive) or nozzle in bad:
                 continue
+            if not safe_name(preset_name(line, printer, nozzle)):
+                unsafe.add(preset_name(line, printer, nozzle))
+                continue
             plan.append((printer, chamber, nozzle, preset_name(line, printer, nozzle)))
             planned.add(plan[-1][3].casefold())
+    for name in sorted(unsafe):                 # only these presets are skipped; the PC would refuse the whole zip
+        problems.append(f"{name!r} cannot be a file name on the PC (check the vendor and line name); skipped")
 
     # an existing preset of the same name made in the app (not installed by us): keep its filament_id
-    # (only for a line created in this run: a saved line's filament_id never changes)
+    # (only for a line created in this run: a saved line's filament_id never changes). A line created in this run
+    # whose presets were installed (lines.json was lost) takes the installed presets' filament_id.
     taken = lines_mod._taken_fids(ls)
     for _p, _c, _n, name in plan:
-        if name not in live_names or name.casefold() in snap_cf:
+        if name.casefold() in snap_cf:
+            if not new_line:
+                continue
+            fid = _snapshot_fid(snapshot, snap_names, name)
+            if isinstance(fid, str) and ID_RE.fullmatch(fid) and fid != line.filament_id and fid not in taken:
+                edits.append(f"{line.line_id}: filament_id {line.filament_id} -> {fid} (taken from the installed "
+                             f"preset {name})")
+                line.filament_id = fid
+                new_line = False
+            continue
+        if name not in live_names:
             continue
         j, _info = live_preset(name)
         fid = (j or {}).get("filament_id")
@@ -375,6 +438,8 @@ def _build_line(line: Line, fs: list[dict], ids: list[int], *, printers, store: 
                          restore=restore):
             deleted.append(name)
             continue
+        brought_back = restore and inapp.deleted(name, snapshot=snap_names, live=seen_live, before=deleted_before,
+                                                 reset=reset, restore=False)
         parent = store.parent_for(line.bambu_parent, printer, nozzle)
         if parent is None:
             problems.append(f"{name}: no system parent; skipped")
@@ -383,7 +448,8 @@ def _build_line(line: Line, fs: list[dict], ids: list[int], *, printers, store: 
             row = _build_preset(line, name, printer, chamber, nozzle, parent, sv, material, btype, entry, ids,
                                 store=store, live_preset=live_preset, snapshot=snapshot, base_out=base_out,
                                 user_id=user_id, now=now, problems=problems, clamps=clamps, edits=edits,
-                                recorded=recorded.get(name), partial=partial, carried=carried)
+                                recorded=recorded.get(name), partial=partial, carried=carried,
+                                notes=(kept_notes or {}).get(name))
         except OSError:
             raise
         except Exception as e:
@@ -391,13 +457,15 @@ def _build_line(line: Line, fs: list[dict], ids: list[int], *, printers, store: 
             continue
         if row is not None:
             rows.append(row)
+            if brought_back and restored is not None:
+                restored.append(name)
     return rows
 
 
 def _build_preset(line: Line, name: str, printer: str, chamber, nozzle: str, parent: str, sv, material, btype,
                   entry, ids, *, store: Store, live_preset, snapshot, base_out: Path, user_id: str, now: float,
                   problems, clamps, edits, recorded: dict | None = None, partial: Path | None = None,
-                  carried: dict[str, dict] | None = None) -> dict | None:
+                  carried: dict[str, dict] | None = None, notes: list[str] | None = None) -> dict | None:
     # 1. the flattened parent
     parent_cfg = store.resolve(parent)
     cfg = copy.deepcopy(parent_cfg)
@@ -426,7 +494,7 @@ def _build_preset(line: Line, name: str, printer: str, chamber, nozzle: str, par
     installed = _read_json(Path(snapshot) / "base" / f"{name}.json") if snapshot is not None else None
     live_cfg, live_info = live_preset(name)
     half = _read_json(Path(partial) / "base" / f"{name}.json") if partial is not None else None
-    mine = inapp.keep_edits(cfg, installed, live_cfg, edits, recorded=recorded, partial=half)
+    mine = inapp.keep_edits(cfg, installed, live_cfg, edits, recorded=recorded, partial=half, notes=notes)
     taken = set(mine)
     protected |= taken
     _fill_nil(cfg, name, edits)

@@ -601,3 +601,97 @@ def test_partial_install_values_are_not_inapp_edits(tmp_path):
     assert not any("filament_density" in e for e in m3["edits"]), m3["edits"]
     assert read(tmp_path, second, "o3")["filament_flow_ratio"] == ["0.92", "0.92"]    # o2's edit still kept
     assert m3["inapp"] == {second: {"filament_flow_ratio": ["0.92", "0.92"]}}
+
+
+def test_app_reset_keeps_the_owners_note_lines(tmp_path):
+    """Final review C1: after an app reset (the live preset is gone) the rebuilt preset keeps the owner's lines below
+    MARK and their recorded in-app values."""
+    m1, ls = build(tmp_path, EIGHT, out="o1")
+    snap, live = _install_build(tmp_path, "o1", m1)
+    name = sunlu(H2D, "0.4")
+    cfg = json.loads((live.root / "base" / f"{name}.json").read_text(encoding="utf-8"))
+    notes = cfg["filament_notes"].replace("Spoolman filament ids", "dry it first\nSpoolman filament ids")
+    _edit_live(live, name, filament_notes=notes, filament_flow_ratio=["0.91", "0.91"])
+    m2, ls = build(tmp_path, EIGHT, line_set=ls, live=live, snapshot=snap, out="o2")
+    snap2, live2 = _install_build(tmp_path, "o2", m2)
+    assert inapp.MARK in read(tmp_path, name, "o2")["filament_notes"]
+    for n in (name, sunlu(H2D, "0.6"), sunlu(H2D, "0.8")):          # 3 of 8 gone at once: an app reset
+        (live2.root / "base" / f"{n}.json").unlink()
+    m3, _ = build(tmp_path, EIGHT, line_set=ls, live=live2, snapshot=snap2, out="o3")
+    assert m3["deleted"] == [] and name in names(m3)
+    new = read(tmp_path, name, "o3")
+    lines_ = new["filament_notes"].splitlines()
+    assert lines_[-3:] == [inapp.MARK, "dry it first", "Spoolman filament ids: 3, 17"]
+    assert new["filament_flow_ratio"] == ["0.91", "0.91"]
+
+
+def test_half_install_note_lines_are_not_copied_below_mark(tmp_path):
+    """Final review I1: the partial build's summary line, written into live by the half-finished install, is not
+    taken for the owner's own line."""
+    m1, ls = build(tmp_path, SUNLU, out="o1")
+    snap, live = _install_build(tmp_path, "o1", m1)
+    name = sunlu(H2D, "0.4")
+    more = SUNLU + [fil(21, "PLA+ 2.0 Blue")]                       # the summary line names the colours
+    m2, ls = build(tmp_path, more, line_set=ls, live=live, snapshot=snap, out="o2")
+    (tmp_path / "o2" / "BUILD.json").write_text(json.dumps(m2), encoding="utf-8")
+    shutil.copy(tmp_path / "o2" / "base" / f"{name}.json", live.root / "base" / f"{name}.json")  # half install
+    m3, _ = build(tmp_path, more, line_set=ls, live=live, snapshot=snap, out="o3", partial=tmp_path / "o2")
+    assert inapp.MARK not in read(tmp_path, name, "o3")["filament_notes"]
+    assert not any("line(s) you wrote" in e for e in m3["edits"])
+
+
+def test_restore_lists_the_presets_it_brought_back(tmp_path):
+    """Final review I3b: the build names the presets it restored, so the PC's installer does not take their absence
+    from Bambu Studio for a deletion made after the build."""
+    first, ls = build(tmp_path, EIGHT)
+    snap, live = _install(tmp_path)
+    gone = sunlu(H2D, "0.6")
+    (live.root / "base" / f"{gone}.json").unlink()
+    plain, _ = build(tmp_path, EIGHT, line_set=ls, live=live, snapshot=snap, out="o2")
+    assert plain["restored"] == []
+    restored, _ = build(tmp_path, EIGHT, line_set=ls, live=live, snapshot=snap, deleted_before={gone},
+                        restore=True, out="o3")
+    assert gone in names(restored) and restored["restored"] == [gone]
+
+
+# ---------- final review minors ----------
+
+def _pc_sync_zips():
+    """pc-sync's fksync.zips (as test_pcsync_e2e imports fksync)."""
+    import importlib
+    import sys
+    pc_sync = str(Path(__file__).resolve().parents[2] / "pc-sync")
+    if pc_sync not in sys.path:
+        sys.path.insert(0, pc_sync)
+    return importlib.import_module("fksync.zips")
+
+
+@pytest.mark.parametrize("name", ["SUNLU PLA+ 2.0 @Bambu Lab H2D 0.4 nozzle", ".Acme PLA @X 0.4 nozzle",
+                                  " Acme PLA", "Acme PLA ", "Acme PLA.", "Acme\tPLA", "Acme\x7fPLA", "CON",
+                                  "con.x", "LPT1", "COM9 .x", "A/B", "A\\B", "A:B", 'A"B', "x" * 195, "x" * 196,
+                                  "", "Ok (1)", "AUX ", "nul"])
+def test_safe_name_is_the_pc_sync_rule(name):
+    zips = _pc_sync_zips()
+    want = zips._safe_name(f"{name}.json") and zips._safe_name(f"{name}.info")
+    assert G.safe_name(name) is want, name
+
+
+def test_line_with_a_name_the_pc_refuses_is_skipped_alone(tmp_path):
+    odd = fil(50, "PLA Grey", vendor=".Acme", extra={"line": json.dumps("PLA")})
+    manifest, _ = build(tmp_path, SUNLU + [odd])
+    assert names(manifest) and all(n.startswith("SUNLU ") for n in names(manifest))
+    assert any(".Acme PLA" in p and "file name" in p for p in manifest["problems"]), manifest["problems"]
+    zips = _pc_sync_zips()
+    assert all(zips._safe_name(p.name) for p in (tmp_path / "out" / "base").iterdir())
+
+
+def test_corrupt_lines_json_adopts_the_installed_filament_id(tmp_path):
+    """Final review minor: lines.json was moved aside (corrupt), so every line is created again in this run; a
+    line keeps the filament_id of its installed presets instead of a new one (when valid and not taken)."""
+    m1, ls = build(tmp_path, SUNLU, out="o1")
+    keep = ls["sunlu--pla-plus-2-0"].filament_id
+    snap, live = _install_build(tmp_path, "o1", m1)
+    m2, ls2 = build(tmp_path, SUNLU, line_set={}, live=live, snapshot=snap, out="o2")
+    assert ls2["sunlu--pla-plus-2-0"].filament_id == keep
+    assert {p["filament_id"] for p in m2["presets"]} == {keep}
+    assert m2["deleted"] == [] and m2["stale"] == []

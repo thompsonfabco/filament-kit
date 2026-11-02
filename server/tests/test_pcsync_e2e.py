@@ -344,6 +344,99 @@ def test_inapp_edit_survives_a_second_rebuild(tmp_path, server, monkeypatch):
     assert pc.preset(edited)["filament_flow_ratio"] == flow                  # second rebuild: still his value
 
 
+def test_app_reset_keeps_the_owners_notes(tmp_path, server, monkeypatch):
+    """Final review C1: a line typed in the notes survives an app reset that removed the preset."""
+    _, sm = server
+    pc, stamp = installed_first_build(tmp_path, server, monkeypatch)
+    edited = sunlu("0.4")
+    cfg = pc.preset(edited)
+    cfg["filament_notes"] = cfg["filament_notes"].replace(IDS_LINE, "dry 8 h at 55 C\n" + IDS_LINE)
+    pc.write(edited, cfg)
+    assert pc.run() == "uploaded"                   # notes alone never ask for a rebuild (S31); any later one
+    builds.request_rebuild("spoolman changed")
+    build(sm)
+    assert pc.run() == "installed"
+    assert "dry 8 h at 55 C" in pc.preset(edited)["filament_notes"]
+    h2d = sorted(n for n in pc.names() if f"@{H2D} " in n)
+    vanish = [edited] + [n for n in h2d if n != edited][: len(h2d) // 2]
+    for name in vanish:                                                      # an app reset
+        (pc.base / f"{name}.json").unlink()
+    uploaded_then_rebuild(pc)
+    b = build(sm)
+    assert manifest(b["stamp"])["deleted"] == []
+    assert pc.run() == "installed"
+    notes = pc.preset(edited)["filament_notes"].splitlines()
+    assert notes[-2:] == ["dry 8 h at 55 C", IDS_LINE], notes
+
+
+def test_restore_deleted_before_the_deletion_build_installs(tmp_path, server, monkeypatch):
+    """Final review I3b: restore-deleted right after a deletion in the app: the build brings the preset back and
+    the PC installs it (no stale_build refusal that would repeat forever)."""
+    _, sm = server
+    pc, _ = installed_first_build(tmp_path, server, monkeypatch)
+    gone = sunlu("0.6")
+    (pc.base / f"{gone}.json").unlink()
+    assert pc.run() == "rebuild_requested"
+    builds.restore_deleted_next()
+    builds.request_rebuild("restore deleted presets")
+    b = build(sm)
+    assert manifest(b["stamp"])["restored"] == [gone]
+    assert pc.run() == "installed"
+    assert gone in pc.names()
+
+
+def test_inapp_nil_value_installs(tmp_path, server, monkeypatch):
+    """Final review I3c: a "nil" typed in the app is carried and filled by the generator; the PC installs that build
+    instead of refusing it as older than the owner's change."""
+    _, sm = server
+    pc, _ = installed_first_build(tmp_path, server, monkeypatch)
+    edited = sunlu("0.4")
+    cfg = pc.preset(edited)
+    temps = cfg["nozzle_temperature"]
+    assert isinstance(temps, list) and len(temps) >= 2, temps
+    cfg["nozzle_temperature"] = ["231"] + ["nil"] * (len(temps) - 1)
+    pc.write(edited, cfg)
+    uploaded_then_rebuild(pc)
+    build(sm)
+    assert pc.run() == "installed"
+    assert pc.preset(edited)["nozzle_temperature"] == ["231"] * len(temps)
+
+
+def test_inapp_gcode_edit_installs_after_an_app_reset(tmp_path, server, monkeypatch):
+    """Final review I3a: the owner's own G-code (accepted once, so in dirs.installed) is carried after an app reset
+    and installed, although no live copy and no system preset holds it."""
+    _, sm = server
+    pc, _ = installed_first_build(tmp_path, server, monkeypatch)
+    edited = sunlu("0.4")
+    cfg = pc.preset(edited)
+    mine = ["; my own end G-code"]
+    cfg["filament_end_gcode"] = mine
+    pc.write(edited, cfg)
+    uploaded_then_rebuild(pc)
+    build(sm)
+    assert pc.run() == "installed"
+    h2d = sorted(n for n in pc.names() if f"@{H2D} " in n)
+    for name in [edited] + [n for n in h2d if n != edited][: len(h2d) // 2]:  # an app reset
+        (pc.base / f"{name}.json").unlink()
+    uploaded_then_rebuild(pc)
+    build(sm)
+    assert pc.run() == "installed"
+    assert pc.preset(edited)["filament_end_gcode"] == mine
+
+
+def test_restored_backup_without_system_presets_is_resynced(tmp_path, server, monkeypatch):
+    """Final review I5: a server backup leaves out live/system but keeps meta.json; the PC's next run uploads the
+    system presets again and builds work."""
+    _, sm = server
+    pc, _ = installed_first_build(tmp_path, server, monkeypatch)
+    shutil.rmtree(config.paths().state / "profiles" / "live" / "system")
+    assert pc.client.state()["system_hash"] is None
+    assert pc.run() == "uploaded"
+    assert pc.client.state()["system_hash"] == builds.tree_hash(pc.folders.system_filament)
+    builds.request_rebuild("after restore")
+    assert builds.run_build(sm)["ok"] is True
+
+
 # ---------- interrupted installs ----------
 
 def _crash_after(monkeypatch, writes: int) -> None:
