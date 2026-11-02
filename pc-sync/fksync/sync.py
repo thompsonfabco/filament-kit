@@ -149,7 +149,9 @@ class _Run:
     def _send(self, kind: str, data: bytes, here: str) -> None:
         label = LABELS[kind]
         try:
-            if kind != "live":
+            if kind == "orca_live" and self._partial():
+                res = self.c.upload(kind, data, partial=self._partial())   # S28 for Orca too (Ruling O)
+            elif kind != "live":
                 res = self.c.upload(kind, data)
             elif self._partial():
                 res = self.c.upload(kind, data, user_id=self.f.user_id, partial=self._partial())
@@ -184,7 +186,12 @@ class _Run:
         here = tree_hash(self.f.user_filament)
         self._send("live", zips.pack(self.f.user_filament, LIVE_MAX), here)
         if self.orca_on and self.o is not None:
-            self._send("orca_live", zips.pack(self.o.user_filament, LIVE_MAX), tree_hash(self.o.user_filament))
+            try:
+                data, h = zips.pack(self.o.user_filament, LIVE_MAX), tree_hash(self.o.user_filament)
+            except (zips.TooLarge, OSError) as e:   # orca_live_owed stays set: the next run sends it
+                self.log(f"Orca Slicer live presets not uploaded this run: {e}")
+                return
+            self._send("orca_live", data, h)
 
     # --- Orca on / off --------------------------------------------------------------------
 
@@ -229,16 +236,16 @@ class _Run:
                    if self._needs_upload("system", system, server.get("system_hash")) else None)
         orca = []
         if self.orca_on:
-            olive = tree_hash(self.o.user_filament)
             try:
+                olive = tree_hash(self.o.user_filament)
                 if (self.st.get("orca_live_owed")
                         or self._needs_upload("orca_live", olive, server.get("orca_live_hash"))):
                     orca.append(("orca_live", zips.pack(self.o.user_filament, LIVE_MAX), olive))
                 osys_zip, osys = zips.orca_system(self.o, SYSTEM_MAX)
                 if self._needs_upload("orca_system", osys, server.get("orca_system_hash")):
                     orca.append(("orca_system", osys_zip, osys))
-            except zips.TooLarge as e:      # an Orca problem must not stop the Bambu Studio sync
-                self.log(f"Orca Slicer not synced this run: {e}")
+            except (zips.TooLarge, OSError) as e:   # an Orca problem (size, unreadable .opc or folder) must
+                self.log(f"Orca Slicer not synced this run: {e}")   # not stop the Bambu Studio sync
                 self.orca_on, orca = False, []
         if live_zip is not None:
             self._send("live", live_zip, here)
@@ -273,7 +280,10 @@ class _Run:
         if (req.get("live_hash") == here and req.get("orca_live_hash") == orca
                 and self.now - float(req.get("at") or 0) < REQUEST_RETRY):
             return False
-        self.c.rebuild(here)
+        if orca is not None:
+            self.c.rebuild(here, orca)
+        else:
+            self.c.rebuild(here)
         self.st["requested"] = {"live_hash": here, "at": self.now}
         if orca is not None:
             self.st["requested"]["orca_live_hash"] = orca

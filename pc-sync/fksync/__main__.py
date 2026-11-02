@@ -139,7 +139,7 @@ def cmd_run(dirs: store.AppDirs, appdata: Path, quiet: bool) -> int:
                         echo(f"This PC is not paired; run '{APP} pair'.")
                     return 1
                 folders = studio.locate(appdata, cfg)
-                orca = _locate_orca(appdata, cfg)
+                orca = _locate_orca(appdata, cfg, warn=lambda m: _warn(dirs, echo, m))
                 c = client.Client(cfg, token, log=lambda m: store.log(dirs, m))
                 outcome = sync.run_once(c, folders, dirs, running=studio.running, now=time.time(), echo=echo,
                                         orca=orca, orca_running=studio.orca_running)
@@ -174,9 +174,23 @@ def _program_files() -> list[Path]:
     return out
 
 
-def _locate_orca(appdata: Path, cfg: dict):
-    """This PC's Orca Slicer folders, or None (Bambu Studio only). NotFound for a bad pin in the config."""
-    return studio.locate_orca(appdata, cfg, program_files=_program_files(), registry=studio._registry_entries)
+def _locate_orca(appdata: Path, cfg: dict, warn=None):
+    """This PC's Orca Slicer folders, or None (Bambu Studio only). A stale `orca_user_id` / `orca_install` pin
+    (e.g. Orca upgraded into a new folder) is warned about and ignored: discovery runs without it."""
+    kw = {"program_files": _program_files(), "registry": studio._registry_entries}
+    try:
+        return studio.locate_orca(appdata, cfg, **kw)
+    except studio.NotFound as e:
+        if warn:
+            warn(f"{e.message} Ignoring the Orca Slicer pin and looking for Orca Slicer instead.")
+        unpinned = {k: v for k, v in cfg.items() if k not in ("orca_user_id", "orca_install")}
+        return studio.locate_orca(appdata, unpinned, **kw)
+
+
+def _warn(dirs: store.AppDirs, echo, msg: str) -> None:
+    store.log(dirs, f"warning: {msg}")
+    if echo:
+        echo(f"warning: {msg}")
 
 
 def _fail(dirs: store.AppDirs, echo, msg: str) -> int:
@@ -211,11 +225,11 @@ def cmd_status(dirs: store.AppDirs, appdata: Path) -> int:
         _out(f"Bambu Studio:    {e.message}")
     st = sync.load_state(dirs)
     try:
-        o = _locate_orca(appdata, cfg)
+        o = _locate_orca(appdata, cfg, warn=lambda m: _out(f"Orca Slicer:     {m}"))
         if o is None:
             _out("Orca Slicer:     not found on this PC (only Bambu Studio is synced)")
         else:
-            pin = " (pinned in the config)" if cfg.get("orca_user_id") else ""
+            pin = " (pinned in the config)" if cfg.get("orca_user_id") == o.user_id else ""
             _out(f"Orca Slicer:     user {o.user_id}{pin}")
             _out(f"Orca folder:     {o.user_filament}")
             _out(f"Orca install:    {o.install or 'not found'}"

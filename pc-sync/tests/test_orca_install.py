@@ -66,15 +66,26 @@ def test_orca_system_zip_limits(tmp_path, monkeypatch):
 
 # --- client routes -------------------------------------------------------------------------------
 
-@pytest.mark.parametrize("kind,path", [("orca_live", "/api/sync/live?target=orca"),
-                                       ("orca_system", "/api/sync/system?target=orca"),
-                                       ("system", "/api/sync/system")])
-def test_client_upload_routes(monkeypatch, kind, path):
+@pytest.mark.parametrize("kind,partial,path", [
+    ("orca_live", None, "/api/sync/live?target=orca"),
+    ("orca_live", "20261102-010203", "/api/sync/live?target=orca&partial=20261102-010203"),   # Ruling O
+    ("orca_system", None, "/api/sync/system?target=orca"),
+    ("system", None, "/api/sync/system")])
+def test_client_upload_routes(monkeypatch, kind, partial, path):
     c = client.Client({"host": "h", "fp": "a" * 64}, "tok")
     seen = []
     monkeypatch.setattr(c, "_request", lambda *a, **kw: seen.append(a) or {})
-    c.upload(kind, b"zip", user_id="u1")
-    assert seen == [("PUT", path, b"zip", "application/zip")]   # no Orca user id or partial in the query
+    c.upload(kind, b"zip", user_id="u1", partial=partial)
+    assert seen == [("PUT", path, b"zip", "application/zip")]   # never the Bambu user id on an Orca upload
+
+
+def test_client_rebuild_sends_orca_live_hash(monkeypatch):
+    c = client.Client({"host": "h", "fp": "a" * 64}, "tok")
+    seen = []
+    monkeypatch.setattr(c, "_request", lambda *a, **kw: seen.append(json.loads(a[2])) or {})
+    c.rebuild("a" * 64)
+    c.rebuild("a" * 64, "b" * 64)
+    assert seen == [{"live_hash": "a" * 64}, {"live_hash": "a" * 64, "orca_live_hash": "b" * 64}]
 
 
 # --- build zip -----------------------------------------------------------------------------------
@@ -232,8 +243,33 @@ def test_orca_inapp_record_and_restored(tmp_path):
     live.update({o: (_orca_preset(o), ORCA_INFO) for o in other})
     e = Env(tmp_path, orca_live=live)
     e.snapshot({N: _orca_preset(N), "Gone": _orca_preset("Gone"), **{o: _orca_preset(o) for o in other}})
+    presets = {N: _orca_preset(N), "Gone": _orca_preset("Gone")}
+    # without the build's records: the "nil" is a late edit and "Gone" a deletion
+    with pytest.raises(installer.Refused) as ei:
+        e.install(e.build(presets))
+    assert "Gone: deleted in Orca Slicer" in ei.value.reason and "filament_flow_ratio" in ei.value.reason
     meta = {"orca_inapp": {N: {"filament_flow_ratio": ["nil"]}}, "orca_restored": ["gone"]}
-    e.install(e.build({N: _orca_preset(N), "Gone": _orca_preset("Gone")}, meta=meta))
+    res = e.install(e.build(presets, meta=meta))
+    assert res.installed_orca == [N, "Gone"]
+    assert (e.orca.user_filament / "Gone.json").is_file()       # restored, not reported as deleted
+    assert "Gone" not in res.stale_orca and res.stale_orca == ["B", "C", "D", "E"]  # not built: listed only
+
+
+def test_failed_orca_backup_keeps_every_bambu_backup(tmp_path, monkeypatch):
+    e = Env(tmp_path, orca_live={N: (_orca_preset(N), ORCA_INFO)})
+    for i in range(installer.KEEP_BACKUPS):
+        (e.dirs.backups / f"20261101-00000{i}").mkdir(parents=True)
+    real = installer.shutil.copytree
+
+    def fail_for_orca(src, dst, *a, **kw):
+        if Path(src) == e.orca.user_filament:
+            raise OSError(28, "No space left on device")
+        return real(src, dst, *a, **kw)
+
+    monkeypatch.setattr(installer.shutil, "copytree", fail_for_orca)
+    with pytest.raises(installer.Refused):
+        e.install(e.build({N: _orca_preset(N, nozzle_temperature=["230"])}))
+    assert sorted(p.name for p in e.dirs.backups.iterdir()) == [f"20261101-00000{i}" for i in range(5)]
 
 
 def test_orca_running_refuses_before_any_write(tmp_path):
