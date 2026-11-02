@@ -53,11 +53,12 @@ export FK_VERSION_CODE
 # Windows dev PC when tools/android_keystore.ps1 has created the keystore; the password goes only into an
 # env var of this process (never echoed, never on a command line).
 if [ -z "${FK_KEYSTORE:-}" ] && command -v powershell >/dev/null 2>&1 && command -v cygpath >/dev/null 2>&1; then
+    # shellcheck disable=SC2016  # $env:LOCALAPPDATA is PowerShell's, expanded by PowerShell
     localapp=$(powershell -NoProfile -Command 'Write-Output $env:LOCALAPPDATA' | tr -d '\r')
     default_ks="$localapp\filament-kit\release.jks"
     if [ -f "$(cygpath -u "$default_ks")" ]; then
         FK_KEYSTORE=$(cygpath -m "$default_ks")
-        FK_KEYSTORE_PASSWORD=$(powershell -NoProfile -File tools/android_keystore.ps1 -Print | tr -d '\r') \
+        FK_KEYSTORE_PASSWORD=$(powershell -NoProfile -ExecutionPolicy Bypass -File tools/android_keystore.ps1 -Print | tr -d '\r') \
             || { echo "error: could not read the keystore password" >&2; exit 1; }
         export FK_KEYSTORE FK_KEYSTORE_PASSWORD
     fi
@@ -77,12 +78,9 @@ else
     rm -f "$apk_dir"/*.apk
 fi
 apk=""
-for candidate in "$apk_dir/app-release.apk"; do
-    if [ -f "$candidate" ]; then
-        apk="$candidate"
-        break
-    fi
-done
+if [ -f "$apk_dir/app-release.apk" ]; then
+    apk="$apk_dir/app-release.apk"
+fi
 if [ -n "$apk" ]; then
     version_code=$FK_VERSION_CODE   # the value the APK above was just built with
     mkdir -p "$stage/app"
