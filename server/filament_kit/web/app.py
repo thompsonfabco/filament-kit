@@ -56,14 +56,14 @@ def transport_security(public: str) -> TransportSecuritySettings:
 
 
 def build_app(cfg: dict | None = None, *, sm: Spoolman | None = None, claude=None, store: auth.Store | None = None,
-              lockout: auth.Lockout | None = None, tools: mcp_tools.Tools | None = None):
+              lockout: auth.Lockout | None = None, tools: mcp_tools.Tools | None = None, kit_api=None):
     cfg = cfg if cfg is not None else config.load()
     public = public_url(cfg)
     lan = (cfg.get("web") or {}).get("lan") or []
     sm = sm if sm is not None else Spoolman(cfg["spoolman_url"])
     store = store if store is not None else auth.Store(oauth_file())
     lockout = lockout if lockout is not None else auth.Lockout()
-    tools = tools if tools is not None else mcp_tools.Tools(sm)
+    tools = tools if tools is not None else mcp_tools.Tools(sm, kit_api=kit_api)
 
     mcp = MCPServer("filament-kit", title="Filament inventory", instructions=mcp_tools.instructions(cfg),
                     version=__version__, auth_server_provider=auth.Provider(store, public),
