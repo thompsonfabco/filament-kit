@@ -99,3 +99,24 @@ def test_cache_follows_current(built, monkeypatch):
     profiles.preset_for(SUNLU[0], "O1D", 0.4)
     profiles.preset_for(SUNLU[0], "O1D", 0.4)
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize("sid", ["PFUS1; rm -rf /", "x" * 33, "PF US1", "ü1"])
+def test_bad_setting_id_dropped(built, sid):
+    builds.store_upload("live", io.BytesIO(zip_of({f"base/{NAME}.json": "{}",
+                                                   f"base/{NAME}.info": f"setting_id = {sid}\n"})),
+                        device_id="a", user_id="1")
+    assert profiles.preset_for(SUNLU[0], "O1D", 0.4).setting_id == ""
+
+
+def test_broken_library_falls_back_to_filament_map(built, monkeypatch):
+    from filament_kit import library
+
+    def broken():
+        raise library.LibraryError("index.json unreadable")
+    monkeypatch.setattr(library, "load", broken)
+    no_line = dict(SUNLU[1], extra={})
+    got = profiles.preset_for(no_line, "O1D", 0.4)
+    assert got is not None and got.name == NAME
+    stranger = TG.fil(4242, "PLA+ 2.0 Mint")
+    assert profiles.preset_for(stranger, "O1D", 0.4) is None
