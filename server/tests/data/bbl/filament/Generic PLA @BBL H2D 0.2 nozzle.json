@@ -1,0 +1,15 @@
+{
+    "type": "filament",
+    "name": "Generic PLA @BBL H2D 0.2 nozzle",
+    "inherits": "Generic PLA @BBL H2D",
+    "from": "system",
+    "setting_id": "GFSL99_11",
+    "instantiation": "true",
+    "filament_max_volumetric_speed": [
+        "2",
+        "2"
+    ],
+    "compatible_printers": [
+        "Bambu Lab H2D 0.2 nozzle"
+    ]
+}
