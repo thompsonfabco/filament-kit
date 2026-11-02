@@ -444,7 +444,7 @@ def _remote_install(ex: _Exec, host: str) -> None:
     before = {}
     for dest in (remote.ROUTER_CONF, remote.PROXY_CONF):
         f = _under(ex.root, dest)
-        before[f] = f.read_bytes() if f.exists() else None
+        before[dest] = f.read_bytes() if f.exists() else None
     conf = remote.read_resource(ex.resources, "mcp-router.conf").replace("@HOST@", host)
     ex.write(remote.ROUTER_CONF, conf.encode("utf-8"), 0o644)
     for name, dest, mode in (("mcp-proxy.conf", remote.PROXY_CONF, 0o644),
@@ -471,13 +471,17 @@ def _remote_install(ex: _Exec, host: str) -> None:
     try:
         ex.cmd(["nginx", "-t"])
     except (subprocess.CalledProcessError, OSError):
-        for f, old in before.items():
+        back, gone = [], []
+        for dest, old in before.items():
+            f = _under(ex.root, dest)
             if old is None:
                 f.unlink(missing_ok=True)
+                gone.append(dest)
             else:
                 f.write_bytes(old)
-        print("nginx -t failed: the previous router conf was put back" if any(before.values())
-              else "nginx -t failed: the kit's router conf was removed again")
+                back.append(dest)
+        print("nginx -t failed: " + "; ".join(([f"put back the previous {', '.join(back)}"] if back else [])
+                                               + ([f"removed {', '.join(gone)} again"] if gone else [])))
         raise
 
 
