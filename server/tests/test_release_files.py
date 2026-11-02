@@ -113,7 +113,7 @@ def test_install_hands_over_to_modules_apply():
     assert "--mode" in text
     assert "Install mode: 1) server 2) station 3) all-in-one 4) custom [1]" in text
     assert "Server address (name or IP): " in text
-    assert '"$WHEEL[station]"' in text
+    assert '"${WHEEL}[station]"' in text
     assert "modules.set_mode" in text
 
 
