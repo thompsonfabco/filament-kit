@@ -1,4 +1,5 @@
-"""Command line: status, pair, unpair, config, cert, ensure-fields, printer map / unpin, library, profiles, modules."""
+"""Command line: status, pair, unpair, config, cert, ensure-fields, printer map / unpin, library, profiles, modules,
+web."""
 from __future__ import annotations
 
 import argparse
@@ -1117,6 +1118,92 @@ def _modules_menu(cfg: dict) -> None:
             print("Unknown choice.")
 
 
+# ---------- web (the MCP endpoint and phone web app) ----------
+
+WEB_PASSPHRASE = "web_passphrase"
+
+
+def _is_root() -> bool:
+    return hasattr(os, "geteuid") and os.geteuid() == 0
+
+
+def cmd_web_passphrase() -> int:
+    """Set the passphrase of the web unit's sign-ins (Claude's connector approval and the phone app). Typed twice,
+    hidden; stored as a salted scrypt hash, root:filament-kit 640, so the service can check it but not change it."""
+    from .web import auth  # needs the [web] extra
+    if not _is_root():
+        print("error: run as root: sudo filament-kit web passphrase", file=sys.stderr)
+        return 1
+    first = getpass.getpass(f"New web passphrase, at least {auth.MIN_PASSPHRASE} characters (hidden): ")
+    second = getpass.getpass("Again (hidden): ")
+    if first != second:
+        print("error: the two passphrases do not match; nothing was changed", file=sys.stderr)
+        return 1
+    try:
+        hashed = auth.hash_passphrase(first)
+    except ValueError as e:
+        print(f"error: {e}; nothing was changed", file=sys.stderr)
+        return 1
+    dest = config.paths().etc / WEB_PASSPHRASE
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(dest.name + ".tmp")
+    try:
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o640)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(hashed + "\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.chmod(tmp, 0o640)          # O_CREAT's mode does not apply to a leftover tmp file
+        shutil.chown(tmp, user="root", group="filament-kit")
+        os.replace(tmp, dest)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    print(f"Passphrase saved ({dest}). Sign-ins from now on use it; existing sessions and connectors stay "
+          "signed in.")
+    return 0
+
+
+def _web_health(port: int) -> tuple[bool, str]:
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=3) as r:
+            body = r.read().decode(errors="replace").strip()
+        return body == "ok", body or "empty answer"
+    except (OSError, http.client.HTTPException) as e:
+        return False, str(e)
+
+
+def cmd_web_status() -> int:
+    cfg = config.load()
+    web = cfg.get("web") or {}
+    on = modules.enabled(cfg)
+    ok = _line("web" in on, "web module is on", "sudo filament-kit modules enable web")
+    public = str(web.get("public_url") or "").rstrip("/")
+    ok &= _line(public.startswith("https://"), f"public URL {public or '(not set)'}",
+                "set web.public_url in config.json (e.g. https://mcp.example.com/filament)")
+    if public:
+        print(f"     connector: {public}/mcp   phone app: {public}/intake")
+    ok &= _line((config.paths().etc / WEB_PASSPHRASE).is_file(), "sign-in passphrase is set",
+                "sudo filament-kit web passphrase")
+    up, why = _web_health(int(web.get("port") or 8101))
+    ok &= _line(up, f"web unit answers on 127.0.0.1:{web.get('port')}" + ("" if up else f" ({why})"),
+                "sudo systemctl restart filament-kit-web; journalctl -u filament-kit-web")
+    try:
+        d = json.loads((config.paths().state / "web" / "oauth.json").read_text(encoding="utf-8"))
+        now = time.time()
+        live = sum(1 for v in (d.get("refresh") or {}).values() if (v.get("expires_at") or 0) > now)
+        print(f"     connectors: {len(d.get('clients') or {})} registered, {live} signed in; "
+              f"phone sessions: {len(d.get('sessions') or {})}")
+    except (OSError, ValueError, AttributeError):
+        print("     connectors: none signed in yet")
+    svc = cfg.get("slot_service")
+    slots = ("slot_service" if isinstance(svc, dict) and svc.get("state_url") else
+             "the kit's printer bridge" if "printers" in on else "none")
+    print(f"     printer slots: {slots}; tag readers: {len(cfg.get('tag_sources') or [])} "
+          f"+ {'station' if (cfg.get('station') or {}).get('url') else 'no station'}")
+    return 0 if ok else 1
+
+
 def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=None, sm_factory=None) -> int:
     ap = argparse.ArgumentParser(prog="filament-kit")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -1164,6 +1251,10 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
     mx = mdsub.add_parser("disable", help="turn a module off and apply; its data is kept (root)")
     mx.add_argument("name")
     mdsub.add_parser("units", help="print every systemd unit of every module, one per line")
+    wb = sub.add_parser("web", help="the MCP endpoint and phone web app: passphrase, status")
+    wbsub = wb.add_subparsers(dest="web_cmd", required=True)
+    wbsub.add_parser("passphrase", help="set the sign-in passphrase (root; typed twice, hidden)")
+    wbsub.add_parser("status", help="check the web unit: public URL, passphrase, health, connectors")
     args = ap.parse_args(argv)
 
     if args.cmd == "status":
@@ -1198,6 +1289,8 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
         if args.profiles_cmd == "set-parent":
             return cmd_profiles_set_parent(args.line_id, args.parent)
         return cmd_profiles_restore_deleted()
+    if args.cmd == "web":
+        return cmd_web_passphrase() if args.web_cmd == "passphrase" else cmd_web_status()
     if args.cmd == "modules":
         if args.modules_cmd == "units":
             return cmd_modules_units()
