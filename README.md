@@ -355,7 +355,9 @@ Then run `sudo filament-kit profiles build` (or wait for the next sync).
 - The PC sync finds Orca Slicer on the PC by itself (its folder in `%APPDATA%\OrcaSlicer`). It sends the Orca
   presets to the server along with the Bambu Studio ones and installs the Orca presets the server builds. It waits
   while Orca Slicer is open, just like for Bambu Studio. A PC without Orca Slicer only gets the Bambu Studio
-  presets. `filament-kit-sync status` on the PC shows the Orca folder it uses.
+  presets. While the server makes no Orca presets (no Orca printers set up as above), the PC sync leaves Orca
+  Slicer alone: it does not wait for it and sends nothing from it. `filament-kit-sync status` on the PC shows the
+  Orca folder it uses.
 - The same rules as for Bambu Studio apply: your edits in Orca Slicer are kept, and presets are deleted in Orca
   Slicer, never on disk.
 - `sudo filament-kit profiles status` shows the last build (its count is the Bambu Studio presets) and the

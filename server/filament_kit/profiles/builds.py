@@ -364,6 +364,9 @@ def _forget_old_pc(meta: dict) -> None:
     raw = _read_obj(_dir() / "installed.json")
     rec = _owner_record(raw.get("stamp"), raw.get("orca_stamp"))
     if rec is not None:
+        if "orca_inapp" not in rec:             # no Orca install yet: the owner's Orca record kept so far (e.g.
+            kept = _owner_edits() or {}         # seeded by migrate-ops) still counts (B-I3)
+            rec.update({k: kept[k] for k in ("orca_inapp", "orca_notes") if k in kept})
         _write_json(_dir() / OWNER_EDITS, rec)
     for name in ("installed.json", "deleted.json"):
         try:
@@ -633,7 +636,10 @@ def store_upload(kind: str, src: BinaryIO, *, device_id: str, user_id: str | Non
             _write_json(_live() / "meta.json", meta)
         if renew:                               # a build waited for this upload (S32)
             _set_state(wait_live=False)
-            request_rebuild("live upload after an install", h)
+            if kind == "orca_live":             # each hash under its own name (Ruling O)
+                request_rebuild("Orca live upload after an install", meta.get("live_hash"), orca_live_hash=h)
+            else:
+                request_rebuild("live upload after an install", h, orca_live_hash=meta.get("orca_live_hash"))
         return h
     finally:
         _rmtree(tmp)
@@ -966,6 +972,8 @@ def record_installed(stamp: str, device_id: str, trees: list[str] | None = None)
         if not (isinstance(stamp, str) and STAMP_RE.fullmatch(stamp)
                 and (_builds() / stamp / "BUILD.json").is_file()):
             raise _not_found(f"no build {stamp!r}")
+        # B-M4: "orca" counts only for a build with an orca/ tree (else it would become an empty Orca snapshot)
+        trees = [t for t in TREES if t in trees and (t == "base" or (_builds() / stamp / t).is_dir())]
         at = time.time()
         rec = {"stamp": stamp, "at": at, "device_id": device_id}
         prev = _installed() or {}
@@ -1021,6 +1029,7 @@ def state_view(device_id: str) -> dict:
     return {"owner": owner(), "you": device_id, "user_id": meta.get("user_id"),
             "live_hash": meta.get("live_hash"), "system_hash": _system_hash(meta),
             "orca_live_hash": meta.get("orca_live_hash"), "orca_system_hash": _system_hash(meta, "orca_system"),
+            "orca_target": _orca_config() is not None,     # B-I2: pc-sync syncs Orca only when true (Ruling X)
             "build": _build_view(),
             "last_attempt": _attempt_view(), "installed": _installed_view(),
             "rebuild_requested": {"at": req["at"], "live_hash": req["live_hash"],

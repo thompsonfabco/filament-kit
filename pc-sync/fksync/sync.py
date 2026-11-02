@@ -39,20 +39,24 @@
   these live presets, so only a new build can settle the difference.
 
 Orca Slicer (`orca` given: this PC has it; None: everything above, Bambu Studio only, exactly as before):
-  - Orca Slicer running counts like Bambu Studio running (`studio_running`, no server call).
+  - Orca is synced only when the server's state says `orca_target: true` (it makes Orca presets) and carries
+    `orca_live_hash` (a server without Orca support would ignore `target=orca` and take the zip as the Bambu
+    Studio live folder). Otherwise (also a server without the `orca_target` key), or after a 404 for a
+    target=orca upload, Orca is skipped entirely: no running check, no zip, no upload; one log line,
+    `state.json` `orca.note` (shown by `status`), retried after UPLOAD_BACKOFF for a 404 (B-I2).
+  - Orca Slicer running counts like Bambu Studio running (`studio_running`), checked right after `state()`.
   - Orca's user filament folder (`orca_live`) and its system presets (`orca_system`, zips.orca_system) are
     uploaded with `?target=orca` by the same rules (hash compare, 6 h backoff on 400/413, `orca_live_owed`
-    after an install), but only when the server's state carries `orca_live_hash` (a server without Orca
-    support would ignore `target=orca` and take the zip as the Bambu Studio live folder). Without it, or after a
-    404 for a target=orca upload, Orca is skipped quietly: one log line, `state.json` `orca.note` (shown by
-    `status`), retried after UPLOAD_BACKOFF for a 404.
+    after an install).
   - Orca never holds up Bambu Studio (Ruling Z). An Orca upload the server refused (400/413) or that could not
     be packed (too large, unreadable) is not tried again for UPLOAD_BACKOFF, `orca_live_owed` included; while
     the Orca live folder is not on the server, Orca is not synced this run. A build whose `orca_live_hash` is not
     this PC's Orca live hash asks for a rebuild, but its Bambu Studio presets are installed all the same; its
     orca/ tree is installed only when Orca is synced this run and the build was made from exactly these Orca
     presets (else "Orca presets not installed this run" is logged). An Orca preset changed since the install
-    (dirs.installed/orca) asks for a rebuild too. An interrupted install is resumed with the trees it was
+    (dirs.installed/orca, kept from the last Orca install by a base/-only install) asks for a rebuild too. The
+    installed build whose orca/ did not go in (`state.json` `installed.trees`) is caught up once Orca syncs
+    again (B-I1): its orca/ is installed when it was made from these Orca presets, else a rebuild is asked for. An interrupted install is resumed with the trees it was
     started with (marker `orca`), and only when Orca's presets are untouched as well. One `installed(stamp,
     trees)` report covers both trees and says which went in (["base"] or ["base", "orca"], Ruling AB: the
     server diffs the Orca folder against the last build whose orca/ was installed); a report still owed after
@@ -109,6 +113,8 @@ LABELS = {"live": "live presets", "system": "Bambu Studio system presets",
           "orca_live": "Orca Slicer live presets", "orca_system": "Orca Slicer system presets"}
 ORCA_UNSUPPORTED = ("the server does not take Orca Slicer presets (update filament-kit on the server); "
                     "only Bambu Studio is synced")
+ORCA_NO_TARGET = ("the server makes no Orca Slicer presets (no Orca printers are set up there); only Bambu Studio "
+                  "is synced")
 
 
 class _Run:
@@ -234,6 +240,9 @@ class _Run:
             return False
         if "orca_live_hash" not in server:  # an older server: target=orca would land in the Bambu live folder
             self._orca_off(ORCA_UNSUPPORTED)
+            return False
+        if server.get("orca_target") is not True:   # B-I2: no Orca printers there (or a server without the key)
+            self._orca_off(ORCA_NO_TARGET)
             return False
         prev = self.st.get("orca") or {}
         if prev.get("unsupported_at") and self.now - float(prev["unsupported_at"]) < UPLOAD_BACKOFF:
@@ -377,9 +386,9 @@ class _Run:
         stale_orca = list(getattr(res, "stale_orca", []) or [])
         if self.o is not None:
             self.st["stale_orca"] = stale_orca
-        self.st["installed"] = {"stamp": stamp, "at": self.now}
         self.st.pop("requested", None)
         trees = ["base", "orca"] if with_orca and (build_dir / "orca").is_dir() else ["base"]
+        self.st["installed"] = {"stamp": stamp, "at": self.now, "trees": trees}
         self.st["report"] = stamp
         self.st["report_trees"] = trees
         self.st["live_owed"] = True             # until upload_live() succeeds (S32)
@@ -499,12 +508,13 @@ class _Run:
     def run(self) -> str:
         if self.running():
             return self.finish("studio_running", "Bambu Studio is open; trying again next run")
-        if self.o is not None and self.orca_running():
-            return self.finish("studio_running", "Orca Slicer is open; trying again next run")
         server = self.c.state()
         owner, you = server.get("owner"), server.get("you")
         if owner not in (None, you):
             return self._other_pc(f"the server's sync PC is device {owner}")
+        # B-I2: Orca Slicer open only matters when the server makes Orca presets (asked after state())
+        if self._orca_wanted(server) and self.orca_running():
+            return self.finish("studio_running", "Orca Slicer is open; trying again next run")
 
         marker = self._marker()
         if marker is not None:
@@ -529,6 +539,9 @@ class _Run:
         stamp = build.get("stamp")
         installed = (server.get("installed") or {}).get("stamp")
         if installed == stamp:
+            done = self._orca_catch_up(stamp, build, here)
+            if done is not None:
+                return done
             if self.changed_since_install():
                 # a generated preset changed in the app since this install (S29b, S31): rebuild
                 if self.request(here):
@@ -553,14 +566,42 @@ class _Run:
             self.log(f"build {stamp} predates your latest Orca Slicer presets; asked for a rebuild")
         return self.install(stamp, accepted)
 
+    def _orca_went_in(self, stamp: str) -> bool:
+        """This PC installed build `stamp`'s orca/ tree (state.json `installed.trees`; an older state.json: the
+        snapshot has an orca/ tree, which before B-I1 it only had when the Orca tree went in)."""
+        inst = self.st.get("installed") or {}
+        if inst.get("stamp") == stamp and isinstance(inst.get("trees"), list):
+            return "orca" in inst["trees"]
+        return (self.d.installed / "orca").is_dir()
+
+    def _orca_catch_up(self, stamp: str, build: dict, here: str) -> str | None:
+        """B-I1: the installed build's orca/ tree did not go in (Orca was not synced on that run, e.g. a refused
+        Orca upload). Once Orca syncs again: install it when the build was made from these Orca presets, else ask
+        for a rebuild. None when there is nothing to catch up (the normal installed-build checks follow)."""
+        orca_ok = self.orca_accepted()
+        if orca_ok is None or "orca_live_hash" not in build or self._orca_went_in(stamp):
+            return None
+        if build["orca_live_hash"] in orca_ok:
+            if self.changed_since_install(orca=False):
+                return None                     # Bambu Studio edits since: those ask for a rebuild first
+            self.log(f"installing the Orca Slicer presets of build {stamp} (they did not go in with its install)")
+            # the base/ tree is this PC's install of the same build, unchanged since: its live hash may differ
+            return self.install(stamp, self.accepted_hashes(here) | {build.get("live_hash")})
+        if self.request(here):
+            return self.finish("rebuild_requested", f"build {stamp} is installed without your Orca Slicer "
+                                                    "presets; they were sent and a rebuild asked for")
+        at = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.st["requested"]["at"]))
+        return self.finish("waiting", f"waiting for the rebuild asked at {at}")
+
     def _apps(self) -> str:
         return "Bambu Studio / Orca Slicer" if self.orca_on else "Bambu Studio"
 
-    def changed_since_install(self) -> bool:
-        """A generated preset of the installed build differs from its live copy by inapp.diff, or is gone."""
+    def changed_since_install(self, orca: bool = True) -> bool:
+        """A generated preset of the installed build differs from its live copy by inapp.diff, or is gone (Orca's
+        only when Orca is synced this run)."""
         if self._changed(self.d.installed / "base", self.f.user_filament / "base"):
             return True
-        return self.o is not None and self._changed(self.d.installed / "orca", self.o.user_filament)
+        return orca and self.orca_on and self.o is not None             and self._changed(self.d.installed / "orca", self.o.user_filament)
 
     @staticmethod
     def _changed(snap: Path, live: Path) -> bool:

@@ -90,7 +90,8 @@ def test_state_before_any_sync(c):
     r = c.get("/api/sync/state", headers=auth(tok))
     assert r.status_code == 200
     assert r.json() == {"owner": None, "you": device_of(tok), "user_id": None, "live_hash": None,
-                        "system_hash": None, "orca_live_hash": None, "orca_system_hash": None, "build": None,
+                        "system_hash": None, "orca_live_hash": None, "orca_system_hash": None, "orca_target": False,
+                        "build": None,
                         "last_attempt": None, "installed": None, "rebuild_requested": None}
 
 
@@ -211,6 +212,7 @@ def test_build_download_and_installed(c, sm):
     assert r.status_code == 404 and r.json()["error"] == "not_found"
     r = c.post("/api/sync/installed", json={"stamp": stamp, "trees": ["orca"]}, headers=auth(tok))
     assert r.status_code == 400
+    (config.paths().state / "profiles" / "builds" / stamp / "orca").mkdir()   # "orca" counts for an orca/ tree
     r = c.post("/api/sync/installed", json={"stamp": stamp, "trees": ["base", "orca"]}, headers=auth(tok))
     assert r.status_code == 200
     assert builds._read_obj(config.paths().state / "profiles" / "installed.json")["orca_stamp"] == stamp
