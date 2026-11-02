@@ -61,13 +61,14 @@ class Printer:
     ip: str = ""
     access_code: str = field(default="", repr=False)
     configured: bool = False
+    cert_fp: str = ""   # SHA-256 of the printer's TLS leaf (DER, lowercase hex), pinned on first use; see tlspin
 
 
 class RegistryError(Exception):
     pass
 
 
-_FIELDS = {"name", "model", "ip", "access_code", "configured"}
+_FIELDS = {"name", "model", "ip", "access_code", "configured", "cert_fp"}
 
 
 def _read() -> dict[str, Printer]:
@@ -160,7 +161,8 @@ class AlreadyConfigured(RegistryError):
 
 def set_code(serial: str, code: str, name: str | None = None, replace: bool = False) -> Printer:
     """Atomically configure `serial` with an Access Code (creating the entry if needed). A printer that is
-    already configured raises AlreadyConfigured unless `replace`; the name only changes when one is given."""
+    already configured raises AlreadyConfigured unless `replace`; the name only changes when one is given. Clears
+    the TLS pin: the next connection pins the leaf the printer presents then."""
     with _locked():
         printers = _read()
         p = printers.get(serial) or Printer(serial=serial)
@@ -168,7 +170,36 @@ def set_code(serial: str, code: str, name: str | None = None, replace: bool = Fa
             raise AlreadyConfigured(serial)
         p.access_code = code
         p.configured = True
+        p.cert_fp = ""          # adding the printer again with its code = trust the leaf it presents next
         p.name = (name or "").strip() or p.name or serial
         printers[serial] = p
         _write(printers)
         return p
+
+
+def pin(serial: str, fp: str) -> str:
+    """Pin `fp` as `serial`'s TLS leaf unless one is pinned already; returns the pin now in force (the earlier
+    one wins). A printer no longer in the registry is not written; `fp` is returned as is."""
+    with _locked():
+        printers = _read()
+        p = printers.get(serial)
+        if p is None:
+            return fp
+        if p.cert_fp:
+            return p.cert_fp
+        p.cert_fp = fp
+        _write(printers)
+        return fp
+
+
+def clear_pin(serial: str) -> bool:
+    """Forget `serial`'s pinned leaf; the next connection pins again. False when there is no such printer."""
+    with _locked():
+        printers = _read()
+        p = printers.get(serial)
+        if p is None:
+            return False
+        if p.cert_fp:
+            p.cert_fp = ""
+            _write(printers)
+        return True
