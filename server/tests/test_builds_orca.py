@@ -72,3 +72,193 @@ def test_family_build_is_byte_identical_to_before_the_orca_target(env, fixed_ids
         assert got[n] == want[n], n
     view = builds.state_view("a")["build"]
     assert set(view) == {"stamp", "live_hash", "created", "presets", "problems"}
+
+
+# ---------- two trees ----------
+
+import importlib
+import zipfile
+
+import test_generate_orca as TGO
+from filament_kit import profiles
+
+SV08 = TGO.SV08
+OUSER = "f790a1c6-1"
+
+
+@pytest.fixture
+def orca_cfg(env, monkeypatch, tmp_path):
+    """The owner's setup: the SV08 MAX in Orca Slicer, and Orca presets for the Bambu printers too."""
+    monkeypatch.setenv("FK_ETC", str(tmp_path / "etc"))
+    config.save({"slicer_printers": [SV08], "presets_orca": True})
+    return env
+
+
+def orca_system_zip() -> bytes:
+    files = {f"BBL/filament/{n}.json": json.dumps(cfg) for n, cfg in TGO.orca_bbl().items()}
+    files["OrcaFilamentLibrary/index.json"] = TGO.ORCA_INDEX.read_bytes()
+    return TB.zip_of(files)
+
+
+def orca_synced(live=None):
+    builds.store_upload("orca_system", io.BytesIO(orca_system_zip()), device_id="a")
+    builds.store_upload("orca_live", io.BytesIO(TB.zip_of(live or {"keep.json": "{}"})), device_id="a",
+                        user_id=OUSER)
+
+
+def _orca_live_zip_of(stamp, *, edit=None, drop=()) -> bytes:
+    tree = TB.profiles_dir() / "builds" / stamp / "orca"
+    files = {}
+    for p in sorted(tree.iterdir()):
+        if p.stem in drop:
+            continue
+        data = p.read_bytes()
+        if p.suffix == ".json" and edit and p.stem in edit:
+            data = json.dumps({**json.loads(data), **edit[p.stem]}).encode()
+        files[p.name] = data
+    return TB.zip_of(files)
+
+
+def load_pc_sync(name):
+    import sys
+    pkg = str(TB.REPO / "pc-sync")
+    if pkg not in sys.path:
+        sys.path.insert(0, pkg)
+    return importlib.import_module(f"fksync.{name}")
+
+
+def test_two_tree_build_zip_and_build_json(orca_cfg, tmp_path):
+    TB.synced(orca_cfg)
+    live = {"SUNLU PLA+ 2.0 @SV08 MAX 0.4.json": json.dumps({"name": "SUNLU PLA+ 2.0 @SV08 MAX 0.4"}),
+            "SUNLU PLA+ 2.0 @SV08 MAX 0.4.info": "sync_info = \nsetting_id = PFUSsv08\nbase_id = x\n"}
+    orca_synced(live=live)
+    r = builds.run_build(orca_cfg, now=TG.NOW)
+    assert r["ok"] is True, r
+    m = builds.manifest(r["stamp"])
+    meta = builds.meta()
+    assert m["orca_live_hash"] == meta["orca_live_hash"] and m["orca_system_hash"] == meta["orca_system_hash"]
+    assert m["orca_user_id"] == OUSER
+    assert m["orca_inapp"] == {} and m["orca_restored"] == [] and m["orca_deleted"] == []
+    targets = {p["name"]: p["target"] for p in m["presets"]}
+    assert targets[TGO.sv08("0.4")] == targets[TGO.h2d("0.4")] == "orca"
+    assert targets[TG.sunlu(TG.H2D, "0.4")] == "bambu_studio"
+    with zipfile.ZipFile(io.BytesIO(builds.build_zip(r["stamp"]))) as zf:
+        names = set(zf.namelist())
+        info = zf.read(f"orca/{TGO.sv08('0.4')}.info").decode()
+    assert {f"orca/{TGO.sv08('0.4')}.json", f"orca/{TGO.h2d('0.6')}.json",
+            f"base/{TG.sunlu(TG.H2D, '0.4')}.json"} <= names
+    assert all(n == "BUILD.json" or n.count("/") == 1 for n in names)              # orca/ is flat
+    assert "setting_id = PFUSsv08" in info and f"user_id = {OUSER}" in info
+    cur = builds.current()
+    assert cur["orca_live_hash"] == meta["orca_live_hash"]
+    assert builds.state_view("a")["build"]["orca_live_hash"] == meta["orca_live_hash"]
+    deleted = json.loads((TB.profiles_dir() / "deleted.json").read_text(encoding="utf-8"))
+    assert deleted == {"deleted_before": [], "orca_deleted_before": []}
+    # pc-sync takes the zip as it is
+    zips = load_pc_sync("zips")
+    got = zips.unpack_build(builds.build_zip(r["stamp"]), tmp_path / "unpacked")
+    assert got["orca_live_hash"] == meta["orca_live_hash"]
+    assert (tmp_path / "unpacked" / "orca" / f"{TGO.sv08('1.0')}.json").is_file()
+    # and installs it: no G-code refusal, the Orca tree flat into the Orca user folder
+    installer, studio, pstore = load_pc_sync("installer"), load_pc_sync("studio"), load_pc_sync("store")
+    bs = studio.StudioFolders(tmp_path / "bs", "BambuStudio", "1", tmp_path / "bs" / "user" / "filament",
+                              tmp_path / "bs" / "system")
+    (bs.user_filament / "base").mkdir(parents=True)
+    bs.system_filament.mkdir(parents=True)
+    of = studio.OrcaFolders(tmp_path / "orca", OUSER, tmp_path / "orca" / "filament", tmp_path / "orca" / "sys",
+                            None, None)
+    of.user_filament.mkdir(parents=True)
+    res = installer.install(tmp_path / "unpacked", bs, pstore.AppDirs(tmp_path / "app"), running=lambda: False,
+                            stamp_now="20270115-080000", orca=of, orca_running=lambda: False)
+    assert TGO.sv08("0.4") in res.installed_orca and TG.sunlu(TG.H2D, "0.4") in res.installed
+    assert (of.user_filament / f"{TGO.h2d('0.4')}.json").is_file()
+    # the AMS lookup serves Bambu Studio presets only
+    ref = profiles.preset_for(SUNLU_F, "O1D", 0.4)
+    assert ref is not None and ref.name == TG.sunlu(TG.H2D, "0.4")
+
+
+SUNLU_F = TB.SUNLU[0]
+
+
+def test_orca_printers_without_an_orca_upload_build_bambu_only(orca_cfg):
+    TB.synced(orca_cfg)
+    r = builds.run_build(orca_cfg, now=TG.NOW)
+    assert r["ok"] is True
+    m = builds.manifest(r["stamp"])
+    assert not [p for p in m["presets"] if p["target"] == "orca"]
+    assert [p for p in m["presets"] if p["target"] == "bambu_studio"]
+    assert any("no Orca Slicer system presets yet" in p for p in r["problems"])
+    assert m["orca_live_hash"] is None
+
+
+def test_orca_edits_deletions_and_the_wait_for_the_orca_live_folder(orca_cfg):
+    TB.synced(orca_cfg)
+    orca_synced()
+    b1 = builds.run_build(orca_cfg, now=TG.NOW)["stamp"]
+    builds.record_installed(b1, "a")
+    TB.tick()
+    builds.store_upload("live", io.BytesIO(TB._live_zip_of(b1)), device_id="a", user_id="1")
+    TB.tick()
+    builds.request_rebuild("bambu live only")
+    TB.tick()
+    r = builds.run_build(orca_cfg, now=TG.NOW + 1)
+    # S32 for the Orca tree: the Orca live folder predates the install
+    assert r["ok"] is False and r["waiting"] is True and r["error"] == builds.WAIT_LIVE
+    before = (TB.profiles_dir() / "rebuild-request").read_bytes()
+    TB.tick()
+    gone = TGO.sv08("1.0")
+    edit = {TGO.sv08("0.4"): {"nozzle_temperature": ["233"]}}
+    builds.store_upload("orca_live", io.BytesIO(_orca_live_zip_of(b1, edit=edit, drop=(gone,))), device_id="a",
+                        user_id=OUSER)
+    assert (TB.profiles_dir() / "rebuild-request").read_bytes() != before          # renewed by the Orca upload
+    TB.tick()
+    r = builds.run_build(orca_cfg, now=TG.NOW + 2)
+    assert r["ok"] is True, r
+    m = builds.manifest(r["stamp"])
+    assert m["orca_inapp"] == {TGO.sv08("0.4"): {"nozzle_temperature": ["233"]}} and m["inapp"] == {}
+    assert m["orca_deleted"] == [gone] and m["deleted"] == []
+    saved = json.loads((TB.profiles_dir() / "deleted.json").read_text(encoding="utf-8"))
+    assert saved["orca_deleted_before"] == [gone] and saved["deleted_before"] == []
+    builds.restore_deleted_next()
+    builds.request_rebuild("restore")
+    r = builds.run_build(orca_cfg, now=TG.NOW + 3)
+    assert builds.manifest(r["stamp"])["orca_restored"] == [gone]
+
+
+def test_orca_partial_install_values_are_not_edits(orca_cfg):
+    TB.synced(orca_cfg)
+    orca_synced()
+    b1 = builds.run_build(orca_cfg, now=TG.NOW)["stamp"]
+    builds.record_installed(b1, "a")
+    TB.tick()
+    builds.store_upload("live", io.BytesIO(TB._live_zip_of(b1)), device_id="a", user_id="1")
+    builds.store_upload("orca_live", io.BytesIO(_orca_live_zip_of(b1)), device_id="a", user_id=OUSER)
+    orca_cfg.filaments = [dict(f, density=1.31) for f in TB.SUNLU]
+    builds.request_rebuild("density")
+    b2 = builds.run_build(orca_cfg, now=TG.NOW + 1)["stamp"]
+    TB.tick()
+    # b2's install stopped part-way: Orca holds b2's values, the PC says so with partial=b2
+    builds.store_upload("orca_live", io.BytesIO(_orca_live_zip_of(b2)), device_id="a", user_id=OUSER, partial=b2)
+    builds.request_rebuild("after the partial install")
+    r = builds.run_build(orca_cfg, now=TG.NOW + 2)
+    assert r["ok"] is True, r
+    assert builds.manifest(r["stamp"])["orca_inapp"] == {}
+
+
+def test_new_sync_pc_keeps_the_owners_orca_edits(orca_cfg):
+    TB.synced(orca_cfg)
+    orca_synced()
+    b1 = builds.run_build(orca_cfg, now=TG.NOW)["stamp"]
+    builds.record_installed(b1, "a")
+    TB.tick()
+    builds.store_upload("live", io.BytesIO(TB._live_zip_of(b1)), device_id="a", user_id="1")
+    edit = {TGO.sv08("0.4"): {"nozzle_temperature": ["233"]}}
+    builds.store_upload("orca_live", io.BytesIO(_orca_live_zip_of(b1, edit=edit)), device_id="a", user_id=OUSER)
+    b2 = builds.run_build(orca_cfg, now=TG.NOW + 1)["stamp"]
+    builds.record_installed(b2, "a")
+    TB.tick()
+    TB.pair("b")
+    builds.store_upload("orca_live", io.BytesIO(_orca_live_zip_of(b1)), device_id="b", user_id=OUSER)
+    r = builds.run_build(orca_cfg, now=TG.NOW + 2)
+    assert r["ok"] is True, r
+    assert builds.manifest(r["stamp"])["orca_inapp"] == {TGO.sv08("0.4"): {"nozzle_temperature": ["233"]}}
