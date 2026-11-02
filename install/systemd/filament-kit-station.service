@@ -1,0 +1,26 @@
+[Unit]
+Description=filament-kit station: USB scale and NFC reader, read-only HTTP for the kit server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=filament-kit-station
+Group=filament-kit-station
+SupplementaryGroups=dialout audio
+ExecStart=/opt/filament-kit/venv/bin/python -I -m filament_kit.station
+Restart=always
+RestartSec=5
+# read-only code, no home, nothing to write
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+# Answers only the addresses in the drop-in written by `filament-kit modules apply`
+# (filament-kit-station.service.d/kit.conf: IPAddressAllow= and STATION_ALLOW).
+IPAddressDeny=any
+
+[Install]
+WantedBy=multi-user.target

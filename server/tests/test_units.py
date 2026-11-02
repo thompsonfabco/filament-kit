@@ -66,21 +66,35 @@ def test_build_path_unit():
     assert cp["Install"]["WantedBy"] == "multi-user.target"
 
 
-def test_install_enables_new_units_and_state_dirs():
+def test_install_ships_units_and_state_dirs():
+    """install.sh copies the units as resources; `modules apply` installs and enables them (apply.plan)."""
     text = _text(INSTALL / "install.sh")
-    for name in NEW_UNITS:
-        assert f'"$RES/systemd/{name}" /etc/systemd/system/{name}' in text, name
-    enable = [ln for ln in text.splitlines() if ln.startswith("systemctl enable filament-kit ")]
-    assert enable and "filament-kit-library.timer" in enable[0] and "filament-kit-build.path" in enable[0]
+    assert 'cp -R "$RES/systemd" "$RES/avahi" "$OPT/resources/"' in text
     assert ('install -d -m 750 -o filament-kit -g filament-kit '
             '"$STATE/profiles" "$STATE/library" "$STATE/library-local"') in text
-    assert "filament-kit profiles build || true" in text
 
 
-def test_uninstall_removes_all_four():
-    units_line = next(ln for ln in _text(INSTALL / "uninstall.sh").splitlines() if ln.startswith("UNITS="))
-    for name in NEW_UNITS:
+def test_uninstall_fallback_lists_every_unit():
+    units_line = next(ln for ln in _text(INSTALL / "uninstall.sh").splitlines()
+                      if ln.strip().startswith('UNITS="filament-kit'))
+    for name in NEW_UNITS + ["filament-kit-station.service", "spoolman.service", "filament-kit.service"]:
         assert name in units_line, name
+
+
+STATION = {"User": "filament-kit-station", "Group": "filament-kit-station",
+           "SupplementaryGroups": "dialout audio",
+           "ExecStart": "/opt/filament-kit/venv/bin/python -I -m filament_kit.station",
+           "Restart": "always", "ProtectSystem": "strict", "ProtectHome": "yes", "PrivateTmp": "yes",
+           "NoNewPrivileges": "yes", "CapabilityBoundingSet": "", "IPAddressDeny": "any"}
+
+
+def test_station_service():
+    cp = _unit("filament-kit-station.service")
+    svc = cp["Service"]
+    for k, v in STATION.items():
+        assert svc[k] == v, k
+    assert "IPAddressAllow" not in svc  # only in the drop-in apply writes
+    assert cp["Install"]["WantedBy"] == "multi-user.target"
 
 
 def test_backup_excludes():
