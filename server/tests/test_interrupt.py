@@ -129,14 +129,16 @@ def test_snapshot_cannot_be_saved_nothing_is_written(rig, monkeypatch):
     assert any("snapshot" in p for p in res.problems)
 
 
-def test_leftover_test_colour_is_never_taken_as_original(rig):
-    """A slot showing a test-colour-shaped colour (left by an interrupted run) refuses the test: nothing written."""
+def test_real_near_red_spool_is_mapped_not_refused(rig):
+    """R3: a slot whose real colour has the test-colour shape no longer locks mapping out; the test picks a test
+    colour that no slot holds and puts the near-red colour back afterwards."""
     m, printer, _ = rig
-    printer.push({"vt_tray": dict(REPORT["vt_tray"], tray_color="FA0300FF")})
-    assert m.wait_report(SERIAL, lambda r: r["vt_tray"]["tray_color"] == "FA0300FF", 2)
+    printer.push({"vt_tray": dict(REPORT["vt_tray"], tray_color="FA0600FF")})
+    assert m.wait_report(SERIAL, lambda r: r["vt_tray"]["tray_color"] == "FA0600FF", 2)
     res = slottest.run(m, SERIAL, lambda t: None)
-    assert printer.writes == [] and res.confirmed == {}
-    assert any("Ext" in p and "test colour" in p for p in res.problems)
+    assert res.restored is True and len(res.confirmed) == 6, res.problems
+    assert "FA0600FF" not in colours_written(printer)[:6]
+    assert printer.tray(254, 0)["tray_color"] == "FA0600FF"
     assert not snapshot.pending(SERIAL)
 
 
@@ -149,12 +151,18 @@ def test_slot_test_refuses_while_a_snapshot_is_pending(rig):
     assert snapshot.pending(SERIAL)
 
 
-def test_looks_like_test_colour():
-    assert snapshot.looks_like_test_colour("FA0300FF", 6)
-    assert snapshot.looks_like_test_colour("fb0100ff", 6)
-    assert not snapshot.looks_like_test_colour("FA0700FF", 6)     # beyond the slot count
-    assert not snapshot.looks_like_test_colour("FA0300FE", 6)
-    assert not snapshot.looks_like_test_colour("FF0000FF", 6)
+def test_corrupt_snapshot_says_what_test_colours_look_like_and_where_the_file_is(rig):
+    """R3: an unreadable snapshot names the shape of the test colours and the file to delete."""
+    m, printer, _ = rig
+    f = snapshot.path(SERIAL)
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text("{not json", encoding="utf-8")
+    probs = snapshot.restore(m, SERIAL)
+    assert len(probs) == 1, probs
+    p = probs[0]
+    assert "FAnn00FF" in p and "F7" in p and "FE" in p and "red" in p
+    assert "Studio" in p and str(f) in p and "delete" in p
+    assert printer.writes == [] and snapshot.pending(SERIAL)
 
 
 # ---------------------------------------------------------------- the snapshot file + mapping
@@ -215,6 +223,62 @@ def test_next_job_refused_when_the_snapshot_restore_is_not_confirmed(rig, stub_j
     assert any("interrupted mapping" in p for p in v["problems"])
     assert snapshot.pending(SERIAL)
     assert v["calibrated"] is False and v["observe"] is True
+
+
+def set_colour(m, printer, unit, tray, colour):
+    """The owner (RFID, Studio, touchscreen) changes a slot's colour on the printer."""
+    rep = copy.deepcopy(printer.report["ams"])
+    rep["ams"][unit]["tray"][tray]["tray_color"] = colour
+    printer.push({"ams": rep})
+    assert m.wait_report(SERIAL, lambda r: r["ams"]["ams"][unit]["tray"][tray]["tray_color"] == colour, 2)
+
+
+def test_stale_restore_leaves_a_slot_the_owner_changed_since(rig):
+    """R2: after a kill -9, a slot whose colour is no test colour was changed by the owner since: left as is."""
+    m, printer, _ = rig
+    leave_test_colours(printer)
+    set_colour(m, printer, 0, 2, "123456FF")              # A3: the owner swapped the spool meanwhile
+    assert snapshot.restore(m, SERIAL) == []
+    assert sorted({(w["ams_id"], w["tray_id"]) for w in printer.writes}) == [(0, 0), (0, 1)]
+    assert printer.tray(0, 2)["tray_color"] == "123456FF"
+    assert_back_to_original(printer, ["A1", "A2", "A4", "HT-A", "Ext"])
+    assert not snapshot.pending(SERIAL)
+
+
+def test_stale_calibration_snapshot_writes_nothing(rig):
+    """R2: the calibration writes no slot setting, so a stale calibration snapshot puts nothing back."""
+    m, printer, _ = rig
+    slots = [{"label": "A1", "ams_id": 0, "tray_id": 0, "setting": dict(printer.tray(0, 0))}]
+    snapshot.save(SERIAL, "calibration", slots)
+    set_colour(m, printer, 0, 0, "123456FF")              # the owner loaded another spool into A1
+    assert snapshot.restore(m, SERIAL) == []
+    assert printer.writes == [] and printer.tray(0, 0)["tray_color"] == "123456FF"
+    assert not snapshot.pending(SERIAL)
+
+
+def test_old_slottest_snapshot_still_restores_its_test_colours(rig):
+    """R2: an old snapshot (more than 10 minutes) restores only slots still showing one of its test colours."""
+    m, printer, _ = rig
+    leave_test_colours(printer)
+    f = snapshot.path(SERIAL)
+    d = json.loads(f.read_text(encoding="utf-8"))
+    f.write_text(json.dumps(dict(d, at=time.time() - 3600)), encoding="utf-8")
+    set_colour(m, printer, 0, 3, "ABCDEFFF")              # A4 changed since
+    assert snapshot.restore(m, SERIAL) == []
+    assert sorted({(w["ams_id"], w["tray_id"]) for w in printer.writes}) == [(0, 0), (0, 1)]
+    assert printer.tray(0, 3)["tray_color"] == "ABCDEFFF"
+
+
+def test_a_new_spool_in_a_test_colour_outside_the_snapshot_does_not_block(rig):
+    """R2: the final 'no test colour left' check looks only at the snapshot's own (non-forgotten) slots."""
+    m, printer, _ = rig
+    leave_test_colours(printer)
+    snapshot.forget(SERIAL, 0, 3)                         # A4 was loaded since (Load into printer) ...
+    set_colour(m, printer, 0, 3, "FA0100FF")              # ... with a real near-red spool
+    assert snapshot.restore(m, SERIAL) == []
+    assert printer.tray(0, 3)["tray_color"] == "FA0100FF"
+    assert_back_to_original(printer, ["A1", "A2"])
+    assert not snapshot.pending(SERIAL)
 
 
 def test_loading_a_slot_drops_it_from_the_snapshot():
@@ -318,6 +382,65 @@ def test_thread_start_failure_releases_the_lock(rig, monkeypatch, stub_jobs):
     assert mp.view(SERIAL)["state"] == "failed"
 
 
+def test_abort_takes_no_lock(rig):
+    """Minor: a signal handler calls abort while the main thread holds the Mapper's lock (in _begin, view):
+    abort must not wait for that lock."""
+    m, printer, _ = rig
+    mp = mapping.Mapper(m)
+    done = threading.Event()
+    with mp._lock:
+        t = threading.Thread(target=lambda: (mp.abort(SERIAL), done.set()), daemon=True)
+        t.start()
+        assert done.wait(2), "abort blocked on the Mapper's lock"
+
+
+def test_abort_before_the_job_stops_the_next_job_before_anything_is_touched(rig, stub_jobs):
+    m, printer, _ = rig
+    mp = mapping.Mapper(m)
+    mp.abort(SERIAL)
+    v = mp.run(SERIAL)
+    assert v["state"] == "failed" and stub_jobs["st"] == 0 and printer.writes == []
+    v = mp.run(SERIAL)                                    # the request was used up by that job
+    assert v["state"] == "done" and stub_jobs["st"] == 1
+
+
+@pytest.fixture
+def leftover_spy(monkeypatch):
+    calls = []
+    monkeypatch.setattr(calib3mf, "delete_leftover", lambda serial, printer=None: calls.append(serial) or [])
+    return calls
+
+
+def calibration_snapshot(printer):
+    snapshot.save(SERIAL, "calibration", [{"label": "A1", "ams_id": 0, "tray_id": 0,
+                                           "setting": dict(printer.tray(0, 0))}])
+
+
+def test_next_job_deletes_a_killed_calibrations_file(rig, stub_jobs, leftover_spy):
+    """Minor: kill -9 mid-calibration left /cache/fk-calib-<serial>.gcode.3mf: the next job deletes it."""
+    m, printer, _ = rig
+    calibration_snapshot(printer)
+    assert mapping.Mapper(m).run(SERIAL)["state"] == "done"
+    assert leftover_spy == [SERIAL] and not snapshot.pending(SERIAL)
+
+
+def test_next_job_after_a_slot_test_snapshot_does_not_touch_ftps(rig, stub_jobs, leftover_spy):
+    m, printer, _ = rig
+    leave_test_colours(printer)
+    assert m.wait_report(SERIAL, lambda r: r["ams"]["ams"][0]["tray"][1]["tray_color"] == "FA0200FF", 2)
+    mapping.Mapper(m).run(SERIAL)
+    assert leftover_spy == []
+
+
+def test_service_start_deletes_a_killed_calibrations_file(rig, leftover_spy):
+    m, printer, _ = rig
+    calibration_snapshot(printer)
+    mp = mapping.Mapper(m)
+    mp.recover_pending(wait=5)
+    mp.shutdown(10)
+    assert leftover_spy == [SERIAL] and not snapshot.pending(SERIAL)
+
+
 def test_interrupted_text_says_test_colours_may_remain():
     assert "test colour" in mapping.INTERRUPTED and "next run" in mapping.INTERRUPTED
 
@@ -343,6 +466,30 @@ def test_cli_signal_aborts_restores_then_exits_non_zero(rig, monkeypatch, capsys
     assert signal.getsignal(signal.SIGINT) is before       # handlers put back
     out = capsys.readouterr().out
     assert "stopped" in out.lower()
+
+
+@pytest.mark.parametrize("err", [RuntimeError("reentrant call inside <_io.BufferedWriter name='<stdout>'>"),
+                                 OSError(5, "Input/output error")])
+def test_cli_signal_aborts_even_when_its_message_cannot_be_printed(rig, monkeypatch, err):
+    """Minor: the handler aborts first; a print that fails (reentrant, or EIO after SIGHUP) loses nothing."""
+    m, printer, _ = rig
+    seen = {}
+
+    def st_run(manager, serial, on_step, should_stop=None):
+        signal.getsignal(signal.SIGINT)(signal.SIGINT, None)
+        seen["stop"] = should_stop()
+        return slottest.SlotTestResult(problems=["interrupted: mapping was stopped; slot test stopped"])
+    monkeypatch.setattr(slottest, "run", st_run)
+    monkeypatch.setattr(m, "stop", lambda: None)
+    real = print
+
+    def flaky(*a, **k):
+        if a and "Stopping" in str(a[0]):
+            raise err
+        return real(*a, **k)
+    monkeypatch.setattr(cli, "print", flaky, raising=False)
+    rc = cli.main(["printer", "map", SERIAL], manager_factory=lambda s: m)
+    assert seen["stop"] is True and rc != 0
 
 
 # ---------------------------------------------------------------- calibration snapshot

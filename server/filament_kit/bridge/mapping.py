@@ -14,7 +14,9 @@ Interruptions never leave a test colour silently: `abort(serial)` (the CLI on SI
 calibration restore every slot before the job ends `failed`; a KeyboardInterrupt still restores first. For a
 process killed outright, the slot snapshot on disk (`snapshot`, saved before the first write, deleted after a
 confirmed restore) is restored at the next job's start (the job is refused unless that restore is confirmed) and
-by the service at start (`recover_pending`) once the printer is connected and idle.
+by the service at start (`recover_pending`) once the printer is connected and idle; a calibration snapshot also
+gets the killed job's file deleted from the printer then (best effort). `abort` takes no lock, so a signal
+handler may call it at any moment.
 
 Outcome (a job that ends `failed` never leaves a trusted map):
   - slot test could not put every slot back -> `failed`, problems name each slot, no calibration; the saved
@@ -26,7 +28,8 @@ Outcome (a job that ends `failed` never leaves a trusted map):
     just proved for the loaded ones), `calibrated: true, observe: false`;
   - calibration inconsistent or refused -> the same slots, default global ids, `calibrated: false, observe:
     true` (filament use is only logged), the reason in problems;
-  - a calibration that could not restore a slot (`CalibResult.restored` false) -> `failed`, the map saved
+  - a calibration that left something changed (`CalibResult.restored` false: a filament left loaded in the
+    toolhead; the calibration writes no slot, so a slot changed meanwhile is only reported) -> `failed`, the map saved
     with `calibrated: false, observe: true` even when the decoding was consistent.
 Slots the slot test did not confirm are left out of the map and listed in problems.
 
@@ -84,6 +87,21 @@ class CertChanged(Exception):
     """The printer's certificate changed (state `cert_changed`): nothing is sent until it is added again."""
 
 
+class _Flag:
+    """A stop flag a signal handler may set: `threading.Event.set` takes a lock (its Condition), which would
+    deadlock if the signal landed while the main thread held it. Setting a bool is atomic and takes none."""
+    __slots__ = ("_on",)
+
+    def __init__(self):
+        self._on = False
+
+    def set(self) -> None:
+        self._on = True
+
+    def is_set(self) -> bool:
+        return self._on
+
+
 @dataclass
 class _Job:
     id: str
@@ -92,7 +110,7 @@ class _Job:
     problems: list[str] = field(default_factory=list)
     started: float = field(default_factory=time.time)
     finished: float | None = None
-    abort: threading.Event = field(default_factory=threading.Event)
+    abort: _Flag = field(default_factory=_Flag)
 
 
 def _dir(serial: str):
@@ -235,6 +253,20 @@ def check_ready(manager, serial: str) -> None:
     slottest.check_idle(manager, serial)
 
 
+def _delete_leftover_job(serial: str) -> None:
+    """A pending calibration snapshot means a calibration was killed mid-job: its file may still be on the
+    printer (`/cache/fk-calib-<serial>.gcode.3mf`). Delete it, best effort (logged, never fatal); read before the
+    restore, which deletes the snapshot."""
+    snap = snapshot.load(serial)
+    if snap is None or snap.get("kind") != "calibration":
+        return
+    problems = calib3mf.delete_leftover(serial)
+    if problems:
+        log.warning("mapping %s: the killed calibration's file was not deleted: %s", serial, problems)
+    else:
+        log.info("mapping %s: deleted the file a killed calibration left on the printer", serial)
+
+
 def _distrust(serial: str) -> None:
     """After a failed restore: keep the saved map's slots, but never as a trusted (calibrated) map."""
     m = ams.load_map(serial)
@@ -267,10 +299,10 @@ class Mapper:
                 _give_back(serial, plock)
                 raise
             job = _Job(uuid.uuid4().hex)
+            self._jobs[serial] = job        # registered first: an abort from now on reaches it directly
             if self._closing.is_set() or serial in self._abort_pending:
                 self._abort_pending.discard(serial)
                 job.abort.set()
-            self._jobs[serial] = job
         _save_status(serial, job)
         log.info("mapping %s: job %s started", serial, job.id)
         return job, plock
@@ -299,13 +331,17 @@ class Mapper:
         return self.view(serial)
 
     def abort(self, serial: str) -> None:
-        """Stop the printer's job as soon as it can: the slots are put back first (CLI signals, shutdown)."""
-        with self._lock:
-            j = self._jobs.get(serial)
-            if j is not None and j.state == "running":
-                j.abort.set()
-            else:
-                self._abort_pending.add(serial)
+        """Stop the printer's job as soon as it can: the slots are put back first (CLI signals, shutdown).
+
+        Called from signal handlers, so it takes no lock (the main thread may hold `_lock` in `_begin` or `view`):
+        only atomic set / dict operations and `_Flag.set`. The request is left pending for a job not registered
+        yet (`_begin` registers the job, then takes up a pending request) and dropped once it reached a running
+        job; either order of the two ends with the job aborted."""
+        self._abort_pending.add(serial)
+        j = self._jobs.get(serial)
+        if j is not None and j.state == "running":
+            j.abort.set()
+            self._abort_pending.discard(serial)
 
     def shutdown(self, timeout: float = SHUTDOWN_WAIT) -> None:
         """Service stop, BEFORE the printer connections close: stop every job (and the start-up restore) and wait
@@ -370,6 +406,7 @@ class Mapper:
                             "mapping run restores it", serial, type(e).__name__)
                 return
             log.info("mapping %s: restoring the slots a stopped mapping left (slot snapshot)", serial)
+            _delete_leftover_job(serial)
             problems = snapshot.restore(self._m, serial)
             if problems:
                 log.warning("mapping %s: restore from the slot snapshot not confirmed: %s", serial, problems)
@@ -423,6 +460,7 @@ class Mapper:
         if job.abort.is_set():
             return fail([STOPPED.split(";")[0] + "; nothing was changed"])
         if snapshot.pending(serial):
+            _delete_leftover_job(serial)
             probs = snapshot.restore(self._m, serial, step)
             if probs:
                 return fail(["the slots an interrupted mapping changed could not all be restored, so nothing else "

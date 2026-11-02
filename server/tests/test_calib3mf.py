@@ -248,25 +248,32 @@ def test_printer_reports_other_ids(fake_ftp, printer):
     assert any("HT-A" in p for p in r.problems)
 
 
-def test_changed_slot_is_restored_and_verified(fake_ftp, printer):
+def a1_changed(r):
+    return any(p.startswith("A1: its setting changed on the printer during the calibration") for p in r.problems)
+
+
+def test_slot_changed_during_the_job_is_left_as_is(fake_ftp, printer):
+    """Round 2: the calibration writes no slot, so a slot that changed meanwhile was changed by someone else: it is
+    reported and left as is, never written; `restored` means we left nothing changed."""
     m = FakeManager(fake_ftp.root, "clobber")
     r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
     assert r.consistent is True, r.problems
-    assert m.set_slots == [(0, 0, {"tray_info_idx": "GFA00", "tray_color": "FF0000FF", "tray_type": "PLA",
-                                   "nozzle_temp_min": 190, "nozzle_temp_max": 230})]
+    assert m.set_slots == []
     t = m.report["ams"]["ams"][0]["tray"][0]
-    assert (t["tray_color"], t["tray_info_idx"]) == ("FF0000FF", "GFA00")
-    assert r.problems == []
+    assert (t["tray_color"], t["tray_info_idx"]) == ("123456FF", "")
+    assert a1_changed(r), r.problems
     assert r.restored is True
 
 
-def test_restore_not_confirmed(fake_ftp, printer):
+def test_slot_check_never_calls_set_slot(fake_ftp, printer):
     m = FakeManager(fake_ftp.root, "clobber")
-    m.set_slot = lambda *a: (m.set_slots.append(a), {"result": "success"})[1]     # accepted, never applied
+
+    def boom(*a):
+        raise AssertionError("the calibration must never write a slot")
+    m.set_slot = boom
     r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
-    assert m.set_slots
-    assert any("A1" in p and "restore" in p for p in r.problems)
-    assert r.restored is False
+    assert a1_changed(r) and r.restored is True
+    assert not (fake_ftp.root / "cache" / FILE).exists()
 
 
 def test_busy_printer_untouched(fake_ftp, printer):
@@ -308,26 +315,14 @@ def test_upload_dropped_midway_file_still_deleted(fake_ftp, printer):
     assert not (fake_ftp.root / "cache" / FILE).exists()                       # the partial file is gone
 
 
-def test_delete_crash_does_not_skip_restore(fake_ftp, printer, monkeypatch):
+def test_delete_crash_does_not_skip_the_slot_check(fake_ftp, printer, monkeypatch):
     def boom(self, path):
         raise RuntimeError("unexpected")
     monkeypatch.setattr(ftps.Client, "delete", boom)
     m = FakeManager(fake_ftp.root, "clobber")
     r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
     assert any("could not delete" in p for p in r.problems)
-    assert [s[:2] for s in m.set_slots] == [(0, 0)]                            # restored anyway
-    assert not any("restore" in p for p in r.problems)
-
-
-def test_restore_crash_is_a_problem(fake_ftp, printer):
-    m = FakeManager(fake_ftp.root, "clobber")
-    def boom(*a):
-        raise RuntimeError("unexpected")
-    m.set_slot = boom
-    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
-    assert any("A1" in p and "restore" in p for p in r.problems)
-    assert r.restored is False
-    assert not (fake_ftp.root / "cache" / FILE).exists()
+    assert a1_changed(r) and m.set_slots == []
 
 
 def test_publish_raises(fake_ftp, printer):
@@ -346,7 +341,7 @@ def test_wait_report_raises_during_job(fake_ftp, printer):
     assert r.consistent is False
     assert any("lost" in p for p in r.problems)
     assert not (fake_ftp.root / "cache" / FILE).exists()
-    assert [s[:2] for s in m.set_slots] == [(0, 0)]                            # still restored
+    assert a1_changed(r) and m.set_slots == []                                 # checked, never written
 
 
 def test_wait_report_raises_everywhere_after_snapshot(fake_ftp, printer):
@@ -355,15 +350,8 @@ def test_wait_report_raises_everywhere_after_snapshot(fake_ftp, printer):
     r = calib3mf.run(m, SERIAL, slotmap_for(m.report))      # must not raise
     assert r.consistent is False
     assert not (fake_ftp.root / "cache" / FILE).exists()
-    assert any("restore not confirmed" in p for p in r.problems)
-    assert r.restored is False
-
-
-def test_restore_refused_is_not_restored(fake_ftp, printer):
-    m = FakeManager(fake_ftp.root, "clobber")
-    m.set_slot = lambda *a: (m.set_slots.append(a), {"result": "fail", "reason": "nope"})[1]
-    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
-    assert r.restored is False and any("refused to restore" in p for p in r.problems)
+    assert any("could not check the slots" in p for p in r.problems)
+    assert m.set_slots == [] and r.restored is True                            # we changed nothing
 
 
 def test_nothing_changed_counts_as_restored(fake_ftp, printer):
@@ -438,10 +426,179 @@ def test_filament_left_loaded_after_the_job_is_not_restored(fake_ftp, printer):
     assert r.restored is False
 
 
-def test_job_that_never_started_still_gets_a_stop(fake_ftp, printer):
-    m = FakeManager(fake_ftp.root, "silent")
+def commands(m):
+    return [p["print"]["command"] for p in m.published]
+
+
+PREVIOUS_RUNS = [f"fk-calib-{SERIAL}", f"fk-calib-{SERIAL}-0a0b0c"]     # the old fixed name, an earlier run
+
+
+def earlier_calibration_report(name):
+    rep = base_report()
+    rep.update({"gcode_state": "FINISH", "subtask_name": name, "task_id": "222"})
+    return rep
+
+
+def test_each_run_sends_its_own_subtask_name(fake_ftp, printer):
+    names = []
+    for _ in range(2):
+        m = FakeManager(fake_ftp.root)
+        r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+        sent = m.published[0]["print"]["subtask_name"]
+        assert re.fullmatch(rf"fk-calib-{SERIAL}-[0-9a-f]{{6}}", sent) and r.job == sent
+        assert m.published[0]["print"]["url"] == f"ftp:///cache/{FILE}"     # the file keeps the fixed name
+        names.append(sent)
+    assert names[0] != names[1]
+
+
+@pytest.mark.parametrize("previous", PREVIOUS_RUNS)
+def test_never_started_after_an_earlier_calibration_sends_no_stop(fake_ftp, printer, previous):
+    """Round 2: the printer still shows an earlier calibration run: not this run, so no stop."""
+    m = FakeManager(fake_ftp.root, "silent", report=earlier_calibration_report(previous))
     calib3mf.run(m, SERIAL, slotmap_for(m.report))
-    assert m.published[-1]["print"]["command"] == "stop"
+    assert commands(m) == ["project_file"]
+
+
+@pytest.mark.parametrize("previous", PREVIOUS_RUNS)
+def test_stale_report_naming_a_previous_run_plus_heating_print_sends_no_stop(fake_ftp, printer, previous):
+    """Round 2: someone starts a print whose first PREPARE push still carries the previous calibration run's
+    subtask_name, and it heats: that is not this run, so it is never stopped."""
+    m = OtherJobManager(fake_ftp.root, {"gcode_state": "PREPARE", "nozzle_target_temper": 220})
+    m.report = earlier_calibration_report(previous)
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert commands(m) == ["project_file"], m.published
+    assert any("heat" in p and "nothing was stopped" in p for p in r.problems), r.problems
+
+
+def test_another_job_changing_a_slot_gets_no_write(fake_ftp, printer):
+    """Round 2: another print starts and changes slot A1 (RFID / Studio): the calibration writes nothing to it."""
+    rep = copy.deepcopy(base_report()["ams"])
+    rep["ams"][0]["tray"][0] = tray(0, "PETG", "ABCDEFFF", "GFG02")
+    m = OtherJobManager(fake_ftp.root, {**THEIRS, "ams": rep})
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert "stop" not in commands(m) and m.set_slots == []
+    assert m.report["ams"]["ams"][0]["tray"][0]["tray_color"] == "ABCDEFFF"
+    assert a1_changed(r) and r.restored is True and r.other_job is True
+
+
+def test_job_that_never_started_on_an_idle_printer_sends_no_stop(fake_ftp, printer):
+    m = FakeManager(fake_ftp.root, "silent")                   # still shows the owner's last print, "benchy"
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert commands(m) == ["project_file"]
+    assert any("did not start" in p for p in r.problems)
+
+
+class OtherJobManager(FakeManager):
+    """The printer accepts our job, but someone starts their own print (touchscreen / Studio) instead: `other` is
+    the report delta that print sends."""
+
+    def __init__(self, ftp_root, other):
+        super().__init__(ftp_root, "silent")
+        self.other = other
+
+    def publish(self, serial, payload):
+        reply = super().publish(serial, payload)
+        if payload["print"]["command"] == "project_file":
+            self.queue.append(copy.deepcopy(self.other))
+            return {"command": "project_file", "result": "success"}
+        return reply
+
+
+THEIRS = {"gcode_state": "PREPARE", "subtask_name": "grandmas-vase", "task_id": "999"}
+
+
+@pytest.mark.parametrize("extra", [
+    {"nozzle_target_temper": 220},
+    {"device": {"extruder": {"info": [{"id": 0, "temp": (220 << 16) | 25}]}}},
+    {"ams": {"tray_now": "0"}},
+    {},
+])
+def test_another_job_starting_in_the_window_is_never_stopped(fake_ftp, printer, extra):
+    """R1: another print that starts (and heats / loads) while we wait for ours is not stopped; the calibration
+    is abandoned, our file deleted, the slots restored (R9), and its filament load is not held against us."""
+    m = OtherJobManager(fake_ftp.root, {**THEIRS, **extra})
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert "stop" not in commands(m), m.published
+    assert any(p.startswith("the printer started another job; calibration abandoned") for p in r.problems), \
+        r.problems
+    assert r.consistent is False
+    assert r.restored is True and calib3mf.LEFT_LOADED not in r.problems
+    assert not (fake_ftp.root / "cache" / FILE).exists()
+
+
+def test_never_started_while_another_job_runs_sends_no_stop(fake_ftp, printer):
+    m = OtherJobManager(fake_ftp.root, {"gcode_state": "RUNNING", "subtask_name": "grandmas-vase",
+                                        "task_id": "999"})
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert commands(m) == ["project_file"]
+    assert any("another job" in p for p in r.problems)
+
+
+def test_heating_with_no_job_of_ours_running_is_not_stopped(fake_ftp, printer):
+    """R1: the owner preheats from the touchscreen while the printer still shows their last print: the watchdog
+    trips, but a `stop` is only ever sent for our own job."""
+    m = OtherJobManager(fake_ftp.root, {"nozzle_target_temper": 220})
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert commands(m) == ["project_file"]
+    assert any("heat" in p and "nothing was stopped" in p for p in r.problems), r.problems
+
+
+def test_our_job_heating_is_stopped(fake_ftp, printer):
+    m = WatchManager(fake_ftp.root, {"nozzle_target_temper": 220})
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert commands(m) == ["project_file", "stop"]
+    assert any("heat" in p and "was stopped" in p for p in r.problems), r.problems
+
+
+def test_packed_target_dropping_does_not_trip(fake_ftp, printer):
+    """Minor: the owner preheated (packed target 200), the firmware zeroes it when our job starts: no trip."""
+    rep = base_report()
+    rep["device"] = {"extruder": {"info": [{"id": 0, "temp": (200 << 16) | 180}]},
+                     "bed": {"info": {"temp": (60 << 16) | 58}}}
+    m = WatchManager(fake_ftp.root, {"device": {"extruder": {"info": [{"id": 0, "temp": 175}]},
+                                                "bed": {"info": {"temp": 57}}}}, ends=True)
+    m.report = rep
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert r.consistent is True, r.problems
+    assert commands(m) == ["project_file"]
+
+
+class InterruptManager(WatchManager):
+    """Ctrl-C (KeyboardInterrupt, no handlers installed) lands while the job is watched."""
+
+    def wait_report(self, serial, predicate, timeout):
+        if self.waits == 1:                        # the watch: the job's reports arrive, then Ctrl-C
+            self.waits += 1
+            while self.queue:
+                self.report = status.merge(self.report, self.queue.pop(0))
+            raise KeyboardInterrupt
+        return super().wait_report(serial, predicate, timeout)
+
+
+def test_keyboard_interrupt_in_the_job_stops_our_job_then_restores(fake_ftp, printer):
+    m = InterruptManager(fake_ftp.root, {})
+    with pytest.raises(KeyboardInterrupt):
+        calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert commands(m) == ["project_file", "stop"]
+    assert not (fake_ftp.root / "cache" / FILE).exists()
+
+
+def test_keyboard_interrupt_with_another_job_running_sends_no_stop(fake_ftp, printer):
+    m = InterruptManager(fake_ftp.root, {"subtask_name": "grandmas-vase", "task_id": "999"})   # theirs replaced ours
+    with pytest.raises(KeyboardInterrupt):
+        calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert commands(m) == ["project_file"]
+    assert not (fake_ftp.root / "cache" / FILE).exists()
+
+
+def test_delete_leftover_removes_a_killed_jobs_file(fake_ftp, printer):
+    """Minor: kill -9 mid-calibration left our file on the printer; it is deleted best effort."""
+    f = fake_ftp.root / "cache" / FILE
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_bytes(b"left over")
+    assert calib3mf.delete_leftover(SERIAL) == []
+    assert not f.exists()
+    assert calib3mf.delete_leftover(SERIAL) == []   # nothing there: no problem, no exception
 
 
 def test_should_stop_stops_the_job(fake_ftp, printer):
@@ -450,7 +607,20 @@ def test_should_stop_stops_the_job(fake_ftp, printer):
 
     def stop():
         calls["n"] += 1
-        return calls["n"] > 2          # after the job was sent
+        return calls["n"] > 3          # once the printer reports our job (PREPARE, fk-calib-<serial>)
     r = calib3mf.run(m, SERIAL, slotmap_for(m.report), should_stop=stop)
     assert stopped_before_the_end(m), m.published
-    assert any("interrupted" in p for p in r.problems)
+    assert any("interrupted" in p and "was stopped" in p for p in r.problems), r.problems
+
+
+def test_should_stop_before_our_job_shows_sends_no_stop(fake_ftp, printer):
+    """R1: stopped while the printer still shows the owner's last print: nothing of ours to stop."""
+    m = WatchManager(fake_ftp.root, {})
+    calls = {"n": 0}
+
+    def stop():
+        calls["n"] += 1
+        return calls["n"] > 2          # the job was sent, its first report not seen yet
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report), should_stop=stop)
+    assert commands(m) == ["project_file"]
+    assert any("interrupted" in p and "nothing was stopped" in p for p in r.problems), r.problems
