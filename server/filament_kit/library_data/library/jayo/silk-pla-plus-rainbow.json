@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "vendor": "JAYO",
+  "product": "Silk PLA+ Rainbow",
+  "material": "PLA",
+  "colors": [
+    "Silk PLA+ Rainbow 01",
+    "Silk PLA+ Rainbow 02",
+    "Silk PLA+ Rainbow 03",
+    "Silk PLA+ Rainbow 04",
+    "Silk PLA+ Rainbow 05",
+    "Silk PLA+ Rainbow 06"
+  ],
+  "bambu_parent": "Bambu PLA Silk",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "205"
+    ],
+    "nozzle_temperature_range_high": [
+      "235"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "_print_speed": "50-200 mm/s",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "Gradient silk, colour changes every 8 m. Temperatures come from JAYO's 5-roll 'Silk PLA Plus / Dual/Triple Colors SILK ... SILK Rainbow' bundle page ('For optimal results with Silk Rainbow Filament ... 205-235C, bed 50-60C, 50-200mm/s'); the single-spool Silk PLA+ Rainbow page gives only diameter/tolerance. Higher temp + lower speed for more gloss per JAYO. No density published."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.jayo3d.com/products/jayo-3d-silk-pla-plus-dual-triple-colors-silk-3d-printer-filament-1-75mm-silk-rabinbow-1-1kg-roll-3d-printing-materials-5-rolls",
+    "https://store.jayo3d.com/products/reusable-spool-jayo-silkpla-rainbow-1-1kg-3d-filament"
+  ],
+  "updated": "2026-11-01"
+}

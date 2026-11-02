@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "vendor": "Inland",
+  "product": "ABS+ High Speed",
+  "material": "ABS",
+  "colors": [
+    "Silver"
+  ],
+  "bambu_parent": "Bambu ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "245"
+    ],
+    "nozzle_temperature_range_high": [
+      "265"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-100",
+    "_ams": "Cardboard spool.",
+    "_notes": "Single listing read via search index of microcenter.com (direct fetch 403); a second search did not return it, so treat as lightly sourced. No max speed published. Density and tolerance not confirmed."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.microcenter.com/product/670232/inland-175mm-abs-high-speed-3d-printer-filament-10-kg-(22-lbs)-cardboard-spool-silver"
+  ],
+  "updated": "2026-11-01"
+}

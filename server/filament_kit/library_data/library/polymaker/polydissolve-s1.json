@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "vendor": "Polymaker",
+  "product": "PolyDissolve S1",
+  "material": "PVA",
+  "colors": [
+    "Natural"
+  ],
+  "bambu_parent": "Bambu PVA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "215"
+    ],
+    "nozzle_temperature_range_high": [
+      "225"
+    ],
+    "filament_density": [
+      "1.13"
+    ],
+    "filament_is_support": [
+      "1"
+    ],
+    "filament_soluble": [
+      "1"
+    ],
+    "filament_max_volumetric_speed": [
+      "8"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "25-60",
+    "fan_max_speed": "ON",
+    "_print_speed": "50-150 (TDS); wiki: no higher than 60 mm/s",
+    "_drying": "80C 12h",
+    "_enclosure": "not needed",
+    "_ams": "Spools roll in the AMS, but Polymaker recommends a multi-nozzle printer to avoid clogs.",
+    "_notes": "Water-soluble PVA support for PLA, TPU, PVB and nylon. Wiki: print very slowly, no higher than 60 mm/s or 8 mm3/s. Sold in 1.75 and 2.85 mm."
+  },
+  "conflicts": [
+    "Wiki: no higher than 60 mm/s; TDS: 50-150 mm/s"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://wiki.polymaker.com/polymaker-products/polymaker-filaments/specialty-filament/polydissolve-tm-s1",
+    "https://cdn.shopify.com/s/files/1/0548/7299/7945/files/PolyDissolve_S1_TDS_EN_V5.4.pdf",
+    "https://shop.polymaker.com/products/polydissolve-s1"
+  ],
+  "updated": "2026-11-01"
+}

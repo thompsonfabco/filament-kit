@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "vendor": "AMOLEN",
+  "product": "PLA Silk S-Series",
+  "material": "PLA",
+  "colors": [
+    "Black Purple Orange",
+    "Gold Red Green",
+    "Red White",
+    "Blue Red Yellow Green",
+    "Berry Pop",
+    "Nebula Ribbon",
+    "Black Turquoise Magenta",
+    "Black Red",
+    "Black Red Yellow",
+    "Black Yellow Green",
+    "Black Pink White",
+    "Gold Purple Red",
+    "Blue Pink White"
+  ],
+  "bambu_parent": "Bambu PLA Silk",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.29"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "30-65",
+    "_drying": "55+/-5C 6-8h",
+    "filament_retraction_length": "0.8-1.2",
+    "filament_retraction_speed": "25-40",
+    "_print_speed": "< 200 mm/s",
+    "_vitrification": "56-58 (Tg)",
+    "_vicat": "60-62",
+    "_hdt_0.45MPa": "54-58",
+    "_diameter_tolerance": "+/-0.02 (variety-pack page)",
+    "_notes": "Multi-colour silk PLA series."
+  },
+  "conflicts": [
+    "tolerance +/-0.03 (https://www.amolen.com/products/pla-silk-s-series-pack-full, variety-pack page)"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.amolen.com/products/pla-silk-s-series",
+    "https://www.amolen.com/products/pla-silk-s-series-pack",
+    "https://www.amolen.com/products/pla-silk-s-series-pack-full"
+  ],
+  "updated": "2026-11-01"
+}

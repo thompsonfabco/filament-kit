@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "vendor": "Siraya Tech",
+  "product": "Fibreheart ABS-CF",
+  "material": "ABS-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu ABS-GF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.06"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100-110",
+    "chamber_temperatures": "60-80 (if heated chamber)",
+    "fan_max_speed": "0-30",
+    "filament_retraction_length": "1-5",
+    "filament_retraction_speed": "1800-3600 mm/min",
+    "_print_speed": "30-120 mm/s",
+    "_drying": "70-80C 4-6h (only if damp)",
+    "_hdt_0.45MPa": "99 (Method B); Method A 94",
+    "_vicat": "99 (ISO 306)",
+    "_vitrification": "101 (Tg)",
+    "_fiber_content": "10% chopped carbon fiber",
+    "_hardened_nozzle_required": "recommended",
+    "_min_nozzle": "0.4 mm",
+    "_enclosure": "Crucial",
+    "_notes": "Direct drive recommended. Melting point 220C. Raft separation 0.16-0.18 mm. Build surface glass or PEI with glue. No Bambu ABS-CF preset; Bambu ABS-GF used as closest fibre-filled ABS parent.",
+    "_ams": "Not recommended (product page FAQ: brittle CF can break in AMS feed path)"
+  },
+  "conflicts": [
+    "Product page states HDT 93C (1.8 MPa) / 98C (0.45 MPa) and an enclosure around 50C; TDS gives HDT 94/99C and heated chamber 60-80C: https://siraya.tech/products/siraya-tech-fibreheart-abs-cf-3d-printing-filament"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://siraya.tech/pages/siraya-tech-fibreheart-abs-cf-tds",
+    "https://siraya.tech/products/siraya-tech-fibreheart-abs-cf-3d-printing-filament"
+  ],
+  "updated": "2026-11-01"
+}

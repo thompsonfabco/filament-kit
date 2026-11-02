@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "vendor": "Bambu Lab",
+  "product": "TPU 95A HF",
+  "material": "TPU",
+  "colors": [],
+  "bambu_parent": "Bambu TPU 95A HF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.22"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "30-35 (glue)",
+    "chamber_temperatures": "25-45",
+    "filament_retraction_length": "0.8-1.4",
+    "filament_retraction_speed": "20-40",
+    "_print_speed": "<200 mm/s",
+    "_drying": "oven 70C 8h; X1 heatbed 80-90C 12h",
+    "_hardness": "95A (from product name; TDS does not state a Shore value)",
+    "_min_nozzle": "TDS lists nozzle sizes 0.4, 0.6, 0.8 mm",
+    "_annealing": "Not recommended",
+    "_notes": "TDS V1.0. Cooling fan: turn on. Plates: Cool, Engineering, High Temperature or Textured PEI. Tg/Vicat/HDT: N/A in TDS. Max overhang ~55 deg, bridging 20 mm. PDF hosted on cdn.shopify.com."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0584/7236/6216/files/Bambu_TPU_95A_HF_Technical_Data_Sheet.pdf"
+  ],
+  "updated": "2026-11-01"
+}

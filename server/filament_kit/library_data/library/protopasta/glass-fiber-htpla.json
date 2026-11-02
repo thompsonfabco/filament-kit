@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "vendor": "Protopasta",
+  "product": "Glass Fiber HTPLA",
+  "material": "PLA",
+  "colors": [
+    "White",
+    "Red",
+    "Blue",
+    "Laser Gray"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "24"
+    ]
+  },
+  "published_ranges": {
+    "_nozzle_by_speed": "240C @ up to 24 mm3/s (product page and EX9 blog, Bambu P1S 0.4 steel nozzle)",
+    "_hardened_nozzle_required": "Abrasive: hard nozzles + gears recommended (product page)",
+    "_annealing": "80-120C for 10+ minutes, about 100C best; shrinks about 1% x/y when heat treated at 100C; holds shape up to 150C after treatment",
+    "_drying": "No drying required (low moisture absorbing, product page)",
+    "_notes": "No TDS or Material Data Table row published; only a single print temperature is given, so the nozzle range is left out of fields."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://proto-pasta.com/products/white-glass-fiber-htpla",
+    "https://proto-pasta.com/blogs/stories/endless-exploration-ex9-july-2025-made-in-the-usa-glass-fiber-htpla"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "vendor": "Creality",
+  "product": "CR-ABS",
+  "material": "ABS",
+  "colors": [
+    "CR-ABS Grey"
+  ],
+  "bambu_parent": "Generic ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.05"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-110",
+    "chamber_temperatures": "50-80",
+    "_enclosure": "For fully enclosed printers, otherwise an enclosure is needed",
+    "_print_speed": "40-80",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "Creality guide: 240C recommended nozzle, 100C recommended hotbed, 50 mm/s recommended speed, environment temperature 50-80C (H2D chamber max is 65C). TDS density 1.05 +/-0.1 g/cm3 at 21.5C (ASTM D792 / ISO 1183 / GB/T 1033)."
+  },
+  "conflicts": [
+    "[pass 3] Density from Creality 'CR-ABS Filament Technical Data Sheet Version 1.0' hosted on reseller eel3dshop.com, seen only as a search-result snippet; published as 1.05 +/-0.1.",
+    "[pass 3] Diameter tolerance from Botland reseller.",
+    "[pass 3] Zoro lists discontinued 'Creality ABS' ABS-1-175-BK at density 1.04 +/-0.2 g/cm3; possibly an older product."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.creality.com/blogs/all/creality-3d-printer-filaments-type-parameter",
+    "https://eel3dshop.com/shop_ordered/54291/pic/Datasheet/Creality/TDS-CR-ABSEN.pdf",
+    "https://botland.store/filamenty-abs/28373-filament-creality-cr-abs-175mm-1kg-gray-6971636408086.html",
+    "https://www.zoro.com/creality-creality-abs-3d-printer-filament-black-175mm-diameter-1kg-abs-1-175-bk/i/G703553947/"
+  ],
+  "updated": "2026-11-01"
+}

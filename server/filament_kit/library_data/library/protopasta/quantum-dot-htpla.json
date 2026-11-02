@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "vendor": "Protopasta",
+  "product": "Quantum Dot HTPLA",
+  "material": "PLA",
+  "colors": [
+    "Red",
+    "Orange",
+    "Yellow",
+    "Green"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.24"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "12"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "55-65",
+    "_nozzle_by_speed": "220C @ 6 mm3/s; 240C @ 12 mm3/s (Material Data Table)",
+    "_print_speed": "100-150 mm/s; volume flow 10-12 mm3/s (TDS, based on Bambu Generic PLA profile)",
+    "_vitrification": "approx. 60 (Tg onset, TDS)",
+    "_drying": "Not recommended by Protopasta (TDS)",
+    "_notes": "InP-based quantum dots (0.04%). Melt (Tm) onset approx. 155C. Flow 100%, extrusion width 0.45 mm. Fluorescence degrades with UV exposure: store dark."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0717/9095/files/TDS_QD_HTPLA.pdf",
+    "https://proto-pasta.com/pages/material-data-table",
+    "https://proto-pasta.com/blogs/stories/endless-exploration-ex13-mar-2026-quantum-dot-filaments"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "PP-CF",
+  "material": "PP-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Generic PP-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-80",
+    "_drying": "50-60C 8h",
+    "_print_speed": "30-100mm/s",
+    "_hdt_0.45MPa": "85 (D648 0.45MPa)",
+    "_density_published": "0.95~1.01 (range; not put in fields)",
+    "_fiber_content": "20% carbon fiber",
+    "_bottom_printing_temperature": "220-240",
+    "_enclosure": "sealed printing",
+    "_notes": "TDS does not state a nozzle requirement. 700g spool per the PP listing."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0252/0412/9841/files/ERYONE-PP_CF-TDS.pdf",
+    "https://eryone3d.com/products/pp-filament"
+  ],
+  "updated": "2026-11-01"
+}

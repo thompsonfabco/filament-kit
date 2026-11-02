@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "vendor": "OVERTURE",
+  "product": "TPU 95A",
+  "material": "TPU",
+  "colors": [
+    "Matte Black",
+    "Matte Space Gray",
+    "Matte Gray",
+    "Matte White",
+    "Matte Natural",
+    "Red",
+    "Bright Pink",
+    "Brown",
+    "Matte Orange",
+    "Matte Yellow",
+    "Digital Blue",
+    "Blue",
+    "Purple",
+    "Green",
+    "Neon Red",
+    "Neon Green",
+    "Neon Orange",
+    "Light Green"
+  ],
+  "bambu_parent": "Bambu TPU 95A",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.18"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "25-60",
+    "_drying": "70C 8h",
+    "_print_speed": "200 mm/s",
+    "_hardness": "~95A (ISO 7619)",
+    "_ams": "95A TPU: not AMS-compatible by Bambu's guidance; feed from external spool.",
+    "_notes": "The product page now links the 'TPU 2.0' TDS (header Version 5.1 Jul 2024): improved printability and less stringing at high speed; melt index 4.5 g/10min (210C 1.2kg); elongation 332%; cooling fan on; textured PEI or blue tape. That PDF has overlapping text layers; values taken from its plain-text layer. The older TPU TDS v5.1 gives 210-230C, 20-40 mm/s, retraction 1-3 mm @ 20-40 mm/s, overhang threshold 35 deg."
+  },
+  "conflicts": [
+    "Nozzle: older OVERTURE TPU TDS v5.1 (https://overture3d.com/cdn/shop/files/OVERTURE_TPU_TDS_EN_V5.1_195e4c18-e1da-47fc-964f-a651a96edc78.pdf) and the product page say 210-230C; current TPU 2.0 TDS says 210-240C (kept).",
+    "Print speed: older TPU TDS v5.1 says 20-40 mm/s; TPU 2.0 TDS says 200 mm/s."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://overture3d.com/cdn/shop/files/OVERTURE_TPU_95A_2.0_TDS_EN.pdf",
+    "https://overture3d.com/products/overture-tpu",
+    "https://overture3d.com/cdn/shop/files/OVERTURE_TPU_TDS_EN_V5.1_195e4c18-e1da-47fc-964f-a651a96edc78.pdf"
+  ],
+  "updated": "2026-11-01"
+}

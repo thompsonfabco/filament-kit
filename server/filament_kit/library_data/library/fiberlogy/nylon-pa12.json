@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "vendor": "Fiberlogy",
+  "product": "Nylon PA12",
+  "material": "PA",
+  "colors": [
+    "Orange",
+    "Blue",
+    "Yellow",
+    "White",
+    "Red",
+    "Natural",
+    "Inox",
+    "Black",
+    "Light Green"
+  ],
+  "bambu_parent": "Generic PA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "255"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.01"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "110",
+    "fan_min_speed/fan_max_speed": "0-10",
+    "_drying": "70C 4h",
+    "_enclosure": "required",
+    "_hdt_0.45MPa": "135 (ISO 75)",
+    "_hdt_1.8MPa": "55 (ISO 75)",
+    "_vicat": "145 (ISO 306)",
+    "_ams": "Compatible with BambuLab AMS (new spool system)",
+    "_notes": "Bed: smooth PEI + adhesive, textured PEI + adhesive, glass + adhesive. Enclosed heated chamber recommended to limit shrinkage."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://fiberlogy.com/en/filaments/nylon-en/nylon-pa12-en/"
+  ],
+  "updated": "2026-11-01"
+}

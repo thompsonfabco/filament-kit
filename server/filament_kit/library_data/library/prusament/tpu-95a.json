@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "Prusament",
+  "product": "TPU 95A",
+  "material": "TPU",
+  "colors": [
+    "Jet Black",
+    "Natural"
+  ],
+  "bambu_parent": "Bambu TPU 95A",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.25"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "55-75",
+    "_fan_speed": "30-50",
+    "_max_print_speed": "up to 30 mm/s",
+    "_vicat": "101.6 (Vicat A, ISO 306)",
+    "_hdt_1.80MPa": "78.6 (ISO 75)",
+    "_hardness": "95A (product name); TDS Shore A 92 +/- 0.4, Shore D 39 +/- 0.7",
+    "_diameter_tolerance": "+/-0.06",
+    "_drying": "usually unnecessary; if needed 60C >=4h, store in drybox (product page)",
+    "_notes": "TDS prints nozzle '230 +/- 10', bed '65 +/- 10'. Smooth PEI only with glue stick separator. High-flow nozzle in enclosure: leave door open."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://storage.googleapis.com/prusa3d-content-prod-14e8-wordpress-prusament-prod/2025/05/80316f6d-tds-prusament_tpu_95a_en-1.pdf",
+    "https://prusament.com/materials/prusament-tpu-95a/"
+  ],
+  "updated": "2026-11-01"
+}

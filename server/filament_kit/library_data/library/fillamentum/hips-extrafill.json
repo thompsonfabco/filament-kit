@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "vendor": "Fillamentum",
+  "product": "HIPS Extrafill",
+  "material": "HIPS",
+  "colors": [
+    "Metallic Grey",
+    "Natural",
+    "Signal Red",
+    "Sky Blue",
+    "Traffic Black"
+  ],
+  "bambu_parent": "Generic HIPS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.05"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-105",
+    "fan_min_speed/fan_max_speed": "0-20",
+    "_print_speed": "30-50 mm/s",
+    "_drying": "70C 3h",
+    "_hdt_0.45MPa": "89 (ISO 75); 85 at 1.8 MPa",
+    "_vicat": "88.5 (ISO 306, 50 N); 98 (ISO 306, 10 N)",
+    "_diameter_tolerance": "+/-0.05",
+    "_notes": "TDS: can be used for support parts, which dissolve in limonene. 750 g + 210 g spool; 2.85 mm also sold."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://fillamentum.com/wp-content/uploads/2020/10/Technical-Data-Sheet_HIPS-Extrafill_03012019.pdf",
+    "https://shop.fillamentum.com/products/hips-extrafill-traffic-black",
+    "https://fillamentum.com/wp-content/uploads/2023/10/Recommendation-for-filament-processing_drying_EN_12102023.pdf"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "PET-CF",
+  "material": "PET-CF",
+  "colors": [],
+  "bambu_parent": "Bambu PET-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "320"
+    ],
+    "filament_density": [
+      "1.42"
+    ],
+    "filament_max_volumetric_speed": [
+      "4"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-120",
+    "fan_min_speed/fan_max_speed": "0-20",
+    "_drying": "80-100C 4-8h",
+    "_print_speed": "0-200",
+    "_hdt_0.45MPa": "75 (145 after annealing)",
+    "_vitrification": "70 (Tg)",
+    "_hardened_nozzle_required": "recommended",
+    "_min_nozzle": "0.4 (nozzle sizes 0.4-1.0)",
+    "_notes": "eSUN PET-CF TDS v1.0 Jul 2024. Hygroscopic: dry at 80C 4-8h before printing. TDS lists both 'Extruder Temperature 250-300C' and 'Nozzle Temperature 250-320C'; the nozzle row is used. Max volumetric flow 4 mm3/s from the TDS print-test block. Diameter not stated in TDS."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://assets.spoolscout.com/tds-sds/esun/tds/esun-pet-cf-tds-v1.0-2024-07.pdf",
+    "https://www.spoolscout.com/data-sheets/esun/pet-pet-cf"
+  ],
+  "updated": "2026-11-01"
+}

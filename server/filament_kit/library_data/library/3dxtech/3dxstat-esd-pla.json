@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "3DXSTAT ESD-PLA",
+  "material": "PLA",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "23-60",
+    "_hardened_nozzle_required": "recommended (abrasion-resistant, e.g. hardened steel)",
+    "_notes": "Values from MatterHackers (authorized reseller) listing; official page unreachable (HTTP 429). ESD: target surface resistance 10^7-10^9 ohm. Prints without heated bed or enclosure. Density/drying not found."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://www.matterhackers.com/store/l/3dxtech-3dxstat-esd-safe-pla-filament/sk/MEAJCXYC"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "vendor": "QIDI Tech",
+  "product": "PPS-CF",
+  "material": "PPS-CF",
+  "colors": [],
+  "bambu_parent": "Bambu PPS-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "310"
+    ],
+    "nozzle_temperature_range_high": [
+      "350"
+    ],
+    "filament_density": [
+      "1.3"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100",
+    "fan_min_speed/fan_max_speed": "0~50%",
+    "_drying": "100-140C 8-12h (product page); 100C 10h (filament guide)",
+    "_print_speed": "30-60 mm/s (TDS); 30-100 mm/s (product page)",
+    "_vicat": "268",
+    "_hdt_0.45MPa": "242.7",
+    "_annealing": "130C 10h (filament guide)",
+    "_hardened_nozzle_required": "yes (hardened steel/bimetal; brass not recommended)",
+    "_min_nozzle": "0.4",
+    "_notes": "TDS titled 'QIDI PPS CF10' (KT079, 19/3/2024); only its first page is machine-readable. Density, Vicat and HDT from the product page; HDT load 0.45 MPa per filament guide. Keep <20% RH. Filament guide bed 100-110C with PVP glue."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://drive.google.com/file/d/1DTDb7ew0Uv_E0KyMK8YkJJ4p9OL6M9Gt/view",
+    "https://qidi3d.com/products/pps-cf-filament",
+    "https://qidi3d.com/pages/choose-the-right-filament-3d-filaments-guide-for-qidi-printers"
+  ],
+  "updated": "2026-11-01"
+}

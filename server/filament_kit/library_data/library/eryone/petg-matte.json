@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "PETG Matte",
+  "material": "PETG",
+  "colors": [
+    "Black",
+    "White",
+    "Gray",
+    "Dark Blue",
+    "Grass Green",
+    "Pink",
+    "Off-White",
+    "Cyan"
+  ],
+  "bambu_parent": "Bambu PETG Matte",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-80",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "Product page 'Print settings' only; heat resistant ~75-80C per page. Density not published."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://eryone3d.com/products/petg-matte-filament-1-75mm-0-03mm-1kg"
+  ],
+  "updated": "2026-11-01"
+}

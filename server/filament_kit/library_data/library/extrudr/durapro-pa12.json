@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "Extrudr",
+  "product": "DuraPro PA12",
+  "material": "PA12",
+  "colors": [],
+  "bambu_parent": "Generic PA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "260"
+    ],
+    "nozzle_temperature_range_high": [
+      "290"
+    ],
+    "filament_density": [
+      "1.01"
+    ],
+    "filament_max_volumetric_speed": [
+      "8"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "110",
+    "fan_min_speed/fan_max_speed": "40-60%",
+    "_print_speed": "150 mm/s",
+    "_enclosure": "yes",
+    "_hardened_nozzle_required": "no",
+    "_vicat": "142 (Vicat B50, ISO 306)",
+    "_hdt_0.45MPa": "135 (ISO 75-2/B, unannealed)",
+    "_notes": "Bed adhesive recommended. Water absorption 1.6% at saturation (23 C). Catalogue print settings are for a 0.4 mm nozzle, max 50% layer height. Diameter not stated in the catalogue, so filament_diameter is left unset."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://s3.extrudr.com/extrudr-media/product-catalogue/extrudr-Produktkatalog_EN.pdf"
+  ],
+  "updated": "2026-11-01"
+}

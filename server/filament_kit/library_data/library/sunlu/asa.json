@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "vendor": "SUNLU",
+  "product": "ASA",
+  "material": "ASA",
+  "colors": [
+    "Black",
+    "Natural",
+    "White",
+    "Grey",
+    "Red",
+    "Yellow",
+    "Green",
+    "Sunny Orange",
+    "Klein Blue",
+    "Lavender Purple",
+    "Mocha Mousse"
+  ],
+  "bambu_parent": "Bambu ASA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "260"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_density": [
+      "1.04"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80-100",
+    "filament_retraction_length": "0.8-1.2mm",
+    "filament_retraction_speed": "30-40mm/s",
+    "_nozzle_by_speed": "250-260C @ 50-100mm/s; 260-280C @ 100-200mm/s",
+    "_drying": "80C (drying time not published)",
+    "_hdt_0.45MPa": "101±2",
+    "_vitrification": "108 (Tg, ISO 11357-2)",
+    "_vicat": "105",
+    "_moulding_shrinkage": "0.4-0.9%",
+    "_hardness": "81.5 (Shore, TDS)",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "TDS: Textured PEI plate with glue. Enclosure not stated in TDS (room temperature)."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://media.sunlu.com/prod/20260330/7d61617c-7540-4ae2-88d3-a0d206e5d801.pdf?filename=TDS",
+    "https://www.sunlu.com/products/asa-uv-resistant-filament"
+  ],
+  "updated": "2026-11-01"
+}

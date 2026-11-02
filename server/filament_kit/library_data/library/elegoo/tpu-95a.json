@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "vendor": "ELEGOO",
+  "product": "TPU 95A",
+  "material": "TPU",
+  "colors": [
+    "Black",
+    "White",
+    "Translucent",
+    "Red",
+    "Blue",
+    "Green",
+    "Grey"
+  ],
+  "bambu_parent": "Bambu TPU 95A",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.16"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "30-45 (depends on printer and build plate type)",
+    "chamber_temperatures": "20-45",
+    "_drying": "70C 8h (+/-5C)",
+    "_drying_required": "Required",
+    "_min_nozzle": "0.4",
+    "_enclosure": "not required",
+    "_plates": "Textured/Smooth PEI or Other Plates; glue recommended",
+    "_max_print_speed": "< 60 mm/s",
+    "_diameter_tolerance": "+/-0.02",
+    "_hardness": "95A",
+    "_notes": "Flexible: check AMS compatibility before loading (Bambu AMS not rated for most TPU). Melting temperature 188C; melt index 45.5 +/- 3.6 g/10 min; print and store at <=20% RH sealed with desiccant."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://us.elegoo.com/products/tpu-filament-1-75mm-colored-1kg"
+  ],
+  "updated": "2026-11-01"
+}

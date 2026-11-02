@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "vendor": "Fillamentum",
+  "product": "Nylon FX256",
+  "material": "PA",
+  "colors": [
+    "Metallic Grey",
+    "Natural",
+    "Signal Red",
+    "Sky Blue",
+    "Traffic Black",
+    "Vertigo Grey"
+  ],
+  "bambu_parent": "Generic PA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "235"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.01"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80-105",
+    "fan_min_speed/fan_max_speed": "0",
+    "_print_speed": "20-30 mm/s (TDS); 30-50 mm/s (product page)",
+    "_drying": "80C 3h",
+    "_hdt_0.45MPa": "110 (ISO 75); 50 at 1.8 MPa",
+    "_vicat": "140 (ISO 306, 5 kg)",
+    "_enclosure": "TDS: cover around printer; guide: heated chamber / enclosure recommended.",
+    "_diameter_tolerance": "+/-0.05",
+    "_notes": "Drying table: nylon drying must not exceed 80 C. Brim recommended. 750 g + 230 g spool."
+  },
+  "conflicts": [
+    "Nozzle: product page and printing guide give 235-255 C.",
+    "Bed: product page and printing guide give 90-110 C."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://fillamentum.com/wp-content/uploads/2020/10/Technical-Data-Sheet_Nylon-FX256.pdf",
+    "https://shop.fillamentum.com/products/nylon-fx256-sky-blue",
+    "https://fillamentum.com/wp-content/uploads/2020/10/FI_Printing_Guide_Nylon-FX-256.pdf",
+    "https://fillamentum.com/wp-content/uploads/2023/10/Recommendation-for-filament-processing_drying_EN_12102023.pdf"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "vendor": "Fiberlogy",
+  "product": "PLA Mineral",
+  "material": "PLA",
+  "colors": [
+    "Natural",
+    "White",
+    "Marble",
+    "Concrete",
+    "Black"
+  ],
+  "bambu_parent": "Bambu PLA Marble",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "210"
+    ],
+    "filament_density": [
+      "1.38"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60",
+    "fan_min_speed/fan_max_speed": "75-100",
+    "_drying": "50C 6h",
+    "_enclosure": "not required",
+    "_hdt_0.45MPa": "48 (ISO 75)",
+    "_ams": "Compatible with BambuLab AMS (new spool system)",
+    "_notes": "Bed surfaces: smooth PEI, textured PEI, glass. Mineral-filled PLA; page does not state an abrasion or nozzle requirement."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://fiberlogy.com/en/filaments/pla-en/pla-mineral-en/"
+  ],
+  "updated": "2026-11-01"
+}

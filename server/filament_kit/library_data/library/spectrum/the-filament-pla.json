@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "vendor": "Spectrum",
+  "product": "The Filament PLA",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "185"
+    ],
+    "nozzle_temperature_range_high": [
+      "215"
+    ],
+    "filament_density": [
+      "1.24"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "40-50",
+    "_cooling": "Up to 100%",
+    "_enclosure": "not necessary",
+    "_hardened_nozzle_required": "No",
+    "_hdt": "55 (ASTM E2092)",
+    "_vitrification": "60 (Tg, DSC D3418)",
+    "_notes": "TDS has a \"Nozzle temperature (High Speed)\" row with no value printed."
+  },
+  "conflicts": [
+    "Official product page (https://spectrumfilaments.com/en/filament/the-filament-pla/) lists nozzle 185-225, bed 0-50; TDS dated 23-09-2024 values kept in fields/published_ranges."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://spectrumfilaments.com/wp-content/uploads/2024/11/eng_tds_the_filament_pla.pdf",
+    "https://spectrumfilaments.com/en/filament/the-filament-pla/"
+  ],
+  "updated": "2026-11-01"
+}

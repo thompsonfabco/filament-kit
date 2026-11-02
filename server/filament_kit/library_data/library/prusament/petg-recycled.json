@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "vendor": "Prusament",
+  "product": "PETG Recycled",
+  "material": "PETG",
+  "colors": [
+    "Recycled Black",
+    "Recycled"
+  ],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.27"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-90",
+    "_fan_speed": "50",
+    "_max_print_speed": "up to 200 mm/s",
+    "_hdt_0.45MPa": "68 (ISO 75)",
+    "_hdt_1.80MPa": "68 (ISO 75)",
+    "_diameter_tolerance": "+/-0.05",
+    "_notes": "TDS prints nozzle '250 +/- 10', bed '80 +/- 10'. Smooth PEI needs glue stick."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://prusament.com/wp-content/uploads/2022/03/8_PETG_RECYCLED_Prusament_TDS_2022.pdf",
+    "https://prusament.com/materials/prusament-petg-recycled/"
+  ],
+  "updated": "2026-11-01"
+}

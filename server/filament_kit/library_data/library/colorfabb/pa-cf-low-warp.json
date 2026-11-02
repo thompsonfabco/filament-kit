@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "vendor": "ColorFabb",
+  "product": "PA-CF Low Warp",
+  "material": "PA-CF",
+  "colors": [],
+  "bambu_parent": "Bambu PA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "260"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_density": [
+      "1.4"
+    ]
+  },
+  "published_ranges": {
+    "fan_max_speed": "50",
+    "_print_speed": "30-40 mm/s",
+    "_diameter_tolerance": "+/-0.1",
+    "_notes": "Product page only (no TDS in the download folder). Bed 'ambient to 50 C': low-infill prints flat on cold bed, higher infill needs ~40-50 C; 3DLac on glass. Fan 50% starting point, least cooling for strength. Continuous service temp 120 C. Page does not state drying or nozzle requirements. Nominal diameter not printed on the cited page (variant selector not readable), so filament_diameter is left out."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://colorfabb.com/pa-cf-low-warp"
+  ],
+  "updated": "2026-11-01"
+}

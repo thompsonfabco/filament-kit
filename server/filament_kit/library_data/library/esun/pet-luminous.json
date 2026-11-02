@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "PET-Luminous",
+  "material": "PETG",
+  "colors": [],
+  "bambu_parent": "Generic PETG",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "245"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.27"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70",
+    "fan_max_speed": "100",
+    "_drying": "60C >8h",
+    "_print_speed": "<=250",
+    "_hdt_0.45MPa": "70",
+    "_notes": "eSUN PET-Luminous (sold as PETG-Luminous, glow) TDS v1.0 Apr 2025. Nozzle sizes 0.2/0.4/0.6/0.8 mm. Abrasion/hardened nozzle not stated in TDS. Diameter not stated in TDS."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://assets.spoolscout.com/tds-sds/esun/tds/esun-petg-luminous-tds-v1.0-2025-04.pdf",
+    "https://www.spoolscout.com/data-sheets/esun/petg-petg-luminous"
+  ],
+  "updated": "2026-11-01"
+}

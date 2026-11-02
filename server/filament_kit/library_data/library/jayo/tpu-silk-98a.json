@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "vendor": "JAYO",
+  "product": "TPU Silk 98A",
+  "material": "TPU",
+  "colors": [
+    "Light Blue",
+    "Burgundy",
+    "Cream White",
+    "Dark Blue",
+    "Black"
+  ],
+  "bambu_parent": "Bambu TPU 95A",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "_nozzle_by_speed": "50-100 mm/s: 210-220C; 100-200 mm/s: 220-240C",
+    "_hardness": "98A",
+    "_diameter_tolerance": "+/-0.03",
+    "_ams": "Flexible TPU: AMS use not stated by JAYO; treat as external-spool material.",
+    "_notes": "Official parameter block (fields hold the higher, 100-200 mm/s range). JAYO says it is easier to print on Bowden ('remote extrusion'). Closest Bambu preset is TPU 95A (no 98A preset). No density published."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.jayo3d.com/products/moq-5-jayo-1-1kg-tpu-silk-98a-1-75mm-filament-flexible-3d-printer-shiny"
+  ],
+  "updated": "2026-11-01"
+}

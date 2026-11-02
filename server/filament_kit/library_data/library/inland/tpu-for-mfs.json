@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "vendor": "Inland",
+  "product": "TPU for MFS",
+  "material": "TPU",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu TPU 90A",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "25-60",
+    "_hardness": "90A (description; title-level listings for other Inland TPU say 95A)",
+    "_ams": "Sold for Flashforge's MFS (Multi-Filament System); cardboard spool. AMS suitability not stated.",
+    "_notes": "Read via search index of microcenter.com (direct fetch 403). Density not published."
+  },
+  "conflicts": [
+    "nozzle_temperature_range: 220-240 (bed 30-35, Shore D 62) (search-index text for a black 1 kg cardboard-spool MFS TPU listing; not confirmed to be the same page) - https://www.microcenter.com/product/701526/inland-175mm-tpu-3d-printer-filament-10-kg-(22-lbs)-cardboard-spool-black"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.microcenter.com/product/701526/inland-tpu-for-mfs-black"
+  ],
+  "updated": "2026-11-01"
+}

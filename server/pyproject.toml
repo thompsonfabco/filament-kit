@@ -24,6 +24,10 @@ filament-kit = "filament_kit.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["filament_kit*"]
+namespaces = false  # library_data/ is package data, not a namespace package
+
+[tool.setuptools.package-data]
+filament_kit = ["library_data/*.json", "library_data/schema/*.json", "library_data/library/*/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "vendor": "Siraya Tech",
+  "product": "Flex TPU 64D",
+  "material": "TPU",
+  "colors": [
+    "Black",
+    "White"
+  ],
+  "bambu_parent": "Generic TPU",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.23"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "45",
+    "fan_max_speed": "70-100 (moderate part cooling)",
+    "filament_retraction_length": "1-2",
+    "filament_retraction_speed": "20-30 mm/s (direct drive)",
+    "_print_speed": "30-80 mm/s",
+    "_drying": "50-60C at least 4-6h, before every print",
+    "_vicat": "133 (ISO 306)",
+    "_hardness": "64D (ISO 7619)",
+    "_min_nozzle": "0.4 mm",
+    "_ams": "Compatible with original Bambu Lab AMS; not compatible with AMS 2; not tested on AMS Lite.",
+    "_enclosure": "Not required",
+    "_notes": "Brass nozzle OK. Melting point 220C. Start ~255C and run a temperature tower. TPU flow often 93-96%. ISO 10993-5/-10/-23 tested. Diameter not stated on TDS."
+  },
+  "conflicts": [
+    "Product page 'Important Notice' strongly discourages using TPU with any AMS series (direct feed recommended); TDS says compatible with original AMS: https://siraya.tech/products/flex-tpu-64d-filament"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://siraya.tech/pages/flex-tpu-64d-filament-tds",
+    "https://siraya.tech/products/flex-tpu-64d-filament"
+  ],
+  "updated": "2026-11-01"
+}

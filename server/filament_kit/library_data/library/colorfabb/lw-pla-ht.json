@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "vendor": "ColorFabb",
+  "product": "LW-PLA-HT",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Aero",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "195"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.2"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "_print_speed": "40-100 mm/s",
+    "_hdt_0.45MPa": "135 (HDT-B, ISO 75; measured on unfoamed PLA-HP)",
+    "_diameter_tolerance": "+/-0.05 (1.75 mm; TDS 'max. roundness deviation'), +/-0.1 (2.85 mm)",
+    "_notes": "TDS v1.0. Active-foaming high-temperature LW-PLA. TDS tip for thin RC parts: first layer 100% flow at 200 C, then ~235 C to activate foaming with 50-60% flow."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://downloads.colorfabb.com/public.php/dav/files/rtfDDRCa723Xdor/Technical%20Data%20Sheets/PLA/colorFabb%20LW-PLA/TDS_E%20ColorFabb%20LW-PLA-HT.pdf"
+  ],
+  "updated": "2026-11-01"
+}

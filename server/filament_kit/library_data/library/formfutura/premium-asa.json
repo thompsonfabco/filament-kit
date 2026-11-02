@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "Premium ASA",
+  "material": "ASA",
+  "colors": [],
+  "bambu_parent": "Bambu ASA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "275"
+    ],
+    "nozzle_temperature_range_high": [
+      "290"
+    ],
+    "filament_density": [
+      "1.08"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-110",
+    "fan_min_speed/fan_max_speed": "15-50",
+    "_print_speed": "50-200 mm/s (TDS)",
+    "_drying": "70C 12h (TDS: >= 12 hours at 70C)",
+    "_enclosure": "Recommended (TDS); dry box recommended",
+    "_min_nozzle": "0.2",
+    "_hdt": "86 at 1.82 MPa, unannealed (ASTM D648)",
+    "_vicat": "95 (ASTM D1525, 50N)",
+    "_notes": "UL 94 HB (not certified)."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://formfutura.com/web/content/256609?download=true",
+    "https://formfutura.com/filaments/premium-asa"
+  ],
+  "updated": "2026-11-01"
+}

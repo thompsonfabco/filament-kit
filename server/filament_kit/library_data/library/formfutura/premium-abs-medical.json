@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "Premium ABS Medical",
+  "material": "ABS",
+  "colors": [],
+  "bambu_parent": "Bambu ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "235"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.06"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-100",
+    "fan_min_speed/fan_max_speed": "0-25",
+    "_print_speed": "50-150 mm/s (TDS)",
+    "_drying": "70-85C 4-6h (TDS)",
+    "_enclosure": "Yes (TDS); dry box recommended",
+    "_min_nozzle": "0.15",
+    "_vicat": "96 (ISO 306)",
+    "_ams": "Product page: compatible with all AMS systems.",
+    "_notes": "ISO 10993 / USP Class V biocompatible grade."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://formfutura.com/web/content/306558?download=true",
+    "https://formfutura.com/filaments/premium-abs-medical"
+  ],
+  "updated": "2026-11-01"
+}

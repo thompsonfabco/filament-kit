@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "vendor": "ColorFabb",
+  "product": "PLA/PHA",
+  "material": "PLA",
+  "colors": [
+    "Standard White",
+    "Standard Black",
+    "Natural",
+    "Blueish White",
+    "Dutch Orange",
+    "Pale Gold",
+    "Mint Turquoise",
+    "Signal Yellow",
+    "Leaf Green",
+    "Traffic Red",
+    "Sky Blue",
+    "Intense Green",
+    "Red Transparent",
+    "Green Transparent",
+    "Violet Transparent",
+    "Fluorescent Pink"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "195"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_density": [
+      "1.2"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "fan_min_speed/fan_max_speed": "0-100",
+    "_print_speed": "40-100 mm/s",
+    "_hdt_0.45MPa": "51 (HDT-B, ISO 75)",
+    "_diameter_tolerance": "+/-0.05 (1.75 mm; TDS 'max. roundness deviation'), +/-0.1 (2.85 mm)",
+    "_notes": "TDS v2.0. Melting temp >155 C. Prints on heated or cold bed (masking tape on cold bed). Product page says 1.75 mm is being discontinued and is now made-to-order with MOQ; 2.85 mm in black/white only."
+  },
+  "conflicts": [
+    "Product page (colorfabb.com/red-transparent) lists density 1.210-1.430 g/cm3 and Tg 55 C vs TDS density 1.2"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://downloads.colorfabb.com/public.php/dav/files/rtfDDRCa723Xdor/Technical%20Data%20Sheets/PLA/colorFabb%20PLA-PHA/TDS_PLA-PHA.pdf",
+    "https://colorfabb.com/red-transparent",
+    "https://colorfabb.com/filaments/materials/pla-filaments/pla-pha"
+  ],
+  "updated": "2026-11-01"
+}

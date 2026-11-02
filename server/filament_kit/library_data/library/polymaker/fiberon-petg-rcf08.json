@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "vendor": "Polymaker",
+  "product": "Fiberon PETG-rCF08",
+  "material": "PETG-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Fiberon PETG-rCF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.30"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-70",
+    "chamber_temperatures": "room temperature",
+    "fan_max_speed": "0-50%",
+    "_print_speed": "up to 300",
+    "_drying": "65C 3h",
+    "_hardened_nozzle_required": "yes",
+    "_vitrification": "69.7 (Tg, DSC)",
+    "_vicat": "81.6",
+    "_hdt_0.45MPa": "68.6",
+    "_hdt_1.8MPa": "65.7",
+    "_ams": "Spools roll in the AMS, but Polymaker warns to be careful with abrasive materials in the AMS.",
+    "_fiber_content": "8% recycled carbon fibre (name)",
+    "_notes": "TDS: brass nozzle wears quickly, wear-resistant nozzle highly recommended; store dry."
+  },
+  "conflicts": [
+    "Wiki print-settings table: fan 0% (TDS: 0-50%); printing speed 30-300 mm/s"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://wiki.polymaker.com/polymaker-products/polymaker-filaments/fiberon-tm/fiberon-tm-petg-rcf08",
+    "https://fiberon.polymaker.com/wp-content/uploads/TDS_FIBERON-PETG-rCF08_V1.0_EN.pdf",
+    "https://shop.polymaker.com/products/fiberon-petg-rcf08"
+  ],
+  "updated": "2026-11-01"
+}

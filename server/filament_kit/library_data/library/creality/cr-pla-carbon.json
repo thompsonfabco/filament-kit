@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "vendor": "Creality",
+  "product": "CR-PLA Carbon",
+  "material": "PLA-CF",
+  "colors": [],
+  "bambu_parent": "Bambu PLA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "_print_speed": "40-80 mm/s",
+    "_notes": "Creality filament parameter reference table (2024-12-23): recommended 200C nozzle, 50C bed, 50 mm/s. K1 table: 220C/45C, 150 mm/s, 11 mm3/s (printer profile values). Creality does not state a hardened-nozzle requirement for this line (not verified; carbon-filled)."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.creality.com/uk/blogs/basics/creality-filaments-parameter-reference-table",
+    "https://store.creality.com/blogs/all/k1-k1-max-printing-parameter-settings",
+    "https://store.creality.com/products/cr-pla-carbon-3d-printing-filament-1kg"
+  ],
+  "updated": "2026-11-01"
+}

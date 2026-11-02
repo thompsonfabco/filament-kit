@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "Polymaker",
+  "product": "PolyFlex TPU95",
+  "material": "TPU",
+  "colors": [
+    "Black",
+    "White",
+    "Blue",
+    "Red",
+    "Yellow",
+    "Orange"
+  ],
+  "bambu_parent": "Bambu TPU 95A",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "25-60",
+    "fan_max_speed": "ON",
+    "filament_retraction_length": "3-6",
+    "filament_retraction_speed": "40-60",
+    "_print_speed": "30-50",
+    "_drying": "70C 8h",
+    "_enclosure": "not needed",
+    "_hardness": "95A (Shore, ISO 7619-1)",
+    "_density_published": "1.20-1.24 g/cm3 (range on TDS; fields.filament_density left unset)",
+    "_notes": "Bed range from the wiki (TDS cell is blank). Sold in 1.75 and 2.85 mm."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://wiki.polymaker.com/polymaker-products/polymaker-filaments/prime-materials/flexible-tpu/polyflex-tm-tpu95",
+    "https://cdn.shopify.com/s/files/1/0548/7299/7945/files/PolyFlex_TPU95_TDS_EN_V5.4.pdf",
+    "https://shop.polymaker.com/products/polyflex-tpu95"
+  ],
+  "updated": "2026-11-01"
+}

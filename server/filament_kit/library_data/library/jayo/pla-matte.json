@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "vendor": "JAYO",
+  "product": "PLA Matte",
+  "material": "PLA",
+  "colors": [
+    "Black",
+    "White",
+    "Gray",
+    "Red",
+    "Blue",
+    "Green",
+    "Pink",
+    "Olive Green",
+    "Light Blue",
+    "Orange",
+    "Light Yellow",
+    "Purple",
+    "Pink Blue",
+    "Terracotta",
+    "Bone-White"
+  ],
+  "bambu_parent": "Bambu PLA Matte",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-80",
+    "_print_speed": "40-80 mm/s",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "Official 'JAYO PLA Matte Print Parameters': Print Temp 200-230C, Hot Bed 60-80C, Print Speed 40-80mm/s, Melt Index 7-9g/10min. No density published."
+  },
+  "conflicts": [
+    "Official reusable-spool PLA Matte page (store.jayo3d.com/products/reusable-spooljayo-1-1kg-pla-matte-3d-printer-filament) claims print speeds 'up to 50-600mm/sec' without temperatures"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.jayo3d.com/products/jayo-pla-matte-1-1kg-3d-printing-filament-cardboard-spool",
+    "https://store.jayo3d.com/products/reusable-spooljayo-1-1kg-pla-matte-3d-printer-filament"
+  ],
+  "updated": "2026-11-01"
+}

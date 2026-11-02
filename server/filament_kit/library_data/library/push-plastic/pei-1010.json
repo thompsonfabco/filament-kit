@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "vendor": "Push Plastic",
+  "product": "PEI 1010",
+  "material": "PEI",
+  "colors": [],
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "370"
+    ],
+    "nozzle_temperature_range_high": [
+      "395"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "130-160",
+    "_drying": "70C 8h",
+    "_enclosure": "Heated enclosure required",
+    "_print_speed": "40mm/s (preferred: 0.4mm nozzle, 0.2mm layer, 375C extruder, 150C bed)",
+    "_notes": "PEI 1010 is extremely vulnerable to moisture absorption - must be dried. No density published in cited sources. Nozzle range exceeds the max hotend temperature of every Bambu printer - not printable on Bambu. No Bambu Studio PEI preset; bambu_parent omitted."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0260/7421/files/PEI_1010_print_settings.pdf",
+    "https://www.pushplastic.com/products/pei-1010-filament-1-75mm-500g"
+  ],
+  "updated": "2026-11-01"
+}

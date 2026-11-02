@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "vendor": "Spectrum",
+  "product": "S-Flex Carbon",
+  "material": "TPU",
+  "colors": [],
+  "bambu_parent": "Bambu TPU 90A",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "245"
+    ],
+    "filament_density": [
+      "1.23"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "45-70",
+    "_print_speed": "20-50 mm/s",
+    "_cooling": "do 100%",
+    "_enclosure": "not necessary",
+    "_hardened_nozzle_required": "recommended",
+    "_hardness": "90A (ISO 7619-1)",
+    "_vicat": "91 (ISO 306)",
+    "_hdt_1.8MPa": "70 (ISO 75)",
+    "_drying": "85C 4h",
+    "_fiber_content": "20% carbon fibre (TDS description)",
+    "_notes": "TDS settings based on a 0.5 mm nozzle."
+  },
+  "conflicts": [
+    "Official product page (https://spectrumfilaments.com/en/filament/s-flex-carbon/) lists bed 0-50, print speed 15-70 mm/s; TDS dated 06-10-2023 values kept in fields/published_ranges."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://spectrumfilaments.com/wp-content/uploads/2024/02/en_tds_spectrum_sflex_carbon.pdf",
+    "https://spectrumfilaments.com/en/filament/s-flex-carbon/"
+  ],
+  "updated": "2026-11-01"
+}

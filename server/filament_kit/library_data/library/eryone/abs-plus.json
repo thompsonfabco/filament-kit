@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "ABS+",
+  "material": "ABS",
+  "colors": [
+    "Black",
+    "White",
+    "Red",
+    "Grey",
+    "Blue",
+    "Green"
+  ],
+  "bambu_parent": "Bambu ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.05"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80-110",
+    "_drying": "90-100C 12h",
+    "_print_speed": "40-100mm/s",
+    "_vicat": "90 (ASTM D1525)",
+    "_hdt": "73 (ASTM D648; load not stated)",
+    "_bottom_printing_temperature": "230-260",
+    "_enclosure": "enclosed printing"
+  },
+  "conflicts": [
+    "nozzle_temperature: 230-270 (https://eryone3d.com/products/abs-plus-filament)",
+    "bed_all_plates: 80-100 (https://eryone3d.com/products/abs-plus-filament)"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0252/0412/9841/files/EYRONE-ABS-Plus_TDS.pdf",
+    "https://eryone3d.com/products/abs-plus-filament"
+  ],
+  "updated": "2026-11-01"
+}

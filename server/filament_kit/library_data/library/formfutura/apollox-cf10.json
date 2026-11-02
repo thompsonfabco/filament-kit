@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "ApolloX CF10",
+  "material": "ASA-CF",
+  "colors": [],
+  "bambu_parent": "Bambu ASA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "265"
+    ],
+    "filament_density": [
+      "1.1"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-110",
+    "fan_min_speed/fan_max_speed": "0-50",
+    "_enclosure": "Recommended (product page)",
+    "_min_nozzle": "0.4 (product page)",
+    "_fiber_content": "10% carbon fibre",
+    "_hardened_nozzle_required": "Recommended - ruby or hardened steel nozzle (TDS)",
+    "_hdt_0.45MPa": "100.5 (ISO 75, 66 psi)",
+    "_hdt": "95 at 264 psi (ISO 75)",
+    "_vicat": "101.6 (ISO 306)",
+    "_notes": "Print temps/bed/fan from product page (TDS gives properties only)."
+  },
+  "conflicts": [
+    "TDS text says no enclosure or heated chamber needed; product page says enclosure recommended."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://formfutura.com/filaments/apollox-cf10",
+    "https://formfutura.com/web/content/256467?download=true"
+  ],
+  "updated": "2026-11-01"
+}

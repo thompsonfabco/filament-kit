@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "vendor": "Protopasta",
+  "product": "PETG",
+  "material": "PETG",
+  "colors": [
+    "Clear",
+    "White",
+    "Black",
+    "Joel's Highfive Blue",
+    "Blood of My Enemies Translucent Red",
+    "Black Recycled"
+  ],
+  "bambu_parent": "Generic PETG",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "235"
+    ],
+    "nozzle_temperature_range_high": [
+      "275"
+    ],
+    "filament_density": [
+      "1.2"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "12"
+    ]
+  },
+  "published_ranges": {
+    "_nozzle_by_speed": "250C @ 12 mm3/s (Material Data Table); 235+C @ 2 mm3/s (product page)",
+    "_bed": "70+C (product page); 80C plate (Material Data Table)",
+    "_notes": "Product page: nozzle 235+C, 'We print up to 275 C, but 255 C is a good compromise'. Use Magigoo or glue to avoid fusing to the plate. Can build up on the nozzle; reduce flow below 100% or add a nozzle wipe. Density from PETG Colors SDS."
+  },
+  "conflicts": [
+    "Joel's Highfive Blue and Blood of My Enemies Red PETG pages, and the White PETG feature list, give 'processing from 230+ C @ 2 cu mm/s' (https://proto-pasta.com/products/joels-highfive-blue-petg)"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://proto-pasta.com/products/simply-black-petg",
+    "https://proto-pasta.com/pages/material-data-table",
+    "https://cdn.shopify.com/s/files/1/0717/9095/files/PETG_Colors.pdf"
+  ],
+  "updated": "2026-11-01"
+}

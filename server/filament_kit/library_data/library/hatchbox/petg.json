@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "vendor": "Hatchbox",
+  "product": "PETG",
+  "material": "PETG",
+  "colors": [
+    "Black",
+    "White",
+    "Red",
+    "Blue",
+    "Silver",
+    "Purple",
+    "Green",
+    "Yellow",
+    "Transparent White",
+    "Gray Blue",
+    "Lake Blue",
+    "Copper",
+    "Bronze"
+  ],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "55-85",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "Product pages spec bullet 'Print Temperature - 230C - 260C', dimensional accuracy +/- 0.03mm; PETG material page: recommended extrusion 230-260 C, build platform 55-85 C, PEI build plate recommended, pause part-cooling fan for first layers. Verified 2026-11-01 against the product pages' Shopify JSON/HTML and the material page."
+  },
+  "conflicts": [
+    "Same Hatchbox PETG product pages, meta description: Recommended Extrusion/Nozzle Temperature 180-220 C (appears to be shared PLA template text)",
+    "Same product pages: 'No Heating Bed Required' vs PETG material page build platform 55-85 C"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.hatchbox3d.com/products/3d-petg-1kg1-75-blk",
+    "https://www.hatchbox3d.com/pages/petg-material",
+    "https://www.hatchbox3d.com/products/petg-transparent-white-1-75mm-1kg-spool"
+  ],
+  "updated": "2026-11-01"
+}

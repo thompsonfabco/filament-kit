@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "vendor": "Inslogic",
+  "product": "PC-ABS",
+  "material": "PC-ABS",
+  "colors": [
+    "PC-ABS Black"
+  ],
+  "bambu_parent": "Generic PC",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "260"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_density": [
+      "1.08"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "textured_plate_temp": "100-110",
+    "fan_max_speed": "0 (OFF)",
+    "_nozzle_by_speed": "260-280C@50-230mm/s",
+    "_drying": "70C 12h; 80C 6h",
+    "_nozzle_sizes_supported": "0.4,0.6",
+    "_hdt_0.45MPa": "103",
+    "_diameter_tolerance": "+/-0.03",
+    "_vitrification": "106 (Tg (DSC))"
+  },
+  "conflicts": [
+    "[pass 2] store.inslogic3d.com page: fan 100%, nozzle 0.2/0.4/0.6, drying 70-80C 6h, 102C; TDS used."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.prod.website-files.com/5e2473a79b89b61b1f3e3f38/68932d2af2b77ac749624bb0_Inslogic_PC-ABS_Filament_Technical_Data_Sheet_TDS.pdf",
+    "https://www.inslogic3d.com/products/inslogic-pc-abs-filament",
+    "https://store.inslogic3d.com/products/pc-abs-filament"
+  ],
+  "updated": "2026-11-01"
+}

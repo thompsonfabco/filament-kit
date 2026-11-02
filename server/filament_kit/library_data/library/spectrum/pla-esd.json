@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "vendor": "Spectrum",
+  "product": "PLA ESD",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "185"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.16"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "0-50",
+    "_print_speed": "40-350 mm/s",
+    "_cooling": "up to 100%",
+    "_enclosure": "not necessary",
+    "_hardened_nozzle_required": "No",
+    "_hdt": "55 (ASTM E2092)",
+    "_vitrification": "55-60 (Tg, DSC D3418)"
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://spectrumfilaments.com/wp-content/uploads/2025/11/en_tds_spectrum_pla_esd.pdf",
+    "https://spectrumfilaments.com/en/filament/pla-esd/"
+  ],
+  "updated": "2026-11-01"
+}

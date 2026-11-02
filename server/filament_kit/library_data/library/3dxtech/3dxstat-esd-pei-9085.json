@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "3DXSTAT ESD-PEI 9085",
+  "material": "PEI",
+  "colors": [
+    "Black"
+  ],
+  "fields": {
+    "filament_density": [
+      "1.38"
+    ]
+  },
+  "published_ranges": {
+    "_vitrification": "186 (Tg, DSC)",
+    "_hdt_0.45MPa": "162",
+    "_notes": "3DXTech TDS Rev 1 '3DXSTAT ESD-Ultem 9085' (third-party-hosted PDF). Specimen print conditions only: Gearbox HT2, 385C nozzle, 160C bed. ESD: surface resistance 10^7-10^9 ohm/sq. Beyond Bambu Lab printer nozzle limits. Filament diameter not printed on the cited TDS (removed in source check)."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0658/0033/9668/files/ESD_Ultem9085_v1_tds.pdf"
+  ],
+  "updated": "2026-11-01"
+}

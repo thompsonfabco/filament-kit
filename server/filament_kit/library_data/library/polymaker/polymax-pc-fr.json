@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "vendor": "Polymaker",
+  "product": "PolyMax PC-FR",
+  "material": "PC",
+  "colors": [
+    "Black",
+    "White"
+  ],
+  "bambu_parent": "Bambu PC FR",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.2"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-105",
+    "chamber_temperatures": "70-100 (needed)",
+    "fan_max_speed": "0 (OFF)",
+    "filament_retraction_speed": "20-40",
+    "_print_speed": "50-200",
+    "_drying": "75C 6h",
+    "_annealing": "90C 2h",
+    "_enclosure": "required, heated chamber recommended",
+    "_vitrification": "115 (Tg, DSC)",
+    "_vicat": "116",
+    "_hdt_0.45MPa": "110",
+    "_hdt_1.8MPa": "107",
+    "_notes": "Flame retardant UL94 V0 (Covestro Makrolon based). No wiki product page; TDS listed under wiki Technical Data Sheets."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0548/7299/7945/files/PolyMax_PC_FR_TDS_EN_V5.4.pdf",
+    "https://wiki.polymaker.com/polymaker-products/more-about-our-products/documents/technical-data-sheets/polycarbonate/polymax-tm-pc-fr",
+    "https://shop.polymaker.com/products/polymax-pc-fr"
+  ],
+  "updated": "2026-11-01"
+}

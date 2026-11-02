@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "vendor": "Spectrum",
+  "product": "ABS GP450",
+  "material": "ABS",
+  "colors": [],
+  "bambu_parent": "Bambu ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "235"
+    ],
+    "nozzle_temperature_range_high": [
+      "255"
+    ],
+    "filament_density": [
+      "1.04"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100",
+    "_print_speed": "30-200 mm/s",
+    "_cooling": "0 - 25%",
+    "_enclosure": "recommended for larger prints",
+    "_hardened_nozzle_required": "not necessary",
+    "_vicat": "95 (ISO 306)"
+  },
+  "conflicts": [
+    "Official product page (https://spectrumfilaments.com/en/filament/abs-gp450/) lists nozzle 240-270, bed 80-100, print speed 30-350 mm/s; TDS dated 06-04-2022 values kept in fields/published_ranges."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://spectrumfilaments.com/wp-content/uploads/2021/09/en_tds_spectrum_abs_gp450.pdf",
+    "https://spectrumfilaments.com/en/filament/abs-gp450/"
+  ],
+  "updated": "2026-11-01"
+}

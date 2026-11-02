@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "vendor": "Spectrum",
+  "product": "Prografen PET-G Graphene Light",
+  "material": "PETG",
+  "colors": [],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "215"
+    ],
+    "nozzle_temperature_range_high": [
+      "265"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-80",
+    "_print_speed": "40-600 mm/s",
+    "_cooling": "Up to 100%",
+    "_enclosure": "not necessary",
+    "_hardened_nozzle_required": "No",
+    "_notes": "No TDS linked on the official page; values from the product page only."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://spectrumfilaments.com/en/filament/prografen-petg-graphene-light/"
+  ],
+  "updated": "2026-11-01"
+}

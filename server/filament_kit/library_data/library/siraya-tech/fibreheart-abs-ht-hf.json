@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "vendor": "Siraya Tech",
+  "product": "Fibreheart ABS HT HF",
+  "material": "ABS",
+  "colors": [
+    "Black",
+    "White"
+  ],
+  "bambu_parent": "Bambu ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.05"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100-110",
+    "chamber_temperatures": "50-70 (if heated chamber)",
+    "fan_max_speed": "0-30",
+    "filament_retraction_length": "0.4-1.0 (direct drive)",
+    "filament_retraction_speed": "1800-3600 mm/min (30-60 mm/s)",
+    "_print_speed": "30-200 mm/s",
+    "_drying": "70-80C 4-6h",
+    "_diameter_tolerance": "+/-0.03",
+    "_hdt_0.45MPa": "101 (Method B); Method A (1.80 MPa) 99",
+    "_vicat": "103 (ISO 306)",
+    "_vitrification": "101 (Tg, ASTM D3418)",
+    "_hardened_nozzle_required": "no (brass OK)",
+    "_min_nozzle": "0.2 mm",
+    "_enclosure": "Essential (fully enclosed printer)",
+    "_notes": "SKUs ST3024/ST3035. Start at 250C. Melting point 220C. Low-odour, acetone-smoothable. Build surface PEI film, PC film or glass.",
+    "_ams": "Compatible (product page FAQ)"
+  },
+  "conflicts": [
+    "Product page spec table gives diameter 1.75+/-0.2 mm and requires a hardened steel nozzle 0.4 mm or larger; TDS gives 1.75+/-0.03 mm and says brass nozzles >=0.2 mm work, no hardened nozzle required: https://siraya.tech/products/fibreheart-abs-high-temp-high-flow-filament"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://siraya.tech/pages/fibreheart-abs-ht-hf-high-temp-filament-tds",
+    "https://siraya.tech/products/fibreheart-abs-high-temp-high-flow-filament"
+  ],
+  "updated": "2026-11-01"
+}

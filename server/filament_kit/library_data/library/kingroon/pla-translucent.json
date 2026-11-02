@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "vendor": "Kingroon",
+  "product": "PLA Translucent",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Translucent",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.22"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "35-65",
+    "chamber_temperatures": "25-45",
+    "filament_retraction_length": "0.6-1.0",
+    "filament_retraction_speed": "20-40",
+    "_drying": "50C 8h",
+    "_max_print_speed": "<150 mm/s",
+    "_min_nozzle": "0.2",
+    "_hdt_0.45MPa": "60",
+    "_vicat": "61",
+    "_vitrification": "54 (Tg, DSC)",
+    "_notes": "TDS V1.0: 10 colours, frosted semi-transparent; Textured PEI / Smooth PEI / Cool Plate SuperTack with glue; fan on; HDT 1.8 MPa 55 C; melting 156 C. No kingroon.com product page found for this line."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://wiki.kingroon.com/kingroon_pla_translucent_technical_data_sheet_v1.0.pdf"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "vendor": "Anycubic",
+  "product": "PLA High Speed",
+  "material": "PLA",
+  "colors": [
+    "White",
+    "Black",
+    "Red",
+    "Gray",
+    "Green",
+    "Orange",
+    "Blue",
+    "Pink",
+    "Purple",
+    "Yellow"
+  ],
+  "bambu_parent": "Generic PLA High Speed",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.19"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "18"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "55-65",
+    "fan_max_speed": "100%",
+    "filament_retraction_speed": "40",
+    "_drying": "45-50C 6-8h",
+    "_nozzle_by_speed": "190-210C at 50-150 mm/s; 210-230C at 150-300 mm/s; 230-260C at 300-600 mm/s (overall 190-260)",
+    "_max_print_speed": "600 mm/s",
+    "_vitrification": "55.1 (Tg, ISO 11357-1)",
+    "_vicat": "54.1 (ISO 306, 10N)",
+    "_hdt_0.45MPa": "52",
+    "_min_nozzle": "0.2",
+    "_notes": "TDS V3.0. Fields hold the highest speed tier (230-260C); the overall printed range is 190-260C. TDS also gives extrusion multiplier 0.96, cooling time 7 s. Product page: ACE compatible, recommended nozzle 0.2 mm or above."
+  },
+  "conflicts": [
+    "Product page legacy 'Recommended Printing Parameters' (store.anycubic.com/products/high-speed-pla-filament): Build Plate Temperature 30-60C, Density 1.25g/cm3, Heat Deflection Temperature 57.8C, Retraction Distance 0.8-3mm, Retraction Speed 30-60mm/s"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0685/7578/9245/files/ANYCUBIC_TDS_PLA_HS_V3.0.pdf",
+    "https://ca.anycubic.com/products/high-speed-pla-filament"
+  ],
+  "updated": "2026-11-01"
+}

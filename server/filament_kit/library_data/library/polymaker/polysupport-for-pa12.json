@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "vendor": "Polymaker",
+  "product": "PolySupport for PA12",
+  "material": "PA",
+  "colors": [
+    "GRASS GREEN"
+  ],
+  "bambu_parent": "Bambu Support For PA PET",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "270"
+    ],
+    "nozzle_temperature_range_high": [
+      "300"
+    ],
+    "filament_density": [
+      "1.29"
+    ],
+    "filament_is_support": [
+      "1"
+    ],
+    "filament_soluble": [
+      "0"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-80",
+    "chamber_temperatures": "enclosure needed (ambient)",
+    "fan_max_speed": "0 (OFF)",
+    "_print_speed": "50-150",
+    "_drying": "100C 8h",
+    "_vicat": "171",
+    "_hdt_0.45MPa": "43",
+    "_hdt_1.8MPa": "53",
+    "_ams": "Spools roll in the AMS, but Polymaker highly recommends a two-nozzle printer (IDEX/tool changer).",
+    "_notes": "Breakaway support for PA12 / Fiberon PA12-CF10 and PA612. Requires all-metal hotend 270C+. TDS HDT values (0.45 MPa 43 C below 1.8 MPa 53 C) copied as printed. Material type of the support is not stated; 'PA' reflects its PA12 pairing."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://wiki.polymaker.com/polymaker-products/polymaker-filaments/specialty-filament/polysupport-tm-for-pa12",
+    "https://cdn.shopify.com/s/files/1/0548/7299/7945/files/PolySupport_for_PA12_TDS_EN_V5.4.pdf",
+    "https://shop.polymaker.com/products/polysupport"
+  ],
+  "updated": "2026-11-01"
+}

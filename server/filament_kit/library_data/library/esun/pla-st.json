@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "PLA-ST",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Tough",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.25"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "45-60",
+    "fan_max_speed": "100",
+    "_print_speed": "40-100",
+    "_notes": "eSUN PLA-ST (super tough) TDS v4.0 Nov 2021. TDS: Bowden (remote) printing needs reduced speed (40 mm/s) to prevent feeding issues. HDT printed as N/A in TDS. Diameter not stated in TDS."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://assets.spoolscout.com/tds-sds/esun/tds/esun-pla-st-tds-v4.0-2021-11.pdf",
+    "https://www.spoolscout.com/data-sheets/esun/pla-pla-st"
+  ],
+  "updated": "2026-11-01"
+}

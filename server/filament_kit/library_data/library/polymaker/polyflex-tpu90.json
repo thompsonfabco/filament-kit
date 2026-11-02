@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "vendor": "Polymaker",
+  "product": "PolyFlex TPU90",
+  "material": "TPU",
+  "colors": [
+    "Black",
+    "White",
+    "Grey",
+    "Polymaker Teal",
+    "Clear"
+  ],
+  "bambu_parent": "Bambu TPU 90A",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.21"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "25-60",
+    "fan_max_speed": "ON",
+    "filament_retraction_length": "3-6",
+    "filament_retraction_speed": "40-60",
+    "_print_speed": "30-70",
+    "_drying": "70C 8h",
+    "_enclosure": "not needed",
+    "_hardness": "90A (Shore, ISO 7619-1)",
+    "_ams": "Polymaker: very soft, direct drive extruder recommended to avoid jams/feeding issues.",
+    "_notes": "Sold in 1.75 and 2.85 mm. ISO 10993 biocompatibility reports linked from the wiki."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://wiki.polymaker.com/polymaker-products/polymaker-filaments/prime-materials/flexible-tpu/polyflex-tm-tpu90",
+    "https://cdn.shopify.com/s/files/1/0548/7299/7945/files/PolyFlex_TPU90_TDS_EN_V5.4.pdf",
+    "https://shop.polymaker.com/products/polyflex-tpu90"
+  ],
+  "updated": "2026-11-01"
+}

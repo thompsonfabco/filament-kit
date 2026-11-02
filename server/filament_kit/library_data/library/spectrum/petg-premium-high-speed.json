@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "Spectrum",
+  "product": "PETG Premium High Speed",
+  "material": "PETG",
+  "colors": [],
+  "bambu_parent": "Bambu PETG HF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "245"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.29"
+    ]
+  },
+  "published_ranges": {
+    "_nozzle_by_speed": "standard speed: 240-265; high speed: 245-270",
+    "bed_all_plates": "60-80",
+    "_cooling": "75-100%",
+    "_enclosure": "not necessary",
+    "_hardened_nozzle_required": "No",
+    "_drying": "60C 4h",
+    "_vitrification": "80 (Tg, D3418)",
+    "_max_print_speed": "800 mm/s (TDS description)"
+  },
+  "conflicts": [
+    "Official product page (https://spectrumfilaments.com/en/filament/pet-g-premium-high-speed/) lists nozzle 230-270; TDS dated 05-10-2024 values kept in fields/published_ranges."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://spectrumfilaments.com/wp-content/uploads/2024/11/en_tds_spectrum_petg_premium_high_speed.pdf",
+    "https://spectrumfilaments.com/en/filament/pet-g-premium-high-speed/"
+  ],
+  "updated": "2026-11-01"
+}

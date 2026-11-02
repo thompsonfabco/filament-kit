@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "PLA Burnt Titanium",
+  "material": "PLA",
+  "colors": [
+    "Nebula",
+    "Constellation",
+    "Fantasy Glaze",
+    "Interstellar",
+    "Wormhole",
+    "Galaxy",
+    "Green",
+    "Dark Gold",
+    "Red",
+    "Blue Purple",
+    "Blue",
+    "Technology Blue"
+  ],
+  "bambu_parent": "Bambu PLA Silk",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_density": [
+      "1.23"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "55-70",
+    "_drying": "65-75C 12h",
+    "_print_speed": "30-100mm/s",
+    "_vicat": "54 (ASTM D1525)",
+    "_hdt": "53 (ASTM D648; load not stated)",
+    "_vitrification": "62 (Tg, DSC 10C/min)",
+    "_bottom_printing_temperature": "190-220",
+    "_enclosure": "Supports open printing; better results with enclosure",
+    "_notes": "Dual-Color and Triple-Color Burnt Titanium listings print the same table. bambu_parent is a closest-match guess (iridescent sheen PLA); no Bambu burnt-titanium preset."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0252/0412/9841/files/ERYONE-Burnt_Titanium_PLA-TDS.pdf",
+    "https://eryone3d.com/products/pla-burnt-titanium-filament",
+    "https://eryone3d.com/products/pla-burnt-titanium-dual-filament"
+  ],
+  "updated": "2026-11-01"
+}

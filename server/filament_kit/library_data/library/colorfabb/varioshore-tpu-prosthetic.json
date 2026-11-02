@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "vendor": "ColorFabb",
+  "product": "varioShore TPU Prosthetic",
+  "material": "TPU",
+  "colors": [
+    "Natural",
+    "Dark Brown",
+    "Medium Brown",
+    "Pale Pink"
+  ],
+  "bambu_parent": "Generic TPU",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "195"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.2"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "_print_speed": "40-100 mm/s",
+    "_hardness": "92 Shore A (ASTM D-2240) unfoamed",
+    "_vitrification": "-20 (Tg, DSC ISO 11357)",
+    "_diameter_tolerance": "+/-0.05 (1.75 mm; TDS 'max. roundness deviation'), +/-0.1 (2.85 mm)",
+    "_notes": "TDS v1.0. Skin-tone variant of active-foaming varioShore TPU. Melting temp 130 C."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://downloads.colorfabb.com/public.php/dav/files/rtfDDRCa723Xdor/Technical%20Data%20Sheets/TPU/colorFabb%20varioShore%20TPU%20Prosthetic/TDS__varioShore%20Prosthetic%20TPU.pdf",
+    "https://colorfabb.com/filaments/materials/tpu-filaments/varioshore-tpu"
+  ],
+  "updated": "2026-11-01"
+}

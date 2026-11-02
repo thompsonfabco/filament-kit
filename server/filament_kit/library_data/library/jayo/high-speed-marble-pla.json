@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "vendor": "JAYO",
+  "product": "High Speed Marble PLA",
+  "material": "PLA",
+  "colors": [
+    "Ashen Concrete",
+    "Brick Red",
+    "Chestnut Brown",
+    "Forest Green",
+    "Oreo Marble",
+    "Shadow Storm"
+  ],
+  "bambu_parent": "Bambu PLA Marble",
+  "fields": {
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_print_speed": "50-600 mm/s",
+    "_max_print_speed": "600 mm/s",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "Official page gives speed (50-600mm/s) and diameter/tolerance only. Nozzle/bed temps and density NOT sourced."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.jayo3d.com/products/reusable-spool-jayo-high-speed-marble-pla-600mm-s-high-speed-3d-printer-non-toxic-filament-1-1kg-roll-reusable-spool",
+    "https://store.jayo3d.com/products/moq-3-jayo-high-speed-marble-pla-600mm-3d-printer-non-toxic-filament-1-1kg-roll"
+  ],
+  "updated": "2026-11-01"
+}

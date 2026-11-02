@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "vendor": "Creality",
+  "product": "Soleyin Ultra PLA",
+  "material": "PLA",
+  "colors": [
+    "White",
+    "Black",
+    "Gray",
+    "Light Green",
+    "Ocean Blue",
+    "Pineapple Yellow",
+    "Almond Purple",
+    "Rosehip",
+    "Strawberry Milk",
+    "Matte Rose Stone",
+    "Matte Fluonte",
+    "Matte Moonstone",
+    "Matte White",
+    "Matte Black",
+    "Matte Gray"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "45-60",
+    "_max_print_speed": "300 mm/s",
+    "_notes": "Line includes matte colours sold under the same product; no separate matte spec published (consider Bambu PLA Matte for the Matte colours). Density, diameter tolerance and drying not found on an official source."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.creality.com/blogs/basics/pla-filament-guide-properties-settings",
+    "https://store.creality.com/products/soleyin-ultra-pla-3d-printing-filament-1kg"
+  ],
+  "updated": "2026-11-01"
+}

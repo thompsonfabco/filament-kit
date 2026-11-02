@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "vendor": "Phrozen",
+  "product": "PLA HS",
+  "material": "PLA",
+  "colors": [
+    "PLA HS Black",
+    "PLA HS Grey"
+  ],
+  "bambu_parent": "Generic PLA High Speed",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_shrink": [
+      "99.5%"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "hot_plate_temp": "45-60",
+    "textured_plate_temp": "45-60",
+    "_plates": "PEI",
+    "_hdt_0.45MPa": "50",
+    "_max_print_speed": "up to 600 mm/s",
+    "_notes": "Density published only as range 1.2-1.25 (page shows unit as g/cm2, a typo). Nozzle and bed ranges from uk.phrozen3d.com (earlier pass). Drying read from search snippet of global.phrozen3d.com.",
+    "bed_all_plates": "45-60 (PEI)",
+    "_drying": "50-55C 6h (before every print)",
+    "_vitrification": "50 (HDT)"
+  },
+  "conflicts": [
+    "[pass 3] Phrozen states only 'PEI Plate'; the same range was applied to smooth and textured PEI keys.",
+    "[merge] published_ranges._plates: pass 5 value \"PEI\" replaced earlier value \"PEI plate (smooth/textured not specified)\"",
+    "[merge] published_ranges._max_print_speed: pass 5 value \"up to 600 mm/s\" replaced earlier value \"600 (up to)\"",
+    "[merge] published_ranges._notes: pass 5 value \"Density published only as range 1.2-1.25 (page shows unit as g/cm2, a typo). Nozzle and bed ranges from uk.phrozen3d.com (earlier pass). Drying read from search snippet of global.phrozen3d.com.\" replaced earlier value \"Density published as a range '1.2-1.25 g/cm2' (unit typo), so it is not set as a single value. Shrinkage rate 0.5%. MFI 10.68 g/10min.\"",
+    "[pass 5] Density unit printed as g/cm2 on global.phrozen3d.com; treated as g/cm3"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://uk.phrozen3d.com/products/high-speed-pla",
+    "https://global.phrozen3d.com/products/high-speed-pla"
+  ],
+  "updated": "2026-11-01"
+}

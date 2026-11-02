@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "OVERTURE",
+  "product": "Matte PLA",
+  "material": "PLA",
+  "colors": [
+    "White"
+  ],
+  "bambu_parent": "Overture Matte PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-70",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "30-60",
+    "overhang_fan_threshold": "60deg (published overhang threshold)",
+    "_print_speed": "60-300",
+    "_drying": "50C 7h",
+    "_fan": "on",
+    "_colors_note": "Pass 1 recorded bare colour names, not full Spoolman names; match on vendor+product."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://overture3d.com/products/overture-matte-pla",
+    "https://overture3d.com/collections/compare-filament/products/overture-matte-pla"
+  ],
+  "updated": "2026-11-01"
+}

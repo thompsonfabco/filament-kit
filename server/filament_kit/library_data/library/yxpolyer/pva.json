@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "yxpolyer",
+  "product": "PVA",
+  "material": "PVA",
+  "colors": [
+    "PVA Natural"
+  ],
+  "bambu_parent": "Generic PVA",
+  "fields": {
+    "filament_soluble": [
+      "1"
+    ],
+    "filament_is_support": [
+      "1"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_ams": "Supplied on reusable AMS-compatible PC spool",
+    "_notes": "Water-soluble support. yxpolyer.com: dissolves in as little as 2.5-4 hours; reduced sensitivity to ambient humidity; foil-sealed; RoHS and REACH compliant. Amazon title: support material for PLA, PETG, ABS."
+  },
+  "conflicts": [
+    "[pass 3] Brand Amazon listing B0G5FCYPKL shows '190-220' only inside an unlabelled comparison table; not used. A different 0.5 kg YXPOLYER PVA listing gives 190-210C and bed 60-80C; different product, not used.",
+    "[merge] published_ranges._notes: pass 4 value \"Water-soluble support for PLA, PETG, ABS, TPU. 1 kg listing: dissolves in cold water within 6 h, faster in 50C water. yxpolyer.com and 500 g listing: 2.5-4 h (4 h cold, 2.5 h at 50-60C). Foil-sealed, 'no pre-drying' needed out of the bag; reduced humidity sensitivity claimed. No print temperatures, bed, drying or density published anywhere official.\" replaced earlier value \"Water-soluble support; dissolves in as little as 2.5-4 hours. Foil-sealed. RoHS/REACH compliant. No temperatures on the official page.\"",
+    "[pass 4] Seller 'Silver AM' (seller on all yxpolyer listings).",
+    "[pass 4] Task table note (190-220C, bed 0-45C) is not on the current listing or on yxpolyer.com; not used.",
+    "[pass 4] Amazon colour field says 'Yellow' for the 1 kg PVA (B0G5FCYPKL).",
+    "[merge] published_ranges._notes: pass 6 value \"Water-soluble support. yxpolyer.com: dissolves in as little as 2.5-4 hours; reduced sensitivity to ambient humidity; foil-sealed; RoHS and REACH compliant. Amazon title: support material for PLA, PETG, ABS.\" replaced earlier value \"Water-soluble support for PLA, PETG, ABS, TPU. 1 kg listing: dissolves in cold water within 6 h, faster in 50C water. yxpolyer.com and 500 g listing: 2.5-4 h (4 h cold, 2.5 h at 50-60C). Foil-sealed, 'no pre-drying' needed out of the bag; reduced humidity sensitivity claimed. No print temperatures, bed, drying or density published anywhere official.\"",
+    "[pass 6] Dissolution time: yxpolyer.com states as little as 2.5-4 hours; Amazon B0G5FCYPKL title states 'Fast Water Soluable in 6 Hours' (search snippet).",
+    "[pass 6] Older YXPOLYER PVA 0.5kg listing B0CFXNF1BW states 190-210C and bed 60-80C but appears to be an older formulation with copy referencing Sainsmart; not used."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://yxpolyer.com/products/pva-1kg",
+    "https://www.amazon.com/YXPOLYER-Filament-Material-Soluable-AMS-Compatible/dp/B0G5FCYPKL",
+    "https://www.amazon.com/dp/B0G5FCYPKL",
+    "https://www.amazon.com/dp/B0FP59QRCQ"
+  ],
+  "updated": "2026-11-01"
+}

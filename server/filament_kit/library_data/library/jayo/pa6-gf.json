@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "JAYO",
+  "product": "PA6-GF",
+  "material": "PA6-GF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu PA6-GF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "270"
+    ],
+    "nozzle_temperature_range_high": [
+      "290"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-70",
+    "_print_speed": "50-120 mm/s",
+    "_fiber_content": "20% glass fiber (heading); body text says 25% (see conflicts)",
+    "_hdt": "214 (HDT, load not stated)",
+    "_annealing": "80-130C 5-12h",
+    "_hardened_nozzle_required": "Works best with hardened steel nozzles (abrasive)",
+    "_notes": "Official page values (the settings bullet mistakenly says 'nylon carbon fiber filament'). PA spool heat-resistant to 110C. No drying spec or density published."
+  },
+  "conflicts": [
+    "Same official page: heading '80% PA6 Nylon + 20% Glass Fiber' vs body '75% nylon 6 with 25% chopped glass fibers'"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.jayo3d.com/products/jayo-1kg-pa6-gf-nylon-carbon-fiber-3d-printer-filament-1-75mm-heat-resistant"
+  ],
+  "updated": "2026-11-01"
+}

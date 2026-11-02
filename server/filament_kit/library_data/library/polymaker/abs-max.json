@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "vendor": "Polymaker",
+  "product": "ABS Max",
+  "material": "ABS",
+  "colors": [
+    "Black",
+    "White",
+    "Grey",
+    "Blue",
+    "Red",
+    "Green"
+  ],
+  "bambu_parent": "PolyLite ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "270"
+    ],
+    "nozzle_temperature_range_high": [
+      "300"
+    ],
+    "filament_density": [
+      "1.06"
+    ],
+    "filament_max_volumetric_speed": [
+      "15"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "120",
+    "chamber_temperatures": "65+ (actively heated)",
+    "fan_min_speed/fan_max_speed": "0-30%",
+    "filament_retraction_length": "1 (direct drive)",
+    "filament_retraction_speed": "20 (direct drive)",
+    "_print_speed": "up to 200",
+    "_drying": "70C 6h",
+    "_enclosure": "required, actively heated chamber 65C+",
+    "_hardened_nozzle_required": "no",
+    "_vitrification": "126.3 (Tg, DSC)",
+    "_vicat": "127.4",
+    "_hdt_0.45MPa": "118.1",
+    "_hdt_1.8MPa": "113.1",
+    "_ams": "Polymaker wiki: spools redesigned so all Polymaker products spin well in the AMS.",
+    "_notes": "Bambu P1/X1 chambers are not actively heated; Polymaker states 65C+ actively heated chamber for best results. Print settings from the wiki table (TDS text layer misaligned)."
+  },
+  "conflicts": [
+    "Wiki print-settings table: retraction distance 1-3 mm, retraction speed 20-40 mm/s (TDS: 1 mm, 20 mm/s, direct drive)"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://wiki.polymaker.com/polymaker-products/polymaker-filaments/prime-materials/abs-and-asa/polymaker-tm-abs-max",
+    "https://cdn.shopify.com/s/files/1/0548/7299/7945/files/TDS_Polymaker_ABS_Max_V1.1_2026_06_01_EN_2.pdf",
+    "https://shop.polymaker.com/products/polymaker-abs-max"
+  ],
+  "updated": "2026-11-01"
+}

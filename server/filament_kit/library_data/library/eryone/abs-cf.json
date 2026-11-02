@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "ABS-CF",
+  "material": "ABS-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_density": [
+      "1.1"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-110",
+    "_drying": "90-100C 12h",
+    "_print_speed": "30-100mm/s",
+    "_hdt": "95 (ASTM D648; load not stated)",
+    "_fiber_content": "approx. 10% carbon fiber",
+    "_enclosure": "Closed printing",
+    "_notes": "TDS does not state a nozzle requirement. No Bambu ABS-CF preset; Bambu ABS used as parent."
+  },
+  "conflicts": [
+    "bed_all_plates: 80-110 (https://eryone3d.com/products/abs-filament (combined ABS & ABS-CF listing header))"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0252/0412/9841/files/ERYONE-ABS_CF-TDS.pdf",
+    "https://eryone3d.com/products/abs-filament"
+  ],
+  "updated": "2026-11-01"
+}

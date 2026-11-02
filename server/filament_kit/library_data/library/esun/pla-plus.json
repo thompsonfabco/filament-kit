@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "PLA+",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "eSUN PLA+",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.24"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "45-60",
+    "fan_max_speed": "100",
+    "_drying": "50C 8-12h",
+    "_print_speed": "<300",
+    "_hdt_0.45MPa": "53.78",
+    "_vitrification": "N/A (Tg not published)",
+    "_notes": "eSUN PLA+ TDS v1.0 Feb 2026. Nozzle sizes 0.2/0.4/0.6/0.8 mm; textured PEI plate. Test print 220C nozzle / 65C bed on Bambu P1S 0.4 mm. Also sold as 'PLA Pro' (same TDS). Diameter not stated in TDS."
+  },
+  "conflicts": [
+    "eSUN 3D Printing Material Datasheet (2019, reseller-hosted copy, https://cdn.shopify.com/s/files/1/1745/6181/files/eSUN_3D_Printing_Filament_Datasheet.pdf): PLA+ 190-220C, bed 60-80C, density 1.25, HDT 52C (older formulation)."
+  ],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://assets.spoolscout.com/tds-sds/esun/tds/esun-pla-plus-tds-v1.0-2026-02.pdf",
+    "https://www.spoolscout.com/data-sheets/esun/pla-pla"
+  ],
+  "updated": "2026-11-01"
+}

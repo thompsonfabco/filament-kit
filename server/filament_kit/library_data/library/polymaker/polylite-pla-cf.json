@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "Polymaker",
+  "product": "PolyLite PLA-CF",
+  "material": "PLA-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu PLA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.29"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "25-60",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "20-40",
+    "_print_speed": "50-300 mm/s",
+    "_drying": "55C 6h",
+    "_vitrification": "62 (Tg, DSC 10C/min)",
+    "_vicat": "64",
+    "_hdt_0.45MPa": "54",
+    "_enclosure": "Not needed",
+    "_fiber_content": "8% chopped carbon fiber by weight (product page)",
+    "_hardened_nozzle_required": "Strongly recommended (abrasive) per product page",
+    "_notes": "TDS V5.4. Build surface PC and textured PEI, glue when needed; cooling fan ON. HDT 1.8 MPa 50 C. Diameter not stated on TDS or product page."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0548/7299/7945/files/PolyLite_PLA-CF_TDS_EN_V5.4.pdf?v=1731948953",
+    "https://wiki.polymaker.com/polymaker-products/more-about-our-products/documents/technical-data-sheets/pla/pla-cf",
+    "https://shop.polymaker.com/products/polylite-pla-cf"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "vendor": "JAYO",
+  "product": "Dual-Color Matte PLA",
+  "material": "PLA",
+  "colors": [
+    "Orange+Red",
+    "Black+Blue",
+    "Red+Yellow",
+    "Yellow+Cyan",
+    "Red+Blue",
+    "Green+Purple",
+    "Red+Black"
+  ],
+  "bambu_parent": "Bambu PLA Matte",
+  "fields": {
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "Two-colour coextruded matte PLA. Official page gives only diameter/tolerance. Nozzle/bed temps and density NOT sourced."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.jayo3d.com/products/moq-4-jayo-dual-color-matte-pla-3d-printing-filament-1-75mm-1-1kg-spool-2-4-lbs-dimensional-accuracy-0-02mm"
+  ],
+  "updated": "2026-11-01"
+}

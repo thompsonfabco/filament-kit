@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "vendor": "Fiberlogy",
+  "product": "HS PLA Clear",
+  "material": "PLA",
+  "colors": [
+    "Pure Transparent",
+    "Turquoise",
+    "Pink",
+    "Orange",
+    "Navy Blue",
+    "Light Green",
+    "Green",
+    "Burgundy",
+    "Blue"
+  ],
+  "bambu_parent": "Generic PLA High Speed",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.24"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60",
+    "fan_min_speed/fan_max_speed": "75-100",
+    "_drying": "50C 4h",
+    "_enclosure": "not required",
+    "_hdt_0.45MPa": "60 (ISO 75)",
+    "_vitrification": "60 (Tg, DSC)",
+    "_max_print_speed": "described as printable 'at speeds exceeding even 900 mm/s' (marketing text)",
+    "_notes": "Bed surfaces: smooth PEI, textured PEI, glass. Increased risk of spontaneous cracking: always unload after printing; cut off the previously loaded section after unloading to avoid breakage inside PTFE tubes."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://fiberlogy.com/en/filaments/pla-en/hs-pla-clear-en/"
+  ],
+  "updated": "2026-11-01"
+}

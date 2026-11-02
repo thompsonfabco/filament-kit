@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "vendor": "Fillamentum",
+  "product": "PETG HFFR",
+  "material": "PETG",
+  "colors": [],
+  "bambu_parent": "Generic PETG",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "235"
+    ],
+    "nozzle_temperature_range_high": [
+      "255"
+    ],
+    "filament_density": [
+      "1.26"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-80",
+    "_drying": "65C 4h",
+    "_vitrification": "58 (Tg, ISO 11357)",
+    "_vicat": "70 (ISO 306)",
+    "_hardened_nozzle_required": "Recommended: product page says abrasive, wear-resistant nozzles are recommended.",
+    "_diameter_tolerance": "+/-0.10",
+    "_notes": "Halogen-free flame-retardant PETG, UL 94 V-0 (TDS 01/11/2024); melting 188 C; temperature resistance up to 70 C. 750 g + 210 g spool. Nozzle/bed from product page (TDS gives no print settings)."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://fillamentum.com/wp-content/uploads/2024/11/TDS_PETG-HFFR_EN_01112024_FI.pdf",
+    "https://shop.fillamentum.com/products/petg-hffr",
+    "https://fillamentum.com/wp-content/uploads/2023/10/Recommendation-for-filament-processing_drying_EN_12102023.pdf"
+  ],
+  "updated": "2026-11-01"
+}

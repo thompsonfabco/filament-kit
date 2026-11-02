@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "Obsidian PA6+CF",
+  "material": "PA6-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu PA6-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "265"
+    ],
+    "nozzle_temperature_range_high": [
+      "285"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-110",
+    "_drying": "90C 4h",
+    "_hardened_nozzle_required": "yes (hardened steel recommended)",
+    "_enclosure": "Heated chamber recommended",
+    "_notes": "Values from MatterHackers (authorized reseller) listing (marketed as Markforged Onyx alternative; listing currently unavailable); official page unreachable (HTTP 429). Drying: 90C 4h if filament shows signs of moisture. Bed prep Magigoo. Density/Tg/HDT not found."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://www.matterhackers.com/store/l/3dxtech-obsidian-pa6cf-markforged-onyx-alternative-filament-175mm/sk/MS881P8M"
+  ],
+  "updated": "2026-11-01"
+}

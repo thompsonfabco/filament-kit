@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "vendor": "yxpolyer",
+  "product": "PPS",
+  "material": "PPS",
+  "colors": [
+    "PPS Black"
+  ],
+  "bambu_parent": "Generic PPS",
+  "fields": {
+    "filament_density": [
+      "1.38"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "nozzle_temperature_range_low": [
+      "300"
+    ],
+    "nozzle_temperature_range_high": [
+      "320"
+    ]
+  },
+  "published_ranges": {
+    "_notes": "Heat resistance up to 180C; UL94 V-0; water absorption 0.05%; melting temperature up to 300C; drying stated as required (no temperature or time published).",
+    "bed_all_plates": "90-120",
+    "chamber_temperatures": "70-100",
+    "_chamber": "chamber heating recommended at 70-100C",
+    "_diameter_tolerance": "+/-0.04"
+  },
+  "conflicts": [
+    "[merge] published_ranges._notes: pass 4 value \"Heat resistance up to 180C (continuous, not stated as HDT); UL94 V-0; moisture absorption 0.05%; bending strength 95 MPa; flexural modulus 3185 MPa (older listing B09N9JDV6Q). yxpolyer.com PPS page states only 'melting point up to 300C'. No density, drying or speed published.\" replaced earlier value \"Heat resistance up to 180C, UL94 V-0, water absorption 0.05%. Print temperatures not visible in accessible listing.\"",
+    "[pass 4] Seller 'Silver AM' (seller on all yxpolyer listings). yxpolyer.com's contact address is 3dservice@silverage.cn, which suggests Silver AM is the brand operator, but this is not stated outright.",
+    "[pass 4] Density 1.38 from an earlier listing could not be confirmed on any current listing or on yxpolyer.com; omitted.",
+    "[pass 4] Listing details field says Material 'Nylon' (B0BJV3932F) and 'Polypropylene' (B09N9JDV6Q); both are listing errors, the titles and bullets say PPS.",
+    "[pass 4] Recommended chamber 70-100C is above the H2D's 65C chamber maximum.",
+    "[merge] published_ranges._notes: pass 5 value \"Heat resistance up to 180C; UL94 V-0; water absorption 0.05%; melting temperature up to 300C; drying stated as required (no temperature or time published).\" replaced earlier value \"Heat resistance up to 180C (continuous, not stated as HDT); UL94 V-0; moisture absorption 0.05%; bending strength 95 MPa; flexural modulus 3185 MPa (older listing B09N9JDV6Q). yxpolyer.com PPS page states only 'melting point up to 300C'. No density, drying or speed published.\"",
+    "[pass 5] Density 1.38 read from the comparison table on brand listing B0BJV3932F (search snippet) and stated on older yxpolyer PPS listing B09N9JDV6Q",
+    "[pass 5] Separate yxpolyer PPS listing B0DHVCBGCY (model PPS-TF-02) states hardened steel nozzle, 0.4/0.6/0.8 mm, plates 80-100C; not merged because it may be a different PPS grade"
+  ],
+  "source_quality": "brand_amazon_listing",
+  "sources": [
+    "https://www.amazon.com/yxpolyer-PPS-TF-DE-YXPOLYER-Filament/dp/B0BJV3932F",
+    "https://www.amazon.de/-/en/YXPOLYER-Hardened-Modified-Retardant-Technical/dp/B0BJV3932F",
+    "https://www.amazon.com/dp/B0BJV3932F",
+    "https://www.amazon.com/dp/B09N9JDV6Q",
+    "https://yxpolyer.com/products/pps-1kg",
+    "https://us.amazon.com/YXPOLYER-Filament-Resistance-Engineering-Grade-Printier/dp/B0BJV3932F",
+    "https://www.amazon.com/YXPOLYER-Filament-1-75mm-Engineering-Printer/dp/B09N9JDV6Q"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "vendor": "OVERTURE",
+  "product": "Easy PLA",
+  "material": "PLA",
+  "colors": [
+    "Easy Black",
+    "Easy White",
+    "Easy Space Gray",
+    "Easy Rock White",
+    "Easy Red",
+    "Easy Orange",
+    "Easy Caramel",
+    "Easy Digital Blue",
+    "Easy Green",
+    "Easy Natural",
+    "Easy Yellow",
+    "Easy Yolk Yellow",
+    "Easy Pumpkin Orange",
+    "Easy Magenta",
+    "Easy Pink",
+    "Easy Beige",
+    "Easy Purple",
+    "Easy Cobalt Blue",
+    "Glow Red",
+    "Glow Orange",
+    "Glow Yellow",
+    "Glow Blue",
+    "Glow White (Green in Dark)",
+    "Shimmer Silver Green",
+    "Shimmer Bronze",
+    "Shimmer Dark Green",
+    "Shimmer Purple"
+  ],
+  "bambu_parent": "Overture PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_density": [
+      "1.20"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "25-60",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "20-40",
+    "overhang_fan_threshold": "60 (threshold overhang angle, degrees)",
+    "_print_speed": "40-90 mm/s",
+    "_vicat": "66.2 (ISO 306)",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "TDS v5.1 (Jul 2024): melt index 10.0 g/10min (210C 2.15kg as printed); melting temp 149C (DSC); cooling fan on; based on 0.4 mm nozzle. Overture sells 'Glow PLA' and 'Shimmer PLA' as separate listings, but the Easy PLA listing offers those colours as Easy PLA variants and the Glow PLA page links an Easy PLA TDS (the Shimmer page mis-links the Easy Nylon TDS); no separate Glow/Shimmer TDS was found, so they are folded in here."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://overture3d.com/cdn/shop/files/OVERTURE__EASY_PLA_TDS_EN_V5.1_f2df1ff7-e3da-4ae4-8c69-7e90319c05c1.pdf",
+    "https://overture3d.com/products/overture-easy-pla-3d-printer-filament",
+    "https://overture3d.com/products/overture-glow-pla",
+    "https://overture3d.com/products/overture-shimmer-pla-3d-printer-filament-1-75mm"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "Spectrum",
+  "product": "PET-G FR V0",
+  "material": "PETG",
+  "colors": [],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "255"
+    ],
+    "filament_density": [
+      "1.26"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-80",
+    "_print_speed": "30-70 mm/s",
+    "_cooling": "YES (up to 100%)",
+    "_enclosure": "not necessary",
+    "_hardened_nozzle_required": "not necessary",
+    "_vicat": "70 (ISO 306, injection moulded)",
+    "_hdt_0.45MPa": "63 (ISO 75, annealed)",
+    "_hdt_1.8MPa": "58 (ISO 75, annealed)"
+  },
+  "conflicts": [
+    "Official product page (https://spectrumfilaments.com/en/filament/pet-g-fr-v0/) lists nozzle 240-260; TDS dated 06-04-2022 values kept in fields/published_ranges."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://spectrumfilaments.com/wp-content/uploads/2022/05/en_tds_petg_frv0.pdf",
+    "https://spectrumfilaments.com/en/filament/pet-g-fr-v0/"
+  ],
+  "updated": "2026-11-01"
+}

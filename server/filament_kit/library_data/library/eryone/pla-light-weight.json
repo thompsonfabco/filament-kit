@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "PLA Light-Weight",
+  "material": "PLA",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu PLA Aero",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "45-60",
+    "_print_speed": "30-90mm/s",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "Product page only (750g spool); low-density lightweight PLA. Density not published."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://eryone3d.com/products/pla-light-weight-filament"
+  ],
+  "updated": "2026-11-01"
+}

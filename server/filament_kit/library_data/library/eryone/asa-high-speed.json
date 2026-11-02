@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "ASA High-Speed",
+  "material": "ASA",
+  "colors": [
+    "Black",
+    "White",
+    "Orange"
+  ],
+  "bambu_parent": "Bambu ASA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.05"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "75-90",
+    "_drying": "90-100C 12h",
+    "_print_speed": "30-200mm/s",
+    "_vicat": "106 (ASTM D1525)",
+    "_hdt": "82 (ASTM D648; load not stated)",
+    "_bottom_printing_temperature": "240-290",
+    "_enclosure": "enclosed printing",
+    "_notes": "TDS titled 'Hyper-Speed ASA'. Its 'Bottom printing temperature' (240-290) exceeds its nozzle range (230-260) as printed."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0252/0412/9841/files/ERYONE-ASA-HP-TDS.pdf",
+    "https://eryone3d.com/products/asa-high-speed-filament"
+  ],
+  "updated": "2026-11-01"
+}

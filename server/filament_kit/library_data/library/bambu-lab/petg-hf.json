@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "vendor": "Bambu Lab",
+  "product": "PETG HF",
+  "material": "PETG",
+  "colors": [
+    "Yellow",
+    "Orange"
+  ],
+  "bambu_parent": "Bambu PETG HF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.28"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "hot_plate_temp": "65-75",
+    "textured_plate_temp": "65-75",
+    "fan_min_speed/fan_max_speed": "0-60",
+    "filament_retraction_length": "0.8-1.4",
+    "filament_retraction_speed": "30-60",
+    "chamber_temperatures": "35-50",
+    "_print_speed": "<300",
+    "_drying": "oven 65C 8h; heatbed 75-85C 12h",
+    "_nozzle_sizes": "0.2,0.4,0.6,0.8",
+    "_vicat": "70",
+    "_hdt": "62 (1.8MPa), 69 (0.45MPa)",
+    "_colors_note": "Pass 1 recorded bare colour names, not full Spoolman names; match on vendor+product.",
+    "_vitrification": "66 (Tg (DSC))"
+  },
+  "conflicts": [
+    "[pass 1] Guide page: bed 60-80, fan 0-80% vs TDS 65-75, 0-60%"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://store.bblcdn.com/3a230e260a3a47c2b0db0156e07eef91.pdf",
+    "https://bambulab.com/en/filament/petg-hf"
+  ],
+  "updated": "2026-11-01"
+}

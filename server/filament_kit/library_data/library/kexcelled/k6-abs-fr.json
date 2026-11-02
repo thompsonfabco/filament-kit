@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "vendor": "Kexcelled",
+  "product": "K6 ABS FR",
+  "material": "ABS",
+  "colors": [],
+  "bambu_parent": "Bambu ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80-100",
+    "_density": "1.16-1.2 g/cm3 (ISO 1183)",
+    "_hdt_0.45MPa": "96",
+    "_vicat": "101 (10N)",
+    "_print_speed": "40-225 mm/s",
+    "_cooling_fan": "OFF",
+    "_bed_surface": "Tape or glue",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "TDS 'THE K6 ABS FR' rev 01, 13/12/2024 (flame-retardant ABS); settings based on a 0.4mm nozzle. Density is a range, so filament_density left unset. No drying spec published."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0958/0111/4939/files/THE_K6_ABS_FR_TDS.pdf"
+  ],
+  "updated": "2026-11-01"
+}

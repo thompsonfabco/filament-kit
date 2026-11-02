@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "vendor": "Prusament",
+  "product": "Woodfill",
+  "material": "Wood-filled biobased polymer blend",
+  "colors": [
+    "Birch White",
+    "Charcoal Black",
+    "Pastel Brown",
+    "Chocolate Brown",
+    "Linden Light"
+  ],
+  "bambu_parent": "Bambu PLA Wood",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "185"
+    ],
+    "nozzle_temperature_range_high": [
+      "205"
+    ],
+    "filament_density": [
+      "1.16"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-70",
+    "_fan_speed": "100",
+    "_max_print_speed": "up to 200 mm/s",
+    "_hdt_0.45MPa": "62.6 (ISO 75)",
+    "_hdt_1.80MPa": "58.2 (ISO 75)",
+    "_diameter_tolerance": "+/-0.04",
+    "_drying": "not required (product page)",
+    "_min_nozzle": "standard 0.4 mm brass works (product page)",
+    "_notes": "TDS (Linden Light) prints nozzle '195 +/- 10', bed '60 +/- 10'. Base polymer not named (TDS: 'Biobased Polymer Blend'); bambu_parent chosen as nearest wood-fill preset. Satin sheet recommended; textured not recommended. Brittle."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://storage.googleapis.com/prusa3d-content-prod-14e8-wordpress-prusament-prod/2024/07/286c3bc0-tds_prusament_woodfill-linden-light_en.pdf",
+    "https://prusament.com/materials/prusament-woodfill/"
+  ],
+  "updated": "2026-11-01"
+}

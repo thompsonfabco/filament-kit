@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "vendor": "SUNLU",
+  "product": "High Speed PLA",
+  "material": "PLA",
+  "colors": [
+    "Orange",
+    "Pink",
+    "Olive Green 3kg"
+  ],
+  "bambu_parent": "Generic PLA High Speed",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.28"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "filament_retraction_speed": "30-40",
+    "_max_print_speed": "<=250",
+    "_hdt": "57+/-4",
+    "_colors_note": "Pass 1 recorded bare colour names, not full Spoolman names; match on vendor+product."
+  },
+  "conflicts": [
+    "[pass 1] Table <=250 mm/s vs headline 600 mm/s",
+    "[pass 1] Marble colors may be a separate SUNLU line",
+    "[merge] Removed colours Marble Ashen Concrete, Marble Brick Red from this entry; they belong to the separate 'High Speed Marble PLA' entry (pass 2)."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.sunlu.com/products/high-speed-pla-filament"
+  ],
+  "updated": "2026-11-01"
+}

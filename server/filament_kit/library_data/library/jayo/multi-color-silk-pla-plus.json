@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "vendor": "JAYO",
+  "product": "Multi-Color Silk PLA+",
+  "material": "PLA",
+  "colors": [
+    "Pink+Gold",
+    "Red+Gold",
+    "Blue+Green",
+    "Red+Blue",
+    "Black+Gold",
+    "Black+Green",
+    "Black+Purple",
+    "Green+Purple",
+    "Black+Blue",
+    "Black+White",
+    "Blue+Green+Purple",
+    "Red+Yellow+Green",
+    "Red+Yellow+Blue",
+    "Orange+Blue+Green",
+    "Black+Gold+Purple",
+    "Black+Red+Yellow+Gray"
+  ],
+  "bambu_parent": "Bambu PLA Silk",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "205"
+    ],
+    "nozzle_temperature_range_high": [
+      "215"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-65",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "Dual/tri/four-colour coextruded silk PLA+ (JAYO 'Multi-Color SILK'). Official recommended settings: nozzle 205-215C, bed 50-65C; the same values are repeated on JAYO's US/EU Halloween bundle pages. Bambu Studio has no multi-colour silk-specific preset in the list beyond PLA Silk/Silk+. No density published."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.jayo3d.com/products/jayo-multi-color-silk-filamentdual-color-tri-color-1kg",
+    "https://store.jayo3d.com/products/us-onlyjayo-halloween-filament-bundle-5-rolls-pla-glow-in-the-dark-multi-color-silk-pla"
+  ],
+  "updated": "2026-11-01"
+}

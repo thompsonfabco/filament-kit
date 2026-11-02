@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "vendor": "Anycubic",
+  "product": "PLA Marble",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Marble",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.37"
+    ],
+    "filament_max_volumetric_speed": [
+      "12"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "55-65",
+    "fan_max_speed": "100%",
+    "filament_retraction_speed": "40",
+    "_drying": "55-65C 6-8h",
+    "_print_speed": "50-250 mm/s",
+    "_vitrification": "58.2 (Tg, ISO 11357-1)",
+    "_vicat": "56 (ISO 306, 10N)",
+    "_hdt_0.45MPa": "54",
+    "_notes": "TDS V3.0: 'enhanced with genuine marble particles' (mineral filler; Anycubic states no hardened-nozzle requirement). TDS also gives extrusion multiplier 0.98, cooling time 8 s, raft separation 1.8. Diameter not stated in TDS."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0698/1235/5357/files/ANYCUBIC_TDS_PLA_Marble_V3.0.pdf"
+  ],
+  "updated": "2026-11-01"
+}

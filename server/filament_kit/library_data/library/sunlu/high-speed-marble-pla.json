@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "vendor": "SUNLU",
+  "product": "High Speed Marble PLA",
+  "material": "PLA",
+  "colors": [
+    "High Speed PLA Marble Ashen Concrete",
+    "High Speed PLA Marble Brick Red"
+  ],
+  "bambu_parent": "Generic PLA High Speed",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.26"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "_nozzle_by_speed": "210-230C@60-150mm/s; 230-260C@300-400mm/s",
+    "filament_shrink": "99.7%-99.9% (published 0.1-0.3%)",
+    "filament_retraction_length": "0.8-1.2",
+    "filament_retraction_speed": "30-40",
+    "_max_print_speed": "600 (thin walls; infill up to 400)",
+    "_hdt": "55+/-3",
+    "_vitrification": "54 (Vicat)"
+  },
+  "conflicts": [
+    "[pass 2] Spool label: 190-260C by speed tier."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.sunlu.com/products/high-speed-pla-marble-filament",
+    "https://store.sunlu.com/products/high-speed-pla-marble-3d-printer-filament-1kg"
+  ],
+  "updated": "2026-11-01"
+}

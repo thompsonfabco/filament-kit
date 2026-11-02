@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "vendor": "Fillamentum",
+  "product": "ABS Extrafill",
+  "material": "ABS",
+  "colors": [
+    "Cobalt Blue",
+    "Concrete Grey",
+    "Luminous Orange",
+    "Metallic Grey",
+    "Natural",
+    "Signal Brown",
+    "Sky Blue",
+    "Traffic Black",
+    "Traffic Red",
+    "Traffic White",
+    "Traffic Yellow",
+    "Transparent",
+    "Turquoise Green"
+  ],
+  "bambu_parent": "Bambu ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.04"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80-105",
+    "fan_min_speed/fan_max_speed": "0-20",
+    "_print_speed": "30-50 mm/s",
+    "_drying": "80C 2h",
+    "_vicat": "103 (ISO 306, 1 kg); 96 (ISO 306, 5 kg)",
+    "_notes": "HDT 81 C at 1.8 MPa (ISO 75-A). Guide (13/05/2020): heated chamber/enclosure recommended. 750 g + 210 g spool; 2.85 mm also sold.",
+    "_enclosure": "Recommended (printing guide).",
+    "_diameter_tolerance": "+/-0.05",
+    "_ams": "Product page lists the line as AMS-compatible."
+  },
+  "conflicts": [
+    "Nozzle: TDS (03/01/2019) gives 220-240 C; product page and printing guide give 220-250 C."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://fillamentum.com/wp-content/uploads/2020/10/Technical-Data-Sheet_ABS-Extrafill_03012019-1.pdf",
+    "https://shop.fillamentum.com/products/abs-extrafill-metallic-grey",
+    "https://fillamentum.com/wp-content/uploads/2023/01/3D-printing-guide_Fillamentum-ABS-Extrafill_EN_13052020.pdf",
+    "https://fillamentum.com/wp-content/uploads/2023/10/Recommendation-for-filament-processing_drying_EN_12102023.pdf"
+  ],
+  "updated": "2026-11-01"
+}

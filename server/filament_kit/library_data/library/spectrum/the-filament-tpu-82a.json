@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "vendor": "Spectrum",
+  "product": "The Filament TPU 82A",
+  "material": "TPU",
+  "colors": [],
+  "bambu_parent": "Bambu TPU 85A",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.21"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "40-80",
+    "_cooling": "Up to 100%",
+    "_enclosure": "not necessary",
+    "_hardened_nozzle_required": "No",
+    "_hardness": "82A (ISO 7619-1)",
+    "_notes": "Very soft TPU: not suitable for AMS. No Bambu 82A preset; 85A used as closest."
+  },
+  "conflicts": [
+    "Official product page (https://spectrumfilaments.com/en/filament/the-filament-tpu-82a/) lists bed 0-50; TDS dated 23-07-2025 values kept in fields/published_ranges."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://spectrumfilaments.com/wp-content/uploads/2025/09/en_tds_the_filament_tpu_82a.pdf",
+    "https://spectrumfilaments.com/en/filament/the-filament-tpu-82a/"
+  ],
+  "updated": "2026-11-01"
+}

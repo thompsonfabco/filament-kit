@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "vendor": "Siraya Tech",
+  "product": "Flex TPU 95A Matte",
+  "material": "TPU",
+  "colors": [
+    "Matte Black"
+  ],
+  "bambu_parent": "Bambu TPU 95A HF",
+  "fields": {
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "15"
+    ]
+  },
+  "published_ranges": {
+    "_diameter_tolerance": "+/-0.03",
+    "_hardness": "95A",
+    "_notes": "Product page calls it an upgraded 'TPU 95A HF (High Flow)' with max flow rate 15 mm3/s; direct drive highly recommended. No TDS published; nozzle/bed temperatures, density and drying not published. ISO 10993-5/-10/-23 tested."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://siraya.tech/products/flex-tpu-95a-matte-filament"
+  ],
+  "updated": "2026-11-01"
+}

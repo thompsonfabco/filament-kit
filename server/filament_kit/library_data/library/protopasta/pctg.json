@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "vendor": "Protopasta",
+  "product": "PCTG",
+  "material": "PCTG",
+  "colors": [
+    "Clear"
+  ],
+  "bambu_parent": "Generic PCTG",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "255"
+    ],
+    "nozzle_temperature_range_high": [
+      "275"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "12"
+    ]
+  },
+  "published_ranges": {
+    "_nozzle_by_speed": "255C full melt up to 6 mm3/s; 275C full melt up to 12 mm3/s, up to 24 mm3/s possible with lower interlayer strength (EX12 blog)",
+    "_bed": "80+C (product page; EX12 blog recommends 80C, warping seen at 70C)",
+    "_notes": "Product page: nozzle 255+C, 'We print up to 275 C, but 255 C is a good compromise'; start from Generic PETG or PCTG profile. Avoid very low volume rates at 275C (inclusions at 2 mm3/s). Can build up on nozzle. No density published."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://proto-pasta.com/products/clear-pctg",
+    "https://proto-pasta.com/blogs/stories/endless-exploration-ex12-jan-2026-high-performance-pctg-composites"
+  ],
+  "updated": "2026-11-01"
+}

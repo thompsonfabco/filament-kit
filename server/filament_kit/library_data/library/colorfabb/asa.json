@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "vendor": "ColorFabb",
+  "product": "ASA",
+  "material": "ASA",
+  "colors": [],
+  "bambu_parent": "Bambu ASA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.07"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-100",
+    "fan_min_speed/fan_max_speed": "0-50",
+    "_print_speed": "30-50 mm/s",
+    "_hdt_0.45MPa": "87 (HDT-B, ISO 75)",
+    "_diameter_tolerance": "+/-0.05 (1.75 mm; TDS 'max. roundness deviation'), +/-0.1 (2.85 mm)",
+    "_notes": "TDS v1.0. Use least cooling possible to reduce warping and improve layer adhesion. Spools 650/2000 g."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://downloads.colorfabb.com/public.php/dav/files/rtfDDRCa723Xdor/Technical%20Data%20Sheets/ASA/colorFabb%20ASA/TDS_E_ColorFabb_ASA.pdf"
+  ],
+  "updated": "2026-11-01"
+}

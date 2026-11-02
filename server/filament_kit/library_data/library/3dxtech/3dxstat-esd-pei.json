@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "3DXSTAT ESD-PEI",
+  "material": "PEI",
+  "colors": [
+    "Black"
+  ],
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "360"
+    ],
+    "nozzle_temperature_range_high": [
+      "390"
+    ],
+    "filament_diameter": [
+      "2.85"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "140-160",
+    "_drying": "120C 4h",
+    "_notes": "Values from MatterHackers listing (only 2.85mm listed there); official page unreachable (HTTP 429). All-metal hotend, no cooling fan, PEI tape bed; may be annealed. ESD: surface resistivity 10^7-10^9 ohm. Ultem grade not stated on the listing (search results for Vision Miner name it ULTEM 1010; not read). Beyond Bambu Lab printer nozzle limits."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://www.matterhackers.com/store/l/3dxtech-3dxstat-black-esd-safe-pei-filament-05kg/sk/ML47Y7F0"
+  ],
+  "updated": "2026-11-01"
+}

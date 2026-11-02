@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "vendor": "JAYO",
+  "product": "PLA+ 2.0",
+  "material": "PLA",
+  "colors": [
+    "Black",
+    "White",
+    "Blue",
+    "Gray",
+    "Red",
+    "Yellow",
+    "Green",
+    "Beige",
+    "Grass Green",
+    "Fuchsia",
+    "Purple",
+    "Silver",
+    "Light Gold",
+    "Cyan",
+    "Blue Gray",
+    "Orange",
+    "Pink",
+    "Coffee",
+    "Gold",
+    "Olive Green",
+    "Mint Green",
+    "Lemon Yellow",
+    "Sakura Pink",
+    "Sunny Orange",
+    "Cherry Red",
+    "Sky Blue"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "205"
+    ],
+    "nozzle_temperature_range_high": [
+      "215"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "55-65",
+    "_print_speed": "40-80 mm/s",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "The official PLA+ 2.0 page repeats the PLA+ copy and parameter block (Print Temp 205-215C, Hot Bed 55-65C, 40-80mm/s, Melt Index 7-9g/10min); JAYO publishes no PLA+ 2.0-specific values. No density published."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.jayo3d.com/products/reusable-spooljayo-1-1kg-pla-2-0-3d-printer-filament-1-75mm-high-strengt-0-02mm",
+    "https://store.jayo3d.com/products/eu-onlyjayo-1-1kg-pla-2-0-3d-printer-filament"
+  ],
+  "updated": "2026-11-01"
+}

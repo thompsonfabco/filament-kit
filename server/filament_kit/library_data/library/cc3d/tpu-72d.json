@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "vendor": "CC3D",
+  "product": "TPU 72D",
+  "material": "TPU",
+  "colors": [
+    "TPU 72D Black",
+    "TPU 72D White",
+    "Hard TPU Red"
+  ],
+  "bambu_parent": "Generic TPU for AMS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60 (glue)",
+    "_print_speed": "30-40",
+    "filament_retraction_length": "0-4",
+    "filament_retraction_speed": "45-50",
+    "_drying": "60-65C 6h",
+    "_hardness": "72D",
+    "_fiber_content": "none stated; TPU and nylon composite",
+    "_ams": "CC3D: not suitable for 3D printers that feed filament remotely",
+    "_notes": "Composite of TPU and nylon. Keep dry in-line during printing. Hard TPU Red (B0F3CBBLBH) is sold as 'CC3D Hard TPU Filament 72D Red' with identical 72D TPU/nylon composite copy, so it is treated as the same product."
+  },
+  "conflicts": [
+    "[pass 3] Values from search-result snippet of the brand's Amazon listing B0CFXZR974 (Black); page could not be fetched.",
+    "[pass 3] Listing bullets say print speed 20-40 mm/s and extrusion 230-240C; description says 30-40 mm/s.",
+    "[pass 3] Retraction distance unit written as 'mm/s' in the listing.",
+    "[pass 3] Spool label states 235C +/-10 (225-245C), wider than the listing's 230-240C."
+  ],
+  "source_quality": "brand_amazon_listing",
+  "sources": [
+    "https://www.amazon.com/CC3D-Flexible-Filament-Toughness-Comparable/dp/B0CFXZR974",
+    "https://www.amazon.com/CC3D-Flexible-Filament-Toughness-Comparable/dp/B0D31B1Y7X",
+    "https://www.amazon.com/CC3D-Filament-Hardness-Toughness-Comparable/dp/B0F3CBBLBH"
+  ],
+  "updated": "2026-11-01"
+}

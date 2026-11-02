@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "vendor": "JAYO",
+  "product": "TPU 95A",
+  "material": "TPU",
+  "colors": [
+    "Black",
+    "White"
+  ],
+  "bambu_parent": "Bambu TPU 95A",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-80",
+    "_hardness": "95A",
+    "_diameter_tolerance": "+/-0.02",
+    "_ams": "AMS compatibility not stated by JAYO; 95A TPU is generally fed from an external spool rather than the AMS.",
+    "_notes": "Official listing (shared TPU/ASA page, 0.5 kg / 1 kg spools): recommended nozzle 210-230C, heated bed 70-80C; stretches up to 3x. ASA on the same listing has no published settings."
+  },
+  "conflicts": [
+    "Same official listing's title states dimensional accuracy +/-0.03 mm (body says +/-0.02 mm)"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.jayo3d.com/products/jayo-pla-meta-1-1kg-3d-printer-filament-cardboard-spool"
+  ],
+  "updated": "2026-11-01"
+}

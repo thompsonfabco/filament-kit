@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "vendor": "Push Plastic",
+  "product": "HIPS",
+  "material": "HIPS",
+  "colors": [
+    "Natural"
+  ],
+  "bambu_parent": "Generic HIPS",
+  "fields": {
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_hdt_1.82MPa": "178F (~81C) (ASTM D648, 264 psi)",
+    "_notes": "Support material. TDS gives mechanical data, Rockwell L50 and UL-94 HB(1.5) but no density, print temperatures or drying."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0260/7421/files/Push_Plastic_HIPS_Technical_Data_sheet.pdf",
+    "https://www.pushplastic.com/products/hips-production-filament-1-75mm-1kg"
+  ],
+  "updated": "2026-11-01"
+}

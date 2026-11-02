@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "vendor": "QIDI Tech",
+  "product": "ASA",
+  "material": "ASA",
+  "colors": [
+    "Black",
+    "White",
+    "Red",
+    "Blue",
+    "Green",
+    "Yellow",
+    "Brown",
+    "Gray"
+  ],
+  "bambu_parent": "Bambu ASA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.07"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100-110",
+    "chamber_temperatures": "60-80",
+    "fan_min_speed/fan_max_speed": "0-30%",
+    "filament_retraction_length": "1-5",
+    "filament_retraction_speed": "1800-3600 mm/min",
+    "_drying": "70-80C 4-6h",
+    "_print_speed": "30-120 mm/s",
+    "_vitrification": "98 (Tg, ISO 11357)",
+    "_vicat": "101",
+    "_hdt_0.45MPa": "93",
+    "_enclosure": "closed chamber; heated chamber 60-80C",
+    "_notes": "TDS v5.1 (07.2023). HDT 1.8MPa 83C. Recommended support: QIDI S-White."
+  },
+  "conflicts": [
+    "filament guide: bed 80-110C (https://qidi3d.com/pages/choose-the-right-filament-3d-filaments-guide-for-qidi-printers)"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://drive.google.com/file/d/1XkpBAvVBSMZGPDQ9H0wu3A_nh6zpI1fU/view",
+    "https://qidi3d.com/products/qidi-asa-filament",
+    "https://qidi3d.com/pages/choose-the-right-filament-3d-filaments-guide-for-qidi-printers"
+  ],
+  "updated": "2026-11-01"
+}

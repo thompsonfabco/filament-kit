@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "vendor": "Prusament",
+  "product": "PLA High Speed",
+  "material": "PLA",
+  "colors": [
+    "Lipstick Red",
+    "Gravity Grey",
+    "Pristine White",
+    "Prusa Galaxy Black",
+    "Prusa Orange"
+  ],
+  "bambu_parent": "Generic PLA High Speed",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.24"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "40-60",
+    "_fan_speed": "100",
+    "_max_print_speed": "up to 300 mm/s",
+    "_hdt_0.45MPa": "57 (ISO 75)",
+    "_hdt_1.80MPa": "55 (ISO 75)",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "TDS prints nozzle '210 +/- 20' and bed '50 +/- 10' (converted to ranges). High-Flow (CHT) nozzle required to reach maximum print speed. Bed types: smooth PEI, powder coated, satin."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://storage.googleapis.com/prusa3d-content-prod-14e8-wordpress-prusament-prod/2026/06/269cd3c8-prusament-pla-hs-technical-datasheet.pdf",
+    "https://prusament.com/materials/prusament-pla-high-speed/"
+  ],
+  "updated": "2026-11-01"
+}

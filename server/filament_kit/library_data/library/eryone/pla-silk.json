@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "PLA Silk",
+  "material": "PLA",
+  "colors": [
+    "White",
+    "Pink",
+    "Blue",
+    "Radiant Gold",
+    "Gold",
+    "Green",
+    "Dark Green",
+    "Silver",
+    "Copper",
+    "Royal Blue",
+    "Scarlet",
+    "Orange",
+    "Neon Green",
+    "Rose Red"
+  ],
+  "bambu_parent": "Bambu PLA Silk",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "55-70",
+    "_print_speed": "30-60mm/s",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "Product page only; no single-colour Silk PLA TDS on the files page. Density not published for this line."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://eryone3d.com/products/silk-pla"
+  ],
+  "updated": "2026-11-01"
+}

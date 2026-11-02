@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "vendor": "Extrudr",
+  "product": "Wood",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Wood",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "170"
+    ],
+    "nozzle_temperature_range_high": [
+      "190"
+    ],
+    "filament_density": [
+      "1.23"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "20-60",
+    "fan_min_speed/fan_max_speed": "50-80%",
+    "_print_speed": "40-60 mm/s",
+    "_enclosure": "no",
+    "_hardened_nozzle_required": "no",
+    "_min_nozzle": "0.5 mm (catalogue: filaments with fibre components are printed with a nozzle of at least 0.5 mm)",
+    "_vicat": "48 (Vicat A, ISO 306, 4 mm wall)",
+    "_notes": "Spruce-fibre filled bio material. Max volumetric speed not published. Diameter not stated in the catalogue, so filament_diameter is left unset."
+  },
+  "conflicts": [
+    "Print speed: the product page prints 40-60 mm/s; the overview table in the same catalogue prints 20-40 mm/s for WOOD."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://s3.extrudr.com/extrudr-media/product-catalogue/extrudr-Produktkatalog_EN.pdf"
+  ],
+  "updated": "2026-11-01"
+}

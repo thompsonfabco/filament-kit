@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "Volcano PLA",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Generic PLA High Speed",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "255"
+    ],
+    "filament_density": [
+      "1.27"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "0-60",
+    "fan_min_speed/fan_max_speed": "50-100",
+    "_print_speed": "High; engineered for > 120 mm/s (product page)",
+    "_min_nozzle": "0.15",
+    "_vicat": ">= 95 after annealing (TDS v3, method as printed ISO 75)",
+    "_diameter_tolerance": "+/-0.05 (1.75 mm), +/-0.10 (2.85 mm)",
+    "_notes": "TDS: higher melt flow at 240C +/-10C increases speed capability. Page flow rate 95-110%, retraction ~5 mm. Heat bed range and fan from product page."
+  },
+  "conflicts": [
+    "Product page print temp 230-265C vs TDS (v3) 220-255C."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://formfutura.com/web/content/256653?download=true",
+    "https://formfutura.com/filaments/volcano-pla"
+  ],
+  "updated": "2026-11-01"
+}

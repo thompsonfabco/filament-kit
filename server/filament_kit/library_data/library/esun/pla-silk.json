@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "PLA-Silk",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Silk",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.21"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "45-60",
+    "fan_max_speed": "100",
+    "_drying": "50C >8h",
+    "_print_speed": "<200",
+    "_hdt_0.45MPa": "50",
+    "_notes": "eSUN PLA-Silk (eSilk-PLA) TDS v1.0 Jul 2024. Nozzle sizes 0.2/0.4/0.6/0.8 mm; PEI plate. Diameter not stated in TDS."
+  },
+  "conflicts": [
+    "eSUN 3D Printing Material Datasheet (2019, https://cdn.shopify.com/s/files/1/1745/6181/files/eSUN_3D_Printing_Filament_Datasheet.pdf): eSilk-PLA 190-220C, bed 60-80C, density 1.43, HDT 67C."
+  ],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://assets.spoolscout.com/tds-sds/esun/tds/esun-pla-silk-tds-v1.0-2024-07.pdf",
+    "https://www.spoolscout.com/data-sheets/esun/pla-pla-silk"
+  ],
+  "updated": "2026-11-01"
+}

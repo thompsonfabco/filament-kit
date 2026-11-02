@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "vendor": "Prusament",
+  "product": "PEI 1010",
+  "material": "PEI",
+  "colors": [
+    "Natural"
+  ],
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "400"
+    ],
+    "nozzle_temperature_range_high": [
+      "420"
+    ],
+    "filament_density": [
+      "1.27"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "140-160",
+    "chamber_temperatures": "90",
+    "_fan_speed": "50",
+    "_max_print_speed": "up to 40 mm/s",
+    "_hdt_0.45MPa": "207 (ISO 75)",
+    "_hdt_1.80MPa": "194 (ISO 75)",
+    "_diameter_tolerance": "+/-0.05",
+    "_drying": "150C 6-8h; keep in dry box while printing",
+    "_enclosure": "heated chamber required (>=90 C)",
+    "_notes": "TDS prints nozzle '410 +/- 10'. Requires high-temperature hot end (high-flow hot end will not work) and heated chamber (e.g. Prusa Pro HT90) - beyond Bambu X1/P1 capability; no PEI system preset, bambu_parent omitted. Bed: PA Nylon sheet or powder coated with HT glue."
+  },
+  "conflicts": [
+    "Chamber: product page says 90-190 C (https://prusament.com/materials/prusament-pei-1010/); TDS says 90 C"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://storage.googleapis.com/prusa3d-content-prod-14e8-wordpress-prusament-prod/2024/09/53ee8f5e-tds_prusament_pei-1010_en.pdf",
+    "https://prusament.com/materials/prusament-pei-1010/"
+  ],
+  "updated": "2026-11-01"
+}

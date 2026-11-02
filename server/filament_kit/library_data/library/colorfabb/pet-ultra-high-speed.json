@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "vendor": "ColorFabb",
+  "product": "PET Ultra High Speed",
+  "material": "PET",
+  "colors": [
+    "Clear"
+  ],
+  "bambu_parent": "Bambu PETG HF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "280"
+    ],
+    "nozzle_temperature_range_high": [
+      "320"
+    ],
+    "filament_density": [
+      "1.33"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "40"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60",
+    "fan_max_speed": "100",
+    "_print_speed": "500 mm/s",
+    "_max_print_speed": "40 mm3/s (product page)",
+    "_hdt_0.45MPa": "68 (HDT-B, ISO 75; footnoted)",
+    "_vitrification": "67.6 (Tg, DSC ISO 11357)",
+    "_diameter_tolerance": "+/-0.03 (TDS 'max. roundness deviation')",
+    "_notes": "TDS v1.0 (temps, bed, fan, speed); density and volumetric flow from product page. Nozzle 280-320 C exceeds the 300 C limit of most Bambu hotends. Product page also lists a 'processing temperature range' of 200-300 C. Bed surface: adhesion spray (3D lac)."
+  },
+  "conflicts": [
+    "Product page lists diameter tolerance +/-0.1 mm vs TDS max. roundness deviation +/-0.03",
+    "Product page 'processing temperature range' 200-300 C alongside advised 280-320 C"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://downloads.colorfabb.com/public.php/dav/files/rtfDDRCa723Xdor/Technical%20Data%20Sheets/Co-Polyester/PET/TDS_PET_ULTRA-HIGH-SPEED.pdf",
+    "https://colorfabb.com/pet-ultra-high-speed-clear"
+  ],
+  "updated": "2026-11-01"
+}

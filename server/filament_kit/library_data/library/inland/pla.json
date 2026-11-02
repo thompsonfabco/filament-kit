@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "vendor": "Inland",
+  "product": "PLA",
+  "material": "PLA",
+  "colors": [
+    "PLA Ocean Blue"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "45-60",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "Amazon B0FBNTJS85 (Ocean Blue & Lava Red 2-pack, UPC 618996788217, MPN PLA175OBLLRD2PK): Ingeo PLA pellets made in Nebraska; 'upgraded formula' for toughness; same material across Inland PLA, PLA+, PLA Pro and PLA Basics; cardboard spool with wax-sealed edge for AMS/CFS; vacuum-sealed with desiccant. No density or drying spec published for this line."
+  },
+  "conflicts": [
+    "[pass 4] Amazon listing B0FBNTJS85 is currently unavailable and shows no seller, so it cannot be confirmed as sold by Micro Center/Inland; brand and manufacturer fields say INLAND.",
+    "[pass 4] User's single-spool UPC 618996787029 was not found on microcenter.com or elsewhere; values come from the 2-pack listing of the same colour.",
+    "[pass 4] Other Inland PLA pages on microcenter.com (older SKUs, possibly different formulations) differ: MCPLA175* cardboard-spool PLA 205-225C, bed 60-80C, density 1.24; PLA175U1 Blue 190-220C, bed 60-80C, density 1.24; Basic PLA Blue 190-230C, bed 35-60C; Raspberry Red PLA 215-230C, bed 60-80C, density 1.17. None of these is identified as the Ingeo 'upgraded formula' Ocean Blue product, so their densities were not applied."
+  ],
+  "source_quality": "brand_amazon_listing",
+  "sources": [
+    "https://www.amazon.com/dp/B0FBNTJS85",
+    "https://www.microcenter.com/site/content/inland%20filament.aspx"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "vendor": "Creality",
+  "product": "Hyper PLA",
+  "material": "PLA",
+  "colors": [
+    "White",
+    "Black",
+    "Grey",
+    "Red",
+    "Blue",
+    "Green",
+    "Skin",
+    "Orange",
+    "Brown",
+    "Yellow",
+    "Purple",
+    "Peach Fuzz",
+    "Viva Magenta",
+    "Gold",
+    "Very Peri"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "25-60",
+    "fan_max_speed": "100%",
+    "_print_speed": "30-600 mm/s",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "Creality K1-series parameter table (2024-12-23) recommends 220C nozzle, 45C bed, 300 mm/s optimal speed, 23 mm3/s max volume flow, 100% model fan; K2 Plus table recommends 220C nozzle, 50C bed, 35C chamber, 23 mm3/s. These are printer profile values, not published ranges, so max volumetric speed is not set in fields. Hyper PLA RFID and Spool-Free Hyper PLA RFID are sold as the same Hyper PLA material (RFID tag / refill format); assumed to share this entry. Density not found on an official source (resellers quote 1.25 g/cm3)."
+  },
+  "conflicts": [
+    "Diameter tolerance: Creality's own Amazon listing title (ASIN B0CLTY4MML, sold by Creality CL Store) says 'Dimensional Accuracy +/-0.02mm'; its bullet and Creality's PLA guide say 1.75+/-0.03mm."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.creality.com/blogs/basics/pla-filament-guide-properties-settings",
+    "https://store.creality.com/blogs/all/k1-k1-max-printing-parameter-settings",
+    "https://store.creality.com/blogs/all/creality-k2-plus-filament-parameters-settings",
+    "https://store.creality.com/products/hyper-series-pla-3d-printing-filament-1kg",
+    "https://www.amazon.com/dp/B0CLTY4MML"
+  ],
+  "updated": "2026-11-01"
+}

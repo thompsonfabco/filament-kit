@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "AthenaX",
+  "material": "PCTG",
+  "colors": [],
+  "bambu_parent": "Generic PCTG",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "290"
+    ],
+    "filament_density": [
+      "1.23"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "85-100",
+    "fan_min_speed/fan_max_speed": "0-100",
+    "_drying": "75C 24h (TDS)",
+    "_enclosure": "Recommended (product page)",
+    "_min_nozzle": "0.4 (product page)",
+    "_hdt_0.45MPa": "76 (ISO 75)",
+    "_hdt": "64 at 1.82 MPa (ISO 75)",
+    "_vicat": "88 (listed method DSC)",
+    "_notes": "Print settings from product page."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://formfutura.com/filaments/athenax",
+    "https://formfutura.com/web/content/256479?download=true"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "vendor": "Creality",
+  "product": "CR-Silk",
+  "material": "PLA",
+  "colors": [
+    "White",
+    "Rainbow",
+    "Red Copper",
+    "Blue",
+    "Purple",
+    "Gold",
+    "Silver",
+    "Yellow-blue",
+    "Pink-purple",
+    "Golden-silver",
+    "Blue-green",
+    "Golden Red"
+  ],
+  "bambu_parent": "Bambu PLA Silk",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "_print_speed": "40-80 mm/s",
+    "_environment_temp": "<60",
+    "_notes": "Creality filament parameter reference table (2024-12-23): recommended 200C nozzle, 50C bed, 50 mm/s. K2 Plus table: 220C/50C, 10 mm3/s (printer profile value)."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.creality.com/uk/blogs/basics/creality-filaments-parameter-reference-table",
+    "https://store.creality.com/blogs/all/creality-k2-plus-filament-parameters-settings",
+    "https://store.creality.com/products/cr-silk-1-75mm-pla-3d-printing-filament-1kg"
+  ],
+  "updated": "2026-11-01"
+}

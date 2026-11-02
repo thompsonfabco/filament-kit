@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "vendor": "JAYO",
+  "product": "High Speed Matte PLA",
+  "material": "PLA",
+  "colors": [
+    "Olive Green",
+    "Mint Green",
+    "Black",
+    "Chocolate",
+    "Gray",
+    "Lemon Yellow",
+    "Sky Blue",
+    "Sunny Orange",
+    "Sakura Pink",
+    "Cherry Red",
+    "White"
+  ],
+  "bambu_parent": "Bambu PLA Matte",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "_nozzle_by_speed": "50-150 mm/s: 190-210C; 150-300 mm/s: 210-230C; 300-600 mm/s: 230-260C",
+    "_print_speed": "30-600 mm/s",
+    "_max_print_speed": "600 mm/s",
+    "_notes": "Official recommended settings: Hot Bed 50-60C with speed-matched nozzle temps; fields hold the highest (300-600 mm/s) range: use the lower tiers at normal speeds. Neither cited page states the diameter or tolerance in text. No density published."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.jayo3d.com/products/jayo-high-speed-matte-pla-1-1kg-reusable-spool-3d-printing-filament",
+    "https://store.jayo3d.com/products/moq-5-rolls-jayo-high-speed-matte-pla-3d-printing-filament-1-1kg"
+  ],
+  "updated": "2026-11-01"
+}

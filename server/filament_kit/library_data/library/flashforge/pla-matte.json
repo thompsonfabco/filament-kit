@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "vendor": "Flashforge",
+  "product": "PLA Matte",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Matte",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "RT-60",
+    "fan_min_speed/fan_max_speed": "50-100",
+    "filament_retraction_length": "1-2",
+    "filament_retraction_speed": "30-50",
+    "_print_speed": "60-90 mm/s (60 recommended); travel 60-120 mm/s",
+    "_nozzle_recommended": "220C",
+    "_bed_recommended": "40C",
+    "_density": "1.23-1.25 g/cm3 (ISO 1183); published as a range only, so filament_density left unset",
+    "_hdt_0.45MPa": "53 (ISO 75, 0.455 MPa)",
+    "_ambient_temperature": "room temperature to 40C",
+    "_min_nozzle": "TDS: 0.4/0.6 mm (0.4 recommended)",
+    "_notes": "TDS dated 2024-01-18. Continuous service temperature 50C. Water absorption 0.5%. Support: self-supporting, PVA, BVOH. TDS gives no drying condition, diameter or tolerance."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://after-support.flashforge.jp/uploads/datasheet/tds/PLA_Matte_TDS_EN.pdf"
+  ],
+  "updated": "2026-11-01"
+}

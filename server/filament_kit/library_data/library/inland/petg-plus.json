@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "vendor": "Inland",
+  "product": "PETG+",
+  "material": "PETG",
+  "colors": [
+    "Black",
+    "Green",
+    "True Red",
+    "Yellow",
+    "Gray",
+    "White",
+    "Blue"
+  ],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80",
+    "_notes": "Black PETG+ listing key features: 230-250 print, 80 plate (microcenter.com, read via search index; direct fetch 403). Listing describes higher melt flow allowing faster printing. Density not published.",
+    "_diameter_tolerance": "+/-0.05"
+  },
+  "conflicts": [
+    "nozzle_temperature_range_high: 260 (same listing specs table gives extruder temperature 230-260) - https://www.microcenter.com/product/626528/inland-175mm-petg-3d-printer-filament-1kg-(22-lbs)-spool-black",
+    "bed_all_plates: 50-80 (same listing specs table) - https://www.microcenter.com/product/626528/inland-175mm-petg-3d-printer-filament-1kg-(22-lbs)-spool-black",
+    "nozzle_temperature_range: 210-250 (bed 80-100) (Blue PETG+ listing 626535) - https://www.microcenter.com/product/626535/inland-175mm-petg-3d-printer-filament-1kg-(22-lbs)-spool-blue"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.microcenter.com/product/626528/inland-175mm-petg-3d-printer-filament-1kg-(22-lbs)-spool-black"
+  ],
+  "updated": "2026-11-01"
+}

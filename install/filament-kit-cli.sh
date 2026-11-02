@@ -15,6 +15,11 @@ case "${1:-}" in
 esac
 
 if [ "$(id -u)" -eq 0 ]; then
+    # `library add <file>`: the service user may not be able to read a file in the caller's home folder,
+    # so root opens it and the CLI reads it on stdin.
+    if [ "${1:-}" = library ] && [ "${2:-}" = add ] && [ -n "${3:-}" ] && [ "$3" != - ]; then
+        exec runuser -u filament-kit -- "$BIN" library add - < "$3"
+    fi
     exec runuser -u filament-kit -- "$BIN" "$@"
 fi
 exec "$BIN" "$@"

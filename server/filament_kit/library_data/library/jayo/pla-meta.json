@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "vendor": "JAYO",
+  "product": "PLA Meta",
+  "material": "PLA",
+  "colors": [
+    "White",
+    "Black",
+    "Gray",
+    "Green",
+    "Pink",
+    "Red",
+    "Yellow",
+    "Blue",
+    "Fuchsia",
+    "Purple",
+    "Beige",
+    "Coffee",
+    "Orange",
+    "Sky Blue",
+    "Lemon Yellow",
+    "Cherry Red",
+    "Olive Green",
+    "Mint Green",
+    "Sunny Orange",
+    "Sakura Pink"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "185"
+    ],
+    "nozzle_temperature_range_high": [
+      "195"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-80",
+    "_print_speed": "50-100 mm/s",
+    "_max_print_speed": "250 mm/s",
+    "_notes": "Official 'JAYO PLA Meta Print Parameters' (published on JAYO's mystery-box listing): Print Temp 185-195C, Hot Bed 60-80C, Print Speed 50-100mm/s, Melt Index 9-12g/10min. PLA Meta product pages: flow 1.5x normal PLA/PLA+, max print speed 250mm/s. Diameter tolerance not stated on the Meta pages. No density published."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.jayo3d.com/products/jayo-fdm-filament-printing-mystery-box-5-rolls-of-random-colors-filament",
+    "https://store.jayo3d.com/products/reusable-spooljayo-1-1kg-pla-meta-3d-printer-filament",
+    "https://store.jayo3d.com/products/moq-5-rolls-jayo-pla-meta-1-1kg-3d-printing-filament-bundle"
+  ],
+  "updated": "2026-11-01"
+}

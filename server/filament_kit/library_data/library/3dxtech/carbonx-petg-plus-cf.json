@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "CarbonX PETG+CF",
+  "material": "PETG-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu PETG-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.34"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-70",
+    "_print_speed": "50-70 mm/s",
+    "_drying": "65C 4h",
+    "_vitrification": "80 (Tg, DSC)",
+    "_hdt_0.45MPa": "77",
+    "_diameter_tolerance": "+/-0.05",
+    "_hardened_nozzle_required": "yes (hardened steel recommended)",
+    "_min_nozzle": "0.4",
+    "_enclosure": "Heated chamber not required",
+    "_notes": "Temps/density/Tg/HDT from 3DXTech TDS Rev 2.1 (third-party-hosted PDF; current 3dxtech.com unreachable, HTTP 429). Drying/tolerance/nozzle from MatterHackers listing. Do not print layers below 0.2mm."
+  },
+  "conflicts": [
+    "bed: 70-90 per MatterHackers listing (https://www.matterhackers.com/store/l/3dxtech-carbonx-petgcf-filament/sk/MMZ842RH) vs 60-70 on TDS Rev 2.1"
+  ],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0965/1648/files/Carbon_Fiber_PETG_Filament_v2.1.pdf",
+    "https://www.matterhackers.com/store/l/3dxtech-carbonx-petgcf-filament/sk/MMZ842RH"
+  ],
+  "updated": "2026-11-01"
+}

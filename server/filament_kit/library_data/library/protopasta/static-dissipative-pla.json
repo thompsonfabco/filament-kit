@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "vendor": "Protopasta",
+  "product": "Static Dissipative PLA",
+  "material": "PLA",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.24"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "12"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60",
+    "_drying": "55C 6h (generally not required)",
+    "_min_nozzle": "0.4 mm or larger",
+    "_ams": "Compatible (TDS)",
+    "_notes": "Carbon black composite, non-abrasive, ESD-safe (typ. 1e4-1e7 ohm surface resistance). PEI or similar with Magigoo or glue stick for release. Extra purge needed. Density from SDS."
+  },
+  "conflicts": [
+    "Material Data Table (https://proto-pasta.com/pages/material-data-table) lists 220C @ 6 mm3/s, 240C @ 12 mm3/s, 55C plate"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0717/9095/files/PLA1xxxx-ESD_TDS.pdf",
+    "https://cdn.shopify.com/s/files/1/0717/9095/files/PLA_ESD.pdf",
+    "https://proto-pasta.com/pages/material-data-table"
+  ],
+  "updated": "2026-11-01"
+}

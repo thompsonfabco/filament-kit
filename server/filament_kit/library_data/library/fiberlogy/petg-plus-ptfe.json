@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "vendor": "Fiberlogy",
+  "product": "PETG+PTFE",
+  "material": "PETG",
+  "colors": [
+    "Black",
+    "Natural"
+  ],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.32"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90",
+    "fan_min_speed/fan_max_speed": "0-25",
+    "_drying": "60C 4h",
+    "_enclosure": "not required",
+    "_ams": "Compatible with BambuLab AMS (new spool system)",
+    "_notes": "Contains 10% PTFE (low friction). Temperature resistance 'up to 70C' (no method). Bed: smooth PEI + adhesive, textured PEI, glass + adhesive."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://fiberlogy.com/en/filaments/petg-en/petgptfe-en/"
+  ],
+  "updated": "2026-11-01"
+}

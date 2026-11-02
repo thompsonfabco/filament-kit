@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "vendor": "QIDI Tech",
+  "product": "TPU95A-HF",
+  "material": "TPU",
+  "colors": [
+    "Black",
+    "White",
+    "Transparent"
+  ],
+  "bambu_parent": "Bambu TPU 95A HF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.15"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "20-50",
+    "filament_retraction_length": "1-5",
+    "filament_retraction_speed": "1800-3600 mm/min",
+    "_drying": "70-80C 4-6h",
+    "_print_speed": "30-120 mm/s",
+    "_vicat": "99",
+    "_hardness": "95A",
+    "_notes": "TDS v5.0 (07.2023). Cooling fan on. Filament guide bed 35-50C on textured PEI."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://drive.google.com/file/d/1rPb6qsu-dDGB-LYU-xTC1zqfevB6678c/view",
+    "https://qidi3d.com/products/qidi-tpu95a-hf-filament",
+    "https://qidi3d.com/pages/choose-the-right-filament-3d-filaments-guide-for-qidi-printers"
+  ],
+  "updated": "2026-11-01"
+}

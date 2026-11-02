@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "ThermaX PEI 1010",
+  "material": "PEI",
+  "colors": [
+    "Natural"
+  ],
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "370"
+    ],
+    "nozzle_temperature_range_high": [
+      "390"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "120-160",
+    "_print_speed": "20-30 mm/s",
+    "_drying": "120C 4h",
+    "_vitrification": "217 (Tg)",
+    "_diameter_tolerance": "+/-0.05",
+    "_annealing": "hot-air oven anneal to reduce printed-in stress",
+    "_notes": "Values from MatterHackers listing 'ThermaX PEI 1010 Blend'; official page unreachable (HTTP 429). Warm to hot build environment; PEI tape bed. Beyond Bambu Lab printer nozzle limits."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://www.matterhackers.com/store/l/3dxtech-thermax-pei-1010-blend-3d-filament-175mm/sk/MHCFSNUC"
+  ],
+  "updated": "2026-11-01"
+}

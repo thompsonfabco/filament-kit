@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "vendor": "ELEGOO",
+  "product": "PAHT-CF",
+  "material": "PAHT-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Generic PA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "260"
+    ],
+    "nozzle_temperature_range_high": [
+      "290"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-110",
+    "_enclosure": "required",
+    "_hardened_nozzle_required": "yes",
+    "_colors_note": "Pass 1 recorded bare colour names, not full Spoolman names; match on vendor+product."
+  },
+  "conflicts": [
+    "[pass 1] Drying 80C 8h vs 85C 8h (max 100C)"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://us.elegoo.com/products/paht-cf-filament-1-75mm-colored-1kg",
+    "https://au.elegoo.com/products/paht-cf-filament-1-75mm-colored-1kg"
+  ],
+  "updated": "2026-11-01"
+}

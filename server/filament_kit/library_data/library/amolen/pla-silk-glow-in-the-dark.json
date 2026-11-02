@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "vendor": "AMOLEN",
+  "product": "PLA Silk Glow In The Dark",
+  "material": "PLA",
+  "colors": [
+    "Green",
+    "Blue",
+    "Orange-Red",
+    "Purple",
+    "Yellow"
+  ],
+  "bambu_parent": "Bambu PLA Glow",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "30-65",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "Silk + glow-in-the-dark PLA; parent chosen for the glow pigment (Bambu PLA Silk is the alternative). Page publishes only nozzle/bed/diameter/tolerance (no density/drying)."
+  },
+  "conflicts": [
+    "nozzle 210-230C (https://www.amolen.com/products/pla-silk-glow-in-the-dark-variety-pack-4x200g, variety-pack page)"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.amolen.com/products/pla-silk-basic-glow-in-the-dark-1-75mm-1kg-2-2lb",
+    "https://www.amolen.com/products/pla-silk-glow-in-the-dark-variety-pack-4x200g"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "PVA",
+  "material": "PVA",
+  "colors": [],
+  "bambu_parent": "Bambu PVA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "180"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.25"
+    ],
+    "filament_soluble": [
+      "1"
+    ],
+    "filament_is_support": [
+      "1"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "45-60",
+    "fan_max_speed": "100",
+    "_drying": "45C >10h",
+    "_print_speed": "20-50",
+    "_notes": "eSUN PVA (water-soluble) TDS v4.0 Nov 2021. Set support-model distance 0; slow first layer and turn fan off on it. Use with dry box (eBOX). Diameter not stated in TDS."
+  },
+  "conflicts": [
+    "eSUN 3D Printing Material Datasheet (2019, https://cdn.shopify.com/s/files/1/1745/6181/files/eSUN_3D_Printing_Filament_Datasheet.pdf): PVA 190-210C, bed 60-80C, density 1.25."
+  ],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://assets.spoolscout.com/tds-sds/esun/tds/esun-pva-tds-v4.0-2021-11.pdf",
+    "https://www.spoolscout.com/data-sheets/esun/pva-pva"
+  ],
+  "updated": "2026-11-01"
+}

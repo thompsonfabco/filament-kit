@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "vendor": "Protopasta",
+  "product": "Glow HTPLA",
+  "material": "PLA",
+  "colors": [
+    "Green Glow-in-the-Dark, Natural",
+    "Green Glow-in-the-Dark, White",
+    "Nebula Glow",
+    "Forest Fantasy Glow",
+    "Candy Rainbow Glow",
+    "Nebula Night Glow Fluorescent Multicolor"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.2"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "12"
+    ]
+  },
+  "published_ranges": {
+    "_nozzle_by_speed": "220C @ 6 mm3/s; 240C @ 12 mm3/s (Material Data Table row 'PLAs (w/o fibers)', which lists HTGL)",
+    "_bed": "55C plate (Material Data Table)",
+    "_hardened_nozzle_required": "Wear resistant nozzle advised (product pages: 'Low wear glow additive. Use wear resistant nozzle')",
+    "_notes": "No glow-specific TDS published; temps from the shared PLA/HTPLA row of the Material Data Table, density from the PLA/HTPLA Colors SDS (covers HTGL). Protopasta names the Generic PLA profile; Bambu PLA Glow is the closest Bambu product."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://proto-pasta.com/pages/material-data-table",
+    "https://cdn.shopify.com/s/files/1/0717/9095/files/PLA_Colors.pdf",
+    "https://proto-pasta.com/products/nebula-glow-in-the-dark"
+  ],
+  "updated": "2026-11-01"
+}

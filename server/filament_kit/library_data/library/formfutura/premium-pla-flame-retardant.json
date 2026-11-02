@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "Premium PLA Flame Retardant",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.26"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "40-60",
+    "fan_min_speed/fan_max_speed": "75-100",
+    "_print_speed": "25-150 mm/s (TDS)",
+    "_drying": "not necessary (TDS)",
+    "_enclosure": "Not necessary (TDS)",
+    "_min_nozzle": "0.15",
+    "_hdt": "55 (ISO 75-2/B); 90 after annealing at 95C (ISO 75-2/B)",
+    "_annealing": "95C anneal raises HDT to 90C (TDS)",
+    "_notes": "UL 94 V0 (0.8 mm and 3.2 mm), halogen-free. TDS lists 'Melt Temperature 75C (DSC)' as printed."
+  },
+  "conflicts": [
+    "Product page print speed 25-100 mm/s vs TDS 25-150 mm/s."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://formfutura.com/web/content/256617?download=true",
+    "https://formfutura.com/filaments/premium-pla-flame-retardant"
+  ],
+  "updated": "2026-11-01"
+}

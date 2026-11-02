@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "vendor": "Protopasta",
+  "product": "Magnetic Iron PLA",
+  "material": "PLA",
+  "colors": [
+    "Iron"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "192"
+    ],
+    "nozzle_temperature_range_high": [
+      "200"
+    ],
+    "filament_density": [
+      "1.85"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "24"
+    ]
+  },
+  "published_ranges": {
+    "_nozzle_by_speed": "200C @ 24 mm3/s (Material Data Table); 192C @ 2-3 mm3/s, 20-30 mm/s (TDS, Ultimaker S5 profile)",
+    "_bed": "55C plate (Material Data Table); 60C heated bed (TDS)",
+    "_hardened_nozzle_required": "Hard steel nozzle + gears recommended (Material Data Table)",
+    "_notes": "Ferromagnetic, rustable iron-filled PLA. Slightly more brittle than PLA and more abrasive than standard PLA; max particle 250 microns; min bend diameter 35 mm. Avoid printing below 3 mm3/s. Melt onset approx. 155C. Sold as 'Iron-filled Metal Composite PLA'. fields low/high are the TDS and Material Data Table single values."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0717/9095/files/TDS__Iron_PLA_1.0.1.pdf",
+    "https://proto-pasta.com/pages/material-data-table",
+    "https://cdn.shopify.com/s/files/1/0717/9095/files/FEP1xxxx_SDS.pdf"
+  ],
+  "updated": "2026-11-01"
+}

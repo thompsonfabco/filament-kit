@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "vendor": "Fillamentum",
+  "product": "PETG",
+  "material": "PETG",
+  "colors": [
+    "Aloe Green",
+    "Black Soul",
+    "Bunny Blue Transparent",
+    "Calendula Orange",
+    "Copper With Me",
+    "Deep Sea Transparent",
+    "Forget-me-not Blue",
+    "Fresh Poison Transparent",
+    "Ghost White",
+    "Gold Cloud",
+    "Greedy Dragon",
+    "Iced Green Transparent",
+    "Koala Grey",
+    "Lemon Yellow Transparent",
+    "Melon Yellow",
+    "Natural",
+    "Neon Orange Transparent",
+    "Neon Pink Transparent",
+    "Neon Yellow Transparent",
+    "Pink Lollipop Transparent",
+    "Red Hood Transparent",
+    "Sea Wave"
+  ],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "255"
+    ],
+    "nozzle_temperature_range_high": [
+      "285"
+    ],
+    "filament_density": [
+      "1.27"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "65-80",
+    "fan_min_speed/fan_max_speed": "0-40",
+    "_nozzle_by_speed": "basic 230-275 (40-60 mm/s, bed 65-75, fan 0-30%); high-speed printers setup 255-285 (100-300 mm/s, bed 65-80, fan 0-40%); matte finish 235-255 (bed 65-80) [product page + 3D print guide 8/2024]",
+    "_print_speed": "40-60 mm/s basic; 100-300 mm/s high-speed setup",
+    "_drying": "65C 4h",
+    "_vicat": "75 (ISO 306)",
+    "_enclosure": "Guide: enclosure not required.",
+    "_hardened_nozzle_required": "No; guide says a hardened steel nozzle is better at high speeds.",
+    "_diameter_tolerance": "+/-0.05",
+    "_ams": "Product page lists the line as AMS-compatible.",
+    "_notes": "Temperature resistance up to 70 C (TDS). 750 g (premium) / 1000 g (basic, transparent) + 210 g spool. 2.85 mm also sold."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://fillamentum.com/wp-content/uploads/2023/02/TDS_PETG_EN_30012023.pdf",
+    "https://shop.fillamentum.com/products/petg-natural-1",
+    "https://fillamentum.com/wp-content/uploads/2024/11/3D_PRINT_GUIDE_PETG_8_2024.pdf",
+    "https://fillamentum.com/wp-content/uploads/2023/10/Recommendation-for-filament-processing_drying_EN_12102023.pdf"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "vendor": "ColorFabb",
+  "product": "LW-PET Flex",
+  "material": "PET",
+  "colors": [],
+  "bambu_parent": "Generic PETG",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60",
+    "fan_max_speed": "100",
+    "_print_speed": "50 mm/s",
+    "_vitrification": "67.6 (Tg, DSC ISO 11357)",
+    "_diameter_tolerance": "+/-0.03 (TDS 'max. roundness deviation')",
+    "_notes": "TDS v1.0. Active-foaming flexible PET: unfoamed 210 C at 100% flow, foamed 260 C at 60% flow (fields span these two printed values). Bed surface: adhesion spray (3D lac). TDS gives no density."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://downloads.colorfabb.com/public.php/dav/files/rtfDDRCa723Xdor/Technical%20Data%20Sheets/Co-Polyester/PET/TDS_LW-PET-FLEX.pdf"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "vendor": "JAYO",
+  "product": "PLA",
+  "material": "PLA",
+  "colors": [
+    "PLA Black"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "210"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "_print_speed": "40-60 mm/s (JAYO blog table); 50-600 mm/s (marketing)",
+    "_max_print_speed": "600 ('50-600mm/sec' marketing claim)",
+    "_hdt": "55C",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "The user's ASIN B0DX6S6XR7 (ordered 2026-01-30 as 'JAYO PLA ... Black ... 1.1KG', sold by JAYO Official Store) now redirects into the JAYO PLA Classic Amazon family (MPNs XJJUS-PLACS-...); bullets match store.jayo3d.com 'PLA Classic' (SKU DLZ-US-JY-PLACS-BK-1.1kg-C, Black listed, 1100 g net, 50-600 mm/s). Temps, bed, HDT 55C and melting point 158C come from JAYO's official eBay store (seller jayo-3d) PLA Classic listings. Factory note only: 'completely dried for 24 hours' before vacuum sealing; no user drying spec. No density published.",
+    "fan_max_speed": "100",
+    "filament_retraction_length": "5",
+    "filament_retraction_speed": "50",
+    "_drying": "50C",
+    "_chamber": "Room temperature (JAYO blog: ambient temperature room temperature)"
+  },
+  "conflicts": [
+    "[pass 4] Line identity: the spool appears to be JAYO 'PLA Classic' (PLACS MPN). JAYO's separate 'PLA' product (store.jayo3d.com reusable-spool PLA and jayo3d.com/products/pla, SKU DLZ-US-JY-PLA-BK) lists Print Temp 200-210C, Hot Bed 60-80C, 40-80 mm/s, melt index 7-9 g/10min. If the spool is actually that product, use those values instead.",
+    "[pass 4] Temps/bed/HDT are from JAYO's own eBay store listings (jayo-3d, business seller), not from jayo3d.com or Amazon; the store.jayo3d.com PLA Classic page and the Amazon listing give no temperatures.",
+    "[pass 4] Not borrowed from SUNLU: no JAYO or SUNLU source states the products are the same.",
+    "[merge] published_ranges._print_speed: pass 6 value \"40-60 mm/s (JAYO blog table); 50-600 mm/s (marketing)\" replaced earlier value \"50-100\"",
+    "[merge] published_ranges._hdt: pass 6 value \"55C\" replaced earlier value \"55\"",
+    "[pass 6] Nozzle 190-210C and HDT 55C are from JAYO official eBay store 'PLA Classic'; JAYO blog 'PLA' row (Oct 2024) states 200-210C; JAYO 'PLA' page states 200-210C with bed 60-80C.",
+    "[pass 6] Drying 50C (no time), fan 100%, retraction 5mm @ 50mm/s and 40-60 mm/s come from a generic 'PLA' row in the JAYO blog table dated 2024-10-19, which predates ASIN B0DX6S6XR7; not confirmed to be the same grade as PLA Classic."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.jayo3d.com/products/reusable-spool-jayo-pla-classic-1-1kg-1-75mm-3d-printer-filament",
+    "https://www.ebay.de/itm/405999675402",
+    "https://www.ebay.de/itm/405984590422",
+    "https://www.ebay.de/itm/405984590457",
+    "https://www.amazon.com/dp/B0GMGYCZMX",
+    "https://store.jayo3d.com/products/reusable-spooljayo-1-1kg-pla-3d-printer-filament-1-75mm-high-strengt-0-02mm",
+    "https://jayo3d.com/blogs/news/getting-optimal-3d-prints-settings-and-tips-for-different-filament-materials"
+  ],
+  "updated": "2026-11-01"
+}

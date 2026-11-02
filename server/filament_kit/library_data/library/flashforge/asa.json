@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "vendor": "Flashforge",
+  "product": "ASA",
+  "material": "ASA",
+  "colors": [
+    "ASA Multicolor Burnt Titanium"
+  ],
+  "bambu_parent": "Generic ASA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100-120",
+    "fan_min_speed/fan_max_speed": "0-50",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "30-50",
+    "_drying": "80C 12h; 80C >=5h (Flashforge ASA TDS)",
+    "_print_speed": "40-60 mm/s (Flashforge ASA TDS)",
+    "_nozzle_sizes_supported": "0.4, 0.6",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "Density published only as range 1.08-1.09 g/cm3 (ISO 1183, Flashforge ASA TDS). Water absorption 1% (23C/24h). Support material: HIPS. Build surfaces per TDS: tempered glass, BuildTak, carbon fiber board.",
+    "_hdt_0.45MPa": "88 (Flashforge ASA TDS, 0.455 MPa)",
+    "_chamber": "ambient room temperature to 40C (Flashforge ASA TDS)"
+  },
+  "conflicts": [
+    "[pass 4] Diameter tolerance: au.flashforge.com ASA Multicolor page says +/-0.03 mm; the brand-sold Amazon listing B0CRHJ8SJN says +/-0.02 mm. Kept the official page value.",
+    "[pass 4] No TDS PDF found; values are from the Flashforge product page (identical on flashforge.com, eu., ca., au. and enterprise. storefronts). The standard Flashforge ASA page on uk.flashforge.com also lists Burnt Titanium as a colour and shows the same 240-270C / 100-120C / 80C 12h / fan 0-50% values, and the Amazon listing presents Burnt Titanium as a chameleon colour of FLASHFORGE ASA, so the two pages agree.",
+    "[merge] published_ranges._drying: pass 5 value \"80C 12h; 80C >=5h (Flashforge ASA TDS)\" replaced earlier value \"80C 12h (convection oven)\"",
+    "[merge] published_ranges._nozzle_sizes_supported: pass 5 value \"0.4, 0.6\" replaced earlier value \"0.4,0.6 (0.4 recommended)\"",
+    "[merge] published_ranges._print_speed: pass 5 value \"40-60 mm/s (Flashforge ASA TDS)\" replaced earlier value \"40-300 (higher speeds require higher temperatures)\"",
+    "[merge] published_ranges._notes: pass 5 value \"Density published only as range 1.08-1.09 g/cm3 (ISO 1183, Flashforge ASA TDS). Water absorption 1% (23C/24h). Support material: HIPS. Build surfaces per TDS: tempered glass, BuildTak, carbon fiber board.\" replaced earlier value \"Flashforge sells Burnt Titanium (colour code 412101) as its own product page 'ASA Multicolor' (chameleon series); Burnt Titanium is the only variant there. Layer height 0.12-0.3 mm. Support: self-supporting or HIPS. Store at room temp to 40C, <=20% RH sealed with desiccant. Mechanical (X-Y): tensile 42-45 MPa, flexural 75-79 MPa, modulus 1200-1400 MPa, impact 19-20 kJ/m2. Amazon brand listing: 'maintains its shape and integrity up to temperatures near 93C' (test method not stated). No density, HDT, enclosure or volumetric-speed value published.\"",
+    "[pass 5] Flashforge ASA TDS is for Flashforge ASA generally, not the Multicolor page; TDS nozzle 240-260C (250 recommended) vs Multicolor page 240-270C; TDS drying 80C >=5h vs Multicolor page 80C 12h",
+    "[pass 5] Reseller copy of Flashforge ASA page (qiditech3dprinter.com) presents Basic, Multicolor and Sparkle as options of one ASA product and repeats density 1.08-1.09 and HDT 88C"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://flashforge.com/products/asa-multicolor",
+    "https://au.flashforge.com/products/asa-multicolor",
+    "https://enterprise.flashforge.com/products/asa-multicolor",
+    "https://uk.flashforge.com/products/asa",
+    "https://www.amazon.com/dp/B0CRHJ8SJN",
+    "https://after-support.flashforge.jp/uploads/datasheet/tds/ASA_TDS_EN.pdf",
+    "https://www.qiditech3dprinter.com/en-us/products/flashforge-high-performance-asa-filament-for-3d-printing-flashforge-filament"
+  ],
+  "updated": "2026-11-01"
+}

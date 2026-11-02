@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "vendor": "Prusament",
+  "product": "PETG Ultraglow",
+  "material": "PETG",
+  "colors": [
+    "Green"
+  ],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.5"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "75-95",
+    "_fan_speed": "50 (100 for bridges)",
+    "_max_print_speed": "up to 200 mm/s",
+    "_hdt_0.45MPa": "91 (ISO 75)",
+    "_hdt_1.80MPa": "78 (ISO 75)",
+    "_diameter_tolerance": "+/-0.04",
+    "_hardened_nozzle_required": "yes; very high abrasivity (strontium aluminate)",
+    "_min_nozzle": "0.6 mm recommended (0.4 mm profiles exist but larger diameters advised to avoid clogging)",
+    "_drying": "optional; reduces stringing/clogging after prolonged storage",
+    "_ams": "Abrasive: product page warns of accelerated wear on PTFE tubes and hardened components (extruder gears) with frequent high-volume use.",
+    "_notes": "Glow-in-the-dark PETG. TDS prints nozzle '260 +/- 10', bed '85 +/- 10'. Bed: PP, satin, textured sheet."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://storage.googleapis.com/prusa3d-content-prod-14e8-wordpress-prusament-prod/2026/05/a150c178-prusament-petg-ultraglow-filament-technical-data-sheet.pdf",
+    "https://prusament.com/materials/prusament-petg-ultraglow/"
+  ],
+  "updated": "2026-11-01"
+}

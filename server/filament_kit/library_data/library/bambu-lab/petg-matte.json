@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "vendor": "Bambu Lab",
+  "product": "PETG Matte",
+  "material": "PETG",
+  "colors": [],
+  "bambu_parent": "Bambu PETG Matte",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.37"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "65-75 (glue stick/liquid glue recommended)",
+    "chamber_temperatures": "35-50",
+    "filament_retraction_length": "0.4-0.8",
+    "filament_retraction_speed": "30-60",
+    "_print_speed": "<250 mm/s",
+    "_drying": "oven 65C 8h; X/P/H2 heatbed 80C 12h; AMS 2 Pro/AMS HT: 60C 12h (filament inserted) or 65C 8h (not inserted)",
+    "_ams": "AMS, AMS 2 Pro, AMS HT, AMS Lite compatible (TDS)",
+    "_min_nozzle": "TDS lists nozzle sizes 0.2, 0.4, 0.6, 0.8 mm",
+    "_vitrification": "71 (Tg, DSC 10C/min)",
+    "_vicat": "75.7 (ISO 306)",
+    "_hdt_0.45MPa": "72.3",
+    "_hdt_1.8MPa": "71.2",
+    "_notes": "TDS V1.0 (reseller-hosted copy linked from 3DJake). Plates: Textured PEI, Smooth PEI, Cool Plate SuperTack. Cooling fan: turn on. Support material: Support for PLA/PETG. Melting temp 160C (DSC) as printed. Max overhang ~70 deg, bridging ~30 mm."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://3d.nice-cdn.com/upload/file/PETG_Matte.pdf",
+    "https://www.3djake.com/bambu-lab/petg-matte-gray-1"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "vendor": "Protopasta",
+  "product": "Static Dissipative PETG",
+  "material": "PETG",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Generic PETG",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "290"
+    ],
+    "filament_density": [
+      "1.2"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "8"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-80",
+    "_drying": "65C 6h (highly recommended)",
+    "_min_nozzle": "0.4 mm or larger",
+    "_ams": "Compatible (TDS)",
+    "_notes": "Carbon black composite, non-abrasive, ESD-safe. PEI or similar with Magigoo or glue stick for release. Extra purge needed. Density from SDS."
+  },
+  "conflicts": [
+    "Material Data Table (https://proto-pasta.com/pages/material-data-table) lists 250C @ 12 mm3/s, 80C plate; TDS gives up to 8 mm3/s"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0717/9095/files/PETGxxxx-ESD_TDS.pdf",
+    "https://cdn.shopify.com/s/files/1/0717/9095/files/PETG_ESD.pdf",
+    "https://proto-pasta.com/pages/material-data-table"
+  ],
+  "updated": "2026-11-01"
+}

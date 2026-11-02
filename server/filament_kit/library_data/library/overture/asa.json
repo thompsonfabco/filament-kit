@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "vendor": "OVERTURE",
+  "product": "ASA",
+  "material": "ASA",
+  "colors": [
+    "Orange"
+  ],
+  "bambu_parent": "Generic ASA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-95",
+    "_print_speed": "30-50",
+    "_drying": "75C 7h",
+    "_colors_note": "Pass 1 recorded bare colour names, not full Spoolman names; match on vendor+product.",
+    "_vitrification": "106.2 (Vicat)"
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://overture3d.com/products/overture-asa-filament-1-75mm"
+  ],
+  "updated": "2026-11-01"
+}

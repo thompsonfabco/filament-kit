@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "vendor": "Protopasta",
+  "product": "c-Matte PLA",
+  "material": "PLA",
+  "colors": [
+    "White",
+    "Gray",
+    "Black",
+    "Brick Red",
+    "Granite Gray",
+    "Terracotta",
+    "Jurassic Jungle Green"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_density": [
+      "1.3"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "18"
+    ]
+  },
+  "published_ranges": {
+    "_nozzle_by_speed": "200C @ 12 mm3/s; 220C @ 18 mm3/s (Material Data Table)",
+    "_bed": "45C plate (Material Data Table)",
+    "_notes": "10 wt% calcium carbonate filled matte PLA (SDS). Cool to below 40C before removal. Density from cMatte PLA SDS. Protopasta names the Generic PLA profile; Bambu PLA Matte is the closest Bambu product."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://proto-pasta.com/pages/material-data-table",
+    "https://cdn.shopify.com/s/files/1/0717/9095/files/PLA_CaCO3.pdf"
+  ],
+  "updated": "2026-11-01"
+}

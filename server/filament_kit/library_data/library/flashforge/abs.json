@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "vendor": "Flashforge",
+  "product": "ABS",
+  "material": "ABS",
+  "colors": [],
+  "bambu_parent": "Bambu ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80-110",
+    "fan_min_speed/fan_max_speed": "0-50",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "30-50",
+    "_print_speed": "40-60 mm/s (50 recommended); travel 60-120 mm/s",
+    "_nozzle_recommended": "230C",
+    "_bed_recommended": "100C",
+    "_drying": "80C >=5h (hot dry air oven)",
+    "_density": "1.04-1.06 g/cm3 (ISO 1183); published as a range only, so filament_density left unset",
+    "_hdt_0.45MPa": "88 (ISO 75, 0.455 MPa)",
+    "_ambient_temperature": "room temperature to 40C",
+    "_min_nozzle": "TDS: 0.4/0.6 mm (0.4 recommended)",
+    "_notes": "Base resin CHIMEI ABS 757 (TDS). Water absorption 1%. Support: self-supporting, HIPS. Soluble in acetone (Filament Guide). TDS dated 2022-02-08."
+  },
+  "conflicts": [
+    "Flashforge Filament Guide: bed 100-110C vs TDS 80-110C; nozzle 220-240C and speed 40-60 mm/s agree."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://after-support.flashforge.jp/uploads/datasheet/tds/ABS_TDS_EN.pdf",
+    "https://wiki.flashforge.com/resource/filament_tips/flashforge_filament_guide.pdf"
+  ],
+  "updated": "2026-11-01"
+}

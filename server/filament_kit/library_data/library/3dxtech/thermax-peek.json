@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "ThermaX PEEK",
+  "material": "PEEK",
+  "colors": [
+    "Natural"
+  ],
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "375"
+    ],
+    "nozzle_temperature_range_high": [
+      "410"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "130-145",
+    "chamber_temperatures": "70-140",
+    "_print_speed": "10-50 mm/s (0.2mm layer)",
+    "_drying": "120C 4h",
+    "_notes": "Values from MatterHackers listing; official page unreachable (HTTP 429). Enclosure: hotter is better. PEI build surface. Beyond Bambu Lab printer nozzle limits."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://www.matterhackers.com/store/l/3dxtech-thermax-peek-05kg-175mm/sk/MQKH3YHL"
+  ],
+  "updated": "2026-11-01"
+}
