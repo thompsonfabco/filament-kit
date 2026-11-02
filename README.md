@@ -7,14 +7,19 @@ It also:
 
 - connects to your Bambu Lab printer, so filament used in a print comes off the right spool;
 - builds a filament preset for every filament line you own and installs them in Bambu Studio on your Windows PC
-  (see [Presets in Bambu Studio](#presets-in-bambu-studio)).
+  (see [Presets in Bambu Studio](#presets-in-bambu-studio)), and in Orca Slicer if you ask for them
+  (see [Presets in Orca Slicer](#presets-in-orca-slicer)).
+
+Optional extras, all off until you turn them on: a Claude connector and a phone web app
+([Claude connector and phone web app](#claude-connector-and-phone-web-app)), a public https address for them
+([Remote access](#remote-access)) and your order history for label reading ([Order history](#order-history)).
 
 ## What you need
 
 - A computer running **Ubuntu 24.04 or newer**, on your home network, that stays on.
 - An **Anthropic API key** (starts with `sk-ant-`). Keep it handy; the installer asks for it once.
 - An Android phone (Android 10 or newer) for the filament-kit app.
-- Optional: a Windows PC with Bambu Studio, for the presets.
+- Optional: a Windows PC with Bambu Studio (and, if you like, Orca Slicer), for the presets.
 - Optional: an **intake station**: a USB scale (DYMO) and a PN532 NFC reader on the same computer or on a second
   one (see [Intake station](#intake-station)).
 
@@ -204,10 +209,16 @@ Run these in a Terminal on the Ubuntu computer.
 | `sudo filament-kit config` | Settings menu: display name, storage locations, Claude model and daily limit, API key, printers, modules. |
 | `sudo filament-kit modules list` | Shows each module on or off and the mode. `modules set <mode>`, `modules enable <name>` and `modules disable <name>` change them (see [Change the mode later](#change-the-mode-later)); `modules apply` sets the computer up again from the saved settings. |
 | `sudo filament-kit printer map <serial>` | Maps a printer's AMS slots (see [Map slots](#map-slots)), printing each step. |
-| `sudo filament-kit profiles status` / `build` | Shows or rebuilds the Bambu Studio presets (see [Presets](#presets-in-bambu-studio)). |
+| `sudo filament-kit profiles status` / `build` | Shows or rebuilds the Bambu Studio and Orca Slicer presets (see [Presets](#presets-in-bambu-studio)). |
+| `sudo filament-kit profiles lines` / `set-parent <line_id> <parent>` | Lists the filament lines; sets a line's Bambu Studio parent (`--orca`: its Orca Slicer parent). |
 | `sudo filament-kit profiles restore-deleted` | Brings back, at the next build, the generated presets you deleted in Bambu Studio. |
 | `sudo filament-kit library status` / `update` / `rollback` | The spec library (see [Spec library updates](#spec-library-updates)). |
 | `sudo filament-kit printer unpin <serial>` | Forgets a printer's pinned certificate; the next connection trusts the one it presents. |
+| `sudo filament-kit web passphrase` | Sets the sign-in passphrase of the Claude connector and the phone web app (see [Claude connector and phone web app](#claude-connector-and-phone-web-app)). |
+| `sudo filament-kit web status` | Checks the web part: public address, passphrase, the service, signed-in connectors. |
+| `sudo filament-kit remote firewall` | Prints the firewall and port-forward rules remote access needs (it changes nothing; see [Remote access](#remote-access)). |
+| `sudo filament-kit remote issue` | Gets the https certificate with certbot (port 80 must reach this computer while it runs). |
+| `sudo filament-kit migrate-ops <bundle>` | Moving from filament-ops: shows what it would do; `--apply` does it (see [Moving from filament-ops](#moving-from-filament-ops)). |
 
 Your spool inventory (Spoolman) is also in a web browser on any computer at home:
 `http://<computer name>.local:7912`, where `<computer name>` is the Ubuntu computer's own name (type
@@ -313,6 +324,43 @@ then installs them in Bambu Studio.
 - To see how the last build went: `sudo filament-kit profiles status`. To rebuild now:
   `sudo filament-kit profiles build`. (It needs the PC sync to have run once.)
 
+## Presets in Orca Slicer
+
+The server can also build Orca Slicer filament presets, for your Bambu Lab printers and for other printers Orca
+Slicer knows (for example a Sovol). This is off until you ask for it in `/etc/filament-kit/config.json`:
+
+- `"presets_orca": true` makes Orca presets for the Bambu Lab printers the server knows, for every nozzle Orca
+  has for them except 0.2. To choose the nozzles, add for example `"presets_orca_nozzles": ["0.4", "0.6", "0.8"]`.
+- `"slicer_printers"` adds printers that are not Bambu Lab ones. Each entry names the printer as Orca Slicer
+  does and its nozzles:
+
+  ```
+  "slicer_printers": [
+    {"name": "Sovol SV08 MAX", "slicer": "orca", "nozzles": ["0.4", "0.6", "1.0"],
+     "label": "SV08 MAX",
+     "compatible_printers": {"0.4": "Sovol SV08 MAX", "0.6": "Sovol SV08 MAX 0.6", "1.0": "Sovol SV08 MAX 1.0"}}
+  ]
+  ```
+
+  `label` (optional) is the printer's name in the preset names. `compatible_printers` (optional) gives, for each
+  nozzle, the name of the printer preset in Orca Slicer that the filament preset belongs to; use it when your
+  printer presets are named differently from the default.
+
+Then run `sudo filament-kit profiles build` (or wait for the next sync).
+
+- Names look like `<brand> <line> @<printer> <nozzle>`, for example `SUNLU PLA+ 2.0 @SV08 MAX 0.4`.
+- Each line also has an **Orca Slicer parent**, the Orca system preset it starts from. The server picks one;
+  `sudo filament-kit profiles lines` shows it and `sudo filament-kit profiles set-parent --orca <line_id> <parent>`
+  changes it (give the parent's name without ` @System`).
+- The PC sync finds Orca Slicer on the PC by itself (its folder in `%APPDATA%\OrcaSlicer`). It sends the Orca
+  presets to the server along with the Bambu Studio ones and installs the Orca presets the server builds. It waits
+  while Orca Slicer is open, just like for Bambu Studio. A PC without Orca Slicer only gets the Bambu Studio
+  presets. `filament-kit-sync status` on the PC shows the Orca folder it uses.
+- The same rules as for Bambu Studio apply: your edits in Orca Slicer are kept, and presets are deleted in Orca
+  Slicer, never on disk.
+- `sudo filament-kit profiles status` counts the Bambu Studio and Orca presets together, and lists a problem
+  when, for example, an Orca parent is not in your Orca Slicer.
+
 ## Spec library updates
 
 The library holds published filament specs (temperatures, speeds). A copy comes with the server, so it works
@@ -382,8 +430,12 @@ hand: `sudo systemctl unmask sleep.target suspend.target hibernate.target hybrid
 - These settings are in `/etc/filament-kit/config.json` under `"station"`: `"nfc_device"` (`"auto"`, or a
   device such as `"tty:USB0:pn532"`), `"beep"` (`true` or `false`), `"beep_device"` (empty for automatic, or
   an ALSA device such as `"plughw:1,0"`), `"speech"` (`true` or `false`) and `"camera"` (`"auto"` for the first
-  USB camera, a device such as `"/dev/video0"`, or `"off"`). After a change, run
-  `sudo filament-kit modules apply`.
+  USB camera, a device such as `"/dev/video0"`, or `"off"`) and `"panel_flash"` (`true` or `false`, see the
+  next point). After a change, run `sudo filament-kit modules apply`.
+- **Panel firmware updates itself.** The station carries the panel's firmware. When it finds a panel running
+  another version, it writes the bundled one to it over USB (once per version) and then uses it. If that does
+  not work, the panel keeps running as it is. Set `"panel_flash": false` to never touch the panel's firmware.
+  `curl http://127.0.0.1:5003/state` shows the panel's version as `"panel_version"`.
 
 ### Is it working?
 
@@ -398,6 +450,186 @@ hand: `sudo systemctl unmask sleep.target suspend.target hibernate.target hybrid
   `/etc/filament-kit/config.json` under `"station"`, for example `"url": "http://station.local:5003"`. If the
   server's address changes, run `sudo filament-kit modules apply` on the station computer so it answers the new
   one.
+
+## Tag readers and printer slots
+
+### More tag readers
+
+Besides the intake station, the kit can read tags from other NFC readers that report the last tag they saw, for
+example a reader on a printer. List them in `/etc/filament-kit/config.json`:
+
+```
+"tag_sources": [{"name": "printer", "url": "http://sv08.local:5002/last-tag"}]
+```
+
+Each address must answer a GET with JSON like `{"status": "ok", "nfc_id": "04A1B2C3", "read_at_unix": ...,
+"age_seconds": 12}` (the station's own `/last-tag` speaks the same). The newest tap across all readers and the
+station wins. A tap from the last 5 minutes, or a spool held on the station's panel, counts as the spool you are
+working on: a label read then treats that spool as opened, and the Open spool tab of the phone web app shows it.
+A reader that does not answer is skipped for a minute.
+
+### Printer slots for the Claude connector
+
+The connector's `printer_slots` and `printer_set_slot` tools show and set what is loaded in a printer's AMS
+slots. With the `printers` module on, they use the kit's own printer connection. If another service of yours
+already talks to the printer, point the tools at it instead, so the kit never connects to that printer:
+
+```
+"slot_service": {"state_url": "http://127.0.0.1:8105/api/state", "set_url": "http://127.0.0.1:8104/set-slot",
+                 "token_file": "/etc/filament-kit/h2d_token"}
+```
+
+The token file holds the bearer token for `set_url` (copy it with `sudo install -m 640 -o root -g filament-kit
+<file> /etc/filament-kit/h2d_token`; never paste it into config.json). `sudo filament-kit web status` shows which
+one is in use.
+
+## Claude connector and phone web app
+
+The `web` module runs one more service, `filament-kit-web`, on this computer only (`127.0.0.1:8101`). It gives:
+
+- a **Claude connector** (an MCP server) at `<public address>/mcp`, so Claude can find spools, add spools,
+  open a spool, check the presets and the printer slots for you (tools `find_spools`, `add_spools`, `tag_state`,
+  `open_spool`, `preset_status`, `list_lines`, `find_parents`, `add_filaments_to_line`, `add_line`, `generate`,
+  `printer_slots`, `printer_set_slot`);
+- a **phone web app** at `<public address>/intake`, in any phone browser (no install): add spools from label
+  photos, open a tapped spool, and see the presets.
+
+Both use one passphrase. Adding spools does a dry run first in both, as in the Android app.
+
+### Turn it on
+
+1. Pick the **public address**: the `https://` address people (and Claude) will use, ending in a path such as
+   `/filament`, for example `https://filament.example.com/filament`. It must start with `https://`, also when the
+   web part is only used at home: the connector's sign-in only works over https. The web service itself only
+   listens on this computer, so something has to carry that address to it: the kit's [Remote access](#remote-access)
+   module, or a web server of your own that passes the path on to `http://127.0.0.1:8101`.
+2. Put it into `/etc/filament-kit/config.json`:
+
+   ```
+   "web": {"public_url": "https://filament.example.com/filament"}
+   ```
+
+3. Set the passphrase (at least 12 characters; you type it twice and nothing shows):
+
+   ```
+   sudo filament-kit web passphrase
+   ```
+
+4. Turn the module on and check it:
+
+   ```
+   sudo filament-kit modules enable web
+   sudo filament-kit web status
+   ```
+
+   `web status` shows the public address, the connector and phone app addresses, whether the passphrase is set,
+   whether the service answers, and how many connectors and phones are signed in. No line should start with
+   `FAIL`.
+
+### Add the connector in Claude
+
+In claude.ai, add a custom connector with the address `<public address>/mcp`. Claude then opens a sign-in page:
+type the passphrase there. Claude stays signed in after that; changing the passphrase later does not sign it out.
+
+### Use the phone web app
+
+Open `<public address>/intake` on the phone, type the passphrase and add the page to the home screen if you
+like. It stays signed in for 30 days.
+
+### What only works at home
+
+The sign-in pages (`/authorize`, `/login`) and the whole phone web app answer only addresses from your home
+network. Elsewhere they show a "home network only" page. Claude's servers reach the connector itself
+(`/mcp` and the token exchange) from the internet, so sign Claude in from home once. The home network is the
+private address ranges by default; set your own in `"web": {"lan": ["192.168.1.0/24"]}`. Five wrong passphrases
+lock the sign-in for 10 minutes.
+
+## Remote access
+
+The `remote` module puts the web part on a public `https://` name, with a free certificate from Let's Encrypt.
+It installs nginx and certbot. It **never changes your firewall or router**: it prints the rules, and you set
+them up yourself.
+
+1. Do [Claude connector and phone web app](#claude-connector-and-phone-web-app) first (`web.public_url` set).
+   Its host name is the public name; you can also write it as `"remote": {"hostname": "filament.example.com"}`,
+   which must then be the same name. Optional in `"remote"`: `"email"` (certbot's expiry mails) and
+   `"acme_window"`, see the port 80 note below.
+2. Make the name point to your home's public address (DNS), and to this computer at home.
+3. Turn it on:
+
+   ```
+   sudo filament-kit modules enable remote
+   ```
+
+   That sets up nginx with a router on port 443 (`/etc/nginx/conf.d/filament-kit-router.conf`), a route from
+   the public path (for example `/filament`) to the web service, and a temporary self-signed certificate, so
+   nginx starts before the real one exists. Other routes can share the same name:
+   `sudo /usr/local/sbin/mcp-route ls`, `add <name> <port>` and `rm <name>`.
+4. Print the rules you need and set them up on your firewall and router:
+
+   ```
+   sudo filament-kit remote firewall
+   ```
+
+   It lists port 443 from Claude's address range and your home network, port 80 for certbot, and an optional
+   nginx hardening file.
+5. Get the certificate, with port 80 reaching this computer:
+
+   ```
+   sudo filament-kit remote issue
+   ```
+
+   nginx stops while certbot runs and starts again afterwards. From then on certbot renews the certificate by
+   itself.
+
+**Port 80.** certbot needs port 80 from the internet to this computer whenever it issues or renews (it answers
+the check itself). If you only want port 80 open at a set time, open it on your router for a short window each
+night and set `"acme_window"` to a time inside it, for example `"03:10 America/New_York"`: certbot's renewal
+timer then runs only at that time. Outside the window port 80 can stay closed.
+
+**HTTP/2.** The router speaks HTTP/1.1 only, so its nginx settings work on Ubuntu 24.04's nginx too. Claude and
+phone browsers work with that.
+
+Turning `remote` off removes only the kit's own router file, its certbot hook and its route. nginx, certbot,
+the certificate and any other routes stay.
+
+## Order history
+
+The `orders` module gives label reading your shop order history, so the AI can tell the brand, the seller and
+the price of a spool when the label does not show them. You need a file with your orders, kept up to date by a
+tool of yours, in this shape:
+
+```
+{"items": [{"order": "112-...", "date": "2026-10-01", "asin": "B0...", "title": "SUNLU PLA+ 1kg ...",
+            "qty": 2, "unit_price": 19.99, "seller": "SUNLU"}]}
+```
+
+Put its path into `/etc/filament-kit/config.json` and turn the module on (it needs `ai_intake`):
+
+```
+"orders": {"file": "/var/lib/filament-kit/filament_orders.json"}
+```
+
+```
+sudo filament-kit modules enable orders
+```
+
+The kit's user must be able to read the file (for example owner `root`, group `filament-kit`, mode 640). If it
+cannot be read, labels are still read, without the orders.
+
+## Moving from filament-ops
+
+If you ran the older filament-ops setup (filament MCP server, phone intake app, `regen.py` presets, the
+`intake-station` service and the `fpsync` task), the kit takes over all of it. The steps, checks and rollback for
+each computer are in [docs/migrate-from-filament-ops.md](docs/migrate-from-filament-ops.md). In short:
+
+1. On the old server, export a bundle with `tools/export_ops.sh` (it only reads).
+2. Install the kit in server mode, then `sudo filament-kit migrate-ops <bundle>`: it shows what it would do and
+   changes nothing. `sudo filament-kit migrate-ops <bundle> --apply` then moves your Spoolman data, lines,
+   calibrated preset values, the connector's sign-ins, the passphrase and your settings. Running it again changes
+   nothing.
+3. Turn on `web`, `orders` and `remote`; the connector and phone app keep their addresses and sign-ins.
+4. Then the station computer and the Windows PC, as the guide says.
 
 ## Troubleshooting
 
