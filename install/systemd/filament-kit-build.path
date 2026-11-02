@@ -1,0 +1,9 @@
+[Unit]
+Description=Rebuild filament-kit presets when a rebuild is requested
+
+[Path]
+PathModified=/var/lib/filament-kit/profiles/rebuild-request
+Unit=filament-kit-build.service
+
+[Install]
+WantedBy=multi-user.target

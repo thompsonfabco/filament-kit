@@ -29,14 +29,19 @@ rm -f "$stage/.gitignore"
 rm -rf server/build
 ls "$stage"/filament_kit-"$version"-*.whl >/dev/null 2>&1 \
     || { echo "error: wheel for $version not built" >&2; exit 1; }
+# The bundled library snapshot is package data; a wheel without it has no library at all.
+for whl in "$stage"/filament_kit-"$version"-*.whl; do
+    unzip -l "$whl" | grep -qE ' filament_kit/library_data/index\.json[[:space:]]*$' \
+        || { echo "error: $whl has no filament_kit/library_data/index.json" >&2; exit 1; }
+done
 
 # ---------- scripts and units ----------
 cp install/install.sh install/uninstall.sh "$stage/"
 cp install/backup.sh install/filament-kit-cli.sh "$stage/install/"
-cp install/systemd/*.service install/systemd/*.timer "$stage/install/systemd/"
+cp install/systemd/*.service install/systemd/*.timer install/systemd/*.path "$stage/install/systemd/"
 cp install/avahi/filament-kit.service "$stage/install/avahi/"
 # A Windows checkout may have CRLF line endings; Linux needs LF.
-find "$stage" -type f \( -name '*.sh' -o -name '*.service' -o -name '*.timer' \) \
+find "$stage" -type f \( -name '*.sh' -o -name '*.service' -o -name '*.timer' -o -name '*.path' \) \
     -exec sed -i 's/\r$//' {} +
 chmod 755 "$stage/install.sh" "$stage/uninstall.sh" "$stage/install/backup.sh" \
     "$stage/install/filament-kit-cli.sh"
