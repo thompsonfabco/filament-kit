@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "filament-kit-sync"
+version = "0.1.0"
+description = "filament-kit PC sync: uploads Bambu Studio filament presets to a filament-kit server and installs generated presets"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest==8.3.4"]
+
+[project.scripts]
+filament-kit-sync = "fksync.__main__:main"
+
+[tool.setuptools]
+packages = ["fksync"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
