@@ -346,8 +346,23 @@ def test_inapp_nil_or_vitrification_never_written(tmp_path):
     manifest, _ = build(tmp_path, SUNLU, line_set=ls, live=live, snapshot=snap, out="o2")
     new = read(tmp_path, name, "o2")
     assert new["filament_flow_ratio"] == ["0.95", "0.95"]
-    assert new["temperature_vitrification"] == ["45"]
-    assert any("temperature_vitrification" in e for e in manifest["edits"])
+    assert new["temperature_vitrification"] == ["60"]                 # ruling S16: his edit is kept
+    assert any("temperature_vitrification" in e and "your in-app value, kept" in e for e in manifest["edits"])
+    assert name in names(manifest)
+    assert read(tmp_path, sunlu(H2D, "0.6"), "o2")["temperature_vitrification"] == ["45"]
+
+
+def test_inapp_vitrification_only_nil_restores_parent(tmp_path):
+    _, ls = build(tmp_path, SUNLU)
+    snap, live = _install(tmp_path)
+    name = sunlu(H2D, "0.4")
+    p = live.root / "base" / f"{name}.json"
+    cfg = json.loads(p.read_text(encoding="utf-8"))
+    cfg["temperature_vitrification"] = ["nil"]
+    p.write_text(json.dumps(cfg), encoding="utf-8")
+    manifest, _ = build(tmp_path, SUNLU, line_set=ls, live=live, snapshot=snap, out="o2")
+    assert name in names(manifest)
+    assert read(tmp_path, name, "o2")["temperature_vitrification"] == ["45"]
 
 
 def test_adopts_existing_wizard_filament_id(tmp_path):
@@ -362,11 +377,80 @@ def test_adopts_existing_wizard_filament_id(tmp_path):
     assert any("Pabc1234" in e for e in manifest["edits"])
 
 
+def test_existing_line_keeps_its_filament_id(tmp_path):
+    _, ls = build(tmp_path, SUNLU, out="o1")
+    keep = ls["sunlu--pla-plus-2-0"].filament_id
+    live_root = tmp_path / "live"
+    (live_root / "base").mkdir(parents=True)
+    name = sunlu(H2D, "0.4")
+    (live_root / "base" / f"{name}.json").write_text(json.dumps({"name": name, "filament_id": "Pabc1234"}),
+                                                     encoding="utf-8")
+    manifest, out = build(tmp_path, SUNLU, line_set=ls, live=G.Live(live_root, "u1"))
+    assert out["sunlu--pla-plus-2-0"].filament_id == keep
+    assert all(p["filament_id"] == keep for p in manifest["presets"])
+    assert any(name in p and "Pabc1234" in p and keep in p for p in manifest["problems"])
+
+
+def test_adoption_skips_an_id_held_by_an_invalid_row(tmp_path):
+    ls = lines.LineSet()
+    ls.invalid.append({"line_id": "broken", "filament_id": "Pabc1234"})
+    live_root = tmp_path / "live"
+    (live_root / "base").mkdir(parents=True)
+    name = sunlu(H2D, "0.4")
+    (live_root / "base" / f"{name}.json").write_text(json.dumps({"name": name, "filament_id": "Pabc1234"}),
+                                                     encoding="utf-8")
+    manifest, out = build(tmp_path, SUNLU, line_set=ls, live=G.Live(live_root, "u1"))
+    assert out["sunlu--pla-plus-2-0"].filament_id != "Pabc1234"
+
+
 def test_stale_lists_snapshot_names_no_longer_built(tmp_path):
     _, ls = build(tmp_path, EIGHT)
     snap, live = _install(tmp_path)
     manifest, _ = build(tmp_path, SUNLU, line_set=ls, live=live, snapshot=snap, out="o2")
     assert manifest["stale"] == sorted(f"Generic PLA-CF Black @{H2D} {n} nozzle" for n in ("0.4", "0.6", "0.8"))
+
+
+def test_skipped_this_run_is_not_stale(tmp_path, monkeypatch):
+    _, ls = build(tmp_path, EIGHT)
+    snap, live = _install(tmp_path)
+    ps = presets()
+    del ps["Bambu PLA Tough+ @BBL P1S"]                        # parent temporarily missing
+    real = G.check_preset
+    bad = sunlu(H2D, "0.6")
+    monkeypatch.setattr(G, "check_preset", lambda cfg, parent, **kw: ["forced"] if cfg["name"] == bad
+                        else real(cfg, parent, **kw))
+    manifest, _ = build(tmp_path, EIGHT, line_set=ls, live=live, snapshot=snap, store_presets=ps, out="o2")
+    assert bad not in names(manifest) and sunlu(P1S, "0.4") not in names(manifest)
+    assert any(bad in p for p in manifest["problems"])
+    assert manifest["stale"] == []
+
+
+def test_line_that_raises_is_not_stale(tmp_path, monkeypatch):
+    _, ls = build(tmp_path, EIGHT)
+    snap, live = _install(tmp_path)
+    real = G._build_line
+    def boom(line, *a, **kw):
+        if line.line_id == "generic--pla-cf-black":
+            raise ValueError("odd")
+        return real(line, *a, **kw)
+    monkeypatch.setattr(G, "_build_line", boom)
+    manifest, _ = build(tmp_path, EIGHT, line_set=ls, live=live, snapshot=snap, out="o2")
+    assert any("generic--pla-cf-black" in p and "odd" in p for p in manifest["problems"])
+    assert manifest["stale"] == [] and len(manifest["presets"]) == 5
+
+
+def test_bad_filament_or_line_is_a_problem_not_a_failure(tmp_path, monkeypatch):
+    fs = SUNLU + [fil(20, "Weird", material=42), fil(8, "PLA-CF Black", vendor="Generic", material="PLA-CF")]
+    real = lines.rechoose
+    def picky(line, store, **kw):
+        if line.line_id == "generic--pla-cf-black":
+            raise TypeError("bad line")
+        return real(line, store, **kw)
+    monkeypatch.setattr(lines, "rechoose", picky)
+    manifest, _ = build(tmp_path, fs)
+    assert any("filament 20" in p for p in manifest["problems"])
+    assert any("generic--pla-cf-black" in p and "bad line" in p for p in manifest["problems"])
+    assert sunlu(H2D, "0.4") in names(manifest)
 
 
 def test_unsupported_nozzles_skipped(tmp_path):
@@ -382,6 +466,10 @@ def test_check_preset():
             "filament_notes": "x\nSpoolman filament ids: 1", "compatible_printers": ["Bambu Lab H2D 0.4 nozzle"],
             "temperature_vitrification": ["45"]}
     assert G.check_preset(good, parent) == []
+    edited_tv = {**good, "temperature_vitrification": ["60"]}
+    assert G.check_preset(edited_tv, parent, edited={"temperature_vitrification": [60]}) == []
+    assert G.check_preset(edited_tv, parent, edited={"temperature_vitrification": ["55"]})
+    assert G.check_preset(edited_tv, parent, edited={})
     for bad in ({"filament_id": "GFL99"}, {"inherits": "Generic PLA"}, {"nozzle_temperature_range_low": ["x"]},
                 {"nozzle_temperature_range_high": None}, {"filament_notes": "Spoolman filament ids: 1\nx"},
                 {"compatible_printers": ["a", "b"]}, {"temperature_vitrification": ["60"]},

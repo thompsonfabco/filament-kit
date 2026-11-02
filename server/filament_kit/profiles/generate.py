@@ -8,8 +8,12 @@ keys, set the common keys, `values.apply_library` (always, so hardened materials
 MARK + the owner's lines, `Spoolman filament ids:` last), `check_preset`, then the files.
 
 "nil" is never written: a parent list with "nil" items gets them filled from the list's first real value (an
-all-"nil" key is dropped) before the library is applied and again after the in-app edits. temperature_vitrification
-always stays the parent's (an in-app change to it is reported, not kept).
+all-"nil" key is dropped) before the library is applied and again after the in-app edits. The generator never sets
+temperature_vitrification: it stays the parent's unless the owner edited it in the app (ruling S16: then the edit
+is kept like any other; an edit that is only "nil" restores the parent's value).
+
+A saved line's filament_id never changes (ruling S12). Only a line created in this run takes the filament_id of an
+existing preset of the same name made in the app; for a saved line that preset is reported and replaced.
 
 One line with odd data, or one bad preset, is skipped with a problem line; the rest of the build goes on.
 """
@@ -111,8 +115,9 @@ def _int(v) -> int | None:
     return round(f) if math.isfinite(f) else None
 
 
-def check_preset(cfg: dict, parent_cfg: dict) -> list[str]:
-    """Why this preset must not be written ([] = good)."""
+def check_preset(cfg: dict, parent_cfg: dict, *, edited: dict | None = None) -> list[str]:
+    """Why this preset must not be written ([] = good). `edited` = the owner's in-app values that were kept;
+    temperature_vitrification may equal the edited value instead of the parent's."""
     errs = []
     if _has_nil(cfg):
         errs.append('a value is "nil"')
@@ -129,7 +134,8 @@ def check_preset(cfg: dict, parent_cfg: dict) -> list[str]:
     cp = cfg.get("compatible_printers")
     if not (isinstance(cp, list) and len(cp) == 1 and isinstance(cp[0], str)):
         errs.append("compatible_printers is not a single printer")
-    if inapp.norm(cfg.get(TV)) != inapp.norm(parent_cfg.get(TV)):
+    tv = inapp.norm(cfg.get(TV))
+    if tv != inapp.norm(parent_cfg.get(TV)) and not (edited and TV in edited and tv == inapp.norm(edited[TV])):
         errs.append(f"{TV} differs from the parent's")
     name = cfg.get("name")
     if not isinstance(name, str) or not name.strip() or BAD_NAME.search(name):
@@ -237,10 +243,22 @@ def build_all(*, filaments: list[dict], models: list[str], store: Store, library
             used.add(j["filament_id"])
 
     ls = _copy_lines(lines)
-    groups = lines_mod.group(filaments, ls, library=library, store=store, used_fids=used)
-    for line in ls.values():
+    before = set(ls)
+    groups: dict[str, list[dict]] = {}
+    for f in filaments:                     # one at a time: one odd filament never breaks the build
+        try:
+            for lid, fs in lines_mod.group([f], ls, library=library, store=store, used_fids=used).items():
+                groups.setdefault(lid, []).extend(fs)
+        except Exception as e:
+            fid = f.get("id") if isinstance(f, dict) else None
+            problems.append(f"filament {fid}: skipped ({e.__class__.__name__}: {e})")
+    new_lines = set(ls) - before
+    for line in list(ls.values()):
         if line.parent_source != "user":
-            lines_mod.rechoose(line, store, library=library)
+            try:
+                lines_mod.rechoose(line, store, library=library)
+            except Exception as e:
+                problems.append(f"{line.line_id}: parent not re-checked ({e.__class__.__name__}: {e})")
     problems.extend(lines_mod.problems(ls))
     printers = _printers(models, problems)
 
@@ -248,6 +266,7 @@ def build_all(*, filaments: list[dict], models: list[str], store: Store, library
     manifest_lines: dict[str, dict] = {}
     deleted: list[str] = []
     generated: set[str] = set()
+    planned: set[str] = set()               # casefolded names planned this run, built or not
 
     for lid in sorted(groups):
         line = ls[lid]
@@ -259,7 +278,8 @@ def build_all(*, filaments: list[dict], models: list[str], store: Store, library
                                 snapshot=snapshot, seen_live=seen_live, snap_names=snap_names,
                                 deleted_before=deleted_before, restore=restore_deleted, reset=reset,
                                 base_out=base_out, user_id=live.user_id if live is not None else "", now=now,
-                                problems=problems, clamps=clamps, edits=edits, deleted=deleted)
+                                problems=problems, clamps=clamps, edits=edits, deleted=deleted,
+                                planned=planned, new_line=lid in new_lines)
         except OSError:
             raise
         except Exception as e:  # one odd line never breaks the build
@@ -272,7 +292,10 @@ def build_all(*, filaments: list[dict], models: list[str], store: Store, library
                                "product": line.product}
 
     live_cf = {n.casefold() for n in live_names}
-    stale = sorted(n for n in snap_names if n.casefold() not in generated and n.casefold() in live_cf)
+    # a line still in Spoolman keeps its presets even if some were skipped this run (problems say why)
+    prefixes = tuple(f"{ls[lid].vendor} {ls[lid].product} @".casefold() for lid in groups if lid in ls)
+    stale = sorted(n for n in snap_names if n.casefold() in live_cf and n.casefold() not in generated
+                   and n.casefold() not in planned and not n.casefold().startswith(prefixes))
     manifest = {"presets": presets, "lines": manifest_lines, "problems": problems, "clamps": clamps,
                 "edits": edits, "deleted": sorted(deleted), "stale": stale, "library_version": library.version}
     return manifest, ls
@@ -281,7 +304,7 @@ def build_all(*, filaments: list[dict], models: list[str], store: Store, library
 def _build_line(line: Line, fs: list[dict], ids: list[int], *, printers, store: Store, library: Library,
                 live_preset, live_names, snap_cf, ls: LineSet, snapshot, seen_live, snap_names, deleted_before,
                 restore, reset, base_out: Path, user_id: str, now: float, problems, clamps, edits,
-                deleted) -> list[dict]:
+                deleted, planned: set[str], new_line: bool) -> list[dict]:
     if line.bambu_parent is None:
         return []                                   # reported by lines.problems
     sv = values.spoolman_values(fs)
@@ -303,19 +326,26 @@ def _build_line(line: Line, fs: list[dict], ids: list[int], *, printers, store: 
             if (nozzle == "0.2" and abrasive) or nozzle in bad:
                 continue
             plan.append((printer, chamber, nozzle, preset_name(line, printer, nozzle)))
+            planned.add(plan[-1][3].casefold())
 
     # an existing preset of the same name made in the app (not installed by us): keep its filament_id
-    taken = {l.filament_id for k, l in ls.items() if k != line.line_id}
+    # (only for a line created in this run: a saved line's filament_id never changes)
+    taken = lines_mod._taken_fids(ls)
     for _p, _c, _n, name in plan:
         if name not in live_names or name.casefold() in snap_cf:
             continue
         j, _info = live_preset(name)
         fid = (j or {}).get("filament_id")
-        if isinstance(fid, str) and fid != line.filament_id and ID_RE.fullmatch(fid) and fid not in taken:
+        if fid == line.filament_id:
+            continue
+        if new_line and isinstance(fid, str) and ID_RE.fullmatch(fid) and fid not in taken:
             edits.append(f"{line.line_id}: filament_id {line.filament_id} -> {fid} (taken from your existing "
                          f"preset {name})")
             line.filament_id = fid
-            break
+            new_line = False                # adopt once
+            continue
+        problems.append(f"your preset {name} has filament_id {fid}; line keeps {line.filament_id}, "
+                        f"the generated preset replaces it")
 
     rows = []
     for printer, chamber, nozzle, name in plan:
@@ -371,20 +401,26 @@ def _build_preset(line: Line, name: str, printer: str, chamber, nozzle: str, par
     # 5. in-app edits
     installed = _read_json(Path(snapshot) / "base" / f"{name}.json") if snapshot is not None else None
     live_cfg, live_info = live_preset(name)
-    if installed is not None and live_cfg is not None:
-        live_cfg = dict(live_cfg)
-        if inapp.norm(live_cfg.get(TV)) != inapp.norm(installed.get(TV)):
-            edits.append(f"{name}: {TV} {live_cfg.get(TV)} not kept (the generator never sets it)")
-            if TV in installed:
-                live_cfg[TV] = installed[TV]
-            else:
-                live_cfg.pop(TV, None)
-    protected |= inapp.keep_edits(cfg, installed, live_cfg, edits)
+    taken = inapp.keep_edits(cfg, installed, live_cfg, edits)
+    protected |= taken
     _fill_nil(cfg, name, edits)
+    edited = None
+    if TV in taken:
+        if TV in cfg:
+            edited = {TV: cfg[TV]}
+        else:                               # the in-app value was only "nil": the parent's again
+            if TV in template:
+                cfg[TV] = copy.deepcopy(template[TV])
+            edits.append(f"{name}: {TV} was only \"nil\" in the app; the parent's value is used")
     # 6. protected values outside a published bound: reported, kept
     values.report_outside(cfg, entry, protected, clamps)
     # 8. check
-    errs = check_preset(cfg, parent_cfg)
+    parent_view = dict(parent_cfg)          # the parent's TV after its own "nil" items were filled
+    if TV in template:
+        parent_view[TV] = template[TV]
+    else:
+        parent_view.pop(TV, None)
+    errs = check_preset(cfg, parent_view, edited=edited)
     if errs:
         problems.append(f"{name}: skipped ({'; '.join(errs)})")
         return None
