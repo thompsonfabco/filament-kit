@@ -51,7 +51,7 @@ def test_x1_two_ams():
 
 
 def test_labels_match_status():
-    rep = {"ams": {"ams": [unit(0), unit(1), unit(128, 1)]}}
+    rep = {"ams": {"ams": [unit(0), unit(1), unit(128, 1)]}, "vt_tray": {"id": "254"}}
     st = status.summarize(rep, [])["ams"]
     assert [s["label"] for u in st for s in u["slots"]] == [s.label for u in ams.units(rep) for s in u.slots]
 
