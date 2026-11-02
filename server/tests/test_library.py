@@ -8,6 +8,7 @@ import shutil
 import threading
 import time
 import urllib.error
+import urllib.request
 from pathlib import Path
 
 import pytest
@@ -62,6 +63,7 @@ class Served:
         self.root = root
         self.url = url
         self.requests: list[str] = []
+        self.redirects: dict[str, str] = {}   # path prefix -> Location prefix
 
 
 @pytest.fixture
@@ -76,6 +78,13 @@ def served(tmp_path):
 
         def do_GET(self):
             holder["s"].requests.append(self.path)
+            for prefix, target in holder["s"].redirects.items():
+                if self.path.startswith(prefix):
+                    self.send_response(302)
+                    self.send_header("Location", target + self.path[len(prefix):])
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                    return
             super().do_GET()
 
     httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(Handler, directory=str(root)))
@@ -473,3 +482,123 @@ def test_corrupt_current_falls_back_to_bundled():
     d.mkdir(parents=True)
     (d / "current.json").write_text('{"dir": "../../etc"}', encoding="utf-8")
     assert library.load().source == "bundled"
+
+
+# ---------- fix round 1 ----------
+
+def _assert_no_tmp():
+    vd = versions_dir()
+    assert not vd.exists() or not [p for p in vd.iterdir() if p.name.endswith(".tmp")]
+
+
+def test_redirect_to_other_http_host_refused(served):
+    other = served.url.replace("127.0.0.1", "localhost")          # a different host, plain http
+    served.redirects["/away/"] = other
+    r = library.update(served.url + "away/")
+    assert r.changed is False and "redirected" in r.error
+    assert served.requests == ["/away/index.json"]                   # the redirect was never followed
+    lc = library.status()["last_check"]
+    assert lc["ok"] is False and "redirected" in lc["error"]
+    _assert_no_tmp()
+
+
+def test_redirect_same_local_host_followed(served):
+    served.redirects["/old/"] = served.url
+    r = library.update(served.url + "old/")
+    assert r.error is None and r.version == 3
+
+
+def test_redirect_rules():
+    ok = library._redirect_allowed
+    assert ok("https://a.example/", "https://b.example/x")
+    assert not ok("https://a.example/", "http://a.example/x")
+    assert not ok("https://a.example/", "ftp://a.example/x")
+    assert not ok("https://a.example/", "https://u:p@a.example/x")
+    assert ok("http://127.0.0.1:8000/", "http://127.0.0.1:8000/y")
+    assert not ok("http://127.0.0.1:8000/", "http://127.0.0.1:8001/y")
+    assert not ok("http://127.0.0.1:8000/", "http://localhost:8000/y")
+
+
+def test_safe_opener_has_no_ftp_or_file():
+    op = library._safe_opener()
+    for url in ("ftp://127.0.0.1/x", "file:///etc/passwd", "data:text/plain,hi"):
+        with pytest.raises(urllib.error.URLError) as ei:
+            op(urllib.request.Request(url), timeout=1)
+        assert "unknown url type" in str(ei.value)
+
+
+def _set_row(root: Path, rel: str, raw: bytes) -> None:
+    (root / rel).write_bytes(raw)
+    idx = json.loads((root / "index.json").read_text(encoding="utf-8"))
+    for row in idx["entries"]:
+        if row["path"] == rel:
+            row["sha256"] = hashlib.sha256(raw).hexdigest()
+    (root / "index.json").write_text(json.dumps(idx), encoding="utf-8")
+
+
+def test_deeply_nested_entry_fails_cleanly(served):
+    _set_row(served.root, "library/sunlu/pla-plus-2-0.json", b"[" * (256 * 1024))
+    r = library.update(served.url)
+    assert r.changed is False and r.error
+    _assert_kept(_bundled_version())
+
+
+def test_deeply_nested_index_fails_cleanly(served):
+    (served.root / "index.json").write_bytes(b"[" * 200_000)
+    r = library.update(served.url)
+    assert r.changed is False and r.error
+    _assert_kept(_bundled_version())
+
+
+def test_unexpected_error_still_cleans_up(served, monkeypatch):
+    edit(served.root, "library/sunlu/pla-plus-2-0.json", lambda e: e["published_ranges"].update({"_t": "a"}))
+    reindex(served.root, 3)
+
+    def boom(entry, **k):
+        raise KeyError("surprise")
+    monkeypatch.setattr(library, "validate", boom)
+    r = library.update(served.url)
+    assert r.error == "update failed unexpectedly (KeyError)"
+    _assert_kept(_bundled_version())
+
+
+def test_update_deadline(served, monkeypatch):
+    edit(served.root, "library/sunlu/pla-plus-2-0.json", lambda e: e["published_ranges"].update({"_t": "a"}))
+    reindex(served.root, 3)
+    ticks = iter(range(0, 100_000, 250))
+    monkeypatch.setattr(library, "_clock", lambda: next(ticks))
+    r = library.update(served.url)
+    assert r.changed is False and "longer than" in r.error
+    _assert_kept(_bundled_version())
+
+
+def test_update_total_bytes_cap(served, monkeypatch):
+    for rel in ("library/sunlu/pla-plus-2-0.json", "library/elegoo/petg-cf.json"):
+        edit(served.root, rel, lambda e: e["published_ranges"].update({"_t": "a"}))
+    reindex(served.root, 3)
+    index_size = (served.root / "index.json").stat().st_size
+    one = (served.root / "library/elegoo/petg-cf.json").stat().st_size
+    monkeypatch.setattr(library, "TOTAL_LIMIT", index_size + one + 10)   # room for the index and one entry
+    r = library.update(served.url)
+    assert r.changed is False and "downloaded more than" in r.error
+    _assert_kept(_bundled_version())
+
+
+def test_http_status_field(served):
+    assert library.update("https://example.invalid/", opener=_raising_opener(404)).http_status == 404
+    assert library.update("https://example.invalid/", opener=_raising_opener(500)).http_status == 500
+    edit(served.root, "library/elegoo/petg-cf.json", lambda e: e["published_ranges"].update({"_t": "a"}))
+    assert library.update(served.url).http_status is None           # an index sha mismatch is not HTTP
+
+
+def test_add_local_deeply_nested():
+    with pytest.raises(ValueError):
+        library.add_local(b"[" * 200_000)
+
+
+def test_status_url_is_sanitized():
+    cfg = config.load()
+    cfg["library"]["url"] = "https://user:pw@mirror.example:8443/lib/?token=s3cret#frag"
+    config.save(cfg)
+    assert library.status()["url"] == "https://mirror.example:8443/lib/"
+    assert library.display_url("not a url") == "(invalid url)"

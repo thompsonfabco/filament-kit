@@ -44,6 +44,10 @@ ENTRY_LIMIT = 256 * 2**10
 LOCAL_LIMIT = 256 * 2**10
 MAX_ENTRIES = 20_000
 TIMEOUT = 30
+DEADLINE = 600                  # seconds for a whole update
+TOTAL_LIMIT = 256 * 2**20       # bytes downloaded by one update
+PRIVATE_STATUSES = (401, 403, 404)
+_clock = time.monotonic
 SCHEDULES = {"daily": 20 * 3600, "weekly": 6.5 * 86400, "off": None}
 
 ROW_PATH = re.compile(r"library/[a-z0-9-]+/[a-z0-9-]+\.json")
@@ -382,6 +386,8 @@ def add_local(data: bytes) -> tuple[dict, str]:
         entry = json.loads(data.decode("utf-8"))
     except (UnicodeDecodeError, ValueError) as e:
         raise ValueError(f"not a JSON document: {e}") from None
+    except RecursionError:
+        raise ValueError("not a JSON document: nested too deeply") from None
     if not isinstance(entry, dict):
         raise ValueError("entry is not a JSON object")
     entry.pop("local", None)               # a marker some callers send; not a schema key, never stored
@@ -406,10 +412,13 @@ class UpdateResult:
     version: int
     downloaded: int
     error: str | None
+    http_status: int | None = None     # set when the error was an HTTP status (401/403/404: maybe private)
 
 
 class _Abort(Exception):
-    pass
+    def __init__(self, message: str, http_status: int | None = None):
+        super().__init__(message)
+        self.http_status = http_status
 
 
 def configured_url(cfg: dict | None = None) -> str:
@@ -437,26 +446,81 @@ def _check_url(url: str) -> str:
     raise LibraryError("the library url must be https:// (plain http only for 127.0.0.1 or localhost with a port)")
 
 
-def _fetch(opener, url: str, name: str, limit: int, version: int) -> bytes:
-    req = urllib.request.Request(url, headers={"User-Agent": "filament-kit"})
+def _redirect_allowed(origin: str, target: str) -> bool:
+    """A redirect may go to any https URL, or (for the local test server) to the same http host and port."""
     try:
-        with opener(req, timeout=TIMEOUT) as r:
-            status = getattr(r, "status", 200)
-            if status != 200:
-                raise _Abort(f"{name}: HTTP {status}")
-            data = r.read(limit + 1)
-    except urllib.error.HTTPError as e:
-        msg = f"{name}: HTTP {e.code}"
-        if e.code in (401, 403, 404):
-            msg += f"; the library repository may be private; using version {version}"
-        raise _Abort(msg) from None
-    except urllib.error.URLError as e:
-        raise _Abort(f"{name}: cannot connect ({e.reason})") from None
-    except (OSError, ValueError) as e:
-        raise _Abort(f"{name}: download failed ({type(e).__name__})") from None
-    if len(data) > limit:
-        raise _Abort(f"{name}: too large (over {limit // 1024} KiB)")
-    return data
+        o, t = urllib.parse.urlsplit(origin), urllib.parse.urlsplit(target)
+        o.port, t.port
+    except ValueError:
+        return False
+    if t.username or t.password:
+        return False
+    if t.scheme == "https" and t.hostname:
+        return True
+    return (t.scheme == "http" and o.scheme == "http" and LOCAL_HOST.fullmatch(origin) is not None
+            and (t.hostname, t.port) == (o.hostname, o.port))
+
+
+class _SafeRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not _redirect_allowed(req.full_url, newurl):
+            raise _Abort("the library server redirected to a location that is not https; refused")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _safe_opener():
+    """http(s) only (no ftp, file or data handlers); redirects checked by `_SafeRedirect`."""
+    od = urllib.request.OpenerDirector()
+    for h in (urllib.request.ProxyHandler(), urllib.request.HTTPHandler(), urllib.request.HTTPSHandler(),
+              _SafeRedirect(), urllib.request.HTTPDefaultErrorHandler(), urllib.request.HTTPErrorProcessor(),
+              urllib.request.UnknownHandler()):   # any other scheme: URLError "unknown url type"
+        od.add_handler(h)
+    return od.open
+
+
+class _Fetcher:
+    """Downloads for one update, within the time deadline and the total byte cap."""
+
+    def __init__(self, opener, version: int):
+        self.opener = opener
+        self.version = version
+        self.start = _clock()
+        self.total = 0
+
+    def remaining(self) -> float:
+        left = DEADLINE - (_clock() - self.start)
+        if left <= 0:
+            raise _Abort(f"the update took longer than {DEADLINE} s; stopped")
+        return left
+
+    def get(self, url: str, name: str, limit: int) -> bytes:
+        timeout = max(1.0, min(TIMEOUT, self.remaining()))
+        budget = TOTAL_LIMIT - self.total
+        req = urllib.request.Request(url, headers={"User-Agent": "filament-kit"})
+        try:
+            with self.opener(req, timeout=timeout) as r:
+                status = getattr(r, "status", 200)
+                if status != 200:
+                    raise _Abort(f"{name}: HTTP {status}", status)
+                data = r.read(min(limit, budget) + 1)
+        except urllib.error.HTTPError as e:
+            msg = f"{name}: HTTP {e.code}"
+            if e.code in PRIVATE_STATUSES:
+                msg += f"; the library repository may be private; using version {self.version}"
+            raise _Abort(msg, e.code) from None
+        except urllib.error.URLError as e:
+            if isinstance(e.reason, _Abort):
+                raise e.reason from None
+            raise _Abort(f"{name}: cannot connect ({e.reason})") from None
+        except (OSError, ValueError) as e:
+            raise _Abort(f"{name}: download failed ({type(e).__name__})") from None
+        self.remaining()
+        if len(data) > limit:
+            raise _Abort(f"{name}: too large (over {limit // 1024} KiB)")
+        if len(data) > budget:
+            raise _Abort(f"the update downloaded more than {TOTAL_LIMIT // 2**20} MiB; stopped")
+        self.total += len(data)
+        return data
 
 
 def _parse_index(raw: bytes, current: int) -> tuple[dict, list[dict]]:
@@ -519,10 +583,11 @@ def _file_sha(path: Path) -> str | None:
         return None
 
 
-def update(url: str | None = None, *, opener=urllib.request.urlopen, now: float | None = None) -> UpdateResult:
+def update(url: str | None = None, *, opener=None, now: float | None = None) -> UpdateResult:
     """Fetch the index at `url` (default: config, else DEFAULT_LIBRARY_URL) and swap to it only if every entry
     downloads, matches its sha256, validates and sits at its own path. Raises LibraryError for an unusable URL;
-    every other failure is returned in `error` (and recorded in last_check.json) with the current version kept."""
+    every other failure is returned in `error` (and recorded in last_check.json) with the current version kept.
+    `opener` (urlopen-like) defaults to one that speaks only http(s) and refuses redirects away from https."""
     base = _check_url(configured_url() if url is None else url)
     now = time.time() if now is None else now
     with _locked():
@@ -532,8 +597,9 @@ def update(url: str | None = None, *, opener=urllib.request.urlopen, now: float 
         make_state_dir(_dir() / "versions")
         tmp = None
         downloaded = 0
+        fetch = _Fetcher(opener or _safe_opener(), cur_version)
         try:
-            raw = _fetch(opener, base + "index.json", "index.json", INDEX_LIMIT, cur_version)
+            raw = fetch.get(base + "index.json", "index.json", INDEX_LIMIT)
             idx, rows = _parse_index(raw, cur_version)
             new_rows = {r["path"]: r["sha256"] for r in rows}
             if idx["library_version"] == cur_version and new_rows == cur_rows:
@@ -543,12 +609,13 @@ def update(url: str | None = None, *, opener=urllib.request.urlopen, now: float 
             tmp = _dir() / "versions" / (name + ".tmp")
             make_state_dir(tmp)
             for r in rows:
+                fetch.remaining()
                 path, sha = r["path"], r["sha256"]
                 src = cur_root / path
                 if cur_rows.get(path) == sha and _file_sha(src) == sha:
                     data = src.read_bytes()
                 else:
-                    data = _fetch(opener, base + path, path, ENTRY_LIMIT, cur_version)
+                    data = fetch.get(base + path, path, ENTRY_LIMIT)
                     downloaded += 1
                 if hashlib.sha256(data).hexdigest() != sha:
                     raise _Abort(f"{path}: sha256 does not match index.json")
@@ -579,12 +646,17 @@ def update(url: str | None = None, *, opener=urllib.request.urlopen, now: float 
             _prune({name} | ({old["dir"]} if old else set()))
             _record_check(now, None)
             return UpdateResult(True, idx["library_version"], downloaded, None)
-        except (_Abort, OSError) as e:
+        except Exception as e:  # noqa: BLE001 - every failure must clean up and be recorded, never half-swap
             if tmp is not None:
                 shutil.rmtree(tmp, ignore_errors=True)
-            error = str(e) if isinstance(e, _Abort) else f"cannot write the library ({type(e).__name__})"
+            if isinstance(e, _Abort):
+                error = str(e)
+            elif isinstance(e, OSError):
+                error = f"cannot write the library ({type(e).__name__})"
+            else:
+                error = f"update failed unexpectedly ({type(e).__name__})"
             _record_check(now, error)
-            return UpdateResult(False, cur_version, downloaded, error)
+            return UpdateResult(False, cur_version, downloaded, error, getattr(e, "http_status", None))
 
 
 def rollback() -> int:
@@ -635,7 +707,19 @@ def last_check() -> dict | None:
     return {"at": lc.get("at"), "ok": lc.get("ok") is True, "error": lc.get("error")}
 
 
+def display_url(url) -> str:
+    """Scheme, host, port and path only: never a query string, fragment or credentials."""
+    try:
+        u = urllib.parse.urlsplit(url)
+        port = u.port
+    except (TypeError, ValueError, AttributeError):
+        return "(invalid url)"
+    if not u.scheme or not u.hostname:
+        return "(invalid url)"
+    return f"{u.scheme}://{u.hostname}{f':{port}' if port else ''}{u.path}"
+
+
 def status() -> dict:
     lib = load()
-    return {"version": lib.version, "source": lib.source, "local": lib.local_count, "url": configured_url(),
-            "last_check": last_check()}
+    return {"version": lib.version, "source": lib.source, "local": lib.local_count,
+            "url": display_url(configured_url()), "last_check": last_check()}
