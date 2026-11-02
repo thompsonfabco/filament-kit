@@ -154,7 +154,7 @@ def err(r, status, code):
 
 def preset(monkeypatch):
     monkeypatch.setattr(profiles, "preset_for", lambda fil, model, nozzle: profiles.PresetRef(
-        "P7a1b2c3", "SUNLU PLA+ Grey @Bambu Lab H2D 0.4 nozzle", 200, 230))
+        "P7a1b2c3", "SUNLU PLA+ Grey @Bambu Lab H2D 0.4 nozzle", 200, 230, "PLA"))
 
 
 # ---------------------------------------------------------------- auth
