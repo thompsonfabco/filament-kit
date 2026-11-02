@@ -1,0 +1,230 @@
+# Moving from filament-ops to filament-kit (cut-over runbook)
+
+This moves the owner's filament-ops setup onto filament-kit, one machine at a time: the Spoolman VM first, then
+the intake station PC, then the Windows desktop. Each machine has its steps, the checks that say it worked, and a
+rollback. **Run it only with the owner's go, and only when no print is running** (the H2D usage tracker writes
+to Spoolman, and Spoolman is down for a few minutes on the VM).
+
+What stays as it is: the claude.ai connector URL `https://mcp.example.com/filament/mcp`, the phone app at
+`https://mcp.example.com/filament/intake`, the passphrase, Claude's sign-in (the OAuth store is carried
+over), Spoolman's data and port 7912, the amazon and h2d routes, the SV08 MAX tag reader and the H2D services.
+
+Rule for every step: never `cat`, `less` or paste a secret file (`/etc/filament-mcp/*` other than `server.json`,
+`oauth.json`, `/etc/filament-kit/web_passphrase`, `anthropic_key`, `h2d_token`). Copy them with `install`.
+
+## 0. Before you start (desktop, 10 minutes)
+
+1. Check the kit release tarball and the PC sync setup (`filament-kit-sync-setup-<version>.exe`) are at hand.
+2. On the VM, note what runs now (for the rollback):
+   ```
+   systemctl list-units --no-pager 'filament*' Spoolman.service smbd.service nginx.service h2d-*.service
+   ls /etc/nginx/sites-enabled /etc/nginx/mcp.d
+   ```
+3. Make a rehearsal first if anything changed since 2026-11-02 (new lines, a new slicer version): export with
+   `--no-secrets` into WSL and run `migrate-ops` there (section 5). The 2026-11-02 rehearsal is in the Task 8
+   report.
+
+## 1. Spoolman VM (`ssh spoolman-vm`)
+
+### 1.1 Stop the ops writers and export the bundle
+
+```
+sudo systemctl stop filament-mcp.service filament-regen.path filament-regen.service
+sudo systemctl stop Spoolman.service          # nothing writes the database from here on
+tar xzf filament-kit-<version>.tar.gz
+sudo bash filament-kit-<version>/install/export_ops.sh /root/ops-bundle.tar.gz
+```
+
+The export only reads (the database through sqlite's backup API) and writes the one bundle file (root, 600). It
+prints the spool, filament and preset counts: expect about 296 spools, 213 filaments, 413 Bambu Studio and ~700
+Orca presets. The bundle holds the passphrase hash, `oauth.json` and the Anthropic key; it never holds the H2D
+token.
+
+**Check:** `sudo tar tzf /root/ops-bundle.tar.gz | grep -c presets/` is over 4000; the counts printed match
+Spoolman's web page from before.
+
+**Rollback:** `sudo systemctl start Spoolman.service filament-mcp.service filament-regen.path` (nothing was
+changed).
+
+### 1.2 Install the kit (server mode)
+
+```
+sudo systemctl disable Spoolman.service filament-mcp.service filament-regen.path
+cd filament-kit-<version> && sudo ./install.sh --mode server
+```
+
+The kit's own Spoolman (v0.27.0, the same as the ops one) starts on port 7912 with an empty database in
+`/var/lib/spoolman`. The old database in `/home/user/.local/share/spoolman` is left exactly as it is (it is the
+rollback). Skip the Anthropic key question if the installer asks: the migration brings it.
+
+**Check:** `sudo filament-kit status` (Spoolman answers; the key line may FAIL until 1.3).
+
+**Rollback:** `sudo ./uninstall.sh` (keeps data), then 1.1's rollback plus
+`sudo systemctl enable Spoolman.service filament-mcp.service filament-regen.path`.
+
+### 1.3 Migrate
+
+```
+sudo filament-kit migrate-ops /root/ops-bundle.tar.gz            # dry run: read the report
+sudo filament-kit migrate-ops /root/ops-bundle.tar.gz --apply
+```
+
+What `--apply` does (each line of the report says it): Spoolman's database replaced by the bundle's (services
+stopped meanwhile, counts checked, the empty one backed up under `/var/backups/filament-kit/migrate-ops-<stamp>/`);
+`lines.json` with the 116 ops lines (same names, Bambu Studio template and Orca parent set by you, and the
+`filament_id` of the existing Bambu Studio presets); `extra.line` on the ~35 filaments the kit would otherwise
+group elsewhere; `owner-edits.json` with the calibrated flow ratio, pressure advance, max volumetric speed,
+nozzle and plate temperatures of every live preset plus your note lines; the OAuth store, the passphrase hash
+and the Anthropic key; config (placement, locations, tare hints, the SV08 MAX tag reader, the station, the H2D
+slot service, the orders file, the SV08 MAX and H2D Orca printers, `web.public_url`, `remote.hostname`, the
+certbot window); and the H2D as a model-only printer (no address, no Access Code: the kit never connects to it,
+the entry only makes the H2D presets). Running it again changes nothing.
+
+Then the H2D token (never printed) and the orders exporter (it now writes into the kit's state folder; the ops
+path is inside `filament-mcp`'s private folder, which the kit's user cannot read, and goes away with ops):
+
+```
+sudo install -m 640 -o root -g filament-kit /etc/filament-mcp/h2d_token /etc/filament-kit/h2d_token
+sudo mkdir -p /etc/systemd/system/filament-orders.service.d
+sudo tee /etc/systemd/system/filament-orders.service.d/filament-kit.conf >/dev/null <<'EOF'
+[Service]
+Environment=FILAMENT_ORDERS=/var/lib/filament-kit/filament_orders.json
+ReadWritePaths=/var/lib/filament-kit
+ExecStartPost=/bin/chgrp filament-kit /var/lib/filament-kit/filament_orders.json
+EOF
+sudo systemctl daemon-reload && sudo systemctl start filament-orders.service
+```
+
+(The exporter still sets group `filament-mcp` first, so keep that group until the exporter moves to the
+amazon-mcp side; see section 4.)
+
+**Check:**
+- `curl -s 'http://127.0.0.1:7912/api/v1/spool?allow_archived=true' | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))'`
+  gives the spool count of 1.1 (and the same for `filament`).
+- `sudo filament-kit profiles lines | head` lists the ops line names with both parents.
+- `sudo ls -l /var/lib/filament-kit/filament_orders.json` is `root filament-kit`, fresh time.
+- The H2D tools: `curl -s http://127.0.0.1:8105/api/state` still answers (owner service, unchanged).
+
+**Rollback:** `sudo systemctl stop filament-kit spoolman`, then 1.2's rollback. Spools added in the kit since
+then are in `/var/lib/spoolman/spoolman.db` only: copy them over by hand if any.
+
+### 1.4 Web unit and orders (same port 8101: the ops nginx route keeps working)
+
+```
+sudo filament-kit modules enable web
+sudo filament-kit modules enable orders
+sudo filament-kit web status
+```
+
+**Check:** `curl -s http://127.0.0.1:8101/health` is `ok`; `web status` shows the public URL, the passphrase
+set and the connector registrations from ops. On the phone, open the intake app (same URL): it should still be
+signed in; tap a tag on the SV08 MAX reader and see it in the Open spool tab. In claude.ai, ask the filament
+connector for `preset_status` and `printer_slots`: it answers without a new sign-in.
+
+**Rollback:** `sudo filament-kit modules disable web` (and `orders`), then
+`sudo systemctl start filament-mcp.service` (port 8101 is free again; the route is unchanged).
+
+### 1.5 Remote access (the kit takes over nginx and certbot)
+
+The ops router and the kit router collide (both are the default server on 443, and both install
+`/usr/local/sbin/mcp-route`), so the ops pieces go first. The amazon, amazon-ext and h2d routes in
+`/etc/nginx/mcp.d/` stay and are served by the kit's router, which includes the same folder and the same
+`/etc/nginx/mcp-proxy.conf`. The certificate in `/etc/mcp-router/tls` (valid to 2027-01-28) is kept: the kit
+never replaces a real one.
+
+```
+sudo mkdir -p /root/ops-router && sudo cp -a /etc/nginx/sites-available/mcp-router /usr/local/sbin/mcp-route \
+    /etc/nginx/mcp.d /etc/nginx/mcp-proxy.conf /root/ops-router/
+sudo rm /etc/nginx/sites-enabled/mcp-router            # the ops router conf (the file in sites-available stays)
+sudo rm /usr/local/sbin/mcp-route                      # replaced by the kit's
+sudo filament-kit modules enable remote                # router conf, mcp-route, hooks; route filament -> 8101
+sudo nginx -t && sudo /usr/local/sbin/mcp-route ls
+```
+
+`remote.hostname` is `mcp.example.com` and `remote.acme_window` is `03:10 America/New_York` (the
+migration set both; pfSense forwards port 80 only from 03:00 to 03:30).
+
+**Check:** from the LAN: `curl -s https://mcp.example.com/health` (router ok),
+`curl -s https://mcp.example.com/filament/health` (ok), the amazon connector and
+`https://mcp.example.com/h2d/` and `/printer/` still answer; the claude.ai connector works from outside.
+
+**The certificate.** The ops lineage (`spoolman-mcp.example.com`) keeps renewing with the ops hook
+(`/usr/local/sbin/filament-acme-hook`, which opens the nft `acme` chain) until the kit has its own: at the next
+window, the owner opens port 80 in nftables (`filament-kit remote firewall` prints the rule; the kit never changes
+the firewall), runs `sudo filament-kit remote issue`, and closes it again. After that succeeds:
+`sudo certbot delete --cert-name spoolman-mcp.example.com` and `sudo rm /usr/local/sbin/filament-acme-hook`
+(the old `spoolman-mcp` name is no longer served; nothing uses it since 2026-10-30).
+
+**Rollback:** `sudo filament-kit modules disable remote`, then
+`sudo ln -s /etc/nginx/sites-available/mcp-router /etc/nginx/sites-enabled/mcp-router`,
+`sudo cp -a /root/ops-router/mcp-route /usr/local/sbin/ && sudo cp -a /root/ops-router/mcp.d/. /etc/nginx/mcp.d/`,
+`sudo cp /root/ops-router/mcp-proxy.conf /etc/nginx/ && sudo nginx -t && sudo systemctl reload nginx`.
+
+### 1.6 Optional hardening (the owner's firewall)
+
+The ops `inet filament` output chain limits uid `filament-mcp` only. The kit's units already restrict addresses
+(`IPAddressAllow`); mirror the egress rules for uid `filament-kit` in nftables if wanted. The phone app port
+8710 (Android) is open on the LAN by the default input policy.
+
+## 2. Station PC (192.0.2.11, `intake.home.arpa`)
+
+1. Stop the old service: `sudo systemctl disable --now intake-station.service` (it holds port 5003).
+2. Install the kit in station mode, pointing at the VM:
+   `sudo ./install.sh --mode station --server spoolman.home.arpa`.
+3. Leave the scale switched on (it must be on to enumerate).
+
+**Check:** from the VM, `curl -s http://intake.home.arpa:5003/state` shows the scale and tag; on the
+VM `sudo filament-kit status` has the station OK; a tag tapped at the station shows in the phone app's Open spool
+tab within 3 s, with the scale weight.
+
+**Rollback:** `sudo ./uninstall.sh`, then `sudo systemctl enable --now intake-station.service`.
+
+## 3. Desktop (Windows, Bambu Studio and Orca Slicer)
+
+Two installers on one slicer folder is the hazard: the ops task must not run once the kit's sync is paired.
+
+1. **Stop fpsync:** in PowerShell, `Disable-ScheduledTask -TaskName 'Filament preset sync'`.
+2. **Pair the PC sync:** close Bambu Studio and Orca Slicer, run `filament-kit-sync-setup-<version>.exe`, then on
+   the VM `sudo filament-kit pair --pc` and paste the link (see the README, "PC sync"). It uploads both slicers'
+   presets; the VM's first build follows.
+3. **The first build** (`sudo filament-kit profiles status` on the VM): expect 413 Bambu Studio presets, every one
+   keeping its `filament_id`, and about 694 Orca presets. It rewrites, once:
+   - the per-variant arrays of the Orca H2D presets from 3 extruder variants to the 2 the Orca H2D parent has
+     (your calibrated values follow by variant name: "fitted from 3 to 2 extruder variants" lines);
+   - the `version` of the adopted Orca H2D presets (ops wrote 2.8.0.16; the kit writes the parent's);
+   - one preset ops had is not made (`Bambu Lab TPU 85A @SV08 MAX 0.4`: the library rules that nozzle out).
+   The `problems` list shows the stock system presets your slicers cannot resolve (Bambu Support, COEX, ...):
+   they were there before and do not affect the generated presets.
+4. Open both slicers once the sync says it installed: the presets keep their names; your calibrated values are
+   kept (they are recorded as your in-app values from now on).
+5. **Retire fpsync:** `Unregister-ScheduledTask -TaskName 'Filament preset sync' -Confirm:$false`.
+6. **Retire Samba** (VM, after a day of normal syncing):
+   `sudo systemctl disable --now smbd nmbd`; remove the `[filament]` share from `/etc/samba/smb.conf`
+   (or the included `smb-filament.conf`); the owner removes the nft rules for 139/445 from 192.0.2.7.
+   `/srv/filament` stays until filament-ops is archived.
+
+**Check:** `sudo filament-kit profiles status` shows the PC sync owner, the installed build and no new
+problems; Bambu Studio and Orca Slicer show the presets with the same names.
+
+**Rollback:** unpair the PC (`sudo filament-kit unpair <id>` on the VM), uninstall the PC sync, then
+`Enable-ScheduledTask -TaskName 'Filament preset sync'` and (if retired) `sudo systemctl enable --now smbd`. The
+slicers' folders keep the kit's last install until fpsync installs the next ops build, which needs 1.1's
+rollback first.
+
+## 4. After a week of normal use
+
+- Archive filament-ops (repository read-only). On the VM: `/opt/filament-mcp`, `/var/lib/filament-mcp`,
+  `/etc/filament-mcp`, `/srv/filament`, the ops units and the old Spoolman in `/home/user/Spoolman` can go.
+- Keep `export_filament_orders.py` (move it next to amazon-mcp, change its group to `filament-kit` and drop the
+  `ExecStartPost` line) before removing the `filament-mcp` user and group.
+- Delete `/root/ops-bundle.tar.gz` (it holds secrets).
+
+## 5. Rehearsal (no live changes)
+
+```
+ssh spoolman-vm 'sudo bash -s -- --no-secrets -' < tools/export_ops.sh > (a WSL path)/ops-bundle.tar.gz
+```
+
+On a WSL all-in-one install: add fixture secrets to the bundle (never the real ones), run `migrate-ops` dry and
+with `--apply`, check the counts, `lines.json` (116 lines, Orca parents), upload the slicers' presets and run a
+build; then `uninstall.sh --purge` and delete the bundle.

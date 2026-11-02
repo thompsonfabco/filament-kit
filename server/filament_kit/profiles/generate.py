@@ -226,6 +226,23 @@ def _fill_nil(cfg: dict, where: str, log: list[str] | None) -> None:
                 log.append(f"{where}: {k} \"nil\" -> {real[0]} (no value for that variant)")
 
 
+def _fit_variants(cfg: dict, mine: dict, variants: list[str], src_variants, log: list[str]) -> None:
+    """Fit a carried in-app value that holds one entry per extruder variant to this preset's variants (in place,
+    in `cfg` and the record `mine`): the migration from filament-ops carries values written for its variant list
+    (three on the H2D) into presets whose parent has another (two in Orca Slicer). By variant name when
+    `src_variants` (the live preset's `filament_extruder_variant`) lines up with the value, a variant it lacks
+    taking the first value. Anything else (single values, a value that does not line up with the live variants,
+    no live preset) is left as the owner wrote it."""
+    n = len(variants)
+    src = [str(x) for x in src_variants] if isinstance(src_variants, list) else None
+    for k, v in list(mine.items()):
+        if k == "filament_extruder_variant" or not isinstance(v, list) or len(v) <= 1 or not n or len(v) == n                 or src is None or len(src) != len(v):
+            continue
+        out = [v[src.index(x)] if x in src else v[0] for x in variants]
+        cfg[k] = mine[k] = out
+        log.append(f"{cfg.get('name')}: {k} fitted from {len(v)} to {n} extruder variants (your in-app value)")
+
+
 def _variants(cfg: dict) -> list[str]:
     v = cfg.get("filament_extruder_variant")
     if isinstance(v, list) and v:
@@ -528,6 +545,7 @@ def _build_preset(line: Line, name: str, printer: str, chamber, nozzle: str, par
     live_cfg, live_info = live_preset(name)
     half = _read_json(Path(partial) / "base" / f"{name}.json") if partial is not None else None
     mine = inapp.keep_edits(cfg, installed, live_cfg, edits, recorded=recorded, partial=half, notes=notes)
+    _fit_variants(cfg, mine, variants, (live_cfg or {}).get("filament_extruder_variant"), edits)
     taken = set(mine)
     protected |= taken
     _fill_nil(cfg, name, edits)
@@ -916,6 +934,7 @@ def _build_orca_preset(line: Line, name: str, p: OrcaPrinter, nozzle: str, paren
     # the installed note lines are carried
     mine = inapp.keep_edits(cfg, installed, live_cfg if t.live_fresh else installed, edits, recorded=recorded,
                             partial=half, notes=notes)
+    _fit_variants(cfg, mine, variants, (live_cfg or {}).get("filament_extruder_variant"), edits)
     _fill_nil(cfg, name, edits)
     for k in [k for k in cfg if "gcode" in k.lower()]:
         if live_cfg is None or inapp.norm(live_cfg.get(k)) != inapp.norm(cfg[k]):
