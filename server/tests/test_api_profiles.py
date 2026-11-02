@@ -320,7 +320,8 @@ def test_propose(c, sm):
                headers=auth(tok))
     assert r.status_code == 200
     assert r.json() == {"line_id": LID, "line": "PLA+ 2.0", "bambu_parent": r.json()["bambu_parent"],
-                        "parent_source": r.json()["parent_source"], "exists": False}
+                        "parent_source": r.json()["parent_source"], "orca_parent": "Generic PLA",
+                        "orca_parent_source": "material", "exists": False}
     assert r.json()["bambu_parent"]
     built(c, tok, sm)
     r = c.post("/api/profiles/propose", json={"vendor": "SUNLU", "line": "PLA+ 2.0", "material": "PLA"},

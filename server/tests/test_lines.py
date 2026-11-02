@@ -195,12 +195,14 @@ def test_propose(lib, store):
     ls: dict = {}
     p = lines.propose("SUNLU", "PLA+", "PLA", library=lib, store=store, lines=ls)
     assert p == {"line_id": "sunlu--pla-plus", "line": "PLA+", "bambu_parent": "SUNLU PLA+",
-                 "parent_source": "brand", "exists": False}
+                 "parent_source": "brand", "orca_parent": "Generic PLA", "orca_parent_source": "material",
+                 "exists": False}
     lines.ensure(ls, "SUNLU", "PLA+", "PLA", bambu_parent="Generic PLA", library=lib, store=store,
                  used_fids=set())
     p = lines.propose("sunlu", " pla+ ", "PLA", library=lib, store=store, lines=ls)
     assert p == {"line_id": "sunlu--pla-plus", "line": "PLA+", "bambu_parent": "Generic PLA",
-                 "parent_source": "user", "exists": True}
+                 "parent_source": "user", "orca_parent": "Generic PLA", "orca_parent_source": "material",
+                 "exists": True}
 
 
 # ---------- product_of and group ----------
