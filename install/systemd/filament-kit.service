@@ -1,7 +1,8 @@
 [Unit]
 Description=filament-kit server (phone pairing, label reading, Spoolman writes)
 After=network-online.target spoolman.service
-Wants=network-online.target spoolman.service
+# After= only: with the spoolman module off a local Spoolman must stay stopped (Wants= would start it)
+Wants=network-online.target
 
 [Service]
 Type=simple

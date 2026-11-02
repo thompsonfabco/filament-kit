@@ -15,6 +15,8 @@ It also:
 - An **Anthropic API key** (starts with `sk-ant-`). Keep it handy; the installer asks for it once.
 - An Android phone (Android 10 or newer) for the filament-kit app.
 - Optional: a Windows PC with Bambu Studio, for the presets.
+- Optional: an **intake station**: a USB scale (DYMO) and a PN532 NFC reader on the same computer or on a second
+  one (see [Intake station](#intake-station)).
 
 ## Install the server
 
@@ -37,6 +39,8 @@ Do these steps on the Ubuntu computer, in a Terminal window.
    ```
 
 4. Answer the questions:
+   - **Install mode**: press Enter for `1) server`, the usual choice. The other modes are in
+     [Install modes](#install-modes).
    - **Display name**: the name the phone app shows for this server. Any text works (spaces, accents);
      press Enter to keep the suggested name. Phones find the server by the computer's own name, not this one.
    - **Default storage locations**: press Enter for yes. Type `n` if you want to name your own racks and
@@ -48,6 +52,75 @@ Do these steps on the Ubuntu computer, in a Terminal window.
 
 The installer takes a few minutes. You can run it again at any time; it never deletes your spools or
 settings.
+
+## Install modes
+
+The kit is made of parts called **modules** (Spoolman, the server, AI label reading, printers, presets, the spec
+library, the nightly backup and the intake station). A **mode** is a ready-made set of them. The installer asks
+for the mode on the first install:
+
+| Mode | What it installs | Use it when |
+|---|---|---|
+| `server` (1, the default) | Spoolman, the server, AI label reading, printers, presets, library, backup | One computer runs the kit. This is the kit as it always was. |
+| `station` (2) | Only the intake station (USB scale and NFC reader) | The station is a second computer and the server runs on another one. It asks for the **server's address**. |
+| `all-in-one` (3) | Everything, station included | The scale and reader are plugged into the server computer. |
+| `custom` (4) | The modules you pick one by one, at the installer's question or later with `sudo filament-kit modules enable/disable` | You know which parts you want. |
+
+A station-only computer needs no API key, certificate or Spoolman.
+
+You can also give the mode on the command line, so the installer asks no mode question. `--mode` takes
+`server`, `station` or `all-in-one`; for `custom`, answer 4 at the question or switch modules afterwards with
+`sudo filament-kit modules enable <module>` and `sudo filament-kit modules disable <module>`:
+
+```
+sudo ./install.sh --mode server
+sudo ./install.sh --mode all-in-one
+sudo ./install.sh --mode station --server 192.0.2.10
+```
+
+`--server` is the kit server's name or IP address, for example `spoolman.home.arpa` or `192.0.2.10`. Give one
+address, not a range. The station answers only that address and the station computer itself.
+
+Running `sudo ./install.sh` again later (an update) asks no questions and keeps the mode you have. An install
+from before modules existed counts as the `server` mode and works exactly as before.
+
+### All-in-one on one computer
+
+Plug the USB scale and the NFC reader into the Ubuntu computer, then:
+
+```
+sudo ./install.sh --mode all-in-one
+```
+
+Answer the display name, storage and API key questions as in [Install the server](#install-the-server). Besides
+the usual server, this sets up:
+
+- the station service `filament-kit-station`, which reads the scale and the reader and answers on port 5003,
+  for this computer only (`http://127.0.0.1:5003/state`);
+- the server's link to it, so `sudo filament-kit status` shows a line `station answering at
+  http://127.0.0.1:5003`, and the phone app can read the scale and the last tag;
+- the computer changes the station needs (see [Intake station](#intake-station)): brltty removed, ModemManager
+  off, sleep and suspend off, audio unmuted, and a rule that lets the station read the DYMO scale.
+
+Until a tag has been read and the scale has been switched on, `status` shows `station reader not seen` and
+`station scale not seen`. Those lines are information, not failures.
+
+### Change the mode later
+
+Use either way. Both install what the new mode needs, start it, and stop what it no longer uses:
+
+- `sudo filament-kit config`, then **6) Modules**. Pick **m) choose mode**, or type a module's number to turn it
+  on or off. Turning a module off that others need asks to turn those off too. Choosing `station` asks for the
+  server's address. Then **0) back** and **0) save and exit**.
+- `sudo filament-kit modules set <mode>`, for example `sudo filament-kit modules set all-in-one`. For the station
+  mode, add the server's address: `sudo filament-kit modules set station --server 192.0.2.10`.
+- One module at a time: `sudo filament-kit modules enable <name>` or `sudo filament-kit modules disable <name>`,
+  for example `sudo filament-kit modules disable printers`. `sudo filament-kit modules list` shows the names and
+  which are on.
+
+Turning a module off **never deletes its data**. Spoolman's spools, settings and paired phones stay where they
+are and come back when you turn the module on again. Only `sudo ./uninstall.sh --purge` deletes data. While a
+module is off, the app gets the message that it is turned off for anything that needs it.
 
 ## Install the app and pair your phone
 
@@ -128,7 +201,8 @@ Run these in a Terminal on the Ubuntu computer.
 | `sudo filament-kit pair` | Shows a new QR code to pair another phone. |
 | `sudo filament-kit pair --pc` | Shows the link and code to pair the Windows PC sync tool. |
 | `sudo filament-kit unpair` | Lists paired devices: phones and the PC sync (named `pc`). `sudo filament-kit unpair <id>` removes one. |
-| `sudo filament-kit config` | Settings menu: display name, storage locations, Claude model and daily limit, API key, printers. |
+| `sudo filament-kit config` | Settings menu: display name, storage locations, Claude model and daily limit, API key, printers, modules. |
+| `sudo filament-kit modules list` | Shows each module on or off and the mode. `modules set <mode>`, `modules enable <name>` and `modules disable <name>` change them (see [Change the mode later](#change-the-mode-later)); `modules apply` sets the computer up again from the saved settings. |
 | `sudo filament-kit printer map <serial>` | Maps a printer's AMS slots (see [Map slots](#map-slots)), printing each step. |
 | `sudo filament-kit profiles status` / `build` | Shows or rebuilds the Bambu Studio presets (see [Presets](#presets-in-bambu-studio)). |
 | `sudo filament-kit profiles restore-deleted` | Brings back, at the next build, the generated presets you deleted in Bambu Studio. |
@@ -259,6 +333,63 @@ working.
 
 Your own `library add` entries override the shared library for that line.
 
+## Intake station
+
+The intake station weighs a spool and reads its NFC tag, so adding or opening a spool needs no typing. It runs as
+the `station` module, on the server computer (`all-in-one`) or on a second computer (`station` mode, see
+[Install modes](#install-modes)).
+
+### Hardware
+
+- A **DYMO USB postal scale** (for example the M10 or M25). Switch it on before you start the station; a DYMO
+  only shows up on USB while it is on, and it switches itself off after a few minutes.
+- A **PN532 NFC reader** on a USB serial adapter (CH340 chip).
+- Optional: the **button panel** (Hold and Discard buttons, lamps and a buzzer on a Wemos D1 mini). How to
+  build and flash it: [station/PANEL.md](station/PANEL.md).
+- Optional: a speaker (USB or the computer's headphone socket) for the scan beep when there is no panel.
+
+### What the installer changes on the computer
+
+Turning the station on (install or **Modules**) also changes these, because each one stops a station from
+working:
+
+- **brltty is removed.** It takes CH340 USB adapters for braille displays and grabs the reader.
+- **ModemManager is turned off.** It probes every new USB serial port and confuses the reader and the panel.
+- **Sleep, suspend and hibernate are turned off** (masked). An idle Ubuntu desktop otherwise goes to sleep and
+  the station stops answering.
+- **Audio outputs are unmuted** at 80% and saved, so the scan beep can be heard.
+- A **udev rule** (`/etc/udev/rules.d/99-filament-kit-station.rules`) lets the station read the DYMO scale
+  without running as root.
+
+Turning the station off again, or switching to another mode, leaves these changes as they are. To undo them by
+hand: `sudo systemctl unmask sleep.target suspend.target hibernate.target hybrid-sleep.target`,
+`sudo systemctl enable --now ModemManager`, and `sudo apt-get install brltty`. Uninstalling removes the udev rule.
+
+### Reader, panel and beep
+
+- The panel and the reader both use CH340 USB adapters, which have no serial numbers. The station finds the
+  panel by asking each port who it is, and the reader gets the other port (`NFC_DEVICE=auto`). With no panel,
+  the reader gets the first USB serial port.
+- A scan beeps on the panel's buzzer, or, without a panel, through a USB speaker or the headphone socket
+  (`STATION_BEEP`).
+- These settings are in `/etc/filament-kit/config.json` under `"station"`: `"nfc_device"` (`"auto"`, or a
+  device such as `"tty:USB0:pn532"`), `"beep"` (`true` or `false`) and `"beep_device"` (empty for automatic, or
+  an ALSA device such as `"plughw:1,0"`). After a change, run `sudo filament-kit modules apply`.
+
+### Is it working?
+
+- `sudo filament-kit status` on the server shows `station answering at ...`. `station reader not seen` means no
+  tag has been read yet; `station scale not seen` means the scale has sent nothing yet (switch it on and put
+  something on it).
+- On the station computer: `curl http://127.0.0.1:5003/state` shows the last tag and weight.
+  `sudo journalctl -u filament-kit-station -n 30` shows what the station is doing; `NFC reader ...; retrying in
+  5 s` means the reader is not plugged in or not found.
+- The station answers only its own computer and the server's address. Anything else gets no answer.
+- A station on a second computer: on the **server**, put the station's address in
+  `/etc/filament-kit/config.json` under `"station"`, for example `"url": "http://station.local:5003"`. If the
+  server's address changes, run `sudo filament-kit modules apply` on the station computer so it answers the new
+  one.
+
 ## Troubleshooting
 
 - Run `sudo filament-kit status` on the Ubuntu computer. No line should start with `FAIL`; a failing line
@@ -284,8 +415,10 @@ From the unpacked folder:
 sudo ./uninstall.sh
 ```
 
-This removes the programs but **keeps** your spools, settings and backups, so a later install picks up where
-you left off. To delete everything, including all spool data and backups:
+This removes the programs (Spoolman and the intake station too, with the station's user and udev rule) but
+**keeps** your spools, settings and backups, so a later install picks up where you left off, in the same mode.
+The station's computer changes (brltty, ModemManager, sleep, audio) stay; see
+[What the installer changes on the computer](#what-the-installer-changes-on-the-computer) to undo them. To delete everything, including all spool data and backups:
 
 ```
 sudo ./uninstall.sh --purge

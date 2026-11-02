@@ -18,7 +18,7 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse
 from starlette.routing import Route
 
-from . import API_VERSION, __version__, config, intake, inventory, pairing, profiles_api, tags
+from . import API_VERSION, __version__, config, intake, inventory, modules, pairing, profiles_api, tags
 from .intake import CapReached, PhotoError, ReadCap, ReadError
 from .bridge import camera, loading, mapping, registry, usage
 from .bridge.connection import ACTIONS, DEVELOPER_MODE_REASON, Manager, NoReply, PrinterOffline, UnknownPrinter
@@ -27,6 +27,7 @@ from .bridge.models import camera_kind
 from .inventory import AddFailed, TagConflict
 from .profiles.errors import ProfileError
 from .spoolman import Spoolman, SpoolmanError
+from .station_client import StationClient, StationUnreachable
 
 log = logging.getLogger(__name__)
 
@@ -105,6 +106,22 @@ def _bridge_error(e: Exception) -> JSONResponse | None:
     if isinstance(e, loading.NotFound):
         return _err(404, "not_found", str(e))
     return None
+
+
+def _module_off(module: str) -> JSONResponse:
+    return _err(409, "module_off", f"the {module} module is turned off on this server", module=module)
+
+
+def _gated(routes: list[Route], module: str, on: frozenset[str]) -> list[Route]:
+    """`routes` as they are when `module` is on; otherwise the same paths and methods, each answering 409
+    `module_off` (after the usual token check, so an unpaired caller still gets 401)."""
+    if module in on:
+        return routes
+
+    @_authed
+    async def off(request: Request):
+        return _module_off(module)
+    return [Route(r.path, off, methods=sorted(r.methods or ())) for r in routes]
 
 
 def _handle(fn):
@@ -439,13 +456,17 @@ class _Refused(Exception):
 
 
 def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hub=None,
-               mapper: mapping.Mapper | None = None) -> Starlette:
+               mapper: mapping.Mapper | None = None, enabled_modules: frozenset[str] | None = None) -> Starlette:
     cfg = config.load()
+    on = enabled_modules if enabled_modules is not None else modules.enabled(cfg)
     sm = sm if sm is not None else Spoolman(cfg["spoolman_url"])
-    printers = printers if printers is not None else Manager(spoolman=sm)  # started by __main__, not here
-    # stopped by __main__'s lifespan; the Manager's `cert_changed` also refuses the camera
-    camera_hub = camera_hub if camera_hub is not None else camera.Hub(printer_state=printers.state)
-    mapper = mapper if mapper is not None else mapping.Mapper(printers)
+    if "printers" in on:
+        printers = printers if printers is not None else Manager(spoolman=sm)  # started by __main__, not here
+        # stopped by __main__'s lifespan; the Manager's `cert_changed` also refuses the camera
+        camera_hub = camera_hub if camera_hub is not None else camera.Hub(printer_state=printers.state)
+        mapper = mapper if mapper is not None else mapping.Mapper(printers)
+    # else: the gated routes never reach these; nothing printer-related is built
+    station: list = [None, None]  # [url, client]: the client (and its back-off) lives as long as the url does
     cap = ReadCap(config.paths().state / "reads.json", cfg["reads_per_day"])
 
     def rules() -> dict:  # sync: call it from inside the threadpool
@@ -453,7 +474,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
 
     def info_body() -> dict:
         return {"name": config.load()["server_name"], "version": __version__, "api": API_VERSION,
-                "apk_version": _apk_version()}
+                "apk_version": _apk_version(), "modules": sorted(on)}
 
     @_handle
     async def info(request: Request):
@@ -555,6 +576,19 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             return out
         return JSONResponse({"locations": await run_in_threadpool(names)})
 
+    @_authed
+    async def station_state(request: Request):
+        url = (config.load().get("station") or {}).get("url")
+        if not url:
+            return _module_off("station")
+        if station[0] != url:
+            station[:] = [url, StationClient(url)]
+        try:
+            return JSONResponse(await run_in_threadpool(station[1].state))
+        except StationUnreachable as e:
+            log.warning("station: %s", e)
+            return _err(503, "station_unreachable", "the intake station is not reachable")
+
     @_handle
     async def apk(request: Request):
         f = config.paths().opt / "app" / "filament-kit.apk"
@@ -569,19 +603,21 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         routes=[
             Route("/api/info", info),
             Route("/api/pair", pair, methods=["POST"]),
-            Route("/api/intake/read", intake_read, methods=["POST"]),
-            Route("/api/intake/retry/{read_id}", intake_retry, methods=["POST"]),
-            Route("/api/intake/add", intake_add, methods=["POST"]),
+            *_gated([
+                Route("/api/intake/read", intake_read, methods=["POST"]),
+                Route("/api/intake/retry/{read_id}", intake_retry, methods=["POST"]),
+                Route("/api/intake/add", intake_add, methods=["POST"]),
+            ], "ai_intake", on),
             Route("/api/tags/{uid}", tag_lookup),
             Route("/api/spools", spool_search),
             Route("/api/spools/{id:int}/link", spool_link, methods=["POST"]),
             Route("/api/spools/{id:int}", spool_update, methods=["PATCH"]),
             Route("/api/locations", locations),
             Route("/app.apk", apk),
-            *_printer_routes(printers),
-            *_bridge_routes(printers, mapper, sm),
-            *camera.routes(camera_hub, _authed),
-            *profiles_api.routes(_authed, sm),
+            Route("/api/station", station_state),
+            *_gated([*_printer_routes(printers), *_bridge_routes(printers, mapper, sm),
+                     *camera.routes(camera_hub, _authed)], "printers", on),
+            *_gated(profiles_api.routes(_authed, sm), "presets", on),
         ],
         exception_handlers={HTTPException: http_error},
     )

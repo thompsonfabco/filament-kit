@@ -18,6 +18,7 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["pytest", "httpx", "pyftpdlib>=2.0", "pyopenssl>=24"]  # pyftpdlib + pyopenssl: the fake printer FTPS server
+station = ["nfcpy==1.0.4", "pyserial>=3.5"]
 
 [project.scripts]
 filament-kit = "filament_kit.cli:main"
