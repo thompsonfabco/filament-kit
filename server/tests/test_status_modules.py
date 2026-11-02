@@ -74,7 +74,7 @@ def test_status_station_not_seen_is_informational(capsys):
 
 
 def test_status_station_seen(capsys):
-    srv, url = _serve_station({"tag": {"uid": "a"}, "scale": {"n": 1}, "last_weight": None, "held": None})
+    srv, url = _serve_station({"tag": {"nfc_id": "a"}, "scale": {"n": 1}, "last_weight": None, "held": None})
     try:
         _cfg(url)
         assert cli.main(["status"]) == 0
@@ -82,3 +82,33 @@ def test_status_station_seen(capsys):
         srv.shutdown()
     out = capsys.readouterr().out
     assert "OK   station answering" in out and "not seen" not in out
+
+
+# What filament_kit.station really answers (station/http.py): "tag" is always an object, "nfc_id" null until a tap.
+FRESH_STATE = {"tag": {"status": "ok", "nfc_id": None, "read_at": None, "read_at_unix": None,
+                       "age_seconds": None, "held": False},
+               "scale": None, "last_weight": None, "panel": None}
+
+
+def test_status_real_fresh_station_shows_reader_and_scale_not_seen(capsys):
+    srv, url = _serve_station(FRESH_STATE)
+    try:
+        _cfg(url)
+        assert cli.main(["status"]) == 0
+    finally:
+        srv.shutdown()
+    out = capsys.readouterr().out
+    assert "--   station reader not seen" in out and "--   station scale not seen" in out
+
+
+def test_status_real_station_after_a_tap_reader_seen(capsys):
+    state = json.loads(json.dumps(FRESH_STATE))
+    state["tag"]["nfc_id"] = "4:77:90:e:9:22:89"
+    srv, url = _serve_station(state)
+    try:
+        _cfg(url)
+        assert cli.main(["status"]) == 0
+    finally:
+        srv.shutdown()
+    out = capsys.readouterr().out
+    assert "reader not seen" not in out and "--   station scale not seen" in out

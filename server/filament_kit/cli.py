@@ -92,8 +92,9 @@ def _station_lines(url: str) -> bool:
         return _line(False, f"station not answering at {url}",
                      f"check the station machine: sudo systemctl status filament-kit-station  (url {url})")
     good = _line(True, f"station answering at {url}")
-    # a fresh station has seen neither the reader nor the scale: informational, not a failure
-    if not state.get("tag"):
+    # a fresh station has seen neither the reader nor the scale: informational, not a failure.
+    # "tag" is always an object; its nfc_id stays null until the reader has read a tag.
+    if not (state.get("tag") or {}).get("nfc_id"):
         print("--   station reader not seen")
     if not state.get("scale") and not state.get("last_weight"):
         print("--   station scale not seen")

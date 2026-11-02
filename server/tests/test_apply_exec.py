@@ -84,7 +84,7 @@ def test_no_systemd_prints_instead_of_running(tmp_path, monkeypatch, capsys):
     apply.execute(acts, run=run, resources=_res(tmp_path), root=tmp_path / "root")
     assert run.calls == []
     out = capsys.readouterr().out
-    assert "apt-get install -y -q unzip" in out
+    assert "apt-get -o DPkg::Lock::Timeout=300 install -y -q unzip" in out
     assert "systemctl enable x.service" in out
     assert "udevadm control --reload" in out
 
@@ -93,7 +93,7 @@ def test_apt_batched_once(tmp_path):
     run = Recorder()
     apply.execute([Action("apt", "unzip"), Action("apt", "ffmpeg"), Action("daemon_reload")],
                   run=run, resources=_res(tmp_path), root=tmp_path)
-    assert run.texts() == ["apt-get install -y -q unzip ffmpeg", "systemctl daemon-reload"]
+    assert run.texts() == ["apt-get -o DPkg::Lock::Timeout=300 install -y -q unzip ffmpeg", "systemctl daemon-reload"]
 
 
 def test_enable_kinds(tmp_path):
@@ -301,3 +301,26 @@ def test_cli_modules_apply_invalid_config(monkeypatch, capsys):
         json.dumps({"modules": {"server": True, "spoolman": False}}), encoding="utf-8")
     assert cli.main(["modules", "apply"]) == 1
     assert "error:" in capsys.readouterr().err
+
+
+def test_prints_reach_the_output_before_each_command(tmp_path, monkeypatch):
+    # Piped to a file (install.sh > log) stdout is block-buffered; the "==>" lines must still come
+    # before the output of the command they announce.
+    class Buffered:
+        def __init__(self):
+            self.pending, self.flushed = "", ""
+
+        def write(self, s):
+            self.pending += s
+            return len(s)
+
+        def flush(self):
+            self.flushed += self.pending
+            self.pending = ""
+
+    out = Buffered()
+    monkeypatch.setattr(apply.sys, "stdout", out)
+    seen = []
+    apply.execute([Action("first_build")], run=lambda cmd: seen.append(out.flushed),
+                  resources=_res(tmp_path), root=tmp_path)
+    assert "==> Building presets" in seen[0]

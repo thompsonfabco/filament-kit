@@ -94,6 +94,13 @@ def test_server_and_pc_sync_versions_match():
 SPOOLMAN_SHA = "bcc961af4c20d7ad7f1740f5609cd3efd94c4556baafaeba5036122dd7e46704"
 
 
+def test_release_no_grep_q_after_a_pipe():
+    # set -o pipefail: `cmd | grep -q` fails when grep exits on the first match and cmd gets SIGPIPE
+    text = _read("tools/make_release.sh")
+    assert "set -euo pipefail" in text
+    assert not re.search(r"\|\s*grep\s+-[a-zA-Z]*q", text)
+
+
 def test_release_copies_spoolman_script():
     text = _read("tools/make_release.sh")
     assert "install/spoolman.sh" in text
@@ -222,3 +229,10 @@ def test_install_save_station_mode_with_server(tmp_path):
     cfg = _run_save(tmp_path, "station", server="192.0.2.10")
     assert cfg["modules"] == {n: n == "station" for n in cfg["modules"]}
     assert cfg["station"]["allow"] == ["192.0.2.10"]
+
+
+def test_install_apt_waits_for_the_dpkg_lock():
+    # a fresh Ubuntu often runs unattended-upgrades right after boot; apt must wait, not fail
+    calls = [ln for ln in _read("install/install.sh").splitlines()
+             if ln.strip().startswith("apt-get")]
+    assert calls and all("DPkg::Lock::Timeout=" in ln for ln in calls)
