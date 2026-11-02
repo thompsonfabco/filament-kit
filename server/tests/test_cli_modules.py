@@ -137,3 +137,51 @@ def test_config_menu_choose_mode(applied, monkeypatch):
     cli.main(["config"])
     assert config.load()["modules"] == {n: True for n in modules.MODULES}
     assert config.load()["station"]["url"] == "http://127.0.0.1:5003"
+
+
+def test_non_root_changes_nothing(applied, monkeypatch, capsys):
+    monkeypatch.delenv("FK_NO_SYSTEMD")
+    monkeypatch.setattr(cli.os, "geteuid", lambda: 1000, raising=False)
+    for argv in (["modules", "set", "all-in-one"], ["modules", "enable", "station"],
+                 ["modules", "disable", "library"]):
+        assert cli.main(argv) == 1
+        assert "run as root" in capsys.readouterr().err
+    assert "modules" not in config.load()
+    assert applied == []
+
+
+def test_set_station_without_address_fails(applied, capsys):
+    assert cli.main(["modules", "set", "station"]) == 1
+    err = capsys.readouterr().err
+    assert "fix:" in err and "--server" in err
+    assert "modules" not in config.load() and applied == []
+
+
+def test_set_station_with_server(applied):
+    assert cli.main(["modules", "set", "station", "--server", "kit.localdomain"]) == 0
+    cfg = config.load()
+    assert cfg["station"]["allow"] == ["kit.localdomain"]
+    assert cfg["modules"]["station"] is True and cfg["modules"]["server"] is False
+
+
+def test_set_station_refuses_range(applied, capsys):
+    assert cli.main(["modules", "set", "station", "--server", "10.0.0.0/24"]) == 1
+    assert "single address" in capsys.readouterr().err
+
+
+def test_enable_station_with_existing_allow(applied):
+    cfg = config.load()
+    cfg["modules"] = {n: n in ("backup",) for n in modules.MODULES}
+    cfg["station"]["allow"] = ["192.0.2.10"]
+    config.save(cfg)
+    assert cli.main(["modules", "enable", "station"]) == 0
+    assert config.load()["station"]["allow"] == ["192.0.2.10"]
+
+
+def test_enable_station_server_off_needs_address(applied, capsys):
+    cfg = config.load()
+    cfg["modules"] = {n: n == "backup" for n in modules.MODULES}
+    config.save(cfg)
+    assert cli.main(["modules", "enable", "station"]) == 1
+    assert cli.main(["modules", "enable", "station", "--server", "10.0.0.5"]) == 0
+    assert config.load()["station"]["allow"] == ["10.0.0.5"]

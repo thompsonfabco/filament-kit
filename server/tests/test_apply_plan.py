@@ -10,6 +10,14 @@ def _cfg(**over):
     return config._merge(config.DEFAULTS, over)
 
 
+def _mode(mode):
+    """A mode's config; station-only needs the server's address (validate)."""
+    cfg = set_mode(_cfg(), mode)
+    if mode == "station":
+        cfg["station"]["allow"] = ["spoolman.home.arpa"]
+    return cfg
+
+
 def _of(actions, kind):
     return [a.arg for a in actions if a.kind == kind]
 
@@ -71,14 +79,14 @@ def test_validation_error_propagates():
 @pytest.mark.parametrize("a,b", list(itertools.permutations(modules.MODES, 2)))
 def test_switch_never_removes_data(a, b):
     for mode in (a, b):
-        acts = apply.plan(set_mode(_cfg(), mode), resolve=lambda h: [h])
+        acts = apply.plan(_mode(mode), resolve=lambda h: [h])
         for p in _of(acts, "remove_file"):
             assert not p.startswith(("/var/lib", "/etc/filament-kit", "/var/backups"))
 
 
 def test_daemon_reload_once_before_enable():
     for mode in modules.MODES:
-        acts = apply.plan(set_mode(_cfg(), mode), resolve=lambda h: [h])
+        acts = apply.plan(_mode(mode), resolve=lambda h: [h])
         kinds = [a.kind for a in acts]
         assert kinds.count("daemon_reload") == 1
         assert kinds.index("daemon_reload") < kinds.index("enable")
