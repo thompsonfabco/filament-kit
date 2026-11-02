@@ -268,6 +268,10 @@ def _add_lines(items: list[dict], by_id: dict) -> None:
         known = lines._extra_line(f) if f else ""
         if known:
             it["line"] = known
+        elif f:
+            # an existing filament's line is its own (derived below from its name), never what Claude read: then
+            # only an edit in the app can make the add's line differ and move the filament
+            it.pop("line", None)
         elif not isinstance(it.get("line"), str) or not it["line"].strip():
             it.pop("line", None)
         else:

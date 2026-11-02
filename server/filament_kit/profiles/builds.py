@@ -183,7 +183,8 @@ _store_cache_lock = threading.Lock()
 
 
 def system_store() -> Store | None:
-    """The uploaded Bambu Studio system presets (`system/BBL/filament`), or None when none are uploaded.
+    """The uploaded Bambu Studio system presets (`live/system/`, the PC sync's upload of its
+    `system/BBL/filament` folder), or None when none are uploaded.
 
     A store is uploaded exactly when meta.json has a `system_hash` and the folder holds at least one preset. The
     store is cached by (folder, system_hash). On a cache miss the raw files are read under live.lock (so an upload
@@ -401,8 +402,8 @@ def sweep_uploads(now: float | None = None) -> None:
 
 
 def store_upload(kind: str, src: BinaryIO, *, device_id: str, user_id: str | None = None) -> str:
-    """Store the PC sync's zip of its user filament folder (`live`) or `system/BBL/filament` (`system`) and
-    return its tree hash. Claims the sync owner. Raises OtherPc, BadZip or TooLarge; then nothing changed."""
+    """Store the PC sync's zip of its user filament folder (`live`, into `live/user/`) or of Bambu Studio's
+    `system/BBL/filament` (`system`, into `live/system/`) and return its tree hash. Claims the sync owner. Raises OtherPc, BadZip or TooLarge; then nothing changed."""
     if kind not in ("live", "system"):
         raise ValueError(f"unknown upload kind {kind!r}")
     if user_id is not None and not USER_ID.fullmatch(user_id):
