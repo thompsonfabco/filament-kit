@@ -133,3 +133,37 @@ def test_deleted():
     assert inapp.deleted("C @H2D 0.4", snapshot=snap, live=live, before={"c @h2d 0.4"}, reset=False,
                          restore=False) is True
     assert inapp.deleted("C @H2D 0.4", snapshot=snap, live=live, before=set(), reset=False, restore=False) is False
+
+
+def test_app_reset_keeps_note_lines_below_mark():
+    """Final review C1: the live preset is gone (app reset): the owner's lines below MARK come from the installed
+    copy (filament_notes is in IGNORE, so the edit record never carries them)."""
+    installed = {"filament_notes": f"Old summary\n{inapp.MARK}\nmine\nalso mine\nSpoolman filament ids: 1"}
+    cfg = {"name": "x", "filament_notes": "New summary\nSpoolman filament ids: 1, 2"}
+    log = []
+    inapp.keep_edits(cfg, installed, None, log)
+    assert cfg["filament_notes"] == f"New summary\n{inapp.MARK}\nmine\nalso mine\nSpoolman filament ids: 1, 2"
+    assert any("2 line(s) you wrote" in line for line in log)
+    # only the MARK section: the installed copy's generated lines are not his
+    cfg2 = {"name": "x", "filament_notes": "New summary\nSpoolman filament ids: 1, 2"}
+    inapp.keep_edits(cfg2, {"filament_notes": "Old summary\nSpecs\nSpoolman filament ids: 1"}, None, [])
+    assert cfg2["filament_notes"] == "New summary\nSpoolman filament ids: 1, 2"
+
+
+def test_partial_build_note_lines_are_not_the_owners():
+    """Final review I1: the half-finished install wrote that build's summary/spec lines into live; they are not
+    the owner's lines, while a line he typed (or his lines below MARK) still are."""
+    installed = {"filament_notes": "Old summary\nSpoolman filament ids: 1"}
+    half = {"filament_notes": f"New summary\nSpecs\n{inapp.MARK}\nmine\nSpoolman filament ids: 1, 2"}
+    gen = "Newer summary\nSpecs\nSpoolman filament ids: 1, 2"
+    cfg = {"name": "x", "filament_notes": gen}
+    inapp.keep_edits(cfg, installed, dict(half), [], partial=half)
+    assert cfg["filament_notes"] == f"Newer summary\nSpecs\n{inapp.MARK}\nmine\nSpoolman filament ids: 1, 2"
+    typed = {"filament_notes": "New summary\nSpecs\ntyped later\nSpoolman filament ids: 1, 2"}
+    cfg = {"name": "x", "filament_notes": gen}
+    inapp.keep_edits(cfg, installed, typed, [], partial=dict(typed, filament_notes="New summary\nSpecs\n"
+                                                                                    "Spoolman filament ids: 1, 2"))
+    assert cfg["filament_notes"] == f"Newer summary\nSpecs\n{inapp.MARK}\ntyped later\nSpoolman filament ids: 1, 2"
+    # without the partial copy the half-install's lines look typed (the bug)
+    assert inapp.user_notes(installed, half) == ["mine", "New summary", "Specs"]
+    assert inapp.user_notes(installed, half, partial=half) == ["mine"]

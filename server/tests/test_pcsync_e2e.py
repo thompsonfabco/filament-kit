@@ -344,6 +344,32 @@ def test_inapp_edit_survives_a_second_rebuild(tmp_path, server, monkeypatch):
     assert pc.preset(edited)["filament_flow_ratio"] == flow                  # second rebuild: still his value
 
 
+
+def test_app_reset_keeps_the_owners_notes(tmp_path, server, monkeypatch):
+    """Final review C1: a line typed in the notes survives an app reset that removed the preset."""
+    _, sm = server
+    pc, stamp = installed_first_build(tmp_path, server, monkeypatch)
+    edited = sunlu("0.4")
+    cfg = pc.preset(edited)
+    cfg["filament_notes"] = cfg["filament_notes"].replace(IDS_LINE, "dry 8 h at 55 C\n" + IDS_LINE)
+    pc.write(edited, cfg)
+    assert pc.run() == "uploaded"                   # notes alone never ask for a rebuild (S31); any later one
+    builds.request_rebuild("spoolman changed")
+    build(sm)
+    assert pc.run() == "installed"
+    assert "dry 8 h at 55 C" in pc.preset(edited)["filament_notes"]
+    h2d = sorted(n for n in pc.names() if f"@{H2D} " in n)
+    vanish = [edited] + [n for n in h2d if n != edited][: len(h2d) // 2]
+    for name in vanish:                                                      # an app reset
+        (pc.base / f"{name}.json").unlink()
+    uploaded_then_rebuild(pc)
+    b = build(sm)
+    assert manifest(b["stamp"])["deleted"] == []
+    assert pc.run() == "installed"
+    notes = pc.preset(edited)["filament_notes"].splitlines()
+    assert notes[-2:] == ["dry 8 h at 55 C", IDS_LINE], notes
+
+
 # ---------- interrupted installs ----------
 
 def _crash_after(monkeypatch, writes: int) -> None:
