@@ -73,11 +73,12 @@ def carried(cfg: dict, installed: dict | None, live: dict | None, *, recorded: d
 
 
 def keep_edits(cfg: dict, installed: dict | None, live: dict | None, log: list[str], *,
-               recorded: dict | None = None, partial: dict | None = None) -> dict:
+               recorded: dict | None = None, partial: dict | None = None, notes: list[str] | None = None) -> dict:
     """Carry the owner's in-app values (see `carried`) into cfg (in place); returns them ({key: value}, the
     record of this build). Their note lines go below MARK, before a trailing `Spoolman filament ids:` line if cfg
     has one. With no live copy (an app reset) the lines below MARK of the installed copy are carried; lines a
-    half-finished install wrote (`partial`) are never taken for theirs."""
+    half-finished install wrote (`partial`) are never taken for theirs. With no installed copy at all (a re-paired
+    PC, ruling S34) the owner's saved note lines `notes` are carried."""
     edits, dropped = carried(cfg, installed, live, recorded=recorded, partial=partial)
     for k in dropped:
         log.append(f"{cfg.get('name')}: {k} is the generated value again; no longer kept as your in-app value")
@@ -86,10 +87,11 @@ def keep_edits(cfg: dict, installed: dict | None, live: dict | None, log: list[s
             log.append(f"{cfg.get('name')}: {k} {cfg.get(k)} -> {v} (your in-app value, kept)")
         cfg[k] = v
     if installed is None:
-        return edits
-    # the live preset is gone (an app reset, a restore): the owner's lines below MARK in the installed copy count
-    mine = user_notes(installed, live if live is not None else installed,
-                      partial=partial if live is not None else None)
+        mine = [line for line in (notes or []) if isinstance(line, str) and not line.startswith(IDS_PREFIX)]
+    else:
+        # the live preset is gone (an app reset, a restore): the owner's lines below MARK in the installed copy count
+        mine = user_notes(installed, live if live is not None else installed,
+                          partial=partial if live is not None else None)
     if mine:
         lines = notes_text(cfg.get("filament_notes")).splitlines()
         tail = [lines.pop()] if lines and lines[-1].startswith(IDS_PREFIX) else []

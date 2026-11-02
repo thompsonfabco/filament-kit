@@ -10,6 +10,8 @@ State, all under `state/profiles/`:
   current.json               the last good build {stamp, created, live_hash, presets, problems}
   installed.json             the build the sync PC installed {stamp, at, device_id}
   deleted.json               {deleted_before: [preset names deleted in the app]}
+  owner-edits.json           {stamp, inapp, notes}: the owner's in-app record and note lines of the old PC's
+                             installed build, kept when the sync PC changes (ruling S34) until the new PC installs
   build-state.json           {last_attempt: {at, ok, error}, handled: {at, started}} (the builder's own record)
   rebuild-request            written by `request_rebuild`; watched by filament-kit-build.path (PathModified).
                              The builder only ever READS it; what was handled is kept in build-state.json.
@@ -67,7 +69,7 @@ from .. import config, pairing
 from .. import library as library_mod
 from ..bridge import registry
 from ..pairing import _write_atomic, make_state_dir, open_lock
-from . import generate, lines as lines_mod
+from . import generate, inapp as inapp_mod, lines as lines_mod
 from .bbl import Store
 from .errors import ProfileError
 
@@ -86,6 +88,7 @@ STAMP_RE = re.compile(r"\d{8}-\d{6}(?:-[1-9]\d{0,5})?")
 USER_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
 NO_SYSTEM = "no Bambu Studio system presets yet: install and pair the PC sync"
 WAIT_LIVE = "waiting for the PC's next sync"
+OWNER_EDITS = "owner-edits.json"
 _BAD_PART = re.compile(r'[<>:"|?*\x00-\x1f\x7f]')
 _DRIVE = re.compile(r"[A-Za-z]:")
 
@@ -256,9 +259,48 @@ def _installed() -> dict | None:
     return d if d.get("device_id") == _meta().get("owner") else None
 
 
+def _owner_record(stamp) -> dict | None:
+    """The owner's part of an installed build (ruling S34): its BUILD.json `inapp` record and, per preset, the note
+    lines below MARK. None when that build is gone."""
+    if not (isinstance(stamp, str) and STAMP_RE.fullmatch(stamp)):
+        return None
+    folder = _builds() / stamp
+    m = _read_json(folder / "BUILD.json")
+    if not isinstance(m, dict):
+        return None
+    rec = m.get("inapp")
+    if not isinstance(rec, dict):
+        rec = {}
+    rec = {n: v for n, v in rec.items() if isinstance(n, str) and isinstance(v, dict)}
+    notes = {}
+    base = folder / "base"
+    if base.is_dir():
+        for f in sorted(base.iterdir()):
+            if f.suffix.casefold() != ".json" or not f.is_file():
+                continue
+            cfg = _read_json(f)
+            if isinstance(cfg, dict):
+                mine = inapp_mod.user_notes(cfg, cfg)
+                if mine:
+                    notes[f.stem] = mine
+    return {"stamp": stamp, "inapp": rec, "notes": notes}
+
+
+def _owner_edits() -> dict | None:
+    d = _read_obj(_dir() / OWNER_EDITS)
+    return d or None
+
+
 def _forget_old_pc(meta: dict) -> None:
-    """A new sync PC (the owner changes): the old PC's install snapshot, partial build and deletion record are
-    dropped, so the new PC starts like a first install. Called under live.lock before meta.json is written."""
+    """A new sync PC (the owner changes; also the same PC re-paired, which gets a new device id): the old PC's
+    install snapshot (the basis for deletions and diffs), partial build and deletion record are dropped, so the new
+    PC starts like a first install. The owner's in-app record and note lines of the installed build are theirs,
+    not the PC's: they are kept in owner-edits.json (ruling S34) and carried by the next builds until the new PC
+    installs one. Called under live.lock before meta.json is written."""
+    raw = _read_obj(_dir() / "installed.json")
+    rec = _owner_record(raw.get("stamp"))
+    if rec is not None:
+        _write_json(_dir() / OWNER_EDITS, rec)
     for name in ("installed.json", "deleted.json"):
         try:
             (_dir() / name).unlink()
@@ -639,6 +681,7 @@ def _build_once(sm, now: float) -> dict:
         # a build whose install stopped part-way (S28): only while it is kept and is not the installed one
         partial = (root / part if isinstance(part, str) and STAMP_RE.fullmatch(part)
                    and (root / part / "BUILD.json").is_file() and part != (installed or {}).get("stamp") else None)
+        owner_edits = _owner_edits() if snapshot is None else None     # S34: a re-paired / new sync PC
         before = _read_obj(_dir() / "deleted.json").get("deleted_before")
         deleted_before = {n for n in before if isinstance(n, str)} if isinstance(before, list) else set()
         restore_flag = _dir() / "restore-deleted"
@@ -648,7 +691,7 @@ def _build_once(sm, now: float) -> dict:
             manifest, new_lines = generate.build_all(
                 filaments=filaments, models=models, store=store, library=lib, lines=ls, live=live,
                 snapshot=snapshot, deleted_before=deleted_before, restore_deleted=restore, out_dir=tmp, now=now,
-                partial=partial)
+                partial=partial, owner_edits=owner_edits)
             problems = list(store.problems) + [p for p in manifest.get("problems", []) if p not in store.problems]
             manifest.update(stamp=stamp, created=now, live_hash=meta.get("live_hash"),
                             system_hash=meta.get("system_hash"), user_id=meta.get("user_id"), problems=problems,
@@ -755,6 +798,10 @@ def record_installed(stamp: str, device_id: str) -> dict:
         if "partial" in meta:                   # a finished install ends the partial one (S28)
             meta.pop("partial")
             _write_json(_live() / "meta.json", meta)
+        try:                                    # the installed build's own record carries them from now on (S34)
+            (_dir() / OWNER_EDITS).unlink()
+        except FileNotFoundError:
+            pass
         return {"stamp": stamp, "at": at}
 
 
