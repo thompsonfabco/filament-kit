@@ -255,7 +255,8 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
     cfg = config.load()
     sm = sm if sm is not None else Spoolman(cfg["spoolman_url"])
     printers = printers if printers is not None else Manager(spoolman=sm)  # started by __main__, not here
-    camera_hub = camera_hub if camera_hub is not None else camera.Hub()  # stopped by __main__'s lifespan
+    # stopped by __main__'s lifespan; the Manager's `cert_changed` also refuses the camera
+    camera_hub = camera_hub if camera_hub is not None else camera.Hub(printer_state=printers.state)
     cap = ReadCap(config.paths().state / "reads.json", cfg["reads_per_day"])
 
     def rules() -> dict:  # sync: call it from inside the threadpool

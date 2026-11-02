@@ -175,8 +175,11 @@ def test_wrong_code_printer_rekeyed_with_real_manager(monkeypatch):
     class Client(FakeClient):
         def connect_async(self, host, port, keepalive):
             super().connect_async(host, port, keepalive)
-            rc = 0 if self.password == "24681357" else 5
-            threading.Timer(0.05, lambda: self.connected(rc)).start()
+
+            def attempt():
+                if self.socket_open():   # the code is only set once the leaf passed
+                    self.on_connect(self, None, {}, 0 if self.password == "24681357" else 5, None)
+            threading.Timer(0.05, attempt).start()
 
     m = Manager(client_factory=Client)
     try:
