@@ -18,13 +18,14 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse
 from starlette.routing import Route
 
-from . import API_VERSION, __version__, config, intake, inventory, pairing, tags
+from . import API_VERSION, __version__, config, intake, inventory, pairing, profiles_api, tags
 from .intake import CapReached, PhotoError, ReadCap, ReadError
 from .bridge import camera, loading, mapping, registry, usage
 from .bridge.connection import ACTIONS, DEVELOPER_MODE_REASON, Manager, NoReply, PrinterOffline, UnknownPrinter
 from .bridge.slottest import NoStatus, PrinterBusy
 from .bridge.models import camera_kind
 from .inventory import AddFailed, TagConflict
+from .profiles.errors import ProfileError
 from .spoolman import Spoolman, SpoolmanError
 
 log = logging.getLogger(__name__)
@@ -49,6 +50,10 @@ def _http_error(e: HTTPException) -> JSONResponse:
 def _to_response(e: Exception) -> JSONResponse:
     if isinstance(e, HTTPException):  # e.g. a malformed or oversized multipart body from request.form()
         return _http_error(e)
+    if isinstance(e, ProfileError):
+        if e.status >= 500:
+            log.error("profiles error %s", e.code, exc_info=e)
+        return _err(e.status, e.code, e.message, **e.extra)
     if isinstance(e, PhotoError):
         return _err(400, "bad_photo", str(e))
     if isinstance(e, CapReached):
@@ -576,6 +581,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             *_printer_routes(printers),
             *_bridge_routes(printers, mapper, sm),
             *camera.routes(camera_hub, _authed),
+            *profiles_api.routes(_authed, sm),
         ],
         exception_handlers={HTTPException: http_error},
     )
