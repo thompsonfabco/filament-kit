@@ -1,7 +1,8 @@
-"""Command line: status, pair, unpair, config, cert, ensure-fields, printer map / unpin, library, profiles."""
+"""Command line: status, pair, unpair, config, cert, ensure-fields, printer map / unpin, library, profiles, modules."""
 from __future__ import annotations
 
 import argparse
+import copy
 import getpass
 import http.client
 import json
@@ -16,14 +17,25 @@ import time
 import urllib.request
 from pathlib import Path
 
-from . import config, inventory, library, pairing
+from . import apply, config, inventory, library, modules, pairing
 from .bridge import registry
 from .profiles import builds, lines as lines_mod
 from .profiles.errors import ProfileError
 from .spoolman import Spoolman, SpoolmanError
+from .station_client import StationClient, StationUnreachable
 
 KEY_FILE = "anthropic_key"
-SERVICES = ("spoolman", "filament-kit")
+
+def services_for(on: frozenset[str]) -> tuple[str, ...]:
+    """systemd services that must be active for the modules that are on."""
+    out = []
+    if "spoolman" in on:
+        out.append("spoolman")
+    if "server" in on:
+        out.append("filament-kit")
+    if "station" in on:
+        out.append("filament-kit-station")
+    return tuple(out)
 
 
 def _no_systemd() -> bool:
@@ -73,58 +85,91 @@ def _api_answers(port: int) -> tuple[bool, str]:
         return False, url
 
 
+def _station_lines(url: str) -> bool:
+    try:
+        state = StationClient(url, backoff=0).state()
+    except StationUnreachable:
+        return _line(False, f"station not answering at {url}",
+                     f"check the station machine: sudo systemctl status filament-kit-station  (url {url})")
+    good = _line(True, f"station answering at {url}")
+    # a fresh station has seen neither the reader nor the scale: informational, not a failure.
+    # "tag" is always an object; its nfc_id stays null until the reader has read a tag.
+    if not (state.get("tag") or {}).get("nfc_id"):
+        print("--   station reader not seen")
+    if not state.get("scale") and not state.get("last_weight"):
+        print("--   station scale not seen")
+    return good
+
+
 def cmd_status(client_factory) -> int:
     cfg = config.load()
     p = config.paths()
+    on = modules.enabled(cfg)
     good = True
 
     if _no_systemd():
         print("--   service checks skipped (FK_NO_SYSTEMD=1)")
     else:
-        for svc in SERVICES:
+        for svc in services_for(on):
             try:
                 r = subprocess.run(["systemctl", "is-active", svc], capture_output=True, text=True, timeout=15)
                 active = r.stdout.strip() == "active"
             except (OSError, subprocess.SubprocessError):
                 active = False
             good &= _line(active, f"service {svc} active", f"sudo systemctl start {svc}")
-        ok, url = _api_answers(cfg["port"])
-        good &= _line(ok, f"filament-kit API {'answering' if ok else 'not answering'} at {url}",
-                      "sudo journalctl -u filament-kit -n 50")
+        if "server" in on:
+            ok, url = _api_answers(cfg["port"])
+            good &= _line(ok, f"filament-kit API {'answering' if ok else 'not answering'} at {url}",
+                          "sudo journalctl -u filament-kit -n 50")
 
-    try:
-        version = Spoolman(cfg["spoolman_url"]).ping()
-        good &= _line(True, f"Spoolman reachable at {cfg['spoolman_url']} (v{version})")
-    except SpoolmanError as e:
-        good &= _line(False, f"Spoolman not reachable at {cfg['spoolman_url']}: {e}",
-                      "sudo systemctl start spoolman")
-
-    keyfile = p.etc / KEY_FILE
-    try:
-        key = keyfile.read_text(encoding="utf-8").strip()
-    except OSError:
-        key = ""
-    if not key:
-        good &= _line(False, f"Anthropic key missing ({keyfile})", "run: sudo filament-kit config  (option 4)")
-    else:
+    if "server" in on or "spoolman" in on:
         try:
-            client_factory(key).models.list()
-            good &= _line(True, "Anthropic key accepted")
-        except Exception as e:  # noqa: BLE001 - any failure means the key/network is unusable
-            msg = str(e).replace(key, "***")
-            good &= _line(False, f"Anthropic key not accepted or API unreachable: {msg}",
-                          "run: sudo filament-kit config  (option 4) or check internet access")
+            version = Spoolman(cfg["spoolman_url"]).ping()
+            good &= _line(True, f"Spoolman reachable at {cfg['spoolman_url']} (v{version})")
+        except SpoolmanError as e:
+            good &= _line(False, f"Spoolman not reachable at {cfg['spoolman_url']}: {e}",
+                          "sudo systemctl start spoolman" if "spoolman" in on
+                          else "check that the remote Spoolman is running and spoolman_url is right")
 
-    cert = p.etc / "cert.pem"
-    if cert.exists():
-        good &= _line(True, f"certificate present, fingerprint {pairing.fingerprint(cert.read_bytes())}")
-    else:
-        good &= _line(False, f"certificate missing ({cert})", "run: sudo filament-kit cert")
+    if "ai_intake" in on:
+        keyfile = p.etc / KEY_FILE
+        try:
+            key = keyfile.read_text(encoding="utf-8").strip()
+        except OSError:
+            key = ""
+        if not key:
+            good &= _line(False, f"Anthropic key missing ({keyfile})", "run: sudo filament-kit config  (option 4)")
+        else:
+            try:
+                client_factory(key).models.list()
+                good &= _line(True, "Anthropic key accepted")
+            except Exception as e:  # noqa: BLE001 - any failure means the key/network is unusable
+                msg = str(e).replace(key, "***")
+                good &= _line(False, f"Anthropic key not accepted or API unreachable: {msg}",
+                              "run: sudo filament-kit config  (option 4) or check internet access")
 
-    print(f"--   display name: {cfg['server_name']}")
-    print(f"--   paired devices: {len(pairing.devices())}")
-    print(f"--   reads used today: {_reads_today()} of {cfg['reads_per_day']}")
-    good &= _profile_status_lines()
+    if "server" in on:
+        cert = p.etc / "cert.pem"
+        if cert.exists():
+            good &= _line(True, f"certificate present, fingerprint {pairing.fingerprint(cert.read_bytes())}")
+        else:
+            good &= _line(False, f"certificate missing ({cert})", "run: sudo filament-kit cert")
+
+    station_url = (cfg.get("station") or {}).get("url")
+    if station_url:
+        good &= _station_lines(station_url)
+
+    if "server" in on:
+        print(f"--   display name: {cfg['server_name']}")
+        print(f"--   paired devices: {len(pairing.devices())}")
+        print(f"--   reads used today: {_reads_today()} of {cfg['reads_per_day']}")
+    if "presets" in on:
+        good &= _profile_status_lines()
+    elif "library" in on:
+        try:
+            _library_status_lines()
+        except Exception as e:  # noqa: BLE001 - status reports, it does not crash
+            print(f"--   library: could not be read ({e.__class__.__name__}: {e})")
     return 0 if good else 1
 
 
@@ -407,6 +452,7 @@ def _printers_menu() -> None:
 
 def cmd_config() -> int:
     cfg = config.load()
+    before = _module_state(cfg)
     while True:
         print("\nfilament-kit settings\n"
               f"  1) display name       {cfg['server_name']}\n"
@@ -414,6 +460,7 @@ def cmd_config() -> int:
               f"  3) Claude model       {cfg['model']}, {cfg['reads_per_day']} reads/day\n"
               "  4) Anthropic key\n"
               "  5) Printers\n"
+              f"  6) Modules            {modules.mode_of(modules.enabled(cfg))}\n"
               "  0) save and exit")
         choice = _ask("> ")
         if choice is None or choice.strip() == "0":
@@ -441,10 +488,23 @@ def cmd_config() -> int:
                 print("No key entered; unchanged.")
         elif choice == "5":
             _printers_menu()
+        elif choice == "6":
+            _modules_menu(cfg)
         else:
             print("Unknown choice.")
+    changed = _module_state(cfg) != before
+    if changed:
+        if not _require_root():
+            return 1
+        err = _plan_error(cfg)
+        if err:
+            print(f"error: {err}\nNothing was saved.", file=sys.stderr)
+            return 1
     config.save(cfg)
     print("Saved.")
+    if changed:
+        # the apply restarts what changed, so it replaces the plain restart
+        return _run_apply(pairing=False)
     _restart_service()
     return 0
 
@@ -800,6 +860,263 @@ def cmd_profiles_restore_deleted() -> int:
     return 0
 
 
+# ---------- modules ----------
+
+def cmd_modules_units() -> int:
+    """Every unit of every module, with companion services (uninstall.sh reads this)."""
+    for mod in modules.MODULES.values():
+        for unit in mod.units:
+            for u in apply._unit_files(unit):
+                print(u)
+    return 0
+
+
+def _require_root() -> bool:
+    """False (with a hint) when not root; checked before anything is saved."""
+    if not _no_systemd() and hasattr(os, "geteuid") and os.geteuid() != 0:
+        print("error: run as root: sudo filament-kit modules <command>", file=sys.stderr)
+        return False
+    return True
+
+
+def _run_apply(*, pairing: bool = True) -> int:
+    """Plan, execute and finish for the saved config. `pairing` shows the QR code at the end."""
+    if not _require_root():
+        return 1
+    cfg = config.load()
+    try:
+        actions = apply.plan(cfg)
+    except modules.ModuleError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    on = modules.enabled(cfg)
+    print(f"Mode: {modules.mode_of(on)} ({', '.join(n for n in modules.MODULES if n in on)})")
+    for a in actions:
+        if a.kind == "install_file" and a.arg[0] == apply.DROPIN:
+            allow = next(ln for ln in a.arg[1].splitlines() if ln.startswith("IPAddressAllow="))
+            print(f"Station answers: {allow.split('=', 1)[1]}")
+    try:
+        apply.execute(actions)
+    except apply.ApplyError:
+        return 1
+    apply.finish(cfg, pairing=pairing)
+    return 0
+
+
+def cmd_modules_apply() -> int:
+    return _run_apply(pairing=True)
+
+
+def _module_state(cfg: dict) -> tuple:
+    """What an apply cares about: the module set and the station link."""
+    st = cfg.get("station") or {}
+    return (modules.enabled(cfg), st.get("url"), tuple(st.get("allow") or ()))
+
+
+def _with_modules(cfg: dict, on) -> dict:
+    """Copy of cfg with every module name written true/false (never an empty dict)."""
+    out = copy.deepcopy(cfg)
+    out["modules"] = {n: n in on for n in modules.MODULES}
+    return out
+
+
+def _link_station(cfg: dict) -> None:
+    """Station on beside the server: all-in-one semantics (spec section 3)."""
+    st = cfg.setdefault("station", {})
+    st["allow"] = ["127.0.0.1"]
+    st["url"] = "http://127.0.0.1:5003"
+
+
+def _change_module(cfg: dict, name: str, want_on: bool, *, confirm=None, ask_address=None,
+                   server: str | None = None) -> str | None:
+    """Turn `name` on/off in `cfg` (in place). Returns an error text, or None when changed.
+
+    `confirm(text) -> bool` is asked before dependents go off too (None: refuse).
+    `ask_address() -> str | None` supplies the server address for a station without a server."""
+    if name not in modules.MODULES:
+        return f"unknown module {name!r}"
+    on = set(modules.enabled(cfg))
+    if want_on:
+        missing = [d for d in modules.MODULES[name].depends if d not in on]
+        if missing:
+            listed = ", ".join(missing)
+            return f"{name} needs {listed}\nfix: enable {listed} first"
+        on.add(name)
+    else:
+        deps = modules.dependents(name, frozenset(on))
+        if deps:
+            listed = ", ".join(deps)
+            if confirm is None or not confirm(f"Also turn off {listed}? [y/N] "):
+                return f"{listed} depend on {name}\nfix: disable {listed} first"
+            on -= set(deps)
+        on.discard(name)
+    new = _with_modules(cfg, on)
+    if not {"server", "station"} <= on:
+        modules.drop_local_station_link(new)
+    if want_on and name == "station":
+        if "server" in on:
+            _link_station(new)
+        elif server:
+            new.setdefault("station", {})["allow"] = [server]
+        elif _server_addr_missing(new) and ask_address is not None:
+            addr = ask_address()
+            if addr is None:
+                return "station needs the server's address; unchanged"
+            new.setdefault("station", {})["allow"] = [addr]
+    try:
+        modules.validate(new)
+    except modules.ModuleError as e:
+        return str(e)
+    cfg.clear()
+    cfg.update(new)
+    return None
+
+
+def _server_addr_missing(cfg: dict) -> bool:
+    """True when station.allow holds only loopback (an existing real address is kept)."""
+    allow = (cfg.get("station") or {}).get("allow") or []
+    return not any(str(e).strip() not in ("127.0.0.1", "localhost", "::1") for e in allow)
+
+
+def _tty_confirm(text: str) -> bool:
+    if not apply._tty():
+        return False
+    ans = _ask(text)
+    return bool(ans) and ans.strip().lower() in ("y", "yes")
+
+
+def cmd_modules_list() -> int:
+    on = modules.enabled(config.load())
+    width = max(len(n) for n in modules.MODULES)
+    for n, m in modules.MODULES.items():
+        print(f"{n:<{width}}  {'on ' if n in on else 'off'}  {m.title}")
+    print(f"mode: {modules.mode_of(on)}")
+    return 0
+
+
+def _plan_error(cfg: dict) -> str | None:
+    """apply.plan's refusal (validation or name resolution) for `cfg`, or None. No side effects:
+    checked before config.json is saved, so a refused change leaves the settings as they were."""
+    try:
+        apply.plan(cfg)
+    except modules.ModuleError as e:
+        return str(e)
+    return None
+
+
+def _save_and_apply(cfg: dict) -> int:
+    err = _plan_error(cfg)
+    if err:
+        print(f"error: {err}\nNothing was changed.", file=sys.stderr)
+        return 1
+    config.save(cfg)
+    return _run_apply(pairing=False)
+
+
+def _server_addr_error(addr: str) -> str | None:
+    try:
+        modules.validate({"modules": {"station": True}, "station": {"allow": [addr]}})
+    except modules.ModuleError as e:
+        return str(e)
+    return None
+
+
+def cmd_modules_set(mode: str, server: str | None = None) -> int:
+    if not _require_root():
+        return 1
+    try:
+        cfg = modules.set_mode(config.load(), mode)
+        if server:
+            err = _server_addr_error(server)
+            if err:
+                raise modules.ModuleError(err)
+            if mode == "station":
+                cfg["station"]["allow"] = [server]
+        modules.validate(cfg)
+    except modules.ModuleError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    return _save_and_apply(cfg)
+
+
+def cmd_modules_toggle(name: str, want_on: bool, server: str | None = None) -> int:
+    if not _require_root():
+        return 1
+    cfg = config.load()
+    if server:
+        err = _server_addr_error(server)
+        if err:
+            print(f"error: {err}", file=sys.stderr)
+            return 1
+    err = _change_module(cfg, name, want_on, confirm=_tty_confirm, server=server)
+    if err:
+        print(f"error: {err}", file=sys.stderr)
+        return 1
+    return _save_and_apply(cfg)
+
+
+def _ask_station_server() -> str | None:
+    """Server address for a station-only machine; a blank answer cancels."""
+    while True:
+        raw = _ask("Server address (single IP or host name, blank to cancel): ")
+        if raw is None or not raw.strip():
+            return None
+        addr = raw.strip()
+        try:
+            modules.validate({"modules": {"station": True}, "station": {"allow": [addr]}})
+        except modules.ModuleError:
+            print("Enter a single address or host name, not a range or wildcard.")
+            continue
+        return addr
+
+
+def _modules_menu(cfg: dict) -> None:
+    names = list(modules.MODULES)
+    while True:
+        on = modules.enabled(cfg)
+        print(f"\nModules (mode: {modules.mode_of(on)})")
+        for i, n in enumerate(names, 1):
+            m = modules.MODULES[n]
+            print(f"  {i}) {'on ' if n in on else 'off'}  {m.title}: {m.description}")
+        print("  m) choose mode\n  0) back")
+        choice = _ask("> ")
+        if choice is None or choice.strip() == "0":
+            return
+        choice = choice.strip().lower()
+        if choice == "m":
+            modes = list(modules.MODES)
+            for i, m in enumerate(modes, 1):
+                print(f"  {i}) {m}")
+            pick = _ask_int("Mode: ", 1)
+            if pick is None or pick > len(modes):
+                print("Unknown mode.")
+                continue
+            mode = modes[pick - 1]
+            new = modules.set_mode(cfg, mode)
+            if mode == "station":
+                addr = _ask_station_server()
+                if addr is None:
+                    print("Unchanged.")
+                    continue
+                new["station"]["allow"] = [addr]
+            try:
+                modules.validate(new)
+            except modules.ModuleError as e:
+                print(f"error: {e}")
+                continue
+            cfg.clear()
+            cfg.update(new)
+        elif choice.isdigit() and 1 <= int(choice) <= len(names):
+            name = names[int(choice) - 1]
+            err = _change_module(cfg, name, name not in on,
+                                 confirm=lambda t: (_ask(t) or "").strip().lower() in ("y", "yes"),
+                                 ask_address=_ask_station_server)
+            if err:
+                print(f"error: {err}")
+        else:
+            print("Unknown choice.")
+
+
 def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=None, sm_factory=None) -> int:
     ap = argparse.ArgumentParser(prog="filament-kit")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -834,6 +1151,19 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
     sp.add_argument("line_id")
     sp.add_argument("parent")
     pfsub.add_parser("restore-deleted", help="bring back the presets deleted in Bambu Studio at the next build")
+    md = sub.add_parser("modules", help="the switchable parts of the kit: apply the settings, list units")
+    mdsub = md.add_subparsers(dest="modules_cmd", required=True)
+    mdsub.add_parser("apply", help="install, start and stop what config.json's modules say (root)")
+    mdsub.add_parser("list", help="show each module on/off and the mode")
+    ms = mdsub.add_parser("set", help="switch to an install mode and apply (root)")
+    ms.add_argument("mode", choices=list(modules.MODES))
+    ms.add_argument("--server", help="the kit server's name or IP (station mode)")
+    me = mdsub.add_parser("enable", help="turn a module on and apply (root)")
+    me.add_argument("name")
+    me.add_argument("--server", help="the kit server's name or IP (when enabling station without a server)")
+    mx = mdsub.add_parser("disable", help="turn a module off and apply; its data is kept (root)")
+    mx.add_argument("name")
+    mdsub.add_parser("units", help="print every systemd unit of every module, one per line")
     args = ap.parse_args(argv)
 
     if args.cmd == "status":
@@ -868,4 +1198,15 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
         if args.profiles_cmd == "set-parent":
             return cmd_profiles_set_parent(args.line_id, args.parent)
         return cmd_profiles_restore_deleted()
+    if args.cmd == "modules":
+        if args.modules_cmd == "units":
+            return cmd_modules_units()
+        if args.modules_cmd == "list":
+            return cmd_modules_list()
+        if args.modules_cmd == "set":
+            return cmd_modules_set(args.mode, args.server)
+        if args.modules_cmd in ("enable", "disable"):
+            return cmd_modules_toggle(args.name, args.modules_cmd == "enable",
+                                      getattr(args, "server", None))
+        return cmd_modules_apply()
     return cmd_ensure_fields()
