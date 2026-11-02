@@ -57,11 +57,10 @@ Orca target. On, the build also writes `orca/` (generate.OrcaTarget: the Orca li
 `orca/` tree, `orca_partial`, `orca_deleted_before`, the owner's Orca record), BUILD.json gains
 `orca_live_hash`, `orca_system_hash`, `orca_user_id`, `orca_inapp`, `orca_deleted`, `orca_restored`,
 `orca_stale` and a `target` on every preset row,
-and the S32 wait also covers the Orca live folder, but only while the PC is syncing Orca: the installed build
-has an Orca tree, the Orca live folder predates this install yet was uploaded after the install before it
-(installed.json `prev_at`), and the Bambu Studio live folder came less than ORCA_GRACE seconds ago if it already
-followed the install (an Orca upload that keeps failing never stalls the builds). An Orca live upload renews a
-waiting request like a Bambu Studio one. A new sync PC forgets the old one's Orca live upload (S34).
+but only the Bambu Studio live folder is waited for (S32). An Orca live folder not uploaded since the
+installed build (an Orca upload that keeps failing, Ruling Z) is stale: it is not diffed, the installed build's
+Orca record, restores and deletions are carried as they are (generate.OrcaTarget.live_fresh). An Orca live upload
+renews a waiting request like a Bambu Studio one. A new sync PC forgets the old one's Orca live upload (S34).
 """
 from __future__ import annotations
 
@@ -100,7 +99,6 @@ MAX_ENTRIES = 20_000
 MAX_FILE = 4 << 20
 MAX_TOTAL = 512 << 20
 MAX_RUNS = 3
-ORCA_GRACE = 30 * 60            # S32: how long a build waits for an Orca live upload after the Bambu Studio one
 KEEP = 5
 CHUNK = 64 * 1024
 MAX_PART = 255                  # bytes in one path part of an upload entry
@@ -741,31 +739,6 @@ def _predates_install(installed: dict | None, live_at) -> bool:
         and installed["at"] > live_at
 
 
-def _wait_for_orca(installed: dict | None, meta: dict, folder: Path | None) -> bool:
-    """S32 for the Orca live folder (fix I1): only while the PC is syncing Orca. The Orca live folder predates
-    this install, was uploaded after the previous one (installed.json `prev_at`; any upload for a first install)
-    and the installed build has an Orca tree; once the Bambu Studio live folder followed the install, the Orca one
-    is waited for at most ORCA_GRACE seconds."""
-    olive = meta.get("orca_live_at")
-    if not _predates_install(installed, olive) or folder is None or not _has_orca_tree(folder):
-        return False
-    prev = installed.get("prev_at")
-    if isinstance(prev, (int, float)) and olive <= prev:
-        return False                            # no Orca upload since the previous install: not syncing Orca
-    live_at = meta.get("live_at")
-    if isinstance(live_at, (int, float)) and live_at > installed["at"] and time.time() - live_at > ORCA_GRACE:
-        return False                            # the Orca upload did not follow the Bambu Studio one
-    return True
-
-
-def _has_orca_tree(folder: Path) -> bool:
-    tree = folder / generate.ORCA
-    try:
-        return tree.is_dir() and any(p.suffix.casefold() == ".json" for p in tree.iterdir())
-    except OSError:
-        return False
-
-
 def _build_once(sm, now: float) -> dict:
     root = _builds()
     make_state_dir(root)
@@ -798,13 +771,16 @@ def _build_once(sm, now: float) -> dict:
             ostore = orca_store() if orca_on else None
             orca_live = None
             ouser = _live() / "orca" / "user"
-            if orca_on and ouser.is_dir():
+            if orca_on and ouser.is_dir() and meta.get("orca_live_hash"):
                 shutil.copytree(ouser, orca_copy)
                 orca_live = generate.Live(orca_copy, str(meta.get("orca_user_id") or ""), sub="")
-            if _predates_install(installed, meta.get("live_at")) or (
-                    orca_on and _wait_for_orca(installed, meta, root / installed["stamp"] if installed else None)):
-                # the PC reported an install but has not uploaded the live folder since (S32; the Orca live
-                # folder too when the installed build has an Orca tree)
+            # Ruling Z: never wait for Orca; an Orca live folder older than the install is only not diffed
+            olive_at = meta.get("orca_live_at")
+            orca_fresh = not installed or (isinstance(olive_at, (int, float))
+                                           and isinstance(installed.get("at"), (int, float))
+                                           and olive_at > installed["at"])
+            if _predates_install(installed, meta.get("live_at")):
+                # the PC reported an install but has not uploaded the live folder since (S32)
                 _set_state(last_attempt={"at": now, "ok": False, "error": WAIT_LIVE}, wait_live=True)
                 return {"stamp": None, "ok": False, "error": WAIT_LIVE, "problems": [], "waiting": True,
                         "keep_request": True}
@@ -837,7 +813,7 @@ def _build_once(sm, now: float) -> dict:
                          else None),
                 deleted_before={n for n in obefore if isinstance(n, str)} if isinstance(obefore, list) else set(),
                 owner_edits={"inapp": oe.get("orca_inapp"), "notes": oe.get("orca_notes")} if owner_edits else None,
-                user_id=str(meta.get("orca_user_id") or ""))
+                user_id=str(meta.get("orca_user_id") or ""), live_fresh=orca_fresh)
         with lines_mod.locked():
             ls = lines_mod.load()
             manifest, new_lines = generate.build_all(
@@ -968,11 +944,7 @@ def record_installed(stamp: str, device_id: str) -> dict:
                 and (_builds() / stamp / "BUILD.json").is_file()):
             raise _not_found(f"no build {stamp!r}")
         at = time.time()
-        rec = {"stamp": stamp, "at": at, "device_id": device_id}
-        prev = _installed()                     # the install before this one (the Orca S32 wait, fix I1)
-        if prev and isinstance(prev.get("at"), (int, float)) and prev.get("device_id") == device_id:
-            rec["prev_at"] = prev["at"]
-        _write_json(_dir() / "installed.json", rec)
+        _write_json(_dir() / "installed.json", {"stamp": stamp, "at": at, "device_id": device_id})
         meta = _meta()
         if "partial" in meta or "orca_partial" in meta:     # a finished install ends the partial one (S28)
             meta.pop("partial", None)

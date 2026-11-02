@@ -611,6 +611,7 @@ class OrcaTarget:
     deleted_before: set[str] | None = None
     owner_edits: dict | None = None
     user_id: str = ""           # Orca's user id as the PC sync reported it (the .info user_id without a live folder)
+    live_fresh: bool = True     # False: `live` predates the installed build (Ruling Z): never diffed, see _build_orca
 
 
 def _label(name: str) -> str:
@@ -631,12 +632,12 @@ def orca_printers(models: list[str], slicer_printers: list,
     seen: set[str] = set()
     allowed: list[str] = []
     if bambu_nozzles is not None:
-        if isinstance(bambu_nozzles, list) and all(isinstance(n, str) and _NOZZLE.fullmatch(n)
-                                                   for n in bambu_nozzles):
+        if isinstance(bambu_nozzles, list) and bambu_nozzles and all(isinstance(n, str) and _NOZZLE.fullmatch(n)
+                                                                     for n in bambu_nozzles):
             allowed = list(dict.fromkeys(bambu_nozzles))
         else:
-            problems.append("config presets_orca_nozzles must be a list of sizes such as 0.4; the default "
-                            "(all but 0.2) is used")
+            problems.append("config presets_orca_nozzles must be a non-empty list of sizes such as 0.4; the "
+                            "default (all but 0.2) is used")
     for m in models:
         name = models_mod.printer_preset_name(m)
         if name is None:
@@ -700,7 +701,12 @@ def _orca_recorded(t: OrcaTarget) -> tuple[dict[str, dict], dict[str, list[str]]
 
 def _build_orca(t: OrcaTarget, *, groups: dict[str, list[dict]], ls: LineSet, library: Library, restore: bool,
                 out_dir: Path, now: float, problems: list[str], clamps: list[str], edits: list[str]) -> dict:
-    """The Orca tree `out_dir/orca/` for every grouped line; returns the manifest's Orca keys (+ `_rows`)."""
+    """The Orca tree `out_dir/orca/` for every grouped line; returns the manifest's Orca keys (+ `_rows`).
+
+    A stale Orca live folder (`t.live_fresh` False: not uploaded since the installed build, e.g. the Orca upload
+    keeps failing; Ruling Z) is never diffed: its old values would read as in-app edits. The installed build's
+    record (`orca_inapp`, note lines) and its `orca_restored` are carried unchanged, nothing counts as deleted in
+    the app but what was deleted before, and the presets are generated as usual."""
     problems.extend(t.problems)
     rows: list[dict] = []
     carried: dict[str, dict] = {}
@@ -713,8 +719,9 @@ def _build_orca(t: OrcaTarget, *, groups: dict[str, list[dict]], ls: LineSet, li
     live_names = t.live.names() if t.live is not None else set()
     live_by_cf = {n.casefold(): n for n in sorted(live_names)}
     snap_names = _snapshot_names(t.snapshot, ORCA)
-    seen_live = live_names if t.live is not None else snap_names
-    reset = t.live is not None and inapp.is_reset(snap_names, live_names)
+    fresh = t.live is not None and t.live_fresh
+    seen_live = live_names if fresh else snap_names
+    reset = fresh and inapp.is_reset(snap_names, live_names)
     if reset and active:
         gone = len({n.casefold() for n in snap_names} - set(live_by_cf))
         problems.append(f"{gone} of {len(snap_names)} installed Orca Slicer presets are gone from Orca Slicer at "
@@ -753,6 +760,10 @@ def _build_orca(t: OrcaTarget, *, groups: dict[str, list[dict]], ls: LineSet, li
             for row in built:
                 generated.add(row["name"].casefold())
             rows.extend(built)
+    if t.live is not None and not t.live_fresh and t.snapshot is not None:
+        prev = (_read_json(Path(t.snapshot) / "BUILD.json") or {}).get("orca_restored")
+        restored = sorted(set(restored) | {n for n in prev if isinstance(n, str)}) if isinstance(prev, list) \
+            else restored
     prefixes = tuple(f"{ls[lid].vendor} {ls[lid].product} @".casefold() for lid in groups if lid in ls)
     stale = sorted(n for n in snap_names if n.casefold() in live_by_cf and n.casefold() not in generated
                    and n.casefold() not in planned and not n.casefold().startswith(prefixes))
@@ -776,11 +787,17 @@ def _build_orca_line(line: Line, fs: list[dict], ids: list[int], *, t: OrcaTarge
         if p.bambu:
             if line.bambu_parent is None:
                 continue                                # reported by lines.problems
-            sizes = [n for n in store.bbl.nozzles_for(line.bambu_parent, p.name)
-                     if (n in p.nozzles if p.nozzles else n != "0.2")]
-            if not sizes:
+            listed = store.bbl.nozzles_for(line.bambu_parent, p.name)
+            sizes = [n for n in listed if (n in p.nozzles if p.nozzles else n != "0.2")]
+            if not listed:
                 problems.append(f"{line.line_id}: no Orca Slicer {line.bambu_parent!r} system preset lists "
                                 f"{p.name}; no Orca Slicer {p.label} presets")
+                continue
+            if not sizes:
+                problems.append(f"{line.line_id}: the Orca Slicer {line.bambu_parent!r} system presets list "
+                                f"{p.name} only with nozzle {', '.join(listed)}, which presets_orca_nozzles leaves "
+                                f"out ({', '.join(p.nozzles) if p.nozzles else 'default: all but 0.2'}); no Orca "
+                                f"Slicer {p.label} presets")
                 continue
         else:
             sizes = p.nozzles
@@ -894,7 +911,10 @@ def _build_orca_preset(line: Line, name: str, p: OrcaPrinter, nozzle: str, paren
     # 4. in-app edits
     installed = _read_json(Path(t.snapshot) / ORCA / f"{name}.json") if t.snapshot is not None else None
     half = _read_json(Path(t.partial) / ORCA / f"{name}.json") if t.partial is not None else None
-    mine = inapp.keep_edits(cfg, installed, live_cfg, edits, recorded=recorded, partial=half, notes=notes)
+    # a stale live folder is not diffed (Ruling Z): the installed copy stands in for it, so only the record and
+    # the installed note lines are carried
+    mine = inapp.keep_edits(cfg, installed, live_cfg if t.live_fresh else installed, edits, recorded=recorded,
+                            partial=half, notes=notes)
     _fill_nil(cfg, name, edits)
     for k in [k for k in cfg if "gcode" in k.lower()]:
         if live_cfg is None or inapp.norm(live_cfg.get(k)) != inapp.norm(cfg[k]):

@@ -191,7 +191,9 @@ def test_orca_printers_without_an_orca_upload_build_bambu_only(orca_cfg):
     assert m["orca_live_hash"] is None
 
 
-def test_orca_edits_deletions_and_the_wait_for_the_orca_live_folder(orca_cfg):
+def test_orca_edits_and_deletions_from_a_fresh_orca_live_folder(orca_cfg):
+    """Ruling Z: no Orca wait. After an install the build runs on the Bambu Studio live upload alone (the stale
+    Orca folder is not diffed); a fresh Orca live upload's edits and deletions are then taken."""
     TB.synced(orca_cfg)
     orca_synced()
     b1 = builds.run_build(orca_cfg, now=TG.NOW)["stamp"]
@@ -200,18 +202,15 @@ def test_orca_edits_deletions_and_the_wait_for_the_orca_live_folder(orca_cfg):
     builds.store_upload("live", io.BytesIO(TB._live_zip_of(b1)), device_id="a", user_id="1")
     TB.tick()
     builds.request_rebuild("bambu live only")
-    TB.tick()
     r = builds.run_build(orca_cfg, now=TG.NOW + 1)
-    # S32 for the Orca tree: the Orca live folder predates the install
-    assert r["ok"] is False and r["waiting"] is True and r["error"] == builds.WAIT_LIVE
-    before = (TB.profiles_dir() / "rebuild-request").read_bytes()
+    assert r["ok"] is True, r                                                # never waits for Orca
+    assert builds.manifest(r["stamp"])["orca_inapp"] == {}
     TB.tick()
     gone = TGO.sv08("1.0")
     edit = {TGO.sv08("0.4"): {"nozzle_temperature": ["233"]}}
     builds.store_upload("orca_live", io.BytesIO(_orca_live_zip_of(b1, edit=edit, drop=(gone,))), device_id="a",
                         user_id=OUSER)
-    assert (TB.profiles_dir() / "rebuild-request").read_bytes() != before          # renewed by the Orca upload
-    TB.tick()
+    builds.request_rebuild("pc sync: the build predates the Orca live presets")
     r = builds.run_build(orca_cfg, now=TG.NOW + 2)
     assert r["ok"] is True, r
     m = builds.manifest(r["stamp"])
@@ -287,41 +286,41 @@ def test_new_sync_pc_without_orca_is_never_waited_for(orca_cfg):
     assert r["ok"] is True, r
 
 
-def test_orca_upload_failing_after_an_install_does_not_stall_builds(orca_cfg, monkeypatch):
-    """I1: the PC synced Orca after the previous install, but its Orca live upload keeps failing after this one:
-    the build waits a grace period for it, then goes on without; an Orca live folder older than the previous
-    install is never waited for."""
+def test_failing_orca_upload_never_strands_a_request_and_its_stale_folder_is_not_diffed(orca_cfg):
+    """Ruling Z: the Orca live folder predates the install (the Orca upload keeps failing) and differs from the
+    installed build. A pending request waits for the Bambu Studio live folder only; that upload alone renews it
+    (no manual request) and the build runs: the stale Orca values are no in-app edits, no Orca preset counts as
+    deleted, the installed build's Orca record and restores are carried unchanged."""
     TB.synced(orca_cfg)
     orca_synced()
     b1 = builds.run_build(orca_cfg, now=TG.NOW)["stamp"]
+    m1 = builds.manifest(b1)
+    gone = TGO.sv08("1.0")
+    old = {TGO.sv08("0.4"): {"nozzle_temperature": ["199"]}}                     # values from before b1
+    builds.store_upload("orca_live", io.BytesIO(_orca_live_zip_of(b1, edit=old, drop=(gone,))), device_id="a",
+                        user_id=OUSER)
+    builds.store_upload("live", io.BytesIO(TB._live_zip_of(b1)), device_id="a", user_id="1")   # pre-install
+    TB.tick()
     builds.record_installed(b1, "a")
     TB.tick()
-    builds.store_upload("live", io.BytesIO(TB._live_zip_of(b1)), device_id="a", user_id="1")
-    builds.store_upload("orca_live", io.BytesIO(_orca_live_zip_of(b1)), device_id="a", user_id=OUSER)
+    builds.request_rebuild("spoolman changed")
     TB.tick()
-    builds.request_rebuild("synced")
-    b2 = builds.run_build(orca_cfg, now=TG.NOW + 1)["stamp"]
-    builds.record_installed(b2, "a")
+    r = builds.run_build(orca_cfg, now=TG.NOW + 1)
+    assert r["waiting"] is True and r["error"] == builds.WAIT_LIVE                # Bambu Studio's S32, as before
     TB.tick()
-    builds.store_upload("live", io.BytesIO(TB._live_zip_of(b2)), device_id="a", user_id="1")   # Orca's fails
+    builds.store_upload("live", io.BytesIO(TB._live_zip_of(b1)), device_id="a", user_id="1")   # Orca's fails
+    assert builds.state_view("a")["rebuild_requested"] is not None                # renewed by that upload alone
     TB.tick()
-    builds.request_rebuild("bambu only")
     r = builds.run_build(orca_cfg, now=TG.NOW + 2)
-    assert r["waiting"] is True and r["error"] == builds.WAIT_LIVE          # within the grace period
-    monkeypatch.setattr(builds, "ORCA_GRACE", 0)
-    TB.tick()
-    builds.request_rebuild("pc sync asks again")
-    r = builds.run_build(orca_cfg, now=TG.NOW + 3)
     assert r["ok"] is True, r
-    # installed again: the Orca live folder now predates the previous install too: no wait at all
-    monkeypatch.setattr(builds, "ORCA_GRACE", 10 ** 9)
-    builds.record_installed(r["stamp"], "a")
-    TB.tick()
-    builds.store_upload("live", io.BytesIO(TB._live_zip_of(r["stamp"])), device_id="a", user_id="1")
-    TB.tick()
-    builds.request_rebuild("bambu only again")
-    r = builds.run_build(orca_cfg, now=TG.NOW + 4)
-    assert r["ok"] is True, r
+    m = builds.manifest(r["stamp"])
+    assert m["orca_inapp"] == m1["orca_inapp"] == {}
+    assert m["orca_deleted"] == [] and m["orca_restored"] == []
+    assert gone in {p["name"] for p in m["presets"]}
+    cfg = json.loads((TB.profiles_dir() / "builds" / r["stamp"] / "orca" / f"{TGO.sv08('0.4')}.json")
+                     .read_text(encoding="utf-8"))
+    assert cfg.get("nozzle_temperature") != ["199"]
+    assert builds.state_view("a")["rebuild_requested"] is None
 
 
 def test_orca_store_alone_leaves_the_family_build_and_lines_unchanged(env, fixed_ids):
