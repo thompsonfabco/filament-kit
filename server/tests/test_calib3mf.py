@@ -257,6 +257,7 @@ def test_changed_slot_is_restored_and_verified(fake_ftp, printer):
     t = m.report["ams"]["ams"][0]["tray"][0]
     assert (t["tray_color"], t["tray_info_idx"]) == ("FF0000FF", "GFA00")
     assert r.problems == []
+    assert r.restored is True
 
 
 def test_restore_not_confirmed(fake_ftp, printer):
@@ -265,6 +266,7 @@ def test_restore_not_confirmed(fake_ftp, printer):
     r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
     assert m.set_slots
     assert any("A1" in p and "restore" in p for p in r.problems)
+    assert r.restored is False
 
 
 def test_busy_printer_untouched(fake_ftp, printer):
@@ -324,6 +326,7 @@ def test_restore_crash_is_a_problem(fake_ftp, printer):
     m.set_slot = boom
     r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
     assert any("A1" in p and "restore" in p for p in r.problems)
+    assert r.restored is False
     assert not (fake_ftp.root / "cache" / FILE).exists()
 
 
@@ -353,3 +356,17 @@ def test_wait_report_raises_everywhere_after_snapshot(fake_ftp, printer):
     assert r.consistent is False
     assert not (fake_ftp.root / "cache" / FILE).exists()
     assert any("restore not confirmed" in p for p in r.problems)
+    assert r.restored is False
+
+
+def test_restore_refused_is_not_restored(fake_ftp, printer):
+    m = FakeManager(fake_ftp.root, "clobber")
+    m.set_slot = lambda *a: (m.set_slots.append(a), {"result": "fail", "reason": "nope"})[1]
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert r.restored is False and any("refused to restore" in p for p in r.problems)
+
+
+def test_nothing_changed_counts_as_restored(fake_ftp, printer):
+    m = FakeManager(fake_ftp.root)
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert r.restored is True and m.set_slots == []
