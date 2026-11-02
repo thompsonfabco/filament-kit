@@ -6,6 +6,7 @@ import urllib.parse
 
 import pytest
 
+import orca_fixture
 import studio_fixture
 from fksync import __main__ as cli
 from fksync import store, studio
@@ -39,6 +40,8 @@ def _respond(m, p, b):
 def _studio_closed(monkeypatch):
     """The real tasklist would see this PC's own Bambu Studio; the CLI tests decide instead."""
     monkeypatch.setattr(studio, "running", lambda tasklist=None: False)
+    monkeypatch.setattr(studio, "orca_running", lambda tasklist=None: False)
+    monkeypatch.setattr(studio, "_registry_entries", lambda: [])
 
 
 @pytest.fixture
@@ -222,3 +225,25 @@ def test_run_while_studio_open_exits_0(srv, paths, monkeypatch, capsys):
     assert _main(paths, "run") == 0
     assert "studio_running" in capsys.readouterr().out
     assert len(srv.requests) == n
+
+
+def test_run_with_orca_and_an_old_server_sends_nothing_for_orca(srv, paths, capsys):
+    appdata = paths[0]
+    orca_fixture.make(appdata, presets={"Acme PLA @SV08 MAX 0.4": ({"name": "Acme PLA @SV08 MAX 0.4"},
+                                                                   {"setting_id": ""})})
+    assert _main(paths, "pair", stdin=_link(srv) + "\n") == 0
+    assert _main(paths, "run") == 0
+    # this server's state has no orca_live_hash: it would store a target=orca zip as the Bambu live folder
+    assert not [r for r in srv.requests if "target=orca" in r["path"]]
+    assert any(r["path"].startswith("/api/sync/live") for r in srv.requests)
+    capsys.readouterr()
+    assert _main(paths, "status") == 0
+    out = capsys.readouterr().out
+    assert "Orca Slicer:     user " + orca_fixture.USER_ID in out
+    assert "does not take Orca Slicer presets" in out
+    assert "Orca install:    not found" in out
+
+
+def test_status_without_orca(paths, capsys):
+    assert _main(paths, "status") == 0
+    assert "Orca Slicer:     not found on this PC" in capsys.readouterr().out

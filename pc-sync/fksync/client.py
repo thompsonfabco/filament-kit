@@ -235,12 +235,17 @@ class Client:
         return self._request("GET", "/api/sync/state")
 
     def upload(self, kind: str, data: bytes, user_id: str | None = None, partial: str | None = None) -> dict:
-        """`partial` (live only): the stamp of a build whose install stopped part-way in this folder (S28)."""
+        """`partial` (live only): the stamp of a build whose install stopped part-way in this folder (S28).
+        `orca_live` / `orca_system` go to the same routes with `?target=orca` (no user id, no partial)."""
         if kind == "live":
             q = {k: v for k, v in (("user_id", user_id), ("partial", partial)) if v}
             path = "/api/sync/live" + (f"?{urllib.parse.urlencode(q)}" if q else "")
         elif kind == "system":
             path = "/api/sync/system"
+        elif kind == "orca_live":
+            path = "/api/sync/live?target=orca"
+        elif kind == "orca_system":
+            path = "/api/sync/system?target=orca"
         else:
             raise ValueError(f"unknown upload kind {kind!r}")
         return self._request("PUT", path, data, "application/zip")
