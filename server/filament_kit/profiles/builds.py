@@ -27,7 +27,9 @@ a temp dir while counting the real bytes, and every live `.json` must parse. A s
 (under live.lock); a refused upload leaves the previous live folder as it was.
 
 One sync PC (Decision): the first paired device that uploads becomes the owner; other devices get 409
-`other_pc` until the owner is unpaired (it is then no longer in `pairing.devices()`).
+`other_pc` until the owner is unpaired (it is then no longer in `pairing.devices()`). When the owner changes, the
+old PC's installed.json, deleted.json and meta `partial` are dropped (the new PC starts like a first install), and
+an installed.json written for another device than the owner is never read.
 
 Builds (Decision "build trigger and retention"): `run_build` holds build.lock, builds into builds/<stamp>.tmp,
 renames it, saves the lines, writes deleted.json and then current.json. The installed build (and the partial one,
@@ -227,8 +229,23 @@ def _set_state(**changes) -> None:
 
 
 def _installed() -> dict | None:
+    """installed.json, or None; also None when it was written for another device than the sync PC (meta.json
+    `owner`): another PC's snapshot would turn its presets into false deletions and edits (final review I4)."""
     d = _read_obj(_dir() / "installed.json")
-    return d if isinstance(d.get("stamp"), str) and STAMP_RE.fullmatch(d["stamp"]) else None
+    if not (isinstance(d.get("stamp"), str) and STAMP_RE.fullmatch(d["stamp"])):
+        return None
+    return d if d.get("device_id") == _meta().get("owner") else None
+
+
+def _forget_old_pc(meta: dict) -> None:
+    """A new sync PC (the owner changes): the old PC's install snapshot, partial build and deletion record are
+    dropped, so the new PC starts like a first install. Called under live.lock before meta.json is written."""
+    for name in ("installed.json", "deleted.json"):
+        try:
+            (_dir() / name).unlink()
+        except FileNotFoundError:
+            pass
+    meta.pop("partial", None)
 
 
 def _rmtree(path: Path) -> None:
@@ -455,6 +472,8 @@ def store_upload(kind: str, src: BinaryIO, *, device_id: str, user_id: str | Non
                 raise
             meta = _meta()
             now = time.time()
+            if meta.get("owner") != device_id and (meta.get("owner") or _dir().joinpath("installed.json").exists()):
+                _forget_old_pc(meta)
             meta["owner"] = device_id
             if kind == "live":
                 if user_id is not None:
