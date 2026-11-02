@@ -9,6 +9,13 @@ settings changed since the start is set back from the snapshot taken at the star
 from the next report (`CalibResult.restored` false when any slot was not confirmed back). It does not save a
 SlotMap (the mapping job does).
 
+Watchdog (the gcode never heats or loads, so either means the printer is doing something we did not ask for):
+while the job is watched, a nozzle or bed TARGET temperature above the snapshot's (`nozzle_target_temper`,
+`bed_target_temper`; for the H2D's packed `device.extruder.info[].temp` / `device.bed.info.temp` any change of
+the decoded target) or an `ams.tray_now` other than the snapshot's sends `stop` at once. After the job, a
+`tray_now` other than the snapshot's is the problem "printer left a filament loaded in the toolhead" and
+`restored` is false. A job that never started still gets a best-effort `stop`.
+
 The print command, modelled on what Bambu Studio sends in LAN mode (to be confirmed on the owner's H2D, Task 9):
 
     {"print": {
@@ -39,13 +46,14 @@ import hashlib
 import io
 import json
 import logging
+import time
 import zipfile
 from dataclasses import dataclass, field
 from xml.sax.saxutils import quoteattr
 
-from . import ftps, registry, tlspin
+from . import ftps, registry, snapshot, tlspin
 from .ams import SlotMap, default_global
-from .status import _d, _int, _l, _s
+from .status import _d, _int, _l, _s, packed
 
 log = logging.getLogger(__name__)
 
@@ -248,11 +256,14 @@ def _ok(reply: dict) -> bool:
 
 # ---------------------------------------------------------------- the job
 
-def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None = None) -> CalibResult:
+def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None = None,
+        should_stop=None) -> CalibResult:
     """Run the calibration job on an idle, connected printer (see the module docstring). Never raises for
     printer-side trouble: everything lands in `CalibResult.problems`. Once the upload was attempted, the file is
     always deleted (best effort, over a new session; skipped only for a changed leaf) and, once the job was sent,
-    the slots are always restored, whatever went wrong in between."""
+    the slots are always restored, whatever went wrong in between. The snapshot of the loaded slots is saved to
+    disk (`snapshot.save`) before the print command and deleted after a confirmed restore. `should_stop()` true
+    (CLI signal, service stopping) stops the job at once (`stop` command), then the slots are restored."""
     res = CalibResult()
     if manager.state(serial) != 'connected':
         res.problems.append('printer_offline')
@@ -287,6 +298,9 @@ def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None
         res.problems.append('not_configured')
         return res
 
+    if should_stop is not None and should_stop():
+        res.problems.append("interrupted: mapping was stopped before the calibration job")
+        return res
     path = remote_path(serial)
     try:
         with ftps.Client(printer) as c:
@@ -302,7 +316,17 @@ def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None
         return res
 
     try:
-        _job(manager, serial, res, labels, sent, snap)
+        snapshot.save(serial, "calibration", [{"label": label, "ams_id": _key(slot)[0], "tray_id": _key(slot)[1],
+                                               "setting": _setting(trays0[_key(slot)])}
+                                              for label, slot in slotmap.slots.items()
+                                              if _key(slot) is not None and _loaded(trays0.get(_key(slot)))])
+    except Exception as e:      # no snapshot on disk: do not start the job
+        log.exception("printer %s: cannot save the slot snapshot", serial)
+        res.problems.append(f"cannot save the slot snapshot ({type(e).__name__}: {e}); the job was not started")
+        _delete(printer, path, res)
+        return res
+    try:
+        _job(manager, serial, res, labels, sent, snap, should_stop)
     except Exception as e:      # e.g. the MQTT connection was lost while watching the job
         log.warning("printer %s: calibration job interrupted (%s)", serial, type(e).__name__)
         res.consistent = False
@@ -314,13 +338,88 @@ def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None
         except Exception as e:
             res.restored = False
             res.problems.append(f"could not restore the slots ({type(e).__name__})")
+        if res.restored:            # every slot confirmed back: the snapshot on disk is done with
+            try:
+                snapshot.clear(serial)
+            except OSError:
+                log.exception("printer %s: cannot delete the slot snapshot", serial)
+        _left_loaded(manager, serial, snap, res)
     log.info("printer %s: calibration %s; decoding %s; problems %s", serial,
              "consistent" if res.consistent else "not consistent", res.decoding, res.problems)
     return res
 
 
-def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[int], snap: dict) -> None:
+POLL = 0.5                 # seconds between stop checks while a stoppable wait runs
+ONLINE = ('connected', 'needs_developer_mode')
+LEFT_LOADED = "printer left a filament loaded in the toolhead"
+HEATING = "the printer began heating during the calibration job; it was stopped"
+LOADING = "the printer began loading a filament during the calibration job; it was stopped"
+
+
+def heater_targets(report: dict) -> dict[str, tuple[str, int]]:
+    """Every nozzle / bed TARGET temperature in a report: name -> (kind, value). kind "plain" (a target field:
+    only a rise counts) or "packed" (an H2D `device.*.info[].temp` packed (target << 16) | current: any change of
+    the decoded target counts, the current part is ignored)."""
+    p = _d(report)
+    out: dict[str, tuple[str, int]] = {}
+    for k in ('nozzle_target_temper', 'bed_target_temper'):
+        v = _int(p.get(k))
+        if v is not None:
+            out[k] = ('plain', v)
+    dev = _d(p.get('device'))
+    for ex in _l(_d(dev.get('extruder')).get('info')):
+        cur, tgt = packed(ex.get('temp'))
+        if tgt is not None:
+            out[f"extruder{_int(ex.get('id'), 0)}"] = ('packed', tgt)
+    _, bt = packed(_d(_d(dev.get('bed')).get('info')).get('temp'))
+    if bt is not None:
+        out['bed'] = ('packed', bt)
+    return out
+
+
+def heating(before: dict, report: dict) -> str | None:
+    """The name of a heater whose target rose (plain) or changed (packed) since `before`; None if none did."""
+    for name, (kind, v) in heater_targets(report).items():
+        old = before.get(name, (kind, 0))[1]
+        if (kind == 'plain' and v > old) or (kind == 'packed' and v != old):
+            return name
+    return None
+
+
+def _tray_now(report: dict) -> str | None:
+    tn = _d(_d(report).get('ams')).get('tray_now')
+    return None if tn is None else str(tn)
+
+
+def _wait(manager, serial: str, pred, timeout: float, should_stop) -> dict | None:
+    """`manager.wait_report`, in short slices when the job can be stopped (`pred` checks `should_stop` itself)."""
+    if should_stop is None:
+        return manager.wait_report(serial, pred, timeout)
+    deadline = time.monotonic() + timeout
+    while True:
+        left = deadline - time.monotonic()
+        r = manager.wait_report(serial, pred, max(min(left, POLL), 0.01))
+        if r is not None or left <= POLL or manager.state(serial) not in ONLINE:
+            return r
+
+
+def _stop(manager, serial: str) -> bool:
+    """Best-effort `stop`; true once a report shows the printer no longer busy."""
+    try:
+        manager.publish(serial, {"print": {"command": "stop", "param": ""}})
+        return manager.wait_report(serial, lambda r: _s(r.get('gcode_state')).upper() not in BUSY,
+                                   STOP_TIMEOUT) is not None
+    except Exception:
+        return False
+
+
+def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[int], snap: dict,
+         should_stop=None) -> None:
     name = job_name(serial)
+    stopping = should_stop or (lambda: False)
+    if stopping():
+        res.problems.append("interrupted: mapping was stopped before the calibration job")
+        return
     try:
         reply = manager.publish(serial, payload(serial, sent))
     except Exception as e:      # offline / no reply raised by the Manager
@@ -332,9 +431,22 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
         return
 
     before = (_s(snap.get('gcode_state')).upper(), _s(snap.get('subtask_name')), _s(snap.get('task_id')))
-    st = {'started': False, 'final': None}
+    heaters0, tray0 = heater_targets(snap), _tray_now(snap)
+    st = {'started': False, 'final': None, 'trip': None}
 
     def watch(r: dict) -> bool:
+        # the watchdog first, whether or not the job is seen as started: no heating, no filament load, ever
+        if stopping():
+            st['trip'] = "interrupted: mapping was stopped; the calibration job was stopped"
+            return True
+        h = heating(heaters0, r)
+        if h is not None:
+            st['trip'] = f"{HEATING} ({h})"
+            return True
+        tn = _tray_now(r)
+        if tn is not None and tn != tray0:
+            st['trip'] = f"{LOADING} (tray_now {tray0} -> {tn})"
+            return True
         gs, sub = _s(r.get('gcode_state')).upper(), _s(r.get('subtask_name'))
         if not st['started']:
             if sub != name:
@@ -346,27 +458,28 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
         m = r.get('mapping')
         if isinstance(m, list):
             res.mapping = list(m)
-        tn = _d(r.get('ams')).get('tray_now')
-        if tn is not None and (not res.tray_now or res.tray_now[-1] != str(tn)):
-            res.tray_now.append(str(tn))
+        if tn is not None and (not res.tray_now or res.tray_now[-1] != tn):
+            res.tray_now.append(tn)
         if gs in ENDED or gs == 'IDLE':
             st['final'] = gs
             return True
         return False
 
-    manager.wait_report(serial, watch, JOB_TIMEOUT)
+    _wait(manager, serial, watch, JOB_TIMEOUT, should_stop)
+    if st['trip'] is not None:
+        log.warning("printer %s: calibration job tripped: %s", serial, st['trip'])
+        stopped = _stop(manager, serial)
+        res.problems.append(st['trip'] + ("" if stopped else " (the stop was not confirmed)"))
+        res.consistent = False
+        return
     if not st['started']:
+        _stop(manager, serial)       # best effort: it may still start after we gave up on it
         res.problems.append(f"the printer did not start the calibration job within {JOB_TIMEOUT:.0f} s")
         return
     if st['final'] is None:
-        try:
-            manager.publish(serial, {"print": {"command": "stop", "param": ""}})
-            stopped = manager.wait_report(serial, lambda r: _s(r.get('gcode_state')).upper() not in BUSY,
-                                          STOP_TIMEOUT)
-        except Exception:
-            stopped = None
+        stopped = _stop(manager, serial)
         res.problems.append(f"the calibration job did not finish within {JOB_TIMEOUT:.0f} s; "
-                            + ("it was stopped" if stopped is not None else "it could not be stopped"))
+                            + ("it was stopped" if stopped else "it could not be stopped"))
         return
     if st['final'] != 'FINISH':
         res.problems.append(f"the calibration job ended as {st['final']} on the printer")
@@ -386,6 +499,20 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
             res.problems.append(f"{label}: sent slot {sent[i]}, the printer reported {v}")
             mismatch = True
     res.consistent = st['final'] == 'FINISH' and not mismatch
+
+
+def _left_loaded(manager, serial: str, snap: dict, res: CalibResult) -> None:
+    """After the job: a filament in the toolhead that was not there before -> not restored."""
+    try:
+        r = manager.wait_report(serial, lambda r: True, SNAPSHOT_TIMEOUT)
+    except Exception:
+        r = None
+    if r is None:
+        return
+    if _tray_now(r) is not None and _tray_now(r) != _tray_now(snap):
+        res.problems.append(LEFT_LOADED)
+        res.restored = False
+        res.consistent = False
 
 
 def _delete(printer: registry.Printer, path: str, res: CalibResult) -> None:

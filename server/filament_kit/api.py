@@ -83,9 +83,8 @@ def _bridge_error(e: Exception) -> JSONResponse | None:
     """Slot mapping, loading and usage errors (route-contract.md); None for anything else."""
     if isinstance(e, usage.UsageError):
         return _err(e.status, e.code, str(e))
-    if isinstance(e, mapping.AlreadyRunning):
-        return _err(409, "already_running", "slot mapping is in progress for this printer; try again when it "
-                                            "has finished")
+    if isinstance(e, mapping.AlreadyRunning):   # also LoadRunning: a load is writing to the printer
+        return _err(409, "already_running", e.message)
     if isinstance(e, mapping.CertChanged):
         return _err(409, "cert_changed", CERT_CHANGED)
     if isinstance(e, PrinterBusy):
