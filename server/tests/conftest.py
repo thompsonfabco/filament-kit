@@ -1,3 +1,4 @@
+import logging
 import socket
 import threading
 import time
@@ -6,6 +7,16 @@ import pytest
 import uvicorn
 
 from fakes import spoolman_fake
+
+
+@pytest.fixture(autouse=True)
+def _restore_app_logger():
+    """main() gives the filament_kit logger its own handler and stops propagation; put it back after every test
+    so later caplog-based tests still see records, whatever order the tests run in."""
+    log = logging.getLogger("filament_kit")
+    saved = (list(log.handlers), log.level, log.propagate)
+    yield
+    log.handlers[:], log.level, log.propagate = saved
 
 
 def free_port() -> int:
