@@ -464,6 +464,7 @@ def test_wait_report_returns_none_when_the_connection_drops(manager, clients):
 def test_publish_without_reply_returns_none_and_fills_sequence_id(manager, clients, monkeypatch):
     monkeypatch.setattr(connection, "COMMAND_TIMEOUT", 0.1)
     c, printer = connected_printer(manager, clients)
+    printer.answer_jobs = False
     assert manager.publish("S1", {"print": {"command": "project_file", "param": "x"}}) is None
     body = c.published[-1][1]["print"]
     assert body["command"] == "project_file" and body["sequence_id"].isdigit()

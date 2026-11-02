@@ -119,6 +119,7 @@ class FakePrinter:
         self.writes: list[dict] = []
         self.jobs: list[dict] = []
         self.job_stuck = False
+        self.answer_jobs = True        # False: job commands get no reply and nothing happens
         self.lock = threading.Lock()
         client.responder = self.respond
 
@@ -128,7 +129,7 @@ class FakePrinter:
             with self.lock:
                 return {'print': copy.deepcopy(self.report)}
         if pr is not None and pr.get('command') in ('project_file', 'stop'):
-            return self._job(pr)
+            return self._job(pr) if self.answer_jobs else None
         if pr is None or pr.get('command') != 'ams_filament_setting':
             return None
         self.writes.append(pr)
