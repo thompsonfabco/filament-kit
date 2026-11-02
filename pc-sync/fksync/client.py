@@ -260,6 +260,7 @@ class Client:
     def build(self, stamp: str) -> bytes:
         return self._request("GET", f"/api/sync/build?{urllib.parse.urlencode({'stamp': stamp})}", raw=True)
 
-    def installed(self, stamp: str) -> dict:
-        return self._request("POST", "/api/sync/installed", json.dumps({"stamp": stamp}).encode(),
-                             "application/json")
+    def installed(self, stamp: str, trees: list[str] | None = None) -> dict:
+        """Report an install; `trees` = what went in (Ruling AB): ["base"] or ["base", "orca"]."""
+        body = {"stamp": stamp} if trees is None else {"stamp": stamp, "trees": list(trees)}
+        return self._request("POST", "/api/sync/installed", json.dumps(body).encode(), "application/json")

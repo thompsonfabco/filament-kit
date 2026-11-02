@@ -338,5 +338,12 @@ def test_presets_orca_nozzles_empty_or_excluding_everything_is_a_clear_problem(t
     assert any("presets_orca_nozzles must be a non-empty list" in p for p in problems)
     m, _ = build(tmp_path, slicer=(), presets_orca=True, bambu_nozzles=["1.0"])
     assert onames(m) == []
-    assert any("leaves out (1.0)" in p and "Bambu Lab H2D only with nozzle 0.2, 0.4, 0.6, 0.8" in p
+    assert any("config presets_orca_nozzles (1.0) leaves out" in p
+               and "Bambu Lab H2D only with nozzle 0.2, 0.4, 0.6, 0.8" in p for p in m["problems"]), m["problems"]
+    only02 = orca_bbl()
+    for n in ("Bambu PLA Tough+ @BBL H2D 0.2 nozzle", "Bambu PLA Tough+ @BBL P1S"):
+        del only02[n]
+    only02["Bambu PLA Tough+ @BBL H2D"]["compatible_printers"] = TG.cp(TG.H2D, "0.2")
+    m, _ = build(tmp_path, out="o2", t=target(tmp_path, store=ostore(only02), slicer=(), presets_orca=True))
+    assert any("leave out by default (all but 0.2)" in p and "presets_orca_nozzles" not in p
                for p in m["problems"]), m["problems"]

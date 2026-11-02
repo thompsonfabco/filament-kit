@@ -197,7 +197,7 @@ def test_orca_edits_and_deletions_from_a_fresh_orca_live_folder(orca_cfg):
     TB.synced(orca_cfg)
     orca_synced()
     b1 = builds.run_build(orca_cfg, now=TG.NOW)["stamp"]
-    builds.record_installed(b1, "a")
+    builds.record_installed(b1, "a", ["base", "orca"])
     TB.tick()
     builds.store_upload("live", io.BytesIO(TB._live_zip_of(b1)), device_id="a", user_id="1")
     TB.tick()
@@ -228,7 +228,7 @@ def test_orca_partial_install_values_are_not_edits(orca_cfg):
     TB.synced(orca_cfg)
     orca_synced()
     b1 = builds.run_build(orca_cfg, now=TG.NOW)["stamp"]
-    builds.record_installed(b1, "a")
+    builds.record_installed(b1, "a", ["base", "orca"])
     TB.tick()
     builds.store_upload("live", io.BytesIO(TB._live_zip_of(b1)), device_id="a", user_id="1")
     builds.store_upload("orca_live", io.BytesIO(_orca_live_zip_of(b1)), device_id="a", user_id=OUSER)
@@ -248,13 +248,13 @@ def test_new_sync_pc_keeps_the_owners_orca_edits(orca_cfg):
     TB.synced(orca_cfg)
     orca_synced()
     b1 = builds.run_build(orca_cfg, now=TG.NOW)["stamp"]
-    builds.record_installed(b1, "a")
+    builds.record_installed(b1, "a", ["base", "orca"])
     TB.tick()
     builds.store_upload("live", io.BytesIO(TB._live_zip_of(b1)), device_id="a", user_id="1")
     edit = {TGO.sv08("0.4"): {"nozzle_temperature": ["233"]}}
     builds.store_upload("orca_live", io.BytesIO(_orca_live_zip_of(b1, edit=edit)), device_id="a", user_id=OUSER)
     b2 = builds.run_build(orca_cfg, now=TG.NOW + 1)["stamp"]
-    builds.record_installed(b2, "a")
+    builds.record_installed(b2, "a", ["base", "orca"])
     TB.tick()
     TB.pair("b")
     builds.store_upload("orca_live", io.BytesIO(_orca_live_zip_of(b1)), device_id="b", user_id=OUSER)
@@ -270,7 +270,7 @@ def test_new_sync_pc_without_orca_is_never_waited_for(orca_cfg):
     TB.synced(orca_cfg)
     orca_synced()
     b1 = builds.run_build(orca_cfg, now=TG.NOW)["stamp"]
-    builds.record_installed(b1, "a")
+    builds.record_installed(b1, "a", ["base", "orca"])
     TB.tick()
     TB.pair("b")
     builds.store_upload("live", io.BytesIO(TB._live_zip_of(b1)), device_id="b", user_id="1")
@@ -278,7 +278,7 @@ def test_new_sync_pc_without_orca_is_never_waited_for(orca_cfg):
     assert not {"orca_live_at", "orca_live_hash", "orca_user_id"} & set(meta)
     b2 = builds.run_build(orca_cfg, now=TG.NOW + 1)["stamp"]
     assert b2 and TB.profiles_dir().joinpath("builds", b2, "orca").is_dir()
-    builds.record_installed(b2, "b")
+    builds.record_installed(b2, "b", ["base", "orca"])
     TB.tick()
     builds.store_upload("live", io.BytesIO(TB._live_zip_of(b2)), device_id="b", user_id="1")
     builds.request_rebuild("after the install")
@@ -301,7 +301,7 @@ def test_failing_orca_upload_never_strands_a_request_and_its_stale_folder_is_not
                         user_id=OUSER)
     builds.store_upload("live", io.BytesIO(TB._live_zip_of(b1)), device_id="a", user_id="1")   # pre-install
     TB.tick()
-    builds.record_installed(b1, "a")
+    builds.record_installed(b1, "a", ["base", "orca"])
     TB.tick()
     builds.request_rebuild("spoolman changed")
     TB.tick()
@@ -365,3 +365,70 @@ def test_presets_orca_nozzles_config(orca_cfg):
     r = builds.run_build(orca_cfg, now=TG.NOW + 1)
     names = {p["name"] for p in builds.manifest(r["stamp"])["presets"] if p["target"] == "orca"}
     assert {TGO.h2d("0.2"), TGO.h2d("0.4")} <= names and TGO.h2d("0.6") not in names
+
+
+# ---------- fix round 3 (Ruling AB): the Orca snapshot is the build whose orca/ went in ----------
+
+PETG = TG.fil(60, "PETG Basic Blue", vendor="SUNLU", material="PETG",
+              extra={"line": json.dumps("PETG Basic")})
+
+
+def test_base_only_install_keeps_the_orca_snapshot(orca_cfg):
+    """b1 goes in with its orca/ tree; b2 (other density, a new line with new Orca presets) goes in base/ only.
+    The Orca folder still holds b1's presets: a fresh Orca upload is diffed against b1, so b2's density is no
+    in-app edit and b2's new Orca presets are not deletions; the owner's real edit is taken."""
+    TB.synced(orca_cfg)
+    orca_synced()
+    b1 = builds.run_build(orca_cfg, now=TG.NOW)["stamp"]
+    builds.record_installed(b1, "a", ["base", "orca"])
+    inst = json.loads((TB.profiles_dir() / "installed.json").read_text(encoding="utf-8"))
+    assert inst["orca_stamp"] == b1 and inst["orca_at"] == inst["at"]
+    TB.tick()
+    builds.store_upload("live", io.BytesIO(TB._live_zip_of(b1)), device_id="a", user_id="1")
+    orca_cfg.filaments = [dict(f, density=1.31) for f in TB.SUNLU] + [PETG]
+    builds.request_rebuild("density + a new line")
+    b2 = builds.run_build(orca_cfg, now=TG.NOW + 1)["stamp"]
+    new_orca = {p["name"] for p in builds.manifest(b2)["presets"]
+                if p["target"] == "orca" and p["line_id"] != "sunlu--pla-plus-2-0"}
+    assert new_orca
+    TB.tick()
+    builds.record_installed(b2, "a")                       # an older PC sync: no trees = ["base"]
+    inst = json.loads((TB.profiles_dir() / "installed.json").read_text(encoding="utf-8"))
+    assert inst["stamp"] == b2 and inst["orca_stamp"] == b1
+    TB.tick()
+    builds.store_upload("live", io.BytesIO(TB._live_zip_of(b2)), device_id="a", user_id="1")
+    edit = {TGO.sv08("0.4"): {"nozzle_temperature": ["233"]}}
+    builds.store_upload("orca_live", io.BytesIO(_orca_live_zip_of(b1, edit=edit)), device_id="a", user_id=OUSER)
+    builds.request_rebuild("orca edit")
+    r = builds.run_build(orca_cfg, now=TG.NOW + 2)
+    assert r["ok"] is True, r
+    m = builds.manifest(r["stamp"])
+    assert m["orca_inapp"] == {TGO.sv08("0.4"): {"nozzle_temperature": ["233"]}}       # not the density
+    assert m["orca_deleted"] == [] and not new_orca - {p["name"] for p in m["presets"]}
+    assert not any("app reset" in p for p in m["problems"])
+
+
+def test_no_orca_install_yet_means_the_orca_folder_is_never_diffed(orca_cfg):
+    TB.synced(orca_cfg)
+    orca_synced()
+    b1 = builds.run_build(orca_cfg, now=TG.NOW)["stamp"]
+    builds.record_installed(b1, "a")                       # base/ only
+    assert "orca_stamp" not in json.loads((TB.profiles_dir() / "installed.json").read_text(encoding="utf-8"))
+    TB.tick()
+    builds.store_upload("live", io.BytesIO(TB._live_zip_of(b1)), device_id="a", user_id="1")
+    edit = {TGO.sv08("0.4"): {"nozzle_temperature": ["233"]}}
+    builds.store_upload("orca_live", io.BytesIO(_orca_live_zip_of(b1, edit=edit, drop=(TGO.sv08("1.0"),))),
+                        device_id="a", user_id=OUSER)
+    r = builds.run_build(orca_cfg, now=TG.NOW + 1)
+    m = builds.manifest(r["stamp"])
+    assert m["orca_inapp"] == {} and m["orca_deleted"] == []
+
+
+def test_install_report_trees_are_checked(orca_cfg):
+    from filament_kit.profiles import errors
+    TB.synced(orca_cfg)
+    b1 = builds.run_build(orca_cfg, now=TG.NOW)["stamp"]
+    for bad in (["orca"], ["base", "cura"], "base", []):
+        with pytest.raises(errors.ProfileError) as e:
+            builds.record_installed(b1, "a", bad)
+        assert e.value.status == 400

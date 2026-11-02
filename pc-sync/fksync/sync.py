@@ -53,8 +53,10 @@ Orca Slicer (`orca` given: this PC has it; None: everything above, Bambu Studio 
     orca/ tree is installed only when Orca is synced this run and the build was made from exactly these Orca
     presets (else "Orca presets not installed this run" is logged). An Orca preset changed since the install
     (dirs.installed/orca) asks for a rebuild too. An interrupted install is resumed with the trees it was
-    started with (marker `orca`), and only when Orca's presets are untouched as well. One `installed(stamp)`
-    report covers both trees.
+    started with (marker `orca`), and only when Orca's presets are untouched as well. One `installed(stamp,
+    trees)` report covers both trees and says which went in (["base"] or ["base", "orca"], Ruling AB: the
+    server diffs the Orca folder against the last build whose orca/ was installed); a report still owed after
+    a crash keeps its trees (`state.json` `report_trees`).
 
 Every outcome and the stale-preset list are logged in one line each. Errors other than an install
 refusal, a rejected upload or `409 other_pc` propagate (the caller logs them; the next run retries).
@@ -319,16 +321,19 @@ class _Run:
 
     # --- install --------------------------------------------------------------------------
 
-    def report(self, stamp: str) -> None:
+    def report(self, stamp: str, trees: list[str] | None = None) -> None:
+        trees = list(trees) if trees else ["base"]
         self.st["report"] = stamp
+        self.st["report_trees"] = trees
         self.save()
         try:
-            self.c.installed(stamp)
+            self.c.installed(stamp, trees)
         except ApiError as e:
             if e.status != 404:
                 raise
             self.log(f"build {stamp} is no longer on the server; its install was not recorded there")
         self.st.pop("report", None)
+        self.st.pop("report_trees", None)
         self.save()
 
     def _download(self, stamp: str, work: Path):
@@ -374,7 +379,9 @@ class _Run:
             self.st["stale_orca"] = stale_orca
         self.st["installed"] = {"stamp": stamp, "at": self.now}
         self.st.pop("requested", None)
+        trees = ["base", "orca"] if with_orca and (build_dir / "orca").is_dir() else ["base"]
         self.st["report"] = stamp
+        self.st["report_trees"] = trees
         self.st["live_owed"] = True             # until upload_live() succeeds (S32)
         if installed_orca:
             self.st["orca_live_owed"] = True
@@ -385,7 +392,7 @@ class _Run:
         if stale_orca:
             self.log(f"{len(stale_orca)} Orca Slicer presets are no longer generated; delete them in Orca Slicer: "
                      + ", ".join(stale_orca))
-        self.report(stamp)                  # first: a failed report must not leave the new live folder uploaded
+        self.report(stamp, trees)           # first: a failed report must not leave the new live folder uploaded
         self.upload_live()
         orca = f", {len(installed_orca)} Orca Slicer presets" if installed_orca else ""
         return self.finish("installed", f"installed build {stamp} ({len(res.installed)} presets{orca}, "
@@ -508,7 +515,7 @@ class _Run:
 
         pending = self.st.get("report")
         if pending:
-            self.report(pending)
+            self.report(pending, self.st.get("report_trees"))
             server = self.c.state()
 
         here = self.uploads(server)

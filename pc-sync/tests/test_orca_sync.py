@@ -326,3 +326,64 @@ def test_orca_upload_refused_backs_off_and_bambu_studio_still_installs(env):
     c.calls.clear()
     assert _run(c, folders, orca, dirs, now=T0 + 60) in ("up_to_date", "uploaded")
     assert "orca_live" not in _uploads(c)
+
+
+# ---------- Ruling AB: the install report says which trees went in ----------
+
+def test_install_report_names_both_trees(env):
+    folders, orca, dirs = env
+    live, olive = _matching(folders, orca)
+    c = OrcaClient(_state(folders, orca, build={"stamp": STAMP, "live_hash": live, "orca_live_hash": olive}),
+                   _zip(live_hash=live, orca_live_hash=olive))
+    assert _run(c, folders, orca, dirs) == "installed"
+    assert c.trees == [["base", "orca"]]
+
+
+def test_install_report_names_base_only_when_orca_did_not_go_in(env):
+    folders, orca, dirs = env
+    live = _hashes(folders, orca)[0]
+    c = OrcaClient(_state(folders, orca, build={"stamp": STAMP, "live_hash": live, "orca_live_hash": "older"}),
+                   _zip(live_hash=live, orca_live_hash="older"))
+    assert _run(c, folders, orca, dirs) == "installed"
+    assert c.trees == [["base"]]
+
+
+def test_resumed_install_reports_the_trees_it_was_started_with(env):
+    folders, orca, dirs = env
+    live = _hashes(folders, orca)[0]
+
+    def crashing_install(build_dir, folders, dirs, *, running, stamp_now, before_write=None, orca=None,
+                         orca_running=None):
+        assert orca is None                                    # started base/ only
+        backup = installer._backup(folders.user_filament, dirs.backups, stamp_now)
+        before_write(backup)
+        raise OSError("disk full")
+
+    c = OrcaClient(_state(folders, orca, build={"stamp": STAMP, "live_hash": live, "orca_live_hash": "older"}),
+                   _zip(live_hash=live, orca_live_hash="older"))
+    with pytest.raises(OSError):
+        _run(c, folders, orca, dirs, install=crashing_install)
+    assert json.loads(sync.marker_path(dirs).read_text())["orca"] is False
+    assert _run(c, folders, orca, dirs, now=T0 + 60) == "installed"
+    assert c.trees == [["base"]]
+    assert json.loads((orca.user_filament / f"{N}.json").read_text())["nozzle_temperature"] == ["215"]
+
+
+def test_owed_report_keeps_its_trees(env):
+    folders, orca, dirs = env
+    live, olive = _matching(folders, orca)
+    c = OrcaClient(_state(folders, orca, build={"stamp": STAMP, "live_hash": live, "orca_live_hash": olive}),
+                   _zip(live_hash=live, orca_live_hash=olive))
+    c.fail_kind = {}
+    real = c.installed
+
+    def failing(stamp, trees=None):
+        raise client.ApiError(503, "unavailable", "down")
+
+    c.installed = failing
+    with pytest.raises(client.ApiError):
+        _run(c, folders, orca, dirs)
+    assert sync.load_state(dirs)["report_trees"] == ["base", "orca"]
+    c.installed = real
+    _run(c, folders, orca, dirs, now=T0 + 60)
+    assert c.trees[0] == ["base", "orca"] and "report_trees" not in sync.load_state(dirs)

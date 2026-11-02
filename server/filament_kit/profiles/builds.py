@@ -15,7 +15,8 @@ State, all under `state/profiles/`:
   builds/*.tmp               a build or upload in progress; removed by the next build
   current.json               the last good build {stamp, created, live_hash, presets, problems} (+ orca_live_hash
                              with the Orca target)
-  installed.json             the build the sync PC installed {stamp, at, device_id}
+  installed.json             the build the sync PC installed {stamp, at, device_id} (+ orca_stamp, orca_at: the
+                             last build whose orca/ tree went in, and when; Ruling AB)
   deleted.json               {deleted_before: [preset names deleted in the app]} (+ orca_deleted_before)
   owner-edits.json           {stamp, inapp, notes} (+ orca_inapp, orca_notes): the owner's in-app record and note
                              lines of the old PC's installed build, kept when the sync PC changes (ruling S34) until
@@ -57,9 +58,12 @@ Orca target. On, the build also writes `orca/` (generate.OrcaTarget: the Orca li
 `orca/` tree, `orca_partial`, `orca_deleted_before`, the owner's Orca record), BUILD.json gains
 `orca_live_hash`, `orca_system_hash`, `orca_user_id`, `orca_inapp`, `orca_deleted`, `orca_restored`,
 `orca_stale` and a `target` on every preset row,
-but only the Bambu Studio live folder is waited for (S32). An Orca live folder not uploaded since the
-installed build (an Orca upload that keeps failing, Ruling Z) is stale: it is not diffed, the installed build's
-Orca record, restores and deletions are carried as they are (generate.OrcaTarget.live_fresh). An Orca live upload
+but only the Bambu Studio live folder is waited for (S32). The Orca snapshot is the build whose orca/ tree the
+PC installed (installed.json `orca_stamp`, from the install report's `trees`, Ruling AB), not the last install:
+a base/-only install leaves the Orca folder as it was. With no such build, or an Orca live folder not uploaded
+since that Orca install (an Orca upload that keeps failing, Ruling Z), the Orca live folder is stale: it is not
+diffed, the Orca snapshot's record, restores and deletions are carried as they are
+(generate.OrcaTarget.live_fresh). An Orca live upload
 renews a waiting request like a Bambu Studio one. A new sync PC forgets the old one's Orca live upload (S34).
 """
 from __future__ import annotations
@@ -310,9 +314,10 @@ def _installed() -> dict | None:
     return d if d.get("device_id") == _meta().get("owner") else None
 
 
-def _owner_record(stamp) -> dict | None:
+def _owner_record(stamp, orca_stamp=None) -> dict | None:
     """The owner's part of an installed build (ruling S34): its BUILD.json `inapp` record and, per preset, the note
-    lines below MARK. None when that build is gone."""
+    lines below MARK; the Orca part (`orca_inapp`, `orca_notes`) from the build whose orca/ tree was installed
+    (`orca_stamp`). None when that build is gone."""
     if not (isinstance(stamp, str) and STAMP_RE.fullmatch(stamp)):
         return None
     folder = _builds() / stamp
@@ -320,8 +325,12 @@ def _owner_record(stamp) -> dict | None:
     if not isinstance(m, dict):
         return None
     out = {"stamp": stamp}
-    trees = [("", "base")] + ([("orca_", generate.ORCA)] if "orca_inapp" in m else [])
-    for prefix, tree in trees:
+    trees = [("", "base", folder, m)]
+    if isinstance(orca_stamp, str) and STAMP_RE.fullmatch(orca_stamp):
+        om = _read_json(_builds() / orca_stamp / "BUILD.json")
+        if isinstance(om, dict):
+            trees.append(("orca_", generate.ORCA, _builds() / orca_stamp, om))
+    for prefix, tree, folder, m in trees:
         rec = m.get(prefix + "inapp")
         if not isinstance(rec, dict):
             rec = {}
@@ -353,7 +362,7 @@ def _forget_old_pc(meta: dict) -> None:
     not the PC's: they are kept in owner-edits.json (ruling S34) and carried by the next builds until the new PC
     installs one. Called under live.lock before meta.json is written."""
     raw = _read_obj(_dir() / "installed.json")
-    rec = _owner_record(raw.get("stamp"))
+    rec = _owner_record(raw.get("stamp"), raw.get("orca_stamp"))
     if rec is not None:
         _write_json(_dir() / OWNER_EDITS, rec)
     for name in ("installed.json", "deleted.json"):
@@ -698,6 +707,8 @@ def _prune() -> None:
     inst = _installed()
     if inst:
         keep.add(inst["stamp"])
+        if isinstance(inst.get("orca_stamp"), str):
+            keep.add(inst["orca_stamp"])          # the Orca snapshot (Ruling AB)
     cur = current()
     if cur:
         keep.add(cur["stamp"])
@@ -774,11 +785,14 @@ def _build_once(sm, now: float) -> dict:
             if orca_on and ouser.is_dir() and meta.get("orca_live_hash"):
                 shutil.copytree(ouser, orca_copy)
                 orca_live = generate.Live(orca_copy, str(meta.get("orca_user_id") or ""), sub="")
-            # Ruling Z: never wait for Orca; an Orca live folder older than the install is only not diffed
-            olive_at = meta.get("orca_live_at")
-            orca_fresh = not installed or (isinstance(olive_at, (int, float))
-                                           and isinstance(installed.get("at"), (int, float))
-                                           and olive_at > installed["at"])
+            # Ruling Z/AB: never wait for Orca; the Orca snapshot is the build whose orca/ went in; an Orca live
+            # folder from before that install (or with no such install) is not diffed
+            ostamp = (installed or {}).get("orca_stamp")
+            ostamp = ostamp if isinstance(ostamp, str) and STAMP_RE.fullmatch(ostamp) \
+                and (root / ostamp / "BUILD.json").is_file() else None
+            olive_at, oat = meta.get("orca_live_at"), (installed or {}).get("orca_at")
+            orca_fresh = ostamp is not None and isinstance(olive_at, (int, float)) \
+                and isinstance(oat, (int, float)) and olive_at > oat
             if _predates_install(installed, meta.get("live_at")):
                 # the PC reported an install but has not uploaded the live folder since (S32)
                 _set_state(last_attempt={"at": now, "ok": False, "error": WAIT_LIVE}, wait_live=True)
@@ -805,14 +819,14 @@ def _build_once(sm, now: float) -> dict:
                                                           bambu_nozzles=want.get("nozzles"))
             opart = meta.get("orca_partial")
             obefore = _read_obj(_dir() / "deleted.json").get("orca_deleted_before")
-            oe = owner_edits or {}
+            osnap = root / ostamp if ostamp is not None else None
+            oe = _owner_edits() if osnap is None else None      # S34 for the Orca tree
             orca = generate.OrcaTarget(
-                store=ostore, printers=oprinters, problems=oproblems, live=orca_live, snapshot=snapshot,
+                store=ostore, printers=oprinters, problems=oproblems, live=orca_live, snapshot=osnap,
                 partial=(root / opart if isinstance(opart, str) and STAMP_RE.fullmatch(opart)
-                         and (root / opart / "BUILD.json").is_file() and opart != (installed or {}).get("stamp")
-                         else None),
+                         and (root / opart / "BUILD.json").is_file() and opart != ostamp else None),
                 deleted_before={n for n in obefore if isinstance(n, str)} if isinstance(obefore, list) else set(),
-                owner_edits={"inapp": oe.get("orca_inapp"), "notes": oe.get("orca_notes")} if owner_edits else None,
+                owner_edits={"inapp": oe.get("orca_inapp"), "notes": oe.get("orca_notes")} if oe else None,
                 user_id=str(meta.get("orca_user_id") or ""), live_fresh=orca_fresh)
         with lines_mod.locked():
             ls = lines_mod.load()
@@ -936,24 +950,44 @@ def build_zip(stamp: str) -> bytes:
     return buf.getvalue()
 
 
-def record_installed(stamp: str, device_id: str) -> dict:
-    """The sync PC installed build `stamp`: {stamp, at}. OtherPc for another device, 404 for an unknown stamp."""
+TREES = ("base", "orca")
+
+
+def record_installed(stamp: str, device_id: str, trees: list[str] | None = None) -> dict:
+    """The sync PC installed build `stamp`: {stamp, at}. `trees` = what went in (Ruling AB): ["base"] (also an
+    older PC sync's report without it) or ["base", "orca"]; with "orca" this build becomes the Orca snapshot
+    (`orca_stamp`, `orca_at`), else the previous Orca snapshot stays. OtherPc for another device, 404 for an
+    unknown stamp, 400 for bad trees."""
+    trees = ["base"] if trees is None else trees
+    if not (isinstance(trees, list) and "base" in trees and all(t in TREES for t in trees)):
+        raise ProfileError(400, "bad_request", "trees must be [\"base\"] or [\"base\", \"orca\"]")
     with _locked("live.lock"):
         check_owner(device_id)
         if not (isinstance(stamp, str) and STAMP_RE.fullmatch(stamp)
                 and (_builds() / stamp / "BUILD.json").is_file()):
             raise _not_found(f"no build {stamp!r}")
         at = time.time()
-        _write_json(_dir() / "installed.json", {"stamp": stamp, "at": at, "device_id": device_id})
+        rec = {"stamp": stamp, "at": at, "device_id": device_id}
+        prev = _installed() or {}
+        if "orca" in trees:
+            rec.update(orca_stamp=stamp, orca_at=at)
+        elif isinstance(prev.get("orca_stamp"), str):
+            rec.update(orca_stamp=prev["orca_stamp"], orca_at=prev.get("orca_at"))
+        _write_json(_dir() / "installed.json", rec)
         meta = _meta()
         if "partial" in meta or "orca_partial" in meta:     # a finished install ends the partial one (S28)
             meta.pop("partial", None)
             meta.pop("orca_partial", None)
             _write_json(_live() / "meta.json", meta)
-        try:                                    # the installed build's own record carries them from now on (S34)
-            (_dir() / OWNER_EDITS).unlink()
-        except FileNotFoundError:
-            pass
+        kept = _owner_edits() or {}
+        orca_part = {k: kept[k] for k in ("orca_inapp", "orca_notes") if k in kept}
+        if orca_part and "orca" not in trees:   # the Orca tree did not go in: the owner's Orca record still counts
+            _write_json(_dir() / OWNER_EDITS, {"stamp": kept.get("stamp"), **orca_part})
+        else:
+            try:                                # the installed build's own record carries them from now on (S34)
+                (_dir() / OWNER_EDITS).unlink()
+            except FileNotFoundError:
+                pass
         return {"stamp": stamp, "at": at}
 
 
