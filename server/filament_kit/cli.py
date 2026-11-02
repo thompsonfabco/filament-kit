@@ -704,7 +704,8 @@ def cmd_profiles_build(sm_factory) -> int:
     r = builds.run_build(sm_factory())
     if r.get("waiting"):
         # waiting for the first PC sync is a normal state: the build unit must not show as failed
-        print(f"{r.get('error') or builds.NO_SYSTEM} (see README: Pair your PC)")
+        err = r.get("error") or builds.NO_SYSTEM
+        print(err + (" (see README: Pair your PC)" if err == builds.NO_SYSTEM else ""))
         return 0
     if not r.get("ok"):
         _err_line(f"build failed: {r.get('error')}; the last good build stays in use "
@@ -729,9 +730,13 @@ def cmd_profiles_status() -> int:
     else:
         print("build: no build yet")
     if la:
-        state = "ok" if la.get("ok") else ("waiting" if la.get("error") == builds.NO_SYSTEM else "failed")
+        state = "ok" if la.get("ok") else ("waiting" if la.get("error") in (builds.NO_SYSTEM, builds.WAIT_LIVE)
+                                           else "failed")
         print(f"last attempt: {_fmt_time(la.get('at'))} {state}"
               + (f": {la['error']}" if la.get("error") and not la.get("ok") else ""))
+        if not la.get("ok") and la.get("error") == builds.WAIT_LIVE:
+            print("  the PC sync has to run once (it runs every 10 minutes while Bambu Studio is closed); "
+                  "the build follows its upload")
     print(f"installed on the PC: {inst['stamp']} ({_fmt_time(inst.get('at'))})" if inst
           else "installed on the PC: nothing yet")
     print(f"PC sync: device {pc['device_id']}, last upload {_fmt_time(pc.get('last_upload'))}" if pc

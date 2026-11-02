@@ -59,6 +59,10 @@ class Env:
         """Pretend a previous install put these presets in dirs.installed."""
         _write_build(self.dirs.installed, presets)
 
+    def snapshot_replace(self, presets) -> None:
+        shutil.rmtree(self.dirs.installed)
+        self.snapshot(presets)
+
     def install(self, build_dir, stamp="20261102-010000", running=lambda: False):
         return installer.install(build_dir, self.folders, self.dirs, running=running, stamp_now=stamp)
 
@@ -201,6 +205,23 @@ def test_edit_carried_by_build_is_fine(tmp_path):
     env.snapshot({"A": _preset("A")})
     build = env.build({"A": _preset("A", filament_flow_ratio=["0.95"], nozzle_temperature=["225", "225"])})
     assert env.install(build).installed == ["A"]
+
+
+def test_partial_build_values_are_not_late_edits(tmp_path):
+    """Ruling S28: a value a half-finished install wrote (equal to dirs.partial's copy) is not an in-app edit."""
+    env = Env(tmp_path, live={"A": (_preset("A", filament_density=["1.31"]), _info())})
+    env.snapshot({"A": _preset("A", filament_density=["1.24"])})
+    build = env.build({"A": _preset("A", filament_density=["1.35"])})
+    with pytest.raises(installer.Refused) as e:                  # without the partial copy: an edit
+        env.install(build)
+    assert e.value.code == "stale_build" and "filament_density" in e.value.reason
+    _write_build(env.dirs.partial, {"A": _preset("A", filament_density=["1.31"])})
+    assert env.install(build).installed == ["A"]
+    # a value that differs from the partial copy too is still the owner's edit
+    env.live.joinpath("A.json").write_text(json.dumps(_preset("A", filament_density=["1.29"])), encoding="utf-8")
+    env.snapshot_replace({"A": _preset("A", filament_density=["1.24"])})
+    with pytest.raises(installer.Refused):
+        env.install(env.build({"A": _preset("A", filament_density=["1.35"])}))
 
 
 def test_deleted_in_app_after_build_refused(tmp_path):
