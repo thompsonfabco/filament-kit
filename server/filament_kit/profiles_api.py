@@ -188,8 +188,8 @@ def _preset_counts() -> dict[str, int]:
     cur = builds.current()
     m = builds.manifest(cur["stamp"]) if cur else None
     out: dict[str, int] = {}
-    for p in (m or {}).get("presets", []):
-        lid = p.get("line_id") if isinstance(p, dict) else None
+    for p in builds.bambu_rows(m):              # Bambu Studio presets only (Orca's are counted apart)
+        lid = p.get("line_id")
         if isinstance(lid, str):
             out[lid] = out.get(lid, 0) + 1
     return out
@@ -299,8 +299,9 @@ def routes(authed, sm) -> list[Route]:
         stamp = body.get("stamp")
         if not isinstance(stamp, str):
             raise _bad("stamp is required")
+        trees = body.get("trees")               # Ruling AB: ["base"] | ["base", "orca"]; absent = ["base"]
         inst = await run_in_threadpool(_audit, "sync installed", device,
-                                       lambda: builds.record_installed(stamp, device), stamp=stamp)
+                                       lambda: builds.record_installed(stamp, device, trees), stamp=stamp)
         return JSONResponse({"installed": _iso_at(inst)})
 
     @authed

@@ -14,3 +14,6 @@ server/tests/data/library/** -text
 
 # The panel firmware the station flashes is a binary, byte for byte.
 station/panel/firmware/*.bin binary
+
+# The family build golden files are compared byte for byte (test_builds_orca.py).
+server/tests/data/golden/** -text

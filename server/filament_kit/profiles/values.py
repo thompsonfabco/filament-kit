@@ -35,7 +35,7 @@ BED_KEYS = ["hot_plate_temp", "hot_plate_temp_initial_layer", "textured_plate_te
 ABRASIVE = re.compile(r"-(CF|GF)\b|CF\d|GF\d")
 FAN_OFF = {"0", "0%", "0 (off)"}
 MERGE_DICTS = ("fields", "published_ranges")
-MERGE_VALUES = ("bambu_parent", "material")
+MERGE_VALUES = ("bambu_parent", "orca_parent", "material")
 _COLOR_WORDS = r"^.*?(PLA\+? 2\.0|PETG|PLA\+?|TPU|ABS|ASA|PC|PA|CF|GF|72D|HS|Silk|Matte|Wood|Glow|Metal|Marble|Meta)\s*"
 _RANGE = re.compile(r"\s*(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\s*")
 NOTE_LABELS = (("bed_all_plates", "bed"), ("hot_plate_temp", "smooth PEI"), ("textured_plate_temp", "textured PEI"),
@@ -212,7 +212,7 @@ def apply_spoolman(cfg: dict, sv: SpoolmanValues, *, variants: list[str], templa
 
 def merged_entry(lookup: Lookup) -> dict | None:
     """The library entry with the owner's local entry on top: fields and published_ranges key by key,
-    bambu_parent and material replaced. None when neither exists."""
+    bambu_parent, orca_parent and material replaced. None when neither exists."""
     lib, loc = lookup.library, lookup.local
     if lib is None and loc is None:
         return None
