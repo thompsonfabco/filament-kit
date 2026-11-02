@@ -1,0 +1,444 @@
+"""End to end: the real server app under uvicorn over TLS on 127.0.0.1 + the real PC sync client and installer.
+
+A fixture Bambu Studio folder lives under tmp_path (APPDATA / LOCALAPPDATA point there, as in pc-sync's conftest);
+Spoolman is the in-memory FakeSm of test_builds; the system presets are server/tests/data/bbl/filament. Builds run
+in-process (`builds.run_build`), as filament-kit-build.service would run them.
+"""
+import importlib.util
+import io
+import json
+import re
+import shutil
+import sys
+import threading
+import time
+from pathlib import Path
+
+import pytest
+import uvicorn
+
+from conftest import free_port
+from filament_kit import config, library, pairing
+from filament_kit.api import create_app
+from filament_kit.bridge import registry
+from filament_kit.bridge.registry import Printer
+from filament_kit.profiles import builds, preset_for
+
+import test_generate as TG
+from test_builds import FakeSm, SUNLU
+
+REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO / "pc-sync"))
+
+from fksync import __main__ as fkmain, client as fkclient, installer, store, studio, sync  # noqa: E402
+
+_spec = importlib.util.spec_from_file_location("pcsync_studio_fixture", REPO / "pc-sync" / "tests" / "studio_fixture.py")
+studio_fixture = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(studio_fixture)
+
+BBL = Path(__file__).parent / "data" / "bbl" / "filament"
+H2D = "Bambu Lab H2D"
+P_ID = re.compile(r"^P[0-9a-f]{7}$")
+IDS_LINE = "Spoolman filament ids: 3, 17"
+LID = "sunlu--pla-plus-2-0"
+
+
+@pytest.fixture(autouse=True)
+def _fake_appdata(tmp_path, monkeypatch):
+    """As pc-sync's conftest: nothing here may reach the real %APPDATA% / %LOCALAPPDATA%."""
+    for name in ("APPDATA", "LOCALAPPDATA"):
+        (tmp_path / name.lower()).mkdir()
+        monkeypatch.setenv(name, str(tmp_path / name.lower()))
+
+
+# ---------- the server ----------
+
+@pytest.fixture
+def server(tmp_path, monkeypatch):
+    """(port, FakeSm) of a real create_app under uvicorn with the server's own TLS certificate."""
+    srv = tmp_path / "srv"
+    for name in ("etc", "state", "opt"):
+        (srv / name).mkdir(parents=True)
+        monkeypatch.setenv(f"FK_{name.upper()}", str(srv / name))
+    pairing.make_cert("fkhost", [], srv / "etc")
+    config.save({"placement": {"box_count": 2}})
+    monkeypatch.setattr(library, "load", lambda: TG.make_lib())
+    registry.upsert(Printer("S1", "H2D", "O1D", "10.0.0.5", "", True))
+    sm = FakeSm([json.loads(json.dumps(f)) for f in SUNLU])
+    port = free_port()
+    etc = config.paths().etc
+    uv = uvicorn.Server(uvicorn.Config(create_app(sm=sm), host="127.0.0.1", port=port, log_level="warning",
+                                       ssl_certfile=str(etc / "cert.pem"), ssl_keyfile=str(etc / "key.pem"),
+                                       lifespan="off"))
+    t = threading.Thread(target=uv.run, daemon=True)
+    t.start()
+    for _ in range(200):
+        if uv.started:
+            break
+        time.sleep(0.05)
+    else:
+        raise RuntimeError("the server did not start")
+    yield port, sm
+    uv.should_exit = True
+    t.join(timeout=10)
+
+
+# ---------- the PC ----------
+
+class Pc:
+    """One Windows PC: its fixture Bambu Studio folder, the sync's own files and a paired client."""
+
+    def __init__(self, root: Path, port: int, system_src: Path):
+        self.appdata, self.dirs = root / "appdata", store.AppDirs(root / "local" / "filament-kit-sync")
+        self.folders = studio_fixture.make(self.appdata, system_src=system_src)
+        self.port = port
+        self.now = time.time()
+        self.client = None
+
+    def pair(self, monkeypatch, code: str) -> int:
+        """The real `filament-kit-sync pair` dialogue: address, confirm the fingerprint, 6-digit code."""
+        self.dirs.ensure()
+        monkeypatch.setattr(sys, "stdin", io.StringIO(f"127.0.0.1:{self.port}\ny\n{code}\n"))
+        rc = fkmain.cmd_pair(self.dirs)
+        if rc == 0:
+            cfg = store.load_config(self.dirs)
+            self.folders = studio.locate(self.appdata, cfg)
+            self.client = fkclient.Client(cfg, store.load_token(self.dirs))
+        return rc
+
+    def run(self) -> str:
+        self.now += 3600          # past REQUEST_RETRY, so every run may ask for a rebuild again
+        return sync.run_once(self.client, self.folders, self.dirs, running=lambda: False, now=self.now)
+
+    @property
+    def base(self) -> Path:
+        return self.folders.user_filament / "base"
+
+    def preset(self, name: str) -> dict:
+        return json.loads((self.base / f"{name}.json").read_text(encoding="utf-8"))
+
+    def write(self, name: str, cfg: dict) -> None:
+        with open(self.base / f"{name}.json", "w", encoding="utf-8", newline="\n") as f:
+            json.dump(cfg, f, indent=4)
+
+    def names(self) -> set[str]:
+        return {p.stem for p in self.base.glob("*.json")}
+
+
+def system_copy(tmp_path) -> Path:
+    """The fixture system presets without broken.json (the server refuses a zip with a non-JSON .json; see
+    test_unparsable_system_preset_is_refused_and_not_resent)."""
+    dest = tmp_path / "bbl-src"
+    shutil.copytree(BBL, dest)
+    (dest / "broken.json").unlink()
+    return dest
+
+
+def sunlu(nozzle: str) -> str:
+    return TG.sunlu(H2D, nozzle)
+
+
+def build(sm) -> dict:
+    r = builds.run_build(sm)
+    assert r["ok"], r
+    return r
+
+
+def manifest(stamp: str) -> dict:
+    return builds.manifest(stamp)
+
+
+def choose_parent(port: int, fp: str, parent: str) -> None:
+    """The phone app (its own paired device) sets the line's Bambu parent: PATCH /api/profiles/lines/<id>."""
+    phone = fkclient.Client({"host": "127.0.0.1", "port": port, "fp": fp},
+                            pairing.redeem_code(pairing.issue("phone").code))
+    res = phone._request("PATCH", f"/api/profiles/lines/{LID}", json.dumps({"bambu_parent": parent}).encode(),
+                         "application/json")
+    assert res["line"]["bambu_parent"] == parent, res
+
+
+def uploaded_then_rebuild(pc: Pc) -> None:
+    """The edit goes up, but the installed build stays current (no rebuild is asked for by the PC); a rebuild is
+    then requested (POST /api/sync/rebuild), as a Spoolman change or the app would."""
+    assert pc.run() == "uploaded"
+    st = pc.client.state()
+    assert st["live_hash"] == builds.tree_hash(pc.folders.user_filament)
+    assert pc.client.rebuild(st["live_hash"]) == {"requested": True}
+    assert pc.client.state()["rebuild_requested"]["live_hash"] == st["live_hash"]
+
+
+def paired_pc(tmp_path, server, monkeypatch, name="pc1") -> Pc:
+    port, _ = server
+    pc = Pc(tmp_path / name, port, system_copy(tmp_path / name))
+    assert pc.pair(monkeypatch, pairing.issue("pc").code) == 0
+    return pc
+
+
+def installed_first_build(tmp_path, server, monkeypatch) -> tuple[Pc, str]:
+    """Pair, upload, build, install; returns (pc, stamp)."""
+    _, sm = server
+    pc = paired_pc(tmp_path, server, monkeypatch)
+    assert pc.run() == "uploaded"
+    build(sm)                                   # creates the line (no usable parent for the H2D yet)
+    choose_parent(pc.port, store.load_config(pc.dirs)["fp"], "Generic PLA")
+    stamp = build(sm)["stamp"]
+    assert pc.run() == "installed"
+    return pc, stamp
+
+
+# ---------- the brief's flow ----------
+
+def test_full_cycle(tmp_path, server, monkeypatch):
+    port, sm = server
+
+    # a build before any sync waits cleanly (S15)
+    r = builds.run_build(sm)
+    assert r["ok"] is False and r.get("waiting") is True and r["stamp"] is None
+    assert builds.current() is None
+
+    # 1. pair with a code (the PC checks the fingerprint, then sends the code; the token is stored by DPAPI)
+    pc = Pc(tmp_path / "pc1", port, system_copy(tmp_path / "pc1"))
+    assert pc.pair(monkeypatch, pairing.issue("pc").code) == 0
+    cfg = store.load_config(pc.dirs)
+    assert cfg["fp"] == pairing.fingerprint((config.paths().etc / "cert.pem").read_bytes())
+    me = cfg["device"]
+    assert me in {d["id"] for d in pairing.devices()}
+    st = pc.client.state()
+    assert st["owner"] is None and st["you"] == me and st["build"] is None
+
+    # 2. run_once -> uploaded (live + system), then no_build; the system upload asked for a build
+    assert pc.run() == "uploaded"
+    st = pc.client.state()
+    assert st["owner"] == me and st["user_id"] == pc.folders.user_id
+    assert st["live_hash"] == builds.tree_hash(pc.folders.user_filament)
+    assert st["system_hash"] == builds.tree_hash(pc.folders.system_filament)
+    assert st["rebuild_requested"] is not None
+    assert builds.tree_hash(config.paths().state / "profiles" / "live" / "system") == st["system_hash"]
+    assert pc.run() == "no_build"
+
+    # 3. the build. The library's parent (Bambu PLA Tough+) is not in this system folder and the one SUNLU brand
+    # preset lists only the X1C: a good build with a problem line; the owner picks Generic PLA in the app
+    b0 = build(sm)
+    assert manifest(b0["stamp"])["presets"] == []
+    assert any(LID in p and "H2D" in p for p in b0["problems"]), b0["problems"]
+    choose_parent(port, cfg["fp"], "Generic PLA")
+    assert pc.client.state()["rebuild_requested"] is not None
+    b1 = build(sm)
+    st = pc.client.state()
+    assert st["build"]["stamp"] == b1["stamp"] and st["build"]["live_hash"] == st["live_hash"]
+    assert st["rebuild_requested"] is None and st["installed"] is None
+    m1 = manifest(b1["stamp"])
+    built = {p["name"] for p in m1["presets"]}
+    h2d = {n for n in built if f"@{H2D} " in n}
+    assert h2d and len(h2d) >= 3, (built, m1["problems"])
+
+    # 4. run_once -> installed; base/ has the H2D presets with the Spoolman ids line last; the server knows
+    assert pc.run() == "installed"
+    assert h2d <= pc.names()
+    for name in h2d:
+        cfg_ = pc.preset(name)
+        notes = cfg_["filament_notes"]
+        notes = "\n".join(notes) if isinstance(notes, list) else notes
+        assert notes.splitlines()[-1] == IDS_LINE, name
+        assert cfg_["inherits"] == "" and P_ID.match(cfg_["filament_id"]), name
+        assert (pc.base / f"{name}.info").is_file()
+    st = pc.client.state()
+    assert st["installed"]["stamp"] == b1["stamp"]
+    assert st["live_hash"] == builds.tree_hash(pc.folders.user_filament)     # re-uploaded after the install
+    assert json.loads((pc.dirs.installed / "BUILD.json").read_text(encoding="utf-8"))["stamp"] == b1["stamp"]
+    assert pc.run() == "up_to_date"
+
+    # 5. preset_for: the line's generated P id with int temps, never a Generic or system id
+    ref = preset_for(SUNLU[0], "O1D", 0.4)
+    assert ref is not None and ref.name == sunlu("0.4")
+    assert P_ID.match(ref.filament_id) and not ref.filament_id.startswith("G")
+    system_ids = {json.loads(p.read_text(encoding="utf-8")).get("filament_id")
+                  for p in pc.folders.system_filament.glob("*.json")}
+    assert ref.filament_id not in system_ids
+    assert ref.filament_id == pc.preset(ref.name)["filament_id"]
+    assert type(ref.nozzle_temp_min) is int and type(ref.nozzle_temp_max) is int
+    assert (ref.nozzle_temp_min, ref.nozzle_temp_max) == (190, 230)       # the Spoolman nozzle_range
+    assert ref.filament_type == "PLA"
+    ref_red = preset_for(SUNLU[1], "O1D", 0.4)
+    assert ref_red is not None and ref_red.filament_id == ref.filament_id       # one id per line
+
+    # 6. an in-app edit of filament_flow_ratio is kept through upload, rebuild and reinstall
+    edited = sunlu("0.4")
+    cfg_ = pc.preset(edited)
+    flow = ["0.91"] * len(cfg_["filament_flow_ratio"])
+    assert cfg_["filament_flow_ratio"] != flow
+    cfg_["filament_flow_ratio"] = flow
+    pc.write(edited, cfg_)
+    uploaded_then_rebuild(pc)
+    b2 = build(sm)
+    assert any(edited in e and "filament_flow_ratio" in e for e in manifest(b2["stamp"])["edits"])
+    assert pc.run() == "installed"
+    assert pc.client.state()["installed"]["stamp"] == b2["stamp"]
+    assert pc.preset(edited)["filament_flow_ratio"] == flow
+    assert pc.preset(sunlu("0.6"))["filament_flow_ratio"] != flow          # only the edited one
+
+    # 7. a preset deleted in the app is not reinstalled
+    gone = sunlu("0.6")
+    (pc.base / f"{gone}.json").unlink()
+    (pc.base / f"{gone}.info").unlink()
+    uploaded_then_rebuild(pc)
+    b3 = build(sm)
+    m3 = manifest(b3["stamp"])
+    assert gone not in {p["name"] for p in m3["presets"]} and m3["deleted"] == [gone]
+    assert pc.run() == "installed"
+    assert gone not in pc.names() and not (pc.base / f"{gone}.info").exists()
+    assert (h2d - {gone}) <= pc.names()
+    assert preset_for(SUNLU[0], "O1D", 0.6) is None                          # no preset: never a Generic one
+    # (that the step-6 edit also survives this second rebuild is test_inapp_edit_survives_a_second_rebuild)
+
+    # 8. half of the generated presets vanish at once: an app reset, so all of them come back
+    left = sorted(h2d - {gone})
+    vanish = left[: (len(h2d) + 1) // 2]
+    assert len(vanish) / len(left) > 0.25
+    for name in vanish:
+        (pc.base / f"{name}.json").unlink()
+    uploaded_then_rebuild(pc)
+    b4 = build(sm)
+    m4 = manifest(b4["stamp"])
+    assert m4["deleted"] == []
+    assert {p["name"] for p in m4["presets"]} == built                       # the one deleted in step 7 too
+    assert pc.run() == "installed"
+    assert built <= pc.names()
+    assert preset_for(SUNLU[0], "O1D", 0.6) is not None
+
+    # 9. a second device is not the sync PC: other_pc, and nothing it has reaches the server
+    before = pc.client.state()
+    other = Pc(tmp_path / "pc2", port, system_copy(tmp_path / "pc2"))
+    assert other.pair(monkeypatch, pairing.issue("pc").code) == 0
+    assert store.load_config(other.dirs)["device"] != me
+    (other.base / "mine.json").write_text("{}", encoding="utf-8")
+    assert other.run() == "other_pc"
+    assert sync.load_state(other.dirs).get("uploaded") is None
+    after = pc.client.state()
+    assert (after["owner"], after["live_hash"], after["system_hash"]) == \
+        (me, before["live_hash"], before["system_hash"])
+    with pytest.raises(fkclient.ApiError) as e:
+        other.client.upload("live", b"PK\x05\x06" + b"\0" * 18, user_id="x")
+    assert e.value.status == 409 and e.value.code == "other_pc"
+    assert pc.run() == "up_to_date"
+
+
+@pytest.mark.xfail(strict=True, reason=(
+    "BUG (Task 13): an in-app edit is carried into exactly one build. In-app edits are found only as "
+    "diff(installed snapshot, live); once the build carrying the edit is installed, the snapshot holds the edited "
+    "value too, so the next build sees no diff and writes the parent/spec value back over the owner's edit"))
+def test_inapp_edit_survives_a_second_rebuild(tmp_path, server, monkeypatch):
+    _, sm = server
+    pc, _ = installed_first_build(tmp_path, server, monkeypatch)
+    edited = sunlu("0.4")
+    cfg = pc.preset(edited)
+    flow = ["0.91"] * len(cfg["filament_flow_ratio"])
+    cfg["filament_flow_ratio"] = flow
+    pc.write(edited, cfg)
+    uploaded_then_rebuild(pc)
+    build(sm)
+    assert pc.run() == "installed"
+    assert pc.preset(edited)["filament_flow_ratio"] == flow                  # first rebuild: kept
+    _density(sm, 1.30)                                                       # any later reason to rebuild
+    builds.request_rebuild("spoolman changed")
+    b3 = build(sm)
+    assert pc.run() == "installed"
+    assert pc.client.state()["installed"]["stamp"] == b3["stamp"]
+    assert pc.preset(edited)["filament_density"] == ["1.3"]
+    assert pc.preset(edited)["filament_flow_ratio"] == flow                  # second rebuild: still his value
+
+
+# ---------- interrupted installs ----------
+
+def _crash_after(monkeypatch, writes: int) -> None:
+    """The installer's live writes fail (OSError) after `writes` files, as a crash or a full disk would."""
+    real, n = installer._write_live, [0]
+
+    def write(target, data):
+        if n[0] >= writes:
+            raise OSError(28, "No space left on device (test)")
+        n[0] += 1
+        real(target, data)
+    monkeypatch.setattr(installer, "_write_live", write)
+
+
+def _density(sm, value: float) -> None:
+    for f in sm.filaments:
+        f["density"] = value
+
+
+def test_interrupted_install_is_resumed(tmp_path, server, monkeypatch):
+    _, sm = server
+    pc, _ = installed_first_build(tmp_path, server, monkeypatch)
+    _density(sm, 1.31)
+    builds.request_rebuild("spoolman changed")
+    b2 = build(sm)
+    with monkeypatch.context() as m:
+        _crash_after(m, 2)                       # the first preset's .json + .info, then the disk is full
+        with pytest.raises(OSError):
+            pc.run()
+    assert sync.marker_path(pc.dirs).exists()
+    first, *rest = sorted(p["name"] for p in manifest(b2["stamp"])["presets"])
+    assert pc.preset(first)["filament_density"] == ["1.31"]
+    assert all(pc.preset(n)["filament_density"] != ["1.31"] for n in rest)
+
+    assert pc.run() == "installed"               # resumed: the same build, no live-hash gate
+    assert not sync.marker_path(pc.dirs).exists()
+    assert pc.client.state()["installed"]["stamp"] == b2["stamp"]
+    for n in [first, *rest]:
+        assert pc.preset(n)["filament_density"] == ["1.31"], n
+    assert pc.run() == "up_to_date"
+
+
+@pytest.mark.xfail(strict=True, reason=(
+    "BUG (Task 13): after an interrupted install whose resume is declined (a later in-app edit), the half-new live "
+    "folder is diffed against the server's last *recorded* install (B1), so values the crashed install of B2 "
+    "already wrote are carried into B3 as in-app edits and beat the newer Spoolman value"))
+def test_interrupted_install_values_are_not_inapp_edits(tmp_path, server, monkeypatch):
+    _, sm = server
+    pc, _ = installed_first_build(tmp_path, server, monkeypatch)
+    _density(sm, 1.31)
+    builds.request_rebuild("spoolman changed")
+    b2 = build(sm)
+    with monkeypatch.context() as m:
+        _crash_after(m, 2)
+        with pytest.raises(OSError):
+            pc.run()
+    first, *rest = sorted(p["name"] for p in manifest(b2["stamp"])["presets"])
+    assert pc.preset(first)["filament_density"] == ["1.31"]
+
+    # edited in Bambu Studio before the next run: the resume is declined, the normal path follows
+    edited = rest[0]
+    cfg = pc.preset(edited)
+    flow = ["0.9"] * len(cfg["filament_flow_ratio"])
+    cfg["filament_flow_ratio"] = flow
+    pc.write(edited, cfg)
+    _density(sm, 1.35)                            # and Spoolman changed again meanwhile
+    assert pc.run() == "rebuild_requested"
+    assert not sync.marker_path(pc.dirs).exists()
+    b3 = build(sm)
+    out = pc.run()
+    assert out == "installed", (out, sync.load_state(pc.dirs).get("last"))
+    assert pc.client.state()["installed"]["stamp"] == b3["stamp"]
+    assert pc.preset(edited)["filament_flow_ratio"] == flow                # the real in-app edit is kept
+    edits = manifest(b3["stamp"]).get("edits", [])
+    assert not any(first in e and "filament_density" in e for e in edits), edits
+    for n in [first, *rest]:
+        assert pc.preset(n)["filament_density"] == ["1.35"], n            # the half-install's 1.31 is not "his"
+
+
+# ---------- uploads the server refuses ----------
+
+def test_unparsable_system_preset_is_refused_and_not_resent(tmp_path, server, monkeypatch):
+    """The unmodified fixture folder holds broken.json: the server refuses the whole system zip (400 bad_zip), the
+    PC records the refusal and does not send that version again within the back-off; no build can be made."""
+    port, sm = server
+    pc = Pc(tmp_path / "pc1", port, BBL)
+    assert pc.pair(monkeypatch, pairing.issue("pc").code) == 0
+    assert pc.run() == "uploaded"                  # the live folder went up
+    rej = sync.load_state(pc.dirs)["rejected"]["system"]
+    assert rej["hash"] == builds.tree_hash(pc.folders.system_filament) and "bad_zip" in rej["error"]
+    st = pc.client.state()
+    assert st["system_hash"] is None and st["live_hash"] is not None
+    assert pc.run() == "no_build"
+    assert builds.run_build(sm).get("waiting") is True
