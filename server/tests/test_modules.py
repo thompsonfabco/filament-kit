@@ -171,9 +171,54 @@ def test_orders_needs_file():
 def test_new_config_defaults():
     d = config.DEFAULTS
     assert d["web"]["port"] == 8101 and d["web"]["public_url"] is None
-    assert d["web"]["lan"] == ["192.168.0.0/16", "10.0.0.0/8", "172.16.0.0/12"]
+    assert d["web"]["lan"] == ["192.168.0.0/16", "10.0.0.0/8"]   # A-M6: no 172.16/12 (Docker bridges)
     assert d["remote"] == {"hostname": None, "acme_window": None, "email": None}
     assert d["orders"] == {"file": None}
     assert d["tag_sources"] == [] and d["slot_service"] is None and d["slicer_printers"] == []
     assert d["presets_orca"] is False and d["web_instructions"] is None
     assert d["intake"] == {"tare_hints": {}, "model": None}
+
+
+# ---------- C-I3: a mode change keeps the opt-in modules switched on by hand ----------
+
+def _with_opt_in(**on):
+    cfg = set_mode({}, "server")
+    cfg["modules"].update(on)
+    return cfg
+
+
+def test_set_mode_keeps_hand_enabled_opt_in_modules():
+    cfg = set_mode(_with_opt_in(web=True, remote=True, orders=True), "all-in-one", say=lambda m: None)
+    assert {"web", "remote", "orders"} <= enabled(cfg)
+    assert enabled(cfg) - {"web", "remote", "orders"} == MODES["all-in-one"]
+    again = set_mode(cfg, "server", say=lambda m: None)
+    assert {"web", "remote", "orders"} <= enabled(again)
+
+
+def test_set_mode_drops_opt_in_modules_whose_dependencies_go_and_says_so():
+    said = []
+    cfg = set_mode(_with_opt_in(web=True, remote=True, orders=True), "station", say=said.append)
+    assert enabled(cfg) == MODES["station"]
+    assert len(said) == 1 and all(n in said[0] for n in ("web", "remote", "orders"))
+    validate(dict(cfg, station={"allow": ["10.0.0.5"]}))
+
+
+def test_set_mode_never_turns_opt_in_modules_on():
+    said = []
+    assert enabled(set_mode({}, "all-in-one", say=said.append)) == MODES["all-in-one"]
+    assert enabled(set_mode(_with_opt_in(web=False), "server", say=said.append)) == MODES["server"]
+    assert said == []
+
+
+def test_validate_checks_web_lan_entries_are_networks():
+    """A-M5: a bad web.lan entry is a ModuleError now, not a web unit that crashes on start (a restart loop)."""
+    cfg = set_mode({}, "server", say=None)
+    cfg["modules"]["web"] = True
+    cfg["web"] = {"public_url": "https://mcp.example.com/filament", "lan": ["192.168.1.0/24", "10.0.0.0/8"]}
+    validate(cfg)
+    for bad in (["192.168.1.0/33"], ["home"], "192.168.1.0/24", [None]):
+        cfg["web"]["lan"] = bad
+        with pytest.raises(ModuleError, match="web.lan"):
+            validate(cfg)
+    cfg["modules"]["web"] = False
+    validate(cfg)                               # only checked while web is on

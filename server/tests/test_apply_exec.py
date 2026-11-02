@@ -271,6 +271,26 @@ def test_station_off_notice_once(tmp_path, capsys):
     assert "brltty" in out and "ModemManager" in out
 
 
+def test_remove_file_unlinks_only_an_existing_file(tmp_path):
+    root = tmp_path / "root"
+    old = root / apply.OLD_UDEV_RULE.lstrip("/")
+    old.parent.mkdir(parents=True)
+    old.write_text("x", encoding="utf-8")
+    res = _res(tmp_path)
+    apply.execute([Action("remove_file", apply.OLD_UDEV_RULE)], run=Recorder(), resources=res, root=root)
+    assert not old.exists()
+    apply.execute([Action("remove_file", apply.OLD_UDEV_RULE)], run=Recorder(), resources=res, root=root)  # none
+
+
+def test_station_off_notice_for_the_old_rule_name(tmp_path, capsys):
+    root = tmp_path / "root"
+    rule = root / apply.OLD_UDEV_RULE.lstrip("/")
+    rule.parent.mkdir(parents=True)
+    rule.write_text("x", encoding="utf-8")
+    apply.execute([Action("disable", apply.STATION_UNIT)], run=Recorder(), resources=_res(tmp_path), root=root)
+    assert capsys.readouterr().out.count("left as they are") == 1
+
+
 def test_no_station_notice_without_rule(tmp_path, capsys):
     apply.execute([Action("disable", apply.STATION_UNIT)], run=Recorder(),
                   resources=_res(tmp_path), root=tmp_path / "root")

@@ -137,6 +137,13 @@ def test_station_extra_in_pyproject():
     assert re.search(r'^station = \["nfcpy==1\.0\.4", "pyserial>=3\.5", "esptool==5\.6\.0"\]\s*$', text, re.M)
 
 
+def test_web_extra_pins_mcp_exactly():
+    """filament_kit.web imports MCP SDK internals and install.sh runs `pip install --upgrade`, so a range would pull
+    any future SDK: the web extra pins the exact version it was built against."""
+    text = _read("server/pyproject.toml")
+    assert re.search(r'^web = \["mcp==2\.3\.0"\]', text, re.M)
+
+
 def test_wrapper_runs_modules_as_root():
     text = _read("install/filament-kit-cli.sh")
     assert re.search(r"^\s+config \| cert \| modules \| remote \| migrate-ops\)\s*$", text, re.M)
@@ -156,7 +163,8 @@ def test_uninstall_uses_modules_units_and_cleans_station():
     text = _read("install/uninstall.sh")
     assert "modules units" in text
     assert "/etc/systemd/system/filament-kit-station.service.d" in text
-    assert "/etc/udev/rules.d/99-filament-kit-station.rules" in text
+    assert "/etc/udev/rules.d/99-zz-filament-kit-station.rules" in text
+    assert "/etc/udev/rules.d/99-filament-kit-station.rules" in text        # the old name, from before C-I1
     # spec section 4: the station user owns no data, so every uninstall removes it, after its unit is gone
     i_user = text.index("userdel filament-kit-station")
     assert text.index("for u in $UNITS") < i_user < text.index('if [ "$PURGE" -eq 1 ]; then\n    rm -rf')

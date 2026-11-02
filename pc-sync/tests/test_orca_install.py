@@ -296,6 +296,19 @@ def test_orca_absent_installs_bambu_only_and_snapshot_has_no_orca(tmp_path):
     assert not e.dirs.orca_backups.exists()
 
 
+def test_base_only_install_keeps_the_previous_orca_snapshot(tmp_path):
+    """B-I1: a base/-only install must not drop the Orca snapshot of the last build whose orca/ went in: the server
+    keeps that build as its Orca snapshot (Ruling AB), and changed_since_install diffs Orca edits against it."""
+    e = Env(tmp_path, orca=False)
+    e.snapshot({N: _orca_preset(N, nozzle_temperature=["210"])})
+    b = e.build({N: _orca_preset(N, nozzle_temperature=["230"])},
+                {"Acme PLA @BBL H2D": {"name": "Acme PLA @BBL H2D", "from": "User"}})
+    e.install(b)
+    assert (e.dirs.installed / "base" / "Acme PLA @BBL H2D.json").is_file()
+    kept = json.loads((e.dirs.installed / "orca" / f"{N}.json").read_text())
+    assert kept["nozzle_temperature"] == ["210"]                           # the old Orca snapshot, not the build's
+
+
 def test_orca_stale_listed_never_deleted(tmp_path):
     old = "Old PLA @SV08 MAX 0.4"
     e = Env(tmp_path, orca_live={N: (_orca_preset(N), ORCA_INFO), old: (_orca_preset(old), ORCA_INFO)})

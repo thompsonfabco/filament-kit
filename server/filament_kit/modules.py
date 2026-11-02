@@ -9,6 +9,7 @@ from __future__ import annotations
 import copy
 import ipaddress
 from dataclasses import dataclass
+from typing import Callable
 from urllib.parse import urlparse
 
 
@@ -94,12 +95,25 @@ def drop_local_station_link(cfg: dict) -> None:
         st["url"] = None
 
 
-def set_mode(cfg: dict, mode: str) -> dict:
-    """Copy of cfg with `mode`'s module set (and the station link for all-in-one)."""
+def set_mode(cfg: dict, mode: str, say: Callable[[str], None] | None = print) -> dict:
+    """Copy of cfg with `mode`'s module set (and the station link for all-in-one). Opt-in modules switched on by
+    hand stay on (C-I3: a mode never turns them on or off), except those whose dependencies the new mode removes;
+    those are named through `say`."""
     if mode not in MODES:
         raise ModuleError(f"unknown mode {mode!r}")
     out = copy.deepcopy(cfg)
-    out["modules"] = {n: n in MODES[mode] for n in MODULES}
+    was = enabled(cfg) if cfg.get("modules") is not None else frozenset()
+    on = set(MODES[mode])
+    dropped = []
+    for n in MODULES:                       # registry order: web before remote, so remote sees web's outcome
+        if n in OPT_IN and n in was:
+            if all(d in on for d in MODULES[n].depends):
+                on.add(n)
+            else:
+                dropped.append(n)
+    out["modules"] = {n: n in on for n in MODULES}
+    if dropped and say is not None:
+        say(f"Mode {mode}: turned off {', '.join(dropped)} (they need modules this mode does not have).")
     if mode == "all-in-one":
         st = out.setdefault("station", {})
         st["allow"] = ["127.0.0.1"]
@@ -150,6 +164,15 @@ def validate(cfg: dict) -> None:
             who = "web" if "web" in on else "remote"
             raise ModuleError(f"{who} needs web.public_url set to the https address people will use "
                               "(e.g. https://mcp.example.com/filament)")
+    if "web" in on:                             # A-M5: a bad entry would crash the web unit on every start
+        lan = (cfg.get("web") or {}).get("lan")
+        if not isinstance(lan, list):
+            raise ModuleError("web.lan must be a list of networks such as 192.168.1.0/24")
+        for entry in lan:
+            try:
+                ipaddress.ip_network(str(entry) if isinstance(entry, str) else "", strict=False)
+            except ValueError:
+                raise ModuleError(f"web.lan entry {entry!r} is not a network such as 192.168.1.0/24") from None
     if "orders" in on and not (cfg.get("orders") or {}).get("file"):
         raise ModuleError("orders needs orders.file (the order history file)")
     allow = (cfg.get("station") or {}).get("allow") or []

@@ -360,6 +360,7 @@ passphrase file, token, logs).
 ### Harmless output to expect
 
 - `filament-kit web passphrase` reads the terminal (getpass); piping the passphrase into `sudo` hangs. Type it.
-- `profiles status` counts only the Bambu Studio presets; the Orca ones are in the build zip and `BUILD.json`.
+- `profiles status`: `N presets` counts the Bambu Studio presets; the Orca ones are `N Orca presets` beside it
+  (since the final review fix C-I5).
 - migrate-ops copies the order list to `/var/lib/filament-kit/filament_orders.json` even when `orders.file`
   points elsewhere (it is the path the runbook's exporter drop-in writes).

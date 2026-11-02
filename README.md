@@ -119,6 +119,8 @@ Use either way. Both install what the new mode needs, start it, and stop what it
   server's address. Then **0) back** and **0) save and exit**.
 - `sudo filament-kit modules set <mode>`, for example `sudo filament-kit modules set all-in-one`. For the station
   mode, add the server's address: `sudo filament-kit modules set station --server 192.0.2.10`.
+  A mode never turns `web`, `remote` or `orders` on or off: the ones you turned on stay on, unless the new mode
+  lacks a module they need (then they go off, and the command says so).
 - One module at a time: `sudo filament-kit modules enable <name>` or `sudo filament-kit modules disable <name>`,
   for example `sudo filament-kit modules disable printers`. `sudo filament-kit modules list` shows the names and
   which are on.
@@ -355,7 +357,9 @@ Then run `sudo filament-kit profiles build` (or wait for the next sync).
 - The PC sync finds Orca Slicer on the PC by itself (its folder in `%APPDATA%\OrcaSlicer`). It sends the Orca
   presets to the server along with the Bambu Studio ones and installs the Orca presets the server builds. It waits
   while Orca Slicer is open, just like for Bambu Studio. A PC without Orca Slicer only gets the Bambu Studio
-  presets. `filament-kit-sync status` on the PC shows the Orca folder it uses.
+  presets. While the server makes no Orca presets (no Orca printers set up as above), the PC sync leaves Orca
+  Slicer alone: it does not wait for it and sends nothing from it. `filament-kit-sync status` on the PC shows the
+  Orca folder it uses.
 - The same rules as for Bambu Studio apply: your edits in Orca Slicer are kept, and presets are deleted in Orca
   Slicer, never on disk.
 - `sudo filament-kit profiles status` shows the last build (its count is the Bambu Studio presets) and the
@@ -410,7 +414,7 @@ working:
 - **Sleep, suspend and hibernate are turned off** (masked). An idle Ubuntu desktop otherwise goes to sleep and
   the station stops answering.
 - **Audio outputs are unmuted** at 80% and saved, so the scan beep can be heard.
-- A **udev rule** (`/etc/udev/rules.d/99-filament-kit-station.rules`) lets the station read the DYMO scale
+- A **udev rule** (`/etc/udev/rules.d/99-zz-filament-kit-station.rules`) lets the station read the DYMO scale
   without running as root.
 
 Turning the station off again, or switching to another mode, leaves these changes as they are. To undo them by
@@ -541,7 +545,8 @@ like. It stays signed in for 30 days.
 The sign-in pages (`/authorize`, `/login`) and the whole phone web app answer only addresses from your home
 network. Elsewhere they say that sign-in is only available from the home network. Claude's servers reach the connector itself
 (`/mcp` and the token exchange) from the internet, so sign Claude in from home once. The home network is the
-private address ranges by default; set your own in `"web": {"lan": ["192.168.1.0/24"]}`. Five wrong passphrases
+`192.168.0.0/16` and `10.0.0.0/8` by default (not `172.16.0.0/12`, where Docker's bridges live); set your own
+in `"web": {"lan": ["192.168.1.0/24"]}` (each entry a network; `modules apply` refuses a bad one). Five wrong passphrases
 lock the sign-in for 10 minutes.
 
 ## Remote access
@@ -591,7 +596,9 @@ timer then runs only at that time. Outside the window port 80 can stay closed.
 phone browsers work with that.
 
 Turning `remote` off removes only the kit's own router file, its certbot hook and its route. nginx, certbot,
-the certificate and any other routes stay.
+the certificate and any other routes stay. While `/etc/nginx/mcp.d` still holds routes the kit did not add, the
+router file stays too, because it is what serves them; the kit says so, and you remove it by hand once nothing
+needs those routes.
 
 ## Order history
 
@@ -661,11 +668,13 @@ This removes the programs (Spoolman and the intake station too, with the station
 The station's computer changes (brltty, ModemManager, sleep, audio) stay; see
 [What the installer changes on the computer](#what-the-installer-changes-on-the-computer) to undo them. With
 [Remote access](#remote-access) on, it also removes the kit's router file, its route and its certbot hook; nginx,
-certbot, the certificate and any other routes stay (remove them with `apt` if nothing else uses them). To delete
-everything, including all spool data and backups:
+certbot, the certificate and any other routes stay (remove them with `apt` if nothing else uses them). The
+router file stays while other routes in `/etc/nginx/mcp.d` need it (it says so). To delete everything, including
+all spool data and backups:
 
 ```
 sudo ./uninstall.sh --purge
 ```
 
-It asks you to type `purge` to confirm.
+It asks you to type `purge` to confirm. `--purge` also removes the certbot timer drop-in
+`/etc/systemd/system/certbot.timer.d/acme-window.conf` (the `remote.acme_window` setting).

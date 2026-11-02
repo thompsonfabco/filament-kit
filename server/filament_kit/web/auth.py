@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import itertools
 import html
 import ipaddress
 import json
@@ -289,21 +290,43 @@ def check_passphrase(text: str, file: Path | str) -> bool | None:
 
 class Lockout:
     """At most LOCK_MAX wrong passphrases per LOCK_WINDOW seconds, counted across every sign-in form (one shared
-    instance for /login and the web app). Global, not per IP: only the LAN can reach the forms anyway."""
+    instance for /login and the web app). Global, not per IP: only the LAN can reach the forms anyway.
+
+    A sign-in calls attempt() before the (slow) passphrase check: the attempt is counted at once, under the lock,
+    so parallel guesses cannot all pass the check-then-count gap (A-M1); a right passphrase release()s it."""
 
     def __init__(self, max_fails: int = LOCK_MAX, window: float = LOCK_WINDOW):
-        self.max, self.window, self.fails = max_fails, window, []
+        self.max, self.window, self.fails = max_fails, window, []   # fails: [(time, attempt id)]
         self._lock = threading.Lock()
+        self._ids = itertools.count()
+
+    def _prune(self) -> None:
+        now = time.time()
+        self.fails[:] = [f for f in self.fails if f[0] > now - self.window]
 
     def blocked(self) -> bool:
-        now = time.time()
         with self._lock:
-            self.fails[:] = [t for t in self.fails if t > now - self.window]
+            self._prune()
             return len(self.fails) >= self.max
+
+    def attempt(self) -> int | None:
+        """Count one sign-in attempt; None (and nothing counted) when locked out. Pass the result to release()
+        when the passphrase was right, or the check could not run."""
+        with self._lock:
+            self._prune()
+            if len(self.fails) >= self.max:
+                return None
+            n = next(self._ids)
+            self.fails.append((time.time(), n))
+            return n
+
+    def release(self, attempt: int | None) -> None:
+        with self._lock:
+            self.fails[:] = [f for f in self.fails if f[1] != attempt]
 
     def fail(self) -> None:
         with self._lock:
-            self.fails.append(time.time())
+            self.fails.append((time.time(), next(self._ids)))
 
 
 # ---------- sign-in page (LAN only) ----------
@@ -369,14 +392,16 @@ def login_routes(store: Store, public_url: str, passphrase_file: Path | str, *, 
                          f"slicer presets.</p><form method=post><input type=hidden name=req value='{html.escape(rid)}'>"
                          "<input type=password name=passphrase placeholder=Passphrase autofocus>"
                          "<button>Allow</button></form>")
-        if lockout.blocked():
+        attempt = lockout.attempt()             # counted before the check (A-M1)
+        if attempt is None:
             return _page("<p>Too many wrong passphrases. Wait 10 minutes.</p>", 429)
         ok = await anyio.to_thread.run_sync(check_passphrase, str(form.get("passphrase", "")), passphrase_file)
         if ok is None:
+            lockout.release(attempt)
             return _page("<p>No passphrase is set on the server yet (run: filament-kit web passphrase).</p>", 503)
         if not ok:
-            lockout.fail()
             return _page("<p>Wrong passphrase.</p><p><a href='login?req=" + html.escape(rid) + "'>Try again</a></p>", 401)
+        lockout.release(attempt)
         store.pending.pop(rid, None)
         p, now = pend["params"], time.time()
         code = secrets.token_urlsafe(32)

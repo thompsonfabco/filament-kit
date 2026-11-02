@@ -37,8 +37,9 @@ rm -rf /etc/systemd/system/filament-kit-station.service.d
 systemctl daemon-reload
 # The station's udev rule. Its other system changes (brltty removed, ModemManager off, sleep masked,
 # audio levels) are left as they are.
-if [ -f /etc/udev/rules.d/99-filament-kit-station.rules ]; then
-    rm -f /etc/udev/rules.d/99-filament-kit-station.rules
+# (99-filament-kit-station.rules is its name before it was renamed to sort after the ops station's rule.)
+if [ -f /etc/udev/rules.d/99-zz-filament-kit-station.rules ] || [ -f /etc/udev/rules.d/99-filament-kit-station.rules ]; then
+    rm -f /etc/udev/rules.d/99-zz-filament-kit-station.rules /etc/udev/rules.d/99-filament-kit-station.rules
     udevadm control --reload 2>/dev/null || true
 fi
 # The station user owns no data; its unit is gone, so it goes on every uninstall.
@@ -51,10 +52,13 @@ systemctl reload avahi-daemon 2>/dev/null || true
 rm -f /usr/local/bin/filament-kit
 # remote: the kit's own nginx and certbot files, as `modules disable remote` removes them: its routes (only files
 # mcp-route wrote), its router conf and its deploy hook. nginx, certbot, the certificate (/etc/mcp-router/tls),
-# mcp-route, its hook and other routes stay.
+# mcp-route, its hook and other routes stay. While /etc/nginx/mcp.d holds routes the kit did not add (the owner's
+# amazon and h2d routes), the router conf stays too: once the ops router is gone it is what serves them.
 REMOTE_GONE=0
+KIT_ROUTES=""
 if [ -f /etc/mcp-router/kit-routes ]; then
-    for n in $(cat /etc/mcp-router/kit-routes); do
+    KIT_ROUTES=$(cat /etc/mcp-router/kit-routes)
+    for n in $KIT_ROUTES; do
         case "$n" in *[!a-z0-9-]*|"") continue ;; esac
         if [ -f "/etc/nginx/mcp.d/$n.conf" ] && grep -q 'written by mcp-route' "/etc/nginx/mcp.d/$n.conf"; then
             rm -f "/etc/nginx/mcp.d/$n.conf" && REMOTE_GONE=1
@@ -62,15 +66,29 @@ if [ -f /etc/mcp-router/kit-routes ]; then
     done
     rm -f /etc/mcp-router/kit-routes
 fi
-for f in /etc/nginx/conf.d/filament-kit-router.conf /etc/letsencrypt/renewal-hooks/deploy/filament-kit; do
+OTHER_ROUTES=""
+for f in /etc/nginx/mcp.d/*.conf; do
+    [ -f "$f" ] || continue
+    n=$(basename "$f" .conf)
+    case " $(echo $KIT_ROUTES) " in *" $n "*) continue ;; esac
+    OTHER_ROUTES="$OTHER_ROUTES $n"
+done
+REMOTE_FILES=/etc/letsencrypt/renewal-hooks/deploy/filament-kit
+if [ -z "$OTHER_ROUTES" ]; then
+    REMOTE_FILES="/etc/nginx/conf.d/filament-kit-router.conf $REMOTE_FILES"
+elif [ -f /etc/nginx/conf.d/filament-kit-router.conf ]; then
+    echo "Remote: kept the kit's router conf /etc/nginx/conf.d/filament-kit-router.conf: it serves the other"
+    echo "routes in /etc/nginx/mcp.d (${OTHER_ROUTES# }). Remove it by hand once nothing needs them."
+fi
+for f in $REMOTE_FILES; do
     [ -e "$f" ] && rm -f "$f" && REMOTE_GONE=1
 done
 if [ "$REMOTE_GONE" -eq 1 ]; then
     if command -v nginx >/dev/null 2>&1 && nginx -t -q 2>/dev/null && systemctl is-active -q nginx; then
         systemctl reload nginx || true
     fi
-    echo "Removed the kit's router conf, route and certbot deploy hook. nginx, certbot, the certificate in"
-    echo "/etc/mcp-router and mcp-route were left; remove them with apt and rm if nothing else uses them."
+    echo "Removed the kit's own remote files. nginx, certbot, the certificate in /etc/mcp-router and"
+    echo "mcp-route were left; remove them with apt and rm if nothing else uses them."
 fi
 rm -rf /opt/filament-kit /opt/spoolman /opt/spoolman.new /opt/spoolman.old
 
