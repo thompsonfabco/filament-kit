@@ -427,6 +427,20 @@ def test_inapp_gcode_edit_installs_after_an_app_reset(tmp_path, server, monkeypa
     assert pc.preset(edited)["filament_end_gcode"] == mine
 
 
+
+def test_restored_backup_without_system_presets_is_resynced(tmp_path, server, monkeypatch):
+    """Final review I5: a server backup leaves out live/system but keeps meta.json; the PC's next run uploads the
+    system presets again and builds work."""
+    _, sm = server
+    pc, _ = installed_first_build(tmp_path, server, monkeypatch)
+    shutil.rmtree(config.paths().state / "profiles" / "live" / "system")
+    assert pc.client.state()["system_hash"] is None
+    assert pc.run() == "uploaded"
+    assert pc.client.state()["system_hash"] == builds.tree_hash(pc.folders.system_filament)
+    builds.request_rebuild("after restore")
+    assert builds.run_build(sm)["ok"] is True
+
+
 # ---------- interrupted installs ----------
 
 def _crash_after(monkeypatch, writes: int) -> None:

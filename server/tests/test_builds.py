@@ -686,3 +686,24 @@ def test_installed_json_of_another_device_is_ignored(env):
     (profiles_dir() / "installed.json").write_text(json.dumps({"stamp": b1, "at": 1.0, "device_id": "zz"}),
                                                    encoding="utf-8")
     assert builds.state_view("a")["installed"] is None
+
+
+# ---------- final review I5: a restored backup has no system presets ----------
+
+@pytest.mark.parametrize("how", ["missing", "empty"])
+def test_system_hash_is_null_without_the_system_folder(env, how):
+    """The backup leaves out live/system but keeps meta.json's system_hash: the server must report null, so the PC
+    uploads its system presets again (else every build says "no system presets" forever)."""
+    import shutil
+    synced(env)
+    assert builds.state_view("a")["system_hash"] is not None
+    assert builds.system_store() is not None
+    system = profiles_dir() / "live" / "system"
+    shutil.rmtree(system)
+    if how == "empty":
+        system.mkdir()
+    assert builds.state_view("a")["system_hash"] is None
+    assert builds.system_store() is None
+    synced(env)                                                 # the PC's next run re-uploads them
+    assert builds.state_view("a")["system_hash"] is not None
+    assert builds.system_store() is not None

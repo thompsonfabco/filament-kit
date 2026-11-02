@@ -189,6 +189,19 @@ def meta() -> dict:
 
 # ---------- the uploaded system store (one definition for every caller) ----------
 
+def _system_hash(meta: dict) -> str | None:
+    """meta.json's `system_hash`, but None when `live/system/` is missing or holds no preset .json (a backup
+    restored without it, final review I5): the PC then sees a mismatch and uploads its system presets again."""
+    h = meta.get("system_hash")
+    if not isinstance(h, str) or not h:
+        return None
+    try:
+        has = any(p.suffix.casefold() == ".json" and p.is_file() for p in (_live() / "system").rglob("*"))
+    except OSError:
+        has = False
+    return h if has else None
+
+
 _store_cache: dict = {}
 _store_cache_lock = threading.Lock()
 
@@ -197,12 +210,13 @@ def system_store() -> Store | None:
     """The uploaded Bambu Studio system presets (`live/system/`, the PC sync's upload of its
     `system/BBL/filament` folder), or None when none are uploaded.
 
-    A store is uploaded exactly when meta.json has a `system_hash` and the folder holds at least one preset. The
+    A store is uploaded exactly when meta.json has a `system_hash` and the folder holds at least one preset
+    (`_system_hash`). The
     store is cached by (folder, system_hash). On a cache miss the raw files are read under live.lock (so an upload
     swap can't interleave) and parsed after it is released."""
     folder = _live() / "system"
     with _locked("live.lock"):
-        h = _meta().get("system_hash")
+        h = _system_hash(_meta())
         key = (str(folder), h)
         with _store_cache_lock:
             if _store_cache.get("key") == key:
@@ -764,7 +778,7 @@ def state_view(device_id: str) -> dict:
     meta = _meta()
     req = _pending_request()
     return {"owner": owner(), "you": device_id, "user_id": meta.get("user_id"),
-            "live_hash": meta.get("live_hash"), "system_hash": meta.get("system_hash"), "build": _build_view(),
+            "live_hash": meta.get("live_hash"), "system_hash": _system_hash(meta), "build": _build_view(),
             "last_attempt": _attempt_view(), "installed": _installed_view(),
             "rebuild_requested": {"at": req["at"], "live_hash": req["live_hash"]} if req else None}
 
