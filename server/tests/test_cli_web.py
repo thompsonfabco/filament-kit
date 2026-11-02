@@ -98,3 +98,38 @@ def test_web_status(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "https://mcp.example.test/filament/mcp" in out and "FAIL" not in out
     assert "https://mcp.example.test/filament/intake" in out
+
+
+def test_web_status_effective_port_and_unreadable_oauth(monkeypatch, capsys):
+    mods = {n: True for n in modules.MODES["server"]}
+    mods["web"] = True
+    config.save({"modules": mods, "web": {"public_url": "https://mcp.example.test/filament"}})
+    cli.main(["web", "status"])
+    out = capsys.readouterr().out
+    assert "127.0.0.1:8101" in out and "None" not in out
+    f = config.paths().state / "web" / "oauth.json"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text("{}", encoding="utf-8")
+    real = cli.Path.read_text
+
+    def denied(self, *a, **kw):
+        if self.name == "oauth.json":
+            raise PermissionError(13, "Permission denied")
+        return real(self, *a, **kw)
+    monkeypatch.setattr(cli.Path, "read_text", denied)
+    cli.main(["web", "status"])
+    assert "cannot read (run as root)" in capsys.readouterr().out
+
+
+def test_web_passphrase_without_the_group(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "_is_root", lambda: True)
+
+    def no_group(path, user=None, group=None):
+        raise LookupError(f"no such group: {group!r}")
+    monkeypatch.setattr(cli.shutil, "chown", no_group)
+    _prompts(monkeypatch, PASS, PASS)
+    assert cli.main(["web", "passphrase"]) == 1
+    err = capsys.readouterr().err
+    assert "filament-kit" in err and "fix:" in err and "Traceback" not in err
+    etc = config.paths().etc
+    assert not (etc / "web_passphrase").exists() and not list(etc.glob("web_passphrase*"))

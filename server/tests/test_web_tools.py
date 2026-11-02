@@ -456,3 +456,77 @@ def test_add_line_without_orca_parent_keeps_the_chosen_one(tools, sm, store, mon
     out = tools.add_line("Acme Basic", "Acme", [fid], "", "Bambu PLA Basic")
     line = lines_mod.load()[out["line_id"]]
     assert line.orca_parent == "Generic PLA" and line.orca_parent_source != "user"
+
+
+# ---------- fix round 1 ----------
+
+def _mcp_call(tools, name, args):
+    import anyio
+    from mcp.server.mcpserver import MCPServer
+    m = MCPServer("t")
+    mcp_tools.register(m, tools)
+
+    async def run():
+        return await m.call_tool(name, args)
+    return anyio.run(run)
+
+
+def test_mcp_add_of_an_existing_filament_keeps_its_line(tools, sm, spoolman_fake_store):
+    # Ruling AC: Claude filling `line` on a routine add must not move a reused filament to another line
+    (a,) = add(sm, item(line="PLA+"))
+    fid = sm.get(f"spool/{a}")["filament"]["id"]
+    sm.patch(f"filament/{fid}", {"extra": {"line": json.dumps("PLA+")}})
+    body = {"items": [{**item(), "line": "Something Else", "bambu_parent": "Bambu PLA Basic"}], "dry_run": False}
+    _mcp_call(tools, "add_spools", body)
+    f = spoolman_fake_store["filaments"][fid]
+    assert json.loads(f["extra"]["line"]) == "PLA+"
+    assert len([s for s in spoolman_fake_store["spools"].values() if s["filament_id"] == fid]) == 2
+    # a new filament keeps its line
+    _mcp_call(tools, "add_spools", {"items": [{**item(name="PLA+ Red"), "line": "PLA+"}], "dry_run": False})
+    new = next(f for f in spoolman_fake_store["filaments"].values() if f["name"] == "PLA+ Red")
+    assert json.loads(new["extra"]["line"]) == "PLA+"
+
+
+def test_tool_texts_round_1():
+    from filament_kit.web.mcp_tools import SpoolItem
+    assert "only for a new filament" in SpoolItem.model_fields["line"].description
+    assert "only for a new filament" in SpoolItem.model_fields["bambu_parent"].description
+    assert "only for a new filament" in mcp_tools.instructions(config._merge(config.DEFAULTS, {}))
+    import anyio
+    from mcp.server.mcpserver import MCPServer
+    m = MCPServer("t")
+    mcp_tools.register(m, mcp_tools.Tools(None))
+    tools = {t.name: t for t in anyio.run(m.list_tools)}
+    d = tools["add_filaments_to_line"].description
+    assert "Refuses duplicates" not in d and "moves" in d and "extra.line" in d
+    assert "EXT-L" in tools["h2d_set_slot"].description and "slot_service" in tools["h2d_set_slot"].description
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), -float("inf")])
+def test_non_finite_numbers_refused(tools, sm, bad):
+    with pytest.raises(ValueError):
+        tools.add_spools([item(net=bad)], dry_run=True)
+    (a,) = add(sm, item())
+    with pytest.raises(ValueError):
+        inventory.open_spool(sm, a, UID, RULES, remaining=bad, dry=True)
+
+
+def test_error_text_only_for_deliberate_refusals():
+    assert mcp_tools.error_text(Problem("x")) == "x"
+    assert mcp_tools.error_text(ValueError("bad value")) == "bad value"
+    assert mcp_tools.error_text(KeyError("line")) is None
+    assert mcp_tools.error_text(TypeError("boom")) is None
+    assert mcp_tools.error_text(RuntimeError("boom")) is None
+
+
+def test_half_configured_slot_service_refuses(tools, caplog):
+    import logging
+    cfg = config.load()
+    cfg["slot_service"] = {"state_url": "http://x/api/state"}          # no set_url
+    config.save(cfg)
+    with caplog.at_level(logging.ERROR, logger="filament_kit"):
+        with pytest.raises(Problem, match="slot_service"):
+            tools.printer_slots()
+    assert any("slot_service" in r.getMessage() for r in caplog.records)
+    with pytest.raises(Problem, match="slot_service"):
+        tools.printer_set_slot(1, "1")

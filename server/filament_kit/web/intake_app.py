@@ -15,6 +15,7 @@ from __future__ import annotations
 import html
 import json
 import logging
+import math
 import struct
 import zlib
 from pathlib import Path
@@ -29,6 +30,7 @@ from starlette.routing import Route
 
 from .. import config, intake, modules, tagsources
 from ..intake import CapReached, ReadCap, ReadError
+from ..spoolman import SpoolmanError
 from ..station_client import StationClient
 from . import auth, mcp_tools
 from .errors import Problem
@@ -72,12 +74,35 @@ def icon_png(size: int = 180) -> bytes:
 
 
 def _num(b: dict, key: str) -> float | None:
+    """An optional number field (the phone sends the input's text): blank is None; NaN/infinity are refused."""
     v = b.get(key)
     if v in (None, ""):
         return None
-    if isinstance(v, bool):
-        raise ValueError(f"{key} must be a number")
-    return float(v)
+    try:
+        if isinstance(v, bool):
+            raise ValueError
+        n = float(v)
+    except (TypeError, ValueError):
+        raise Problem(f"{key} must be a number") from None
+    if not math.isfinite(n):
+        raise Problem(f"{key} must be a number")
+    return n
+
+
+def _ids(b: dict) -> list[int]:
+    ids = b.get("ids")
+    if not isinstance(ids, list) or not ids or not all(isinstance(i, int) and not isinstance(i, bool) for i in ids):
+        raise Problem("ids must be a list of Spoolman filament ids")
+    return ids
+
+
+def _text(b: dict, key: str, *, required: bool = True) -> str:
+    v = b.get(key)
+    if v is None and not required:
+        return ""
+    if not isinstance(v, str) or (required and not v.strip()):
+        raise Problem(f"{key} must be text")
+    return v.strip()
 
 
 class IntakeApp:
@@ -206,8 +231,6 @@ class IntakeApp:
                 return JSONResponse({"error": e.message, "read_id": e.read_id}, 502)
             except Exception as e:  # noqa: BLE001 - a refusal is shown on the phone; a crash is logged only
                 text = mcp_tools.error_text(e)
-                if text is None and isinstance(e, TypeError):
-                    text = str(e) or "bad request"
                 if text is None:
                     log.exception("intake %s", request.url.path)
                     return JSONResponse({"error": "internal error (see the server log)"}, 500)
@@ -252,9 +275,8 @@ class IntakeApp:
             try:
                 ctx = intake.read_context(cfg, self.tools.sm, self._station())
                 return intake.read_labels(self.tools.sm, images, hint, None, self.claude, **ctx)
-            except Exception as e:
-                if not isinstance(e, ReadError):  # never reached Claude (Spoolman down ...): give the read back
-                    cap.refund()
+            except SpoolmanError:  # as api.py: the catalog fetch failed before Claude was called
+                cap.refund()
                 raise
         return await anyio.to_thread.run_sync(run)
 
@@ -324,14 +346,14 @@ class IntakeApp:
 
     async def line_add(self, request: Request):
         b = await self._body(request)
-        return await anyio.to_thread.run_sync(self.tools.add_filaments_to_line, str(b["line"]),
-                                              [int(i) for i in b["ids"]])
+        line, ids = _text(b, "line"), _ids(b)
+        return await anyio.to_thread.run_sync(self.tools.add_filaments_to_line, line, ids)
 
     async def line_new(self, request: Request):
         b = await self._body(request)
-        return await anyio.to_thread.run_sync(self.tools.add_line, str(b["name"]).strip(), str(b["vendor"]).strip(),
-                                              [int(i) for i in b["ids"]], str(b.get("orca_parent") or ""),
-                                              str(b["bs_template"]))
+        args = (_text(b, "name"), _text(b, "vendor"), _ids(b), _text(b, "orca_parent", required=False),
+                _text(b, "bs_template"))
+        return await anyio.to_thread.run_sync(self.tools.add_line, *args)
 
     async def generate(self, request: Request):
         return await anyio.to_thread.run_sync(self.tools.generate)
