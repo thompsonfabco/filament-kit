@@ -2,9 +2,14 @@
 
 State, all under `state/profiles/`:
   live/user/, live/system/   the PC sync's last good uploads (user filament folder, `system/BBL/filament`)
+  live/orca/user/            Orca Slicer's user `filament/` folder (upload kind `orca_live`, Task 3)
+  live/orca/system/          Orca's system presets (kind `orca_system`, Ruling L): `BBL/filament/**.json` from
+                             `%APPDATA%\\OrcaSlicer\\system\\BBL\\filament\\` + `OrcaFilamentLibrary/index.json`
   live/meta.json             {owner, user_id, live_hash, live_at, system_hash, system_at, system_presets,
-                             partial}; `partial` = a build whose install stopped part-way on the PC (ruling S28,
-                             `PUT /api/sync/live?partial=<stamp>`), cleared by the next install report
+                             partial, orca_user_id, orca_live_hash, orca_live_at, orca_system_hash,
+                             orca_system_at, orca_system_presets}; `partial` = a build whose install stopped
+                             part-way on the PC (ruling S28, `PUT /api/sync/live?partial=<stamp>`), cleared by the
+                             next install report
   builds/<stamp>/            one build: BUILD.json (the manifest) + base/<name>.json|.info
   builds/*.tmp               a build or upload in progress; removed by the next build
   current.json               the last good build {stamp, created, live_hash, presets, problems}
@@ -72,6 +77,7 @@ from ..pairing import _write_atomic, make_state_dir, open_lock
 from . import generate, inapp as inapp_mod, lines as lines_mod
 from .bbl import Store
 from .errors import ProfileError
+from .orca import OrcaStore
 
 MAX_LIVE = 32 << 20
 MAX_SYSTEM = 64 << 20
@@ -89,6 +95,9 @@ USER_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
 NO_SYSTEM = "no Bambu Studio system presets yet: install and pair the PC sync"
 WAIT_LIVE = "waiting for the PC's next sync"
 OWNER_EDITS = "owner-edits.json"
+# upload kind -> (folder under live/, size cap, every .json must parse, meta.json key prefix)
+KINDS = {"live": ("user", MAX_LIVE, True, ""), "system": ("system", MAX_SYSTEM, False, ""),
+         "orca_live": ("orca/user", MAX_LIVE, True, "orca_"), "orca_system": ("orca/system", MAX_SYSTEM, False, "orca_")}
 _BAD_PART = re.compile(r'[<>:"|?*\x00-\x1f\x7f]')
 _DRIVE = re.compile(r"[A-Za-z]:")
 
@@ -192,14 +201,16 @@ def meta() -> dict:
 
 # ---------- the uploaded system store (one definition for every caller) ----------
 
-def _system_hash(meta: dict) -> str | None:
-    """meta.json's `system_hash`, but None when `live/system/` is missing or holds no preset .json (a backup
-    restored without it, final review I5): the PC then sees a mismatch and uploads its system presets again."""
-    h = meta.get("system_hash")
+def _system_hash(meta: dict, kind: str = "system") -> str | None:
+    """meta.json's `system_hash` (`orca_system_hash` for kind "orca_system"), but None when its folder is missing
+    or holds no preset .json (a backup restored without it, final review I5): the PC then sees a mismatch and
+    uploads its system presets again."""
+    sub, _cap, _strict, prefix = KINDS[kind]
+    h = meta.get(prefix + "system_hash")
     if not isinstance(h, str) or not h:
         return None
     try:
-        has = any(p.suffix.casefold() == ".json" and p.is_file() for p in (_live() / "system").rglob("*"))
+        has = any(p.suffix.casefold() == ".json" and p.is_file() for p in _live().joinpath(*sub.split("/")).rglob("*"))
     except OSError:
         has = False
     return h if has else None
@@ -235,6 +246,32 @@ def system_store() -> Store | None:
         store = None
     with _store_cache_lock:
         _store_cache.update(key=key, store=store)
+    return store
+
+
+_orca_cache: dict = {}
+
+
+def orca_store() -> OrcaStore | None:
+    """The uploaded Orca system presets (`live/orca/system/`, Ruling L), or None when none are uploaded; cached
+    and locked exactly as `system_store`."""
+    folder = _live() / "orca" / "system"
+    fast = (str(folder), _system_hash(_meta(), "orca_system"))
+    with _store_cache_lock:
+        if fast[1] is not None and _orca_cache.get("key") == fast:
+            return _orca_cache["store"]
+    with _locked("live.lock"):
+        h = _system_hash(_meta(), "orca_system")
+        key = (str(folder), h)
+        with _store_cache_lock:
+            if _orca_cache.get("key") == key:
+                return _orca_cache["store"]
+        raw = OrcaStore.read(folder) if h else None
+    store = OrcaStore.parse(raw) if raw else None
+    if store is not None and not store.names():
+        store = None
+    with _store_cache_lock:
+        _orca_cache.update(key=key, store=store)
     return store
 
 
@@ -497,18 +534,23 @@ def sweep_uploads(now: float | None = None) -> None:
 
 def store_upload(kind: str, src: BinaryIO, *, device_id: str, user_id: str | None = None,
                  partial: str | None = None) -> str:
-    """Store the PC sync's zip of its user filament folder (`live`, into `live/user/`) or of Bambu Studio's
-    `system/BBL/filament` (`system`, into `live/system/`) and return its tree hash. Claims the sync owner.
-    `partial` (live only) names the build whose install stopped part-way in this live folder (ruling S28).
-    Raises OtherPc, BadZip or TooLarge; then nothing changed."""
-    if kind not in ("live", "system"):
+    """Store a PC sync upload and return its tree hash. Claims the sync owner. Kinds (KINDS):
+      live         Bambu Studio's user filament folder        -> live/user/
+      system       Bambu Studio's `system/BBL/filament`       -> live/system/
+      orca_live    Orca Slicer's user `filament/` folder      -> live/orca/user/
+      orca_system  `BBL/filament/**.json` + `OrcaFilamentLibrary/index.json` (Ruling L) -> live/orca/system/
+    `user_id` (the slicer's user folder id) is kept for the two live kinds. `partial` (Bambu Studio live only)
+    names the build whose install stopped part-way in this live folder (ruling S28). Raises OtherPc, BadZip or
+    TooLarge; then nothing changed."""
+    if kind not in KINDS:
         raise ValueError(f"unknown upload kind {kind!r}")
+    sub, cap, strict, prefix = KINDS[kind]
+    is_live = kind in ("live", "orca_live")
     if user_id is not None and not USER_ID.fullmatch(user_id):
         raise ProfileError(400, "bad_request", "user_id may only have letters, digits, - and _ (at most 64)")
     if partial is not None and (kind != "live" or not isinstance(partial, str) or not STAMP_RE.fullmatch(partial)):
-        raise ProfileError(400, "bad_request", "partial must be a build stamp (live uploads only)")
+        raise ProfileError(400, "bad_request", "partial must be a build stamp (Bambu Studio live uploads only)")
     check_owner(device_id)                      # refuse before reading the body
-    cap = MAX_LIVE if kind == "live" else MAX_SYSTEM
     make_state_dir(_dir())
     sweep_uploads()
     tmp = Path(tempfile.mkdtemp(prefix=f"upload-{kind}-", suffix=".tmp", dir=_dir()))
@@ -516,12 +558,14 @@ def store_upload(kind: str, src: BinaryIO, *, device_id: str, user_id: str | Non
         zpath = tmp / "upload.zip"
         _receive(src, zpath, cap)
         tree = tmp / "tree"
-        jsons = _extract(zpath, tree, strict_json=kind == "live")
+        jsons = _extract(zpath, tree, strict_json=strict)
         h = tree_hash(tree)
         with _locked("live.lock"):
             check_owner(device_id)
             make_state_dir(_live())
-            dest = _live() / ("user" if kind == "live" else "system")
+            dest = _live().joinpath(*sub.split("/"))
+            if dest.parent != _live():
+                make_state_dir(dest.parent)
             old = tmp / "old"
             if dest.exists():
                 os.replace(dest, old)
@@ -536,17 +580,19 @@ def store_upload(kind: str, src: BinaryIO, *, device_id: str, user_id: str | Non
             if meta.get("owner") != device_id and (meta.get("owner") or _dir().joinpath("installed.json").exists()):
                 _forget_old_pc(meta)
             meta["owner"] = device_id
-            if kind == "live":
+            renew = False
+            if is_live:
                 if user_id is not None:
-                    meta["user_id"] = user_id
+                    meta[prefix + "user_id"] = user_id
                 if partial is not None:
                     meta["partial"] = partial
-                meta.update(live_hash=h, live_at=now)
-                renew = bool(_state().get("wait_live"))
+                meta.update({prefix + "live_hash": h, prefix + "live_at": now})
+                # S32 waits on the Bambu Studio live folder; the Orca side joins the builds in Task 6
+                renew = kind == "live" and bool(_state().get("wait_live"))
             else:
-                meta.update(system_hash=h, system_at=now, system_presets=jsons)
+                meta.update({prefix + "system_hash": h, prefix + "system_at": now, prefix + "system_presets": jsons})
             _write_json(_live() / "meta.json", meta)
-        if kind == "live" and renew:            # a build waited for this upload (S32)
+        if renew:                               # a build waited for this upload (S32)
             _set_state(wait_live=False)
             request_rebuild("live upload after an install", h)
         return h
@@ -830,7 +876,9 @@ def state_view(device_id: str) -> dict:
     meta = _meta()
     req = _pending_request()
     return {"owner": owner(), "you": device_id, "user_id": meta.get("user_id"),
-            "live_hash": meta.get("live_hash"), "system_hash": _system_hash(meta), "build": _build_view(),
+            "live_hash": meta.get("live_hash"), "system_hash": _system_hash(meta),
+            "orca_live_hash": meta.get("orca_live_hash"), "orca_system_hash": _system_hash(meta, "orca_system"),
+            "build": _build_view(),
             "last_attempt": _attempt_view(), "installed": _installed_view(),
             "rebuild_requested": {"at": req["at"], "live_hash": req["live_hash"]} if req else None}
 
