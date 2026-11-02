@@ -28,7 +28,9 @@ jobs:
             echo "::error::tag $GITHUB_REF_NAME does not match __version__ (server $server, pc-sync $sync)"
             exit 1
           fi
-          # versionCode = MAJOR*10000 + MINOR*100 + PATCH, so MINOR and PATCH stay below 100
+          # versionCode = MAJOR*10000 + MINOR*100 + PATCH, so MINOR and PATCH stay below 100.
+          # Pre-release tags (v0.3.0-rc1) are rejected on purpose: the formula has no room for them,
+          # and an rc's versionCode would equal the final release's, so phones would not update to it.
           if ! [[ "$version" =~ ^(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]?)\.(0|[1-9][0-9]?)$ ]]; then
             echo "::error::version $version is not MAJOR.MINOR.PATCH with MINOR and PATCH below 100"
             exit 1
@@ -179,6 +181,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           fail_on_unmatched_files: true
+          generate_release_notes: true
           files: |
             dist/filament-kit-${{ needs.version.outputs.version }}.tar.gz
             dist/filament-kit.apk
