@@ -133,6 +133,13 @@ data class AddUiState(
     /** Every item has a whole spool count of at least 1 (Preview is blocked otherwise). */
     val countsValid: Boolean
         get() = items.all { ((it["count"] as? JsonPrimitive)?.intOrNull ?: 0) >= 1 }
+
+    /** No item has an empty-spool weight (tare) of 0 g or less, e.g. from a read (blank = unknown is allowed). */
+    val taresValid: Boolean
+        get() = items.all { item ->
+            val tare = (item["tare"] as? JsonPrimitive)?.takeIf { !it.isString }?.contentOrNull?.toDoubleOrNull()
+            tare == null || isValidWeight(tare)
+        }
 }
 
 /**
@@ -490,7 +497,7 @@ class AddViewModel(
 
     fun preview() {
         val s = _state.value
-        if (s.items.isEmpty() || !s.countsValid || s.stage != Stage.Review) return
+        if (s.items.isEmpty() || !s.countsValid || !s.taresValid || s.stage != Stage.Review) return
         typingParent.toList().forEach(::commitParent) // parent text still being typed counts as entered
         runAdd(dryRun = true)
     }

@@ -171,6 +171,27 @@ class AddViewModelTest {
         assertEquals("Sunlu Inc", saved["vendor"]!!.jsonPrimitive.content)
     }
 
+    @Test fun aTareOfZeroOrLessBlocksPreview() = runTest(dispatcher) {
+        val vm = vm()
+        readOne(vm, JsonObject(item() + ("tare" to JsonPrimitive(0))))
+        assertFalse(vm.state.value.taresValid)
+        vm.preview()
+        advanceUntilIdle()
+        assertTrue("nothing sent with a 0 g tare", api.adds.isEmpty())
+        // typing 0 or a negative never replaces it; a real weight does
+        vm.setNumber(0, "tare", -5.0)
+        assertFalse(vm.state.value.taresValid)
+        vm.setNumber(0, "tare", 213.0)
+        assertTrue(vm.state.value.taresValid)
+        // blank (unknown) stays allowed
+        vm.setNumber(0, "tare", null)
+        assertTrue(vm.state.value.taresValid)
+        vm.setNumber(0, "tare", 213.0)
+        vm.preview()
+        advanceUntilIdle()
+        assertEquals(213.0, sentItem()["tare"]!!.jsonPrimitive.double, 0.0)
+    }
+
     @Test fun blankLocationIsLeftToTheServer() = runTest(dispatcher) {
         val vm = vm()
         readOne(vm, item())
