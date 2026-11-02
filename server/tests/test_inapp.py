@@ -95,6 +95,18 @@ def test_recorded_edits_last_and_drop_when_generated_again():
     assert out["filament_flow_ratio"] == ["0.91"]
 
 
+def test_recorded_edit_survives_a_coinciding_generated_value():
+    """Fix round 1: a key only in the record is never dropped because the generated value happens to match."""
+    recorded = {"nozzle_temperature": ["220"]}
+    b2 = {"nozzle_temperature": ["220"]}                    # B2 carried the owner's 220
+    live = {"nozzle_temperature": ["220"]}
+    rec3 = inapp.keep_edits({"name": "x", "nozzle_temperature": ["220"]}, b2, live, [], recorded=recorded)
+    assert rec3 == {"nozzle_temperature": ["220"]}          # B3 generates 220 too: still his
+    cfg4 = {"name": "x", "nozzle_temperature": ["230"]}
+    assert inapp.keep_edits(cfg4, b2, live, [], recorded=rec3) == {"nozzle_temperature": ["220"]}
+    assert cfg4["nozzle_temperature"] == ["220"]            # B4 generates 230: his 220 wins
+
+
 def test_partial_build_values_are_not_edits():
     cfg = {"name": "x", "filament_density": ["1.35"], "filament_flow_ratio": ["0.98"]}
     installed = {"filament_density": ["1.24"], "filament_flow_ratio": ["0.98"]}

@@ -317,7 +317,8 @@ def build_all(*, filaments: list[dict], models: list[str], store: Store, library
     stale = sorted(n for n in snap_names if n.casefold() in live_cf and n.casefold() not in generated
                    and n.casefold() not in planned and not n.casefold().startswith(prefixes))
     manifest = {"presets": presets, "lines": manifest_lines, "problems": problems, "clamps": clamps,
-                "edits": edits, "inapp": dict(sorted(carried.items())), "deleted": sorted(deleted), "stale": stale, "library_version": library.version}
+                "edits": edits, "inapp": dict(sorted(carried.items())), "deleted": sorted(deleted), "stale": stale,
+                "library_version": library.version}
     return manifest, ls
 
 

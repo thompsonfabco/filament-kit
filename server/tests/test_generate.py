@@ -554,6 +554,22 @@ def test_inapp_edit_reverted_to_generated_is_dropped(tmp_path):
     assert name not in m4["inapp"]
 
 
+def test_inapp_edit_kept_when_the_generated_value_coincides_then_moves(tmp_path):
+    """Fix round 1: B3's parent gives the owner's value, B4's another one; B4 still holds the owner's value."""
+    flow = ["0.91", "0.91"]
+    name, ls, snap, live = _edited_once(tmp_path, flow)
+    same = presets()
+    same["Bambu PLA Tough+ @BBL H2D"]["filament_flow_ratio"] = ["0.91", "nil"]
+    m3, ls = build(tmp_path, SUNLU, store_presets=same, line_set=ls, live=live, snapshot=snap, out="o3")
+    assert m3["inapp"][name] == {"filament_flow_ratio": flow}
+    snap3, live3 = _install_build(tmp_path, "o3", m3)
+    moved = presets()
+    moved["Bambu PLA Tough+ @BBL H2D"]["filament_flow_ratio"] = ["0.96", "nil"]
+    m4, _ = build(tmp_path, SUNLU, store_presets=moved, line_set=ls, live=live3, snapshot=snap3, out="o4")
+    assert read(tmp_path, name, "o4")["filament_flow_ratio"] == flow
+    assert read(tmp_path, sunlu(H2D, "0.6"), "o4")["filament_flow_ratio"] == ["0.96", "0.96"]
+
+
 def test_inapp_edit_changed_again_takes_the_new_value(tmp_path):
     name, ls, snap, live = _edited_once(tmp_path, ["0.91", "0.91"])
     _edit_live(live, name, filament_flow_ratio=["0.93", "0.93"], pressure_advance=["0.03"])
