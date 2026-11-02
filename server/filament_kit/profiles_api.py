@@ -188,8 +188,8 @@ def _preset_counts() -> dict[str, int]:
     cur = builds.current()
     m = builds.manifest(cur["stamp"]) if cur else None
     out: dict[str, int] = {}
-    for p in (m or {}).get("presets", []):
-        lid = p.get("line_id") if isinstance(p, dict) else None
+    for p in builds.bambu_rows(m):              # Bambu Studio presets only (Orca's are counted apart)
+        lid = p.get("line_id")
         if isinstance(lid, str):
             out[lid] = out.get(lid, 0) + 1
     return out
