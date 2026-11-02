@@ -167,3 +167,90 @@ fingerprint is unchanged.
 ## 7. Clean up
 
 `sudo ./uninstall.sh --purge` (type `purge`), or destroy the VM.
+
+# WSL install test: install modes and the station module
+
+A second, repeatable test for the modules work (spec `docs/superpowers/specs/2026-11-02-modules-design.md`,
+section 7). It runs on the dev PC's WSL **Ubuntu 26.04** (systemd running, passwordless sudo, no USB). Never on the
+family member's install, the owner's Spoolman VM or the station PC.
+
+Run every command with `wsl -d Ubuntu --exec bash -lc '...'`: plain `wsl -d Ubuntu -- ...` passes the command
+through a login shell first, which expands `$?` and `$(...)` too early (an exit code then reads 0).
+
+## Procedure
+
+```
+# Windows, Git Bash
+bash tools/make_release.sh                                     # dist/filament-kit-<version>.tar.gz
+# WSL: copy and unpack in the WSL home, never run from /mnt/c
+mkdir -p ~/fk-test && cp /mnt/c/CODING/filament-kit-modules/dist/filament-kit-0.2.0.tar.gz ~/fk-test/
+cd ~/fk-test && tar xzf filament-kit-0.2.0.tar.gz && cd filament-kit-0.2.0
+```
+
+Purge between the modes (`echo purge | sudo ./uninstall.sh --purge`). Run the installer with `</dev/null` so it
+behaves as a non-interactive install, and type no API key.
+
+1. **server**: `sudo ./install.sh --mode server`. `sudo filament-kit status` has one `FAIL` (the missing key) and
+   exits 1; `spoolman filament-kit filament-kit-backup.timer filament-kit-library.timer filament-kit-build.path`
+   active, `filament-kit-station` inactive; `curl localhost:7912/api/v1/info` answers 0.27.0.
+2. **station**: `sudo ./install.sh --mode station --server 127.0.0.2` (127.0.0.2 is a single loopback address
+   that is not a server). Only `filament-kit-station` active; `curl 127.0.0.1:5003/state` 200;
+   `curl --interface 127.0.0.2 http://127.0.0.1:5003/state` 200; the drop-in has `IPAddressAllow=localhost
+   127.0.0.2`; `journalctl -u filament-kit-station` shows `NFC reader None: no USB serial port for the reader;
+   retrying in 5 s`.
+3. **all-in-one**: `sudo ./install.sh --mode all-in-one`. All six units active; status shows `station answering at
+   http://127.0.0.1:5003`, `station reader not seen`, `station scale not seen`; with a paired token
+   `GET /api/station` 200 (the station's `/state`), without one 401;
+   `curl --interface <eth0 IP> http://<eth0 IP>:5003/state` gets no answer.
+4. **Switches without reinstall** (from all-in-one, with a spool added through Spoolman's API):
+   `modules set station` without `--server` is refused with a `fix:`; `modules set station --server 127.0.0.2`
+   leaves only the station running and `/var/lib/spoolman/spoolman.db` in place; `modules set all-in-one` brings
+   back every unit, the spool and the paired token; `modules disable printers` makes `GET /api/printers` answer
+   409 `module_off` and drops `printers` from `/api/info`; `sudo ./install.sh` with no flags asks nothing and
+   keeps the same units (also in the custom mode); `modules enable printers` gives 200 again.
+5. **Uninstall**: `sudo ./uninstall.sh` removes units, `/opt`, the wrapper, the drop-in, the udev rule and the
+   station user and keeps `/etc/filament-kit`, `/var/lib/filament-kit`, `/var/lib/spoolman`; `sudo ./install.sh`
+   brings back the same mode, spool and paired device. `--purge` leaves no unit, file or user
+   (`filament-kit`, `spoolman`, `filament-kit-station`).
+6. **Clean up**: `sudo systemctl unmask sleep.target suspend.target hibernate.target hybrid-sleep.target` (the
+   station masked them), `rm -rf ~/fk-test`.
+
+## Results, 2026-11-02 (filament-kit 0.2.0, branch `modules`)
+
+All steps passed after the fixes below. Details: `.superpowers/sdd/2026-11-02-modules/task-7-report.md`.
+
+- **Upgrade from 0.1.0** (an older test install was still on WSL): `sudo ./install.sh` with no flags asked
+  nothing, left `config.json` without `modules` (server mode), kept the spools, key, certificate and paired
+  devices, and every status line was OK.
+- **server**: as expected; the only `FAIL` was `Anthropic key missing`, status exit 1.
+- **station** (`--server 127.0.0.2`, accepted: validate only refuses 127.0.0.1, localhost and ::1): as expected.
+  No speaker and no reader on WSL: the journal shows `scan beep: no speaker output found` and the reader retry
+  every 5 s. A missing scale is not logged (as in filament-ops). brltty and ModemManager were not installed on
+  this WSL, so nothing was removed; the sleep targets were masked.
+- **all-in-one**: as expected. The eth0 request (172.21.246.152) timed out (curl exit 28): systemd's
+  `IPAddressDeny=any` drops the packets before the station's own 403 check.
+- **Switches, re-run, uninstall, purge**: as expected.
+
+### Found and fixed
+
+- `tools/make_release.sh` failed with "wheel has no filament_kit/library_data/index.json" although the file was
+  there: `unzip -l | grep -q` under `set -o pipefail` fails when grep stops at the first match and unzip gets
+  SIGPIPE. Now `grep ... >/dev/null` (test `test_release_no_grep_q_after_a_pipe`).
+- `filament-kit status` never printed `station reader not seen`: the real station's `/state` always has a `tag`
+  object; only its `nfc_id` is null before a tap. Now checks `tag.nfc_id` (tests with the real `/state` shape in
+  `test_status_modules.py`).
+- `modules disable` and `install.sh` failed at once with "Could not get lock /var/lib/dpkg/lock-frontend"
+  while unattended-upgrades ran. Every `apt-get` now waits up to 5 minutes for the lock
+  (`-o DPkg::Lock::Timeout=300`); checked on WSL by holding the lock for 20 s during `modules disable printers`.
+- With the installer's output going to a file, apply's `==>` lines came after the output of the commands they
+  announce (Python block-buffers a pipe). apply now flushes before every command.
+
+### Harmless output to expect
+
+- A first install in `station` mode prints `Failed to disable unit: Unit spoolman.service does not exist` (and
+  the same for the other server units): apply turns off the units of every module that is off, installed or not.
+- Turning modules off prints systemd's "The unit files have no installation config" note for the companion
+  `.service` units of the timers and the build path.
+- The station probes print `id: 'filament-kit-station': no such user`, `dpkg-query: package 'brltty' is not
+  installed` and `not-found` (ModemManager) on a computer without them.
+- The Android app was not built for this test (`dist/` tarball without `app/`).
