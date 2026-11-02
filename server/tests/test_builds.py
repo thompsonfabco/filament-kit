@@ -647,3 +647,42 @@ def test_live_upload_without_a_waiting_build_requests_nothing(env):
     assert builds.state_view("a")["rebuild_requested"] is None
     builds.store_upload("live", io.BytesIO(_live_zip_of(b1)), device_id="a", user_id="1")
     assert builds.state_view("a")["rebuild_requested"] is None
+
+
+# ---------- final review I4: a new sync PC ----------
+
+def test_new_sync_pc_starts_like_a_first_install(env):
+    """After the old PC is unpaired, the next uploader becomes the owner; the old PC's installed snapshot, partial
+    build and deletion record do not describe it, so they are cleared (no false deletions or edits)."""
+    synced(env)
+    b1 = builds.run_build(env, now=TG.NOW)["stamp"]
+    builds.record_installed(b1, "a")
+    tick()
+    builds.store_upload("live", io.BytesIO(_live_zip_of(b1)), device_id="a", user_id="1", partial=b1)
+    (profiles_dir() / "deleted.json").write_text(json.dumps({"deleted_before": ["Old one"]}), encoding="utf-8")
+    pair("b")                                                   # a unpaired, b paired
+    names = sorted(p.stem for p in (profiles_dir() / "builds" / b1 / "base").glob("*.json"))
+    assert len(names) >= 4                                      # one gone is not an app reset
+    with zipfile.ZipFile(io.BytesIO(_live_zip_of(b1))) as zf:   # b has all but one of those presets
+        files = {n: zf.read(n) for n in zf.namelist() if not n.startswith(f"base/{names[0]}.")}
+    builds.store_upload("live", io.BytesIO(zip_of(files)), device_id="b", user_id="2")
+    view = builds.state_view("b")
+    assert view["owner"] == "b" and view["installed"] is None
+    assert "partial" not in builds.meta()
+    assert not (profiles_dir() / "installed.json").exists()
+    assert builds.status()["installed"] is None
+    r = builds.run_build(env, now=TG.NOW + 1)
+    assert r["ok"] is True, r
+    m = builds.manifest(r["stamp"])
+    assert m["deleted"] == [] and m["inapp"] == {}
+    assert names[0] in {p["name"] for p in m["presets"]}
+
+
+def test_installed_json_of_another_device_is_ignored(env):
+    synced(env)
+    b1 = builds.run_build(env, now=TG.NOW)["stamp"]
+    builds.record_installed(b1, "a")
+    assert builds.state_view("a")["installed"]["stamp"] == b1
+    (profiles_dir() / "installed.json").write_text(json.dumps({"stamp": b1, "at": 1.0, "device_id": "zz"}),
+                                                   encoding="utf-8")
+    assert builds.state_view("a")["installed"] is None
