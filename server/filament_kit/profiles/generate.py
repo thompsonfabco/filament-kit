@@ -42,6 +42,7 @@ from ..library import Library
 from . import inapp, lines as lines_mod, values
 from .bbl import Store, _first
 from .lines import BS_VALID, Line, LineSet
+from .orca import SYSTEM
 
 ID_RE = re.compile(r"^P[0-9a-f]{7}$")
 # the PC sync's rule for a preset file name (pc-sync zips._safe_name, for <name>.json and <name>.info): one name it
@@ -80,34 +81,40 @@ def _read_json(path: Path) -> dict | None:
 
 @dataclass
 class Live:
-    """The user filament folder the PC sync uploaded (`root/base/<name>.json` + `.info`)."""
+    """The user filament folder the PC sync uploaded (`root/base/<name>.json` + `.info`; Orca Slicer's is flat:
+    `sub=""`, `root/<name>.json`)."""
     root: Path
     user_id: str
+    sub: str = "base"
+
+    def _dir(self) -> Path:
+        return Path(self.root) / self.sub if self.sub else Path(self.root)
 
     def preset(self, name: str) -> tuple[dict | None, dict]:
-        base = Path(self.root) / "base"
+        base = self._dir()
         return _read_json(base / f"{name}.json"), _read_info(base / f"{name}.info")
 
     def names(self) -> set[str]:
-        base = Path(self.root) / "base"
+        base = self._dir()
         if not base.is_dir():
             return set()
         return {p.stem for p in base.iterdir() if p.is_file() and p.suffix.casefold() == ".json"}
 
 
-def _recorded(build_dir: Path | None) -> dict[str, dict]:
-    """The in-app edits a build carried ({preset name: {key: value}}, its BUILD.json `inapp`), {} when none."""
+def _recorded(build_dir: Path | None, key: str = "inapp") -> dict[str, dict]:
+    """The in-app edits a build carried ({preset name: {key: value}}, its BUILD.json `inapp`; `orca_inapp` for
+    the Orca tree), {} when none."""
     if build_dir is None:
         return {}
     m = _read_json(Path(build_dir) / "BUILD.json")
-    rec = (m or {}).get("inapp")
+    rec = (m or {}).get(key)
     if not isinstance(rec, dict):
         return {}
     return {n: v for n, v in rec.items() if isinstance(n, str) and isinstance(v, dict)}
 
 
-def _snapshot_names(snapshot: Path | None) -> set[str]:
-    base = Path(snapshot) / "base" if snapshot is not None else None
+def _snapshot_names(snapshot: Path | None, tree: str = "base") -> set[str]:
+    base = Path(snapshot) / tree if snapshot is not None else None
     if base is None or not base.is_dir():
         return set()
     return {p.stem for p in base.iterdir() if p.is_file() and p.suffix.casefold() == ".json"}
@@ -256,11 +263,14 @@ def _printers(models: list[str], problems: list[str]) -> list[tuple[str, int | N
 def build_all(*, filaments: list[dict], models: list[str], store: Store, library: Library,
               lines: dict[str, Line], live: Live | None, snapshot: Path | None, deleted_before: set[str],
               restore_deleted: bool, out_dir: Path, now: float,
-              partial: Path | None = None, owner_edits: dict | None = None) -> tuple[dict, dict[str, Line]]:
+              partial: Path | None = None, owner_edits: dict | None = None,
+              orca: "OrcaTarget | None" = None) -> tuple[dict, dict[str, Line]]:
     """Build every preset into `out_dir/base`; returns (manifest, updated lines). `snapshot` = the installed
     build's folder; `partial` = a build whose install stopped part-way (its values in live are not edits);
     `owner_edits` = {inapp: {preset: {key: value}}, notes: {preset: [lines]}} saved when the sync PC changed
-    (ruling S34): with no snapshot and no partial build it is the record of the owner's edits and note lines."""
+    (ruling S34): with no snapshot and no partial build it is the record of the owner's edits and note lines.
+    `orca` (None: Bambu Studio only, the manifest exactly as before the Orca target) adds the Orca tree
+    `out_dir/orca/` (see `OrcaTarget`)."""
     out_dir = Path(out_dir)
     base_out = out_dir / "base"
     base_out.mkdir(parents=True, exist_ok=True)
@@ -321,6 +331,14 @@ def build_all(*, filaments: list[dict], models: list[str], store: Store, library
                 lines_mod.rechoose(line, store, library=library)
             except Exception as e:
                 problems.append(f"{line.line_id}: parent not re-checked ({e.__class__.__name__}: {e})")
+    if orca is not None and orca.store is not None:
+        # lines made by intake before the Orca store was uploaded get a store-backed Orca parent now
+        for line in list(ls.values()):
+            if line.orca_parent_source != "user":
+                try:
+                    lines_mod.rechoose_orca(line, orca.store, library=library)
+                except Exception as e:
+                    problems.append(f"{line.line_id}: Orca parent not re-checked ({e.__class__.__name__}: {e})")
     problems.extend(lines_mod.problems(ls))
     printers = _printers(models, problems)
 
@@ -364,6 +382,12 @@ def build_all(*, filaments: list[dict], models: list[str], store: Store, library
                 "edits": edits, "inapp": dict(sorted(carried.items())), "deleted": sorted(deleted),
                 "restored": sorted(restored), "stale": stale,
                 "library_version": library.version}
+    if orca is not None:
+        for row in presets:
+            row["target"] = BAMBU_STUDIO
+        manifest.update(_build_orca(orca, groups=groups, ls=ls, library=library, restore=restore_deleted,
+                                    out_dir=out_dir, now=now, problems=problems, clamps=clamps, edits=edits))
+        presets.extend(manifest.pop("_rows"))
     return manifest, ls
 
 
@@ -530,3 +554,347 @@ def _build_preset(line: Line, name: str, printer: str, chamber, nozzle: str, par
             "filament_id": cfg["filament_id"], "filament_type": _first(cfg["filament_type"]),
             "nozzle_temp_min": _int(cfg["nozzle_temperature_range_low"]),
             "nozzle_temp_max": _int(cfg["nozzle_temperature_range_high"]), "spoolman_ids": ids}
+
+
+# ---------- the Orca Slicer target (Task 6, Rulings L and O) ----------
+#
+# Orca presets are not flattened: each one inherits its system parent and writes only what differs from it plus
+# the preset's own keys. A configured (non-Bambu) printer (config `slicer_printers`) inherits the line's Orca
+# library parent (`"<orca_parent> @System"`, from the uploaded OrcaFilamentLibrary index); a Bambu printer
+# (config `presets_orca`) inherits the Orca BBL system preset of the line's Bambu parent for that printer and
+# nozzle (`... @BBL H2D 0.6 nozzle`). Names match filament-ops gen.py (`<line> @SV08 MAX 0.4`, `<line> @H2D
+# 0.4`), so the owner's existing Orca presets are adopted: a live preset of the same name (any letter case) keeps
+# its spelling, its .info setting_id and its filament_id. Values follow the Bambu Studio policy (library on the
+# parent's values, Spoolman on top, in-app edits last); "nil" is never written. G-code: none of our own; a
+# carried in-app G-code value only while the live preset still holds it (the PC refuses anything else).
+
+BAMBU_STUDIO, ORCA = "bambu_studio", "orca"
+ORCA_DEFAULT_VERSION = "2.4.0.16"           # what ops wrote for library-parent presets (no parent version known)
+_NOZZLE = re.compile(r"\d+(?:\.\d+)?")
+
+
+@dataclass
+class OrcaPrinter:
+    name: str                   # the printer Orca knows: "Bambu Lab H2D", or the configured "Sovol SV08 MAX"
+    label: str                  # in preset names: "<line> @<label> <nozzle>" ("H2D", "SV08 MAX")
+    bambu: bool                 # parents from Orca's BBL system presets; nozzles from them, per line
+    nozzles: list[str]          # a configured printer's nozzles
+    compat: dict[str, str]      # nozzle -> compatible_printers entry (a configured printer's own preset names)
+    chamber: int | None = None
+
+    def compatible(self, nozzle: str) -> str:
+        return self.compat.get(nozzle) or f"{self.name} {nozzle} nozzle"
+
+
+@dataclass
+class OrcaTarget:
+    """What an Orca build needs. `store` = the uploaded Orca system presets (None: no Orca presets, one problem);
+    `live` = Orca's uploaded user filament folder (`Live(..., sub="")`); `snapshot`/`partial` = the installed /
+    half-installed build folders (their `orca/` tree and BUILD.json `orca_inapp`); `deleted_before` = Orca preset
+    names deleted in the app; `owner_edits` = {inapp, notes} of the Orca tree kept across a PC change (S34)."""
+    store: object | None
+    printers: list[OrcaPrinter]
+    problems: list[str]
+    live: Live | None = None
+    snapshot: Path | None = None
+    partial: Path | None = None
+    deleted_before: set[str] | None = None
+    owner_edits: dict | None = None
+
+
+def _label(name: str) -> str:
+    if name.startswith("Bambu Lab "):
+        return name[len("Bambu Lab "):]
+    return name.split(" ", 1)[1] if " " in name.strip() else name
+
+
+def orca_printers(models: list[str], slicer_printers: list) -> tuple[list[OrcaPrinter], list[str]]:
+    """(the Orca printers, problems): the Bambu `models` (pass the registry's when `presets_orca` is on, else
+    []), then each valid `slicer_printers` entry {"name", "slicer": "orca", "nozzles": [...], optional "label",
+    optional "compatible_printers": {nozzle: printer preset name}}. A bad entry is a problem line."""
+    out: list[OrcaPrinter] = []
+    problems: list[str] = []
+    seen: set[str] = set()
+    for m in models:
+        name = models_mod.printer_preset_name(m)
+        if name is None:
+            problems.append(f"printer model {m!r} is unknown; no Orca Slicer presets for it")
+            continue
+        if name not in seen:
+            seen.add(name)
+            out.append(OrcaPrinter(name, _label(name), True, [], {}, models_mod.chamber_max(m)))
+    for i, e in enumerate(slicer_printers or []):
+        where = f"config slicer_printers[{i}]"
+        if not isinstance(e, dict):
+            problems.append(f"{where}: not an object; ignored")
+            continue
+        name, slicer, nozzles = e.get("name"), e.get("slicer", ORCA), e.get("nozzles")
+        compat, label = e.get("compatible_printers", {}), e.get("label")
+        if not (isinstance(name, str) and name.strip()):
+            problems.append(f"{where}: no name; ignored")
+            continue
+        if slicer != ORCA:
+            problems.append(f"{where} {name!r}: slicer {slicer!r} is not supported (only orca); ignored")
+            continue
+        if not (isinstance(nozzles, list) and nozzles and all(isinstance(n, str) and _NOZZLE.fullmatch(n)
+                                                                for n in nozzles)):
+            problems.append(f"{where} {name!r}: nozzles must be a list of sizes such as 0.4; ignored")
+            continue
+        if not (isinstance(compat, dict) and all(isinstance(k, str) and isinstance(v, str) and v.strip()
+                                                 for k, v in compat.items())):
+            problems.append(f"{where} {name!r}: compatible_printers must map a nozzle to a printer name; ignored")
+            continue
+        if label is not None and not (isinstance(label, str) and label.strip()):
+            problems.append(f"{where} {name!r}: label must be text; ignored")
+            continue
+        name = name.strip()
+        if name in seen:
+            problems.append(f"{where}: printer {name!r} is listed twice; ignored")
+            continue
+        seen.add(name)
+        out.append(OrcaPrinter(name, label.strip() if label else _label(name), False, list(dict.fromkeys(nozzles)),
+                               {k: v.strip() for k, v in compat.items()}))
+    return out, problems
+
+
+def orca_preset_name(line: Line, printer: OrcaPrinter, nozzle: str) -> str:
+    return f"{line.vendor} {line.product} @{printer.label} {nozzle}"
+
+
+def _orca_recorded(t: OrcaTarget) -> tuple[dict[str, dict], dict[str, list[str]]]:
+    """(the Orca in-app record to start from, the owner's saved Orca note lines): the partial build's record,
+    else the installed build's, else (a new sync PC, S34) the owner's kept record and note lines."""
+    if t.partial is not None:
+        return _recorded(t.partial, "orca_inapp"), {}
+    if t.snapshot is not None:
+        return _recorded(t.snapshot, "orca_inapp"), {}
+    oe = t.owner_edits if isinstance(t.owner_edits, dict) else {}
+    rec, nts = oe.get("inapp"), oe.get("notes")
+    rec = {n: v for n, v in rec.items() if isinstance(n, str) and isinstance(v, dict)} if isinstance(rec, dict) else {}
+    nts = {n: [x for x in v if isinstance(x, str)] for n, v in nts.items()
+           if isinstance(n, str) and isinstance(v, list)} if isinstance(nts, dict) else {}
+    return rec, nts
+
+
+def _build_orca(t: OrcaTarget, *, groups: dict[str, list[dict]], ls: LineSet, library: Library, restore: bool,
+                out_dir: Path, now: float, problems: list[str], clamps: list[str], edits: list[str]) -> dict:
+    """The Orca tree `out_dir/orca/` for every grouped line; returns the manifest's Orca keys (+ `_rows`)."""
+    problems.extend(t.problems)
+    rows: list[dict] = []
+    carried: dict[str, dict] = {}
+    deleted: list[str] = []
+    restored: list[str] = []
+    active = bool(t.printers) and t.store is not None
+    if t.printers and t.store is None:
+        problems.append("no Orca Slicer system presets yet (the PC sync uploads them once Orca Slicer is set up); "
+                        "no Orca Slicer presets")
+    live_names = t.live.names() if t.live is not None else set()
+    live_by_cf = {n.casefold(): n for n in sorted(live_names)}
+    snap_names = _snapshot_names(t.snapshot, ORCA)
+    seen_live = live_names if t.live is not None else snap_names
+    reset = t.live is not None and inapp.is_reset(snap_names, live_names)
+    if reset and active:
+        gone = len({n.casefold() for n in snap_names} - set(live_by_cf))
+        problems.append(f"{gone} of {len(snap_names)} installed Orca Slicer presets are gone from Orca Slicer at "
+                        f"once; treated as an app reset, all rebuilt")
+    recorded, kept_notes = _orca_recorded(t)
+    generated: set[str] = set()
+    planned: set[str] = set()
+    cache: dict[str, tuple[dict | None, dict]] = {}
+
+    def live_preset(name: str) -> tuple[dict | None, dict]:
+        if t.live is None or name not in live_names:
+            return None, {}
+        if name not in cache:
+            cache[name] = t.live.preset(name)
+        return cache[name]
+
+    if active:
+        out_tree = Path(out_dir) / ORCA
+        out_tree.mkdir(parents=True, exist_ok=True)
+        for lid in sorted(groups):
+            if lid not in ls:
+                continue
+            fs = groups[lid]
+            ids = sorted({f["id"] for f in fs if isinstance(f.get("id"), int) and not isinstance(f["id"], bool)})
+            try:
+                built = _build_orca_line(ls[lid], fs, ids, t=t, library=library, restore=restore, reset=reset,
+                                         out_tree=out_tree, now=now, live_preset=live_preset, live_by_cf=live_by_cf,
+                                         snap_names=snap_names, seen_live=seen_live, recorded=recorded,
+                                         kept_notes=kept_notes, problems=problems, clamps=clamps, edits=edits,
+                                         carried=carried, deleted=deleted, restored=restored, planned=planned)
+            except OSError:
+                raise
+            except Exception as e:  # one odd line never breaks the build
+                problems.append(f"{lid}: no Orca Slicer presets ({e.__class__.__name__}: {e})")
+                continue
+            for row in built:
+                generated.add(row["name"].casefold())
+            rows.extend(built)
+    prefixes = tuple(f"{ls[lid].vendor} {ls[lid].product} @".casefold() for lid in groups if lid in ls)
+    stale = sorted(n for n in snap_names if n.casefold() in live_by_cf and n.casefold() not in generated
+                   and n.casefold() not in planned and not n.casefold().startswith(prefixes))
+    return {"_rows": rows, "orca_inapp": dict(sorted(carried.items())), "orca_deleted": sorted(deleted),
+            "orca_restored": sorted(restored), "orca_stale": stale}
+
+
+def _build_orca_line(line: Line, fs: list[dict], ids: list[int], *, t: OrcaTarget, library: Library, restore,
+                     reset, out_tree: Path, now: float, live_preset, live_by_cf, snap_names, seen_live, recorded,
+                     kept_notes, problems, clamps, edits, carried, deleted, restored, planned) -> list[dict]:
+    store = t.store
+    sv = values.spoolman_values(fs)
+    material = sv.material or line.material
+    entry = values.merged_entry(library.lookup(line.vendor, line.product))
+    abrasive = bool(values.ABRASIVE.search(material or "")) \
+        or bool(values.ABRASIVE.search(str((entry or {}).get("material") or "")))
+    bad = values.unsupported_nozzles(entry)
+
+    plan = []
+    for p in t.printers:
+        if p.bambu:
+            if line.bambu_parent is None:
+                continue                                # reported by lines.problems
+            sizes = store.bbl.nozzles_for(line.bambu_parent, p.name)
+            if not sizes:
+                problems.append(f"{line.line_id}: no Orca Slicer {line.bambu_parent!r} system preset lists "
+                                f"{p.name}; no Orca Slicer {p.label} presets")
+                continue
+        else:
+            sizes = p.nozzles
+        for nozzle in sizes:
+            if (nozzle == "0.2" and abrasive) or nozzle in bad:
+                continue
+            name = orca_preset_name(line, p, nozzle)
+            name = live_by_cf.get(name.casefold(), name)     # the owner's spelling: never a case twin
+            if not safe_name(name):
+                problems.append(f"{name!r} cannot be a file name on the PC (check the vendor and line name); skipped")
+                continue
+            plan.append((p, nozzle, name))
+            planned.add(name.casefold())
+
+    rows = []
+    before = t.deleted_before or set()
+    for p, nozzle, name in plan:
+        if inapp.deleted(name, snapshot=snap_names, live=seen_live, before=before, reset=reset, restore=restore):
+            deleted.append(name)
+            continue
+        brought_back = restore and inapp.deleted(name, snapshot=snap_names, live=seen_live, before=before,
+                                                 reset=reset, restore=False)
+        if p.bambu:
+            parent = store.system_parent_for(p.name, nozzle, line.bambu_parent)
+            template = store.parent(parent) if parent is not None else None
+            if template is None:
+                problems.append(f"{name}: no Orca Slicer {line.bambu_parent!r} system preset for {p.name} "
+                                f"{nozzle} (or it does not resolve); skipped")
+                continue
+            base_id = template.get("setting_id")
+        else:
+            parent = f"{line.orca_parent}{SYSTEM}" if line.orca_parent else None
+            lib_row = store.library.get(parent) if parent is not None else None
+            if lib_row is None:
+                why = f"Orca parent {parent!r} is not in the uploaded Orca Slicer system presets" if parent                     else "no Orca parent"
+                problems.append(f"{name}: {why}; skipped (set one: filament-kit profiles set-parent "
+                                f"{line.line_id} <parent> --orca)")
+                continue
+            template, base_id = {}, lib_row.get("setting_id")
+        try:
+            row = _build_orca_preset(line, name, p, nozzle, parent, template, base_id, sv, material, entry, ids,
+                                     t=t, live_preset=live_preset, out_tree=out_tree, now=now, problems=problems,
+                                     clamps=clamps, edits=edits, recorded=recorded.get(name), carried=carried,
+                                     notes=kept_notes.get(name))
+        except OSError:
+            raise
+        except Exception as e:
+            problems.append(f"{name}: skipped ({e.__class__.__name__}: {e})")
+            continue
+        if row is not None:
+            rows.append(row)
+            if brought_back:
+                restored.append(name)
+    return rows
+
+
+def check_orca_preset(cfg: dict) -> list[str]:
+    """Why this Orca preset must not be written ([] = good)."""
+    errs = []
+    if _has_nil(cfg):
+        errs.append('a value is "nil"')
+    if not (isinstance(cfg.get("inherits"), str) and cfg["inherits"]):
+        errs.append("inherits is empty")
+    cp = cfg.get("compatible_printers")
+    if not (isinstance(cp, list) and len(cp) == 1 and isinstance(cp[0], str)):
+        errs.append("compatible_printers is not a single printer")
+    v = cfg.get("filament_extruder_variant")
+    if not (isinstance(v, list) and v):
+        errs.append("filament_extruder_variant is empty")
+    notes = inapp.notes_text(cfg.get("filament_notes")).splitlines()
+    if not notes or not notes[-1].startswith(inapp.IDS_PREFIX + " "):
+        errs.append("notes do not end with the Spoolman filament ids")
+    if not safe_name(cfg.get("name")):
+        errs.append(f"name {cfg.get('name')!r} cannot be a file name on the PC")
+    return errs
+
+
+def _build_orca_preset(line: Line, name: str, p: OrcaPrinter, nozzle: str, parent: str, template: dict, base_id,
+                       sv, material, entry, ids, *, t: OrcaTarget, live_preset, out_tree: Path, now: float,
+                       problems, clamps, edits, recorded: dict | None, carried: dict[str, dict],
+                       notes: list[str] | None) -> dict | None:
+    # 1. the parent's values (only to compare against: the preset inherits them)
+    tmpl = copy.deepcopy(template)
+    for k in POP:
+        tmpl.pop(k, None)
+    _fill_nil(tmpl, name, None)
+    variants = _variants(tmpl) if p.bambu else t.store.printer_variants(p.name)
+    # 2. library on the parent's values, Spoolman on top (the Bambu Studio policy)
+    full = copy.deepcopy(tmpl)
+    values.apply_library(full, entry, template=tmpl, printer=p.name, nozzle=nozzle, chamber_max=p.chamber,
+                         log=clamps, material=material)
+    protected = values.apply_spoolman(full, sv, variants=variants, template=tmpl)
+    # 3. only what differs from the parent, never G-code, plus the preset's own keys
+    cfg = {k: v for k, v in full.items() if (k not in tmpl or inapp.norm(v) != inapp.norm(tmpl[k]))
+           and "gcode" not in k.lower()}
+    ftype = lines_mod.orca_type(material) or _first(tmpl.get("filament_type")) or "PLA"
+    version = tmpl.get("version") if p.bambu else None
+    live_cfg, live_info = live_preset(name)
+    cfg.update({"name": name, "from": "User", "filament_settings_id": [name], "filament_vendor": [line.vendor],
+                "filament_type": [ftype], "inherits": parent, "compatible_printers": [p.compatible(nozzle)],
+                "filament_extruder_variant": list(variants),
+                "version": version if isinstance(version, str) and version else ORCA_DEFAULT_VERSION})
+    fid = (live_cfg or {}).get("filament_id")
+    if isinstance(fid, str) and fid:
+        cfg["filament_id"] = fid                    # the owner's preset keeps its filament id (adoption)
+    summary = f"One profile for every {line.vendor} {line.product} colour in Spoolman ({sv.colors})."
+    spec = values.spec_notes(entry)
+    cfg["filament_notes"] = "\n".join([summary] + ([spec] if spec else [])
+                                      + [f"{inapp.IDS_PREFIX} {', '.join(str(i) for i in ids)}"])
+    # 4. in-app edits
+    installed = _read_json(Path(t.snapshot) / ORCA / f"{name}.json") if t.snapshot is not None else None
+    half = _read_json(Path(t.partial) / ORCA / f"{name}.json") if t.partial is not None else None
+    mine = inapp.keep_edits(cfg, installed, live_cfg, edits, recorded=recorded, partial=half, notes=notes)
+    _fill_nil(cfg, name, edits)
+    for k in [k for k in cfg if "gcode" in k.lower()]:
+        if live_cfg is None or inapp.norm(live_cfg.get(k)) != inapp.norm(cfg[k]):
+            del cfg[k]
+            mine.pop(k, None)
+            problems.append(f"{name}: {k} not written (an in-app G-code value is only kept while Orca Slicer "
+                            f"still holds it)")
+    # 5. protected values outside a published bound: reported, kept
+    values.report_outside(cfg, entry, protected | set(mine), clamps)
+    errs = check_orca_preset(cfg)
+    if errs:
+        problems.append(f"{name}: skipped ({'; '.join(errs)})")
+        return None
+    # 6. files
+    info = {"sync_info": "", "user_id": t.live.user_id if t.live is not None else "", "setting_id": "",
+            "base_id": base_id if isinstance(base_id, str) else "", "updated_time": int(now)}
+    sid = (live_info or {}).get("setting_id")
+    if sid:
+        info.update(setting_id=sid, sync_info="update")
+    _write(out_tree, name, cfg, info)
+    if mine:
+        carried[name] = mine
+    view = {**tmpl, **cfg}
+    return {"target": ORCA, "name": name, "line_id": line.line_id, "printer": p.name, "nozzle": nozzle,
+            "parent": parent, "filament_id": cfg.get("filament_id"), "filament_type": ftype,
+            "nozzle_temp_min": _int(view.get("nozzle_temperature_range_low")),
+            "nozzle_temp_max": _int(view.get("nozzle_temperature_range_high")), "spoolman_ids": ids}
