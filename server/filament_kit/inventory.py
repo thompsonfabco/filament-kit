@@ -1,13 +1,26 @@
-"""Inventory writes: add spools, link NFC tags, update weights/locations, search."""
+"""Inventory writes: add spools, link NFC tags, update weights/locations, search.
+
+An add may name each item's product `line` and its Bambu Studio parent (`bambu_parent`), both text of at most
+100 characters without `@`. A new filament gets `extra.line`. Once a store of Bambu system presets is uploaded,
+a `bambu_parent` that is not a usable system preset is refused (400 `unknown_parent`, as PATCH lines does) before
+anything is written. After a real add, each item's line is created or updated in lines.json and a profile
+rebuild is requested; a failure there is logged and never fails the add.
+"""
 from __future__ import annotations
 
 import datetime
 import json
+import logging
 import threading
 from dataclasses import dataclass, field
 
-from . import placement, tags
+from . import library, placement, tags
+from .profiles import builds, lines as lines_mod
+from .profiles.bbl import Store
+from .profiles.errors import ProfileError
 from .spoolman import Spoolman, SpoolmanError
+
+log = logging.getLogger(__name__)
 
 SEALED_COMMENT = "SEALED - tag when opened"
 
@@ -70,7 +83,46 @@ def _is_num(v) -> bool:
 
 
 _OPT_NUM = ("nozzle", "bed", "price_per_kg", "gross")
-_OPT_STR = ("location", "color_hex", "lot", "note", "price_line", "nozzle_range", "bed_range", "spool_note")
+_OPT_STR = ("location", "color_hex", "lot", "note", "price_line", "nozzle_range", "bed_range", "spool_note",
+            "line", "bambu_parent")
+MAX_LINE_TEXT = 100
+
+
+class UnknownParent(ProfileError, ValueError):
+    """400 `unknown_parent`: the uploaded system store has no usable preset of that name. A ValueError too, so a
+    route that maps only ValueError still answers 400."""
+
+    def __init__(self, parent: str):
+        super().__init__(400, "unknown_parent", f"{parent!r} is not a usable Bambu Studio system preset "
+                                                f"(not in the uploaded system presets, or it lists no printer)",
+                         parent=parent)
+
+
+def check_line_text(label: str, key: str, value) -> None:
+    """`line` / `bambu_parent`: None or text of at most MAX_LINE_TEXT characters without `@` (a printer suffix
+    such as "@BBL H2D" is not part of a line or base preset name)."""
+    if value is None:
+        return
+    if not isinstance(value, str):
+        raise ValueError(f"{label}: {key} must be text")
+    if len(value.strip()) > MAX_LINE_TEXT:
+        raise ValueError(f"{label}: {key} is longer than {MAX_LINE_TEXT} characters")
+    if "@" in value:
+        raise ValueError(f"{label}: {key} may not contain '@' (give the base name, without the printer)")
+
+
+def system_store() -> Store | None:
+    """The uploaded Bambu Studio system presets, or None before the PC sync uploaded any."""
+    with builds._locked("live.lock"):
+        store = Store.load(builds._live() / "system")
+    return store if store.names() else None
+
+
+def check_parent(parent: str, store: Store | None) -> None:
+    """Raise UnknownParent when a system store is uploaded and `parent` is not a usable preset in it (the same
+    check as PATCH /api/profiles/lines); with no store yet any name is accepted and re-checked at build time."""
+    if store is not None and not lines_mod._usable(store, parent):
+        raise UnknownParent(parent)
 
 
 def _validate(items: list[dict]) -> None:
@@ -101,6 +153,22 @@ def _validate(items: list[dict]) -> None:
             raise ValueError(f"{label}: sealed must be true or false")
         if it.get("gross") is not None and (it["count"] != 1 or it["gross"] <= it["tare"]):
             raise ValueError(f"{label}: gross {it['gross']} g needs count 1 and a weight above the spool")
+        for k in ("line", "bambu_parent"):
+            check_line_text(label, k, it.get(k))
+
+
+def _parent(it: dict) -> str | None:
+    p = it.get("bambu_parent")
+    return p.strip() if isinstance(p, str) and p.strip() else None
+
+
+def _check_parents(items: list[dict]) -> None:
+    wanted = [p for p in (_parent(it) for it in items) if p is not None]
+    if not wanted:
+        return
+    store = system_store()
+    for p in wanted:
+        check_parent(p, store)
 
 
 def _used_locations(sm: Spoolman) -> set[str]:
@@ -109,6 +177,7 @@ def _used_locations(sm: Spoolman) -> set[str]:
 
 def add_spools(sm: Spoolman, items: list[dict], rules: dict, dry: bool) -> AddResult:
     _validate(items)
+    _check_parents(items)
     result = AddResult(dry=dry)
     with _LOCK:
         placed = placement.place(items, _used_locations(sm), rules)
@@ -174,6 +243,8 @@ def _write_items(sm, placed, vendors, fils, result, dry) -> None:
 
 def _new_filament(sm: Spoolman, it: dict, vendor: dict, dry: bool) -> dict:
     extra = {k: json.dumps(it[k]) for k in ("nozzle_range", "bed_range") if it.get(k)}
+    if isinstance(it.get("line"), str) and it["line"].strip():
+        extra["line"] = json.dumps(it["line"].strip())
     note = it.get("note") or ""
     if it.get("price_line"):
         note = (note + " | " if note else "") + it["price_line"]
@@ -249,6 +320,8 @@ def add_and_link(sm: Spoolman, items: list[dict], rules: dict, dry: bool, uid: s
                 raise TagConflict(other, f"tag {uid} is already linked to {describe(other)}")
         result = add_spools(sm, items, rules, dry)
         if uid is None:
+            if not dry:
+                _record_lines(items)
             return result
         if not single_opened:
             result.lines.append("tag not linked: it can only be linked when exactly one opened spool is added")
@@ -261,7 +334,27 @@ def add_and_link(sm: Spoolman, items: list[dict], rules: dict, dry: bool, uid: s
                 raise AddFailed(f"spool {result.spool_ids[0]} was added but linking tag {uid} failed: {e}",
                                 result) from e
             result.lines.append(f"linked tag {uid} to spool {result.spool_ids[0]}")
+        if not dry:
+            _record_lines(items)
     return result
+
+
+def _record_lines(items: list[dict]) -> None:
+    """Create or update each added item's line (with its bambu_parent) and request a rebuild. Never raises: the
+    spools are in Spoolman already, and the next build groups them into lines anyway."""
+    try:
+        lib = library.load()
+        store = system_store()
+        with lines_mod.transaction() as ls:
+            for it in items:
+                vendor = it["vendor"].strip()
+                product = (it.get("line") or "").strip() or lines_mod.product_of(
+                    {"name": it["name"], "vendor": {"name": vendor}, "extra": {}}, lib) or it["material"].strip()
+                lines_mod.ensure(ls, vendor, product, it["material"], bambu_parent=_parent(it), library=lib,
+                                 store=store, used_fids=set())
+        builds.request_rebuild("intake")
+    except Exception as e:  # noqa: BLE001 - the add itself succeeded; a line problem shows at the next build
+        log.warning("spools added, but recording their product lines failed: %s: %s", e.__class__.__name__, e)
 
 
 def open_spool(sm: Spoolman, spool_id: int, uid: str, rules: dict, *, gross: float | None = None,
