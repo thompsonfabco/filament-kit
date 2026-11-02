@@ -135,9 +135,30 @@ Until mapping succeeds, filament use is **only logged** (you can see it in the a
 taken off your spools. If a slot could not be put back, mapping says which one so you can check it on the
 printer.
 
-If a printer's certificate changed (for example after a firmware update or a factory reset), the server stops
-talking to it. Add the printer again with its Access Code, or, if you are sure it is your printer, run
-`sudo filament-kit printer unpin <serial>`.
+- **Stopping a mapping** (Ctrl-C, closing the terminal, or restarting the server) always puts the slots back
+  first and then reports the mapping as failed. If the computer loses power or the process is killed mid-way,
+  the server keeps a note of every slot's original setting (`/var/lib/filament-kit/printers/<serial>/slottest-snapshot.json`);
+  the next mapping run, or the server when it starts and the printer is idle, puts those slots back before
+  doing anything else. A mapping refuses to start while that restore is not confirmed.
+- A slot whose colour looks like a mapping test colour (`FA0100FF`, `FA0200FF` ... a red with no blue) is never
+  taken as the slot's own colour: mapping refuses and names the slot. Set that slot's filament again on the
+  printer (or with **Load into printer**), then map again.
+- The calibration job is stopped at once if the printer starts heating or loading a filament, and a filament
+  left loaded in the toolhead afterwards is reported.
+- Loading a spool and mapping never run at the same time on one printer; the second one is refused with "try
+  again".
+
+When a print ends, its filament is taken off the spools in its slots. An entry in the usage list says why when it
+could not be: for example the printer didn't say which slots it used (`no_mapping`), or a slot isn't in the slot
+map (`unmapped_slot`, run **Map slots** again).
+
+Spools in a printer's slots have the location "<printer name> – AMS <slot>" in Spoolman (the printer's serial
+number when it has no name). If you rename a printer, the spools already in its slots keep the old location
+text: load them again (or fix their location in Spoolman) so filament use finds them.
+
+If a printer's certificate changed, the server stops talking to it. If you reset the printer or its mainboard was
+replaced, add the printer again with its Access Code (or run `sudo filament-kit printer unpin <serial>`). If not,
+something else may be answering at the printer's address: check the printer's IP before re-adding it.
 
 A backup of your spools and settings is made every night in `/var/backups/filament-kit` (the last 14 days are
 kept).

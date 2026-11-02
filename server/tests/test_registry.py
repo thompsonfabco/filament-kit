@@ -132,3 +132,8 @@ def test_root_lock_file_given_to_state_dir_owner(env, monkeypatch):
     calls = _as_root(monkeypatch)
     registry.load()
     assert any(os.path.basename(c[0]) == "printers.lock" for c in calls), calls
+
+
+def test_display_name_is_the_name_or_the_serial():
+    assert registry.display_name(Printer("S1", "Office H2D")) == "Office H2D"
+    assert registry.display_name(Printer("S1", "")) == "S1"

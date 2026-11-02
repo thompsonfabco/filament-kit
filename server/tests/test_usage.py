@@ -539,3 +539,23 @@ def test_calibrated_print_on_a_slot_missing_from_the_map_is_unmapped_slot(rig, s
     assert es["A2"].get("error") is None and used(spoolman_fake_store, A2) == 21.92
     assert es["none"]["error"] == "unmapped_slot" and es["none"]["spool_id"] is None
     assert used(spoolman_fake_store, HTA) == 0
+
+
+def test_unnamed_printer_finds_its_spools_by_serial(sd):
+    """M2: the printer's display name (registry name, else serial) is the same everywhere: loading put the spool
+    at "<serial> – AMS A2", so usage looks there too."""
+    registry.upsert(Printer(SERIAL, "", "O1D", "127.0.0.1", CODE, True))
+    calibrate()
+    put(sd, "/cache/bracket_v3_plate_1.gcode.3mf", build_3mf(TWO_COLOUR))
+
+    class SM:
+        uses = []
+
+        def get(self, path):
+            return [{"id": 9, "location": f"{SERIAL} {DASH} AMS A2"}]
+
+        def use(self, sid, g):
+            SM.uses.append((sid, g))
+    out = usage.settle(SERIAL, {"subtask": "bracket_v3", "plate": "1", "mapping": [1, 128]}, 100.0, SM())
+    assert SM.uses == [(9, 21.92)]
+    assert [e["spool_id"] for e in out if e["slot"] == "A2"] == [9]
