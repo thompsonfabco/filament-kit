@@ -100,3 +100,17 @@ def test_release_packages_path_units_and_checks_library_data():
     text = _text(ROOT / "tools" / "make_release.sh")
     assert "install/systemd/*.path" in text
     assert "filament_kit/library_data/index.json" in text
+
+
+def test_readme_final_review_points():
+    """Final review: README documents restore-deleted, the real pairing order, that unpair covers the PC, and that
+    a library rollback is undone by the next scheduled update unless updates are off."""
+    readme = _text(ROOT / "README.md")
+    assert "sudo filament-kit profiles restore-deleted" in readme
+    pair = readme[readme.index("## Pair your PC"):readme.index("## Building the Android app release")]
+    assert pair.index("Finish") < pair.index("paste the link")
+    assert "Pair this PC with the filament-kit server now" in pair
+    row = next(line for line in readme.splitlines() if line.startswith("| `sudo filament-kit unpair`"))
+    assert "PC" in row and "phones" in row
+    lib = readme[readme.index("## Spec library updates"):readme.index("## Troubleshooting")]
+    assert '"schedule": "off"' in lib and "rollback" in lib and "next" in lib
