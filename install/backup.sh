@@ -41,7 +41,13 @@ done
 
 out="$DEST/$(date +%F).tar.gz"
 tmp="$out.tmp"
-tar -czf "$tmp" -C "$work" . -C / "${paths[@]}"
+# Skipped: data that is downloaded again (the uploaded Bambu system presets, earlier library versions)
+# and half-written builds.
+tar -czf "$tmp" \
+    --exclude='var/lib/filament-kit/profiles/live/system' \
+    --exclude='var/lib/filament-kit/library/versions' \
+    --exclude='var/lib/filament-kit/profiles/builds/*.tmp' \
+    -C "$work" . -C / "${paths[@]}"
 mv -f "$tmp" "$out"
 
 # Keep 14 days of backups.

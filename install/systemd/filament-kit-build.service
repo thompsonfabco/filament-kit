@@ -1,0 +1,21 @@
+[Unit]
+Description=filament-kit Bambu Studio preset build (started by filament-kit-build.path)
+After=spoolman.service
+
+[Service]
+Type=oneshot
+User=filament-kit
+Group=filament-kit
+WorkingDirectory=/var/lib/filament-kit
+ExecStart=/opt/filament-kit/venv/bin/filament-kit profiles build
+Nice=10
+ProtectSystem=strict
+ReadWritePaths=/var/lib/filament-kit
+ProtectHome=yes
+NoNewPrivileges=yes
+PrivateTmp=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+# the build only talks to Spoolman on this host
+IPAddressDeny=any
+IPAddressAllow=localhost

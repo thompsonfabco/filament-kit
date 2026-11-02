@@ -1,0 +1,21 @@
+[Unit]
+Description=filament-kit filament library update (skips unless config library.schedule says it is due)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=filament-kit
+Group=filament-kit
+WorkingDirectory=/var/lib/filament-kit
+# a private or unreachable library repo is a warning (exit 0), not a failure
+ExecStart=/opt/filament-kit/venv/bin/filament-kit library update --scheduled
+Nice=10
+ProtectSystem=strict
+ReadWritePaths=/var/lib/filament-kit
+ProtectHome=yes
+NoNewPrivileges=yes
+PrivateTmp=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+# no IPAddressDeny: the library host's CDN address ranges change
