@@ -138,6 +138,15 @@ def test_add_bad_items_400(sm):
     assert r.status_code == 400 and r.json()["error"] == "bad_request"
 
 
+def test_add_rejects_a_tare_of_zero_or_less(sm):
+    c = client(sm)
+    for tare in (0, -5):
+        it = {"vendor": "SUNLU", "name": "PETG Grey", "material": "PETG", "net": 1000, "tare": tare,
+              "density": 1.27, "count": 1}
+        r = c.post("/api/intake/add", headers=auth(token()), json={"items": [it], "dry_run": True})
+        assert r.status_code == 400 and r.json()["error"] == "bad_request"
+        assert "tare must be a positive number" in r.json()["message"]
+
 def sealed_spool(sm, **kw) -> int:
     it = {"vendor": "SUNLU", "name": "PETG Grey", "material": "PETG", "net": 1000, "tare": 213, "density": 1.27,
           "count": 1, **kw}
