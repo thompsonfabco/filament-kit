@@ -379,7 +379,7 @@ def test_uninstall_keeps_the_router_conf_while_other_routes_need_it():
     assert "kept the kit's router conf" in block
 
 
-def test_remote_install_restores_the_previous_router_conf_when_nginx_test_fails(tmp_path):
+def test_remote_install_restores_the_previous_router_conf_when_nginx_test_fails(tmp_path, capsys):
     """C-I4: a router conf that fails `nginx -t` must not stay (every later nginx start would fail): the previous
     one comes back, or none, and the step fails."""
     root = tmp_path / "root"
@@ -393,8 +393,10 @@ def test_remote_install_restores_the_previous_router_conf_when_nginx_test_fails(
     with pytest.raises(apply.ApplyError):
         apply.execute([Action("remote_install", "fk.example.org")], run=run, resources=INSTALL, root=root)
     assert not conf.exists() and not proxy.exists()
+    assert f"removed {remote.ROUTER_CONF}, {remote.PROXY_CONF} again" in capsys.readouterr().out
     conf.write_text("OLD ROUTER\n")
     proxy.write_text("OLD PROXY\n")
     with pytest.raises(apply.ApplyError):
         apply.execute([Action("remote_install", "fk.example.org")], run=run, resources=INSTALL, root=root)
     assert conf.read_text() == "OLD ROUTER\n" and proxy.read_text() == "OLD PROXY\n"
+    assert f"put back the previous {remote.ROUTER_CONF}, {remote.PROXY_CONF}" in capsys.readouterr().out
