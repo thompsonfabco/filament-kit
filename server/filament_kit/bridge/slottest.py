@@ -167,7 +167,7 @@ def run(manager, serial: str, on_step: Callable[[str], None],
     by_label = {t.label: t for t in targets}
     # a slot's colour is its own even when it looks like a test colour (a real near-red spool): an interrupted
     # run is covered by the snapshot on disk, which `snapshot.pending` above already made the caller restore
-    taken ={t.snap['tray_color'] for t in targets if t.snap['tray_color']}   # never pick a colour a slot holds
+    taken = {t.snap['tray_color'] for t in targets if t.snap['tray_color']}   # never pick a colour a slot holds
     plan: list[str] = []                 # the test colour of each target, in test order
     for n in range(1, len(targets) + 1):
         c = pick_test_colour(n, taken)
