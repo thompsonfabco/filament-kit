@@ -42,7 +42,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.thompsonfabco.filamentkit.net.ParentList
+import com.thompsonfabco.filamentkit.ui.TARE_PROBLEM
 import com.thompsonfabco.filamentkit.ui.parseWeight
+import com.thompsonfabco.filamentkit.ui.tareProblem
 import com.thompsonfabco.filamentkit.ui.profile.ParentField
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -122,9 +124,13 @@ fun ReviewScreen(
             else -> {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = vm::backToPhotos) { Text("Back to photos") }
-                    Button(onClick = vm::preview, enabled = state.items.isNotEmpty() && state.countsValid) { Text("Preview") }
+                    Button(
+                        onClick = vm::preview,
+                        enabled = state.items.isNotEmpty() && state.countsValid && state.taresValid,
+                    ) { Text("Preview") }
                 }
                 if (!state.countsValid) Text("Enter a spool count for every item.", style = MaterialTheme.typography.bodySmall)
+                if (!state.taresValid) Text(TARE_PROBLEM, style = MaterialTheme.typography.bodySmall)
             }
         }
     }
@@ -210,7 +216,9 @@ private fun ItemCard(
                 vm.setCount(index, it?.toInt())
             }
             NumberField(label("Net weight (g)", "net"), item.num("net"), enabled) { vm.setNumber(index, "net", it) }
-            NumberField(label("Empty spool (g)", "tare"), item.num("tare"), enabled) { vm.setNumber(index, "tare", it) }
+            NumberField(label("Empty spool (g)", "tare"), item.num("tare"), enabled, problem = ::tareProblem) {
+                vm.setNumber(index, "tare", it)
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(
                     checked = sealed, onCheckedChange = { vm.setItemSealed(index, it) }, enabled = enabled,
@@ -256,13 +264,24 @@ private fun TextField(
 }
 
 @Composable
-/** [whole]: a count (whole number, 0 allowed so the user sees the error). Otherwise grams: finite and above 0. */
-private fun NumberField(label: String, initial: Double?, enabled: Boolean, whole: Boolean = false, onChange: (Double?) -> Unit) {
+/**
+ * [whole]: a count (whole number, 0 allowed so the user sees the error). Otherwise grams: finite and above 0.
+ * [problem] replaces the generic message for bad text (null = fine).
+ */
+private fun NumberField(
+    label: String,
+    initial: Double?,
+    enabled: Boolean,
+    whole: Boolean = false,
+    problem: ((String) -> String?)? = null,
+    onChange: (Double?) -> Unit,
+) {
     var text by remember { mutableStateOf(initial?.let(::grams).orEmpty()) }
     fun parse(t: String): Double? = if (whole) {
         t.trim().toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0 && it == Math.floor(it) && it <= Int.MAX_VALUE }
     } else parseWeight(t)
     val bad = text.isNotBlank() && parse(text) == null
+    val badText = problem?.invoke(text) ?: if (whole) "Enter a whole number" else "Enter grams above 0"
     OutlinedTextField(
         value = text,
         onValueChange = {
@@ -271,7 +290,7 @@ private fun NumberField(label: String, initial: Double?, enabled: Boolean, whole
             if (it.isBlank() || v != null) onChange(v)
         },
         enabled = enabled, singleLine = true, isError = bad,
-        supportingText = if (bad) ({ Text(if (whole) "Enter a whole number" else "Enter grams above 0") }) else null,
+        supportingText = if (bad) ({ Text(badText) }) else null,
         keyboardOptions = KeyboardOptions(keyboardType = if (whole) KeyboardType.Number else KeyboardType.Decimal),
         label = { Text(label) }, modifier = Modifier.fillMaxWidth(),
     )
