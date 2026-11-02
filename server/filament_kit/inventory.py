@@ -393,8 +393,10 @@ def open_spool(sm: Spoolman, spool_id: int, uid: str, rules: dict, *, gross: flo
     uid = tags.normalize_uid(uid)
     if gross is not None and remaining is not None:
         raise ValueError("give only one of gross or remaining")
-    if remaining is not None and remaining < 0:
-        raise ValueError("remaining cannot be negative")
+    if remaining is not None and (not _is_num(remaining) or remaining < 0):
+        raise ValueError("remaining must be a number of grams, not negative")
+    if gross is not None and not _is_num(gross):
+        raise ValueError("gross must be a number of grams")
     if humidity is not None and (not _is_num(humidity) or not 0 <= humidity <= 100):
         raise ValueError("humidity must be a percentage (0-100)")
     with _LOCK:
