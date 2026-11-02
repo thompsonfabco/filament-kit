@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from filament_kit import config, library, pairing, profiles
+from filament_kit.profiles import inapp as inapp_mod
 from filament_kit.bridge import registry
 from filament_kit.bridge.registry import Printer
 from filament_kit.profiles import builds, errors, generate as G
@@ -647,3 +648,105 @@ def test_live_upload_without_a_waiting_build_requests_nothing(env):
     assert builds.state_view("a")["rebuild_requested"] is None
     builds.store_upload("live", io.BytesIO(_live_zip_of(b1)), device_id="a", user_id="1")
     assert builds.state_view("a")["rebuild_requested"] is None
+
+
+# ---------- final review I4: a new sync PC ----------
+
+def test_new_sync_pc_starts_like_a_first_install(env):
+    """After the old PC is unpaired, the next uploader becomes the owner; the old PC's installed snapshot, partial
+    build and deletion record do not describe it, so they are cleared (no false deletions or edits)."""
+    synced(env)
+    b1 = builds.run_build(env, now=TG.NOW)["stamp"]
+    builds.record_installed(b1, "a")
+    tick()
+    builds.store_upload("live", io.BytesIO(_live_zip_of(b1)), device_id="a", user_id="1", partial=b1)
+    (profiles_dir() / "deleted.json").write_text(json.dumps({"deleted_before": ["Old one"]}), encoding="utf-8")
+    pair("b")                                                   # a unpaired, b paired
+    names = sorted(p.stem for p in (profiles_dir() / "builds" / b1 / "base").glob("*.json"))
+    assert len(names) >= 4                                      # one gone is not an app reset
+    with zipfile.ZipFile(io.BytesIO(_live_zip_of(b1))) as zf:   # b has all but one of those presets
+        files = {n: zf.read(n) for n in zf.namelist() if not n.startswith(f"base/{names[0]}.")}
+    builds.store_upload("live", io.BytesIO(zip_of(files)), device_id="b", user_id="2")
+    view = builds.state_view("b")
+    assert view["owner"] == "b" and view["installed"] is None
+    assert "partial" not in builds.meta()
+    assert not (profiles_dir() / "installed.json").exists()
+    assert builds.status()["installed"] is None
+    r = builds.run_build(env, now=TG.NOW + 1)
+    assert r["ok"] is True, r
+    m = builds.manifest(r["stamp"])
+    assert m["deleted"] == [] and m["inapp"] == builds.manifest(b1)["inapp"]   # the owner's record is kept (S34)
+    assert names[0] in {p["name"] for p in m["presets"]}
+
+
+def test_installed_json_of_another_device_is_ignored(env):
+    synced(env)
+    b1 = builds.run_build(env, now=TG.NOW)["stamp"]
+    builds.record_installed(b1, "a")
+    assert builds.state_view("a")["installed"]["stamp"] == b1
+    (profiles_dir() / "installed.json").write_text(json.dumps({"stamp": b1, "at": 1.0, "device_id": "zz"}),
+                                                   encoding="utf-8")
+    assert builds.state_view("a")["installed"] is None
+
+
+# ---------- final review I5: a restored backup has no system presets ----------
+
+@pytest.mark.parametrize("how", ["missing", "empty"])
+def test_system_hash_is_null_without_the_system_folder(env, how):
+    """The backup leaves out live/system but keeps meta.json's system_hash: the server must report null, so the PC
+    uploads its system presets again (else every build says "no system presets" forever)."""
+    import shutil
+    synced(env)
+    assert builds.state_view("a")["system_hash"] is not None
+    assert builds.system_store() is not None
+    system = profiles_dir() / "live" / "system"
+    shutil.rmtree(system)
+    if how == "empty":
+        system.mkdir()
+    assert builds.state_view("a")["system_hash"] is None
+    assert builds.system_store() is None
+    synced(env)                                                 # the PC's next run re-uploads them
+    assert builds.state_view("a")["system_hash"] is not None
+    assert builds.system_store() is not None
+
+
+# ---------- ruling S34: re-pairing (a new device id) keeps the owner's edits and notes ----------
+
+def test_repaired_pc_keeps_the_owners_inapp_edits_and_notes(env):
+    """Every pairing makes a new device id, so re-pairing the same PC is an owner change. The old installed build's
+    in-app record and note lines belong to the owner: the next build carries them although the new PC has no
+    install snapshot and its fresh Bambu Studio folder holds only generated presets."""
+    synced(env)
+    b1 = builds.run_build(env, now=TG.NOW)["stamp"]
+    builds.record_installed(b1, "a")
+    tick()
+    name = TG.sunlu(TG.H2D, "0.4")
+    cfg = json.loads((profiles_dir() / "builds" / b1 / "base" / f"{name}.json").read_text(encoding="utf-8"))
+    flow = ["0.91"] * len(cfg["filament_flow_ratio"])
+    notes = cfg["filament_notes"].replace("Spoolman filament ids", "dry 8 h first\nSpoolman filament ids")
+    builds.store_upload("live", io.BytesIO(_live_zip_of(b1, edit={name: {"filament_flow_ratio": flow,
+                                                                        "filament_notes": notes}})),
+                        device_id="a", user_id="1")
+    b2 = builds.run_build(env, now=TG.NOW + 1)["stamp"]
+    assert builds.manifest(b2)["inapp"][name] == {"filament_flow_ratio": flow}
+    builds.record_installed(b2, "a")
+    tick()
+    builds.store_upload("live", io.BytesIO(_live_zip_of(b2)), device_id="a", user_id="1")
+    pair("b")                                       # re-paired: the same PC under a new device id
+    builds.store_upload("live", io.BytesIO(_live_zip_of(b1)), device_id="b", user_id="1")   # fresh folder
+    assert builds.state_view("b")["installed"] is None
+    b3 = builds.run_build(env, now=TG.NOW + 2)
+    assert b3["ok"] is True, b3
+    m3 = builds.manifest(b3["stamp"])
+    assert m3["deleted"] == [] and m3["inapp"][name] == {"filament_flow_ratio": flow}
+    got = json.loads((profiles_dir() / "builds" / b3["stamp"] / "base" / f"{name}.json").read_text(encoding="utf-8"))
+    assert got["filament_flow_ratio"] == flow
+    lines_ = got["filament_notes"].splitlines()
+    assert lines_[-3:-1] == [inapp_mod.MARK, "dry 8 h first"] and lines_[-1].startswith("Spoolman filament ids:")
+    # once the new PC installs that build, its record carries them on (owner-edits.json is no longer needed)
+    builds.record_installed(b3["stamp"], "b")
+    assert not (profiles_dir() / "owner-edits.json").exists()
+    tick()
+    builds.store_upload("live", io.BytesIO(_live_zip_of(b3["stamp"])), device_id="b", user_id="1")
+    b4 = builds.run_build(env, now=TG.NOW + 3)["stamp"]
+    assert builds.manifest(b4)["inapp"][name] == {"filament_flow_ratio": flow}

@@ -499,3 +499,34 @@ def test_other_owner_short_circuits_before_sending(env):
     c = FakeClient(st)
     assert _run(c, folders, dirs) == "other_pc"
     assert c.calls == [("state",)]
+
+
+def test_stale_build_refusal_asks_for_a_rebuild_rate_limited(env):
+    """Final review I3: a stale_build refusal means server and PC disagree; a rebuild is asked for (at most every
+    15 min, the same limiter as other requests)."""
+    folders, dirs = env
+    live = _hashes(folders)[0]
+
+    def fake_install(build_dir, folders, dirs, *, running, stamp_now, before_write=None):
+        raise installer.Refused("edited after the build", "stale_build")
+
+    c = FakeClient(_synced_state(folders, build={"stamp": STAMP, "live_hash": live}), _build_zip(live_hash=live))
+    assert _run(c, folders, dirs, install=fake_install) == "refused"
+    assert c.calls.count(("rebuild", live)) == 1
+    assert "asked for a rebuild" in _log(dirs)
+    assert _run(c, folders, dirs, now=T0 + 60, install=fake_install) == "refused"
+    assert c.calls.count(("rebuild", live)) == 1
+    assert _run(c, folders, dirs, now=T0 + 15 * 60 + 1, install=fake_install) == "refused"
+    assert c.calls.count(("rebuild", live)) == 2
+
+
+def test_untrusted_gcode_refusal_asks_for_nothing(env):
+    folders, dirs = env
+    live = _hashes(folders)[0]
+
+    def fake_install(build_dir, folders, dirs, *, running, stamp_now, before_write=None):
+        raise installer.Refused("tampered", "untrusted_gcode")
+
+    c = FakeClient(_synced_state(folders, build={"stamp": STAMP, "live_hash": live}), _build_zip(live_hash=live))
+    assert _run(c, folders, dirs, install=fake_install) == "refused"
+    assert not [x for x in c.calls if x[0] == "rebuild"]

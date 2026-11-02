@@ -39,7 +39,10 @@ def test_build_service():
     svc = _unit("filament-kit-build.service")["Service"]
     assert svc["ExecStart"] == "/opt/filament-kit/venv/bin/filament-kit profiles build"
     assert svc["IPAddressDeny"] == "any"
-    assert svc["IPAddressAllow"] == "localhost"
+    # final review: a LAN spoolman_url must work in builds too; the same allowlist as the main service
+    main = _unit("filament-kit.service")["Service"]
+    assert svc["IPAddressAllow"] == main["IPAddressAllow"]
+    assert "192.168.0.0/16" in svc["IPAddressAllow"].split() and "localhost" in svc["IPAddressAllow"].split()
 
 
 def test_library_service_has_no_ip_lines():
@@ -97,3 +100,17 @@ def test_release_packages_path_units_and_checks_library_data():
     text = _text(ROOT / "tools" / "make_release.sh")
     assert "install/systemd/*.path" in text
     assert "filament_kit/library_data/index.json" in text
+
+
+def test_readme_final_review_points():
+    """Final review: README documents restore-deleted, the real pairing order, that unpair covers the PC, and that
+    a library rollback is undone by the next scheduled update unless updates are off."""
+    readme = _text(ROOT / "README.md")
+    assert "sudo filament-kit profiles restore-deleted" in readme
+    pair = readme[readme.index("## Pair your PC"):readme.index("## Building the Android app release")]
+    assert pair.index("Finish") < pair.index("paste the link")
+    assert "Pair this PC with the filament-kit server now" in pair
+    row = next(line for line in readme.splitlines() if line.startswith("| `sudo filament-kit unpair`"))
+    assert "PC" in row and "phones" in row
+    lib = readme[readme.index("## Spec library updates"):readme.index("## Troubleshooting")]
+    assert '"schedule": "off"' in lib and "rollback" in lib and "next" in lib

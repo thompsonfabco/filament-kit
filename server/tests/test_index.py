@@ -120,3 +120,30 @@ def test_broken_library_falls_back_to_filament_map(built, monkeypatch):
     assert got is not None and got.name == NAME
     stranger = TG.fil(4242, "PLA+ 2.0 Mint")
     assert profiles.preset_for(stranger, "O1D", 0.4) is None
+
+
+def test_recorded_line_wins_over_a_longer_library_prefix(built, monkeypatch):
+    """Final review I2: the build keeps a filament in its recorded line (S12); after a library update adds a longer
+    product that exists as another line, preset_for still follows the build's filament-id map. An explicit
+    extra.line (the new-colour case) and a filament not in the map still go by vendor + line."""
+    from filament_kit.profiles import lines as lines_mod
+    _, stamp = built
+    path = config.paths().state / "profiles" / "builds" / stamp / "BUILD.json"
+    m = json.loads(path.read_text(encoding="utf-8"))
+    grey = "SUNLU PLA+ 2.0 Grey @Bambu Lab H2D 0.4 nozzle"
+    m["lines"]["sunlu--pla-plus-2-0-grey"] = {"filament_id": "P0000abc", "spoolman_ids": [], "vendor": "SUNLU",
+                                              "product": "PLA+ 2.0 Grey"}
+    row = dict(next(p for p in m["presets"] if p["name"] == NAME), name=grey, line_id="sunlu--pla-plus-2-0-grey",
+               filament_id="P0000abc", spoolman_ids=[])
+    m["presets"].append(row)
+    path.write_text(json.dumps(m), encoding="utf-8")
+    monkeypatch.setattr(lines_mod, "product_of", lambda f, lib: "PLA+ 2.0 Grey")   # the library's longer product
+    in_map = dict(SUNLU[0], extra={})                                # filament 17, recorded in the plain line
+    assert profiles.preset_for(in_map, "O1D", 0.4).name == NAME
+    moved = dict(SUNLU[0], extra={"line": json.dumps("PLA+ 2.0 Grey")})   # explicitly moved by the owner
+    assert profiles.preset_for(moved, "O1D", 0.4).name == grey
+    unknown = TG.fil(4243, "PLA+ 2.0 Grey Matte")                    # not in the map: vendor + line
+    assert profiles.preset_for(unknown, "O1D", 0.4).name == grey
+    # an explicit line the build doesn't have yet: the map still gives the recorded line
+    elsewhere = dict(SUNLU[0], extra={"line": json.dumps("PLA+ 3.0")})
+    assert profiles.preset_for(elsewhere, "O1D", 0.4).name == NAME

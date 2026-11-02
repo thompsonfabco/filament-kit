@@ -3,12 +3,16 @@
 Order (each check runs before anything is written):
   1. the staged names come from build_dir/base;
   2. untrusted G-code: every value of a key containing "gcode" must equal a value from this PC's
-     system filament presets, or the live preset's current value (the builder never writes G-code
-     of its own);
+     system filament presets, a value of the installed snapshot (dirs.installed: this PC accepted it
+     once, e.g. the owner's G-code edit carried after an app reset), or the live preset's current
+     value (the builder never writes G-code of its own);
   3. a preset edited or deleted in Bambu Studio after the build was made refuses the install
      (unless more than a quarter of the installed presets vanished at once: an app reset); a live
      value equal to the copy in dirs.partial (a build whose install stopped part-way, ruling S28) was
-     written by that install, not typed in the app, so it is not an edit (the server agrees);
+     written by that install, not typed in the app, so it is not an edit (the server agrees); nor is
+     a live value equal to the build's own record of the in-app values it carried (BUILD.json
+     `inapp`: the build saw it, e.g. a "nil" it filled in); a preset the build brought back on
+     `profiles restore-deleted` (BUILD.json `restored`) is not a deletion;
   4. Bambu Studio must not be running; this is checked again right before the first write, and
      if it runs then nothing is written, not even the backup;
   5. the user filament folder (which must exist) is backed up to dirs.backups/<stamp> (the 5
@@ -70,7 +74,7 @@ def _key(v) -> str:
 def _names(folder: Path) -> list[str]:
     if not folder.is_dir():
         return []
-    return sorted(p.stem for p in folder.iterdir() if p.suffix == ".json" and p.is_file())
+    return sorted(p.stem for p in folder.iterdir() if p.suffix.casefold() == ".json" and p.is_file())
 
 
 def _load_or_none(path: Path) -> dict | None:
@@ -83,19 +87,36 @@ def _load_or_none(path: Path) -> dict | None:
         raise Refused(f"could not read {path}: {e}") from None
 
 
-def trusted_gcode(system_filament: Path) -> set[str]:
-    """Every G-code value in this PC's Bambu Studio system filament presets."""
+def trusted_gcode(system_filament: Path, *more: Path) -> set[str]:
+    """Every G-code value in this PC's Bambu Studio system filament presets (and in the `more` folders, e.g. the
+    installed snapshot's base/)."""
     ok = set()
-    if not system_filament.is_dir():
-        return ok
-    for f in system_filament.iterdir():
-        if f.suffix == ".json" and f.is_file():
-            try:
-                d = inapp.load(f)
-            except (OSError, UnicodeDecodeError, ValueError):
-                continue
-            ok.update(_key(v) for k, v in d.items() if "gcode" in k.lower())
+    for folder in (system_filament, *more):
+        if not folder.is_dir():
+            continue
+        for f in folder.iterdir():
+            if f.suffix.casefold() == ".json" and f.is_file():
+                try:
+                    d = inapp.load(f)
+                except (OSError, UnicodeDecodeError, ValueError):
+                    continue
+                ok.update(_key(v) for k, v in d.items() if "gcode" in k.lower())
     return ok
+
+
+def _build_meta(build_dir: Path) -> tuple[dict[str, dict], set[str]]:
+    """(BUILD.json `inapp`: {preset: {key: value}}, casefolded BUILD.json `restored` names); empty when absent."""
+    try:
+        m = json.loads((build_dir / "BUILD.json").read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError):
+        return {}, set()
+    if not isinstance(m, dict):
+        return {}, set()
+    rec = m.get("inapp")
+    rec = {n: v for n, v in rec.items() if isinstance(n, str) and isinstance(v, dict)} if isinstance(rec, dict) else {}
+    restored = m.get("restored")
+    restored = {n.casefold() for n in restored if isinstance(n, str)} if isinstance(restored, list) else set()
+    return rec, restored
 
 
 def untrusted_gcode(new: dict, live: dict | None, trusted: set[str]) -> list[str]:
@@ -199,7 +220,8 @@ def install(build_dir: Path, folders: StudioFolders, dirs: AppDirs, *,
     reset = inapp.is_reset(set(before), set(live_names))
 
     # 2. untrusted G-code, 3. edited / deleted after the build
-    trusted = trusted_gcode(folders.system_filament)
+    trusted = trusted_gcode(folders.system_filament, snap)
+    record, restored = _build_meta(build_dir)
     unsafe, stop = [], []
     for name in staged:
         now = _load_or_none(live / f"{name}.json")
@@ -208,12 +230,14 @@ def install(build_dir: Path, folders: StudioFolders, dirs: AppDirs, *,
         if old is None:
             continue
         if now is None:
-            if not reset:
+            if not reset and name.casefold() not in restored:
                 stop.append(f"{name}: deleted in Bambu Studio after the build was made")
             continue
         part = _load_or_none(half / f"{name}.json") if half.is_dir() else None
+        seen = record.get(name, {})
         late = [k for k, v in inapp.diff(old, now).items() if inapp.norm(new[name].get(k)) != inapp.norm(v)
-                and not (part is not None and k in part and inapp.norm(part[k]) == inapp.norm(v))]
+                and not (part is not None and k in part and inapp.norm(part[k]) == inapp.norm(v))
+                and not (k in seen and inapp.norm(seen[k]) == inapp.norm(v))]
         if late:
             stop.append(f"{name}: edited in Bambu Studio after the build was made ({', '.join(late)})")
     if unsafe:
@@ -221,7 +245,7 @@ def install(build_dir: Path, folders: StudioFolders, dirs: AppDirs, *,
                       "already in your live copy (the build may have been tampered with): " + "; ".join(unsafe[:20]),
                       "untrusted_gcode")
     if stop:
-        raise Refused("the build is older than your latest Bambu Studio changes; it will be rebuilt: "
+        raise Refused("the build is older than your latest Bambu Studio changes; a rebuild is asked for: "
                       + "; ".join(stop[:20]), "stale_build")
 
     staged_cf = {n.casefold() for n in staged}

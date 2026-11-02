@@ -627,3 +627,74 @@ def test_lines_recorded_only_for_items_added_before_spoolman_failed(sm, spoolman
     assert len(e.value.partial.spool_ids) == 1
     ls = lines_mod.load()
     assert "elegoo--petg-hf" in ls and "acme--pla-matte" not in ls
+
+
+# ---------- final review I6: an intake add never blocks spool loads during a build ----------
+
+def test_add_never_holds_the_inventory_lock_while_a_build_holds_its_locks(sm, spoolman_fake_store):
+    """The build service holds live.lock and the lines lock for the whole build; a spool load (bridge loading)
+    needs inventory._LOCK. An add checks parents before taking _LOCK and records lines after releasing it, so
+    _LOCK stays free and the spools are added while the build runs."""
+    _upload_store()
+    store = builds.system_store()
+    parent = next(n for n in sorted(store.bases()) if lines_mod.usable(store, n))
+    held, release = threading.Event(), threading.Event()
+
+    def the_build():
+        with builds._locked("live.lock"), lines_mod.locked():
+            held.set()
+            release.wait(20)
+
+    b = threading.Thread(target=the_build, daemon=True)
+    b.start()
+    assert held.wait(5)
+    errs = []
+
+    def the_add():
+        try:
+            inventory.add_and_link(sm, [_hf(bambu_parent=parent)], RULES, dry=False, uid=None)
+        except Exception as e:  # noqa: BLE001
+            errs.append(e)
+
+    a = threading.Thread(target=the_add, daemon=True)
+    try:
+        a.start()
+        deadline = time.time() + 5
+        while not spoolman_fake_store["spools"] and time.time() < deadline:
+            time.sleep(0.02)
+        assert spoolman_fake_store["spools"], "the add's inventory phase did not finish while the build ran"
+        for _ in range(10):                                     # a spool load could take the lock meanwhile
+            assert inventory._LOCK.acquire(timeout=1), "inventory._LOCK held while waiting for build locks"
+            inventory._LOCK.release()
+            time.sleep(0.02)
+        assert a.is_alive()                                     # still waiting to record its line
+    finally:
+        release.set()
+        b.join(5)
+        a.join(10)
+    assert not errs, errs
+    assert lines_mod.load()["elegoo--petg-hf"].bambu_parent == parent
+
+
+def test_system_store_cache_hit_needs_no_live_lock():
+    _upload_store()
+    first = builds.system_store()
+    got = []
+    held, release = threading.Event(), threading.Event()
+
+    def holder():
+        with builds._locked("live.lock"):
+            held.set()
+            release.wait(10)
+
+    t = threading.Thread(target=holder, daemon=True)
+    t.start()
+    assert held.wait(5)
+    r = threading.Thread(target=lambda: got.append(builds.system_store()), daemon=True)
+    r.start()
+    r.join(2)
+    quick = list(got)                                           # before live.lock is released
+    release.set()
+    t.join(5)
+    r.join(5)
+    assert quick and quick[0] is first

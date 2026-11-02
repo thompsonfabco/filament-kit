@@ -16,6 +16,6 @@ NoNewPrivileges=yes
 PrivateTmp=yes
 CapabilityBoundingSet=
 AmbientCapabilities=
-# the build only talks to Spoolman on this host
+# the build talks to Spoolman (spoolman_url may be on the LAN): the same allowlist as filament-kit.service
 IPAddressDeny=any
-IPAddressAllow=localhost
+IPAddressAllow=localhost 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 160.79.104.0/21 2607:6bc0::/48

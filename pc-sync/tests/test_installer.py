@@ -427,3 +427,75 @@ def test_before_write_not_called_when_refused(tmp_path):
         installer.install(env.build({"A": _preset("A")}), env.folders, env.dirs, running=lambda: True,
                           stamp_now="20261102-020000", before_write=seen.append)
     assert seen == []
+
+
+# --- final review I3: refusals that would repeat forever ---------------------------------------------
+
+def _manifest(build: Path, **fields) -> None:
+    m = json.loads((build / "BUILD.json").read_text(encoding="utf-8"))
+    m.update(fields)
+    (build / "BUILD.json").write_text(json.dumps(m), encoding="utf-8")
+
+
+def test_gcode_already_installed_once_is_trusted(tmp_path):
+    """(a) An in-app G-code edit carried by the build after an app reset: no live copy, not a system value, but
+    dirs.installed holds it (this PC accepted it once)."""
+    names = ["A", "B", "C", "D"]
+    mine = ["; my own end"]
+    env = Env(tmp_path, live={"D": (_preset("D"), _info())})              # 3 of 4 gone: an app reset
+    env.snapshot({n: _preset(n, filament_end_gcode=mine) if n == "A" else _preset(n) for n in names})
+    build = env.build({n: _preset(n, filament_end_gcode=mine) if n == "A" else _preset(n) for n in names})
+    assert env.install(build).installed == names
+    # a value that was never installed nor in a system preset is still refused
+    env2 = Env(tmp_path / "two", live={"D": (_preset("D"), _info())})
+    env2.snapshot({n: _preset(n) for n in names})
+    with pytest.raises(installer.Refused) as e:
+        env2.install(env2.build({n: _preset(n, filament_end_gcode=mine) if n == "A" else _preset(n)
+                                 for n in names}))
+    assert e.value.code == "untrusted_gcode"
+
+
+def test_restored_presets_are_not_deletions(tmp_path):
+    """(b) `profiles restore-deleted` before the deletion build was installed: the build names what it restored."""
+    names = ["A", "B", "C", "D", "E"]
+    env = Env(tmp_path, live={n: (_preset(n), _info()) for n in names if n != "A"})
+    env.snapshot({n: _preset(n) for n in names})
+    build = env.build({n: _preset(n) for n in names})
+    _manifest(build, restored=["a"])                                     # casefolded match
+    assert env.install(build).installed == names
+    assert (env.live / "A.json").exists()
+
+
+def test_nil_edit_the_build_carried_is_not_late(tmp_path):
+    """(c) The owner typed "nil" in the app; the build carried it (BUILD.json `inapp`) and the generator filled it:
+    that live value was seen by the build, so it is not an edit made after it."""
+    env = Env(tmp_path, live={"A": (_preset("A", nozzle_temperature=["225", "nil"]), _info())})
+    env.snapshot({"A": _preset("A")})
+    build = env.build({"A": _preset("A", nozzle_temperature=["225", "225"])})
+    with pytest.raises(installer.Refused) as e:                          # without the record: stale
+        env.install(build)
+    assert e.value.code == "stale_build"
+    _manifest(build, inapp={"A": {"nozzle_temperature": ["225", "nil"]}})
+    assert env.install(build).installed == ["A"]
+    # a later edit (another value than the record's) still refuses
+    env.live.joinpath("A.json").write_text(json.dumps(_preset("A", nozzle_temperature=["230", "nil"])),
+                                           encoding="utf-8")
+    env.snapshot_replace({"A": _preset("A")})
+    build2 = env.build({"A": _preset("A", nozzle_temperature=["225", "225"])})
+    _manifest(build2, inapp={"A": {"nozzle_temperature": ["225", "nil"]}})
+    with pytest.raises(installer.Refused):
+        env.install(build2)
+
+
+# --- final review minor: suffixes match case-insensitively (as the server) -----------------------------
+
+def test_upper_case_suffixes_count(tmp_path):
+    env = Env(tmp_path, live={"B": (_preset("B"), _info())})
+    (env.live / "A.JSON").write_text(json.dumps(_preset("A")), encoding="utf-8")
+    env.snapshot({"A": _preset("A"), "B": _preset("B")})
+    assert installer._names(env.live) == ["A", "B"]
+    sysp = {"name": "Generic PLA @BBL H2D", "filament_start_gcode": SYS_GCODE}
+    (env.folders.system_filament / "Generic PLA upper.JSON").write_text(json.dumps(sysp), encoding="utf-8")
+    assert installer._key(SYS_GCODE) in installer.trusted_gcode(env.folders.system_filament)
+    res = env.install(env.build({"B": _preset("B", filament_start_gcode=SYS_GCODE)}))
+    assert res.stale == ["A"]                         # still in the app, no longer built

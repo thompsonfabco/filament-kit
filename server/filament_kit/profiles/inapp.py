@@ -36,14 +36,17 @@ def diff(installed: dict, live: dict) -> dict:
     return {k: v for k, v in live.items() if k not in IGNORE and (k not in installed or norm(v) != norm(installed[k]))}
 
 
-def user_notes(installed: dict, live: dict) -> list[str]:
-    """Note lines the owner wrote: everything below MARK, plus lines that were not in the installed notes;
+def user_notes(installed: dict, live: dict, *, partial: dict | None = None) -> list[str]:
+    """Note lines the owner wrote: everything below MARK, plus lines that were not in the installed notes (nor in
+    `partial`'s, the copy a half-finished install wrote: its summary/spec lines are generated, not theirs);
     never the generated `Spoolman filament ids:` line."""
     lines = notes_text(live.get("filament_notes")).splitlines()
     kept = []
     if MARK in lines:
         kept, lines = lines[lines.index(MARK) + 1:], lines[:lines.index(MARK)]
     old = set(notes_text(installed.get("filament_notes")).splitlines())
+    if partial is not None:
+        old |= set(notes_text(partial.get("filament_notes")).splitlines())
     out = kept + [line for line in lines if line.strip() and line not in old and line not in kept]
     return [line for line in out if not line.startswith(IDS_PREFIX)]
 
@@ -70,10 +73,12 @@ def carried(cfg: dict, installed: dict | None, live: dict | None, *, recorded: d
 
 
 def keep_edits(cfg: dict, installed: dict | None, live: dict | None, log: list[str], *,
-               recorded: dict | None = None, partial: dict | None = None) -> dict:
+               recorded: dict | None = None, partial: dict | None = None, notes: list[str] | None = None) -> dict:
     """Carry the owner's in-app values (see `carried`) into cfg (in place); returns them ({key: value}, the
     record of this build). Their note lines go below MARK, before a trailing `Spoolman filament ids:` line if cfg
-    has one."""
+    has one. With no live copy (an app reset) the lines below MARK of the installed copy are carried; lines a
+    half-finished install wrote (`partial`) are never taken for theirs. With no installed copy at all (a re-paired
+    PC, ruling S34) the owner's saved note lines `notes` are carried."""
     edits, dropped = carried(cfg, installed, live, recorded=recorded, partial=partial)
     for k in dropped:
         log.append(f"{cfg.get('name')}: {k} is the generated value again; no longer kept as your in-app value")
@@ -81,9 +86,12 @@ def keep_edits(cfg: dict, installed: dict | None, live: dict | None, log: list[s
         if norm(cfg.get(k)) != norm(v):
             log.append(f"{cfg.get('name')}: {k} {cfg.get(k)} -> {v} (your in-app value, kept)")
         cfg[k] = v
-    if installed is None or live is None:
-        return edits
-    mine = user_notes(installed, live)
+    if installed is None:
+        mine = [line for line in (notes or []) if isinstance(line, str) and not line.startswith(IDS_PREFIX)]
+    else:
+        # the live preset is gone (an app reset, a restore): the owner's lines below MARK in the installed copy count
+        mine = user_notes(installed, live if live is not None else installed,
+                          partial=partial if live is not None else None)
     if mine:
         lines = notes_text(cfg.get("filament_notes")).splitlines()
         tail = [lines.pop()] if lines and lines[-1].startswith(IDS_PREFIX) else []

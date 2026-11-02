@@ -1,9 +1,10 @@
 """`preset_for`: the owner's preset for a Spoolman filament on a printer model and nozzle, from the last good build.
 
 Steps (Decision "preset_for source"): printer = `models.printer_preset_name(model)`, nozzle = f"{nozzle_mm:g}";
-the line is `lines.line_id_for(vendor, lines.product_of(filament, library))` (= `library.line_id`, except for a
-part whose slug is empty, matching how builds key their lines) when the build has that line, else the build's
-Spoolman filament-id map; then the build's preset of that line, printer and nozzle. A preset whose filament_id is
+the line is the filament's explicit `extra.line` when the build has it (a new colour of a built line, or a filament
+the owner moved), else the build's Spoolman filament-id map (where the build really put it, ruling S12), else
+`lines.line_id_for(vendor, lines.product_of(filament, library))` (= `library.line_id`, except for a part whose slug
+is empty, matching how builds key their lines); then the build's preset of that line, printer and nozzle. A preset whose filament_id is
 not a generated id (`generate.ID_RE`), whose name could not be a file name, or that lacks either nozzle temperature
 or its filament_type is refused (None): never a system id, never None temps. `setting_id` comes from the live
 upload's `base/<name>.info` when it matches
@@ -57,24 +58,30 @@ def _int(v) -> int | None:
 
 
 def _line_of(filament: dict, build: dict) -> str | None:
+    """The build's line of this filament: its explicit `extra.line` when the build has that line (a new colour, or a
+    filament the owner moved); else the build's filament-id map (the build keeps a filament in its recorded line,
+    ruling S12, even after a library update adds a longer product prefix); else vendor + `product_of`."""
     vendor = lines_mod._vendor(filament)
-    if vendor:
-        product = lines_mod._extra_line(filament)
-        if not product:
-            try:
-                product = lines_mod.product_of(filament, library_mod.load())
-            except Exception:           # a broken library: fall back to the build's filament-id map
-                log.warning("preset_for: library unavailable; using the build's filament-id map", exc_info=True)
-                product = ""
-        if product:
-            lid = lines_mod.line_id_for(vendor, product)
-            if lid in build["lines"]:
-                return lid
+    explicit = lines_mod._extra_line(filament) if vendor else ""
+    if explicit:
+        lid = lines_mod.line_id_for(vendor, explicit)
+        if lid in build["lines"]:
+            return lid
     fid = filament.get("id")
     if isinstance(fid, int) and not isinstance(fid, bool):
         lid = build["filaments"].get(str(fid))
         if isinstance(lid, str):
             return lid
+    if vendor and not explicit:
+        try:
+            product = lines_mod.product_of(filament, library_mod.load())
+        except Exception:               # a broken library: only the build's filament-id map is left
+            log.warning("preset_for: library unavailable; using the build's filament-id map", exc_info=True)
+            product = ""
+        if product:
+            lid = lines_mod.line_id_for(vendor, product)
+            if lid in build["lines"]:
+                return lid
     return None
 
 
@@ -101,7 +108,7 @@ def preset_for(filament: dict, model: str, nozzle_mm: float) -> PresetRef | None
     lo, hi = _int(row.get("nozzle_temp_min")), _int(row.get("nozzle_temp_max"))
     if not (isinstance(fid, str) and generate.ID_RE.fullmatch(fid)):
         return None
-    if not (isinstance(name, str) and name.strip() and not generate.BAD_NAME.search(name)) or name in (".", ".."):
+    if not generate.safe_name(name):
         return None
     if lo is None or hi is None or not (isinstance(ftype, str) and ftype):
         return None
