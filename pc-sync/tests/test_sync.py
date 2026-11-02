@@ -163,9 +163,9 @@ def test_matching_build_installs_reuploads_and_reports(env):
                                                  "presets": 1, "problems": 0}), _build_zip(live_hash=live))
     assert _run(c, folders, dirs) == "installed"
     names = [x[0] for x in c.calls]
-    assert names == ["state", "build", "upload", "installed"]
-    assert c.calls[2] == ("upload", "live", folders.user_id)
-    assert c.calls[3] == ("installed", STAMP)
+    assert names == ["state", "build", "installed", "upload"]       # the report first (fix round 1)
+    assert c.calls[2] == ("installed", STAMP)
+    assert c.calls[3] == ("upload", "live", folders.user_id)
     got = json.loads((folders.user_filament / "base" / "Acme PLA @BBL H2D.json").read_text(encoding="utf-8"))
     assert got["nozzle_temperature"] == ["220"]
     assert json.loads((dirs.installed / "BUILD.json").read_text())["stamp"] == STAMP
@@ -271,7 +271,7 @@ def test_unexpected_install_oserror_propagates_then_next_run_finishes(env):
     c.calls.clear()
     assert _run(c, folders, dirs, now=T0 + 600) == "installed"
     assert ("rebuild", _hashes(folders)[0]) not in c.calls
-    assert c.calls[-1] == ("installed", STAMP)
+    assert c.calls[-2:] == [("installed", STAMP), ("upload", "live", folders.user_id)]
     assert not sync.marker_path(dirs).exists()
     assert "interrupted" in _log(dirs)
 
@@ -356,6 +356,44 @@ def test_resume_refused_when_a_new_preset_was_edited_after_the_crash(env):
     assert "partial" not in json.loads(dirs.state.read_text()) and not dirs.partial.exists()
     uploads = [x for x in c.calls if x[0] == "upload"]
     assert uploads == [("upload", "live", folders.user_id)]
+
+
+def test_failed_report_skips_the_live_upload_and_is_sent_first_next_run(env):
+    """Fix round 1: the post-install live upload only follows a recorded install, so the server never holds the
+    new live folder next to the old installed snapshot."""
+    folders, dirs = env
+    live = _hashes(folders)[0]
+    c = FakeClient(_synced_state(folders, build={"stamp": STAMP, "live_hash": live}), _build_zip(live_hash=live))
+    c.fail["installed"] = client.Offline("server unreachable")
+    with pytest.raises(client.Offline):
+        _run(c, folders, dirs)
+    assert not [x for x in c.calls if x[0] == "upload"]
+    c.fail.clear()
+    c.calls.clear()
+    _run(c, folders, dirs, now=T0 + 600)
+    names = [x[0] for x in c.calls]
+    assert ("installed", STAMP) in c.calls and "upload" in names
+    assert names.index("installed") < names.index("upload")
+
+
+def test_studio_info_rewrites_and_own_presets_do_not_ask_for_a_rebuild(env):
+    """Ruling S31: only a generated preset that differs from dirs.installed (inapp.diff) or is gone asks for one."""
+    folders, dirs = env
+    live = _hashes(folders)[0]
+    c = FakeClient(_synced_state(folders, build={"stamp": STAMP, "live_hash": live}), _build_zip(live_hash=live))
+    assert _run(c, folders, dirs) == "installed"
+    base = folders.user_filament / "base"
+    (base / "Acme PLA @BBL H2D.info").write_text("sync_info = update\nsetting_id = PFUS9\nupdated_time = 9\n",
+                                                  encoding="utf-8")
+    (base / "My own PETG.json").write_text(json.dumps(dict(PRESET, name="My own PETG")), encoding="utf-8")
+    cfg = json.loads((base / "Acme PLA @BBL H2D.json").read_text(encoding="utf-8"))
+    cfg["updated_time"] = "12345"                                       # bookkeeping only (inapp.IGNORE)
+    (base / "Acme PLA @BBL H2D.json").write_text(json.dumps(cfg), encoding="utf-8")
+    c.calls.clear()
+    assert _run(c, folders, dirs, now=T0 + 60) == "uploaded"            # the server gets the folder, no rebuild
+    assert not [x for x in c.calls if x[0] == "rebuild"]
+    (base / "Acme PLA @BBL H2D.json").unlink()                          # deleted in the app: a rebuild
+    assert _run(c, folders, dirs, now=T0 + 120) == "rebuild_requested"
 
 
 def test_rebuild_requested_after_an_inapp_edit_of_the_installed_build(env):

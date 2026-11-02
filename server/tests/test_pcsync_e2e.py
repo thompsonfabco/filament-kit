@@ -81,6 +81,7 @@ def server(tmp_path, monkeypatch):
     yield port, sm
     uv.should_exit = True
     t.join(timeout=10)
+    assert not t.is_alive(), "the uvicorn thread did not stop"
 
 
 # ---------- the PC ----------

@@ -7,8 +7,9 @@ MARK.
 
 Edits last (ruling S27): each build records, per preset, the in-app values it carried (BUILD.json `inapp`). The
 next build starts from the installed build's record, overridden/extended by diff(installed preset, live): a key the
-owner changed again takes the new live value; a key whose value equals the newly generated one (the owner set it
-back) is dropped from the record. A half-finished install (ruling S28) is not the owner's doing: a live value equal
+owner changed again takes the new live value; a key the owner changed to the newly generated value (set it back) is
+dropped from the record. A key only in the record is never dropped because the generated value happens to match
+it: a later build that generates another value still keeps the owner's. A half-finished install (ruling S28) is not the owner's doing: a live value equal
 to that partial build's value is not an edit; that build's own record is used instead of the installed one's.
 
 IGNORE, norm, diff and is_reset must stay identical to pc-sync/fksync/inapp.py (a server test compares them).
@@ -49,16 +50,19 @@ def user_notes(installed: dict, live: dict) -> list[str]:
 
 def carried(cfg: dict, installed: dict | None, live: dict | None, *, recorded: dict | None = None,
             partial: dict | None = None) -> tuple[dict, list[str]]:
-    """(the owner's in-app values for this preset, keys dropped from `recorded` because they now equal the
-    generated value). `cfg` holds the generated values; `recorded` = the edits the installed (or partial) build
-    carried; `partial` = the partial build's copy of this preset (its values are not edits)."""
-    out = {k: v for k, v in (recorded or {}).items() if k not in IGNORE}
+    """(the owner's in-app values for this preset, recorded keys the owner set back to the generated value).
+    `cfg` holds the generated values; `recorded` = the edits the installed (or partial) build carried;
+    `partial` = the partial build's copy of this preset (its values are not edits). Only a key changed in the app
+    since the install (`fresh`) is dropped when its live value equals the generated one."""
+    fresh = {}
     if installed is not None and live is not None:
         for k, v in diff(installed, live).items():
             if partial is not None and k in partial and norm(partial[k]) == norm(v):
                 continue                    # written by the half-finished install, not typed by the owner
-            out[k] = v
-    same = [k for k, v in out.items() if k in cfg and norm(cfg[k]) == norm(v)]
+            fresh[k] = v
+    out = {k: v for k, v in (recorded or {}).items() if k not in IGNORE}
+    out.update(fresh)
+    same = [k for k, v in fresh.items() if k in cfg and norm(cfg[k]) == norm(v)]
     dropped = sorted(k for k in same if k in (recorded or {}))
     for k in same:
         del out[k]

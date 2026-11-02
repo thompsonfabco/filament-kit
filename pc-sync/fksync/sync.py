@@ -18,11 +18,15 @@
      `uploaded.<kind>` `{local, server}`; when it differs from ours that is logged once, the upload is
      not repeated while both stay the same, and a build with that server hash counts as built from
      these live presets.
-  5. An install whose `installed(stamp)` report failed is reported again.
+  5. An install whose `installed(stamp)` report failed is reported again, before any upload: after an
+     install the live folder is re-uploaded only once the server has recorded the install, so the
+     server never pairs the new live folder with the old installed build (which would turn every
+     generated change into an "in-app edit").
   6. No build -> `no_build` (a build is requested, at most every 15 min). The build already
-     installed -> `up_to_date`, unless the live folder changed since that install (an in-app edit:
-     its hash differs from `state.json` `installed.live`, the hash right after the install); then a
-     rebuild is requested like below (ruling S29b). A build made from other live presets -> a rebuild is requested
+     installed -> `up_to_date`, unless a generated preset was changed in Bambu Studio since that
+     install (it differs from its dirs.installed copy by `inapp.diff`, or is gone); then a rebuild is
+     requested like below (rulings S29b, S31: Studio's own .info rewrites, bookkeeping keys and the
+     owner's own presets never ask for one; they are only uploaded). A build made from other live presets -> a rebuild is requested
      (`rebuild_requested`), re-sent only after 15 min (`waiting` until then; `state.json`
      `requested: {live_hash, at}`). A build made from exactly these live presets -> download,
      install (backup stamp `%Y%m%d-%H%M%S` of `now`), upload the live folder again, `installed(stamp)`.
@@ -39,7 +43,7 @@ import time
 from pathlib import Path
 from typing import Callable
 
-from . import installer, store, zips
+from . import inapp, installer, store, zips
 from .client import ApiError
 from .studio import StudioFolders
 from .treehash import tree_hash
@@ -225,15 +229,15 @@ class _Run:
         self._clear_marker()
         self._clear_partial()
         self.st["stale"] = list(res.stale)
-        self.st["installed"] = {"stamp": stamp, "at": self.now, "live": tree_hash(self.f.user_filament)}
+        self.st["installed"] = {"stamp": stamp, "at": self.now}
         self.st.pop("requested", None)
         self.st["report"] = stamp
         self.save()
         if res.stale:
             self.log(f"{len(res.stale)} presets are no longer generated; delete them in Bambu Studio: "
                      + ", ".join(res.stale))
+        self.report(stamp)                  # first: a failed report must not leave the new live folder uploaded
         self.upload_live()
-        self.report(stamp)
         return self.finish("installed", f"installed build {stamp} ({len(res.installed)} presets, "
                                         f"backup {res.backup.name})")
 
@@ -333,12 +337,12 @@ class _Run:
                 return done
             server = self.c.state()
 
-        here = self.uploads(server)
-
         pending = self.st.get("report")
         if pending:
             self.report(pending)
             server = self.c.state()
+
+        here = self.uploads(server)
 
         build = server.get("build")
         if not build:
@@ -349,10 +353,8 @@ class _Run:
         stamp = build.get("stamp")
         installed = (server.get("installed") or {}).get("stamp")
         if installed == stamp:
-            mine = self.st.get("installed") or {}
-            if mine.get("stamp") == stamp and mine.get("live") and mine["live"] != here \
-                    and build.get("live_hash") not in self.accepted_hashes(here):
-                # changed in Bambu Studio since this install (S29b): the edit goes into a rebuild
+            if self.changed_since_install():
+                # a generated preset changed in Bambu Studio since this install (S29b, S31): rebuild
                 if self.request(here):
                     return self.finish("rebuild_requested", f"build {stamp} is installed; your Bambu Studio "
                                                             "changes since then were sent and a rebuild asked for")
@@ -369,6 +371,28 @@ class _Run:
             return self.finish("waiting", f"waiting for the rebuild asked at "
                                           f"{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(self.st['requested']['at']))}")
         return self.install(stamp, accepted)
+
+    def changed_since_install(self) -> bool:
+        """A generated preset of the installed build differs from its live copy by inapp.diff, or is gone."""
+        snap = self.d.installed / "base"
+        if not snap.is_dir():
+            return False
+        live = self.f.user_filament / "base"
+        for p in sorted(snap.glob("*.json")):
+            try:
+                old = inapp.load(p)
+            except (OSError, UnicodeDecodeError, ValueError):
+                continue
+            target = live / p.name
+            if not target.exists():
+                return True
+            try:
+                now = inapp.load(target)
+            except (OSError, UnicodeDecodeError, ValueError):
+                return True
+            if inapp.diff(old, now):
+                return True
+        return False
 
     def _other_pc(self, why: str) -> str:
         return self.finish("other_pc", f"another PC is the sync PC for this server ({why}); unpair it on the "
