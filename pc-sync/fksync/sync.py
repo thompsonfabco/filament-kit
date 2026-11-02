@@ -1,13 +1,22 @@
 """One sync run (port of filament-ops fpsync.main, over the pinned HTTPS API instead of a share).
 
   1. Bambu Studio running -> `studio_running`, nothing else (not even a server call).
-  2. An install that crashed part-way (marker `installing.json`) is finished first: the same build is
-     downloaded and installed again, bypassing the live-hash gate (the live folder is ahead of the
-     build only because of that install; the installer still refuses real in-app edits).
-  3. The user filament folder and system/BBL/filament are uploaded when their tree hash differs from
-     the server's (zip limits are checked before anything is sent).
-  4. An install whose `installed(stamp)` report failed is reported again.
-  5. No build -> `no_build` (a build is requested, at most every 15 min). The build already
+  2. `state()`; when the server already has another sync PC (`owner not in (None, you)`) ->
+     `other_pc` before anything is sent.
+  3. An install that crashed part-way (marker `installing.json`, written by the installer's
+     before_write hook right after the backup, naming it) is resumed only when every staged preset's
+     live .json still equals the build's copy or the backup's copy (missing in both counts as equal).
+     Then the same build is installed again without the live-hash gate. If any differs, it was edited
+     in Bambu Studio since: the marker is dropped and the normal path follows (upload, rebuild).
+  4. The user filament folder and system/BBL/filament are uploaded when their tree hash differs from
+     the server's (zip limits are checked before anything is sent). An upload the server rejects
+     (400/413) is recorded in `state.json` `rejected.<kind>` `{kind, hash, at, error}` and that same
+     hash is not sent again for UPLOAD_BACKOFF (6 h, fixed). The hash the server returns is recorded in
+     `uploaded.<kind>` `{local, server}`; when it differs from ours that is logged once, the upload is
+     not repeated while both stay the same, and a build with that server hash counts as built from
+     these live presets.
+  5. An install whose `installed(stamp)` report failed is reported again.
+  6. No build -> `no_build` (a build is requested, at most every 15 min). The build already
      installed -> `up_to_date`. A build made from other live presets -> a rebuild is requested
      (`rebuild_requested`), re-sent only after 15 min (`waiting` until then; `state.json`
      `requested: {live_hash, at}`). A build made from exactly these live presets -> download,
@@ -16,7 +25,7 @@
   (`no_build` / `up_to_date`).
 
 Every outcome and the stale-preset list are logged in one line each. Errors other than an install
-refusal or `409 other_pc` propagate (the caller logs them; the next scheduled run retries).
+refusal, a rejected upload or `409 other_pc` propagate (the caller logs them; the next run retries).
 """
 import json
 import shutil
@@ -31,6 +40,7 @@ from .studio import StudioFolders
 from .treehash import tree_hash
 
 REQUEST_RETRY = 15 * 60
+UPLOAD_BACKOFF = 6 * 3600
 LIVE_MAX = zips.LIVE_MAX
 SYSTEM_MAX = zips.SYSTEM_MAX
 
@@ -52,6 +62,13 @@ def load_state(dirs: store.AppDirs) -> dict:
 
 def _save_state(dirs: store.AppDirs, st: dict) -> None:
     store._write_atomic(dirs.state, (json.dumps(st, indent=2, sort_keys=True) + "\n").encode("utf-8"))
+
+
+def _read_bytes(path: Path) -> bytes | None:
+    try:
+        return path.read_bytes()
+    except FileNotFoundError:
+        return None
 
 
 class _Run:
@@ -78,29 +95,66 @@ class _Run:
 
     # --- uploads --------------------------------------------------------------------------
 
-    def upload_live(self) -> str:
-        here = tree_hash(self.f.user_filament)
-        data = zips.pack(self.f.user_filament, LIVE_MAX)
-        self.c.upload("live", data, user_id=self.f.user_id)
+    def _needs_upload(self, kind: str, here: str, server_hash) -> bool:
+        if server_hash == here:
+            return False
+        rec = (self.st.get("uploaded") or {}).get(kind) or {}
+        if rec.get("local") == here and rec.get("server") and rec.get("server") == server_hash:
+            return False  # the server hashes our upload differently; already logged, nothing new to send
+        rej = (self.st.get("rejected") or {}).get(kind) or {}
+        if rej.get("hash") == here and self.now - float(rej.get("at") or 0) < UPLOAD_BACKOFF:
+            return False
+        return True
+
+    def _send(self, kind: str, data: bytes, here: str) -> None:
+        label = "live presets" if kind == "live" else "Bambu Studio system presets"
+        try:
+            res = self.c.upload(kind, data, user_id=self.f.user_id) if kind == "live" else self.c.upload(kind, data)
+        except ApiError as e:
+            if e.status not in (400, 413):
+                raise
+            err = f"{e.status} {e.code}: {e.message}"
+            self.st.setdefault("rejected", {})[kind] = {"kind": kind, "hash": here, "at": self.now, "error": err}
+            self.save()
+            self.log(f"the server refused the {label} upload ({err}); not sending this version again for "
+                     f"{UPLOAD_BACKOFF // 3600} h")
+            return
         self.uploaded = True
-        self.log(f"uploaded the live presets ({len(data)} bytes, {self.f.variant} user {self.f.user_id})")
-        return here
+        (self.st.get("rejected") or {}).pop(kind, None)
+        returned = res.get(f"{kind}_hash") if isinstance(res, dict) else None
+        prev = (self.st.get("uploaded") or {}).get(kind) or {}
+        self.st.setdefault("uploaded", {})[kind] = {"local": here, "server": returned}
+        self.save()
+        extra = self.f.variant + " user " + self.f.user_id if kind == "live" else ""
+        self.log(f"uploaded the {label} ({len(data)} bytes{', ' + extra if extra else ''})")
+        if returned and returned != here and not (prev.get("local") == here and prev.get("server") == returned):
+            self.log(f"the server's hash of the {label} ({returned}) differs from this PC's ({here})")
+
+    def upload_live(self) -> None:
+        here = tree_hash(self.f.user_filament)
+        self._send("live", zips.pack(self.f.user_filament, LIVE_MAX), here)
 
     def uploads(self, server: dict) -> str:
         here = tree_hash(self.f.user_filament)
         system = tree_hash(self.f.system_filament)
         # both checked against the limits before either is sent
-        live_zip = zips.pack(self.f.user_filament, LIVE_MAX) if server.get("live_hash") != here else None
-        sys_zip = zips.pack(self.f.system_filament, SYSTEM_MAX) if server.get("system_hash") != system else None
+        live_zip = (zips.pack(self.f.user_filament, LIVE_MAX)
+                    if self._needs_upload("live", here, server.get("live_hash")) else None)
+        sys_zip = (zips.pack(self.f.system_filament, SYSTEM_MAX)
+                   if self._needs_upload("system", system, server.get("system_hash")) else None)
         if live_zip is not None:
-            self.c.upload("live", live_zip, user_id=self.f.user_id)
-            self.uploaded = True
-            self.log(f"uploaded the live presets ({len(live_zip)} bytes, {self.f.variant} user {self.f.user_id})")
+            self._send("live", live_zip, here)
         if sys_zip is not None:
-            self.c.upload("system", sys_zip)
-            self.uploaded = True
-            self.log(f"uploaded the Bambu Studio system presets ({len(sys_zip)} bytes)")
+            self._send("system", sys_zip, system)
         return here
+
+    def accepted_hashes(self, here: str) -> set[str]:
+        """Live hashes that mean "built from exactly these live presets"."""
+        out = {here}
+        rec = (self.st.get("uploaded") or {}).get("live") or {}
+        if rec.get("local") == here and rec.get("server"):
+            out.add(rec["server"])
+        return out
 
     # --- rebuild requests -----------------------------------------------------------------
 
@@ -128,35 +182,32 @@ class _Run:
         self.st.pop("report", None)
         self.save()
 
-    def install(self, stamp: str, expect_hash: str | None) -> str:
-        """Download, install, re-upload, report. expect_hash None: finishing an interrupted install."""
+    def _download(self, stamp: str, work: Path):
+        """(build_dir, BUILD.json) or (None, refusal text)."""
         data = self.c.build(stamp)
-        work = Path(tempfile.mkdtemp(prefix=".download.", suffix=".tmp", dir=self.d.base))
+        build_dir = work / "build"
         try:
-            build_dir = work / "build"
-            try:
-                meta = zips.unpack_build(data, build_dir)
-            except ValueError as e:
-                self._clear_marker()
-                return self.finish("refused", f"build {stamp}: {e}")
-            if meta.get("stamp") not in (None, stamp) or (
-                    expect_hash is not None and meta.get("live_hash") not in (None, expect_hash)):
-                self._clear_marker()
-                return self.finish("refused", f"build {stamp}: its BUILD.json does not match the server's state")
-            store._write_atomic(marker_path(self.d), json.dumps({"stamp": stamp, "at": self.now}).encode())
-            try:
-                res = self.install_fn(build_dir, self.f, self.d, running=self.running,
-                                      stamp_now=time.strftime("%Y%m%d-%H%M%S", time.localtime(self.now)))
-            except installer.Refused as e:
-                if e.code == "studio_running":
-                    if expect_hash is not None:
-                        self._clear_marker()  # nothing was written; a normal run decides again
-                    return self.finish("studio_running", f"Bambu Studio started; build {stamp} not installed yet")
-                self._clear_marker()
-                return self.finish("refused", f"install of build {stamp} refused ({e.code}): {e.reason}")
-            # an OSError here propagates with the marker kept: the next run finishes this install
-        finally:
-            shutil.rmtree(work, ignore_errors=True)
+            return build_dir, zips.unpack_build(data, build_dir)
+        except ValueError as e:
+            return None, f"build {stamp}: {e}"
+
+    def _write_marker(self, stamp: str, backup: Path) -> None:
+        store._write_atomic(marker_path(self.d),
+                            json.dumps({"stamp": stamp, "backup": backup.name, "at": self.now}).encode())
+
+    def _install(self, stamp: str, build_dir: Path, resuming: bool) -> str:
+        try:
+            res = self.install_fn(build_dir, self.f, self.d, running=self.running,
+                                  stamp_now=time.strftime("%Y%m%d-%H%M%S", time.localtime(self.now)),
+                                  before_write=lambda backup: self._write_marker(stamp, backup))
+        except installer.Refused as e:
+            if e.code == "studio_running":
+                if not resuming:
+                    self._clear_marker()  # nothing was written by this attempt
+                return self.finish("studio_running", f"Bambu Studio started; build {stamp} not installed yet")
+            self._clear_marker()
+            return self.finish("refused", f"install of build {stamp} refused ({e.code}): {e.reason}")
+        # an OSError propagates with the marker kept: the next run resumes this install (or not, see run())
         self._clear_marker()
         self.st["stale"] = list(res.stale)
         self.st["installed"] = {"stamp": stamp, "at": self.now}
@@ -170,6 +221,55 @@ class _Run:
         self.report(stamp)
         return self.finish("installed", f"installed build {stamp} ({len(res.installed)} presets, "
                                         f"backup {res.backup.name})")
+
+    def install(self, stamp: str, accepted: set[str]) -> str:
+        work = Path(tempfile.mkdtemp(prefix=".download.", suffix=".tmp", dir=self.d.base))
+        try:
+            build_dir, meta = self._download(stamp, work)
+            if build_dir is None:
+                return self.finish("refused", meta)
+            if meta.get("stamp") not in (None, stamp) or meta.get("live_hash") not in (None, *accepted):
+                return self.finish("refused", f"build {stamp}: its BUILD.json does not match the server's state")
+            return self._install(stamp, build_dir, resuming=False)
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
+
+    def resume(self, marker: dict) -> str | None:
+        """Finish an interrupted install, or None when it must not be resumed (marker dropped)."""
+        stamp = marker["stamp"]
+        work = Path(tempfile.mkdtemp(prefix=".download.", suffix=".tmp", dir=self.d.base))
+        try:
+            try:
+                build_dir, meta = self._download(stamp, work)
+            except ApiError as e:
+                if e.status != 404:
+                    raise
+                self._clear_marker()
+                self.log(f"build {stamp} of the interrupted install is no longer on the server; not resuming it")
+                return None
+            if build_dir is None:
+                self._clear_marker()
+                self.log(f"interrupted install not resumed: {meta}")
+                return None
+            backup = self.d.backups / str(marker.get("backup") or "\0missing")
+            live = self.f.user_filament / "base"
+            edited = []
+            for p in sorted((build_dir / "base").glob("*.json")):
+                now = _read_bytes(live / p.name)
+                if now == p.read_bytes():
+                    continue
+                if backup.is_dir() and now == _read_bytes(backup / "base" / p.name):
+                    continue  # untouched since the backup (missing in both also matches)
+                edited.append(p.stem)
+            if edited:
+                self._clear_marker()
+                self.log(f"interrupted install of build {stamp} not resumed: edited in Bambu Studio since: "
+                         + ", ".join(edited[:20]))
+                return None
+            self.log(f"finishing the interrupted install of build {stamp}")
+            return self._install(stamp, build_dir, resuming=True)
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
 
     def _clear_marker(self) -> None:
         marker_path(self.d).unlink(missing_ok=True)
@@ -190,19 +290,16 @@ class _Run:
         if self.running():
             return self.finish("studio_running", "Bambu Studio is open; trying again next run")
         server = self.c.state()
+        owner, you = server.get("owner"), server.get("you")
+        if owner not in (None, you):
+            return self._other_pc(f"the server's sync PC is device {owner}")
 
         marker = self._marker()
         if marker is not None:
-            stamp = marker["stamp"]
-            self.log(f"finishing the interrupted install of build {stamp}")
-            try:
-                return self.install(stamp, None)
-            except ApiError as e:
-                if e.status != 404:
-                    raise
-                self._clear_marker()
-                self.log(f"build {stamp} of the interrupted install is no longer on the server")
-                server = self.c.state()
+            done = self.resume(marker)
+            if done is not None:
+                return done
+            server = self.c.state()
 
         here = self.uploads(server)
 
@@ -223,13 +320,18 @@ class _Run:
             if self.uploaded:
                 return self.finish("uploaded", f"build {stamp} is installed; the server has your latest presets")
             return self.finish("up_to_date", f"build {stamp} is installed")
-        if build.get("live_hash") != here:
+        accepted = self.accepted_hashes(here)
+        if build.get("live_hash") not in accepted:
             if self.request(here):
                 return self.finish("rebuild_requested",
                                    f"build {stamp} predates your latest Bambu Studio presets; asked for a rebuild")
             return self.finish("waiting", f"waiting for the rebuild asked at "
                                           f"{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(self.st['requested']['at']))}")
-        return self.install(stamp, here)
+        return self.install(stamp, accepted)
+
+    def _other_pc(self, why: str) -> str:
+        return self.finish("other_pc", f"another PC is the sync PC for this server ({why}); unpair it on the "
+                                       "server ('sudo filament-kit unpair <id>') to sync from this one")
 
 
 def run_once(client, folders: StudioFolders, dirs: store.AppDirs, *, running: Callable[[], bool],
@@ -240,6 +342,5 @@ def run_once(client, folders: StudioFolders, dirs: store.AppDirs, *, running: Ca
         return r.run()
     except ApiError as e:
         if e.status == 409 and e.code == "other_pc":
-            return r.finish("other_pc", "another PC is the sync PC for this server; unpair it on the server "
-                                        f"('sudo filament-kit unpair <id>') to sync from this one ({e.message})")
+            return r._other_pc(e.message)
         raise

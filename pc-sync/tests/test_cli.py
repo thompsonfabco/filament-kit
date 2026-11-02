@@ -108,6 +108,7 @@ def test_pair_address_confirms_fingerprint_then_code(srv, paths, capsys):
     dirs = _dirs(paths)
     assert store.load_token(dirs) == CODE_TOKEN
     assert store.load_config(dirs)["fp"] == srv.fp
+    assert store.load_config(dirs)["ips"] == ["127.0.0.1"]
     assert _main(paths, "run", "--quiet") == 0
     out2 = capsys.readouterr()
     assert out2.out == ""
@@ -140,7 +141,7 @@ def test_run_not_paired_exits_1_and_logs(paths, capsys):
     assert "pair" in _dirs(paths).log_file.read_text(encoding="utf-8")
 
 
-def test_run_offline_exits_1_and_logs(srv, paths):
+def test_run_offline_exits_0_with_warning(srv, paths):
     assert _main(paths, "pair", stdin=_link(srv) + "\n") == 0
     dirs = _dirs(paths)
     cfg = store.load_config(dirs)
@@ -149,9 +150,28 @@ def test_run_offline_exits_1_and_logs(srv, paths):
     cfg.update(host="127.0.0.1", ips=[], port=s.getsockname()[1])
     s.close()
     store.save_config(dirs, cfg)
+    assert _main(paths, "run", "--quiet") == 0      # offline is a warning, not a failure
+    log = dirs.log_file.read_text(encoding="utf-8")
+    assert "warning" in log and "error" not in log and LINK_TOKEN not in log
+
+
+def test_run_cert_changed_exits_1_sends_nothing(srv, paths):
+    assert _main(paths, "pair", stdin=_link(srv) + "\n") == 0
+    dirs = _dirs(paths)
+    cfg = store.load_config(dirs)
+    cfg["fp"] = "0" * 64
+    store.save_config(dirs, cfg)
+    n = len(srv.requests)
     assert _main(paths, "run", "--quiet") == 1
     log = dirs.log_file.read_text(encoding="utf-8")
-    assert "error" in log and LINK_TOKEN not in log
+    assert "error" in log and "certificate" in log
+    assert len(srv.requests) == n
+
+
+def test_pair_by_name_stores_connected_ip(srv, paths):
+    assert _main(paths, "pair", stdin=f"localhost:{srv.port}\ny\n123456\n") == 0
+    cfg = store.load_config(_dirs(paths))
+    assert cfg["host"] == "localhost" and cfg["ips"] == ["127.0.0.1"]
 
 
 def test_run_already_running_exits_0(srv, paths):

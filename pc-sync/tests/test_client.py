@@ -46,6 +46,7 @@ def test_fetch_fingerprint(certs):
     (cert, key, fp), _ = certs
     with TlsServer(cert, key) as srv:
         assert client.fetch_fingerprint("127.0.0.1", srv.port, timeout=5) == fp
+        assert client.fetch_peer("localhost", srv.port, timeout=5) == (fp, "127.0.0.1")
         assert srv.requests == []
 
 
@@ -102,9 +103,11 @@ def test_mismatch_moves_to_next_address_without_sending(certs):
         except OSError:
             pytest.skip("cannot bind 127.0.0.3 here")
         with bad:
+            logged = []
             c = client.Client({"host": "127.0.0.3", "port": good.port, "fp": fp_b, "ips": ["127.0.0.1"]},
-                              "secret-token", timeout=5)
+                              "secret-token", timeout=5, log=logged.append)
             assert c.info()["name"] == "fk"
+            assert logged == ["certificate mismatch on 127.0.0.3, using 127.0.0.1"]
             assert bad.wait_received() and all(r == b"" for r in bad.received)
             assert bad.requests == []
             assert len(good.requests) == 1
