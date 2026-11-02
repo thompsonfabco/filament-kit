@@ -149,9 +149,10 @@ def _used_locations(sm: Spoolman) -> set[str]:
     return {s["location"] for s in sm.get("spool") if s.get("location")}
 
 
-def add_spools(sm: Spoolman, items: list[dict], rules: dict, dry: bool) -> AddResult:
+def add_spools(sm: Spoolman, items: list[dict], rules: dict, dry: bool, *, parents_checked: bool = False) -> AddResult:
     _validate(items)
-    _check_parents(items)
+    if not parents_checked:
+        _check_parents(items)                   # before _LOCK: it may wait on the build's live.lock
     result = AddResult(dry=dry)
     with _LOCK:
         placed = placement.place(items, _used_locations(sm), rules)
@@ -313,40 +314,50 @@ def link_tag(sm: Spoolman, spool_id: int, uid: str, force: bool, dry: bool) -> L
 
 
 def add_and_link(sm: Spoolman, items: list[dict], rules: dict, dry: bool, uid: str | None) -> AddResult:
+    """Add the spools (and link the tag of a single opened one). The Bambu parents are checked before _LOCK is
+    taken and the lines recorded after it is released: both may wait for a build (live.lock, the lines lock), and
+    a spool load needs _LOCK meanwhile (final review I6)."""
     if uid is not None:
         uid = tags.normalize_uid(uid)  # refuse before anything is written
     single_opened = (isinstance(items, list) and len(items) == 1 and isinstance(items[0], dict)
                      and items[0].get("count") == 1 and items[0].get("sealed") is False)
-    with _LOCK:
-        if uid is not None and single_opened:
-            other = by_tag(sm, uid)
-            if other is not None:  # refuse before writing, so a retry cannot duplicate the spool
-                raise TagConflict(other, f"tag {uid} is already linked to {describe(other)}")
-        try:
-            result = add_spools(sm, items, rules, dry)
-        except AddFailed as e:  # Spoolman failed part-way: the items that got a spool still join their lines
-            if not dry and e.partial.added:
-                _record_lines(e.partial.added)
-            raise
-        if uid is None:
-            if not dry:
-                _record_lines(result.added)
-            return result
-        if not single_opened:
-            result.lines.append("tag not linked: it can only be linked when exactly one opened spool is added")
-        elif dry:
-            result.lines.append(f"would link tag {uid}")
-        else:
+    _validate(items)
+    _check_parents(items)
+    record: list[dict] = []
+    try:
+        with _LOCK:
+            if uid is not None and single_opened:
+                other = by_tag(sm, uid)
+                if other is not None:  # refuse before writing, so a retry cannot duplicate the spool
+                    raise TagConflict(other, f"tag {uid} is already linked to {describe(other)}")
             try:
-                link_tag(sm, result.spool_ids[0], uid, force=False, dry=False)
-            except (SpoolmanError, RuntimeError) as e:  # the spool exists; report it so a retry doesn't duplicate
-                _record_lines(result.added)            # and it joins its line all the same
-                raise AddFailed(f"spool {result.spool_ids[0]} was added but linking tag {uid} failed: {e}",
-                                result) from e
-            result.lines.append(f"linked tag {uid} to spool {result.spool_ids[0]}")
-        if not dry:
-            _record_lines(result.added)
-    return result
+                result = add_spools(sm, items, rules, dry, parents_checked=True)
+            except AddFailed as e:  # Spoolman failed part-way: the items that got a spool still join their lines
+                if not dry:
+                    record = e.partial.added
+                raise
+            if uid is None:
+                if not dry:
+                    record = result.added
+                return result
+            if not single_opened:
+                result.lines.append("tag not linked: it can only be linked when exactly one opened spool is added")
+            elif dry:
+                result.lines.append(f"would link tag {uid}")
+            else:
+                try:
+                    link_tag(sm, result.spool_ids[0], uid, force=False, dry=False)
+                except (SpoolmanError, RuntimeError) as e:  # the spool exists; report it so a retry doesn't
+                    record = result.added                  # duplicate it, and it joins its line all the same
+                    raise AddFailed(f"spool {result.spool_ids[0]} was added but linking tag {uid} failed: {e}",
+                                    result) from e
+                result.lines.append(f"linked tag {uid} to spool {result.spool_ids[0]}")
+            if not dry:
+                record = result.added
+        return result
+    finally:
+        if record:                              # after _LOCK is released
+            _record_lines(record)
 
 
 def _record_lines(items: list[dict]) -> None:

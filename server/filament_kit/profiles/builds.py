@@ -212,9 +212,14 @@ def system_store() -> Store | None:
 
     A store is uploaded exactly when meta.json has a `system_hash` and the folder holds at least one preset
     (`_system_hash`). The
-    store is cached by (folder, system_hash). On a cache miss the raw files are read under live.lock (so an upload
-    swap can't interleave) and parsed after it is released."""
+    store is cached by (folder, system_hash). A cache hit takes no lock (meta.json is replaced atomically), so an
+    intake add never waits behind a build holding live.lock (final review I6). On a cache miss the raw files are
+    read under live.lock (so an upload swap can't interleave) and parsed after it is released."""
     folder = _live() / "system"
+    fast = (str(folder), _system_hash(_meta()))
+    with _store_cache_lock:
+        if fast[1] is not None and _store_cache.get("key") == fast:
+            return _store_cache["store"]
     with _locked("live.lock"):
         h = _system_hash(_meta())
         key = (str(folder), h)
