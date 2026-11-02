@@ -43,6 +43,21 @@ def merge(full: dict, delta: dict) -> dict:
     return out
 
 
+JOB_KEYS = ('mapping', 'plate_idx')   # belong to one job: never carried over into the next
+
+
+def merge_report(full: dict, delta: dict) -> dict:
+    """`merge` for the live report: when the delta moves `gcode_state` from not active to active (a new job
+    starts), the last job's `mapping` and `plate_idx` are dropped unless this delta carries them, so a job whose
+    reports never say which slots it uses cannot inherit the previous job's (e.g. the calibration job's)."""
+    out = merge(full, delta)
+    if 'gcode_state' in delta and _s(full.get('gcode_state')) not in ACTIVE and _s(out.get('gcode_state')) in ACTIVE:
+        for k in JOB_KEYS:
+            if k not in delta:
+                out.pop(k, None)
+    return out
+
+
 def packed(v: Any) -> tuple[int | None, int | None]:
     """Newer printers (H2D family) pack a temperature as (target << 16) | current. Returns (current, target)."""
     v = _int(v)
