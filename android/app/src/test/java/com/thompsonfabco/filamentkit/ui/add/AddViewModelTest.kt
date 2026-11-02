@@ -60,9 +60,12 @@ class AddViewModelTest {
         dir.deleteRecursively()
     }
 
+    /** The view models' wall clock (parent list age). */
+    private var clockMs = 1_000_000L
+
     private fun vm(draftId: String? = null, initialTag: String? = null) = AddViewModel(
         api = api, store = store, taps = taps, draftId = draftId, initialTag = initialTag,
-        prepare = { it }, io = dispatcher,
+        prepare = { it }, io = dispatcher, clock = { clockMs },
     )
 
     private fun item(sealed: Boolean = false, count: Int = 1, vendor: String = "SUNLU") = buildJsonObject {
@@ -758,6 +761,126 @@ class AddViewModelTest {
         again.setText(0, "material", "PETG")
         advanceUntilIdle()
         assertEquals("SUNLU PLA+", again.state.value.items.single().text("bambu_parent"))
+    }
+
+    // ---------- fix round 1 ----------
+
+    private fun JsonObject.picked() = containsKey(AddViewModel.PICKED)
+
+    @Test fun anUnpickedProposedParentIsNotSentButAPickedOneIs() = runTest(dispatcher) {
+        val vm = vm()
+        readOne(vm, lineItem(), lineItem())
+        vm.setParent(1, "SUNLU PLA+")
+        vm.preview()
+        advanceUntilIdle()
+        val unpicked = sentItem(index = 0)
+        assertFalse("the server's own proposal is not sent back", unpicked.containsKey("bambu_parent"))
+        assertEquals("PLA+", unpicked.text("line"))
+        assertEquals("SUNLU PLA+", sentItem(index = 1).text("bambu_parent"))
+        assertEquals("the screen still shows the proposal", "Generic PLA", vm.state.value.items[0].text("bambu_parent"))
+    }
+
+    @Test fun whenSyncedOnlyAListedParentOrBlankIsAccepted() = runTest(dispatcher) {
+        api.parentLists["PLA"] = ParentList(listOf("Generic PLA", "SUNLU PLA+"), synced = true)
+        val vm = vm()
+        readOne(vm, lineItem())
+        vm.setParent(0, "Made Up PLA")
+        assertEquals("Generic PLA", vm.state.value.items.single().text("bambu_parent"))
+        assertFalse(vm.state.value.items.single().picked())
+        vm.typeParent(0, "Typed PLA")
+        assertEquals("typing is ignored while synced", "Generic PLA", vm.state.value.items.single().text("bambu_parent"))
+        vm.setParent(0, "SUNLU PLA+")
+        assertEquals("SUNLU PLA+", vm.state.value.items.single().text("bambu_parent"))
+        assertTrue(vm.state.value.items.single().picked())
+        api.proposals += proposal("Generic PLA")
+        vm.setParent(0, "") // Automatic
+        advanceUntilIdle()
+        assertFalse(vm.state.value.items.single().picked())
+        assertEquals("Generic PLA", vm.state.value.items.single().text("bambu_parent"))
+    }
+
+    @Test fun freeTextTypingIsAPickOnlyWhenCommitted() = runTest(dispatcher) {
+        val vm = vm() // parents not synced: free text
+        readOne(vm, lineItem())
+        vm.typeParent(0, "SUN")
+        vm.typeParent(0, "SUNLU PLA+ HS")
+        assertFalse("keystrokes are not picks", vm.state.value.items.single().picked())
+        assertEquals("SUNLU PLA+ HS", vm.state.value.items.single().text("bambu_parent"))
+        api.proposals += proposal("Generic PETG")
+        vm.setText(0, "material", "PETG")
+        advanceUntilIdle()
+        assertEquals("a proposal does not overwrite text being typed", "SUNLU PLA+ HS", vm.state.value.items.single().text("bambu_parent"))
+        vm.commitParent(0)
+        assertTrue(vm.state.value.items.single().picked())
+    }
+
+    @Test fun previewCommitsTypedParentText() = runTest(dispatcher) {
+        val vm = vm()
+        readOne(vm, lineItem())
+        vm.typeParent(0, "SUNLU PLA+ HS")
+        vm.preview()
+        advanceUntilIdle()
+        assertEquals("SUNLU PLA+ HS", sentItem().text("bambu_parent"))
+    }
+
+    @Test fun committingBlankTypedTextIsNoPickAndProposesAgain() = runTest(dispatcher) {
+        val vm = vm()
+        readOne(vm, lineItem())
+        vm.typeParent(0, "")
+        api.proposals += proposal("Generic PLA")
+        vm.commitParent(0)
+        advanceUntilIdle()
+        assertFalse(vm.state.value.items.single().picked())
+        assertEquals("Generic PLA", vm.state.value.items.single().text("bambu_parent"))
+    }
+
+    @Test fun unknownParentOnAddIsAParentFieldError() = runTest(dispatcher) {
+        val vm = vm()
+        readOne(vm, lineItem())
+        vm.setParent(0, "Foo PLA")
+        api.addFailures += ApiError(400, "unknown_parent", "Bambu Studio has no preset named Foo PLA")
+        vm.preview()
+        advanceUntilIdle()
+        val s = vm.state.value
+        assertEquals(Stage.Review, s.stage)
+        assertEquals(UNKNOWN_PARENT, s.parentError)
+        assertEquals(UNKNOWN_PARENT, s.error!!.message)
+        assertEquals("Bambu Studio has no preset named Foo PLA", s.error?.detail)
+        vm.setParent(0, "Generic PLA")
+        assertNull("an edit clears it", vm.state.value.parentError)
+    }
+
+    @Test fun intakeTextRuleHints() {
+        assertNull(intakeTextProblem("SUNLU PLA+"))
+        assertNull(intakeTextProblem(""))
+        assertNull(intakeTextProblem("a".repeat(100)))
+        assertEquals("At most 100 characters", intakeTextProblem("a".repeat(101)))
+        assertEquals("No @ (leave out the printer part)", intakeTextProblem("Generic PLA @BBL H2D"))
+    }
+
+    @Test fun parentListsAreReloadedAfterStartOver() = runTest(dispatcher) {
+        val vm = vm()
+        readOne(vm, lineItem())
+        vm.preview()
+        advanceUntilIdle()
+        vm.confirm()
+        advanceUntilIdle()
+        vm.startOver()
+        readOne(vm, lineItem())
+        assertEquals(listOf("PLA", "PLA"), api.parentCalls)
+    }
+
+    @Test fun parentListsOlderThanFiveMinutesAreReloaded() = runTest(dispatcher) {
+        val vm = vm()
+        readOne(vm, lineItem())
+        assertEquals(listOf("PLA"), api.parentCalls)
+        vm.setText(0, "line", "PLA+ 2")
+        advanceUntilIdle()
+        assertEquals("fresh: cached", listOf("PLA"), api.parentCalls)
+        clockMs += 5 * 60_000L + 1
+        vm.setText(0, "line", "PLA+ 3")
+        advanceUntilIdle()
+        assertEquals(listOf("PLA", "PLA"), api.parentCalls)
     }
 }
 
