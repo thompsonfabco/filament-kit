@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# filament-kit installer for Ubuntu 24.04 or newer. Run as root: sudo ./install.sh [--mode MODE]
+# filament-kit installer for Ubuntu 24.04 or newer.
+# Run as root: sudo ./install.sh [--mode MODE] [--server NAME-OR-IP]
 # MODE: server (default), station, all-in-one. A first install at a terminal asks for the mode
-# (and offers custom). Safe to run again: an existing install is upgraded and keeps its data,
+# (and offers custom). --server gives a station the kit server's address without a terminal;
+# station mode needs it (or a terminal to ask at). Safe to run again: an existing install is upgraded and keeps its data,
 # settings, modules, key and certificate; without --mode an upgrade asks nothing and changes no module.
 # This script installs the program; `filament-kit modules apply` (run at the end) sets up the
 # modules that are on, the same code path `sudo filament-kit config` uses later.
@@ -14,13 +16,18 @@ VENV="$OPT/venv"
 
 say() { printf '\n==> %s\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
-usage() { echo "usage: sudo ./install.sh [--mode server|station|all-in-one]" >&2; exit 2; }
+usage() { echo "usage: sudo ./install.sh [--mode server|station|all-in-one] [--server NAME-OR-IP]" >&2; exit 2; }
+# one host name or address: station.allow never takes a range
+bad_addr() { case "$1" in "" | */* | *"*"* | *" "*) return 0 ;; esac; return 1; }
 
 MODE=""
+SERVER_ADDR=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --mode) [ $# -ge 2 ] || usage; MODE="$2"; shift 2 ;;
         --mode=*) MODE="${1#--mode=}"; shift ;;
+        --server) [ $# -ge 2 ] || usage; SERVER_ADDR="$2"; shift 2 ;;
+        --server=*) SERVER_ADDR="${1#--server=}"; shift ;;
         *) usage ;;
     esac
 done
@@ -28,6 +35,13 @@ case "$MODE" in
     "" | server | station | all-in-one) ;;
     *) die "unknown mode '$MODE' (use server, station or all-in-one)" ;;
 esac
+if [ -n "$SERVER_ADDR" ] && bad_addr "$SERVER_ADDR"; then
+    die "--server takes one name or address, e.g. spoolman.home.arpa or 192.0.2.10"
+fi
+# Checked before anything is installed: a station without the server's address would answer nobody.
+if [ "$MODE" = station ] && [ -z "$SERVER_ADDR" ] && ! [ -t 0 ]; then
+    die "station mode needs the kit server's address: run again with --server <name-or-IP>"
+fi
 
 # Files sit next to this script in the release tarball (install/...), or in the
 # same directory when run from a source checkout (install/install.sh).
@@ -118,7 +132,6 @@ chmod -R go-w "$OPT"
 # ---------- 4. install mode ----------
 # First install at a terminal: ask. --mode: set it, on any install. Upgrade without --mode: no
 # questions, the modules stay as they are (a config without modules is the server mode).
-SERVER_ADDR=""
 CUSTOM=""
 if [ -z "$MODE" ] && [ "$FIRST_INSTALL" -eq 1 ] && [ -t 0 ]; then
     say "Install mode"
@@ -150,21 +163,40 @@ for m in modules.MODULES.values():
 ')
     fi
 fi
-if [ "$MODE" = station ] && [ -t 0 ]; then
+# A station whose server is on another machine needs that server's address (spec section 3):
+# station mode, or custom with station on and server off.
+NEED_ADDR=0
+case "$MODE" in
+    station) NEED_ADDR=1 ;;
+    custom)
+        case "$CUSTOM," in
+            *,station,*)
+                case "$CUSTOM," in
+                    *,server,*) ;;
+                    *) NEED_ADDR=1 ;;
+                esac
+                ;;
+        esac
+        ;;
+esac
+if [ "$NEED_ADDR" -eq 1 ] && [ -z "$SERVER_ADDR" ]; then
+    [ -t 0 ] || die "station mode needs the kit server's address: run again with --server <name-or-IP>"
     while :; do
         SERVER_ADDR=""
         read -r -p "Server address (name or IP): " SERVER_ADDR || true
-        case "$SERVER_ADDR" in
-            "" | */* | *"*"* | *" "*) echo "Give one name or address, e.g. spoolman.home.arpa or 192.0.2.10." ;;
-            *) break ;;
-        esac
+        if bad_addr "$SERVER_ADDR"; then
+            echo "Give one name or address, e.g. spoolman.home.arpa or 192.0.2.10."
+        else
+            break
+        fi
     done
 fi
+[ "$NEED_ADDR" -eq 1 ] || SERVER_ADDR=""  # the address only matters for a station without a local server
 if [ -z "$MODE" ] && [ "$FIRST_INSTALL" -eq 1 ]; then
     MODE=server  # non-interactive first install
 fi
 if [ -n "$MODE" ]; then
-    # Only the modules (and the station address) change; on a first install there is no
+    # Only the modules and the station link change; on a first install there is no
     # server_name yet, so `modules apply` asks the first-run questions.
     FK_MODE="$MODE" FK_MODULES="$CUSTOM" FK_SERVER="$SERVER_ADDR" FK_NO_SYSTEMD=1 "$VENV/bin/python" -I -c '
 import json, os, sys
@@ -175,6 +207,11 @@ mode = os.environ["FK_MODE"]
 if mode == "custom":
     on = set(filter(None, os.environ["FK_MODULES"].split(",")))
     cfg["modules"] = {n: n in on for n in modules.MODULES}
+    if {"station", "server"} <= on:
+        # station and server on one machine: as all-in-one, the server reads the local station
+        st = cfg.setdefault("station", {})
+        st["allow"] = ["127.0.0.1"]
+        st["url"] = "http://127.0.0.1:5003"
 else:
     cfg = modules.set_mode(cfg, mode)
 if os.environ["FK_SERVER"]:
@@ -188,10 +225,6 @@ print("Install mode: " + mode)
 '
     chown root:filament-kit "$ETC/config.json"
     chmod 640 "$ETC/config.json"
-    if [ "$MODE" = station ] && [ -z "$SERVER_ADDR" ]; then
-        echo "No server address given: the station answers this machine only."
-        echo "Add the server later with: sudo filament-kit config  (Modules)"
-    fi
 fi
 
 # ---------- 5. the modules ----------

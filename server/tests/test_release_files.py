@@ -1,5 +1,7 @@
 """Release and packaging files: checked as text (CI files are written and linted here, run on GitHub)."""
 import re
+
+import pytest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -132,5 +134,91 @@ def test_uninstall_uses_modules_units_and_cleans_station():
     assert "modules units" in text
     assert "/etc/systemd/system/filament-kit-station.service.d" in text
     assert "/etc/udev/rules.d/99-filament-kit-station.rules" in text
+    # spec section 4: the station user owns no data, so every uninstall removes it, after its unit is gone
+    i_user = text.index("userdel filament-kit-station")
+    assert text.index("for u in $UNITS") < i_user < text.index('if [ "$PURGE" -eq 1 ]; then\n    rm -rf')
     purge = text[text.index('if [ "$PURGE" -eq 1 ]; then\n    rm -rf'):]
-    assert "filament-kit-station" in purge
+    assert "for u in filament-kit spoolman; do" in purge
+
+
+def test_install_server_flag_and_usage():
+    text = _read("install/install.sh")
+    assert "[--mode server|station|all-in-one] [--server NAME-OR-IP]" in text
+    assert "--server) [ $# -ge 2 ] || usage; SERVER_ADDR=" in text
+    assert "--server=*) SERVER_ADDR=" in text
+    assert "run again with --server <name-or-IP>" in text
+
+
+def _bash():
+    import shutil
+    found = shutil.which("bash")
+    # Windows' System32 bash.exe is WSL, which cannot take a Windows path; Git Bash can.
+    return None if found and "system32" in found.lower() else found
+
+
+def _install_sh(*args):
+    """Run install.sh with no terminal; the cases used here stop during argument checks, before anything else."""
+    import subprocess
+    return subprocess.run([_bash(), str(ROOT / "install" / "install.sh"), *args], stdin=subprocess.DEVNULL,
+                          capture_output=True, text=True, timeout=30)
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_install_station_without_terminal_or_server_fails_early():
+    r = _install_sh("--mode", "station")
+    assert r.returncode == 1
+    assert "station mode needs the kit server's address: run again with --server <name-or-IP>" in r.stderr
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+# not a bare "*": on Windows the MSYS runtime would glob it against the working directory
+@pytest.mark.parametrize("addr", ["192.168.1.0/24", "nohost*x", "a b"])
+def test_install_server_flag_rejects_ranges(addr):
+    r = _install_sh("--mode", "station", "--server", addr)
+    assert r.returncode == 1 and "--server takes one name or address" in r.stderr
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_install_usage_mentions_server():
+    r = _install_sh("--bogus")
+    assert r.returncode == 2 and "--server NAME-OR-IP" in r.stderr
+
+
+def _save_snippet() -> str:
+    text = _read("install/install.sh")
+    start = text.index("import json, os, sys\nfrom filament_kit import config, modules")
+    return text[start:text.index("\n'\n", start)]
+
+
+def _run_save(tmp_path, mode, modules_csv="", server=""):
+    import json
+    import os
+    import subprocess
+    import sys
+    etc = tmp_path / "etc"
+    etc.mkdir(exist_ok=True)
+    env = dict(os.environ, FK_ETC=str(etc), FK_MODE=mode, FK_MODULES=modules_csv, FK_SERVER=server,
+               FK_NO_SYSTEMD="1", PYTHONPATH=str(ROOT / "server"))
+    r = subprocess.run([sys.executable, "-c", _save_snippet()], env=env, capture_output=True, text=True,
+                       timeout=60)
+    assert r.returncode == 0, r.stderr
+    return json.loads((etc / "config.json").read_text(encoding="utf-8"))
+
+
+def test_install_save_custom_station_without_server_takes_address(tmp_path):
+    cfg = _run_save(tmp_path, "custom", ",station", server="spoolman.home.arpa")
+    assert cfg["modules"]["station"] and not cfg["modules"]["server"]
+    assert cfg["station"]["allow"] == ["spoolman.home.arpa"]
+    assert "server_name" not in cfg  # apply asks the first-run questions
+
+
+def test_install_save_custom_station_with_server_is_local(tmp_path):
+    cfg = _run_save(tmp_path, "custom", ",spoolman,server,station")
+    assert cfg["station"]["allow"] == ["127.0.0.1"]
+    assert cfg["station"]["url"] == "http://127.0.0.1:5003"
+
+
+def test_install_save_station_mode_with_server(tmp_path):
+    cfg = _run_save(tmp_path, "station", server="192.0.2.10")
+    assert cfg["modules"] == {n: n == "station" for n in cfg["modules"]}
+    assert cfg["station"]["allow"] == ["192.0.2.10"]

@@ -41,6 +41,10 @@ if [ -f /etc/udev/rules.d/99-filament-kit-station.rules ]; then
     rm -f /etc/udev/rules.d/99-filament-kit-station.rules
     udevadm control --reload 2>/dev/null || true
 fi
+# The station user owns no data; its unit is gone, so it goes on every uninstall.
+if id -u filament-kit-station >/dev/null 2>&1; then
+    userdel filament-kit-station || true
+fi
 
 rm -f /etc/avahi/services/filament-kit.service
 systemctl reload avahi-daemon 2>/dev/null || true
@@ -49,7 +53,7 @@ rm -rf /opt/filament-kit /opt/spoolman /opt/spoolman.new /opt/spoolman.old
 
 if [ "$PURGE" -eq 1 ]; then
     rm -rf /etc/filament-kit /var/lib/filament-kit /var/lib/spoolman /var/backups/filament-kit
-    for u in filament-kit spoolman filament-kit-station; do
+    for u in filament-kit spoolman; do
         if id -u "$u" >/dev/null 2>&1; then
             userdel "$u" || true
         fi
