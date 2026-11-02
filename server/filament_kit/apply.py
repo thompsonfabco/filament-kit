@@ -145,6 +145,8 @@ def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) ->
         if rs["window"]:
             acts.append(A("install_file", (remote.TIMER_DROPIN, remote.timer_dropin(rs["window"]),
                                            "0644", "root:root")))
+        else:
+            acts.append(A("remote_unpin"))  # a window set earlier is removed with the setting
     if "station" in on:
         acts += [
             A("user", ("filament-kit-station", "dialout,audio")),
@@ -219,6 +221,7 @@ _HINTS = {
     "wait_http": "Spoolman did not answer on port 7912; see: journalctl -u spoolman",
     "remote_install": f"see the messages above (nginx -t shows config errors), then {_AGAIN}",
     "remote_route": "see: nginx -t and journalctl -u nginx; list routes with: sudo /usr/local/sbin/mcp-route ls",
+    "remote_unpin": "remove it by hand: sudo rm /etc/systemd/system/certbot.timer.d/acme-window.conf",
     "remote_off": "remove the route by hand: sudo /usr/local/sbin/mcp-route rm <arg>",
     "ensure_fields": "check Spoolman answers, then: sudo filament-kit ensure-fields",
 }
@@ -427,7 +430,9 @@ def _remote_install(ex: _Exec, host: str) -> None:
                              ("acme-hooks.sh", remote.HOOK, 0o755)):
         ex.write(dest, remote.read_resource(ex.resources, name).encode("utf-8"), mode)
     ex.write(f"{remote.ROUTER_DIR}/host", f"{host}\n".encode("utf-8"), 0o644)
-    # certbot runs this for every renewal; the hook acts only on this router's certificate
+    # The deploy hook deliberately runs from two places: the lineage's renewal conf (set by `remote issue`) and
+    # this renewal-hooks/deploy file. A later `certbot --expand` rewrites the renewal conf and drops its hook
+    # (known from the ops install); this file keeps the cert reaching nginx. The hook acts only on our lineage.
     ex.write(remote.DEPLOY_HOOK_FILE, f"#!/bin/sh\nexec {remote.HOOK} deploy\n".encode("utf-8"), 0o755)
     for d, mode in ((remote.ROUTE_DIR, 0o755), (remote.TLS_DIR, 0o750)):
         _under(ex.root, d).mkdir(parents=True, exist_ok=True)
@@ -441,6 +446,18 @@ def _remote_install(ex: _Exec, host: str) -> None:
                 "-keyout", str(key), "-out", str(cert)])
         ex.cmd(["chmod", "600", str(key)])
     ex.cmd(["nginx", "-t"])
+
+
+def _remote_route(ex: _Exec, name: str, port: int) -> None:
+    """Route the web unit; drop routes this kit added earlier under another name (public_url changed)."""
+    book = _under(ex.root, remote.KIT_ROUTES)
+    old = book.read_text(encoding="utf-8").split() if book.exists() else []
+    for n in old:
+        if n != name and re.fullmatch(r"[a-z][a-z0-9-]{1,30}", n):
+            ex.cmd([remote.MCP_ROUTE, "rm", n])  # mcp-route rm leaves files it did not write
+    ex.cmd([remote.MCP_ROUTE, "add", name, str(port)])
+    book.parent.mkdir(parents=True, exist_ok=True)
+    book.write_text(name + "\n", encoding="utf-8")
 
 
 def _remote_off(ex: _Exec, name: str) -> None:
@@ -502,8 +519,13 @@ def _step(ex: _Exec, a: Action) -> None:
         _wait_http(ex, arg)
     elif k == "remote_install":
         _remote_install(ex, arg)
+    elif k == "remote_unpin":
+        f = _under(ex.root, remote.TIMER_DROPIN)
+        if f.exists():
+            f.unlink()
+            print("remote.acme_window is unset: removed the certbot timer drop-in.")
     elif k == "remote_route":
-        ex.cmd([remote.MCP_ROUTE, "add", arg[0], str(arg[1])])
+        _remote_route(ex, arg[0], arg[1])
     elif k == "remote_off":
         _remote_off(ex, arg)
     elif k == "remote_print":

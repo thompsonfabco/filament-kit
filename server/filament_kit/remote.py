@@ -27,6 +27,7 @@ ROUTER_DIR = "/etc/mcp-router"
 TLS_DIR = ROUTER_DIR + "/tls"
 TIMER_DROPIN = "/etc/systemd/system/certbot.timer.d/acme-window.conf"
 DEPLOY_HOOK_FILE = "/etc/letsencrypt/renewal-hooks/deploy/filament-kit"
+KIT_ROUTES = ROUTER_DIR + "/kit-routes"  # names of the routes this kit added, one per line
 MARK = "written by mcp-route"  # first line of every route mcp-route writes; the only files we ever remove
 DEFAULT_ROUTE = "filament"
 ANTHROPIC = "160.79.104.0/21 2607:6bc0::/48"  # the same ranges the kit's units allow for Claude
@@ -42,7 +43,11 @@ def settings(cfg: dict) -> dict:
     rem = config._merge(config.DEFAULTS["remote"], cfg.get("remote") or {})
     web = config._merge(config.DEFAULTS["web"], cfg.get("web") or {})
     pu = urlparse(str(web.get("public_url") or ""))
-    host = str(rem.get("hostname") or pu.hostname or "").strip().lower()
+    set_host = str(rem.get("hostname") or "").strip().lower()
+    if set_host and pu.hostname and set_host != pu.hostname.lower():
+        raise ModuleError(f"remote.hostname {set_host!r} differs from the host of web.public_url "
+                          f"{pu.hostname.lower()!r}; make them the same")
+    host = set_host or (pu.hostname or "").lower()
     if not host or not _HOST.match(host):
         raise ModuleError(f"remote.hostname {host!r} is not a host name")
     parts = [p for p in pu.path.split("/") if p]
@@ -73,7 +78,7 @@ def timer_dropin(window: str) -> str:
     m = _WINDOW.match(window)
     when = f"{int(m.group(1)):02d}:{m.group(2)}:00" + (f" {m.group(3)}" if m.group(3) else "")
     return ("# Pinned to the time your router opens port 80 (remote.acme_window)\n"
-            f"[Timer]\nOnCalendar=\nOnCalendar=*-*-* {when}\nRandomizedDelaySec=0\n")
+            f"[Timer]\nOnCalendar=\nOnCalendar=*-*-* {when}\nRandomizedDelaySec=0\nPersistent=false\n")
 
 
 def _remote_dir(resources: Path) -> Path:
@@ -167,5 +172,9 @@ def firewall(cfg: dict) -> int:
         print(firewall_text(settings(cfg), config.paths().opt / "resources"))
     except ModuleError as e:
         print(f"error: {e}")
+        return 1
+    except OSError as e:
+        print(f"error: cannot read the remote files ({e})\n"
+              "fix: run ./install.sh again (they live in /opt/filament-kit/resources/remote)")
         return 1
     return 0
