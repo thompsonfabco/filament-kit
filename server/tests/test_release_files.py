@@ -137,6 +137,13 @@ def test_station_extra_in_pyproject():
     assert re.search(r'^station = \["nfcpy==1\.0\.4", "pyserial>=3\.5", "esptool==5\.6\.0"\]\s*$', text, re.M)
 
 
+def test_web_extra_pins_mcp_exactly():
+    """filament_kit.web imports MCP SDK internals and install.sh runs `pip install --upgrade`, so a range would pull
+    any future SDK: the web extra pins the exact version it was built against."""
+    text = _read("server/pyproject.toml")
+    assert re.search(r'^web = \["mcp==2\.3\.0"\]', text, re.M)
+
+
 def test_wrapper_runs_modules_as_root():
     text = _read("install/filament-kit-cli.sh")
     assert re.search(r"^\s+config \| cert \| modules \| remote \| migrate-ops\)\s*$", text, re.M)
