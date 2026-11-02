@@ -42,6 +42,8 @@ DEFAULTS: dict = {
     },
     "printers": [],
     "library": {"url": None, "schedule": "daily"},
+    "station": {"url": None, "allow": ["127.0.0.1"], "port": 5003,
+                "nfc_device": "auto", "beep": True, "beep_device": ""},
 }
 
 
