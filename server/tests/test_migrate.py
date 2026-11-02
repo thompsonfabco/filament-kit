@@ -727,3 +727,22 @@ def test_variant_source_never_takes_a_stale_live_preset_over_the_installed_one()
     assert generate._variant_source(live, inst, False) == V3[:2]          # Ruling Z: stale live not used
     assert generate._variant_source(live, None, False) == V3              # first install after migrate-ops
     assert generate._variant_source(None, None, True) is None
+
+
+# ---------- C-M6: the kit's Spoolman fields, once, right after the database copy ----------
+
+def test_apply_ensures_the_kits_fields_once_after_the_database_copy(env, lib, monkeypatch):
+    from filament_kit import spoolman as spoolman_mod
+    order = []
+    real_ensure = spoolman_mod.Spoolman.ensure_fields
+    real_copy = migrate._copy_db
+    monkeypatch.setattr(spoolman_mod.Spoolman, "ensure_fields",
+                        lambda self: order.append("ensure_fields") or real_ensure(self))
+    monkeypatch.setattr(migrate, "_copy_db", lambda b, tmp: order.append("copy") or real_copy(b, tmp))
+    # not only when the lines step has extra.line values to set (the fields are the kit's, whatever the lines)
+    monkeypatch.setattr(migrate, "step_lines", lambda b, ctx: None)
+    code, text = run(make_bundle(env / "bundle"), lib, apply=True, replace_spoolman=True)
+    assert code == 0, text
+    assert order == ["copy", "ensure_fields"]
+    code, text = run(make_bundle(env / "bundle2"), lib)              # a dry run never writes Spoolman
+    assert order == ["copy", "ensure_fields"]

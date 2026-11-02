@@ -8,7 +8,8 @@ secrets/{web_passphrase,oauth.json,anthropic_key}. The H2D slot token is not in 
 Steps, each reporting what it would do (dry run, the default) or did (`--apply`, root):
 1. spoolman  the bundle's database into the spoolman module's data dir (FK_SPOOLMAN_DATA, /var/lib/spoolman),
              services stopped meanwhile; a database that already holds spools is only replaced with
-             --replace-spoolman. The counts are checked after the copy.
+             --replace-spoolman. The counts are checked after the copy; then (with --apply) the kit's Spoolman
+             extra fields are added once.
 2. lines     lines.py -> lines.json: vendor/product (the ops name minus its vendor), the Bambu Studio template as
              `bambu_parent` and the Orca library parent as `orca_parent` (both source "user"), the members, and
              the `filament_id` of the line's existing Bambu Studio presets, so the first build adopts them.
@@ -576,7 +577,6 @@ def step_lines(b: Bundle, ctx: _Ctx) -> None:
     if not ctx.apply:
         return
     try:
-        ctx.sm.ensure_fields()
         for i, product in need:
             cur = ctx.sm.get(f"filament/{i}")
             if lines_mod._extra_line(cur) == product:
@@ -806,6 +806,19 @@ def step_config(b: Bundle, ctx: _Ctx) -> None:
 
 # ---------- entry ----------
 
+def _ensure_fields(ctx: _Ctx) -> None:
+    """The kit's Spoolman extra fields (spoolman.EXTRA_FIELDS) on the database just copied in: the ops database
+    lacks some, and the kit's writes (extra.line, tags) need them. Idempotent."""
+    try:
+        made = ctx.sm.ensure_fields()
+    except SpoolmanError as e:
+        ctx.fail("spoolman", f"adding the kit's Spoolman fields: {e}; run migrate-ops --apply again once Spoolman "
+                             "answers (or: sudo filament-kit ensure-fields)")
+        return
+    if made:
+        ctx.say("spoolman", f"added the kit's Spoolman fields: {', '.join(made)}")
+
+
 def run(bundle, *, apply: bool = False, library=None, out: Callable[[str], None] = print,
         replace_spoolman: bool = False, sm=None, allow_unknown_spoolman: bool = False) -> int:
     """Migrate (or, without `apply`, report what would be migrated); 0 when every step went through."""
@@ -818,8 +831,10 @@ def run(bundle, *, apply: bool = False, library=None, out: Callable[[str], None]
             for name, fn in (("spoolman", step_spoolman), ("lines", step_lines), ("presets", step_presets),
                              ("web", step_web), ("config", step_config)):
                 try:
-                    if name == "lines" and apply and not _no_systemd():
-                        _wait_spoolman(sm)       # just restarted with the new database
+                    if name == "lines" and apply:
+                        if not _no_systemd():
+                            _wait_spoolman(sm)   # just restarted with the new database
+                        _ensure_fields(ctx)      # C-M6: once, on the copied database, whatever the lines need
                     fn(b, ctx)
                 except Exception as e:  # noqa: BLE001 - one failed step is reported; the others still run
                     ctx.fail(name, f"{e.__class__.__name__}: {e}")
