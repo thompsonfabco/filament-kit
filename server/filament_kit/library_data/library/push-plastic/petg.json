@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "vendor": "Push Plastic",
+  "product": "PETG",
+  "material": "PETG",
+  "colors": [
+    "PETG Black"
+  ],
+  "bambu_parent": "Generic PETG",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "235"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.27"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80-100",
+    "_drying": "60C 4h",
+    "_print_speed": "45-55",
+    "_hdt": "65.5 (ASTM D648, load not stated)",
+    "_enclosure": "heated enclosure not required",
+    "_plates": "adhesion: hairspray, glue stick or higher bed temp",
+    "_notes": "TDS v1.0: unreinforced glycol-modified copolyester; density 1.27 g/cc (D792). Print settings PDF (0.4 mm nozzle, 0.2-0.3 mm layer) also lists 240C extruder and 90C bed as preferred values; says to lower temp or increase retraction for stringing, and that larger nozzles / higher flow / faster speeds need higher temps. Push Plastic publishes Bambu Studio PETG profiles (H2D, X1C, P1S, A1 zips) and says Bambu printers need higher-than-normal temperatures; the zip contents could not be read from this session. User spool is a factory second (seconds page: may be underweight, colour/texture may vary, some spools not AMS compatible)."
+  },
+  "conflicts": [
+    "[pass 4] Factory seconds page does not explicitly state the material is identical to first-quality PETG; values are from Push Plastic's standard PETG TDS and print settings.",
+    "[pass 4] Push Plastic says Bambu Lab printers need custom higher-temperature profiles (Bambu_Studio_PETG_H2D.zip), so the 235-250C range may be low for the H2D; zip values not extracted.",
+    "[pass 4] PETG MSDS (rev v1, 2018) gives no numeric density ('>1'); TDS 1.27 used."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0260/7421/files/Push_Plastic_PETG_Technical_Data_sheet.pdf",
+    "https://cdn.shopify.com/s/files/1/0260/7421/files/PETG_print_settings.pdf?v=1683905833",
+    "https://www.pushplastic.com/pages/print-settings",
+    "https://cdn.shopify.com/s/files/1/0260/7421/files/Bambu_Studio_PETG_H2D.zip?v=1762466020",
+    "https://cdn.shopify.com/s/files/1/0260/7421/files/PUSH_PLASTIC_MSDS_PETG.pdf",
+    "https://www.pushplastic.com/products/factory-seconds-filament"
+  ],
+  "updated": "2026-11-01"
+}

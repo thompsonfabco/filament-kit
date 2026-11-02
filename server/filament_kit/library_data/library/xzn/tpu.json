@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "vendor": "XZN",
+  "product": "TPU",
+  "material": "TPU",
+  "colors": [
+    "TPU Grey",
+    "TPU Transparent Gold",
+    "TPU Transparent Red",
+    "TPU White"
+  ],
+  "bambu_parent": "Generic TPU",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "_min_nozzle": "0.6",
+    "_hardness": "95A",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "Listing: 'nozzle size >=0.6mm'. The H2D default 0.4 mm High Flow nozzle is below XZN's stated minimum."
+  },
+  "conflicts": [
+    "[pass 3] Values from search-result snippets of the brand's Amazon listings; temperatures and nozzle-size rule seen on sibling-colour ASIN B0CZRT7N9X (Clear Blue). User's ASINs B0CZRZV4WB (White) and B0CZRZ3PRH (Clear Gold) snippets confirm 95A and +/-0.02 mm only.",
+    "[pass 3] A separate XZN 0.5 kg TPU listing (B0F6TTPKVM) states bed 50-70C and 20-40 mm/s; different SKU."
+  ],
+  "source_quality": "brand_amazon_listing",
+  "sources": [
+    "https://www.amazon.com/XZN-Cear-Filament-2-2lbs-Spool/dp/B0CZRT7N9X",
+    "https://www.amazon.co.uk/XZN-Filament-Flexible-Dimensional-Accuracy/dp/B0CZRZV4WB",
+    "https://us.amazon.com/XZN-Filament-Flexible-Dimensional-Accuracy/dp/B0CZRZ3PRH"
+  ],
+  "updated": "2026-11-01"
+}

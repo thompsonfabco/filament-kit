@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "yxpolyer",
+  "product": "Easy PA",
+  "material": "PA",
+  "colors": [
+    "Easy PA Blue",
+    "Easy PA Red"
+  ],
+  "bambu_parent": "Generic PA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_max_print_speed": "200",
+    "_notes": "PA6 ('Easy PA'). Listing: 'supports printing as low as 220C, speeds up to 200 mm/s' with drying before each print; melting temperature up to 194C; tensile 56 MPa; elongation at break 25%; notched Izod 50 kJ/m2. yxpolyer.com PA6 Red/Blue pages: 'easy printing at 220C'; PA6 Black page: up to 200 mm/s when properly dried. No upper nozzle temperature, bed, drying or density published."
+  },
+  "conflicts": [
+    "[pass 4] Seller 'Silver AM' (seller on all yxpolyer listings; yxpolyer.com contact is @silverage.cn).",
+    "[pass 4] The nozzle low value is an 'as low as 220C' statement, not the low end of a published range; no upper bound is published.",
+    "[pass 4] yxpolyer.com blog post (a user test report on the brand's own blog) quotes the listing as saying dry 80C 6h and a 220-260C range with bed topping out at 100C; these values are not on any current listing or product page, so they are not used. The task table note says the listing once gave 220-280C, bed 80-100C; also not on the current listing.",
+    "[pass 4] Blue ASIN B0FS6BYM4R now redirects to yxpolyer PA6-GF Black (B0F5QH7W4T); its values were not used. Blue is covered by yxpolyer.com/products/nylon-pa6-blue.",
+    "[pass 4] yxpolyer.com pages also claim '1612 MPa flexural strength', which is implausible for PA6; ignored."
+  ],
+  "source_quality": "brand_amazon_listing",
+  "sources": [
+    "https://www.amazon.com/dp/B0FS1T6MKB",
+    "https://yxpolyer.com/products/nylon-pa6-red",
+    "https://yxpolyer.com/products/nylon-pa6-blue",
+    "https://yxpolyer.com/products/nylon-pa6-black"
+  ],
+  "updated": "2026-11-01"
+}

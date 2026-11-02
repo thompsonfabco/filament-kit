@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "vendor": "ColorFabb",
+  "product": "PA Blue Metal Detectable",
+  "material": "PA",
+  "colors": [
+    "Blue"
+  ],
+  "bambu_parent": "Generic PA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "265"
+    ],
+    "nozzle_temperature_range_high": [
+      "290"
+    ],
+    "filament_density": [
+      "1.25"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "fan_min_speed/fan_max_speed": "0-50",
+    "_print_speed": "30-40 mm/s",
+    "_hdt_0.45MPa": "90 (HDT-B, ISO 75)",
+    "_diameter_tolerance": "+/-0.05 (1.75 mm; TDS 'max. roundness deviation'), +/-0.1 (2.85 mm)",
+    "_notes": "TDS v2.0. Bed printed as 'Ambient-50' C. Fan 0% for best layer adhesion, max 50% where geometry needs cooling."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://downloads.colorfabb.com/public.php/dav/files/rtfDDRCa723Xdor/Technical%20Data%20Sheets/PA/colorFabb%20PA%20BMD/TDS_E%20PA%20Blue%20Metal%20Detectable.pdf"
+  ],
+  "updated": "2026-11-01"
+}

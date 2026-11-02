@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "vendor": "Polymaker",
+  "product": "Matte PLA for Production",
+  "material": "PLA",
+  "colors": [
+    "White",
+    "Black"
+  ],
+  "bambu_parent": "PolyTerra PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.31"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "25-60",
+    "fan_max_speed": "ON",
+    "filament_retraction_length": "1",
+    "filament_retraction_speed": "20-40",
+    "_print_speed": "60-150",
+    "_drying": "55C 6h",
+    "_enclosure": "not needed",
+    "_vitrification": "60.6 (Tg, DSC)",
+    "_vicat": "62.7",
+    "_notes": "TDS (image-only on wiki, read visually) describes it as PolyTerra PLA-based; density 1.31 at 21C. HDT curve markings (52 / 57.8 C) not assigned to a load because the legend is ambiguous. Sold in larger production spools (White, Black)."
+  },
+  "conflicts": [
+    "Wiki print-settings table: retraction distance 1-3 mm (TDS: 1 mm)"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://wiki.polymaker.com/polymaker-products/polymaker-filaments/prime-materials/functional-pla/matte-pla-for-production",
+    "https://wiki.polymaker.com/polymaker-products/more-about-our-products/documents/technical-data-sheets/pla/matte-pla-for-production",
+    "https://shop.polymaker.com/products/matte-pla-for-production"
+  ],
+  "updated": "2026-11-01"
+}

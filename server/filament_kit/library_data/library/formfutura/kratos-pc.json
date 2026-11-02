@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "Kratos PC",
+  "material": "PC",
+  "colors": [],
+  "bambu_parent": "Bambu PC",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "290"
+    ],
+    "nozzle_temperature_range_high": [
+      "320"
+    ],
+    "filament_density": [
+      "1.20"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100-130",
+    "fan_min_speed/fan_max_speed": "0-25",
+    "_max_print_speed": "200 mm/s (product page)",
+    "_drying": "75C 24h (TDS)",
+    "_enclosure": "Recommended (product page); TDS: needed for larger parts",
+    "_min_nozzle": "0.4 (product page)",
+    "_hdt_0.45MPa": "139 (ASTM D648)",
+    "_hdt": "128 at 1.81 MPa (ASTM D648)",
+    "_vicat": "150 (ASTM D1525)",
+    "_notes": "Low-warp PC. Print temps/bed/fan from product page."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://formfutura.com/filaments/kratos-pc",
+    "https://formfutura.com/web/content/256573?download=true"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "vendor": "AMOLEN",
+  "product": "PETG Basic",
+  "material": "PETG",
+  "colors": [
+    "Multicolor Rainbow",
+    "Black",
+    "Grey",
+    "Red",
+    "White"
+  ],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.27"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "30-65",
+    "_drying": "65+/-5C 6-8h",
+    "filament_retraction_length": "0.8-1.2",
+    "filament_retraction_speed": "25-40",
+    "_print_speed": "< 120 mm/s",
+    "_vitrification": "78-82 (Tg)",
+    "_vicat": "82-86",
+    "_hdt_0.45MPa": "70-75",
+    "_diameter_tolerance": "+/-0.02 (variety-pack page)"
+  },
+  "conflicts": [
+    "max print speed: 'up to 500mm/s with compatible printers' (https://www.amolen.com/products/petg-basic-pack, variety-pack page) vs '< 120 mm/s' (1 kg page spec block)"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.amolen.com/products/petg-basic",
+    "https://www.amolen.com/products/petg-basic-pack",
+    "https://www.amolen.com/products/petg-basic-variety-pack-4x200g-copy"
+  ],
+  "updated": "2026-11-01"
+}

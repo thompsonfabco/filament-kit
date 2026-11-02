@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "PLA Silk High-Speed",
+  "material": "PLA",
+  "colors": [
+    "Orange & Blue & Green",
+    "Red & Yellow & Blue",
+    "Black & Red & Gold"
+  ],
+  "bambu_parent": "Bambu PLA Silk",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_density": [
+      "1.32"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "55-70",
+    "_drying": "65-75C 12h",
+    "_print_speed": "30-500mm/s",
+    "_vicat": "56 (ASTM D1525)",
+    "_hdt": "50 (ASTM D648; load not stated)",
+    "_vitrification": "57 (Tg, DSC 10C/min)",
+    "_diameter_tolerance": "+/-0.03",
+    "_bottom_printing_temperature": "190-220",
+    "_enclosure": "Open printing/closed printing",
+    "_notes": "TDS titled 'Hyper Speed Silk PLA'; sold as High-Speed Dual-Color, Triple-Color and Quadruple-Color listings."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0252/0412/9841/files/ERYONE-HP_Silk_PLA-TDS.pdf",
+    "https://eryone3d.com/products/pla-silk-high-speed-triple-color"
+  ],
+  "updated": "2026-11-01"
+}

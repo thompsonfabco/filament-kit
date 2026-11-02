@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "Python Flex TPU 90A",
+  "material": "TPU",
+  "colors": [],
+  "bambu_parent": "Bambu TPU 90A",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.22"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "0-60",
+    "fan_min_speed/fan_max_speed": "50-100",
+    "_hardness": "90A",
+    "_min_nozzle": "0.25 (product page)",
+    "_drying": "recommended (TDS, no temperature/time given)",
+    "_hdt": "74 (HDT-B)",
+    "_notes": "Print settings from product page. 90A is soft: AMS feeding not addressed by Formfutura."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://formfutura.com/filaments/python-flex-tpu-90a",
+    "https://formfutura.com/web/content/256619?download=true"
+  ],
+  "updated": "2026-11-01"
+}

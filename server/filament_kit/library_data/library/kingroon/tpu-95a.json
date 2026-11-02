@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "vendor": "Kingroon",
+  "product": "TPU 95A",
+  "material": "TPU",
+  "colors": [
+    "Black",
+    "White",
+    "Gray",
+    "Blue",
+    "Red",
+    "Green",
+    "Yellow",
+    "Orange"
+  ],
+  "bambu_parent": "Bambu TPU 95A",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.24"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "30-35",
+    "chamber_temperatures": "25-45",
+    "filament_retraction_length": "0.4-0.8",
+    "_drying": "70C 8h",
+    "_max_print_speed": "<200 mm/s",
+    "_min_nozzle": "0.4",
+    "_hardness": "95A (store variant name); TDS body text says 90A",
+    "_notes": "TDS file is named kingroon_tpu_95a but its title and text say 'TPU 90A'; Kingroon's stores only sell 95A solids and 85A rainbow TPU, so this TDS is attached to the 95A line with the hardness discrepancy flagged. TDS: drying alternative printer heatbed 90 C 16 h; Smooth / Textured PEI with glue; fan on; melting 180 C; retraction speed printed truncated as '10-30mm/' so not recorded; ABS spool rated 90 C. Verification 2026-11-01: fields and plate/chamber/fan/retraction ranges confirmed against the TDS PDF; kingroon.com / kingroon3d.com product pages returned HTTP 429, so page-derived notes and conflicts were not re-checked."
+  },
+  "conflicts": [
+    "TDS content names the product 'TPU 90A' while the URL and all store listings say 95A"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://wiki.kingroon.com/kingroon_tpu_95a_technical_data_sheet_v1.0.pdf",
+    "https://kingroon.com/products/kingroon-tpu"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "vendor": "ColorFabb",
+  "product": "nGen_FLEX",
+  "material": "PETG",
+  "colors": [
+    "Black",
+    "Clear",
+    "Dark Gray"
+  ],
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.16"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "fan_min_speed/fan_max_speed": "0-50",
+    "_print_speed": "40-60 mm/s",
+    "_hardness": "95 Shore A (ISO 868)",
+    "_vitrification": "-40 (Tg, DSC ISO 11357)",
+    "_hdt_0.45MPa": "100 (HDT-B, listed as ISO 36)",
+    "_diameter_tolerance": "+/-0.05 (1.75 mm; TDS 'max. roundness deviation'), +/-0.1 (2.85 mm)",
+    "_notes": "TDS v1.0. Flexible co-polyester (95A). Bed printed as '±80' C: best on BuildTak at roughly 80 C; do not squish first layer. bambu_parent omitted: no flexible co-polyester preset in Bambu Studio. Flexible 95A: AMS feeding not confirmed by colorFabb."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://downloads.colorfabb.com/public.php/dav/files/rtfDDRCa723Xdor/Technical%20Data%20Sheets/Co-Polyester/colorFabb%20nGen/TDS_E_ColorFabb_nGen_FLEX.pdf",
+    "https://colorfabb.com/filaments/materials/co-polyester-filaments/ngen-flex"
+  ],
+  "updated": "2026-11-01"
+}

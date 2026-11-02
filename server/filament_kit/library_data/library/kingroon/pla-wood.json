@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "vendor": "Kingroon",
+  "product": "PLA Wood",
+  "material": "PLA",
+  "colors": [
+    "Wood"
+  ],
+  "bambu_parent": "Bambu PLA Wood",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.21"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "35-45",
+    "chamber_temperatures": "25-45",
+    "filament_retraction_length": "0.6-1.0",
+    "filament_retraction_speed": "20-40",
+    "_drying": "50C 8h",
+    "_max_print_speed": "<250 mm/s",
+    "_min_nozzle": "0.2",
+    "_hdt_0.45MPa": "60",
+    "_vicat": "64",
+    "_vitrification": "54 (Tg, DSC)",
+    "_notes": "TDS V1.0: PLA with fine wood powder; Textured / Smooth PEI with glue; fan on; HDT 1.8 MPa 57 C; melting 156 C. Sold as 'Wood PLA'. Verification 2026-11-01: fields and plate/chamber/fan/retraction ranges confirmed against the TDS PDF; kingroon.com / kingroon3d.com product pages returned HTTP 429, so page-derived notes and conflicts were not re-checked."
+  },
+  "conflicts": [
+    "kingroon.com Wood PLA Filament page: print temp 195-210, tolerance +/-0.03 mm"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://wiki.kingroon.com/kingroon_pla_wood_technical_data_sheet_v1.0.pdf",
+    "https://kingroon.com/products/kingroon-wood-pla-filament"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "vendor": "Fillamentum",
+  "product": "PLA Crystal Clear",
+  "material": "PLA",
+  "colors": [
+    "Amethyst Purple",
+    "Iceland Blue",
+    "Kiwi Green",
+    "Smaragd Green",
+    "Tangerine Orange"
+  ],
+  "bambu_parent": "Bambu PLA Translucent",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.24"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "0-55",
+    "fan_min_speed/fan_max_speed": "0-30",
+    "_nozzle_by_speed": "product page: basic 195-230 (30-70 mm/s), high-speed printers setup 200-240 (30-300 mm/s); TDS 210-230; print guide 8/2024: basic 190-210, high-speed 230-270, matte 180-230",
+    "_print_speed": "30-70 mm/s basic; 30-300 mm/s high-speed setup",
+    "_drying": "50C 4h",
+    "_vitrification": "55-60 (Tg, DSC)",
+    "_hdt_0.45MPa": "55-60 amorphous; 100-110 crystalline (ISO 75-1 method B)",
+    "_annealing": "Page: easily annealed for improved properties (HDT 100-110 C when crystalline per TDS).",
+    "_diameter_tolerance": "+/-0.05",
+    "_ams": "Product page lists the line as AMS-compatible.",
+    "_notes": "Product page gives 1.75 mm (or 2.85 mm), 1000 g filament + 210 g spool. Fields use the product page's highest range."
+  },
+  "conflicts": [
+    "Nozzle: TDS (03/01/2019) gives 210-230 C.",
+    "Nozzle: 3D print guide PRINT_GUIDE_PLA_CRYSTAL_8_2024 gives basic 190-210, high-speed 230-270, matte 180-230 C (same table as PLA Extrafill guide).",
+    "Bed: TDS gives 50-60 C; product page and guide give 0-55 C."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://fillamentum.com/wp-content/uploads/2020/10/Technical-Data-Sheet_PLA-Crystal-Clear_03012019.pdf",
+    "https://shop.fillamentum.com/products/pla-crystal-clear",
+    "https://fillamentum.com/wp-content/uploads/2024/10/PRINT_GUIDE_PLA_CRYSTAL_8_2024.pdf",
+    "https://fillamentum.com/wp-content/uploads/2023/10/Recommendation-for-filament-processing_drying_EN_12102023.pdf"
+  ],
+  "updated": "2026-11-01"
+}

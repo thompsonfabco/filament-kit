@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "vendor": "Kexcelled",
+  "product": "K5 PETG GF",
+  "material": "PETG-GF",
+  "colors": [],
+  "bambu_parent": "Generic PETG",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "275"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-80",
+    "_density": "1.25-1.28 g/cm3 (ISO 1183)",
+    "_vitrification": "~66 (Tg, ISO 11357)",
+    "_hdt_0.45MPa": "76",
+    "_vicat": "85 (10N)",
+    "_print_speed": "150 mm/s",
+    "_cooling_fan": "0-50%",
+    "_bed_surface": "Tape or glue",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "TDS 'THE K5 PETG GF' rev 02, 20/02/2025; settings based on a 0.4mm nozzle. Glass-fibre filled; the TDS does not state fibre content or a hardened-nozzle requirement. No Bambu PETG-GF system preset exists, hence Generic PETG. Density is a range, so filament_density left unset. No drying spec published."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0958/0111/4939/files/THE_K5_PETG_GF_TDS.pdf"
+  ],
+  "updated": "2026-11-01"
+}

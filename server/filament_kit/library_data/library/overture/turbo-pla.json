@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "vendor": "OVERTURE",
+  "product": "Turbo PLA",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "205"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.30"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "25-60",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "20-40",
+    "overhang_fan_threshold": "60 (threshold overhang angle, degrees)",
+    "_nozzle_by_speed": "190-205 (normal speed, 60-100 mm/s); 205-230 (high speed, 100-600 mm/s)",
+    "_print_speed": "60-100 mm/s normal; 100-600 mm/s high speed",
+    "_max_print_speed": "600 mm/s",
+    "_vicat": "65.5 (ISO 306)",
+    "_notes": "TDS v5.1 (Jul 2024): high-speed PLA; melt index 26.0 g/10min (220C 2.16kg); cooling fan on; based on 0.4 mm nozzle. Discontinued on overture3d.com: overture3d.com/products/turbo-pla now redirects to the homepage (checked 2026-11-01). Diameter not printed in the TDS, so filament_diameter left out. Amazon/reseller listings describe a cardboard spool: wrap edges before AMS use. Colours not recorded."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://overture3d.com/cdn/shop/files/OVERTURE_TURBO_PLA_TDS_EN_V5.1_5343cd00-c7b5-4136-a189-8c7eed284f75.pdf"
+  ],
+  "updated": "2026-11-01"
+}

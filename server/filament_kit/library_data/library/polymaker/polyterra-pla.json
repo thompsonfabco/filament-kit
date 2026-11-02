@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "vendor": "Polymaker",
+  "product": "PolyTerra PLA",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "PolyTerra PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.31"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "25-60",
+    "filament_retraction_length": "1",
+    "filament_retraction_speed": "20",
+    "_print_speed": "30-70 mm/s",
+    "_vitrification": "60.6 (Tg, DSC 10C/min)",
+    "_vicat": "62.7",
+    "_hdt_0.45MPa": "57.8",
+    "_notes": "PolyTerra PLA TDS (V5.1 per file name) (0.4 mm nozzle, Simplify3D v4 basis), reseller-hosted copy. Matte bio-based PLA; no longer listed in Polymaker's own shop or TDS index (matte line now Panchroma Matte PLA) but still widely sold. Build surface glue/Magigoo; cooling fan ON; overhang threshold 60 deg. HDT 1.8 MPa 52 C. No drying setting or diameter stated in this TDS."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://3ddruckboss.de/cdn/shop/files/PolyTerra_PLA_TDS_V5.1.pdf"
+  ],
+  "updated": "2026-11-01"
+}

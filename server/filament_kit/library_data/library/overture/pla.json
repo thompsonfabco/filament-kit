@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "vendor": "OVERTURE",
+  "product": "PLA",
+  "material": "PLA",
+  "colors": [
+    "White",
+    "Black",
+    "Cold White",
+    "Red",
+    "Fresh Red",
+    "Space Gray",
+    "Light Gray",
+    "Cement Gray",
+    "Orange",
+    "Pink",
+    "Blue",
+    "Light Blue",
+    "Gray Blue",
+    "Green",
+    "Olive Green",
+    "Glow in Dark",
+    "Yellow",
+    "Highlight Yellow",
+    "Royal Gold",
+    "Brown",
+    "Chocolate",
+    "Purple",
+    "Rainbow",
+    "Aurora Berry",
+    "Avocado",
+    "Tequila Sunrise",
+    "Lemon Yellow",
+    "Metallic Gray",
+    "Northern Lights",
+    "Rocket Pop",
+    "Sparkle Black",
+    "Sparkle Purple",
+    "Champagne Frost",
+    "Christmas Prism"
+  ],
+  "bambu_parent": "Overture PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_density": [
+      "1.21"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "25-60",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "20-40",
+    "overhang_fan_threshold": "60 (threshold overhang angle, degrees)",
+    "_print_speed": "40-70 mm/s",
+    "_vicat": "64.2 (ISO 306)",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "TDS v5.1 (Jul 2024): cooling fan on; build surface OVERTURE Build Surface / textured PEI, optional PVA glue; raft separation 0.1-0.2 mm; melt index 9.0 g/10min (210C 2.15kg as printed); melting temp 148C (DSC); values based on 0.4 mm nozzle. The overture3d.com listing (handle overture-pla) is now titled 'High Speed PLA' but links this same PLA TDS, which gives no high-speed range."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://overture3d.com/cdn/shop/files/OVERTURE_PLA_TDS_EN_V5.1_a4102671-a3b0-416f-9191-7e6feb681e3e.pdf",
+    "https://overture3d.com/products/overture-pla"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "ABS High-Speed",
+  "material": "ABS",
+  "colors": [
+    "Black",
+    "White",
+    "Green",
+    "Blue",
+    "Red",
+    "Gray"
+  ],
+  "bambu_parent": "Bambu ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "290"
+    ],
+    "filament_density": [
+      "1.1"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80-110",
+    "_drying": "90-100C 12h",
+    "_print_speed": "30-600mm/s",
+    "_hdt": "95 (ASTM D648; load not stated)",
+    "_bottom_printing_temperature": "240-290",
+    "_enclosure": "closed printing",
+    "_notes": "TDS titled 'Hyper-Speed ABS'."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0252/0412/9841/files/ERYONE-ABS-HP-TDS.pdf",
+    "https://eryone3d.com/products/abs-high-speed-filament"
+  ],
+  "updated": "2026-11-01"
+}

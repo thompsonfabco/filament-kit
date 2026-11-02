@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "vendor": "Siraya Tech",
+  "product": "Fibreheart PPA-GF",
+  "material": "PPA-GF",
+  "colors": [
+    "Black",
+    "White"
+  ],
+  "bambu_parent": "Generic PPA-GF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "300"
+    ],
+    "nozzle_temperature_range_high": [
+      "320"
+    ],
+    "filament_density": [
+      "1.27"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80-110",
+    "chamber_temperatures": "60-80",
+    "fan_max_speed": "0 (OFF)",
+    "filament_retraction_length": "1-3 (direct drive)",
+    "filament_retraction_speed": "30-60 mm/s (1800-3600 mm/min)",
+    "_print_speed": "30-100 mm/s (first layer 20-30 mm/s)",
+    "_drying": "80-100C 4-6h, before every print",
+    "_diameter_tolerance": "+/-0.03",
+    "_hdt_0.45MPa": "84 unannealed / 185 annealed (Method B); Method A 80 / 112.2",
+    "_vicat": "235 (ISO 306)",
+    "_vitrification": "80 (Tg, ASTM D3418)",
+    "_fiber_content": "15% glass fiber",
+    "_hardened_nozzle_required": "yes (mandatory: hardened steel, ruby or tungsten carbide)",
+    "_min_nozzle": "0.4 mm",
+    "_enclosure": "Passively or actively heated chamber recommended",
+    "_ams": "Not compatible",
+    "_annealing": "90C 4h, cool slowly in oven",
+    "_notes": "All-metal hotend capable of 320C required; direct drive recommended. Print from heated dryer/dry box (<15% RH). Melting point 232C. Brim (10-20 lines) or raft. PEI, G-10 or glass with PVP glue."
+  },
+  "conflicts": [
+    "Product page spec gives diameter 1.75 +/- 0.3 mm; TDS gives 1.75+/-0.03: https://siraya.tech/products/fibreheart-ppa-gf-filament"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://siraya.tech/pages/fibreheart-ppa-gf-tds",
+    "https://siraya.tech/products/fibreheart-ppa-gf-filament"
+  ],
+  "updated": "2026-11-01"
+}

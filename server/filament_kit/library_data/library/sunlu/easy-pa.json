@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "vendor": "SUNLU",
+  "product": "Easy PA",
+  "material": "PA",
+  "colors": [
+    "Easy PA Black"
+  ],
+  "bambu_parent": "Generic PA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_density": [
+      "1.10"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "30-50 (glue)",
+    "_nozzle_by_speed": "250-270C@50-100mm/s; 270-280C@100-150mm/s",
+    "_drying": "90C 12h; 80-110C blast oven (time not stated)",
+    "_hdt": "119+/-3 (UK store) or 121 (US store, Amazon)",
+    "filament_shrink": "98.4%-98.7% (published 1.3-1.6%)",
+    "_annealing": "90-130C 1-3h",
+    "_max_print_speed": "150",
+    "_diameter_tolerance": "+/-0.03",
+    "_vitrification": "135 (Vicat)"
+  },
+  "conflicts": [
+    "[pass 2] Amazon listing B0GSDZ9SZW: nozzle 270-280C, drying 90C 12h.",
+    "[pass 2] US store drying 80-100C vs UK store 80-110C.",
+    "[pass 2] HDT 121C (US store, Amazon) vs 119+/-3C (UK store).",
+    "[pass 2] Shrinkage 1.3-1.6% and annealing come from reseller pages (3dsaga, smith3d) reproducing SUNLU's table."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://uk.store.sunlu.com/products/1-75mm-sunlu-easy-nylonpa-3d-printer-filament-1kg",
+    "https://store.sunlu.com/products/moq-6-easy-nylone-pa-3d-printer-filament-1kg",
+    "https://www.amazon.com/SUNLU-Filament-Designed-Engineering-Filaments/dp/B0GSDZ9SZW",
+    "https://www.3dsaga.com/en/products/sunlu-easy-pa-nylon"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "library_version": 3,
+  "generated": "2026-11-02",
+  "count": 3,
+  "entries": [
+    {
+      "vendor": "Bambu Lab",
+      "product": "PETG HF",
+      "material": "PETG",
+      "path": "library/bambu-lab/petg-hf.json",
+      "sha256": "9100cffbfb65a3ba2a3bf85cf7dd0872ab00d950bad9ea2df2ed11f94edcd3a0",
+      "updated": "2026-11-01"
+    },
+    {
+      "vendor": "ELEGOO",
+      "product": "PETG-CF",
+      "material": "PETG-CF",
+      "path": "library/elegoo/petg-cf.json",
+      "sha256": "2e38d2816be63cdb109d6c8773aebe93bfb24ec924a3882aa7cbc38360fec66f",
+      "updated": "2026-11-01"
+    },
+    {
+      "vendor": "SUNLU",
+      "product": "PLA+ 2.0",
+      "material": "PLA",
+      "path": "library/sunlu/pla-plus-2-0.json",
+      "sha256": "e23bea7ca9f90d0e0c7ce66360d71aba600d61c4197c2924e625f0695754dd80",
+      "updated": "2026-11-01"
+    }
+  ]
+}

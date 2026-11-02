@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "Python Flex TPU 98A",
+  "material": "TPU",
+  "colors": [],
+  "bambu_parent": "Bambu TPU 95A",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "245"
+    ],
+    "nozzle_temperature_range_high": [
+      "255"
+    ],
+    "filament_density": [
+      "1.16"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "0-60",
+    "fan_min_speed/fan_max_speed": "50-100",
+    "_nozzle_by_speed": "general 220-250C; 220-230C single wall no infill at 50 mm/s; 245-255C highly infilled at 100 mm/s (product page)",
+    "_print_speed": "Medium-fast; > 80 mm/s possible (product page)",
+    "_hardness": "98A (ISO 7619-1)",
+    "_min_nozzle": "0.25 (product page)",
+    "_vicat": "138 (ASTM D1525 B/2)",
+    "_diameter_tolerance": "+/-0.05 (1.75 mm), +/-0.10 (2.85 mm)",
+    "_notes": "Page flow 110-130% depending on speed; retraction ~5 mm. Fields hold the highest published range (100 mm/s, high infill) per library rule; general range 220-250C."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://formfutura.com/filaments/python-flex-tpu-98a",
+    "https://formfutura.com/web/content/256621?download=true"
+  ],
+  "updated": "2026-11-01"
+}

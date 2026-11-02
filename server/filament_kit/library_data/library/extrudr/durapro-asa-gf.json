@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "vendor": "Extrudr",
+  "product": "DuraPro ASA GF",
+  "material": "ASA",
+  "colors": [],
+  "bambu_parent": "Generic ASA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.1"
+    ],
+    "filament_max_volumetric_speed": [
+      "12"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "110",
+    "fan_min_speed/fan_max_speed": "0-30%",
+    "_print_speed": "<180 mm/s",
+    "_enclosure": "yes",
+    "_hardened_nozzle_required": "yes",
+    "_min_nozzle": "0.5 mm (catalogue settings are given for a 0.5 mm nozzle)",
+    "_fiber_content": "glass fibre (content not stated)",
+    "_vicat": "101 (Vicat A, ASTM D1525)",
+    "_hdt_0.45MPa": "99 (HDT/B, ASTM D648)",
+    "_notes": "Bed adhesive recommended. Shrinkage 0.30%. UL94 HB at 1.5 mm. Bambu Studio has no ASA-GF system preset, so Generic ASA is used. Diameter not stated in the catalogue, so filament_diameter is left unset."
+  },
+  "conflicts": [
+    "Nozzle: the product page prints 230-270 C; the overview table row in the same catalogue reads 240-280 C."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://s3.extrudr.com/extrudr-media/product-catalogue/extrudr-Produktkatalog_EN.pdf"
+  ],
+  "updated": "2026-11-01"
+}

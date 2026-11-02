@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "ASA-GF",
+  "material": "ASA-GF",
+  "colors": [
+    "Black",
+    "White"
+  ],
+  "bambu_parent": "Bambu ASA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "260"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_density": [
+      "1.17"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-100",
+    "_drying": "80C 4h",
+    "_print_speed": "30-150mm/s",
+    "_hdt": "86 (ASTM D648; load not stated)",
+    "_vitrification": "104 (Tg, DSC 10C/min)",
+    "_fiber_content": "10% fiberglass",
+    "_bottom_printing_temperature": "260-280",
+    "_enclosure": "supports open printing, sealing effect is better if sealed",
+    "_notes": "Sold as ASA Fiberglass."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0252/0412/9841/files/ERYONE-ASA-GF-TDS.pdf",
+    "https://eryone3d.com/products/asa-fiberglass-filament"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "vendor": "Siraya Tech",
+  "product": "Fibreheart PPA",
+  "material": "PPA",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Generic PA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "280"
+    ],
+    "nozzle_temperature_range_high": [
+      "300"
+    ],
+    "filament_density": [
+      "1.21"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-80",
+    "fan_max_speed": "20-60",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "1800-3600 mm/min",
+    "_print_speed": "30-120 mm/s",
+    "_drying": "80-100C 4-6h (oven, only if moist)",
+    "_hdt_0.45MPa": "81 dry / 61 wet (Method B); Method A 73.5 dry / 48.5 wet",
+    "_vicat": "230 (ISO 306)",
+    "_vitrification": "80 (Tg, ASTM D3418)",
+    "_hardened_nozzle_required": "no",
+    "_min_nozzle": "0.4 mm (0.4-1.0 mm)",
+    "_enclosure": "Recommended",
+    "_notes": "Unfilled polyphthalamide. Melting point 231C. Raft separation 0.12-0.16 mm. PEI with glue stick/PVP. Store <15% RH. Annealing not recommended (warps). No Bambu PPA preset; Generic PA used."
+  },
+  "conflicts": [
+    "TDS introduction states density 1.2 g/cm3; property table gives 1.21 (ISO 1183) - table value used: https://siraya.tech/pages/siraya-tech-fibreheart-ppa-filament-tds",
+    "Product page recommends hardened steel nozzles and a heating block of at least 12 mm; TDS says a hardened steel nozzle is not needed: https://siraya.tech/products/siraya-tech-fibreheart-ppa-3d-printing-filament"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://siraya.tech/pages/siraya-tech-fibreheart-ppa-filament-tds",
+    "https://siraya.tech/products/siraya-tech-fibreheart-ppa-3d-printing-filament"
+  ],
+  "updated": "2026-11-01"
+}

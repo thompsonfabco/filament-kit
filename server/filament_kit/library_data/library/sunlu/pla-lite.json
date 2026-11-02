@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "vendor": "SUNLU",
+  "product": "PLA Lite",
+  "material": "PLA",
+  "colors": [
+    "Grey",
+    "Black",
+    "Cherry Red",
+    "Sunny Orange",
+    "Lemon Yellow",
+    "Olive Green",
+    "Mint Green",
+    "Sky Blue",
+    "Sakura Pink",
+    "Chocolate",
+    "Pri-Magenta",
+    "Pri-White",
+    "Pri-Cyan",
+    "Pri-Yellow",
+    "White"
+  ],
+  "bambu_parent": "Bambu PLA Lite",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.36"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "filament_retraction_length": "0.8-1.2mm",
+    "filament_retraction_speed": "30-40mm/s",
+    "_nozzle_by_speed": "TDS: 200-260C @ 450mm/s. Page: 200-210C @ 50-100mm/s; 210-240C @ 100-200mm/s",
+    "_drying": "50C (drying time not published)",
+    "_hdt_0.45MPa": "55±3",
+    "_vitrification": "56 (Tg, ISO 11357-2)",
+    "_hardness": "80.5 (Shore, TDS)",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "CAUTION: the TDS linked from the PLA Lite page is numerically identical to the PLA Classic and High Speed Matte PLA TDS, while the PLA Lite product page table matches SUNLU PLA. One of the two is likely a copy error; verify before relying on density/temps."
+  },
+  "conflicts": [
+    "Product page: nozzle 200-210C/50-100mm/s and 210-240C/100-200mm/s, density 1.23, HDT 55±5, shrinkage 0.1-0.3%, Shore 80, Vicat 54 (TDS: 200-260C/450mm/s, 1.36, 55±3, -, 80.5, -) - https://www.sunlu.com/products/pla-lite-filament"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://media.sunlu.com/prod/20260423/bbf6d99b-179f-4eee-a7d6-505d125658cd.pdf?filename=TDS",
+    "https://www.sunlu.com/products/pla-lite-filament"
+  ],
+  "updated": "2026-11-01"
+}

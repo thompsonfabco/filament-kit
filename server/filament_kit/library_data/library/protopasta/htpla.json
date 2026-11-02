@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "vendor": "Protopasta",
+  "product": "HTPLA",
+  "material": "PLA",
+  "colors": [
+    "Translucent colours",
+    "Sparkly / Glitter colours",
+    "Metallic (pearl) colours",
+    "Opaque colours",
+    "Fluorescent colours",
+    "Multicolor"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.24"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "12"
+    ]
+  },
+  "published_ranges": {
+    "_nozzle_by_speed": "220C @ 6 mm3/s; 240C @ 12 mm3/s (Material Data Table, Bambu); 206C @ 2-3 mm3/s, 25-45 mm/s (Translucent/Sparkly TDS, Ultimaker S5 profile)",
+    "_bed": "55C plate (Material Data Table); 60C heated bed (TDS)",
+    "_vitrification": "approx. 60 (Tg onset, TDS)",
+    "_notes": "Melt point (Tm) onset approx. 155C. TDS: theoretical HDT >140C after heat treating. Material Data Table row 'PLAs (w/o fibers)' covers PLA1/HTP2/HTP3/HTPM/HTGL etc. and recommends the Generic PLA profile; replace tubing more often with rough filament. Blog (EX15/EL43): start from Generic PLA, raise nozzle 220->240 for HTPLA colours, 55C plate, max 12 mm3/s, 100% layer fan, aux fan off. fields low/high are the two Material Data Table points.",
+    "_annealing": "95-110C for 10+ minutes; pre-scale x/y 102.2%, z 99% (TDS)",
+    "_drying": "Protopasta does not recommend drying its PLA-based materials (QD HTPLA TDS)"
+  },
+  "conflicts": [
+    "Density: 1.2 g/cc in the PLA/HTPLA Colors SDS (https://cdn.shopify.com/s/files/1/0717/9095/files/PLA_Colors.pdf) vs approx. 1.24 g/cc in the Translucent/Sparkly TDS"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0717/9095/files/TDS__Translucent_Sparkly_HTPLA_1.0.0.pdf",
+    "https://proto-pasta.com/pages/material-data-table",
+    "https://cdn.shopify.com/s/files/1/0717/9095/files/PLA_Colors.pdf",
+    "https://proto-pasta.com/blogs/stories/endless-pla-43-june-2026-opaque-fluorescents"
+  ],
+  "updated": "2026-11-01"
+}

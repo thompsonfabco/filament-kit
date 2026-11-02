@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "ReForm - rTitan",
+  "material": "ABS",
+  "colors": [],
+  "bambu_parent": "Bambu ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.10"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80-90",
+    "fan_min_speed/fan_max_speed": "0-30",
+    "_enclosure": "No / Recommended (product page)",
+    "_min_nozzle": "0.15",
+    "_vicat": "97 (ISO 306 VST/A/50)",
+    "_diameter_tolerance": "+/-0.05 (1.75 mm), +/-0.10 (2.85 mm)",
+    "_notes": "Recycled TitanX. TDS v1 dated 2 May 2017; bed and fan from product page."
+  },
+  "conflicts": [
+    "Product page print temp 245-265C vs TDS (2017) 240-260C."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://formfutura.com/web/content/256633?download=true",
+    "https://formfutura.com/filaments/reform-rtitan"
+  ],
+  "updated": "2026-11-01"
+}

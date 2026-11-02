@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "vendor": "TEQStone",
+  "product": "TPU",
+  "material": "TPU",
+  "colors": [
+    "TPU Brown",
+    "TPU Green",
+    "TPU Orange",
+    "TPU Red"
+  ],
+  "bambu_parent": "Generic TPU",
+  "fields": {
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_hardness": "95A",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "Only hardness and tolerance are published. B0CS6PKWL5 (TPU Brown, part TEQ-700-001-1855) served as itself, currently unavailable; the user's other ASINs redirect to TEQStone TPU Black B0CG13CP4P with identical bullets."
+  },
+  "conflicts": [
+    "[pass 3] Values from search-result snippets of the brand's Amazon listings, including the user's ASIN B0CS6P8WRS (New Green) and sibling-colour ASINs (Red B0CG17VLRL).",
+    "[merge] published_ranges._notes: pass 4 value \"Only hardness and tolerance are published. B0CS6PKWL5 (TPU Brown, part TEQ-700-001-1855) served as itself, currently unavailable; the user's other ASINs redirect to TEQStone TPU Black B0CG13CP4P with identical bullets.\" replaced earlier value \"No temperatures visible in brand listing snippets. Label 200-230C is not a source.\"",
+    "[pass 4] Seller is 'YJT Group', not a store named TEQStone; the same seller sells TEQStone-branded printers and dryers and the listing links the TEQStone brand store, so it is treated as the brand's listing.",
+    "[pass 4] No temperatures, bed, density or drying from any official source. The 200-230C on the spool label is unsourced and was not used."
+  ],
+  "source_quality": "brand_amazon_listing",
+  "sources": [
+    "https://www.amazon.com/TEQStone-Filament-Flexible-Consistent-Diameter/dp/B0CS6P8WRS",
+    "https://www.amazon.com/TEQStone-Filament-Flexible-Consistent-Diameter/dp/B0CG17VLRL",
+    "https://www.amazon.com/dp/B0CS6PKWL5",
+    "https://www.amazon.com/dp/B0CG13CP4P"
+  ],
+  "updated": "2026-11-01"
+}

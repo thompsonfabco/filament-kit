@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "Anycubic",
+  "product": "TPU 95A",
+  "material": "TPU",
+  "colors": [],
+  "bambu_parent": "Bambu TPU 95A",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "195"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.23"
+    ],
+    "filament_max_volumetric_speed": [
+      "3.2"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "fan_max_speed": "100%",
+    "filament_retraction_speed": "30",
+    "_drying": "70-80C 8-12h",
+    "_print_speed": "50-150 mm/s",
+    "_hardness": "95A (average)",
+    "_hdt_0.45MPa": "52",
+    "_notes": "TDS V3.0 (named 'Anycubic TPU'; sold as TPU 95A). TDS also gives extrusion multiplier 1, cooling time 8 s, melting temperature 145.1C. No Tg or Vicat published. Diameter not stated in TDS. Soft 95A TPU: check AMS suitability before loading (Anycubic publishes no AMS guidance)."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0685/7578/9245/files/ANYCUBIC_TDS_TPU_V3.0.pdf"
+  ],
+  "updated": "2026-11-01"
+}

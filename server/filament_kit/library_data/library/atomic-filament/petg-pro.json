@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "vendor": "Atomic Filament",
+  "product": "PETG PRO",
+  "material": "PETG",
+  "colors": [
+    "Deep Black Opaque",
+    "Extreme JET Black",
+    "Bright White Opaque",
+    "Gray",
+    "Light Gray",
+    "Starlight Gray",
+    "Gun Metal Gray Opaque",
+    "Cosmic Graphite",
+    "Metallic Silver",
+    "Bronze Metallic",
+    "True Gold",
+    "Perfect Red",
+    "Dark Cherry Red",
+    "Perfect Orange Opaque",
+    "Perfect Yellow",
+    "Perfect Blue Opaque",
+    "Royal Blue Opaque",
+    "Navy Blue",
+    "Baby Blue",
+    "Turquoise",
+    "Perfect Purple",
+    "Hot Pink Opaque",
+    "Cashmere",
+    "Khaki",
+    "Majestic Brown",
+    "Olive Drab Green",
+    "Pine Green",
+    "Minty Green",
+    "RepRap Green",
+    "Neon Green UV Reactive Opaque",
+    "Neon Orange UV Reactive Opaque",
+    "Neon Yellow UV Reactive Opaque",
+    "Crystal Clear / Natural",
+    "Translucent Smoke Black",
+    "Translucent Sapphire Blue",
+    "Translucent Bright Orange",
+    "Translucent Neon Green",
+    "Translucent Neon Yellow UV Reactive",
+    "Translucent Neon Hot Pink UV Reactive",
+    "Extreme Translucent Fluorescent Neon Green UV Reactive",
+    "Aqua Translucent",
+    "Emerald Green Translucent",
+    "Gemstone Ruby Red Translucent",
+    "Amethyst Violet Gemstone Translucent",
+    "Aqua Gemstone Translucent",
+    "Golden Blood Diamond Translucent",
+    "Rose Gold Metallic Translucent",
+    "Starry Night Translucent",
+    "Tropical Sea Iridescent Translucent",
+    "Indigo Golden Sparkle Translucent",
+    "Pearlescent Translucent Neon Green UV Reactive",
+    "Mysterious Abyss Pearl",
+    "Marble",
+    "Bug Eyes Shade-Shifting",
+    "Chameleon Coastline Shade-Shifting",
+    "Too Good to be Blue Shade-Shifting"
+  ],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "265"
+    ],
+    "filament_density": [
+      "1.27"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80 +/-10",
+    "_drying": "65C 8-16h",
+    "_vitrification": "78 (Tg, Atomic PETG/PCTG SDS)",
+    "_diameter_tolerance": "+/-0.02",
+    "_ams": "1 kg spools sold as AMS compatible",
+    "_notes": "Nozzle 240-265C appears on ~127 PETG PRO pages. Density 1.27 g/ml (26C) and Tg 78C are from the 'Atomic - PETG/PCTG based 3D Filaments' SDS (rev 07/16/2026), which covers both PETG and PCTG; no PETG TDS published. Drying 65C 8-16h from the Atomic FAQ ('time is dependent on dryer'). Several PETG colours are marked as being discontinued and replaced by PCTG PRO. Also sold in 3.5 kg and 2.85 mm (Crystal Clear / Natural)."
+  },
+  "conflicts": [
+    "Bed temperature varies by colour page: 80C +/-10 on most pages (used); 60-70C on ~22 pages (e.g. https://atomicfilament.com/products/true-gold-petg-pro); 70C +/-10 on ~10 (e.g. https://atomicfilament.com/products/cashmere-petg-pro-ams-compatible); 70-90C on ~15 (e.g. https://atomicfilament.com/products/crystal-clear-natural-petg-pro-2-85mm-1kg); 60-75C (nozzle 240-265C) on Starry Night (https://atomicfilament.com/products/starry-night-translucent-petg-pro).",
+    "Indigo Golden Sparkle Translucent page gives nozzle 232-245C (https://atomicfilament.com/products/indigo-golden-sparkle-trans-petg).",
+    "Translucent Neon Hot Pink UV Reactive and Gray sample pages give nozzle 240-245C (https://atomicfilament.com/products/trans-neon-hot-pink-petg-uv-react).",
+    "Metallic Silver v2 page gives nozzle 240-255C (https://atomicfilament.com/products/metallic-silver-v2-petg-pro-1)."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://atomicfilament.com/products/deep-black-opaque-petg-pro",
+    "https://atomicfilament.com/products/perfect-blue-opaque-petg-pro",
+    "https://cdn.shopify.com/s/files/1/0778/8857/files/Atomic-PETG-SDS-8-2021.pdf?v=1784255382",
+    "https://atomicfilament.com/pages/atomic-filament-faq"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "vendor": "QIDI Tech",
+  "product": "PET-CF",
+  "material": "PET-CF",
+  "colors": [],
+  "bambu_parent": "Bambu PET-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "270"
+    ],
+    "nozzle_temperature_range_high": [
+      "300"
+    ],
+    "filament_density": [
+      "1.34"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-80",
+    "chamber_temperatures": "room temperature",
+    "fan_min_speed/fan_max_speed": "off",
+    "_drying": "100C 10h",
+    "_print_speed": "up to 300 mm/s",
+    "_vitrification": "79.5 (Tg)",
+    "_vicat": "242.5",
+    "_hdt_0.45MPa": "155.3",
+    "_annealing": "120C 10h (strongly recommended)",
+    "_hardened_nozzle_required": "yes (hardened steel/bimetal; brass not recommended)",
+    "_min_nozzle": "0.4",
+    "_ams": "QIDI BOX compatible per QIDI",
+    "_notes": "Listed as 'PET-CF17' in the filament guide. Melt 238.6C. TDS V1.0. Product page lists PC plate as not recommended."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://drive.google.com/file/d/1CigIk1z7Gh0TD_WPvXizGa_McBGElcJf/view",
+    "https://qidi3d.com/products/pet-cf-filament",
+    "https://qidi3d.com/pages/choose-the-right-filament-3d-filaments-guide-for-qidi-printers"
+  ],
+  "updated": "2026-11-01"
+}

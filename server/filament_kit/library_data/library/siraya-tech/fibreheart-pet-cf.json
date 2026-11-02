@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "vendor": "Siraya Tech",
+  "product": "Fibreheart PET-CF",
+  "material": "PET-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu PET-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "280"
+    ],
+    "nozzle_temperature_range_high": [
+      "320"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-80",
+    "fan_max_speed": "0 (OFF)",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "30-60 (1800-3600 mm/min)",
+    "_print_speed": "30-120",
+    "_drying": "90C 4-6h if moist",
+    "_hardened_nozzle_required": "yes",
+    "_hdt": "78.4 (A) / 90.2 (B)",
+    "_colors_note": "Pass 1 recorded bare colour names, not full Spoolman names; match on vendor+product.",
+    "_max_volumetric_speed": "20 mm3/s (nozzle not stated; at 320C)"
+  },
+  "conflicts": [
+    "[pass 1] Bed 60-80 (table) vs 70-90 (prose)"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://siraya.tech/pages/siraya-tech-fibreheart-pet-cf-tds",
+    "https://siraya.tech/pages/siraya-tech-fibreheart-pet-cf-user-manual"
+  ],
+  "updated": "2026-11-01"
+}

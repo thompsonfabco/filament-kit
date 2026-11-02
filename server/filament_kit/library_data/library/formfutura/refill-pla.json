@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "ReFill PLA",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "225"
+    ],
+    "filament_density": [
+      "1.24"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "fan_min_speed/fan_max_speed": "80-100",
+    "_print_speed": "25- mm/s (upper bound blank in TDS)",
+    "_drying": "30-40C 12h (TDS: not necessary)",
+    "_enclosure": "No (TDS)",
+    "_hdt": "55 (HDT A, ASTM E2092)",
+    "_ams": "Spool-less coil: needs a reusable master spool (Formfutura ReFill system) before AMS use.",
+    "_notes": "TDS melting temperature 165C. Food contact approved per EU directives (TDS)."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://formfutura.com/web/content/256626?download=true",
+    "https://formfutura.com/filaments/refill-pla"
+  ],
+  "updated": "2026-11-01"
+}

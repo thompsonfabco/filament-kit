@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "Inland",
+  "product": "TPU",
+  "material": "TPU",
+  "colors": [
+    "Black",
+    "Red Color Change",
+    "Natural"
+  ],
+  "bambu_parent": "Bambu TPU 95A",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-80",
+    "_hardness": "95A",
+    "_ams": "95A TPU; Bambu does not recommend standard AMS feeding for soft TPU - use external spool unless confirmed.",
+    "_notes": "Values from the Black 1 kg listing key features (microcenter.com, read via search index; direct fetch 403). Density not published."
+  },
+  "conflicts": [
+    "bed_all_plates: 18-25 (Red Color Change listing) - https://www.microcenter.com/product/647841/inland-175mm-tpu-3d-printer-filament-1kg-spool-(22-lbs)-red-color-change",
+    "nozzle_temperature_range_high: 230 (Natural 0.5 kg listing gives 210-230, no bed value) - https://www.microcenter.com/product/485159/inland-flexible-175mm-natural-tpu-3d-printer-filament-05kg-spool-(11-lbs)"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.microcenter.com/product/610047/inland-175mm-tpu-3d-printer-filament-10-kg-(22-lbs)-spool-black"
+  ],
+  "updated": "2026-11-01"
+}

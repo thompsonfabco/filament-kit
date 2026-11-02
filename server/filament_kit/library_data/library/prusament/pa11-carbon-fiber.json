@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "vendor": "Prusament",
+  "product": "PA11 Carbon Fiber",
+  "material": "PA11-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu PA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "280"
+    ],
+    "nozzle_temperature_range_high": [
+      "290"
+    ],
+    "filament_density": [
+      "1.11"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100-120",
+    "_fan_speed": "20 (TDS); product page says active cooling not recommended",
+    "_max_print_speed": "up to 100 mm/s",
+    "_hdt_0.45MPa": "192 (ISO 75)",
+    "_hdt_1.80MPa": "152 (ISO 75)",
+    "_diameter_tolerance": "+/-0.04",
+    "_hardened_nozzle_required": "yes",
+    "_enclosure": "recommended (product page)",
+    "_drying": "occasional drying required (product page; no temp/time given)",
+    "_notes": "TDS prints nozzle '285 +/- 5', bed '110 +/- 10'. Bed: PA Nylon spring sheet cleaned with water only."
+  },
+  "conflicts": [
+    "Nozzle: product page says 285 +/- 10 C (https://prusament.com/materials/prusament-pa11-nylon-carbon-fiber/); TDS says 285 +/- 5 C"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://prusament.com/wp-content/uploads/2022/08/TDS_PA11CFB.pdf",
+    "https://prusament.com/materials/prusament-pa11-nylon-carbon-fiber/"
+  ],
+  "updated": "2026-11-01"
+}

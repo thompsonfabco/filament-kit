@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "vendor": "Polymaker",
+  "product": "Panchroma CoPE",
+  "material": "CoPE",
+  "colors": [
+    "Black",
+    "Dark Grey",
+    "Steel Grey",
+    "Grey",
+    "Brown",
+    "Tan",
+    "Beige",
+    "Cream",
+    "White",
+    "Cold White",
+    "Pink",
+    "Magenta",
+    "Red",
+    "Wine Red",
+    "Orange",
+    "Yellow",
+    "Lemon Yellow",
+    "Lime Green",
+    "Olive Green",
+    "Green",
+    "Jungle Green",
+    "Olive Drab Green",
+    "Polymaker Teal",
+    "Aqua Blue",
+    "Stone Blue",
+    "Blue",
+    "Purple"
+  ],
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.30"
+    ],
+    "filament_max_volumetric_speed": [
+      "32"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "25-60",
+    "fan_max_speed": "ON",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "20-40",
+    "_print_speed": "up to 400",
+    "_drying": "55C 6h (only if absorbed moisture)",
+    "_enclosure": "not needed",
+    "_vicat": "66 (TDS 'CoPE' column)",
+    "_ams": "Spools roll well in the AMS, but Polymaker says to print it only with other Panchroma CoPE spools (do not mix with PLA).",
+    "_notes": "Copolyester (not PLA), previously called Panchroma Regular; Polymaker lists it as experimental. Very high bed adhesion: not recommended on textured PEI (use Magigoo Original as release). No matching Bambu Studio system preset, so bambu_parent omitted."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://wiki.polymaker.com/polymaker-products/polymaker-filaments/panchroma-tm/panchroma-tm-cope",
+    "https://cdn.shopify.com/s/files/1/0548/7299/7945/files/TDS_PANCHROMA_V2.pdf",
+    "https://shop.polymaker.com/products/cope-filament"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "CarbonX PEEK CF20",
+  "material": "PEEK-CF",
+  "colors": [
+    "Black"
+  ],
+  "fields": {
+    "filament_density": [
+      "1.39"
+    ]
+  },
+  "published_ranges": {
+    "_vitrification": "143 (Tg, DSC)",
+    "_hdt_1.8MPa": "305",
+    "_notes": "3DXTech TDS Rev 1.0 (third-party-hosted PDF). Specimen print conditions only: 420C nozzle, 140C bed, 0.4mm nozzle. Exceeds the nozzle limit of all Bambu Lab printers; not printable on them. No Bambu preset fits. Surface resistance <10^6 ohm/sq. Filament diameter not printed on the cited TDS (removed in source check)."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/1339/4265/files/CF20_PEEK_v1.pdf"
+  ],
+  "updated": "2026-11-01"
+}

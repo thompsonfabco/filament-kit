@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "ezPC",
+  "material": "PC",
+  "colors": [
+    "Black",
+    "White"
+  ],
+  "bambu_parent": "Bambu PC",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "255"
+    ],
+    "nozzle_temperature_range_high": [
+      "275"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-110",
+    "_print_speed": "40-60 mm/s",
+    "_drying": "80C 4h",
+    "_vitrification": "118 (Tg)",
+    "_diameter_tolerance": "+/-0.05",
+    "_enclosure": "Heated chamber not required",
+    "_notes": "Values from MatterHackers (authorized reseller) listing reproducing 3DXTech print recommendations; official page unreachable (HTTP 429). Drying stated as 80C for 4+ hours. No part-cooling fan; bed prep Magigoo PC. Listing gives HDT 112C with no test load stated. Density not read from an official source."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://www.matterhackers.com/store/l/3dxtech-ezpc-polycarbonate-filament-075kg/sk/M75SQX9Q"
+  ],
+  "updated": "2026-11-01"
+}

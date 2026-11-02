@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "vendor": "Inland",
+  "product": "PLA High Speed",
+  "material": "PLA",
+  "colors": [
+    "White",
+    "Black",
+    "Violet",
+    "Green",
+    "Red"
+  ],
+  "bambu_parent": "Generic PLA High Speed",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "200"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "25-60",
+    "_print_speed": "30-70 mm/s",
+    "_diameter_tolerance": "+/-0.05",
+    "_ams": "Cardboard spool.",
+    "_notes": "Micro Center titles this line both 'PLA High Speed' and 'PLA+ High-Speed'; both list 190-200 / 25-60 and 30-70 mm/s (microcenter.com, read via search index; direct fetch 403). The listed 30-70 mm/s speed conflicts with Micro Center's article claim of >300 mm/s. Density not published."
+  },
+  "conflicts": [
+    "nozzle_temperature_range: 210-230 (Micro Center news article (older) for Inland High-Speed PLA; also claims >300 mm/s) - https://www.microcenter.com/site/mc-news/article/high-speed-pla.aspx"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.microcenter.com/product/660576/inland-175mm-pla-high-speed-3d-printer-filament-10-kg-(22-lbs)-cardboard-spool-white",
+    "https://www.microcenter.com/product/670192/inland-175mm-pla-high-speed-3d-printer-filament-10-kg-(22-lbs)-cardboard-spool-black"
+  ],
+  "updated": "2026-11-01"
+}

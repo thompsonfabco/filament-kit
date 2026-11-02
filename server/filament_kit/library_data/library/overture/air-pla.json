@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "vendor": "OVERTURE",
+  "product": "Air PLA",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Aero",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "210"
+    ],
+    "filament_density": [
+      "0.82"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "25-60",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "20-40",
+    "overhang_fan_threshold": "60 (threshold overhang angle, degrees)",
+    "_print_speed": "30-50 mm/s",
+    "_vicat": "60.1 (ISO 306)",
+    "_notes": "TDS v5.1 (Jul 2024): pre-foamed low-density PLA, very matte; filament density 0.82 g/cm3, TDS intro says printed parts reach ~0.6 g/cm3 (flow must be reduced versus solid PLA); melting temp 151.4C (DSC); cooling fan on; based on 0.4 mm nozzle. Not in the current overture3d.com catalogue listing; still sold via Amazon/resellers (0.82 kg cardboard spool per reseller listing - wrap edges before AMS use). Colours not recorded. Diameter not printed in the TDS (only cited source), so filament_diameter left out."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://overture3d.com/cdn/shop/files/OVERTURE_AIR_PLA_TDS_EN_V5.1_3a66e81c-e5e9-45f7-b7a5-d41bcd85515f.pdf"
+  ],
+  "updated": "2026-11-01"
+}

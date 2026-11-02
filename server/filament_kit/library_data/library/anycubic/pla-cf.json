@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "Anycubic",
+  "product": "PLA-CF",
+  "material": "PLA-CF",
+  "colors": [],
+  "bambu_parent": "Bambu PLA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.22"
+    ],
+    "filament_max_volumetric_speed": [
+      "12"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "55-70",
+    "fan_max_speed": "100%",
+    "filament_retraction_speed": "40",
+    "_drying": "50-55C 6-8h",
+    "_print_speed": "40-250 mm/s",
+    "_vicat": "69 (ISO 306, 10N)",
+    "_hdt_0.45MPa": "60",
+    "_notes": "TDS V3.0. Carbon-fibre filled PLA: a hardened-steel nozzle is the usual practice for CF fills, but the TDS does not state a requirement or fibre content. TDS also gives extrusion multiplier 1.04, cooling time 8 s, melting temperature 165C; no Tg published. Diameter not stated in TDS."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0245/5519/2380/files/ANYCUBIC_TDS_PLA-CF_V3.0.pdf"
+  ],
+  "updated": "2026-11-01"
+}

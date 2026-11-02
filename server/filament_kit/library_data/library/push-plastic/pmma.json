@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "vendor": "Push Plastic",
+  "product": "PMMA",
+  "material": "PMMA",
+  "colors": [],
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.18"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "110-120",
+    "_drying": "60C 4h",
+    "_enclosure": "Heated enclosure recommended",
+    "_print_speed": "40mm/s (preferred: 0.4mm nozzle, 0.2mm layer, 260C extruder, 110C bed)",
+    "_hdt": "106 (ASTM D648, printed specimens; load not stated)",
+    "_notes": "Acrylic. Prone to rapid moisture absorption - dry before printing. No Bambu Studio PMMA preset, bambu_parent omitted."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0260/7421/files/PMMA_print_settings.pdf",
+    "https://cdn.shopify.com/s/files/1/0260/7421/files/PMMA_TDS.pdf",
+    "https://www.pushplastic.com/products/pmma-filament-1-75mm-1kg"
+  ],
+  "updated": "2026-11-01"
+}

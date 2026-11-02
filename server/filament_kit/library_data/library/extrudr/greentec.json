@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "vendor": "Extrudr",
+  "product": "GreenTEC",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.3"
+    ],
+    "filament_max_volumetric_speed": [
+      "16"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "20-90",
+    "fan_min_speed/fan_max_speed": "30-80%",
+    "_print_speed": "20-200 mm/s",
+    "_enclosure": "no",
+    "_hardened_nozzle_required": "no",
+    "_vicat": "115 (Vicat A, 4 mm wall)",
+    "_notes": "Bio-based compound (biodegradable per DIN EN ISO 14855), matte. Shrinkage 0.5%. Catalogue print settings are for a 0.4 mm nozzle, max 50% layer height. Diameter not stated in the catalogue, so filament_diameter is left unset."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://s3.extrudr.com/extrudr-media/product-catalogue/extrudr-Produktkatalog_EN.pdf"
+  ],
+  "updated": "2026-11-01"
+}

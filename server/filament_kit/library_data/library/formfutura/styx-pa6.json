@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "STYX PA6",
+  "material": "PA",
+  "colors": [],
+  "bambu_parent": "Generic PA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "255"
+    ],
+    "nozzle_temperature_range_high": [
+      "285"
+    ],
+    "filament_density": [
+      "1.15"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-110",
+    "fan_min_speed/fan_max_speed": "0-30",
+    "_min_nozzle": "0.25 (product page)",
+    "_hdt": "60 (ISO 75-1/-2)",
+    "_notes": "Print settings from product page; TDS gives properties only. Moisture absorption 3.0% (23C/50% RH); melting temperature 185C (DSC) as printed in TDS. UL-94 V2 at 1.5 mm."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://formfutura.com/filaments/styx-pa6",
+    "https://formfutura.com/web/content/281451?download=true"
+  ],
+  "updated": "2026-11-01"
+}

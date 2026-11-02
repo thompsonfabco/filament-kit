@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "vendor": "Hatchbox",
+  "product": "Performance PLA",
+  "material": "PLA",
+  "colors": [
+    "Black",
+    "White",
+    "Blue",
+    "Silver",
+    "Red",
+    "Green",
+    "Purple",
+    "Yellow",
+    "Orange"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "180"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "Product pages: 'Print Temperature - 180C - 220C', 'No Heating Bed Required', dimensional accuracy +/- 0.03mm. Line may be older/limited stock. Verified 2026-11-01 against the product pages' Shopify JSON/HTML."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.hatchbox3d.com/products/3d-ppla-1kg1-75-blk",
+    "https://www.hatchbox3d.com/products/3d-ppla-1kg1-75-blu"
+  ],
+  "updated": "2026-11-01"
+}

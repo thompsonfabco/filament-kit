@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "vendor": "AMOLEN",
+  "product": "TPU Transparent",
+  "material": "TPU",
+  "colors": [
+    "Clear Yellow",
+    "Clear Orange",
+    "Clear Blue",
+    "Clear Green",
+    "Clear Red"
+  ],
+  "bambu_parent": "Bambu TPU 95A",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.18"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "30-65",
+    "_drying": "55+/-5C 6-8h",
+    "filament_retraction_length": "0.5-1.0",
+    "filament_retraction_speed": "20-30",
+    "_print_speed": "< 55 mm/s",
+    "_vitrification": "-30 (Tg, typical TPU)",
+    "_vicat": "85-88",
+    "_hdt_0.45MPa": "60-65",
+    "_hardness": "95A +/- 2"
+  },
+  "conflicts": [
+    "nozzle 190-220C, bed 0-60C optional (https://www.amolen.com/products/tpu-transparent-1-75mm-1kg-2-2lb, product description text vs spec block)"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.amolen.com/products/tpu-transparent-1-75mm-1kg-2-2lb"
+  ],
+  "updated": "2026-11-01"
+}

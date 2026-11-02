@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "vendor": "IEMAI",
+  "product": "PC-CF",
+  "material": "PC-CF",
+  "colors": [
+    "PC-CF Black"
+  ],
+  "bambu_parent": "Generic PC",
+  "fields": {
+    "filament_density": [
+      "1.38"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ]
+  },
+  "published_ranges": {
+    "_hdt_0.45MPa": "135",
+    "_fiber_content": "<=10% CF (SDS)",
+    "_notes": "TDS (ISO): density 1.38, Tg 143C (DSC), HDT 135C @0.45 MPa, tensile 72 MPa, tensile modulus 6205 MPa, elongation 2.5%, flexural 92 MPa / 5880 MPa. Print settings from the brand's current Amazon listing: dry 80C 5-8h, fully enclosed chamber, 0.4-0.6 mm hardened steel or wear-resistant nozzle, 250-280C, bed 80-100C, speed <=100 mm/s. No chamber temperature value.",
+    "bed_all_plates": "80-100",
+    "_max_print_speed": "<=100",
+    "_drying": "80C 5-8h",
+    "_hardened_nozzle_required": "yes",
+    "_nozzle_sizes_supported": "0.4-0.6 (hardened steel or wear-resistant)",
+    "_min_nozzle": "0.4",
+    "_enclosure": "fully enclosed chamber with heated bed",
+    "_diameter_tolerance": "+/-0.03",
+    "_vitrification": "143 (Tg (DSC))"
+  },
+  "conflicts": [
+    "[pass 2] IEMAI SDS lists carbon fiber <=10% and density 1.1, vs TDS density 1.38 and Amazon listing 20% CF; TDS density used.",
+    "[pass 2] Amazon listing seen is B0CLTV5Z3K, not B0CR3YJX7F; same product name and brand.",
+    "[merge] published_ranges._fiber_content: pass 4 value \"<=10% CF (SDS)\" replaced earlier value \"20% CF (Amazon listing)\"",
+    "[merge] published_ranges._notes: pass 4 value \"TDS (ISO): density 1.38, Tg 143C (DSC), HDT 135C @0.45 MPa, tensile 72 MPa, tensile modulus 6205 MPa, elongation 2.5%, flexural 92 MPa / 5880 MPa. Print settings from the brand's current Amazon listing: dry 80C 5-8h, fully enclosed chamber, 0.4-0.6 mm hardened steel or wear-resistant nozzle, 250-280C, bed 80-100C, speed <=100 mm/s. No chamber temperature value.\" replaced earlier value \"Nozzle/bed ranges not found on an accessible IEMAI page; omitted.\"",
+    "[pass 4] Fibre content: SDS (ICRF015 REV-02, 2022-12-03) gives PC >=85%, carbon fibre <=10%, other <=5%; all Amazon listings say '20% chopped carbon fiber'; an older listing description says '20% carbon fiber + 80% Polycarbonate'. SDS value used.",
+    "[pass 4] Density: TDS 1.38 g/cc (ISO 1183) vs SDS '1.1/cm3'. TDS used.",
+    "[pass 4] Heat: TDS HDT 135C @0.45 MPa and Tg 143C; listings say 'heat deflection temperature up to 147C'; older listing says 'heat deformation temperature can reach 147C (Tg: 147C)'. TDS used.",
+    "[pass 4] Print settings come from B0GSZ1LMW4 (1 kg) and B0GSYG5BMY (3 kg), sold by IEMAI. The user's ASIN B0CR3YJX7F (3 kg) is unavailable and shows no print settings; B0GSYG5BMY is the current 3 kg PC-CF Matte Black listing with bullets 1-5 word for word identical to it, so it is treated as the same product.",
+    "[pass 4] Older listing B0CLTV5Z3K (description mirrored on woodartsupply.com) said: dry 70-80C 8-12h, use a 0.6 mm stainless steel nozzle, 30-100 mm/s, same 250-280C / 80-100C. Current listing (80C 5-8h, 0.4-0.6 mm) used.",
+    "[pass 4] The iemai3d.com CF-PC TDS (2022 and 2026 versions, same values) has no print settings and no CF %; the product page recommends only IEMAI's industrial MAGIC-HT printers."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://store.iemai3d.com/wp-content/uploads/2024/01/03_CF-PC-Filament-TDS.pdf",
+    "https://store.iemai3d.com/wp-content/uploads/2024/01/03_CF-PC-Filament-MSDS.pdf",
+    "https://www.amazon.com/IEMAI-Polycarbonate-Filament-Toughness-Resistance/dp/B0CLTV5Z3K",
+    "https://www.iemai3d.com/wp-content/uploads/2026/08/14_CF-PC_TDS.pdf",
+    "https://www.iemai3d.com/wp-content/uploads/2022/11/12_CF-PC_TDS.pdf",
+    "https://www.iemai3d.com/wp-content/uploads/2023/08/IEMAI-CF-PC-Filament-MSDS.pdf",
+    "https://www.iemai3d.com/index.php/cf-pc-3d-printing-filament/",
+    "https://www.amazon.com/dp/B0GSZ1LMW4",
+    "https://www.amazon.com/dp/B0GSYG5BMY",
+    "https://www.amazon.com/dp/B0CR3YJX7F"
+  ],
+  "updated": "2026-11-01"
+}

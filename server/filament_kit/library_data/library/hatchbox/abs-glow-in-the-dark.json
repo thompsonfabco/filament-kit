@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "vendor": "Hatchbox",
+  "product": "ABS Glow in the Dark",
+  "material": "ABS",
+  "colors": [
+    "Green"
+  ],
+  "bambu_parent": "Bambu ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_notes": "Product pages (1.75 and 3.00 mm): 'Print Temperature - 210C - 240C'. No product-specific bed temperature (ABS material page gives 80-100 C for ABS generally). Glow pigment is usually abrasive; no Hatchbox hardened-nozzle guidance found. Verified 2026-11-01 against the product pages' Shopify JSON/HTML."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.hatchbox3d.com/products/3d-abs-1kg1-75-glow",
+    "https://www.hatchbox3d.com/products/3d-abs-1kg3-00-glow"
+  ],
+  "updated": "2026-11-01"
+}

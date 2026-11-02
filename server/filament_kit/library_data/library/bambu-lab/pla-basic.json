@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "vendor": "Bambu Lab",
+  "product": "PLA Basic",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.24"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "35-45",
+    "chamber_temperatures": "25-45",
+    "filament_retraction_length": "0.6-1.0",
+    "filament_retraction_speed": "20-40",
+    "_drying": "50C 8h",
+    "_drying_x1_heatbed": "60-70C 12h",
+    "_max_print_speed": "<300 mm/s",
+    "_vitrification": "60 (Tg, DSC 10C/min)",
+    "_vicat": "57 (ISO 306)",
+    "_hdt_0.45MPa": "57",
+    "_hdt_1.8MPa": "54",
+    "_melting_point": "160 (DSC)",
+    "_notes": "TDS V3.0. Nozzle sizes 0.2/0.4/0.6/0.8 mm. Plates: Cool Plate, High Temperature Plate or Textured PEI Plate; glue. Cooling fan on. Max overhang 55 deg, max bridge 30 mm. Storage <20% RH."
+  },
+  "conflicts": [
+    "Drying 55C 8h: Bambu PLA Basic TDS V2.0 (https://cdn.shopify.com/s/files/1/0380/5149/files/Bambu_PLA_Basic_Technical_Data_Sheet.pdf) and a Best Buy-hosted V3.0 copy (https://files.bbystatic.com/G8TU2klvsR6MVeDE4zgPkw==/Bambu%2BFilament%2B-Technical%2BData%2BSheet)",
+    "Density 1.26 g/cm3: comparison table in Bambu PLA Pure TDS V1.0 (https://store.bblcdn.com/s7/default/ecb663b46ebb4fb984786d33befb8d2f/PLA_Pure_TDS.pdf)"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://store.bblcdn.com/s1/default/58b85d0f3db94878854a28fdb8a0006e/Bambu_PLA_Basic_Technical_Data_Sheet.pdf",
+    "https://cdn.shopify.com/s/files/1/0380/5149/files/Bambu_PLA_Basic_Technical_Data_Sheet.pdf"
+  ],
+  "updated": "2026-11-01"
+}

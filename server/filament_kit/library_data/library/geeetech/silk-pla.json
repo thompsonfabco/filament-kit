@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "vendor": "GEEETECH",
+  "product": "Silk PLA",
+  "material": "PLA",
+  "colors": [
+    "Silk PLA Royal Blue",
+    "Silk PLA Silver"
+  ],
+  "bambu_parent": "Generic PLA Silk",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.25"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "40-60",
+    "fan_min_speed/fan_max_speed": "80-100",
+    "_print_speed": "40-60",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "Blog: first 1-2 layers fan 25-50%. Wiki: silk colours differ (silk green strings above 200C; silk silver best around 220C); print a temperature tower per colour."
+  },
+  "conflicts": [
+    "[pass 3] Spool labels state 195-230C and bed 30-60C.",
+    "[pass 3] Density 1.25 g/cm3 from reseller Geekbuying spec table (Copper colour), not a GEEETECH page."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.geeetech.com/products/pla-silk-3d-printer-filament-1-75mm-1kg-roll",
+    "https://www.geeetech.com/blogs/3d-printing-materials/silk-pla-filament-a-shiny-choice-for-3d-printing-projects",
+    "https://wiki.geeetech.com/index.php/Filament",
+    "https://www.geekbuying.com/item/Geeetech-Silk-PLA-Filament-for-3D-Printer-Copper-519079.html"
+  ],
+  "updated": "2026-11-01"
+}

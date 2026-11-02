@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "vendor": "JAYO",
+  "product": "PLA Classic",
+  "material": "PLA",
+  "colors": [
+    "White",
+    "Black",
+    "Chocolate",
+    "Cherry Red",
+    "Mint Green",
+    "Gray",
+    "Lemon Yellow",
+    "Olive Green",
+    "Sunny Orange",
+    "Sky Blue",
+    "Sakura Pink"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "_nozzle_by_speed": "50-150 mm/s: 190-210C; 150-300 mm/s: 210-230C; 300-600 mm/s: 230-260C",
+    "_max_print_speed": "600 mm/s",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "Official AU PLA Classic listing 'Suggested Printing Settings' (speed-matched nozzle temps, heated bed 50-60C); fields hold the highest (300-600 mm/s) range: use the lower tiers for normal speeds. ~330 m per 1.1 kg roll. No density published."
+  },
+  "conflicts": [
+    "Official 'PLA Classic Filament 5/10 Rolls' bundle page (store.jayo3d.com/products/jayo-pla-plus-filament-5-rolls-1-75mm-pla-3d-printer-filament-1-1kg-roll-for-3d-neatly-wound-coloful-3d-printing-material) shows a 'PLA Plus Filament Parameter' block: 205-215C at 50-100mm/s, 215-245C at 100-200mm/s, platform 50-60C (label suggests it is PLA+ copy)"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.jayo3d.com/products/au-onlyjayo-halloween-filament-bundle-5-rolls-pla-classic",
+    "https://store.jayo3d.com/products/reusable-spool-jayo-pla-classic-1-1kg-1-75mm-3d-printer-filament"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "vendor": "XZN",
+  "product": "Silk PLA",
+  "material": "PLA",
+  "colors": [
+    "Silk PLA Black",
+    "Silk PLA Copper"
+  ],
+  "bambu_parent": "Generic PLA Silk",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "40-60",
+    "_min_nozzle": "0.4",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "Brand-store Amazon listing (Silk Black, MPN XZN-1204, sold by XZN-US): 190-220C, hot bed 40-60C, nozzle size >=0.4 mm. 'Complete drying for 24 hours before vacuum packaging' is a factory pre-dry, not a user drying spec."
+  },
+  "conflicts": [
+    "[pass 4] Spool labels for both colours say 195-230C; the listing says 190-220C.",
+    "[pass 4] Silk PLA Copper: the user's ASIN B0CZRWM9YS now redirects to XZN PETG Black and Copper is not in the current XZN variation list. A reseller mirror of the old Copper listing (woodartsupply.com, part XZN-121501, links to B0CZRWM9YS) shows the same 190-220C / bed 40-60C / nozzle >=0.4 mm text but +/-0.03 mm tolerance in the bullets (+/-0.02 in the title). Copper is included on that basis; drop it if a brand-sold source is required.",
+    "[pass 4] No XZN website or TDS found; no density or drying spec found."
+  ],
+  "source_quality": "brand_amazon_listing",
+  "sources": [
+    "https://www.amazon.com/dp/B0CZRYHW7M",
+    "https://woodartsupply.com/products/xzn-silk-pla-filament-1-75mm-clog-free-metal-like-shiny-3d-printer-filament-1kg-spool-2-2lbs-neatly-wound-0-02mm-precision-vacuum-packaging-fit-most-fdm-printer-metallic-copper"
+  ],
+  "updated": "2026-11-01"
+}

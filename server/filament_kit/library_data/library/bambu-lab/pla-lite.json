@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "vendor": "Bambu Lab",
+  "product": "PLA Lite",
+  "material": "PLA",
+  "colors": [
+    "Red",
+    "Yellow",
+    "Blue",
+    "Green",
+    "Orange",
+    "White",
+    "Black",
+    "Grey",
+    "Sky Blue",
+    "Light Skin",
+    "Orange Yellow"
+  ],
+  "bambu_parent": "Bambu PLA Lite",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.4"
+    ],
+    "filament_max_volumetric_speed": [
+      "16"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "35-65",
+    "_drying": "50C 8h",
+    "_drying_x1_heatbed": "60-70C 12h",
+    "_max_print_speed": "<250 mm/s",
+    "_vicat": "61",
+    "_hdt_unspecified_load": "60",
+    "_melting_point": "160",
+    "_notes": "No official Bambu PLA Lite TDS found. Print/drying values and max volumetric speed 16 mm3/s (default print temp 210C; nozzles 0.2/0.4/0.6/0.8 mm) come from a Bambu Lab PLA Lite product sheet hosted by reseller Big Dipper (Argentina). Density 1.4 g/cm3 is also given in the comparison table of Bambu's official PLA Pure TDS V1.0. Matte finish. Neither source states a diameter (the reseller file name carries SKU BL-A18-D0-1.75-1000-SPL)."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://www.bigdipper.com.ar/File/hojas-de-datos/BL-A18-D0-1.75-1000-SPL.pdf",
+    "https://store.bblcdn.com/s7/default/ecb663b46ebb4fb984786d33befb8d2f/PLA_Pure_TDS.pdf"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "vendor": "Prusament",
+  "product": "PLA Recycled",
+  "material": "PLA",
+  "colors": [
+    "Mixed colors"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_density": [
+      "1.24"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "40-60",
+    "_fan_speed": "100",
+    "_max_print_speed": "up to 200 mm/s",
+    "_hdt_0.45MPa": "55 (ISO 75)",
+    "_hdt_1.80MPa": "53 (ISO 75)",
+    "_diameter_tolerance": "+/-0.05",
+    "_notes": "TDS prints nozzle '210 +/- 10'. 100% recycled; colour differs per batch."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://prusament.com/wp-content/uploads/2021/12/7_PLA-Recycled_Prusament_TDS_2021_V4.pdf",
+    "https://prusament.com/materials/prusament-pla-recycled/"
+  ],
+  "updated": "2026-11-01"
+}

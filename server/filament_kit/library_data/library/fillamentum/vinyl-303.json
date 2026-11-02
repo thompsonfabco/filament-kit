@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "vendor": "Fillamentum",
+  "product": "Vinyl 303",
+  "material": "PVC",
+  "colors": [
+    "Black",
+    "Natural"
+  ],
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "215"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.35"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80",
+    "fan_min_speed/fan_max_speed": "0-50",
+    "_print_speed": "40-60 mm/s",
+    "_drying": "70C 2h",
+    "_vicat": "71 (ISO 306, 5 kg)",
+    "_hardness": "78 Shore D",
+    "_enclosure": "Guide: heated chamber / enclosure recommended; TDS recommends a printer with air filtration.",
+    "_diameter_tolerance": "+/-0.05",
+    "_notes": "PVC. TDS recommends a brass nozzle; stainless-steel parts may be affected. Guide: do not exceed 230 C (thermal sensitivity), clean nozzle with PLA Crystal Clear or Nylon FX256. No Bambu Studio PVC preset, so bambu_parent omitted. 750 g + 230 g spool; 2.85 mm also sold."
+  },
+  "conflicts": [
+    "Bed: product page and printing guide give 80-90 C."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://fillamentum.com/wp-content/uploads/2020/10/TDS_Vinyl-303_FI.pdf",
+    "https://shop.fillamentum.com/products/vinyl-303-black",
+    "https://fillamentum.com/wp-content/uploads/2020/10/FI_Printing_Guide_Vinyl-303.pdf",
+    "https://fillamentum.com/wp-content/uploads/2023/10/Recommendation-for-filament-processing_drying_EN_12102023.pdf"
+  ],
+  "updated": "2026-11-01"
+}

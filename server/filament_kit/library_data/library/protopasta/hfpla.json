@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "vendor": "Protopasta",
+  "product": "HFPLA",
+  "material": "PLA",
+  "colors": [
+    "Natural",
+    "White",
+    "Black"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_density": [
+      "1.2"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "18"
+    ]
+  },
+  "published_ranges": {
+    "_nozzle_by_speed": "200C @ 12 mm3/s; 220C @ 18 mm3/s (Material Data Table)",
+    "_bed": "45C plate (Material Data Table)",
+    "_notes": "High Flow PLA. Cool to below 40C before removal. EX1 blog: keeps gloss to ~10 mm3/s at 220C, good geometry to 24 mm3/s at 220C on P1S. Density from PLA/HTPLA Colors SDS (covers HFPL). Protopasta names the Generic PLA profile."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://proto-pasta.com/pages/material-data-table",
+    "https://cdn.shopify.com/s/files/1/0717/9095/files/PLA_Colors.pdf",
+    "https://proto-pasta.com/blogs/stories/explorer-ex1-high-flow-pla-for-high-speed-printing"
+  ],
+  "updated": "2026-11-01"
+}

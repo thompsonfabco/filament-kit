@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "vendor": "QIDI Tech",
+  "product": "PLA Rapido",
+  "material": "PLA",
+  "colors": [
+    "Black",
+    "White",
+    "Red",
+    "Yellow",
+    "Orange",
+    "Blue",
+    "Green",
+    "Silver",
+    "Gray",
+    "Pink",
+    "Purple"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.22"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "35-55",
+    "textured_plate_temp": "45-60 (filament guide)",
+    "cool_plate_temp": "30-45 (filament guide)",
+    "fan_min_speed/fan_max_speed": "50-100%",
+    "_drying": "50-55C 6-8h (product page); 50-55C 4-6h (filament guide)",
+    "_print_speed": "<=300 mm/s (filament guide); 20-300 mm/s (product page)",
+    "_vitrification": "60 (Tg, product page)",
+    "_vicat": "73",
+    "_hdt_0.45MPa": "59 (filament guide)",
+    "_ams": "QIDI BOX compatible per QIDI",
+    "_notes": "Density 1.22 and Vicat 73 from the product page. TDS PDF text could not be read, so no TDS-only values are kept."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://qidi3d.com/products/qidi-tech-pla-filament",
+    "https://qidi3d.com/pages/choose-the-right-filament-3d-filaments-guide-for-qidi-printers"
+  ],
+  "updated": "2026-11-01"
+}

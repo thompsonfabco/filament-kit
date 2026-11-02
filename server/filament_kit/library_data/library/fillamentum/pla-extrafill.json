@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "vendor": "Fillamentum",
+  "product": "PLA Extrafill",
+  "material": "PLA",
+  "colors": [
+    "Abu Dhabi Green",
+    "Baby Blue",
+    "Cairo Gold",
+    "Chocolate Brown",
+    "Cobalt Blue",
+    "Concrete Grey",
+    "Electric Grey",
+    "Everybody's Magenta",
+    "Gold Happens",
+    "Green Grass",
+    "Iron Grey",
+    "Light Ivory",
+    "Lilac",
+    "Luminous Green",
+    "Luminous Yellow",
+    "Marrakesh Red",
+    "Melon Yellow",
+    "Metallic Grey",
+    "Mint",
+    "Mukha",
+    "Natural",
+    "Noble Blue",
+    "Orange Orange",
+    "Pearl Night Blue",
+    "Pearl Ruby Red",
+    "Peppered Mustard",
+    "Purple Red",
+    "Rapunzel Silver",
+    "Signal Red",
+    "Sky Blue",
+    "Traffic Black",
+    "Traffic Purple",
+    "Traffic Red",
+    "Traffic White",
+    "Traffic Yellow",
+    "Turkey Egg",
+    "Turquoise Blue",
+    "Turquoise Green",
+    "Vertigo Cherry",
+    "Vertigo Galaxy",
+    "Vertigo Grey",
+    "Vertigo Jade",
+    "Vertigo Mystique",
+    "Vertigo Starlight",
+    "Volcanic Dust"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.24"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "0-55",
+    "fan_min_speed/fan_max_speed": "100",
+    "_nozzle_by_speed": "basic setup 190-210 (30-70 mm/s); high-speed printers setup 230-270 (50-200 mm/s); matte finish setup 180-230 (100-400 mm/s) [product page + 3D print guide 8/2024]; TDS 190-210",
+    "_print_speed": "30-70 mm/s basic; 50-200 mm/s high-speed; 100-400 mm/s matte-finish setup",
+    "_drying": "50C 3h",
+    "_vitrification": "55-60 (Tg, ASTM D3418)",
+    "_hdt_0.45MPa": "55 (ASTM E2092)",
+    "_diameter_tolerance": "+/-0.05",
+    "_ams": "Product page lists the line as AMS-compatible.",
+    "_notes": "750 g filament on 230 g spool. Drying from Fillamentum drying recommendation table (rev. 12 Oct 2023). Fields use the highest published range (high-speed setup)."
+  },
+  "conflicts": [
+    "Bed: TDS (03/01/2019) gives 50-60 C; product page and 2024 print guide give 0-55 C."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://fillamentum.com/wp-content/uploads/2020/10/Technical-Data-Sheet_PLA-Extrafill_03012019.pdf",
+    "https://shop.fillamentum.com/products/pla-extrafill-marrakesh-red",
+    "https://fillamentum.com/wp-content/uploads/2024/10/PRINT_GUIDE_PLA_EXTRAFILL_8_2024.pdf",
+    "https://fillamentum.com/wp-content/uploads/2023/10/Recommendation-for-filament-processing_drying_EN_12102023.pdf"
+  ],
+  "updated": "2026-11-01"
+}

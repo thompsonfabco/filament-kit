@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "ELEGOO",
+  "product": "PLA Copper Filled",
+  "material": "PLA",
+  "colors": [
+    "Copper Filled"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.26"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "35-65 (depends on printer and build plate type)",
+    "chamber_temperatures": "20-45",
+    "_drying": "50C 8h (+/-5C)",
+    "_drying_required": "Recommended",
+    "_min_nozzle": "0.2",
+    "_enclosure": "not required",
+    "_plates": "Textured/Smooth PEI or Other Plates; glue not required",
+    "_max_print_speed": "< 300 mm/s",
+    "_vicat": "62",
+    "_hdt_0.45MPa": "57",
+    "_notes": "Only sold as 10 kg; its spec table is identical to ELEGOO PLA (RFID)/PLA CMYK and the copy is generic PLA text, so the values may be a shared PLA template rather than copper-fill specific. Melting temperature 158C; melt index 8.1 +/- 1.5 g/10 min; print and store at <=20% RH sealed with desiccant."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://us.elegoo.com/products/pla-filament-copper-filled-10-kg"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "vendor": "Protopasta",
+  "product": "Conductive PLA",
+  "material": "PLA",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.24"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "8"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60",
+    "_drying": "55C 6h (generally not required)",
+    "_min_nozzle": "0.4 mm or larger",
+    "_ams": "Compatible (TDS)",
+    "_notes": "Carbon black composite; non-abrasive. PEI or similar with Magigoo or glue stick for release. Extra purge needed when changing material. Filament QC 2.0-3.5 kOhm per 10 cm. Density from SDS."
+  },
+  "conflicts": [
+    "Material Data Table (https://proto-pasta.com/pages/material-data-table) lists 220C @ 6 mm3/s, 240C @ 12 mm3/s, 55C plate; the product TDS gives 210-230C, up to 8 mm3/s, 60C"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0717/9095/files/CDP1xxxx_TDS.pdf",
+    "https://cdn.shopify.com/s/files/1/0717/9095/files/CDP1xxxx_SDS.pdf",
+    "https://proto-pasta.com/pages/material-data-table"
+  ],
+  "updated": "2026-11-01"
+}

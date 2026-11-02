@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "PLA+ High-Speed",
+  "material": "PLA",
+  "colors": [
+    "Black",
+    "Magenta",
+    "Azure Blue",
+    "Gray",
+    "Orange",
+    "Purple",
+    "White",
+    "Red",
+    "Green",
+    "Blue",
+    "Ivory",
+    "Yellow",
+    "Brown",
+    "Mint Green",
+    "Dark Brown",
+    "Violet",
+    "Rainbow-Stone"
+  ],
+  "bambu_parent": "Generic PLA High Speed",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.23"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "35-60",
+    "_drying": "65-75C 12h",
+    "_max_print_speed": "600mm/s",
+    "_vicat": "54 (ASTM D1525)",
+    "_hdt": "53 (ASTM D648; load not stated)",
+    "_diameter_tolerance": "+/-0.03",
+    "_bottom_printing_temperature": "190-230",
+    "_enclosure": "open printing/closed printing",
+    "_notes": "TDS titled 'Hyper-Speed PLA+'. Product page: Printing Speed <=600mm/s."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0252/0412/9841/files/ERYONE-PLA-plus-_HP-TDS.pdf",
+    "https://eryone3d.com/products/pla-plus-high-speed-filament"
+  ],
+  "updated": "2026-11-01"
+}

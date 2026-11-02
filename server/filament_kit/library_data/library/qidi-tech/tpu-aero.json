@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "vendor": "QIDI Tech",
+  "product": "TPU-Aero",
+  "material": "TPU",
+  "colors": [
+    "Black",
+    "White"
+  ],
+  "bambu_parent": "Generic TPU",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.15"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "30-45",
+    "filament_retraction_length": "0 or off",
+    "_drying": "70-80C 4-6h",
+    "_print_speed": "100 mm/s (TDS); 30-50 mm/s (product page)",
+    "_hardness": "82A at 240C to 66A at 270C print temperature (TDS); 85A-65A (product page)",
+    "_min_nozzle": "0.4",
+    "_ams": "not for QIDI BOX, AMS or other PTFE-fed multi-colour systems (product page)",
+    "_notes": "Foaming TPU: printed-part density falls with print temperature (TDS: 0.93 g/cm3 at 240C, flow 0.88, to 0.54 g/cm3 at 270C, flow 0.50); 1.15 is the unfoamed filament density. 0.8 mm nozzles not recommended (product page). Turn retraction off. Vicat 70.4C at 250C print temperature."
+  },
+  "conflicts": [
+    "product page: density 0.74 g/cm3 (printed part, specimens at 250C and 0.68 flow) (https://qidi3d.com/products/tpu-aero)"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://drive.google.com/file/d/1qOA-wn246iokKx_PktWTPFOAjJ2m4bBL/view",
+    "https://qidi3d.com/products/tpu-aero",
+    "https://qidi3d.com/pages/choose-the-right-filament-3d-filaments-guide-for-qidi-printers"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "vendor": "SUNLU",
+  "product": "PLA Twinkling",
+  "material": "PLA",
+  "colors": [
+    "Galaxy Black",
+    "Comet Blue"
+  ],
+  "bambu_parent": "Bambu PLA Sparkle",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.25"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "filament_retraction_length": "0.8-1.2mm",
+    "filament_retraction_speed": "30-40mm/s",
+    "_nozzle_by_speed": "200-210C @ 50-100mm/s; 210-240C @ 100-200mm/s",
+    "_drying": "50C (drying time not published)",
+    "_hdt_0.45MPa": "50.8±3",
+    "_vitrification": "63 (Tg, ISO 11357-2)",
+    "_vicat": "54",
+    "_moulding_shrinkage": "0.1-0.3%",
+    "_hardness": "78.5 (Shore, TDS)",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "Glitter-filled PLA; TDS: Textured PEI plate, no treatment."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://media.sunlu.com/prod/20260327/581a2c53-a377-4a1a-8fa4-f864aa683bd2.pdf?filename=TDS",
+    "https://www.sunlu.com/products/twinkling-pla-filament"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "vendor": "Inland",
+  "product": "PLA+",
+  "material": "PLA",
+  "colors": [
+    "White",
+    "Black",
+    "Green",
+    "Brown",
+    "Red",
+    "Gray"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "205"
+    ],
+    "nozzle_temperature_range_high": [
+      "225"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-80",
+    "_diameter_tolerance": "+/-0.05",
+    "_notes": "Inland is Micro Center's house brand; microcenter.com product pages are the brand's own pages. Direct fetch of microcenter.com returned 403, so values were read from the search-engine index of those pages. Some listings are titled 'PLA Pro' / 'PLA PRO (PLA+)' with the same 205-225 / 60-80 ranges. Also sold as 'Spooless' refill (510202). The CMYK multi-colour PLA+ set lists different ranges and is not covered by this entry. Density not published."
+  },
+  "conflicts": [
+    "nozzle_temperature_range_low: 210 (Spooless Red specifications table says 210-225 while its key features say 205-225) - https://www.microcenter.com/product/510202/inland-175mm-pla-3d-printer-filament-10-kg-(22-lbs)-spooless-red"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.microcenter.com/product/611532/inland-175mm-pla-3d-printer-filament-1-kg-(22-lbs)-spool-black",
+    "https://www.microcenter.com/product/611544/inland-175mm-pla-3d-printer-filament-10-kg-(22-lbs)-spool-white",
+    "https://www.microcenter.com/product/632388/inland-175mm-pla-pro-3d-printer-filament-10-kg-(22-lbs)-spool-black"
+  ],
+  "updated": "2026-11-01"
+}

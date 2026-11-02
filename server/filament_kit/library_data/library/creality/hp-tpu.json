@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "vendor": "Creality",
+  "product": "HP-TPU",
+  "material": "TPU",
+  "colors": [
+    "Transparent",
+    "White"
+  ],
+  "bambu_parent": "Generic TPU",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "No heating-60",
+    "_print_speed": "30-120 mm/s",
+    "_ams": "Creality TPU tip (shared by CR-TPU/HP-TPU on its filament type page): printers should use a direct-drive extruder; Shore hardness not published, so AMS suitability unknown.",
+    "_notes": "Creality filament parameter reference table (2024-12-23): recommended 210C nozzle, 50C bed, 50 mm/s. K2 Plus table: 220C/40C, 3 mm3/s (printer profile values)."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.creality.com/uk/blogs/basics/creality-filaments-parameter-reference-table",
+    "https://store.creality.com/blogs/all/creality-k2-plus-filament-parameters-settings",
+    "https://store.creality.com/products/hp-tpu-fdm-3d-printer-filament-1-75mm-1kg"
+  ],
+  "updated": "2026-11-01"
+}

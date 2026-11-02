@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "vendor": "Prusament",
+  "product": "PETG V0",
+  "material": "PETG",
+  "colors": [
+    "Natural",
+    "Jet Black"
+  ],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.27"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-90",
+    "_fan_speed": "50",
+    "_max_print_speed": "up to 200 mm/s",
+    "_hdt_0.45MPa": "68 (ISO 75)",
+    "_hdt_1.80MPa": "74 (ISO 75, as printed)",
+    "_diameter_tolerance": "+/-0.02",
+    "_drying": "55C 6h",
+    "_notes": "Flame-retardant PETG. TDS prints nozzle '230 +/- 10', bed '80 +/- 10'. Drying from product page (keep dry; else 6 h at 55 C). High moisture absorption."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://prusament.com/wp-content/uploads/2023/07/PETG_V0_ENG.pdf",
+    "https://prusament.com/materials/prusament-petg-v0/"
+  ],
+  "updated": "2026-11-01"
+}

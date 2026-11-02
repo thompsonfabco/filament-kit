@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "vendor": "AMOLEN",
+  "product": "PLA Basic Dual Color High Speed",
+  "material": "PLA",
+  "colors": [
+    "Blue & Bright Yellow",
+    "Black & Gold"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "30-65",
+    "_diameter_tolerance": "+/-0.03",
+    "_max_print_speed": "600 mm/s",
+    "_notes": "Site title 'PLA Basic Dual Color-High Speed'; page states optimized for up to 600 mm/s. Page publishes only nozzle/bed/diameter/tolerance (no density/drying)."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.amolen.com/products/pla-basic-dual"
+  ],
+  "updated": "2026-11-01"
+}

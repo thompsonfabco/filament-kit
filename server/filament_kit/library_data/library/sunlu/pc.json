@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "vendor": "SUNLU",
+  "product": "PC",
+  "material": "PC",
+  "colors": [
+    "Natural"
+  ],
+  "bambu_parent": "Bambu PC",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "260"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_density": [
+      "1.15"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100-110",
+    "filament_retraction_length": "0.8-1.2mm",
+    "filament_retraction_speed": "30-40mm/s",
+    "_nozzle_by_speed": "260-280C @ <=150mm/s",
+    "_drying": "70-80C (drying time not published)",
+    "_hdt_0.45MPa": "101±2",
+    "_hardness": "80D (Shore, TDS)",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "TDS: standard plate with glue stick / LAC spray adhesive. Enclosure not stated by SUNLU."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://media.sunlu.com/prod/20260330/46dca9d5-d877-4a9d-b416-3ad38450204a.pdf?filename=TDS",
+    "https://www.sunlu.com/products/polycarbonate-pc-filament"
+  ],
+  "updated": "2026-11-01"
+}

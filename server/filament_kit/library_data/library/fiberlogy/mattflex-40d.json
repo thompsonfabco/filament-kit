@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "vendor": "Fiberlogy",
+  "product": "MattFlex 40D",
+  "material": "TPU",
+  "colors": [],
+  "bambu_parent": "Generic TPU",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.16"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70",
+    "_drying": "50C 4h",
+    "_enclosure": "not required",
+    "_max_print_speed": "up to 60 mm/s",
+    "_hdt_0.45MPa": "70 (ASTM D648)",
+    "_ams": "Compatible with BambuLab AMS (new spool system)",
+    "_notes": "Matte TPU. Bed can be heated to 110C for easier removal. Page lists '50-75%' under printing parameters (labelled humidity)."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://fiberlogy.com/en/filaments/flex-en/mattflex-40d-en/"
+  ],
+  "updated": "2026-11-01"
+}

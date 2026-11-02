@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "vendor": "ColorFabb",
+  "product": "TPU 95A",
+  "material": "TPU",
+  "colors": [],
+  "bambu_parent": "Bambu TPU 95A",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.21"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "3.2"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "30-40",
+    "fan_min_speed/fan_max_speed": "25-50",
+    "_print_speed": "30-40 mm/s",
+    "_hardness": "90-95 Shore A printed (98 Shore A injection moulded)",
+    "_vitrification": "-25 (Tg, DSC ISO 11357)",
+    "_diameter_tolerance": "+/-0.05 (1.75 mm; TDS 'max. roundness deviation'), +/-0.1 (2.85 mm)",
+    "_notes": "TDS v1.0. Melting temp 200 C. Density is the TDS 'specific gravity' (injection moulded raw material)."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://downloads.colorfabb.com/public.php/dav/files/rtfDDRCa723Xdor/Technical%20Data%20Sheets/TPU/colorFabb%20TPU95A/TDS_colorFabb_TPU95A.pdf"
+  ],
+  "updated": "2026-11-01"
+}

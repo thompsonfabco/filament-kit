@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "vendor": "Siraya Tech",
+  "product": "Flex TPU Air 85A",
+  "material": "TPU",
+  "colors": [
+    "Black",
+    "White",
+    "Green",
+    "Icy Blue",
+    "Blush",
+    "Papaya",
+    "Lilac"
+  ],
+  "bambu_parent": "Generic TPU",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.15"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "12"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "30-45",
+    "fan_max_speed": "100",
+    "filament_retraction_length": "0 (retraction off recommended)",
+    "filament_retraction_speed": "0 (retraction off recommended)",
+    "_print_speed": "30-60 mm/s (up to 150 mm/s possible with careful tuning)",
+    "_drying": "70-80C 4-6h",
+    "_diameter_tolerance": "+/-0.03",
+    "_min_nozzle": "0.4 mm (0.4-0.8 mm recommended)",
+    "_hardness": "Tunable by temperature (actively foaming): 230-240C ~85A, 250C ~75A, 260C ~70A, 270C ~65A",
+    "_vicat": "83 @240C print, 74 @250C, 65 @260C, 53 @270C (ISO 306, printed part)",
+    "_notes": "Active foaming TPU: flow ratio MUST be reduced with temperature (starting flow 85-90% @230-240C, 65-70% @250C, 55-60% @260C, 50-55% @270C). 260C recommended starting point. Use release agent on PEI. Max flow 12 mm3/s from product page. TDS SKUs ST3020/ST3021 (Black/White)."
+  },
+  "conflicts": [
+    "Product page states adjustable hardness 65A-82A (85A before foaming); TDS feature list says 63A-78A; TDS table approximates ~85A at 230-240C: https://siraya.tech/products/flex-tpu-air-65a-82a-foaming-flexible-filament"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://siraya.tech/pages/siraya-tech-flex-tpu-air-tds",
+    "https://siraya.tech/pages/siraya-tech-tpu-air-user-manual",
+    "https://siraya.tech/products/flex-tpu-air-65a-82a-foaming-flexible-filament"
+  ],
+  "updated": "2026-11-01"
+}

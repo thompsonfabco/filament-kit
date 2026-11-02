@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "vendor": "AMOLEN",
+  "product": "PLA Shiny Glitter",
+  "material": "PLA",
+  "colors": [
+    "Shiny Black Yellow Green",
+    "Shiny Glitter Silver",
+    "Shiny Glitter Christmas Red",
+    "Shiny Glitter Christmas Green",
+    "Shiny Glitter Gold Silver"
+  ],
+  "bambu_parent": "Bambu PLA Sparkle",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.25"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "30-65",
+    "_drying": "50C 6-8h",
+    "filament_retraction_length": "0.8-1.2",
+    "filament_retraction_speed": "35-45",
+    "_print_speed": "< 600 mm/s",
+    "_vitrification": "60-65 (Tg)",
+    "_vicat": "60-62",
+    "_hdt_0.45MPa": "55-58",
+    "_hardened_nozzle_required": "recommended (page: avoid wear on brass nozzles due to added glitter)",
+    "_notes": "Product page: glitter additive wears brass nozzles; use a hardened/high-strength nozzle."
+  },
+  "conflicts": [
+    "nozzle 210-230C (https://www.amolen.com/products/pla-shiny-glitter-pack, variety-pack page)"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.amolen.com/products/pla-shiny-glitter",
+    "https://www.amolen.com/products/pla-shiny-glitter-pack"
+  ],
+  "updated": "2026-11-01"
+}

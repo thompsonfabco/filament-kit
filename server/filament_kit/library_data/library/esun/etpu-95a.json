@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "eTPU-95A",
+  "material": "TPU",
+  "colors": [],
+  "bambu_parent": "Bambu TPU 95A",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.21"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "45-60",
+    "fan_max_speed": "100",
+    "_drying": "55C >4h",
+    "_print_speed": "20-50",
+    "_hardness": "95A",
+    "_ams": "flexible: direct-drive extruder recommended; Bowden extruders 20 mm/s or slower",
+    "_notes": "eSUN eTPU-95A TDS v4.0 Nov 2021. Use cleaning filament / replace nozzle if residue builds up. Diameter not stated in TDS."
+  },
+  "conflicts": [
+    "eSUN 3D Printing Material Datasheet (2019, https://cdn.shopify.com/s/files/1/1745/6181/files/eSUN_3D_Printing_Filament_Datasheet.pdf): eTPU-95A 210-240C, no heated bed, density 1.43."
+  ],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://assets.spoolscout.com/tds-sds/esun/tds/esun-e-tpu-95a-v4-tds.pdf",
+    "https://www.spoolscout.com/data-sheets/esun/tpu-etpu-95a"
+  ],
+  "updated": "2026-11-01"
+}

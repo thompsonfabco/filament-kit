@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "vendor": "Siraya Tech",
+  "product": "Fibreheart PETG-CF HF",
+  "material": "PETG-CF",
+  "colors": [
+    "High Flow Black"
+  ],
+  "bambu_parent": "Bambu PETG-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.25"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80",
+    "fan_max_speed": "0-30",
+    "filament_retraction_length": "1-5",
+    "filament_retraction_speed": "1800-3600 mm/min",
+    "_print_speed": "100-200 mm/s",
+    "_drying": "70-80C 4-6h (only if moist)",
+    "_hdt_0.45MPa": "74",
+    "_vicat": "85 (ISO 306)",
+    "_vitrification": "68 (Tg, ASTM D3418)",
+    "_fiber_content": "10% carbon fiber",
+    "_hardened_nozzle_required": "yes (carbon-hardened, hardened steel or higher)",
+    "_min_nozzle": "0.4 mm",
+    "_enclosure": "Not mandatory, recommended",
+    "_notes": "SKU ST3018. Now sold in the EU as 'Peopoly Lancer PETG-CF HF - Manufactured by Siraya Tech' (same feature text). TDS HDT row labels: 68 'Method B @ 1.80 MPa', 74 'Method B @ 0.45 MPa'. TDS spec table says 'GF (Glass Fiber) Content 10%' while the introduction says 10% carbon fiber - treated as a typo. Print-settings table is headed 'Printing with Fibreheart PET-CF' (copy error on page).",
+    "_ams": "Not recommended (Peopoly Lancer listing FAQ: carbon fiber makes filament brittle)"
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://siraya.tech/pages/fibreheart-petg-cf-hf-tds-3d-printing-filament",
+    "https://siraya.tech/products/peopoly-lancer-petg-cf-hf-filament-manufactured-by-siraya-tech"
+  ],
+  "updated": "2026-11-01"
+}

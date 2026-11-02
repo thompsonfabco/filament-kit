@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "vendor": "ColorFabb",
+  "product": "allPHA",
+  "material": "PHA",
+  "colors": [],
+  "bambu_parent": "Generic PHA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "200"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "0",
+    "fan_max_speed": "100",
+    "_print_speed": "40-80 mm/s",
+    "_hdt_0.45MPa": "130 (HDT-B, ISO 75)",
+    "_hardness": "62 Shore D",
+    "_diameter_tolerance": "+/-0.05 (1.75 mm; TDS 'max. roundness deviation'), +/-0.1 (2.85 mm)",
+    "_notes": "TDS v1.0. Bed printed as '0 / RT / not heated': print on a COLD plate (heat induces crystallisation and warping). Fan 100% from 2nd/3rd layer. Bed surface: 3DLac or diluted wood glue. To release large parts heat plate to 90 C ~15 min then scrape. Layer height 0.1-0.27 mm for 0.4 nozzle. TDS density N/A."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://downloads.colorfabb.com/public.php/dav/files/rtfDDRCa723Xdor/Technical%20Data%20Sheets/PHA/colorFabb%20allPHA/TDS_E%20ColorFabb%20allPHA.pdf"
+  ],
+  "updated": "2026-11-01"
+}

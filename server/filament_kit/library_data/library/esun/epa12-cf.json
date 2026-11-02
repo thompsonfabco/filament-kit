@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "ePA12-CF",
+  "material": "PA-CF",
+  "colors": [],
+  "bambu_parent": "Bambu PA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "270"
+    ],
+    "nozzle_temperature_range_high": [
+      "300"
+    ],
+    "filament_density": [
+      "1.24"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "45-60",
+    "fan_max_speed": "0",
+    "_drying": "70C >12h",
+    "_print_speed": "40-100",
+    "_hdt_0.45MPa": "94.1",
+    "_fiber_content": "15% carbon fibre (PA12 base, with LUVOCOM)",
+    "_hardened_nozzle_required": "yes (hardened steel or ruby nozzle; hardened extruder gears preferred)",
+    "_ams": "stiff filament: avoid tight bends in the feed path",
+    "_notes": "eSUN ePA12-CF TDS (file v4.01 Aug 2024; header Nov 2021 v4.0). TDS: continuous use temperature 120C, short-term use 160C. Use with dry box (eBOX); skirt recommended. Diameter not stated in TDS."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://assets.spoolscout.com/tds-sds/esun/tds/esun-pa12-cf-tds-v4.01-2024-08.pdf",
+    "https://www.spoolscout.com/data-sheets/esun/nylon-12-carbon-fiber-epa12-cf"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "vendor": "SUNLU",
+  "product": "Silk PLA+ Rainbow",
+  "material": "PLA",
+  "colors": [
+    "Silk Rainbow01"
+  ],
+  "bambu_parent": "SUNLU Silk PLA+",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.23"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "filament_retraction_length": "0.8-1.2mm",
+    "filament_retraction_speed": "30-40mm/s",
+    "_nozzle_by_speed": "TDS: 210-230C @ 50-200mm/s. Page: 205-215C @ 50-100mm/s; 215-235C @ 100-200mm/s",
+    "_drying": "50C (drying time not published)",
+    "_hdt_0.45MPa": "57±3",
+    "_vitrification": "60.9 (Tg, ISO 11357-2)",
+    "_vicat": "54",
+    "_moulding_shrinkage": "0.1-0.3%",
+    "_hardness": "79.6 (Shore, TDS)",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "TDS is identical to the Silk PLA+ TDS; the product page table instead matches Silk PLA+ 2.0. Only one colour name readable on page."
+  },
+  "conflicts": [
+    "Product page: nozzle 205-215C/50-100mm/s and 215-235C/100-200mm/s, density 1.25, HDT 53, Shore 80 (TDS: 210-230C/50-200mm/s, 1.23, 57±3, 79.6) - https://www.sunlu.com/products/silk-pla-plus-rainbow-filament"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://media.sunlu.com/prod/20260330/5156fe91-c7a8-48bd-9d1a-e753bf9c53a1.pdf?filename=TDS",
+    "https://www.sunlu.com/products/silk-pla-plus-rainbow-filament"
+  ],
+  "updated": "2026-11-01"
+}

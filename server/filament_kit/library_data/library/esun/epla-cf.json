@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "ePLA-CF",
+  "material": "PLA-CF",
+  "colors": [],
+  "bambu_parent": "Bambu PLA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.21"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "45-60",
+    "fan_max_speed": "100",
+    "_print_speed": "50-300",
+    "_hdt_0.45MPa": "53",
+    "_hardened_nozzle_required": "not stated in TDS (carbon-fibre filled: hardened nozzle advisable)",
+    "_notes": "eSUN ePLA-CF TDS v4.0 July 2023. Short-cut carbon fibre in PLA; fibre percentage not published. Diameter not stated in TDS."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://assets.spoolscout.com/tds-sds/esun/tds/esun-pla-cf-tds-v4.0-2023-07.pdf",
+    "https://www.spoolscout.com/data-sheets/esun/pla-epla-cf"
+  ],
+  "updated": "2026-11-01"
+}

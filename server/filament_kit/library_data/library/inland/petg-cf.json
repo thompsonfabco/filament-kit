@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "vendor": "Inland",
+  "product": "PETG-CF",
+  "material": "PETG-CF",
+  "colors": [
+    "Black",
+    "Antique Brass"
+  ],
+  "bambu_parent": "Bambu PETG-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "290"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60",
+    "_notes": "Read via search index of microcenter.com (direct fetch 403). Fiber content and hardened-nozzle requirement not stated on the listing; CF-filled filaments are normally abrasive, so a hardened nozzle is advisable. Density and tolerance not confirmed."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.microcenter.com/product/687104/inland-175mm-petg-cf-3d-printer-filament-1-kg-(22-lbs)-spool-black",
+    "https://www.microcenter.com/product/687109/inland-175mm-petg-cf-3d-printer-filament-1-kg-(22-lbs)-spool-antique-brass"
+  ],
+  "updated": "2026-11-01"
+}

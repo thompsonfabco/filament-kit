@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "QIDI Tech",
+  "product": "PAHT-GF",
+  "material": "PAHT-GF",
+  "colors": [
+    "PAHT-GF Blue"
+  ],
+  "bambu_parent": "Generic PPA-GF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "300"
+    ],
+    "nozzle_temperature_range_high": [
+      "320"
+    ],
+    "filament_density": [
+      "1.27"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-90 (glue)",
+    "_drying": "80-100C 4-8h",
+    "_print_speed": "30-160",
+    "_not_supported": "0.2",
+    "_enclosure": "required",
+    "_hdt": "80",
+    "_notes": "Brass/copper-plated nozzles not recommended; hardened steel recommended. Keep <15% RH. Melting 237C, water absorption 1.75%.",
+    "_vitrification": "80 (HDT)"
+  },
+  "conflicts": [
+    "[pass 2] Amazon listing: bed 80-100C and fan off; QIDI page bed 70-90C with glue, no fan value captured."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://qidi3d.com/products/paht-gf-filament",
+    "https://theqidi.shop/products/paht-gf-filament"
+  ],
+  "updated": "2026-11-01"
+}

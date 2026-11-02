@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "vendor": "SUNLU",
+  "product": "Silk TPU",
+  "material": "TPU",
+  "colors": [
+    "Black",
+    "Cream White",
+    "Burgundy",
+    "Light Blue",
+    "Dark Blue"
+  ],
+  "bambu_parent": "Bambu TPU 95A",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.21"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "filament_retraction_length": "0.8-1.2mm",
+    "filament_retraction_speed": "30-40mm/s",
+    "_nozzle_by_speed": "210-220C @ 50-100mm/s; 220-240C @ 100-200mm/s",
+    "_drying": "50C (drying time not published)",
+    "_hardness": "97.5 (Shore, TDS; scale not stated)",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "TDS title 'TPU Silk'. HDT/Tg/Vicat not published. AMS compatibility not stated."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://media.sunlu.com/prod/20260330/04545ebf-ef5c-4fd9-b425-42a06d39c7c0.pdf?filename=TDS",
+    "https://www.sunlu.com/products/silk-tpu-filament"
+  ],
+  "updated": "2026-11-01"
+}

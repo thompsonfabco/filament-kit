@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "vendor": "Spectrum",
+  "product": "PLA Premium",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "185"
+    ],
+    "nozzle_temperature_range_high": [
+      "215"
+    ],
+    "filament_density": [
+      "1.24"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "0-45",
+    "_print_speed": "40-150 mm/s",
+    "_cooling": "YES (up to 100%)",
+    "_enclosure": "not necessary",
+    "_hardened_nozzle_required": "not necessary",
+    "_hdt": "55 (ASTM E2092)",
+    "_vitrification": "55-60 (Tg, DSC D3418)",
+    "_notes": "Official shop listing could not be reached during source check; diameter not printed in TDS or product page, so left out."
+  },
+  "conflicts": [
+    "Official product page (https://spectrumfilaments.com/en/filament/pla-premium/) lists nozzle 185-230, bed 0-50, print speed 40-350 mm/s; TDS dated 06-04-2022 values kept in fields/published_ranges."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://spectrumfilaments.com/wp-content/uploads/2021/12/en_tds_spectrum_pla_premium.pdf",
+    "https://spectrumfilaments.com/en/filament/pla-premium/",
+    "https://shop.spectrumfilaments.com/product-eng-502-Filament-Spectrum-PLA-Premium-1-75mm-DEEP-BLACK-1kg.html"
+  ],
+  "updated": "2026-11-01"
+}

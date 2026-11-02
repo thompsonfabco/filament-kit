@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "vendor": "GEEETECH",
+  "product": "Wood PLA",
+  "material": "PLA",
+  "colors": [
+    "Wood PLA Black Walnut"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "40-60",
+    "_fiber_content": "about 15% wood fibre (wiki: about 85% PLA / 15% wood fibre; Amazon: more than 15% real wood fibre)",
+    "_min_nozzle": "0.4",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "geeetech.com product page (Black Walnut variant SKU 700-001-0777, matches the spool label): extruder 190-230C, suggested start at 190C, layer height 0.25 mm; lower temperature gives a lighter shade, higher a darker one, and changing temperature mid-print gives a grainy colour effect. Bed 40-60C and the 0.4 mm-or-larger nozzle advice come from the GEEETECH wiki (Wood PLA section)."
+  },
+  "conflicts": [
+    "[pass 4] GEEETECH wiki Wood PLA section gives print temperature 180-190C, product page gives 190-230C; product page used because it is the page for this exact SKU. Spool label says 185-210C, bed 30-60C.",
+    "[pass 4] Product page gives no bed temperature; bed 40-60C is from the wiki. 3DJake (reseller) lists 'heating temperature' 25-60C and 190-230C, and a reseller customer-service Q&A answer there says 0.6 mm is recommended for reliability (not used).",
+    "[pass 4] No density, drying, fan, speed or max volumetric speed found from any official source."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.geeetech.com/products/pla-wood-3d-printer-filament-1-75mm-1kg-roll",
+    "https://wiki.geeetech.com/index.php/Filament",
+    "https://www.amazon.com/dp/B0CQ84BMZ3"
+  ],
+  "updated": "2026-11-01"
+}

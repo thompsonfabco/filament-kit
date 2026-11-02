@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "vendor": "Bambu Lab",
+  "product": "PAHT-CF",
+  "material": "PAHT-CF",
+  "colors": [],
+  "bambu_parent": "Bambu PAHT-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "260"
+    ],
+    "nozzle_temperature_range_high": [
+      "290"
+    ],
+    "filament_density": [
+      "1.06"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80-100 (PVP glue)",
+    "chamber_temperatures": "45-60",
+    "fan_min_speed/fan_max_speed": "0-40%",
+    "filament_retraction_length": "0.8-1.4",
+    "filament_retraction_speed": "20-40",
+    "_print_speed": "100 mm/s",
+    "_drying": "80C 8-12h",
+    "_min_nozzle": "TDS lists nozzle sizes 0.4, 0.6 (recommended), 0.8 mm",
+    "_vitrification": "70 (Tg, DSC 10C/min)",
+    "_vicat": "220 (ISO 306)",
+    "_hdt_0.45MPa": "194",
+    "_hdt_1.8MPa": "170",
+    "_annealing": "80-130C 5-12h",
+    "_enclosure": "Chamber 45-60C recommended",
+    "_notes": "TDS V2.0. Support material: Bambu Support for PA/PET. Plates: Engineering, High Temperature or Textured PEI. Max overhang ~70 deg, bridging ~40 mm. A V3.0 TDS exists (uwaterloo.ca copy) but was not read. PDF hosted on cdn.shopify.com."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0380/5149/files/Bambu_PAHT-CF_Technical_Data_Sheet.pdf"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "vendor": "OVERTURE",
+  "product": "PC Professional",
+  "material": "PC",
+  "colors": [
+    "PC Professional White"
+  ],
+  "bambu_parent": "Generic PC",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_density": [
+      "1.21"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-105",
+    "fan_max_speed": "0 (OFF)",
+    "_drying": "75C 7h",
+    "_print_speed": "30-50",
+    "_enclosure": "Enclosed printer required (product page)",
+    "_diameter_tolerance": "+/-0.02",
+    "_vicat": "110.3C (ISO 306 / GB/T 1633, non-transparent colours); 115.3C for Transparent",
+    "_notes": "TDS V5.1 (July/August 2024). Density 1.21 g/cm3 at 21.5C (ISO 1183), same for Transparent and other colours. Melt index 7.0 g/10min (210C, 2.16 kg) for non-transparent colours. Raft separation 0.1-0.2 mm, overhang threshold 45 deg. Test specimens printed at 260C, bed 95C, 45 mm/s, 0.4 mm nozzle. Non-transparent colours: tensile X-Y 49.8 MPa, Z 37.6 MPa, Young's modulus 2138 MPa, flexural 79.8 MPa / 2293 MPa, elongation 6.2%, notched Charpy 20.5 kJ/m2. Product page: hardened steel or brass nozzle recommended. No HDT, Tg, shrinkage or max volumetric speed published.",
+    "textured_plate_temp": "90-105 (glue)",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "20-40",
+    "_hardened_nozzle_required": "no",
+    "_plates": "TDS build surface: OVERTURE Build Surface, Textured PEI, apply PVA glue",
+    "_vitrification": "110.3 (Vicat)"
+  },
+  "conflicts": [
+    "[pass 2] Product page prose and Amazon B0HGGD38Z3 say bed 80-100C; spec strip 90-105C used.",
+    "[merge] published_ranges._enclosure: pass 3 value \"Enclosed printer required\" replaced earlier value \"required\"",
+    "[pass 3] Same product page 'Expert Tips' text states bed 80-100C and drying 80C 4-6h; spec table used.",
+    "[pass 3] Vicat 110.3C (ISO 306/GB/T 1633) taken from search snippets of OVERTURE's Transparent PC Professional page and OVERTURE FAQ text; the same Transparent page also says 'softening point of 113C'.",
+    "[pass 3] OVERTURE Amazon listing text claims 'heat resistance up to 180C' (apparently copied CoPA text); not used.",
+    "[merge] published_ranges._vicat: pass 4 value \"110.3C (ISO 306 / GB/T 1633, non-transparent colours); 115.3C for Transparent\" replaced earlier value \"110.3\"",
+    "[merge] published_ranges._enclosure: pass 4 value \"Enclosed printer required (product page)\" replaced earlier value \"Enclosed printer required\"",
+    "[merge] published_ranges._notes: pass 4 value \"TDS V5.1 (July/August 2024). Density 1.21 g/cm3 at 21.5C (ISO 1183), same for Transparent and other colours. Melt index 7.0 g/10min (210C, 2.16 kg) for non-transparent colours. Raft separation 0.1-0.2 mm, overhang threshold 45 deg. Test specimens printed at 260C, bed 95C, 45 mm/s, 0.4 mm nozzle. Non-transparent colours: tensile X-Y 49.8 MPa, Z 37.6 MPa, Young's modulus 2138 MPa, flexural 79.8 MPa / 2293 MPa, elongation 6.2%, notched Charpy 20.5 kJ/m2. Product page: hardened steel or brass nozzle recommended. No HDT, Tg, shrinkage or max volumetric speed published.\" replaced earlier value \"Product page tips recommend a hardened steel or brass nozzle. TDS PDF (OVERTURE_PC_PROFESSIONAL_TDS_EN_V5.1) is linked from the product page but could not be opened. Open Filament Database PR #660 quotes the TDS density as 1.21 g/cm3 at 21.5C (ISO 1183, GB/T 1033); community source, so density is omitted until the TDS is read first-hand.\"",
+    "[pass 4] Product page Expert Tips give bed 80-100C and drying 80C 4-6h; the product page spec table gives drying 75C 7h and bed 90-105C (TDS also 90-105C). Drying is not in the TDS, so _drying uses the spec table value.",
+    "[pass 4] SDS (US EN V2) gives relative density 1.20 and melting point 220C; TDS gives 1.21 g/cm3, used here.",
+    "[pass 4] TDS header says July 2024 Version 5.1, footer says August 2024 Version 5.1."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://overture3d.com/products/overture-pc-professional-filament",
+    "https://overture3d.com/products/overture-pc-professional-transparent-3d-printer-filament",
+    "https://www.amazon.com/Overture-Professional-Printer-Filament-1-75mm/dp/B0HGGD38Z3",
+    "https://overture3d.com/pages/faqs",
+    "https://overture3d.com/cdn/shop/files/OVERTURE_PC_PROFESSIONAL_TDS_EN_V5.1_b609023a-6c21-4c78-b6f7-5c84407e4938.pdf",
+    "https://overture3d.com/cdn/shop/files/PC_PROFESSIONAL_SDS_US_EN_V2_02edfa8f-d1c2-4a43-993a-8f52820a967d.pdf"
+  ],
+  "updated": "2026-11-01"
+}

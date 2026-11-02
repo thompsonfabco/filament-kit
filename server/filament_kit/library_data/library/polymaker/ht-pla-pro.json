@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "vendor": "Polymaker",
+  "product": "HT-PLA Pro",
+  "material": "PLA",
+  "colors": [
+    "Black",
+    "White",
+    "Grey",
+    "Red",
+    "Blue",
+    "Orange",
+    "Polymaker Teal",
+    "Green",
+    "Yellow",
+    "Brown",
+    "Dark Grey",
+    "Purple",
+    "Pink",
+    "Magenta",
+    "Burnt Orange",
+    "Army Beige",
+    "Army Green",
+    "3D Print General Flat Dark Earth"
+  ],
+  "bambu_parent": "Bambu PLA Tough",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.24"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "25-65",
+    "fan_max_speed": "ON",
+    "filament_retraction_length": "1-3 (direct drive)",
+    "filament_retraction_speed": "20-40 (direct drive)",
+    "_print_speed": "up to 300",
+    "_drying": "60C 6h",
+    "_enclosure": "not needed",
+    "_vitrification": "59.15 (Tg, ISO 11357)",
+    "_vicat": "148.3 as printed; 150.5 annealed",
+    "_hdt_0.45MPa": "56.3 as printed; 107.6 annealed",
+    "_hdt_1.8MPa": "53.8 as printed; 68.6 annealed",
+    "_annealing": "30 min at 100C",
+    "_notes": "TDS V1.4 (PDF linked from the shop page) and wiki both give a single nozzle temperature of 230 C, so low = high = 230. Retraction values are for direct drive."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://wiki.polymaker.com/polymaker-products/polymaker-filaments/prime-materials/functional-pla/ht-pla-pro",
+    "https://cdn.shopify.com/s/files/1/0548/7299/7945/files/TDS_Polymaker_HT-PLA_Pro_V1.4_2026-7-17_EN.pdf",
+    "https://wiki.polymaker.com/polymaker-products/more-about-our-products/documents/technical-data-sheets/pla/ht-pla-pro",
+    "https://shop.polymaker.com/products/polymaker-ht-pla-pro"
+  ],
+  "updated": "2026-11-01"
+}

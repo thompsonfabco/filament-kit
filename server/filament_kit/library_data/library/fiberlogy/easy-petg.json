@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "vendor": "Fiberlogy",
+  "product": "Easy PETG",
+  "material": "PETG",
+  "colors": [
+    "Orange Transparent",
+    "Translucent White",
+    "Silver Gray RAL 7001",
+    "Sahara Beige RAL 1001",
+    "Olive Green RAL 6003",
+    "Olive Gray RAL 7002",
+    "Olive Drab RAL 6031",
+    "Coyote Brown RAL 8000",
+    "Vertigo",
+    "Bottle Green Transparent",
+    "Light Green",
+    "Black",
+    "Scarlet",
+    "Pure Transparent",
+    "Orange",
+    "Pastel Yellow",
+    "Gray",
+    "Yellow",
+    "Green",
+    "White",
+    "Graphite",
+    "Silver",
+    "Red",
+    "Pastel Mint",
+    "Navy Blue Transparent",
+    "Onyx",
+    "Burgundy Transparent",
+    "Blue",
+    "Pastel Lilac",
+    "Pastel Pink",
+    "Pastel Blue",
+    "Light Green Transparent"
+  ],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.29"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90",
+    "fan_min_speed/fan_max_speed": "0-25",
+    "_drying": "60C 4h",
+    "_enclosure": "not required",
+    "_hdt_0.45MPa": "68 (ISO 75)",
+    "_hdt_1.8MPa": "62 (ISO 75)",
+    "_vicat": "78 (ISO 306)",
+    "_vitrification": "80 (Tg, DSC)",
+    "_ams": "Compatible with BambuLab AMS (new spool system); Fiberlogy publishes a BambuLab profile",
+    "_notes": "Bed surfaces: smooth PEI + adhesive, textured PEI, glass + adhesive; strong adhesion, use adhesive or masking tape."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://fiberlogy.com/en/filaments/petg-en/easy-petg-en/"
+  ],
+  "updated": "2026-11-01"
+}

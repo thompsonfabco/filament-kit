@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "vendor": "Spectrum",
+  "product": "PET CF15",
+  "material": "PET-CF",
+  "colors": [],
+  "bambu_parent": "Bambu PET-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "245"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.40"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-70",
+    "_print_speed": "30-80 mm/s",
+    "_cooling": "0 - 30%",
+    "_enclosure": "not necessary",
+    "_hardened_nozzle_required": "recommended",
+    "_min_nozzle": "0.5",
+    "_fiber_content": "15% carbon fibre (product name)",
+    "_layer_height": "0.20 mm",
+    "_notes": "TDS settings based on a 0.5 mm nozzle; dry box recommended."
+  },
+  "conflicts": [
+    "Official product page (https://spectrumfilaments.com/en/filament/pet-cf15/) lists nozzle 240-270, print speed 30-200 mm/s; TDS dated 06-04-2022 values kept in fields/published_ranges."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://spectrumfilaments.com/wp-content/uploads/2022/05/en_tds_spectrum_pet_cf15.pdf",
+    "https://spectrumfilaments.com/en/filament/pet-cf15/"
+  ],
+  "updated": "2026-11-01"
+}

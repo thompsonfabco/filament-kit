@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "CarbonX ABS+CF",
+  "material": "ABS-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.11"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100-110",
+    "_print_speed": "50-70 mm/s",
+    "_drying": "80C 4h",
+    "_vitrification": "105 (Tg, DSC)",
+    "_hdt_0.45MPa": "102.5",
+    "_diameter_tolerance": "+/-0.05",
+    "_hardened_nozzle_required": "yes (hardened steel recommended)",
+    "_min_nozzle": "0.4",
+    "_enclosure": "Heated chamber recommended",
+    "_notes": "Temps/density/Tg/HDT from 3DXTech TDS Rev 2.1 (third-party-hosted PDF; current 3dxtech.com unreachable, HTTP 429). Drying, tolerance, nozzle and chamber from MatterHackers listing (same 220-240 / 100-110 ranges). Do not print layers below 0.2mm. No Bambu ABS-CF preset exists; parent is Bambu ABS. CF is abrasive and can be brittle in AMS."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0965/1648/files/Carbon_Fiber_ABS_Filament_v2.1.pdf",
+    "https://www.matterhackers.com/store/l/3dxtech-carbonx-abscf-filament/sk/MDQJWZ6R"
+  ],
+  "updated": "2026-11-01"
+}

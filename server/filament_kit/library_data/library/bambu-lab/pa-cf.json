@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "vendor": "Bambu Lab",
+  "product": "PA-CF",
+  "material": "PA-CF",
+  "colors": [],
+  "bambu_parent": "Bambu PA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "260"
+    ],
+    "nozzle_temperature_range_high": [
+      "290"
+    ],
+    "filament_density": [
+      "1.09"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80-100 (PVP glue)",
+    "chamber_temperatures": "45-60",
+    "fan_min_speed/fan_max_speed": "0-60%",
+    "filament_retraction_length": "0.8-1.4",
+    "filament_retraction_speed": "20-40",
+    "_print_speed": "100 mm/s",
+    "_drying": "80C 8-12h",
+    "_min_nozzle": "TDS lists nozzle sizes 0.4, 0.6 (recommended), 0.8 mm",
+    "_fiber_content": "PA6/PA12 blend with carbon fibre (percentage not given)",
+    "_vitrification": "60 (Tg, DSC 10C/min)",
+    "_vicat": "210 (ISO 306)",
+    "_hdt_0.45MPa": "180",
+    "_hdt_1.8MPa": "160",
+    "_enclosure": "Chamber 45-60C recommended",
+    "_notes": "TDS V1.0. Support material: Bambu Support G. Plates: Engineering, High Temperature or Textured PEI. Max overhang ~70 deg, bridging ~40 mm. Possibly superseded by PA6-CF (status not confirmed). PDF hosted on cdn.shopify.com."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0645/5876/0155/files/Bambu_PA-CF_Technical_Data_Sheet.pdf"
+  ],
+  "updated": "2026-11-01"
+}

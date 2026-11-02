@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "vendor": "Kingroon",
+  "product": "PETG-CF",
+  "material": "PETG",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu PETG-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.25"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "65-75",
+    "chamber_temperatures": "35-50",
+    "fan_min_speed/fan_max_speed": "0-60%",
+    "filament_retraction_length": "0.8-1.4",
+    "filament_retraction_speed": "30-60",
+    "_drying": "65C 8h",
+    "_max_print_speed": "<220 mm/s",
+    "_min_nozzle": "0.4",
+    "_hardened_nozzle_required": "yes (kingroon.com page: 'Hardened Nozzle Required')",
+    "_hdt_0.45MPa": "74",
+    "_vicat": "85",
+    "_vitrification": "68 (Tg, DSC)",
+    "_notes": "TDS V1.0: Engineering Plate / High Temperature Plate / Textured PEI with glue; HDT 1.8 MPa 68 C; melting 225 C. TDS annealing text ('55-60 C, 65-70 hours', naming Bambu PETG-CF) looks copied and is not recorded. Sold as 'PETG Carbon Fiber Black'. Verification 2026-11-01: fields and plate/chamber/fan/retraction ranges confirmed against the TDS PDF; kingroon.com / kingroon3d.com product pages returned HTTP 429, so page-derived notes and conflicts were not re-checked."
+  },
+  "conflicts": [
+    "kingroon.com PETG Carbon Fiber page: nozzle 230-250, bed 70-90, fan 100%, HDT 72 C (0.45 MPa), drying 50C 8h"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://wiki.kingroon.com/kingroon_petg_cf_technical_data_sheet_v1.0.pdf",
+    "https://kingroon.com/products/kingroon-petg-carbon-fiber-black-filament"
+  ],
+  "updated": "2026-11-01"
+}

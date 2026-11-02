@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "vendor": "ELEGOO",
+  "product": "Silk PLA",
+  "material": "PLA",
+  "colors": [
+    "Silk PLA Copper"
+  ],
+  "bambu_parent": "Generic PLA Silk",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.25"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "35-65",
+    "_plates": "Textured/Smooth PEI or other plates",
+    "_drying": "55C +/-5C (time not stated)",
+    "_vicat": "58",
+    "_hdt": "54",
+    "_print_speed": "<220",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "Melting temperature 164C. Storage <=50C, <=20% RH sealed with desiccant. Empty spool 174 +/-5 g.",
+    "_vitrification": "58 (Vicat)"
+  },
+  "conflicts": [
+    "[pass 3] ELEGOO 2 kg and 5 kg Silk PLA pages list density 1.20 g/cm3, bed 50-65C, nozzle 190-220C, HDT 53C (0.45MPa), fan 100%; current 1 kg page used.",
+    "[pass 3] Print speed <220 mm/s seen on reseller copies of the ELEGOO spec table, not on the fetched ELEGOO page."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://eu.elegoo.com/en-ie/products/elegoo-silk-pla-filament-1-75mm-colored-1kg",
+    "https://eu.elegoo.com/en-fr/collections/elegoo-products-9-2off/products/silk-pla-filament-1-75mm-colored-2kg",
+    "https://uk.elegoo.com/products/silk-pla-filament-1-75mm-colored-5kg"
+  ],
+  "updated": "2026-11-01"
+}

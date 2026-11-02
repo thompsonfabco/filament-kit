@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "vendor": "Push Plastic",
+  "product": "Carbon Fiber Nylon",
+  "material": "PA-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu PA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.10"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-120",
+    "_drying": "60C 6h",
+    "_enclosure": "Heated enclosure recommended",
+    "_print_speed": "40mm/s (preferred: 0.6mm nozzle, 0.4mm layer, 255C extruder, 90C bed)",
+    "_hardened_nozzle_required": "yes - carbon fiber is abrasive, use a hardened steel nozzle",
+    "_fiber_content": "Polyamide PA6/66 + carbon fiber (TDS); loading not stated",
+    "_hdt": "172 (ASTM D648, printed specimens; load not stated)",
+    "_notes": "Absorbs moisture rapidly - dry before printing. Colour assumed black."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0260/7421/files/CFNylon_print_settings.pdf",
+    "https://cdn.shopify.com/s/files/1/0260/7421/files/Push_Plastic_CF_Nylon_Technical_Data_sheet.pdf",
+    "https://www.pushplastic.com/products/carbon-fiber-nylon-filament-1-75mm-500g"
+  ],
+  "updated": "2026-11-01"
+}

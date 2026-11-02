@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "vendor": "Inland",
+  "product": "PLA Basic",
+  "material": "PLA",
+  "colors": [
+    "Black",
+    "Gray",
+    "White",
+    "Blue",
+    "True Green"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "40-60",
+    "_print_speed": "50-300 mm/s",
+    "_diameter_tolerance": "+/-0.03",
+    "_ams": "Cardboard spool on 1 kg listings.",
+    "_notes": "Values from the Black and Gray 1 kg cardboard-spool listings (microcenter.com, read via search index; direct fetch 403). Other colours/packs list different ranges, see conflicts. Density not published."
+  },
+  "conflicts": [
+    "nozzle_temperature_range: 190-230 (bed 35-60) (Blue spool and 2-pack listings) - https://www.microcenter.com/product/702116/inland-175mm-basic-pla-3d-printer-filament-spool-blue",
+    "nozzle_temperature_range: 205-225 (bed 60-80) (True Green listing) - https://www.microcenter.com/product/702117/inland-175mm-pla-basic-3d-printer-filament-220-lbs-(100-kg)-spool-true-green"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.microcenter.com/product/692935/inland-175mm-pla-basic-3d-printer-filament-1kg-(22lbs)-cardboard-spool-black",
+    "https://www.microcenter.com/product/692937/inland-175mm-pla-basic-3d-printer-filament-1kg-(22lbs)-cardboard-spool-gray"
+  ],
+  "updated": "2026-11-01"
+}

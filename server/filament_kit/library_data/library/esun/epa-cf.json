@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "ePA-CF",
+  "material": "PA-CF",
+  "colors": [],
+  "bambu_parent": "Bambu PA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "260"
+    ],
+    "nozzle_temperature_range_high": [
+      "300"
+    ],
+    "filament_density": [
+      "1.24"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "45-60",
+    "fan_max_speed": "0",
+    "_drying": "70C >12h",
+    "_print_speed": "40-100",
+    "_hdt_0.45MPa": "155",
+    "_fiber_content": "20% carbon fibre (PA6/66 copolymer base)",
+    "_hardened_nozzle_required": "yes (hardened steel or ruby nozzle; hardened extruder gears preferred)",
+    "_ams": "stiff filament: avoid tight bends in the feed path",
+    "_notes": "eSUN ePA-CF TDS v4.0 Nov 2021. Use with dry box (eBOX) while printing; skirt recommended. Diameter not stated in TDS."
+  },
+  "conflicts": [
+    "eSUN 3D Printing Material Datasheet (2019, https://cdn.shopify.com/s/files/1/1745/6181/files/eSUN_3D_Printing_Filament_Datasheet.pdf): ePA-CF 230-260C, bed 80-90C, density 1.24, HDT 120C."
+  ],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://assets.spoolscout.com/tds-sds/esun/tds/esun-e-pa-cf-v4-0-tds.pdf",
+    "https://www.spoolscout.com/data-sheets/esun/nylon-epa-cf"
+  ],
+  "updated": "2026-11-01"
+}

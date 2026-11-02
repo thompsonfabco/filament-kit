@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "SUNLU",
+  "product": "PA6-CF",
+  "material": "PA6-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu PA6-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "270"
+    ],
+    "nozzle_temperature_range_high": [
+      "290"
+    ],
+    "filament_density": [
+      "1.12"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-70 (glue)",
+    "_print_speed": "50-100",
+    "_drying": "80C 24h or 110C 4h",
+    "_hardened_nozzle_required": "yes",
+    "_hdt": "203+/-3",
+    "_colors_note": "Pass 1 recorded bare colour names, not full Spoolman names; match on vendor+product."
+  },
+  "conflicts": [
+    "[pass 1] UK store: nozzle 270-280, bed 100C",
+    "[pass 1] HDT 203 vs 209"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://store.sunlu.com/products/nylon6-carbon-fiber-pa6-cf-3d-printer-filament-1kg",
+    "https://uk.store.sunlu.com/products/sunlu-engineering-filament-collection-epa-pcabs-pa6cf-pa12cf-sunlu-online-store",
+    "https://www.amazon.com/SUNLU-Filament-Temperature-Nylon-Carbon/dp/B0D8745KF7"
+  ],
+  "updated": "2026-11-01"
+}

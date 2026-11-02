@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "vendor": "Inland",
+  "product": "PLA Carbon Fiber",
+  "material": "PLA-CF",
+  "colors": [
+    "Carbon Fiber"
+  ],
+  "bambu_parent": "Bambu PLA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "205"
+    ],
+    "nozzle_temperature_range_high": [
+      "225"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-80",
+    "_notes": "Listed as 'PLA Carbon Fiber' / 'PLA Pro ... Carbon Fiber; Tough, High Rigidity' (microcenter.com, read via search index; direct fetch 403). Fiber content and hardened-nozzle requirement not published on the listing; CF-filled filaments are normally abrasive, so a hardened nozzle is advisable. Density not published."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.microcenter.com/product/632387/inland-175mm-pla-carbon-fiber-3d-printer-filament---10-kg-spool-(22-lbs)"
+  ],
+  "updated": "2026-11-01"
+}

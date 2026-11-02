@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "vendor": "Amazon Basics",
+  "product": "Silk PLA",
+  "material": "PLA",
+  "colors": [
+    "Silver",
+    "Blue",
+    "Gold",
+    "White"
+  ],
+  "bambu_parent": "Bambu PLA Silk",
+  "fields": {
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_diameter_tolerance": "+/-0.05",
+    "_notes": "Amazon listing (B08894NK7S; parent B088986RMD) gives no nozzle/bed temperatures or density; states 'no heated bed required', low-warp, glossy silk finish. Spool has built-in remaining-material gauge. No Amazon Basics system preset in Bambu Studio; parent chosen by material."
+  },
+  "conflicts": [],
+  "source_quality": "brand_amazon_listing",
+  "sources": [
+    "https://www.amazon.com/dp/B08894NK7S"
+  ],
+  "updated": "2026-11-01"
+}

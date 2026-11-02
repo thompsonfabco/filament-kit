@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "vendor": "Polymaker",
+  "product": "Fiberon PET-CF17",
+  "material": "PET-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Fiberon PET-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "270"
+    ],
+    "nozzle_temperature_range_high": [
+      "300"
+    ],
+    "filament_density": [
+      "1.34"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-80",
+    "chamber_temperatures": "room temperature",
+    "fan_max_speed": "0 (OFF)",
+    "_print_speed": "up to 300",
+    "_drying": "100C 10h",
+    "_annealing": "120C 10h",
+    "_hardened_nozzle_required": "yes",
+    "_vitrification": "79.3 (Tg, DSC)",
+    "_vicat": "238.4",
+    "_hdt_0.45MPa": "147.5",
+    "_hdt_1.8MPa": "105",
+    "_ams": "Spools roll in the AMS but carbon-fibre filament is brittle on tight bends.",
+    "_fiber_content": "17% carbon fibre (name)",
+    "_notes": "Wiki requirements: all-metal hotend 270C+, hardened nozzle, annealing post printing. Thermal values for specimens annealed 120C 10h."
+  },
+  "conflicts": [
+    "Wiki print-settings table: printing speed 30-300 mm/s (TDS: up to 300)"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://wiki.polymaker.com/polymaker-products/polymaker-filaments/fiberon-tm/fiberon-tm-pet-cf17",
+    "https://fiberon.polymaker.com/wp-content/uploads/TDS_FIBERON-PET-CF17_V1.0_EN.pdf",
+    "https://shop.polymaker.com/products/fiberon-pet-cf17"
+  ],
+  "updated": "2026-11-01"
+}

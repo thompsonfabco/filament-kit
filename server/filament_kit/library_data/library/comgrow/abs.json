@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "vendor": "Comgrow",
+  "product": "ABS",
+  "material": "ABS",
+  "colors": [
+    "ABS Yellow",
+    "ABS Blue"
+  ],
+  "bambu_parent": "Generic ABS",
+  "fields": {
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "Listing: requires a heat bed and a suitable printing surface to minimize warping. No temperatures visible."
+  },
+  "conflicts": [
+    "[pass 3] Values from search-result snippet of the brand's Amazon listing B0F18JXLDV (sold by comgrow)."
+  ],
+  "source_quality": "brand_amazon_listing",
+  "sources": [
+    "https://www.amazon.com/Comgrow-Filament-Resistant-Printing-Dimensional/dp/B0F18JXLDV"
+  ],
+  "updated": "2026-11-01"
+}

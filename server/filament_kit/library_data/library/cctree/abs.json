@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "vendor": "CCTREE",
+  "product": "ABS",
+  "material": "ABS",
+  "colors": [
+    "ABS Glow in the Dark Blue"
+  ],
+  "bambu_parent": "Generic ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-100 (PEI with ABS glue)",
+    "_print_speed": "30-50 mm/s",
+    "_fan": "Low or off",
+    "_plates": "PEI sheet with ABS glue",
+    "_enclosure": "Compatible with most enclosed FDM printers",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "User ASIN B0D41NBBQL is titled 'Glow in the Dark ABS+ ... 1KG Cardboard Spool ... Good Heat & Freezing Resistance'."
+  },
+  "conflicts": [
+    "[pass 4] Values come from the Glow Green colour of CCTREE glow ABS, not from a Glow Blue page; its variation list (Skyblue, Red, Glow in Dark Green, Teal) has no glow blue. Its settings bullet is word-for-word the same as CCTREE ABS+ Grey (B0CL4F5G6L), so it may be generic ABS boilerplate. Treat as low confidence.",
+    "[pass 4] Spool label says 240-270C; listing says 240-250C.",
+    "[pass 4] The user's ASIN B0D41NBBQL redirects to CCTREE ABS+ Grey; its values were NOT used (though they are identical).",
+    "[pass 4] cctree3d.com refused automated fetches (robots) and the session proxy blocks it.",
+    "[merge] published_ranges._print_speed: pass 6 value \"30-50 mm/s\" replaced earlier value \"30-50\"",
+    "[merge] published_ranges._fan: pass 6 value \"Low or off\" replaced earlier value \"LOW for better surface quality, OFF for better strength\"",
+    "[merge] published_ranges._notes: pass 6 value \"User ASIN B0D41NBBQL is titled 'Glow in the Dark ABS+ ... 1KG Cardboard Spool ... Good Heat & Freezing Resistance'.\" replaced earlier value \"Taken from CCTREE's own glow-in-the-dark ABS listing in Glow Green (B0D57DHGWL, sold by CCTREE Factory Store, MPN CA-ABS-175). No CCTREE glow BLUE ABS listing or page could be found.\"",
+    "[pass 6] Nozzle 240-250C, bed 90-100C, 30-50 mm/s and fan low/off come from CCTREE 'High Speed ABS' Glow Green listing B0D57DHGWL (MPN CA-ABS-175), a different CCTREE line from the user's cardboard-spool 'ABS+' Glow Blue (B0D41NBBQL); direct sibling is ABS+ Glow Green B0F6MHHP29. Treat as provisional.",
+    "[pass 6] Spool label states 240-270C (label, not a source).",
+    "[pass 6] B0D41NBBQL title values are from a search-result snippet."
+  ],
+  "source_quality": "brand_amazon_listing",
+  "sources": [
+    "https://www.amazon.com/dp/B0D57DHGWL",
+    "https://amazon.com/CCTREE-Filament-Dimensional-Accuracy-Resistance/dp/B0D41NBBQL",
+    "https://www.amazon.com/CCTREE-Filament-Excellent-Resistance-Accuracy%C2%B10-03mm/dp/B0D57DHGWL"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "ePLA-LW",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Aero",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.2"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "45-60",
+    "fan_max_speed": "100",
+    "_print_speed": "40-100",
+    "_notes": "eSUN ePLA-LW (lightweight foaming PLA) TDS v4.0 Nov 2021. Foaming ratio depends on temperature/speed; TDS example: at 270C set extrusion rate ~45%. Above 250C needs an all-metal hotend (PTFE-lined hotends unsuitable). Retraction largely ineffective (stringing normal); vase-mode models recommended. Parts may yellow at high temperature. Diameter not stated in TDS."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://assets.spoolscout.com/tds-sds/esun/tds/esun-pla-lw-tds-v4.0-2021-11.pdf",
+    "https://www.spoolscout.com/data-sheets/esun/pla-epla-lw"
+  ],
+  "updated": "2026-11-01"
+}

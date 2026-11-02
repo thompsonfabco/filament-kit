@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "vendor": "Fiberlogy",
+  "product": "rPP",
+  "material": "PP",
+  "colors": [
+    "Anthracite"
+  ],
+  "bambu_parent": "Generic PP",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.05"
+    ]
+  },
+  "published_ranges": {
+    "fan_min_speed/fan_max_speed": "0-50",
+    "_drying": "50C 4h",
+    "_enclosure": "not required",
+    "_hdt_0.45MPa": "40 (ISO 75)",
+    "_ams": "Compatible with BambuLab AMS (new spool system)",
+    "_notes": "100% recycled PP. Bed temperature: not required when using packing tape. Surfaces: smooth PEI + PP packing tape, glass + PP packing tape, powder-coated plate."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://fiberlogy.com/en/filaments/pp-en/rpp-en/"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "ReFill PETG",
+  "material": "PETG",
+  "colors": [],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.29"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "75-80",
+    "fan_min_speed/fan_max_speed": "0-60",
+    "_print_speed": "25- mm/s (upper bound blank in TDS)",
+    "_drying": "45-40C 12h (as printed in TDS; drying required)",
+    "_enclosure": "Yes (TDS); dry box Yes",
+    "_hdt": "78 (TDS, listed as HDT A with method ISO 306)",
+    "_ams": "Spool-less coil: needs a reusable master spool before AMS use."
+  },
+  "conflicts": [
+    "Product page 'Enclosure needed: No' vs TDS 'Print with Enclosure: Yes'."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://formfutura.com/web/content/256624?download=true",
+    "https://formfutura.com/filaments/refill-petg"
+  ],
+  "updated": "2026-11-01"
+}

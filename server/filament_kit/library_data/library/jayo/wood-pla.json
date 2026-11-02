@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "vendor": "JAYO",
+  "product": "Wood PLA",
+  "material": "PLA",
+  "colors": [
+    "Wood PLA Beech"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-65",
+    "_print_speed": "40-60 mm/s",
+    "_fiber_content": "15% wood fibre",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "jayo3d.com JAYO Wood 1.1KG page: Print temp 200-220C, bed 50-65C, 50-100 mm/s, elongation 4%, melt index 6-9 g/10min, +/-0.02 mm. Amazon B0H83CLVD1 (JAYO Official Store, MPN PS-XJJUS-WOOD-BHW-1.1KG): 15% real beech wood fibres, 1100 g, each roll dried 24 h and vacuum sealed (factory pre-dry). No density, drying spec, nozzle size or hardened-nozzle requirement published.",
+    "fan_max_speed": "100",
+    "filament_retraction_length": "5",
+    "filament_retraction_speed": "50",
+    "_drying": "50C",
+    "_chamber": "Room temperature (JAYO blog)"
+  },
+  "conflicts": [
+    "[pass 4] Beech is not listed as a colour on jayo3d.com (only 'Wood') or store.jayo3d.com (Wood, Maple, Walnut, Cherry). Beechwood exists only as an Amazon colour variant of the same JAYO Wood PLA parent (with Wood and Chestnut Brown Wood), same bullets and 15% fibre claim; jayo3d.com line values applied to it as a colour of the same line.",
+    "[pass 4] Spool label 195-260C by speed tier matches SUNLU Optimized Wood PLA's published tiers (195-205C@50-100, 205-215C@100-150, 215-260C@150-400 mm/s), not JAYO's 200-220C. sunlu.com does not sell a Beech wood PLA (its Wood PLA colours: Wood, Maple, Walnut, Cherry; density 1.17 g/cm3, bed 50-60C, TDS available). No source says the JAYO Beech product is the SUNLU product, so SUNLU values were not used.",
+    "[merge] published_ranges._print_speed: pass 6 value \"40-60 mm/s\" replaced earlier value \"50-100\"",
+    "[merge] published_ranges._fiber_content: pass 6 value \"15% wood fibre\" replaced earlier value \"15% real wood fibre (beech for this colour)\"",
+    "[pass 6] JAYO blog 'PLA Wood' row (2024-10-19) states nozzle 205-215C and bed 50-60C; jayo3d.com product page (200-220C, bed 50-65C) kept as primary.",
+    "[pass 6] Drying, fan, retraction and speed come from the blog table, which predates ASIN B0H83CLVD1."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://jayo3d.com/products/jayo-wood-1-1kg-1kg-3d-printer-filament",
+    "https://www.amazon.com/dp/B0H83CLVD1",
+    "https://store.jayo3d.com/products/reusable-spooljayo-3d-wood-pla-printer-filament-1-75mm-1-1kg-15-real-wood-fibers-dimensional-accuracy-0-02mm-fits-most-fdm-3d-printers",
+    "https://jayo3d.com/blogs/news/getting-optimal-3d-prints-settings-and-tips-for-different-filament-materials"
+  ],
+  "updated": "2026-11-01"
+}

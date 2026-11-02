@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "Bambu Lab",
+  "product": "PETG Basic",
+  "material": "PETG",
+  "colors": [],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.25"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "65-75 (glue)",
+    "chamber_temperatures": "35-50",
+    "fan_min_speed/fan_max_speed": "0-60%",
+    "filament_retraction_length": "0.8-1.4",
+    "filament_retraction_speed": "30-60",
+    "_print_speed": "<200 mm/s",
+    "_drying": "65C 8h",
+    "_min_nozzle": "TDS lists nozzle sizes 0.4, 0.6, 0.8 mm",
+    "_vitrification": "68 (Tg, DSC 10C/min)",
+    "_vicat": "78 (ISO 306)",
+    "_hdt_0.45MPa": "69",
+    "_hdt_1.8MPa": "65",
+    "_notes": "TDS V2.0. Plates: Engineering, High Temperature or Textured PEI. Storage <20% RH. ABS spool (70C resistance). Max overhang ~70 deg, bridging ~30 mm. PDF hosted on cdn.shopify.com (store path not independently verified as Bambu's)."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0380/5149/files/Bambu_PETG_Basic_Technical_Data_Sheet.pdf"
+  ],
+  "updated": "2026-11-01"
+}

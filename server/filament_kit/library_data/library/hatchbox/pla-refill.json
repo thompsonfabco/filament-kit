@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "vendor": "Hatchbox",
+  "product": "PLA Refill",
+  "material": "PLA",
+  "colors": [
+    "Red",
+    "Green",
+    "Blue",
+    "Pink"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_ams": "Refill only, no spool: needs a reusable spool before AMS use.",
+    "_notes": "Product page: 'PLA Refill Filament - (Refill Only, No Spool)', 'Print Temperature - 200C - 230C' (higher than the spooled PLA line's 180-220). Verified 2026-11-01 against the product page's Shopify JSON."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.hatchbox3d.com/products/3d-rs-pla1kg-red",
+    "https://www.hatchbox3d.com/collections/pla-1-75mm.atom"
+  ],
+  "updated": "2026-11-01"
+}

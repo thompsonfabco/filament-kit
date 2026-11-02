@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "vendor": "AMOLEN",
+  "product": "PLA Silk Basic",
+  "material": "PLA",
+  "colors": [
+    "Silk Pumpkin Orange",
+    "Silk Mint Macaron",
+    "Silk Pink",
+    "Silk Sakura Pink",
+    "Silk Coffee Gold",
+    "Silk Gradient Aged Brass",
+    "Silk White",
+    "Silk Purple",
+    "Silk Silver Grey",
+    "Silk Mercury Silver",
+    "Silk Gold",
+    "Silk Black",
+    "Silk Bronze Green",
+    "Silk Ice Blue",
+    "Silk Neon Green"
+  ],
+  "bambu_parent": "Bambu PLA Silk",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.27"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "30-65",
+    "_drying": "55+/-5C 6-8h",
+    "filament_retraction_length": "0.8-1.2",
+    "filament_retraction_speed": "25-40",
+    "_print_speed": "< 200 mm/s",
+    "_vitrification": "56-58 (Tg)",
+    "_vicat": "60-62",
+    "_hdt_0.45MPa": "54-58",
+    "_diameter_tolerance": "+/-0.03 (variety-pack page)"
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.amolen.com/products/pla-silk-basic",
+    "https://www.amolen.com/products/pla-silk-basic-pack"
+  ],
+  "updated": "2026-11-01"
+}

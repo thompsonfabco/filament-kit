@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "vendor": "OVERTURE",
+  "product": "Matte TPU",
+  "material": "TPU",
+  "colors": [
+    "Beige Skin"
+  ],
+  "bambu_parent": "Generic TPU",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ]
+  },
+  "published_ranges": {
+    "_hardness": "95A",
+    "_colors_note": "Pass 1 recorded bare colour names, not full Spoolman names; match on vendor+product."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://overture3d.com/products/overture-matte-tpu-3d-printer-filament-1-75mm"
+  ],
+  "updated": "2026-11-01"
+}

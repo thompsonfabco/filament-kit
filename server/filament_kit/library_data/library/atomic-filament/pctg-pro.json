@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "vendor": "Atomic Filament",
+  "product": "PCTG PRO",
+  "material": "PCTG",
+  "colors": [
+    "Deep Black Opaque",
+    "Extreme JET Black",
+    "Bright White Opaque",
+    "Light Gray Opaque",
+    "Gun Metal Gray Opaque",
+    "Cosmic Graphite Opaque",
+    "Metallic Silver Opaque",
+    "Bronze Metallic Opaque",
+    "True Gold Opaque",
+    "Perfect Red",
+    "Dark Cherry Opaque",
+    "Perfect Orange Opaque",
+    "Perfect Yellow Opaque",
+    "Perfect Blue Opaque",
+    "Royal Blue",
+    "Turquoise",
+    "Perfect Purple Opaque",
+    "Hot Pink Opaque",
+    "Khaki Opaque",
+    "Majestic Brown Opaque",
+    "Olive Drab Opaque",
+    "Neon Green UV Reactive Opaque",
+    "Neon Orange UV Reactive Opaque",
+    "Crystal Clear / Natural",
+    "Translucent Smoke Black",
+    "Translucent Sapphire Blue",
+    "Translucent Emerald Green",
+    "Translucent Bright Orange",
+    "Translucent Neon Green UV Reactive",
+    "Translucent Extreme Neon Green UV Reactive",
+    "Translucent Neon Yellow UV Reactive",
+    "Translucent Neon Hot Pink UV Reactive",
+    "Translucent Rose Gold Metallic",
+    "Gemstone Ruby Red Translucent",
+    "Indigo Golden Sparkle Translucent",
+    "Marble"
+  ],
+  "bambu_parent": "Generic PCTG",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "255"
+    ],
+    "nozzle_temperature_range_high": [
+      "272"
+    ],
+    "filament_density": [
+      "1.27"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80 +/-10",
+    "_vitrification": "78 (Tg, Atomic PETG/PCTG SDS)",
+    "_ams": "1 kg spools sold as AMS compatible",
+    "_notes": "Nozzle 255-272C on the cited PCTG PRO pages; bed 80C +/-10 on Deep Black and Perfect Blue. Density 1.27 and Tg 78C from the combined 'Atomic - PETG/PCTG based 3D Filaments' SDS (rev 07/16/2026), not a PCTG TDS. FAQ drying table lists PETG (65C 8-16h) but not PCTG, so no drying value recorded. No diameter tolerance printed on the cited PCTG pages. No Bambu PCTG system preset; Generic PCTG used."
+  },
+  "conflicts": [
+    "Crystal Clear / Natural PCTG PRO pages give bed 70-90C (https://atomicfilament.com/products/crystal-clear-natural-pctg-pro)."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://atomicfilament.com/products/pctg-pro-perfect-blue-opaque",
+    "https://atomicfilament.com/products/deep-black-opaque-pctg-pro",
+    "https://atomicfilament.com/products/crystal-clear-natural-pctg-pro",
+    "https://cdn.shopify.com/s/files/1/0778/8857/files/Atomic-PETG-SDS-8-2021.pdf?v=1784255382"
+  ],
+  "updated": "2026-11-01"
+}

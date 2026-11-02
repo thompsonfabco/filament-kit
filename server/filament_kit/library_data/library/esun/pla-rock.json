@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "PLA-Rock",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.25"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "45-60",
+    "fan_max_speed": "100",
+    "_drying": "50C >8h",
+    "_print_speed": "<250",
+    "_hdt_0.45MPa": "52.3",
+    "_notes": "eSUN PLA-Rock TDS v4.0 Oct 2024. Nozzle sizes 0.2/0.4/0.6/0.8 mm; PEI plate. Diameter not stated in TDS."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://assets.spoolscout.com/tds-sds/esun/tds/esun-pla-rock-tds-v4.0-2024-10.pdf",
+    "https://www.spoolscout.com/data-sheets/esun/pla-pla-rock"
+  ],
+  "updated": "2026-11-01"
+}

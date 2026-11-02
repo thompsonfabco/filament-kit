@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "vendor": "Polymaker",
+  "product": "Fiberon ASA-CF08",
+  "material": "ASA-CF",
+  "colors": [
+    "Black",
+    "Dark Grey",
+    "Light Grey",
+    "Navy Blue",
+    "Dark Red",
+    "Desert Sand"
+  ],
+  "bambu_parent": "Bambu ASA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "260"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_density": [
+      "1.09"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-100",
+    "chamber_temperatures": "room temperature",
+    "fan_max_speed": "0 (OFF)",
+    "_print_speed": "up to 350",
+    "_drying": "90C 6h",
+    "_hardened_nozzle_required": "yes",
+    "_vicat": "110.8",
+    "_enclosure": "recommended",
+    "_ams": "Polymaker: caution with AMS and multi-material systems (brittle and abrasive); keep bend diameter above 60 mm.",
+    "_fiber_content": "8% carbon fibre",
+    "_notes": "TDS: brass nozzle life about 9 h, hardened steel or ruby nozzle highly recommended; keep below 20% RH; filament is brittle (bend diameter >60 mm). Wiki requirements: all-metal hotend 260C+. Other thermal rows in the TDS text layer are garbled, only Vicat kept."
+  },
+  "conflicts": [
+    "Wiki: 'Enclosure Recommended' (TDS chamber temperature: room temp.)"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://wiki.polymaker.com/polymaker-products/polymaker-filaments/fiberon-tm/fiberon-tm-asa-cf08",
+    "https://fiberon.polymaker.com/wp-content/uploads/TDS_FIBERON-ASA-CF08_V1.0_EN.pdf",
+    "https://shop.polymaker.com/products/fiberon-asa-cf08"
+  ],
+  "updated": "2026-11-01"
+}

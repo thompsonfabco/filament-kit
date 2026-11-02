@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "PLA Silk Dual-Color",
+  "material": "PLA",
+  "colors": [
+    "Black&Red",
+    "Blue&Green",
+    "Black&Purple",
+    "Red&Blue",
+    "Red&Gold",
+    "Gold&Silver",
+    "Gold&Copper",
+    "Purple & Green"
+  ],
+  "bambu_parent": "Bambu PLA Silk",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_density": [
+      "1.32"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "55-70",
+    "_drying": "55C 8h",
+    "_print_speed": "30-100mm/s",
+    "_vicat": "56 (ASTM D1525)",
+    "_hdt": "53 (ASTM D648; load not stated)",
+    "_vitrification": "63 (Tg, DSC 10C/min)",
+    "_diameter_tolerance": "+/-0.03",
+    "_bottom_printing_temperature": "190-220",
+    "_enclosure": "supports open printing, sealing effect is better if sealed",
+    "_notes": "The PLA Silk Triple-Color product page prints the same table (190-220, 55-70, 30-100mm/s, 55C 8h)."
+  },
+  "conflicts": [
+    "bed_all_plates: 60-70 (https://eryone3d.com/products/pla-silk-triple-color-filament (spec list; its own table says 55-70))"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0252/0412/9841/files/ERYONE-Silk_PLA_Dual-Color-TDS.pdf",
+    "https://eryone3d.com/products/silk-dual-color-pla",
+    "https://eryone3d.com/products/pla-silk-triple-color-filament"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "SOVOL",
+  "product": "Silk PLA",
+  "material": "PLA",
+  "colors": [
+    "Silk PLA Rainbow Universe"
+  ],
+  "bambu_parent": "Generic PLA Silk",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "_print_speed": "50-300",
+    "filament_retraction_length": "0.5-1 (direct drive)",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "sovol3d.com Silk PLA 3D Filament 1KG, variant 'Rainbow-Universe' (SKU 3DWSVSPLARBUV1KG-N). Retraction published as 0.5-1 mm for direct drive and 4-6 mm for Bowden. Tolerance from the brand Amazon listing (sold by Sovol). No density, drying or fan values published.",
+    "_drying": "45C 2h"
+  },
+  "conflicts": [
+    "[pass 4] The Amazon ASIN B0CC1FPQJ1 serves as 'Purple Rainbow' (fast colour change every 3-5 m), not Rainbow Universe; the sovol3d.com variant list has 'Rainbow-Universe' matching the spool label 'Universe series', so the product page was used. Spool label 200-240C matches.",
+    "[pass 6] Drying 45C 2h and +/-0.03 tolerance are from Sovol's own Amazon bundle listings for sibling colours (Yellow Rainbow Silk + SH01 dryer B0C8NLZFHF; Purple Rainbow Silk bundle B0C8NNQF7S); search-result snippets; drying stated for silk filaments generally.",
+    "[pass 6] Reseller 3dmasterindia lists Rainbow-Universe at 190-210C, bed 50-60C; sovol3d.com Rainbow-Universe variant (200-240C) kept as primary."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.sovol3d.com/products/sovol-3d-printer-silk-1-75mm-pla-filament-1kg-roll",
+    "https://www.amazon.com/dp/B0CC1FPQJ1",
+    "https://www.amazon.com/Sovol-Multicolored-Yellow-Rainbow-Filament/dp/B0C8NLZFHF",
+    "https://www.amazon.com/Sovol-Multicolored-Rainbow-Filament-Printer/dp/B0C8NNQF7S",
+    "https://www.ebay.de/itm/394930379510"
+  ],
+  "updated": "2026-11-01"
+}

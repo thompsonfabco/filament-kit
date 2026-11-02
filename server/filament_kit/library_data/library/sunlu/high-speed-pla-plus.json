@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "vendor": "SUNLU",
+  "product": "High Speed PLA+",
+  "material": "PLA",
+  "colors": [
+    "Green",
+    "Olive Green",
+    "Yellow",
+    "Blue",
+    "Pink",
+    "Orange",
+    "Black",
+    "Red",
+    "White",
+    "Grey"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.27"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "filament_retraction_length": "0.8-1.2mm",
+    "filament_retraction_speed": "30-40mm/s",
+    "_nozzle_by_speed": "210-230C @ <=400mm/s",
+    "_max_print_speed": "400mm/s",
+    "_drying": "50C (drying time not published)",
+    "_hdt_0.45MPa": "56±3",
+    "_vitrification": "64.2 (Tg, ISO 11357-2)",
+    "_hardness": "82 (Shore, TDS)",
+    "_notes": "TDS: Textured PEI plate, no treatment; supports PVA."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://media.sunlu.com/prod/20260330/1cc08af0-45a6-41af-9b5a-07533ce567f3.pdf?filename=TDS",
+    "https://www.sunlu.com/products/high-speed-pla-plus-filament"
+  ],
+  "updated": "2026-11-01"
+}

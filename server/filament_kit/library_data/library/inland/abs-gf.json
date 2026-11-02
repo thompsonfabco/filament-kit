@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "vendor": "Inland",
+  "product": "ABS-GF",
+  "material": "ABS-GF",
+  "colors": [
+    "Gray"
+  ],
+  "bambu_parent": "Bambu ABS-GF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "290"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "Read via search index of microcenter.com (direct fetch 403). Glass-fiber content and hardened-nozzle requirement not stated; GF fill is normally abrasive. Density not published."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.microcenter.com/product/687113/inland-175mm-abs-gf-3d-printer-filament-1-kg-(22-lbs)-spool-gray"
+  ],
+  "updated": "2026-11-01"
+}

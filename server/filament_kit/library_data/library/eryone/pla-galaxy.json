@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "PLA Galaxy",
+  "material": "PLA",
+  "colors": [
+    "Black",
+    "Omega Nebula",
+    "Bipolar Nebula",
+    "Sirius Nebula",
+    "Owl Nebula",
+    "Silver",
+    "Red",
+    "Blue",
+    "Purple"
+  ],
+  "bambu_parent": "Bambu PLA Galaxy",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_density": [
+      "1.23"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "55-70",
+    "_drying": "65-75C 12h",
+    "_print_speed": "30-60mm/s",
+    "_vicat": "54 (ASTM D1525)",
+    "_hdt": "53 (ASTM D648; load not stated)",
+    "_vitrification": "63 (Tg, DSC 10C/min)",
+    "_diameter_tolerance": "+/-0.03",
+    "_bottom_printing_temperature": "190-220",
+    "_enclosure": "Open Printing/closed printing",
+    "_notes": "Sold as 'PLA Galaxy Sparkly Glitter'."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0252/0412/9841/files/ERYONE-PLA_Galaxy-TDS.pdf",
+    "https://eryone3d.com/products/pla-galaxy-sparkly-glitter-filament"
+  ],
+  "updated": "2026-11-01"
+}

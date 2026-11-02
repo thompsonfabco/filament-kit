@@ -1,4 +1,4 @@
-"""Command line: status, pair, unpair, config, cert, ensure-fields, printer map / unpin."""
+"""Command line: status, pair, unpair, config, cert, ensure-fields, printer map / unpin, library."""
 from __future__ import annotations
 
 import argparse
@@ -16,7 +16,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-from . import config, pairing
+from . import config, library, pairing
 from .bridge import registry
 from .spoolman import Spoolman, SpoolmanError
 
@@ -533,6 +533,105 @@ def cmd_printer_unpin(serial: str) -> int:
     return 0
 
 
+# ---------- library ----------
+
+def _request_rebuild(reason: str) -> None:
+    """Ask for a profile rebuild. `filament_kit.profiles.builds` arrives with the profile builder; until then
+    there is nothing to rebuild and this does nothing."""
+    try:
+        from .profiles.builds import request_rebuild
+    except ImportError:
+        return
+    request_rebuild(reason)
+
+
+def _library_line(st: dict) -> str:
+    n = st["local"]
+    return (f"library version {st['version']} ({st['source']}), "
+            f"{n} local addition{'' if n == 1 else 's'}")
+
+
+def cmd_library_status() -> int:
+    st = library.status()
+    print(_library_line(st))
+    print(f"url: {st['url']}")
+    lc = st["last_check"]
+    if lc is None:
+        print("last check: never")
+    else:
+        print(f"last check: {_fmt_time(lc['at'])} {'ok' if lc['ok'] else 'failed: ' + str(lc['error'])}")
+    return 0
+
+
+def cmd_library_update(scheduled: bool) -> int:
+    cfg = config.load()
+    try:
+        if scheduled:
+            if library.schedule(cfg) == "off":
+                print("library updates are off")
+                return 0
+            if not library.due(cfg, time.time()):
+                print("library update not due yet")
+                return 0
+        r = library.update(cfg["library"].get("url") or None)
+    except (library.LibraryError, ValueError) as e:
+        _err_line(str(e))
+        return 1
+    if r.error:
+        if scheduled and r.http_status in library.PRIVATE_STATUSES:
+            # the repository may simply not be public yet: the timer run is not a failure, the bundled
+            # or last good version stays in use
+            print(f"warning: {r.error}", file=sys.stderr)
+            return 0
+        _err_line(r.error)
+        return 1
+    if not r.changed:
+        print(f"library version {r.version} is up to date")
+        return 0
+    print(f"library version {r.version} installed ({r.downloaded} entr{'y' if r.downloaded == 1 else 'ies'} "
+          f"downloaded)")
+    _request_rebuild(f"library updated to version {r.version}")
+    return 0
+
+
+def cmd_library_rollback() -> int:
+    try:
+        v = library.rollback()
+    except library.LibraryError as e:
+        _err_line(str(e))
+        return 1
+    print(f"rolled back to library version {v}")
+    _request_rebuild(f"library rolled back to version {v}")
+    return 0
+
+
+def cmd_library_add(source: str) -> int:
+    limit = library.LOCAL_LIMIT
+    try:
+        if source == "-":
+            if hasattr(sys.stdin, "buffer"):
+                data = sys.stdin.buffer.read(limit + 1)
+            else:
+                data = sys.stdin.read(limit + 1).encode("utf-8")
+        else:
+            with open(source, "rb") as fh:
+                data = fh.read(limit + 1)
+    except OSError as e:
+        _err_line(f"cannot read {source}: {e.strerror or e}")
+        return 1
+    if len(data) > limit:
+        _err_line(f"entry not added: larger than {limit // 1024} KiB")
+        return 1
+    try:
+        entry, line = library.add_local(data)
+    except ValueError as e:
+        _err_line(f"entry not added: {e}")
+        return 1
+    print(f"added local entry {entry['vendor']} {entry['product']} (line {line})")
+    _request_rebuild(f"local library addition {line}")
+    return 0
+
+
 def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=None) -> int:
     ap = argparse.ArgumentParser(prog="filament-kit")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -549,6 +648,14 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
     pm.add_argument("serial")
     pu = psub.add_parser("unpin", help="forget the printer's pinned TLS certificate")
     pu.add_argument("serial")
+    lb = sub.add_parser("library", help="the filament spec library: status, update, rollback, local additions")
+    lsub = lb.add_subparsers(dest="library_cmd", required=True)
+    lsub.add_parser("status", help="show the library version, local additions and the last update check")
+    lu = lsub.add_parser("update", help="fetch the latest library version")
+    lu.add_argument("--scheduled", action="store_true", help="only if config library.schedule says it is due")
+    lsub.add_parser("rollback", help="go back to the library version before the last update")
+    la = lsub.add_parser("add", help="add or replace a local entry from a JSON file ('-' reads stdin)")
+    la.add_argument("file")
     args = ap.parse_args(argv)
 
     if args.cmd == "status":
@@ -565,4 +672,12 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
         if args.printer_cmd == "map":
             return cmd_printer_map(args.serial, manager_factory or _default_manager)
         return cmd_printer_unpin(args.serial)
+    if args.cmd == "library":
+        if args.library_cmd == "status":
+            return cmd_library_status()
+        if args.library_cmd == "update":
+            return cmd_library_update(args.scheduled)
+        if args.library_cmd == "rollback":
+            return cmd_library_rollback()
+        return cmd_library_add(args.file)
     return cmd_ensure_fields()

@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "vendor": "AMOLEN",
+  "product": "PLA S-Series Glow-in-the-Dark",
+  "material": "PLA",
+  "colors": [
+    "Black Green",
+    "Red Yellow"
+  ],
+  "bambu_parent": "Bambu PLA Glow",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "30-65",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "Multi-colour glow-in-the-dark PLA. Page publishes only nozzle/bed/diameter/tolerance (no density/drying)."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.amolen.com/products/pla-s-series-glow-in-the-dark-1-75mm-1kg-2-2lb"
+  ],
+  "updated": "2026-11-01"
+}

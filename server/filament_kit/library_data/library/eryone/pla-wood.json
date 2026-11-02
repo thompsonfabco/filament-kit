@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "PLA Wood",
+  "material": "PLA",
+  "colors": [
+    "Deep",
+    "Light",
+    "Red",
+    "Pine wood",
+    "Clay",
+    "Charcoal ash"
+  ],
+  "bambu_parent": "Bambu PLA Wood",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_density": [
+      "1.1"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "55-70",
+    "_drying": "65-75C 12h",
+    "_print_speed": "30-60mm/s",
+    "_vicat": "54 (ASTM D1525)",
+    "_hdt": "54 (ASTM D648; load not stated)",
+    "_diameter_tolerance": "+/-0.03",
+    "_bottom_printing_temperature": "190-220",
+    "_enclosure": "Open Printing/closed printing"
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0252/0412/9841/files/ERYONE-PLA_Wood-TDS.pdf",
+    "https://eryone3d.com/products/wood-pla"
+  ],
+  "updated": "2026-11-01"
+}

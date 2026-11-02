@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "HDglass",
+  "material": "PETG",
+  "colors": [],
+  "bambu_parent": "Bambu PETG Translucent",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "235"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.27"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80-90",
+    "fan_min_speed/fan_max_speed": "10-30",
+    "_print_speed": "Medium (product page); 'compatible for printing at high speed'",
+    "_min_nozzle": "0.15",
+    "_notes": "Transparent PETG. Page: flow ~100%, retraction ~5 mm. Specific gravity 1.27 g/cc (ASTM D792) per TDS v4."
+  },
+  "conflicts": [
+    "TDS v4 (9 March 2016) prints print temperature 195-225C; current product page gives 235-260C (kept, as 195-225C is implausible for this PETG and looks like a TDS template error)."
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://formfutura.com/filaments/hdglass",
+    "https://formfutura.com/web/content/256561?download=true"
+  ],
+  "updated": "2026-11-01"
+}

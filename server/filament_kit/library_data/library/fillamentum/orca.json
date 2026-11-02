@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "vendor": "Fillamentum",
+  "product": "OrCA",
+  "material": "PA6-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu PA6-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.18"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80-110",
+    "_drying": "80C 5h",
+    "_vitrification": "52 (Tg, ISO 11357)",
+    "_vicat": "196 (ISO 306)",
+    "_min_nozzle": "0.6 mm (printing guide)",
+    "_hardened_nozzle_required": "Yes: product page FAQ and guide (strongly recommend hardened or wear-resistant nozzles).",
+    "_fiber_content": "10% carbon fibre (recycled marine PA6 + CF10).",
+    "_enclosure": "Guide: heated chamber / enclosure recommended.",
+    "_ams": "Product page FAQ: do not rely on the AMS for drying (not enough power).",
+    "_diameter_tolerance": "+/-0.1",
+    "_notes": "Fishy Filaments by Fillamentum; shop title styles the name '0rCA'. Melting 218 C, temperature resistance up to 180 C. Drying: drying table says >5 h at 80 C; guide says 80 C for 5+ h (pre-dry overnight at 80 C; below 70 C not effective). 600 g + 230 g spool."
+  },
+  "conflicts": [
+    "Diameter tolerance: product page gives +/-0.05 mm; TDS (20/07/2023) gives +/-0.1 mm."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://fillamentum.com/wp-content/uploads/2023/07/TDS_Fishy-filament-OrCA_EN_20072023.pdf",
+    "https://shop.fillamentum.com/products/orca",
+    "https://fillamentum.com/wp-content/uploads/2023/08/Fillamentum-ORCA-3D-printing-guide.pdf",
+    "https://fillamentum.com/wp-content/uploads/2023/10/Recommendation-for-filament-processing_drying_EN_12102023.pdf"
+  ],
+  "updated": "2026-11-01"
+}

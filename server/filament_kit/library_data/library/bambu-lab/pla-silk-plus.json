@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "vendor": "Bambu Lab",
+  "product": "PLA Silk+",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Silk+",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.27"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "35-45",
+    "chamber_temperatures": "25-45",
+    "filament_retraction_length": "0.6-1.0",
+    "filament_retraction_speed": "20-40",
+    "_drying": "55C 8h",
+    "_drying_x1_heatbed": "65-75C 12h",
+    "_max_print_speed": "<250 mm/s",
+    "_vitrification": "57 (Tg, DSC 10C/min)",
+    "_vicat": "66 (ISO 306)",
+    "_hdt_0.45MPa": "60",
+    "_hdt_1.8MPa": "56",
+    "_melting_point": "158 (DSC)",
+    "_annealing": "50-55C 6-12h",
+    "_notes": "TDS V1.0 (file name Bambu_PLA_Silk__Technical_Data_Sheet.pdf, titled PLA Silk+). Nozzle sizes 0.2/0.4/0.6/0.8 mm. Plates: Cool Plate SuperTack, Smooth PEI Plate, Textured PEI Plate. Cooling fan on."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://store.bblcdn.com/s7/default/3d4344cb7ecc4daf98a0d53c2fdb39b4/Bambu_PLA_Silk__Technical_Data_Sheet.pdf"
+  ],
+  "updated": "2026-11-01"
+}

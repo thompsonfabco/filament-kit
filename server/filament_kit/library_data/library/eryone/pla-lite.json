@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "PLA Lite",
+  "material": "PLA",
+  "colors": [
+    "black",
+    "white",
+    "light gray",
+    "blue",
+    "bright yellow",
+    "grass green",
+    "mint green",
+    "light pink",
+    "red",
+    "skin"
+  ],
+  "bambu_parent": "Bambu PLA Matte",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_density": [
+      "1.4"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "55-70",
+    "_drying": "50-60C 6h",
+    "_print_speed": "30-500mm/s",
+    "_hdt_0.45MPa": "60 (ASTM D648 0.45MPa)",
+    "_vitrification": "62 (Tg, DSC 10C/min)",
+    "_diameter_tolerance": "+/-0.03",
+    "_enclosure": "Supports open/closed printing",
+    "_notes": "Values from the TDS table embedded in the official product page; the page describes a matte-effect filament. Density 1.4 is copied as printed (unusually high for PLA - verify against a spool if critical)."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://eryone3d.com/products/pla-lite-filament-1-75mm-0-03mm-1kg"
+  ],
+  "updated": "2026-11-01"
+}

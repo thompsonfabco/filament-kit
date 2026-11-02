@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "PETG Lite",
+  "material": "PETG",
+  "colors": [
+    "Black",
+    "White",
+    "Gray",
+    "Red",
+    "Green",
+    "Blue",
+    "Dark Gray",
+    "Transparent",
+    "Transparent Red",
+    "Transparent Blue",
+    "Transparent Orange"
+  ],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "235"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-90",
+    "_print_speed": "40-60mm/s",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "Product page 'Typical settings' only (page adds 'some brands support up to 250 mm/s'); no enclosure needed per page. Density not published."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://eryone3d.com/products/petg-lite-filament-1-75mm-0-03mm-1kg"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "vendor": "Fillamentum",
+  "product": "ASA Extrafill",
+  "material": "ASA",
+  "colors": [
+    "Anthracite Grey",
+    "Dijon Mustard",
+    "Green Grass",
+    "Grey Blue",
+    "Metallic Grey",
+    "Natural",
+    "Sky Blue",
+    "Snow White",
+    "Traffic Black",
+    "Traffic Red",
+    "Traffic White",
+    "Traffic Yellow",
+    "Vertigo Grey",
+    "Vivid Pink",
+    "White Aluminium"
+  ],
+  "bambu_parent": "Bambu ASA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "245"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_density": [
+      "1.07"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-110",
+    "fan_min_speed/fan_max_speed": "10-70",
+    "_nozzle_by_speed": "basic 245-260 (40-100 mm/s, bed 65-75, fan 10-50%); high-speed printers setup 245-280 (40-300 mm/s, bed 90-110, fan 10-70%) [product page + guide 8/2024]; TDS 240-255 (bed 90-105)",
+    "_print_speed": "40-100 mm/s basic; 40-300 mm/s high-speed setup",
+    "_drying": "80C 2h",
+    "_vicat": "94 (ASTM D1525, 5 kg)",
+    "_hdt_0.45MPa": "96 (ASTM D648); 86 at 1.8 MPa",
+    "_enclosure": "Guide: chamber is required; preheat an enclosure to 50 C for at least 30 min if no heated chamber.",
+    "_hardened_nozzle_required": "No; guide says brass works, hardened steel better for durability.",
+    "_diameter_tolerance": "+/-0.05",
+    "_ams": "Product page lists the line as AMS-compatible.",
+    "_notes": "750 g + 210 g spool; 2.85 mm also sold."
+  },
+  "conflicts": [
+    "Nozzle: TDS (03/01/2019) gives 240-255 C.",
+    "Bed: TDS gives 90-105 C; product page basic setup gives 65-75 C.",
+    "Drying: drying table (12 Oct 2023) gives 80 C 2 h; guide 8/2024 gives 80 C 3 h."
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://fillamentum.com/wp-content/uploads/2020/10/Technical-Data-Sheet_ASA-Extrafill_03012019.pdf",
+    "https://shop.fillamentum.com/products/asa-extrafill-snow-white",
+    "https://fillamentum.com/wp-content/uploads/2024/11/3D_PRINT_GUIDE_ASA_EXTRAFILL_8_2024.pdf",
+    "https://fillamentum.com/wp-content/uploads/2023/10/Recommendation-for-filament-processing_drying_EN_12102023.pdf"
+  ],
+  "updated": "2026-11-01"
+}

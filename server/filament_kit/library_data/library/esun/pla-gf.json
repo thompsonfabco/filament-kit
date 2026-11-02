@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "PLA-GF",
+  "material": "PLA-GF",
+  "colors": [],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.31"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "45-60",
+    "fan_max_speed": "100",
+    "_print_speed": "40-100",
+    "_hdt_0.45MPa": "56",
+    "_fiber_content": "15-20% glass fibre",
+    "_notes": "eSUN PLA-GF (ePLA-GF) TDS v1.0 Nov 2023. TDS: enable Z-seam alignment, slow print speed. Hardened nozzle not stated in TDS. No Bambu PLA-GF system preset found, so Generic PLA. Diameter not stated in TDS."
+  },
+  "conflicts": [],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://assets.spoolscout.com/tds-sds/esun/tds/esun-pla-gf-tds-v1.0-2023-11.pdf",
+    "https://www.spoolscout.com/data-sheets/esun/pla-epla-gf"
+  ],
+  "updated": "2026-11-01"
+}

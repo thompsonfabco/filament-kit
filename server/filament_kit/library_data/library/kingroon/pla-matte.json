@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "vendor": "Kingroon",
+  "product": "PLA Matte",
+  "material": "PLA",
+  "colors": [
+    "Black",
+    "White",
+    "Gray",
+    "Blue",
+    "Brown",
+    "Green",
+    "Matte Grass Green",
+    "Orange",
+    "Purple",
+    "Red",
+    "Yellow",
+    "Skin",
+    "Matte Rainbow"
+  ],
+  "bambu_parent": "Bambu PLA Matte",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.31"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "35-45",
+    "chamber_temperatures": "25-45",
+    "filament_retraction_length": "0.6-1.0",
+    "filament_retraction_speed": "20-40",
+    "_drying": "50C 8h",
+    "_max_print_speed": "<300 mm/s (TDS); product page claims 50-600 mm/s",
+    "_min_nozzle": "0.2",
+    "_hdt_0.45MPa": "58",
+    "_vicat": "63",
+    "_vitrification": "61 (Tg, DSC)",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "TDS V1.0 (2025/12/1): Cool Plate / High Temperature Plate / Textured PEI with glue; fan on; ABS spool rated 70 C; HDT 1.8 MPa 52 C; melting 163 C. Tolerance from kingroon.com Matte PLA listing. Verification 2026-11-01: fields and plate/chamber/fan/retraction ranges confirmed against the TDS PDF; kingroon.com / kingroon3d.com product pages returned HTTP 429, so page-derived notes and conflicts were not re-checked."
+  },
+  "conflicts": [
+    "kingroon.com Matte PLA pages (10kg-matte-pla-filament-1-75mm, PLA Gray/White Matte): nozzle 200-230, bed 50-65, density 1.31, HDT 58 C (0.45 MPa)"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://wiki.kingroon.com/kingroon_pla_matte_technical_data_sheet_v1.0.pdf",
+    "https://kingroon.com/products/10kg-matte-pla-filament-1-75mm",
+    "https://kingroon.com/products/kingroon-pla-gray-matte-3d-printer-filament"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "vendor": "SUNLU",
+  "product": "PLA+ 2.0",
+  "material": "PLA",
+  "colors": [
+    "Vivid Yellow",
+    "Klein Blue",
+    "Green",
+    "Red",
+    "Grey",
+    "Blue",
+    "PLA+ Oak"
+  ],
+  "bambu_parent": "Bambu PLA Tough+",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "205"
+    ],
+    "nozzle_temperature_range_high": [
+      "245"
+    ],
+    "filament_density": [
+      "1.21"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "filament_shrink": "99.7%-99.9% (published 0.1-0.3%)",
+    "filament_retraction_length": "0.8-1.2",
+    "filament_retraction_speed": "30-40",
+    "_nozzle_by_speed": "205-215C@50-100; 215-245C@100-200",
+    "_drying": "50C (time not given)",
+    "_hdt": "56+/-3",
+    "_colors_note": "Pass 1 recorded bare colour names, not full Spoolman names; match on vendor+product.",
+    "_vitrification": "54 (Vicat)"
+  },
+  "conflicts": [
+    "[merge] PLA+ Oak folded into this entry (same published values)"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.sunlu.com/products/pla-plus-2.0-3d-printing-filament",
+    "https://store.sunlu.com/products/moq-6kg-pla-2-0-upgraded-pla-pla-plus-3d-printer-filament-1kg"
+  ],
+  "updated": "2026-11-01"
+}

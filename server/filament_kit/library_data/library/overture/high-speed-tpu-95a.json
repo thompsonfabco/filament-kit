@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "vendor": "OVERTURE",
+  "product": "High Speed TPU 95A",
+  "material": "TPU",
+  "colors": [
+    "Black",
+    "White",
+    "Clear",
+    "Gray",
+    "Pink",
+    "Orange",
+    "Grass Green",
+    "Translucent Blue",
+    "Translucent Red",
+    "Translucent Green",
+    "Translucent Purple",
+    "Translucent Orange",
+    "Neon Magenta",
+    "Pastel Rose",
+    "Luminous Pink",
+    "Neon Yellow",
+    "Luminous Electric Indigo",
+    "Luminous Blue",
+    "Luminous Green",
+    "Luminous Orange"
+  ],
+  "bambu_parent": "Bambu TPU 95A HF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.19"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "25-60",
+    "filament_retraction_length": "1-3",
+    "filament_retraction_speed": "20-40",
+    "overhang_fan_threshold": "35 (threshold overhang angle, degrees)",
+    "_print_speed": "60-90 mm/s",
+    "_hardness": "~95A (ISO 7619)",
+    "_ams": "95A TPU: not AMS-compatible by Bambu's guidance; feed from external spool.",
+    "_notes": "TDS v5.1 (Jul 2024): high-flow TPU; melt index 9.5 g/10min (210C 1.2kg); cooling fan on; textured PEI or blue tape; based on 0.4 mm nozzle. Product page claims up to 5x faster than standard TPU (no mm/s figure)."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://overture3d.com/cdn/shop/files/OVERTURE__HIGH_SPEED_TPU_TDS_EN_V5.1_112e83e3-da49-495b-bd52-96b491f2fc64.pdf",
+    "https://overture3d.com/products/overture-high-speed-tpu-3d-printer-filament-1-75mm"
+  ],
+  "updated": "2026-11-01"
+}

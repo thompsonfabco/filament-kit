@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "ColorFabb",
+  "product": "rPLA",
+  "material": "PLA",
+  "colors": [
+    "Ochre",
+    "Eggshell",
+    "Black",
+    "Charcoal",
+    "Blossom",
+    "Wild Sage",
+    "Walnut",
+    "Monumental"
+  ],
+  "bambu_parent": "Bambu PLA Matte",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "195"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-60",
+    "_print_speed": "40-100 mm/s",
+    "_vitrification": "55 (Tg)",
+    "_diameter_tolerance": "+/-0.10",
+    "_notes": "Recycled PLA, semi-matte finish. Page gives density as a range 1.210-1.430 g/cm3 (not put in fields). No TDS published. Nominal diameter not printed on the cited page (variant selector not readable), so filament_diameter is left out."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://colorfabb.com/rpla-semi-matte-black"
+  ],
+  "updated": "2026-11-01"
+}

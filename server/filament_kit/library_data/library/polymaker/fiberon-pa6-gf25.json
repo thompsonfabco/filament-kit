@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "vendor": "Polymaker",
+  "product": "Fiberon PA6-GF25",
+  "material": "PA6-GF",
+  "colors": [
+    "Grey"
+  ],
+  "bambu_parent": "Fiberon PA6-GF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "280"
+    ],
+    "nozzle_temperature_range_high": [
+      "300"
+    ],
+    "filament_density": [
+      "1.20"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "40-50",
+    "chamber_temperatures": "room temperature",
+    "fan_max_speed": "0 (OFF)",
+    "_print_speed": "30-300",
+    "_drying": "100C 10h",
+    "_annealing": "100C 16h",
+    "_hardened_nozzle_required": "yes",
+    "_vitrification": "70.4 (Tg, DSC)",
+    "_vicat": "211.7",
+    "_hdt_0.45MPa": "191",
+    "_hdt_1.8MPa": "157",
+    "_ams": "Spools roll in the AMS, but Polymaker warns to be careful with abrasive materials in the AMS.",
+    "_fiber_content": "25% glass fibre (name)",
+    "_notes": "Wiki requirements: all-metal hotend 280C+, hardened nozzle, filament dryer, annealing then moisture conditioning. Thermal values for annealed specimens."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://wiki.polymaker.com/polymaker-products/polymaker-filaments/fiberon-tm/fiberon-tm-pa6-gf25",
+    "https://cdn.shopify.com/s/files/1/0548/7299/7945/files/TDS_FIBERON_PA6-GF25_V1.1_EN.pdf",
+    "https://shop.polymaker.com/products/fiberon-pa6-gf25"
+  ],
+  "updated": "2026-11-01"
+}

@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "TPU",
+  "material": "TPU",
+  "colors": [
+    "Black",
+    "Transparent Red",
+    "Transparent Blue",
+    "Transparent",
+    "Gray",
+    "White"
+  ],
+  "bambu_parent": "Bambu TPU 95A",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_bed_glass": "40-60",
+    "filament_retraction_length": "4-5",
+    "_print_speed": "10-30mm/s",
+    "_hardness": "95A",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "Product page only (0.5kg and 1kg spools). Bed: PEI magnetic surface 55-70C, glass bed 40-60C (PEI value placed in textured_plate_temp). Density not published.",
+    "_bed_pei_magnetic": "55-70"
+  },
+  "conflicts": [
+    "nozzle_temperature: 200-220 (https://eryone3d.com/products/tpu (spec header; setting list says 190-220))"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://eryone3d.com/products/tpu"
+  ],
+  "updated": "2026-11-01"
+}
