@@ -90,8 +90,8 @@ def test_state_before_any_sync(c):
     r = c.get("/api/sync/state", headers=auth(tok))
     assert r.status_code == 200
     assert r.json() == {"owner": None, "you": device_of(tok), "user_id": None, "live_hash": None,
-                        "system_hash": None, "build": None, "last_attempt": None, "installed": None,
-                        "rebuild_requested": None}
+                        "system_hash": None, "orca_live_hash": None, "orca_system_hash": None, "build": None,
+                        "last_attempt": None, "installed": None, "rebuild_requested": None}
 
 
 def test_live_upload_state_and_rebuild(c):
@@ -259,7 +259,7 @@ def test_lines_list_and_patch(c, sm):
     assert len(lines) == 1
     line = lines[0]
     assert set(line) == {"line_id", "vendor", "product", "material", "bambu_parent", "parent_source",
-                         "spoolman_ids", "presets"}
+                         "orca_parent", "orca_parent_source", "spoolman_ids", "presets"}
     assert line["line_id"] == LID and line["spoolman_ids"] == [3, 17] and line["presets"] > 0
 
     before = builds._request()
@@ -428,3 +428,81 @@ def test_patch_unknown_parent_same_error_as_intake(c, sm):
 def test_profiles_api_uses_the_shared_store_loader():
     from filament_kit import profiles_api
     assert not hasattr(profiles_api, "system_store") and not hasattr(profiles_api, "_store_cache")
+
+
+# ---------- Task 3: Orca uploads and the Orca parent ----------
+
+from test_builds import orca_system_zip
+
+
+def test_orca_live_upload(c):
+    tok = token()
+    r = put_zip(c, tok, "live", zip_of({"X @SV08 MAX 0.4.json": "{}"}), "?target=orca&user_id=f790a1c6-a")
+    assert r.status_code == 200, r.text
+    h = r.json()["live_hash"]
+    assert set(r.json()) == {"live_hash"}
+    assert h == builds.tree_hash(config.paths().state / "profiles" / "live" / "orca" / "user")
+    st = c.get("/api/sync/state", headers=auth(tok)).json()
+    assert (st["orca_live_hash"], st["live_hash"], st["user_id"]) == (h, None, None)
+    assert builds.meta()["orca_user_id"] == "f790a1c6-a"
+    assert not live_files().exists()
+
+
+def test_orca_system_upload_requests_rebuild(c):
+    tok = token()
+    r = put_zip(c, tok, "system", orca_system_zip(), "?target=orca")
+    assert r.status_code == 200, r.text
+    assert set(r.json()) == {"system_hash", "presets"} and r.json()["presets"] == 10
+    assert builds._request() is not None
+    st = c.get("/api/sync/state", headers=auth(tok)).json()
+    assert (st["orca_system_hash"], st["system_hash"]) == (r.json()["system_hash"], None)
+
+
+@pytest.mark.parametrize("q", ["?target=cura", "?target=", "?target=ORCA"])
+def test_bad_target(c, q):
+    tok = token()
+    for kind in ("live", "system"):
+        r = put_zip(c, tok, kind, zip_of({"a.json": "{}"}), q)
+        assert r.status_code == 400 and r.json()["error"] == "bad_request"
+
+
+def test_bambu_target_is_the_default(c):
+    tok = token()
+    r = put_zip(c, tok, "live", zip_of({"base/x.json": "{}"}), "?target=bambu")
+    assert r.status_code == 200 and live_files().is_dir()
+
+
+def test_orca_live_partial_refused(c):
+    tok = token()
+    r = put_zip(c, tok, "live", zip_of({"a.json": "{}"}), "?target=orca&partial=20270115-080000")
+    assert r.status_code == 400 and r.json()["error"] == "bad_request"
+
+
+def test_patch_orca_parent(c, sm):
+    tok = token()
+    built(c, tok, sm)
+    r = c.patch(f"/api/profiles/lines/{LID}", json={"orca_parent": "Anything Before Upload"}, headers=auth(tok))
+    assert r.status_code == 200, r.text
+    got = r.json()["line"]
+    assert (got["orca_parent"], got["orca_parent_source"]) == ("Anything Before Upload", "user")
+    bambu = (got["bambu_parent"], got["parent_source"])
+    assert lines_mod.load()[LID].orca_parent == "Anything Before Upload"
+    assert put_zip(c, tok, "system", orca_system_zip(), "?target=orca").status_code == 200
+    r = c.patch(f"/api/profiles/lines/{LID}", json={"orca_parent": "Nope"}, headers=auth(tok))
+    assert r.status_code == 400 and r.json()["error"] == "unknown_parent"
+    r = c.patch(f"/api/profiles/lines/{LID}", json={"orca_parent": "Overture PLA Pro"}, headers=auth(tok))
+    got = r.json()["line"]
+    assert got["orca_parent"] == "Overture PLA Pro" and (got["bambu_parent"], got["parent_source"]) == bambu
+    r = c.patch(f"/api/profiles/lines/{LID}", json={"bambu_parent": "Generic PLA", "orca_parent": "Generic PLA"},
+                headers=auth(tok))
+    assert r.status_code == 200
+    line = lines_mod.load()[LID]
+    assert (line.bambu_parent, line.orca_parent) == ("Generic PLA", "Generic PLA")
+    for bad in ({"orca_parent": ""}, {"orca_parent": 3}, {"orca_parent": "Generic PLA @System"},
+                {"bambu_parent": "Generic PLA", "orca_parent": "x" * 101}):
+        r = c.patch(f"/api/profiles/lines/{LID}", json=bad, headers=auth(tok))
+        assert r.status_code == 400 and r.json()["error"] == "bad_request", bad
+    # a refused orca parent leaves the Bambu one unchanged too (one transaction)
+    r = c.patch(f"/api/profiles/lines/{LID}", json={"bambu_parent": "Bambu PLA Tough+", "orca_parent": "Nope"},
+                headers=auth(tok))
+    assert r.status_code == 400 and lines_mod.load()[LID].bambu_parent == "Generic PLA"
