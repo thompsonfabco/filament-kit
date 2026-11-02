@@ -638,3 +638,17 @@ def test_half_install_note_lines_are_not_copied_below_mark(tmp_path):
     m3, _ = build(tmp_path, more, line_set=ls, live=live, snapshot=snap, out="o3", partial=tmp_path / "o2")
     assert inapp.MARK not in read(tmp_path, name, "o3")["filament_notes"]
     assert not any("line(s) you wrote" in e for e in m3["edits"])
+
+
+def test_restore_lists_the_presets_it_brought_back(tmp_path):
+    """Final review I3b: the build names the presets it restored, so the PC's installer does not take their absence
+    from Bambu Studio for a deletion made after the build."""
+    first, ls = build(tmp_path, EIGHT)
+    snap, live = _install(tmp_path)
+    gone = sunlu(H2D, "0.6")
+    (live.root / "base" / f"{gone}.json").unlink()
+    plain, _ = build(tmp_path, EIGHT, line_set=ls, live=live, snapshot=snap, out="o2")
+    assert plain["restored"] == []
+    restored, _ = build(tmp_path, EIGHT, line_set=ls, live=live, snapshot=snap, deleted_before={gone},
+                        restore=True, out="o3")
+    assert gone in names(restored) and restored["restored"] == [gone]

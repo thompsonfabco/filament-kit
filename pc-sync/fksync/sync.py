@@ -35,6 +35,9 @@
   `uploaded` is returned when this run uploaded something and the build step had nothing to do
   (`no_build` / `up_to_date`).
 
+  An install refused as `stale_build` asks for a rebuild (same 15 min limiter): the server built from
+  these live presets, so only a new build can settle the difference.
+
 Every outcome and the stale-preset list are logged in one line each. Errors other than an install
 refusal, a rejected upload or `409 other_pc` propagate (the caller logs them; the next run retries).
 """
@@ -229,7 +232,10 @@ class _Run:
                     self._clear_marker()  # nothing was written by this attempt
                 return self.finish("studio_running", f"Bambu Studio started; build {stamp} not installed yet")
             self._clear_marker()
-            return self.finish("refused", f"install of build {stamp} refused ({e.code}): {e.reason}")
+            detail = f"install of build {stamp} refused ({e.code}): {e.reason}"
+            if e.code == "stale_build" and self.request(tree_hash(self.f.user_filament)):
+                detail += "; asked for a rebuild"     # server and PC disagree: only a new build can settle it
+            return self.finish("refused", detail)
         # an OSError propagates with the marker kept: the next run resumes this install (or not, see run())
         self._clear_marker()
         self._clear_partial()
