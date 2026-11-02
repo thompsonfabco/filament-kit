@@ -9,7 +9,7 @@ import time
 from dataclasses import dataclass, field
 
 from .. import config
-from ..pairing import _write_atomic
+from ..pairing import _write_atomic, make_state_dir
 from .status import HT_BASE, _d, _int, _l, _s, slot_label, unit_label
 
 FILE = "slotmap.json"
@@ -98,7 +98,7 @@ def load_map(serial: str) -> SlotMap:
 
 def save_map(serial: str, m: SlotMap) -> None:
     f = _file(serial)
-    f.parent.mkdir(parents=True, exist_ok=True)
+    make_state_dir(f.parent)
     m.updated = time.time()
     data = {'slots': m.slots, 'calibrated': m.calibrated, 'observe': m.observe, 'updated': m.updated}
     _write_atomic(f, json.dumps(data, indent=2).encode("utf-8"), 0o600, state_owned=True)

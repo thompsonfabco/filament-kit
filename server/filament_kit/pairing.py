@@ -81,6 +81,23 @@ def give_to_state_owner(path) -> None:
     os.chown(path, st.st_uid, st.st_gid)
 
 
+def make_state_dir(path) -> None:
+    """`mkdir -p` for a directory in the state directory; each directory it creates is handed to the state
+    directory's owner (as `give_to_state_owner` does for files), so a root-run CLI that creates
+    `printers/<serial>/` first does not lock the service user out of it."""
+    path = Path(path)
+    missing = []
+    p = path
+    while not p.exists() and p.parent != p:
+        missing.append(p)
+        p = p.parent
+    path.mkdir(parents=True, exist_ok=True)
+    state = Path(config.paths().state)
+    for d in reversed(missing):
+        if state in d.parents:
+            give_to_state_owner(d)
+
+
 def open_lock(path: Path):
     """Open (creating if needed) a lock file in the state directory, owned like the state directory."""
     fh = open(path, "a")
