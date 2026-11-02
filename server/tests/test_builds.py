@@ -365,3 +365,69 @@ def test_restore_deleted_flag_consumed(env):
 def test_profiles_package_exports():
     assert profiles.errors is errors
     assert profiles.preset_for is profiles.index.preset_for
+
+
+# ---------- fix round 1 (ruling S24) ----------
+
+@pytest.mark.parametrize("files", [
+    {"base/" + "a" * 300 + ".json": "{}"},                       # a part over 255 bytes
+    {"base/x.json/y.json": "{}", "base/x.json": "{}"},           # a file where a directory was made
+    {"base/x.json": "{}", "base/x.json/y.json": "{}"},           # a directory where a file was made
+    {"base /x.json": "{}"}, {"base./x.json": "{}"},              # trailing space / dot in a part
+    {"base/x.json ": "{}"}, {"base/x.json.": "{}"},
+])
+def test_upload_odd_names_are_bad_zip_not_500(env, files):
+    builds.store_upload("live", io.BytesIO(zip_of({"base/ok.json": "{}"})), device_id="a", user_id="1")
+    live = profiles_dir() / "live" / "user"
+    before = tree_files(live)
+    with pytest.raises(builds.BadZip):
+        builds.store_upload("live", io.BytesIO(zip_of(files)), device_id="a", user_id="1")
+    assert tree_files(live) == before
+    assert not [p for p in profiles_dir().iterdir() if p.name.endswith(".tmp")]
+
+
+def test_upload_dir_entry_with_trailing_space_refused(env):
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr(zipfile.ZipInfo("base /"), "")
+        zf.writestr("base/x.json", "{}")
+    with pytest.raises(builds.BadZip):
+        builds.store_upload("live", io.BytesIO(buf.getvalue()), device_id="a", user_id="1")
+
+
+def test_extract_os_errors_map_to_bad_zip_but_enospc_stays(env, monkeypatch, tmp_path):
+    import errno
+    zpath = tmp_path / "u.zip"
+    zpath.write_bytes(zip_of({"base/x.json": "{}"}))
+    real_open = open
+
+    def failing(exc):
+        def fake_open(path, mode="r", *a, **kw):
+            if str(path).endswith("x.json") and "x" in mode:
+                raise exc
+            return real_open(path, mode, *a, **kw)
+        return fake_open
+    for exc in (IsADirectoryError(), PermissionError(), NotADirectoryError(), FileNotFoundError()):
+        monkeypatch.setattr("builtins.open", failing(exc))
+        with pytest.raises(builds.BadZip):
+            builds._extract(zpath, tmp_path / f"t-{exc.__class__.__name__}")
+    monkeypatch.setattr("builtins.open", failing(OSError(errno.ENOSPC, "No space left on device")))
+    with pytest.raises(OSError) as e:
+        builds._extract(zpath, tmp_path / "t-nospc")
+    assert not isinstance(e.value, builds.BadZip) and e.value.errno == errno.ENOSPC
+
+
+def test_old_upload_tmp_swept(env):
+    root = profiles_dir()
+    root.mkdir(parents=True, exist_ok=True)
+    old, fresh = root / "upload-live-old.tmp", root / "upload-live-new.tmp"
+    for d in (old, fresh):
+        d.mkdir()
+        (d / "upload.zip").write_bytes(b"x")
+    past = time.time() - 2 * 3600
+    os.utime(old, (past, past))
+    builds.store_upload("live", io.BytesIO(zip_of({"base/x.json": "{}"})), device_id="a", user_id="1")
+    assert not old.exists() and fresh.exists()
+    os.utime(fresh, (past, past))
+    builds.run_build(env, now=TG.NOW)
+    assert not fresh.exists()

@@ -69,6 +69,8 @@ MAX_TOTAL = 512 << 20
 MAX_RUNS = 3
 KEEP = 5
 CHUNK = 64 * 1024
+MAX_PART = 255                  # bytes in one path part of an upload entry
+UPLOAD_TMP_AGE = 3600           # an upload temp dir older than this is left over from a crash
 SUFFIXES = (".json", ".info")
 STAMP_RE = re.compile(r"\d{8}-\d{6}(?:-[1-9]\d{0,5})?")
 USER_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
@@ -227,6 +229,17 @@ def check_owner(device_id: str) -> None:
 
 # ---------- uploads ----------
 
+def _check_part(name: str, part: str) -> None:
+    if part in ("", ".", ".."):
+        raise BadZip(f"entry {name!r}: empty, '.' and '..' path parts are not allowed")
+    if _BAD_PART.search(part):
+        raise BadZip(f"entry {name!r}: characters a file name cannot hold")
+    if len(part.encode("utf-8")) > MAX_PART:
+        raise BadZip(f"entry {name!r}: a path part is over {MAX_PART} bytes")
+    if part[-1] in " .":
+        raise BadZip(f"entry {name!r}: a path part ends with a space or a dot")
+
+
 def _safe_rel(name: str) -> str:
     if not name or len(name) > 512:
         raise BadZip("an entry has an empty or overlong name")
@@ -238,10 +251,7 @@ def _safe_rel(name: str) -> str:
         raise BadZip(f"entry {name!r}: drive letters are not allowed")
     parts = name.split("/")
     for part in parts:
-        if part in ("", ".", ".."):
-            raise BadZip(f"entry {name!r}: empty, '.' and '..' path parts are not allowed")
-        if _BAD_PART.search(part):
-            raise BadZip(f"entry {name!r}: characters a file name cannot hold")
+        _check_part(name, part)
     leaf = parts[-1]
     stem, dot, suffix = leaf.rpartition(".")
     if not dot or not stem or "." + suffix.casefold() not in SUFFIXES:
@@ -323,15 +333,36 @@ def _extract(zpath: Path, tree: Path) -> int:
         except BadZip:
             raise
         except (zipfile.BadZipFile, zipfile.LargeZipFile, NotImplementedError, RuntimeError, EOFError,
-                zlib.error, ValueError, FileExistsError) as e:
-            raise BadZip(f"the zip cannot be read ({e.__class__.__name__}: {e})") from None
+                zlib.error, ValueError, FileExistsError, IsADirectoryError, NotADirectoryError,
+                PermissionError, FileNotFoundError) as e:
+            # names that collide on disk (a file where a directory is needed, ...); ENOSPC and other I/O
+            # failures stay errors of the server (500)
+            raise BadZip(f"the zip cannot be extracted ({e.__class__.__name__})") from None
 
 
 def _safe_dir(name: str) -> None:
     body = name.rstrip("/")
-    if not body or "\\" in body or body.startswith("/") or _DRIVE.match(body) \
-            or any(p in ("", ".", "..") or _BAD_PART.search(p) for p in body.split("/")):
+    if not body or "\\" in body or body.startswith("/") or _DRIVE.match(body):
         raise BadZip(f"entry {name!r}: not a safe relative directory")
+    for part in body.split("/"):
+        _check_part(name, part)
+
+
+def sweep_uploads(now: float | None = None) -> None:
+    """Remove `profiles/upload-*.tmp` dirs older than UPLOAD_TMP_AGE (left by a crash mid-upload); a younger one
+    may belong to an upload in progress."""
+    now = time.time() if now is None else now
+    try:
+        found = list(_dir().glob("upload-*.tmp"))
+    except OSError:
+        return
+    for p in found:
+        try:
+            old = now - p.stat().st_mtime > UPLOAD_TMP_AGE
+        except OSError:
+            continue
+        if old:
+            _rmtree(p)
 
 
 def store_upload(kind: str, src: BinaryIO, *, device_id: str, user_id: str | None = None) -> str:
@@ -344,6 +375,7 @@ def store_upload(kind: str, src: BinaryIO, *, device_id: str, user_id: str | Non
     check_owner(device_id)                      # refuse before reading the body
     cap = MAX_LIVE if kind == "live" else MAX_SYSTEM
     make_state_dir(_dir())
+    sweep_uploads()
     tmp = Path(tempfile.mkdtemp(prefix=f"upload-{kind}-", suffix=".tmp", dir=_dir()))
     try:
         zpath = tmp / "upload.zip"
@@ -466,6 +498,7 @@ def _build_once(sm, now: float) -> dict:
     make_state_dir(root)
     for p in root.glob("*.tmp"):
         _rmtree(p)
+    sweep_uploads()
     _set_state(last_attempt={"at": now, "ok": None, "error": None})
     stamp = _new_stamp(now)
     tmp = root / f"{stamp}.tmp"
