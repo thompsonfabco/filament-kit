@@ -10,3 +10,6 @@ gradlew    text eol=lf
 # The spec library snapshot and its test fixture are hashed byte for byte (index.json sha256).
 server/filament_kit/library_data/** -text
 server/tests/data/library/** -text
+
+# The panel firmware the station flashes is a binary, byte for byte.
+station/panel/firmware/*.bin binary

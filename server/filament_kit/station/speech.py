@@ -11,7 +11,7 @@ import subprocess
 import threading
 import time
 
-from . import beep, panel
+from . import beep, wire
 from . import state as st
 
 log = logging.getLogger("intake-station")
@@ -76,13 +76,13 @@ def speak(text):
         if speech_ready.is_set():  # cut off by a newer phrase: fade out from where this one is
             chunk = bytes(round(samples[i] * (RAMP - j) / RAMP) for j in range(RAMP))
             for k in range(0, RAMP, 256):
-                panel.panel_send(b"A %d\n" % len(chunk[k:k + 256]) + chunk[k:k + 256])
+                wire.panel_send(b"A %d\n" % len(chunk[k:k + 256]) + chunk[k:k + 256])
             break
         wait = start + (i - lead) / RATE - time.monotonic()
         if wait > 0:
             time.sleep(wait)
         chunk = samples[i:i + 256]
-        if not panel.panel_send(b"A %d\n" % len(chunk) + chunk):
+        if not wire.panel_send(b"A %d\n" % len(chunk) + chunk):
             break
 
 
@@ -91,4 +91,7 @@ def speech_loop():
     while True:
         speech_ready.wait()
         speech_ready.clear()
-        speak(speech["text"])
+        try:
+            speak(speech["text"])
+        except (OSError, subprocess.TimeoutExpired) as e:  # aplay missing or the output hung
+            log.warning("speech: %s", e)

@@ -74,6 +74,9 @@ def _uniq(items) -> list[str]:
 
 def _env_assign(a: str) -> str:
     """systemd splits Environment= on spaces; quote a whole assignment that has any."""
+    if "\n" in a or "\r" in a:
+        raise ModuleError(f"a line break in a station setting ({a.split('=')[0]}); fix: put the value on one line")
+    a = a.replace("%", "%%")  # systemd expands %-specifiers in Environment=
     if any(c in a for c in ' 	"'):
         return '"' + a.replace("\\", "\\\\").replace('"', '\\"') + '"'
     return a
@@ -88,7 +91,9 @@ def station_dropin(cfg: dict, addresses: list[str]) -> str:
            f"NFC_DEVICE={st['nfc_device']}",
            f"STATION_BEEP={1 if st['beep'] else 0}",
            f"STATION_SPEECH={1 if st['speech'] else 0}",
-           f"STATION_CAMERA={st['camera']}"]
+           f"STATION_CAMERA={st['camera']}",
+           f"STATION_PANEL_FW={config.paths().opt.as_posix()}/resources/panel/intake-panel.bin",
+           f"STATION_PANEL_FLASH={1 if st['panel_flash'] else 0}"]
     if st.get("beep_device"):
         env.append(f"STATION_BEEP_DEVICE={st['beep_device']}")
     env_line = "Environment=" + " ".join(_env_assign(e) for e in env)

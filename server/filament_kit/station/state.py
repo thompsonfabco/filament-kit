@@ -22,6 +22,9 @@ def settings_from_env() -> dict:
         "beep_device": os.environ.get("STATION_BEEP_DEVICE", ""),
         "speech": os.environ.get("STATION_SPEECH", "1") != "0",  # the panel talks (espeak-ng + ffmpeg)
         "camera": os.environ.get("STATION_CAMERA", "auto"),  # webcam picture on Hold: auto | /dev/videoN | off
+        # the bundled panel firmware (a VERSION file beside it); a panel on another version is reflashed
+        "panel_fw": os.environ.get("STATION_PANEL_FW", "/opt/filament-kit/resources/panel/intake-panel.bin"),
+        "panel_flash": os.environ.get("STATION_PANEL_FLASH", "1") != "0",
     }
 
 
@@ -34,7 +37,8 @@ state = {"tag": None, "tag_at": None, "scale": None, "scale_at": None, "last": N
          "held": None, "held_at": None, "suppress": False, "blink_until": 0, "air": None, "air_at": None,
          "photo": None, "photo_at": None}
 # serial ports: the panel's (found by its HELLO) and the one nfcpy uses; neither probes the other's
-ports = {"panel": None, "nfc": None}
+ports = {"panel": None, "panel_version": None, "nfc": None}
+flashed: set[str] = set()  # bundled firmware versions already written this run
 probed = threading.Event()  # set once the panel search has looked at every port, so nfcpy picks the right one
 panel_lock = threading.Lock()
 panel = {"ser": None}
@@ -58,6 +62,6 @@ def active(now):
 
 
 def view() -> dict:
-    """A snapshot for the HTTP handler: the state plus the panel's port."""
+    """A snapshot for the HTTP handler: the state plus the panel's port and firmware version."""
     with lock:
-        return dict(state, panel=ports["panel"])
+        return dict(state, panel=ports["panel"], panel_version=ports["panel_version"])

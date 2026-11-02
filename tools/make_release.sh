@@ -15,7 +15,7 @@ name="filament-kit-$version"
 stage_root="dist/stage"
 stage="$stage_root/$name"
 rm -rf "$stage_root"
-mkdir -p "$stage/install/systemd" "$stage/install/avahi"
+mkdir -p "$stage/install/systemd" "$stage/install/avahi" "$stage/install/panel"
 
 # ---------- wheel ----------
 if command -v uv >/dev/null 2>&1; then
@@ -41,6 +41,7 @@ cp install/install.sh install/uninstall.sh "$stage/"
 cp install/backup.sh install/filament-kit-cli.sh install/spoolman.sh "$stage/install/"
 cp install/systemd/*.service install/systemd/*.timer install/systemd/*.path "$stage/install/systemd/"
 cp install/avahi/filament-kit.service "$stage/install/avahi/"
+cp station/panel/firmware/intake-panel.bin station/panel/firmware/VERSION "$stage/install/panel/"
 # A Windows checkout may have CRLF line endings; Linux needs LF.
 find "$stage" -type f \( -name '*.sh' -o -name '*.service' -o -name '*.timer' -o -name '*.path' \) \
     -exec sed -i 's/\r$//' {} +

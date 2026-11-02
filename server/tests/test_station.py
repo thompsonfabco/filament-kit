@@ -76,7 +76,7 @@ def _get(url):
 def _raw(now, **kw):
     s = {"tag": "4:77:90:e:9:22:89", "tag_at": now - 10, "scale": {"grams": 1000.0, "status": "stable", "unit": 2},
          "scale_at": now - 1, "last": 1000.0, "last_at": now - 2, "held": None, "held_at": None,
-         "suppress": False, "blink_until": 0, "panel": "/dev/ttyUSB1",
+         "suppress": False, "blink_until": 0, "panel": "/dev/ttyUSB1", "panel_version": "2",
          "air": None, "air_at": None, "photo": None, "photo_at": None}
     s.update(kw)
     return s
@@ -91,7 +91,7 @@ def test_state_and_last_tag_shapes():
     try:
         code, st = _get(base + "/state")
         assert code == 200
-        assert set(st) == {"tag", "scale", "last_weight", "panel", "air", "photo"}
+        assert set(st) == {"tag", "scale", "last_weight", "panel", "panel_version", "air", "photo"}
         iso = station_http.iso(now - 10)
         tag = {"status": "ok", "nfc_id": "4:77:90:e:9:22:89", "read_at": iso, "read_at_unix": now - 10,
                "age_seconds": 10, "held": False}
@@ -99,7 +99,7 @@ def test_state_and_last_tag_shapes():
             "tag": tag,
             "scale": {"grams": 1000.0, "status": "stable", "unit": 2, "stable": True, "age_seconds": 1},
             "last_weight": {"grams": 1000.0, "age_seconds": 2, "held": False},
-            "panel": "/dev/ttyUSB1", "air": None, "photo": None}
+            "panel": "/dev/ttyUSB1", "panel_version": "2", "air": None, "photo": None}
         code, lt = _get(base + "/last-tag")
         assert code == 200
         assert lt == tag
@@ -114,7 +114,7 @@ def test_state_and_last_tag_shapes():
 def test_state_held_and_empty():
     now = time.time()
     held = _raw(now, held=812.5, held_at=now - 30, tag_at=now - 900)
-    empty = _raw(now, tag=None, tag_at=None, scale=None, scale_at=None, last=None, last_at=None, panel=None)
+    empty = _raw(now, tag=None, tag_at=None, scale=None, scale_at=None, last=None, last_at=None, panel=None, panel_version=None)
     views = iter([held, empty])
     srv, base = _serve(lambda: dict(next(views)), {"127.0.0.1"})
     try:
@@ -124,7 +124,7 @@ def test_state_held_and_empty():
         _, st = _get(base + "/state")
         assert st == {"tag": {"status": "ok", "nfc_id": None, "read_at": None, "read_at_unix": None,
                               "age_seconds": None, "held": False},
-                      "scale": None, "last_weight": None, "panel": None, "air": None, "photo": None}
+                      "scale": None, "last_weight": None, "panel": None, "panel_version": None, "air": None, "photo": None}
     finally:
         srv.shutdown()
 

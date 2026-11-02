@@ -51,7 +51,7 @@ def make_handler(state_view: Callable[[], dict], allow: set[str]) -> type[BaseHT
                 return self._send(200, {
                     "tag": tag,
                     "scale": dict(sc, stable=sc["status"] == "stable", age_seconds=age(s["scale_at"])) if sc else None,
-                    "last_weight": last, "panel": s["panel"],
+                    "last_weight": last, "panel": s["panel"], "panel_version": s["panel_version"],
                     "air": dict(air, age_seconds=age(s["air_at"])) if air else None,
                     "photo": {"url": "/photo", "taken_at": iso(s["photo_at"]), "age_seconds": age(s["photo_at"])}
                     if s["photo"] else None})
