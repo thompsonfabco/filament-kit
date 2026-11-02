@@ -200,18 +200,19 @@ def test_idle_stop_kills_ffmpeg(ffmpeg_hub):
 
 # ---------------------------------------------------------------- RTSP relay (TLS + Digest)
 
-def tls_server_ctx(tmp_path) -> ssl.SSLContext:
-    pairing.make_cert("printer", ["127.0.0.1"], tmp_path / "pcert")
+def tls_server_ctx(tmp_path, cn="P1") -> ssl.SSLContext:
+    """A fake printer leaf; its CN is the serial (first use pins it only then)."""
+    pairing.make_cert(cn, ["127.0.0.1"], tmp_path / "pcert")
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     ctx.load_cert_chain(tmp_path / "pcert" / "cert.pem", tmp_path / "pcert" / "key.pem")
     return ctx
 
 
-def tls_listener(tmp_path):
+def tls_listener(tmp_path, cn="P1"):
     srv = socket.socket()
     srv.bind(("127.0.0.1", 0))
     srv.listen(4)
-    return srv, tls_server_ctx(tmp_path)
+    return srv, tls_server_ctx(tmp_path, cn)
 
 
 def _read_msg(f) -> tuple[str, dict]:
@@ -243,7 +244,7 @@ def test_relay_answers_digest_challenge_with_rewritten_uri(tmp_path):
     t = threading.Thread(target=printer, daemon=True)
     t.start()
 
-    relay = camera.RtspRelay("127.0.0.1", CODE, port)
+    relay = camera.RtspRelay(Printer("P1", "x", "O1D", "127.0.0.1", CODE, True), port)
     local = relay.start()
     try:
         with socket.create_connection(("127.0.0.1", local), timeout=5) as c:
@@ -526,7 +527,7 @@ def test_relay_drops_a_silent_printer(tmp_path, monkeypatch):
             _read_msg(f)
             time.sleep(10)  # never answers
     threading.Thread(target=printer, daemon=True).start()
-    relay = camera.RtspRelay("127.0.0.1", CODE, srv.getsockname()[1])
+    relay = camera.RtspRelay(Printer("P1", "x", "O1D", "127.0.0.1", CODE, True), srv.getsockname()[1])
     local = relay.start()
     try:
         with socket.create_connection(("127.0.0.1", local), timeout=5) as c:
@@ -552,7 +553,7 @@ def test_mjpeg_source_with_unusable_code_stops_without_retrying(tmp_path, jpeg_p
     port, state = jpeg_printer
     bad = "cødé1234"
     hub = camera.Hub(lookup=lambda s: None, runtime_dir=tmp_path / "run", jpeg_port=port)
-    src = camera.MjpegSource(Printer("P9", "x", "C12", "127.0.0.1", bad, True), hub)
+    src = camera.MjpegSource(Printer("P1", "x", "C12", "127.0.0.1", bad, True), hub)
     with caplog.at_level("DEBUG"):
         src.start()
         assert wait_until(lambda: not src.alive(), 5)

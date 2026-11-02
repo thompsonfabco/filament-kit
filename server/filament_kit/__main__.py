@@ -113,7 +113,7 @@ def main() -> None:
     etc = config.paths().etc
     sm = Spoolman(cfg["spoolman_url"])
     manager = Manager(spoolman=sm)
-    hub = camera.Hub()  # reads ip / Access Code / model from the printer registry
+    hub = camera.Hub(printer_state=manager.state)  # ip / Access Code / model / pin from the registry
     app = create_app(sm, printers=manager, camera_hub=hub)
     app.router.lifespan_context = printer_lifespan(manager, camera_hub=hub)
     # one worker only: the pairing and inventory locks are per process

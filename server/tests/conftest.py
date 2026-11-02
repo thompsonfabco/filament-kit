@@ -36,3 +36,10 @@ def spoolman_url(spoolman_fake_store):
     yield f"http://127.0.0.1:{port}"
     server.should_exit = True
     t.join(timeout=5)
+
+
+@pytest.fixture(autouse=True)
+def _state_dir(tmp_path, monkeypatch):
+    """Tests that read the printer registry indirectly (camera sources pin TLS leaves through it) never touch the
+    real /var/lib/filament-kit; a test's own FK_STATE still wins."""
+    monkeypatch.setenv("FK_STATE", str(tmp_path / "fk-state"))

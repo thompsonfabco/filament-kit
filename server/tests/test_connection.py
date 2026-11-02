@@ -1,4 +1,5 @@
 import json
+import ssl
 import threading
 import time
 from pathlib import Path
@@ -8,9 +9,11 @@ import pytest
 from filament_kit.bridge import connection, registry
 from filament_kit.bridge.connection import Manager, NoReply, PrinterOffline, UnknownPrinter
 from filament_kit.bridge.registry import Printer
+from fakes.fake_certs import FakeTlsSock, Leaf
 
 DATA = Path(__file__).parent / "data"
 CODE = "13572468"
+LEAF = Leaf()                       # the default printer leaf (no CN): pins for any serial
 
 
 class Msg:
@@ -28,6 +31,7 @@ class FakeClient:
         self.username = self.password = None
         self.reconnect_delay = None
         self.on_connect = self.on_disconnect = self.on_message = self.on_connect_fail = None
+        self.on_socket_open = None
         self.responder = None          # fn(topic, payload_dict) -> reply payload dict | None
 
     def username_pw_set(self, username, password):
@@ -64,8 +68,20 @@ class FakeClient:
                 threading.Timer(0.02, self.deliver, args=(reply,)).start()
 
     # test helpers
-    def connected(self, rc=0):
-        self.on_connect(self, None, {}, rc, None)
+    def socket_open(self, der=None) -> bool:
+        """What paho does after the TLS handshake and before CONNECT; False = the attempt failed (OSError)."""
+        if self.on_socket_open is not None:
+            try:
+                self.on_socket_open(self, None, FakeTlsSock(LEAF.der if der is None else der))
+            except OSError:
+                if self.on_connect_fail:
+                    self.on_connect_fail(self, None)
+                return False
+        return True
+
+    def connected(self, rc=0, der=None):
+        if self.socket_open(der):
+            self.on_connect(self, None, {}, rc, None)
 
     def dropped(self, rc=7):
         self.on_disconnect(self, None, {}, rc, None)
@@ -110,8 +126,10 @@ def test_connect_configures_client_subscribes_and_requests_pushall(manager, clie
     manager.sync()
     assert len(clients) == 1
     c = clients[0]
-    assert (c.host, c.port, c.username, c.password) == ("10.0.0.5", 8883, "bblp", CODE)
-    assert c.tls.verify_mode == connection.ssl.CERT_NONE and c.tls.check_hostname is False
+    assert (c.host, c.port, c.password) == ("10.0.0.5", 8883, None)    # the code waits for the pin check
+    assert c.socket_open()
+    assert (c.username, c.password) == ("bblp", CODE)
+    assert c.tls.verify_mode == ssl.CERT_NONE and c.tls.check_hostname is False
     assert c.reconnect_delay == (2, 60)
     assert manager.state("S1") == "offline"
     assert manager.state("S9") == "not_configured"
@@ -177,7 +195,7 @@ def test_new_code_after_wrong_code_reconnects(manager, clients):
     clients[0].connected(5)
     registry.upsert(Printer("S1", "Office H2D", "O1D", "10.0.0.5", "24681357", True))
     manager.sync()
-    assert len(clients) == 2 and clients[1].password == "24681357"
+    assert len(clients) == 2 and clients[1].socket_open() and clients[1].password == "24681357"
 
 
 def test_removed_printer_is_disconnected(manager, clients):
