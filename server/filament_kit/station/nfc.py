@@ -29,7 +29,8 @@ def nfc_path():
 
 def on_tag(nfc_id):
     with st.lock:
-        st.state.update(tag=nfc_id, tag_at=time.time(), held=None, held_at=None, suppress=False)
+        st.state.update(tag=nfc_id, tag_at=time.time(), held=None, held_at=None, suppress=False, photo=None,
+                        photo_at=None)
     log.info("tag %s", nfc_id)
     beep.beep("scan")
     st.panel_dirty.set()

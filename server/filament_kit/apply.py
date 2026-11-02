@@ -86,7 +86,9 @@ def station_dropin(cfg: dict, addresses: list[str]) -> str:
     env = [f"STATION_ALLOW={' '.join(allow)}",
            f"STATION_PORT={int(st['port'])}",
            f"NFC_DEVICE={st['nfc_device']}",
-           f"STATION_BEEP={1 if st['beep'] else 0}"]
+           f"STATION_BEEP={1 if st['beep'] else 0}",
+           f"STATION_SPEECH={1 if st['speech'] else 0}",
+           f"STATION_CAMERA={st['camera']}"]
     if st.get("beep_device"):
         env.append(f"STATION_BEEP_DEVICE={st['beep_device']}")
     env_line = "Environment=" + " ".join(_env_assign(e) for e in env)
@@ -124,8 +126,11 @@ def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) ->
 
     A = Action
     acts: list[Action] = []
-    for pkg in _uniq(p for n in MODULES if n in on for p in MODULES[n].apt):
-        acts.append(A("apt", pkg))
+    full = _uniq(p for n in MODULES if n in on for p in MODULES[n].apt)
+    acts += [A("apt", pkg) for pkg in full]
+    # --no-install-recommends packages; one another module installs in full is left to that install
+    acts += [A("apt_lean", pkg) for pkg in _uniq(p for n in MODULES if n in on for p in MODULES[n].apt_lean)
+             if pkg not in full]
 
     # Phase 1: users, files and unit files; nothing is enabled until daemon_reload.
     if "spoolman" in on:
@@ -141,7 +146,7 @@ def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) ->
         acts.append(A("install_unit", WEB_UNIT))
     if "station" in on:
         acts += [
-            A("user", ("filament-kit-station", "dialout,audio")),
+            A("user", ("filament-kit-station", "dialout,audio,video")),
             A("install_file", (UDEV_RULE, UDEV_TEXT, "0644", "root:root")),
             A("udev_reload"),
             A("remove_pkg", "brltty"),
@@ -190,6 +195,7 @@ APT = ["apt-get", "-o", "DPkg::Lock::Timeout=300"]
 # What to try when a step fails; printed after `FAIL <step>`. <arg> is the action's argument.
 _HINTS = {
     "apt": f"check the network and run `sudo apt-get update`, then {_AGAIN}",
+    "apt_lean": f"check the network and run `sudo apt-get update`, then {_AGAIN}",
     "user": f"see the useradd message above, then {_AGAIN}",
     "spoolman_fetch": f"see the Spoolman messages above, then {_AGAIN}",
     "install_unit": "run ./install.sh again (the unit files live in /opt/filament-kit/resources)",
@@ -470,16 +476,18 @@ def execute(actions: list[Action], *, run: Callable[[list[str]], None] = run_che
     i = 0
     while i < len(actions):
         a = actions[i]
-        if a.kind == "apt":
-            # one batched install for consecutive apt actions
+        if a.kind in ("apt", "apt_lean"):
+            # one batched install for consecutive apt actions of the same kind; apt_lean skips recommended packages
+            # (espeak-ng would otherwise pull in a whole audio stack)
             pkgs = []
-            while i < len(actions) and actions[i].kind == "apt":
+            while i < len(actions) and actions[i].kind == a.kind:
                 pkgs.append(actions[i].arg)
                 i += 1
+            flags = ["--no-install-recommends"] if a.kind == "apt_lean" else []
             try:
-                ex.cmd([*APT, "install", "-y", "-q", *pkgs])
+                ex.cmd([*APT, "install", "-y", "-q", *flags, *pkgs])
             except (subprocess.CalledProcessError, OSError) as e:
-                _fail(Action("apt", " ".join(pkgs)), e)
+                _fail(Action(a.kind, " ".join(pkgs)), e)
             continue
         try:
             _step(ex, a)

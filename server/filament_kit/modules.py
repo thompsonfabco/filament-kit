@@ -24,10 +24,11 @@ class Module:
     units: tuple[str, ...]
     depends: tuple[str, ...]
     apt: tuple[str, ...]
+    apt_lean: tuple[str, ...] = ()  # installed with --no-install-recommends (apply's apt_lean action)
 
 
-def _m(name, title, description, units=(), depends=(), apt=()) -> Module:
-    return Module(name, title, description, tuple(units), tuple(depends), tuple(apt))
+def _m(name, title, description, units=(), depends=(), apt=(), apt_lean=()) -> Module:
+    return Module(name, title, description, tuple(units), tuple(depends), tuple(apt), tuple(apt_lean))
 
 
 MODULES: dict[str, Module] = {m.name: m for m in (
@@ -47,7 +48,7 @@ MODULES: dict[str, Module] = {m.name: m for m in (
     _m("backup", "Backup", "Nightly backup of Spoolman db, settings and state",
        units=("filament-kit-backup.timer",)),
     _m("station", "Station", "USB scale and PN532 reader, read-only HTTP",
-       units=("filament-kit-station.service",), apt=("alsa-utils",)),
+       units=("filament-kit-station.service",), apt=("alsa-utils",), apt_lean=("espeak-ng", "ffmpeg")),
     _m("web", "Web", "Browser UI and the MCP endpoint, on top of the server",
        units=("filament-kit-web.service",), depends=("server",)),
     _m("remote", "Remote access", "Public https name for the web UI (nginx, certbot)",

@@ -5,14 +5,16 @@ Hold keeps the current weight with the scan (both stay current for the phone app
 "held" in /state); Discard forgets the scan and weight. Both the panel and the PN532 board use CH340 USB serial chips
 (no serial numbers), so the panel is found by its HELLO and the reader gets the other ttyUSB port (NFC_DEVICE=auto).
 Protocol, 115200 baud, one line each: PC -> panel `?`, `L <hold> <discard>`, `B <hz> <ms> [count]`;
-panel -> PC `HELLO intake-panel <version>`, `P H`, `P D`.
+`A <n>` + n raw bytes (speech, see `speech`);
+panel -> PC `HELLO intake-panel <version>`, `P H`, `P D`, `AIR <C> <RH|-> <hPa>` (see `air`).
 """
 from __future__ import annotations
 
 import logging
+import threading
 import time
 
-from . import beep
+from . import air, beep, camera, speech
 from . import state as st
 
 log = logging.getLogger("intake-station")
@@ -34,16 +36,19 @@ def on_hold():
     with st.lock:
         tag, _ = st.active(now)
         if tag and st.state["held"] is not None:
-            st.state.update(held=None, held_at=None)
-            kind = "release"
+            st.state.update(held=None, held_at=None, photo=None, photo_at=None)
+            kind, words = "release", "Released"
         elif tag and not st.state["suppress"] and st.fresh(st.state["last_at"], now):
             st.state.update(held=st.state["last"], held_at=now)
-            kind = "hold"
+            kind, words = "hold", f"Held, {st.state['last']:.0f} grams"
         else:
-            kind = "nothing"
+            kind, words = "nothing", "Scan a tag first" if not tag else "Put the spool on the scale"
     log.info("hold button: %s", kind)
     beep.beep(kind)
+    speech.say(words)
     st.panel_dirty.set()
+    if kind == "hold":
+        threading.Thread(target=camera.take_photo, args=(now,), daemon=True).start()
 
 
 def on_discard():
@@ -54,25 +59,28 @@ def on_discard():
         tag, weight = st.active(now)
         if tag or weight is not None:
             sc = st.state["scale"]
-            st.state.update(tag=None, tag_at=None, held=None, held_at=None, last=None, last_at=None,
+            st.state.update(tag=None, tag_at=None, held=None, held_at=None, last=None, last_at=None, photo=None,
+                            photo_at=None,
                             suppress=bool(sc and sc["grams"] >= st.MIN_GRAMS and st.fresh(st.state["scale_at"], now)),
                             blink_until=now + 0.7)
-            kind = "discard"
+            kind, words = "discard", "Discarded"
         else:
-            kind = "nothing"
+            kind, words = "nothing", "Nothing to discard"
     log.info("discard button: %s", kind)
     beep.beep(kind)
+    speech.say(words)
     st.panel_dirty.set()
 
 
 def panel_send(msg):
-    """Send one line to the panel; False when there's no panel (or it just went away)."""
+    """Send one line (str) or a ready-made frame (bytes) to the panel; False when there's no panel (or it just went
+    away)."""
     with st.panel_lock:
         ser = st.panel["ser"]
         if not ser:
             return False
         try:
-            ser.write(msg.encode() + b"\n")
+            ser.write(msg if isinstance(msg, bytes) else msg.encode() + b"\n")
             return True
         except Exception as e:
             log.warning("panel %s: %s", ser.port, e)
@@ -131,6 +139,8 @@ def panel_loop():
                     on_hold()
                 elif line == b"P D":
                     on_discard()
+                elif line.startswith(b"AIR "):
+                    air.on_air(line)
                 now = time.time()
                 modes = lamps(now)
                 if modes != sent or now - last_sent >= 1 or st.panel_dirty.is_set():
