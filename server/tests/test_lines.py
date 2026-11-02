@@ -536,3 +536,44 @@ def test_extra_line_non_string_json_is_ignored(lib, raw):
     f = _fil(1, "PLA+ 2.0 Grey")
     f["extra"]["line"] = raw
     assert lines.product_of(f, lib) == "PLA+ 2.0"
+
+
+# ---------- fix round 2 ----------
+
+@pytest.mark.parametrize("exc", [PermissionError(13, "denied"), OSError(5, "I/O error"), IsADirectoryError(21, "dir")])
+def test_read_error_raises_and_leaves_file_in_place(monkeypatch, exc):
+    p = _lines_file()
+    raw = json.dumps({"version": 1, "lines": [GOOD_ROW]}).encode("utf-8")
+    p.write_bytes(raw)
+    real = Path.read_bytes
+
+    def boom(self):
+        if self == p:
+            raise exc
+        return real(self)
+
+    monkeypatch.setattr(Path, "read_bytes", boom)
+    with pytest.raises(lines.LineStoreError) as ei:
+        lines.load()
+    assert ei.value.code == "lines_corrupt" and ei.value.extra.get("moved") is None
+    with pytest.raises(lines.LineStoreError):
+        with lines.transaction():
+            pass
+    monkeypatch.setattr(Path, "read_bytes", real)
+    assert p.read_bytes() == raw                       # never moved aside, never overwritten
+    assert not list(p.parent.glob("lines.json.corrupt-*"))
+    assert list(lines.load()) == ["xzn--petg"]
+
+
+def test_filament_in_two_lines_is_reported_and_dropped_from_the_later_one(lib, store):
+    p = _lines_file()
+    rows = [dict(GOOD_ROW, filaments=[1, 2]),
+            dict(GOOD_ROW, line_id="acme--pla", vendor="Acme", product="PLA", filament_id="P0000aaa", filaments=[2, 3])]
+    p.write_text(json.dumps({"version": 1, "lines": rows}), encoding="utf-8")
+    ls = lines.load()
+    assert ls["acme--pla"].filaments == [3] and ls["xzn--petg"].filaments == [1, 2]
+    assert any("filament 2 is listed in lines acme--pla and xzn--petg" in s for s in lines.problems(ls))
+    lines.save(ls)
+    saved = {r["line_id"]: r["filaments"] for r in json.loads(p.read_text(encoding="utf-8"))["lines"]}
+    assert saved == {"acme--pla": [3], "xzn--petg": [1, 2]}
+    assert not any("listed in lines" in s for s in lines.problems(lines.load()))
