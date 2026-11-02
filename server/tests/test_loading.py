@@ -1,5 +1,6 @@
 import copy
 import json
+import pathlib
 import threading
 
 import pytest
@@ -16,7 +17,6 @@ NAME = "Office H2D"
 LOC_A2 = "Office H2D – AMS A2"
 REPORT = {
     "gcode_state": "IDLE",
-    "nozzle_diameter": "0.4",
     "ams": {"ams": [
         {"id": "0", "tray": [
             {"id": "0", "tray_type": "PLA", "tray_color": "FF0000FF", "tray_info_idx": "Pa111111",
@@ -41,8 +41,17 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(loading, "CONFIRM_TIMEOUT", 1.0)
 
 
+CAPTURE = json.loads((pathlib.Path(__file__).parent / "data" / "h2d_pushall.json").read_text(encoding="utf-8"))
+H2D_IDLE = {**copy.deepcopy(CAPTURE["print"]), "gcode_state": "IDLE"}   # the real capture, idle; no nozzle field
+
+
 @pytest.fixture
-def rig():
+def report():
+    return REPORT
+
+
+@pytest.fixture
+def rig(report):
     clients = []
 
     def factory(cid):
@@ -52,9 +61,9 @@ def rig():
     m = Manager(client_factory=factory)
     registry.upsert(Printer(SERIAL, NAME, "O1D", "10.0.0.5", "13572468", True))
     m.sync()
-    printer = FakePrinter(clients[0], REPORT)
+    printer = FakePrinter(clients[0], report)
     clients[0].connected(0)
-    assert m.wait_report(SERIAL, lambda r: "vt_tray" in r, 2) is not None
+    assert m.wait_report(SERIAL, lambda r: "ams" in r, 2) is not None
     yield m, printer, clients[0]
     m.stop()
 
@@ -107,10 +116,13 @@ def prev(s):
 
 def test_load_writes_the_slot_then_spoolman(rig, sm, fil):
     m, printer, client = rig
+    printer.push({"nozzle_diameter": "0.6",            # not in the real capture: added here; a top-level value
+                  "device": {"nozzle": {"info": [{"id": 0, "diameter": 0.2}]}}})   # wins over the per-nozzle list
     s = spool(sm, fil, "Rack 1")
     presets = FakePresets()
     r = loading.load(m, sm, SERIAL, "A2", s["id"], False, preset_for=presets)
-    assert presets.calls == [(fil["id"], "O1D", 0.4)]
+    assert presets.calls == [(fil["id"], "O1D", 0.6)]
+    assert r["nozzle_mm"] == 0.6 and r["nozzle_assumed"] is False
     (w,) = settings(client)
     assert (w["ams_id"], w["tray_id"]) == (0, 1)
     assert w["tray_info_idx"] == "P8a1b2c3" and w["tray_color"] == "8A8C8EFF" and w["tray_type"] == "PLA"
@@ -154,13 +166,46 @@ def test_profiles_stub_returns_none():
     assert profiles.preset_for({"id": 1}, "O1D", 0.4) is None
 
 
-def test_missing_nozzle_diameter_is_no_preset(rig, sm, fil):
+@pytest.mark.parametrize("report", [H2D_IDLE])
+@pytest.mark.parametrize("dry", [True, False])
+def test_real_h2d_capture_without_nozzle_assumes_0_4(rig, sm, fil, dry):
     m, printer, client = rig
-    printer.push({"nozzle_diameter": None})
+    assert "nozzle_diameter" not in CAPTURE["print"] and "nozzle" not in CAPTURE["print"].get("device", {})
     s = spool(sm, fil, "Rack 1")
-    with pytest.raises(loading.NoPreset, match="nozzle"):
-        loading.load(m, sm, SERIAL, "A2", s["id"], False, preset_for=FakePresets())
-    assert settings(client) == []
+    presets = FakePresets()
+    r = loading.load(m, sm, SERIAL, "A3", s["id"], dry, preset_for=presets)
+    assert presets.calls == [(fil["id"], "O1D", 0.4)]
+    assert r["nozzle_mm"] == 0.4 and r["nozzle_assumed"] is True
+    assert r["slot"]["ams_id"] == 0 and r["slot"]["tray_id"] == 2
+    if not dry:
+        assert r["confirmed"] is True and sm.get(f"spool/{s['id']}")["location"] == "Office H2D – AMS A3"
+
+
+TWO_NOZZLES = copy.deepcopy(REPORT)
+TWO_NOZZLES["device"] = {"nozzle": {"info": [{"id": 1, "diameter": "0.6"}, {"id": 0, "diameter": 0.4}]}}
+TWO_NOZZLES["ams"]["ams"][0]["info"] = "1103"     # bits 8-11 = 1: unit A feeds extruder 1
+TWO_NOZZLES["ams"]["ams"][1]["info"] = "0003"     # HT-A feeds extruder 0
+
+
+@pytest.mark.parametrize("report", [TWO_NOZZLES])
+def test_per_extruder_nozzle_follows_the_slots_unit(rig, sm, fil):
+    m, printer, client = rig
+    s = spool(sm, fil, "Rack 1")
+    presets = FakePresets()
+    a = loading.load(m, sm, SERIAL, "A2", s["id"], True, preset_for=presets)
+    ht = loading.load(m, sm, SERIAL, "HT-A", s["id"], True, preset_for=presets)
+    ext = loading.load(m, sm, SERIAL, "Ext", s["id"], True, preset_for=presets)   # unit unknown: nozzle id 0
+    assert [c[2] for c in presets.calls] == [0.6, 0.4, 0.4]
+    assert not (a["nozzle_assumed"] or ht["nozzle_assumed"] or ext["nozzle_assumed"])
+
+
+def test_no_unit_info_uses_nozzle_0(rig, sm, fil):
+    m, printer, client = rig
+    printer.push({"device": {"nozzle": {"info": [{"id": 1, "diameter": 0.8}, {"id": 0, "diameter": "0.2"}]}}})
+    s = spool(sm, fil, "Rack 1")
+    presets = FakePresets()
+    r = loading.load(m, sm, SERIAL, "A2", s["id"], True, preset_for=presets)
+    assert presets.calls[0][2] == 0.2 and r["nozzle_assumed"] is False
 
 
 @pytest.mark.parametrize("dry", [False, True])
