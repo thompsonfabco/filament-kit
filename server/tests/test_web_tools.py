@@ -393,3 +393,48 @@ def test_kit_api_pairs_itself_once_and_renews_a_revoked_token(env):
         assert kit.get("/api/printers") == {"printers": []}                    # 401 -> paired again once
         assert tok_file.read_text(encoding="utf-8").strip() != first
         assert seen[-2] is None and seen[-1] is not None
+
+
+# ---------- Orca parents (Task 3's data model) ----------
+
+def _orca_store(monkeypatch):
+    from filament_kit.profiles.orca import OrcaStore
+    s = OrcaStore(library={"Generic PLA @System": {"filament_type": "PLA"},
+                           "Generic PLA Silk @System": {"filament_type": "PLA"},
+                           "Generic PETG @System": {"filament_type": "PETG"}})
+    monkeypatch.setattr(builds, "orca_store", lambda: s)
+    return s
+
+
+def test_find_parents_lists_orca_library(tools, store, monkeypatch):
+    _orca_store(monkeypatch)
+    out = tools.find_parents("pla")
+    assert out["orca_parents"] == ["Generic PLA", "Generic PLA Silk"]
+    assert tools.find_parents("silk")["orca_parents"] == ["Generic PLA Silk"]
+
+
+def test_add_line_sets_the_orca_parent(tools, sm, store, monkeypatch):
+    _orca_store(monkeypatch)
+    (a,) = add(sm, item(vendor="Acme", name="Silk Gold", material="PLA"))
+    fid = sm.get(f"spool/{a}")["filament"]["id"]
+    out = tools.add_line("Acme Silk", "Acme", [fid], "Generic PLA Silk", "Bambu PLA Basic")
+    line = lines_mod.load()[out["line_id"]]
+    assert line.orca_parent == "Generic PLA Silk" and line.orca_parent_source == "user"
+    assert out["orca_parent"] == "Generic PLA Silk"
+    (ln,) = tools.list_lines("acme")["lines"]
+    assert ln["orca_parent"] == "Generic PLA Silk"
+    from filament_kit.profiles.errors import ProfileError
+    (b,) = add(sm, item(vendor="Acme", name="Matte Red", material="PLA"))
+    fid2 = sm.get(f"spool/{b}")["filament"]["id"]
+    with pytest.raises(ProfileError):
+        tools.add_line("Acme Matte", "Acme", [fid2], "Not In Orca", "Bambu PLA Basic")
+    assert "acme--matte" not in lines_mod.load()                       # refused before anything was saved
+
+
+def test_add_line_without_orca_parent_keeps_the_chosen_one(tools, sm, store, monkeypatch):
+    _orca_store(monkeypatch)
+    (a,) = add(sm, item(vendor="Acme", name="Basic White", material="PLA"))
+    fid = sm.get(f"spool/{a}")["filament"]["id"]
+    out = tools.add_line("Acme Basic", "Acme", [fid], "", "Bambu PLA Basic")
+    line = lines_mod.load()[out["line_id"]]
+    assert line.orca_parent == "Generic PLA" and line.orca_parent_source != "user"

@@ -144,7 +144,7 @@ def add_line(sm, name: str, vendor: str, filament_ids: list[int], orca_parent: s
     name = (name or "").strip()
     product = name[len(vendor):].strip() if name.casefold().startswith(vendor.casefold() + " ") else name
     for key, value, at_ok in (("vendor", vendor, False), ("name", product, False),
-                              ("bs_template", bs_template, False), ("orca_parent", orca_parent, True)):
+                              ("bs_template", bs_template, False), ("orca_parent", orca_parent, False)):
         problem = lines_mod.text_problem(value, at_ok=at_ok)
         if problem:
             raise PresetProblem(f"{key} {problem}")
@@ -159,8 +159,9 @@ def add_line(sm, name: str, vendor: str, filament_ids: list[int], orca_parent: s
         if lid in ls:
             raise PresetProblem(f"line {_name(ls[lid])} exists already: use add_filaments_to_line")
         ln = lines_mod.ensure(ls, vendor, product, fils[0].get("material") or "", bambu_parent=bs_template or None,
-                              library=library_mod.load(), store=store, used_fids=set())
-        _set_orca(ln, orca_parent, notes)
+                              library=library_mod.load(), store=store, used_fids=set(),
+                              orca_store=builds.orca_store())
+        _set_orca(ls, ln, orca_parent, notes)
         _join(sm, ls, ln, fils, notes)
         view = _view(ln)
     builds.request_rebuild("mcp line new")
@@ -175,16 +176,27 @@ def generate() -> dict:
                       "shows the new build), and the desktop installs it the next time both slicers are closed"}
 
 
-# ---------- Orca parents (filled in with the Orca data model) ----------
+# ---------- Orca parents (Task 3: Line.orca_parent, lines.set_parent(target="orca"), builds.orca_store) ----------
 
 def _orca_view(ln) -> dict:
-    return {}
+    return {"orca_parent": ln.orca_parent, "orca_parent_source": ln.orca_parent_source}
 
 
 def _orca_parents(words: list[str]) -> list[str]:
-    return []
+    """Base names of the uploaded OrcaFilamentLibrary `@System` presets with every word (no store: [])."""
+    from ..profiles.orca import SYSTEM
+    store = builds.orca_store()
+    if store is None:
+        return []
+    names = sorted({n[: -len(SYSTEM)] for n in store.library_names() if n.endswith(SYSTEM)})
+    return [n for n in names if all(w in n.casefold() for w in words)]
 
 
-def _set_orca(ln, orca_parent: str, notes: list[str]) -> None:
-    if (orca_parent or "").strip():
-        notes.append("orca_parent not stored: this server has no Orca presets yet")
+def _set_orca(ls: dict, ln, orca_parent: str, notes: list[str]) -> None:
+    """The owner's Orca parent for the line (source "user"), checked against the uploaded Orca library; blank
+    keeps the parent the line chose by itself."""
+    parent = (orca_parent or "").strip()
+    if not parent:
+        return
+    lines_mod.check_orca_parent(parent, builds.orca_store())
+    lines_mod.set_parent(ls, ln.line_id, parent, target="orca")
