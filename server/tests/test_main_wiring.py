@@ -292,3 +292,36 @@ def test_corrupt_registry_logged_at_most_once_a_minute(tmp_path, monkeypatch, ca
     errs = [r for r in caplog.records if r.levelno >= logging.ERROR and r.name == m.log.name]
     assert len(errs) == 2 and all(r.exc_info is None for r in errs)
     assert (tmp_path / "printers.json").read_text() == "{broken"
+
+
+def test_main_starts_the_usage_tracker_and_lifespan_stops_it(tmp_path, monkeypatch):
+    from filament_kit.bridge import usage
+    for n in ("etc", "state", "opt"):
+        (tmp_path / n).mkdir()
+        monkeypatch.setenv(f"FK_{n.upper()}", str(tmp_path / n))
+    seen = {}
+    real_lifespan = m.printer_lifespan
+    monkeypatch.setattr(m, "printer_lifespan", lambda mgr, **kw: seen.update(mgr=mgr, tracker=kw.get("tracker"))
+                        or real_lifespan(mgr, **kw))
+    monkeypatch.setattr(m, "serve", lambda app, hub, **kw: None)
+    m.main()
+    t = seen["tracker"]
+    assert isinstance(t, usage.Tracker) and t._on_report in seen["mgr"]._listeners
+
+
+def test_lifespan_stops_the_tracker(tmp_path, monkeypatch):
+    monkeypatch.setenv("FK_STATE", str(tmp_path))
+
+    class T:
+        stopped = 0
+
+        def stop(self):
+            T.stopped += 1
+    mgr = Mgr()
+
+    async def run():
+        async with m.printer_lifespan(mgr, listener_factory=lambda cb: (_ for _ in ()).throw(OSError("x")),
+                                      tracker=T())(None):
+            assert T.stopped == 0
+    asyncio.run(run())
+    assert T.stopped == 1 and mgr.events == ["start", "stop"]

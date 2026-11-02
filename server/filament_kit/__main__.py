@@ -10,7 +10,7 @@ from uvicorn.main import STARTUP_FAILURE
 
 from . import config
 from .api import create_app
-from .bridge import camera, discovery, registry
+from .bridge import camera, discovery, registry, usage
 from .bridge.connection import Manager
 from .spoolman import Spoolman
 
@@ -40,10 +40,11 @@ def discovery_callback(manager):
     return found
 
 
-def printer_lifespan(manager, listener_factory=discovery.Listener, camera_hub=None):
+def printer_lifespan(manager, listener_factory=discovery.Listener, camera_hub=None, tracker=None):
     """Starlette lifespan: the printer connection manager and the SSDP listener live as long as the app.
     A listener that cannot bind (port in use) is logged and skipped; printers already set up still work.
-    On the way out the camera hub (if given) stops every camera source, so no ffmpeg outlives the app."""
+    On the way out the usage tracker (if given) stops taking new jobs, and the camera hub (if given) stops every
+    camera source, so no ffmpeg outlives the app."""
     @asynccontextmanager
     async def lifespan(app):
         listener = None
@@ -59,6 +60,8 @@ def printer_lifespan(manager, listener_factory=discovery.Listener, camera_hub=No
                 await anyio.to_thread.run_sync(manager.stop)
                 if listener is not None:
                     await anyio.to_thread.run_sync(listener.stop)
+                if tracker is not None:
+                    tracker.stop()
             finally:
                 if camera_hub is not None:
                     await anyio.to_thread.run_sync(camera_hub.shutdown)
@@ -113,9 +116,10 @@ def main() -> None:
     etc = config.paths().etc
     sm = Spoolman(cfg["spoolman_url"])
     manager = Manager(spoolman=sm)
+    tracker = usage.Tracker(manager, sm)   # listens before the manager connects: sees every first report
     hub = camera.Hub(printer_state=manager.state)  # ip / Access Code / model / pin from the registry
     app = create_app(sm, printers=manager, camera_hub=hub)
-    app.router.lifespan_context = printer_lifespan(manager, camera_hub=hub)
+    app.router.lifespan_context = printer_lifespan(manager, camera_hub=hub, tracker=tracker)
     # one worker only: the pairing and inventory locks are per process
     serve(app, hub, host="0.0.0.0", port=cfg["port"], ssl_certfile=str(etc / "cert.pem"),
           ssl_keyfile=str(etc / "key.pem"), workers=1, timeout_graceful_shutdown=GRACEFUL_SHUTDOWN)
