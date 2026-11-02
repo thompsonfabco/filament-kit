@@ -3,10 +3,15 @@
 pack() refuses (TooLarge) a folder over the upload limits before zipping it, and is deterministic: the same files give the same bytes (sorted names, fixed timestamps
 and attributes), so it never depends on mtimes.
 
-unpack_build() accepts only `BUILD.json` and `base/<name>.json|.info` with a safe <name>,
+orca_system() packs Orca Slicer's system presets the same way (Ruling L: BBL JSON + the packed library's index).
+
+unpack_build() accepts only `BUILD.json`, `base/<name>.json|.info` and `orca/<name>.json|.info` (the Orca
+Slicer tree; both flat) with a safe <name>,
 refuses everything else before writing anything, caps the uncompressed size while it reads,
 and only moves the result to `dest` once every entry has been written.
 """
+import datetime
+import hashlib
 import io
 import json
 import re
@@ -16,6 +21,7 @@ import tempfile
 import zipfile
 from pathlib import Path
 
+from . import orca_opc
 from .treehash import preset_files
 
 MAX_BUILD_UNCOMPRESSED = 64 * 1024 * 1024
@@ -39,33 +45,66 @@ def pack(root: Path, max_bytes: int | None = None) -> bytes:
     """Zip every .json/.info file under root. TooLarge when the folder breaks an upload limit
     (MAX_ENTRIES files, MAX_FILE per file, MAX_TOTAL uncompressed, max_bytes for the zip)."""
     root = Path(root)
-    files = preset_files(root)
-    if len(files) > MAX_ENTRIES:
-        raise TooLarge(f"{root} is too large to upload: {len(files)} files (the server takes at most {MAX_ENTRIES})")
-    total = 0
+    return _pack(str(root), preset_files(root), {}, max_bytes)
+
+
+LIBRARY_INDEX = "OrcaFilamentLibrary/index.json"
+
+
+def library_index(opc: Path) -> bytes:
+    """`OrcaFilamentLibrary/index.json` for a packed library (Ruling L); the same file gives the same bytes."""
+    st = opc.stat()
+    when = datetime.datetime.fromtimestamp(int(st.st_mtime), datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    index = {"version": 1, "source": f"{opc.name} {when}", "presets": orca_opc.library_presets(opc.read_bytes())}
+    return (json.dumps(index, indent=1, sort_keys=True) + "\n").encode("utf-8")
+
+
+def orca_system(orca, max_bytes: int | None = None) -> tuple[bytes, str]:
+    """(zip, tree hash) of Orca's system presets for `PUT /api/sync/system?target=orca` (Ruling L):
+    `BBL/filament/**.json` from Orca's unpacked %APPDATA%\\OrcaSlicer\\system\\BBL\\filament, plus
+    `OrcaFilamentLibrary/index.json` listing the presets packed in OrcaFilamentLibrary.opc (left out when this
+    PC has no .opc). The hash is what the server's tree hash of the unpacked zip gives."""
+    files = [(f"BBL/filament/{rel}", p) for rel, p in preset_files(orca.system_bbl)
+             if rel.casefold().endswith(".json")]
+    extra = {LIBRARY_INDEX: library_index(orca.library_opc)} if orca.library_opc is not None else {}
+    data = _pack("Orca Slicer's system presets", files, extra, max_bytes)
+    h = hashlib.sha256()
+    with zipfile.ZipFile(io.BytesIO(data)) as zf:   # hash exactly what was sent
+        for name in zf.namelist():
+            h.update(name.encode("utf-8") + b"\0" + hashlib.sha256(zf.read(name)).digest())
+    return data, h.hexdigest()
+
+
+def _pack(label: str, files: list[tuple[str, Path]], extra: dict[str, bytes], max_bytes: int | None) -> bytes:
+    """Zip `files` [(rel, path)] and `extra` {rel: bytes}, sorted by name, after checking the upload limits."""
+    if len(files) + len(extra) > MAX_ENTRIES:
+        raise TooLarge(f"{label} is too large to upload: {len(files) + len(extra)} files "
+                       f"(the server takes at most {MAX_ENTRIES})")
+    total = sum(len(v) for v in extra.values())
     for rel, path in files:
         size = path.stat().st_size
         if size > MAX_FILE:
-            raise TooLarge(f"{root} is too large to upload: {rel} is {_mib(size)} "
+            raise TooLarge(f"{label} is too large to upload: {rel} is {_mib(size)} "
                            f"(the server takes at most {_mib(MAX_FILE)} per file)")
         total += size
     if total > MAX_TOTAL:
-        raise TooLarge(f"{root} is too large to upload: {_mib(total)} uncompressed "
+        raise TooLarge(f"{label} is too large to upload: {_mib(total)} uncompressed "
                        f"(the server takes at most {_mib(MAX_TOTAL)})")
+    entries = sorted([(rel, path) for rel, path in files] + list(extra.items()), key=lambda t: t[0])
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for rel, path in files:
+        for rel, src in entries:
             info = zipfile.ZipInfo(rel, date_time=_FIXED_TIME)
             info.compress_type = zipfile.ZIP_DEFLATED
             info.create_system = 0
             info.external_attr = 0
-            data = path.read_bytes()
+            data = src if isinstance(src, bytes) else src.read_bytes()
             if len(data) > MAX_FILE:  # grew since the stat
-                raise TooLarge(f"{root} is too large to upload: {rel} is over {_mib(MAX_FILE)}")
+                raise TooLarge(f"{label} is too large to upload: {rel} is over {_mib(MAX_FILE)}")
             zf.writestr(info, data)
     data = buf.getvalue()
     if max_bytes is not None and len(data) > max_bytes:
-        raise TooLarge(f"{root} is too large to upload: the zip is {_mib(len(data))} "
+        raise TooLarge(f"{label} is too large to upload: the zip is {_mib(len(data))} "
                        f"(the server takes at most {_mib(max_bytes)})")
     return data
 
@@ -88,7 +127,7 @@ def _check_entries(zf: zipfile.ZipFile) -> list[zipfile.ZipInfo]:
     files, seen, declared = [], set(), 0
     for info in zf.infolist():
         name = info.filename
-        if name == "base/" and info.is_dir():
+        if name in ("base/", "orca/") and info.is_dir():
             continue
         if "\\" in info.orig_filename:  # zipfile turns "\\" into "/" on Windows only; refuse on every OS
             raise ValueError(f"build zip: refusing entry {info.orig_filename!r}")
@@ -97,7 +136,7 @@ def _check_entries(zf: zipfile.ZipFile) -> list[zipfile.ZipInfo]:
             raise ValueError(f"build zip: refusing entry {name!r} (not a regular file)")
         if name != "BUILD.json":
             head, sep, tail = name.partition("/")
-            if head != "base" or not sep or not _safe_name(tail):
+            if head not in ("base", "orca") or not sep or not _safe_name(tail):
                 raise ValueError(f"build zip: refusing entry {name!r}")
         key = name.casefold()
         if key in seen:
