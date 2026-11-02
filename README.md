@@ -254,8 +254,8 @@ failure; the bundled library keeps working.
 - Presets don't appear in Bambu Studio: close Bambu Studio (the sync waits while it is open), then wait up to
   10 minutes. On the PC, run `filament-kit-sync status` to see the server, the Bambu Studio folder in use and
   the last run.
-- The sync log is `%LOCALAPPDATA%ilament-kit-sync\sync.log`. Backups of your Bambu Studio filament folder,
-  made before each install (the 5 newest are kept), are in `%LOCALAPPDATA%ilament-kit-syncackups`.
+- The sync log is `%LOCALAPPDATA%\filament-kit-sync\sync.log`. Backups of your Bambu Studio filament folder,
+  made before each install (the 5 newest are kept), are in `%LOCALAPPDATA%\filament-kit-sync\backups`.
 - "Other PC" errors: another PC already syncs with this server. Remove it with `sudo filament-kit unpair <id>`.
 - `sudo filament-kit profiles build` says to install and pair the PC sync: do [Pair your PC](#pair-your-pc).
 
