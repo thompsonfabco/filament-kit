@@ -3,18 +3,23 @@
 Ported from the owner's H2D usage tracker (`h2d-filament-scanner/usage/usage_tracker.py`, proven on hardware).
 
 Lifecycle (`Tracker`, fed by `Manager.add_listener`): while a printer is RUNNING / PAUSE / PREPARE / SLICING the
-job is remembered (`subtask_name`, plate, `mapping`, `task_id`); when it turns FINISH or FAILED it is settled
+job is remembered (`subtask_name`, plate, `mapping`); when it turns FINISH or FAILED it is settled
 once. A FINISH/FAILED already shown by the first report after a (re)connect is never settled (it ended while
 nobody watched, and may have been settled before a restart); a server restarted mid-print picks the job up from
-that first RUNNING report and settles it when it ends. A `task_id` settled once is not settled again.
+that first RUNNING report and settles it when it ends. Exactly-once rests on that transition alone (the
+watched state goes ACTIVE -> FINISH/FAILED once per job), not on `task_id`: LAN, SD-card and touchscreen
+prints, and our calibration job, all report "0", and a reprint may reuse an id. Our own calibration job
+(`fk-calib-*`) is never settled and logs nothing.
 
 Settling (on a worker thread): the job's 3MF is fetched from the printer's SD card over FTPS by name,
-`<subtask_name>_plate_<n>.gcode.3mf` then `<subtask_name>.gcode.3mf`, each in `/` then `/cache`, then the best
-name match in an NLST of both (the printer has no MLSD and no mtimes: never "the newest file").
+`<subtask_name>_plate_<n>.gcode.3mf` then `<subtask_name>.gcode.3mf`, each in `/` then `/cache`, then a listed
+file whose name is exactly one of those two, ignoring case, in an NLST of both (the printer has no MLSD and no
+mtimes: never "the newest file", never a similar name).
 `Metadata/slice_info.config` lists, per plate, `<filament id=N used_g=...>` with N the project filament number;
 the printer's slot for it is `mapping[N - 1]` (a global slot id), which the calibrated slot map
 (`ams.load_map`) turns into a label (A1, HT-A ...), and the spool in that slot is the Spoolman spool whose
-`location` is exactly "<printer name> – AMS <label>". Grams = `used_g` × final `mc_percent` / 100 (a FINISH
+`location` is exactly "<printer name> – AMS <label>" (two non-archived spools there: `ambiguous_spool`, nothing
+written). Grams = `used_g` × final `mc_percent` / 100 (a FINISH
 counts as 100 %, so a late percent delta cannot under-count), rounded to 0.01 g; filaments with 0 g are
 skipped. The deduction is `Spoolman.use(spool_id, grams)` (`PUT /spool/{id}/use`). A printer whose map is not
 `calibrated`, or is `observe`, is in observe mode: entries are logged with `observe: true`, nothing is written.
@@ -37,7 +42,7 @@ serve):
   undone    true once undone
   error     only when set: "file_not_found" | "no_slice_info" | "plate_not_found" | "printer_unreachable" |
             "cert_changed" (job-level, one entry, nothing written) | "spoolman_unreachable" |
-            "spoolman_failed" (that filament's write did not happen)
+            "spoolman_failed" | "ambiguous_spool" (that filament's write did not happen)
 An entry was written to Spoolman iff observe is false, spool_id is set, grams > 0 and there is no error; only
 those can be undone.
 
@@ -76,6 +81,7 @@ UNDO_DAYS = 7
 ACTIVE = {'RUNNING', 'PAUSE', 'PREPARE', 'SLICING'}
 TERMINAL = {'FINISH', 'FAILED'}
 DIRS = ('/', '/cache')
+CALIB_PREFIX = 'fk-calib-'      # our calibration job (calib3mf): not a print, its file is deleted afterwards
 MAX_SLICE_INFO = 4 * 1024 * 1024
 ENTRY_ID = re.compile(r"[0-9a-f]{32}")
 FIELDS = ('id', 'at', 'job', 'grams', 'spool_id', 'slot', 'observe')
@@ -241,14 +247,15 @@ def candidate_paths(subtask: str, plate: str | None) -> list[str]:
 
 
 def nlst_match(names: list[str], subtask: str, plate: str | None) -> str | None:
-    """The listed 3MF whose name best matches the job: contains the subtask name, prefers `_plate_<n>.`, then
-    the shortest name, then `/` over `/cache`."""
-    hits = [n for n in names if n.lower().endswith('.gcode.3mf') and subtask in n.rsplit('/', 1)[-1]]
-    if plate:
-        pref = [n for n in hits if f"_plate_{plate}." in n.rsplit('/', 1)[-1]]
-        hits = pref or hits
-    hits.sort(key=lambda n: (len(n.rsplit('/', 1)[-1]), n.startswith('/cache')))
-    return hits[0] if hits else None
+    """The listed 3MF named exactly `<subtask>_plate_<n>.gcode.3mf` or `<subtask>.gcode.3mf` ignoring case (that
+    order), `/` before `/cache`. Only case differences are forgiven: a similar name is another job."""
+    wanted = ([f"{subtask}_plate_{plate}.gcode.3mf".casefold()] if plate else []) +         [f"{subtask}.gcode.3mf".casefold()]
+    for w in wanted:
+        hits = sorted((n for n in names if n.rsplit('/', 1)[-1].casefold() == w),
+                      key=lambda n: n.startswith('/cache'))
+        if hits:
+            return hits[0]
+    return None
 
 
 def fetch_3mf(printer: registry.Printer, subtask: str, plate: str | None) -> tuple[bytes | None, str | None]:
@@ -337,7 +344,6 @@ class _Watch:
     def __init__(self):
         self.prev: str | None = None
         self.job: dict | None = None
-        self.done: set[str] = set()
 
 
 class Tracker:
@@ -373,15 +379,13 @@ class Tracker:
             prev, w.prev = w.prev, gs
             if gs in ACTIVE:
                 w.job = {'subtask': str(report.get('subtask_name') or ''), 'plate': _plate_of(report),
-                         'mapping': report.get('mapping'), 'task_id': str(report.get('task_id') or '')}
+                         'mapping': report.get('mapping')}
                 return
             job, w.job = w.job, None
             if first or gs not in TERMINAL or prev not in ACTIVE or job is None:
                 return
-            if job['task_id'] and job['task_id'] in w.done:
+            if job['subtask'].startswith(CALIB_PREFIX):
                 return
-            if job['task_id']:
-                w.done.add(job['task_id'])
             pct = 100.0 if gs == 'FINISH' else float(status._int(report.get('mc_percent'), 0) or 0)
             log.info("usage: printer %s: %s %s at %s %%", serial, job['subtask'], gs, pct)
             self._futures = [f for f in self._futures if not f.done()]
@@ -427,10 +431,11 @@ def settle(serial: str, job: dict, pct: float, spoolman) -> list[dict]:
     smap = ams.load_map(serial)
     observe = not smap.calibrated or smap.observe
     labels = _labels(smap)
-    spools, spool_error = {}, None
+    spools: dict[str, list[dict]] = {}
+    spool_error = None
     try:
-        for s in spoolman.get('spool') or []:
-            spools.setdefault(str(s.get('location') or ''), s)
+        for s in spoolman.get('spool') or []:          # archived spools are not listed
+            spools.setdefault(str(s.get('location') or ''), []).append(s)
     except SpoolmanError as e:
         log.warning("usage: printer %s: cannot list spools: %s", serial, e)
         spool_error = 'spoolman_unreachable'
@@ -445,11 +450,16 @@ def settle(serial: str, job: dict, pct: float, spoolman) -> list[dict]:
         label = None
         if g is not None and g >= 0:
             label = labels.get(g) if smap.calibrated else _guess_label(g)
-        spool = spools.get(status.location(p.name, label)) if label else None
+        here = spools.get(status.location(p.name, label), []) if label else []
+        spool = here[0] if len(here) == 1 else None
         entry = {'job': name, 'grams': grams, 'spool_id': spool.get('id') if spool else None, 'slot': label,
                  'observe': observe}
         if spool_error and label:
             entry['error'] = spool_error
+        elif len(here) > 1:
+            log.warning("usage: printer %s: spools %s all claim slot %s; nothing deducted", serial,
+                        [x.get('id') for x in here], label)
+            entry['error'] = 'ambiguous_spool'
         elif not observe and spool:
             try:
                 spoolman.use(spool['id'], grams)
