@@ -26,7 +26,7 @@ class PinnedTlsTest {
         val cert = serverCert("pat.local")
         val server = start(cert)
         // URL host is 127.0.0.1 but the cert only names pat.local: the host check is skipped for the pinned cert.
-        val url = server.url("/api/info")
+        val url = server.ipUrl("/api/info")
         assertEquals("127.0.0.1", url.host)
 
         pinnedClient(cert.fingerprint()).newCall(Request.Builder().url(url).build()).execute().use {
@@ -42,7 +42,7 @@ class PinnedTlsTest {
         val server = start(other)
 
         val e = assertThrows(FingerprintMismatch::class.java) {
-            pinnedClient(pinned.fingerprint()).newCall(Request.Builder().url(server.url("/api/info")).build()).execute()
+            pinnedClient(pinned.fingerprint()).newCall(Request.Builder().url(server.ipUrl("/api/info")).build()).execute()
         }
 
         assertEquals(pinned.fingerprint(), e.expected)

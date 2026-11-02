@@ -35,7 +35,7 @@ class ApiTest {
 
     @After fun tearDown() = server.close()
 
-    private fun baseOf(s: MockWebServer) = s.url("/").toString().trimEnd('/')
+    private fun baseOf(s: MockWebServer) = s.ipUrl("/").toString().trimEnd('/')
 
     private fun json(body: String, code: Int = 200) =
         server.enqueue(MockResponse.Builder().code(code).addHeader("Content-Type", "application/json").body(body).build())

@@ -26,7 +26,7 @@ class ApiPrintersTest {
         it.start(InetAddress.getByName("127.0.0.1"), 0)
     }
     private val client = pinnedClient(cert.fingerprint())
-    private val api = Api(client, { server.url("/").toString().trimEnd('/') }, { "tok-123" })
+    private val api = Api(client, { server.ipUrl("/").toString().trimEnd('/') }, { "tok-123" })
 
     @After fun tearDown() = server.close()
 
@@ -206,7 +206,7 @@ class ApiPrintersTest {
     }
 
     @Test fun cameraUrlsAndHeaders() {
-        val base = server.url("/").toString().trimEnd('/')
+        val base = server.ipUrl("/").toString().trimEnd('/')
         assertEquals("$base/api/printers/0948AB/camera/index.m3u8", api.cameraHlsUrl("0948AB"))
         assertEquals("$base/api/printers/0948AB/camera.mjpeg", api.cameraMjpegUrl("0948AB"))
         assertEquals(mapOf("Authorization" to "Bearer tok-123"), api.authHeaders())
