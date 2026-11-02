@@ -16,6 +16,7 @@ import json
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 from . import tags
@@ -50,13 +51,18 @@ def _fetch(url: str) -> dict | None:
     return data
 
 
+def _web(url: str) -> bool:
+    """Only http(s): urllib would also open file: and ftp: URLs from the config (A-M2)."""
+    return urllib.parse.urlsplit(url).scheme.lower() in ("http", "https")
+
+
 def _sources(cfg: dict) -> list[tuple[str, str]]:
     out: list[tuple[str, str]] = []
     for s in cfg.get("tag_sources") or []:
-        if isinstance(s, dict) and s.get("url"):
+        if isinstance(s, dict) and s.get("url") and _web(str(s["url"])):
             out.append((str(s.get("name") or s["url"]), str(s["url"])))
     st = (cfg.get("station") or {}).get("url")
-    if st:
+    if st and _web(str(st)):
         out.append(("station", str(st).rstrip("/") + "/last-tag"))
     return out
 

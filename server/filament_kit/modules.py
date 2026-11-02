@@ -164,6 +164,15 @@ def validate(cfg: dict) -> None:
             who = "web" if "web" in on else "remote"
             raise ModuleError(f"{who} needs web.public_url set to the https address people will use "
                               "(e.g. https://mcp.example.com/filament)")
+    if "web" in on:                             # A-M5: a bad entry would crash the web unit on every start
+        lan = (cfg.get("web") or {}).get("lan")
+        if not isinstance(lan, list):
+            raise ModuleError("web.lan must be a list of networks such as 192.168.1.0/24")
+        for entry in lan:
+            try:
+                ipaddress.ip_network(str(entry) if isinstance(entry, str) else "", strict=False)
+            except ValueError:
+                raise ModuleError(f"web.lan entry {entry!r} is not a network such as 192.168.1.0/24") from None
     if "orders" in on and not (cfg.get("orders") or {}).get("file"):
         raise ModuleError("orders needs orders.file (the order history file)")
     allow = (cfg.get("station") or {}).get("allow") or []
