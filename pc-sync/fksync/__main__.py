@@ -13,7 +13,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import __version__, client, store, studio, sync
+from fksync import __version__, client, store, studio, sync  # absolute: PyInstaller runs this file as a script
 
 APP = "filament-kit-sync"
 _HOST = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,252})$")
