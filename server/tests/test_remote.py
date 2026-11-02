@@ -73,9 +73,9 @@ def test_route_name_from_public_url_path_and_default():
 
 
 def test_hostname_setting_wins_and_window_adds_timer_dropin():
-    cfg = _cfg(hostname="Kit.Example.org", acme_window="03:10 America/New_York")
+    cfg = _cfg(hostname="FK.Example.org", acme_window="03:10 America/New_York")
     acts = _plan(cfg)
-    assert _of(acts, "remote_install") == ["kit.example.org"]
+    assert _of(acts, "remote_install") == ["fk.example.org"]
     (dest, text, mode, owner), = [a.arg for a in acts if a.kind == "install_file" and "certbot.timer.d" in a.arg[0]]
     assert "OnCalendar=*-*-* 03:10:00 America/New_York" in text
     assert "certbot.timer" in _of(acts, "enable")
@@ -252,3 +252,65 @@ def test_shell_scripts_parse(name):
 def test_release_files_include_remote():
     assert "install/remote" in (INSTALL.parent / "tools/make_release.sh").read_text()
     assert "$RES/remote" in (INSTALL / "install.sh").read_text()
+
+
+# ---- fix round 1 ----
+
+def test_router_conf_has_no_http2_directive():
+    text = (INSTALL / "remote" / "mcp-router.conf").read_text()
+    assert "http2" not in text  # nginx 1.24 rejects `http2 on`; newer nginx warns about `listen ... http2`
+
+
+def test_hostname_and_public_url_host_must_agree():
+    with pytest.raises(ModuleError) as e:
+        _plan(_cfg(hostname="other.example.org"))
+    assert "other.example.org" in str(e.value) and "fk.example.org" in str(e.value)
+    _plan(_cfg(hostname="FK.example.org"))  # same host, other case: fine
+
+
+def test_timer_dropin_is_not_persistent():
+    assert "Persistent=false" in remote.timer_dropin("03:10")
+
+
+def test_unset_window_removes_the_kit_timer_dropin(tmp_path, capsys):
+    acts = _plan(_cfg())
+    assert _of(acts, "remote_unpin") == [""]
+    root = tmp_path / "root"
+    f = root / "etc/systemd/system/certbot.timer.d/acme-window.conf"
+    f.parent.mkdir(parents=True)
+    f.write_text("[Timer]\n")
+    apply.execute([Action("remote_unpin")], run=Rec(), resources=INSTALL, root=root)
+    assert not f.exists()
+    assert not _of(_plan(_cfg(acme_window="03:10")), "remote_unpin")
+
+
+def test_changed_route_name_removes_the_kits_old_route(tmp_path):
+    root, run = tmp_path / "root", Rec()
+    book = root / "etc/mcp-router/kit-routes"
+    book.parent.mkdir(parents=True)
+    book.write_text("oldname\n")
+    apply.execute([Action("remote_route", ("filament", 8101))], run=run, resources=INSTALL, root=root)
+    assert run.texts() == ["/usr/local/sbin/mcp-route rm oldname", "/usr/local/sbin/mcp-route add filament 8101"]
+    assert book.read_text() == "filament\n"
+    run2 = Rec()  # same name again: nothing to remove
+    apply.execute([Action("remote_route", ("filament", 9000))], run=run2, resources=INSTALL, root=root)
+    assert run2.texts() == ["/usr/local/sbin/mcp-route add filament 9000"]
+
+
+def test_mcp_route_restores_state_when_nginx_rejects_the_route():
+    text = (INSTALL / "remote" / "mcp-route").read_text()
+    assert ".conf.old" in text and "restored the previous state" in text
+
+
+def test_deploy_hook_double_registration_is_explained():
+    src = Path(apply.__file__).read_text(encoding="utf-8")
+    assert "renewal-hooks/deploy" in src and "--expand" in src
+
+
+def test_firewall_command_without_resources_prints_a_fix(monkeypatch, capsys):
+    def boom(*a, **k):
+        raise FileNotFoundError("no remote dir")
+    monkeypatch.setattr(remote, "firewall_text", boom)
+    assert remote.firewall(_cfg()) == 1
+    out = capsys.readouterr().out
+    assert "error:" in out and "fix:" in out
