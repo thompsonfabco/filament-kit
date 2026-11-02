@@ -2,7 +2,7 @@
 
 Folder choice (Decision "Bambu Studio folder choice"): from %APPDATA%\\BambuStudio and
 %APPDATA%\\BambuStudioBeta take the root whose BambuStudio.conf is newest (a root without a conf
-is ranked by its newest user/*/filament dir); within it, the user/<id> whose filament dir is
+is ranked by its newest user/*/filament dir; a root with no user filament dir is skipped); within it, the user/<id> whose filament dir is
 newest. A pin from the sync config (`variant`, `user_id`) wins over both choices.
 
 The caller passes `appdata`; only fksync.__main__ reads the real environment.
@@ -58,11 +58,12 @@ def _user_filament_dirs(root: Path) -> list[tuple[float, str, Path]]:
 
 
 def _root_rank(root: Path) -> float | None:
-    conf = _mtime(root / CONF)
-    if conf is not None:
-        return conf
+    """The root's rank, or None when it has no user/*/filament dir (a root it could never use)."""
     dirs = _user_filament_dirs(root)
-    return max(d[0] for d in dirs) if dirs else None
+    if not dirs:
+        return None
+    conf = _mtime(root / CONF)
+    return conf if conf is not None else max(d[0] for d in dirs)
 
 
 def locate(appdata: Path, pin: dict | None = None) -> StudioFolders:

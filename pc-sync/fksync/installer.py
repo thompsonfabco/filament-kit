@@ -168,7 +168,10 @@ def _replace_installed(build_dir: Path, dirs: AppDirs) -> None:
 
 
 def install(build_dir: Path, folders: StudioFolders, dirs: AppDirs, *,
-            running: Callable[[], bool], stamp_now: str) -> InstallResult:
+            running: Callable[[], bool], stamp_now: str,
+            before_write: Callable[[Path], None] | None = None) -> InstallResult:
+    """before_write(backup_dir) runs after the backup and before the first live write (the sync
+    records it so an interrupted install can be told apart from later in-app edits)."""
     build_dir = Path(build_dir)
     if running():
         raise Refused(STUDIO_RUNNING, "studio_running")
@@ -230,6 +233,8 @@ def install(build_dir: Path, folders: StudioFolders, dirs: AppDirs, *,
 
     # 5. backup
     backup = _backup(folders.user_filament, dirs.backups, stamp_now)
+    if before_write is not None:
+        before_write(backup)
 
     # 6. copy presets, merging .info so a live cloud setting_id is kept
     #    (each file is written to a temp file next to it, then renamed over it)
