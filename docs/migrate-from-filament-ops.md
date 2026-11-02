@@ -236,8 +236,9 @@ Two installers on one slicer folder is the hazard: the ops task must not run onc
 2. **Pair the PC sync:** close Bambu Studio and Orca Slicer, run `filament-kit-sync-setup-<version>.exe`, then on
    the VM `sudo filament-kit pair --pc` and paste the link (see the README, "PC sync"). It uploads both slicers'
    presets; the VM's first build follows.
-3. **The first build** (`sudo filament-kit profiles status` on the VM): expect 413 Bambu Studio presets, every one
-   keeping its `filament_id`, and about 694 Orca presets. It rewrites, once:
+3. **The first build** (`sudo filament-kit profiles status` on the VM): its `build:` line should read about
+   `413 presets, 694 Orca presets, 0 Orca stale` (413 Bambu Studio presets, every one keeping its `filament_id`).
+   It rewrites, once:
    - the per-variant arrays of the Orca H2D presets from 3 extruder variants to the 2 the Orca H2D parent has
      (your calibrated values follow by variant name: "fitted from 3 to 2 extruder variants" lines);
    - the `version` of the adopted Orca H2D presets (ops wrote 2.8.0.16; the kit writes the parent's);

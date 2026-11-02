@@ -786,7 +786,9 @@ def cmd_profiles_status() -> int:
     b, la, inst, pc = st["build"], st["last_attempt"], st["installed"], st["pc"]
     print(f"lines: {st['lines']}")
     if b:
-        print(f"build: {b['stamp']} ({_fmt_time(b.get('created'))}), {st['presets']} presets, "
+        orca = (f"{st['orca_presets']} Orca presets, {len(st['orca_stale'])} Orca stale, "
+                if st.get("orca_presets") is not None else "")
+        print(f"build: {b['stamp']} ({_fmt_time(b.get('created'))}), {st['presets']} presets, {orca}"
               f"{b.get('problems', 0)} problems")
     else:
         print("build: no build yet")
@@ -804,6 +806,8 @@ def cmd_profiles_status() -> int:
           else "PC sync: not set up (see README: Pair your PC)")
     for name in st["stale"]:
         print(f"  delete in Bambu Studio: {name}")
+    for name in st.get("orca_stale", []):
+        print(f"  delete in Orca Slicer: {name}")
     for prob in st["problems"]:
         print(f"  problem: {prob}")
     return 0
