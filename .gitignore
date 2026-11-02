@@ -17,3 +17,6 @@ android/.idea/
 *.iml
 *.jks
 *.keystore
+
+# pc-sync shared tool venv
+pc-sync/.venv/
