@@ -29,7 +29,8 @@ Order (each check runs before anything is written):
      leaves a half-written preset (leftover temp files are removed at the start of this phase);
   7. nothing is ever deleted: presets no longer built but still live are returned as `stale` /
      `stale_orca` (they are deleted in the app, never on disk);
-  8. dirs.installed is replaced with a copy of the build (temp dir + rename).
+  8. dirs.installed is replaced with a copy of the build (temp dir + rename); an orca/ tree not installed this
+     time keeps the previous snapshot's orca/ (B-I1: Orca edits are still diffed against what Orca holds).
 """
 import json
 import os
@@ -190,12 +191,17 @@ def _remove_leftover_tmp(live: Path) -> None:
 
 
 def _replace_installed(build_dir: Path, dirs: AppDirs, skip: tuple[str, ...] = ()) -> None:
+    """dirs.installed becomes a copy of the build; a `skip`ped tree (not installed here) keeps the previous
+    snapshot's copy, if any: it is still what the app holds (the server's Orca snapshot too, Ruling AB)."""
     dirs.ensure()
     work = Path(tempfile.mkdtemp(prefix=".installed.", suffix=".tmp", dir=dirs.base))
     try:
         new = work / "installed"
         top = Path(build_dir)
         shutil.copytree(build_dir, new, ignore=lambda d, names: [n for n in names if Path(d) == top and n in skip])
+        for tree in skip:
+            if (dirs.installed / tree).is_dir():
+                shutil.copytree(dirs.installed / tree, new / tree)
         old = work / "old"
         if dirs.installed.exists():
             dirs.installed.rename(old)

@@ -432,3 +432,62 @@ def test_install_report_trees_are_checked(orca_cfg):
         with pytest.raises(errors.ProfileError) as e:
             builds.record_installed(b1, "a", bad)
         assert e.value.status == 400
+
+
+# ---------- final review fixes ----------
+
+def test_state_view_says_whether_the_server_makes_orca_presets(env, orca_cfg):
+    """B-I2: pc-sync syncs Orca Slicer only when the server makes Orca presets (Ruling X: the config alone)."""
+    assert builds.state_view("a")["orca_target"] is True
+    config.save({})
+    assert builds.state_view("a")["orca_target"] is False
+
+
+def test_orca_live_upload_renews_a_waiting_build_with_its_orca_hash(orca_cfg):
+    """B-M2: an Orca live upload renewing a waiting request names its hash as the Orca one, not the Bambu one."""
+    TB.synced(orca_cfg)
+    orca_synced()
+    b1 = builds.run_build(orca_cfg, now=TG.NOW)["stamp"]
+    builds.store_upload("live", io.BytesIO(TB._live_zip_of(b1)), device_id="a", user_id="1")   # pre-install
+    TB.tick()
+    builds.record_installed(b1, "a", ["base", "orca"])
+    TB.tick()
+    builds.request_rebuild("spoolman changed")
+    assert builds.run_build(orca_cfg, now=TG.NOW + 1)["error"] == builds.WAIT_LIVE
+    h = builds.store_upload("orca_live", io.BytesIO(_orca_live_zip_of(b1)), device_id="a", user_id=OUSER)
+    req = json.loads((TB.profiles_dir() / "rebuild-request").read_text(encoding="utf-8"))
+    assert req["orca_live_hash"] == h
+    assert req["live_hash"] == builds.meta()["live_hash"] != h
+
+
+def test_install_report_counts_orca_only_for_a_build_with_an_orca_tree(env):
+    """B-M4: "orca" in the trees is taken only when the build has an orca/ tree; repeated trees are one."""
+    TB.synced(env)
+    b1 = builds.run_build(env, now=TG.NOW)["stamp"]
+    assert not (TB.profiles_dir() / "builds" / b1 / "orca").exists()
+    builds.record_installed(b1, "a", ["base", "orca"])
+    inst = json.loads((TB.profiles_dir() / "installed.json").read_text(encoding="utf-8"))
+    assert "orca_stamp" not in inst
+    builds.record_installed(b1, "a", ["base", "base"])
+    assert json.loads((TB.profiles_dir() / "installed.json").read_text(encoding="utf-8"))["stamp"] == b1
+
+
+def test_new_sync_pc_keeps_migrated_orca_owner_edits_after_a_base_only_install(orca_cfg):
+    """B-I3: migrate-ops seeds owner-edits.json with the owner's Orca record; the first install goes in base/
+    only (record_installed keeps the Orca part); a new sync PC must not drop it."""
+    TB.synced(orca_cfg)
+    orca_synced()
+    seeded = {"stamp": None, "inapp": {}, "notes": {},
+              "orca_inapp": {TGO.sv08("0.4"): {"nozzle_temperature": ["233"]}}, "orca_notes": {}}
+    (TB.profiles_dir() / "owner-edits.json").write_text(json.dumps(seeded), encoding="utf-8")
+    b1 = builds.run_build(orca_cfg, now=TG.NOW)["stamp"]
+    builds.record_installed(b1, "a")                       # base/ only
+    TB.tick()
+    TB.pair("b")
+    builds.store_upload("live", io.BytesIO(TB._live_zip_of(b1)), device_id="b", user_id="1")
+    oe = json.loads((TB.profiles_dir() / "owner-edits.json").read_text(encoding="utf-8"))
+    assert oe["orca_inapp"] == seeded["orca_inapp"]
+    assert oe["stamp"] == b1 and "inapp" in oe
+    r = builds.run_build(orca_cfg, now=TG.NOW + 1)
+    assert r["ok"] is True, r
+    assert builds.manifest(r["stamp"])["orca_inapp"] == seeded["orca_inapp"]
