@@ -1,5 +1,6 @@
 """FTPS client against a fake printer (implicit TLS, NLST only, data-channel session reuse required)."""
 import logging
+import ssl
 
 import pytest
 
@@ -44,6 +45,16 @@ def test_upload_nlst_download_delete(fake, printer, leaf):
     assert fake.data_conns >= 4 and fake.refused_data == 0       # every data channel resumed the session
     assert "MLSD" not in fake.commands
     assert registry.load()[SERIAL].cert_fp == leaf.fp                 # pinned on first use
+
+
+def test_failed_data_channel_shutdown_is_not_a_failed_transfer(fake, printer, leaf, monkeypatch):
+    # the printer closing an empty listing's channel can make the TLS shutdown fail; the 226 decides
+    def broken(self):
+        raise ssl.SSLError("[SSL: SHUTDOWN_WHILE_IN_INIT] shutdown while in init")
+    monkeypatch.setattr(ssl.SSLSocket, "unwrap", broken)
+    with ftps.Client(printer) as c:
+        assert c.nlst("/cache") == []
+        assert c.nlst("/") == ["cache"]
 
 
 def test_pinned_leaf_accepted(fake, printer, leaf):
