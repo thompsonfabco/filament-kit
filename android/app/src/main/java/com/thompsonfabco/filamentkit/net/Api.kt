@@ -220,6 +220,41 @@ class Api(
         return decode(entry)
     }
 
+    // ---- stage 4: profiles and the spec library ---------------------------------------------------------------
+
+    suspend fun profileStatus(): ProfileStatus = decode(call(request("api", "profiles", "status").get()))
+
+    suspend fun profileLines(): List<ProfileLine> =
+        call(request("api", "profiles", "lines").get()).jsonObject["lines"]?.jsonArray.orEmpty().map { decode(it) }
+
+    /** Bambu Studio parents for [material]; [ParentList.synced] false before the PC uploaded the system presets. */
+    suspend fun parents(material: String): ParentList {
+        val req = request("api", "profiles", "parents") { addQueryParameter("material", material) }
+        return decode(call(req.get()))
+    }
+
+    /** The line and parent the server would use for these values (nothing is saved). */
+    suspend fun propose(vendor: String, line: String, material: String): Proposal {
+        val body = buildJsonObject {
+            put("vendor", vendor)
+            put("line", line)
+            put("material", material)
+        }
+        return decode(call(request("api", "profiles", "propose").post(body.toBody())))
+    }
+
+    /** 400 `unknown_parent` when the PC has synced and Bambu Studio has no such preset; 404 `not_found`. */
+    suspend fun setLineParent(lineId: String, parent: String): ProfileLine {
+        val body = buildJsonObject { put("bambu_parent", parent) }
+        val line = call(request("api", "profiles", "lines", lineId).patch(body.toBody())).jsonObject["line"]
+            ?: throw ApiError(200, "bad_response", "The server did not return the line")
+        return decode(line)
+    }
+
+    /** Saves one of the owner's own library entries; 400 `invalid_entry` carries `problems` in [ApiError.extra]. */
+    suspend fun addLocalProfile(entry: JsonObject): LocalEntryResult =
+        decode(call(request("api", "library", "local").post(entry.toBody())))
+
     // ---- end printers --------------------------------------------------------------------------------------
 
     // --- plumbing ---
