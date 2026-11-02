@@ -469,11 +469,17 @@ def cmd_printer_map(serial: str, manager_factory) -> int:
         mapper = mapping.Mapper(m)
 
         def on_signal(signum, frame):
-            # Ctrl-C, a closed terminal (SIGHUP) or SIGTERM mid-job: stop cooperatively so every slot is put back
-            if not stopped:
-                print("\n  Stopping: putting the slots back first (this takes a few seconds) ...", flush=True)
+            # Ctrl-C, a closed terminal (SIGHUP) or SIGTERM mid-job: stop cooperatively so every slot is put back.
+            # Abort first (lock-free); the message is a courtesy: a print can fail here (a reentrant call when
+            # the signal lands mid-print, EIO once the terminal is gone) and must not lose the abort.
+            first = not stopped
             stopped.append(signum)
             mapper.abort(serial)
+            if first:
+                try:
+                    print("\n  Stopping: putting the slots back first (this takes a few seconds) ...", flush=True)
+                except (OSError, RuntimeError):
+                    pass
         old = _on_stop_signals(on_signal)
         try:
             v = mapper.run(serial, on_step=lambda t: print(f"  {t}", flush=True))
