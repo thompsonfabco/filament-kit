@@ -1,0 +1,144 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 870" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12">
+  <rect width="1000" height="870" fill="#ffffff"/>
+  <defs>
+    <g id="gnd" stroke="#222" stroke-width="2"><line x1="-10" y1="0" x2="10" y2="0"/><line x1="-6" y1="5" x2="6" y2="5"/><line x1="-2" y1="10" x2="2" y2="10"/></g>
+    <g id="v5" stroke="#d22" stroke-width="2"><line x1="-9" y1="0" x2="9" y2="0"/></g>
+    <!-- N-channel enhancement MOSFET, gate lead ends at (0,0); drain lead up at (24,-14..), source at (24,14..) -->
+    <g id="nmos" stroke="#222" stroke-width="2" fill="none">
+      <line x1="0" y1="-14" x2="0" y2="14"/>
+      <line x1="8" y1="-18" x2="8" y2="-10"/><line x1="8" y1="-4" x2="8" y2="4"/><line x1="8" y1="10" x2="8" y2="18"/>
+      <polyline points="8,-14 24,-14"/><polyline points="8,14 24,14"/>
+      <line x1="24" y1="0" x2="24" y2="14"/><line x1="24" y1="0" x2="14" y2="0"/>
+      <polygon points="8,0 15,-4 15,4" fill="#222" stroke="none"/>
+    </g>
+    <!-- push switch, terminals at (0,0) and (-100,0) -->
+    <g id="sw" stroke="#222" stroke-width="2" fill="none">
+      <line x1="0" y1="0" x2="-30" y2="0"/><line x1="-70" y1="0" x2="-100" y2="0"/>
+      <circle cx="-34" cy="0" r="4" fill="#fff"/><circle cx="-66" cy="0" r="4" fill="#fff"/>
+      <line x1="-72" y1="-14" x2="-28" y2="-14"/><line x1="-50" y1="-14" x2="-50" y2="-24"/>
+    </g>
+    <!-- lamp, leads at (0,-13) and (0,13) -->
+    <g id="lamp" stroke-width="2"><circle cx="0" cy="0" r="13" fill="#fff"/>
+      <line x1="-9" y1="-9" x2="9" y2="9"/><line x1="9" y1="-9" x2="-9" y2="9"/></g>
+  </defs>
+
+  <text x="30" y="34" font-size="18" font-weight="600" fill="#111">Intake station button panel: full circuit</text>
+  <text x="30" y="54" fill="#555">Wemos D1 mini (ESP-12F) on the station PC's USB; BS170 MOSFETs switch the 5 V button lamps.</text>
+  <text x="30" y="72" fill="#555">Every ground symbol joins the D1 mini's G pin; every 5V flag joins its 5V pin.</text>
+
+  <!-- ===== D1 mini ===== -->
+  <rect x="380" y="250" width="180" height="320" rx="8" fill="#e8eef5" stroke="#4a6680" stroke-width="2"/>
+  <rect x="425" y="275" width="90" height="62" rx="4" fill="#cfd8e2" stroke="#7a8fa3" stroke-width="1.5"/>
+  <text x="470" y="302" text-anchor="middle" fill="#334" font-weight="600">ESP-12F</text>
+  <text x="470" y="318" text-anchor="middle" fill="#556" font-size="11">metal shield</text>
+  <text x="470" y="460" text-anchor="middle" fill="#334" font-weight="600">D1 mini</text>
+  <rect x="445" y="565" width="50" height="18" rx="3" fill="#bbb" stroke="#666" stroke-width="1.5"/>
+  <text x="470" y="602" text-anchor="middle" fill="#334">micro-USB to station PC</text>
+  <g font-size="12">
+    <text x="392" y="286" fill="#aaa">TX</text><text x="392" y="322" fill="#aaa">RX</text>
+    <text x="392" y="358" font-weight="700" fill="#111">D1</text><text x="392" y="394" font-weight="700" fill="#111">D2</text>
+    <text x="392" y="430" fill="#aaa">D3</text><text x="392" y="466" fill="#aaa">D4</text>
+    <text x="392" y="502" font-weight="700" fill="#111">G</text><text x="392" y="538" font-weight="700" fill="#111">5V</text>
+    <text x="548" y="286" text-anchor="end" fill="#aaa">RST</text><text x="548" y="322" text-anchor="end" fill="#aaa">A0</text>
+    <text x="548" y="358" text-anchor="end" fill="#aaa">D0</text><text x="548" y="394" text-anchor="end" font-weight="700" fill="#111">D5</text>
+    <text x="548" y="430" text-anchor="end" font-weight="700" fill="#111">D6</text><text x="548" y="466" text-anchor="end" font-weight="700" fill="#111">D7</text>
+    <text x="548" y="502" text-anchor="end" fill="#aaa">D8</text><text x="548" y="538" text-anchor="end" font-weight="700" fill="#111">3V3</text>
+  </g>
+  <g fill="#4a6680">
+    <circle cx="380" cy="282" r="4" fill="#bbb"/><circle cx="380" cy="318" r="4" fill="#bbb"/>
+    <circle cx="380" cy="354" r="4"/><circle cx="380" cy="390" r="4"/>
+    <circle cx="380" cy="426" r="4" fill="#bbb"/><circle cx="380" cy="462" r="4" fill="#bbb"/>
+    <circle cx="380" cy="498" r="4"/><circle cx="380" cy="534" r="4"/>
+    <circle cx="560" cy="282" r="4" fill="#bbb"/><circle cx="560" cy="318" r="4" fill="#bbb"/>
+    <circle cx="560" cy="354" r="4" fill="#bbb"/><circle cx="560" cy="390" r="4"/>
+    <circle cx="560" cy="426" r="4"/><circle cx="560" cy="462" r="4"/>
+    <circle cx="560" cy="498" r="4" fill="#bbb"/><circle cx="560" cy="534" r="4"/>
+  </g>
+
+  <!-- ===== left: button switches + ground bus ===== -->
+  <g stroke="#222" stroke-width="2" fill="none">
+    <line x1="380" y1="354" x2="270" y2="354" stroke="#c08a2c"/>
+    <polyline points="380,390 300,390 300,430 270,430" stroke="#c0504d"/>
+    <polyline points="170,354 130,354 130,498 380,498"/>
+    <line x1="170" y1="430" x2="130" y2="430"/>
+    <line x1="380" y1="534" x2="345" y2="534" stroke="#d22"/>
+    <line x1="345" y1="525" x2="345" y2="543" stroke="#d22"/>
+  </g>
+  <use href="#sw" x="270" y="354"/><use href="#sw" x="270" y="430"/>
+  <circle cx="130" cy="430" r="4" fill="#222"/>
+  <text x="220" y="322" text-anchor="middle" font-weight="600" fill="#8a5a10">HOLD button: switch (NO)</text>
+  <text x="220" y="460" text-anchor="middle" font-weight="600" fill="#9a2f2c">DISCARD button: switch (NO)</text>
+  <text x="250" y="516" text-anchor="middle" font-size="11" fill="#555">ground bus to G</text>
+  <text x="337" y="538" text-anchor="end" fill="#d22" font-weight="600">5V</text>
+
+  <!-- ===== row A: HOLD lamp (D5) ===== -->
+  <g stroke="#222" stroke-width="2" fill="none">
+    <polyline points="560,390 590,390 590,190 625,190" stroke="#c08a2c"/>
+    <rect x="625" y="184" width="40" height="12" fill="#fff"/>
+    <line x1="665" y1="190" x2="750" y2="190"/>
+    <line x1="700" y1="190" x2="700" y2="205"/>
+    <rect x="694" y="205" width="12" height="40" fill="#fff"/>
+    <line x1="700" y1="245" x2="700" y2="258"/>
+    <line x1="774" y1="176" x2="774" y2="150"/>
+    <line x1="774" y1="124" x2="774" y2="104" stroke="#d22"/>
+    <line x1="774" y1="204" x2="774" y2="228"/>
+  </g>
+  <circle cx="700" cy="190" r="3.5" fill="#222"/>
+  <use href="#nmos" x="750" y="190"/>
+  <use href="#lamp" x="774" y="137" stroke="#c08a2c"/>
+  <use href="#v5" x="774" y="104"/><use href="#gnd" x="774" y="228"/><use href="#gnd" x="700" y="258"/>
+  <text x="774" y="97" text-anchor="middle" fill="#d22" font-weight="600">5V</text>
+  <text x="645" y="178" text-anchor="middle" font-size="11" fill="#555">RG1 220 Ω</text>
+  <text x="688" y="230" text-anchor="end" font-size="11" fill="#555">RP1 100 kΩ</text>
+  <text x="792" y="194" font-size="11" fill="#555">Q1 BS170</text>
+  <text x="780" y="170" font-size="10" fill="#777">D</text><text x="780" y="218" font-size="10" fill="#777">S</text><text x="740" y="180" font-size="10" fill="#777">G</text>
+  <text x="794" y="133" font-weight="600" fill="#8a5a10">HOLD lamp</text>
+  <text x="794" y="147" font-size="11" fill="#555">+ to 5V, − to D</text>
+
+  <!-- ===== row B: DISCARD lamp (D6) ===== -->
+  <g stroke="#222" stroke-width="2" fill="none">
+    <polyline points="560,426 610,426 610,380 625,380" stroke="#c0504d"/>
+    <rect x="625" y="374" width="40" height="12" fill="#fff"/>
+    <line x1="665" y1="380" x2="750" y2="380"/>
+    <line x1="700" y1="380" x2="700" y2="395"/>
+    <rect x="694" y="395" width="12" height="40" fill="#fff"/>
+    <line x1="700" y1="435" x2="700" y2="448"/>
+    <line x1="774" y1="366" x2="774" y2="340"/>
+    <line x1="774" y1="314" x2="774" y2="294" stroke="#d22"/>
+    <line x1="774" y1="394" x2="774" y2="418"/>
+  </g>
+  <circle cx="700" cy="380" r="3.5" fill="#222"/>
+  <use href="#nmos" x="750" y="380"/>
+  <use href="#lamp" x="774" y="327" stroke="#c0504d"/>
+  <use href="#v5" x="774" y="294"/><use href="#gnd" x="774" y="418"/><use href="#gnd" x="700" y="448"/>
+  <text x="774" y="287" text-anchor="middle" fill="#d22" font-weight="600">5V</text>
+  <text x="645" y="368" text-anchor="middle" font-size="11" fill="#555">RG2 220 Ω</text>
+  <text x="688" y="420" text-anchor="end" font-size="11" fill="#555">RP2 100 kΩ</text>
+  <text x="792" y="384" font-size="11" fill="#555">Q2 BS170</text>
+  <text x="780" y="360" font-size="10" fill="#777">D</text><text x="780" y="408" font-size="10" fill="#777">S</text><text x="740" y="370" font-size="10" fill="#777">G</text>
+  <text x="794" y="323" font-weight="600" fill="#9a2f2c">DISCARD lamp</text>
+  <text x="794" y="337" font-size="11" fill="#555">+ to 5V, − to D</text>
+
+  <!-- ===== row C: buzzer (D7) ===== -->
+  <g stroke="#222" stroke-width="2" fill="none">
+    <polyline points="560,462 660,462 660,640 690,640" stroke="#5a8a3c"/>
+    <polyline points="560,534 640,534 640,665 690,665" stroke="#d22"/>
+    <rect x="690" y="615" width="180" height="75" rx="6" fill="#eef5ea" stroke="#5a8a3c"/>
+    <line x1="780" y1="690" x2="780" y2="705"/>
+  </g>
+  <circle cx="830" cy="652" r="20" fill="#333"/><circle cx="830" cy="652" r="5" fill="#666"/>
+  <use href="#gnd" x="780" y="705"/>
+  <text x="780" y="606" text-anchor="middle" font-weight="600" fill="#3d6a22">3-wire passive buzzer module</text>
+  <text x="698" y="644" font-size="11" fill="#555">S</text><text x="698" y="669" font-size="11" fill="#555">+</text>
+  <text x="786" y="686" font-size="11" fill="#555">−</text>
+
+  <!-- ===== notes ===== -->
+  <line x1="30" y1="735" x2="970" y2="735" stroke="#ddd"/>
+  <g fill="#333" font-size="12">
+    <text x="30" y="758"><tspan font-weight="600">Parts:</tspan> Q1, Q2 BS170 (TO-92, flat face toward you, legs D G S left to right; a 2N7000 is S G D). RG1, RG2 220 Ω (100 Ω–1 kΩ is fine).</text>
+    <text x="30" y="776">RP1, RP2 100 kΩ (47 kΩ–1 MΩ is fine): keep the lamps dark while the ESP8266 resets. Two lit NO push buttons (5 V lamps, resistor built in).</text>
+    <text x="30" y="798"><tspan font-weight="600">Each button</tspan> has 4 terminals: 2 for the switch (no polarity) and lamp + / −. The lamp + goes to 5V, the lamp − to its BS170's drain (D).</text>
+    <text x="30" y="820"><tspan font-weight="600">Keep free:</tspan> D3, D4, D8 decide how the ESP8266 boots; TX/RX carry the USB link to the PC.</text>
+    <text x="30" y="842"><tspan font-weight="600">Buzzer:</tspan> + to 3V3, not 5V (some modules switch the buzzer with a PNP that a 3.3 V signal can't turn off). Firmware: station/panel, pins D1 D2 D5 D6 D7.</text>
+  </g>
+</svg>
