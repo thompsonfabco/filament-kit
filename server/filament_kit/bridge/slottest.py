@@ -1,7 +1,7 @@
 """Slot test: prove which (ams_id, tray_id) address reaches which AMS slot, then put every slot back.
 
 For each slot (AMS units, AMS HT, external holder; empty slots too) the slot's own setting is written back with
-only the colour changed to a unique test colour `FK<nn>00FF`, and the slot counts as confirmed once a report
+only the colour changed to a unique test colour (`FA<nn>00FF`, nn in hex; another prefix if a slot already holds it), and the slot counts as confirmed once a report
 shows that colour on that unit/tray (within CONFIRM_TIMEOUT). Afterwards every slot that may have changed is
 written back to its snapshot and the restore is confirmed from the report. The test stops early, and still
 restores, when the printer starts a job, goes offline, or refuses writes (Developer Mode). Nothing is saved here:
@@ -20,7 +20,8 @@ from .connection import PrinterOffline, UnknownPrinter
 log = logging.getLogger(__name__)
 
 CONFIRM_TIMEOUT = 10.0          # seconds for a report to show a write
-TEST_COLOUR = "FK{:02d}00FF"    # per slot, numbered from 01 in test order
+TEST_COLOUR = "{prefix}{n:02X}00FF"   # RRGGBBAA; n = the slot's number in test order (01, 02 ... in hex)
+TEST_PREFIXES = ("FA", "FB", "FC", "FD", "FE", "F9", "F8", "F7")
 ONLINE = ('connected', 'needs_developer_mode')   # the MQTT session is up in both
 
 
@@ -51,6 +52,21 @@ def check_idle(manager, serial: str) -> None:
     gs = manager.summary(serial)['gcode_state']
     if gs in status.ACTIVE:
         raise PrinterBusy(gs)
+
+
+def pick_test_colour(n: int, taken: set[str]) -> str:
+    """Slot n's test colour: `FA<nn>00FF` (nn = n as two hex digits), or the next prefix (`FB` ...) if a slot's
+    snapshot (or an earlier slot's test) already holds it, so no report can confirm a write by coincidence."""
+    used = {_norm(c) for c in taken}
+    for prefix in TEST_PREFIXES:
+        c = TEST_COLOUR.format(prefix=prefix, n=n & 0xFF)
+        if c not in used:
+            return c
+    for g in range(256):                     # every prefix taken (absurd): vary the blue byte instead
+        c = f"FA{n & 0xFF:02X}{g:02X}FF"
+        if c not in used:
+            return c
+    raise ValueError("no free test colour")
 
 
 def _busy(report: dict) -> bool:
@@ -127,7 +143,8 @@ def run(manager, serial: str, on_step: Callable[[str], None]) -> SlotTestResult:
     res = SlotTestResult()
     changed: list[_Target] = []          # may differ from their snapshot now
     reported: set[str] = set()           # slots that already have a "not confirmed" line
-    colours: set[str] = set()
+    colours: set[str] = set()            # test colours written in this run
+    taken = {t.snap['tray_color'] for t in targets if t.snap['tray_color']}   # never pick a colour a slot holds
     abort = None
 
     def mark(t: _Target) -> None:
@@ -145,7 +162,8 @@ def run(manager, serial: str, on_step: Callable[[str], None]) -> SlotTestResult:
                 abort = "printer_offline: the printer went offline; slot test stopped"
                 break
             step(f"Testing slot {t.label} ({n}/{len(targets)})")
-            colour = TEST_COLOUR.format(n)
+            colour = pick_test_colour(n, taken)
+            taken.add(colour)
             colours.add(colour)
             try:
                 reply = manager.set_slot(serial, t.ams_id, t.tray_id, dict(t.snap, tray_color=colour))
@@ -175,14 +193,14 @@ def run(manager, serial: str, on_step: Callable[[str], None]) -> SlotTestResult:
                                     f"{CONFIRM_TIMEOUT:g} s)")
                 reported.add(t.label)
                 continue
+            where = _showing(r, colour)
+            for lab in where:                # before any abort: wherever the colour landed gets restored
+                if lab in by_label:
+                    mark(by_label[lab])
             if _busy(r):
                 abort = (f"printer_busy: the printer started a job ({status._s(r.get('gcode_state'))}); "
                          f"slot test stopped")
                 break
-            where = _showing(r, colour)
-            for lab in where:
-                if lab in by_label:
-                    mark(by_label[lab])
             if t.label in where:
                 res.confirmed[t.label] = {'ams_id': t.ams_id, 'tray_id': t.tray_id}
             else:
@@ -205,25 +223,35 @@ def run(manager, serial: str, on_step: Callable[[str], None]) -> SlotTestResult:
         step(f"Restoring slot {t.label}")
         try:
             reply = manager.set_slot(serial, t.ams_id, t.tray_id, t.snap)
+            if _failed(reply):
+                res.problems.append(f"{t.label}: restore refused ({_reason(reply)}); "
+                                    f"its test colour may still be set")
+                res.restored = False
+                continue
+            if manager.wait_report(serial, lambda r, t=t: _matches(r, t), CONFIRM_TIMEOUT) is None:
+                res.problems.append(f"{t.label}: restore not confirmed (no report showed its original setting "
+                                    f"within {CONFIRM_TIMEOUT:g} s)")
+                res.restored = False
         except (PrinterOffline, UnknownPrinter):
             res.problems.append(f"{t.label}: not restored (printer_offline); its test colour may still be set")
             res.restored = False
-            continue
-        if _failed(reply):
-            res.problems.append(f"{t.label}: restore refused ({_reason(reply)}); its test colour may still be set")
-            res.restored = False
-            continue
-        if manager.wait_report(serial, lambda r, t=t: _matches(r, t), CONFIRM_TIMEOUT) is None:
-            res.problems.append(f"{t.label}: restore not confirmed (no report showed its original setting within "
-                                f"{CONFIRM_TIMEOUT:g} s)")
+        except Exception as e:               # one slot's failure must not skip the others' restores
+            log.exception("slot test on %s: restoring %s failed", serial, t.label)
+            res.problems.append(f"{t.label}: not restored (error: {type(e).__name__}: {e}); "
+                                f"its test colour may still be set")
             res.restored = False
 
-    final = manager.wait_report(serial, lambda r: True, 0)
-    if final is not None:
-        left = {_norm(c) for c in colours}
-        for lab, s in _slots(final).items():
-            if _norm(s.color) in left:
-                res.problems.append(f"{lab}: test colour {s.color} still in the slot")
-                res.restored = False
+    try:
+        final = manager.wait_report(serial, lambda r: True, 0)
+        if final is not None:
+            left = {_norm(c) for c in colours}
+            for lab, s in _slots(final).items():
+                if _norm(s.color) in left:
+                    res.problems.append(f"{lab}: test colour {s.color} still in the slot")
+                    res.restored = False
+    except Exception as e:
+        log.exception("slot test on %s: final check failed", serial)
+        res.problems.append(f"final check failed (error: {type(e).__name__}: {e}); test colours may remain")
+        res.restored = False
     step("Slot test finished")
     return res

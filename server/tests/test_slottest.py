@@ -1,4 +1,5 @@
 import copy
+import re
 
 import pytest
 
@@ -41,7 +42,12 @@ def env(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def rig():
+def report():
+    return REPORT
+
+
+@pytest.fixture
+def rig(report):
     clients = []
 
     def factory(cid):
@@ -51,11 +57,33 @@ def rig():
     m = Manager(client_factory=factory)
     registry.upsert(Printer(SERIAL, "Office H2D", "O1D", "10.0.0.5", "13572468", True))
     m.sync()
-    printer = FakePrinter(clients[0], REPORT)
+    printer = FakePrinter(clients[0], report)
     clients[0].connected(0)
     assert m.wait_report(SERIAL, lambda r: "vt_tray" in r, 2) is not None
     yield m, printer, clients[0]
     m.stop()
+
+
+def snapshot_colours(report=REPORT):
+    trays = [t for u in report["ams"]["ams"] for t in u["tray"]] + [report["vt_tray"]]
+    return {t["tray_color"].upper() for t in trays if t.get("tray_color")}
+
+
+def expected_colours(report=REPORT):
+    """The test colours slottest picks for slots 1..6 (from its own function, so nothing passes vacuously)."""
+    taken, out = set(snapshot_colours(report)), []
+    for n in range(1, len(LABELS) + 1):
+        c = slottest.pick_test_colour(n, taken)
+        taken.add(c)
+        out.append(c)
+    return out
+
+
+TEST_COLOURS = set(expected_colours())
+
+
+def is_test(colour):
+    return str(colour).upper() in TEST_COLOURS
 
 
 def original(label):
@@ -72,13 +100,13 @@ def assert_back_to_original(printer, labels=LABELS):
         before = original(label)
         if len(before) == 1:                     # the empty slot: written and restored as empty
             assert now.get("tray_type", "") == "" and now.get("tray_info_idx", "") == ""
-            assert not now.get("tray_color", "").startswith("FK")
+            assert not is_test(now.get("tray_color", ""))
         else:
             assert {k: now.get(k) for k in FIELDS} == {k: before.get(k) for k in FIELDS}, label
 
 
 def no_test_colour_left(printer):
-    return all(not str(printer.tray(*a).get("tray_color", "")).startswith("FK") for a in ADDR.values())
+    return all(not is_test(printer.tray(*a).get("tray_color", "")) for a in ADDR.values())
 
 
 def test_every_slot_confirmed_and_restored(rig):
@@ -87,8 +115,10 @@ def test_every_slot_confirmed_and_restored(rig):
     res = slottest.run(m, SERIAL, steps.append)
     assert res.confirmed == {lab: {"ams_id": a, "tray_id": t} for lab, (a, t) in ADDR.items()}
     assert res.restored is True and res.problems == [] and res.needs_developer_mode is False
-    tests = [w for w in printer.writes if w["tray_color"].startswith("FK")]
-    assert [w["tray_color"] for w in tests] == [f"FK{n:02d}00FF" for n in range(1, 7)]
+    tests = [w for w in printer.writes if is_test(w["tray_color"])]
+    assert [w["tray_color"] for w in tests] == expected_colours()
+    assert expected_colours() == [f"FA{n:02X}00FF" for n in range(1, 7)]      # no snapshot collides here
+    assert all(re.fullmatch(r"[0-9A-F]{8}", c) for c in expected_colours())   # valid RRGGBBAA
     a2 = next(w for w in tests if (w["ams_id"], w["tray_id"]) == (0, 1))
     assert (a2["tray_info_idx"], a2["tray_type"], a2["nozzle_temp_min"], a2["nozzle_temp_max"]) == \
         ("Pa735293", "PETG", 235, 250)                       # the snapshot setting, only the colour differs
@@ -118,7 +148,7 @@ def test_print_starting_mid_test_aborts_and_restores(rig):
         assert any(p.startswith(f"{label}:") and "not confirmed" in p for p in res.problems), label
     assert res.restored is True
     assert_back_to_original(printer)
-    tested = {(w["ams_id"], w["tray_id"]) for w in printer.writes if w["tray_color"].startswith("FK")}
+    tested = {(w["ams_id"], w["tray_id"]) for w in printer.writes if is_test(w["tray_color"])}
     assert tested == {(0, 0), (0, 1)}                        # nothing written after the print started
 
 
@@ -191,3 +221,93 @@ def test_refuses_to_start_when_busy_or_offline(rig):
     with pytest.raises(PrinterOffline):
         slottest.run(m, SERIAL, lambda s: None)
     assert printer.writes == []
+
+
+def test_pick_test_colour_skips_colours_a_slot_already_holds():
+    assert slottest.pick_test_colour(1, set()) == "FA0100FF"
+    assert slottest.pick_test_colour(11, set()) == "FA0B00FF"            # two hex digits
+    assert slottest.pick_test_colour(1, {"FA0100FF"}) == "FB0100FF"
+    assert slottest.pick_test_colour(1, {"fa0100ff", "FB0100FF"}) not in {"FA0100FF", "FB0100FF"}
+
+
+COLLIDING = copy.deepcopy(REPORT)
+COLLIDING["ams"]["ams"][0]["tray"][0]["tray_color"] = "FA0100FF"       # A1 already holds its default test colour
+COLLIDING["ams"]["ams"][0]["tray"][1]["tray_color"] = "FA0300FF"       # A2 holds A3's default
+
+
+@pytest.mark.parametrize("report", [COLLIDING])
+def test_slot_already_holding_its_default_test_colour_gets_another(rig, report):
+    m, printer, c = rig
+    res = slottest.run(m, SERIAL, lambda s: None)
+    assert res.restored is True and res.problems == [] and len(res.confirmed) == 6
+    colours = expected_colours(report)
+    assert colours[0] == "FB0100FF" and colours[2] == "FB0300FF"
+    tests = [w["tray_color"] for w in printer.writes[:6]]
+    assert tests == colours
+    assert printer.tray(0, 0)["tray_color"] == "FA0100FF" and printer.tray(0, 1)["tray_color"] == "FA0300FF"
+
+
+def test_restore_error_on_one_slot_is_reported_and_the_rest_restored(rig):
+    m, printer, c = rig
+    real = m.set_slot
+
+    def set_slot(serial, ams_id, tray_id, setting, timeout=None):
+        if (ams_id, tray_id) == (0, 1) and not is_test(setting["tray_color"]):
+            raise RuntimeError("socket exploded")
+        return real(serial, ams_id, tray_id, setting, timeout)
+    m.set_slot = set_slot
+    res = slottest.run(m, SERIAL, lambda s: None)
+    assert res.restored is False
+    assert any(p.startswith("A2: not restored (error:") and "socket exploded" in p for p in res.problems)
+    assert_back_to_original(printer, [l for l in LABELS if l != "A2"])
+
+
+def test_predicate_error_during_restore_is_reported_not_raised(rig, monkeypatch):
+    m, printer, c = rig
+    real = slottest._matches
+
+    def matches(report, t):
+        if t.label == "A3":
+            raise ValueError("odd report")
+        return real(report, t)
+    monkeypatch.setattr(slottest, "_matches", matches)
+    res = slottest.run(m, SERIAL, lambda s: None)
+    assert res.restored is False
+    assert any(p.startswith("A3: not restored (error:") for p in res.problems)
+    assert_back_to_original(printer, [l for l in LABELS if l != "A3"])
+
+
+def test_final_scan_error_is_reported_not_raised(rig):
+    m, printer, c = rig
+    real = m.wait_report
+    zero_calls = []
+
+    def wait_report(serial, predicate, timeout):
+        if timeout == 0:
+            zero_calls.append(1)
+            if len(zero_calls) == 2:                       # the final scan (the first is the snapshot read)
+                raise ValueError("odd report")
+        return real(serial, predicate, timeout)
+    m.wait_report = wait_report
+    res = slottest.run(m, SERIAL, lambda s: None)
+    assert res.restored is False
+    assert any(p.startswith("final check failed") for p in res.problems)
+
+
+def test_busy_abort_still_restores_a_slot_hit_by_a_misaddressed_write(rig):
+    m, printer, c = rig
+    printer.route[(0, 1)] = (0, 2)                            # A2's write lands on A3 ...
+    respond = printer.respond
+
+    def busy_with_second_write(topic, body):
+        out = respond(topic, body)
+        if len(printer.writes) == 2 and printer.report.get("gcode_state") == "IDLE":
+            printer.report["gcode_state"] = "RUNNING"         # ... and a print starts in the same report
+            out[-1]["print"]["gcode_state"] = "RUNNING"       # one report: colour on A3 and the job started
+        return out
+    c.responder = busy_with_second_write
+    res = slottest.run(m, SERIAL, lambda s: None)
+    assert any("printer_busy" in p for p in res.problems)
+    assert res.restored is True
+    assert no_test_colour_left(printer)
+    assert_back_to_original(printer)
