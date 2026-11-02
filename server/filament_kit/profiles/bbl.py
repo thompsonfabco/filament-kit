@@ -48,24 +48,42 @@ class Store:
 
     @classmethod
     def load(cls, folder: Path) -> "Store":
+        return cls.parse(cls.read(folder))
+
+    @staticmethod
+    def read(folder: Path) -> list[tuple[str, bytes | OSError]]:
+        """The raw `*.json` files under `folder` as (relative POSIX path, bytes or the OSError reading it), sorted
+        by path; [] for a missing folder. Cheap I/O only, so a caller can do it under a lock and parse later."""
         folder = Path(folder)
-        presets: dict[str, dict] = {}
-        problems: list[str] = []
         if not folder.is_dir():
-            return cls(presets, problems)
+            return []
         files = sorted((p for p in folder.rglob("*") if p.is_file() and p.suffix.casefold() == ".json"),
                        key=lambda p: p.relative_to(folder).as_posix())
+        out: list[tuple[str, bytes | OSError]] = []
         for p in files:
-            rel = p.relative_to(folder).as_posix()
             try:
-                data = json.loads(p.read_text(encoding="utf-8"))
+                out.append((p.relative_to(folder).as_posix(), p.read_bytes()))
+            except OSError as e:
+                out.append((p.relative_to(folder).as_posix(), e))
+        return out
+
+    @classmethod
+    def parse(cls, files: list[tuple[str, bytes | OSError]]) -> "Store":
+        """A store from `read`'s output: presets keyed by file stem; unreadable or non-object files are problems."""
+        presets: dict[str, dict] = {}
+        problems: list[str] = []
+        for rel, raw in files:
+            try:
+                if isinstance(raw, OSError):
+                    raise raw
+                data = json.loads(raw.decode("utf-8"))
             except (OSError, UnicodeDecodeError, ValueError) as e:
                 problems.append(f"{rel}: unreadable ({e.__class__.__name__}: {e})")
                 continue
             if not isinstance(data, dict):
                 problems.append(f"{rel}: not a JSON object")
                 continue
-            name = p.stem
+            name = Path(rel).stem
             if name in presets:
                 problems.append(f"{rel}: duplicate preset name {name!r}, ignored")
                 continue

@@ -16,7 +16,6 @@ import datetime
 import json
 import logging
 import re
-import threading
 
 import anyio.from_thread
 from starlette.concurrency import run_in_threadpool
@@ -26,13 +25,12 @@ from starlette.routing import Route
 
 from . import library as library_mod
 from .profiles import builds, lines as lines_mod
-from .profiles.bbl import Store
 from .profiles.errors import ProfileError
 
 log = logging.getLogger(__name__)
 
 MAX_JSON = 64 << 10                     # a small JSON body (rebuild, installed, PATCH, propose)
-MAX_TEXT = 100                          # vendor, line, material, bambu_parent
+MAX_TEXT = lines_mod.MAX_TEXT           # vendor, line, material, bambu_parent
 HASH_RE = re.compile(r"[0-9a-f]{64}")
 USER_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
 _PLAIN = re.compile(r"[A-Za-z0-9_.-]{1,64}")
@@ -109,17 +107,18 @@ async def _json(request: Request) -> dict:
     return body
 
 
-def _text(body: dict, key: str, *, required: bool = True, empty_ok: bool = False) -> str:
+def _text(body: dict, key: str, *, required: bool = True, empty_ok: bool = False, at_ok: bool = True) -> str:
+    """`body[key]` stripped, checked by the shared `lines.text_problem` (text of at most MAX_TEXT characters, no
+    `@` unless `at_ok`); 400 `bad_request` otherwise."""
     v = body.get(key)
     if v is None and not required:
         return ""
-    if not isinstance(v, str):
-        raise _bad(f"{key} must be text")
+    problem = lines_mod.text_problem(v, at_ok=at_ok)
+    if problem:
+        raise _bad(f"{key} {problem}")
     v = v.strip()
     if not v and not empty_ok:
         raise _bad(f"{key} is required")
-    if len(v) > MAX_TEXT:
-        raise _bad(f"{key} is longer than {MAX_TEXT} characters")
     return v
 
 
@@ -157,29 +156,6 @@ class _StreamReader:
         else:
             out, self._buf = bytes(self._buf[:n]), self._buf[n:]
         return out
-
-
-# ---------- the system store (cached by its tree hash) ----------
-
-_store_cache: dict = {}
-_store_lock = threading.Lock()
-
-
-def system_store() -> Store | None:
-    """The uploaded `system/BBL/filament` store, or None before the PC sync uploaded any system preset."""
-    with builds._locked("live.lock"):
-        h = builds._meta().get("system_hash")
-        folder = builds._live() / "system"
-        key = (str(folder), h)
-        with _store_lock:
-            if _store_cache.get("key") == key:
-                return _store_cache["store"]
-        store = Store.load(folder) if h else None
-        if store is not None and not store.names():
-            store = None
-        with _store_lock:
-            _store_cache.update(key=key, store=store)
-        return store
 
 
 # ---------- views ----------
@@ -224,7 +200,7 @@ def _line_view(line: lines_mod.Line, counts: dict[str, int]) -> dict:
 
 
 def _parents(material: str) -> dict:
-    store = system_store()
+    store = builds.system_store()
     if store is None:
         return {"parents": [], "synced": False}
     btype = lines_mod.bs_type(material)
@@ -232,7 +208,7 @@ def _parents(material: str) -> dict:
     bases = set()
     for t in types or (None,):
         bases.update(store.bases(t))
-    return {"parents": sorted(b for b in bases if lines_mod._usable(store, b)), "synced": True}
+    return {"parents": sorted(b for b in bases if lines_mod.usable(store, b)), "synced": True}
 
 
 # ---------- routes ----------
@@ -272,7 +248,7 @@ def routes(authed, sm) -> list[Route]:
     @authed
     async def sync_system(request: Request):
         h = await upload(request, "system", None)
-        presets = await run_in_threadpool(lambda: builds._meta().get("system_presets"))
+        presets = await run_in_threadpool(lambda: builds.meta().get("system_presets"))
         return JSONResponse({"system_hash": h, "presets": int(presets or 0)})
 
     @authed
@@ -323,18 +299,14 @@ def routes(authed, sm) -> list[Route]:
         device = request.state.device
         lid = request.path_params["line_id"]
         body = await _json(request)
-        parent = _text(body, "bambu_parent")
-        if "@" in parent:
-            raise _bad("bambu_parent is a base preset name, without \"@printer\"")
+        parent = _text(body, "bambu_parent", at_ok=False)
 
         def run() -> dict:
-            store = system_store()
+            store = builds.system_store()
             with lines_mod.transaction() as ls:
                 if lid not in ls:
                     raise ProfileError(404, "not_found", f"no line {lid!r}")
-                if store is not None and not lines_mod._usable(store, parent):
-                    raise ProfileError(400, "unknown_parent",
-                                       f"Bambu Studio has no usable system preset {parent!r}")
+                lines_mod.check_parent(parent, store)
                 line = lines_mod.set_parent(ls, lid, parent)
             builds.request_rebuild("line parent")
             return _line_view(line, _preset_counts())
@@ -355,8 +327,8 @@ def routes(authed, sm) -> list[Route]:
                                                                                      required=False, empty_ok=True)
 
         def run() -> dict:
-            return lines_mod.propose(vendor, line, material, library=library_mod.load(), store=system_store(),
-                                     lines=lines_mod.load())
+            return lines_mod.propose(vendor, line, material, library=library_mod.load(),
+                                     store=builds.system_store(), lines=lines_mod.load())
         return JSONResponse(await run_in_threadpool(run))
 
     @authed

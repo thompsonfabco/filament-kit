@@ -125,9 +125,37 @@ def line_id_for(vendor: str, product: str) -> str:
 
 # ---------- parent choice ----------
 
-def _usable(store: Store, base: str) -> bool:
+def usable(store: Store, base: str) -> bool:
     """`base` names an instantiable system preset that lists at least one compatible printer."""
     return any(store._compatible(cfg) for _n, cfg in store._with_base(base))
+
+
+def check_parent(parent: str, store: Store | None) -> None:
+    """The one gate on a parent the user picks (PATCH lines, intake add, `profiles set-parent`): with a system
+    store uploaded, `parent` must be a usable preset in it, else ProfileError 400 `unknown_parent`. With no store
+    yet (None) any name is accepted and re-checked at build time; a blank parent is nothing to check."""
+    parent = (parent or "").strip()
+    if store is None or not parent or usable(store, parent):
+        return
+    raise errors.ProfileError(400, "unknown_parent",
+                              f"{parent!r} is not a usable Bambu Studio system preset "
+                              f"(not in the uploaded system presets, or it lists no printer)", parent=parent)
+
+
+MAX_TEXT = 100      # a line, a vendor, a material or a bambu_parent the user types
+
+
+def text_problem(value, *, at_ok: bool = False) -> str | None:
+    """None when `value` is acceptable user text (text of at most MAX_TEXT characters once stripped, without `@`
+    unless `at_ok`), else what is wrong, to follow the field name ("is longer than 100 characters"). A printer
+    suffix such as "@BBL H2D" is not part of a line or base preset name."""
+    if not isinstance(value, str):
+        return "must be text"
+    if len(value.strip()) > MAX_TEXT:
+        return f"is longer than {MAX_TEXT} characters"
+    if not at_ok and "@" in value:
+        return "may not contain '@' (give the base name, without the printer)"
+    return None
 
 
 def _hint(vendor: str, product: str, library: Library) -> str | None:
@@ -140,7 +168,7 @@ def _hint(vendor: str, product: str, library: Library) -> str | None:
 
 
 def _brand(vendor: str, product: str, btype: str, store: Store) -> str | None:
-    cands = [b for b in store.vendor_bases(vendor, btype) if _usable(store, b)]
+    cands = [b for b in store.vendor_bases(vendor, btype) if usable(store, b)]
     want = _norm(product)
     named = [b for b in cands if _norm(b.split(" ", 1)[1] if " " in b else "") == want]
     if len(named) == 1:
@@ -173,7 +201,7 @@ def choose_parent(vendor: str, product: str, material: str, *, library: Library,
         if hint is not None:
             return hint, "library"
         return (f"Generic {btype}", "material") if btype else (None, "none")
-    if hint is not None and _usable(store, hint):
+    if hint is not None and usable(store, hint):
         return hint, "library"
     if not btype:
         return None, "none"

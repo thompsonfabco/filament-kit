@@ -4,7 +4,10 @@ An add may name each item's product `line` and its Bambu Studio parent (`bambu_p
 100 characters without `@`. A new filament gets `extra.line`. Once a store of Bambu system presets is uploaded,
 a `bambu_parent` that is not a usable system preset is refused (400 `unknown_parent`, as PATCH lines does) before
 anything is written. After a real add, each item's line is created or updated in lines.json and a profile
-rebuild is requested; a failure there is logged and never fails the add.
+rebuild is requested (also when linking the tag fails after the spools were added, or Spoolman fails part-way:
+then for the items that got a spool); a failure there is logged and never fails the add. An item for an existing
+filament whose `line` names another line than the filament's own (it was edited in the app) sets that filament's
+`extra.line` in the same add, so the filament really joins that line.
 """
 from __future__ import annotations
 
@@ -16,8 +19,6 @@ from dataclasses import dataclass, field
 
 from . import library, placement, tags
 from .profiles import builds, lines as lines_mod
-from .profiles.bbl import Store
-from .profiles.errors import ProfileError
 from .spoolman import Spoolman, SpoolmanError
 
 log = logging.getLogger(__name__)
@@ -34,6 +35,7 @@ class AddResult:
     spool_ids: list[int] = field(default_factory=list)
     lines: list[str] = field(default_factory=list)
     dry: bool = False
+    added: list[dict] = field(default_factory=list, repr=False)   # items that got at least one spool
 
 
 @dataclass
@@ -85,44 +87,16 @@ def _is_num(v) -> bool:
 _OPT_NUM = ("nozzle", "bed", "price_per_kg", "gross")
 _OPT_STR = ("location", "color_hex", "lot", "note", "price_line", "nozzle_range", "bed_range", "spool_note",
             "line", "bambu_parent")
-MAX_LINE_TEXT = 100
-
-
-class UnknownParent(ProfileError, ValueError):
-    """400 `unknown_parent`: the uploaded system store has no usable preset of that name. A ValueError too, so a
-    route that maps only ValueError still answers 400."""
-
-    def __init__(self, parent: str):
-        super().__init__(400, "unknown_parent", f"{parent!r} is not a usable Bambu Studio system preset "
-                                                f"(not in the uploaded system presets, or it lists no printer)",
-                         parent=parent)
+MAX_LINE_TEXT = lines_mod.MAX_TEXT
 
 
 def check_line_text(label: str, key: str, value) -> None:
-    """`line` / `bambu_parent`: None or text of at most MAX_LINE_TEXT characters without `@` (a printer suffix
-    such as "@BBL H2D" is not part of a line or base preset name)."""
+    """`line` / `bambu_parent`: None or text as `lines.text_problem` allows (at most 100 characters, no `@`)."""
     if value is None:
         return
-    if not isinstance(value, str):
-        raise ValueError(f"{label}: {key} must be text")
-    if len(value.strip()) > MAX_LINE_TEXT:
-        raise ValueError(f"{label}: {key} is longer than {MAX_LINE_TEXT} characters")
-    if "@" in value:
-        raise ValueError(f"{label}: {key} may not contain '@' (give the base name, without the printer)")
-
-
-def system_store() -> Store | None:
-    """The uploaded Bambu Studio system presets, or None before the PC sync uploaded any."""
-    with builds._locked("live.lock"):
-        store = Store.load(builds._live() / "system")
-    return store if store.names() else None
-
-
-def check_parent(parent: str, store: Store | None) -> None:
-    """Raise UnknownParent when a system store is uploaded and `parent` is not a usable preset in it (the same
-    check as PATCH /api/profiles/lines); with no store yet any name is accepted and re-checked at build time."""
-    if store is not None and not lines_mod._usable(store, parent):
-        raise UnknownParent(parent)
+    problem = lines_mod.text_problem(value)
+    if problem:
+        raise ValueError(f"{label}: {key} {problem}")
 
 
 def _validate(items: list[dict]) -> None:
@@ -166,9 +140,9 @@ def _check_parents(items: list[dict]) -> None:
     wanted = [p for p in (_parent(it) for it in items) if p is not None]
     if not wanted:
         return
-    store = system_store()
+    store = builds.system_store()
     for p in wanted:
-        check_parent(p, store)
+        lines_mod.check_parent(p, store)
 
 
 def _used_locations(sm: Spoolman) -> set[str]:
@@ -216,6 +190,7 @@ def _write_items(sm, placed, vendors, fils, result, dry) -> None:
             state = "new filament"
         else:
             state = "existing filament"
+            _join_line(sm, f, it, result, dry)
         tare = f.get("spool_weight") or it["tare"]
         remaining = round(it["gross"] - tare, 1) if it.get("gross") is not None else it["net"]
         opened = it.get("sealed") is False
@@ -231,6 +206,8 @@ def _write_items(sm, placed, vendors, fils, result, dry) -> None:
                 continue
             sid = sm.post("spool", body)["id"]
             result.spool_ids.append(sid)
+            if not ids:
+                result.added.append(it)
             _read_back(sm, sid)
             ids.append(sid)
         gross_note = f" (gross {it['gross']} - tare {tare})" if it.get("gross") is not None else ""
@@ -239,6 +216,30 @@ def _write_items(sm, placed, vendors, fils, result, dry) -> None:
         result.lines.append(
             f"{fid}{vn} {it['name']} ({state}): {it['count']} spool(s){id_note} @ {it['location']}"
             f"{' (opened)' if opened else ''}, {remaining} g{gross_note}")
+
+
+def _join_line(sm: Spoolman, f: dict, it: dict, result: AddResult, dry: bool) -> None:
+    """The item's `line` names another line than the existing filament's own (`extra.line`, else the product
+    derived from its name): it was edited in the app, so set the filament's `extra.line` (other extra fields
+    kept) and the filament moves to that line at the next grouping. The same line, or no line, writes nothing."""
+    want = it.get("line").strip() if isinstance(it.get("line"), str) else ""
+    if not want:
+        return
+    vendor = it["vendor"]
+    try:
+        have = lines_mod.product_of({**f, "vendor": {"name": vendor}}, library.load())
+    except Exception:  # noqa: BLE001 - no library: compare with the filament's own extra.line or its name
+        have = lines_mod._extra_line(f) or (f.get("name") or "")
+    if lines_mod.line_id_for(vendor, want) == lines_mod.line_id_for(vendor, have):
+        return
+    fid = f"F{f['id']} " if f.get("id") is not None else ""
+    if dry:
+        result.lines.append(f"{fid}{vendor} {it['name']}: would set line to {want} (now {have})")
+        return
+    extra = {**(f.get("extra") or {}), "line": json.dumps(want)}
+    sm.patch(f"filament/{f['id']}", {"extra": extra})
+    f["extra"] = extra
+    result.lines.append(f"{fid}{vendor} {it['name']}: line set to {want} (was {have})")
 
 
 def _new_filament(sm: Spoolman, it: dict, vendor: dict, dry: bool) -> dict:
@@ -318,10 +319,15 @@ def add_and_link(sm: Spoolman, items: list[dict], rules: dict, dry: bool, uid: s
             other = by_tag(sm, uid)
             if other is not None:  # refuse before writing, so a retry cannot duplicate the spool
                 raise TagConflict(other, f"tag {uid} is already linked to {describe(other)}")
-        result = add_spools(sm, items, rules, dry)
+        try:
+            result = add_spools(sm, items, rules, dry)
+        except AddFailed as e:  # Spoolman failed part-way: the items that got a spool still join their lines
+            if not dry and e.partial.added:
+                _record_lines(e.partial.added)
+            raise
         if uid is None:
             if not dry:
-                _record_lines(items)
+                _record_lines(result.added)
             return result
         if not single_opened:
             result.lines.append("tag not linked: it can only be linked when exactly one opened spool is added")
@@ -331,20 +337,23 @@ def add_and_link(sm: Spoolman, items: list[dict], rules: dict, dry: bool, uid: s
             try:
                 link_tag(sm, result.spool_ids[0], uid, force=False, dry=False)
             except (SpoolmanError, RuntimeError) as e:  # the spool exists; report it so a retry doesn't duplicate
+                _record_lines(result.added)            # and it joins its line all the same
                 raise AddFailed(f"spool {result.spool_ids[0]} was added but linking tag {uid} failed: {e}",
                                 result) from e
             result.lines.append(f"linked tag {uid} to spool {result.spool_ids[0]}")
         if not dry:
-            _record_lines(items)
+            _record_lines(result.added)
     return result
 
 
 def _record_lines(items: list[dict]) -> None:
     """Create or update each added item's line (with its bambu_parent) and request a rebuild. Never raises: the
     spools are in Spoolman already, and the next build groups them into lines anyway."""
+    if not items:
+        return
     try:
         lib = library.load()
-        store = system_store()
+        store = builds.system_store()
         with lines_mod.transaction() as ls:
             for it in items:
                 vendor = it["vendor"].strip()

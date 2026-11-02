@@ -115,6 +115,15 @@ def app(store: dict[str, Any] | None = None) -> Starlette:
         f = store["filaments"].get(int(request.path_params["id"]))
         if not f:
             return _err("Filament not found", 404)
+        if request.method == "PATCH":  # like Spoolman: extra keys are upserted, the others are kept
+            b = await request.json()
+            if (bad := _check_extra(store, "filament", b.get("extra"))):
+                return bad
+            for k, v in b.items():
+                if k == "extra":
+                    f["extra"] = {**(f.get("extra") or {}), **v}
+                elif k != "id":
+                    f[k] = v
         return JSONResponse(_filament_view(store, f))
 
     def apply_weights(s: dict, b: dict) -> None:
@@ -213,7 +222,7 @@ def app(store: dict[str, Any] | None = None) -> Starlette:
         Route("/api/v1/info", info),
         Route("/api/v1/vendor", vendors, methods=["GET", "POST"]),
         Route("/api/v1/filament", filaments, methods=["GET", "POST"]),
-        Route("/api/v1/filament/{id:int}", filament_one),
+        Route("/api/v1/filament/{id:int}", filament_one, methods=["GET", "PATCH"]),
         Route("/api/v1/spool", spools, methods=["GET", "POST"]),
         Route("/api/v1/spool/{id:int}", spool_one, methods=["GET", "PATCH"]),
         Route("/api/v1/spool/{id:int}/use", spool_use, methods=["PUT"]),
