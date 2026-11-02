@@ -18,6 +18,7 @@ import com.thompsonfabco.filamentkit.ui.printers.PrinterHelp
 import com.thompsonfabco.filamentkit.ui.printers.PrinterToolsBackend
 import com.thompsonfabco.filamentkit.ui.printers.PrinterToolsViewModel
 import com.thompsonfabco.filamentkit.ui.printers.UsageHelp
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -65,11 +66,14 @@ class LoadFlowTest {
     private class FakeLoad(val detail: PrinterDetail, var preview: LoadResult, var real: LoadResult) : LoadBackend {
         val loads = mutableListOf<Triple<String, Int, Boolean>>()
         var loadError: Exception? = null
+        /** When set, a real load waits for it (the write is in flight). */
+        var gate: CompletableDeferred<Unit>? = null
         var printers = listOf(detail.printer, Printer(id = "X", name = "X", serial = "X", configured = false))
         override suspend fun printers() = printers
         override suspend fun printer(id: String) = detail
         override suspend fun load(id: String, label: String, spoolId: Int, dryRun: Boolean): LoadResult {
             loads += Triple(label, spoolId, dryRun)
+            if (!dryRun) gate?.await()
             loadError?.let { throw it }
             return if (dryRun) preview else real
         }
@@ -192,6 +196,38 @@ class LoadFlowTest {
         assertEquals(LoadUiState.Unauthorized, vm.state.value)
     }
 
+    @Test fun closeIsIgnoredWhileARealLoadIsInFlight() = runTest(dispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        load.gate = gate
+        val vm = loadVm()
+        vm.toPreview()
+        assertFalse(vm.writing)
+        vm.confirm()
+        runCurrent()
+        assertTrue(vm.writing)
+        assertFalse("dismiss refused while writing", vm.close())
+        vm.back()
+        assertTrue((vm.state.value as LoadUiState.Preview).busy)
+        gate.complete(Unit)
+        runCurrent()
+        assertTrue("the user sees the write's result", vm.state.value is LoadUiState.Done)
+        assertFalse(vm.writing)
+        assertTrue(vm.close())
+        assertEquals(LoadUiState.Closed, vm.state.value)
+    }
+
+    @Test fun closeDuringTheDryRunStillCancels() = runTest(dispatcher) {
+        val vm = loadVm()
+        vm.start(spool)
+        runCurrent()
+        vm.pickPrinter(printer)
+        runCurrent()
+        vm.pickSlot("A1")
+        assertTrue(vm.close())
+        runCurrent()
+        assertEquals(LoadUiState.Closed, vm.state.value)
+    }
+
     @Test fun backAndClose() = runTest(dispatcher) {
         val vm = loadVm()
         vm.toPreview()
@@ -221,8 +257,13 @@ class LoadFlowTest {
             startError?.let { throw it }
             return "j-1"
         }
+        var mapErrors = 0
         override suspend fun mapStatus(id: String): MapStatus {
             mapCalls++
+            if (mapErrors > 0) {
+                mapErrors--
+                throw ApiError(0, "offline", "x")
+            }
             if (statuses.isNotEmpty()) last = statuses.removeFirst()
             return last
         }
@@ -362,12 +403,64 @@ class LoadFlowTest {
         assertTrue(UsageHelp.canUndo(entry("a")))
         assertFalse(UsageHelp.canUndo(entry("a", observe = true)))
         assertFalse(UsageHelp.canUndo(entry("a", undone = true)))
-        assertFalse(UsageHelp.canUndo(entry("a", error = "no_spool")))
+        assertFalse(UsageHelp.canUndo(entry("a", error = "spoolman_failed")))
         assertEquals("12.5 g · Benchy · A1", UsageHelp.line(entry("a")))
         assertEquals("logged only", UsageHelp.note(entry("a", observe = true)))
         assertEquals("undone", UsageHelp.note(entry("a", undone = true)))
-        assertNotNull(UsageHelp.note(entry("a", error = "no_spool")))
         assertNull(UsageHelp.note(entry("a")))
+        // every real code (route-contract addendum) has its own short reason, not the generic fallback
+        val codes = listOf("file_not_found", "no_slice_info", "plate_not_found", "printer_unreachable", "cert_changed",
+            "spoolman_unreachable", "spoolman_failed", "ambiguous_spool")
+        val generic = UsageHelp.note(entry("a", error = "something_new"))!!
+        assertTrue(generic.contains("something new"))
+        for (c in codes) {
+            val n = UsageHelp.note(entry("a", error = c))
+            assertNotNull(n)
+            assertFalse("$c has its own reason", n == generic.replace("something new", c.replace('_', ' ')))
+        }
+        assertTrue(UsageHelp.note(entry("a", error = "ambiguous_spool"))!!.contains("two spools are set to that slot"))
+        assertTrue(UsageHelp.note(entry("a", error = "file_not_found"))!!.contains("print file not found on the printer"))
+    }
+
+    @Test fun noSpoolInTheSlotSaysNothingWasTakenOff() {
+        val e = entry("a").copy(spoolId = null)
+        assertEquals("no spool in that slot, nothing taken off", UsageHelp.note(e))
+        assertFalse(UsageHelp.canUndo(e))
+        assertEquals("logged only", UsageHelp.note(e.copy(observe = true)))
+    }
+
+    @Test fun mapPollRetriesWithCappedBackoffAfterAnError() = runTest(dispatcher) {
+        tools.last = running("Testing A1")
+        val vm = toolsVm()
+        vm.start()
+        runCurrent()
+        assertEquals(1, tools.mapCalls)
+        tools.mapErrors = 100 // the network drops for a long while
+        advanceTimeBy(120_000)
+        val during = tools.mapCalls - 1
+        // backoff 2, 4, 8, 16, 30, 30 ... s: a handful of calls in two minutes, never a tight loop
+        assertTrue("retried ($during)", during in 4..9)
+        assertNotNull(vm.state.value.mapMessage)
+        assertTrue(vm.state.value.mapRunning)
+        tools.mapErrors = 0
+        tools.statuses.add(MapStatus(state = "done", calibrated = true))
+        advanceTimeBy(30_001)
+        assertEquals("done", vm.state.value.map!!.state)
+        assertNull("the poll error clears once polling works again", vm.state.value.mapMessage)
+        vm.stop()
+    }
+
+    @Test fun mapPollingReArmsOnTheNextStart() = runTest(dispatcher) {
+        tools.last = running("Testing A1")
+        val vm = toolsVm()
+        vm.start()
+        runCurrent()
+        vm.stop()
+        tools.statuses.add(MapStatus(state = "done"))
+        vm.start()
+        runCurrent()
+        assertEquals("done", vm.state.value.map!!.state)
+        vm.stop()
     }
 
     // ---- printer state text ---------------------------------------------------------------------------
