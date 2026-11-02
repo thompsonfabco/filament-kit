@@ -30,7 +30,7 @@ station PC and the desktop run one product, and filament-ops is archived.
 | Remote access | New module **`remote`**: nginx path router (`mcp-route`), certbot standalone with pre/post/deploy hooks; config `remote.hostname`, `remote.acme_window`. Never edits nftables/ufw/pfSense: prints the exact rules for the owner | firewall changes need the owner |
 | Tag sources | Config `tag_sources`: list of `{name, url}` read like the station's `/last-tag` (SV08 lasttag :5002, station :5003); newest tap wins, 300 s freshness, `held` always fresh | generic replacement for hard-coded SV08/station URLs |
 | Orders | Module **`orders`**: optional `orders.file` (JSON `{items:[{order,date,asin,title,qty,unit_price,seller}]}`) fed to label reading; the exporter stays with amazon-mcp | owner-specific source, generic interface |
-| Slot service | Config `slot_service` `{url_state, url_set, token_file}` gives MCP tools `printer_slots`/`printer_set_slot`; when absent and `printers` is on, the same tools use kit's bridge | keeps "never connect to the H2D directly" for the owner |
+| Slot service | Config `slot_service` `{state_url, set_url, token_file}` gives MCP tools `printer_slots`/`printer_set_slot`; when absent and `printers` is on, the same tools use kit's bridge | keeps "never connect to the H2D directly" for the owner |
 | Spoolman on the VM | Owner's VM Spoolman is v0.27.0 = kit's pin: migrate its sqlite DB into the `spoolman` module's data dir | one managed Spoolman |
 | Owner data | Placement, locations, tare hints become config (`placement`, `locations`, `intake.tare_hints`); MCP `instructions` built from config | no hard-coded owner values in code |
 
