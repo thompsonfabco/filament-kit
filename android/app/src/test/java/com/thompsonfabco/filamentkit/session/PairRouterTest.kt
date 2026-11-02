@@ -96,6 +96,42 @@ class PairRouterTest {
         assertEquals(PairNotice.Unpaired(null), router.notice.value)
     }
 
+    @Test fun aLate401ForTheOldTokenAfterRePairingDoesNotRoute() = runBlocking {
+        val router = PairRouter()
+        var current = "old"
+        router.currentToken = { current }
+        // the request goes out with the old token; re-pairing finishes before its 401 comes back
+        val client = OkHttpClient.Builder()
+            .addInterceptor(SessionWatcher(router) {})
+            .addInterceptor { chain -> current = "new"; chain.proceed(chain.request()) }
+            .build()
+        val api = Api(client, { server.ipUrl("/").toString().trimEnd('/') }, { current })
+        server.enqueue(MockResponse(code = 401, body = """{"error":"unauthorized","message":"Token revoked"}"""))
+        val e = assertThrows(ApiError::class.java) { runBlocking { api.search("grey", false) } }
+        assertEquals("old", e.sentToken)
+        assertNull(router.notice.value)
+        assertEquals(0, router.requests.value)
+        // a screen reporting that same error does not route either
+        router.report(e)
+        assertNull(router.notice.value)
+        assertEquals(0, router.requests.value)
+    }
+
+    @Test fun a401ForTheCurrentTokenStillRoutes() {
+        val router = PairRouter()
+        router.currentToken = { "new" }
+        router.unauthorized("new")
+        assertEquals(PairNotice.Unpaired("new"), router.notice.value)
+        router.clear()
+        router.report(ApiError(401, "unauthorized", "nope", sentToken = "new"))
+        assertEquals(2, router.requests.value)
+        // an error that did not say which token it was sent with still routes
+        router.report(ApiError(401, "unauthorized", "nope"))
+        assertEquals(3, router.requests.value)
+        router.unauthorized("old")
+        assertEquals(3, router.requests.value)
+    }
+
     @Test fun a401FromAnUnauthenticatedCallDoesNotRoute() = runBlocking {
         val router = PairRouter()
         val api = api(router)

@@ -51,12 +51,17 @@ data class AddResult(
     val dry: Boolean = true,
 )
 
-/** A failed call: the server's `{error, message, ...}` body, or `status` 0 / code `offline` when it could not be reached. */
+/**
+ * A failed call: the server's `{error, message, ...}` body, or `status` 0 / code `offline` when it could not be reached.
+ * [sentToken] is the bearer token a rejected (401) request carried, so a late 401 for an old token can be told apart
+ * from one for the current token; it is never part of the message.
+ */
 class ApiError(
     val status: Int,
     val code: String,
     override val message: String,
     val extra: JsonObject = JsonObject(emptyMap()),
+    val sentToken: String? = null,
 ) : Exception(message)
 
 // ---- printer models (Task 16) ------------------------------------------------------------------------

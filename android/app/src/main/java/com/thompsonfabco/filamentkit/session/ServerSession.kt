@@ -64,6 +64,7 @@ class ServerSession(
     @Volatile private var host: String? = null
 
     init {
+        router.currentToken = ::currentToken
         scope.launch { configs.collect(::apply) }
         scope.launch { router.notice.collect { if (it is PairNotice.Unpaired && it.token != null) forgetToken(it.token) } }
     }

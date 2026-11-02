@@ -77,7 +77,9 @@ class ServerSessionTest {
         await { s.connection.first { it is Connection.Online } }
 
         router.unauthorized("old")
-        assertEquals(PairNotice.Unpaired("old"), router.notice.value)
+        // stale: the session's current token is "new", so there is no notice and no trip to the Pair screen
+        assertEquals(null, router.notice.value)
+        assertEquals(0, router.requests.value)
         // give the session's collector time to act on it
         runBlocking { kotlinx.coroutines.delay(300) }
         assertEquals("new", s.config.value?.token)
