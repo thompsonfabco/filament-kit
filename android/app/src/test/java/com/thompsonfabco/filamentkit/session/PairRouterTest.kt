@@ -3,6 +3,7 @@ package com.thompsonfabco.filamentkit.session
 import com.thompsonfabco.filamentkit.net.Api
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
+import com.thompsonfabco.filamentkit.net.ipUrl
 import kotlinx.coroutines.runBlocking
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
@@ -21,7 +22,7 @@ class PairRouterTest {
 
     private fun api(router: PairRouter, token: String? = "tok", onOffline: () -> Unit = {}): Api {
         val client = OkHttpClient.Builder().addInterceptor(SessionWatcher(router, onOffline)).build()
-        return Api(client, { server.url("/").toString().trimEnd('/') }, { token })
+        return Api(client, { server.ipUrl("/").toString().trimEnd('/') }, { token })
     }
 
     @Test fun unauthorizedApiErrorRoutesToPairWithMessage() {
