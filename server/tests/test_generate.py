@@ -604,8 +604,8 @@ def test_partial_install_values_are_not_inapp_edits(tmp_path):
 
 
 def test_app_reset_keeps_the_owners_note_lines(tmp_path):
-    """Final review C1: after an app reset (the live preset is gone) the rebuilt preset keeps his lines below MARK
-    and his recorded in-app values."""
+    """Final review C1: after an app reset (the live preset is gone) the rebuilt preset keeps the owner's lines below
+    MARK and their recorded in-app values."""
     m1, ls = build(tmp_path, EIGHT, out="o1")
     snap, live = _install_build(tmp_path, "o1", m1)
     name = sunlu(H2D, "0.4")
