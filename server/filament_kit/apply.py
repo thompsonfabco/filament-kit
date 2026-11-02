@@ -177,6 +177,8 @@ AVAHI_FILE = "/etc/avahi/services/filament-kit.service"
 SLEEP_TARGETS = ["sleep.target", "suspend.target", "hibernate.target", "hybrid-sleep.target"]
 ALSA_CONTROLS = ("Master", "Headphone", "Speaker", "PCM")
 _AGAIN = "run `sudo filament-kit modules apply` again"
+# Wait for the dpkg lock instead of failing at once: on a fresh Ubuntu, unattended-upgrades often holds it.
+APT = ["apt-get", "-o", "DPkg::Lock::Timeout=300"]
 
 # What to try when a step fails; printed after `FAIL <step>`. <arg> is the action's argument.
 _HINTS = {
@@ -251,6 +253,8 @@ class _Exec:
         if self.dry:
             print("would run: " + " ".join(cmd))
             return
+        # stdout is block-buffered when piped to a log: our "==>" lines must come before the command's output
+        sys.stdout.flush()
         self._run(cmd)
 
     def ok(self, cmd: list[str]) -> bool:
@@ -400,7 +404,7 @@ def _step(ex: _Exec, a: Action) -> None:
         ex.cmd(["udevadm", "trigger", "--subsystem-match=hidraw"])
     elif k == "remove_pkg":
         if ex.probe(["dpkg", "-s", arg]):
-            ex.cmd(["apt-get", "remove", "-y", "-q", arg])
+            ex.cmd([*APT, "remove", "-y", "-q", arg])
     elif k == "disable_ext":
         if ex.probe(["systemctl", "is-enabled", arg]):
             ex.cmd(["systemctl", "disable", "--now", arg])
@@ -458,7 +462,7 @@ def execute(actions: list[Action], *, run: Callable[[list[str]], None] = run_che
                 pkgs.append(actions[i].arg)
                 i += 1
             try:
-                ex.cmd(["apt-get", "install", "-y", "-q", *pkgs])
+                ex.cmd([*APT, "install", "-y", "-q", *pkgs])
             except (subprocess.CalledProcessError, OSError) as e:
                 _fail(Action("apt", " ".join(pkgs)), e)
             continue

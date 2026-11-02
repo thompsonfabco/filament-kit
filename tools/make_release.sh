@@ -30,8 +30,9 @@ rm -rf server/build
 ls "$stage"/filament_kit-"$version"-*.whl >/dev/null 2>&1 \
     || { echo "error: wheel for $version not built" >&2; exit 1; }
 # The bundled library snapshot is package data; a wheel without it has no library at all.
+# Not `grep -q`: it stops reading at the first match, unzip then dies of SIGPIPE and pipefail fails the check.
 for whl in "$stage"/filament_kit-"$version"-*.whl; do
-    unzip -l "$whl" | grep -qE ' filament_kit/library_data/index\.json[[:space:]]*$' \
+    unzip -l "$whl" | grep -E ' filament_kit/library_data/index\.json[[:space:]]*$' >/dev/null \
         || { echo "error: $whl has no filament_kit/library_data/index.json" >&2; exit 1; }
 done
 
