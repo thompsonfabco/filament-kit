@@ -169,6 +169,42 @@ def _meta() -> dict:
     return _read_obj(_live() / "meta.json")
 
 
+def meta() -> dict:
+    """A copy of the live upload's meta.json (owner, user_id, live/system hashes, times, system_presets), read under
+    live.lock so it never sees a half-done upload."""
+    with _locked("live.lock"):
+        return dict(_meta())
+
+
+# ---------- the uploaded system store (one definition for every caller) ----------
+
+_store_cache: dict = {}
+_store_cache_lock = threading.Lock()
+
+
+def system_store() -> Store | None:
+    """The uploaded Bambu Studio system presets (`live/system/`, the PC sync's upload of its
+    `system/BBL/filament` folder), or None when none are uploaded.
+
+    A store is uploaded exactly when meta.json has a `system_hash` and the folder holds at least one preset. The
+    store is cached by (folder, system_hash). On a cache miss the raw files are read under live.lock (so an upload
+    swap can't interleave) and parsed after it is released."""
+    folder = _live() / "system"
+    with _locked("live.lock"):
+        h = _meta().get("system_hash")
+        key = (str(folder), h)
+        with _store_cache_lock:
+            if _store_cache.get("key") == key:
+                return _store_cache["store"]
+        files = Store.read(folder) if h else []
+    store = Store.parse(files) if files else None
+    if store is not None and not store.names():
+        store = None
+    with _store_cache_lock:
+        _store_cache.update(key=key, store=store)
+    return store
+
+
 def _state() -> dict:
     return _read_obj(_dir() / "build-state.json")
 
@@ -366,8 +402,8 @@ def sweep_uploads(now: float | None = None) -> None:
 
 
 def store_upload(kind: str, src: BinaryIO, *, device_id: str, user_id: str | None = None) -> str:
-    """Store the PC sync's zip of its user filament folder (`live`) or `system/BBL/filament` (`system`) and
-    return its tree hash. Claims the sync owner. Raises OtherPc, BadZip or TooLarge; then nothing changed."""
+    """Store the PC sync's zip of its user filament folder (`live`, into `live/user/`) or of Bambu Studio's
+    `system/BBL/filament` (`system`, into `live/system/`) and return its tree hash. Claims the sync owner. Raises OtherPc, BadZip or TooLarge; then nothing changed."""
     if kind not in ("live", "system"):
         raise ValueError(f"unknown upload kind {kind!r}")
     if user_id is not None and not USER_ID.fullmatch(user_id):

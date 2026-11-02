@@ -5,6 +5,8 @@ block of the vendors and filaments already in Spoolman. Failed reads keep their 
 
 Every item also gets its product `line` (an existing filament's `extra.line` wins; an empty answer is derived from
 the name as `lines.product_of` does) and the line's proposal: `bambu_parent`, `parent_source` and `line_exists`.
+When no proposal can be made the line is the library product that prefixes the name, else "" (never the
+name with its colour).
 """
 from __future__ import annotations
 
@@ -20,8 +22,7 @@ import time
 from pathlib import Path
 
 from . import config, library
-from .inventory import system_store
-from .profiles import lines
+from .profiles import builds, lines
 from .spoolman import Spoolman
 
 log = logging.getLogger(__name__)
@@ -267,20 +268,24 @@ def _add_lines(items: list[dict], by_id: dict) -> None:
         known = lines._extra_line(f) if f else ""
         if known:
             it["line"] = known
+        elif f:
+            # an existing filament's line is its own (derived below from its name), never what Claude read: then
+            # only an edit in the app can make the add's line differ and move the filament
+            it.pop("line", None)
         elif not isinstance(it.get("line"), str) or not it["line"].strip():
             it.pop("line", None)
         else:
             # the add accepts at most 100 characters without "@": keep what Claude read within that
-            it["line"] = it["line"].split("@", 1)[0].strip()[:100].strip()
+            it["line"] = it["line"].split("@", 1)[0].strip()[:lines.MAX_TEXT].strip()
             if not it["line"]:
                 it.pop("line")
+    lib = None
     try:
         lib = library.load()
-        store = system_store()
+        store = builds.system_store()
         ls = lines.load()
         for it in items:
-            it.setdefault("line", lines.product_of(
-                {"name": it.get("name") or "", "vendor": {"name": it.get("vendor") or ""}, "extra": {}}, lib))
+            it.setdefault("line", lines.product_of(_as_filament(it), lib))
             p = lines.propose(it.get("vendor") or "", it["line"], it.get("material") or "", library=lib,
                               store=store, lines=ls)
             it.update(line=p["line"], bambu_parent=p["bambu_parent"], parent_source=p["parent_source"],
@@ -288,10 +293,26 @@ def _add_lines(items: list[dict], by_id: dict) -> None:
     except Exception as e:  # noqa: BLE001 - the label read itself succeeded
         log.warning("label read: no line proposal (%s: %s)", e.__class__.__name__, e)
         for it in items:
-            it.setdefault("line", (it.get("name") or "").strip())
+            it.setdefault("line", _fallback_line(it, lib))
             it.setdefault("bambu_parent", None)
             it.setdefault("parent_source", "none")
             it.setdefault("line_exists", False)
+
+
+def _as_filament(it: dict) -> dict:
+    return {"name": it.get("name") or "", "vendor": {"name": it.get("vendor") or ""}, "extra": {}}
+
+
+def _fallback_line(it: dict, lib) -> str:
+    """The line when no proposal could be made: the library product that prefixes the name (the name without its
+    colour), else "" so the add and the build derive it; never the full name with the colour."""
+    if lib is None:
+        return ""
+    try:
+        product = lines.product_of(_as_filament(it), lib)
+    except Exception:  # noqa: BLE001 - same reason as the proposal failing
+        return ""
+    return "" if product == (it.get("name") or "").strip() else product
 
 
 def read_labels(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | None, client=None,
