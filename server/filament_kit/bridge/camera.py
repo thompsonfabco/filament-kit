@@ -9,6 +9,10 @@ P1/A1 printers: TLS on port 6000, an 80-byte auth packet, then frames of a 16-by
 12 bytes) and a JPEG. Served as `multipart/x-mixed-replace` at no more than 5 frames a second. A viewer is an
 open MJPEG response.
 
+Both upstreams are TLS with the printer's pinned leaf (`tlspin`): the Access Code (Digest response, auth packet)
+only goes over a socket whose leaf passed the pin; a changed leaf stops the source and the routes answer
+`409 cert_changed` (also as soon as the MQTT connection has seen it, via `printer_state`).
+
 Ported from the owner's H2D remote (`remote.py`, proven on hardware). The Access Code is never on a command
 line, never logged and never part of a repr.
 """
@@ -23,7 +27,6 @@ import re
 import shutil
 import signal
 import socket
-import ssl
 import struct
 import subprocess
 import tempfile
@@ -39,7 +42,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response, StreamingResponse
 from starlette.routing import Route
 
-from . import models, registry
+from . import models, registry, tlspin
 
 log = logging.getLogger(__name__)
 
@@ -78,12 +81,11 @@ class Unavailable(CameraError):
     status, code = 503, "camera_unavailable"
 
 
-def _insecure_ctx() -> ssl.SSLContext:
-    """Bambu printers present a self-signed certificate; the code only ever goes to the registry IP."""
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
-    return ctx
+class CertChangedError(CameraError):
+    status, code = 409, "cert_changed"
+
+
+CERT_CHANGED = "The printer's certificate changed — add it again with its Access Code"
 
 
 # ---------------------------------------------------------------- RTSPS relay (X1 / H2 / X2 / P2S)
@@ -117,9 +119,10 @@ def _md5(s: str) -> str:
 class RtspRelay:
     """Loopback RTSP server; each connection is forwarded to the printer over TLS with Digest auth added."""
 
-    def __init__(self, ip: str, access_code: str, port: int = RTSP_PORT):
-        self.ip, self.port = ip, port
-        self._code = access_code
+    def __init__(self, printer: registry.Printer, port: int = RTSP_PORT):
+        self.printer, self.ip, self.port = printer, printer.ip, port
+        self._code = printer.access_code
+        self.cert_changed = False       # the upstream leaf did not match the pin
         self._srv: socket.socket | None = None
         self._conns: set[socket.socket] = set()
         self._lock = threading.Lock()
@@ -169,8 +172,11 @@ class RtspRelay:
         try:
             if not self._track(cli):
                 return
-            raw = socket.create_connection((self.ip, self.port), timeout=10)
-            up = _insecure_ctx().wrap_socket(raw)
+            try:
+                up = tlspin.connect(self.printer, self.port, timeout=10)   # pin checked before any Digest
+            except tlspin.CertChanged:  # logged by tlspin (fingerprints only)
+                self.cert_changed = True
+                return
             if not self._track(up):
                 return
             real = f"rtsps://{self.ip}:{self.port}"
@@ -287,7 +293,7 @@ class HlsSource:
 
     def __init__(self, printer: registry.Printer, hub: "Hub"):
         self.serial, self.dir = printer.serial, hub.dir_for(printer.serial)
-        self._relay = RtspRelay(printer.ip, printer.access_code, hub.rtsp_port)
+        self._relay = RtspRelay(printer, hub.rtsp_port)
         self._ffmpeg = list(hub.ffmpeg)
         self._proc: subprocess.Popen | None = None
         self.started_at = 0.0
@@ -323,6 +329,10 @@ class HlsSource:
     def alive(self) -> bool:
         return self._proc is not None and self._proc.poll() is None
 
+    @property
+    def cert_changed(self) -> bool:
+        return self._relay.cert_changed
+
 
 # ---------------------------------------------------------------- port-6000 JPEG stream (P1 / A1)
 
@@ -349,7 +359,9 @@ class MjpegSource:
 
     def __init__(self, printer: registry.Printer, hub: "Hub"):
         self.serial, self.ip, self.port = printer.serial, printer.ip, hub.jpeg_port
+        self.printer = printer
         self._code = printer.access_code
+        self.cert_changed = False       # the leaf did not match the pin; the source gave up
         self._stop = threading.Event()
         self._sock = None
         self._lock = threading.Lock()
@@ -389,8 +401,7 @@ class MjpegSource:
         delay = BACKOFF[0]
         while not self._stop.is_set():
             try:
-                raw = socket.create_connection((self.ip, self.port), timeout=10)
-                s = _insecure_ctx().wrap_socket(raw)
+                s = tlspin.connect(self.printer, self.port, timeout=10)   # pin checked before the auth packet
                 self._sock = s
                 if self._stop.is_set():
                     break
@@ -406,6 +417,10 @@ class MjpegSource:
                     with self._lock:
                         self._frame, self.seq = img, self.seq + 1
                     delay = BACKOFF[0]
+            except tlspin.CertChanged:  # logged by tlspin (fingerprints only); retrying cannot help
+                self.cert_changed = True
+                self._stop.set()
+                break
             except ValueError as e:  # an unusable Access Code: log the type only, retrying cannot help
                 log.warning("camera %s: %s; not retrying", self.serial, type(e).__name__)
                 self._stop.set()
@@ -439,8 +454,9 @@ class Hub:
     def __init__(self, lookup: Callable[[str], registry.Printer | None] | None = None,
                  runtime_dir: Path | None = None, idle_stop: float = IDLE_STOP, hls_window: float = HLS_WINDOW,
                  sources: dict | None = None, ffmpeg=("ffmpeg",), rtsp_port: int = RTSP_PORT,
-                 jpeg_port: int = JPEG_PORT):
+                 jpeg_port: int = JPEG_PORT, printer_state: Callable[[str], str] | None = None):
         self._lookup = lookup or (lambda serial: registry.load().get(serial))
+        self._printer_state = printer_state   # the MQTT Manager's state(): its `cert_changed` refuses the camera too
         self.root = Path(runtime_dir) if runtime_dir else _runtime_root()
         self.idle_stop, self.hls_window = idle_stop, hls_window
         self._sources = {"hls": HlsSource, "mjpeg": MjpegSource, **(sources or {})}
@@ -449,7 +465,8 @@ class Hub:
         self._lock = threading.Lock()
         self._serial_locks: dict[str, threading.RLock] = {}
         self._running: dict[str, object] = {}
-        self._targets: dict[str, tuple[str, str]] = {}  # (ip, Access Code) each running source was started with
+        # the printer each running source was started with; a first-use pin updates its cert_fp in place
+        self._targets: dict[str, registry.Printer] = {}
         self._refs: dict[str, int] = {}
         self._stop_timers: dict[str, threading.Timer] = {}
         self._hls_last: dict[str, float] = {}
@@ -472,6 +489,8 @@ class Hub:
             raise NoCamera("this printer has no camera of that kind" if p else "no such printer")
         if not p.configured or not p.access_code or not p.ip:
             raise NotConfigured("add this printer's Access Code first")
+        if self._printer_state is not None and self._printer_state(serial) == "cert_changed":
+            raise CertChangedError(CERT_CHANGED)
         return p, k
 
     def running(self, serial: str) -> bool:
@@ -512,17 +531,22 @@ class Hub:
         src.start()
         with self._lock:
             self._running[serial] = src
-            self._targets[serial] = (p.ip, p.access_code)
+            self._targets[serial] = p
         return src
 
+    @staticmethod
+    def _target(p: registry.Printer) -> tuple[str, str, str]:
+        return p.ip, p.access_code, p.cert_fp
+
     def _retarget(self, serial: str, p: registry.Printer, kind: str, src):
-        """The running source if it still points at the printer's (ip, Access Code); otherwise it is stopped and
-        a new one started (the printer moved or was re-keyed). Caller holds the printer's lock."""
+        """The running source if it still points at the printer's (ip, Access Code, pin); otherwise it is stopped
+        and a new one started (the printer moved, was re-keyed or added again). Caller holds the printer's lock."""
         with self._lock:
-            same = self._targets.get(serial) == (p.ip, p.access_code)
+            t = self._targets.get(serial)
+            same = t is not None and self._target(t) == self._target(p)
         if same:
             return src
-        log.info("camera %s: the printer's address or Access Code changed; restarting", serial)
+        log.info("camera %s: the printer's address, Access Code or pin changed; restarting", serial)
         with self._lock:
             if self._running.get(serial) is src:
                 del self._running[serial]
@@ -657,10 +681,14 @@ def routes(hub: Hub, auth_wrapper: Callable) -> list[Route]:
         if not SEGMENT.fullmatch(name):
             return _err(400, "bad_request", "only index.m3u8 and .ts segments are served here")
         src = await run_in_threadpool(hub.touch_hls, serial)
+        if getattr(src, "cert_changed", False):
+            raise CertChangedError(CERT_CHANGED)
         path = src.dir / name
         if name.endswith(".m3u8"):
             end = time.monotonic() + HLS_START_WAIT
             while not await run_in_threadpool(path.exists):
+                if getattr(src, "cert_changed", False):
+                    raise CertChangedError(CERT_CHANGED)
                 if time.monotonic() >= end or hub.stopping.is_set():
                     return _err(503, "camera_unavailable",
                                 "the camera stream did not start; check that the printer is on and "
@@ -680,6 +708,8 @@ def routes(hub: Hub, auth_wrapper: Callable) -> list[Route]:
         try:
             end = time.monotonic() + HLS_START_WAIT
             while src.frame()[1] is None:
+                if getattr(src, "cert_changed", False):
+                    raise CertChangedError(CERT_CHANGED)
                 if time.monotonic() >= end or not src.alive() or hub.stopping.is_set():
                     raise Unavailable("the camera sent no picture; check that the printer is on and "
                                       "LAN mode liveview is enabled")

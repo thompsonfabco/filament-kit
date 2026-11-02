@@ -1,7 +1,10 @@
 """One local MQTT-over-TLS connection per configured Bambu printer: live status and commands.
 
-Port 8883, user `bblp`, password = the printer's Access Code; the printer's certificate is self-signed, so TLS is
-not verified (the Access Code only ever goes to the registry IP, which discovery ties to the announcing host).
+Port 8883, user `bblp`, password = the printer's Access Code. The printer's certificate is self-signed, so it is
+pinned instead of CA-verified (`tlspin`): paho's `on_socket_open` runs after the TLS handshake and before the
+CONNECT packet is built, and only there, once the live socket's leaf passed the pin, is the Access Code handed to
+paho. A changed leaf: state `cert_changed`, the code is withdrawn, paho stops retrying, until the printer is added
+again with its code (which clears the pin).
 Reports on `device/<serial>/report` are deep-merged into one state; commands go to `device/<serial>/request` and
 the printer's reply is matched by `sequence_id`. Ported from the owner's single-printer remote (`remote.py`).
 
@@ -13,12 +16,12 @@ import json
 import logging
 import re
 import secrets
-import ssl
 import threading
 import time
+from dataclasses import replace
 from typing import Any, Callable
 
-from . import registry, status
+from . import registry, status, tlspin
 from ..spoolman import SpoolmanError
 
 log = logging.getLogger(__name__)
@@ -35,6 +38,7 @@ AUTH_REFUSED = {4, 5, 134, 135}  # CONNACK bad user/password, not authorized (MQ
 DEVELOPER_MODE_REASON = re.compile(r'verify|auth|permission|denied|developer', re.I)
 DEVELOPER_MODE_ERR_CODES = {84033543}   # Bambu: "mqtt message verify failed" (LAN-only without Developer Mode)
 ACTIONS = ('pause', 'resume', 'stop', 'light_on', 'light_off')
+STICKY = ('wrong_code', 'cert_changed')   # states only a new code / re-add clears; a drop does not reset them
 
 
 class PrinterOffline(Exception):
@@ -80,13 +84,6 @@ def _developer_mode_refusal(reply: dict) -> bool:
     return bool(DEVELOPER_MODE_REASON.search(str(reply.get('reason', ''))))
 
 
-def _tls_context() -> ssl.SSLContext:
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
-    return ctx
-
-
 class _Waiter:
     def __init__(self):
         self.event = threading.Event()
@@ -99,6 +96,7 @@ class PrinterConnection:
         self.name = printer.name
         self.ip = printer.ip
         self._code = printer.access_code
+        self._printer = replace(printer)     # own copy: tlspin records the pin on it
         self._factory = client_factory
         self._port = port
         self._lock = threading.Lock()
@@ -116,14 +114,16 @@ class PrinterConnection:
         return f"PrinterConnection(serial={self.serial!r}, ip={self.ip!r}, state={self.state!r})"
 
     def same_target(self, p: registry.Printer) -> bool:
-        return (p.ip, p.access_code) == (self.ip, self._code)
+        """Same address, code and pin. A cleared pin (the printer was added again) means a new connection."""
+        return (p.ip, p.access_code, p.cert_fp) == (self.ip, self._code, self._printer.cert_fp)
 
     # ---------------------------------------------------------------- lifecycle
     def start(self) -> None:
         c = self._factory(f"filament-kit-{self.serial}-{secrets.token_hex(3)}")
-        c.username_pw_set(USER, self._code)
-        c.tls_set_context(_tls_context())
+        # no password yet: `_on_socket_open` sets it once the leaf of the socket it will go over passed the pin
+        c.tls_set_context(tlspin.context())
         c.reconnect_delay_set(min_delay=BACKOFF[0], max_delay=BACKOFF[1])
+        c.on_socket_open = self._on_socket_open
         c.on_connect = self._on_connect
         c.on_connect_fail = self._on_connect_fail
         c.on_disconnect = self._on_disconnect
@@ -162,6 +162,21 @@ class PrinterConnection:
         return self.state
 
     # ---------------------------------------------------------------- paho callbacks
+    def _on_socket_open(self, client, userdata, sock):
+        """paho: TLS handshake done, CONNECT not built yet (every connect and reconnect). Raising an OSError here
+        aborts the attempt (paho reports it through on_connect_fail)."""
+        try:
+            tlspin.check_socket(self._printer, sock)
+        except tlspin.CertChanged as e:
+            client.username_pw_set(USER, None)   # a reconnect must not reuse the code meant for the pinned leaf
+            self._set_state('cert_changed')
+            client.disconnect()                  # stop paho retrying: only a re-add can clear this
+            raise ConnectionAbortedError("the printer's certificate changed") from e
+        except Exception as e:
+            client.username_pw_set(USER, None)
+            raise ConnectionAbortedError(f"cannot check the printer's certificate ({type(e).__name__})") from e
+        client.username_pw_set(USER, self._code)
+
     def _on_connect(self, client, userdata, flags, rc, properties=None):
         if _rc_ok(rc):
             self._set_state('connected')
@@ -175,11 +190,11 @@ class PrinterConnection:
             self._set_state('offline')
 
     def _on_connect_fail(self, client, userdata):
-        if self._state != 'wrong_code':
+        if self._state not in STICKY:
             self._set_state('offline')
 
     def _on_disconnect(self, client, userdata, flags, rc, properties=None):
-        if self._state != 'wrong_code':
+        if self._state not in STICKY:
             self._set_state('offline')
         self._wake_pending()
 
