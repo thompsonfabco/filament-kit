@@ -58,12 +58,12 @@ object PrinterHelp {
     }
 
     /**
-     * Deliberately does not push the user to re-add: re-adding while an impostor holds the printer's address would
-     * trust the impostor's certificate.
+     * Says when re-adding is right (a reset or a new mainboard) and when it is not: re-adding while something else
+     * answers at the printer's address would trust that certificate instead.
      */
-    const val CERT_CHANGED = "The printer's certificate changed. This usually clears by itself when the printer comes " +
-        "back at its usual address. Add it again with its Access Code only if you expected this (factory reset or a " +
-        "new mainboard)."
+    const val CERT_CHANGED = "The printer's certificate changed. If you reset the printer or its mainboard was " +
+        "replaced, add it again with its Access Code. If not, something else may be answering at the printer's " +
+        "address — check the printer's IP before re-adding."
 
     /** What the user should do about [state], or null when nothing is wrong. */
     fun fix(state: String): String? = when (state) {
@@ -84,6 +84,7 @@ object PrinterHelp {
         "not_configured" -> "Set up this printer first: enter its Access Code on the Printers screen."
         "not_found" -> "The server has no camera view for this printer."
         "unauthorized" -> "This phone is no longer paired with the server."
+        "cert_changed" -> CERT_CHANGED
         else -> "The camera could not be shown right now. Leave this screen and come back to try again."
     }
 
@@ -98,7 +99,7 @@ object PrinterHelp {
         "needs_developer_mode" -> fix("needs_developer_mode")!!
         "no_preset" -> "No preset for this filament on this printer yet — profiles come next"
         "write_refused" -> "The printer refused the change"
-        "already_running" -> "Slot mapping is already running."
+        "already_running" -> "Slot mapping or a load is in progress on this printer. Try again in a moment."
         "too_old" -> "Older than 7 days, can't undo"
         "already_undone" -> "This one was already undone."
         "nothing_to_undo" -> "Nothing was taken off a spool for this one"
