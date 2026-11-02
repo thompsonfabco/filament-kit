@@ -70,7 +70,11 @@ mode `owner` is not added (YAGNI): the owner's VM is `server` + `web` + `remote`
 ### 4.3 Presets: Orca target (server/filament_kit/profiles/, library, pc-sync)
 - `Line.orca_parent` (+ source), lines.json v2 (reads v1). Library schema optional `orca_parent`.
 - Config `slicer_printers`: non-Bambu printers `[{"name": "Sovol SV08 MAX", "slicer": "orca", "nozzles":
-  ["0.4","0.6","1.0"]}]`; Bambu printers also get Orca presets when `presets.orca` is true.
+  ["0.4","0.6","1.0"], "label": "SV08 MAX" (optional, used in preset names), "compatible_printers": {"0.4":
+  "Sovol SV08 MAX", "0.6": "Sovol SV08 MAX 0.6", "1.0": "Sovol SV08 MAX 1.0"} (optional)}]`; Bambu printers also
+  get Orca presets when top-level `presets_orca` is true (nozzles from the Orca store minus 0.2, or
+  `presets_orca_nozzles`). The Orca target is on only when one of these asks for Orca presets (amended 2026-11-02,
+  Rulings W/X/Y).
 - `profiles/orca.py`: Orca system store from a pc-sync upload (names, `@System` parents, setting ids), generator
   `_build_orca_preset` (inherits `"<parent> @System"`, `compatible_printers`, variants, never nil), output tree
   `orca/` beside `base/`; names `"<vendor> <product> @<printer> <nozzle>"` matching ops names for adoption.
