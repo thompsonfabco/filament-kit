@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from . import config, modules
+from . import config, modules, remote
 from .modules import MODULES, ModuleError
 
 SPOOLMAN_INFO = "http://127.0.0.1:7912/api/v1/info"
@@ -139,6 +139,12 @@ def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) ->
                 acts += [A("install_unit", u) for u in _unit_files(unit)]
     if "web" in on:
         acts.append(A("install_unit", WEB_UNIT))
+    rs = remote.settings(cfg) if "remote" in on else None
+    if rs:
+        acts.append(A("remote_install", rs["hostname"]))
+        if rs["window"]:
+            acts.append(A("install_file", (remote.TIMER_DROPIN, remote.timer_dropin(rs["window"]),
+                                           "0644", "root:root")))
     if "station" in on:
         acts += [
             A("user", ("filament-kit-station", "dialout,audio")),
@@ -157,6 +163,9 @@ def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) ->
         if name not in on and (name not in modules.OPT_IN or name in configured):
             for unit in mod.units:
                 acts += [A("disable", u) for u in _unit_files(unit)]
+    # Remote off: remove the router route this kit made; nginx, certbot and other routes stay.
+    if "remote" not in on and "remote" in configured:
+        acts.append(A("remote_off", remote.route_name(cfg)))
     acts.append(A("daemon_reload"))
 
     # Phase 2: start things, Spoolman first.
@@ -170,8 +179,15 @@ def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) ->
             acts += [A("enable", u) for u in MODULES[name].units]
     if "web" in on:
         acts.append(A("enable", WEB_UNIT))
+    if rs:
+        acts.append(A("enable", "nginx.service"))
+        if rs["window"]:
+            acts.append(A("enable", "certbot.timer"))
+        acts.append(A("remote_route", (rs["route"], rs["port"])))
     if "station" in on:
         acts.append(A("enable", STATION_UNIT))
+    if rs:  # last, so the rules are the final thing on screen before the closing line
+        acts.append(A("remote_print", (rs["hostname"], rs["route"], rs["window"] or "", tuple(rs["lan"]))))
     if "presets" in on:
         acts.append(A("first_build"))
     return acts
@@ -201,6 +217,9 @@ _HINTS = {
     "disable_ext": "disable it by hand: sudo systemctl disable --now <arg>",
     "mask_sleep": "mask them by hand: sudo systemctl mask " + " ".join(SLEEP_TARGETS),
     "wait_http": "Spoolman did not answer on port 7912; see: journalctl -u spoolman",
+    "remote_install": f"see the messages above (nginx -t shows config errors), then {_AGAIN}",
+    "remote_route": "see: nginx -t and journalctl -u nginx; list routes with: sudo /usr/local/sbin/mcp-route ls",
+    "remote_off": "remove the route by hand: sudo /usr/local/sbin/mcp-route rm <arg>",
     "ensure_fields": "check Spoolman answers, then: sudo filament-kit ensure-fields",
 }
 
@@ -398,6 +417,52 @@ def _server_setup(ex: _Exec, arg: str) -> None:
         ex.cmd(["systemctl", "restart", "avahi-daemon"])
 
 
+def _remote_install(ex: _Exec, host: str) -> None:
+    """Router files, certbot hooks and a placeholder certificate so nginx starts before certbot has run."""
+    conf = remote.read_resource(ex.resources, "mcp-router.conf").replace("@HOST@", host)
+    ex.write(remote.ROUTER_CONF, conf.encode("utf-8"), 0o644)
+    for name, dest, mode in (("mcp-proxy.conf", remote.PROXY_CONF, 0o644),
+                             ("route.template", f"{remote.ROUTER_DIR}/route.template", 0o644),
+                             ("mcp-route", remote.MCP_ROUTE, 0o755),
+                             ("acme-hooks.sh", remote.HOOK, 0o755)):
+        ex.write(dest, remote.read_resource(ex.resources, name).encode("utf-8"), mode)
+    ex.write(f"{remote.ROUTER_DIR}/host", f"{host}\n".encode("utf-8"), 0o644)
+    # certbot runs this for every renewal; the hook acts only on this router's certificate
+    ex.write(remote.DEPLOY_HOOK_FILE, f"#!/bin/sh\nexec {remote.HOOK} deploy\n".encode("utf-8"), 0o755)
+    for d, mode in ((remote.ROUTE_DIR, 0o755), (remote.TLS_DIR, 0o750)):
+        _under(ex.root, d).mkdir(parents=True, exist_ok=True)
+        os.chmod(_under(ex.root, d), mode)
+    cert = _under(ex.root, f"{remote.TLS_DIR}/fullchain.pem")
+    key = _under(ex.root, f"{remote.TLS_DIR}/privkey.pem")
+    if not cert.exists():  # never replaces a real certificate
+        print(f"\n==> Placeholder certificate for {host} (replaced when certbot succeeds)")
+        ex.cmd(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "30",
+                "-subj", f"/CN={host}", "-addext", f"subjectAltName=DNS:{host}",
+                "-keyout", str(key), "-out", str(cert)])
+        ex.cmd(["chmod", "600", str(key)])
+    ex.cmd(["nginx", "-t"])
+
+
+def _remote_off(ex: _Exec, name: str) -> None:
+    """Remove only the route file mcp-route made for this kit; other routes and nginx itself stay."""
+    f = _under(ex.root, f"{remote.ROUTE_DIR}/{name}.conf")
+    if not f.exists():
+        return
+    if remote.MARK not in f.read_text(encoding="utf-8", errors="replace"):
+        print(f"Remote is off; {f} was not written by the kit, so it was left in place.")
+        return
+    f.unlink()
+    print(f"Remote is off: removed the {name} route (nginx, certbot and other routes were left).")
+    if ex.ok(["nginx", "-t"]):
+        ex.ok(["systemctl", "reload", "nginx"])  # a stopped nginx needs nothing
+
+
+def _remote_print(ex: _Exec, arg: tuple) -> None:
+    host, route, window, lan = arg
+    s = {"hostname": host, "route": route, "window": window or None, "lan": list(lan)}
+    print(remote.firewall_text(s, ex.resources))
+
+
 def _step(ex: _Exec, a: Action) -> None:
     k, arg = a.kind, a.arg
     if k == "user":
@@ -435,6 +500,14 @@ def _step(ex: _Exec, a: Action) -> None:
         _enable(ex, arg)
     elif k == "wait_http":
         _wait_http(ex, arg)
+    elif k == "remote_install":
+        _remote_install(ex, arg)
+    elif k == "remote_route":
+        ex.cmd([remote.MCP_ROUTE, "add", arg[0], str(arg[1])])
+    elif k == "remote_off":
+        _remote_off(ex, arg)
+    elif k == "remote_print":
+        _remote_print(ex, arg)
     elif k == "ensure_fields":
         ex.cmd([WRAPPER, "ensure-fields"])  # the wrapper runs it as the filament-kit user
     elif k == "first_build":
