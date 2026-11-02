@@ -637,6 +637,22 @@ def test_failed_copy_puts_the_previous_database_back_and_restarts(env, lib, unit
     assert ("stop", "spoolman") in units.calls
 
 
+def test_restored_database_files_go_back_to_spoolman(env, lib, units, monkeypatch):
+    b = make_bundle(env / "bundle")
+    prev = env / "spoolman" / "spoolman.db"
+    sqlite3.connect(prev).close()
+    (env / "spoolman" / "spoolman.db-wal").write_bytes(b"wal")
+    monkeypatch.setattr(migrate, "_db_counts", lambda p: (0, 0))      # no sqlite open: it would drop the stray -wal
+    owners: dict[str, tuple] = {}
+    monkeypatch.setattr(migrate, "_chown", lambda p, u, g: owners.__setitem__(Path(p).name, (u, g)))
+    monkeypatch.setattr(migrate, "_copy_db", _broken_copy)
+    code, text = run(b, lib, apply=True)
+    assert code == 1 and "put back" in text
+    # the backup copies belong to root; Spoolman (user spoolman) must own what it starts on again
+    assert owners.get("spoolman.db") == ("spoolman", "spoolman")
+    assert owners.get("spoolman.db-wal") == ("spoolman", "spoolman")
+
+
 def test_failed_copy_with_no_previous_database_leaves_spoolman_stopped(env, lib, units, monkeypatch):
     b = make_bundle(env / "bundle")
     monkeypatch.setattr(migrate, "_copy_db", _broken_copy)
@@ -690,7 +706,12 @@ print("ready", flush=True); time.sleep(60)
     env = {**os.environ, "OPS_ETC": str(tmp_path / "etc"), "OPS_STATE": str(tmp_path / "state"),
            "OPS_OPT": str(tmp_path / "opt"), "OPS_DATA": str(tmp_path / "srv"), "OPS_EXPORT_NOT_ROOT": "1"}
     script = Path(__file__).resolve().parents[2] / "tools" / "export_ops.sh"
+    # with --spoolman-db there is no unit to check, so a WAL database needs --force (the owner says it is stopped)
     r = subprocess.run(["bash", str(script), "--no-secrets", "--spoolman-db", str(db), str(out)], env=env,
+                       capture_output=True, text=True, timeout=120)
+    assert r.returncode != 0 and "--force" in r.stderr and not out.exists()
+    assert snapshot(data) == before
+    r = subprocess.run(["bash", str(script), "--no-secrets", "--force", "--spoolman-db", str(db), str(out)], env=env,
                        capture_output=True, text=True, timeout=120)
     assert r.returncode == 0, r.stderr
     assert snapshot(data) == before                            # db, -wal and -shm untouched
