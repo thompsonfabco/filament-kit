@@ -1,13 +1,25 @@
-"""Apply planner (spec section 4): config.json -> ordered install actions.
+"""Apply planner and executor (spec section 4): config.json -> ordered install actions -> a system.
 
 Pure: `plan()` touches no system (name resolution goes through an injectable
-callable), so tests check every mode change without root. The executor that
-runs these actions is a separate step. Nothing here ever deletes data.
+callable), so tests check every mode change without root. `execute()` runs the
+actions: commands go through an injectable `run`, files are written under
+`root`, so tests run it against a fake and a temporary directory. Nothing here
+ever deletes data.
 """
 from __future__ import annotations
 
+import getpass
+import json
+import os
+import re
 import socket
+import ssl
+import subprocess
+import sys
+import time
+import urllib.request
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable
 
 from . import config, modules
@@ -156,3 +168,336 @@ def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) ->
     if "presets" in on:
         acts.append(A("first_build"))
     return acts
+
+
+# ---------- executor ----------
+
+WRAPPER = "/usr/local/bin/filament-kit"
+AVAHI_FILE = "/etc/avahi/services/filament-kit.service"
+SLEEP_TARGETS = ["sleep.target", "suspend.target", "hibernate.target", "hybrid-sleep.target"]
+ALSA_CONTROLS = ("Master", "Headphone", "Speaker", "PCM")
+_AGAIN = "run `sudo filament-kit modules apply` again"
+
+# What to try when a step fails; printed after `FAIL <step>`. <arg> is the action's argument.
+_HINTS = {
+    "apt": f"check the network and run `sudo apt-get update`, then {_AGAIN}",
+    "user": f"see the useradd message above, then {_AGAIN}",
+    "spoolman_fetch": f"see the Spoolman messages above, then {_AGAIN}",
+    "install_unit": "run ./install.sh again (the unit files live in /opt/filament-kit/resources)",
+    "install_file": f"check the disk is writable, then {_AGAIN}",
+    "enable": "see: journalctl -u <arg>",
+    "daemon_reload": "see: journalctl -b",
+    "udev_reload": "see: journalctl -b -u systemd-udevd",
+    "remove_pkg": "remove it by hand: sudo apt-get remove <arg>",
+    "disable_ext": "disable it by hand: sudo systemctl disable --now <arg>",
+    "mask_sleep": "mask them by hand: sudo systemctl mask " + " ".join(SLEEP_TARGETS),
+    "wait_http": "Spoolman did not answer on port 7912; see: journalctl -u spoolman",
+    "ensure_fields": "check Spoolman answers, then: sudo filament-kit ensure-fields",
+}
+
+
+class ApplyError(Exception):
+    """A step failed; the `FAIL` and `fix:` lines are already printed."""
+
+
+def run_checked(cmd: list[str]) -> None:
+    subprocess.run(cmd, check=True, env=dict(os.environ, DEBIAN_FRONTEND="noninteractive"))
+
+
+def _no_systemd() -> bool:
+    return os.environ.get("FK_NO_SYSTEMD") == "1"
+
+
+def _tty() -> bool:
+    try:
+        return sys.stdin.isatty()
+    except (AttributeError, ValueError):
+        return False
+
+
+def _http_ok(url: str) -> bool:
+    try:
+        with urllib.request.urlopen(url, timeout=3) as r:
+            return 200 <= r.status < 300
+    except (OSError, ValueError):
+        return False
+
+
+def _https_local_ok(url: str) -> bool:
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE  # the kit's own self-signed certificate, on localhost (curl -k today)
+    try:
+        with urllib.request.urlopen(url, timeout=3, context=ctx) as r:
+            return 200 <= r.status < 300
+    except (OSError, ValueError):
+        return False
+
+
+def _under(root: Path, path: str) -> Path:
+    return root / path.lstrip("/")
+
+
+class _Exec:
+    """Runs commands (or, with FK_NO_SYSTEMD=1, prints them) and writes files under `root`."""
+
+    def __init__(self, run, resources: Path, root: Path):
+        self.dry = _no_systemd()
+        self._run = run
+        self.resources = resources
+        self.root = root
+
+    def cmd(self, cmd: list[str]) -> None:
+        if self.dry:
+            print("would run: " + " ".join(cmd))
+            return
+        self._run(cmd)
+
+    def ok(self, cmd: list[str]) -> bool:
+        """Run a command whose failure is harmless (or is the answer, for a probe)."""
+        try:
+            self.cmd(cmd)
+            return True
+        except (subprocess.CalledProcessError, OSError):
+            return False
+
+    def probe(self, cmd: list[str]) -> bool:
+        if self.dry:
+            return True
+        return self.ok(cmd)
+
+    def write(self, dest: str, data: bytes, mode: int, owner: str = "") -> Path:
+        path = _under(self.root, dest)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_bytes(data)
+        os.chmod(tmp, mode)
+        os.replace(tmp, path)
+        os.chmod(path, mode)
+        if owner:
+            self.cmd(["chown", owner, str(path)])
+        return path
+
+
+def _enable(ex: _Exec, unit: str) -> None:
+    ex.cmd(["systemctl", "enable", unit])
+    # restart, not start: an upgrade must run the new code, and a path unit must re-read its file
+    ex.cmd(["systemctl", "start" if unit.endswith(".timer") else "restart", unit])
+
+
+def _user(ex: _Exec, arg) -> None:
+    name, groups = (arg, "") if isinstance(arg, str) else arg
+    if not ex.dry and ex.ok(["id", "-u", name]):
+        return
+    cmd = ["useradd", "--system", "--user-group", "--no-create-home", "--home-dir", "/nonexistent",
+           "--shell", "/usr/sbin/nologin"]
+    if groups:
+        cmd += ["--groups", groups]
+    ex.cmd(cmd + [name])
+
+
+def _alsa_unmute(ex: _Exec) -> None:
+    # From filament-ops station_setup.sh: analog outputs start muted on a fresh install; unmute them at
+    # 80% and keep that across reboots (the scan beep). Failures are ignored.
+    try:
+        cards = _under(ex.root, "/proc/asound/cards").read_text(encoding="utf-8")
+    except OSError:
+        cards = ""
+    for card in re.findall(r"^ *([0-9]+) \[", cards, re.M):
+        for ctl in ALSA_CONTROLS:
+            ex.ok(["amixer", "-q", "-c", card, "sset", ctl, "80%", "unmute"])
+    ex.ok(["alsactl", "store"])
+
+
+def _wait_http(ex: _Exec, url: str) -> None:
+    if ex.dry:
+        print(f"would wait for {url}")
+        return
+    print(f"\n==> Waiting for {url}")
+    for _ in range(90):
+        if _http_ok(url):
+            return
+        time.sleep(2)
+    raise ApplyError(f"{url} did not answer")
+
+
+def _raw_config() -> dict:
+    f = config.paths().etc / "config.json"
+    try:
+        return json.loads(f.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+
+
+def _ask(prompt: str) -> str:
+    print(prompt, end="", flush=True)
+    return (sys.stdin.readline() or "").rstrip("\r\n")
+
+
+def _server_setup(ex: _Exec, arg: str) -> None:
+    """install.sh steps 5-6 (Ruling F): first-run questions, key, certificate, avahi file."""
+    from . import cli  # cli imports apply; import here, not at module load
+    etc = config.paths().etc
+    if "server_name" not in _raw_config() and _tty():
+        print("\n==> First-time setup")
+        default_name = socket.gethostname()
+        name = _ask(f"Display name shown in the phone app (any text) [{default_name}]: ").strip()
+        cfg = config.load()
+        cfg["server_name"] = name or default_name
+        if _ask("Use the default storage locations? [Y/n]: ").strip()[:1] in ("n", "N"):
+            print("Make your changes, then 0 to go back.")
+            cli._storage_menu(cfg)
+        config.save(cfg)
+
+    key_file = etc / cli.KEY_FILE
+    # Asked whenever it is missing and someone is at the keyboard (also on upgrade).
+    if arg == "key" and (not key_file.exists() or key_file.stat().st_size == 0) and _tty():
+        key = getpass.getpass("Anthropic API key (typing is hidden, Enter to skip): ").strip()
+        if key:
+            cli.write_key(key)
+            print("Key saved.")
+        else:
+            print("No key entered. Add it later with: sudo filament-kit config  (option 4)")
+        del key
+    for f in (etc / "config.json", key_file):
+        if f.exists():
+            ex.cmd(["chown", "root:filament-kit", str(f)])
+            ex.cmd(["chmod", "640", str(f)])
+
+    # certificate: created once, never replaced
+    print("\n==> Server certificate")
+    if cli.cmd_cert() != 0:
+        raise ApplyError("certificate not created")
+    cert, key_pem = etc / "cert.pem", etc / "key.pem"
+    if cert.exists():
+        ex.cmd(["chown", "root:filament-kit", str(cert), str(key_pem)])
+        ex.cmd(["chmod", "644", str(cert)])
+        ex.cmd(["chmod", "640", str(key_pem)])
+
+    port = int(config.load()["port"])
+    text = (ex.resources / "avahi" / "filament-kit.service").read_text(encoding="utf-8")
+    ex.write(AVAHI_FILE, text.replace("<port>8710</port>", f"<port>{port}</port>").encode("utf-8"), 0o644)
+    ex.cmd(["systemctl", "enable", "--now", "avahi-daemon"])
+    if not ex.ok(["systemctl", "reload", "avahi-daemon"]):
+        ex.cmd(["systemctl", "restart", "avahi-daemon"])
+
+
+def _step(ex: _Exec, a: Action) -> None:
+    k, arg = a.kind, a.arg
+    if k == "user":
+        _user(ex, arg)
+    elif k == "spoolman_fetch":
+        ex.cmd(["bash", str(ex.resources / "spoolman.sh")])
+    elif k == "install_unit":
+        ex.write(f"/etc/systemd/system/{arg}", (ex.resources / "systemd" / arg).read_bytes(), 0o644)
+    elif k == "install_file":
+        dest, content, mode, owner = arg
+        ex.write(dest, content.encode("utf-8"), int(mode, 8), owner)
+    elif k == "server_setup":
+        _server_setup(ex, arg)
+    elif k == "udev_reload":
+        ex.cmd(["udevadm", "control", "--reload"])
+        ex.cmd(["udevadm", "trigger", "--subsystem-match=hidraw"])
+    elif k == "remove_pkg":
+        if ex.probe(["dpkg", "-s", arg]):
+            ex.cmd(["apt-get", "remove", "-y", "-q", arg])
+    elif k == "disable_ext":
+        if ex.probe(["systemctl", "is-enabled", arg]):
+            ex.cmd(["systemctl", "disable", "--now", arg])
+    elif k == "mask_sleep":
+        ex.cmd(["systemctl", "mask", *SLEEP_TARGETS])
+    elif k == "alsa_unmute":
+        _alsa_unmute(ex)
+    elif k == "disable":
+        ex.ok(["systemctl", "disable", "--now", arg])  # a unit that was never installed is fine
+    elif k == "daemon_reload":
+        ex.cmd(["systemctl", "daemon-reload"])
+    elif k == "enable":
+        _enable(ex, arg)
+    elif k == "wait_http":
+        _wait_http(ex, arg)
+    elif k == "ensure_fields":
+        ex.cmd([WRAPPER, "ensure-fields"])  # the wrapper runs it as the filament-kit user
+    elif k == "first_build":
+        # Before the PC sync has uploaded the Bambu Studio presets this only prints what to do next;
+        # it never stops apply.
+        print("\n==> Building presets")
+        ex.ok([WRAPPER, "profiles", "build"])
+    else:
+        raise ApplyError(f"unknown action {k!r}")
+
+
+def _label(a: Action) -> str:
+    if isinstance(a.arg, tuple):
+        return f"{a.kind} {a.arg[0]}"
+    return f"{a.kind} {a.arg}".rstrip()
+
+
+def _fail(a: Action, e: Exception) -> None:
+    print(f"FAIL {_label(a)}")
+    arg = a.arg if isinstance(a.arg, str) else ""
+    print(f"     fix: {_HINTS.get(a.kind, f'see the messages above, then {_AGAIN}').replace('<arg>', arg)}")
+    raise ApplyError(f"{_label(a)}: {e}") from e
+
+
+def execute(actions: list[Action], *, run: Callable[[list[str]], None] = run_checked,
+            resources: Path | None = None, root: Path = Path("/")) -> None:
+    """Run `actions` in order; stop at the first failure with `FAIL <step>` / `fix: <hint>` (ApplyError).
+
+    `resources` defaults to config.paths().opt / "resources" (what install.sh copies there)."""
+    if resources is None:
+        resources = config.paths().opt / "resources"
+    ex = _Exec(run, Path(resources), Path(root))
+    i = 0
+    while i < len(actions):
+        a = actions[i]
+        if a.kind == "apt":
+            # one batched install for consecutive apt actions
+            pkgs = []
+            while i < len(actions) and actions[i].kind == "apt":
+                pkgs.append(actions[i].arg)
+                i += 1
+            try:
+                ex.cmd(["apt-get", "install", "-y", "-q", *pkgs])
+            except (subprocess.CalledProcessError, OSError) as e:
+                _fail(Action("apt", " ".join(pkgs)), e)
+            continue
+        try:
+            _step(ex, a)
+        except (subprocess.CalledProcessError, OSError, ApplyError) as e:
+            _fail(a, e)
+        i += 1
+    # Spec section 5: the station's system changes stay when the module is turned off; say so once.
+    station_on = any(a.kind == "install_file" and a.arg[0] == UDEV_RULE for a in actions)
+    if not station_on and _under(ex.root, UDEV_RULE).exists():
+        print("Station is off: brltty removal, ModemManager, suspend masking and audio levels "
+              "were left as they are.")
+
+
+def finish(cfg: dict, *, run: Callable[[list[str]], None] = run_checked) -> None:
+    """install.sh step 8, for the modules that are on: status, pairing code, the closing line."""
+    ex = _Exec(run, Path("."), Path("/"))
+    on = modules.enabled(cfg)
+    host = socket.gethostname()
+    if "server" in on:
+        port = int(cfg.get("port", 8710))
+        if not ex.dry:
+            print("\n==> Waiting for filament-kit to start")
+            for _ in range(30):
+                if _https_local_ok(f"https://127.0.0.1:{port}/api/info"):
+                    break
+                time.sleep(1)
+        print("\n==> Status")
+        if not ex.ok([WRAPPER, "status"]):
+            print("Some checks failed; follow the 'fix:' lines above.")
+        print("\n==> Pair a phone: open the filament-kit app and scan this code")
+        ex.ok([WRAPPER, "pair"])
+    parts = ["Done."]
+    if "spoolman" in on:
+        parts.append(f"Spoolman: http://{host}.local:7912")
+    if "server" in on:
+        parts.append("Pair another phone: sudo filament-kit pair")
+    if "station" in on:
+        st = config._merge(config.DEFAULTS["station"], cfg.get("station") or {})
+        parts.append(f"Station: http://{host}.local:{int(st['port'])}/state")
+    print("\n" + "   ".join(parts))

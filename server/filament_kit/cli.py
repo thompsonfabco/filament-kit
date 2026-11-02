@@ -1,4 +1,4 @@
-"""Command line: status, pair, unpair, config, cert, ensure-fields, printer map / unpin, library, profiles."""
+"""Command line: status, pair, unpair, config, cert, ensure-fields, printer map / unpin, library, profiles, modules."""
 from __future__ import annotations
 
 import argparse
@@ -16,7 +16,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-from . import config, inventory, library, pairing
+from . import apply, config, inventory, library, modules, pairing
 from .bridge import registry
 from .profiles import builds, lines as lines_mod
 from .profiles.errors import ProfileError
@@ -800,6 +800,41 @@ def cmd_profiles_restore_deleted() -> int:
     return 0
 
 
+# ---------- modules ----------
+
+def cmd_modules_units() -> int:
+    """Every unit of every module, with companion services (uninstall.sh reads this)."""
+    for mod in modules.MODULES.values():
+        for unit in mod.units:
+            for u in apply._unit_files(unit):
+                print(u)
+    return 0
+
+
+def cmd_modules_apply() -> int:
+    if not _no_systemd() and hasattr(os, "geteuid") and os.geteuid() != 0:
+        print("error: run as root: sudo filament-kit modules apply", file=sys.stderr)
+        return 1
+    cfg = config.load()
+    try:
+        actions = apply.plan(cfg)
+    except modules.ModuleError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    on = modules.enabled(cfg)
+    print(f"Mode: {modules.mode_of(on)} ({', '.join(n for n in modules.MODULES if n in on)})")
+    for a in actions:
+        if a.kind == "install_file" and a.arg[0] == apply.DROPIN:
+            allow = next(ln for ln in a.arg[1].splitlines() if ln.startswith("IPAddressAllow="))
+            print(f"Station answers: {allow.split('=', 1)[1]}")
+    try:
+        apply.execute(actions)
+    except apply.ApplyError:
+        return 1
+    apply.finish(cfg)
+    return 0
+
+
 def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=None, sm_factory=None) -> int:
     ap = argparse.ArgumentParser(prog="filament-kit")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -834,6 +869,10 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
     sp.add_argument("line_id")
     sp.add_argument("parent")
     pfsub.add_parser("restore-deleted", help="bring back the presets deleted in Bambu Studio at the next build")
+    md = sub.add_parser("modules", help="the switchable parts of the kit: apply the settings, list units")
+    mdsub = md.add_subparsers(dest="modules_cmd", required=True)
+    mdsub.add_parser("apply", help="install, start and stop what config.json's modules say (root)")
+    mdsub.add_parser("units", help="print every systemd unit of every module, one per line")
     args = ap.parse_args(argv)
 
     if args.cmd == "status":
@@ -868,4 +907,8 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
         if args.profiles_cmd == "set-parent":
             return cmd_profiles_set_parent(args.line_id, args.parent)
         return cmd_profiles_restore_deleted()
+    if args.cmd == "modules":
+        if args.modules_cmd == "units":
+            return cmd_modules_units()
+        return cmd_modules_apply()
     return cmd_ensure_fields()

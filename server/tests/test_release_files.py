@@ -87,3 +87,50 @@ def test_server_and_pc_sync_versions_match():
     # the wheel takes its version from pyproject; make_release.sh looks for the __version__ wheel
     for rel in ("server/pyproject.toml", "pc-sync/pyproject.toml"):
         assert re.search(r'^version = "0\.2\.0"\s*$', _read(rel), re.M), rel
+
+
+SPOOLMAN_SHA = "bcc961af4c20d7ad7f1740f5609cd3efd94c4556baafaeba5036122dd7e46704"
+
+
+def test_release_copies_spoolman_script():
+    text = _read("tools/make_release.sh")
+    assert "install/spoolman.sh" in text
+    assert '"$stage/install/spoolman.sh"' in text  # made executable in the stage
+
+
+def test_install_hands_over_to_modules_apply():
+    text = _read("install/install.sh")
+    assert "exec /usr/local/bin/filament-kit modules apply" in text
+    assert "--mode" in text
+    assert "Install mode: 1) server 2) station 3) all-in-one 4) custom [1]" in text
+    assert "Server address (name or IP): " in text
+    assert '"$WHEEL[station]"' in text
+    assert "modules.set_mode" in text
+
+
+def test_spoolman_sha_only_in_spoolman_script():
+    assert SPOOLMAN_SHA not in _read("install/install.sh")
+    text = _read("install/spoolman.sh")
+    assert f"SPOOLMAN_SHA256={SPOOLMAN_SHA}" in text
+    assert "SPOOLMAN_VERSION=v0.27.0" in text
+    assert "sha256sum -c" in text
+    assert '/etc/systemd/system/spoolman.service' in text
+
+
+def test_station_extra_in_pyproject():
+    text = _read("server/pyproject.toml")
+    assert re.search(r'^station = \["nfcpy==1\.0\.4", "pyserial>=3\.5"\]\s*$', text, re.M)
+
+
+def test_wrapper_runs_modules_as_root():
+    text = _read("install/filament-kit-cli.sh")
+    assert re.search(r"^\s+config \| cert \| modules\)\s*$", text, re.M)
+
+
+def test_uninstall_uses_modules_units_and_cleans_station():
+    text = _read("install/uninstall.sh")
+    assert "modules units" in text
+    assert "/etc/systemd/system/filament-kit-station.service.d" in text
+    assert "/etc/udev/rules.d/99-filament-kit-station.rules" in text
+    purge = text[text.index('if [ "$PURGE" -eq 1 ]; then\n    rm -rf'):]
+    assert "filament-kit-station" in purge
