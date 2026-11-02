@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import getpass
 import http.client
 import json
@@ -450,6 +451,7 @@ def _printers_menu() -> None:
 
 def cmd_config() -> int:
     cfg = config.load()
+    before = _module_state(cfg)
     while True:
         print("\nfilament-kit settings\n"
               f"  1) display name       {cfg['server_name']}\n"
@@ -457,6 +459,7 @@ def cmd_config() -> int:
               f"  3) Claude model       {cfg['model']}, {cfg['reads_per_day']} reads/day\n"
               "  4) Anthropic key\n"
               "  5) Printers\n"
+              f"  6) Modules            {modules.mode_of(modules.enabled(cfg))}\n"
               "  0) save and exit")
         choice = _ask("> ")
         if choice is None or choice.strip() == "0":
@@ -484,10 +487,15 @@ def cmd_config() -> int:
                 print("No key entered; unchanged.")
         elif choice == "5":
             _printers_menu()
+        elif choice == "6":
+            _modules_menu(cfg)
         else:
             print("Unknown choice.")
     config.save(cfg)
     print("Saved.")
+    if _module_state(cfg) != before:
+        # the apply restarts what changed, so it replaces the plain restart
+        return _run_apply(pairing=False)
     _restart_service()
     return 0
 
@@ -854,7 +862,8 @@ def cmd_modules_units() -> int:
     return 0
 
 
-def cmd_modules_apply() -> int:
+def _run_apply(*, pairing: bool = True) -> int:
+    """Plan, execute and finish for the saved config. `pairing` shows the QR code at the end."""
     if not _no_systemd() and hasattr(os, "geteuid") and os.geteuid() != 0:
         print("error: run as root: sudo filament-kit modules apply", file=sys.stderr)
         return 1
@@ -874,8 +883,174 @@ def cmd_modules_apply() -> int:
         apply.execute(actions)
     except apply.ApplyError:
         return 1
-    apply.finish(cfg)
+    apply.finish(cfg, pairing=pairing)
     return 0
+
+
+def cmd_modules_apply() -> int:
+    return _run_apply(pairing=True)
+
+
+def _module_state(cfg: dict) -> tuple:
+    """What an apply cares about: the module set and the station link."""
+    st = cfg.get("station") or {}
+    return (modules.enabled(cfg), st.get("url"), tuple(st.get("allow") or ()))
+
+
+def _with_modules(cfg: dict, on) -> dict:
+    """Copy of cfg with every module name written true/false (never an empty dict)."""
+    out = copy.deepcopy(cfg)
+    out["modules"] = {n: n in on for n in modules.MODULES}
+    return out
+
+
+def _link_station(cfg: dict) -> None:
+    """Station on beside the server: all-in-one semantics (spec section 3)."""
+    st = cfg.setdefault("station", {})
+    st["allow"] = ["127.0.0.1"]
+    st["url"] = "http://127.0.0.1:5003"
+
+
+def _change_module(cfg: dict, name: str, want_on: bool, *, confirm=None, ask_address=None) -> str | None:
+    """Turn `name` on/off in `cfg` (in place). Returns an error text, or None when changed.
+
+    `confirm(text) -> bool` is asked before dependents go off too (None: refuse).
+    `ask_address() -> str | None` supplies the server address for a station without a server."""
+    if name not in modules.MODULES:
+        return f"unknown module {name!r}"
+    on = set(modules.enabled(cfg))
+    if want_on:
+        missing = [d for d in modules.MODULES[name].depends if d not in on]
+        if missing:
+            listed = ", ".join(missing)
+            return f"{name} needs {listed}\nfix: enable {listed} first"
+        on.add(name)
+    else:
+        deps = modules.dependents(name, frozenset(on))
+        if deps:
+            listed = ", ".join(deps)
+            if confirm is None or not confirm(f"Also turn off {listed}? [y/N] "):
+                return f"{listed} depend on {name}\nfix: disable {listed} first"
+            on -= set(deps)
+        on.discard(name)
+    new = _with_modules(cfg, on)
+    if want_on and name == "station":
+        if "server" in on:
+            _link_station(new)
+        elif ask_address is not None:
+            addr = ask_address()
+            if addr is None:
+                return "station needs the server's address; unchanged"
+            new.setdefault("station", {})["allow"] = [addr]
+    try:
+        modules.validate(new)
+    except modules.ModuleError as e:
+        return str(e)
+    cfg.clear()
+    cfg.update(new)
+    return None
+
+
+def _tty_confirm(text: str) -> bool:
+    if not apply._tty():
+        return False
+    ans = _ask(text)
+    return bool(ans) and ans.strip().lower() in ("y", "yes")
+
+
+def cmd_modules_list() -> int:
+    on = modules.enabled(config.load())
+    width = max(len(n) for n in modules.MODULES)
+    for n, m in modules.MODULES.items():
+        print(f"{n:<{width}}  {'on ' if n in on else 'off'}  {m.title}")
+    print(f"mode: {modules.mode_of(on)}")
+    return 0
+
+
+def _save_and_apply(cfg: dict) -> int:
+    config.save(cfg)
+    return _run_apply(pairing=False)
+
+
+def cmd_modules_set(mode: str) -> int:
+    try:
+        cfg = modules.set_mode(config.load(), mode)
+        modules.validate(cfg)
+    except modules.ModuleError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    return _save_and_apply(cfg)
+
+
+def cmd_modules_toggle(name: str, want_on: bool) -> int:
+    cfg = config.load()
+    err = _change_module(cfg, name, want_on, confirm=_tty_confirm)
+    if err:
+        print(f"error: {err}", file=sys.stderr)
+        return 1
+    return _save_and_apply(cfg)
+
+
+def _ask_station_server() -> str | None:
+    """Server address for a station-only machine; a blank answer cancels."""
+    while True:
+        raw = _ask("Server address (single IP or host name, blank to cancel): ")
+        if raw is None or not raw.strip():
+            return None
+        addr = raw.strip()
+        try:
+            modules.validate({"modules": {"station": True}, "station": {"allow": [addr]}})
+        except modules.ModuleError:
+            print("Enter a single address or host name, not a range or wildcard.")
+            continue
+        return addr
+
+
+def _modules_menu(cfg: dict) -> None:
+    names = list(modules.MODULES)
+    while True:
+        on = modules.enabled(cfg)
+        print(f"\nModules (mode: {modules.mode_of(on)})")
+        for i, n in enumerate(names, 1):
+            m = modules.MODULES[n]
+            print(f"  {i}) {'on ' if n in on else 'off'}  {m.title}: {m.description}")
+        print("  m) choose mode\n  0) back")
+        choice = _ask("> ")
+        if choice is None or choice.strip() == "0":
+            return
+        choice = choice.strip().lower()
+        if choice == "m":
+            modes = list(modules.MODES)
+            for i, m in enumerate(modes, 1):
+                print(f"  {i}) {m}")
+            pick = _ask_int("Mode: ", 1)
+            if pick is None or pick > len(modes):
+                print("Unknown mode.")
+                continue
+            mode = modes[pick - 1]
+            new = modules.set_mode(cfg, mode)
+            if mode == "station":
+                addr = _ask_station_server()
+                if addr is None:
+                    print("Unchanged.")
+                    continue
+                new["station"]["allow"] = [addr]
+            try:
+                modules.validate(new)
+            except modules.ModuleError as e:
+                print(f"error: {e}")
+                continue
+            cfg.clear()
+            cfg.update(new)
+        elif choice.isdigit() and 1 <= int(choice) <= len(names):
+            name = names[int(choice) - 1]
+            err = _change_module(cfg, name, name not in on,
+                                 confirm=lambda t: (_ask(t) or "").strip().lower() in ("y", "yes"),
+                                 ask_address=_ask_station_server)
+            if err:
+                print(f"error: {err}")
+        else:
+            print("Unknown choice.")
 
 
 def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=None, sm_factory=None) -> int:
@@ -915,6 +1090,13 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
     md = sub.add_parser("modules", help="the switchable parts of the kit: apply the settings, list units")
     mdsub = md.add_subparsers(dest="modules_cmd", required=True)
     mdsub.add_parser("apply", help="install, start and stop what config.json's modules say (root)")
+    mdsub.add_parser("list", help="show each module on/off and the mode")
+    ms = mdsub.add_parser("set", help="switch to an install mode and apply (root)")
+    ms.add_argument("mode", choices=list(modules.MODES))
+    me = mdsub.add_parser("enable", help="turn a module on and apply (root)")
+    me.add_argument("name")
+    mx = mdsub.add_parser("disable", help="turn a module off and apply; its data is kept (root)")
+    mx.add_argument("name")
     mdsub.add_parser("units", help="print every systemd unit of every module, one per line")
     args = ap.parse_args(argv)
 
@@ -953,5 +1135,11 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
     if args.cmd == "modules":
         if args.modules_cmd == "units":
             return cmd_modules_units()
+        if args.modules_cmd == "list":
+            return cmd_modules_list()
+        if args.modules_cmd == "set":
+            return cmd_modules_set(args.mode)
+        if args.modules_cmd in ("enable", "disable"):
+            return cmd_modules_toggle(args.name, args.modules_cmd == "enable")
         return cmd_modules_apply()
     return cmd_ensure_fields()

@@ -474,8 +474,10 @@ def execute(actions: list[Action], *, run: Callable[[list[str]], None] = run_che
               "were left as they are.")
 
 
-def finish(cfg: dict, *, run: Callable[[list[str]], None] = run_checked) -> None:
-    """install.sh step 8, for the modules that are on: status, pairing code, the closing line."""
+def finish(cfg: dict, *, run: Callable[[list[str]], None] = run_checked, pairing: bool = True) -> None:
+    """install.sh step 8, for the modules that are on: status, pairing code, the closing line.
+
+    `pairing=False` (modules set/enable/disable, config menu) prints the status only, no QR code."""
     ex = _Exec(run, Path("."), Path("/"))
     on = modules.enabled(cfg)
     host = socket.gethostname()
@@ -490,8 +492,9 @@ def finish(cfg: dict, *, run: Callable[[list[str]], None] = run_checked) -> None
         print("\n==> Status")
         if not ex.ok([WRAPPER, "status"]):
             print("Some checks failed; follow the 'fix:' lines above.")
-        print("\n==> Pair a phone: open the filament-kit app and scan this code")
-        ex.ok([WRAPPER, "pair"])
+        if pairing:
+            print("\n==> Pair a phone: open the filament-kit app and scan this code")
+            ex.ok([WRAPPER, "pair"])
     parts = ["Done."]
     if "spoolman" in on:
         parts.append(f"Spoolman: http://{host}.local:7912")
