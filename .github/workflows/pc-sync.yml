@@ -1,0 +1,37 @@
+name: pc-sync
+on:
+  push:
+    paths: ['pc-sync/**', '.github/workflows/pc-sync.yml']
+  pull_request:
+    paths: ['pc-sync/**', '.github/workflows/pc-sync.yml']
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install "./pc-sync[test]"
+
+      - name: Tests
+        run: pytest pc-sync/tests
+
+      - name: PyInstaller
+        run: |
+          pip install pyinstaller==6.11.1
+          pyinstaller --noconfirm pc-sync/fksync.spec
+
+      - name: Smoke test
+        run: |
+          ./dist/filament-kit-sync/filament-kit-sync.exe --help
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path -LiteralPath dist/filament-kit-sync/filament-kit-sync-task.exe)) {
+            Write-Output "::error::filament-kit-sync-task.exe is missing"
+            exit 1
+          }
