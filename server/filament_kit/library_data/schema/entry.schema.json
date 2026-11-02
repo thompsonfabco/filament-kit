@@ -17,6 +17,10 @@
       "description": "Bambu Studio system filament preset name, without the '@BBL <printer>' suffix.",
       "type": "string", "minLength": 1, "pattern": "^[^@]+$"
     },
+    "orca_parent": {
+      "description": "Orca Slicer OrcaFilamentLibrary preset name, without the ' @System' suffix.",
+      "type": "string", "minLength": 1, "pattern": "^[^@]+$"
+    },
     "fields": {
       "description": "Slicer values as Bambu Studio one-element string arrays. temperature_vitrification is never allowed.",
       "type": "object",
