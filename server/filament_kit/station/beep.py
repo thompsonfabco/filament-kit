@@ -13,8 +13,7 @@ import subprocess
 import threading
 import wave
 
-from . import panel
-from . import state as st
+from . import state as st, wire
 
 log = logging.getLogger("intake-station")
 
@@ -54,7 +53,7 @@ BEEP_WAV = tone()
 def beep(kind="scan"):
     """The panel's buzzer if the panel is connected, else (scan beep only) a tone on the PC's speaker output.
     Plays in the background so the reader loop isn't held up; a missing speaker only logs."""
-    if not st.settings["beep"] or panel.panel_send(TONES[kind]) or kind != "scan":
+    if not st.settings["beep"] or wire.panel_send(TONES[kind]) or kind != "scan":
         return
     dev = st.settings["beep_device"] or beep_device()
     if not dev:

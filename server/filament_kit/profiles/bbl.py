@@ -179,6 +179,21 @@ class Store:
         v = cfg.get("compatible_printers")
         return [str(x) for x in v] if isinstance(v, list) else []
 
+    # public lookups for other stores (profiles/orca.py) -- the private ones stay for this package's own callers
+    def resolved(self, name: str) -> dict | None:
+        """`name` resolved through its inherits/include chain, or None when it cannot be (reported once in
+        `problems`). The store's cached dict: read it, copy before changing it (`resolve` returns a copy)."""
+        return self._try(name)
+
+    def instantiable(self) -> list[str]:
+        """The names of the presets a user can pick (`instantiation` "true"), sorted."""
+        return self._instantiable()
+
+    @staticmethod
+    def compatible_printers(cfg: dict) -> list[str]:
+        """A resolved preset's `compatible_printers` as text; [] when it is not a list."""
+        return Store._compatible(cfg)
+
     def parent_for(self, base: str, printer: str, nozzle: str) -> str | None:
         target = f"{printer} {nozzle} nozzle"
         hits = [n for n, cfg in self._with_base(base) if target in self._compatible(cfg)]

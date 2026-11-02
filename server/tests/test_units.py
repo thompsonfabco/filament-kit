@@ -69,9 +69,24 @@ def test_build_path_unit():
 def test_install_ships_units_and_state_dirs():
     """install.sh copies the units as resources; `modules apply` installs and enables them (apply.plan)."""
     text = _text(INSTALL / "install.sh")
-    assert 'cp -R "$RES/systemd" "$RES/avahi" "$OPT/resources/"' in text
+    assert 'cp -R "$RES/systemd" "$RES/avahi" "$RES/remote" "$OPT/resources/"' in text
     assert ('install -d -m 750 -o filament-kit -g filament-kit '
             '"$STATE/profiles" "$STATE/library" "$STATE/library-local"') in text
+
+
+def test_install_copies_the_panel_firmware_pair_as_a_resource():
+    text = _text(INSTALL / "install.sh")
+    assert '"$OPT/resources/panel/"' in text and "intake-panel.bin" in text and "VERSION" in text
+    rel = _text(INSTALL.parent / "tools" / "make_release.sh")
+    assert "station/panel/firmware/intake-panel.bin" in rel
+    fw = INSTALL.parent / "station" / "panel" / "firmware"
+    assert (fw / "intake-panel.bin").read_bytes()[:1] == b"\xe9"  # an ESP8266 image, untouched by line-ending rules
+    assert (fw / "VERSION").read_text().strip().isdigit()
+    assert "firmware/*.bin binary" in _text(INSTALL.parent / ".gitattributes")
+
+
+def test_station_extra_has_esptool():
+    assert "esptool==5.6.0" in _text(INSTALL.parent / "server" / "pyproject.toml")
 
 
 def test_uninstall_fallback_lists_every_unit():
@@ -82,7 +97,7 @@ def test_uninstall_fallback_lists_every_unit():
 
 
 STATION = {"User": "filament-kit-station", "Group": "filament-kit-station",
-           "SupplementaryGroups": "dialout audio",
+           "SupplementaryGroups": "dialout audio video",
            "ExecStart": "/opt/filament-kit/venv/bin/python -I -m filament_kit.station",
            "Restart": "always", "ProtectSystem": "strict", "ProtectHome": "yes", "PrivateTmp": "yes",
            "NoNewPrivileges": "yes", "CapabilityBoundingSet": "", "IPAddressDeny": "any"}

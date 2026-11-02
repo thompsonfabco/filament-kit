@@ -825,32 +825,40 @@ def cmd_profiles_lines() -> int:
     for lid in sorted(ls):
         line = ls[lid]
         parent = f"{line.bambu_parent} ({line.parent_source})" if line.bambu_parent else "none"
+        oparent = f"{line.orca_parent} ({line.orca_parent_source})" if line.orca_parent else "none"
         ids = ", ".join(str(i) for i in line.filaments) or "-"
-        print(f"{lid}  {line.vendor} {line.product}  {line.material}  parent {parent}  "
+        print(f"{lid}  {line.vendor} {line.product}  {line.material}  parent {parent}  orca {oparent}  "
               f"filaments {ids}  presets {per_line.get(lid, 0)}")
     return 0
 
 
-def cmd_profiles_set_parent(line_id: str, parent: str) -> int:
+def cmd_profiles_set_parent(line_id: str, parent: str, orca: bool = False) -> int:
     parent = parent.strip()
     try:
         if not parent:
-            raise ValueError("give the name of a Bambu Studio system preset")
+            raise ValueError("give the name of an Orca Slicer library preset (without ' @System')" if orca
+                             else "give the name of a Bambu Studio system preset")
         inventory.check_line_text("set-parent", "parent", parent)
-        lines_mod.check_parent(parent, builds.system_store())
+        if orca:
+            parent = lines_mod.check_orca_parent(parent, builds.orca_store())   # the store's spelling (fix I1)
+        else:
+            lines_mod.check_parent(parent, builds.system_store())
     except (ValueError, ProfileError) as e:
         _err_line(str(e))
         return 1
     try:
-        line = lines_mod.set_parent_saved(line_id, parent)
+        line = lines_mod.set_parent_saved(line_id, parent, target="orca" if orca else "bambu")
     except KeyError:
         _err_line(f"no line {line_id} (see: sudo filament-kit profiles lines)")
         return 1
     except lines_mod.LineStoreError as e:
         _err_line(e.message)
         return 1
-    print(f"line {line.line_id}: parent {line.bambu_parent} (set by you)")
-    _request_rebuild(f"parent of line {line.line_id} set")
+    if orca:
+        print(f"line {line.line_id}: Orca parent {line.orca_parent} (set by you)")
+    else:
+        print(f"line {line.line_id}: parent {line.bambu_parent} (set by you)")
+    _request_rebuild(f"{'Orca ' if orca else ''}parent of line {line.line_id} set")
     return 0
 
 
@@ -1229,14 +1237,18 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
     lsub.add_parser("rollback", help="go back to the library version before the last update")
     la = lsub.add_parser("add", help="add or replace a local entry from a JSON file ('-' reads stdin)")
     la.add_argument("file")
-    pf = sub.add_parser("profiles", help="the generated Bambu Studio presets: build, status, lines, parents")
+    _pf_help = "the generated Bambu Studio and Orca Slicer presets: build, status, lines, parents"
+    pf = sub.add_parser("profiles", help=_pf_help, description=_pf_help)
     pfsub = pf.add_subparsers(dest="profiles_cmd", required=True)
     pfsub.add_parser("build", help="build the presets now (needs the PC sync to have run once)")
     pfsub.add_parser("status", help="show the last build, the PC sync and the problems")
-    pfsub.add_parser("lines", help="list the product lines and their Bambu Studio parents")
-    sp = pfsub.add_parser("set-parent", help="set the Bambu Studio system preset a line is built from")
+    pfsub.add_parser("lines", help="list the product lines and their Bambu Studio and Orca Slicer parents")
+    sp = pfsub.add_parser("set-parent", help="set the Bambu Studio system preset (or with --orca the Orca Slicer "
+                                             "library preset) a line is built from")
     sp.add_argument("line_id")
     sp.add_argument("parent")
+    sp.add_argument("--orca", action="store_true",
+                    help="set the line's Orca Slicer library parent instead (the name without ' @System')")
     pfsub.add_parser("restore-deleted", help="bring back the presets deleted in Bambu Studio at the next build")
     md = sub.add_parser("modules", help="the switchable parts of the kit: apply the settings, list units")
     mdsub = md.add_subparsers(dest="modules_cmd", required=True)
@@ -1255,6 +1267,10 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
     wbsub = wb.add_subparsers(dest="web_cmd", required=True)
     wbsub.add_parser("passphrase", help="set the sign-in passphrase (root; typed twice, hidden)")
     wbsub.add_parser("status", help="check the web unit: public URL, passphrase, health, connectors")
+    rm_ = sub.add_parser("remote", help="remote access: get the certificate, show the firewall rules")
+    rmsub = rm_.add_subparsers(dest="remote_cmd", required=True)
+    rmsub.add_parser("issue", help="get the certificate with certbot (standalone on port 80) (root)")
+    rmsub.add_parser("firewall", help="print the firewall and port-forward rules to set up by hand")
     args = ap.parse_args(argv)
 
     if args.cmd == "status":
@@ -1287,10 +1303,14 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
         if args.profiles_cmd == "lines":
             return cmd_profiles_lines()
         if args.profiles_cmd == "set-parent":
-            return cmd_profiles_set_parent(args.line_id, args.parent)
+            return cmd_profiles_set_parent(args.line_id, args.parent, orca=args.orca)
         return cmd_profiles_restore_deleted()
     if args.cmd == "web":
         return cmd_web_passphrase() if args.web_cmd == "passphrase" else cmd_web_status()
+    if args.cmd == "remote":
+        from . import remote
+        cfg = config.load()
+        return remote.issue(cfg) if args.remote_cmd == "issue" else remote.firewall(cfg)
     if args.cmd == "modules":
         if args.modules_cmd == "units":
             return cmd_modules_units()

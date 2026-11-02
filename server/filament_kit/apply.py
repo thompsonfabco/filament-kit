@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from . import config, modules
+from . import config, modules, remote
 from .modules import MODULES, ModuleError
 
 SPOOLMAN_INFO = "http://127.0.0.1:7912/api/v1/info"
@@ -74,6 +74,9 @@ def _uniq(items) -> list[str]:
 
 def _env_assign(a: str) -> str:
     """systemd splits Environment= on spaces; quote a whole assignment that has any."""
+    if "\n" in a or "\r" in a:
+        raise ModuleError(f"a line break in a station setting ({a.split('=')[0]}); fix: put the value on one line")
+    a = a.replace("%", "%%")  # systemd expands %-specifiers in Environment=
     if any(c in a for c in ' 	"'):
         return '"' + a.replace("\\", "\\\\").replace('"', '\\"') + '"'
     return a
@@ -86,7 +89,11 @@ def station_dropin(cfg: dict, addresses: list[str]) -> str:
     env = [f"STATION_ALLOW={' '.join(allow)}",
            f"STATION_PORT={int(st['port'])}",
            f"NFC_DEVICE={st['nfc_device']}",
-           f"STATION_BEEP={1 if st['beep'] else 0}"]
+           f"STATION_BEEP={1 if st['beep'] else 0}",
+           f"STATION_SPEECH={1 if st['speech'] else 0}",
+           f"STATION_CAMERA={st['camera']}",
+           f"STATION_PANEL_FW={config.paths().opt.as_posix()}/resources/panel/intake-panel.bin",
+           f"STATION_PANEL_FLASH={1 if st['panel_flash'] else 0}"]
     if st.get("beep_device"):
         env.append(f"STATION_BEEP_DEVICE={st['beep_device']}")
     env_line = "Environment=" + " ".join(_env_assign(e) for e in env)
@@ -124,8 +131,11 @@ def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) ->
 
     A = Action
     acts: list[Action] = []
-    for pkg in _uniq(p for n in MODULES if n in on for p in MODULES[n].apt):
-        acts.append(A("apt", pkg))
+    full = _uniq(p for n in MODULES if n in on for p in MODULES[n].apt)
+    acts += [A("apt", pkg) for pkg in full]
+    # --no-install-recommends packages; one another module installs in full is left to that install
+    acts += [A("apt_lean", pkg) for pkg in _uniq(p for n in MODULES if n in on for p in MODULES[n].apt_lean)
+             if pkg not in full]
 
     # Phase 1: users, files and unit files; nothing is enabled until daemon_reload.
     if "spoolman" in on:
@@ -139,9 +149,17 @@ def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) ->
                 acts += [A("install_unit", u) for u in _unit_files(unit)]
     if "web" in on:
         acts.append(A("install_unit", WEB_UNIT))
+    rs = remote.settings(cfg) if "remote" in on else None
+    if rs:
+        acts.append(A("remote_install", rs["hostname"]))
+        if rs["window"]:
+            acts.append(A("install_file", (remote.TIMER_DROPIN, remote.timer_dropin(rs["window"]),
+                                           "0644", "root:root")))
+        else:
+            acts.append(A("remote_unpin"))  # a window set earlier is removed with the setting
     if "station" in on:
         acts += [
-            A("user", ("filament-kit-station", "dialout,audio")),
+            A("user", ("filament-kit-station", "dialout,audio,video")),
             A("install_file", (UDEV_RULE, UDEV_TEXT, "0644", "root:root")),
             A("udev_reload"),
             A("remove_pkg", "brltty"),
@@ -157,6 +175,9 @@ def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) ->
         if name not in on and (name not in modules.OPT_IN or name in configured):
             for unit in mod.units:
                 acts += [A("disable", u) for u in _unit_files(unit)]
+    # Remote off: remove the router route this kit made; nginx, certbot and other routes stay.
+    if "remote" not in on and "remote" in configured:
+        acts.append(A("remote_off", remote.route_name(cfg)))
     acts.append(A("daemon_reload"))
 
     # Phase 2: start things, Spoolman first.
@@ -170,8 +191,15 @@ def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) ->
             acts += [A("enable", u) for u in MODULES[name].units]
     if "web" in on:
         acts.append(A("enable", WEB_UNIT))
+    if rs:
+        acts.append(A("enable", "nginx.service"))
+        if rs["window"]:
+            acts.append(A("enable", "certbot.timer"))
+        acts.append(A("remote_route", (rs["route"], rs["port"])))
     if "station" in on:
         acts.append(A("enable", STATION_UNIT))
+    if rs:  # last, so the rules are the final thing on screen before the closing line
+        acts.append(A("remote_print", (rs["hostname"], rs["route"], rs["window"] or "", tuple(rs["lan"]))))
     if "presets" in on:
         acts.append(A("first_build"))
     return acts
@@ -190,6 +218,7 @@ APT = ["apt-get", "-o", "DPkg::Lock::Timeout=300"]
 # What to try when a step fails; printed after `FAIL <step>`. <arg> is the action's argument.
 _HINTS = {
     "apt": f"check the network and run `sudo apt-get update`, then {_AGAIN}",
+    "apt_lean": f"check the network and run `sudo apt-get update`, then {_AGAIN}",
     "user": f"see the useradd message above, then {_AGAIN}",
     "spoolman_fetch": f"see the Spoolman messages above, then {_AGAIN}",
     "install_unit": "run ./install.sh again (the unit files live in /opt/filament-kit/resources)",
@@ -201,6 +230,10 @@ _HINTS = {
     "disable_ext": "disable it by hand: sudo systemctl disable --now <arg>",
     "mask_sleep": "mask them by hand: sudo systemctl mask " + " ".join(SLEEP_TARGETS),
     "wait_http": "Spoolman did not answer on port 7912; see: journalctl -u spoolman",
+    "remote_install": f"see the messages above (nginx -t shows config errors), then {_AGAIN}",
+    "remote_route": "see: nginx -t and journalctl -u nginx; list routes with: sudo /usr/local/sbin/mcp-route ls",
+    "remote_unpin": "remove it by hand: sudo rm /etc/systemd/system/certbot.timer.d/acme-window.conf",
+    "remote_off": "remove the route by hand: sudo /usr/local/sbin/mcp-route rm <arg>",
     "ensure_fields": "check Spoolman answers, then: sudo filament-kit ensure-fields",
 }
 
@@ -398,6 +431,66 @@ def _server_setup(ex: _Exec, arg: str) -> None:
         ex.cmd(["systemctl", "restart", "avahi-daemon"])
 
 
+def _remote_install(ex: _Exec, host: str) -> None:
+    """Router files, certbot hooks and a placeholder certificate so nginx starts before certbot has run."""
+    conf = remote.read_resource(ex.resources, "mcp-router.conf").replace("@HOST@", host)
+    ex.write(remote.ROUTER_CONF, conf.encode("utf-8"), 0o644)
+    for name, dest, mode in (("mcp-proxy.conf", remote.PROXY_CONF, 0o644),
+                             ("route.template", f"{remote.ROUTER_DIR}/route.template", 0o644),
+                             ("mcp-route", remote.MCP_ROUTE, 0o755),
+                             ("acme-hooks.sh", remote.HOOK, 0o755)):
+        ex.write(dest, remote.read_resource(ex.resources, name).encode("utf-8"), mode)
+    ex.write(f"{remote.ROUTER_DIR}/host", f"{host}\n".encode("utf-8"), 0o644)
+    # The deploy hook deliberately runs from two places: the lineage's renewal conf (set by `remote issue`) and
+    # this renewal-hooks/deploy file. A later `certbot --expand` rewrites the renewal conf and drops its hook
+    # (known from the ops install); this file keeps the cert reaching nginx. The hook acts only on our lineage.
+    ex.write(remote.DEPLOY_HOOK_FILE, f"#!/bin/sh\nexec {remote.HOOK} deploy\n".encode("utf-8"), 0o755)
+    for d, mode in ((remote.ROUTE_DIR, 0o755), (remote.TLS_DIR, 0o750)):
+        _under(ex.root, d).mkdir(parents=True, exist_ok=True)
+        os.chmod(_under(ex.root, d), mode)
+    cert = _under(ex.root, f"{remote.TLS_DIR}/fullchain.pem")
+    key = _under(ex.root, f"{remote.TLS_DIR}/privkey.pem")
+    if not cert.exists():  # never replaces a real certificate
+        print(f"\n==> Placeholder certificate for {host} (replaced when certbot succeeds)")
+        ex.cmd(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "30",
+                "-subj", f"/CN={host}", "-addext", f"subjectAltName=DNS:{host}",
+                "-keyout", str(key), "-out", str(cert)])
+        ex.cmd(["chmod", "600", str(key)])
+    ex.cmd(["nginx", "-t"])
+
+
+def _remote_route(ex: _Exec, name: str, port: int) -> None:
+    """Route the web unit; drop routes this kit added earlier under another name (public_url changed)."""
+    book = _under(ex.root, remote.KIT_ROUTES)
+    old = book.read_text(encoding="utf-8").split() if book.exists() else []
+    for n in old:
+        if n != name and re.fullmatch(r"[a-z][a-z0-9-]{1,30}", n):
+            ex.cmd([remote.MCP_ROUTE, "rm", n])  # mcp-route rm leaves files it did not write
+    ex.cmd([remote.MCP_ROUTE, "add", name, str(port)])
+    book.parent.mkdir(parents=True, exist_ok=True)
+    book.write_text(name + "\n", encoding="utf-8")
+
+
+def _remote_off(ex: _Exec, name: str) -> None:
+    """Remove only the route file mcp-route made for this kit; other routes and nginx itself stay."""
+    f = _under(ex.root, f"{remote.ROUTE_DIR}/{name}.conf")
+    if not f.exists():
+        return
+    if remote.MARK not in f.read_text(encoding="utf-8", errors="replace"):
+        print(f"Remote is off; {f} was not written by the kit, so it was left in place.")
+        return
+    f.unlink()
+    print(f"Remote is off: removed the {name} route (nginx, certbot and other routes were left).")
+    if ex.ok(["nginx", "-t"]):
+        ex.ok(["systemctl", "reload", "nginx"])  # a stopped nginx needs nothing
+
+
+def _remote_print(ex: _Exec, arg: tuple) -> None:
+    host, route, window, lan = arg
+    s = {"hostname": host, "route": route, "window": window or None, "lan": list(lan)}
+    print(remote.firewall_text(s, ex.resources))
+
+
 def _step(ex: _Exec, a: Action) -> None:
     k, arg = a.kind, a.arg
     if k == "user":
@@ -435,6 +528,19 @@ def _step(ex: _Exec, a: Action) -> None:
         _enable(ex, arg)
     elif k == "wait_http":
         _wait_http(ex, arg)
+    elif k == "remote_install":
+        _remote_install(ex, arg)
+    elif k == "remote_unpin":
+        f = _under(ex.root, remote.TIMER_DROPIN)
+        if f.exists():
+            f.unlink()
+            print("remote.acme_window is unset: removed the certbot timer drop-in.")
+    elif k == "remote_route":
+        _remote_route(ex, arg[0], arg[1])
+    elif k == "remote_off":
+        _remote_off(ex, arg)
+    elif k == "remote_print":
+        _remote_print(ex, arg)
     elif k == "ensure_fields":
         ex.cmd([WRAPPER, "ensure-fields"])  # the wrapper runs it as the filament-kit user
     elif k == "first_build":
@@ -470,16 +576,18 @@ def execute(actions: list[Action], *, run: Callable[[list[str]], None] = run_che
     i = 0
     while i < len(actions):
         a = actions[i]
-        if a.kind == "apt":
-            # one batched install for consecutive apt actions
+        if a.kind in ("apt", "apt_lean"):
+            # one batched install for consecutive apt actions of the same kind; apt_lean skips recommended packages
+            # (espeak-ng would otherwise pull in a whole audio stack)
             pkgs = []
-            while i < len(actions) and actions[i].kind == "apt":
+            while i < len(actions) and actions[i].kind == a.kind:
                 pkgs.append(actions[i].arg)
                 i += 1
+            flags = ["--no-install-recommends"] if a.kind == "apt_lean" else []
             try:
-                ex.cmd([*APT, "install", "-y", "-q", *pkgs])
+                ex.cmd([*APT, "install", "-y", "-q", *flags, *pkgs])
             except (subprocess.CalledProcessError, OSError) as e:
-                _fail(Action("apt", " ".join(pkgs)), e)
+                _fail(Action(a.kind, " ".join(pkgs)), e)
             continue
         try:
             _step(ex, a)
