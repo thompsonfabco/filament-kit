@@ -138,8 +138,10 @@ printer.
 - **Stopping a mapping** (Ctrl-C, closing the terminal, or restarting the server) always puts the slots back
   first and then reports the mapping as failed. If the computer loses power or the process is killed mid-way,
   the server keeps a note of every slot's original setting (`/var/lib/filament-kit/printers/<serial>/slottest-snapshot.json`);
-  the next mapping run, or the server when it starts and the printer is idle, puts those slots back before
-  doing anything else. A mapping refuses to start while that restore is not confirmed.
+  the next mapping run, or the server when it starts and the printer is idle, puts back every slot that still
+  shows a test colour before doing anything else. A slot you changed in the meantime (another spool, Bambu
+  Studio, the touchscreen) is left as you set it. A mapping refuses to start while that restore is not
+  confirmed.
 - Test colours are near-pure reds, `FAnn00FF` (the first two digits F7 to FE). Mapping picks test colours that
   no slot holds, so a real spool of such a red is mapped like any other. If the note file cannot be read,
   mapping says so: set the filament of any slot showing such a red again (on the printer or in Bambu Studio),

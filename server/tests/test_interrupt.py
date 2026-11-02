@@ -225,6 +225,62 @@ def test_next_job_refused_when_the_snapshot_restore_is_not_confirmed(rig, stub_j
     assert v["calibrated"] is False and v["observe"] is True
 
 
+def set_colour(m, printer, unit, tray, colour):
+    """The owner (RFID, Studio, touchscreen) changes a slot's colour on the printer."""
+    rep = copy.deepcopy(printer.report["ams"])
+    rep["ams"][unit]["tray"][tray]["tray_color"] = colour
+    printer.push({"ams": rep})
+    assert m.wait_report(SERIAL, lambda r: r["ams"]["ams"][unit]["tray"][tray]["tray_color"] == colour, 2)
+
+
+def test_stale_restore_leaves_a_slot_the_owner_changed_since(rig):
+    """R2: after a kill -9, a slot whose colour is no test colour was changed by the owner since: left as is."""
+    m, printer, _ = rig
+    leave_test_colours(printer)
+    set_colour(m, printer, 0, 2, "123456FF")              # A3: the owner swapped the spool meanwhile
+    assert snapshot.restore(m, SERIAL) == []
+    assert sorted({(w["ams_id"], w["tray_id"]) for w in printer.writes}) == [(0, 0), (0, 1)]
+    assert printer.tray(0, 2)["tray_color"] == "123456FF"
+    assert_back_to_original(printer, ["A1", "A2", "A4", "HT-A", "Ext"])
+    assert not snapshot.pending(SERIAL)
+
+
+def test_stale_calibration_snapshot_writes_nothing(rig):
+    """R2: the calibration writes no slot setting, so a stale calibration snapshot puts nothing back."""
+    m, printer, _ = rig
+    slots = [{"label": "A1", "ams_id": 0, "tray_id": 0, "setting": dict(printer.tray(0, 0))}]
+    snapshot.save(SERIAL, "calibration", slots)
+    set_colour(m, printer, 0, 0, "123456FF")              # the owner loaded another spool into A1
+    assert snapshot.restore(m, SERIAL) == []
+    assert printer.writes == [] and printer.tray(0, 0)["tray_color"] == "123456FF"
+    assert not snapshot.pending(SERIAL)
+
+
+def test_old_slottest_snapshot_still_restores_its_test_colours(rig):
+    """R2: an old snapshot (more than 10 minutes) restores only slots still showing one of its test colours."""
+    m, printer, _ = rig
+    leave_test_colours(printer)
+    f = snapshot.path(SERIAL)
+    d = json.loads(f.read_text(encoding="utf-8"))
+    f.write_text(json.dumps(dict(d, at=time.time() - 3600)), encoding="utf-8")
+    set_colour(m, printer, 0, 3, "ABCDEFFF")              # A4 changed since
+    assert snapshot.restore(m, SERIAL) == []
+    assert sorted({(w["ams_id"], w["tray_id"]) for w in printer.writes}) == [(0, 0), (0, 1)]
+    assert printer.tray(0, 3)["tray_color"] == "ABCDEFFF"
+
+
+def test_a_new_spool_in_a_test_colour_outside_the_snapshot_does_not_block(rig):
+    """R2: the final 'no test colour left' check looks only at the snapshot's own (non-forgotten) slots."""
+    m, printer, _ = rig
+    leave_test_colours(printer)
+    snapshot.forget(SERIAL, 0, 3)                         # A4 was loaded since (Load into printer) ...
+    set_colour(m, printer, 0, 3, "FA0100FF")              # ... with a real near-red spool
+    assert snapshot.restore(m, SERIAL) == []
+    assert printer.tray(0, 3)["tray_color"] == "FA0100FF"
+    assert_back_to_original(printer, ["A1", "A2"])
+    assert not snapshot.pending(SERIAL)
+
+
 def test_loading_a_slot_drops_it_from_the_snapshot():
     snapshot.save(SERIAL, "slottest", [{"label": "A1", "ams_id": 0, "tray_id": 0, "setting": {}},
                                         {"label": "A2", "ams_id": 0, "tray_id": 1, "setting": {}}])
