@@ -286,18 +286,33 @@ def test_load_busy_offline_cert_changed(client, mgr, monkeypatch):
     assert mgr.writes == []
 
 
-def test_load_refused_during_mapping(client, mgr, stubs, monkeypatch):
+def test_load_and_unload_refused_during_mapping(client, mgr, sm, stubs, monkeypatch):
     preset(monkeypatch)
     gate = threading.Event()
     stubs["gate"] = gate
     assert client.post(f"/api/printers/{SERIAL}/map").status_code == 202
     try:
-        err(client.post(f"/api/printers/{SERIAL}/slots/A1/load", json={"spool_id": 1, "dry_run": False}),
-            409, "printer_busy")
+        for url, body in ((f"/api/printers/{SERIAL}/slots/A1/load", {"spool_id": 1, "dry_run": False}),
+                          (f"/api/printers/{SERIAL}/slots/A1/load", {"spool_id": 1, "dry_run": True}),
+                          (f"/api/printers/{SERIAL}/slots/A1/unload", {"dry_run": False})):
+            r = client.post(url, json=body)
+            err(r, 409, "already_running")
+            assert "mapping" in r.json()["message"]
     finally:
         gate.set()
         wait_state(client)
-    assert mgr.writes == []
+    assert mgr.writes == [] and sm.spools[2]["location"] == LOC_A1
+
+
+def test_load_and_unload_refused_while_another_process_maps(client, mapper, sm, monkeypatch):
+    """`filament-kit printer map` in another process: the lock file says so (Mapper.in_progress)."""
+    preset(monkeypatch)
+    monkeypatch.setattr(mapping._ProcessLock, "held_elsewhere", staticmethod(lambda serial: serial == SERIAL))
+    assert mapper.in_progress(SERIAL) is True
+    err(client.post(f"/api/printers/{SERIAL}/slots/A1/load", json={"spool_id": 1, "dry_run": False}),
+        409, "already_running")
+    err(client.post(f"/api/printers/{SERIAL}/slots/A1/unload", json={"dry_run": False}), 409, "already_running")
+    assert sm.spools[2]["location"] == LOC_A1
 
 
 def test_load_write_refused(client, mgr, monkeypatch):
