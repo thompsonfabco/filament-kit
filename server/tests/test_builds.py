@@ -431,3 +431,55 @@ def test_old_upload_tmp_swept(env):
     os.utime(fresh, (past, past))
     builds.run_build(env, now=TG.NOW)
     assert not fresh.exists()
+
+
+# ---------- Task 7c: one system store loader ----------
+
+def test_system_store_none_before_an_upload():
+    assert builds.system_store() is None
+
+
+def test_system_store_is_hash_gated_not_folder_gated():
+    """A system folder without a system_hash in meta.json is not an uploaded store (one definition everywhere)."""
+    folder = profiles_dir() / "live" / "system"
+    folder.mkdir(parents=True)
+    for n, cfg in TG.presets().items():
+        (folder / f"{n}.json").write_text(json.dumps(cfg), encoding="utf-8")
+    assert builds.system_store() is None
+
+
+def test_system_store_cached_by_hash_and_reloaded_on_a_new_upload():
+    pair("a")
+    builds.store_upload("system", io.BytesIO(system_zip()), device_id="a")
+    s1 = builds.system_store()
+    assert s1 is not None and s1.names() == set(TG.presets())
+    assert builds.system_store() is s1                      # same hash: the cached store
+    fewer = dict(list(TG.presets().items())[:2])
+    builds.store_upload("system", io.BytesIO(system_zip(fewer)), device_id="a")
+    s2 = builds.system_store()
+    assert s2 is not s1 and s2.names() == set(fewer)
+
+
+def test_system_store_parses_outside_the_live_lock(monkeypatch):
+    pair("a")
+    builds.store_upload("system", io.BytesIO(system_zip()), device_id="a")
+    from filament_kit.profiles import bbl
+    held = []
+    real = bbl.Store.parse
+
+    def parse(cls, files):
+        held.append(getattr(builds._held, "live_lock", 0))
+        return real.__func__(cls, files)
+
+    monkeypatch.setattr(bbl.Store, "parse", classmethod(parse))
+    assert builds.system_store() is not None
+    assert held == [0]
+
+
+def test_meta_is_a_public_copy():
+    pair("a")
+    builds.store_upload("system", io.BytesIO(system_zip()), device_id="a")
+    m = builds.meta()
+    assert m["system_presets"] == len(TG.presets()) and m["owner"] == "a"
+    m["owner"] = "x"
+    assert builds.meta()["owner"] == "a"

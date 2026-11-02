@@ -19,6 +19,7 @@ from pathlib import Path
 from . import config, inventory, library, pairing
 from .bridge import registry
 from .profiles import builds, lines as lines_mod
+from .profiles.errors import ProfileError
 from .spoolman import Spoolman, SpoolmanError
 
 KEY_FILE = "anthropic_key"
@@ -770,8 +771,8 @@ def cmd_profiles_set_parent(line_id: str, parent: str) -> int:
         if not parent:
             raise ValueError("give the name of a Bambu Studio system preset")
         inventory.check_line_text("set-parent", "parent", parent)
-        inventory.check_parent(parent, inventory.system_store())
-    except ValueError as e:
+        lines_mod.check_parent(parent, builds.system_store())
+    except (ValueError, ProfileError) as e:
         _err_line(str(e))
         return 1
     try:
