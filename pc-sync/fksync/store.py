@@ -29,6 +29,7 @@ class AppDirs:
         self.log_file = self.base / "sync.log"
         self.backups = self.base / "backups"
         self.installed = self.base / "installed"
+        self.partial = self.base / "partial"      # a build whose install stopped part-way (ruling S28)
         self.state = self.base / "state.json"
         self.lock = self.base / "sync.lock"
 

@@ -7,7 +7,10 @@
      before_write hook right after the backup, naming it) is resumed only when every staged preset's
      live .json still equals the build's copy or the backup's copy (missing in both counts as equal).
      Then the same build is installed again without the live-hash gate. If any differs, it was edited
-     in Bambu Studio since: the marker is dropped and the normal path follows (upload, rebuild).
+     in Bambu Studio since: the marker is dropped and the normal path follows (upload, rebuild). The
+     half-installed build is then kept as dirs.partial and named in every live upload
+     (`partial=<stamp>`, `state.json` `partial: {stamp, at}`) until an install succeeds (ruling S28):
+     its values in the live folder are not in-app edits, for the server nor for the installer.
   4. The user filament folder and system/BBL/filament are uploaded when their tree hash differs from
      the server's (zip limits are checked before anything is sent). An upload the server rejects
      (400/413) is recorded in `state.json` `rejected.<kind>` `{kind, hash, at, error}` and that same
@@ -17,7 +20,9 @@
      these live presets.
   5. An install whose `installed(stamp)` report failed is reported again.
   6. No build -> `no_build` (a build is requested, at most every 15 min). The build already
-     installed -> `up_to_date`. A build made from other live presets -> a rebuild is requested
+     installed -> `up_to_date`, unless the live folder changed since that install (an in-app edit:
+     its hash differs from `state.json` `installed.live`, the hash right after the install); then a
+     rebuild is requested like below (ruling S29b). A build made from other live presets -> a rebuild is requested
      (`rebuild_requested`), re-sent only after 15 min (`waiting` until then; `state.json`
      `requested: {live_hash, at}`). A build made from exactly these live presets -> download,
      install (backup stamp `%Y%m%d-%H%M%S` of `now`), upload the live folder again, `installed(stamp)`.
@@ -106,10 +111,19 @@ class _Run:
             return False
         return True
 
+    def _partial(self) -> str | None:
+        p = self.st.get("partial") or {}
+        return p.get("stamp") if isinstance(p.get("stamp"), str) else None
+
     def _send(self, kind: str, data: bytes, here: str) -> None:
         label = "live presets" if kind == "live" else "Bambu Studio system presets"
         try:
-            res = self.c.upload(kind, data, user_id=self.f.user_id) if kind == "live" else self.c.upload(kind, data)
+            if kind != "live":
+                res = self.c.upload(kind, data)
+            elif self._partial():
+                res = self.c.upload(kind, data, user_id=self.f.user_id, partial=self._partial())
+            else:
+                res = self.c.upload(kind, data, user_id=self.f.user_id)
         except ApiError as e:
             if e.status not in (400, 413):
                 raise
@@ -209,8 +223,9 @@ class _Run:
             return self.finish("refused", f"install of build {stamp} refused ({e.code}): {e.reason}")
         # an OSError propagates with the marker kept: the next run resumes this install (or not, see run())
         self._clear_marker()
+        self._clear_partial()
         self.st["stale"] = list(res.stale)
-        self.st["installed"] = {"stamp": stamp, "at": self.now}
+        self.st["installed"] = {"stamp": stamp, "at": self.now, "live": tree_hash(self.f.user_filament)}
         self.st.pop("requested", None)
         self.st["report"] = stamp
         self.save()
@@ -262,6 +277,7 @@ class _Run:
                     continue  # untouched since the backup (missing in both also matches)
                 edited.append(p.stem)
             if edited:
+                self._keep_partial(stamp, build_dir)
                 self._clear_marker()
                 self.log(f"interrupted install of build {stamp} not resumed: edited in Bambu Studio since: "
                          + ", ".join(edited[:20]))
@@ -270,6 +286,22 @@ class _Run:
             return self._install(stamp, build_dir, resuming=True)
         finally:
             shutil.rmtree(work, ignore_errors=True)
+
+    def _keep_partial(self, stamp: str, build_dir: Path) -> None:
+        """Keep the half-installed build (dirs.partial) and name it in live uploads until an install (S28)."""
+        tmp = Path(tempfile.mkdtemp(prefix=".partial.", suffix=".tmp", dir=self.d.base))
+        try:
+            shutil.copytree(build_dir, tmp / "partial")
+            shutil.rmtree(self.d.partial, ignore_errors=True)
+            (tmp / "partial").rename(self.d.partial)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        self.st["partial"] = {"stamp": stamp, "at": self.now}
+        self.save()
+
+    def _clear_partial(self) -> None:
+        shutil.rmtree(self.d.partial, ignore_errors=True)
+        self.st.pop("partial", None)
 
     def _clear_marker(self) -> None:
         marker_path(self.d).unlink(missing_ok=True)
@@ -317,6 +349,15 @@ class _Run:
         stamp = build.get("stamp")
         installed = (server.get("installed") or {}).get("stamp")
         if installed == stamp:
+            mine = self.st.get("installed") or {}
+            if mine.get("stamp") == stamp and mine.get("live") and mine["live"] != here \
+                    and build.get("live_hash") not in self.accepted_hashes(here):
+                # changed in Bambu Studio since this install (S29b): the edit goes into a rebuild
+                if self.request(here):
+                    return self.finish("rebuild_requested", f"build {stamp} is installed; your Bambu Studio "
+                                                            "changes since then were sent and a rebuild asked for")
+                at = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.st["requested"]["at"]))
+                return self.finish("waiting", f"waiting for the rebuild asked at {at}")
             if self.uploaded:
                 return self.finish("uploaded", f"build {stamp} is installed; the server has your latest presets")
             return self.finish("up_to_date", f"build {stamp} is installed")

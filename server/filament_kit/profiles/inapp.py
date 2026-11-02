@@ -1,9 +1,15 @@
-"""What the owner changed in Bambu Studio since the last install (path-free port of filament-ops inapp.py).
+"""What the owner changed in Bambu Studio (path-free port of filament-ops inapp.py).
 
-The PC sync keeps an exact copy of the last installed build; a key whose live value differs from that copy was
-edited in the app (calibration, temps, ...) and is carried into the next build. A generated preset that was
-installed but is gone from the app was deleted there and stays deleted until restored. Note lines the owner typed
-are kept below MARK.
+The server keeps the build the PC sync last installed; a key whose live value differs from that copy was edited
+in the app (calibration, temps, ...) and is carried into the next build. A generated preset that was installed but
+is gone from the app was deleted there and stays deleted until restored. Note lines the owner typed are kept below
+MARK.
+
+Edits last (ruling S27): each build records, per preset, the in-app values it carried (BUILD.json `inapp`). The
+next build starts from the installed build's record, overridden/extended by diff(installed preset, live): a key the
+owner changed again takes the new live value; a key whose value equals the newly generated one (the owner set it
+back) is dropped from the record. A half-finished install (ruling S28) is not the owner's doing: a live value equal
+to that partial build's value is not an edit; that build's own record is used instead of the installed one's.
 
 IGNORE, norm, diff and is_reset must stay identical to pc-sync/fksync/inapp.py (a server test compares them).
 """
@@ -41,24 +47,45 @@ def user_notes(installed: dict, live: dict) -> list[str]:
     return [line for line in out if not line.startswith(IDS_PREFIX)]
 
 
-def keep_edits(cfg: dict, installed: dict | None, live: dict | None, log: list[str]) -> set[str]:
-    """Carry what the owner changed in the app since the last install into cfg (in place); returns the keys taken
-    from live. Their note lines go below MARK, before a trailing `Spoolman filament ids:` line if cfg has one."""
-    if installed is None or live is None:
-        return set()
-    taken = set()
-    for k, v in diff(installed, live).items():
+def carried(cfg: dict, installed: dict | None, live: dict | None, *, recorded: dict | None = None,
+            partial: dict | None = None) -> tuple[dict, list[str]]:
+    """(the owner's in-app values for this preset, keys dropped from `recorded` because they now equal the
+    generated value). `cfg` holds the generated values; `recorded` = the edits the installed (or partial) build
+    carried; `partial` = the partial build's copy of this preset (its values are not edits)."""
+    out = {k: v for k, v in (recorded or {}).items() if k not in IGNORE}
+    if installed is not None and live is not None:
+        for k, v in diff(installed, live).items():
+            if partial is not None and k in partial and norm(partial[k]) == norm(v):
+                continue                    # written by the half-finished install, not typed by the owner
+            out[k] = v
+    same = [k for k, v in out.items() if k in cfg and norm(cfg[k]) == norm(v)]
+    dropped = sorted(k for k in same if k in (recorded or {}))
+    for k in same:
+        del out[k]
+    return out, dropped
+
+
+def keep_edits(cfg: dict, installed: dict | None, live: dict | None, log: list[str], *,
+               recorded: dict | None = None, partial: dict | None = None) -> dict:
+    """Carry the owner's in-app values (see `carried`) into cfg (in place); returns them ({key: value}, the
+    record of this build). Their note lines go below MARK, before a trailing `Spoolman filament ids:` line if cfg
+    has one."""
+    edits, dropped = carried(cfg, installed, live, recorded=recorded, partial=partial)
+    for k in dropped:
+        log.append(f"{cfg.get('name')}: {k} is the generated value again; no longer kept as your in-app value")
+    for k, v in edits.items():
         if norm(cfg.get(k)) != norm(v):
             log.append(f"{cfg.get('name')}: {k} {cfg.get(k)} -> {v} (your in-app value, kept)")
         cfg[k] = v
-        taken.add(k)
+    if installed is None or live is None:
+        return edits
     mine = user_notes(installed, live)
     if mine:
         lines = notes_text(cfg.get("filament_notes")).splitlines()
         tail = [lines.pop()] if lines and lines[-1].startswith(IDS_PREFIX) else []
         cfg["filament_notes"] = "\n".join(lines + [MARK] + mine + tail)
         log.append(f"{cfg.get('name')}: filament_notes, {len(mine)} line(s) you wrote (kept)")
-    return taken
+    return edits
 
 
 def is_reset(snapshot: set[str], live: set[str]) -> bool:
