@@ -21,7 +21,9 @@
   5. An install whose `installed(stamp)` report failed is reported again, before any upload: after an
      install the live folder is re-uploaded only once the server has recorded the install, so the
      server never pairs the new live folder with the old installed build (which would turn every
-     generated change into an "in-app edit").
+     generated change into an "in-app edit"). `state.json` `live_owed` is set before that report and
+     cleared by a successful live upload; while it is set the live folder is sent even when its hash
+     equals the server's (the server waits for it, ruling S32).
   6. No build -> `no_build` (a build is requested, at most every 15 min). The build already
      installed -> `up_to_date`, unless a generated preset was changed in Bambu Studio since that
      install (it differs from its dirs.installed copy by `inapp.diff`, or is gone); then a rebuild is
@@ -138,6 +140,8 @@ class _Run:
                      f"{UPLOAD_BACKOFF // 3600} h")
             return
         self.uploaded = True
+        if kind == "live":
+            self.st.pop("live_owed", None)
         (self.st.get("rejected") or {}).pop(kind, None)
         returned = res.get(f"{kind}_hash") if isinstance(res, dict) else None
         prev = (self.st.get("uploaded") or {}).get(kind) or {}
@@ -156,8 +160,9 @@ class _Run:
         here = tree_hash(self.f.user_filament)
         system = tree_hash(self.f.system_filament)
         # both checked against the limits before either is sent
+        owed = bool(self.st.get("live_owed"))   # an install was reported; its live upload did not arrive
         live_zip = (zips.pack(self.f.user_filament, LIVE_MAX)
-                    if self._needs_upload("live", here, server.get("live_hash")) else None)
+                    if owed or self._needs_upload("live", here, server.get("live_hash")) else None)
         sys_zip = (zips.pack(self.f.system_filament, SYSTEM_MAX)
                    if self._needs_upload("system", system, server.get("system_hash")) else None)
         if live_zip is not None:
@@ -232,6 +237,7 @@ class _Run:
         self.st["installed"] = {"stamp": stamp, "at": self.now}
         self.st.pop("requested", None)
         self.st["report"] = stamp
+        self.st["live_owed"] = True             # until upload_live() succeeds (S32)
         self.save()
         if res.stale:
             self.log(f"{len(res.stale)} presets are no longer generated; delete them in Bambu Studio: "

@@ -603,6 +603,43 @@ def test_build_waits_for_live_after_an_install_then_runs_without_false_edits(env
     assert builds.state_view("a")["rebuild_requested"] is None
 
 
+def test_set_state_is_one_locked_read_modify_write(env, monkeypatch):
+    """Round 3: two writers of build-state.json never lose each other's key."""
+    import threading
+    seen = []
+    real = builds._state
+
+    def slow_state():
+        st = real()
+        seen.append(1)
+        time.sleep(0.05)                        # widen the window between read and write
+        return st
+    monkeypatch.setattr(builds, "_state", slow_state)
+    ts = [threading.Thread(target=builds._set_state, kwargs={k: True}) for k in ("one", "two")]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join()
+    monkeypatch.setattr(builds, "_state", real)
+    st = builds._state()
+    assert st.get("one") is True and st.get("two") is True and len(seen) == 2
+
+
+def test_status_says_the_pc_must_sync_while_waiting_on_live(env, capsys):
+    from filament_kit import cli
+    synced(env)
+    b1 = builds.run_build(env, now=TG.NOW)["stamp"]
+    builds.store_upload("live", io.BytesIO(_live_zip_of(b1)), device_id="a", user_id="1")
+    tick()
+    builds.record_installed(b1, "a")
+    assert builds.run_build(env, now=TG.NOW + 1)["error"] == builds.WAIT_LIVE
+    capsys.readouterr()
+    assert cli.main(["profiles", "status"]) == 0
+    out = capsys.readouterr().out
+    assert "waiting: waiting for the PC's next sync" in out
+    assert "the PC sync has to run once" in out
+
+
 def test_live_upload_without_a_waiting_build_requests_nothing(env):
     synced(env)
     b1 = builds.run_build(env, now=TG.NOW)["stamp"]

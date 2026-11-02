@@ -14,7 +14,8 @@ State, all under `state/profiles/`:
   rebuild-request            written by `request_rebuild`; watched by filament-kit-build.path (PathModified).
                              The builder only ever READS it; what was handled is kept in build-state.json.
   restore-deleted            flag: the next build brings back presets deleted in the app (consumed by it)
-  build.lock, live.lock      cross-process locks (fcntl; thread locks only where fcntl is missing)
+  build.lock, live.lock,     cross-process locks (fcntl; thread locks only where fcntl is missing);
+  state.lock                 state.lock guards the read-modify-write of build-state.json
 
 Uploads (Decision "sync uploads", Review Focus 1): the body is streamed into a temp file and refused with 413 as
 soon as it passes the cap (MAX_LIVE / MAX_SYSTEM), before reading further. The zip is then checked entry by
@@ -217,9 +218,11 @@ def _state() -> dict:
 
 
 def _set_state(**changes) -> None:
-    st = _state()
-    st.update(changes)
-    _write_json(_dir() / "build-state.json", st)
+    """Read-modify-write of build-state.json under state.lock (builds and uploads both write it)."""
+    with _locked("state.lock"):
+        st = _state()
+        st.update(changes)
+        _write_json(_dir() / "build-state.json", st)
 
 
 def _installed() -> dict | None:

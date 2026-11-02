@@ -734,6 +734,9 @@ def cmd_profiles_status() -> int:
                                            else "failed")
         print(f"last attempt: {_fmt_time(la.get('at'))} {state}"
               + (f": {la['error']}" if la.get("error") and not la.get("ok") else ""))
+        if not la.get("ok") and la.get("error") == builds.WAIT_LIVE:
+            print("  the PC sync has to run once (it runs every 10 minutes while Bambu Studio is closed); "
+                  "the build follows its upload")
     print(f"installed on the PC: {inst['stamp']} ({_fmt_time(inst.get('at'))})" if inst
           else "installed on the PC: nothing yet")
     print(f"PC sync: device {pc['device_id']}, last upload {_fmt_time(pc.get('last_upload'))}" if pc
