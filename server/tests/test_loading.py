@@ -1,0 +1,328 @@
+import copy
+import json
+import threading
+
+import pytest
+
+from filament_kit import profiles
+from filament_kit.bridge import ams, connection, loading, registry, slottest
+from filament_kit.bridge.connection import Manager, PrinterOffline, UnknownPrinter
+from filament_kit.bridge.registry import Printer
+from filament_kit.spoolman import Spoolman
+from fakes.fake_paho import FakeClient, FakePrinter
+
+SERIAL = "S1"
+NAME = "Office H2D"
+LOC_A2 = "Office H2D – AMS A2"
+REPORT = {
+    "gcode_state": "IDLE",
+    "nozzle_diameter": "0.4",
+    "ams": {"ams": [
+        {"id": "0", "tray": [
+            {"id": "0", "tray_type": "PLA", "tray_color": "FF0000FF", "tray_info_idx": "Pa111111",
+             "nozzle_temp_min": "190", "nozzle_temp_max": "230", "tray_sub_brands": ""},
+            {"id": "1", "tray_type": "PETG", "tray_color": "1A1A1AFF", "tray_info_idx": "Pa735293",
+             "nozzle_temp_min": "235", "nozzle_temp_max": "250", "tray_sub_brands": ""},
+            {"id": "2"},
+            {"id": "3"},
+        ]},
+        {"id": "128", "tray": [{"id": "0"}]},
+    ]},
+    "vt_tray": {"id": "254", "tray_type": "TPU", "tray_color": "FFFFFFFF", "tray_info_idx": "Pa444444",
+                "nozzle_temp_min": "220", "nozzle_temp_max": "240", "tray_sub_brands": ""},
+}
+
+
+@pytest.fixture(autouse=True)
+def env(tmp_path, monkeypatch):
+    monkeypatch.setenv("FK_STATE", str(tmp_path / "state"))
+    monkeypatch.setattr(connection, "PUSHALL_AFTER_COMMAND", 0.05)
+    monkeypatch.setattr(connection, "COMMAND_TIMEOUT", 1.0)
+    monkeypatch.setattr(loading, "CONFIRM_TIMEOUT", 1.0)
+
+
+@pytest.fixture
+def rig():
+    clients = []
+
+    def factory(cid):
+        c = FakeClient(cid)
+        clients.append(c)
+        return c
+    m = Manager(client_factory=factory)
+    registry.upsert(Printer(SERIAL, NAME, "O1D", "10.0.0.5", "13572468", True))
+    m.sync()
+    printer = FakePrinter(clients[0], REPORT)
+    clients[0].connected(0)
+    assert m.wait_report(SERIAL, lambda r: "vt_tray" in r, 2) is not None
+    yield m, printer, clients[0]
+    m.stop()
+
+
+@pytest.fixture
+def sm(spoolman_url):
+    s = Spoolman(spoolman_url)
+    s.ensure_fields()
+    return s
+
+
+@pytest.fixture
+def fil(sm):
+    v = sm.post("vendor", {"name": "SUNLU"})
+    return sm.post("filament", {"name": "PLA+ Grey", "vendor_id": v["id"], "material": "PLA",
+                                "color_hex": "8a8c8e", "density": 1.24})
+
+
+def spool(sm, fil, location, prev=None):
+    extra = {} if prev is None else {"prev_location": json.dumps(prev)}
+    return sm.post("spool", {"filament_id": fil["id"], "location": location, "extra": extra})
+
+
+PRESET = profiles.PresetRef(filament_id="P8a1b2c3", name="SUNLU PLA+ Grey @Bambu Lab H2D 0.4 nozzle",
+                            nozzle_temp_min=200, nozzle_temp_max=230)
+
+
+class FakePresets:
+    def __init__(self, preset=PRESET):
+        self.preset = preset
+        self.calls = []
+
+    def __call__(self, filament, model, nozzle_mm):
+        self.calls.append((filament["id"], model, nozzle_mm))
+        return self.preset
+
+
+def settings(client):
+    return [b["print"] for _, b in client.published if b.get("print", {}).get("command") == "ams_filament_setting"]
+
+
+def at(sm, location):
+    return [s for s in sm.get("spool") if s.get("location") == location]
+
+
+def prev(s):
+    v = (s.get("extra") or {}).get("prev_location")
+    return None if v is None else json.loads(v)
+
+
+def test_load_writes_the_slot_then_spoolman(rig, sm, fil):
+    m, printer, client = rig
+    s = spool(sm, fil, "Rack 1")
+    presets = FakePresets()
+    r = loading.load(m, sm, SERIAL, "A2", s["id"], False, preset_for=presets)
+    assert presets.calls == [(fil["id"], "O1D", 0.4)]
+    (w,) = settings(client)
+    assert (w["ams_id"], w["tray_id"]) == (0, 1)
+    assert w["tray_info_idx"] == "P8a1b2c3" and w["tray_color"] == "8A8C8EFF" and w["tray_type"] == "PLA"
+    assert (w["nozzle_temp_min"], w["nozzle_temp_max"]) == (200, 230)
+    t = printer.tray(0, 1)
+    assert t["tray_info_idx"] == "P8a1b2c3" and t["tray_color"] == "8A8C8EFF"
+    got = sm.get(f"spool/{s['id']}")
+    assert got["location"] == LOC_A2 and prev(got) == "Rack 1"
+    assert r["confirmed"] is True and r["dry_run"] is False
+    assert r["spool"]["id"] == s["id"] and r["spool"]["location"] == LOC_A2
+    assert r["slot"] == {"label": "A2", "ams_id": 0, "tray_id": 1, "location": LOC_A2}
+    assert r["preset"]["filament_id"] == "P8a1b2c3" and r["preset"]["name"] == PRESET.name
+
+
+def test_dry_run_writes_nothing(rig, sm, fil, spoolman_fake_store):
+    m, printer, client = rig
+    s = spool(sm, fil, "Rack 1")
+    other = spool(sm, fil, LOC_A2, prev="Storage box 1")
+    before = copy.deepcopy(spoolman_fake_store["spools"])
+    r = loading.load(m, sm, SERIAL, "A2", s["id"], True, preset_for=FakePresets())
+    assert settings(client) == [] and printer.writes == []
+    assert spoolman_fake_store["spools"] == before
+    assert r["dry_run"] is True and r["confirmed"] is None
+    assert r["spool"]["location"] == LOC_A2 and prev(r["spool"]) == "Rack 1"
+    assert r["command"]["tray_info_idx"] == "P8a1b2c3"
+    assert r["moved_back"] == [{"id": other["id"], "location": "Storage box 1"}]
+
+
+def test_no_preset_refuses_and_sends_nothing(rig, sm, fil, spoolman_fake_store):
+    m, printer, client = rig
+    s = spool(sm, fil, "Rack 1")
+    before = copy.deepcopy(spoolman_fake_store["spools"])
+    with pytest.raises(loading.NoPreset):
+        loading.load(m, sm, SERIAL, "A2", s["id"], False, preset_for=FakePresets(None))
+    with pytest.raises(loading.NoPreset):        # the stub interface: no presets until the profiles plan lands
+        loading.load(m, sm, SERIAL, "A2", s["id"], False)
+    assert settings(client) == [] and spoolman_fake_store["spools"] == before
+
+
+def test_profiles_stub_returns_none():
+    assert profiles.preset_for({"id": 1}, "O1D", 0.4) is None
+
+
+def test_missing_nozzle_diameter_is_no_preset(rig, sm, fil):
+    m, printer, client = rig
+    printer.push({"nozzle_diameter": None})
+    s = spool(sm, fil, "Rack 1")
+    with pytest.raises(loading.NoPreset, match="nozzle"):
+        loading.load(m, sm, SERIAL, "A2", s["id"], False, preset_for=FakePresets())
+    assert settings(client) == []
+
+
+@pytest.mark.parametrize("dry", [False, True])
+def test_busy_refuses(rig, sm, fil, dry):
+    m, printer, client = rig
+    printer.push({"gcode_state": "RUNNING"})
+    assert m.wait_report(SERIAL, lambda r: r.get("gcode_state") == "RUNNING", 2)
+    s = spool(sm, fil, "Rack 1")
+    with pytest.raises(slottest.PrinterBusy):
+        loading.load(m, sm, SERIAL, "A2", s["id"], dry, preset_for=FakePresets())
+    assert settings(client) == [] and sm.get(f"spool/{s['id']}")["location"] == "Rack 1"
+
+
+def test_offline_refuses(rig, sm, fil):
+    m, printer, client = rig
+    client.dropped()
+    s = spool(sm, fil, "Rack 1")
+    with pytest.raises(PrinterOffline):
+        loading.load(m, sm, SERIAL, "A2", s["id"], False, preset_for=FakePresets())
+    assert sm.get(f"spool/{s['id']}")["location"] == "Rack 1"
+
+
+def test_not_found(rig, sm, fil):
+    m, printer, client = rig
+    s = spool(sm, fil, "Rack 1")
+    with pytest.raises(UnknownPrinter):
+        loading.load(m, sm, "NOPE", "A2", s["id"], False, preset_for=FakePresets())
+    with pytest.raises(loading.NotFound):
+        loading.load(m, sm, SERIAL, "Z9", s["id"], False, preset_for=FakePresets())
+    with pytest.raises(loading.NotFound):
+        loading.load(m, sm, SERIAL, "A2", 9999, False, preset_for=FakePresets())
+    with pytest.raises(UnknownPrinter):
+        loading.unload(m, sm, "NOPE", "A2", False)
+    with pytest.raises(loading.NotFound):              # nothing in that slot
+        loading.unload(m, sm, SERIAL, "A2", False)
+    assert settings(client) == []
+
+
+def test_previous_occupants_go_back(rig, sm, fil):
+    m, printer, client = rig
+    s = spool(sm, fil, "Rack 1")
+    a = spool(sm, fil, LOC_A2, prev="Storage box 1")
+    b = spool(sm, fil, LOC_A2)                        # no prev_location: sealed stock
+    keep = spool(sm, fil, "Office H2D – AMS A1", prev="Rack 1")
+    r = loading.load(m, sm, SERIAL, "A2", s["id"], False, preset_for=FakePresets())
+    assert sm.get(f"spool/{a['id']}")["location"] == "Storage box 1"
+    assert sm.get(f"spool/{b['id']}")["location"] == "Sealed stock"
+    assert prev(sm.get(f"spool/{a['id']}")) == ""
+    assert sm.get(f"spool/{keep['id']}")["location"] == "Office H2D – AMS A1"
+    assert [x["id"] for x in at(sm, LOC_A2)] == [s["id"]]
+    assert sorted(x["id"] for x in r["moved_back"]) == sorted([a["id"], b["id"]])
+
+
+def test_slot_to_slot_move_keeps_original_prev_location(rig, sm, fil):
+    m, printer, client = rig
+    s = spool(sm, fil, "Office H2D – AMS A1", prev="Rack 1")
+    loading.load(m, sm, SERIAL, "A2", s["id"], False, preset_for=FakePresets())
+    got = sm.get(f"spool/{s['id']}")
+    assert got["location"] == LOC_A2 and prev(got) == "Rack 1"
+
+
+def test_reload_same_spool_keeps_prev_location(rig, sm, fil):
+    m, printer, client = rig
+    s = spool(sm, fil, "Rack 1")
+    loading.load(m, sm, SERIAL, "A2", s["id"], False, preset_for=FakePresets())
+    loading.load(m, sm, SERIAL, "A2", s["id"], False, preset_for=FakePresets())
+    got = sm.get(f"spool/{s['id']}")
+    assert got["location"] == LOC_A2 and prev(got) == "Rack 1"
+
+
+def test_unconfirmed_write_is_reported_not_raised(rig, sm, fil):
+    m, printer, client = rig
+    printer.frozen = True
+    s = spool(sm, fil, "Rack 1")
+    r = loading.load(m, sm, SERIAL, "A2", s["id"], False, preset_for=FakePresets())
+    assert r["confirmed"] is False and r["problems"]
+    assert sm.get(f"spool/{s['id']}")["location"] == LOC_A2
+
+
+def test_refused_write_leaves_spoolman_untouched(rig, sm, fil, spoolman_fake_store):
+    m, printer, client = rig
+    printer.refuse[(0, 1)] = {"result": "fail", "reason": "nope"}
+    s = spool(sm, fil, "Rack 1")
+    before = copy.deepcopy(spoolman_fake_store["spools"])
+    with pytest.raises(loading.SlotWriteFailed):
+        loading.load(m, sm, SERIAL, "A2", s["id"], False, preset_for=FakePresets())
+    assert spoolman_fake_store["spools"] == before
+
+
+def test_external_and_ht_slots(rig, sm, fil):
+    m, printer, client = rig
+    s1 = spool(sm, fil, "Rack 1")
+    s2 = spool(sm, fil, "Rack 1")
+    assert loading.load(m, sm, SERIAL, "Ext", s1["id"], False, preset_for=FakePresets())["confirmed"]
+    assert loading.load(m, sm, SERIAL, "HT-A", s2["id"], False, preset_for=FakePresets())["confirmed"]
+    assert [(w["ams_id"], w["tray_id"]) for w in settings(client)] == [(254, 0), (128, 0)]
+    assert sm.get(f"spool/{s1['id']}")["location"] == "Office H2D – AMS Ext"
+    assert sm.get(f"spool/{s2['id']}")["location"] == "Office H2D – AMS HT-A"
+
+
+def test_calibrated_slot_map_address_is_used(rig, sm, fil):
+    m, printer, client = rig
+    ams.save_map(SERIAL, ams.SlotMap(slots={"A2": {"ams_id": 0, "tray_id": 2, "global_id": 2}},
+                                     calibrated=True))
+    s = spool(sm, fil, "Rack 1")
+    r = loading.load(m, sm, SERIAL, "A2", s["id"], False, preset_for=FakePresets())
+    (w,) = settings(client)
+    assert (w["ams_id"], w["tray_id"]) == (0, 2) and r["confirmed"] is True
+
+
+def test_concurrent_loads_into_one_slot(rig, sm, fil):
+    m, printer, client = rig
+    fils = [fil, sm.post("filament", {"name": "PLA Red", "vendor_id": fil["vendor"]["id"], "material": "PLA",
+                                      "color_hex": "CC0000"})]
+    spools = [spool(sm, f, "Rack 1") for f in fils]
+    errors = []
+    start = threading.Barrier(2)
+
+    def go(sid):
+        try:
+            start.wait()
+            loading.load(m, sm, SERIAL, "A2", sid, False, preset_for=FakePresets())
+        except Exception as e:  # pragma: no cover - reported below
+            errors.append(e)
+    ts = [threading.Thread(target=go, args=(s["id"],)) for s in spools]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join(15)
+    assert not errors
+    (winner,) = at(sm, LOC_A2)
+    assert printer.tray(0, 1)["tray_color"] == winner["filament"]["color_hex"].upper() + "FF"
+    loser = next(s for s in spools if s["id"] != winner["id"])
+    assert sm.get(f"spool/{loser['id']}")["location"] == "Rack 1"
+
+
+def test_unload_moves_spool_back_without_mqtt(rig, sm, fil):
+    m, printer, client = rig
+    s = spool(sm, fil, LOC_A2, prev="Storage box 1")
+    n = len(client.published)
+    r = loading.unload(m, sm, SERIAL, "A2", False)
+    assert len(client.published) == n and printer.writes == []
+    got = sm.get(f"spool/{s['id']}")
+    assert got["location"] == "Storage box 1" and prev(got) == ""
+    assert r["spool"]["id"] == s["id"] and r["spool"]["location"] == "Storage box 1"
+    assert r["slot"]["label"] == "A2" and r["slot"]["location"] == LOC_A2 and r["preset"] is None
+
+
+def test_unload_without_prev_goes_to_sealed_stock_and_dry_run(rig, sm, fil, spoolman_fake_store):
+    m, printer, client = rig
+    s = spool(sm, fil, LOC_A2)
+    before = copy.deepcopy(spoolman_fake_store["spools"])
+    r = loading.unload(m, sm, SERIAL, "A2", True)
+    assert spoolman_fake_store["spools"] == before and r["spool"]["location"] == "Sealed stock"
+    loading.unload(m, sm, SERIAL, "A2", False)
+    assert sm.get(f"spool/{s['id']}")["location"] == "Sealed stock"
+
+
+def test_unload_works_while_printer_offline_or_busy(rig, sm, fil):
+    m, printer, client = rig
+    printer.push({"gcode_state": "RUNNING"})
+    s = spool(sm, fil, LOC_A2, prev="Rack 1")
+    client.dropped()
+    loading.unload(m, sm, SERIAL, "A2", False)
+    assert sm.get(f"spool/{s['id']}")["location"] == "Rack 1"
