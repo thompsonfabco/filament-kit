@@ -533,6 +533,12 @@ def sweep_uploads(now: float | None = None) -> None:
             _rmtree(p)
 
 
+def _orca_presets(tree: Path) -> int:
+    """The presets in an extracted `orca_system` upload: the store's BBL names plus its library index rows."""
+    store = OrcaStore.load(tree)
+    return len(store.bbl.names()) + len(store.library)
+
+
 def store_upload(kind: str, src: BinaryIO, *, device_id: str, user_id: str | None = None,
                  partial: str | None = None) -> str:
     """Store a PC sync upload and return its tree hash. Claims the sync owner. Kinds (KINDS):
@@ -561,6 +567,8 @@ def store_upload(kind: str, src: BinaryIO, *, device_id: str, user_id: str | Non
         _receive(src, zpath, cap)
         tree = tmp / "tree"
         jsons = _extract(zpath, tree, strict_json=strict)
+        if kind == "orca_system":               # presets = BBL preset files + library index rows (fix M2)
+            jsons = _orca_presets(tree)
         h = tree_hash(tree)
         with _locked("live.lock"):
             check_owner(device_id)

@@ -117,7 +117,7 @@ class OrcaStore:
             return dict(self.library[name])
         if name not in self.bbl.names():
             return None
-        cfg = self.bbl._try(name)
+        cfg = self.bbl.resolved(name)
         return copy.deepcopy(cfg) if cfg is not None else None
 
     def system_parent_for(self, printer: str, nozzle: str, base: str) -> str | None:
@@ -134,9 +134,9 @@ class OrcaStore:
             return list(self._variants[printer])
         pat = re.compile(re.escape(printer) + r" \d+(?:\.\d+)? nozzle")
         seen: collections.Counter = collections.Counter()
-        for n in self.bbl._instantiable():
-            cfg = self.bbl._try(n)
-            if cfg is None or not any(pat.fullmatch(cp) for cp in self.bbl._compatible(cfg)):
+        for n in self.bbl.instantiable():
+            cfg = self.bbl.resolved(n)
+            if cfg is None or not any(pat.fullmatch(cp) for cp in Store.compatible_printers(cfg)):
                 continue
             v = cfg.get("filament_extruder_variant")
             seen[tuple(str(x) for x in v) if isinstance(v, list) and v else (STD,)] += 1

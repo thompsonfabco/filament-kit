@@ -130,3 +130,17 @@ def test_real_orca_bbl_folder():
     s = orca.OrcaStore.load(REAL)                 # no index there: BBL only
     assert s.system_parent_for("Bambu Lab H2D", "0.4", "Bambu PLA Basic") == "Bambu PLA Basic @BBL H2D"
     assert s.printer_variants("Bambu Lab H2D") == ["Direct Drive Standard", "Direct Drive High Flow"]
+
+
+def test_orca_store_uses_only_public_bbl_api():
+    """Fix M3: bbl.Store has public lookups; OrcaStore calls no private Store method."""
+    import inspect
+    import re as _re
+    from filament_kit.profiles import bbl
+    s = bbl.Store.load(ORCA / "BBL" / "filament")
+    assert "Bambu PLA Basic @BBL H2D" in s.instantiable() and "fdm_filament_pla" not in s.instantiable()
+    cfg = s.resolved("Bambu PLA Basic @BBL H2D")
+    assert cfg["filament_id"] == "GFA00" and s.resolved("nope") is None
+    assert bbl.Store.compatible_printers(cfg) == ["Bambu Lab H2D 0.4 nozzle"]
+    assert bbl.Store.compatible_printers({"compatible_printers": "x"}) == []
+    assert not _re.search(r"\.bbl\._", inspect.getsource(orca))

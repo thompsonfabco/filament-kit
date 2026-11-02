@@ -452,7 +452,7 @@ def test_orca_system_upload_requests_rebuild(c):
     tok = token()
     r = put_zip(c, tok, "system", orca_system_zip(), "?target=orca")
     assert r.status_code == 200, r.text
-    assert set(r.json()) == {"system_hash", "presets"} and r.json()["presets"] == 10
+    assert set(r.json()) == {"system_hash", "presets"} and r.json()["presets"] == 9 + 7
     assert builds._request() is not None
     st = c.get("/api/sync/state", headers=auth(tok)).json()
     assert (st["orca_system_hash"], st["system_hash"]) == (r.json()["system_hash"], None)
@@ -522,3 +522,14 @@ def test_patch_orca_parent(c, sm):
     r = c.patch(f"/api/profiles/lines/{LID}", json={"bambu_parent": "Bambu PLA Tough+", "orca_parent": "Nope"},
                 headers=auth(tok))
     assert r.status_code == 400 and lines_mod.load()[LID].bambu_parent == "Generic PLA"
+
+
+def test_patch_orca_parent_stores_the_canonical_spelling(c, sm):
+    """Fix I1: a case-insensitive match is stored as the Orca store spells it, so `inherits` resolves."""
+    tok = token()
+    built(c, tok, sm)
+    assert put_zip(c, tok, "system", orca_system_zip(), "?target=orca").status_code == 200
+    r = c.patch(f"/api/profiles/lines/{LID}", json={"orca_parent": "overture pla PRO"}, headers=auth(tok))
+    assert r.status_code == 200, r.text
+    assert r.json()["line"]["orca_parent"] == "Overture PLA Pro"
+    assert lines_mod.load()[LID].orca_parent == "Overture PLA Pro"
