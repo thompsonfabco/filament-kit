@@ -370,3 +370,87 @@ def test_nothing_changed_counts_as_restored(fake_ftp, printer):
     m = FakeManager(fake_ftp.root)
     r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
     assert r.restored is True and m.set_slots == []
+
+
+# ---------------------------------------------------------------- I3: heating / filament-load watchdog
+
+class WatchManager(FakeManager):
+    """The job's RUNNING report carries `extra` (a heater target, a filament load ...); it never ends by itself
+    unless `ends` is true."""
+
+    def __init__(self, ftp_root, extra, ends=False, after=None):
+        super().__init__(ftp_root, "stuck")
+        self.extra, self.ends, self.after = extra, ends, after
+
+    def publish(self, serial, payload):
+        reply = super().publish(serial, payload)
+        if payload["print"]["command"] == "project_file":
+            self.queue[-1].update(copy.deepcopy(self.extra))
+            if self.ends:
+                self.queue.append({"gcode_state": "FINISH", "mc_percent": 100, **(self.after or {})})
+        return reply
+
+
+def stopped_before_the_end(m):
+    cmds = [p["print"]["command"] for p in m.published]
+    return cmds == ["project_file", "stop"]
+
+
+@pytest.mark.parametrize("extra", [
+    {"nozzle_target_temper": 220},
+    {"bed_target_temper": 55},
+    {"device": {"extruder": {"info": [{"id": 0, "temp": (220 << 16) | 25}]}}},
+    {"device": {"bed": {"info": {"temp": (60 << 16) | 24}}}},
+])
+def test_heating_stops_the_job_at_once(fake_ftp, printer, extra):
+    m = WatchManager(fake_ftp.root, extra)
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert stopped_before_the_end(m), m.published
+    assert r.consistent is False
+    assert any("heat" in p for p in r.problems), r.problems
+    assert not any("did not finish" in p for p in r.problems)
+
+
+def test_unchanged_targets_do_not_trip(fake_ftp, printer):
+    rep = base_report()
+    rep.update({"nozzle_target_temper": 0, "bed_target_temper": 0,
+                "device": {"extruder": {"info": [{"id": 0, "temp": 30}]}}})
+    m = WatchManager(fake_ftp.root, {"nozzle_target_temper": 0, "device": {"extruder": {"info": [{"id": 0, "temp": 31}]}}},
+                     ends=True)
+    m.report = rep
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert r.consistent is True, r.problems
+
+
+def test_filament_load_stops_the_job_and_is_not_restored(fake_ftp, printer):
+    m = WatchManager(fake_ftp.root, {"ams": {"tray_now": "0"}})
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert stopped_before_the_end(m), m.published
+    assert any("filament" in p and "load" in p for p in r.problems), r.problems
+    assert "printer left a filament loaded in the toolhead" in r.problems
+    assert r.restored is False
+
+
+def test_filament_left_loaded_after_the_job_is_not_restored(fake_ftp, printer):
+    m = WatchManager(fake_ftp.root, {}, ends=True, after={"ams": {"tray_now": "1"}})
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert "printer left a filament loaded in the toolhead" in r.problems
+    assert r.restored is False
+
+
+def test_job_that_never_started_still_gets_a_stop(fake_ftp, printer):
+    m = FakeManager(fake_ftp.root, "silent")
+    calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert m.published[-1]["print"]["command"] == "stop"
+
+
+def test_should_stop_stops_the_job(fake_ftp, printer):
+    m = WatchManager(fake_ftp.root, {})
+    calls = {"n": 0}
+
+    def stop():
+        calls["n"] += 1
+        return calls["n"] > 2          # after the job was sent
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report), should_stop=stop)
+    assert stopped_before_the_end(m), m.published
+    assert any("interrupted" in p for p in r.problems)

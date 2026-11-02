@@ -236,14 +236,13 @@ COLLIDING["ams"]["ams"][0]["tray"][1]["tray_color"] = "FA0300FF"       # A2 hold
 
 
 @pytest.mark.parametrize("report", [COLLIDING])
-def test_slot_already_holding_its_default_test_colour_gets_another(rig, report):
+def test_slot_already_holding_a_test_colour_refuses_the_test(rig, report):
+    """C1 (final review): a test-colour-shaped colour may be a leftover of an interrupted run, so it is never taken
+    as the slot's original: the test refuses before writing anything and names the slots."""
     m, printer, c = rig
     res = slottest.run(m, SERIAL, lambda s: None)
-    assert res.restored is True and res.problems == [] and len(res.confirmed) == 6
-    colours = expected_colours(report)
-    assert colours[0] == "FB0100FF" and colours[2] == "FB0300FF"
-    tests = [w["tray_color"] for w in printer.writes[:6]]
-    assert tests == colours
+    assert printer.writes == [] and res.confirmed == {}
+    assert [p.split(":")[0] for p in res.problems] == ["A1", "A2"]
     assert printer.tray(0, 0)["tray_color"] == "FA0100FF" and printer.tray(0, 1)["tray_color"] == "FA0300FF"
 
 
@@ -311,3 +310,16 @@ def test_busy_abort_still_restores_a_slot_hit_by_a_misaddressed_write(rig):
     assert res.restored is True
     assert no_test_colour_left(printer)
     assert_back_to_original(printer)
+
+
+def test_check_idle_needs_a_status_from_the_printer():
+    """M1: a connected printer that has not reported its gcode_state yet is not idle."""
+    class M:
+        def state(self, serial):
+            return "connected"
+
+        def summary(self, serial):
+            return {"gcode_state": "UNKNOWN", "percent": 0, "remaining_min": 0, "job": None}
+    with pytest.raises(slottest.NoStatus) as e:
+        slottest.check_idle(M(), SERIAL)
+    assert isinstance(e.value, PrinterOffline) and "no status from the printer yet" in str(e.value)

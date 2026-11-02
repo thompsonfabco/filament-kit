@@ -5,7 +5,8 @@
 shortly afterwards on the report topic, in order, from a timer thread (as paho's network loop would).
 
 `FakePrinter` is such a responder: it keeps a report, answers `pushall` with the full report and applies
-`ams_filament_setting` to its AMS units / external holder (reply first, then the changed report delta)."""
+`ams_filament_setting` to its AMS units / external holder (reply first, then the changed report delta); a
+`project_file` job runs at once and reports the `mapping` it was sent."""
 from __future__ import annotations
 
 import copy
@@ -116,6 +117,9 @@ class FakePrinter:
         self.frozen = False
         self.silent = False
         self.writes: list[dict] = []
+        self.jobs: list[dict] = []
+        self.job_stuck = False
+        self.answer_jobs = True        # False: job commands get no reply and nothing happens
         self.lock = threading.Lock()
         client.responder = self.respond
 
@@ -124,6 +128,8 @@ class FakePrinter:
         if body.get('pushing', {}).get('command') == 'pushall':
             with self.lock:
                 return {'print': copy.deepcopy(self.report)}
+        if pr is not None and pr.get('command') in ('project_file', 'stop'):
+            return self._job(pr) if self.answer_jobs else None
         if pr is None or pr.get('command') != 'ams_filament_setting':
             return None
         self.writes.append(pr)
@@ -138,6 +144,23 @@ class FakePrinter:
             if delta is not None:
                 out.append({'print': delta})
         return out or None
+
+    def _job(self, pr) -> list[dict]:
+        """`project_file`: the job runs at once (PREPARE, RUNNING reporting `mapping` = the sent `ams_mapping`,
+        FINISH) unless `job_stuck`; `stop`: FAILED. `jobs` lists the job commands received."""
+        self.jobs.append(pr)
+        reply = {'print': {'command': pr['command'], 'sequence_id': pr['sequence_id'], 'result': 'success'}}
+        if pr['command'] == 'stop':
+            deltas = [{'gcode_state': 'FAILED'}]
+        else:
+            deltas = [{'gcode_state': 'PREPARE', 'subtask_name': pr.get('subtask_name', ''), 'task_id': '0'},
+                      {'gcode_state': 'RUNNING', 'mapping': list(pr.get('ams_mapping') or [])}]
+            if not self.job_stuck:
+                deltas.append({'gcode_state': 'FINISH', 'mc_percent': 100})
+        with self.lock:
+            for d in deltas:
+                self.report.update(copy.deepcopy(d))
+        return [reply] + [{'print': d} for d in deltas]
 
     def _apply(self, key, pr) -> dict | None:
         ams_id, tray_id = key

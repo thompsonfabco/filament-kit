@@ -325,3 +325,46 @@ def test_lifespan_stops_the_tracker(tmp_path, monkeypatch):
             assert T.stopped == 0
     asyncio.run(run())
     assert T.stopped == 1 and mgr.events == ["start", "stop"]
+
+
+def test_lifespan_stops_mapping_before_the_manager_and_recovers_at_start(tmp_path, monkeypatch):
+    """C1: a running mapping job is stopped and its restore awaited while the printer connections are still up;
+    at start the mapper restores any slot snapshot a killed job left."""
+    monkeypatch.setenv("FK_STATE", str(tmp_path))
+    events = []
+
+    class M:
+        def start(self):
+            events.append("manager.start")
+
+        def stop(self):
+            events.append("manager.stop")
+
+    class Mp:
+        def recover_pending(self):
+            events.append("mapper.recover")
+
+        def shutdown(self, timeout=60):
+            events.append("mapper.shutdown")
+
+    async def run():
+        async with m.printer_lifespan(M(), listener_factory=lambda cb: (_ for _ in ()).throw(OSError("x")),
+                                      mapper=Mp())(None):
+            events.append("serving")
+    asyncio.run(run())
+    assert events == ["manager.start", "mapper.recover", "serving", "mapper.shutdown", "manager.stop"]
+
+
+def test_main_passes_one_mapper_to_app_and_lifespan(tmp_path, monkeypatch):
+    from filament_kit.bridge import mapping
+    for n in ("etc", "state", "opt"):
+        (tmp_path / n).mkdir()
+        monkeypatch.setenv(f"FK_{n.upper()}", str(tmp_path / n))
+    seen = {}
+    real_create, real_lifespan = m.create_app, m.printer_lifespan
+    monkeypatch.setattr(m, "create_app", lambda *a, **kw: seen.update(app=kw.get("mapper")) or real_create(*a, **kw))
+    monkeypatch.setattr(m, "printer_lifespan", lambda mgr, **kw: seen.update(life=kw.get("mapper"))
+                        or real_lifespan(mgr, **kw))
+    monkeypatch.setattr(m, "serve", lambda app, hub, **kw: None)
+    m.main()
+    assert isinstance(seen["app"], mapping.Mapper) and seen["life"] is seen["app"]

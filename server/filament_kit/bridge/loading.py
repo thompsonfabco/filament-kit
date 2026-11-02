@@ -18,7 +18,10 @@
      cleared; the spool moves to that location with its previous location in `extra.prev_location` (a spool
      coming from another printer slot keeps the prev_location it already had).
   Loads into the same printer slot are serialised (a lock per (serial, label)): the last one wins on the printer
-  and in Spoolman, and Spoolman ends with exactly one spool at that location.
+  and in Spoolman, and Spoolman ends with exactly one spool at that location. The write phase holds the printer
+  against slot mapping (`mapping.load_guard`: refused at once with `mapping.AlreadyRunning` while a mapping job
+  runs in this or another process; loads do not exclude each other); a confirmed-sent write also drops that slot
+  from a pending slot snapshot (`snapshot.forget`), so restoring an interrupted mapping never undoes a load.
   `dry=True` runs every check and returns the plan (`command`, `moved_back`, the spool as it would be) without
   writing anything to the printer or Spoolman.
 
@@ -32,6 +35,7 @@ load adds `confirmed` (None on a dry run), `problems`, `nozzle_mm`, `nozzle_assu
 Errors (the API maps them):
   NoPreset                     -> 409 no_preset
   slottest.PrinterBusy         -> 409 printer_busy
+  mapping.AlreadyRunning       -> 409 already_running (slot mapping holds the printer)
   connection.PrinterOffline    -> 409 printer_offline (also when the printer drops during the write)
   connection.UnknownPrinter    -> 404 not_found (printer not in the registry)
   NotFound                     -> 404 not_found (unknown slot, unknown or archived spool, empty slot on unload)
@@ -39,13 +43,14 @@ Errors (the API maps them):
   spoolman.SpoolmanError       -> Spoolman failed (after a confirmed printer write: the slot is already set)"""
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import threading
 
 from .. import inventory, profiles
 from ..spoolman import SpoolmanError
-from . import ams, registry, slottest, status
+from . import ams, mapping, registry, slottest, snapshot, status
 from .connection import PrinterOffline, UnknownPrinter
 
 log = logging.getLogger(__name__)
@@ -226,7 +231,7 @@ def load(manager, sm, serial: str, label: str, spool_id, dry: bool, *, preset_fo
     """Load spool `spool_id` into slot `label` of printer `serial` (see the module docstring)."""
     preset_for = preset_for or profiles.preset_for
     p = _printer(serial)
-    name = p.name or p.serial
+    name = registry.display_name(p)
     spool = _spool(sm, spool_id)
     slottest.check_idle(manager, serial)
     report = manager.wait_report(serial, lambda r: True, 0)
@@ -258,12 +263,16 @@ def load(manager, sm, serial: str, label: str, spool_id, dry: bool, *, preset_fo
         return {**result, "spool": {**spool, **patch}, "confirmed": None, "moved_back": moved,
                 "command": {"ams_id": ams_id, "tray_id": tray_id, **setting}}
 
-    with _slot_lock(serial, label):
+    with mapping.load_guard(serial), _slot_lock(serial, label):
         slottest.check_idle(manager, serial)           # the printer may have started a job while we waited
         reply = manager.set_slot(serial, ams_id, tray_id, setting)
         if reply is not None and str(reply.get("result", "")).lower() != "success":
             raise SlotWriteFailed(f"{name} refused the write to {label}: "
                                   f"{reply.get('reason') or reply.get('err_code') or reply.get('result')}")
+        try:      # the owner set this slot: a pending restore of an interrupted mapping must not undo it
+            snapshot.forget(serial, ams_id, tray_id)
+        except (OSError, ValueError):
+            log.exception("load on %s: cannot update the pending slot snapshot", serial)
         confirmed = manager.wait_report(serial, lambda r: _shows(r, ams_id, tray_id, setting),
                                         CONFIRM_TIMEOUT) is not None
         if not confirmed:
@@ -283,13 +292,14 @@ def load(manager, sm, serial: str, label: str, spool_id, dry: bool, *, preset_fo
 def unload(manager, sm, serial: str, label: str, dry: bool, *, sealed_location: str = SEALED) -> dict:
     """Take the spool(s) in slot `label` of printer `serial` back to their previous location, in Spoolman only."""
     p = _printer(serial)
-    name = p.name or p.serial
+    name = registry.display_name(p)
     loc = status.location(name, label)
     report = manager.wait_report(serial, lambda r: True, 0) if manager is not None else None
     addr = _address(serial, report or {}, label)
     slot = {"label": label, "ams_id": addr[0] if addr else None, "tray_id": addr[1] if addr else None,
             "location": loc}
-    with _slot_lock(serial, label), inventory._LOCK:
+    guard = mapping.load_guard(serial) if not dry else contextlib.nullcontext()
+    with guard, _slot_lock(serial, label), inventory._LOCK:
         here = _occupants(sm, loc)
         if not here:
             raise NotFound(f"no spool is in {name} slot {label}")

@@ -62,7 +62,7 @@ def stubs(monkeypatch, calls):
     """slottest.run confirms CONFIRMED (steps reported); calib3mf.run decodes default_global unless changed."""
     cfg = {"st": None, "calib": None, "gate": None}
 
-    def st_run(manager, serial, on_step):
+    def st_run(manager, serial, on_step, should_stop=None):
         calls["slottest"] += 1
         on_step("Reading the AMS slots")
         if cfg["gate"] is not None:
@@ -71,7 +71,7 @@ def stubs(monkeypatch, calls):
         on_step("Slot test finished")
         return cfg["st"] or SlotTestResult(confirmed=dict(CONFIRMED))
 
-    def calib_run(manager, serial, slotmap):
+    def calib_run(manager, serial, slotmap, should_stop=None):
         calls["calib"].append(json.loads(json.dumps(slotmap.slots)))
         if cfg["calib"] is not None:
             return cfg["calib"]
@@ -194,7 +194,7 @@ def test_unconfirmed_slots_listed_but_calibration_runs(stubs, calls):
 
 
 def test_slot_test_crash_fails_with_reason(stubs, monkeypatch):
-    def boom(manager, serial, on_step):
+    def boom(manager, serial, on_step, should_stop=None):
         raise RuntimeError("kaput")
     monkeypatch.setattr(slottest, "run", boom)
     v = mapping.Mapper(FakeManager()).run(SERIAL)
@@ -202,7 +202,7 @@ def test_slot_test_crash_fails_with_reason(stubs, monkeypatch):
 
 
 def test_printer_starts_job_during_slot_test(stubs, monkeypatch):
-    def busy(manager, serial, on_step):
+    def busy(manager, serial, on_step, should_stop=None):
         raise PrinterBusy("RUNNING")
     monkeypatch.setattr(slottest, "run", busy)
     v = mapping.Mapper(FakeManager()).run(SERIAL)
@@ -240,6 +240,7 @@ def test_one_job_per_printer_and_progress_visible(stubs):
     v = wait_done(m)
     assert v["state"] == "done" and v["calibrated"] is True
     assert m.start(SERIAL)                     # a finished job does not block the next
+    wait_done(m)                               # (the printer is held per process: do not leak the job)
 
 
 def test_last_result_survives_a_restart(stubs):

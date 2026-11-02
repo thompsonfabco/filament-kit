@@ -4,7 +4,8 @@ Ported from the owner's H2D usage tracker (`h2d-filament-scanner/usage/usage_tra
 
 Lifecycle (`Tracker`, fed by `Manager.add_listener`): while a printer is RUNNING / PAUSE / PREPARE / SLICING the
 job is remembered (`subtask_name`, plate, `mapping`); when it turns FINISH or FAILED it is settled
-once. A FINISH/FAILED already shown by the first report after a (re)connect is never settled (it ended while
+once. A job start drops the previous job's `mapping` / `plate_idx` from the merged report (`status.merge_report`),
+so a job settles with its own mapping or none (`no_mapping`, nothing written). A FINISH/FAILED already shown by the first report after a (re)connect is never settled (it ended while
 nobody watched, and may have been settled before a restart); a server restarted mid-print picks the job up from
 that first RUNNING report and settles it when it ends. Exactly-once rests on that transition alone (the
 watched state goes ACTIVE -> FINISH/FAILED once per job), not on `task_id`: LAN, SD-card and touchscreen
@@ -41,8 +42,9 @@ serve):
   observe   true: logged only, nothing written to Spoolman
   undone    true once undone
   error     only when set: "file_not_found" | "no_slice_info" | "plate_not_found" | "printer_unreachable" |
-            "cert_changed" (job-level, one entry, nothing written) | "spoolman_unreachable" |
-            "spoolman_failed" | "ambiguous_spool" (that filament's write did not happen)
+            "cert_changed" | "no_mapping" (the job's reports never carried `mapping`) (job-level, one entry,
+            nothing written) | "spoolman_unreachable" | "spoolman_failed" | "ambiguous_spool" |
+            "unmapped_slot" (calibrated map, but its slot id is not in it) (that filament's write did not happen)
 An entry was written to Spoolman iff observe is false, spool_id is set, grams > 0 and there is no error; only
 those can be undone.
 
@@ -412,6 +414,8 @@ def settle(serial: str, job: dict, pct: float, spoolman) -> list[dict]:
                                 'error': error})]
     if p is None or not name:
         return fail('file_not_found')
+    if not isinstance(job.get('mapping'), list) or not job['mapping']:
+        return fail('no_mapping')        # the printer never said which slots this job used: guess nothing
     try:
         data, path = fetch_3mf(p, name, job.get('plate'))
     except tlspin.CertChanged:
@@ -450,11 +454,13 @@ def settle(serial: str, job: dict, pct: float, spoolman) -> list[dict]:
         label = None
         if g is not None and g >= 0:
             label = labels.get(g) if smap.calibrated else _guess_label(g)
-        here = spools.get(status.location(p.name, label), []) if label else []
+        here = spools.get(status.location(registry.display_name(p), label), []) if label else []
         spool = here[0] if len(here) == 1 else None
         entry = {'job': name, 'grams': grams, 'spool_id': spool.get('id') if spool else None, 'slot': label,
                  'observe': observe}
-        if spool_error and label:
+        if smap.calibrated and g is not None and g >= 0 and label is None:
+            entry['error'] = 'unmapped_slot'     # a slot the map does not know: run Map slots
+        elif spool_error and label:
             entry['error'] = spool_error
         elif len(here) > 1:
             log.warning("usage: printer %s: spools %s all claim slot %s; nothing deducted", serial,

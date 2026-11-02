@@ -22,7 +22,7 @@ from . import API_VERSION, __version__, config, intake, inventory, pairing, tags
 from .intake import CapReached, PhotoError, ReadCap, ReadError
 from .bridge import camera, loading, mapping, registry, usage
 from .bridge.connection import ACTIONS, DEVELOPER_MODE_REASON, Manager, NoReply, PrinterOffline, UnknownPrinter
-from .bridge.slottest import PrinterBusy
+from .bridge.slottest import NoStatus, PrinterBusy
 from .bridge.models import camera_kind
 from .inventory import AddFailed, TagConflict
 from .spoolman import Spoolman, SpoolmanError
@@ -76,20 +76,21 @@ def _to_response(e: Exception) -> JSONResponse:
 
 
 OFFLINE = "the printer is offline; check that it is on and on the network"
-CERT_CHANGED = "The printer's certificate changed; add it again with its Access Code"
+CERT_CHANGED = camera.CERT_CHANGED   # one text for the API and the camera
 
 
 def _bridge_error(e: Exception) -> JSONResponse | None:
     """Slot mapping, loading and usage errors (route-contract.md); None for anything else."""
     if isinstance(e, usage.UsageError):
         return _err(e.status, e.code, str(e))
-    if isinstance(e, mapping.AlreadyRunning):
-        return _err(409, "already_running", "slot mapping is in progress for this printer; try again when it "
-                                            "has finished")
+    if isinstance(e, mapping.AlreadyRunning):   # also LoadRunning: a load is writing to the printer
+        return _err(409, "already_running", e.message)
     if isinstance(e, mapping.CertChanged):
         return _err(409, "cert_changed", CERT_CHANGED)
     if isinstance(e, PrinterBusy):
         return _err(409, "printer_busy", f"the printer is busy ({e}); try again once it is idle")
+    if isinstance(e, NoStatus):
+        return _err(409, "printer_offline", str(e))
     if isinstance(e, PrinterOffline):
         return _err(409, "printer_offline", OFFLINE)
     if isinstance(e, loading.NoPreset):
@@ -177,7 +178,7 @@ def _printer_view(p: registry.Printer, printers) -> dict:
     except Exception:  # noqa: BLE001 - one odd report must not fail the whole printer list
         log.exception("printer %s: cannot summarize its report", p.serial)
         summary = None
-    return {"id": p.serial, "name": p.name or p.serial, "model": p.model, "serial": p.serial, "ip": p.ip,
+    return {"id": p.serial, "name": registry.display_name(p), "model": p.model, "serial": p.serial, "ip": p.ip,
             "configured": p.configured, "state": state, "camera": {"kind": camera_kind(p.model)},
             "summary": summary}
 
