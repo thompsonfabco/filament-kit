@@ -1226,13 +1226,14 @@ def cmd_web_status() -> int:
 
 # ---------- migrate-ops (from filament-ops, sub-project 4) ----------
 
-def cmd_migrate_ops(bundle: str, apply_: bool, replace_spoolman: bool) -> int:
+def cmd_migrate_ops(bundle: str, apply_: bool, replace_spoolman: bool, allow_unknown_spoolman: bool = False) -> int:
     """Report (default) or carry out the move of a filament-ops export bundle into this install."""
     from . import migrate
     if apply_ and not _is_root():
         print(f"error: run as root: sudo filament-kit migrate-ops {bundle} --apply", file=sys.stderr)
         return 1
-    return migrate.run(bundle, apply=apply_, replace_spoolman=replace_spoolman)
+    return migrate.run(bundle, apply=apply_, replace_spoolman=replace_spoolman,
+                       allow_unknown_spoolman=allow_unknown_spoolman)
 
 
 def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=None, sm_factory=None) -> int:
@@ -1300,6 +1301,8 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
     mo.add_argument("--apply", action="store_true", help="do it (root); without it nothing is written")
     mo.add_argument("--replace-spoolman", action="store_true",
                     help="replace a Spoolman database that already holds spools (a backup is kept)")
+    mo.add_argument("--allow-unknown-spoolman", action="store_true",
+                    help="accept a bundle database without a schema revision (only if it came from Spoolman 0.27.0)")
     args = ap.parse_args(argv)
 
     if args.cmd == "status":
@@ -1337,7 +1340,7 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
     if args.cmd == "web":
         return cmd_web_passphrase() if args.web_cmd == "passphrase" else cmd_web_status()
     if args.cmd == "migrate-ops":
-        return cmd_migrate_ops(args.bundle, args.apply, args.replace_spoolman)
+        return cmd_migrate_ops(args.bundle, args.apply, args.replace_spoolman, args.allow_unknown_spoolman)
     if args.cmd == "remote":
         from . import remote
         cfg = config.load()

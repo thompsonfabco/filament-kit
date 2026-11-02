@@ -236,11 +236,21 @@ def _fit_variants(cfg: dict, mine: dict, variants: list[str], src_variants, log:
     n = len(variants)
     src = [str(x) for x in src_variants] if isinstance(src_variants, list) else None
     for k, v in list(mine.items()):
-        if k == "filament_extruder_variant" or not isinstance(v, list) or len(v) <= 1 or not n or len(v) == n                 or src is None or len(src) != len(v):
+        if k == "filament_extruder_variant" or not isinstance(v, list) or len(v) <= 1 or not n or len(v) == n:
+            continue
+        if src is None or len(src) != len(v):
             continue
         out = [v[src.index(x)] if x in src else v[0] for x in variants]
         cfg[k] = mine[k] = out
         log.append(f"{cfg.get('name')}: {k} fitted from {len(v)} to {n} extruder variants (your in-app value)")
+
+
+def _variant_source(live_cfg: dict | None, installed: dict | None, live_fresh: bool):
+    """The extruder variant names the carried values were written for: the live preset's, except that a stale
+    live folder (Ruling Z) never counts when an installed copy stands in for it. With no installed copy at all
+    (a first install after `migrate-ops`) the live upload is the only copy, and the record came from it."""
+    src = live_cfg if (live_fresh or installed is None) else installed
+    return (src or {}).get("filament_extruder_variant")
 
 
 def _variants(cfg: dict) -> list[str]:
@@ -934,7 +944,7 @@ def _build_orca_preset(line: Line, name: str, p: OrcaPrinter, nozzle: str, paren
     # the installed note lines are carried
     mine = inapp.keep_edits(cfg, installed, live_cfg if t.live_fresh else installed, edits, recorded=recorded,
                             partial=half, notes=notes)
-    _fit_variants(cfg, mine, variants, (live_cfg or {}).get("filament_extruder_variant"), edits)
+    _fit_variants(cfg, mine, variants, _variant_source(live_cfg, installed, t.live_fresh), edits)
     _fill_nil(cfg, name, edits)
     for k in [k for k in cfg if "gcode" in k.lower()]:
         if live_cfg is None or inapp.norm(live_cfg.get(k)) != inapp.norm(cfg[k]):
