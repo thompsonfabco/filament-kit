@@ -7,6 +7,12 @@ Every item also gets its product `line` (an existing filament's `extra.line` win
 the name as `lines.product_of` does) and the line's proposal: `bambu_parent`, `parent_source` and `line_exists`.
 When no proposal can be made the line is the library product that prefixes the name, else "" (never the
 name with its colour).
+
+merge-ops additions (ports of filament-ops intake.py): with the `orders` module on, the caller passes the order
+history (`load_orders`) and the prompt gains an orders block plus the order/price rules, so each item may come back
+with `order`, `price_per_kg` and `price_line`; config `intake.tare_hints` ({vendor: grams}) go into the prompt;
+a fresh unknown tag (`tagsources.fresh_unknown_tag`) with one item forces `sealed=false`, and then one opened single
+spool with a fresh (or held) station weight above its tare gets `gross`.
 """
 from __future__ import annotations
 
@@ -16,12 +22,11 @@ import os
 import re
 import secrets
 import shutil
-import threading
 import logging
 import time
 from pathlib import Path
 
-from . import config, library
+from . import config, library, locks, modules, tagsources
 from .profiles import builds, lines
 from .spoolman import Spoolman
 
@@ -68,6 +73,19 @@ Use the highest one: nozzle_range and bed_range are the higher range, nozzle and
 line: the product line as printed, without the colour (e.g. 'PLA+ 2.0', 'PETG HF');
 for an existing filament copy its line from the catalog."""
 
+# Appended to RULES only when an order history is passed (the `orders` module); the text is ops intake.py's.
+ORDER_RULES = """Brand from orders: when neither the label nor the spool shows the brand, the order history can; use
+'Unknown' only when neither the photos nor the orders point to a brand.
+Orders: the user's Amazon filament purchases not yet in the catalog are listed below (newest first), plus every
+bundle (a bundle's other colours often arrive later as new filaments: match them to it). A spool of a catalog
+filament doesn't need an order (order, price_per_kg, price_line null: the filament keeps its price). Match each spool to the order line
+it most likely came from (brand or seller, material, colour, weight, bundle contents, recent delivery) and use it
+to confirm the brand, product line and colour, the net weight per spool (bundle kg / spools in the bundle) and the
+price: price_per_kg = unit price / kg in the bundle, before tax and promotions, and
+price_line = 'Price: $<price_per_kg>/kg - Amazon order <order> (<date>): $<unit price> / <kg> kg, ASIN <asin>'.
+Set order to the order id. No good match: order, price_per_kg and price_line null (say so in questions only if it
+matters, e.g. the brand is still uncertain). A bundle with colours you can't see in the photos is fine."""
+
 _S, _I = {"anyOf": [{"type": "string"}, {"type": "null"}]}, {"anyOf": [{"type": "integer"}, {"type": "null"}]}
 ITEM_PROPS = {"photos": {"type": "array", "items": {"type": "integer"}}, "existing_filament_id": _I,
               "vendor": {"type": "string"}, "name": {"type": "string"}, "material": {"type": "string"},
@@ -79,6 +97,15 @@ SCHEMA = {"type": "object", "additionalProperties": False, "required": ["items",
           "properties": {"questions": {"type": "array", "items": {"type": "string"}},
                          "items": {"type": "array", "items": {"type": "object", "additionalProperties": False,
                                                               "required": list(ITEM_PROPS), "properties": ITEM_PROPS}}}}
+ORDER_PROPS = {**ITEM_PROPS, "order": _S, "price_per_kg": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+               "price_line": _S}
+SCHEMA_ORDERS = {**SCHEMA, "properties": {
+    "questions": SCHEMA["properties"]["questions"],
+    "items": {"type": "array", "items": {"type": "object", "additionalProperties": False,
+                                         "required": list(ORDER_PROPS), "properties": ORDER_PROPS}}}}
+
+# an order line that stays listed even when its ASIN is already in the catalog: more colours/spools may follow
+MULTI = re.compile(r"bundle|\d+\s*-?\s*(pack|pcs|rolls|spools|colou?rs)\b|([2-9]|\d{2})(\.\d+)?\s*kg", re.I)
 
 
 class PhotoError(ValueError):
@@ -111,7 +138,8 @@ class ReadCap:
 
     def __init__(self, path: Path, per_day: int):
         self.path, self.per_day = Path(path), per_day
-        self._lock = threading.Lock()
+        # `reads.lock` beside the file: the server and web processes share one cap
+        self._lock = locks.ProcessLock(self.path.with_name("reads.lock"))
 
     def _load(self, now: float) -> list[float]:
         try:
@@ -141,6 +169,38 @@ class ReadCap:
             if stamps:
                 stamps.remove(max(stamps))
             self._save(stamps)
+
+
+# ---------- order history (the `orders` module) ----------
+
+def load_orders(cfg: dict) -> list[dict] | None:
+    """The order lines of `orders.file` (`{items: [{order, date, asin, title, qty, unit_price, seller}]}`), or None
+    when the `orders` module is off. On but unreadable: [] (the prompt then says the history is unavailable)."""
+    path = (cfg.get("orders") or {}).get("file")
+    if not path or "orders" not in modules.enabled(cfg):
+        return None
+    try:
+        items = json.loads(Path(path).read_text(encoding="utf-8"))["items"]
+    except (OSError, ValueError, KeyError, TypeError):
+        log.warning("orders: %s could not be read", path)
+        return []
+    return [o for o in items if isinstance(o, dict)] if isinstance(items, list) else []
+
+
+def filter_orders(orders: list[dict], fils: list[dict]) -> list[dict]:
+    """Only purchases not inventoried yet, newest first: a line whose ASIN is already in a filament's comment (its
+    price line) is in Spoolman, unless the title is a bundle (MULTI), whose other colours are still to come.
+    Matched by ASIN, not order id: one order can hold several products."""
+    known = " ".join((f.get("comment") or "") for f in fils)
+    kept = [o for o in orders
+            if not o.get("asin") or o["asin"] not in known or MULTI.search(str(o.get("title") or ""))]
+    return sorted(kept, key=lambda o: str(o.get("date") or ""), reverse=True)
+
+
+def _orders_text(orders: list[dict]) -> str:
+    return "\n".join(f"{o.get('date')} | {o.get('order')} | {o.get('asin')} | qty {o.get('qty')} | "
+                     f"${o.get('unit_price')} | {o.get('seller') or '-'} | {o.get('title')}"
+                     for o in orders) or "(order history unavailable)"
 
 
 # ---------- failed reads kept for retry ----------
@@ -186,7 +246,9 @@ def _api_key() -> str:
     return key
 
 
-def _call(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | None, client) -> dict:
+def _call(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | None, client, *,
+          orders: list[dict] | None = None, station_state: dict | None = None,
+          fresh_tag: dict | None = None) -> dict:
     import anthropic
     cfg = config.load()
     if client is None:
@@ -199,23 +261,35 @@ def _call(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | None, cli
         for f in sorted(fils, key=lambda f: (((f.get("vendor") or {}).get("name") or "").lower(), f["name"].lower())))
     vlist = ", ".join(f"{v['name']} (empty spool {v.get('empty_spool_weight') or '?'} g)" for v in vendors)
     # reference data first and cached: it only changes with Spoolman, so a batch of reads pays for it once
-    content = [{"type": "text", "cache_control": {"type": "ephemeral"},
-                "text": f"Vendors: {vlist}\n\nCatalog (id | vendor | name | material | net | tare | density | "
-                        f"hex | line):\n{catalog}"}]
+    ref = (f"Vendors: {vlist}\n\nCatalog (id | vendor | name | material | net | tare | density | "
+           f"hex | line):\n{catalog}")
+    hints = (cfg.get("intake") or {}).get("tare_hints") or {}
+    if isinstance(hints, dict) and hints:
+        ref += ("\n\nOwner's empty spool weights (these win over the defaults in the tare rule): "
+                + ", ".join(f"{v} {g} g" for v, g in sorted(hints.items(), key=lambda kv: str(kv[0]).lower())))
+    if orders is not None:
+        ref += ("\n\nAmazon filament orders (date | order | ASIN | qty | unit price | seller | title):\n"
+                + _orders_text(filter_orders(orders, fils)))
+    content = [{"type": "text", "cache_control": {"type": "ephemeral"}, "text": ref}]
     for i, data in enumerate(images):
         content += [{"type": "text", "text": f"Photo {i}:"},
                     {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
                                                  "data": base64.standard_b64encode(data).decode()}}]
-    tag = {"nfc_id": tag_uid} if tag_uid else None
+    # the app's tag wins; else a fresh unknown tap on a reader (age known: say how long before the photos)
+    tag = {"nfc_id": tag_uid} if tag_uid else (dict(fresh_tag) if fresh_tag and fresh_tag.get("nfc_id") else None)
+    age = tag.get("age_seconds") if tag else None
+    when = f"{age} s before sending these photos" if age is not None else "just before sending these photos"
     if tag:
-        content.append({"type": "text", "text": f"The user tapped an NFC tag ({tag_uid}) that isn't linked to any "
-                                                f"spool just before sending these photos: the pictured spool is an "
-                                                f"opened one (sealed false)."})
+        content.append({"type": "text", "text": f"The user tapped an NFC tag ({tag['nfc_id']}) that isn't linked to "
+                                                f"any spool {when}: the pictured spool is an opened one "
+                                                f"(sealed false)."})
     content.append({"type": "text", "text": f"User's note: {hint or '(none)'}"})
     try:
         resp = client.beta.messages.create(
-            model=cfg["model"], max_tokens=16000, system=RULES, messages=[{"role": "user", "content": content}],
-            output_config={"effort": "medium", "format": {"type": "json_schema", "schema": SCHEMA}},
+            model=cfg["model"], max_tokens=16000, system=RULES if orders is None else RULES + "\n" + ORDER_RULES,
+            messages=[{"role": "user", "content": content}],
+            output_config={"effort": "medium", "format": {"type": "json_schema",
+                                                          "schema": SCHEMA if orders is None else SCHEMA_ORDERS}},
             betas=["server-side-fallback-2026-07-01"], fallbacks="default")
     except anthropic.AuthenticationError:
         raise ReadError("bad_key", "the Anthropic API key was rejected") from None
@@ -249,15 +323,24 @@ def _call(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | None, cli
         hx = (it.get("color_hex") or "").lstrip("#").upper()
         it["color_hex"] = hx if len(hx) == 6 and all(c in "0123456789ABCDEF" for c in hx) else None
         it["count"] = max(1, int(it.get("count") or 1))
+        if isinstance(it.get("price_per_kg"), (int, float)) and not isinstance(it["price_per_kg"], bool):
+            it["price_per_kg"] = round(float(it["price_per_kg"]), 2)
     _add_lines(items, by_id)
     if tag and len(items) == 1:  # a fresh unknown tap is the user opening this very spool
-        items[0].update(sealed=False, sealed_reason=f"new tag {tag_uid} tapped before the photos")
+        ago = f" {age} s" if age is not None else ""
+        items[0].update(sealed=False, sealed_reason=f"new tag {tag['nfc_id']} tapped{ago} before the photos")
+    weight = tagsources.scale_weight(station_state)
+    one = items[0] if len(items) == 1 else None
+    if (weight and one and one["count"] == 1 and one.get("sealed") is False
+            and weight["grams"] > (one.get("tare") or 0)):
+        one["gross"] = weight["grams"]  # the opened spool on the station's scale: remaining = gross - tare
     out["tag"] = tag
     u = resp.usage
     out["usage"] = {"model": resp.model, "input_tokens": u.input_tokens + (u.cache_read_input_tokens or 0)
                     + (u.cache_creation_input_tokens or 0), "cached": u.cache_read_input_tokens or 0,
                     "output_tokens": u.output_tokens}
-    return {"items": items, "questions": out.get("questions", []), "tag": out["tag"], "usage": out["usage"]}
+    return {"items": items, "questions": out.get("questions", []), "tag": out["tag"], "scale": weight,
+            "usage": out["usage"]}
 
 
 def _add_lines(items: list[dict], by_id: dict) -> None:
@@ -316,14 +399,21 @@ def _fallback_line(it: dict, lib) -> str:
 
 
 def read_labels(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | None, client=None,
-                read_id: str | None = None) -> dict:
-    """Read label photos. On a ReadError the photos are kept under state/failed/<read_id> (error.read_id)."""
+                read_id: str | None = None, *, orders: list[dict] | None = None,
+                station_state: dict | None = None, fresh_tag: dict | None = None) -> dict:
+    """Read label photos. On a ReadError the photos are kept under state/failed/<read_id> (error.read_id).
+
+    `orders`: the order history (`load_orders`), None when the `orders` module is off. `station_state`: the intake
+    station's GET /state (its `last_weight` may become an opened spool's `gross`). `fresh_tag`: the reader's last
+    tag when it is fresh and unknown (`tagsources.fresh_unknown_tag`); `tag_uid` (from the app) wins over it."""
     _sweep_failed()
     rid = read_id or secrets.token_hex(6)
     try:
-        out = _call(sm, images, hint, tag_uid, client)
+        out = _call(sm, images, hint, tag_uid, client, orders=orders, station_state=station_state,
+                    fresh_tag=fresh_tag)
     except ReadError as e:
-        _keep(rid, images, hint, tag_uid)
+        # a retry has no reader context any more: keep the fresh tag as the tag the photos were sent with
+        _keep(rid, images, hint, tag_uid or (fresh_tag or {}).get("nfc_id"))
         e.read_id = rid
         raise
     _forget(rid)
@@ -339,8 +429,8 @@ def is_kept(read_id: str) -> bool:
     return (_failed_dir() / read_id).is_dir()
 
 
-def retry(read_id: str, sm: Spoolman, client=None) -> dict:
-    """Re-run a failed read from its kept photos."""
+def retry(read_id: str, sm: Spoolman, client=None, *, orders: list[dict] | None = None) -> dict:
+    """Re-run a failed read from its kept photos (the tag it was sent with; no station weight, which is stale)."""
     if not is_kept(read_id):
         raise ReadError("not_found", "those photos are no longer kept (24 h); send them again")
     d = _failed_dir() / read_id
@@ -349,4 +439,5 @@ def retry(read_id: str, sm: Spoolman, client=None) -> dict:
         meta = json.loads((d / "meta.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         meta = {}
-    return read_labels(sm, images, meta.get("hint") or "", meta.get("tag_uid"), client=client, read_id=read_id)
+    return read_labels(sm, images, meta.get("hint") or "", meta.get("tag_uid"), client=client, read_id=read_id,
+                       orders=orders)
