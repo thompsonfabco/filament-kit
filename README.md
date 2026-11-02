@@ -3,11 +3,18 @@
 Take photos of a filament spool's label with your phone; filament-kit reads the label and adds the spool to
 your inventory (Spoolman). Runs on a small Ubuntu computer on your home network.
 
+It also:
+
+- connects to your Bambu Lab printer, so filament used in a print comes off the right spool;
+- builds a filament preset for every filament line you own and installs them in Bambu Studio on your Windows PC
+  (see [Presets in Bambu Studio](#presets-in-bambu-studio)).
+
 ## What you need
 
 - A computer running **Ubuntu 24.04 or newer**, on your home network, that stays on.
 - An **Anthropic API key** (starts with `sk-ant-`). Keep it handy; the installer asks for it once.
 - An Android phone (Android 10 or newer) for the filament-kit app.
+- Optional: a Windows PC with Bambu Studio, for the presets.
 
 ## Install the server
 
@@ -36,7 +43,7 @@ Do these steps on the Ubuntu computer, in a Terminal window.
      boxes now (you can also change them later).
    - **Anthropic API key**: paste the key and press Enter. Nothing shows while you type or paste; that is on
      purpose.
-5. At the end the installer prints a status list (every line should start with `OK`) and a **QR code** with a
+5. At the end the installer prints a status list (no line should start with `FAIL`) and a **QR code** with a
    pairing code underneath.
 
 The installer takes a few minutes. You can run it again at any time; it never deletes your spools or
@@ -60,6 +67,30 @@ settings.
    fingerprint matches the one `sudo filament-kit pair` printed, and type the 6-digit code instead.
 4. The QR code and the code expire after a few minutes. If the app says the code has expired or was already
    used, run `sudo filament-kit pair` again.
+
+## Pair your PC
+
+Do this once, on the Windows PC where you use Bambu Studio. The PC sync tool sends your Bambu Studio filament
+list to the server and installs the presets the server builds. One server works with **one** sync PC: the
+first PC that syncs is the one. To move to another PC, remove the first one with `sudo filament-kit unpair`
+(see [Everyday commands](#everyday-commands)).
+
+1. On the PC, download `filament-kit-sync-setup-<version>.exe` from the same GitHub Releases page and run it.
+   It does not need administrator rights.
+2. On the Ubuntu computer, run:
+
+   ```
+   sudo filament-kit pair --pc
+   ```
+
+   It prints a long link that starts with `fkit://pair?`, the certificate fingerprint and a 6-digit code.
+3. When the setup window asks for it, paste the link and press Enter. (No link? Type the server's name or
+   address instead. The window shows the server's certificate fingerprint. Check that it matches the one on the
+   Ubuntu computer and type `y` to confirm it. Then it asks for the 6-digit code.)
+4. Finish the setup. From then on the PC syncs every 10 minutes. It waits while Bambu Studio is open and tries
+   again later, so close Bambu Studio to let new presets in.
+
+The link and the code expire after a few minutes. If they do, run `sudo filament-kit pair --pc` again.
 
 ## Building the Android app release (owner, Windows PC)
 
@@ -94,9 +125,12 @@ Run these in a Terminal on the Ubuntu computer.
 |---|---|
 | `sudo filament-kit status` | Checks that everything works. Anything failing shows a `fix:` line telling you what to do. |
 | `sudo filament-kit pair` | Shows a new QR code to pair another phone. |
+| `sudo filament-kit pair --pc` | Shows the link and code to pair the Windows PC sync tool. |
 | `sudo filament-kit unpair` | Lists paired phones. `sudo filament-kit unpair <id>` removes one. |
 | `sudo filament-kit config` | Settings menu: display name, storage locations, Claude model and daily limit, API key, printers. |
 | `sudo filament-kit printer map <serial>` | Maps a printer's AMS slots (see [Map slots](#map-slots)), printing each step. |
+| `sudo filament-kit profiles status` / `build` | Shows or rebuilds the Bambu Studio presets (see [Presets](#presets-in-bambu-studio)). |
+| `sudo filament-kit library status` / `update` / `rollback` | The spec library (see [Spec library updates](#spec-library-updates)). |
 | `sudo filament-kit printer unpin <serial>` | Forgets a printer's pinned certificate; the next connection trusts the one it presents. |
 
 Your spool inventory (Spoolman) is also in a web browser on any computer at home:
@@ -119,6 +153,16 @@ that to work:
 
 A printer appears in the app once it has been seen on the network (or added by hand with its IP address); you
 then enter its Access Code in the app to set it up.
+
+### Add a printer
+
+Use either way:
+
+- In the app: open **Printers**. The printer must already be in the list (the server finds it on the network). Tap it, and type its **Access Code** (shown on the printer's screen).
+- On the Ubuntu computer: `sudo filament-kit config`, then **Printers** and **add printer**. Enter the name, IP
+  address, serial number and Access Code.
+
+Then run **Map slots** (next section), and load spools into the printer from the app.
 
 ### Map slots
 
@@ -167,6 +211,57 @@ something else may be answering at the printer's address: check the printer's IP
 
 A backup of your spools and settings is made every night in `/var/backups/filament-kit` (the last 14 days are
 kept).
+
+## Presets in Bambu Studio
+
+The server builds one Bambu Studio filament preset for each filament line you own (a line is a brand's product,
+for example one brand's PLA, without the colour), for each of your printers and each nozzle size. The PC sync
+then installs them in Bambu Studio.
+
+- Names look like `<brand> <line> @Bambu Lab <printer> <nozzle> nozzle`.
+- Spoolman data for your filaments wins over the library, and the library wins over Bambu's own starting preset
+  (the "Bambu Studio parent").
+- **Your edits are kept.** If you change a preset in Bambu Studio, the server keeps those values the next
+  time it builds.
+- **Delete presets in Bambu Studio, never on disk.** The PC sync never deletes preset files. A preset that is
+  no longer built is listed as "delete in Bambu Studio" in the sync log; delete it there yourself.
+- Bambu's cloud keeps about 100 filament presets. The rest stay on this PC only.
+- A line the library doesn't have: in the app tap **Add profile** and fill in the line.
+- To change which Bambu preset a line starts from, change its **Bambu Studio parent**: in the app, on the
+  **Check the spools** screen while you add spools (field **Bambu Studio parent**; it applies to every colour of
+  that line), or in **Add profile**, or on the Ubuntu computer with `sudo filament-kit profiles lines` (lists the
+  lines) and `sudo filament-kit profiles set-parent <line_id> <parent>`.
+- To see how the last build went: `sudo filament-kit profiles status`. To rebuild now:
+  `sudo filament-kit profiles build`. (It needs the PC sync to have run once.)
+
+## Spec library updates
+
+The library holds published filament specs (temperatures, speeds). A copy comes with the server, so it works
+at once. The server checks for a newer copy every day.
+
+- `sudo filament-kit library status`: shows the library version and the last check.
+- `sudo filament-kit library update`: checks for a newer version now.
+- `sudo filament-kit library rollback`: goes back to the version before the last update.
+- `sudo filament-kit library add <file>`: adds or replaces your own entry from a JSON file.
+
+Updates only arrive once the library's GitHub repository is public or the server's library address points to a
+public mirror. While the library repository can't be reached, the daily check logs a warning, and running
+`sudo filament-kit library update` yourself shows an error. Neither is a failure; the bundled library keeps
+working.
+
+Your own `library add` entries override the shared library for that line.
+
+## Troubleshooting
+
+- Run `sudo filament-kit status` on the Ubuntu computer. No line should start with `FAIL`; a failing line
+  shows a `fix:` line.
+- Presets don't appear in Bambu Studio: close Bambu Studio (the sync waits while it is open), then wait up to
+  10 minutes. On the PC, run `filament-kit-sync status` to see the server, the Bambu Studio folder in use and
+  the last run.
+- The sync log is `%LOCALAPPDATA%\filament-kit-sync\sync.log`. Backups of your Bambu Studio filament folder,
+  made before each install (the 5 newest are kept), are in `%LOCALAPPDATA%\filament-kit-sync\backups`.
+- "Other PC" errors: another PC already syncs with this server. Remove it with `sudo filament-kit unpair <id>`.
+- `sudo filament-kit profiles build` says the PC sync hasn't run yet (this is a message, not an error): do [Pair your PC](#pair-your-pc).
 
 ## Update
 
