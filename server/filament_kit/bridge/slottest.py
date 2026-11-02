@@ -14,7 +14,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Callable
 
-from . import ams, status
+from . import ams, snapshot, status
 from .connection import PrinterOffline, UnknownPrinter
 
 log = logging.getLogger(__name__)
@@ -27,6 +27,14 @@ ONLINE = ('connected', 'needs_developer_mode')   # the MQTT session is up in bot
 
 class PrinterBusy(Exception):
     """The printer is running, paused, preparing or slicing a job (the gcode_state is the message)."""
+
+
+class NoStatus(PrinterOffline):
+    """Connected, but the printer has not reported its `gcode_state` yet: not known to be idle."""
+
+    def __init__(self, serial: str):
+        super().__init__("no status from the printer yet; try again in a few seconds")
+        self.serial = serial
 
 
 @dataclass
@@ -46,10 +54,13 @@ class _Target:
 
 
 def check_idle(manager, serial: str) -> None:
-    """Raise PrinterOffline / PrinterBusy unless the printer may be changed now."""
+    """Raise PrinterOffline (NoStatus: no `gcode_state` reported yet) / PrinterBusy unless the printer may be
+    changed now."""
     if manager.state(serial) not in ONLINE:
         raise PrinterOffline(serial)
-    gs = manager.summary(serial)['gcode_state']
+    gs = manager.summary(serial).get('gcode_state')
+    if not isinstance(gs, str) or gs in ('', 'UNKNOWN'):
+        raise NoStatus(serial)
     if gs in status.ACTIVE:
         raise PrinterBusy(gs)
 
@@ -119,18 +130,32 @@ def _failed(reply: dict | None) -> bool:
     return reply is not None and str(reply.get('result', '')).lower() != 'success'
 
 
-def run(manager, serial: str, on_step: Callable[[str], None]) -> SlotTestResult:
+INTERRUPTED = "interrupted: mapping was stopped; slot test stopped"
+
+
+def run(manager, serial: str, on_step: Callable[[str], None],
+        should_stop: Callable[[], bool] | None = None) -> SlotTestResult:
     """Run the slot test on an idle printer (raises PrinterOffline / PrinterBusy before touching anything).
 
-    `on_step(text)` is told each step ("Testing slot A1 (1/6)", "Restoring slot A1" ...). Returns the result; a
-    problem never goes unreported: every slot not confirmed and every slot not confirmed restored has a line."""
+    `on_step(text)` is told each step ("Testing slot A1 (1/6)", "Restoring slot A1" ...). `should_stop()` true
+    (the CLI got a signal, the service is stopping) ends the test early as "interrupted"; the restore still runs.
+    Returns the result; a problem never goes unreported: every slot not confirmed and every slot not confirmed
+    restored has a line. The snapshot is saved to disk (`snapshot.save`) before the first write and deleted after
+    a confirmed restore; the restore runs whatever stops the test (a KeyboardInterrupt too, re-raised afterwards).
+    A slot whose colour looks like a leftover test colour refuses the test (it is never taken as the original)."""
     def step(text: str) -> None:
         try:
             on_step(text)
         except Exception:
             log.exception("slot test: progress callback failed")
 
+    stopping = should_stop or (lambda: False)
     check_idle(manager, serial)
+    res = SlotTestResult()
+    if snapshot.pending(serial):
+        res.problems.append("a slot snapshot from an interrupted mapping is still pending; run the mapping again "
+                            "to restore it first")
+        return res
     step("Reading the AMS slots")
     report = manager.wait_report(serial, lambda r: True, 0)
     if report is None:
@@ -140,12 +165,32 @@ def run(manager, serial: str, on_step: Callable[[str], None]) -> SlotTestResult:
         for s in u.slots:
             targets.append(_Target(s.label, u.ams_id, s.tray_id, _snapshot(_raw_tray(report, u, s))))
     by_label = {t.label: t for t in targets}
-    res = SlotTestResult()
+    leftovers = [t for t in targets if snapshot.looks_like_test_colour(t.snap['tray_color'], len(targets))]
+    for t in leftovers:
+        res.problems.append(f"{t.label}: its colour {t.snap['tray_color']} looks like a test colour left by an "
+                            f"interrupted mapping, so it is not taken as the slot's own; set that slot's filament "
+                            f"again (on the printer or with Load into printer), then map again")
+    if leftovers:
+        return res
+    taken = {t.snap['tray_color'] for t in targets if t.snap['tray_color']}   # never pick a colour a slot holds
+    plan: list[str] = []                 # the test colour of each target, in test order
+    for n in range(1, len(targets) + 1):
+        c = pick_test_colour(n, taken)
+        taken.add(c)
+        plan.append(c)
+    try:
+        snapshot.save(serial, "slottest", [{"label": t.label, "ams_id": t.ams_id, "tray_id": t.tray_id,
+                                            "setting": dict(t.snap)} for t in targets], plan)
+    except Exception as e:               # no snapshot on disk: never touch the printer
+        log.exception("slot test on %s: cannot save the slot snapshot", serial)
+        res.problems.append(f"cannot save the slot snapshot ({type(e).__name__}: {e}); nothing was changed")
+        return res
     changed: list[_Target] = []          # may differ from their snapshot now
     reported: set[str] = set()           # slots that already have a "not confirmed" line
-    colours: set[str] = set()            # test colours written in this run
-    taken = {t.snap['tray_color'] for t in targets if t.snap['tray_color']}   # never pick a colour a slot holds
+    colours: set[str] = set()            # test colours written (or being written) in this run
     abort = None
+    interrupted: BaseException | None = None
+    current: list[_Target] = []          # the slot being written right now
 
     def mark(t: _Target) -> None:
         if t not in changed:
@@ -153,6 +198,9 @@ def run(manager, serial: str, on_step: Callable[[str], None]) -> SlotTestResult:
 
     try:
         for n, t in enumerate(targets, 1):
+            if stopping():
+                abort = INTERRUPTED
+                break
             try:
                 check_idle(manager, serial)
             except PrinterBusy as e:
@@ -162,9 +210,12 @@ def run(manager, serial: str, on_step: Callable[[str], None]) -> SlotTestResult:
                 abort = "printer_offline: the printer went offline; slot test stopped"
                 break
             step(f"Testing slot {t.label} ({n}/{len(targets)})")
-            colour = pick_test_colour(n, taken)
-            taken.add(colour)
+            if stopping():
+                abort = INTERRUPTED
+                break
+            colour = plan[n - 1]
             colours.add(colour)
+            current[:] = [t]
             try:
                 reply = manager.set_slot(serial, t.ams_id, t.tray_id, dict(t.snap, tray_color=colour))
             except (PrinterOffline, UnknownPrinter):
@@ -172,6 +223,7 @@ def run(manager, serial: str, on_step: Callable[[str], None]) -> SlotTestResult:
                 abort = "printer_offline: the printer went offline; slot test stopped"
                 break
             if _failed(reply):
+                current.clear()
                 if manager.state(serial) == 'needs_developer_mode':
                     res.needs_developer_mode = True
                     res.problems.append(f"needs_developer_mode: the printer refused the write to {t.label} "
@@ -184,6 +236,7 @@ def run(manager, serial: str, on_step: Callable[[str], None]) -> SlotTestResult:
                 reported.add(t.label)
                 continue
             mark(t)
+            current.clear()
             r = manager.wait_report(serial, lambda r, c=colour: _busy(r) or bool(_showing(r, c)), CONFIRM_TIMEOUT)
             if r is None:
                 if manager.state(serial) not in ONLINE:
@@ -209,6 +262,12 @@ def run(manager, serial: str, on_step: Callable[[str], None]) -> SlotTestResult:
     except Exception as e:                  # never leave test colours behind because of a bug or callback
         log.exception("slot test on %s failed", serial)
         abort = f"error: slot test failed ({type(e).__name__}: {e})"
+    except BaseException as e:              # Ctrl-C, SystemExit ...: restore first, re-raise afterwards
+        log.warning("slot test on %s interrupted (%s); restoring the slots", serial, type(e).__name__)
+        abort = INTERRUPTED
+        interrupted = e
+    for t in current:                       # stopped in the middle of a write: it may have landed
+        mark(t)
 
     if abort and abort != "needs_developer_mode":
         res.problems.insert(0, abort)
@@ -217,7 +276,21 @@ def run(manager, serial: str, on_step: Callable[[str], None]) -> SlotTestResult:
         if t.label not in res.confirmed and t.label not in reported:
             res.problems.append(f"{t.label}: not confirmed ({why})")
 
-    # restore: unconfirmed addresses first, so a mis-addressed write is overwritten by the right slot's restore
+    _restore(manager, serial, res, changed, colours, step)
+    if res.restored:
+        try:
+            snapshot.clear(serial)
+        except OSError:
+            log.exception("slot test on %s: cannot delete the slot snapshot", serial)
+    step("Slot test finished")
+    if interrupted is not None:
+        raise interrupted
+    return res
+
+
+def _restore(manager, serial: str, res: SlotTestResult, changed: list[_Target], colours: set[str], step) -> None:
+    """Put every changed slot back to its snapshot and confirm it; then check no test colour is left anywhere."""
+    # unconfirmed addresses first, so a mis-addressed write is overwritten by the right slot's restore
     order = [t for t in changed if t.label not in res.confirmed] + [t for t in changed if t.label in res.confirmed]
     for t in order:
         step(f"Restoring slot {t.label}")
@@ -249,9 +322,10 @@ def run(manager, serial: str, on_step: Callable[[str], None]) -> SlotTestResult:
                 if _norm(s.color) in left:
                     res.problems.append(f"{lab}: test colour {s.color} still in the slot")
                     res.restored = False
+        elif changed:
+            res.problems.append("final check failed (no report from the printer); test colours may remain")
+            res.restored = False
     except Exception as e:
         log.exception("slot test on %s: final check failed", serial)
         res.problems.append(f"final check failed (error: {type(e).__name__}: {e}); test colours may remain")
         res.restored = False
-    step("Slot test finished")
-    return res

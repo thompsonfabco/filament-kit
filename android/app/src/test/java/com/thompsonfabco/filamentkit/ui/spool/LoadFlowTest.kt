@@ -177,13 +177,14 @@ class LoadFlowTest {
         assertFalse(p.busy)
     }
 
-    @Test fun certChangedErrorExplainsWithoutPushingReAdd() = runTest(dispatcher) {
+    @Test fun certChangedErrorSaysWhenToReAddAndWhenToCheckTheIp() = runTest(dispatcher) {
         load.loadError = ApiError(409, "cert_changed", "x")
         val vm = loadVm()
         vm.toPreview()
         val msg = (vm.state.value as LoadUiState.PickSlot).error!!
         assertTrue(msg.startsWith("The printer's certificate changed."))
-        assertTrue(msg.contains("only if you expected this"))
+        assertTrue(msg.contains("If you reset the printer or its mainboard was replaced"))
+        assertTrue(msg.contains("check the printer's IP before re-adding"))
     }
 
     @Test fun loadMismatchAndUnauthorized() = runTest(dispatcher) {
@@ -410,7 +411,7 @@ class LoadFlowTest {
         assertNull(UsageHelp.note(entry("a")))
         // every real code (route-contract addendum) has its own short reason, not the generic fallback
         val codes = listOf("file_not_found", "no_slice_info", "plate_not_found", "printer_unreachable", "cert_changed",
-            "spoolman_unreachable", "spoolman_failed", "ambiguous_spool")
+            "spoolman_unreachable", "spoolman_failed", "ambiguous_spool", "no_mapping", "unmapped_slot")
         val generic = UsageHelp.note(entry("a", error = "something_new"))!!
         assertTrue(generic.contains("something new"))
         for (c in codes) {
@@ -420,6 +421,9 @@ class LoadFlowTest {
         }
         assertTrue(UsageHelp.note(entry("a", error = "ambiguous_spool"))!!.contains("two spools are set to that slot"))
         assertTrue(UsageHelp.note(entry("a", error = "file_not_found"))!!.contains("print file not found on the printer"))
+        assertTrue(UsageHelp.note(entry("a", error = "no_mapping"))!!.contains("the printer didn't say which slots it used"))
+        assertTrue(UsageHelp.note(entry("a", error = "unmapped_slot"))!!
+            .contains("that slot isn't in the slot map — run Map slots"))
     }
 
     @Test fun noSpoolInTheSlotSaysNothingWasTakenOff() {
@@ -468,11 +472,14 @@ class LoadFlowTest {
     @Test fun certChangedStateText() {
         assertEquals("Certificate changed", PrinterHelp.stateLabel("cert_changed"))
         assertEquals(
-            "The printer's certificate changed. This usually clears by itself when the printer comes back at its " +
-                "usual address. Add it again with its Access Code only if you expected this (factory reset or a new " +
-                "mainboard).",
+            "The printer's certificate changed. If you reset the printer or its mainboard was replaced, add it again " +
+                "with its Access Code. If not, something else may be answering at the printer's address — check the " +
+                "printer's IP before re-adding.",
             PrinterHelp.fix("cert_changed"),
         )
+        assertFalse(PrinterHelp.CERT_CHANGED.contains("usually clears"))
+        // M4: the camera says the same, not the generic "could not be shown"
+        assertEquals(PrinterHelp.CERT_CHANGED, PrinterHelp.cameraFix("cert_changed"))
         assertEquals(PrinterHelp.fix("cert_changed"), PrinterHelp.message(ApiError(409, "cert_changed", "x")))
         assertEquals(PrinterHelp.fix("needs_developer_mode"), PrinterHelp.message(ApiError(409, "needs_developer_mode", "x")))
     }

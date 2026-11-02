@@ -371,3 +371,141 @@ def test_unload_works_while_printer_offline_or_busy(rig, sm, fil):
     client.dropped()
     loading.unload(m, sm, SERIAL, "A2", False)
     assert sm.get(f"spool/{s['id']}")["location"] == "Rack 1"
+
+
+# ---------------------------------------------------------------- I1: one writer per printer (load vs mapping)
+
+from filament_kit.bridge import mapping  # noqa: E402
+
+
+class FakeFcntl:
+    """flock semantics for one lock file, shared by every fd (the tests use one printer): `other` is what another
+    process holds ('sh' / 'ex' / None)."""
+    LOCK_SH, LOCK_EX, LOCK_NB, LOCK_UN = 1, 2, 4, 8
+
+    def __init__(self):
+        self.other = None
+        self.mine: dict[int, int] = {}
+        self.ops: list[int] = []
+
+    def flock(self, fd, op):
+        self.ops.append(op)
+        if op & self.LOCK_UN:
+            self.mine.pop(fd, None)
+            return
+        want_ex = bool(op & self.LOCK_EX)
+        held = [m for f, m in self.mine.items() if f != fd] + ([self.LOCK_EX if self.other == 'ex' else self.LOCK_SH]
+                                                                if self.other else [])
+        if held and (want_ex or self.LOCK_EX in held):
+            raise BlockingIOError("locked")
+        self.mine[fd] = self.LOCK_EX if want_ex else self.LOCK_SH
+
+
+def test_load_refused_while_a_mapping_job_runs(rig, sm, fil, monkeypatch):
+    m, printer, c = rig
+    s = spool(sm, fil, "Shelf 1")
+    gate, started = threading.Event(), threading.Event()
+
+    def st_run(manager, serial, on_step, should_stop=None):
+        started.set()
+        gate.wait(5)
+        return slottest.SlotTestResult()
+    monkeypatch.setattr(slottest, "run", st_run)
+    mp = mapping.Mapper(m)
+    mp.start(SERIAL)
+    try:
+        assert started.wait(5)
+        with pytest.raises(mapping.AlreadyRunning):
+            loading.load(m, sm, SERIAL, "A2", s["id"], False, preset_for=FakePresets())
+        assert settings(c) == []
+    finally:
+        gate.set()
+        mp.shutdown(5)
+
+
+def test_mapping_refused_while_a_load_writes(rig, sm, fil, monkeypatch):
+    m, printer, c = rig
+    s = spool(sm, fil, "Shelf 1")
+    in_write, gate = threading.Event(), threading.Event()
+    real = m.set_slot
+
+    def slow(*a, **k):
+        in_write.set()
+        gate.wait(5)
+        return real(*a, **k)
+    monkeypatch.setattr(m, "set_slot", slow)
+    t = threading.Thread(target=loading.load, args=(m, sm, SERIAL, "A2", s["id"], False),
+                         kwargs={"preset_for": FakePresets()})
+    t.start()
+    try:
+        assert in_write.wait(5)
+        with pytest.raises(mapping.AlreadyRunning) as e:
+            mapping.Mapper(m).start(SERIAL)
+        assert isinstance(e.value, mapping.LoadRunning) and "loaded" in e.value.message
+    finally:
+        gate.set()
+        t.join(5)
+    assert not mapping.Mapper(m).in_progress(SERIAL)
+
+
+def test_two_loads_on_one_printer_do_not_refuse_each_other(rig, sm, fil):
+    m, printer, c = rig
+    a, b = spool(sm, fil, "Shelf 1"), spool(sm, fil, "Shelf 2")
+    with mapping.load_guard(SERIAL):
+        r = loading.load(m, sm, SERIAL, "A1", b["id"], False, preset_for=FakePresets())
+    assert r["confirmed"] is True
+    loading.load(m, sm, SERIAL, "A2", a["id"], False, preset_for=FakePresets())
+
+
+def test_cross_process_load_takes_a_shared_lock(rig, sm, fil, monkeypatch):
+    m, printer, c = rig
+    fake = FakeFcntl()
+    monkeypatch.setattr(mapping, "fcntl", fake)
+    s = spool(sm, fil, "Shelf 1")
+    loading.load(m, sm, SERIAL, "A2", s["id"], False, preset_for=FakePresets())
+    assert fake.LOCK_SH | fake.LOCK_NB in fake.ops and fake.mine == {}
+    fake.other = 'ex'                                    # `filament-kit printer map` in another process
+    with pytest.raises(mapping.AlreadyRunning):
+        loading.load(m, sm, SERIAL, "A1", s["id"], False, preset_for=FakePresets())
+    fake.other = 'sh'                                    # a load in another process: loads go on
+    loading.load(m, sm, SERIAL, "A1", s["id"], False, preset_for=FakePresets())
+
+
+def test_cross_process_mapping_refused_while_another_process_loads(rig, monkeypatch):
+    m, printer, c = rig
+    fake = FakeFcntl()
+    monkeypatch.setattr(mapping, "fcntl", fake)
+    fake.other = 'sh'
+    with pytest.raises(mapping.AlreadyRunning):
+        mapping.Mapper(m).start(SERIAL)
+    assert printer.writes == []
+    assert mapping.Mapper(m).in_progress(SERIAL) is False   # a load is not a mapping job
+
+
+@pytest.mark.skipif(mapping.fcntl is None, reason="cross-process lock needs fcntl (Linux)")
+def test_real_flock_load_refused_while_another_process_maps(rig, sm, fil, tmp_path):
+    m, printer, c = rig
+    import fcntl
+    s = spool(sm, fil, "Shelf 1")
+    d = tmp_path / "state" / "printers" / SERIAL
+    d.mkdir(parents=True, exist_ok=True)
+    with open(d / mapping.LOCK_FILE, "a") as other:
+        fcntl.flock(other.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with pytest.raises(mapping.AlreadyRunning):
+            loading.load(m, sm, SERIAL, "A2", s["id"], False, preset_for=FakePresets())
+        fcntl.flock(other.fileno(), fcntl.LOCK_UN)
+    assert settings(c) == []
+
+
+@pytest.mark.skipif(mapping.fcntl is None, reason="cross-process lock needs fcntl (Linux)")
+def test_real_flock_mapping_refused_while_another_process_loads(rig, tmp_path):
+    m, printer, c = rig
+    import fcntl
+    d = tmp_path / "state" / "printers" / SERIAL
+    d.mkdir(parents=True, exist_ok=True)
+    with open(d / mapping.LOCK_FILE, "a") as other:
+        fcntl.flock(other.fileno(), fcntl.LOCK_SH | fcntl.LOCK_NB)
+        with pytest.raises(mapping.AlreadyRunning):
+            mapping.Mapper(m).start(SERIAL)
+        assert mapping.Mapper(m).in_progress(SERIAL) is False
+        fcntl.flock(other.fileno(), fcntl.LOCK_UN)

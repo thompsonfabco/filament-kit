@@ -145,3 +145,26 @@ def test_summarize_never_raises_on_odd_reports(report):
 def test_hms_code_tolerates_bad_values():
     assert status.hms_code({"attr": "x", "code": None}) == "0000_0000_0000_0000"
     assert status.hms_code({"attr": -1, "code": 0}) == "FFFF_FFFF_0000_0000"
+
+
+# ---------------------------------------------------------------- I2: a new job never inherits the last job's mapping
+
+def test_job_start_drops_the_previous_jobs_mapping_and_plate():
+    full = {"gcode_state": "FINISH", "subtask_name": "fk-calib-X", "mapping": [0, 1], "plate_idx": 1}
+    out = status.merge_report(full, {"gcode_state": "PREPARE", "subtask_name": "bracket"})
+    assert "mapping" not in out and "plate_idx" not in out and out["subtask_name"] == "bracket"
+    assert full["mapping"] == [0, 1]                                    # input untouched
+
+
+def test_job_start_keeps_a_mapping_the_same_delta_carries():
+    out = status.merge_report({"gcode_state": "IDLE", "mapping": [0]},
+                              {"gcode_state": "RUNNING", "mapping": [1, 128], "plate_idx": 2})
+    assert out["mapping"] == [1, 128] and out["plate_idx"] == 2
+
+
+def test_mapping_survives_deltas_within_one_job():
+    full = status.merge_report({"gcode_state": "IDLE"}, {"gcode_state": "PREPARE"})
+    full = status.merge_report(full, {"mapping": [1, 128]})
+    full = status.merge_report(full, {"gcode_state": "RUNNING", "mc_percent": 5})   # PREPARE -> RUNNING
+    full = status.merge_report(full, {"gcode_state": "FINISH"})
+    assert full["mapping"] == [1, 128]

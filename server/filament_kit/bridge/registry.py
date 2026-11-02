@@ -64,6 +64,13 @@ class Printer:
     cert_fp: str = ""   # SHA-256 of the printer's TLS leaf (DER, lowercase hex), pinned on first use; see tlspin
 
 
+def display_name(p: Printer) -> str:
+    """The printer's name everywhere it is shown or joined on (Spoolman slot locations "<name> – AMS <label>",
+    usage's spool lookup, the status join): the registry name, else the serial. Renaming a printer therefore
+    moves its slot locations: spools already "in" it keep the old location text (see README)."""
+    return p.name or p.serial
+
+
 class RegistryError(Exception):
     pass
 

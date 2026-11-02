@@ -131,13 +131,13 @@ def client(mgr, sm, mapper):
 def stubs(monkeypatch):
     cfg = {"gate": None, "calib": None}
 
-    def st_run(manager, serial, on_step):
+    def st_run(manager, serial, on_step, should_stop=None):
         on_step("Reading the AMS slots")
         if cfg["gate"] is not None:
             cfg["gate"].wait(5)
         return SlotTestResult(confirmed={"A1": {"ams_id": 0, "tray_id": 0}, "A2": {"ams_id": 0, "tray_id": 1}})
 
-    def calib_run(manager, serial, slotmap):
+    def calib_run(manager, serial, slotmap, should_stop=None):
         if cfg["calib"] is not None:
             return cfg["calib"]
         return CalibResult(decoding={"A1": 0, "A2": 1}, consistent=True)
@@ -507,3 +507,27 @@ def test_no_route_returns_the_access_code(client, mgr, stubs, monkeypatch):
         for s in _walk(r.json()):
             assert CODE not in s
             assert "access_code" not in s
+
+
+def test_load_refused_before_the_first_status_report(client, mgr, monkeypatch):
+    """M1: connected, but no gcode_state reported yet: not known to be idle."""
+    preset(monkeypatch)
+    mgr.report["gcode_state"] = "UNKNOWN"
+    r = client.post(f"/api/printers/{SERIAL}/slots/A1/load", json={"spool_id": 1, "dry_run": False})
+    err(r, 409, "printer_offline")
+    assert "no status from the printer yet" in r.json()["message"]
+    assert mgr.writes == []
+
+
+def test_map_refused_while_a_load_writes(client, mgr, monkeypatch):
+    """I1: a load's write phase holds the printer; POST /map is 409 already_running with a load message."""
+    from filament_kit.bridge import mapping as mp
+    with mp.load_guard(SERIAL):
+        r = client.post(f"/api/printers/{SERIAL}/map")
+    err(r, 409, "already_running")
+    assert "loaded" in r.json()["message"]
+
+
+def test_cert_changed_message_says_what_to_do():
+    from filament_kit import api
+    assert "reset the printer" in api.CERT_CHANGED and "IP" in api.CERT_CHANGED

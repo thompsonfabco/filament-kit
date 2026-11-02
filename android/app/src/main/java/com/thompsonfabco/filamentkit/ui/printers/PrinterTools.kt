@@ -57,6 +57,8 @@ object UsageHelp {
         "spoolman_unreachable" -> "the inventory could not be reached"
         "spoolman_failed" -> "the inventory refused the change"
         "ambiguous_spool" -> "two spools are set to that slot"
+        "no_mapping" -> "the printer didn't say which slots it used"
+        "unmapped_slot" -> "that slot isn't in the slot map — run Map slots"
         else -> code.replace('_', ' ')
     }
 }
