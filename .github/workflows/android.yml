@@ -17,4 +17,9 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: android-actions/setup-android@v3
+        with:
+          # the default also asks for the legacy 'tools' package, which current sdkmanager no longer has;
+          # AGP downloads the platform and build-tools it needs itself
+          packages: 'platform-tools'
+          log-accepted-android-sdk-licenses: false
       - run: ./gradlew testDebugUnitTest assembleDebug
