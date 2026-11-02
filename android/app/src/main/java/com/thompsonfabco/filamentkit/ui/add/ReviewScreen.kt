@@ -89,7 +89,7 @@ fun ReviewScreen(
         val editable = state.stage == Stage.Review || state.stage == Stage.Preview
         state.items.forEachIndexed { i, item ->
             key(state.generation, i) {
-                ItemCard(i, item, state.locations, state.parents, vm, editable)
+                ItemCard(i, item, state.locations, state.parents, state.parentError, vm, editable)
             }
         }
 
@@ -167,6 +167,7 @@ private fun ItemCard(
     item: JsonObject,
     locations: List<String>,
     parents: Map<String, ParentList>,
+    parentError: String?,
     vm: AddViewModel,
     enabled: Boolean,
 ) {
@@ -190,11 +191,17 @@ private fun ItemCard(
 
             TextField(label("Vendor", "vendor"), item.str("vendor"), enabled) { vm.setText(index, "vendor", it) }
             TextField(label("Name", "name"), item.str("name"), enabled) { vm.setText(index, "name", it) }
-            TextField(label("Line", "line"), item.str("line"), enabled) { vm.setText(index, "line", it) }
+            TextField(label("Line", "line"), item.str("line"), enabled, check = ::intakeTextProblem) { vm.setText(index, "line", it) }
             TextField(label("Material", "material"), item.str("material"), enabled) { vm.setText(index, "material", it) }
-            ParentField(item.str("bambu_parent").orEmpty(), item.str("material")?.let { parents[it] }, enabled) {
-                vm.setParent(index, it)
-            }
+            val parent = item.str("bambu_parent").orEmpty()
+            val picked = item.bool(AddViewModel.PICKED) == true
+            ParentField(
+                parent, item.str("material")?.let { parents[it] }, enabled,
+                onPick = { vm.setParent(index, it) },
+                onType = { vm.typeParent(index, it) },
+                onCommit = { vm.commitParent(index) },
+                error = parentError?.takeIf { picked } ?: intakeTextProblem(parent),
+            )
             if (item.bool("line_exists") == true) {
                 Text("The Bambu Studio parent applies to every colour of this line.", style = MaterialTheme.typography.bodySmall)
             }
@@ -232,10 +239,18 @@ private fun Swatch(hex: String?) {
 }
 
 @Composable
-private fun TextField(label: String, initial: String?, enabled: Boolean, onChange: (String) -> Unit) {
+private fun TextField(
+    label: String,
+    initial: String?,
+    enabled: Boolean,
+    check: ((String) -> String?)? = null,
+    onChange: (String) -> Unit,
+) {
     var text by remember { mutableStateOf(initial.orEmpty()) }
+    val problem = check?.invoke(text)
     OutlinedTextField(
         value = text, onValueChange = { text = it; onChange(it) }, enabled = enabled, singleLine = true,
+        isError = problem != null, supportingText = problem?.let { { Text(it) } },
         label = { Text(label) }, modifier = Modifier.fillMaxWidth(),
     )
 }
