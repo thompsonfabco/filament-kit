@@ -16,6 +16,9 @@ In-app edits last (rulings S27, S28; see profiles.inapp): the manifest's `inapp`
 values the build carried; the next build reads that record from the installed build's BUILD.json (or, after a
 half-finished install, from the partial build's, whose values then never count as edits).
 
+`restored` lists the presets a restore-deleted build brought back (deleted in the app before): the PC's installer
+does not take their absence from Bambu Studio for a deletion made after the build.
+
 A saved line's filament_id never changes (ruling S12). Only a line created in this run takes the filament_id of an
 existing preset of the same name made in the app; for a saved line that preset is reported and replaced.
 
@@ -284,6 +287,7 @@ def build_all(*, filaments: list[dict], models: list[str], store: Store, library
     presets: list[dict] = []
     manifest_lines: dict[str, dict] = {}
     deleted: list[str] = []
+    restored: list[str] = []                # brought back by restore-deleted (the PC must not see a deletion)
     generated: set[str] = set()
     planned: set[str] = set()               # casefolded names planned this run, built or not
 
@@ -298,7 +302,7 @@ def build_all(*, filaments: list[dict], models: list[str], store: Store, library
                                 deleted_before=deleted_before, restore=restore_deleted, reset=reset,
                                 base_out=base_out, user_id=live.user_id if live is not None else "", now=now,
                                 problems=problems, clamps=clamps, edits=edits, deleted=deleted,
-                                planned=planned, new_line=lid in new_lines, recorded=recorded,
+                                restored=restored, planned=planned, new_line=lid in new_lines, recorded=recorded,
                                 partial=partial, carried=carried)
         except OSError:
             raise
@@ -317,7 +321,8 @@ def build_all(*, filaments: list[dict], models: list[str], store: Store, library
     stale = sorted(n for n in snap_names if n.casefold() in live_cf and n.casefold() not in generated
                    and n.casefold() not in planned and not n.casefold().startswith(prefixes))
     manifest = {"presets": presets, "lines": manifest_lines, "problems": problems, "clamps": clamps,
-                "edits": edits, "inapp": dict(sorted(carried.items())), "deleted": sorted(deleted), "stale": stale,
+                "edits": edits, "inapp": dict(sorted(carried.items())), "deleted": sorted(deleted),
+                "restored": sorted(restored), "stale": stale,
                 "library_version": library.version}
     return manifest, ls
 
@@ -325,7 +330,7 @@ def build_all(*, filaments: list[dict], models: list[str], store: Store, library
 def _build_line(line: Line, fs: list[dict], ids: list[int], *, printers, store: Store, library: Library,
                 live_preset, live_names, snap_cf, ls: LineSet, snapshot, seen_live, snap_names, deleted_before,
                 restore, reset, base_out: Path, user_id: str, now: float, problems, clamps, edits,
-                deleted, planned: set[str], new_line: bool, recorded: dict[str, dict], partial: Path | None,
+                deleted, planned: set[str], new_line: bool, restored: list[str] | None = None, recorded: dict[str, dict], partial: Path | None,
                 carried: dict[str, dict]) -> list[dict]:
     if line.bambu_parent is None:
         return []                                   # reported by lines.problems
@@ -375,6 +380,8 @@ def _build_line(line: Line, fs: list[dict], ids: list[int], *, printers, store: 
                          restore=restore):
             deleted.append(name)
             continue
+        brought_back = restore and inapp.deleted(name, snapshot=snap_names, live=seen_live, before=deleted_before,
+                                                 reset=reset, restore=False)
         parent = store.parent_for(line.bambu_parent, printer, nozzle)
         if parent is None:
             problems.append(f"{name}: no system parent; skipped")
@@ -391,6 +398,8 @@ def _build_line(line: Line, fs: list[dict], ids: list[int], *, printers, store: 
             continue
         if row is not None:
             rows.append(row)
+            if brought_back and restored is not None:
+                restored.append(name)
     return rows
 
 
