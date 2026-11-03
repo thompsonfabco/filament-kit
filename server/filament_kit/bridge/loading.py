@@ -6,8 +6,9 @@
      (`ams.units`: A1 ... Z4, AA1 ..., HT-A ..., Ext or Ext-L / Ext-R)). Ruling BK: a print does not block a
      load (the owner loads a spool into a free slot while printing, as the scanner allowed); only the slot that
      feeds the running job is refused (`SlotInUse`: `ams.tray_now`, and an extruder's `snow` when the report has
-     it), and a slot mapping or calibration job (`mapping.load_guard`). Mapping and the slot test keep
-     `slottest.check_idle`;
+     it; Ruling BM: on a multi-nozzle model without `snow`, every slot in the job's `mapping`, and every slot
+     while the job has no `mapping` yet), and a slot mapping or calibration job (`mapping.load_guard`). Mapping
+     and the slot test keep `slottest.check_idle`;
   2. nozzle size: the report's top-level `nozzle_diameter`, else `device.nozzle.info[].diameter` of the slot's
      extruder (bits 8-11 of the unit's `info`; id 0 when the report does not say), else 0.4 with
      `nozzle_assumed: true` in the result (never refused for a missing size); preset =
@@ -56,7 +57,7 @@ import threading
 
 from .. import inventory, profiles
 from ..spoolman import SpoolmanError
-from . import ams, layout, mapping, registry, slottest, snapshot, status
+from . import ams, hardware, layout, mapping, registry, slottest, snapshot, status
 from .connection import PrinterOffline, UnknownPrinter
 
 log = logging.getLogger(__name__)
@@ -97,17 +98,75 @@ def _feeding(report: dict) -> set[tuple[int, int]]:
     return out
 
 
-def check_slot_free(manager, serial: str, report: dict, ams_id: int, tray_id: int, label: str) -> None:
-    """Raise PrinterOffline / NoStatus unless the printer is connected and says what it is doing; SlotInUse when a
-    job is running and this slot feeds it. A print on other slots does not refuse (Ruling BK)."""
+def _has_snow(report: dict) -> bool:
+    infos = status._l(status._d(status._d(status._d(report).get("device")).get("extruder")).get("info"))
+    return any("snow" in e for e in infos)
+
+
+def _job_labels(serial: str, model, report: dict) -> set[str] | None:
+    """The labels of every slot the running job's `mapping` names, or None when the report has no mapping. Decoded
+    with the calibrated slot map, and also with every numbering scheme the model may use (a union: this only ever
+    refuses more, Ruling BM)."""
+    raw = status._d(report).get("mapping")
+    if not isinstance(raw, list) or not raw:
+        return None
+    hw = hardware.load()
+    mi = hw.model(model)
+    smap = ams.load_map(serial)
+    by_global = {}
+    if smap.calibrated:
+        for lab, a in smap.slots.items():
+            g = status._int(a.get("global_id")) if isinstance(a, dict) else None
+            if g is not None:
+                by_global[g] = lab
+    out = set()
+    for v in raw:
+        g = status._int(v)
+        if g is None or g < 0:
+            continue
+        if g in by_global:
+            out.add(by_global[g])
+        for key in mi.numbering or ("legacy",):
+            try:
+                dec = hw.scheme(key).decode(g)
+            except KeyError:
+                continue
+            lab = layout.label_for(dec[0], dec[1], mi, hw) if dec else None
+            if lab:
+                out.add(lab)
+    return out
+
+
+def in_use(serial: str, model, report: dict, ams_id: int, tray_id: int, label: str) -> str | None:
+    """Why this slot may not be changed now (None: it may). Only while a job is active (Ruling BK): the slot that
+    feeds it (`tray_now`, an extruder's `snow`). On a model with more than one nozzle whose report has no `snow`
+    (Ruling BM), `tray_now` shows one nozzle only, so every slot in the job's `mapping` counts as in use, and an
+    active job without a `mapping` refuses every slot (fails closed)."""
+    gs = status._s(status._d(report).get("gcode_state"))
+    if gs not in status.ACTIVE:
+        return None
+    if (ams_id, tray_id) in _feeding(report):
+        return f"{label} feeds the print that is running ({gs})"
+    if hardware.load().model(model).nozzles > 1 and not _has_snow(report):
+        labels = _job_labels(serial, model, report)
+        if labels is None:
+            return f"the running print ({gs}) does not say yet which slots it uses"
+        if label in labels:
+            return f"{label} is used by the print that is running ({gs})"
+    return None
+
+
+def check_slot_free(manager, serial: str, report: dict, ams_id: int, tray_id: int, label: str, model=None) -> None:
+    """Raise PrinterOffline / NoStatus unless the printer is connected and says what it is doing; SlotInUse when
+    `in_use` says so. A print on other slots does not refuse (Ruling BK)."""
     if manager.state(serial) not in slottest.ONLINE:
         raise PrinterOffline(serial)
     gs = status._s(status._d(report).get("gcode_state"))
     if gs in ("", "UNKNOWN"):
         raise slottest.NoStatus(serial)
-    if gs in status.ACTIVE and (ams_id, tray_id) in _feeding(report):
-        raise SlotInUse(f"{label} feeds the print that is running ({gs}); set it once the print is done, or "
-                        "pick another slot")
+    why = in_use(serial, model, report, ams_id, tray_id, label)
+    if why:
+        raise SlotInUse(f"{why}; set it once the print is done, or pick another slot")
 
 
 class SlotWriteFailed(Exception):
@@ -285,7 +344,7 @@ def load(manager, sm, serial: str, label: str, spool_id, dry: bool, *, preset_fo
     if addr is None:
         raise NotFound(f"{name} has no slot {label}")
     ams_id, tray_id, kind, alias = addr
-    check_slot_free(manager, serial, report, ams_id, tray_id, label)
+    check_slot_free(manager, serial, report, ams_id, tray_id, label, p.model)
     loc = status.location(name, label)
     old_loc = status.location(name, alias) if alias else None
     slot = {"label": label, "ams_id": ams_id, "tray_id": tray_id, "location": loc}
@@ -313,7 +372,7 @@ def load(manager, sm, serial: str, label: str, spool_id, dry: bool, *, preset_fo
         now = manager.wait_report(serial, lambda r: True, 0)   # the job may have moved on while we waited
         if now is None:
             raise PrinterOffline(serial)
-        check_slot_free(manager, serial, now, ams_id, tray_id, label)
+        check_slot_free(manager, serial, now, ams_id, tray_id, label, p.model)
         reply = manager.set_slot(serial, ams_id, tray_id, setting, kind=kind)
         if reply is not None and str(reply.get("result", "")).lower() != "success":
             raise SlotWriteFailed(f"{name} refused the write to {label}: "
@@ -351,8 +410,9 @@ def unload(manager, sm, serial: str, label: str, dry: bool, *, sealed_location: 
     alias = addr[3] if addr else next((a for a, cur in layout.aliases(p.model).items() if cur == label), None)
     old_loc = status.location(name, alias) if alias else None
     # Spoolman only, so it works offline; but not the slot the running print feeds (Ruling BK)
-    if addr and report and status._s(report.get("gcode_state")) in status.ACTIVE             and (addr[0], addr[1]) in _feeding(report):
-        raise SlotInUse(f"{label} feeds the print that is running; unload it once the print is done")
+    why = in_use(serial, p.model, report, addr[0], addr[1], label) if addr and report else None
+    if why:
+        raise SlotInUse(f"{why}; unload it once the print is done")
     guard = mapping.load_guard(serial) if not dry else contextlib.nullcontext()
     with guard, _slot_lock(serial, label), inventory._LOCK:
         here = _occupants(sm, loc, also=old_loc)
