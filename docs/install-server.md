@@ -3,10 +3,10 @@
 This guide puts filament-kit on a Linux computer at home. The server keeps your spool list and talks to your
 printers. The Android app, the iPhone web app and the PC sync all connect to it, so install it first.
 
-> **Before the first release.** The one-command install below needs a published GitHub release and a public
-> repository. Neither exists yet. Until then, use [While the repository is private](#while-the-repository-is-private)
-> or [Install from a downloaded file](#install-from-a-downloaded-file). The full list of what is not ready is in
-> [Known gaps](known-gaps.md).
+> **Beta.** The one-command install below needs a public repository, and the repository is private for now. Until
+> it goes public, use [While the repository is private](#while-the-repository-is-private) or
+> [Install from a downloaded file](#install-from-a-downloaded-file) (signed in to GitHub). What else is still rough
+> is in [Known gaps](known-gaps.md).
 
 ## What you need
 
@@ -236,7 +236,7 @@ Every command is in the [user guide](user-guide.md#everyday-commands).
 
 - **`Ubuntu 24.04 or newer is required`**: the computer runs another system or an older Ubuntu. Upgrade it, or
   use another computer.
-- **`curl: (22) The requested URL returned error: 404`** from the one command: there is no public release yet.
+- **`curl: (22) The requested URL returned error: 404`** from the one command: the repository is still private.
   See [While the repository is private](#while-the-repository-is-private).
 - **The install stops at "Installing system packages" for several minutes**: a new Ubuntu often installs its own
   updates in the background first. The installer waits up to 5 minutes for them. Let it run.

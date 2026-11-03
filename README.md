@@ -30,8 +30,8 @@ It downloads the newest release, checks its signature, and asks a few questions 
 fine). At the end it shows a QR code for pairing your phone. Step by step, with every question and what you see:
 **[Install the server](docs/install-server.md)**.
 
-The command works once the repository is public and has a release; neither is the case yet (see
-[Known gaps](docs/known-gaps.md)). Until then the server how-to has the private route.
+The command works once the repository is public. It is private for now (a beta), so until then the server
+how-to has the private route, and [Known gaps](docs/known-gaps.md) lists what else is still rough.
 
 Then, on your phone:
 
