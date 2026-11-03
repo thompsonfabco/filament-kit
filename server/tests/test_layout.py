@@ -218,9 +218,9 @@ def test_default_global_routes_through_the_first_numbering_scheme():
     assert ams.default_global(129, 0, "O1D") == 129 << 8
 
 
-def test_status_legacy_label_helpers_have_no_limit():
-    assert status.unit_label(40) == ("AO", "ams")
-    assert status.unit_label(160) == ("HT-AG", "ams_ht")
+def test_labels_have_no_limit():
+    assert layout.label_for(40, 0) == "AO1"
+    assert layout.label_for(160, 0) == "HT-AG"
 
 
 def test_garbage_never_crashes():

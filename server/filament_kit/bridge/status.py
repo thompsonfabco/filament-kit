@@ -91,21 +91,6 @@ def tray_now_tag(n: Any) -> str | None:
     return f"{a}:{t}"
 
 
-def unit_label(ams_id: int) -> tuple[str, str]:
-    """(label, kind) by id alone, as Bambu Studio names units: 0 -> 'A' ... 25 -> 'Z', 26 -> 'AA' ...;
-    128 -> 'HT-A', 129 -> 'HT-B' ... (no limit). Reports go through `layout.build`, which also knows the unit's
-    type and the printer's externals; this is the fallback for an id alone."""
-    if ams_id >= HT_BASE:
-        return f"HT-{layout.letters(ams_id - HT_BASE)}", 'ams_ht'
-    return layout.letters(max(0, ams_id)), 'ams'
-
-
-def slot_label(ams_id: int, tray_id: int) -> str:
-    """Studio's slot label: A1-A4, B1-B4 ... for 4-slot units; an AMS HT's single slot is the unit label."""
-    label, kind = unit_label(ams_id)
-    return label if kind == 'ams_ht' else f"{label}{tray_id + 1}"
-
-
 def location(printer_name: str, label: str) -> str:
     """The Spoolman location of a spool sitting in that slot."""
     return f"{printer_name} {DASH} AMS {label}"
