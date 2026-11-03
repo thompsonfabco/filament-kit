@@ -68,7 +68,7 @@ def env(tmp_path, monkeypatch, readers):
     tagsources._failed.clear()
     data, url = readers
     mods = {n: True for n in modules.MODES["server"]}
-    mods["web"] = True
+    mods["web"] = mods["ai_intake"] = True
     config.save({"placement": RULES, "modules": mods, "tag_sources": [{"name": "printer", "url": url + "/last-tag"}],
                  "web": {"public_url": PUBLIC, "lan": ["192.168.1.0/24"]}})
     (tmp_path / "etc" / "web_passphrase").write_text(auth.hash_passphrase(PASS) + "\n", encoding="utf-8")
@@ -401,3 +401,28 @@ def test_web_read_refunds_only_when_claude_was_not_reached(app, sm, fake, monkey
         monkeypatch.setattr(sm, "get", down)                             # catalog fetch fails: refunded
         r = c.post("/intake/api/read", files=photo, **post)
         assert r.status_code == 400 and count() == 1
+
+
+def test_ai_off_page_hides_reading_and_manual_add_works(app, env, sm):
+    """R1: without ai_intake the page says so (no photo read), label reading is refused, and a spool added by
+    hand (vendor, name, material, weights; or an existing filament picked from the list) is saved."""
+    cfg = config.load()
+    cfg["modules"]["ai_intake"] = False
+    config.save(cfg)
+    with _client(app) as c:
+        _sign_in(c)
+        post = {"headers": {"Origin": ORIGIN}}
+        assert "data-ai='0'" in c.get("/intake").text
+        r = c.post("/intake/api/read", files=[("photos", ("a.jpg", JPEG, "image/jpeg"))], **post)
+        assert r.status_code == 400 and "ai_intake" in r.json()["error"]
+        item = {"vendor": "Elegoo", "name": "PLA Red", "material": "PLA", "net": "1000", "tare": "160",
+                "density": "1.24", "count": "2", "sealed": True, "location": "", "color_hex": "cc0000"}
+        r = c.post("/intake/api/add", json={"items": [item], "dry_run": False}, **post)
+        assert r.status_code == 200, r.text
+        assert len(r.json()["spool_ids"]) == 2
+        fils = c.get("/intake/api/filaments", params={"q": "elegoo"}).json()["filaments"]
+        assert [(f["vendor"], f["name"], f["tare"], f["spools"]) for f in fils] == [("Elegoo", "PLA Red", 160, 2)]
+        assert [v["name"] for v in c.get("/intake/api/vendors").json()["vendors"]] == ["Elegoo"]
+        cfg["modules"]["ai_intake"] = True
+        config.save(cfg)
+        assert "data-ai='1'" in c.get("/intake").text

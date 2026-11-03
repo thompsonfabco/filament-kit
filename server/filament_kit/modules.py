@@ -38,7 +38,7 @@ MODULES: dict[str, Module] = {m.name: m for m in (
     # Spoolman need is checked by validate(): local module or a remote spoolman_url.
     _m("server", "Server", "App server: pairing, inventory, API, avahi announcement",
        units=("filament-kit.service",), apt=("avahi-daemon", "qrencode")),
-    _m("ai_intake", "AI intake", "Claude label reading and the API key",
+    _m("ai_intake", "AI intake", "Claude reads spool labels from photos (needs an Anthropic API key)",
        depends=("server",)),
     _m("printers", "Printers", "Bambu bridge: discovery, usage, slot mapping, camera",
        depends=("server",), apt=("ffmpeg",)),
@@ -58,8 +58,9 @@ MODULES: dict[str, Module] = {m.name: m for m in (
        depends=("ai_intake",)),
 )}
 
-# Switched on by hand (modules set / config menu), never by a mode: a mode is the kit as it was.
-OPT_IN = frozenset({"web", "remote", "orders"})
+# Switched on by hand (modules set / config menu, the installer's question), never by a mode: a mode is the kit
+# as it was. ai_intake (spec R 2.4): AI is optional, so a new install has it off; one that had it keeps it.
+OPT_IN = frozenset({"ai_intake", "web", "remote", "orders"})
 
 MODES: dict[str, frozenset[str]] = {
     "server": frozenset(MODULES) - {"station"} - OPT_IN,
@@ -67,20 +68,25 @@ MODES: dict[str, frozenset[str]] = {
     "all-in-one": frozenset(MODULES) - OPT_IN,
 }
 
+# A config without `modules` is an install from before modules: the server mode as it was then, AI intake on.
+LEGACY = MODES["server"] | {"ai_intake"}
+# On in addition to a mode's set without making the mode "custom" (the legacy set is still the server mode).
+ADD_ONS = frozenset({"ai_intake"})
+
 _LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 
 def enabled(cfg: dict) -> frozenset[str]:
-    """Names switched on; missing/None `modules` is the server mode."""
+    """Names switched on; missing/None `modules` is the server mode as it was before modules (`LEGACY`)."""
     mods = cfg.get("modules")
     if mods is None:
-        return MODES["server"]
+        return LEGACY
     return frozenset(n for n, v in mods.items() if v and n in MODULES)
 
 
 def mode_of(on: frozenset[str]) -> str:
     for name, members in MODES.items():
-        if on == members:
+        if on == members or (on - ADD_ONS == members and "server" in members):
             return name
     return "custom"
 
@@ -102,7 +108,8 @@ def set_mode(cfg: dict, mode: str, say: Callable[[str], None] | None = print) ->
     if mode not in MODES:
         raise ModuleError(f"unknown mode {mode!r}")
     out = copy.deepcopy(cfg)
-    was = enabled(cfg) if cfg.get("modules") is not None else frozenset()
+    # An empty cfg is a new install (nothing was on); a filled one without `modules` is a legacy install.
+    was = enabled(cfg) if cfg.get("modules") is not None or cfg else frozenset()
     on = set(MODES[mode])
     dropped = []
     for n in MODULES:                       # registry order: web before remote, so remote sees web's outcome

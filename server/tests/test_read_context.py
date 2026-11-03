@@ -53,7 +53,7 @@ def _cfg(tmp_path, url, *, orders_on=True, orders_file=True) -> dict:
     f = tmp_path / "orders.json"
     if orders_file:
         f.write_text(json.dumps({"items": ORDERS}), encoding="utf-8")
-    mods = {n: True for n in modules.MODES["server"]}
+    mods = {n: True for n in modules.MODES["server"] | {"ai_intake"}}  # orders needs ai_intake
     mods["orders"] = orders_on
     return {"modules": mods, "orders": {"file": str(f)}, "station": {"url": url},
             "tag_sources": [{"name": "printer", "url": url + "/last-tag"}]}
