@@ -41,6 +41,7 @@ POLL_SECONDS = 1.0        # at most one kit poll per second per open stream
 PING_SECONDS = 25.0
 MAX_STREAMS = 12          # open status streams (a phone or two per printer)
 MAX_CAMERAS = 4           # open MJPEG relays
+BUSY = "too many open views of the printers; close one (another phone or tab) and this one will retry"
 ACTIONS = ("pause", "resume", "stop", "light_on", "light_off")
 SERIAL = re.compile(r"[A-Za-z0-9]{1,32}")
 ENTRY = re.compile(r"[A-Za-z0-9_-]{1,64}")
@@ -61,6 +62,7 @@ class PrintersApp:
         self._kit = kit
         self.poll, self.ping = POLL_SECONDS, PING_SECONDS
         self.streams = self.cameras = 0
+        self.last_test = 0.0
         self.push_on = push_on
         self.push_store = self.sender = self.watcher = None
         if push_on:
@@ -97,8 +99,8 @@ class PrintersApp:
                       ("/push/unsubscribe", g(self.push_unsubscribe), ["POST"]),
                       ("/push/test", g(self.push_test), ["POST"])]
         routes = [Route("/intake/api/printers" + p, fn, methods=m) for p, fn, m in table]
-        if self.push_on:   # the service worker: served from the app's path so its scope is the app
-            routes.append(Route("/intake/sw.js", self.service_worker, methods=["GET"]))
+        if self.push_on:   # the service worker: served from the app's path so its scope is the app (LAN + session)
+            routes.append(Route("/intake/sw.js", g(self.service_worker), methods=["GET"]))
         return routes
 
     def guard(self, fn):
@@ -203,13 +205,14 @@ class PrintersApp:
 
     async def events_route(self, request: Request):
         serial = self._serial(request)
-        if self.streams >= MAX_STREAMS:
-            return JSONResponse({"error": "too many open status streams"}, 429)
+        heads = {"Cache-Control": "no-store", "X-Accel-Buffering": "no"}
+        if self.streams >= MAX_STREAMS:    # a readable message, and a long retry so the phone does not hammer
+            msg = "retry: 30000\ndata: " + _dump({"error": BUSY}) + "\n\n"
+            return Response(msg, media_type="text/event-stream", headers=heads)
 
         async def alive():
             return not await request.is_disconnected()
-        return StreamingResponse(self.events(serial, alive), media_type="text/event-stream",
-                                 headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
+        return StreamingResponse(self.events(serial, alive), media_type="text/event-stream", headers=heads)
 
     # ---------- camera ----------
     async def mjpeg(self, request: Request):
@@ -218,24 +221,24 @@ class PrintersApp:
             return JSONResponse({"error": "too many open camera views"}, 429)
         self.cameras += 1
         try:
-            status, _ctype, up = await anyio.to_thread.run_sync(self.kit.raw, f"/api/printers/{serial}/camera.mjpeg")
+            _status, _ctype, up = await anyio.to_thread.run_sync(self.kit.raw, f"/api/printers/{serial}/camera.mjpeg")
         except BaseException:
             self.cameras -= 1
             raise
         read = getattr(up, "read1", up.read)
 
+        def release():
+            self.cameras -= 1
+            up.close()      # the kit hub counts the viewer out when this connection ends
+
         async def body():
-            try:
-                while True:
-                    chunk = await anyio.to_thread.run_sync(read, 65536)
-                    if not chunk:
-                        break
-                    yield chunk
-            finally:
-                self.cameras -= 1
-                up.close()      # the kit hub counts the viewer out when this connection ends
-        return StreamingResponse(body(), media_type="multipart/x-mixed-replace; boundary=frame",
-                                 headers={"Cache-Control": "no-cache"})
+            while True:
+                chunk = await anyio.to_thread.run_sync(read, 65536)
+                if not chunk:
+                    break
+                yield chunk
+        return _Relay(body(), release, media_type="multipart/x-mixed-replace; boundary=frame",
+                      headers={"Cache-Control": "no-cache"})
 
     async def hls(self, request: Request):
         serial, name = self._serial(request), request.path_params["name"]
@@ -253,7 +256,12 @@ class PrintersApp:
         return Response(data, media_type=HLS_TYPES[m.group(1)], headers={"Cache-Control": "no-cache"})
 
     # ---------- Web Push (only with web.push) ----------
+    def _sendable(self) -> None:
+        if not self.push.available():
+            raise Problem(self.push.NOT_INSTALLED)
+
     async def push_key(self, request: Request):
+        self._sendable()
         return {"key": (await anyio.to_thread.run_sync(self.push.vapid))[1]}
 
     async def push_subscribe(self, request: Request):
@@ -272,6 +280,11 @@ class PrintersApp:
         return {"ok": True}
 
     async def push_test(self, request: Request):
+        self._sendable()
+        now = time.monotonic()
+        if now - self.last_test < self.push.TEST_EVERY:
+            raise Problem(f"wait {self.push.TEST_EVERY:.0f} s between test alerts")
+        self.last_test = now
         threading.Thread(target=self.push.send_all, daemon=True,
                          args=(self.push_store, "Printers test", "Notifications are working.", "test"),
                          kwargs={"sender": self.sender, "url": self.intake.base + "/"}).start()
@@ -280,6 +293,32 @@ class PrintersApp:
     async def service_worker(self, request: Request):
         return Response((STATIC / "sw.js").read_bytes(), media_type="text/javascript",
                         headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"})
+
+
+class _Relay(StreamingResponse):
+    """A streaming response whose cleanup runs exactly once however it ends: served, client gone, error, or never
+    started (a response that is dropped without being sent is cleaned up when it is collected)."""
+
+    def __init__(self, content, on_close, **kw):
+        super().__init__(content, **kw)
+        self._on_close = on_close
+
+    def _close(self) -> None:
+        cb, self._on_close = self._on_close, None
+        if cb is not None:
+            cb()
+
+    async def __call__(self, scope, receive, send):
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            self._close()
+
+    def __del__(self):
+        try:
+            self._close()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def _dump(obj) -> str:

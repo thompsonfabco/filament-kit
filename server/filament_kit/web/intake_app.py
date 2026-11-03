@@ -160,7 +160,16 @@ class IntakeApp:
             f"<link rel=manifest href='{b}/manifest.webmanifest'>"
             + body + (("" if not self.printers else f"<script src='{b}/printers.js'></script>")
                       + f"<script src='{b}/app.js'></script>" if signed_in else ""),
-            status_code=status, headers=HEADERS)
+            status_code=status, headers=self.headers())
+
+    def headers(self) -> dict:
+        """The page headers. With the Printers tab the CSP also allows `media-src 'self'` (the HLS camera in a
+        <video>); without it the CSP is exactly the intake app's."""
+        h = dict(HEADERS)
+        if self.printers:
+            h["Content-Security-Policy"] = h["Content-Security-Policy"].replace(
+                "connect-src 'self';", "connect-src 'self'; media-src 'self';")
+        return h
 
     def _shell(self) -> str:
         cfg = self.tools.cfg()
@@ -168,9 +177,9 @@ class IntakeApp:
         data = {"base": self.base, "locations": json.dumps(cfg["locations"]),
                 "sealed": pl.get("sealed_location") or "", "auto": mcp_tools._placement_text(cfg),
                 "picks": json.dumps([pl.get("pla_location") or ""]),
-                "ai": "1" if "ai_intake" in modules.enabled(cfg) else "0",
+                "ai": "1" if "ai_intake" in modules.enabled(cfg) else "0",  # label photos only with ai_intake
                 "printers": "1" if self.printers else "0",
-                "push": "1" if self.printers and self.printers.push_on else "0"}  # label photos only with ai_intake
+                "push": "1" if self.printers and self.printers.push_on else "0"}
         attrs = " ".join(f"data-{k}='{html.escape(v, quote=True)}'" for k, v in data.items())
         return f"<body {attrs}><main id=app></main></body>"
 
