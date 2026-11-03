@@ -20,3 +20,15 @@ def test_printer_preset_name(model, name):
 ])
 def test_chamber_max(model, cmax):
     assert models.chamber_max(model) == cmax
+
+
+@pytest.mark.parametrize("model,kind", [
+    ("O1D", "hls"), ("C12", "mjpeg"), ("N9", "mjpeg"), ("X1C", "hls"), ("zz", None), (None, None),
+])
+def test_camera_kind(model, kind):
+    assert models.camera_kind(model) == kind
+
+
+def test_model_record():
+    assert models.model("O1D").name == "H2D" and models.model("O1D").known
+    assert models.model("zz").known is False
