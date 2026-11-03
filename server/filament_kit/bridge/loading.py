@@ -3,7 +3,7 @@
 `load(manager, sm, serial, label, spool_id, dry)`:
   1. the printer must be in the registry, the spool in Spoolman (not archived), the printer connected and idle
      (`slottest.check_idle`: the same rule as the slot test), the slot known (the calibrated slot map's address,
-     else the report's AMS units: A1-D4, HT-A..., Ext);
+     else the report's units (`ams.units`: A1 ... Z4, AA1 ..., HT-A ..., Ext or Ext-L / Ext-R));
   2. nozzle size: the report's top-level `nozzle_diameter`, else `device.nozzle.info[].diameter` of the slot's
      extruder (bits 8-11 of the unit's `info`; id 0 when the report does not say), else 0.4 with
      `nozzle_assumed: true` in the result (never refused for a missing size); preset =
@@ -51,7 +51,7 @@ import threading
 
 from .. import inventory, profiles
 from ..spoolman import SpoolmanError
-from . import ams, mapping, registry, slottest, snapshot, status
+from . import ams, layout, mapping, registry, slottest, snapshot, status
 from .connection import PrinterOffline, UnknownPrinter
 
 log = logging.getLogger(__name__)
@@ -110,7 +110,7 @@ def _address(serial: str, report: dict, label: str) -> tuple[int, int] | None:
     a = m.slots.get(label) if m.calibrated else None
     if isinstance(a, dict) and status._int(a.get("ams_id")) is not None and status._int(a.get("tray_id")) is not None:
         return int(a["ams_id"]), int(a["tray_id"])
-    for u in ams.units(report or {}):
+    for u in ams.units(report or {}, ams.printer_model(serial)):
         for s in u.slots:
             if s.label == label:
                 return u.ams_id, s.tray_id
@@ -165,16 +165,7 @@ def _colour(filament: dict) -> str:
 
 
 def _tray_at(report: dict, ams_id: int, tray_id: int) -> dict:
-    p = status._d(report)
-    vt = status._d(p.get("vt_tray"))
-    if vt and status._int(vt.get("id")) == ams_id:
-        return vt
-    for u in status._l(status._d(p.get("ams")).get("ams")):
-        if status._int(u.get("id")) == ams_id:
-            for t in status._l(u.get("tray")):
-                if status._int(t.get("id")) == tray_id:
-                    return t
-    return {}
+    return layout.raw_trays(report).get((ams_id, tray_id), {})
 
 
 def _shows(report: dict, ams_id: int, tray_id: int, setting: dict) -> bool:

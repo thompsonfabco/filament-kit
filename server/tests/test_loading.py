@@ -209,7 +209,7 @@ def test_per_extruder_nozzle_follows_the_slots_unit(rig, sm, fil):
     presets = FakePresets()
     a = loading.load(m, sm, SERIAL, "A2", s["id"], True, preset_for=presets)
     ht = loading.load(m, sm, SERIAL, "HT-A", s["id"], True, preset_for=presets)
-    ext = loading.load(m, sm, SERIAL, "Ext", s["id"], True, preset_for=presets)   # unit unknown: nozzle id 0
+    ext = loading.load(m, sm, SERIAL, "Ext-L", s["id"], True, preset_for=presets)   # unit unknown: nozzle id 0
     assert [c[2] for c in presets.calls] == [0.6, 0.4, 0.4]
     assert not (a["nozzle_assumed"] or ht["nozzle_assumed"] or ext["nozzle_assumed"])
 
@@ -314,10 +314,11 @@ def test_external_and_ht_slots(rig, sm, fil):
     m, printer, client = rig
     s1 = spool(sm, fil, "Rack 1")
     s2 = spool(sm, fil, "Rack 1")
-    assert loading.load(m, sm, SERIAL, "Ext", s1["id"], False, preset_for=FakePresets())["confirmed"]
+    assert loading.load(m, sm, SERIAL, "Ext-L", s1["id"], False, preset_for=FakePresets())["confirmed"]
     assert loading.load(m, sm, SERIAL, "HT-A", s2["id"], False, preset_for=FakePresets())["confirmed"]
-    assert [(w["ams_id"], w["tray_id"]) for w in settings(client)] == [(254, 0), (128, 0)]
-    assert sm.get(f"spool/{s1['id']}")["location"] == "Office H2D – AMS Ext"
+    # an external holder: tray_id = ams_id, slot_id 0 (P2, the H2D rule); an AMS HT slot as before
+    assert [(w["ams_id"], w["tray_id"], w.get("slot_id")) for w in settings(client)] == [(254, 254, 0), (128, 0, None)]
+    assert sm.get(f"spool/{s1['id']}")["location"] == "Office H2D – AMS Ext-L"
     assert sm.get(f"spool/{s2['id']}")["location"] == "Office H2D – AMS HT-A"
 
 

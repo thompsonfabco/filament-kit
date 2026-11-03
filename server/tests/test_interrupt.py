@@ -241,7 +241,7 @@ def test_stale_restore_leaves_a_slot_the_owner_changed_since(rig):
     assert snapshot.restore(m, SERIAL) == []
     assert sorted({(w["ams_id"], w["tray_id"]) for w in printer.writes}) == [(0, 0), (0, 1)]
     assert printer.tray(0, 2)["tray_color"] == "123456FF"
-    assert_back_to_original(printer, ["A1", "A2", "A4", "HT-A", "Ext"])
+    assert_back_to_original(printer, ["A1", "A2", "A4", "HT-A", "Ext-L"])
     assert not snapshot.pending(SERIAL)
 
 
