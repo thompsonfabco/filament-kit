@@ -1083,20 +1083,24 @@ def _ask_station_server() -> str | None:
         return addr
 
 
-def _apply_selection(cfg: dict, on, *, ask_address=None) -> str | None:
-    """Set the module set of `cfg` (in place) to `on` with the station link rules. Returns an error text or None."""
-    old = modules.enabled(cfg)
-    new = _with_modules(cfg, on)
+def _station_link(new: dict, on) -> None:
     if not {"server", "station"} <= set(on):
         modules.drop_local_station_link(new)
-    if "station" in on and "station" not in old:
-        if "server" in on:
-            _link_station(new)
-        elif _server_addr_missing(new) and ask_address is not None:
-            addr = ask_address()
-            if addr is None:
-                return "station needs the server's address; unchanged"
-            new.setdefault("station", {})["allow"] = [addr]
+
+
+def _apply_selection(cfg: dict, on, *, ask=None) -> str | None:
+    """Set the module set of `cfg` (in place) to `on` with the station link rules; asks for settings the modules
+    need. Returns an error text or None."""
+    old = modules.enabled(cfg)
+    new = _with_modules(cfg, on)
+    _station_link(new, on)
+    if "station" in on and "station" not in old and "server" in on:
+        _link_station(new)
+    got = modules.collect_settings(on, new, ask or _ask)
+    if got is None:
+        return "a setting was left blank; unchanged"
+    for key, value in got.items():
+        modules.set_setting(new, key, value)
     try:
         modules.validate(new)
     except modules.ModuleError as e:
@@ -1115,14 +1119,14 @@ def _modules_menu(cfg: dict) -> None:
     if chosen is None or chosen == on:
         print("Unchanged.")
         return
-    err = _apply_selection(cfg, chosen, ask_address=_ask_station_server)
+    err = _apply_selection(cfg, chosen)
     if err:
         print(f"error: {err}")
 
 
 def cmd_modules_menu(raw: bool) -> int:
-    """The checklist on its own. --raw: prompts on stderr, the chosen modules on stdout as a comma list
-    (install.sh custom mode)."""
+    """The checklist on its own. --raw: prompts on stderr; stdout gets the chosen modules as a comma list, then
+    one `set <key>=<value>` line per setting asked for (install.sh custom mode). Changes nothing."""
     cfg = config.load()
     on = modules.enabled(cfg)
     if not raw:
@@ -1136,19 +1140,29 @@ def cmd_modules_menu(raw: bool) -> int:
             if chosen is None:
                 return 1
             trial = _with_modules(cfg, chosen)
-            if "station" in chosen and "server" not in chosen and _server_addr_missing(trial):
-                # install.sh asks for the address afterwards; a placeholder keeps validate from objecting to it
-                trial.setdefault("station", {})["allow"] = ["server.invalid"]
+            _station_link(trial, chosen)
+            if {"server", "station"} <= set(chosen):
+                _link_station(trial)
+            got = modules.collect_settings(chosen, trial, _ask)
+            if got is None:
+                print("A setting was left blank; change the selection (q cancels).")
+                on = chosen
+                continue
+            for key, value in got.items():
+                modules.set_setting(trial, key, value)
             try:
                 modules.validate(trial)
             except modules.ModuleError as e:
-                print(f"error: {e}\nfix: change the selection and press Enter again (q cancels)")
+                print(f"error: {e}")
+                print("fix: change the selection and press Enter again (q cancels)")
                 on = chosen
                 continue
             break
     finally:
         sys.stdout = out
     print(",".join(n for n in modules.MODULES if n in chosen))
+    for key, value in got.items():
+        print(f"set {key}={value}")
     return 0
 
 

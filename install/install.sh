@@ -22,6 +22,7 @@ bad_addr() { case "$1" in "" | */* | *"*"* | *" "*) return 0 ;; esac; return 1; 
 
 MODE=""
 CUSTOM=""
+SETS=""
 SERVER_ADDR=""
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -163,8 +164,13 @@ if [ -z "$MODE" ] && [ "$FIRST_INSTALL" -eq 1 ] && [ -t 0 ]; then
     esac
     if [ "$MODE" = custom ]; then
         # the same checklist as `filament-kit config` -> Modules; prompts on the terminal, the choice on stdout
-        CUSTOM=",$("$VENV/bin/filament-kit" modules menu --raw)" \
-            || die "no modules chosen; run ./install.sh again"
+        # First line: the modules, comma separated. Then one `set <key>=<value>` per setting the menu asked for.
+        MENU_OUT=$("$VENV/bin/filament-kit" modules menu --raw) || die "no modules chosen; run ./install.sh again"
+        CUSTOM=",$(printf '%s\n' "$MENU_OUT" | head -n 1)"
+        SETS=$(printf '%s\n' "$MENU_OUT" | tail -n +2)
+        # the server's address for a station without a server is the one setting the installer itself uses below
+        MENU_ADDR=$(printf '%s\n' "$SETS" | sed -n 's/^set station\.allow=//p' | head -n 1)
+        [ -z "$SERVER_ADDR" ] && SERVER_ADDR="$MENU_ADDR"
     fi
 fi
 # A custom list is closed first (what the chosen modules need goes on too), so the checks below see
@@ -218,7 +224,7 @@ fi
 if [ -n "$MODE" ]; then
     # Only the modules and the station link change; on a first install there is no
     # server_name yet, so `modules apply` asks the first-run questions.
-    FK_MODE="$MODE" FK_MODULES="$CUSTOM" FK_SERVER="$SERVER_ADDR" FK_NO_SYSTEMD=1 "$VENV/bin/python" -I -c '
+    FK_MODE="$MODE" FK_MODULES="$CUSTOM" FK_SETS="$SETS" FK_SERVER="$SERVER_ADDR" FK_NO_SYSTEMD=1 "$VENV/bin/python" -I -c '
 import json, os, sys
 from filament_kit import config, modules
 f = config.paths().etc / "config.json"
@@ -238,6 +244,12 @@ if mode == "custom":
         st = cfg.setdefault("station", {})
         st["allow"] = ["127.0.0.1"]
         st["url"] = "http://127.0.0.1:5003"
+    for line in os.environ.get("FK_SETS", "").splitlines():
+        if line.startswith("set ") and "=" in line:
+            key, value = line[4:].split("=", 1)
+            modules.set_setting(cfg, key, value)
+    if "web" in on:
+        cfg.setdefault("web", {}).setdefault("lan", list(config.DEFAULTS["web"]["lan"]))
 else:
     cfg = modules.set_mode(cfg, mode)
 if os.environ["FK_SERVER"]:

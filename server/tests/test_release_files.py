@@ -239,14 +239,14 @@ def _save_snippet() -> str:
     return text[start:text.index("\n'\n", start)]
 
 
-def _run_save(tmp_path, mode, modules_csv="", server=""):
+def _run_save(tmp_path, mode, modules_csv="", server="", sets=""):
     import json
     import os
     import subprocess
     import sys
     etc = tmp_path / "etc"
     etc.mkdir(exist_ok=True)
-    env = dict(os.environ, FK_ETC=str(etc), FK_MODE=mode, FK_MODULES=modules_csv, FK_SERVER=server,
+    env = dict(os.environ, FK_ETC=str(etc), FK_MODE=mode, FK_MODULES=modules_csv, FK_SERVER=server, FK_SETS=sets,
                FK_NO_SYSTEMD="1", PYTHONPATH=str(ROOT / "server"))
     r = subprocess.run([sys.executable, "-c", _save_snippet()], env=env, capture_output=True, text=True,
                        timeout=60)
@@ -358,16 +358,29 @@ def test_install_mode_custom_is_rejected():
 
 @pytest.mark.skipif(not _bash(), reason="needs bash")
 @pytest.mark.parametrize("body, rc, expect", [
-    ('echo "spoolman,server,backup"', 0, "CUSTOM=,spoolman,server,backup"),
+    ('echo "spoolman,server,backup"', 0, "CUSTOM=,spoolman,server,backup SETS= ADDR="),
+    ('printf "web,server\\nset web.public_url=https://a.example.com/f\\nset orders.file=/o=1.json\\n"', 0,
+     "CUSTOM=,web,server SETS=set web.public_url=https://a.example.com/f|set orders.file=/o=1.json ADDR="),
+    ('printf "station\\nset station.allow=srv.localdomain\\n"', 0,
+     "CUSTOM=,station SETS=set station.allow=srv.localdomain ADDR=srv.localdomain"),
     ("exit 1", 1, "no modules chosen"),
 ])
 def test_install_menu_wrapper_cancel_and_choice(tmp_path, body, rc, expect):
     venv, env = _stub_venv(tmp_path, body)
     text = _read("install/install.sh")
-    a = text.index('        CUSTOM=",$("$VENV/bin/filament-kit" modules menu --raw)"')
-    b = text.index("\n", text.index("|| die", a))
+    a = text.index('        MENU_OUT=$("$VENV/bin/filament-kit" modules menu --raw)')
+    b = text.index("\n", text.index('[ -z "$SERVER_ADDR" ] && SERVER_ADDR=', a))
     wrapper = text[a:b].strip()
-    script = 'die() { echo "error: $*" >&2; exit 1; }\n' + wrapper + '\necho "CUSTOM=$CUSTOM"\n'
+    script = ('die() { echo "error: $*" >&2; exit 1; }\nSERVER_ADDR=""\n' + wrapper +
+              '\necho "CUSTOM=$CUSTOM SETS=$(printf \'%s\' "$SETS" | tr \'\\n\' \'|\') ADDR=$SERVER_ADDR"\n')
     r = _run_part(script, venv, env, tmp_path)
     assert r.returncode == rc
     assert expect in (r.stdout if rc == 0 else r.stderr)
+
+
+def test_install_save_applies_menu_settings(tmp_path):
+    sets = "set web.public_url=https://mcp.example.com/filament" + chr(10) + "set orders.file=/srv/o.json"
+    cfg = _run_save(tmp_path, "custom", ",spoolman,server,ai_intake,web,orders", sets=sets)
+    assert cfg["web"]["public_url"] == "https://mcp.example.com/filament"
+    assert cfg["web"]["lan"] and cfg["orders"]["file"] == "/srv/o.json"
+    assert cfg["modules"]["web"] and cfg["modules"]["orders"]

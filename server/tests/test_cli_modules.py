@@ -140,10 +140,10 @@ def test_config_menu_choose_mode(applied, monkeypatch):
 
 
 def test_modules_menu_raw_prints_choice_only_on_stdout(monkeypatch, capsys):
-    _stdin(monkeypatch, "t\n1\n\n")           # station preset, then spoolman on, Enter
+    _stdin(monkeypatch, "t\n1\n\n192.168.1.5\n")   # station preset, spoolman on, Enter, the server's address
     assert cli.main(["modules", "menu", "--raw"]) == 0
     cap = capsys.readouterr()
-    assert cap.out.strip() == "spoolman,station"
+    assert cap.out.splitlines() == ["spoolman,station", "set station.allow=192.168.1.5"]
     assert "[x]" in cap.err and "OPTIONAL AI" in cap.err
     assert "modules" not in config.load()          # --raw changes nothing
 
@@ -284,3 +284,38 @@ def test_modules_menu_raw_revalidates_and_reshows(monkeypatch, capsys):
     cap = capsys.readouterr()
     assert "spoolman_url" in cap.err
     assert "spoolman" in cap.out.split(",")
+
+
+def _n(name):
+    return list(modules.MODULES).index(name) + 1
+
+
+def test_raw_menu_asks_web_and_orders_settings(monkeypatch, capsys):
+    # web: a non-https answer is refused, then accepted; orders: the file path
+    _stdin(monkeypatch, f"{_n('web')} {_n('orders')}\n\nhttp://x\nhttps://mcp.example.com/filament\n/srv/orders.json\n")
+    assert cli.main(["modules", "menu", "--raw"]) == 0
+    cap = capsys.readouterr()
+    lines = cap.out.splitlines()
+    assert "web" in lines[0].split(",") and "orders" in lines[0].split(",")
+    assert "set web.public_url=https://mcp.example.com/filament" in lines
+    assert "set orders.file=/srv/orders.json" in lines
+    assert "https address" in cap.err
+    assert "modules" not in config.load()
+
+
+def test_raw_menu_blank_setting_returns_to_checklist(monkeypatch, capsys):
+    # web on, blank url -> back to the checklist; web off again, Enter -> no settings lines
+    _stdin(monkeypatch, f"{_n('web')}\n\n\n{_n('web')}\n\n")
+    assert cli.main(["modules", "menu", "--raw"]) == 0
+    cap = capsys.readouterr()
+    assert "left blank" in cap.err
+    assert not any(ln.startswith("set ") for ln in cap.out.splitlines())
+
+
+def test_config_menu_web_and_orders_ask_settings_and_store_them(applied, monkeypatch):
+    _stdin(monkeypatch, f"6\n{_n('web')} {_n('orders')}\n\nhttps://mcp.example.com/filament\n/srv/orders.json\n0\n")
+    assert cli.main(["config"]) == 0
+    cfg = config.load()
+    assert cfg["modules"]["web"] and cfg["modules"]["orders"]
+    assert cfg["web"]["public_url"] == "https://mcp.example.com/filament"
+    assert cfg["orders"]["file"] == "/srv/orders.json"
