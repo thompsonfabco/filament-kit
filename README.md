@@ -1,22 +1,50 @@
-`curl -fsSL https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh | sudo bash`
-
 # filament-kit
 
-filament-kit keeps track of your 3D printer filament. It runs on a computer at home and keeps every spool in
-[Spoolman](https://github.com/Donkie/Spoolman), and it connects those spools to your Bambu Lab printers.
+filament-kit keeps track of your 3D printer filament. It runs on a small computer at home, keeps every spool you
+own in [Spoolman](https://github.com/Donkie/Spoolman), and connects those spools to your Bambu Lab printers: add
+a spool from your phone, load it into a printer slot, and the printer gets the right filament setting while the
+filament it uses comes off that spool. It also builds slicer presets for every filament you own.
 
-The command above installs it on Ubuntu 24.04 or newer. It works once the repository is public and has a
-release; neither is the case yet (see [Known gaps](docs/known-gaps.md)).
+The goal is a kit a normal user can set up without being a developer: one command installs it, a menu picks
+the parts you want and says what each one needs, AI is optional, every Bambu Lab printer is supported (Klipper
+and Prusa printers are planned), the facts about printers live in data files you can correct yourself, and it
+can keep itself up to date. The whole kit is free software (GPL-3.0).
 
-## Get started
+## What you need
 
-1. **[Install the server](docs/install-server.md)** on an Ubuntu computer on your home network. Do this first.
-2. Then, on your phone:
-   - **Android:** [Install the Android app](docs/install-android-app.md) and pair it with the server.
-   - **iPhone** (or any phone browser): [Use the web app on an iPhone](docs/install-iphone-web-app.md).
-3. Optional: the PC sync for Bambu Studio presets ([Pair your PC](docs/user-guide.md#pair-your-pc)), an intake
-   station with a scale and an NFC reader ([Intake station](docs/user-guide.md#intake-station)), and the bench
-   [reader](reader/README.md).
+- A computer running **Ubuntu 24.04 or newer** on your home network that stays on (an old laptop or a mini PC).
+- An **Android phone** (Android 10 or newer), or an **iPhone** for the web app.
+- One or more **Bambu Lab printers** on the same network. The kit works without a printer too, as a spool list.
+- Optional: a Windows PC with Bambu Studio (for the presets), an Anthropic API key (for AI label reading), a USB
+  scale and an NFC reader (for the intake station).
+
+## Install
+
+On the Ubuntu computer, open a Terminal, paste this line and press Enter:
+
+```bash
+curl -fsSL https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh | sudo bash
+```
+
+It downloads the newest release, checks its signature, and asks a few questions (pressing Enter at each one is
+fine). At the end it shows a QR code for pairing your phone. Step by step, with every question and what you see:
+**[Install the server](docs/install-server.md)**.
+
+The command works once the repository is public and has a release; neither is the case yet (see
+[Known gaps](docs/known-gaps.md)). Until then the server how-to has the private route.
+
+Then, on your phone:
+
+- **Android:** [Install the Android app](docs/install-android-app.md) and pair it with the server.
+- **iPhone** (or any phone browser): [Use the web app on an iPhone](docs/install-iphone-web-app.md).
+
+Optional afterwards: the PC sync for Bambu Studio presets ([Pair your PC](#pair-your-pc)), an intake station with
+a scale and an NFC reader ([Intake station](docs/user-guide.md#intake-station)), and the bench
+[reader](#the-reader).
+
+Your spool list is also in any web browser at home, at `http://<computer name>.local:7912` (the installer prints
+the address). If something doesn't work, `sudo filament-kit status` on the server checks everything and says
+what to do about a failing line.
 
 Everything else (every command, printers and slot mapping, presets, the station, the Claude connector, remote
 access) is in the **[user guide](docs/user-guide.md)**.
@@ -48,7 +76,7 @@ the library and auto-update are off until you turn them on. Change them any time
 | `printers` | Bambu bridge: discovery, usage, slot mapping, camera | `server` |
 | `presets` | Bambu Studio preset builds and PC sync | `server`, a Windows PC with Bambu Studio |
 | `library` | Filament spec library: downloaded on request, then a daily update | nothing |
-| `backup` | Nightly backup of Spoolman db, settings and state | nothing |
+| `backup` | Nightly backup of the Spoolman database, settings and state | nothing |
 | `station` | USB scale and PN532 reader, read-only HTTP | a DYMO USB scale and a PN532 NFC reader |
 | `web` | Phone web app and the Claude connector (MCP), on top of the server | `server`, an https address (`web.public_url`) |
 | `remote` | nginx in front of the web part, and a public https name (certbot) | `web`; for a public name: DNS, ports 443 and 80 |
@@ -79,8 +107,8 @@ wiring, building and its API are in [reader/README.md](reader/README.md).
 
 Every Bambu Lab printer the hardware data file describes: H2D, H2D Pro, H2S, H2C, X2D, P2S, X1 Carbon, X1, X1E,
 P1P, P1S, A1 mini, A1 and A2L, with any number of AMS, AMS 2 Pro, AMS HT and AMS Lite units and the external
-spool holders. Slots are labelled A1 ... P4, AA1 ..., HT-A ..., Ext (or Ext-L / Ext-R). Klipper and Prusa printers
-are planned.
+spool holders. Slots are labelled by unit and position: A1 ... Z4, then AA1 ..., HT-A ... for AMS HT units, and
+Ext (or Ext-L / Ext-R) for the external holders. Klipper and Prusa printers are planned.
 
 The facts about each model and unit live in a data file (`bambu_hardware.xml`), not in the program, and updates
 bring new versions of it. To correct or add something yourself, see
@@ -95,7 +123,8 @@ it runs a firewall). Add one by hand with `sudo filament-kit config` > **Printer
 - `sudo filament-kit update --check`: says whether a newer release is out.
 - `sudo filament-kit update`: downloads it, checks its signature and hash as the installer does, and installs it.
   Your spools, settings and paired phones stay, and the version it replaced is kept. It does nothing while a
-  printer is mapping slots or loading a spool. Paired Android phones then offer the new app.
+  printer is mapping slots or loading a spool. When the release carries a newer Android app, paired phones
+  offer it on their home screen.
 - `sudo filament-kit update --rollback`: goes back to that version.
 - `sudo filament-kit modules enable updates`: checks every day and installs on its own. Details:
   [Update](docs/user-guide.md#update).
@@ -119,7 +148,8 @@ with `sudo filament-kit library update`, or turn on the `library` module to also
 ## Uninstall
 
 `sudo ./uninstall.sh` from an unpacked release removes the programs and keeps your spools, settings and backups;
-`--purge` deletes those too. Step by step: [Install the server, Uninstall](docs/install-server.md#uninstall).
+`--purge` deletes those too (it asks you to type `purge`). Where to find the unpacked release after a
+one-command install, and what stays behind: [Install the server, Uninstall](docs/install-server.md#uninstall).
 
 ## More
 

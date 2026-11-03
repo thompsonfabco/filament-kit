@@ -52,7 +52,7 @@ Pairing lets the app trust your server and lets the server know your phone. You 
    ```
 
    It shows a QR code, the server's certificate fingerprint and a 6-digit pairing code. They are good for about
-   10 minutes.
+   10 minutes. (The installer showed the same at the end of the install; if that code is still fresh, use it.)
 
 2. **On the phone**, the app opens on **Pair with your server**. It asks for each permission only when it first
    needs it, not at the start:
