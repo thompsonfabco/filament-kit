@@ -153,7 +153,7 @@ def test_remote_off_executor_removes_only_marked_route(tmp_path):
     d = root / "etc/nginx/mcp.d"
     d.mkdir(parents=True)
     ours = d / "filament.conf"
-    ours.write_text('# MCP server "filament" (written by mcp-route)\n')
+    ours.write_text(f'# MCP server "filament" ({remote.MARK})\n')
     other = d / "amazon.conf"
     other.write_text("# hand-written\n")
     run = Rec()
@@ -404,3 +404,98 @@ def test_remote_install_restores_the_previous_router_conf_when_nginx_test_fails(
         apply.execute([Action("remote_install", "fk.example.org")], run=run, resources=INSTALL, root=root)
     assert conf.read_text() == "OLD ROUTER\n" and proxy.read_text() == "OLD PROXY\n"
     assert f"put back the previous {remote.ROUTER_CONF}, {remote.PROXY_CONF}" in capsys.readouterr().out
+
+
+# ---- v0.3.0: the kit's own route marker (the ops router writes "written by mcp-route" too) ----
+
+OPS_FIRST_LINE = ('# MCP server "@NAME@" -> 127.0.0.1:@PORT@   (written by mcp-route; public base '
+                  'https://@HOST@/@NAME@)')
+
+
+def _ops_route(name="filament", port=8790, host="mcp.example.com"):
+    return OPS_FIRST_LINE.replace("@NAME@", name).replace("@PORT@", str(port)).replace("@HOST@", host) + "\n"
+
+
+def test_kit_template_has_its_own_marker():
+    first = (INSTALL / "remote" / "route.template").read_text(encoding="utf-8").splitlines()[0]
+    assert remote.MARK in first and remote.OLD_MARK not in first
+    assert remote.MARK != remote.OLD_MARK and remote.OLD_MARK not in remote.MARK
+    assert remote.MARK in (INSTALL / "remote" / "mcp-route").read_text(encoding="utf-8")
+
+
+def test_is_kit_route():
+    assert remote.is_kit_route(f"# x ({remote.MARK}; public base y)\n", "filament", [])
+    assert not remote.is_kit_route(_ops_route(), "filament", [])                 # the ops router's file
+    assert remote.is_kit_route(_ops_route(), "filament", ["filament"])           # an older kit wrote it
+    assert not remote.is_kit_route(_ops_route(), "filament", ["other"])
+    assert not remote.is_kit_route("# hand-written\n", "filament", ["filament"])
+
+
+def test_remote_off_never_removes_the_ops_route(tmp_path, capsys):
+    """The live cut-over: `remote` off deleted the ops `filament` route, whose header the kit's matched."""
+    root = tmp_path / "root"
+    f = root / "etc/nginx/mcp.d/filament.conf"
+    f.parent.mkdir(parents=True)
+    f.write_text(_ops_route())
+    apply.execute([Action("remote_off", "filament")], run=Rec(), resources=INSTALL, root=root)
+    assert f.read_text() == _ops_route()
+    assert "not written by the kit" in capsys.readouterr().out
+
+
+def test_remote_off_removes_an_older_kit_route_listed_in_kit_routes(tmp_path):
+    root = tmp_path / "root"
+    f = root / "etc/nginx/mcp.d/filament.conf"
+    f.parent.mkdir(parents=True)
+    f.write_text(_ops_route(port=8101))
+    book = root / "etc/mcp-router/kit-routes"
+    book.parent.mkdir(parents=True)
+    book.write_text("filament\n")
+    apply.execute([Action("remote_off", "filament")], run=Rec(), resources=INSTALL, root=root)
+    assert not f.exists()
+
+
+def _mcp_route(tmp_path):
+    """install/remote/mcp-route with its /etc paths under tmp_path, nginx and systemctl stubbed."""
+    sh = shutil.which("bash")
+    if not sh:
+        pytest.skip("no bash")
+    root = tmp_path / "r"
+    (root / "etc/mcp-router").mkdir(parents=True)
+    (root / "etc/nginx/mcp.d").mkdir(parents=True)
+    (root / "etc/mcp-router/host").write_text("mcp.example.com\n")
+    shutil.copy(INSTALL / "remote" / "route.template", root / "etc/mcp-router/route.template")
+    text = (INSTALL / "remote" / "mcp-route").read_text(encoding="utf-8").replace("/etc/", f"{root.as_posix()}/etc/")
+    script = tmp_path / "mcp-route"
+    script.write_text(text, encoding="utf-8", newline="\n")
+    bin_ = tmp_path / "bin"
+    bin_.mkdir()
+    for name, rc in (("nginx", 0), ("systemctl", 1)):
+        (bin_ / name).write_text(f"#!/bin/sh\nexit {rc}\n", newline="\n")
+        os.chmod(bin_ / name, 0o755)
+    env = dict(os.environ, PATH=f"{bin_.as_posix()}{os.pathsep}{os.environ['PATH']}")
+
+    def run(*args):
+        return subprocess.run([sh, script.as_posix(), *args], capture_output=True, text=True, env=env)
+    return root, run
+
+
+def test_mcp_route_leaves_the_ops_route_alone(tmp_path):
+    root, run = _mcp_route(tmp_path)
+    f = root / "etc/nginx/mcp.d/filament.conf"
+    f.write_text(_ops_route())
+    r = run("rm", "filament")
+    assert r.returncode == 2 and "not ours" in r.stdout and f.read_text() == _ops_route()
+    r = run("add", "filament", "8101")
+    assert r.returncode == 2 and "not ours" in r.stdout and f.read_text() == _ops_route()
+
+
+def test_mcp_route_takes_over_an_older_kit_route_and_writes_its_marker(tmp_path):
+    root, run = _mcp_route(tmp_path)
+    f = root / "etc/nginx/mcp.d/filament.conf"
+    f.write_text(_ops_route(port=8101))
+    (root / "etc/mcp-router/kit-routes").write_text("filament\n")
+    r = run("add", "filament", "8101")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert remote.MARK in f.read_text().splitlines()[0]
+    r = run("rm", "filament")
+    assert r.returncode == 0 and not f.exists()

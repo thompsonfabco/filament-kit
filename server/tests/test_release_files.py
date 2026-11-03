@@ -213,6 +213,7 @@ def test_uninstall_removes_the_kits_remote_files():
     for path in (remote.ROUTER_CONF, remote.DEPLOY_HOOK_FILE, remote.KIT_ROUTES):
         assert path in block, path
     assert f"{remote.ROUTE_DIR}/$n.conf" in block and remote.MARK in block       # only routes mcp-route wrote
+    assert f"-e '{remote.OLD_MARK}'" in block and "for n in $KIT_ROUTES" in block  # old marker: listed routes only
     assert "nginx -t" in block and "systemctl reload nginx" in block
     purge = text[text.index('if [ "$PURGE" -eq 1 ]; then\n    rm -rf'):]
     assert remote.TIMER_DROPIN in purge

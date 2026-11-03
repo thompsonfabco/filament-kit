@@ -525,7 +525,9 @@ def _remote_off(ex: _Exec, name: str) -> None:
     gone = []
     f = _under(ex.root, f"{remote.ROUTE_DIR}/{name}.conf")
     if f.exists():
-        if remote.MARK not in f.read_text(encoding="utf-8", errors="replace"):
+        book = _under(ex.root, remote.KIT_ROUTES)
+        listed = book.read_text(encoding="utf-8").split() if book.exists() else []
+        if not remote.is_kit_route(f.read_text(encoding="utf-8", errors="replace"), name, listed):
             print(f"Remote is off; {f} was not written by the kit, so it was left in place.")
         else:
             f.unlink()

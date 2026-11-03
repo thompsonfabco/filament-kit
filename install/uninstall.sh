@@ -60,7 +60,9 @@ if [ -f /etc/mcp-router/kit-routes ]; then
     KIT_ROUTES=$(tr -s '[:space:]' ' ' < /etc/mcp-router/kit-routes)
     for n in $KIT_ROUTES; do
         case "$n" in *[!a-z0-9-]*|"") continue ;; esac
-        if [ -f "/etc/nginx/mcp.d/$n.conf" ] && grep -q 'written by mcp-route' "/etc/nginx/mcp.d/$n.conf"; then
+        # listed in kit-routes: the kit's marker, or the old one the ops router writes too (older kit versions)
+        if [ -f "/etc/nginx/mcp.d/$n.conf" ] && head -n 1 "/etc/nginx/mcp.d/$n.conf" \
+                | grep -qF -e 'written by filament-kit mcp-route' -e 'written by mcp-route'; then
             rm -f "/etc/nginx/mcp.d/$n.conf" && REMOTE_GONE=1
         fi
     done
