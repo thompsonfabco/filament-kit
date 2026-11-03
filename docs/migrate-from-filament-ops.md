@@ -331,10 +331,13 @@ Every command that touches the printer is the owner's: no one else connects to i
 
 ### 6.1 Capture (owner, read-only)
 
-On the VM, from a kit checkout or the release tarball's `tools/` (the scanner's venv has paho-mqtt):
+Copy the script from a kit checkout on the desktop (the release tarball does not ship it), then run it on the VM
+with the scanner's venv (it has paho-mqtt):
 
 ```
-sudo /opt/h2d-scanner/venv/bin/python -I tools/capture_bambu.py --env /etc/h2d-scanner/env --out ~/h2d-capture.json
+scp tools/capture_bambu.py spoolman-vm:
+ssh spoolman-vm
+sudo /opt/h2d-scanner/venv/bin/python -I capture_bambu.py --env /etc/h2d-scanner/env --out ~/h2d-capture.json
 ```
 
 It reads `PRINTER_IP`, `PRINTER_SERIAL` and `PRINTER_CODE` from the env file (never printing them), sends only
