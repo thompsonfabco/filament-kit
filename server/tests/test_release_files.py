@@ -215,10 +215,12 @@ def test_uninstall_removes_the_kits_remote_files():
 
 def test_install_server_flag_and_usage():
     text = _read("install/install.sh")
-    assert "[--mode server|station|all-in-one] [--server NAME-OR-IP]" in text
+    assert "[--mode server|station|all-in-one | --modules a,b,c [--set KEY=VALUE]...] [--server NAME-OR-IP]" in text
     assert "--server) [ $# -ge 2 ] || usage; SERVER_ADDR=" in text
     assert "--server=*) SERVER_ADDR=" in text
     assert "run again with --server <name-or-IP>" in text
+    assert "--modules) [ $# -ge 2 ] || usage; CUSTOM=" in text
+    assert "modules menu --raw" in text and "close_selection" in text
 
 
 def _bash():
@@ -262,7 +264,7 @@ def _save_snippet() -> str:
     return text[start:text.index("\n'\n", start)]
 
 
-def _run_save(tmp_path, mode, modules_csv="", server="", ai="", existing=None):
+def _run_save(tmp_path, mode, modules_csv="", server="", sets="", ai="", existing=None):
     import json
     import os
     import subprocess
@@ -271,7 +273,7 @@ def _run_save(tmp_path, mode, modules_csv="", server="", ai="", existing=None):
     etc.mkdir(parents=True, exist_ok=True)
     if existing is not None:
         (etc / "config.json").write_text(json.dumps(existing), encoding="utf-8")
-    env = dict(os.environ, FK_ETC=str(etc), FK_MODE=mode, FK_MODULES=modules_csv, FK_SERVER=server, FK_AI=ai,
+    env = dict(os.environ, FK_ETC=str(etc), FK_MODE=mode, FK_MODULES=modules_csv, FK_SERVER=server, FK_AI=ai, FK_SETS=sets,
                FK_NO_SYSTEMD="1", PYTHONPATH=str(ROOT / "server"))
     r = subprocess.run([sys.executable, "-c", _save_snippet()], env=env, capture_output=True, text=True,
                        timeout=60)
@@ -305,6 +307,112 @@ def test_install_apt_waits_for_the_dpkg_lock():
     assert calls and all("DPkg::Lock::Timeout=" in ln for ln in calls)
 
 
+def test_install_save_custom_adds_what_modules_need(tmp_path):
+    cfg = _run_save(tmp_path, "custom", ",spoolman,printers")
+    assert cfg["modules"]["server"] and cfg["modules"]["printers"]
+
+
+def _install_part(start_marker, end_marker):
+    text = _read("install/install.sh")
+    a = text.index(start_marker)
+    return text[a:text.index(end_marker, a)]
+
+
+def _stub_venv(tmp_path, kit_body=None):
+    """A fake $VENV: bin/python runs the test interpreter; bin/filament-kit runs `kit_body` if given."""
+    import os
+    import stat
+    import sys
+    b = tmp_path / "venv" / "bin"
+    b.mkdir(parents=True)
+    py = b / "python"
+    py.write_text(f'#!/bin/sh\nexec "{sys.executable.replace(chr(92), "/")}" "$@"\n', newline="\n")
+    py.chmod(py.stat().st_mode | stat.S_IEXEC)
+    if kit_body is not None:
+        kit = b / "filament-kit"
+        kit.write_text("#!/bin/sh\n" + kit_body + "\n", newline="\n")
+        kit.chmod(kit.stat().st_mode | stat.S_IEXEC)
+    env = dict(os.environ, PYTHONPATH=str(ROOT / "server"))
+    return tmp_path / "venv", env
+
+
+def _run_part(script, venv, env, tmp_path):
+    import subprocess
+    f = tmp_path / "part.sh"
+    f.write_text(script, newline="\n")
+    return subprocess.run([_bash(), str(f)], stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                          timeout=60, env=dict(env, VENV=str(venv).replace(chr(92), "/")))
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_install_modules_closed_before_address_check(tmp_path):
+    # --modules station,printers: printers pulls in the server, so no server address is needed (no terminal here)
+    venv, env = _stub_venv(tmp_path)
+    part = _install_part("# A custom list is closed first", '[ "$NEED_ADDR" -eq 1 ] || SERVER_ADDR=""')
+    script = ('die() { echo "error: $*" >&2; exit 1; }\nbad_addr() { return 1; }\n'
+              'MODE=custom\nCUSTOM=",station,printers"\nSERVER_ADDR=""\n' + part +
+              'echo "NEED=$NEED_ADDR CUSTOM=$CUSTOM"\n')
+    r = _run_part(script, venv, env, tmp_path)
+    assert r.returncode == 0, r.stderr
+    assert "NEED=0 CUSTOM=,server,printers,station" in r.stdout
+    assert "also turned on" in r.stderr
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_install_modules_station_alone_still_needs_address_without_terminal(tmp_path):
+    venv, env = _stub_venv(tmp_path)
+    part = _install_part("# A custom list is closed first", '[ "$NEED_ADDR" -eq 1 ] || SERVER_ADDR=""')
+    script = ('die() { echo "error: $*" >&2; exit 1; }\nbad_addr() { return 1; }\n'
+              'MODE=custom\nCUSTOM=",station"\nSERVER_ADDR=""\n' + part)
+    r = _run_part(script, venv, env, tmp_path)
+    assert r.returncode == 1 and "needs the kit server's address" in r.stderr
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_install_modules_unknown_name_fails(tmp_path):
+    venv, env = _stub_venv(tmp_path)
+    part = _install_part("# A custom list is closed first", "# A station whose server is on another machine")
+    r = _run_part('MODE=custom\nCUSTOM=",bogus"\n' + part, venv, env, tmp_path)
+    assert r.returncode == 1 and "unknown module 'bogus'" in r.stderr
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_install_mode_custom_is_rejected():
+    r = _install_sh("--mode", "custom")
+    assert r.returncode == 1 and "--modules" in r.stderr and "unknown mode 'custom'" in r.stderr
+
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+@pytest.mark.parametrize("body, rc, expect", [
+    ('echo "spoolman,server,backup"', 0, "CUSTOM=,spoolman,server,backup SETS= ADDR="),
+    ('printf "web,server\\nset web.public_url=https://a.example.com/f\\nset orders.file=/o=1.json\\n"', 0,
+     "CUSTOM=,web,server SETS=set web.public_url=https://a.example.com/f|set orders.file=/o=1.json ADDR="),
+    ('printf "station\\nset station.allow=srv.localdomain\\n"', 0,
+     "CUSTOM=,station SETS=set station.allow=srv.localdomain ADDR=srv.localdomain"),
+    ("exit 1", 1, "no modules chosen"),
+])
+def test_install_menu_wrapper_cancel_and_choice(tmp_path, body, rc, expect):
+    venv, env = _stub_venv(tmp_path, body)
+    text = _read("install/install.sh")
+    a = text.index('        MENU_OUT=$("$VENV/bin/filament-kit" modules menu --raw)')
+    b = text.index("\n", text.index('[ -z "$SERVER_ADDR" ] && SERVER_ADDR=', a))
+    wrapper = text[a:b].strip()
+    script = ('die() { echo "error: $*" >&2; exit 1; }\nSERVER_ADDR=""\n' + wrapper +
+              '\necho "CUSTOM=$CUSTOM SETS=$(printf \'%s\' "$SETS" | tr \'\\n\' \'|\') ADDR=$SERVER_ADDR"\n')
+    r = _run_part(script, venv, env, tmp_path)
+    assert r.returncode == rc
+    assert expect in (r.stdout if rc == 0 else r.stderr)
+
+
+def test_install_save_applies_menu_settings(tmp_path):
+    sets = "set web.public_url=https://mcp.example.com/filament" + chr(10) + "set orders.file=/srv/o.json"
+    cfg = _run_save(tmp_path, "custom", ",spoolman,server,ai_intake,web,orders", sets=sets)
+    assert cfg["web"]["public_url"] == "https://mcp.example.com/filament"
+    assert cfg["web"]["lan"] and cfg["orders"]["file"] == "/srv/o.json"
+    assert cfg["modules"]["web"] and cfg["modules"]["orders"]
+
+
 def test_install_save_new_server_has_ai_intake_off_unless_chosen(tmp_path):
     """R1: a new install has AI label reading off; the first-install question (FK_AI) turns it on."""
     assert _run_save(tmp_path / "a", "server")["modules"]["ai_intake"] is False
@@ -315,3 +423,87 @@ def test_install_save_mode_on_a_legacy_install_keeps_ai_intake(tmp_path):
     """An install from before modules (no `modules` key) had AI intake: `--mode` on its upgrade keeps it."""
     cfg = _run_save(tmp_path, "server", existing={"server_name": "fk", "port": 8443})
     assert cfg["modules"]["ai_intake"] is True and cfg["server_name"] == "fk"
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_install_set_refuses_other_keys():
+    r = _install_sh("--modules", "web", "--set", "web.port=1")
+    assert r.returncode == 1
+    assert "web.public_url" in r.stderr and "orders.file" in r.stderr and "station.allow" in r.stderr
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_install_set_needs_modules():
+    r = _install_sh("--mode", "server", "--set", "orders.file=/x")
+    assert r.returncode == 1 and "--set goes with --modules" in r.stderr
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_install_set_is_collected_and_station_address_feeds_server_addr(tmp_path):
+    # the argument block alone: repeated --set, station.allow becomes the server address
+    text = _read("install/install.sh")
+    a = text.index("# --set KEY=VALUE")
+    b = text.index("# Checked before anything is installed")
+    script = ('die() { echo "error: $*" >&2; exit 1; }\nusage() { exit 2; }\nbad_addr() { return 1; }\n'
+              + text[a:b] + 'echo "MODE=$MODE SERVER=$SERVER_ADDR"; printf "%s\n" "$SETS"\n')
+    f = tmp_path / "args.sh"
+    f.write_text(script, newline="\n")
+    import subprocess
+    r = subprocess.run([_bash(), str(f), "--modules", "web,station", "--set", "web.public_url=https://m.example.com/f",
+                        "--set=station.allow=srv.localdomain"], capture_output=True, text=True, timeout=30,
+                       stdin=subprocess.DEVNULL)
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.splitlines() == ["MODE=custom SERVER=srv.localdomain",
+                                     "set web.public_url=https://m.example.com/f",
+                                     "set station.allow=srv.localdomain"]
+
+
+def test_install_save_rejects_bad_set_value(tmp_path):
+    import os
+    import subprocess
+    import sys
+    etc = tmp_path / "etc"
+    etc.mkdir()
+    env = dict(os.environ, FK_ETC=str(etc), FK_MODE="custom", FK_MODULES=",spoolman,server,ai_intake,web",
+               FK_SERVER="", FK_AI="", FK_SETS="set web.public_url=http://nope", FK_NO_SYSTEMD="1",
+               PYTHONPATH=str(ROOT / "server"))
+    r = subprocess.run([sys.executable, "-c", _save_snippet()], env=env, capture_output=True, text=True, timeout=60)
+    assert r.returncode != 0 and "web.public_url" in r.stderr
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_install_unknown_module_name_is_caught_before_packages(tmp_path):
+    import subprocess
+    import zipfile
+    whl = tmp_path / "filament_kit-0.whl"
+    with zipfile.ZipFile(whl, "w") as z:
+        z.writestr("filament_kit/modules.py", (ROOT / "server" / "filament_kit" / "modules.py").read_text("utf-8"))
+    part = _install_part("# --modules names are checked now", "FIRST_INSTALL=1")
+    f = tmp_path / "early.sh"
+    f.write_text(f'MODE=custom\nWHEEL="{str(whl).replace(chr(92), "/")}"\nCUSTOM="$1"\n' + part + 'echo passed\n',
+                 newline="\n")
+    import os
+    import sys
+    venv, env = _stub_venv(tmp_path)                 # its bin/python runs the test interpreter
+    shim = tmp_path / "shim"
+    shim.mkdir()
+    exe = sys.executable.replace(chr(92), "/")
+    (shim / "python3").write_text(f'#!/bin/sh\nexec "{exe}" "$@"\n', newline="\n")
+    env = dict(os.environ, PATH=str(shim).replace(chr(92), "/") + os.pathsep + os.environ["PATH"])
+    ok = subprocess.run([_bash(), str(f), ",spoolman,server"], capture_output=True, text=True, timeout=30, env=env)
+    bad = subprocess.run([_bash(), str(f), ",server,bogus"], capture_output=True, text=True, timeout=30, env=env)
+    assert ok.returncode == 0 and "passed" in ok.stdout, ok.stderr
+    assert bad.returncode != 0 and "unknown module bogus" in bad.stderr and "passed" not in bad.stdout
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_install_set_station_allow_refused_when_server_in_list(tmp_path):
+    import subprocess
+    part = _install_part("# With the server on this machine", "# A station whose server")
+    f = tmp_path / "m.sh"
+    f.write_text('die() { echo "error: $*" >&2; exit 1; }\nMODE=custom\nCUSTOM="$1"\nSETS="set station.allow=x"\n'
+                 + part + 'echo passed\n', newline="\n")
+    bad = subprocess.run([_bash(), str(f), ",station,server"], capture_output=True, text=True, timeout=30)
+    ok = subprocess.run([_bash(), str(f), ",station"], capture_output=True, text=True, timeout=30)
+    assert bad.returncode == 1 and "drop --set station.allow" in bad.stderr
+    assert ok.returncode == 0

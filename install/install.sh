@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # filament-kit installer for Ubuntu 24.04 or newer.
-# Run as root: sudo ./install.sh [--mode MODE] [--server NAME-OR-IP]
+# Run as root: sudo ./install.sh [--mode MODE | --modules a,b,c [--set KEY=VALUE]...] [--server NAME-OR-IP]
 # MODE: server (default), station, all-in-one. A first install at a terminal asks for the mode
 # (and offers custom). --server gives a station the kit server's address without a terminal;
 # station mode needs it (or a terminal to ask at). Safe to run again: an existing install is upgraded and keeps its data,
@@ -16,16 +16,32 @@ VENV="$OPT/venv"
 
 say() { printf '\n==> %s\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
-usage() { echo "usage: sudo ./install.sh [--mode server|station|all-in-one] [--server NAME-OR-IP]" >&2; exit 2; }
+usage() { echo "usage: sudo ./install.sh [--mode server|station|all-in-one | --modules a,b,c [--set KEY=VALUE]...] [--server NAME-OR-IP]" >&2; exit 2; }
 # one host name or address: station.allow never takes a range
 bad_addr() { case "$1" in "" | */* | *"*"* | *" "*) return 0 ;; esac; return 1; }
 
+# --set KEY=VALUE: a setting a chosen module needs, the ones the module menu asks for (repeatable)
+add_set() {
+    case "$1" in
+        web.public_url=* | orders.file=* | station.allow=*) ;;
+        *) die "--set takes web.public_url=URL, orders.file=PATH or station.allow=ADDRESS (got '$1')" ;;
+    esac
+    SETS="$SETS${SETS:+
+}set $1"
+}
+
 MODE=""
+CUSTOM=""
+SETS=""
 SERVER_ADDR=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --mode) [ $# -ge 2 ] || usage; MODE="$2"; shift 2 ;;
         --mode=*) MODE="${1#--mode=}"; shift ;;
+        --modules) [ $# -ge 2 ] || usage; CUSTOM="$2"; shift 2 ;;
+        --modules=*) CUSTOM="${1#--modules=}"; shift ;;
+        --set) [ $# -ge 2 ] || usage; add_set "$2"; shift 2 ;;
+        --set=*) add_set "${1#--set=}"; shift ;;
         --server) [ $# -ge 2 ] || usage; SERVER_ADDR="$2"; shift 2 ;;
         --server=*) SERVER_ADDR="${1#--server=}"; shift ;;
         *) usage ;;
@@ -33,8 +49,18 @@ while [ $# -gt 0 ]; do
 done
 case "$MODE" in
     "" | server | station | all-in-one) ;;
-    *) die "unknown mode '$MODE' (use server, station or all-in-one)" ;;
+    *) die "unknown mode '$MODE' (use server, station or all-in-one; to choose single modules use --modules a,b,c)" ;;
 esac
+if [ -n "$CUSTOM" ]; then
+    [ -z "$MODE" ] || die "use --mode or --modules, not both"
+    MODE=custom                # internal: reached only through --modules or the installer's menu
+    CUSTOM=",$CUSTOM"          # names are checked and what they need is added just before the address check
+fi
+if [ -n "$SETS" ]; then
+    [ "$MODE" = custom ] || die "--set goes with --modules (a custom module list)"
+    FLAG_ADDR=$(printf '%s\n' "$SETS" | sed -n 's/^set station\.allow=//p' | head -n 1)
+    [ -z "$SERVER_ADDR" ] && SERVER_ADDR="$FLAG_ADDR"
+fi
 if [ -n "$SERVER_ADDR" ] && bad_addr "$SERVER_ADDR"; then
     die "--server takes one name or address, e.g. spoolman.home.arpa or 192.0.2.10"
 fi
@@ -67,6 +93,20 @@ done
 major=${VERSION_ID%%.*}
 if [ "${ID:-}" != ubuntu ] || ! [ "$major" -ge 24 ] 2>/dev/null; then
     die "Ubuntu 24.04 or newer is required (found ${PRETTY_NAME:-unknown})"
+fi
+
+# --modules names are checked now, before any package or venv work, against the module registry inside the
+# wheel (a wheel is a zip file; the names are the _m("name", ...) entries of filament_kit/modules.py).
+if [ "$MODE" = custom ] && [ -n "$CUSTOM" ]; then
+    python3 - "$WHEEL" "$CUSTOM" <<'PYEOF' || exit 1
+import re, sys, zipfile
+with zipfile.ZipFile(sys.argv[1]) as z:
+    text = z.read("filament_kit/modules.py").decode("utf-8")
+known = re.findall(r'_m[(]"([a-z_]+)"', text)
+bad = [n for n in sys.argv[2].split(",") if n and n not in known]
+if bad:
+    sys.exit("error: unknown module %s\nfix: use module names from: %s" % (", ".join(bad), ", ".join(known)))
+PYEOF
 fi
 
 FIRST_INSTALL=1
@@ -155,7 +195,6 @@ chmod -R go-w "$OPT"
 # ---------- 4. install mode ----------
 # First install at a terminal: ask. --mode: set it, on any install. Upgrade without --mode: no
 # questions, the modules stay as they are (a config without modules is the server mode).
-CUSTOM=""
 AI_INTAKE=""
 if [ -z "$MODE" ] && [ "$FIRST_INSTALL" -eq 1 ] && [ -t 0 ]; then
     say "Install mode"
@@ -173,18 +212,17 @@ if [ -z "$MODE" ] && [ "$FIRST_INSTALL" -eq 1 ] && [ -t 0 ]; then
         *) die "unknown choice '$choice'; run ./install.sh again" ;;
     esac
     if [ "$MODE" = custom ]; then
-        # module list on fd 3, so the y/N answers still come from the terminal
-        while IFS='|' read -r -u 3 name desc; do
-            yn=""
-            read -r -p "Turn on $name ($desc)? [y/N] " yn || true
-            case "$yn" in
-                [yY]*) CUSTOM="$CUSTOM,$name" ;;
-            esac
-        done 3< <("$VENV/bin/python" -I -c '
-from filament_kit import modules
-for m in modules.MODULES.values():
-    print(f"{m.name}|{m.description}")
-')
+        # the same checklist as `filament-kit config` -> Modules; prompts on the terminal, the choice on stdout
+        # First line: the modules, comma separated. Then one `set <key>=<value>` per setting the menu asked for.
+        MENU_OUT=$("$VENV/bin/filament-kit" modules menu --raw) || die "no modules chosen; run ./install.sh again"
+        CUSTOM=",$(printf '%s
+' "$MENU_OUT" | head -n 1)"
+        SETS=$(printf '%s
+' "$MENU_OUT" | tail -n +2)
+        # the server's address for a station without a server is the one setting the installer itself uses below
+        MENU_ADDR=$(printf '%s
+' "$SETS" | sed -n 's/^set station\.allow=//p' | head -n 1)
+        [ -z "$SERVER_ADDR" ] && SERVER_ADDR="$MENU_ADDR"
     elif [ "$MODE" != station ]; then
         # AI is optional (off unless chosen here or later in `filament-kit config`); spools are added by hand without it
         yn=""
@@ -194,6 +232,27 @@ for m in modules.MODULES.values():
         esac
     fi
 fi
+# A custom list is closed first (what the chosen modules need goes on too), so the checks below see
+# the real set: --modules station,printers has a server and needs no address.
+if [ "$MODE" = custom ]; then
+    CUSTOM=$(FK_MODULES="$CUSTOM" "$VENV/bin/python" -I -c '
+import os, sys
+from filament_kit import modules
+try:
+    chosen, notes = modules.close_selection(os.environ["FK_MODULES"].split(","))
+except modules.ModuleError as e:
+    names = ", ".join(modules.MODULES)
+    sys.exit(f"error: {e}\nfix: use module names from: {names}")
+for note in notes:
+    print(note, file=sys.stderr)
+print("," + ",".join(n for n in modules.MODULES if n in chosen))
+') || exit 1
+fi
+# With the server on this machine the station reads it over loopback; an address would break that link.
+case "$MODE:$CUSTOM,:$SETS" in
+    custom:*,server,*:*"set station.allow="*)
+        die "station.allow is for a station without the server on this machine; with server in the module list the station is linked locally, so drop --set station.allow" ;;
+esac
 # A station whose server is on another machine needs that server's address (spec section 3):
 # station mode, or custom with station on and server off.
 NEED_ADDR=0
@@ -229,20 +288,35 @@ fi
 if [ -n "$MODE" ]; then
     # Only the modules and the station link change; on a first install there is no
     # server_name yet, so `modules apply` asks the first-run questions.
-    FK_MODE="$MODE" FK_MODULES="$CUSTOM" FK_AI="$AI_INTAKE" FK_SERVER="$SERVER_ADDR" FK_NO_SYSTEMD=1 "$VENV/bin/python" -I -c '
+    FK_MODE="$MODE" FK_MODULES="$CUSTOM" FK_AI="$AI_INTAKE" FK_SETS="$SETS" FK_SERVER="$SERVER_ADDR" FK_NO_SYSTEMD=1 "$VENV/bin/python" -I -c '
 import json, os, sys
 from filament_kit import config, modules
 f = config.paths().etc / "config.json"
 cfg = json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}
 mode = os.environ["FK_MODE"]
 if mode == "custom":
-    on = set(filter(None, os.environ["FK_MODULES"].split(",")))
+    try:
+        chosen, notes = modules.close_selection(os.environ["FK_MODULES"].split(","))
+    except modules.ModuleError as e:
+        sys.exit(f"error: {e}\nfix: use module names from: {', '.join(modules.MODULES)}")
+    for note in notes:
+        print(note)
+    on = set(chosen)
     cfg["modules"] = {n: n in on for n in modules.MODULES}
     if {"station", "server"} <= on:
         # station and server on one machine: as all-in-one, the server reads the local station
         st = cfg.setdefault("station", {})
         st["allow"] = ["127.0.0.1"]
         st["url"] = "http://127.0.0.1:5003"
+    for line in os.environ.get("FK_SETS", "").splitlines():
+        if line.startswith("set ") and "=" in line:
+            key, value = line[4:].split("=", 1)
+            bad = modules.check_setting(key, value)
+            if bad:
+                sys.exit(f"error: {key}: {bad}")
+            modules.set_setting(cfg, key, value)
+    if "web" in on:
+        cfg.setdefault("web", {}).setdefault("lan", list(config.DEFAULTS["web"]["lan"]))
 else:
     cfg = modules.set_mode(cfg, mode)
     if os.environ.get("FK_AI"):
