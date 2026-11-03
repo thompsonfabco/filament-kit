@@ -952,6 +952,7 @@ def build_zip(stamp: str) -> bytes:
         for name, path in files:
             info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
             info.compress_type = zipfile.ZIP_DEFLATED
+            info.create_system = 0      # the same bytes on Windows and Linux (Python stamps its own OS otherwise)
             zf.writestr(info, path.read_bytes())
     return buf.getvalue()
 
