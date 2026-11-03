@@ -101,6 +101,19 @@ PYVER=$(python3 --version 2>&1)
 FK_MARKER="$OPT/.fk-installed"
 say "Installing filament-kit ($(basename "$WHEEL"))"
 mkdir -p "$OPT"
+# Earlier versions bundled the spec library inside the program. Keep a copy of it before the venv is replaced and
+# hand it to the new program below, so an upgrade keeps its library (and its profiles do not change).
+LEGACY_LIB=""
+if [ ! -f "$STATE/library/current.json" ]; then
+    for d in "$VENV"/lib/python*/site-packages/filament_kit/library_data; do
+        if [ -f "$d/index.json" ] && [ -d "$d/library" ]; then
+            LEGACY_LIB=$(mktemp -d)
+            cp -a "$d/." "$LEGACY_LIB/"
+            chmod -R a+rX "$LEGACY_LIB"
+            break
+        fi
+    done
+fi
 if [ ! -f "$FK_MARKER" ] || ! grep -qxF "$PYVER" "$FK_MARKER"; then
     rm -rf "$VENV"
 fi
@@ -112,6 +125,10 @@ rm -f "$FK_MARKER"
 # Same version number on a rebuild: make sure the new code is in place.
 "$VENV/bin/python" -m pip install -q --force-reinstall --no-deps "$WHEEL"
 "$VENV/bin/python" -m compileall -q "$VENV/lib" >/dev/null || true
+if [ -n "$LEGACY_LIB" ]; then
+    runuser -u filament-kit -- "$VENV/bin/filament-kit" library adopt "$LEGACY_LIB"         || echo "warning: could not keep the earlier library; run: sudo filament-kit library update"
+    rm -rf "$LEGACY_LIB"
+fi
 install -m 755 "$RES/backup.sh" "$OPT/backup.sh"
 install -m 755 "$RES/filament-kit-cli.sh" /usr/local/bin/filament-kit
 # Units, the avahi file and the Spoolman script: `modules apply` installs them from here.
@@ -142,7 +159,7 @@ CUSTOM=""
 AI_INTAKE=""
 if [ -z "$MODE" ] && [ "$FIRST_INSTALL" -eq 1 ] && [ -t 0 ]; then
     say "Install mode"
-    echo "  server      kit server with Spoolman, presets, library and backup"
+    echo "  server      kit server with Spoolman, printers, presets and backup (AI label reading and library on request)"
     echo "  station     only the USB scale and NFC reader, for a kit server on another machine"
     echo "  all-in-one  server and station on this machine"
     echo "  custom      choose each module"
