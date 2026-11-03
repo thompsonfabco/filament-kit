@@ -503,3 +503,29 @@ def find(sm: Spoolman, q: str, sealed_only: bool) -> list[dict]:
         if all(w in hay for w in words):
             out.append(s)
     return out
+
+
+def filaments(sm: Spoolman, q: str = "") -> list[dict]:
+    """Spoolman's filaments matching every word of `q` (vendor, name, material), with or without spools, for a
+    manual add's picker. Fields carry an add item's names (net, tare, nozzle, bed), so a client copies them."""
+    words = (q or "").lower().split()
+    counts: dict = {}
+    for s in sm.get("spool"):
+        fid = (s.get("filament") or {}).get("id")
+        counts[fid] = counts.get(fid, 0) + 1
+    out = []
+    for f in sm.get("filament"):
+        vendor = (f.get("vendor") or {}).get("name") or ""
+        if any(w not in f"{vendor} {f.get('name') or ''} {f.get('material') or ''}".lower() for w in words):
+            continue
+        out.append({"id": f["id"], "vendor": vendor, "name": f.get("name"), "material": f.get("material"),
+                    "density": f.get("density"), "net": f.get("weight"), "tare": f.get("spool_weight"),
+                    "color_hex": f.get("color_hex"), "nozzle": f.get("settings_extruder_temp"),
+                    "bed": f.get("settings_bed_temp"), "spools": counts.get(f["id"], 0)})
+    return sorted(out, key=lambda f: (f["vendor"].lower(), (f["name"] or "").lower()))
+
+
+def vendors(sm: Spoolman) -> list[dict]:
+    """Spoolman's vendors (name and empty spool weight as `tare`), for a manual add's vendor choice."""
+    return sorted(({"id": v["id"], "name": v.get("name") or "", "tare": v.get("empty_spool_weight")}
+                   for v in sm.get("vendor")), key=lambda v: v["name"].lower())

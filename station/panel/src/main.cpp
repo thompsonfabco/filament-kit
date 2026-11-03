@@ -6,11 +6,12 @@
 //                                         (3 only restarts the blinks when the mode changes to it)
 //                 "B <hz> <ms> [count]"   beep(s) on the passive buzzer, 60 ms apart
 //                 "A <n>" + n raw bytes   speech for the speaker: unsigned 8-bit mono at 8 kHz (n 1-1024), each byte
-//                                         the speaker MOSFET's duty, 0 = off. The PC streams it in real time and
+//                                         the speaker MOSFET's PWM duty (/256), 0 = off. The PC streams it in real time and
 //                                         ramps up from 0 and back down so the speaker doesn't click.
 //   panel -> PC   "HELLO intake-panel <version>"   at boot and in answer to "?"
 //                 "P H" / "P D"           Hold / Discard pressed (debounced, once per press)
-//                 "AIR <C> <RH%|-> <hPa>" room air from the BME280 every 10 s (RH "-" on a BMP280)
+//                 "AIR <C> <RH%|-> <hPa|->" room air every 10 s: a BME280, or a BMP280 + AHT20 board ("-": no such
+//                                         sensor, e.g. RH on a lone BMP280)
 // The PC resends "L" every second; with no "L" for 5 s (station service stopped) the lamps go dark.
 //
 // Pins avoid the USB serial pins (GPIO1 TX, GPIO3 RX). Boot straps: GPIO0/D3 and GPIO2/D4 must be high at power-on,
@@ -20,16 +21,16 @@
 #include <ESP8266WiFi.h>
 #include <Wire.h>
 #include <core_esp8266_waveform.h>
-#include <sigma_delta.h>
+#include "aht20.h"
 #include "bme280.h"
 
-static const char *VERSION = "2";
+static const char *VERSION = "6";
 static const uint8_t PIN_BUZZER = D7;       // GPIO13: buzzer module signal
 static const uint8_t PIN_BTN_HOLD = D1;     // GPIO5:  Hold button to GND (internal pull-up)
 static const uint8_t PIN_BTN_DISCARD = D2;  // GPIO4:  Discard button to GND
 static const uint8_t PIN_LAMP_HOLD = D5;    // GPIO14: Hold lamp MOSFET gate (high = lit)
 static const uint8_t PIN_LAMP_DISCARD = D6; // GPIO12: Discard lamp MOSFET gate
-static const uint8_t PIN_SPEAKER = D8;      // GPIO15: speaker MOSFET gate (sigma-delta); its drain drives the
+static const uint8_t PIN_SPEAKER = D8;      // GPIO15: speaker MOSFET gate (40 kHz PWM); its drain drives the
                                             // push-pull pair's bases, so the speaker signal comes out inverted
 static const uint8_t PIN_SDA = D3;          // GPIO0:  BME280 SDA
 static const uint8_t PIN_SCL = D4;          // GPIO2:  BME280 SCL
@@ -72,21 +73,28 @@ struct Button {
   }
 };
 
-// ---------- speaker: samples from the PC through a ring buffer, played by a timer1 callback into the sigma-delta ----
-#define GPSD ESP8266_REG(0x368)  // sigma-delta register: duty (bits 0-7), prescaler (8-15), enable (16)
+// ---------- speaker: samples from the PC through a ring buffer, played as 40 kHz PWM by a timer1 callback ----------
+// PWM, not the ESP8266's sigma-delta: a first-order sigma-delta slow enough for the push-pull pair (1 kOhm base
+// pull-up) repeats its pattern every 256 clocks, an audible whine in the speech band. PWM has one pulse per period at
+// any duty, so the slow rising edge costs the same at every level (an offset, no distortion).
 static const uint32_t RING = 8192;  // 1 s of audio; the PC keeps about 0.25 s queued
 static uint8_t ring[RING];
 static volatile uint32_t ringHead = 0, ringTail = 0;  // head: written by loop(), tail: by the timer callback
-static uint32_t nextSample = 0, idleSamples = 0;
-static uint8_t level = 0;
+static const uint32_t PWM_PERIOD = F_CPU / 40000;    // 40 kHz carrier: inaudible, 5 periods per 8 kHz sample
+static const uint32_t SPIN = F_CPU / 1000000 * 8;    // edges nearer than 8 us: wait them out here (the core won't
+                                                     // schedule timer interrupts closer than 4 us)
+static const uint32_t EARLY = F_CPU / 1000000 * 3;   // ask for the interrupt 3 us before an edge and wait out the
+                                                     // rest: entry latency varies (e.g. loop() on a flash cache miss)
+static const uint32_t SPK_BIT = 1u << 15;            // PIN_SPEAKER = GPIO15
+static const uint32_t SUBS = F_CPU / PWM_PERIOD / SAMPLE_RATE;  // PWM periods per sample
+static uint32_t nextEdge = 0, periodStart = 0, idleSamples = 0;
+static uint8_t level = 0, sub = 0;
+static bool spkHigh = false, ticked = false;
 
-static uint32_t IRAM_ATTR audioTick() {
-  // Called on every timer1 interrupt (tone() shares the timer), so it keeps its own time on the cycle counter.
-  uint32_t now = ESP.getCycleCount(), period = F_CPU / SAMPLE_RATE;
-  int32_t wait = (int32_t)(nextSample - now);
-  if (wait > 0) return wait;
-  nextSample += period;
-  if ((int32_t)(nextSample - now) <= 0) nextSample = now + period;  // fell behind: don't race to catch up
+static inline __attribute__((always_inline)) void sampleTick() {
+  // Once per PWM period, after that period's edge is set: a sample lasts SUBS periods (taken at once while silent).
+  if (++sub < SUBS && level) return;
+  sub = 0;
   if (ringTail != ringHead) {
     level = ring[ringTail];
     ringTail = (ringTail + 1) % RING;
@@ -94,8 +102,36 @@ static uint32_t IRAM_ATTR audioTick() {
   } else if (++idleSamples > SAMPLE_RATE / 2 && level && (idleSamples & 15) == 0) {
     level--;  // stream stopped without its ramp down: fade to off over up to 0.5 s so the coupling cap doesn't thump
   }           // a short gap holds the last sample
-  GPSD = (GPSD & ~0xFFu) | level;
-  return nextSample - now;
+}
+
+static uint32_t IRAM_ATTR audioTick() {
+  // Called on every timer1 interrupt (tone() shares the timer), so it keeps its own time on the cycle counter.
+  // Each edge is set straight after its wait, and the sample bookkeeping runs in the longer half of the period:
+  // work done before an edge on only some periods (every 5th, at each new sample) would make an 8 kHz whine.
+  for (;;) {
+    int32_t wait = (int32_t)(nextEdge - ESP.getCycleCount());
+    if (wait > (int32_t)SPIN) return wait - EARLY;
+    while ((int32_t)(nextEdge - ESP.getCycleCount()) > 0) {}  // exact edge
+    if (spkHigh) {  // end of the pulse
+      GPOC = SPK_BIT; spkHigh = false;
+      if (!ticked) sampleTick();
+      nextEdge = periodStart + PWM_PERIOD;
+      continue;
+    }
+    periodStart = nextEdge;  // start of a period
+    if ((int32_t)(ESP.getCycleCount() - periodStart) > (int32_t)PWM_PERIOD) periodStart = ESP.getCycleCount();
+    uint32_t high = level * PWM_PERIOD >> 8;
+    if (high) {
+      GPOS = SPK_BIT; spkHigh = true;
+      nextEdge = periodStart + high;
+      ticked = high >= PWM_PERIOD / 2;  // long pulse: do the bookkeeping now, else after the falling edge
+      if (ticked) sampleTick();
+      continue;
+    }
+    sampleTick();  // no pulse this period
+    // silent: look again in 1 ms instead of 40 000 interrupts a second
+    nextEdge = periodStart + (!level && ringTail == ringHead ? F_CPU / 1000 : PWM_PERIOD);
+  }
 }
 
 static void ringPush(uint8_t b) {
@@ -103,11 +139,34 @@ static void ringPush(uint8_t b) {
   if (next != ringTail) { ring[ringHead] = b; ringHead = next; }  // full: drop
 }
 
-// ---------- BME280 / BMP280 room air (forced mode) ----------
+// ---------- room air: BME280, or a BMP280 + AHT20 board (BMP280 temperature + pressure, AHT20 humidity) ----------
 struct Air {
-  uint8_t addr = 0; bool humidity = false;
+  uint8_t addr = 0; bool humidity = false;  // BME/BMP280 address (0: none), BME280 humidity
+  bool aht = false;                          // AHT20 at 0x38
   Bme280Calib cal;
   uint32_t due = 0; bool measuring = false;
+  static const uint8_t AHT = 0x38;
+
+  bool ahtBegin() {
+    Wire.beginTransmission(AHT);
+    if (Wire.endTransmission() != 0 || Wire.requestFrom(AHT, (uint8_t)1) != 1) return false;
+    if (!(Wire.read() & 0x08)) {  // not calibrated yet: initialise
+      Wire.beginTransmission(AHT); Wire.write(0xBE); Wire.write(0x08); Wire.write(0x00);
+      if (Wire.endTransmission() != 0) return false;
+      delay(10);
+    }
+    return true;
+  }
+  bool ahtTrigger() {
+    Wire.beginTransmission(AHT); Wire.write(0xAC); Wire.write(0x33); Wire.write(0x00);
+    return Wire.endTransmission() == 0;
+  }
+  bool ahtRead(uint32_t &rhTenths, int32_t &centiC) {
+    uint8_t d[7];
+    if (Wire.requestFrom(AHT, (uint8_t)7) != 7) return false;
+    for (uint8_t i = 0; i < 7; i++) d[i] = Wire.read();
+    return aht20Decode(d, rhTenths, centiC);
+  }
 
   bool read(uint8_t reg, uint8_t *buf, uint8_t n) {
     Wire.beginTransmission(addr); Wire.write(reg);
@@ -119,7 +178,7 @@ struct Air {
     Wire.beginTransmission(addr); Wire.write(reg); Wire.write(v);
     return Wire.endTransmission() == 0;
   }
-  bool begin() {
+  bool bmeBegin() {
     for (uint8_t a : {0x76, 0x77}) {
       addr = a; uint8_t id;
       if (!read(0xD0, &id, 1) || (id != 0x60 && id != 0x58)) continue;  // 0x60 BME280, 0x58 BMP280
@@ -134,34 +193,46 @@ struct Air {
     addr = 0;
     return false;
   }
+  void lost(uint32_t now) { addr = 0; aht = false; due = now + 30000; }
   void poll(uint32_t now) {
     if ((int32_t)(now - due) < 0) return;
-    if (!addr) {  // not found (yet): look again every 30 s
+    if (!addr && !aht) {  // nothing found (yet): look again every 30 s
       due = now + 30000;
-      if (!begin()) return;
+      bmeBegin();
+      aht = ahtBegin();
+      if (!addr && !aht) return;
     }
-    if (!measuring) {
-      if (write(0xF4, 0x25)) { measuring = true; due = now + 50; }  // T x1, P x1, forced: done in ~10 ms
-      else { addr = 0; due = now + 30000; }
+    if (!measuring) {  // BMP/BME280: T x1, P x1, forced (~10 ms); AHT20: ~80 ms
+      if ((addr && !write(0xF4, 0x25)) || (aht && !ahtTrigger())) { lost(now); return; }
+      measuring = true; due = now + 100;
       return;
     }
     measuring = false; due = now + AIR_MS;
-    uint8_t d[8];
-    if (!read(0xF7, d, humidity ? 8 : 6)) { addr = 0; due = now + 30000; return; }
-    int32_t adcP = (int32_t)d[0] << 12 | d[1] << 4 | d[2] >> 4;
-    int32_t adcT = (int32_t)d[3] << 12 | d[4] << 4 | d[5] >> 4;
-    int32_t tf = cal.tFine(adcT), centiC = Bme280Calib::centiC(tf);
-    uint32_t p = cal.pressure(adcP, tf);  // Pa * 256
-    if (!p) return;
-    char rh[8] = "-";
-    if (humidity) {
-      uint32_t tenths = (cal.humidity(d[6] << 8 | d[7], tf) * 10 + 512) / 1024;  // %RH * 10
-      snprintf(rh, sizeof rh, "%u.%u", (unsigned)(tenths / 10), (unsigned)(tenths % 10));
+    int32_t centiC = 0; uint32_t centiHpa = 0, rhTenths = 0;
+    bool haveT = false, haveRh = false;
+    if (addr) {
+      uint8_t d[8];
+      if (!read(0xF7, d, humidity ? 8 : 6)) { lost(now); return; }
+      int32_t adcP = (int32_t)d[0] << 12 | d[1] << 4 | d[2] >> 4;
+      int32_t adcT = (int32_t)d[3] << 12 | d[4] << 4 | d[5] >> 4;
+      int32_t tf = cal.tFine(adcT);
+      uint32_t p = cal.pressure(adcP, tf);  // Pa * 256
+      if (p) { centiC = Bme280Calib::centiC(tf); centiHpa = (p + 128) / 256; haveT = true; }  // Pa = hPa * 100
+      if (humidity) { rhTenths = (cal.humidity(d[6] << 8 | d[7], tf) * 10 + 512) / 1024; haveRh = true; }
     }
-    uint32_t centiHpa = (p + 128) / 256;  // Pa = hPa * 100
-    char out[48];
-    snprintf(out, sizeof out, "AIR %s%d.%02d %s %u.%02u", centiC < 0 ? "-" : "", abs(centiC) / 100,
-             abs(centiC) % 100, rh, (unsigned)(centiHpa / 100), (unsigned)(centiHpa % 100));
+    if (aht) {
+      int32_t ahtC;
+      if (ahtRead(rhTenths, ahtC)) {  // the AHT20's humidity; its temperature only without a BMP280
+        haveRh = true;
+        if (!haveT) { centiC = ahtC; haveT = true; }
+      }
+    }
+    if (!haveT) return;
+    char rh[8] = "-", hpa[12] = "-", out[48];
+    if (haveRh) snprintf(rh, sizeof rh, "%u.%u", (unsigned)(rhTenths / 10), (unsigned)(rhTenths % 10));
+    if (centiHpa) snprintf(hpa, sizeof hpa, "%u.%02u", (unsigned)(centiHpa / 100), (unsigned)(centiHpa % 100));
+    snprintf(out, sizeof out, "AIR %s%d.%02d %s %s", centiC < 0 ? "-" : "", abs(centiC) / 100, abs(centiC) % 100,
+             rh, hpa);
     Serial.println(out);
   }
 };
@@ -197,16 +268,14 @@ void setup() {
   WiFi.forceSleepBegin();
   Serial.setRxBufferSize(2048);  // audio arrives at ~8 KB/s; covers a slow I2C read
   Serial.begin(115200);
-  for (uint8_t p : {PIN_LAMP_HOLD, PIN_LAMP_DISCARD, PIN_BUZZER}) { pinMode(p, OUTPUT); digitalWrite(p, LOW); }
+  for (uint8_t p : {PIN_LAMP_HOLD, PIN_LAMP_DISCARD, PIN_BUZZER, PIN_SPEAKER}) {
+    pinMode(p, OUTPUT); digitalWrite(p, LOW);
+  }
   pinMode(PIN_BTN_HOLD, INPUT_PULLUP);
   pinMode(PIN_BTN_DISCARD, INPUT_PULLUP);
-  // sigma-delta clock 80 MHz / 128 = 625 kHz: pulses of 1.6 us or more, about 5 time constants of the 1 kOhm pull-up
-  // charging the push-pull pair's bases. The PC keeps the duty within 16-240, so the lowest output frequency
-  // (~39 kHz) stays far above speech.
-  sigmaDeltaEnable();
-  sigmaDeltaSetPrescaler(127);
-  sigmaDeltaWrite(0, 0);
-  sigmaDeltaAttachPin(PIN_SPEAKER);
+  // The PC keeps the duty within 16-240: pulses of 1.6 us or more, about 5 time constants of the 1 kOhm pull-up
+  // charging the push-pull pair's bases.
+  nextEdge = ESP.getCycleCount() + F_CPU / 1000;
   setTimer1Callback(audioTick);
   Wire.begin(PIN_SDA, PIN_SCL);
   delay(50);

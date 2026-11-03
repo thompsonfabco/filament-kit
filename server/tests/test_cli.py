@@ -5,7 +5,7 @@ import sys
 
 import pytest
 
-from filament_kit import cli, config, pairing
+from filament_kit import cli, config, modules, pairing
 
 
 @pytest.fixture(autouse=True)
@@ -477,13 +477,12 @@ def _status_lines(capsys) -> list:
     return capsys.readouterr().out.splitlines()
 
 
-def test_status_fresh_install_profiles_lines_no_fail(capsys, spoolman_url):
+def test_status_fresh_install_profiles_lines_no_fail(capsys, spoolman_url, no_library):
     _status_setup(spoolman_url)
     assert cli.main(["status"], client_factory=_ok_client) == 0
     out = _status_lines(capsys)
     assert not any(ln.startswith("FAIL") for ln in out)
-    v = library_mod.load().version
-    assert f"--   library version {v} (bundled), 0 local additions" in out
+    assert "--   library not downloaded (filament-kit library update), 0 local additions" in out
     assert "--   profiles: no build yet (waiting for the PC sync)" in out
     assert "--   PC sync: not set up (see README: Pair your PC)" in out
 
@@ -650,3 +649,15 @@ def test_unreadable_config_says_run_with_sudo(argv, monkeypatch, capsys):
     err = capsys.readouterr().err
     assert "/etc/filament-kit/config.json" in err and f"sudo filament-kit {argv[0]}" in err
     assert "Traceback" not in err
+
+
+def test_key_saved_with_ai_intake_off_says_how_to_turn_it_on(monkeypatch, capsys):
+    """R1: AI is optional; a key alone does not switch label reading on, so the menu says where to do that."""
+    cfg = config.load()
+    cfg["modules"] = {n: n in modules.MODES["server"] for n in modules.MODULES}
+    config.save(cfg)
+    monkeypatch.setattr(sys, "stdin", io.StringIO("4\n0\n"))
+    monkeypatch.setattr("getpass.getpass", lambda prompt="": "sk-ant-TOPSECRET")
+    assert cli.main(["config"]) == 0
+    out = capsys.readouterr().out
+    assert "Key saved." in out and "ai_intake" in out and "6) Modules" in out

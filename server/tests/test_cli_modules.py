@@ -45,7 +45,7 @@ def test_modules_list_shows_mode(capsys):
 def test_modules_set_all_in_one_saves_and_applies(applied):
     assert cli.main(["modules", "set", "all-in-one"]) == 0
     cfg = config.load()
-    assert cfg["modules"] == {n: n not in modules.OPT_IN for n in modules.MODULES}
+    assert cfg["modules"] == {n: n not in modules.OPT_IN or n in ("ai_intake", "library") for n in modules.MODULES}  # legacy cfg: AI kept
     assert cfg["station"]["url"] == "http://127.0.0.1:5003"
     assert cfg["station"]["allow"] == ["127.0.0.1"]
     assert applied[0]["modules"]["station"] is True
@@ -135,7 +135,7 @@ def test_config_menu_station_on_asks_address_and_refuses_range(applied, monkeypa
 def test_config_menu_choose_mode(applied, monkeypatch):
     _stdin(monkeypatch, "6\na\n\n0\n")  # a = all-in-one preset
     cli.main(["config"])
-    assert config.load()["modules"] == {n: n not in modules.OPT_IN for n in modules.MODULES}
+    assert config.load()["modules"] == {n: n not in modules.OPT_IN or n in ("ai_intake", "library") for n in modules.MODULES}  # legacy cfg: AI kept
     assert config.load()["station"]["url"] == "http://127.0.0.1:5003"
 
 
@@ -143,7 +143,7 @@ def test_modules_menu_raw_prints_choice_only_on_stdout(monkeypatch, capsys):
     _stdin(monkeypatch, "t\n1\n\n192.168.1.5\n")   # station preset, spoolman on, Enter, the server's address
     assert cli.main(["modules", "menu", "--raw"]) == 0
     cap = capsys.readouterr()
-    assert cap.out.splitlines() == ["spoolman,station", "set station.allow=192.168.1.5"]
+    assert cap.out.splitlines() == ["spoolman,library,station", "set station.allow=192.168.1.5"]
     assert "[x]" in cap.err and "OPTIONAL AI" in cap.err
     assert "modules" not in config.load()          # --raw changes nothing
 

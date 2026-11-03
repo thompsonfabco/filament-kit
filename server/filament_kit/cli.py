@@ -182,10 +182,13 @@ def _library_status_lines() -> None:
         if isinstance(at, (int, float)) and not isinstance(at, bool):
             source = f"updated {time.strftime('%Y-%m-%d', time.localtime(at))}"
     n = st["local"]
-    print(f"--   library version {st['version']} ({source}), {n} local addition{'' if n == 1 else 's'}")
+    if source == "none":
+        print(f"--   library not downloaded (filament-kit library update), {n} local addition{'' if n == 1 else 's'}")
+    else:
+        print(f"--   library version {st['version']} ({source}), {n} local addition{'' if n == 1 else 's'}")
     lc = st["last_check"]
     if lc is not None and not lc["ok"]:
-        # a warning, not a failure: the bundled or last good version stays in use
+        # a warning, not a failure: the last good version (or none) stays in use
         print(f"--   library update: {lc['error']}")
 
 
@@ -459,7 +462,7 @@ def cmd_config() -> int:
               f"  1) display name       {cfg['server_name']}\n"
               "  2) storage\n"
               f"  3) Claude model       {cfg['model']}, {cfg['reads_per_day']} reads/day\n"
-              "  4) Anthropic key\n"
+              "  4) Anthropic key      only for AI label reading (ai_intake)\n"
               "  5) Printers\n"
               f"  6) Modules            {modules.mode_of(modules.enabled(cfg))}\n"
               "  0) save and exit")
@@ -485,6 +488,8 @@ def cmd_config() -> int:
             if key:
                 write_key(key)
                 print("Key saved.")
+                if "ai_intake" not in modules.enabled(cfg):  # AI is optional: the key alone turns nothing on
+                    print("AI label reading is off: turn on ai_intake in 6) Modules to use the key.")
             else:
                 print("No key entered; unchanged.")
         elif choice == "5":
@@ -670,6 +675,9 @@ def _request_rebuild(reason: str) -> None:
 
 def _library_line(st: dict) -> str:
     n = st["local"]
+    if st["source"] == "none":
+        return (f"library not downloaded (run: filament-kit library update), "
+                f"{n} local addition{'' if n == 1 else 's'}")
     return (f"library version {st['version']} ({st['source']}), "
             f"{n} local addition{'' if n == 1 else 's'}")
 
@@ -702,8 +710,8 @@ def cmd_library_update(scheduled: bool) -> int:
         return 1
     if r.error:
         if scheduled and r.http_status in library.PRIVATE_STATUSES:
-            # the repository may simply not be public yet: the timer run is not a failure, the bundled
-            # or last good version stays in use
+            # the library may simply not be published yet: the timer run is not a failure, the last good
+            # version (or none) stays in use
             print(f"warning: {r.error}", file=sys.stderr)
             return 0
         _err_line(r.error)
@@ -714,6 +722,17 @@ def cmd_library_update(scheduled: bool) -> int:
     print(f"library version {r.version} installed ({r.downloaded} entr{'y' if r.downloaded == 1 else 'ies'} "
           f"downloaded)")
     _request_rebuild(f"library updated to version {r.version}")
+    return 0
+
+
+def cmd_library_adopt(folder: str) -> int:
+    try:
+        v = library.adopt(Path(folder))
+    except library.LibraryError as e:
+        _err_line(str(e))
+        return 1
+    if v is not None:
+        print(f"kept the library of the earlier program version (library version {v})")
     return 0
 
 
@@ -1309,9 +1328,11 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     lb = sub.add_parser("library", help="the filament spec library: status, update, rollback, local additions")
     lsub = lb.add_subparsers(dest="library_cmd", required=True)
     lsub.add_parser("status", help="show the library version, local additions and the last update check")
-    lu = lsub.add_parser("update", help="fetch the latest library version")
+    lu = lsub.add_parser("update", help="download or update the library (library.url)")
     lu.add_argument("--scheduled", action="store_true", help="only if config library.schedule says it is due")
     lsub.add_parser("rollback", help="go back to the library version before the last update")
+    la = lsub.add_parser("adopt", help="keep the library an older program version bundled (used by the installer)")
+    la.add_argument("folder", help="the old library_data folder (index.json and library/)")
     la = lsub.add_parser("add", help="add or replace a local entry from a JSON file ('-' reads stdin)")
     la.add_argument("file")
     _pf_help = "the generated Bambu Studio and Orca Slicer presets: build, status, lines, parents"
@@ -1381,6 +1402,8 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
             return cmd_library_update(args.scheduled)
         if args.library_cmd == "rollback":
             return cmd_library_rollback()
+        if args.library_cmd == "adopt":
+            return cmd_library_adopt(args.folder)
         return cmd_library_add(args.file)
     if args.cmd == "profiles":
         if args.profiles_cmd == "build":

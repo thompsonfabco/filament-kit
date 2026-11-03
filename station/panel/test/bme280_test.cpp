@@ -1,9 +1,11 @@
 // Checks src/bme280.h on the PC: the BMP280 datasheet's worked example (3.12) for temperature and pressure, the
-// humidity formula against Bosch's floating-point version, and the packed H4/H5 calibration bytes.
+// humidity formula against Bosch's floating-point version, and the packed H4/H5 calibration bytes. Also
+// src/aht20.h: its CRC-8 against the standard check value and the decoding of a built measurement.
 //   g++ -std=c++17 -I../src bme280_test.cpp -o /tmp/bme280_test && /tmp/bme280_test
 #include <cmath>
 #include <cstdio>
 #include <initializer_list>
+#include "aht20.h"
 #include "bme280.h"
 
 static int fails = 0;
@@ -48,6 +50,18 @@ int main() {
       CHECK(fabs(got - want) < 0.05, "RH adcH %d adcT %d: %.3f, float %.3f", adcH, adcT, got, want);
     }
   }
+  // AHT20: CRC-8 poly 0x31 init 0xFF ("CRC-8/NRSC-5", check value 0xF7 for "123456789")
+  const uint8_t check[] = {'1', '2', '3', '4', '5', '6', '7', '8', '9'};
+  CHECK(aht20Crc(check, 9) == 0xF7, "AHT20 CRC %02x, want f7", aht20Crc(check, 9));
+  // humidity raw 0x80000 (50.0 %), temperature raw 0x66666 (30.00 C)
+  uint8_t m[7] = {0x1C, 0x80, 0x00, 0x06, 0x66, 0x66, 0};
+  m[6] = aht20Crc(m, 6);
+  uint32_t rh10; int32_t cC;
+  CHECK(aht20Decode(m, rh10, cC) && rh10 == 500 && cC == 3000, "AHT20 decode %u %d, want 500 3000", rh10, cC);
+  m[6] ^= 1;
+  CHECK(!aht20Decode(m, rh10, cC), "AHT20 bad CRC accepted");
+  m[6] ^= 1; m[0] |= 0x80;
+  CHECK(!aht20Decode(m, rh10, cC), "AHT20 busy accepted");
   printf(fails ? "%d failed\n" : "all passed\n", fails);
   return fails != 0;
 }

@@ -29,11 +29,14 @@ rm -f "$stage/.gitignore"
 rm -rf server/build
 ls "$stage"/filament_kit-"$version"-*.whl >/dev/null 2>&1 \
     || { echo "error: wheel for $version not built" >&2; exit 1; }
-# The bundled library snapshot is package data; a wheel without it has no library at all.
-# Not `grep -q`: it stops reading at the first match, unzip then dies of SIGPIPE and pipefail fails the check.
+# The wheel bundles no library entries (the library is downloaded on request); a wheel that still carries them
+# would ship the old 4 MB snapshot. Not `grep -q`: it stops at the first match, unzip then dies of SIGPIPE and
+# pipefail fails the check.
 for whl in "$stage"/filament_kit-"$version"-*.whl; do
-    unzip -l "$whl" | grep -E ' filament_kit/library_data/index\.json[[:space:]]*$' >/dev/null \
-        || { echo "error: $whl has no filament_kit/library_data/index.json" >&2; exit 1; }
+    if unzip -l "$whl" | grep -E ' filament_kit/library_data/library/' >/dev/null; then
+        echo "error: $whl bundles library entries; they belong in the library-<date>.tar.gz asset" >&2
+        exit 1
+    fi
 done
 
 # ---------- scripts and units ----------
@@ -108,3 +111,21 @@ rm -rf "$stage_root"
 
 echo "built $out"
 tar -tzf "$out"
+
+# ---------- library asset (optional) ----------
+# The filament-library data is a separate release asset, library-<date>.tar.gz, plus library.tar.gz under the
+# fixed name the default `library.url` points at (releases/latest/download/library.tar.gz). Built from a
+# filament-library checkout (FK_LIBRARY_SRC, default /c/CODING/filament-library) after the same validation the
+# program applies on download; skipped when there is no checkout. Nothing is uploaded here.
+lib_src=${FK_LIBRARY_SRC:-/c/CODING/filament-library}
+if [ -f "$lib_src/index.json" ]; then
+    py=python3
+    command -v "$py" >/dev/null 2>&1 || py=python
+    lib_out="dist/library-$(date +%Y-%m-%d).tar.gz"
+    "$py" -I tools/build_library_asset.py --from "$lib_src" --out "$lib_out" \
+        || { echo "error: library asset not built" >&2; exit 1; }
+    cp "$lib_out" dist/library.tar.gz
+    echo "built $lib_out and dist/library.tar.gz"
+else
+    echo "no filament-library checkout at $lib_src; no library asset built"
+fi
