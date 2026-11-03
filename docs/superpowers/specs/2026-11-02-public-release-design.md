@@ -13,8 +13,7 @@ Date: 2026-11-02. Status: awaiting owner approval. Sub-project 6. Builds on `mer
 6. An optional auto-updater updates the program and pulls new data.
 7. The filament-library is optional, downloaded on request, and used as the initial source for filament profiles.
 
-Owner decisions (2026-11-02): the whole filament-kit repo becomes **public** (GPLv3); existing JSON data files are
-**converted to XML** with automatic migration of existing installs.
+Owner decisions (2026-11-02, refined 22:38): the repo goes **public only when the owner says so**, after the whole project reaches strong beta; until then everything stays private and the bootstrap is built so it works once public (tested privately now). **XML for everything, but the conversion of existing JSON files is deferred** (logged as later work); new data files are XML now.
 
 ## 2. Components
 
@@ -87,7 +86,7 @@ Owner decisions (2026-11-02): the whole filament-kit repo becomes **public** (GP
 
 ## 3. Order of work
 1. Printers (sub-project 5), 2. AI optional + module menu, 3. XML conversion (with migration), 4. library on request,
-5. updater + get.sh + signed releases, 6. scrub + public flip (owner go).
+5. updater + get.sh + signed releases (testable against private releases with a token), 6. scrub + public flip (only on the owner's word, after strong beta). LATER (deferred by the owner): 2.7 conversion of existing JSON files to XML.
 
 ## 4. Testing
 - pytest per component; JSON→XML migration round-trip on real-shaped fixtures (every file type), idempotent;
