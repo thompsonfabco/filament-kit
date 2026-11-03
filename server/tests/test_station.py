@@ -141,9 +141,9 @@ def test_refuses_client_not_in_allow():
 def test_allow_default_and_split(monkeypatch):
     monkeypatch.delenv("STATION_ALLOW", raising=False)
     assert state.settings_from_env()["allow"] == {"127.0.0.1"}
-    monkeypatch.setenv("STATION_ALLOW", "127.0.0.1 192.0.2.10  192.0.2.7")
+    monkeypatch.setenv("STATION_ALLOW", "127.0.0.1 192.0.2.10  198.51.100.7")
     s = state.settings_from_env()
-    assert s["allow"] == {"127.0.0.1", "192.0.2.10", "192.0.2.7"}
+    assert s["allow"] == {"127.0.0.1", "192.0.2.10", "198.51.100.7"}
     assert (s["port"], s["nfc_device"], s["active"], s["beep"], s["beep_device"]) == (5003, "auto", 300, True, "")
 
 

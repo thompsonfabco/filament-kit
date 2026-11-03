@@ -1,4 +1,5 @@
 """F2: the README is for a normal user, and its module table follows the module registry (modules.py)."""
+import hashlib
 import re
 
 import pytest
@@ -40,8 +41,21 @@ def test_module_table_matches_the_registry():
             assert m.needs_text in needs, (row, m.needs_text)
 
 
-OWNER_DATA = ("192.0.2.10", "192.0.2.11", "192.0.2.109", "192.0.2.179", "localdomain", "example.com",
-              "spoolman-vm", "mcp.example", "h2d_token", "sv08", "G:\\")
+OWNER_DATA = ("localdomain", "spoolman-vm", "h2d_token", "sv08", "G:\\")   # any other "thompsonfabco" is caught below
+
+# The owner's private values (home LAN addresses, the H2D serial, host and account names) are banned by salted
+# SHA-256 fingerprint, so this file does not publish them itself. A text is cut into IPv4 addresses and word runs.
+_OWNER_SALT = b"filament-kit owner-data v1:"
+OWNER_FINGERPRINTS = frozenset({
+    "d760cbea97a1228524ab", "92ce0773c1c5a2e0ca4a", "95fb2cac257df2546230", "87bf20b4038304003845",
+    "17b7f0c3556139cbbfd1", "107b22d060e0f4dce62d", "dbf1988c2971e2f59646", "4cff4dd88d4eba517032",
+    "c9f6ef41de056225a7cf"})
+_OWNER_TOKEN = re.compile(r"\d{1,3}(?:\.\d{1,3}){3}|[A-Za-z0-9][A-Za-z0-9-]*")
+
+
+def _owner_hits(text: str) -> list[str]:
+    return sorted({t for t in _OWNER_TOKEN.findall(text)
+                   if hashlib.sha256(_OWNER_SALT + t.encode()).hexdigest()[:20] in OWNER_FINGERPRINTS})
 
 
 # Every Markdown file under docs/ is public (the owner's runbooks live outside the repository).
@@ -54,6 +68,7 @@ def test_public_docs_have_no_owner_specific_data(rel):
     text = (ROOT / rel).read_text(encoding="utf-8")
     for bad in OWNER_DATA:
         assert bad not in text, (rel, bad)
+    assert not _owner_hits(text), rel
     # the GitHub repo paths are the one allowed mention of the owner's account
     rest = text
     for ok in ("github.com/thompsonfabco/filament-kit", "-R thompsonfabco/filament-kit",
@@ -65,9 +80,8 @@ def test_public_docs_have_no_owner_specific_data(rel):
 
 # Final review I4: the same ban over the public code and test files. `sv08` (a printer model the kit makes Orca
 # presets for) and `h2d_token` (the filament-ops token file name that `migrate-ops` reads) are product names
-# there, not the owner's data; the owner's H2D serial and scanner paths are added instead.
-CODE_OWNER_DATA = tuple(b for b in OWNER_DATA if b not in ("sv08", "h2d_token")) + (
-    "0948ZZ0A0000001", "h2d-scanner", "printer-host", "intake.home.arpa", "owner")
+# there, not the owner's data; the owner's scanner paths are added instead (the fingerprints apply as well).
+CODE_OWNER_DATA = tuple(b for b in OWNER_DATA if b not in ("sv08", "h2d_token")) + ("h2d-scanner",)
 CODE_SCAN = ("server/tests", "get.sh", "install", "reader", "tools")
 # ban lists themselves
 CODE_SCAN_SKIP = {"server/tests/test_readme.py", "reader/tools/test_ota_publish.py"}
@@ -93,6 +107,7 @@ def test_public_code_and_tests_have_no_owner_specific_data():
         except (UnicodeDecodeError, FileNotFoundError):
             continue                     # binaries (firmware images, fixtures)
         for n, line in enumerate(text.splitlines(), 1):
+            found += [f"{rel}:{n}: owner value" for _ in _owner_hits(line)]
             for bad in CODE_OWNER_DATA:
                 if re.search(re.escape(bad) + (r"(?!\d)" if bad[-1].isdigit() else ""), line):
                     found.append(f"{rel}:{n}: {bad}")

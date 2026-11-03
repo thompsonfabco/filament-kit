@@ -492,7 +492,7 @@ def test_lan_only_blocks_outsiders(store, passfile, path):
 
 
 def test_lan_only_lets_lan_and_loopback_through(store, passfile):
-    for who in (HOME, ("127.0.0.1", 1), ("::1", 1), ("::ffff:192.0.2.7", 1)):
+    for who in (HOME, ("127.0.0.1", 1), ("::1", 1), ("::ffff:192.168.1.77", 1)):
         with TestClient(_app(store, passfile), client=who) as c:
             assert c.get("/intake/api/find").text == "intake"
 
