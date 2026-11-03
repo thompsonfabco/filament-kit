@@ -178,3 +178,68 @@ def test_rejected_connection_writes_nothing(cap, tmp_path, capsys):
 def test_read_env_format(cap, tmp_path):
     env = cap.read_env(env_file(tmp_path))
     assert env == {"PRINTER_IP": IP, "PRINTER_SERIAL": SERIAL, "PRINTER_CODE": CODE}   # nothing else kept
+
+
+# ---------- fix round 1 ----------
+
+import socket   # noqa: E402
+import struct   # noqa: E402
+
+
+def packed(ip, order="<"):
+    return struct.unpack(order + "I", socket.inet_aton(ip))[0]
+
+
+def test_int_ips_are_replaced(cap, tmp_path):
+    """Bambu firmware sends net.info[].ip / mask / gw as packed uint32 (little-endian, ha-bambulab)."""
+    replies = {"pushall": [{"print": {"command": "push_status", "net": {"info": [
+        {"ip": packed(IP), "mask": packed("255.255.255.0"), "gw": packed("192.168.1.1")},
+        {"ip": 0, "mask": 0}, {"ip": 12345, "mask": 777}]},
+        "other": [packed(IP, ">"), packed(IP)], "uptime": 42}}],
+        "get_version": []}
+    rc, out, _ = run(cap, tmp_path, factory=lambda cid: FakeClient(cid, replies=replies))
+    assert rc == 0
+    data = json.loads(out.read_text(encoding="utf-8"))
+    p = data["report"]["print"]
+    doc = packed("192.0.2.1")
+    assert p["net"]["info"][0] == {"ip": doc, "mask": packed("255.255.255.0"), "gw": doc}    # plain netmask kept
+    assert p["net"]["info"][1] == {"ip": doc, "mask": 0}
+    assert p["net"]["info"][2] == {"ip": doc, "mask": doc}                                    # not a netmask
+    assert p["other"] == [doc, doc] and p["uptime"] == 42
+    for n in (packed(IP), packed(IP, ">"), packed("192.168.1.1")):
+        assert str(n) not in out.read_text(encoding="utf-8")
+
+
+def test_final_check_refuses_a_leftover_host_ip(cap, tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(cap, "scrub", lambda obj, *a, **k: obj)      # a scrub that missed something
+    rc, out, _ = run(cap, tmp_path)
+    assert rc == 1 and not out.exists()
+    assert CODE not in capsys.readouterr().err
+
+
+def test_final_check_sees_a_packed_host_ip(cap):
+    assert cap.leftovers('{"x": %d}' % packed(IP, ">"), "S", "C", IP)
+    assert cap.leftovers('{"x": "%s"}' % IP, "S", "C", IP)
+    assert not cap.leftovers('{"x": %d1}' % packed(IP), "S", "C", IP)
+
+
+def test_module_serials_are_redacted_consistently(cap, tmp_path):
+    replies = {"pushall": [{"print": {"command": "push_status",
+                                      "ams": {"ams": [{"id": "0", "sn": "19C06A111"}]}}}],
+               "get_version": [{"info": {"command": "get_version", "module": [
+                   {"name": "n3f/0", "sn": "19C06A111"}, {"name": "n3s/128", "sn": "22E08B222"},
+                   {"name": "ahb", "sn": "33X"}, {"name": "ota", "sn": SERIAL}]}},
+                   {"info": {"command": "get_version", "module": [{"name": "n3s/128", "sn": "22E08B222"}]}}]}
+    rc, out, _ = run(cap, tmp_path, factory=lambda cid: FakeClient(cid, replies=replies))
+    assert rc == 0
+    text = out.read_text(encoding="utf-8")
+    for sn in ("19C06A111", "22E08B222", "33X", SERIAL):
+        assert sn not in text
+    data = json.loads(text)
+    mods = {m["name"]: m["sn"] for m in data["version"]["module"]}
+    first = [m for m in data["messages"] if "info" in m["payload"]][0]["payload"]["info"]["module"]
+    names = {m["name"]: m["sn"] for m in first}
+    assert names == {"n3f/0": "SN-redacted-1", "n3s/128": "SN-redacted-2", "ahb": "SN-redacted-3",
+                     "ota": "SERIAL0000000000"}
+    assert mods == {"n3s/128": "SN-redacted-2"}
+    assert data["report"]["print"]["ams"]["ams"][0]["sn"] == "SN-redacted-1"

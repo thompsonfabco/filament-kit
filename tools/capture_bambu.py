@@ -9,8 +9,11 @@ format, `KEY=value` lines as systemd's EnvironmentFile reads them), connects to 
 
 The fixture (JSON) holds every message received (`messages`: topic, seconds since connect, payload) and the
 `print` payloads merged in order (`report`). The serial is replaced by SERIAL0000000000 everywhere (keys, topics,
-nested strings) and every IPv4 address by 192.0.2.1. The access code is never printed or written (a value
-equal to it is replaced by REDACTED). An --out inside the repository's tests directory is refused without
+nested strings) and every IPv4 address by 192.0.2.1, also the packed uint32 form the firmware uses in
+`net.info[]` (ip / gw, and a mask that is not a plain netmask) and any int equal to the printer's packed address;
+each AMS / HT / toolhead serial in the get_version module list becomes SN-redacted-<n> (the same n everywhere). The access code is never printed or written (a value
+equal to it is replaced by REDACTED); a fixture that still holds the serial, the code or the printer's IP
+(string or packed) is not written. An --out inside the repository's tests directory is refused without
 --force: review the file before it is committed.
 
 Standard library + paho-mqtt (the scanner's and the kit's venvs both have it)."""
@@ -19,7 +22,9 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import socket
 import ssl
+import struct
 import sys
 import threading
 import time
@@ -84,20 +89,88 @@ def read_env(path: str | Path) -> dict[str, str]:
     return out
 
 
-def scrub(obj: Any, serial: str, code: str | None = None) -> Any:
+def packed(ip: str) -> tuple[int, int]:
+    """An IPv4 address as Bambu's packed uint32, little-endian (how `net.info[].ip` comes) and big-endian."""
+    raw = socket.inet_aton(ip)
+    return struct.unpack("<I", raw)[0], struct.unpack(">I", raw)[0]
+
+
+IP_OUT_INT = packed(IP_OUT)[0]
+IP_KEYS = ("ip", "gw")                       # an int under these is an address (net.info[])
+MASK_KEYS = ("mask",)
+
+
+def _netmask(n: int) -> bool:
+    """A plain netmask (leading ones, then zeros) in either byte order."""
+    if not 0 <= n <= 0xFFFFFFFF:
+        return False
+    for v in (n, int.from_bytes(n.to_bytes(4, "little"), "big")):
+        inv = ~v & 0xFFFFFFFF
+        if inv & (inv + 1) == 0:
+            return True
+    return False
+
+
+def module_serials(messages: list[dict], serial: str) -> dict[str, str]:
+    """sn -> "SN-redacted-<n>" for every `sn` in a get_version reply's `module` list (AMS, HT, toolhead ...),
+    numbered in order of appearance; the printer's own serial is left to the SERIAL0000000000 rule."""
+    out: dict[str, str] = {}
+    for m in messages:
+        info = m.get("payload", {}).get("info") if isinstance(m.get("payload"), dict) else None
+        mods = info.get("module") if isinstance(info, dict) else None
+        for mod in mods if isinstance(mods, list) else []:
+            sn = mod.get("sn") if isinstance(mod, dict) else None
+            if isinstance(sn, str) and sn and sn != serial and sn not in out:
+                out[sn] = f"SN-redacted-{len(out) + 1}"
+    return out
+
+
+def scrub(obj: Any, serial: str, code: str | None = None, host: str | None = None,
+          sns: dict[str, str] | None = None) -> Any:
     """A copy with the serial -> SERIAL0000000000 (also inside keys and longer strings), every IPv4 address ->
-    192.0.2.1, and a value equal to the access code -> REDACTED."""
-    if isinstance(obj, dict):
-        return {scrub(k, serial, code): scrub(v, serial, code) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [scrub(v, serial, code) for v in obj]
-    if isinstance(obj, str):
-        if code and code in obj:
-            obj = obj.replace(code, REDACTED)
-        if serial:
-            obj = obj.replace(serial, SERIAL_OUT)
-        return _IPV4.sub(IP_OUT, obj)
-    return obj
+    192.0.2.1 (strings; an int under an ip / gw key, an int under a mask key unless a plain netmask, and any int
+    equal to the host's packed address in either byte order -> 192.0.2.1 packed), each module serial in `sns` ->
+    its SN-redacted-<n>, and a string containing the access code -> REDACTED."""
+    host_ints = set(packed(host)) if host else set()
+    subs = sorted((sns or {}).items(), key=lambda kv: -len(kv[0]))
+
+    def walk(o: Any, key: Any) -> Any:
+        if isinstance(o, dict):
+            return {walk(k, None): walk(v, k) for k, v in o.items()}
+        if isinstance(o, list):
+            return [walk(v, key) for v in o]
+        if isinstance(o, str):
+            if code and code in o:
+                o = o.replace(code, REDACTED)
+            for sn, new in subs:
+                if o == sn or (len(sn) >= 6 and sn in o):
+                    o = o.replace(sn, new)
+            if serial:
+                o = o.replace(serial, SERIAL_OUT)
+            return _IPV4.sub(IP_OUT, o)
+        if isinstance(o, int) and not isinstance(o, bool):
+            k = key.lower() if isinstance(key, str) else None
+            if k in IP_KEYS or o in host_ints:
+                return IP_OUT_INT
+            if k in MASK_KEYS and not _netmask(o):
+                return IP_OUT_INT
+        return o
+
+    return walk(obj, None)
+
+
+def leftovers(text: str, serial: str, code: str, host: str) -> list[str]:
+    """What the scrubbed fixture text still holds that must never be written (names only, never the values)."""
+    found = []
+    if code and code in text:
+        found.append("the access code")
+    if serial and serial in text:
+        found.append("the serial")
+    if host and re.search(rf"(?<![\w.]){re.escape(host)}(?![\w.])", text):
+        found.append("the printer's IP")
+    if host and any(re.search(rf"(?<!\d){n}(?!\d)", text) for n in packed(host)):
+        found.append("the printer's IP (packed)")
+    return found
 
 
 def merge(base: dict, delta: dict) -> dict:
@@ -189,7 +262,7 @@ def capture(host: str, serial: str, code: str, seconds: float = SECONDS,
         return {"connected": True, "messages": list(messages)}
 
 
-def fixture(raw: dict, serial: str, code: str, seconds: float) -> dict:
+def fixture(raw: dict, serial: str, code: str, seconds: float, host: str | None = None) -> dict:
     report: dict = {}
     for m in raw["messages"]:
         p = m["payload"].get("print") if isinstance(m["payload"], dict) else None
@@ -201,7 +274,7 @@ def fixture(raw: dict, serial: str, code: str, seconds: float) -> dict:
     out = {"captured_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "seconds": seconds,
            "sent": [c for c in COMMANDS], "report": {"print": report}, "version": version[-1] if version else None,
            "messages": raw["messages"]}
-    return scrub(out, serial, code)
+    return scrub(out, serial, code, host, module_serials(raw["messages"], serial))
 
 
 def main(argv: list[str] | None = None, *, client_factory: Callable[[str], Any] = _paho_client,
@@ -225,10 +298,11 @@ def main(argv: list[str] | None = None, *, client_factory: Callable[[str], Any] 
     except CaptureError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
-    data = fixture(raw, serial, code, args.seconds)
+    data = fixture(raw, serial, code, args.seconds, host)
     text = json.dumps(data, indent=1, ensure_ascii=False, sort_keys=False)
-    if code in text or serial in text:       # belt and braces: never write either
-        print("error: the scrubbed capture still holds the serial or access code; nothing written", file=sys.stderr)
+    bad = leftovers(text, serial, code, host)  # belt and braces: never write any of these
+    if bad:
+        print(f"error: the scrubbed capture still holds {', '.join(bad)}; nothing written", file=sys.stderr)
         return 1
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(text + "\n", encoding="utf-8")
