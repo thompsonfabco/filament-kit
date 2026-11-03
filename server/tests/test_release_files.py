@@ -30,7 +30,8 @@ def test_release_workflow_uses_both_signing_secrets():
     # secrets only ever reach a step through env, never a run line
     for line in text.splitlines():
         if "secrets." in line:
-            assert re.match(r"\s+FK_KEYSTORE(_B64|_PASSWORD): \$\{\{ secrets\.FK_KEYSTORE(_B64|_PASSWORD) \}\}$", line), line
+            assert re.match(r"\s+(FK_KEYSTORE(_B64|_PASSWORD)|FK_RELEASE_KEY): "
+                            r"\$\{\{ secrets\.(FK_KEYSTORE(_B64|_PASSWORD)|FK_RELEASE_KEY) \}\}$", line), line
 
 
 def test_release_workflow_builds_sync_on_windows_with_pinned_pyinstaller():
@@ -146,7 +147,7 @@ def test_web_extra_pins_mcp_exactly():
 
 def test_wrapper_runs_modules_as_root():
     text = _read("install/filament-kit-cli.sh")
-    assert re.search(r"^\s+config \| cert \| modules \| remote \| migrate-ops\)\s*$", text, re.M)
+    assert re.search(r"^\s+config \| cert \| modules \| remote \| migrate-ops \| update\)\s*$", text, re.M)
 
 
 def test_wrapper_runs_web_passphrase_as_root():

@@ -1,0 +1,12 @@
+[Unit]
+Description=filament-kit auto-update (module updates): install the latest signed release when one is due
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# root: it stops the kit's services and runs the release's install.sh (packages, /opt, units)
+ExecStart=/opt/filament-kit/venv/bin/filament-kit update --scheduled
+Nice=10
+TimeoutStartSec=1h
+# no IPAddressDeny: GitHub's address ranges change
