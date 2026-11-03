@@ -21,7 +21,7 @@ Unknown → the generic record.
     code          str          primary code from the file (generic: the code asked for, upper case, maybe "")
     name          str          display name ("H2D", "X1 Carbon"); generic: "Unknown Bambu printer (...)"
     preset_name   str | None   Bambu Studio printer name ("Bambu Lab H2D"); None for the generic record
-    say           str | None   speech text for the printer ("x one carbon"); generic: "unknown printer"
+    say           str | None   speech text for the printer ("x one c"); generic: "printer"
     aliases       tuple[str]   other codes and typed names that find this model
     nozzles       int          number of nozzles (generic: 1)
     camera        str | None   "hls" (RTSPS, relayed as HLS), "mjpeg" (port-6000 JPEG) or None (no camera offered)
@@ -142,7 +142,7 @@ class ModelInfo:
 def generic_model(code: str | None) -> ModelInfo:
     c = (code or "").strip().upper()
     return ModelInfo(code=c, name=f"Unknown Bambu printer ({c})" if c else "Unknown Bambu printer",
-                     preset_name=None, say="unknown printer", light_nodes=(), known=False)
+                     preset_name=None, say="printer", light_nodes=(), known=False)
 
 
 @dataclass(frozen=True)

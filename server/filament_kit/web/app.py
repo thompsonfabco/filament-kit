@@ -7,8 +7,9 @@
       /login                    the passphrase page that approves a sign-in (LAN only)
       /health                   "ok"
       /intake ...               the phone web app (LAN only, cookie sessions)
+      /reader/...               the bench NFC reader's API (LAN only, reader token; reader.py)
 
-The whole app is wrapped in `auth.lan_only`, so /authorize, /login and /intake answer the LAN only. One Lockout is
+The whole app is wrapped in `auth.lan_only`, so /authorize, /login, /intake and /reader answer the LAN only. One Lockout is
 shared by /login and the web app's sign-in. State: `FK_STATE/web/oauth.json`; the passphrase hash
 `FK_ETC/web_passphrase` (set with `filament-kit web passphrase`).
 """
@@ -24,7 +25,7 @@ from starlette.responses import PlainTextResponse
 
 from .. import __version__, config
 from ..spoolman import Spoolman
-from . import auth, mcp_tools
+from . import auth, mcp_tools, reader
 from .intake_app import IntakeApp
 
 ALLOWED_ORIGINS = ["https://claude.ai", "https://claude.com"]
@@ -75,7 +76,8 @@ def build_app(cfg: dict | None = None, *, sm: Spoolman | None = None, claude=Non
 
     routes = [*auth.login_routes(store, public, passphrase_file(), lan_cidrs=lan, lockout=lockout),
               *IntakeApp(tools, store=store, lockout=lockout, public_url=public, lan_cidrs=lan,
-                         passphrase_file=passphrase_file(), claude=claude).routes()]
+                         passphrase_file=passphrase_file(), claude=claude).routes(),
+              *reader.Reader(tools, sm, lan_cidrs=lan).routes()]
     mcp.custom_route("/health", methods=["GET"])(health)
     for r in routes:
         mcp.custom_route(r.path, methods=sorted(r.methods - {"HEAD"} if r.methods else ["GET"]))(r.endpoint)

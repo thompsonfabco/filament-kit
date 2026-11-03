@@ -1271,6 +1271,41 @@ def cmd_web_passphrase() -> int:
     return 0
 
 
+def cmd_reader(action: str, name: str | None = None, ref: str | None = None) -> int:
+    """`reader token [--name X]` (root): a new reader token, printed once for the reader's secrets.h (only its
+    sha256 is kept); `reader tokens`: the tokens (id, name, made); `reader revoke <id|name>` (root)."""
+    from .web import reader  # needs the [web] extra
+    store = reader.TokenStore()
+    if action in ("token", "revoke") and not _is_root():
+        print(f"error: run as root: sudo filament-kit reader {action}", file=sys.stderr)
+        return 1
+    try:
+        if action == "token":
+            tid, tok = store.issue(name)
+            print(f"New reader token {tid} ({reader._clean_name(name)}). It is shown only this once:\n\n  {tok}\n\n"
+                  "Put it in the reader's src/secrets.h as READER_TOKEN, then build and flash (reader/README.md).\n"
+                  f"Remove it later with: sudo filament-kit reader revoke {tid}")
+            return 0
+        if action == "tokens":
+            rows = store.list()
+            for t in rows:
+                print(f"{t['id']:<6} {t['name']:<24} {t['created']}")
+            if not rows:
+                print("no reader tokens (make one: sudo filament-kit reader token --name bench)")
+            return 0
+        if store.revoke(ref or ""):
+            print(f"revoked {ref}; a reader using it is refused from now on")
+            return 0
+        print(f"error: no single reader token {ref!r} (see: filament-kit reader tokens)", file=sys.stderr)
+        return 1
+    except reader.TokenFileError as e:
+        print(f"error: {e}; nothing was changed", file=sys.stderr)
+        return 1
+    except PermissionError as e:
+        print(f"error: {e} (try with sudo)", file=sys.stderr)
+        return 1
+
+
 def _web_health(port: int) -> tuple[bool, str]:
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=3) as r:
@@ -1400,6 +1435,13 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     wbsub = wb.add_subparsers(dest="web_cmd", required=True)
     wbsub.add_parser("passphrase", help="set the sign-in passphrase (root; typed twice, hidden)")
     wbsub.add_parser("status", help="check the web unit: public URL, passphrase, health, connectors")
+    rd = sub.add_parser("reader", help="the bench NFC reader's tokens: make, list, revoke")
+    rdsub = rd.add_subparsers(dest="reader_cmd", required=True)
+    rdt = rdsub.add_parser("token", help="make a reader token and print it once, for secrets.h (root)")
+    rdt.add_argument("--name", help="what the token is for, e.g. bench")
+    rdsub.add_parser("tokens", help="list the reader tokens (never the tokens themselves)")
+    rdr = rdsub.add_parser("revoke", help="remove a reader token (root)")
+    rdr.add_argument("ref", help="its id (r1 ...) or name")
     rm_ = sub.add_parser("remote", help="remote access: get the certificate, show the firewall rules")
     rmsub = rm_.add_subparsers(dest="remote_cmd", required=True)
     rmsub.add_parser("issue", help="get the certificate with certbot (standalone on port 80) (root)")
@@ -1457,6 +1499,8 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
         return cmd_profiles_restore_deleted()
     if args.cmd == "web":
         return cmd_web_passphrase() if args.web_cmd == "passphrase" else cmd_web_status()
+    if args.cmd == "reader":
+        return cmd_reader(args.reader_cmd, getattr(args, "name", None), getattr(args, "ref", None))
     if args.cmd == "migrate-ops":
         return cmd_migrate_ops(args.bundle, args.apply, args.replace_spoolman, args.allow_unknown_spoolman)
     if args.cmd == "remote":

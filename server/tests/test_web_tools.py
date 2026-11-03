@@ -324,7 +324,10 @@ class FakeKit:
                 "status": {"gcode_state": "IDLE", "job": "", "ams": [
                     {"unit": 0, "label": "A", "kind": "ams", "slots": [
                         {"slot": 0, "label": "A1", "type": "PLA", "color_hex": "FFFFFF", "active": False,
-                         "spool": {"id": 7, "name": "SUNLU PLA+ Grey"}}]}]}}
+                         "present": True, "spool": {"id": 7, "name": "SUNLU PLA+ Grey"}}]},
+                    {"unit": 129, "label": "HT-B", "kind": "ams_ht", "slots": [{"slot": 0, "label": "HT-B"}]},
+                    {"unit": 254, "label": "Ext-L", "kind": "ext", "slots": [{"slot": 0, "label": "Ext-L"}]},
+                    {"unit": 255, "label": "Ext-R", "kind": "ext", "slots": [{"slot": 0, "label": "Ext-R"}]}]}}
 
     def post(self, path, body):
         self.loads.append((path, body))
@@ -341,8 +344,31 @@ def test_printer_tools_via_kit_bridge(sm):
     assert kit.loads == [("/api/printers/SER1/slots/A1/load", {"spool_id": 7, "dry_run": True})]
     tools.printer_set_slot(7, "HT2", dry_run=False)
     assert kit.loads[-1][0] == "/api/printers/SER1/slots/HT-B/load"
+    tools.printer_set_slot(7, "EXT-R", dry_run=False)
+    assert kit.loads[-1][0] == "/api/printers/SER1/slots/Ext-R/load"
+    tools.printer_set_slot(7, "ext-l", dry_run=False, printer="H2D")
+    assert kit.loads[-1][0] == "/api/printers/SER1/slots/Ext-L/load"
+    with pytest.raises(Problem, match="unknown slot"):
+        tools.printer_set_slot(7, "B1")                    # not on this printer
     with pytest.raises(Problem, match="printer"):
         tools.printer_set_slot(7, "A1", printer="OTHER")
+    by = {s["slot"]: s for s in tools.printer_slots("SER1")["printers"][0]["slots"]}
+    assert by["A1"]["present"] is True and by["Ext-L"]["kind"] == "ext" and by["HT-B"]["unit"] == "HT-B"
+
+
+@pytest.mark.parametrize("old, labels, new", [
+    ("1", ["A1", "A2"], "A1"), ("AMS slot 4", None, "A4"), ("HT1", ["A1", "HT-A"], "HT-A"),
+    ("ht3", None, "HT-C"), ("AMS HT 2", None, "HT-B"), ("EXT-L", ["A1", "Ext-L", "Ext-R"], "Ext-L"),
+    ("external right", ["Ext-L", "Ext-R"], "Ext-R"), ("EXT-L", ["A1", "Ext"], "Ext"), ("EXT", ["Ext"], "Ext"),
+    ("ext-r", None, "Ext-R"), ("b3", ["A1", "B3"], "B3"), ("AA4", None, "AA4"), ("HT-AB", ["HT-AB"], "HT-AB")])
+def test_kit_label_any_printer_and_h2d_compat(old, labels, new):
+    assert slots.kit_label(old, labels) == new
+
+
+@pytest.mark.parametrize("bad, labels", [("Z9", ["A1"]), ("EXT-L", ["A1"]), ("a b", None), ("x" * 17, None)])
+def test_kit_label_refuses(bad, labels):
+    with pytest.raises(Problem, match="unknown slot"):
+        slots.kit_label(bad, labels)
 
 
 # ---------- instructions ----------
@@ -499,7 +525,9 @@ def test_tool_texts_round_1():
     tools = {t.name: t for t in anyio.run(m.list_tools)}
     d = tools["add_filaments_to_line"].description
     assert "Refuses duplicates" not in d and "moves" in d and "extra.line" in d
-    assert "EXT-L" in tools["h2d_set_slot"].description and "slot_service" in tools["h2d_set_slot"].description
+    # P4: the old H2D names (EXT-L ...) work with both backends now, so the description no longer limits them
+    assert "EXT-L" in json.dumps(tools["h2d_set_slot"].input_schema) and "Ext-L" in mcp_tools.SLOT_ARG
+    assert "slot_service" not in tools["h2d_set_slot"].description
 
 
 @pytest.mark.parametrize("bad", [float("nan"), float("inf"), -float("inf")])
