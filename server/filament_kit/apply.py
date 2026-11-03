@@ -323,9 +323,18 @@ class _Exec:
             return False
 
     def probe(self, cmd: list[str]) -> bool:
+        """A command whose exit status is the answer; its output (a uid, a package status, `no such user`) would
+        only look like an error in the install log, so it goes nowhere."""
         if self.dry:
             return True
-        return self.ok(cmd)
+        try:
+            if self._run is run_checked:
+                subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            else:
+                self._run(cmd)
+            return True
+        except (subprocess.CalledProcessError, OSError):
+            return False
 
     def write(self, dest: str, data: bytes, mode: int, owner: str = "") -> Path:
         path = _under(self.root, dest)
@@ -348,7 +357,7 @@ def _enable(ex: _Exec, unit: str) -> None:
 
 def _user(ex: _Exec, arg) -> None:
     name, groups = (arg, "") if isinstance(arg, str) else arg
-    if not ex.dry and ex.ok(["id", "-u", name]):
+    if not ex.dry and ex.probe(["id", "-u", name]):
         return
     cmd = ["useradd", "--system", "--user-group", "--no-create-home", "--home-dir", "/nonexistent",
            "--shell", "/usr/sbin/nologin"]

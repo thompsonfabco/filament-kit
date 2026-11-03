@@ -234,7 +234,9 @@ if [ -z "$MODE" ] && [ "$FIRST_INSTALL" -eq 1 ] && [ -t 0 ]; then
         *) die "unknown choice '$choice'; run ./install.sh again" ;;
     esac
     if [ "$MODE" = custom ]; then
-        # the same checklist as `filament-kit config` -> Modules; prompts on the terminal, the choice on stdout
+        # the same checklist as `filament-kit config` -> Modules (cursor keys and Space; drawn on /dev/tty, as
+        # stdout is captured here; the numbered list without a usable terminal); prompts on the terminal, the
+        # choice on stdout
         # First line: the modules, comma separated. Then one `set <key>=<value>` per setting the menu asked for.
         MENU_OUT=$("$VENV/bin/filament-kit" modules menu --raw) || die "no modules chosen; run ./install.sh again"
         CUSTOM=",$(printf '%s
