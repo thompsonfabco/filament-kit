@@ -47,7 +47,7 @@ DEFAULTS: dict = {
                 "nfc_device": "auto", "beep": True, "beep_device": "",
                 "speech": True, "camera": "auto", "panel_flash": True},
     # merge-ops: web unit, remote access, orders file, tag readers, slot service, slicer/presets/intake extras
-    "web": {"port": 8101, "public_url": None,
+    "web": {"port": 8101, "public_url": None, "push": False,   # push: Web Push alerts (needs internet egress)
             "lan": ["192.168.0.0/16", "10.0.0.0/8"]},   # not 172.16/12: Docker's bridges live there (A-M6)
     "remote": {"hostname": None, "acme_window": None, "email": None},
     "orders": {"file": None},

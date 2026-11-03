@@ -169,6 +169,12 @@ def _ams(p: dict, spools: list[dict], printer_name: str, lay) -> list[dict]:
     return units
 
 
+def _print_error(p: dict) -> str:
+    """The report's `print_error` as "HHHH_HHHH" ("" for none), as the h2d remote shows it."""
+    n = (_int(p.get('print_error'), 0) or 0) & 0xFFFFFFFF
+    return f"{n >> 16:04X}_{n & 0xFFFF:04X}" if n else ''
+
+
 def brief(report: dict) -> dict:
     """The few fields the printer list needs (`Manager.summary`), without building the AMS layout."""
     p = _d(report)
@@ -221,6 +227,7 @@ def summarize(report: dict, spools: list[dict], *, printer_name: str = '', updat
         'presence': lay.presence,
         'notes': list(lay.notes),
         'hms': hms,
+        'print_error': _print_error(p),
         'light': light,
         'updated': int(updated) if updated else None,
     }
