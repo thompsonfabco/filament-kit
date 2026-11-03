@@ -291,6 +291,20 @@ something else may be answering at the printer's address: check the printer's IP
 A backup of your spools and settings is made every night in `/var/backups/filament-kit` (the last 14 days are
 kept).
 
+### Your own printer data (override)
+
+The facts about each printer model and AMS unit come from the kit's own `bambu_hardware.xml`. To correct or add
+something, put your own file at `/etc/filament-kit/bambu_hardware.xml`. It wins element by element over the
+kit's own file, and the updater never replaces a file you made.
+
+Your file must carry a **version above the kit's own file**, in its first line: for example, when the kit's file
+says `<bambu-hardware version="1.0">`, write `<bambu-hardware version="1.1">`. A file whose version is the same
+as or lower than the kit's own is **ignored**, so an old file never hides newer data that an upgrade brings.
+`sudo filament-kit status` then shows a note: "override version ... is not newer than the kit's own ...:
+ignored". After an upgrade that ships a newer file, check that note: raise your file's version again, or delete
+your file if the new release already has what you added. A file with mistakes is refused whole (the last good
+data stays in use), and status names it.
+
 ## Presets in Bambu Studio
 
 The server builds one Bambu Studio filament preset for each filament line you own (a line is a brand's product,

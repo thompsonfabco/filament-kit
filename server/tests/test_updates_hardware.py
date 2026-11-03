@@ -69,10 +69,17 @@ def test_a_hand_made_override_survives_a_newer_feed_and_a_kit_upgrade(env, srv, 
     newer = tmp_path / "bundled.xml"                          # the kit is upgraded: its own file is now 1.6
     newer.write_bytes(xml("1.6"))
     monkeypatch.setattr(hardware, "BUNDLED", newer)
+    capsys.readouterr()
     srv.add("1.0.1", extra={HW: xml("1.7")})
     assert _update(env, srv) == 0
     assert override.read_bytes() == mine
     assert not override.with_name(HW + ".previous").exists()
+    # the loader agrees with the feed (Ruling BT): the hand-made 1.2 is no longer newer than the kit's 1.6, so it
+    # is ignored, and the updater says so instead of implying it is still in use
+    hardware._reset_cache()
+    assert "not newer" in " ".join(hardware.load().warnings)
+    out = capsys.readouterr().out
+    assert "is not newer than the kit's own" in out and "ignored" in out
 
 
 def test_a_hand_edited_feed_file_counts_as_hand_made(env, srv, key, override, capsys):
