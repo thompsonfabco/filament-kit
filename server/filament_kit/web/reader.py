@@ -431,11 +431,12 @@ def _short_spool(v) -> dict | None:
 
 def reader_slots(rows: list[dict], printer: str = "") -> list[dict]:
     """The slots the firmware can tell apart: it keeps and sends back a label as is, cut at 40 bytes, and the kit
-    matches labels whatever their case. A label over 40 bytes is left out rather than cut (kit labels are short),
-    and of slots with the same label (in any case) only the first is listed."""
+    matches labels whatever their case and surrounding spaces (`slots.label_key`). A label over 40 bytes is left
+    out rather than cut (kit labels are short), and of slots with the same key only the first is listed (the one
+    `slots.kit_label` picks for it)."""
     seen, out = set(), []
     for s in rows:
-        key = str(s["label"]).upper()
+        key = slots.label_key(s["label"])
         if not fits(s["label"], MAX_TEXT) or key in seen:
             log.warning("reader: printer %s slot %s left out of the list (%s)", _safe(printer), _safe(s["label"]),
                         "listed twice" if key in seen else f"label over {MAX_TEXT} bytes")
