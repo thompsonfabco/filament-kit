@@ -34,7 +34,7 @@ REPO = "thompsonfabco/filament-kit"
 API = "https://api.github.com"
 # The release public key: ed25519, the raw 32 bytes in base64. Empty until the owner runs
 # `tools/sign_release.py keygen` then `tools/sign_release.py set-pubkey <key>`; nothing verifies without it.
-PUBKEY = ""
+PUBKEY = "CUwA4XV86H/Orv8A1f7ghiTarDdsPdrpZjQsTvJpJCA="
 TOKEN_HOSTS = frozenset({"api.github.com", "objects.githubusercontent.com"})
 SUMS = "SHA256SUMS"
 SIG = "SHA256SUMS.sig"
