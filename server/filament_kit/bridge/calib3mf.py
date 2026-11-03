@@ -2,12 +2,13 @@
 
 `build(labels)` makes a minimal Bambu project 3MF with one PLA filament per slot label and a plate gcode that is
 only comments and `M400`. `run(manager, serial, slotmap)` uploads it over FTPS to `/cache/fk-calib-<serial>.gcode.3mf`,
-starts it with `ams_mapping` = filament i -> the slot's number in the model's first candidate numbering scheme
-(`hardware.ModelInfo.numbering`; an external holder as its own id) plus `ams_mapping2` (`[{ams_id, slot_id}]`) when
-the model lists it, waits (at most `JOB_TIMEOUT` s) for the job to start and end, records the `mapping` and
-`ams.tray_now` the printer reports, and decodes the reported mapping against every candidate scheme: the first that
-round-trips every loaded slot is `CalibResult.scheme` (another job, in the next candidate's numbers, only when none
-does; see `run`). A job that ends FAILED with `print_error` 0 or absent counts as finished on a model with
+starts it with `ams_mapping` = filament i -> the slot's legacy number (unit*4+tray, an HT unit its id: the command
+Bambu Studio sends and the scanner verified on the owner's H2D; an external holder as its own id) plus
+`ams_mapping2` (`[{ams_id, slot_id}]`) when the model lists it, waits (at most `JOB_TIMEOUT` s) for the job to
+start and end, records the `mapping` and `ams.tray_now` the printer reports, and decodes the reported mapping
+against every candidate scheme: the first (model order) that round-trips every loaded slot is `CalibResult.scheme`
+(another job, in the next candidate's numbers, only after a clean end that fits none or a refusal; see `run`). A
+job that ends FAILED with `print_error` absent, 0, "0" or "" counts as finished on a model with
 `gcode_only_failed_is_finish` (the H2D ends a gcode-only job so). Afterwards (always) the file is deleted and every
 slot whose settings changed since the start is set back from the snapshot taken at the start and the restore is
 verified from the next report (`CalibResult.restored` false when any slot was not confirmed back). It does not save
@@ -316,23 +317,26 @@ def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None
     disk (`snapshot.save`) before the print command and deleted after a confirmed restore. `should_stop()` true
     (CLI signal, service stopping) stops the job at once (`stop` command), then the slots are restored.
 
-    Numbering (P3): the model's candidate schemes (`ModelInfo.numbering`, first guess first). The first job sends
-    `ams_mapping` in the first candidate's numbers (plus `ams_mapping2` when the model lists it); the mapping the
-    printer reports is decoded against EVERY candidate and the first (in the model's order) that round-trips all
-    loaded slots is the result (`scheme`): one job is enough whichever numbering the printer uses, as long as it
-    reports its own numbers. Only when none fits (or the printer refused the job) is another job sent, in the next
-    candidate's numbers (a candidate that numbers the loaded slots as an earlier one did is skipped). The result
-    is the last job's; `attempts` says what the earlier ones saw."""
+    Numbering (P3, ruling BL): the first job sends `ams_mapping` in legacy numbers, Bambu Studio's command (plus
+    `ams_mapping2` when the model lists it); the mapping the printer reports (in its own numbering: the owner's H2D
+    answers [0, 2, 128, 129] with [0, 2, 32768, 33024]) is decoded against EVERY candidate scheme of the model
+    (`ModelInfo.numbering`) and the first in the model's order that round-trips all loaded slots is the result
+    (`scheme`). Only when the job finished (FINISH, or FAILED-as-finish) and no candidate fits, or the printer
+    refused the job, is another job sent, in the next candidate's numbers (a scheme that numbers the loaded slots
+    as an earlier job did is skipped; so is one that cannot number them, e.g. legacy for AMS ids >= 32). A real
+    failure, a trip, a timeout or a stop never gets a second job. The result is the last job's; `attempts` says
+    what the earlier ones saw."""
     if printer is None:
         printer = registry.load().get(serial)
     hw = hardware.load()
     mi = hw.model(printer.model if printer is not None and printer.model else None)
     candidates = [k for k in mi.numbering if k in hw.schemes] or ['legacy']
+    sends = ['legacy'] + [k for k in candidates if k != 'legacy']     # what each job's ams_mapping is numbered in
     tried: list[list[int]] = []
     sent_keys: list[str] = []
     attempts: list[str] = []
     res: CalibResult | None = None
-    for key in candidates:
+    for key in sends:
         r = _attempt(manager, serial, slotmap, printer, should_stop, hw, mi, candidates, key, tried)
         if r.skip:
             continue
@@ -545,6 +549,17 @@ def _stop(manager, serial: str) -> bool:
         return False
 
 
+def _no_error(v) -> bool:
+    """`print_error` says no error: absent, 0, "0" or "" only."""
+    if v is None:
+        return True
+    if isinstance(v, bool):
+        return False
+    if isinstance(v, int):
+        return v == 0
+    return isinstance(v, str) and v.strip() in ("", "0")
+
+
 def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[int], snap: dict,
          should_stop=None, *, numbering) -> None:
     """Send and watch one job. `numbering` = (hardware, model, candidate scheme keys, (ams_id, tray_id) per label,
@@ -627,7 +642,7 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
         res.problems.append(f"the calibration job did not finish within {JOB_TIMEOUT:.0f} s"
                             + _stopped_text(_stop_ours(manager, serial, name)))
         return
-    if st['final'] == 'FAILED' and mi.gcode_only_failed_is_finish and not _int(st['error']):
+    if st['final'] == 'FAILED' and mi.gcode_only_failed_is_finish and _no_error(st['error']):
         # this model ends a gcode-only job as FAILED with no print_error (the owner's H2D, 2026-11-02): finished.
         # Only for our own calibration job (this watch), never for a print.
         log.info("printer %s: calibration job ended FAILED with no print_error: finished (%s rule)", serial,
@@ -636,9 +651,9 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
     if st['final'] != 'FINISH':
         res.problems.append(f"the calibration job ended as {st['final']} on the printer")
 
-    res.retry = True            # from here the job ended: unless a scheme fits, the next candidate may
     if res.mapping is None:
         res.problems.append("the printer did not report the job's slot mapping")
+        res.retry = st['final'] == 'FINISH'
         return
     vals = []
     for i, label in enumerate(labels):
@@ -663,7 +678,8 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
         log.info("printer %s: the loaded slots number alike under %s; taking %s (the model's first)", serial,
                  ", ".join(proved), res.scheme)
     res.consistent = st['final'] == 'FINISH' and res.scheme is not None
-    res.retry = res.scheme is None
+    # another job only after a clean end that proved nothing (never after a real failure or a stop)
+    res.retry = st['final'] == 'FINISH' and res.scheme is None
 
 
 def delete_leftover(serial: str, printer: registry.Printer | None = None) -> list[str]:

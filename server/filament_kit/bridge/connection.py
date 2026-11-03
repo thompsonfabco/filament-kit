@@ -322,7 +322,7 @@ class PrinterConnection:
 
     def request_pushall(self) -> None:
         c = self.client
-        if c is not None:
+        if c is not None and self._state == 'connected':
             c.publish(f"device/{self.serial}/request",
                       json.dumps({"pushing": {"sequence_id": "0", "command": "pushall"}}), qos=1)
 
@@ -345,7 +345,7 @@ class PrinterConnection:
                 return
             self._version_at = now
         c = self.client
-        if c is not None:
+        if c is not None and self._state == 'connected':
             c.publish(f"device/{self.serial}/request",
                       json.dumps({"info": {"sequence_id": str(next(self._seq)), "command": "get_version"}}), qos=1)
 

@@ -693,3 +693,20 @@ def test_a_matching_print_resets_the_mismatch_streak(rig, sd, spoolman_fake_stor
     m = ams.load_map(SERIAL)
     assert m.mismatch_streak == 0 and m.suspect is False
     assert used(spoolman_fake_store, A2) == 21.92
+
+
+def test_usage_map_save_is_dropped_when_the_map_changed_meanwhile(env):
+    """M1: usage saves what a print taught under the shared save lock, compare-and-save: a map a mapping job saved
+    after usage read it wins, and usage's version is dropped."""
+    registry.upsert(Printer(SERIAL, NAME, "O1D", "127.0.0.1", CODE, True))
+    ams.save_map(SERIAL, ams.SlotMap(slots=dict(CALIBRATED), calibrated=True, observe=False))
+    mine = ams.load_map(SERIAL)
+    stamp = mine.updated
+    newer = ams.SlotMap(slots={"A1": CALIBRATED["A1"]}, calibrated=True, observe=False, scheme="shift8")
+    ams.save_map(SERIAL, newer)                                  # a mapping job finished meanwhile
+    mine.learned["4000"] = "HT-A"
+    usage._save_map(SERIAL, mine, stamp)
+    m = ams.load_map(SERIAL)
+    assert m.scheme == "shift8" and m.learned == {} and set(m.slots) == {"A1"}
+    assert ams.save_map_if(SERIAL, mine, m.updated) is True     # the current stamp: saved
+    assert ams.load_map(SERIAL).learned == {"4000": "HT-A"}
