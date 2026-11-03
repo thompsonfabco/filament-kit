@@ -350,7 +350,8 @@ def _page(body: str, status: int = 200) -> HTMLResponse:
 
 def _lan_path(path: str) -> bool:
     path = path.rstrip("/")
-    return path in ("/authorize", "/login", "/intake") or path.startswith("/intake/")
+    return (path in ("/authorize", "/login", "/intake", "/reader") or path.startswith("/intake/")
+            or path.startswith("/reader/"))
 
 
 def lan_only(app: Any, lan_cidrs: Iterable[str]) -> Any:

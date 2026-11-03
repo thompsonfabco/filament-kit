@@ -161,6 +161,7 @@ def _ams(p: dict, spools: list[dict], printer_name: str, lay) -> list[dict]:
             t = sl.raw
             slots.append({'slot': sl.tray_id, 'label': sl.label, 'say': list(sl.say),
                           'type': _s(t.get('tray_type')), 'color_hex': _s(t.get('tray_color'))[:6],
+                          'preset_id': _s(t.get('tray_info_idx')),
                           'active': now == f"{u.ams_id}:{sl.tray_id}",
                           'present': sl.present, 'reading': sl.reading,
                           'spool': _spool_view(spool) if spool else None})
@@ -190,7 +191,8 @@ def summarize(report: dict, spools: list[dict], *, printer_name: str = '', updat
     `spools` are Spoolman spools; a slot shows the spool whose `location` is "<printer_name> – AMS <label>"
     (no join without a printer name). `updated` is when the last report arrived (unix seconds). `model` (code,
     name or None = generic) picks the externals' labels, unit types and the presence layout (`layout.build`).
-    Additive fields: unit `type_name`, `say`; slot `say`, `present`, `reading` (None = unknown); `presence`
+    Additive fields: unit `type_name`, `say`; slot `say`, `present`, `reading` (None = unknown), `preset_id` (the
+    slot's `tray_info_idx`; the reader's queue checks with it that a setting stuck); `presence`
     ("bits" | "tray_type") and `notes` (what is unknown about this printer)."""
     p = _d(report)
     lay = layout.build(p, model)

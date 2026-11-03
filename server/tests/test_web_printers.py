@@ -480,7 +480,7 @@ def test_push_send_drops_dead_subscriptions(env):
 
 # ---------- KitApi.raw / status ----------
 
-def test_kitapi_raw_streams_and_errors_carry_the_status(env, monkeypatch):
+def test_kitapi_raw_streams_and_errors_carry_the_http_status(env, monkeypatch):
     from starlette.applications import Starlette
     from starlette.responses import JSONResponse, Response
     from starlette.routing import Route
@@ -506,10 +506,10 @@ def test_kitapi_raw_streams_and_errors_carry_the_status(env, monkeypatch):
         for call in (lambda: kit.get("/api/printers/b"), lambda: kit.raw("/api/printers/b")):
             with pytest.raises(slots.SlotError) as ei:
                 call()
-            assert ei.value.status == 404 and "no such printer" in str(ei.value)
+            assert ei.value.http == 404 and ei.value.code == "not_found" and "no such printer" in str(ei.value)
     with pytest.raises(slots.SlotError) as ei:
         slots.KitApi(base_url="http://127.0.0.1:1").raw("/x")
-    assert ei.value.status is None
+    assert ei.value.http is None and ei.value.code == "unreachable"
 
 
 # ---------- review round 1 ----------
@@ -571,9 +571,7 @@ def test_hls_relay_passes_the_kit_error_through(app, kit):
     c = signed(app)
 
     def boom(path):
-        e = SlotError("the camera stream did not start; check that LAN mode liveview is enabled")
-        e.status = 503
-        raise e
+        raise SlotError("the camera stream did not start; check that LAN mode liveview is enabled", http=503)
     kit.raw = boom
     r = c.get(P + f"/{SERIAL}/camera/index.m3u8")
     assert r.status_code == 503 and "liveview" in r.json()["error"]

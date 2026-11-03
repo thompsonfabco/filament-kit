@@ -326,7 +326,7 @@ def test_say_with_model():
 
 def test_model_say():
     hw = hardware.load()
-    assert hw.model("BL-P001").say == "x one carbon"
+    assert hw.model("BL-P001").say == "x one c"          # P4: words the reader firmware can speak
     assert hw.model("O1D").say == "h two d"
     assert all(m.say for m in hw.models)
     assert hw.model("zz").say
