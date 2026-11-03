@@ -1,5 +1,7 @@
 """F2: the README is for a normal user, and its module table follows the module registry (modules.py)."""
 import re
+
+import pytest
 from pathlib import Path
 
 from filament_kit import modules
@@ -34,12 +36,18 @@ def test_module_table_matches_the_registry():
             assert m.needs_text in needs, (row, m.needs_text)
 
 
-def test_readme_has_no_owner_specific_data():
-    text = _readme()
-    for bad in ("localdomain", "example.com", "192.0.2.11", "spoolman-vm", "h2d_token", "sv08",
-                "mcp.example", "G:\\"):
-        assert bad not in text, bad
-    assert "thompsonfabco/filament-kit" in text       # the GitHub repo path is the one allowed
+OWNER_DATA = ("192.0.2.10", "192.0.2.11", "192.0.2.109", "192.0.2.179", "localdomain", "example.com",
+              "spoolman-vm", "mcp.example", "h2d_token", "sv08", "G:\\")
+
+
+@pytest.mark.parametrize("rel", ["README.md", "docs/user-guide.md", "docs/testing-e2e.md"])
+def test_public_docs_have_no_owner_specific_data(rel):
+    text = (ROOT / rel).read_text(encoding="utf-8")
+    for bad in OWNER_DATA:
+        assert bad not in text, (rel, bad)
+    # the GitHub repo path is the one allowed mention of the owner's account
+    assert "thompsonfabco" not in text.replace("github.com/thompsonfabco/filament-kit", "").replace(
+        "-R thompsonfabco/filament-kit", ""), rel
 
 
 def test_readme_sections_a_user_needs():

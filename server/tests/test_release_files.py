@@ -638,8 +638,19 @@ def test_wrapper_reader_revoke_as_root_and_list_as_user(tmp_path):
     assert _wrapper_run(tmp_path / "b", "reader", "tokens") == "as-user ./stubs/prog reader tokens"
 
 
-@pytest.mark.parametrize("rel", ["install/install.sh", "install/uninstall.sh", "install/spoolman.sh",
-                                 "install/backup.sh", "get.sh"])
+# The shell scripts with multi-line `python -c '...'` blocks (test_no_other_script_has_python_c_blocks keeps the list
+# complete): each must keep at least one block, so the check below never passes on nothing.
+PYTHON_C_SCRIPTS = ["install/install.sh"]
+
+
+def test_no_other_script_has_python_c_blocks():
+    scripts = sorted(str(p.relative_to(ROOT)).replace("\\", "/") for p in [*(ROOT / "install").rglob("*.sh"),
+                                                                           ROOT / "get.sh", *(ROOT / "tools").glob("*.sh")])
+    have = [s for s in scripts if re.search(r"-c '$", _read(s), re.M)]
+    assert have == PYTHON_C_SCRIPTS
+
+
+@pytest.mark.parametrize("rel", PYTHON_C_SCRIPTS)
 def test_inline_python_survives_shell_single_quotes(rel):
     """A `python -c '...'` block is one shell single-quoted word: a ' inside it ends the word, and Python gets a
     cut program (install.sh's custom-mode block did, so every --modules install without a terminal failed).
@@ -655,5 +666,4 @@ def test_inline_python_survives_shell_single_quotes(rel):
         assert text[end - 1] == "\n", f"{rel}: a ' inside the python -c block near: {code[-80:]!r}"
         compile(code, f"{rel} python -c block", "exec")
         blocks += 1
-    if rel == "install/install.sh":
-        assert blocks >= 2
+    assert blocks >= 1, f"{rel}: no python -c block left; update PYTHON_C_SCRIPTS"

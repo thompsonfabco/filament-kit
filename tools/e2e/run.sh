@@ -45,8 +45,12 @@ for port in 7912 8101 8710 8883; do
     if ss -Hltn "sport = :$port" | grep -q .; then die "port $port is in use"; fi
 done
 
+# 0700: only root uses it (the run is root; the service user never reads it). It holds the throwaway release key.
 WORK=$(mktemp -d /tmp/fk-e2e.XXXXXX)
-chmod 755 "$WORK"
+chmod 700 "$WORK"
+# The snapshots and the saved ALSA state live outside WORK (WORK may be kept or removed before the comparison).
+KEEP=$(mktemp -d /tmp/fk-e2e-state.XXXXXX)
+chmod 700 "$KEEP"
 SLEEP_TARGETS="sleep.target suspend.target hibernate.target hybrid-sleep.target"
 ALSA_STATE=/var/lib/alsa/asound.state
 
@@ -54,7 +58,7 @@ ALSA_STATE=/var/lib/alsa/asound.state
 snapshot() {
     {
         echo "## packages"
-        dpkg-query -W -f '${Package} ${Status}\n' | sort
+        dpkg-query -W -f '${Package} ${Version} ${Status}\n' | sort      # a changed version shows too
         echo "## unit files"
         systemctl list-unit-files --no-legend --no-pager | awk '{print $1, $2}' | sort
         echo "## /etc/systemd/system"
@@ -77,14 +81,13 @@ snapshot() {
     } > "$1"
 }
 
-snapshot "$WORK/before.txt"
-cp "$WORK/before.txt" /tmp/fk-e2e-before.txt     # kept outside WORK for the final comparison
-dpkg-query -W -f '${Package}\n' | sort > /tmp/fk-e2e-packages-before.txt
+snapshot "$KEEP/before.txt"
+dpkg-query -W -f '${Package}\n' | sort > "$KEEP/packages-before.txt"
 MASKED_BEFORE=""
 for t in $SLEEP_TARGETS; do
     [ "$(systemctl is-enabled "$t" 2>/dev/null || true)" != masked ] || MASKED_BEFORE="$MASKED_BEFORE $t"
 done
-[ ! -f "$ALSA_STATE" ] || cp -p "$ALSA_STATE" /tmp/fk-e2e-asound.state
+[ ! -f "$ALSA_STATE" ] || cp -p "$ALSA_STATE" "$KEEP/asound.state"
 
 cleanup() {
     local rc=$?
@@ -105,21 +108,21 @@ cleanup() {
     for t in $SLEEP_TARGETS; do
         case " $MASKED_BEFORE " in *" $t "*) ;; *) systemctl unmask "$t" >/dev/null 2>&1 ;; esac
     done
-    if [ -f /tmp/fk-e2e-asound.state ]; then
-        cp -p /tmp/fk-e2e-asound.state "$ALSA_STATE"
+    if [ -f "$KEEP/asound.state" ]; then
+        cp -p "$KEEP/asound.state" "$ALSA_STATE"
     else
         rm -f "$ALSA_STATE"
     fi
     # packages this run installed (install.sh and the modules' apt lines)
     dpkg-query -W -f '${Package}\n' | sort > "$WORK/packages-after.txt"
-    new=$(comm -13 /tmp/fk-e2e-packages-before.txt "$WORK/packages-after.txt" | tr '\n' ' ')
+    new=$(comm -13 "$KEEP/packages-before.txt" "$WORK/packages-after.txt" | tr '\n' ' ')
     if [ -n "${new// /}" ]; then
         echo "purging packages the run installed: $new"
         # shellcheck disable=SC2086
         DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 purge -y -q $new >/dev/null 2>&1 \
             || echo "warning: could not purge: $new"
     fi
-    gone=$(comm -23 /tmp/fk-e2e-packages-before.txt "$WORK/packages-after.txt" | tr '\n' ' ')
+    gone=$(comm -23 "$KEEP/packages-before.txt" "$WORK/packages-after.txt" | tr '\n' ' ')
     if [ -n "${gone// /}" ]; then
         echo "reinstalling packages the run removed: $gone"
         # shellcheck disable=SC2086
@@ -129,21 +132,20 @@ cleanup() {
     systemctl daemon-reload
     systemctl reset-failed 'filament-kit*' 'spoolman*' >/dev/null 2>&1
     rm -rf /tmp/filament-kit-get.*
-    snapshot /tmp/fk-e2e-after.txt
+    snapshot "$KEEP/after.txt"
     if [ "$KEEP_WORK" -eq 1 ]; then
         echo "work folder kept: $WORK (holds the throwaway release key; delete it when done)"
     else
         rm -rf "$WORK"
     fi
-    if diff -u /tmp/fk-e2e-before.txt /tmp/fk-e2e-after.txt > /tmp/fk-e2e-host.diff; then
+    if diff -u "$KEEP/before.txt" "$KEEP/after.txt" > "$KEEP/host.diff"; then
         echo "host state: same as before the run"
-        rm -f /tmp/fk-e2e-host.diff
     else
-        echo "FAIL host state differs from before the run (/tmp/fk-e2e-host.diff):"
-        cat /tmp/fk-e2e-host.diff
+        echo "FAIL host state differs from before the run:"
+        cat "$KEEP/host.diff"
         rc=1
     fi
-    rm -f /tmp/fk-e2e-before.txt /tmp/fk-e2e-after.txt /tmp/fk-e2e-packages-before.txt /tmp/fk-e2e-asound.state
+    rm -rf "$KEEP"
     exit "$rc"
 }
 trap cleanup EXIT

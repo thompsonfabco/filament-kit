@@ -224,7 +224,7 @@ that to work:
 - The Ubuntu computer must be on the **same network segment** as the printers: the same router or switch and
   the same Wi-Fi / LAN, not a separate guest network or VLAN. Announcements do not cross routers.
 - If the computer runs a firewall (for example `ufw`), allow incoming **UDP ports 2021 and 1990** from your
-  home network, for example `sudo ufw allow from 192.168.1.0/24 to any port 2021,1990 proto udp` (use your
+  home network, for example `sudo ufw allow from 198.51.100.0/24 to any port 2021,1990 proto udp` (use your
   own network's range).
 - A server inside **WSL**, a virtual machine with NAT networking, or a container without host networking does
   not receive the announcements. Add the printers by hand there: `sudo filament-kit config` → **Printers** →
@@ -549,7 +549,7 @@ The sign-in pages (`/authorize`, `/login`) and the whole phone web app answer on
 network. Elsewhere they say that sign-in is only available from the home network. Claude's servers reach the connector itself
 (`/mcp` and the token exchange) from the internet, so sign Claude in from home once. The home network is the
 `192.168.0.0/16` and `10.0.0.0/8` by default (not `172.16.0.0/12`, where Docker's bridges live); set your own
-in `"web": {"lan": ["192.168.1.0/24"]}` (each entry a network; `modules apply` refuses a bad one). Five wrong passphrases
+in `"web": {"lan": ["198.51.100.0/24"]}` (each entry a network; `modules apply` refuses a bad one). Five wrong passphrases
 lock the sign-in for 10 minutes.
 
 ## Remote access
