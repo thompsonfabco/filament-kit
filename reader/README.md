@@ -74,6 +74,12 @@ pinned root (ISRG Root X1 unless `READER_ROOT_CA` is set). This contract is fixe
 - `present`: `true`, `false` or `null`/missing (unknown). `type`: filament type the printer reports.
 - `spool`: an object with `name` (or just `id`), a name string, an id number, or `null`.
 - Other fields are ignored. At most 16 printers and 128 slots are kept.
+- Size limits (the C3 has little RAM): a list reply over 20 KB (20480 bytes) is refused and the last good list
+  stays; `label`, `name`, `say`, `type` and the spool name are cut to 40 bytes; a printer `id` longer than 64
+  bytes is skipped (ids are never cut, they go back in URLs).
+- The reader re-selects the saved printer id and slot label after every refresh, so a unit that is missing from
+  one reply only moves the selection until it is back. If the slots of a newly picked printer cannot be read, the
+  reader shows "No slots" and refuses scans rather than keep the old printer's slots.
 
 `POST <READER_BASE>/scan` with `{"uid": "4:c7:96:11:9:22:89", "printer": "h2d", "slot": "A1", "dry_run": false}`
 → a JSON object `{"status": ..., "message": ..., "filament": ...}`:
@@ -101,7 +107,10 @@ becomes a short beep, so new labels only need a `say` text on the server (the ta
 
 ## Build
 
-Needs [PlatformIO](https://platformio.org/) (`pip install platformio`).
+Needs [PlatformIO](https://platformio.org/) (`pip install platformio`). `platformio.ini` pins the pioarduino
+platform (Arduino core 3.1.3) and exact library versions. The platform zip,
+`https://github.com/pioarduino/platform-espressif32/releases/download/53.03.13/platform-espressif32.zip`, has
+SHA-256 `e42240daaba9d4dfb9cec7ec702b6c84a0605d34c7f03e1ad342bbee74fc1db8` (1,472,729 bytes, checked 2026-11-03).
 
 1. `cp src/secrets.example.h src/secrets.h` and fill in Wi-Fi, `READER_BASE`, `READER_TOKEN` and `OTA_PUBKEY`
    (see below). `secrets.h` is ignored by git; never commit it.

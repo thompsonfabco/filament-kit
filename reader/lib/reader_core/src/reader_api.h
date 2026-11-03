@@ -13,6 +13,18 @@ namespace reader {
 // 8 HT + 2 externals = 74 slots, so 128 leaves room.
 static const int MAX_PRINTERS = 16;
 static const int MAX_SLOTS = 128;
+// A list reply larger than this is refused before it is read into RAM (74 slots
+// with long names are ~12 KB).
+static const size_t MAX_RESPONSE_BYTES = 20480;
+// Display/speech strings (label, name, say, type, spool) are cut to this many
+// bytes, at a UTF-8 character boundary.
+static const size_t MAX_FIELD = 40;
+// Printer ids go back in URLs, so they are never cut; longer ones are dropped.
+static const size_t MAX_ID = 64;
+
+// True when a Content-Length says the body is too big to read (-1 = unknown:
+// the reader then reads with a cap of MAX_RESPONSE_BYTES).
+bool responseTooBig(int contentLength);
 
 struct PrinterEntry {
   std::string id;    // opaque; echoed back in URLs and the scan body
@@ -36,6 +48,23 @@ struct SlotEntry {
 // good list) and false is returned. Entries without an id / label are skipped.
 bool parsePrinters(const char* json, std::vector<PrinterEntry>& out);
 bool parseSlots(const char* json, std::vector<SlotEntry>& out);
+
+// The slot list together with the printer it belongs to, so a failed fetch after a
+// printer change can never leave the old printer's slots on screen (or scan into
+// them). A failed refresh of the same printer keeps the last good list.
+struct SlotCache {
+  std::string printer;            // whose slots these are ("" = none)
+  std::vector<SlotEntry> slots;
+  void apply(const std::string& printerId, bool ok, std::vector<SlotEntry> fresh);
+  bool usableFor(const std::string& printerId) const {
+    return !slots.empty() && printer == printerId;
+  }
+};
+
+// The label to re-select after a refresh: the saved one, unless the knob was
+// turned and the new choice is not saved yet. A unit that drops out for a moment
+// then shows the first slot and goes back to the saved slot when it returns.
+std::string wantedLabel(const std::string& saved, const std::string& current, bool turnedUnsaved);
 
 // One line describing what is in a slot ("PLA Polymaker Grey", "empty", "?").
 std::string slotContents(const SlotEntry& s);
