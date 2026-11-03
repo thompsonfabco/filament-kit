@@ -14,6 +14,7 @@ dependencies = [
     "anthropic>=2.3.0",  # fallbacks= on beta.messages.create
     "cryptography>=44",
     "paho-mqtt>=2.0",
+    "defusedxml==0.7.1",  # hardware XML: no DTD, entities or external references
 ]
 
 [project.optional-dependencies]
@@ -29,7 +30,8 @@ include = ["filament_kit*"]
 namespaces = false  # library_data/ is package data, not a namespace package
 
 [tool.setuptools.package-data]
-filament_kit = ["web/static/*", "library_data/*.json", "library_data/schema/*.json", "library_data/library/*/*.json"]
+filament_kit = ["web/static/*", "library_data/*.json", "library_data/schema/*.json", "library_data/library/*/*.json",
+                "bridge/*.xml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
