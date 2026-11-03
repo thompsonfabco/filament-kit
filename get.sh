@@ -5,12 +5,15 @@
 #
 # Options go after `bash -s --`, e.g. `... | sudo bash -s -- --mode server`:
 #   --version X.Y.Z    install that release instead of the latest
-#   --mode M, --modules a,b, --server NAME-OR-IP
-#                      passed to install.sh (no questions asked when given)
+#   --mode M, --modules a,b, --server NAME-OR-IP, --set KEY=VALUE (repeatable, with --modules)
+#                      passed to install.sh (no questions asked when given); --set gives a chosen module a setting
+#                      it needs, e.g. --set web.public_url=https://kit.example.net/filament for web
 #   --token-file FILE  a GitHub token for a private repo (or set FK_GITHUB_TOKEN; with sudo use `sudo -E` or
 #                      the file). The token is never printed and goes only to api.github.com and
 #                      objects.githubusercontent.com over https.
-#   --repo OWNER/NAME, --api URL   another repo, or a mirror of the GitHub API (testing)
+#   --repo OWNER/NAME, --api URL   another repo, or a mirror of the GitHub API (testing: tools/e2e/run.sh
+#                      serves a fake one; the release public key below is then set in a throwaway copy of this
+#                      file with tools/sign_release.py set-pubkey, never in the published get.sh)
 #
 # What it does: finds the release through the GitHub API, downloads SHA256SUMS and SHA256SUMS.sig, checks the
 # signature with the release public key carried below (ed25519, checked with the system python3), then
@@ -25,7 +28,7 @@ set -euo pipefail
 fk_die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 fk_usage() {
     echo "usage: curl -fsSL <get.sh url> | sudo bash -s -- [--version X.Y.Z] [--mode M] [--modules a,b]" >&2
-    echo "       [--server NAME-OR-IP] [--token-file FILE] [--repo OWNER/NAME] [--api URL]" >&2
+    echo "       [--server NAME-OR-IP] [--set KEY=VALUE]... [--token-file FILE] [--repo OWNER/NAME] [--api URL]" >&2
     exit 2
 }
 
@@ -34,7 +37,7 @@ fk_main() {
     local -a pass=()
     while [ $# -gt 0 ]; do
         case "$1" in
-            --version | --mode | --modules | --server | --token-file | --repo | --api)
+            --version | --mode | --modules | --server | --set | --token-file | --repo | --api)
                 [ $# -ge 2 ] || fk_usage
                 case "$1" in
                     --version) version="$2" ;;
