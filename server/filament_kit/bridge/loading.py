@@ -110,6 +110,8 @@ def _address(serial: str, report: dict, label: str) -> tuple[int, int, str | Non
     model = ams.printer_model(serial)
     lay = layout.build(report or {}, model)
     kinds = {u.ams_id: u.kind for u in lay.units}
+    for x in lay.model.externals:       # a holder the live report does not list right now is still external
+        kinds.setdefault(x.id, layout.EXT_KIND)
     alias = next((s.alias for u in lay.units for s in u.slots if s.label == label), None)
     m = ams.load_map(serial)
     a = m.slots.get(label) if m.calibrated else None

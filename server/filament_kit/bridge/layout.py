@@ -311,7 +311,9 @@ def same_layout(a, b) -> bool:
 
 def label_for(ams_id: int, tray_id: int, model=None, hw: hardware.Hardware | None = None) -> str | None:
     """The label a slot has without a report to read (no module codes, the type by id range): for decoding a
-    printer's slot number into a label (usage, observe mode). Externals (254 / 255) take the model's labels."""
+    printer's slot number into a label (usage, observe mode). Externals (254 / 255) take the model's labels as
+    `build` gives them to a LONE holder (the report lists only this one): on a printer whose report lists holders
+    the model does not know, `build` may label them otherwise (Ext-L / Ext-R / Ext-<id>)."""
     hw = hw or hardware.load()
     a, t = _int(ams_id), _int(tray_id)
     if a is None or t is None or a < 0 or t < 0:

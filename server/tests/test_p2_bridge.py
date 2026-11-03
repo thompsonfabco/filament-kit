@@ -284,6 +284,44 @@ def test_saved_map_key_ext_is_read_as_ext_l():
     m = ams.load_map(SERIAL)
     assert set(m.slots) == {"A1", "Ext-L"}
     from filament_kit.bridge import usage
-    assert usage._labels(m)[254] == "Ext-L"                       # usage decodes 254 to Ext-L
+    assert usage.decode(254, m, "O1D") == ("Ext-L", "map")        # usage decodes 254 to Ext-L
     registry.upsert(Printer(SERIAL, "Lab", "P1S", "10.0.0.5", "13572468", True))
     assert set(ams.load_map(SERIAL).slots) == {"A1", "Ext"}       # a single-holder printer keeps "Ext"
+
+
+def test_get_version_while_disconnected_does_not_use_the_rate_limit_slot(monkeypatch):
+    """P3 (P2 review minor): an ask made while the printer is not connected sends nothing and must not take the
+    VERSION_GAP slot, or the ask at the next connect would be delayed (or lost)."""
+    monkeypatch.setattr(connection, "VERSION_GAP", 30.0)
+    m, printer, c = make_rig(big_report(), modules=[("n3f/0", "N3F05")])
+    try:
+        conn = m._conns[SERIAL]
+
+        def asks():
+            return len([b for t, b in c.published if b.get("info", {}).get("command") == "get_version"])
+        assert asks() == 1
+        conn._version_at = None              # as if the gap had passed
+        conn._state = "offline"
+        conn.request_version()               # disconnected: nothing sent, no slot taken
+        assert asks() == 1 and conn._version_at is None and conn._version_timer is None
+        conn._state = "connected"
+        conn.request_version()               # back: asked at once
+        assert asks() == 2
+    finally:
+        m.stop()
+
+
+@pytest.mark.parametrize("state", ["wrong_code", "offline", "cert_changed"])
+def test_no_pushall_or_get_version_while_not_connected(state):
+    """P3 fix round 1: nothing is published to a printer that is not connected (a wrong code, offline...)."""
+    m, printer, c = make_rig(big_report(), modules=[("n3f/0", "N3F05")])
+    try:
+        conn = m._conns[SERIAL]
+        conn._state = state
+        conn._version_at = None
+        before = len(c.published)
+        conn.request_pushall()
+        conn.request_version()
+        assert len(c.published) == before
+    finally:
+        m.stop()

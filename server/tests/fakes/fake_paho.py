@@ -120,6 +120,7 @@ class FakePrinter:
         self.jobs: list[dict] = []
         self.job_stuck = False
         self.answer_jobs = True        # False: job commands get no reply and nothing happens
+        self.native: str | None = None   # a numbering scheme key: report `mapping` in it from `ams_mapping2`
         self.lock = threading.Lock()
         client.responder = self.respond
 
@@ -154,13 +155,32 @@ class FakePrinter:
             deltas = [{'gcode_state': 'FAILED'}]
         else:
             deltas = [{'gcode_state': 'PREPARE', 'subtask_name': pr.get('subtask_name', ''), 'task_id': '0'},
-                      {'gcode_state': 'RUNNING', 'mapping': list(pr.get('ams_mapping') or [])}]
+                      {'gcode_state': 'RUNNING', 'mapping': self._mapping(pr)}]
             if not self.job_stuck:
                 deltas.append({'gcode_state': 'FINISH', 'mc_percent': 100})
         with self.lock:
             for d in deltas:
                 self.report.update(copy.deepcopy(d))
         return [reply] + [{'print': d} for d in deltas]
+
+    def _mapping(self, pr) -> list:
+        """The `mapping` the printer reports for a job: the sent `ams_mapping`, or with `native` set the printer's
+        own numbers for the slots `ams_mapping` names (read as legacy numbers, as Bambu Studio sends them;
+        `ams_mapping2`, when sent, must name the same slots; externals stay their id)."""
+        sent = list(pr.get('ams_mapping') or [])
+        if not self.native:
+            return sent
+        from filament_kit.bridge import hardware
+        hw = hardware.load()
+        legacy, native = hw.scheme('legacy'), hw.scheme(self.native)
+        m2 = pr.get('ams_mapping2')
+        out = []
+        for i, n in enumerate(sent):
+            slot = (n, 0) if n >= 254 else legacy.decode(n)
+            if isinstance(m2, list):
+                assert (m2[i]['ams_id'], m2[i]['slot_id']) == slot, (m2[i], slot)
+            out.append(n if n >= 254 else native.encode(*slot))
+        return out
 
     def _apply(self, key, pr) -> dict | None:
         ams_id, tray_id = key

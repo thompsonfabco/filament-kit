@@ -560,3 +560,153 @@ def test_unnamed_printer_finds_its_spools_by_serial(sd):
     out = usage.settle(SERIAL, {"subtask": "bracket_v3", "plate": "1", "mapping": [1, 128]}, 100.0, SM())
     assert SM.uses == [(9, 21.92)]
     assert [e["spool_id"] for e in out if e["slot"] == "A2"] == [9]
+
+
+# ---------------------------------------------------------------- numbering schemes, learning, suspect (P3)
+
+WHITE_PLA = {"tray_type": "PLA", "tray_info_idx": "PFUS3f5a0c1d", "tray_color": "FFFFFFFF"}
+BLACK_PETG = {"tray_type": "PETG", "tray_info_idx": "PFUS3f5a0c2e", "tray_color": "1A1A1AFF"}
+
+
+def loaded_report(a2=WHITE_PLA, hta=BLACK_PETG, extra=None):
+    """IDLE with AMS 0 (A2 holds `a2`, A1 / A3 / A4 empty) and AMS HT 128 (holds `hta`): the slots a print's
+    start report shows."""
+    trays = [{"id": "0"}, dict(a2, id="1"), {"id": "2"}, {"id": "3"}]
+    units = [{"id": "0", "tray": trays}, {"id": "128", "tray": [dict(hta, id="0")]}] + list(extra or [])
+    return {"gcode_state": "IDLE", "mc_percent": 0, "subtask_name": "", "ams": {"ams": units}}
+
+
+def spool_at(sm, label):
+    fil = sm.post("filament", {"name": "PLA Basic", "material": "PLA", "weight": 1000, "spool_weight": 250})
+    return sm.post("spool", {"filament_id": fil["id"], "location": f"{NAME} {DASH} AMS {label}",
+                             "initial_weight": 1000})["id"]
+
+
+def test_owner_h2d_calibration_values_decode_a_print(rig, sd, spoolman_fake_store, sm):
+    """The map the owner's H2D calibration gives (A1 / A3 = 0 / 2, HT-A / HT-B = 32768 / 33024, shift8): a print
+    reporting [2, 33024] deducts from A3 and HT-B."""
+    a3, htb = spool_at(sm, "A3"), spool_at(sm, "HT-B")
+    ams.save_map(SERIAL, ams.SlotMap(slots={
+        "A1": {"ams_id": 0, "tray_id": 0, "global_id": 0}, "A3": {"ams_id": 0, "tray_id": 2, "global_id": 2},
+        "HT-A": {"ams_id": 128, "tray_id": 0, "global_id": 32768},
+        "HT-B": {"ams_id": 129, "tray_id": 0, "global_id": 33024}}, calibrated=True, observe=False, scheme="shift8"))
+    put(sd, "/cache/bracket_v3_plate_1.gcode.3mf", build_3mf(TWO_COLOUR))
+    r = rig()
+    r.print_job(job=dict(JOB, mapping=[2, 33024]))
+    assert used(spoolman_fake_store, a3) == 21.92 and used(spoolman_fake_store, htb) == 9.6
+    assert used(spoolman_fake_store, HTA) == 0
+
+
+def test_saved_scheme_decodes_a_number_the_map_does_not_list(rig, sd, spoolman_fake_store):
+    """A2 and HT-A are not in the calibrated map (they were empty at calibration): the saved scheme (shift8)
+    decodes 1 -> A2 and 32768 -> HT-A, both slots of the printer at the print's start."""
+    ams.save_map(SERIAL, ams.SlotMap(slots={"A1": {"ams_id": 0, "tray_id": 0, "global_id": 0}}, calibrated=True,
+                                     observe=False, scheme="shift8"))
+    put(sd, "/cache/bracket_v3_plate_1.gcode.3mf", build_3mf(TWO_COLOUR))
+    r = rig(loaded_report())
+    r.print_job(job=dict(JOB, mapping=[1, 32768]))
+    assert used(spoolman_fake_store, A2) == 21.92 and used(spoolman_fake_store, HTA) == 9.6
+    assert all(e.get("error") is None for e in usage.entries(SERIAL, 7))
+
+
+def test_saved_scheme_never_decodes_to_a_slot_the_printer_does_not_have(rig, sd, spoolman_fake_store):
+    ams.save_map(SERIAL, ams.SlotMap(slots={"A1": {"ams_id": 0, "tray_id": 0, "global_id": 0}}, calibrated=True,
+                                     observe=False, scheme="shift8"))
+    put(sd, "/cache/bracket_v3_plate_1.gcode.3mf", build_3mf(TWO_COLOUR))
+    r = rig(loaded_report(hta=WHITE_PLA))                     # no slot holds the PETG: nothing to learn either
+    r.print_job(job=dict(JOB, mapping=[1, 0x0300]))           # shift8: unit 3 tray 0, not on this printer
+    es = {e["grams"]: e for e in usage.entries(SERIAL, 7)}
+    assert es[9.6]["error"] == "unmapped_slot" and es[9.6]["slot"] is None
+
+
+def test_uncalibrated_decodes_with_the_models_first_candidate(rig, sd, spoolman_fake_store):
+    put(sd, "/cache/bracket_v3_plate_1.gcode.3mf", build_3mf(TWO_COLOUR))
+    r = rig()
+    r.print_job(job=dict(JOB, mapping=[1, 32768]))           # H2D: shift8 first
+    es = usage.entries(SERIAL, 7)
+    assert sorted((e["slot"], e["observe"]) for e in es) == [("A2", True), ("HT-A", True)]
+    assert spoolman_fake_store.get("uses", []) == []
+
+
+def test_unseen_number_learned_when_exactly_one_loaded_slot_matches(rig, sd, spoolman_fake_store):
+    """4000 is no number the map or its scheme knows; exactly one loaded slot (HT-A) holds the sliced filament
+    (tray_info_idx): learned, deducted, and the next print decodes it from the map."""
+    ams.save_map(SERIAL, ams.SlotMap(slots=dict(CALIBRATED), calibrated=True, observe=False, scheme="legacy"))
+    put(sd, "/cache/bracket_v3_plate_1.gcode.3mf", build_3mf(TWO_COLOUR))
+    r = rig(loaded_report())
+    r.print_job(job=dict(JOB, mapping=[1, 4000]))
+    assert used(spoolman_fake_store, HTA) == 9.6
+    assert ams.load_map(SERIAL).learned == {"4000": "HT-A"}
+    r.push({"gcode_state": "IDLE"})
+    r.print_job(job=dict(JOB, mapping=[1, 4000]))
+    assert used(spoolman_fake_store, HTA) == 19.2
+
+
+def test_unseen_number_by_type_and_colour_when_the_slice_has_no_preset(rig, sd, spoolman_fake_store):
+    plain = {1: [(1, "", "PLA", "#FFFFFF", 21.92), (2, "", "PETG", "#1A1A1A", 9.6)]}
+    ams.save_map(SERIAL, ams.SlotMap(slots=dict(CALIBRATED), calibrated=True, observe=False, scheme="legacy"))
+    put(sd, "/cache/bracket_v3_plate_1.gcode.3mf", build_3mf(plain))
+    r = rig(loaded_report())
+    r.print_job(job=dict(JOB, mapping=[1, 4000]))
+    assert ams.load_map(SERIAL).learned == {"4000": "HT-A"} and used(spoolman_fake_store, HTA) == 9.6
+
+
+def test_unseen_number_not_learned_when_two_slots_match(rig, sd, spoolman_fake_store):
+    ams.save_map(SERIAL, ams.SlotMap(slots=dict(CALIBRATED), calibrated=True, observe=False, scheme="legacy"))
+    put(sd, "/cache/bracket_v3_plate_1.gcode.3mf", build_3mf(TWO_COLOUR))
+    r = rig(loaded_report(extra=[{"id": "129", "tray": [dict(BLACK_PETG, id="0")]}]))
+    r.print_job(job=dict(JOB, mapping=[1, 4000]))
+    es = {e["grams"]: e for e in usage.entries(SERIAL, 7)}
+    assert es[9.6]["error"] == "unmapped_slot" and ams.load_map(SERIAL).learned == {}
+    assert used(spoolman_fake_store, HTA) == 0
+
+
+def test_two_mismatched_prints_make_the_map_suspect_and_ask_for_a_remap(rig, sd, spoolman_fake_store):
+    """A2 holds PETG but the slice puts white PLA there: not deducted (slot_mismatch). Two such prints in a row:
+    suspect, logging only, and LayoutWatch is asked to re-map when idle."""
+    from filament_kit.bridge import mapping
+    mapping._REMAP_REQUESTS.discard(SERIAL)
+    ams.save_map(SERIAL, ams.SlotMap(slots=dict(CALIBRATED), calibrated=True, observe=False, scheme="legacy"))
+    put(sd, "/cache/bracket_v3_plate_1.gcode.3mf", build_3mf(TWO_COLOUR))
+    r = rig(loaded_report(a2=BLACK_PETG, hta=BLACK_PETG))
+    r.print_job()
+    es = {e["slot"]: e for e in usage.entries(SERIAL, 7)}
+    assert es["A2"]["error"] == "slot_mismatch" and used(spoolman_fake_store, A2) == 0
+    assert used(spoolman_fake_store, HTA) == 9.6                 # HT-A agrees: deducted
+    m = ams.load_map(SERIAL)
+    assert m.mismatch_streak == 1 and m.suspect is False and SERIAL not in mapping._REMAP_REQUESTS
+    r.push({"gcode_state": "IDLE"})
+    r.print_job()
+    m = ams.load_map(SERIAL)
+    assert m.mismatch_streak == 2 and m.suspect is True and m.observe is True and m.calibrated is True
+    assert SERIAL in mapping._REMAP_REQUESTS
+    assert used(spoolman_fake_store, HTA) == 9.6                 # suspect from this print on: logging only
+    mapping._REMAP_REQUESTS.discard(SERIAL)
+
+
+def test_a_matching_print_resets_the_mismatch_streak(rig, sd, spoolman_fake_store):
+    ams.save_map(SERIAL, ams.SlotMap(slots=dict(CALIBRATED), calibrated=True, observe=False, scheme="legacy",
+                                     mismatch_streak=1))
+    put(sd, "/cache/bracket_v3_plate_1.gcode.3mf", build_3mf(TWO_COLOUR))
+    r = rig(loaded_report())
+    r.print_job()
+    m = ams.load_map(SERIAL)
+    assert m.mismatch_streak == 0 and m.suspect is False
+    assert used(spoolman_fake_store, A2) == 21.92
+
+
+def test_usage_map_save_is_dropped_when_the_map_changed_meanwhile(env):
+    """M1: usage saves what a print taught under the shared save lock, compare-and-save: a map a mapping job saved
+    after usage read it wins, and usage's version is dropped."""
+    registry.upsert(Printer(SERIAL, NAME, "O1D", "127.0.0.1", CODE, True))
+    ams.save_map(SERIAL, ams.SlotMap(slots=dict(CALIBRATED), calibrated=True, observe=False))
+    mine = ams.load_map(SERIAL)
+    stamp = mine.updated
+    newer = ams.SlotMap(slots={"A1": CALIBRATED["A1"]}, calibrated=True, observe=False, scheme="shift8")
+    ams.save_map(SERIAL, newer)                                  # a mapping job finished meanwhile
+    mine.learned["4000"] = "HT-A"
+    usage._save_map(SERIAL, mine, stamp)
+    m = ams.load_map(SERIAL)
+    assert m.scheme == "shift8" and m.learned == {} and set(m.slots) == {"A1"}
+    assert ams.save_map_if(SERIAL, mine, m.updated) is True     # the current stamp: saved
+    assert ams.load_map(SERIAL).learned == {"4000": "HT-A"}

@@ -525,3 +525,13 @@ def test_real_flock_mapping_refused_while_another_process_loads(rig, tmp_path):
             mapping.Mapper(m).start(SERIAL)
         assert mapping.Mapper(m).in_progress(SERIAL) is False
         fcntl.flock(other.fileno(), fcntl.LOCK_UN)
+
+
+def test_calibrated_external_missing_from_the_report_keeps_kind_ext(rig):
+    """P3 (P2 review minor): a calibrated map's external holder the live report does not list (no vir_slot entry
+    right now) is still addressed as an external of the model, never as an AMS slot."""
+    ams.save_map(SERIAL, ams.SlotMap(slots={"Ext-R": {"ams_id": 255, "tray_id": 0, "global_id": 255}},
+                                     calibrated=True))
+    assert loading._address(SERIAL, {"ams": {"ams": []}}, "Ext-R") == (255, 0, "ext", None)
+    ams.save_map(SERIAL, ams.SlotMap(slots={"A9": {"ams_id": 9, "tray_id": 0, "global_id": 36}}, calibrated=True))
+    assert loading._address(SERIAL, {"ams": {"ams": []}}, "A9") == (9, 0, None, None)
