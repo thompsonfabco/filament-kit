@@ -243,6 +243,22 @@ def test_one_job_per_printer_and_progress_visible(stubs):
     wait_done(m)                               # (the printer is held per process: do not leak the job)
 
 
+def test_a_start_right_after_done_waits_for_the_printer_to_be_given_back(stubs, monkeypatch):
+    # the job shows "done" a moment before its worker gives the printer back; a start in that moment is not refused
+    real = mapping._give_back
+
+    def slow(serial, plock):
+        time.sleep(0.3)
+        real(serial, plock)
+    monkeypatch.setattr(mapping, "_give_back", slow)
+    m = mapping.Mapper(FakeManager())
+    m.start(SERIAL)
+    assert wait_done(m)["state"] == "done"
+    assert m.start(SERIAL)
+    wait_done(m)
+    time.sleep(0.4)                            # let the second job give the printer back
+
+
 def test_last_result_survives_a_restart(stubs):
     mapping.Mapper(FakeManager()).run(SERIAL)
     v = mapping.Mapper(FakeManager()).view(SERIAL)  # a new process

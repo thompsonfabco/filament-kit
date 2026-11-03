@@ -117,6 +117,8 @@ class _Job:
     finished: float | None = None
     abort: _Flag = field(default_factory=_Flag)
     auto: bool = False              # started by LayoutWatch (the printer's layout changed): the app shows re-mapping
+    # set once the job has given the printer back; it shows done/failed a moment earlier
+    released: threading.Event = field(default_factory=threading.Event)
 
 
 def _dir(serial: str):
@@ -308,8 +310,8 @@ class Mapper:
             raise UnknownPrinter(serial)
         with self._lock:
             j = self._jobs.get(serial)
-            if j is not None and j.state == "running":
-                raise AlreadyRunning(serial)
+            if j is not None and (j.state == "running" or not j.released.wait(5)):
+                raise AlreadyRunning(serial)    # a finished job is still giving the printer back: wait for that
             plock = _take_for_mapping(serial)
             try:
                 check_ready(self._m, serial)
@@ -341,6 +343,7 @@ class Mapper:
             job.problems.append(f"error: the mapping job could not start ({type(e).__name__}: {e})")
             _save_status(serial, job)
             _give_back(serial, plock)
+            job.released.set()
             raise
         with self._lock:
             self._threads = [x for x in self._threads if x.is_alive()] + [t]
@@ -470,7 +473,10 @@ class Mapper:
             try:
                 step(final)
             finally:
-                _give_back(serial, plock)
+                try:
+                    _give_back(serial, plock)
+                finally:
+                    job.released.set()
             log.info("mapping %s: job %s %s; problems %s", serial, job.id, job.state, job.problems)
 
     def _map(self, serial: str, job: _Job, step) -> None:
