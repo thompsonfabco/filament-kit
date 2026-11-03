@@ -55,7 +55,17 @@ the repository and a GitHub token that can read it:
    sudo bash get.sh --token-file ~/fk-token
    ```
 
-The token is never shown on screen and is only sent to GitHub.
+The token is never shown on screen and is only sent to GitHub. The first thing it prints is
+`verified filament-kit <version>`; then the installer runs as below.
+
+Later updates need the token too, or `sudo filament-kit update --check` answers
+`api.github.com answered HTTP 404: no such release (a private repo needs a token ...)`. Keep the token file
+somewhere only root can read, for example `/etc/filament-kit/github_token`, and add to
+`/etc/filament-kit/config.json`:
+
+```
+"updates": {"token_file": "/etc/filament-kit/github_token"}
+```
 
 ## Install from a downloaded file
 
