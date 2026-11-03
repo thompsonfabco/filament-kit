@@ -1,4 +1,5 @@
-"""Phone web intake app (PWA) of the `web` process: add spools from label photos, open a tapped spool, preset lines.
+"""Phone web intake app (PWA) of the `web` process: add spools by hand or (with ai_intake) from label photos, open a
+tapped spool, preset lines.
 
 A port of filament-ops vm/intake.py and intake_static/ (same routes under `<public path>/intake`, same three-tab
 page), on the kit's own functions: label reads go through `intake.read_labels` with the reader context
@@ -28,7 +29,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from starlette.routing import Route
 
-from .. import config, intake, modules, tagsources
+from .. import config, intake, inventory, modules, tagsources
 from ..intake import CapReached, ReadCap, ReadError
 from ..spoolman import SpoolmanError
 from ..station_client import StationClient
@@ -126,6 +127,8 @@ class IntakeApp:
             ("/intake/manifest.webmanifest", self.manifest, ["GET"]),
             ("/intake/api/read", self.api(self.read), ["POST"]), ("/intake/api/add", self.api(self.add), ["POST"]),
             ("/intake/api/tag", self.api(self.tag), ["GET"]), ("/intake/api/find", self.api(self.find), ["GET"]),
+            ("/intake/api/filaments", self.api(self.filaments), ["GET"]),
+            ("/intake/api/vendors", self.api(self.vendors), ["GET"]),
             ("/intake/api/open", self.api(self.open), ["POST"]),
             ("/intake/api/presets", self.api(self.presets), ["GET"]),
             ("/intake/api/parents", self.api(self.parents), ["GET"]),
@@ -157,7 +160,8 @@ class IntakeApp:
         pl = cfg["placement"]
         data = {"base": self.base, "locations": json.dumps(cfg["locations"]),
                 "sealed": pl.get("sealed_location") or "", "auto": mcp_tools._placement_text(cfg),
-                "picks": json.dumps([pl.get("pla_location") or ""])}
+                "picks": json.dumps([pl.get("pla_location") or ""]),
+                "ai": "1" if "ai_intake" in modules.enabled(cfg) else "0"}  # label photos only with ai_intake
         attrs = " ".join(f"data-{k}='{html.escape(v, quote=True)}'" for k, v in data.items())
         return f"<body {attrs}><main id=app></main></body>"
 
@@ -330,6 +334,13 @@ class IntakeApp:
     async def find(self, request: Request):
         q = request.query_params
         return await anyio.to_thread.run_sync(self.tools.find_spools, q.get("q", ""), q.get("sealed") == "1", None)
+
+    async def filaments(self, request: Request):  # the manual add's existing-filament picker
+        return {"filaments": await anyio.to_thread.run_sync(inventory.filaments, self.tools.sm,
+                                                            request.query_params.get("q", ""))}
+
+    async def vendors(self, request: Request):
+        return {"vendors": await anyio.to_thread.run_sync(inventory.vendors, self.tools.sm)}
 
     async def open(self, request: Request):
         b = await self._body(request)
