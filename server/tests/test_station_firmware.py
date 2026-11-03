@@ -137,8 +137,8 @@ def test_nfc_port_stays_out_of_the_panels_way_while_flashing(fw):
 
 def test_bundled_firmware_is_version_6_and_flashes_an_older_panel(fw, monkeypatch):
     """The repo's own bundled pair (not the fixture's) is what the self-flash logic picks up."""
-    bundled = os.path.join(os.path.dirname(panel.__file__), "..", "..", "..", "station", "panel", "firmware")
-    bundled = os.path.normpath(bundled)
+    bundled = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "station", "panel", "firmware")
+    bundled = os.path.normpath(bundled)   # from the test file: the package may be installed (CI), not editable
     monkeypatch.setitem(st.settings, "panel_fw", os.path.join(bundled, "intake-panel.bin"))
     assert panel.fw_version() == "6"
     FakeSerial.VERSIONS = {"/dev/ttyUSB1": "5"}

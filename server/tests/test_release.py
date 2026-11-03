@@ -499,9 +499,11 @@ def _git_bash():
 
 
 def _wheel_builder() -> bool:
-    if shutil.which("uv") or shutil.which("uv.cmd"):
+    """What make_release.sh will use: uv, uv.cmd (Windows only), else python3 -m build."""
+    if shutil.which("uv") or (sys.platform == "win32" and shutil.which("uv.cmd")):
         return True
-    return subprocess.run([sys.executable, "-c", "import build"], capture_output=True).returncode == 0
+    py = shutil.which("python3")
+    return bool(py) and subprocess.run([py, "-c", "import build"], capture_output=True).returncode == 0
 
 
 @pytest.mark.skipif(not _git_bash(), reason="needs bash (Git Bash on Windows)")
