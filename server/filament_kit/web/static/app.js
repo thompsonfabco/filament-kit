@@ -53,9 +53,11 @@ async function run(box, label, fn) {
 }
 
 // ---------- tabs ----------
-const tabs = { add: addTab(), open: openTab(), presets: presetsTab() };
+const PRINTERS = document.body.dataset.printers === "1";   // the printers module is on (printers.js is loaded)
+const tabs = { add: addTab(), open: openTab(), presets: presetsTab(), ...(PRINTERS ? { printers: printersTab() } : {}) };
 const bar = h("nav", { class: "tabs" });
-for (const [key, label] of [["add", "Add spools"], ["open", "Open spool"], ["presets", "Presets"]]) {
+for (const [key, label] of [["add", "Add spools"], ["open", "Open spool"], ["presets", "Presets"],
+    ...(PRINTERS ? [["printers", "Printers"]] : [])]) {
   bar.append(h("button", { textContent: label, dataset: { key }, on: { click: () => show(key) } }));
 }
 app.append(bar, ...Object.values(tabs).map((t) => t.el),

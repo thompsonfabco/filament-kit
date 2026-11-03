@@ -21,6 +21,7 @@ dependencies = [
 test = ["pytest", "httpx", "pyftpdlib>=2.0", "pyopenssl>=24"]  # pyftpdlib + pyopenssl: the fake printer FTPS server
 station = ["nfcpy==1.0.4", "pyserial>=3.5", "esptool==5.6.0"]
 web = ["mcp==2.3.0"]  # exact: the web unit imports SDK internals and install.sh upgrades; the server process never imports it
+push = ["pywebpush>=2.0,<3"]  # only for config web.push (Printers tab alerts); the sender imports it when used
 
 [project.scripts]
 filament-kit = "filament_kit.cli:main"
