@@ -83,6 +83,9 @@ def _cfg(env, on=("spoolman", "server", "updates"), **extra):
 
 
 class Runner:
+    """Records commands. `rc`: install.sh's exit code, or {version folder: exit code or an exception to raise
+    or a callable to call}."""
+
     def __init__(self, rc=0):
         self.cmds, self.rc = [], rc
         self.installed = []
@@ -91,8 +94,14 @@ class Runner:
         self.cmds.append(cmd)
         if cmd[0] == "bash":
             assert Path(cmd[1]).name == "install.sh" and Path(cmd[1]).is_file()
-            self.installed.append(Path(cmd[1]).parent.name)
-            return self.rc
+            folder = Path(cmd[1]).parent.name
+            self.installed.append(folder)
+            out = self.rc.get(folder, 0) if isinstance(self.rc, dict) else self.rc
+            if isinstance(out, BaseException):
+                raise out
+            if callable(out):
+                return out()
+            return out
         return 0
 
 
@@ -175,19 +184,150 @@ def test_update_stops_the_services_when_systemd(env, srv, key, monkeypatch):
     run = Runner()
     assert updates.update(_cfg(env, on=("spoolman", "server", "web", "updates")), fetcher=srv.fetcher(),
                           run=run) == 0
-    assert run.cmds[0] == ["systemctl", "stop", "spoolman.service", "filament-kit.service",
+    assert run.cmds[0] == ["systemctl", "stop", "filament-kit-update.timer"]           # timers first (M6)
+    assert run.cmds[1] == ["systemctl", "stop", "spoolman.service", "filament-kit.service",
                            "filament-kit-web.service"]
-    assert run.cmds[1][0] == "bash" and len(run.cmds) == 2   # install.sh's modules apply starts them again
+    assert run.cmds[2][0] == "bash" and len(run.cmds) == 3   # install.sh's modules apply starts them again
 
 
-def test_failed_install_starts_the_services_again(env, srv, key, monkeypatch):
-    srv.add("1.1.0")
+START = [["systemctl", "start", "spoolman.service", "filament-kit.service"],
+         ["systemctl", "start", "filament-kit-build.path", "filament-kit-update.timer"]]
+
+
+@pytest.fixture
+def systemd(monkeypatch):
     monkeypatch.delenv("FK_NO_SYSTEMD")
     monkeypatch.setattr(updates, "_require_root", lambda: True)
+
+
+def _on():
+    return ("spoolman", "server", "presets", "updates")
+
+
+def test_failed_install_without_a_kept_copy_starts_the_units_again(env, srv, key, systemd, capsys):
+    srv.add("1.1.0")
     run = Runner(rc=3)
-    assert updates.update(_cfg(env), fetcher=srv.fetcher(), run=run) == 1
-    assert run.cmds[-1] == ["systemctl", "start", "spoolman.service", "filament-kit.service"]
-    assert "previous" not in updates._read_state()
+    assert updates.update(_cfg(env, on=_on()), fetcher=srv.fetcher(), run=run) == 1
+    assert run.cmds[-2:] == START
+    assert "previous" not in updates._read_state() and updates._read_state()["failed"] == "1.1.0"
+    assert "--version 1.0.0" in capsys.readouterr().err
+
+
+def test_install_failing_halfway_reinstalls_the_running_version(env, srv, key, systemd, capsys):
+    srv.add("1.0.0")
+    srv.add("1.1.0")
+    updates._write_state(previous="0.9.0")
+    run = Runner(rc={"filament-kit-1.1.0": 7})
+    assert updates.update(_cfg(env, on=_on()), fetcher=srv.fetcher(), run=run, now=50.0) == 1
+    assert run.installed == ["filament-kit-1.1.0", "filament-kit-1.0.0"]
+    # the failed attempt started the units again before the reinstall stopped them once more
+    i = run.cmds.index(["bash", run.cmds[2][1]])
+    assert run.cmds[i + 1:i + 3] == START
+    st = updates._read_state()
+    assert st["failed"] == "1.1.0" and st["previous"] == "0.9.0"      # 1.0.0 runs again: previous as it was
+    assert "1.0.0 is back in place" in capsys.readouterr().err
+
+
+def test_previous_is_recorded_before_the_install(env, srv, key):
+    srv.add("1.0.0")
+    srv.add("1.1.0")
+    seen = []
+    run = Runner(rc={"filament-kit-1.1.0": lambda: seen.append(updates._read_state().get("previous")) or 0})
+    assert updates.update(_cfg(env), fetcher=srv.fetcher(), run=run) == 0
+    assert seen == ["1.0.0"]
+
+
+def test_both_failing_keeps_previous_and_says_how_to_roll_back(env, srv, key, systemd, monkeypatch, capsys):
+    srv.add("1.0.0")
+    srv.add("1.1.0")
+    cfg = _cfg(env, on=_on())
+    run = Runner(rc=9)
+    assert updates.update(cfg, fetcher=srv.fetcher(), run=run) == 1
+    assert run.installed == ["filament-kit-1.1.0", "filament-kit-1.0.0"]
+    assert run.cmds[-2:] == START
+    assert updates._read_state()["previous"] == "1.0.0"
+    assert "sudo filament-kit update --rollback" in capsys.readouterr().err
+    # the rollback afterwards works (this process may still report the old version after a half-done install)
+    run = Runner()
+    assert updates.rollback(cfg, run=run) == 0
+    assert run.installed == ["filament-kit-1.0.0"]
+
+
+def test_failed_version_is_not_retried_daily(env, srv, key):
+    srv.add("1.0.0")
+    srv.add("1.1.0")
+    cfg = _cfg(env)
+    run = Runner(rc={"filament-kit-1.1.0": 1})
+    assert updates.update(cfg, scheduled=True, fetcher=srv.fetcher(), run=run, now=0.0) == 1
+    run = Runner()
+    for day in (1, 2, 3):
+        assert updates.update(cfg, scheduled=True, fetcher=srv.fetcher(), run=run, now=day * 86400.0) == 0
+    assert run.cmds == []
+    # a newer release is tried, and clears the mark
+    srv.add("1.2.0")
+    assert updates.update(cfg, scheduled=True, fetcher=srv.fetcher(), run=run, now=4 * 86400.0) == 0
+    assert run.installed == ["filament-kit-1.2.0"] and updates._read_state()["failed"] is None
+
+
+def test_manual_update_retries_a_failed_version(env, srv, key):
+    srv.add("1.0.0")
+    srv.add("1.1.0")
+    cfg = _cfg(env)
+    assert updates.update(cfg, fetcher=srv.fetcher(), run=Runner(rc={"filament-kit-1.1.0": 1})) == 1
+    run = Runner()
+    assert updates.update(cfg, fetcher=srv.fetcher(), run=run) == 0
+    assert run.installed == ["filament-kit-1.1.0"] and updates._read_state()["failed"] is None
+
+
+def test_run_raising_oserror_starts_the_units_again(env, srv, key, systemd):
+    srv.add("1.1.0")
+    run = Runner(rc=OSError("bash missing"))
+    assert updates.update(_cfg(env, on=_on()), fetcher=srv.fetcher(), run=run) == 1
+    assert run.cmds[-2:] == START
+
+
+def test_unexpected_exception_still_starts_the_units_again(env, srv, key, systemd):
+    srv.add("1.1.0")
+    run = Runner(rc=RuntimeError("boom"))
+    with pytest.raises(RuntimeError):
+        updates.update(_cfg(env, on=_on()), fetcher=srv.fetcher(), run=run)
+    assert run.cmds[-2:] == START
+
+
+def test_sigterm_during_install_starts_the_units_again(env, srv, key, systemd):
+    import signal
+    srv.add("1.1.0")
+    before = signal.getsignal(signal.SIGTERM)
+
+    def term():                         # what the kernel does: call the handler the updater installed
+        handler = signal.getsignal(signal.SIGTERM)
+        assert callable(handler) and handler is not before
+        handler(signal.SIGTERM, None)
+        return 0
+    run = Runner(rc=term)
+    with pytest.raises(SystemExit) as e:
+        updates.update(_cfg(env, on=_on()), fetcher=srv.fetcher(), run=run)
+    assert e.value.code == 128 + signal.SIGTERM
+    assert run.cmds[-2:] == START
+    assert signal.getsignal(signal.SIGTERM) is before       # handler restored
+    assert not (env / "opt/releases/.work").exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="a real SIGTERM to this process")
+def test_real_sigterm_during_install(env, srv, key, systemd):
+    import signal
+    srv.add("1.1.0")
+    run = Runner(rc=lambda: os.kill(os.getpid(), signal.SIGTERM) or 0)
+    with pytest.raises(SystemExit):
+        updates.update(_cfg(env, on=_on()), fetcher=srv.fetcher(), run=run)
+    assert run.cmds[-2:] == START
+
+
+def test_update_unit_starts_the_kit_when_the_run_did_not_succeed():
+    svc = (ROOT / "install/systemd/filament-kit-update.service").read_text(encoding="utf-8")
+    line = next(ln for ln in svc.splitlines() if ln.startswith("ExecStopPost="))
+    assert '"$$SERVICE_RESULT" != success' in line and "--state=enabled" in line
+    assert "systemctl start --no-block \"$$unit\"" in line and "/opt/filament-kit/venv" not in line
 
 
 def test_up_to_date_does_nothing(env, srv, key):

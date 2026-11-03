@@ -3,7 +3,10 @@
 `update` finds the latest release, downloads and verifies it exactly as get.sh does (`release.fetch`: the
 signature over SHA256SUMS, then the tarball's hash), keeps it in /opt/filament-kit/releases/<version>/, stops the
 kit's services, runs the release's install.sh in upgrade mode (no questions; it ends with `modules apply`, which
-starts them again) and keeps the version it replaced for `--rollback`. Nothing is touched while a printer is
+starts them again) and keeps the version it replaced for `--rollback`. The module's timers are stopped too. If
+install.sh fails, raises or the updater gets SIGTERM, the stopped units are started again; a failed install then
+reinstalls the version that was running (from its kept copy) and the failed version is not retried by the timer
+until a newer release appears (`update` by hand tries it again). Nothing is touched while a printer is
 mapping or loading: the printers' mapping.lock files are held for the whole install. The timer
 (filament-kit-update.timer, daily) runs `update --scheduled`, which does nothing unless the module is on and
 `updates.schedule` (daily or weekly) says a check is due, and never reinstalls a version that was rolled back.
@@ -17,6 +20,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -136,9 +140,11 @@ def printers_idle():
 
 # ---------------------------------------------------------------- install
 
-def _units(cfg: dict) -> list[str]:
+def _units(cfg: dict) -> tuple[list[str], list[str]]:
+    """(services, timers and path units) of the modules that are on."""
     on = modules.enabled(cfg)
-    return [u for n, m in modules.MODULES.items() if n in on for u in m.units if u.endswith(".service")]
+    units = [u for n, m in modules.MODULES.items() if n in on for u in m.units]
+    return [u for u in units if u.endswith(".service")], [u for u in units if not u.endswith(".service")]
 
 
 def _systemctl(run, verb: str, units: list[str]) -> None:
@@ -150,26 +156,62 @@ def default_run(cmd: list[str]) -> int:
     return subprocess.run(cmd, stdin=subprocess.DEVNULL, check=False).returncode
 
 
+@contextmanager
+def _sigterm_exits():
+    """SIGTERM (systemctl stop, shutdown) raises SystemExit, so the `finally` that starts the kit again runs."""
+    def _exit(signum, frame):
+        raise SystemExit(128 + signum)
+    try:
+        old = signal.signal(signal.SIGTERM, _exit)
+    except ValueError:                  # not the main thread
+        old = None
+    try:
+        yield
+    finally:
+        if old is not None:
+            signal.signal(signal.SIGTERM, old)
+
+
+def _start_again(run, services: list[str], timers: list[str]) -> None:
+    """Best effort: a failure here must not hide the install's own error."""
+    for group in (services, timers):
+        try:
+            _systemctl(run, "start", group)
+        except Exception as e:          # noqa: BLE001 - keep going, say what failed
+            print(f"error: could not start {', '.join(group)}: {e}", file=sys.stderr)
+
+
 def _install(cfg: dict, version: str, run: Callable[[list[str]], int]) -> bool:
-    """Re-verify the kept release, unpack it, stop the services, run its install.sh. On failure the stopped
-    services are started again."""
+    """Re-verify the kept release, unpack it, stop the module timers and services, run its install.sh (whose
+    `modules apply` starts them again). Unless install.sh succeeded, whatever happened (a failure, an exception,
+    SIGTERM), the stopped units are started again before this returns or raises."""
     tarball = release.verify_dir(store() / version, version)
     work = store() / ".work"
     shutil.rmtree(work, ignore_errors=True)
     work.mkdir(mode=0o700, parents=True)
+    ok = False
+    services, timers = _units(cfg)
+    stopped: tuple[list[str], list[str]] = ([], [])
     try:
-        root = release.extract(tarball, version, work)
-        units = _units(cfg)
-        print(f"stopping {', '.join(units) or 'nothing'}; installing filament-kit {version}")
-        _systemctl(run, "stop", units)
-        rc = run(["bash", str(root / "install.sh")])
-        if rc != 0:
-            print(f"error: install.sh of {version} failed (exit {rc}); starting the services again",
-                  file=sys.stderr)
-            _systemctl(run, "start", units)
-            return False
-        return True
+        with _sigterm_exits():
+            root = release.extract(tarball, version, work)
+            print(f"stopping {', '.join(timers + services) or 'nothing'}; installing filament-kit {version}")
+            stopped = (services, timers)
+            _systemctl(run, "stop", timers)
+            _systemctl(run, "stop", services)
+            try:
+                rc = run(["bash", str(root / "install.sh")])
+            except OSError as e:
+                print(f"error: cannot run install.sh of {version}: {e}", file=sys.stderr)
+                rc = -1
+            ok = rc == 0
+            if not ok:
+                print(f"error: install.sh of {version} failed (exit {rc})", file=sys.stderr)
+            return ok
     finally:
+        if not ok and (stopped[0] or stopped[1]):
+            print("starting the kit's services again", file=sys.stderr)
+            _start_again(run, *stopped)
         shutil.rmtree(work, ignore_errors=True)
 
 
@@ -239,6 +281,11 @@ def update(cfg: dict, *, scheduled: bool = False, fetcher: release.Fetcher | Non
             _write_state(last_ok_at=now)
             print(f"{latest} was rolled back; the timer leaves it (sudo filament-kit update installs it)")
             return 0
+        if scheduled and st.get("failed") == latest:
+            _write_state(last_ok_at=now)
+            print(f"installing {latest} failed before; the timer waits for a newer release "
+                  "(sudo filament-kit update tries it again)")
+            return 0
         if not _kept(cur):
             try:
                 _download(fetcher, s["repo"], cur)
@@ -246,8 +293,13 @@ def update(cfg: dict, *, scheduled: bool = False, fetcher: release.Fetcher | Non
                 print(f"warning: no verified copy of the installed {cur} for a rollback: {e}", file=sys.stderr)
         _download(fetcher, s["repo"], latest)
         with printers_idle():
+            kept = _kept(cur)
+            old_previous = st.get("previous")
+            if kept:                    # before anything changes: a half-done install can still roll back
+                _write_state(previous=cur)
             if not _install(cfg, latest, run):
-                return 1
+                _write_state(failed=latest, last_ok_at=now)
+                return _restore(cfg, cur, kept, old_previous, run)
     except Busy as e:
         print(f"{'skipped' if scheduled else 'error'}: printer {e} is mapping or loading; "
               f"{'the next check tries again' if scheduled else 'try again when it is done'}",
@@ -256,10 +308,31 @@ def update(cfg: dict, *, scheduled: bool = False, fetcher: release.Fetcher | Non
     except ReleaseError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
-    _write_state(last_ok_at=now, previous=cur if _kept(cur) else None, held=None)
+    _write_state(last_ok_at=now, previous=cur if _kept(cur) else None, held=None, failed=None)
     _prune({latest, cur})
     print(f"updated filament-kit {cur} -> {latest}" + ("" if _kept(cur) else " (no rollback copy)"))
     return 0
+
+
+def _restore(cfg: dict, cur: str, kept: bool, old_previous, run) -> int:
+    """After a failed install: reinstall `cur` from its kept copy. Always returns 1 (the update failed)."""
+    if not kept:
+        print(f"error: no kept copy of {cur} to go back to; reinstall it by hand: curl -fsSL <get.sh url> | "
+              f"sudo bash -s -- --version {cur}", file=sys.stderr)
+        return 1
+    print(f"reinstalling filament-kit {cur}", file=sys.stderr)
+    try:
+        restored = _install(cfg, cur, run)
+    except ReleaseError as e:
+        print(f"error: {e}", file=sys.stderr)
+        restored = False
+    if restored:
+        _write_state(previous=old_previous)
+        print(f"filament-kit {cur} is back in place; the update failed", file=sys.stderr)
+    else:
+        print(f"error: reinstalling {cur} failed too; try again with: sudo filament-kit update --rollback",
+              file=sys.stderr)
+    return 1
 
 
 def rollback(cfg: dict, *, run: Callable[[list[str]], int] = default_run) -> int:
@@ -275,6 +348,7 @@ def rollback(cfg: dict, *, run: Callable[[list[str]], int] = default_run) -> int
     try:
         with printers_idle():
             if not _install(cfg, target, run):
+                print("error: the rollback failed; the version before is still kept, try again", file=sys.stderr)
                 return 1
     except Busy as e:
         print(f"error: printer {e} is mapping or loading; try again when it is done", file=sys.stderr)
@@ -282,7 +356,8 @@ def rollback(cfg: dict, *, run: Callable[[list[str]], int] = default_run) -> int
     except ReleaseError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
-    _write_state(previous=None, held=cur)
-    print(f"rolled back filament-kit {cur} -> {target}; settings and data stay as they are. The timer will not "
-          f"install {cur} again; `sudo filament-kit update` does.")
+    held = cur if cur != target else st.get("held")    # after a half-done update this process may say `target`
+    _write_state(previous=None, held=held)
+    print(f"rolled back filament-kit {cur} -> {target}; settings and data stay as they are."
+          + (f" The timer will not install {held} again; `sudo filament-kit update` does." if held else ""))
     return 0

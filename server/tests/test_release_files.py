@@ -38,7 +38,22 @@ def test_release_workflow_builds_sync_on_windows_with_pinned_pyinstaller():
     text = _read(".github/workflows/release.yml")
     assert "windows-2022" in text
     assert "pyinstaller==6.11.1" in text
-    assert "softprops/action-gh-release@v2" in text
+    assert re.search(r"softprops/action-gh-release@[0-9a-f]{40}  # v2\.", text)
+
+
+def test_release_workflow_pins_every_action_by_commit():
+    """M3: the release jobs hold signing secrets, so every action is a full commit SHA with its tag beside it."""
+    text = _read(".github/workflows/release.yml")
+    uses = re.findall(r"^\s*- uses: (\S+)(.*)$", text, re.M)
+    assert uses
+    for ref, rest in uses:
+        assert re.fullmatch(r"[\w.-]+/[\w.-]+@[0-9a-f]{40}", ref), ref
+        assert re.fullmatch(r"\s+# v\d+\.\d+\.\d+", rest), (ref, rest)
+    assert "--require-hashes --only-binary :all: -r tools/release-signing-requirements.txt" in text
+    req = _read("tools/release-signing-requirements.txt")
+    for pkg in ("cryptography==", "cffi==", "pycparser=="):
+        assert pkg in req
+    assert re.search(r"sha256sum .*\\\n\s+\"filament-kit-sync-setup", text)   # M4: the continuation is kept
 
 
 def test_pc_sync_workflow():
