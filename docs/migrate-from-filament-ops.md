@@ -350,16 +350,27 @@ to write into `server/tests/` without `--force`.
 
 Install or upgrade the kit with the `printers` and `web` modules on: `sudo filament-kit modules enable printers`
 then `sudo filament-kit modules enable web` (each applies). Before the kit can reach the printer, apply the
-network rules in 6.8.
+network rules in 6.9.
 
 ### 6.3 Add the H2D (owner)
 
 In the app (Printers) or `sudo filament-kit config` → Printers → add printer: name (for example `H2D`), IP, serial
 and the Access Code, typed by the owner. The name becomes the Spoolman location prefix ("H2D – AMS A1"). The
 model-only `ops-h2d` placeholder from 1.3 can be removed now; while it is there, pass `--printer <serial>` below.
-Do not press Map slots: step 6.4 seeds the map.
+Do not press Map slots: step 6.5 seeds the map.
 
-### 6.4 Migrate the slots and the usage calibration
+### 6.4 Stop the scanner (just before the migration)
+
+Right before 6.5, with no print running, stop all three scanner services, so a tap on the old reader cannot claim a
+slot again after the move and two trackers never deduct the same print:
+
+```
+sudo systemctl disable --now h2d-scanner h2d-remote h2d-usage
+```
+
+From here until 6.6 the reader cannot set slots (the old one has no server, the new one is not flashed yet).
+
+### 6.5 Migrate the slots and the usage calibration
 
 ```
 sudo cp /var/lib/h2d-usage/calibration.json /root/h2d-calibration.json
@@ -371,48 +382,47 @@ The dry run prints each change as `old → new`: spools at "H2D - AMS slot N" / 
 "H2D - External left|right" go to the kit's "<name> – AMS A<N>" / "HT-<letter>" / "Ext-L|Ext-R" (labels from the
 kit's own layout code); `extra.active_tray` is cleared, `extra.prev_location` is kept, spools elsewhere are not
 touched. The slot map is seeded from the calibration (expected: scheme shift8, A1 = 0, A3 = 2, HT-A = 32768,
-HT-B = 33024, plus any numbers the scanner learned from prints), calibrated, so usage deducts at once. Anything
-the file holds that the kit cannot read is listed as `unknown:` and not written. `--apply` first writes a backup
-(`/var/backups/filament-kit/migrate-scanner-<stamp>.json`, path printed). A printer that already has a different
-slot map is refused unless `--replace-map`. Running `--apply` again changes nothing and says so.
+HT-B = 33024, plus any numbers the scanner learned from prints), calibrated when the scanner's calibration was
+"calibrated" or "learning" (it deducted on both), so usage deducts at once. Anything the file holds that the kit
+cannot read is listed as `unknown:` and not written; a calibration with no usable entry seeds no map (run Map
+slots then). `--apply` first writes a backup (`/var/backups/filament-kit/migrate-scanner-<stamp>.json`, path
+printed). A printer that already has a different slot map is refused unless `--replace-map`; a map saved while
+the command runs is never overwritten (it says so: run it again). Running `--apply` again changes nothing and
+says so, also after the kit has learned more numbers ("seeded earlier, since updated by the kit").
 
 Check: the app's printer page shows the spools in their slots and the mapping status says "Seeded from the
 h2d-filament-scanner calibration"; the first print after the cut-over shows its deduction in the usage list.
-`h2d-usage` deducts nothing from then on (it finds spools by `active_tray`, now cleared); 6.6 stops it.
 
-### 6.5 The reader
+### 6.6 The reader
 
 The reader API needs the printers module and answers with an error while `slot_service` (the scanner's slot
 endpoints) is configured. So, in this order:
-1. Stop the scanner's slot writers: `sudo systemctl disable --now h2d-scanner h2d-remote`.
-2. Remove `slot_service` from the kit: set `"slot_service": null` in `/etc/filament-kit/config.json`, then
+1. Remove `slot_service` from the kit: set `"slot_service": null` in `/etc/filament-kit/config.json`, then
    `sudo systemctl restart filament-kit filament-kit-web`; `/etc/filament-kit/h2d_token` can go.
-3. Only now reflash the reader with `READER_BASE` pointing at the kit (reader/README.md, "Moving from the H2D-only
+2. Only now reflash the reader with `READER_BASE` pointing at the kit (reader/README.md, "Moving from the H2D-only
    reader"): a reader flashed earlier finds no kit reader API.
 
-### 6.6 Retire the scanner
-
-```
-sudo systemctl disable --now h2d-usage h2d-scanner h2d-remote
-```
+### 6.7 Retire the scanner's routes
 
 Remove the `/h2d/` and `/printer/` locations from `/etc/nginx/mcp.d/h2d.conf` (the scanner's `nginx-h2d.conf`),
 **keeping `location ^~ /h2d/fw/`** (and its auth include) until the new reader firmware is in and updates from
 the kit; then `sudo nginx -t && sudo systemctl reload nginx`. Keep `/opt/h2d-scanner`, `/etc/h2d-scanner` and
 `/var/lib/h2d-usage` until section 4's week has passed.
 
-### 6.7 Rollback
+### 6.8 Rollback
 
-1. `sudo systemctl enable --now h2d-scanner h2d-remote h2d-usage`; put the nginx locations back (`nginx -t`,
-   reload).
+In this order (the kit lets go of the H2D before the scanner takes it back, so no print is deducted twice):
+1. Kit: remove the H2D in the app (or delete `/var/lib/filament-kit/printers/<serial>/slotmap.json`, which puts
+   its usage in observe mode). To use the scanner's slot endpoints again, restore `slot_service` in
+   `/etc/filament-kit/config.json` and `sudo systemctl restart filament-kit filament-kit-web`.
 2. Spoolman: the backup's `spools` list holds each moved spool's old `location` and `extra`; PATCH them back
    (`/api/v1/spool/<id>` with that location and extra), or move them in Spoolman's UI to "H2D - AMS slot N" etc.
-   and tap them again on the old reader.
-3. Kit: remove the H2D in the app (or delete `/var/lib/filament-kit/printers/<serial>/slotmap.json`); restore
-   `slot_service` in `config.json` if the kit should use the scanner's slot endpoints again.
-4. Reader: flash the old firmware again (or keep the new one; it only talks to the kit).
+   and tap them again on the old reader once it runs.
+3. `sudo systemctl enable --now h2d-scanner h2d-remote h2d-usage`; put the nginx locations back (`nginx -t`,
+   reload).
+4. Reader: flash the old firmware again (the new one only talks to the kit).
 
-### 6.8 Network rules (owner applies; nothing in the kit changes them)
+### 6.9 Network rules (owner applies; nothing in the kit changes them)
 
 - The kit's units (`filament-kit.service`, `filament-kit-web.service`) allow 192.168.0.0/16 in `IPAddressAllow`
   already. Any nft / pfSense rule that limits the VM's egress by uid or service must let uid `filament-kit` reach
@@ -422,7 +432,7 @@ the kit; then `sudo nginx -t && sudo systemctl reload nginx`. Keep `/opt/h2d-sca
   them in the VM's input chain if it filters, or add the printer by IP (6.3) and skip discovery.
 - Web Push (optional): egress to the browsers' push hosts, the owner decides.
 
-### 6.9 Known limits (from the reviews)
+### 6.10 Known limits (from the reviews)
 
 - An automatic re-map (layout changed, or prints disagreed with the map) whose calibration fails downgrades the
   map to observe: usage only logs until a mapping succeeds. Re-run it with Map slots in the app or

@@ -11,10 +11,10 @@ The fixture (JSON) holds every message received (`messages`: topic, seconds sinc
 `print` payloads merged in order (`report`). The serial is replaced by SERIAL0000000000 everywhere (keys, topics,
 nested strings) and every IPv4 address by 192.0.2.1, also the packed uint32 form the firmware uses in
 `net.info[]` (ip / gw, and a mask that is not a plain netmask) and any int equal to the printer's packed address;
-each AMS / HT / toolhead serial in the get_version module list becomes SN-redacted-<n> (the same n everywhere). The access code is never printed or written (a value
-equal to it is replaced by REDACTED); a fixture that still holds the serial, the code or the printer's IP
-(string or packed) is not written. An --out inside the repository's tests directory is refused without
---force: review the file before it is committed.
+each AMS / HT / toolhead serial in the get_version module list becomes SN-redacted-<n> (the same n everywhere).
+The access code is never printed or written (a value equal to it is replaced by REDACTED); a fixture that still
+holds the serial, the code or the printer's IP (string or packed) is not written. An --out inside the repository's
+tests directory is refused without --force: review the file before it is committed.
 
 Standard library + paho-mqtt (the scanner's and the kit's venvs both have it)."""
 from __future__ import annotations
