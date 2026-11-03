@@ -18,7 +18,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-from . import apply, config, inventory, library, modules, pairing
+from . import apply, config, inventory, library, menu_ui, modules, pairing
 from .bridge import registry
 from .profiles import builds, lines as lines_mod
 from .profiles.errors import ProfileError
@@ -1154,11 +1154,12 @@ def _apply_selection(cfg: dict, on, *, ask=None) -> str | None:
 
 
 def _modules_menu(cfg: dict) -> None:
-    """One checklist: numbers toggle (needs go on too, dependents are listed), a/s/t presets, Enter applies."""
+    """One checklist (menu_ui: cursor keys and Space, or numbers without a terminal): needs go on too, dependents
+    go off, a/s/t presets, Enter applies."""
     on = modules.enabled(cfg)
     print()
     print(f"Modules (mode: {modules.mode_of(on)})")
-    chosen = modules.run_checklist(on, _ask)
+    chosen = menu_ui.run_menu(on, _ask)
     if chosen is None or chosen == on:
         print("Unchanged.")
         return
@@ -1190,7 +1191,7 @@ def cmd_modules_menu(raw: bool) -> int:
     sys.stdout = sys.stderr                     # prompts and the checklist go to the terminal, not the capture
     try:
         while True:
-            chosen = modules.run_checklist(on, _ask)
+            chosen = menu_ui.run_menu(on, _ask)
             if chosen is None:
                 return 1
             trial = _with_modules(cfg, chosen)
@@ -1437,7 +1438,7 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     mdsub = md.add_subparsers(dest="modules_cmd", required=True)
     mdsub.add_parser("apply", help="install, start and stop what config.json's modules say (root)")
     mdsub.add_parser("list", help="show each module on/off and the mode")
-    mm = mdsub.add_parser("menu", help="the module checklist (numbers toggle, a/s/t presets, Enter applies)")
+    mm = mdsub.add_parser("menu", help="the module checklist (cursor keys move, Space switches, a/s/t presets, Enter applies)")
     mm.add_argument("--raw", action="store_true", help="print the chosen modules as a comma list; change nothing")
     ms = mdsub.add_parser("set", help="switch to an install mode and apply (root)")
     ms.add_argument("mode", choices=list(modules.MODES))
