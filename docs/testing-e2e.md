@@ -7,7 +7,7 @@ the rollback, and a station upgrade. It is made for the WSL Ubuntu on the dev PC
 found it.
 
 ```
-wsl -d Ubuntu -- sudo bash /mnt/c/CODING/filament-kit/tools/e2e/run.sh
+wsl -d Ubuntu -- sudo bash /mnt/c/<checkout>/tools/e2e/run.sh
 ```
 
 Options: `--only a,d,c,b,e` runs some scenarios (the later ones need a), `--results FILE` copies the results

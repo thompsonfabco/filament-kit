@@ -387,9 +387,17 @@ class E2E:
         item = {"vendor": "E2E Test Co", "name": "E2E PLA Red", "material": "PLA", "color_hex": "cc0000",
                 "net": 1000, "tare": 200, "density": 1.24, "count": 1, "nozzle": 210, "bed": 60,
                 "sealed": False}               # an opened spool: only then is the tag linked
+        def spool_count() -> int:
+            c, spools = jhttp("GET", f"{SPOOLMAN}/spool?allow_archived=true")
+            if c != 200 or not isinstance(spools, list):
+                raise Fail(f"cannot list Spoolman's spools: {c}")
+            return len(spools)
+        n_before = spool_count()
         code, dry = jhttp("POST", f"{KIT}/api/intake/add", headers=auth, body={"items": [item], "dry_run": True})
-        run.check(sc, "dry run adds nothing", code == 200 and isinstance(dry, dict) and dry.get("dry") is True,
-                  f"{code} {dry}")
+        n_after = spool_count()
+        run.check(sc, "dry run answers dry and adds no spool to Spoolman",
+                  code == 200 and isinstance(dry, dict) and dry.get("dry") is True and n_after == n_before,
+                  f"{code} {dry} spools {n_before} -> {n_after}")
         code, added = jhttp("POST", f"{KIT}/api/intake/add", headers=auth,
                             body={"items": [item], "dry_run": False, "tag": UID})
         ok = code == 200 and isinstance(added, dict) and len(added.get("spool_ids") or []) == 1
@@ -449,8 +457,8 @@ class E2E:
         run.check(sc, "GET reader/printers lists the printer", code == 200 and
                   [p.get("id") for p in plist] == [SERIAL] and plist[0].get("name") == "E2E H2D", str(plist))
         labels = [s.get("label") for s in slots if s.get("label")]
-        run.check(sc, "GET .../slots: 16 AMS x 4 + 8 HT + 2 externals = 74 slots", len(labels) == 74,
-                  f"{len(labels)}: {labels}")
+        run.check(sc, "GET .../slots: 16 AMS x 4 + 8 HT + 2 externals = 74 slots, every one labelled",
+                  len(slots) == 74 and len(labels) == 74, f"{len(slots)} entries, {len(labels)} labels: {labels}")
         run.check(sc, "every slot label is unique (also ignoring case) and at most 40 bytes",
                   len({x.lower() for x in labels}) == len(labels) and all(len(x.encode()) <= 40 for x in labels),
                   str(labels))
