@@ -11,6 +11,14 @@ const PICKS = JSON.parse(document.body.dataset.picks); // extra places offered w
 const AI = document.body.dataset.ai === "1";       // the ai_intake module is on: label photos can be read
 // typical densities (g/cm3), filled in for a spool added by hand while its density is still blank
 const DENSITY = { PLA: 1.24, PETG: 1.27, ABS: 1.04, ASA: 1.07, TPU: 1.21, PA: 1.14, PC: 1.2, PVA: 1.23, HIPS: 1.04 };
+// a material with no entry of its own ("PLA+", "PLA Silk", "PETG-CF") takes the longest known one it starts with
+function densityFor(material) {
+  const m = String(material ?? "").trim().toUpperCase();
+  if (!m) return undefined;
+  if (m in DENSITY) return DENSITY[m];
+  const key = Object.keys(DENSITY).filter((k) => m.startsWith(k)).sort((x, y) => y.length - x.length)[0];
+  return key ? DENSITY[key] : undefined;
+}
 const MAX_EDGE = 1568, QUALITY = 0.85; // Claude reads labels well at this size; keeps uploads ~300 KB per photo
 const app = document.getElementById("app");
 
@@ -123,7 +131,7 @@ function addTab() {
         class: "pick", on: { click: () => addItem({ ...blankItem(), vendor: f.vendor, name: f.name, material: f.material || "",
           net: f.net ?? 1000, tare: f.tare, density: f.density, color_hex: f.color_hex || "", nozzle: f.nozzle, bed: f.bed,
           existing_filament_id: f.id, match: "existing filament" }) } },
-        h("strong", { textContent: `F${f.id} ` }), `${f.vendor} ${f.name}`,
+        h("strong", { textContent: `F${f.id} ` }), `${f.vendor || "(no vendor)"} ${f.name}`,
         h("div", { class: "muted", textContent: `${f.material || "?"} · ${f.net ?? "?"} g · ${f.spools} spool${f.spools === 1 ? "" : "s"}` })));
     });
   }
@@ -180,7 +188,7 @@ function addTab() {
       list: key === "vendor" ? "vendors" : undefined,
       on: { input: (e) => { it[key] = type === "number" ? (e.target.value === "" ? null : Number(e.target.value)) : e.target.value;
                             if (key === "color_hex") swatchFor(it);
-                            if (key === "material") fillBlank(it, "density", DENSITY[it.material.trim().toUpperCase()], ins);
+                            if (key === "material") fillBlank(it, "density", densityFor(it.material), ins);
                             if (key === "vendor") fillBlank(it, "tare", vendorTare.get(it.vendor.trim().toLowerCase()), ins);
                             dirty(); } } });
     ins[key] = inp;
