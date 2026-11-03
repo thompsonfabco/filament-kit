@@ -652,8 +652,8 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
         res.problems.append(f"the calibration job ended as {st['final']} on the printer")
 
     if res.mapping is None:
-        res.problems.append("the printer did not report the job's slot mapping")
-        res.retry = st['final'] == 'FINISH'
+        # a printer that reports no mapping will not for other numbers either: no second job, observe mode
+        res.problems.append("the printer reported no slot mapping")
         return
     vals = []
     for i, label in enumerate(labels):

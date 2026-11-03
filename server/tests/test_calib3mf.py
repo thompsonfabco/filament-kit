@@ -840,3 +840,13 @@ def test_failed_as_finish_only_by_the_model_rule(fake_ftp, printer, model, error
     assert r.failed_as_finish is finished
     assert any("ended as FAILED" in p for p in r.problems) is (not finished)
     assert len(jobs(m)) == 1                       # FAILED never earns a second job
+
+
+def test_finish_without_mapping_sends_one_job_only(fake_ftp, printer):
+    """Round 2: a clean FINISH with no reported mapping proves nothing, and another numbering would not make the
+    printer report one: one job, not consistent (observe), the reason in problems."""
+    m = FakeManager(fake_ftp.root, "native", report=owner_h2d_report())
+    m.report_mapping = False
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert r.consistent is False and r.retry is False and len(jobs(m)) == 1 and r.tried == ["legacy"]
+    assert "the printer reported no slot mapping" in r.problems
