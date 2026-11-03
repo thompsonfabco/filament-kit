@@ -1,12 +1,15 @@
 """Bambu MQTT report handling: merge report deltas and condense the merged report for the app.
 
 Ported from the owner's single-printer remote (`h2d-filament-scanner/remote/remote.py`) and generalised to any
-Bambu printer: nozzle count, AMS units and lights all come from the report itself."""
+Bambu printer: nozzle count, AMS units and lights all come from the report itself; units, labels and presence
+from `layout.build` (shared with `ams.units`)."""
 from __future__ import annotations
 
 import time
 from datetime import datetime
 from typing import Any
+
+from . import hardware, layout
 
 STAGES = {0: 'Printing', 1: 'Auto bed leveling', 2: 'Heatbed preheating', 3: 'Vibration compensation',
           4: 'Changing filament', 5: 'M400 pause', 6: 'Paused: filament runout', 7: 'Heating hotend',
@@ -25,8 +28,8 @@ STAGES = {0: 'Printing', 1: 'Auto bed leveling', 2: 'Heatbed preheating', 3: 'Vi
 ACTIVE = {'RUNNING', 'PAUSE', 'PREPARE', 'SLICING'}
 HT_BASE = 128            # AMS HT units are addressed 128, 129, ... (one slot each, tray 0)
 DASH = '–'          # Spoolman locations are "<printer name> – AMS <label>" (en dash)
-EXT = 'Ext'              # the external spool holder (`vt_tray`): unit and slot label
-EXT_ID = 254             # its id; a second nozzle's holder reports 255
+EXT = 'Ext'              # a single external spool holder's unit and slot label (two holders: Ext-L / Ext-R)
+EXT_ID = 254             # its id; a second nozzle's holder reports 255 (`layout` reads both)
 
 
 def merge(full: dict, delta: dict) -> dict:
@@ -76,23 +79,24 @@ def hms_code(e: dict) -> str:
 
 
 def tray_now_tag(n: Any) -> str | None:
-    """`ams.tray_now` as "<ams_id>:<tray_id>"; 254 = external spool ('ext'), 255 = nothing loaded (None)."""
+    """`ams.tray_now` as "<ams_id>:<tray_id>": legacy numbering (unit * 4 + tray, AMS HT units their own id);
+    254 = the external holder ("254:0"), 255 = nothing loaded (None)."""
     n = _int(n)
-    if n is None:
+    if n is None or n < 0:
         return None
     if n >= 254:
-        return None if n == 255 else 'ext'
-    return f"{n}:0" if n >= HT_BASE else f"{n // 4}:{n % 4}"
+        return None if n == 255 else f"{n}:0"
+    a, t = hardware.BUILTIN_SCHEMES['legacy'].decode(n)
+    return f"{a}:{t}"
 
 
 def unit_label(ams_id: int) -> tuple[str, str]:
-    """(label, kind) as Bambu Studio names units: 0 -> 'A', 1 -> 'B' ...; 128 -> 'HT-A', 129 -> 'HT-B' ...
-    An id outside those ranges is labelled with its number ('#40')."""
-    if HT_BASE <= ams_id < HT_BASE + 26:
-        return f"HT-{chr(ord('A') + ams_id - HT_BASE)}", 'ams_ht'
-    if 0 <= ams_id < 26:
-        return chr(ord('A') + ams_id), 'ams'
-    return f"#{ams_id}", 'ams'
+    """(label, kind) by id alone, as Bambu Studio names units: 0 -> 'A' ... 25 -> 'Z', 26 -> 'AA' ...;
+    128 -> 'HT-A', 129 -> 'HT-B' ... (no limit). Reports go through `layout.build`, which also knows the unit's
+    type and the printer's externals; this is the fallback for an id alone."""
+    if ams_id >= HT_BASE:
+        return f"HT-{layout.letters(ams_id - HT_BASE)}", 'ams_ht'
+    return layout.letters(max(0, ams_id)), 'ams'
 
 
 def slot_label(ams_id: int, tray_id: int) -> str:
@@ -159,49 +163,39 @@ def _spool_view(s: dict) -> dict:
             'remaining_weight': s.get('remaining_weight')}
 
 
-def _ams(p: dict, spools: list[dict], printer_name: str) -> list[dict]:
-    ams = _d(p.get('ams'))
-    now = tray_now_tag(ams.get('tray_now'))
+def _ams(p: dict, spools: list[dict], printer_name: str, lay) -> list[dict]:
+    now = tray_now_tag(_d(p.get('ams')).get('tray_now'))
     by_location: dict[str, dict] = {}
     if printer_name:
         for s in sorted(_l(spools), key=lambda s: _int(s.get('id'), 0) or 0):
             by_location.setdefault(_s(s.get('location')), s)
     units = []
-    for u in _l(ams.get('ams')):
-        uid = _int(u.get('id'))
-        if uid is None or uid < 0:
-            continue
-        label, kind = unit_label(uid)
+    for u in lay.units:
         slots = []
-        for t in _l(u.get('tray')):
-            tid = _int(t.get('id'))
-            if tid is None or tid < 0:
-                continue
-            sl = slot_label(uid, tid)
-            spool = by_location.get(location(printer_name, sl)) if printer_name else None
-            slots.append({'slot': tid, 'label': sl, 'type': _s(t.get('tray_type')),
-                          'color_hex': _s(t.get('tray_color'))[:6],
-                          'active': now == f"{uid}:{tid}",
+        for sl in u.slots:
+            spool = by_location.get(location(printer_name, sl.label)) if printer_name else None
+            t = sl.raw
+            slots.append({'slot': sl.tray_id, 'label': sl.label, 'say': list(sl.say),
+                          'type': _s(t.get('tray_type')), 'color_hex': _s(t.get('tray_color'))[:6],
+                          'active': now == f"{u.ams_id}:{sl.tray_id}",
+                          'present': sl.present, 'reading': sl.reading,
                           'spool': _spool_view(spool) if spool else None})
-        units.append({'unit': uid, 'label': label, 'kind': kind, 'slots': slots})
-    vt = p.get('vt_tray')
-    if isinstance(vt, dict):        # the external spool holder, loadable like a slot (label "Ext", kind "ext")
-        gid = _int(vt.get('id'), EXT_ID)
-        spool = by_location.get(location(printer_name, EXT)) if printer_name else None
-        units.append({'unit': gid if gid is not None else EXT_ID, 'label': EXT, 'kind': 'ext',
-                      'slots': [{'slot': 0, 'label': EXT, 'type': _s(vt.get('tray_type')),
-                                 'color_hex': _s(vt.get('tray_color'))[:6], 'active': now == 'ext',
-                                 'spool': _spool_view(spool) if spool else None}]})
+        units.append({'unit': u.ams_id, 'label': u.label, 'kind': u.kind, 'type_name': u.type_name,
+                      'say': list(u.say), 'slots': slots})
     return units
 
 
 def summarize(report: dict, spools: list[dict], *, printer_name: str = '', updated: float | None = None,
-              now: float | None = None) -> dict:
+              now: float | None = None, model=None) -> dict:
     """Condense a merged report (the `print` object) into the API's `status` shape.
 
     `spools` are Spoolman spools; a slot shows the spool whose `location` is "<printer_name> – AMS <label>"
-    (no join without a printer name). `updated` is when the last report arrived (unix seconds)."""
+    (no join without a printer name). `updated` is when the last report arrived (unix seconds). `model` (code,
+    name or None = generic) picks the externals' labels, unit types and the presence layout (`layout.build`).
+    Additive fields: unit `type_name`, `say`; slot `say`, `present`, `reading` (None = unknown); `presence`
+    ("bits" | "tray_type") and `notes` (what is unknown about this printer)."""
     p = _d(report)
+    lay = layout.build(p, model)
     now = time.time() if now is None else now
     gs = _s(p.get('gcode_state')) or 'UNKNOWN'
     active = gs in ACTIVE
@@ -231,7 +225,9 @@ def summarize(report: dict, spools: list[dict], *, printer_name: str = '', updat
         'remaining_min': remaining,
         'eta': eta,
         'temps': _temps(p),
-        'ams': _ams(p, spools, printer_name),
+        'ams': _ams(p, spools, printer_name, lay),
+        'presence': lay.presence,
+        'notes': list(lay.notes),
         'hms': hms,
         'light': light,
         'updated': int(updated) if updated else None,

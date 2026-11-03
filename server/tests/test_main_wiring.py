@@ -307,6 +307,8 @@ def test_main_starts_the_usage_tracker_and_lifespan_stops_it(tmp_path, monkeypat
     m.main()
     t = seen["tracker"]
     assert isinstance(t, usage.Tracker) and t._on_report in seen["mgr"]._listeners
+    from filament_kit.bridge import mapping
+    assert any(isinstance(fn, mapping.LayoutWatch) for fn in seen["mgr"]._listeners)   # P2: stale + re-map
 
 
 def test_lifespan_stops_the_tracker(tmp_path, monkeypatch):

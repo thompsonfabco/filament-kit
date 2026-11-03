@@ -20,7 +20,7 @@ from starlette.routing import Route
 
 from . import API_VERSION, __version__, config, intake, inventory, modules, pairing, profiles_api, tags
 from .intake import CapReached, PhotoError, ReadCap, ReadError
-from .bridge import camera, loading, mapping, registry, usage
+from .bridge import camera, hardware, loading, mapping, registry, usage
 from .bridge.connection import ACTIONS, DEVELOPER_MODE_REASON, Manager, NoReply, PrinterOffline, UnknownPrinter
 from .bridge.slottest import NoStatus, PrinterBusy
 from .bridge.models import camera_kind
@@ -205,6 +205,17 @@ def _printer_view(p: registry.Printer, printers) -> dict:
             "summary": summary}
 
 
+def _hardware_view() -> dict:
+    """The printer hardware data file's state (`bambu_hardware.xml`): errors = a refused override (the last good
+    data stays in use), warnings = unknown elements/attributes that were ignored."""
+    try:
+        hw = hardware.load()
+    except Exception as e:  # noqa: BLE001 - the status must still answer
+        log.exception("hardware data cannot be loaded")
+        return {"errors": [f"{type(e).__name__}: {e}"], "warnings": []}
+    return {"errors": list(hw.errors), "warnings": list(hw.warnings)}
+
+
 NOT_SEEN = "That printer hasn't been seen on the network yet"
 
 
@@ -259,7 +270,8 @@ def _printer_routes(printers) -> list[Route]:
 
         def build() -> dict:
             p = known(serial)
-            return {"printer": _printer_view(p, printers), "status": printers.status(serial)}
+            return {"printer": _printer_view(p, printers), "status": printers.status(serial),
+                    "hardware": _hardware_view()}
         return JSONResponse(await run_in_threadpool(build))
 
     @_authed

@@ -24,7 +24,7 @@ import time
 from dataclasses import replace
 from typing import Any, Callable
 
-from . import registry, status, tlspin
+from . import layout, registry, status, tlspin
 from ..spoolman import SpoolmanError
 
 log = logging.getLogger(__name__)
@@ -94,6 +94,32 @@ class _Waiter:
         self.reply: dict | None = None
 
 
+def _unit_ids(report: dict) -> set[int] | None:
+    units = status._d(report.get('ams')).get('ams')
+    if not isinstance(units, list):
+        return None
+    return {i for i in (status._int(u.get('id')) for u in status._l(units)) if i is not None}
+
+
+_MODULE_NAME = re.compile(r'^[a-z0-9_]+/(\d{1,3})$', re.I)
+
+
+def modules_from_version(info) -> dict[str, str]:
+    """{"<ams_id>": "<module code>"} from a `get_version` reply's `module` list: entries named "<kind>/<id>"
+    (e.g. "n3f/0" -> hw_ver "N3F05", "n3s/128" -> "N3S05"); anything else is ignored."""
+    if not isinstance(info, dict) or info.get('command') != 'get_version':
+        return {}
+    out = {}
+    for m in info.get('module') if isinstance(info.get('module'), list) else []:
+        if not isinstance(m, dict):
+            continue
+        mt = _MODULE_NAME.match(str(m.get('name') or ''))
+        hw = m.get('hw_ver')
+        if mt and isinstance(hw, str) and hw.strip() and hw.strip().upper() != 'N/A' and int(mt.group(1)) <= 253:
+            out[str(int(mt.group(1)))] = hw.strip()
+    return out
+
+
 class PrinterConnection:
     def __init__(self, printer: registry.Printer, client_factory: Callable, port: int = PORT,
                  listeners: list[Callable] | None = None):
@@ -102,6 +128,7 @@ class PrinterConnection:
         self.ip = printer.ip
         self._code = printer.access_code
         self._printer = replace(printer)     # own copy: tlspin records the pin on it
+        self.model = printer.model or None   # registry model code / name (hardware.ModelInfo lookup)
         self._factory = client_factory
         self._port = port
         self._lock = threading.RLock()
@@ -116,6 +143,7 @@ class PrinterConnection:
         self._seq = itertools.count(secrets.randbelow(SEQ_RANGE))
         self._stopping = False
         self._fresh = False          # no report with `gcode_state` seen yet since the last connect
+        self._unit_ids: set[int] | None = None   # AMS unit ids in the last report (a change asks get_version)
         self._listeners = listeners if listeners is not None else []
         self.client = None
 
@@ -191,9 +219,11 @@ class PrinterConnection:
     def _on_connect(self, client, userdata, flags, rc, properties=None):
         if _rc_ok(rc):
             self._fresh = True
+            self._unit_ids = None
             self._set_state('connected')
             client.subscribe(f"device/{self.serial}/report", qos=0)
             self.request_pushall()
+            self.request_version()
         elif _auth_refused(rc):
             self._set_state('wrong_code')
             client.disconnect()          # stop paho retrying a code the printer rejects
@@ -225,14 +255,30 @@ class PrinterConnection:
                     w.reply = body
                     w.event.set()
         pr = payload.get('print')
+        mods = modules_from_version(payload.get('info'))
+        if mods:      # merged like a report delta (a dict: later replies add to it)
+            pr = {**pr, layout.MODULES: mods} if isinstance(pr, dict) else {layout.MODULES: mods}
+        ask = False
         if isinstance(pr, dict):
             with self._changed:
                 self._report = status.merge_report(self._report, pr)
+                ids = _unit_ids(self._report)
+                if ids is not None and self._unit_ids is not None and ids != self._unit_ids:
+                    # units plugged in or out: their module codes are asked again, codes of gone ids dropped
+                    keep = ids & self._unit_ids
+                    old = status._d(self._report.get(layout.MODULES))
+                    self._report = {**self._report, layout.MODULES: {k: v for k, v in old.items()
+                                                                     if status._int(k) in keep}}
+                    ask = True
+                if ids is not None:
+                    self._unit_ids = ids
                 self.updated = time.time()
                 report, first = self._report, self._fresh
                 if 'gcode_state' in pr:
                     self._fresh = False
                 self._changed.notify_all()
+            if ask:
+                self.request_version()
             for fn in list(self._listeners):
                 try:
                     fn(self.serial, report, first)
@@ -271,6 +317,15 @@ class PrinterConnection:
         if c is not None and self._state == 'connected':
             c.publish(f"device/{self.serial}/request",
                       json.dumps({"pushing": {"sequence_id": "0", "command": "pushall"}}), qos=1)
+
+    def request_version(self) -> None:
+        """Ask once per connect for the module list (`get_version`: a read-only info request Bambu Studio sends
+        too); the reply's AMS module codes ("n3f/0" -> "N3F05") land in the report under `layout.MODULES`. A
+        printer that never answers keeps resolving its units by id range and tray count."""
+        c = self.client
+        if c is not None and self._state == 'connected':
+            c.publish(f"device/{self.serial}/request",
+                      json.dumps({"info": {"sequence_id": str(next(self._seq)), "command": "get_version"}}), qos=1)
 
     # ---------------------------------------------------------------- commands
     def _messages(self, action: str) -> list[tuple[str, dict]]:
@@ -372,9 +427,12 @@ class PrinterConnection:
         return {'ok': ok, 'reply': reply}
 
 
-def slot_setting(ams_id: int, tray_id: int, setting: dict) -> dict:
+def slot_setting(ams_id: int, tray_id: int, setting: dict, kind: str | None = None) -> dict:
     """The `ams_filament_setting` command exactly as the owner's orchestrator sends it (verified on the H2D);
     `publish` adds the `sequence_id`.
+
+    An external holder (unit kind "ext"; with no kind given, ids 254 / 255, which no AMS unit uses) is addressed
+    `tray_id = ams_id, slot_id = 0` (the scanner's rule, verified on the H2D); AMS slots keep `ams_id, tray_id`.
 
     `setting`: `tray_info_idx`, `tray_color` (RRGGBBAA, sent upper-case), `tray_type`, `nozzle_temp_min`,
     `nozzle_temp_max` (ints; the report's strings are accepted, missing = 0), optional `tray_sub_brands`,
@@ -384,7 +442,8 @@ def slot_setting(ams_id: int, tray_id: int, setting: dict) -> dict:
             return int(setting.get(k) or 0)
         except (TypeError, ValueError):
             return 0
-    return {"print": {
+    external = kind == layout.EXT_KIND if kind is not None else int(ams_id) in layout.EXT_DEFAULT
+    cmd = {"print": {
         "command": "ams_filament_setting",
         "ams_id": int(ams_id), "tray_id": int(tray_id),
         "tray_info_idx": str(setting.get('tray_info_idx') or ''),
@@ -394,6 +453,9 @@ def slot_setting(ams_id: int, tray_id: int, setting: dict) -> dict:
         "nozzle_temp_min": temp('nozzle_temp_min'), "nozzle_temp_max": temp('nozzle_temp_max'),
         "setting_id": str(setting.get('setting_id') or ''),
     }}
+    if external:
+        cmd["print"].update(tray_id=int(ams_id), slot_id=0)
+    return cmd
 
 
 class Manager:
@@ -442,6 +504,7 @@ class Manager:
                     del self._conns[serial]
                 else:
                     conn.name = registry.display_name(p)
+                    conn.model = p.model or None
             for serial, p in printers.items():
                 if serial not in self._conns and self._usable(p):
                     conn = PrinterConnection(p, self._factory, self.port, self._listeners)
@@ -510,7 +573,8 @@ class Manager:
         conn = self._conn(serial)
         if conn is None:
             return None
-        return status.summarize(conn.report(), self._spool_list(), printer_name=conn.name, updated=conn.updated)
+        return status.summarize(conn.report(), self._spool_list(), printer_name=conn.name, updated=conn.updated,
+                                model=conn.model)
 
     def summary(self, serial: str) -> dict:
         conn = self._conn(serial)
@@ -518,6 +582,14 @@ class Manager:
         s = status.summarize(r, [])
         return {'gcode_state': s['gcode_state'], 'percent': s['percent'], 'remaining_min': s['remaining_min'],
                 'job': s['job'] or None}
+
+    def model(self, serial: str) -> str | None:
+        """The printer's model code or name from the registry (None when unknown)."""
+        conn = self._conn(serial)
+        if conn is not None:
+            return conn.model
+        p = self._printers.get(serial)
+        return (p.model or None) if p is not None else None
 
     def _live(self, serial: str) -> PrinterConnection:
         conn = self._conn(serial)
@@ -538,10 +610,11 @@ class Manager:
         return self._live(serial).publish(payload, COMMAND_TIMEOUT if timeout is None else timeout)
 
     def set_slot(self, serial: str, ams_id: int, tray_id: int, setting: dict,
-                 timeout: float | None = None) -> dict | None:
-        """Write one AMS slot's filament setting (`slot_setting`); returns the reply as `publish` does. A reply with
-        `result` "success" means accepted, not applied: confirm it with `wait_report` (a later report shows it)."""
-        return self.publish(serial, slot_setting(ams_id, tray_id, setting), timeout)
+                 timeout: float | None = None, kind: str | None = None) -> dict | None:
+        """Write one AMS slot's filament setting (`slot_setting`; `kind` = the unit's kind, "ext" for an external
+        holder); returns the reply as `publish` does. A reply with `result` "success" means accepted, not
+        applied: confirm it with `wait_report` (a later report shows it)."""
+        return self.publish(serial, slot_setting(ams_id, tray_id, setting, kind), timeout)
 
     def wait_report(self, serial: str, predicate: Callable[[dict], bool], timeout: float) -> dict | None:
         """Wait up to `timeout` s for the printer's merged report to satisfy `predicate` and return that report;

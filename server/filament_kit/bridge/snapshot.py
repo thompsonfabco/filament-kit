@@ -21,7 +21,7 @@ from typing import Callable
 
 from .. import config
 from ..pairing import _write_atomic, make_state_dir
-from . import registry, status
+from . import layout, registry, status
 from .connection import PrinterOffline, UnknownPrinter
 
 log = logging.getLogger(__name__)
@@ -107,20 +107,8 @@ def forget(serial: str, ams_id: int, tray_id: int) -> None:
 # ---------------------------------------------------------------- restoring from the file
 
 def trays(report: dict) -> dict[tuple[int, int], dict]:
-    """(ams_id, tray_id) -> raw tray dict; the external holder as (its id, 0), as `ams.units` labels it."""
-    out: dict[tuple[int, int], dict] = {}
-    for u in status._l(status._d(status._d(report).get('ams')).get('ams')):
-        uid = status._int(u.get('id'))
-        if uid is None:
-            continue
-        for t in status._l(u.get('tray')):
-            tid = status._int(t.get('id'))
-            if tid is not None:
-                out[(uid, tid)] = t
-    vt = status._d(report).get('vt_tray')
-    if isinstance(vt, dict):
-        out[(status._int(vt.get('id'), 254), 0)] = vt
-    return out
+    """(ams_id, tray_id) -> raw tray dict; each external holder as (its id, 0) (`layout.raw_trays`)."""
+    return layout.raw_trays(report)
 
 
 def _norm(colour) -> str:

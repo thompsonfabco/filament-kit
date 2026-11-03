@@ -199,6 +199,9 @@ def test_main_with_printers_builds_bridge(monkeypatch):
 
         def state(self, s):
             return "not_configured"
+
+        def add_listener(self, fn):
+            pass
     monkeypatch.setattr(m, "Manager", Fake)
     monkeypatch.setattr(m.usage, "Tracker", Fake)
     monkeypatch.setattr(m.camera, "Hub", Fake)
