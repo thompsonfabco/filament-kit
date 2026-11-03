@@ -44,7 +44,7 @@ fun LoadFlow(state: LoadUiState, vm: LoadViewModel, onDone: (LoadUiState.Done) -
                 slots.isEmpty() && state.error == null -> Text("The printer reports no AMS slots.")
                 else -> slots.forEach { s ->
                     OutlinedButton(onClick = { vm.pickSlot(s.label) }, modifier = Modifier.fillMaxWidth()) {
-                        Text(LoadHelp.slotLine(s))
+                        Text(LoadHelp.slotLine(s, state.units))
                     }
                 }
             }

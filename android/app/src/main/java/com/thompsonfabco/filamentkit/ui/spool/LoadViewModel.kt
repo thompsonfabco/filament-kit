@@ -3,6 +3,7 @@ package com.thompsonfabco.filamentkit.ui.spool
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.thompsonfabco.filamentkit.net.AmsSlot
+import com.thompsonfabco.filamentkit.net.AmsUnit
 import com.thompsonfabco.filamentkit.net.Api
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
@@ -45,6 +46,8 @@ sealed interface LoadUiState {
         val slots: List<AmsSlot>? = null,
         val error: String? = null,
         val busy: Boolean = false,
+        /** The printer's units, to name its external holders. */
+        val units: List<AmsUnit> = emptyList(),
     ) : LoadUiState
 
     /** The dry run's answer, as [lines]; confirm sends the real load. */
@@ -92,8 +95,14 @@ object LoadHelp {
     const val NOT_SENT_PAIRING = "Not loaded: the server did not accept this phone's pairing at that moment. " +
         "Nothing was changed. If you have paired again, tap Load to try again."
 
-    fun previewLines(spool: SpoolSummary, printer: Printer, r: LoadResult): List<String> = buildList {
-        add("Load ${spool.title()} into ${printer.name}, ${PrinterHelp.slotName(r.slot.label)}")
+    /** [units] are the printer's units (they name its external holders). */
+    fun previewLines(
+        spool: SpoolSummary,
+        printer: Printer,
+        r: LoadResult,
+        units: List<AmsUnit> = emptyList(),
+    ): List<String> = buildList {
+        add("Load ${spool.title()} into ${printer.name}, ${PrinterHelp.slotName(r.slot.label, units)}")
         add(r.preset?.name?.ifBlank { null }?.let { "Preset: $it" } ?: "Preset: none")
         val mm = r.nozzleMm?.let(::mm)
         when {
@@ -110,9 +119,15 @@ object LoadHelp {
      * The result. [loadedId] is the spool just loaded (never listed as moved back); [names] are spool names by id
      * (from the printer's slots) for the spools that went back to their previous place.
      */
-    fun doneLines(printer: Printer, r: LoadResult, loadedId: Int? = null, names: Map<Int, String> = emptyMap()) =
+    fun doneLines(
+        printer: Printer,
+        r: LoadResult,
+        loadedId: Int? = null,
+        names: Map<Int, String> = emptyMap(),
+        units: List<AmsUnit> = emptyList(),
+    ) =
         buildList {
-            val where = PrinterHelp.slotName(r.slot.label)
+            val where = PrinterHelp.slotName(r.slot.label, units)
             if (r.confirmed) {
                 add("Loaded into ${printer.name}, $where")
             } else {
@@ -125,8 +140,8 @@ object LoadHelp {
             addAll(r.problems)
         }
 
-    fun slotLine(s: AmsSlot): String = listOfNotNull(
-        if (s.label == PrinterHelp.EXT) "Ext (external spool holder)" else s.label,
+    fun slotLine(s: AmsSlot, units: List<AmsUnit> = emptyList()): String = listOfNotNull(
+        PrinterHelp.slotLabel(s, units),
         s.type.ifBlank { "empty" },
         s.spool?.name?.ifBlank { null },
     ).joinToString(" · ")
@@ -147,10 +162,12 @@ class LoadViewModel(private val backend: LoadBackend) : ViewModel() {
     private var job: Job? = null
     private var printers: List<Printer>? = null
     private var slots: List<AmsSlot>? = null
+    private var units: List<AmsUnit> = emptyList()
 
     fun start(spool: SpoolSummary) {
         printers = null
         slots = null
+        units = emptyList()
         _state.value = LoadUiState.PickPrinter(spool)
         op(onError = { LoadUiState.PickPrinter(spool, emptyList(), it) }) {
             val list = backend.printers().filter { it.configured }
@@ -162,13 +179,17 @@ class LoadViewModel(private val backend: LoadBackend) : ViewModel() {
     fun pickPrinter(printer: Printer) {
         val spool = spoolOf(_state.value) ?: return
         slots = null
+        units = emptyList()
         _state.value = LoadUiState.PickSlot(spool, printer)
         op(onError = { LoadUiState.PickSlot(spool, printer, emptyList(), it) }) {
             val d = backend.printer(printer.id)
-            val all = d.status?.ams.orEmpty().flatMap { it.slots }.filter { it.label.isNotBlank() }
+            val ams = d.status?.ams.orEmpty()
+            val all = ams.flatMap { it.slots }.filter { it.label.isNotBlank() }
             slots = all
+            units = ams
             _state.value = LoadUiState.PickSlot(spool, d.printer, all,
-                error = if (d.status == null) "No live status from the printer yet, so its slots aren't known." else null)
+                error = if (d.status == null) "No live status from the printer yet, so its slots aren't known." else null,
+                units = ams)
         }
     }
 
@@ -179,7 +200,8 @@ class LoadViewModel(private val backend: LoadBackend) : ViewModel() {
         _state.value = s.copy(busy = true, error = null)
         op(onError = { s.copy(busy = false, error = it) }) {
             val r = backend.load(s.printer.id, label, s.spool.id, dryRun = true)
-            _state.value = LoadUiState.Preview(s.spool, s.printer, label, r, LoadHelp.previewLines(s.spool, s.printer, r))
+            _state.value = LoadUiState.Preview(s.spool, s.printer, label, r,
+                LoadHelp.previewLines(s.spool, s.printer, r, s.units))
         }
     }
 
@@ -205,7 +227,7 @@ class LoadViewModel(private val backend: LoadBackend) : ViewModel() {
             unauthorizedIsError = true,
         ) {
             val r = backend.load(p.printer.id, p.label, p.spool.id, dryRun = false)
-            _state.value = LoadUiState.Done(p.printer, p.label, LoadHelp.doneLines(p.printer, r, p.spool.id, names),
+            _state.value = LoadUiState.Done(p.printer, p.label, LoadHelp.doneLines(p.printer, r, p.spool.id, names, units),
                 r.spool?.toSpoolSummary(), r.spool)
         }
     }
@@ -215,7 +237,7 @@ class LoadViewModel(private val backend: LoadBackend) : ViewModel() {
         if (writing) return
         job?.cancel()
         when (val s = _state.value) {
-            is LoadUiState.Preview -> _state.value = LoadUiState.PickSlot(s.spool, s.printer, slots ?: emptyList())
+            is LoadUiState.Preview -> _state.value = LoadUiState.PickSlot(s.spool, s.printer, slots ?: emptyList(), units = units)
             is LoadUiState.PickSlot -> _state.value = LoadUiState.PickPrinter(s.spool, printers ?: emptyList())
             else -> close()
         }

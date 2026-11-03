@@ -127,6 +127,30 @@ class LoadFlowTest {
         assertEquals("Loaded into Garage H2D, the external spool holder", (vm.state.value as LoadUiState.Done).lines[0])
     }
 
+    @Test fun twoExternalHoldersAreNamedFromSay() = runTest(dispatcher) {
+        val two = PrinterDetail(printer, PrinterStatus(gcodeState = "IDLE", ams = listOf(
+            AmsUnit(254, "Ext-L", "ext", listOf(AmsSlot(0, "Ext-L", "TPU", say = listOf("external", "left")))),
+            AmsUnit(255, "Ext-R", "ext", listOf(AmsSlot(0, "Ext-R", say = listOf("external", "right")))),
+        )))
+        val l = LoadSlot("Ext-L", 254, 0)
+        val fake = FakeLoad(two, result().copy(slot = l), result(confirmed = true).copy(slot = l))
+        val vm = LoadViewModel(fake)
+        vm.start(spool); runCurrent()
+        vm.pickPrinter(printer); runCurrent()
+        val pick = vm.state.value as LoadUiState.PickSlot
+        assertEquals(
+            listOf("Ext-L (external left spool holder) · TPU", "Ext-R (external right spool holder) · empty"),
+            pick.slots!!.map { LoadHelp.slotLine(it, pick.units) },
+        )
+        vm.pickSlot("Ext-L"); runCurrent()
+        assertTrue((vm.state.value as LoadUiState.Preview).lines[0].endsWith("the external left spool holder"))
+        vm.back(); runCurrent()
+        assertEquals("units survive going back", 2, (vm.state.value as LoadUiState.PickSlot).units.size)
+        vm.pickSlot("Ext-L"); runCurrent()
+        vm.confirm(); runCurrent()
+        assertEquals("Loaded into Garage H2D, the external left spool holder", (vm.state.value as LoadUiState.Done).lines[0])
+    }
+
     @Test fun doneListsTheSpoolsMovedBack() = runTest(dispatcher) {
         load.real = result(confirmed = true).copy(movedBack = listOf(MovedBack(3, "Shelf 1"), MovedBack(9, ""),
             MovedBack(7, "Garage H2D – AMS A1")))
