@@ -442,3 +442,51 @@ In this order (the kit lets go of the H2D before the scanner takes it back, so n
 - A stale `print_error` from an earlier print blocks FAILED-as-finish for the calibration job (it fails safe:
   run the mapping again once the error is cleared).
 - A mapping job's map save wins over usage learned at the same moment (that print's learning is dropped).
+
+## Maintainer notes (moved from the README)
+
+The owner's release chores; the public README is for users. The tools named here are in `tools/`.
+
+### Building the Android app release (Windows PC)
+
+The app is signed with a key that lives only on your PC. Android only installs an update over an installed app
+if it is signed with the **same** key, so losing the key means everyone has to uninstall and reinstall the app.
+
+1. Once: `powershell -ExecutionPolicy Bypass -File tools\android_keystore.ps1`. It creates
+   `%LOCALAPPDATA%\filament-kit\release.jks` and a random password stored (encrypted with Windows DPAPI) in
+   `%LOCALAPPDATA%\filament-kit\keystore.pw.dpapi`. You never type or see the password. It refuses to overwrite an
+   existing keystore. It uses `keytool` from `JAVA_HOME` if set, otherwise from `<local path>`.
+2. Each release: pick the app's version code and run, in Git Bash,
+   `FK_VERSION_CODE=<n> bash tools/make_release.sh`. It builds and signs the app with that versionCode and puts
+   `app/filament-kit.apk` and `app/version.txt` (containing the same number) into the tarball.
+   **Bump the version code for every app release**: use the previous release's number plus one (it must be a whole
+   number above 0 and must never go down; without `FK_VERSION_CODE` it is `1`). Phones only offer the update when
+   the server's `version.txt` is higher than the installed app's versionCode, and Android refuses to install a
+   lower one. Without the keystore, no app is built and any old `app-release.apk` is deleted, so a tarball never
+   carries a stale app.
+3. **Back up both** `release.jks` **and** `keystore.pw.dpapi` together, somewhere safe and off this PC. A DPAPI
+   file only decrypts on this Windows account on this PC, so also make a portable backup:
+   `powershell -ExecutionPolicy Bypass -File tools\android_keystore.ps1 -Export D:\safe\filament-kit-keystore.bak`
+   (you type a passphrase of at least 12 characters; remember it). On another PC restore it with
+   `-Import <file>`. The `FK_BACKUP_PASSPHRASE` environment variable is for test automation only; never use it for
+   a real backup.
+4. `-Forget` deletes the keystore and the password file (it asks first).
+
+### Signing releases
+
+get.sh and the updater install only releases whose `SHA256SUMS` is signed with the release key. Once:
+
+1. On your PC, with Python and the `cryptography` package: `python tools/sign_release.py keygen --out
+   <a folder outside the repo>/filament-kit-release.pem`. It writes the private key there (only you can read it;
+   it never overwrites one) and prints only the public key.
+2. `python tools/sign_release.py set-pubkey <the public key>` puts the public key into
+   `server/filament_kit/release.py` and `get.sh`; commit both.
+3. Add the private key yourself as a GitHub Actions secret: repository **Settings > Secrets and variables >
+   Actions > New repository secret**, name `FK_RELEASE_KEY`, value the whole contents of the `.pem` file. The key
+   never goes into the repository.
+4. Back the `.pem` file up somewhere safe and off this PC. Losing it means a new key, and installs from before the
+   change then refuse the new releases until updated by hand.
+
+The release workflow then signs every release; without the secret, or with a key that does not match the public
+key in `release.py`, it fails instead of publishing an unsigned release. After editing `release.py`, run
+`python tools/sign_release.py sync-get` (get.sh carries a copy of it; a test checks they match).
