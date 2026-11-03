@@ -14,7 +14,7 @@ The web app does most of what the Android app does:
 - **Printers** (when the `printers` module is on): live status, the camera, pause, resume and stop, the
   chamber light, what is in each AMS slot and the filament usage log.
 
-It only works **on your home network**. Away from home it says it is only available from the home network.
+It only works **on your home network**. Away from home it says "Spool intake only works on the home network."
 There is no sign-in: anyone on your home Wi-Fi can use it.
 
 > **This takes more setup than the Android app.** The web app is part of the `web` module, and Safari only
@@ -54,12 +54,13 @@ There is no sign-in: anyone on your home Wi-Fi can use it.
    sudo filament-kit config
    ```
 
-3. Type `6` (**Modules**), then `9` to tick **web** and `10` to tick **remote**, and press Enter.
+3. Type `6` and press Enter (**Modules**). A checklist of modules appears. Type `9 10` and press Enter: that
+   ticks **web** and **remote**. Then press Enter on an empty line to apply.
 4. When it asks `web needs its public https address`, type your address, for example
    `https://my-server.local/filament`, and press Enter.
-5. Type `0` to save and exit. The kit installs nginx and sets it up. Among its output it prints a list of
-   firewall and router rules: for home-only use you can **ignore them**. Do not run `sudo filament-kit remote issue`:
-   that only works with a public name.
+5. Back at the settings menu, type `0` and press Enter to save. The kit installs nginx and sets it up. Among its
+   output it prints a list of firewall and router rules: for home-only use you can **ignore them**. Do not run
+   `sudo filament-kit remote issue`: that only works with a public name.
 6. Check it:
 
    ```bash
@@ -128,7 +129,7 @@ is on at the server.
 
 ## Common problems
 
-- **"only available from the home network"** while you are at home:
+- **"Spool intake only works on the home network"** while you are at home:
   - Check that the iPhone is on your home Wi-Fi, not mobile data.
   - The kit counts addresses starting with `192.168.` and `10.` as home. If your home network uses addresses
     starting with `172.16.` to `172.31.`, add your network to `/etc/filament-kit/config.json` under `"web"`, for

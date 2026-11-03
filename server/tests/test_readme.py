@@ -13,10 +13,14 @@ def _readme() -> str:
     return (ROOT / "README.md").read_text(encoding="utf-8")
 
 
-def test_first_line_is_the_one_command_install():
-    first = _readme().splitlines()[0]
+def test_readme_opens_with_the_goal_then_the_one_command_install():
+    # The owner's order: what the kit is and what it is for first, then how to install it.
+    text = _readme()
+    assert text.startswith("# filament-kit\n")
+    install = text.index("\n## Install\n")
+    assert "## What you need" in text[:install]
     assert "curl -fsSL https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh | sudo bash" \
-        in first
+        in text[install:text.index("\n## ", install + 1)]
 
 
 def test_module_table_matches_the_registry():
@@ -95,7 +99,8 @@ def test_public_code_and_tests_have_no_owner_specific_data():
 
 def test_readme_sections_a_user_needs():
     text = _readme()
-    for h in ("## What it does", "## Modules", "## Supported printers", "## The phone app", "## The reader",
+    for h in ("## What you need", "## Install", "## What it does", "## Modules", "## Supported printers",
+              "## The phone app", "## The reader",
               "## Updates and rollback", "## The filament library", "## Where your data lives", "## Uninstall",
               "## Pair your PC"):        # the CLI says "see README: Pair your PC"
         assert h in text, h

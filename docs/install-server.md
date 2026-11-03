@@ -41,7 +41,8 @@ check fails. Then it runs the installer.
 The command above only works once the repository is public. Until then you need a GitHub account that can see
 the repository and a GitHub token that can read it:
 
-1. Get `get.sh` from the newest release, for example with the GitHub CLI:
+1. Get `get.sh` from the newest release, for example with the GitHub CLI (`sudo apt install gh`, then
+   `gh auth login` once):
 
    ```bash
    gh release download -R thompsonfabco/filament-kit -p get.sh
@@ -80,7 +81,8 @@ This way skips the signature check that the one command does.
 
 ## The questions
 
-The installer asks these one at a time. For a first install, pressing **Enter** at every question is fine.
+The installer first installs two small packages (`==> Installing system packages`), then asks these one at a
+time. For a first install, pressing **Enter** at every question is fine.
 
 1. **Install mode**
 
@@ -120,7 +122,8 @@ The installer asks these one at a time. For a first install, pressing **Enter** 
    Use the default storage locations? [Y/n]:
    ```
 
-   Press Enter for yes. You can rename your racks and boxes later in `sudo filament-kit config`.
+   Press Enter for yes. The defaults are **Sealed stock**, **Rack 1**, **Storage box** and **Overflow**. You can
+   rename them later in `sudo filament-kit config` → **2) storage**.
 
 5. **Anthropic API key**: only if you answered `y` to question 2. Paste the key and press Enter. Nothing shows
    while you paste. That is on purpose.
@@ -209,9 +212,10 @@ Type `6` for **Modules**. A checklist appears. Each line says what the module ne
  [ ] 10 remote     Public https name for the web UI (nginx, certbot)          needs: web
 ```
 
-Type a module's number to tick or untick it. What it needs is ticked too. Press Enter to apply, answer any
-question it asks (for example `web` asks for its https address), then type `0` to save and exit. The kit
-installs and starts what you turned on. Turning a module off never deletes its data.
+Type a module's number (or several, like `9 10`) and press Enter to tick or untick it. What it needs is ticked
+too, and unticking one that others need asks about those. Press Enter on an empty line to apply, answer any
+question it asks (for example `web` asks for its https address), then type `0` at the settings menu to save
+and exit. The kit installs and starts what you turned on. Turning a module off never deletes its data.
 
 To use AI label reading later: in `sudo filament-kit config`, type `4` to enter the API key, then `6` and tick
 `ai_intake`.
