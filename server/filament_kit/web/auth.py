@@ -38,7 +38,6 @@ __all__ = ["AuthorizationParams", "CALLBACKS", "Lockout", "Provider", "Store", "
 
 CALLBACKS = frozenset({"https://claude.ai/api/mcp/auth_callback", "https://claude.com/api/mcp/auth_callback"})
 ACCESS_TTL, REFRESH_TTL, CODE_TTL, PENDING_TTL = 3600, 60 * 86400, 300, 600
-SESSION_TTL = 30 * 86400
 SCOPE = "filament"
 # registration and /token answer Anthropic's whole range (any Claude user's web fetch or sandbox can reach them),
 # so registrations are bounded: one that never got a token is dropped after an hour, oldest first when full.
@@ -48,6 +47,8 @@ REUSE_GRACE = 30  # a rotated refresh token seen again later than this means it 
 LOCK_MAX, LOCK_WINDOW = 5, 600
 MIN_PASSPHRASE = 12
 SCRYPT = {"n": 2 ** 15, "r": 8, "p": 1, "maxmem": 2 ** 26}
+# "sessions" held the phone web app's sign-ins (gone: the app has no sign-in); kept so old files load and
+# the entries expire away.
 _KEYS = ("clients", "codes", "access", "refresh", "used", "sessions")
 _EXPIRING = ("codes", "access", "refresh", "used", "sessions")
 
@@ -110,25 +111,6 @@ class Store:
         except BaseException:
             tmp.unlink(missing_ok=True)
             raise
-
-    # ---------- web app sessions (cookie value stored hashed) ----------
-    def new_session(self) -> str:
-        tok, now = secrets.token_urlsafe(32), time.time()
-        with self.lock:
-            self.d["sessions"][_h(tok)] = {"expires_at": now + SESSION_TTL, "created": now}
-            self.save()
-        return tok
-
-    def check_session(self, cookie: str | None) -> bool:
-        s = cookie and self.d["sessions"].get(_h(cookie))
-        return bool(s and s["expires_at"] > time.time())
-
-    def end_session(self, cookie: str | None) -> None:
-        if not cookie:
-            return
-        with self.lock:
-            if self.d["sessions"].pop(_h(cookie), None) is not None:
-                self.save()
 
 
 # ---------- OAuth provider ----------
