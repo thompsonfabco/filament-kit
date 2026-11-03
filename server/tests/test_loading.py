@@ -280,6 +280,48 @@ def test_dual_nozzle_job_without_mapping_fails_closed(rig, sm, fil):
         loading.load(m, sm, SERIAL, "A2", s["id"], True, preset_for=FakePresets())
 
 
+def pushalls(client):
+    return sum(1 for _, b in client.published if b.get("pushing", {}).get("command") == "pushall")
+
+
+def test_missing_mapping_asks_for_a_pushall_at_most_every_30_s(rig, sm, fil, monkeypatch):
+    """A dual-nozzle job without a mapping: the refusal asks the printer for a full report (the mapping comes back
+    with it) instead of refusing every load for the whole print; at most once per 30 s per printer."""
+    m, printer, client = rig
+    clock = [1000.0]
+    monkeypatch.setattr(loading, "_clock", lambda: clock[0])
+    monkeypatch.setattr(loading, "_PUSHALL_AT", {})
+    printer.push({"gcode_state": "RUNNING", "ams": {"tray_now": "0"}})
+    assert m.wait_report(SERIAL, lambda r: r.get("gcode_state") == "RUNNING", 2)
+    s = spool(sm, fil, "Rack 1")
+    before = pushalls(client)
+    with pytest.raises(loading.SlotInUse, match="does not say yet"):
+        loading.load(m, sm, SERIAL, "A2", s["id"], True, preset_for=FakePresets())
+    assert pushalls(client) == before + 1
+    clock[0] += 29
+    with pytest.raises(loading.SlotInUse, match="does not say yet"):
+        loading.load(m, sm, SERIAL, "A2", s["id"], True, preset_for=FakePresets())
+    with pytest.raises(loading.SlotInUse, match="does not say yet"):
+        loading.unload(m, sm, SERIAL, "A2", True)
+    assert pushalls(client) == before + 1                                   # within 30 s: not again
+    clock[0] += 2
+    with pytest.raises(loading.SlotInUse, match="does not say yet"):
+        loading.load(m, sm, SERIAL, "A2", s["id"], True, preset_for=FakePresets())
+    assert pushalls(client) == before + 2
+
+
+def test_a_feeding_slot_refusal_asks_for_no_pushall(rig, sm, fil, monkeypatch):
+    m, printer, client = rig
+    monkeypatch.setattr(loading, "_PUSHALL_AT", {})
+    printer.push({"gcode_state": "RUNNING", "ams": {"tray_now": "1"}, "mapping": [1]})
+    assert m.wait_report(SERIAL, lambda r: r.get("mapping") == [1], 2)
+    s = spool(sm, fil, "Rack 1")
+    before = pushalls(client)
+    with pytest.raises(loading.SlotInUse, match="feeds the print"):
+        loading.load(m, sm, SERIAL, "A2", s["id"], True, preset_for=FakePresets())
+    assert pushalls(client) == before
+
+
 def test_unknown_model_counts_as_multi_nozzle(rig, sm, fil):
     """Ruling BM for an unknown model: its nozzle count is not known, so without `snow` the job's mapping decides,
     and a job without a mapping refuses every slot, as on a dual-nozzle model."""
