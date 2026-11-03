@@ -439,6 +439,44 @@ class PrinterViewModelTest {
         assertEquals("spool #9", PrinterHelp.spoolName(SlotSpool(9)))
     }
 
+    @Test fun externalHoldersAreNamedFromSay() {
+        val left = AmsSlot(0, "Ext-L", "PLA", say = listOf("external", "left"))
+        val right = AmsSlot(0, "Ext-R", "", say = listOf("external", "right"))
+        val units = listOf(
+            AmsUnit(0, "A", "ams", listOf(AmsSlot(0, "A1")), typeName = "AMS 2 Pro"),
+            AmsUnit(254, "Ext-L", "ext", listOf(left), say = listOf("external", "left")),
+            AmsUnit(255, "Ext-R", "ext", listOf(right)),
+        )
+        assertEquals("the external left spool holder", PrinterHelp.slotName("Ext-L", units))
+        assertEquals("the external right spool holder", PrinterHelp.slotName("Ext-R", units))
+        assertEquals("slot A1", PrinterHelp.slotName("A1", units))
+        assertEquals("External left spool holder", PrinterHelp.unitTitle(units[1]))
+        assertEquals("from the slot's say", "External right spool holder", PrinterHelp.unitTitle(units[2]))
+        assertEquals("AMS 2 Pro A", PrinterHelp.unitTitle(units[0]))
+        assertEquals("Ext-L (external left spool holder)", PrinterHelp.slotLabel(left, units))
+        // without the printer's units an Ext-… label still reads as an external holder
+        assertEquals("the external spool holder Ext-R", PrinterHelp.slotName("Ext-R"))
+        // any unit of kind ext is an external holder, whatever its label
+        val odd = listOf(AmsUnit(254, "Spool rack", "ext", listOf(AmsSlot(0, "Spool rack"))))
+        assertEquals("the external spool holder Spool rack", PrinterHelp.slotName("Spool rack", odd))
+    }
+
+    @Test fun anExternalUnloadUsesTheSayWords() = runTest(dispatcher) {
+        val left = ext.copy(label = "Ext-L", say = listOf("external", "left"))
+        backend.detail = PrinterDetail(printer(), status(gcode = "IDLE").copy(ams = listOf(
+            AmsUnit(254, "Ext-L", "ext", listOf(left)),
+        )))
+        backend.unloadResult = UnloadResult(slot = LoadSlot("Ext-L", 254, 0), location = "Sealed stock")
+        val vm = vm()
+        vm.start(); runCurrent()
+        vm.askUnload(left); runCurrent()
+        assertEquals("Unload Acme PETG Green from the external left spool holder? It goes back to Sealed stock.",
+            vm.state.value.unloadAsk!!.question)
+        vm.confirmUnload(); runCurrent()
+        assertEquals("Unloaded Acme PETG Green from the external left spool holder.", vm.state.value.slotMessage[0])
+        vm.stop()
+    }
+
     @Test fun blankCodeIsNotSent() = runTest(dispatcher) {
         backend.list = listOf(printer(state = "not_configured", configured = false))
         val vm = PrintersViewModel(backend)
