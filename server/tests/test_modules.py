@@ -294,3 +294,20 @@ def test_close_selection():
     assert on == {"spoolman", "printers", "server"} and notes
     with pytest.raises(ModuleError):
         modules.close_selection(["x"])
+
+
+def test_missing_and_collect_settings():
+    from filament_kit import config, modules
+    cfg = config.DEFAULTS
+    assert modules.missing_settings(frozenset({"server"}), cfg) == []
+    assert modules.missing_settings(frozenset({"web", "orders", "station"}), cfg) == [
+        "web.public_url", "orders.file", "station.allow"]
+    assert modules.missing_settings(frozenset({"web", "station", "server"}), cfg) == ["web.public_url"]
+    answers = iter(["ftp://x", "https://a.example.com/f"])
+    said = []
+    got = modules.collect_settings(frozenset({"web"}), cfg, lambda p: next(answers), said.append)
+    assert got == {"web.public_url": "https://a.example.com/f"} and said
+    assert modules.collect_settings(frozenset({"web"}), cfg, lambda p: "", print) is None
+    assert modules.check_setting("station.allow", "127.0.0.1")
+    assert modules.check_setting("station.allow", "10.0.0.0/8")
+    assert modules.check_setting("station.allow", "srv.localdomain") is None

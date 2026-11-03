@@ -314,3 +314,83 @@ def close_selection(names) -> tuple[frozenset[str], list[str]]:
     extra = needs_closure(names)
     notes = [f"{', '.join(extra)} also turned on (needed by the modules you chose)."] if extra else []
     return frozenset(names) | set(extra), notes
+
+
+# ---------- settings a module needs before it can start (asked in the checklist) ----------
+
+def _lookup(cfg: dict, key: str):
+    cur = cfg
+    for part in key.split("."):
+        cur = cur.get(part) if isinstance(cur, dict) else None
+    return cur
+
+
+def set_setting(cfg: dict, key: str, value: str) -> None:
+    """Store a collected setting in cfg (in place). station.allow is a one-address list."""
+    parts = key.split(".")
+    cur = cfg
+    for part in parts[:-1]:
+        if not isinstance(cur.get(part), dict):
+            cur[part] = {}
+        cur = cur[part]
+    cur[parts[-1]] = [value] if key == "station.allow" else value
+
+
+def check_setting(key: str, value: str) -> str | None:
+    """Error text for a bad value, or None."""
+    value = value.strip()
+    if key == "web.public_url":
+        pu = urlparse(value)
+        if pu.scheme != "https" or not pu.hostname:
+            return "Give the https address people will use, e.g. https://mcp.example.com/filament"
+    elif key == "orders.file":
+        if not value:
+            return "Give the path of the order history file."
+    elif key == "station.allow":
+        if _bad_allow(value):
+            return "Enter a single address or host name, not a range or wildcard."
+        if value in _LOCAL_HOSTS:
+            return "A station without a local server needs the address of the machine the server runs on."
+    return None
+
+
+_SETTING_PROMPTS = {
+    "web.public_url": "web needs its public https address (e.g. https://mcp.example.com/filament): ",
+    "orders.file": "orders needs the path of the order history file: ",
+    "station.allow": "station without the server needs the server's address (IP or host name): ",
+}
+
+
+def missing_settings(on, cfg: dict) -> list[str]:
+    """Setting keys (stable order) that modules in `on` need and cfg does not have yet."""
+    out = []
+    if ("web" in on or "remote" in on) and check_setting("web.public_url", str(_lookup(cfg, "web.public_url") or "")):
+        out.append("web.public_url")
+    if "orders" in on and not _lookup(cfg, "orders.file"):
+        out.append("orders.file")
+    if "station" in on and "server" not in on:
+        allow = _lookup(cfg, "station.allow") or []
+        if not any(str(e).strip() not in _LOCAL_HOSTS for e in allow):
+            out.append("station.allow")
+    return out
+
+
+def collect_settings(on, cfg: dict, ask: Callable[[str], str | None],
+                     say: Callable[[str], None] = print) -> dict[str, str] | None:
+    """Ask for each missing setting, validating the answer; returns {key: value}. A blank answer (or EOF)
+    gives None: the caller goes back to the checklist."""
+    got: dict[str, str] = {}
+    work = copy.deepcopy(cfg)
+    for key in missing_settings(on, work):
+        while True:
+            raw = ask(_SETTING_PROMPTS[key])
+            if raw is None or not raw.strip():
+                return None
+            err = check_setting(key, raw)
+            if err:
+                say(err)
+                continue
+            got[key] = raw.strip()
+            set_setting(work, key, raw.strip())
+            break
+    return got
