@@ -426,3 +426,95 @@ def test_ai_off_page_hides_reading_and_manual_add_works(app, env, sm):
         cfg["modules"]["ai_intake"] = True
         config.save(cfg)
         assert "data-ai='1'" in c.get("/intake").text
+
+
+# ---------- R1 minors: the manual add's picker ----------
+
+def test_picker_tare_falls_back_to_the_vendor_and_vendorless_filaments_are_listed(app, sm):
+    v = sm.post("vendor", {"name": "SUNLU", "empty_spool_weight": 213})
+    sm.post("filament", {"name": "PLA+ Grey", "vendor_id": v["id"], "material": "PLA+", "density": 1.24})
+    sm.post("filament", {"name": "PETG Blue", "vendor_id": v["id"], "material": "PETG", "density": 1.27,
+                         "spool_weight": 180})
+    sm.post("filament", {"name": "Mystery PLA", "material": "PLA", "density": 1.24})
+    with _client(app) as c:
+        _sign_in(c)
+        fils = c.get("/intake/api/filaments").json()["filaments"]
+    by = {f["name"]: f for f in fils}
+    assert by["PLA+ Grey"]["tare"] == 213             # no spool weight of its own: the vendor's empty spool
+    assert by["PETG Blue"]["tare"] == 180             # its own wins
+    assert by["Mystery PLA"]["vendor"] == "" and by["Mystery PLA"]["tare"] is None   # listed, not dropped
+
+
+def test_picker_routes_refuse_off_lan(app):
+    with _client(app, AWAY) as c:
+        for path in ("/intake/api/filaments", "/intake/api/vendors", "/intake/api/presets", "/intake/api/parents",
+                     "/intake/api/tag"):
+            r = c.get(path)
+            assert r.status_code == 403 and "home network" in r.text, path
+
+
+def _node():
+    import shutil
+    return shutil.which("node")
+
+
+@pytest.mark.skipif(not _node(), reason="needs node")
+def test_density_lookup_matches_by_prefix():
+    """A material with no exact entry gets the density of the longest known material it starts with."""
+    import re
+    import subprocess
+    from pathlib import Path
+    src = (Path(web_app.__file__).parent / "static" / "app.js").read_text(encoding="utf-8")
+    table = re.search(r"^const DENSITY = .*?;$", src, re.M).group(0)
+    fn = re.search(r"^function densityFor\(.*?^}$", src, re.M | re.S).group(0)
+    probe = ["PLA", "pla+", "PLA Silk", "PETG-CF", "PA6-GF", "ASA", "Wood", "", " petg ", "PCTG", "pctg-cf", "PC"]
+    js = f"{table}\n{fn}\nconsole.log(JSON.stringify({json.dumps(probe)}.map(densityFor)));"
+    out = subprocess.run([_node(), "-e", js], capture_output=True, text=True, timeout=30, check=True).stdout
+    assert json.loads(out) == [1.24, 1.24, 1.24, 1.27, 1.14, 1.07, None, None, 1.27, 1.23, 1.23, 1.2]
+
+
+def test_picker_names_filaments_without_a_vendor():
+    from pathlib import Path
+    src = (Path(web_app.__file__).parent / "static" / "app.js").read_text(encoding="utf-8")
+    assert '"(no vendor)"' in src
+
+
+# ---------- the public prefix (nginx strips it) ----------
+
+def test_intake_with_a_slash_redirects_within_the_public_prefix(app):
+    """nginx strips the public path (/filament) before the app sees a request, so a redirect the app builds from the
+    request's own URL would lose it: /filament/intake/ must lead to /filament/intake, not /intake."""
+    with _client(app) as c:
+        r = c.get("/intake/", follow_redirects=False)
+        assert r.status_code in (301, 302, 303, 307, 308), r.status_code
+        assert r.headers["location"] in (BASE, ORIGIN + BASE)
+        assert _client(app, AWAY).get("/intake/", follow_redirects=False).status_code == 403
+
+
+def test_router_streams_sse_under_the_public_prefix():
+    """The Printers tab's live status (SSE) goes through the router's route: no buffering, and a read timeout far
+    above the stream's keep-alive ping; /<name> without a slash gets nginx's own redirect to /<name>/ (a prefix
+    location ending in a slash with proxy_pass)."""
+    import re
+    from pathlib import Path
+    from filament_kit.web import printers_app
+    remote = Path(__file__).resolve().parents[2] / "install" / "remote"
+    route = (remote / "route.template").read_text(encoding="utf-8")
+    proxy = (remote / "mcp-proxy.conf").read_text(encoding="utf-8")
+    assert re.search(r"location \^~ /@NAME@/ \{\s*proxy_pass http://127\.0\.0\.1:@PORT@/;", route)
+    assert route.count("include /etc/nginx/mcp-proxy.conf;") == 3
+    assert "proxy_buffering off;" in proxy and "proxy_cache off;" in proxy
+    timeout = int(re.search(r"proxy_read_timeout (\d+)s;", proxy).group(1))
+    assert timeout >= 10 * printers_app.PING_SECONDS
+    assert 'proxy_set_header Connection "";' in proxy and "proxy_http_version 1.1;" in proxy
+
+
+@pytest.mark.parametrize("path, target", [("/reader/printers/", "/filament/reader/printers"),
+                                          ("/intake/", BASE)])
+def test_slash_redirects_stay_within_the_public_prefix(app, path, target):
+    """M4: the app runs with the public path as its root_path, so every slash redirect keeps the prefix nginx
+    strips (not only /intake/)."""
+    with _client(app) as c:
+        r = c.get(path, follow_redirects=False)
+    assert r.status_code in (301, 302, 303, 307, 308), (r.status_code, r.text[:200])
+    assert r.headers["location"] in (target, ORIGIN + target), r.headers["location"]

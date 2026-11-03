@@ -340,6 +340,34 @@ def test_slot_list(app, token):
     assert missing.status_code == 404 and missing.json()["status"] == "error"
 
 
+def test_slot_labels_are_unique_within_what_the_firmware_keeps(app, token, kit):
+    """The firmware keeps 40 bytes of a label and sends it back: a printer never gets two slots it cannot tell apart
+    (the same label twice, also in another case, as the kit matches labels whatever their case), and never a label
+    over 40 bytes (it would come back cut)."""
+    long1, long2 = "Ü" * 20 + "x", "Ü" * 20 + "y"        # 41 bytes, equal in the first 40
+    kit.slots["SER1"] += [slot("A1", kind="generic"), slot("a1", kind="ams_ht"), slot(long1, kind="generic"),
+                          slot(long2, kind="generic"), slot("Ü" * 20, kind="ams_lite")]
+    with client(app) as c:
+        sl = c.get("/reader/printers/SER1/slots", headers={"X-Auth-Token": token}).json()
+    labels = [s["label"] for s in sl if "label" in s]
+    assert labels == ["A1", "A2", "HT-A", "Ext-L", "Ext-R", "Ü" * 20]
+    cut = [lab.encode("utf-8")[:40].upper() for lab in labels]
+    assert len(set(cut)) == len(cut)
+
+
+def test_reader_slots_and_kit_label_agree_on_a_case_or_space_collision():
+    """M3: the reader lists the first of "A1" / "a1" / " a1 "; a scan naming it must reach that same slot."""
+    rows = [{"label": "A1"}, {"label": "a1"}, {"label": " a1 "}, {"label": "A2"}]
+    listed = [r["label"] for r in reader.reader_slots(rows)]
+    assert listed == ["A1", "A2"]
+    labels = [r["label"] for r in rows]
+    assert slots.kit_label("A1", labels) == "A1"
+    assert slots.kit_label(" A1 ", labels) == "A1"
+    assert slots.kit_label("a1", labels) == "a1"           # an exact match wins
+    assert slots.kit_label("A1", ["a1", "A1"]) == "A1"
+    assert slots.kit_label("a1", ["X", "A1", "a1 "]) == "A1"   # no exact match: the first of the collision
+
+
 # ---------- routes: scan ----------
 
 def scan(c, token, **body):

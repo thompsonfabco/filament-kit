@@ -580,6 +580,12 @@ class Manager:
         p = self._printers.get(serial)
         return 'offline' if p is not None and p.configured else 'not_configured'
 
+    def request_pushall(self, serial: str) -> None:
+        """Ask a connected printer for a full report (nothing when it is unknown or not connected)."""
+        conn = self._conn(serial)
+        if conn is not None:
+            conn.request_pushall()
+
     def wait_settled(self, serial: str, timeout: float) -> str:
         """Wait until a new connection has its first result (connected, wrong code, unreachable); return the state."""
         conn = self._conn(serial)
