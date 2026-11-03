@@ -1,6 +1,6 @@
 """Read-only capture of a Bambu printer's MQTT report, for a test fixture (spec P §6). The OWNER runs it.
 
-    sudo /opt/h2d-scanner/venv/bin/python -I tools/capture_bambu.py --env /etc/h2d-scanner/env --out h2d.json
+    sudo /opt/filament-kit/venv/bin/python -I tools/capture_bambu.py --env <printer env file> --out printer.json
 
 Reads PRINTER_IP, PRINTER_SERIAL and PRINTER_CODE from the env file it is given (the h2d-filament-scanner
 format, `KEY=value` lines as systemd's EnvironmentFile reads them), connects to the printer over MQTT/TLS (port
@@ -195,8 +195,8 @@ def _paho_client(client_id: str):
     try:
         import paho.mqtt.client as mqtt
     except ImportError:
-        raise CaptureError("paho-mqtt is not installed for this python; run it with the scanner's venv "
-                           "(/opt/h2d-scanner/venv/bin/python) or the kit's (/opt/filament-kit/venv/bin/python)") \
+        raise CaptureError("paho-mqtt is not installed for this python; run it with the kit's "
+                           "(/opt/filament-kit/venv/bin/python) or another python that has paho-mqtt") \
             from None
     return mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=client_id)
 

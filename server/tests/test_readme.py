@@ -50,6 +50,47 @@ def test_public_docs_have_no_owner_specific_data(rel):
         "-R thompsonfabco/filament-kit", ""), rel
 
 
+# Final review I4: the same ban over the public code and test files. `sv08` (a printer model the kit makes Orca
+# presets for) and `h2d_token` (the filament-ops token file name that `migrate-ops` reads) are product names
+# there, not the owner's data; the owner's H2D serial and scanner paths are added instead.
+CODE_OWNER_DATA = tuple(b for b in OWNER_DATA if b not in ("sv08", "h2d_token")) + (
+    "0948ZZ0A0000001", "h2d-scanner", "printer-host", "intake.home.arpa", "owner")
+CODE_SCAN = ("server/tests", "get.sh", "install", "reader", "tools")
+# ban lists themselves; the private runbook (docs/migrate-from-filament-ops.md) is not scanned here
+CODE_SCAN_SKIP = {"server/tests/test_readme.py", "reader/tools/test_ota_publish.py"}
+# the repository paths: filament-kit (README, get.sh), and the filament-library repo that release.yml builds from
+ALLOWED_REPO_PATHS = ("github.com/thompsonfabco/filament-kit", "thompsonfabco/filament-kit",
+                      "github.com/thompsonfabco/filament-library", "thompsonfabco/filament-library")
+
+
+def _public_code_files() -> list[str]:
+    import subprocess
+    out = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-z", "--", *CODE_SCAN], capture_output=True,
+                         check=True).stdout.decode("utf-8")
+    return [f for f in out.split("\0") if f and f not in CODE_SCAN_SKIP]
+
+
+def test_public_code_and_tests_have_no_owner_specific_data():
+    files = _public_code_files()
+    assert "get.sh" in files and any(f.startswith("server/tests/") for f in files)
+    found = []
+    for rel in files:
+        try:
+            text = (ROOT / rel).read_text(encoding="utf-8")
+        except (UnicodeDecodeError, FileNotFoundError):
+            continue                     # binaries (firmware images, fixtures)
+        for n, line in enumerate(text.splitlines(), 1):
+            for bad in CODE_OWNER_DATA:
+                if re.search(re.escape(bad) + (r"(?!\d)" if bad[-1].isdigit() else ""), line):
+                    found.append(f"{rel}:{n}: {bad}")
+            rest = line
+            for ok in ALLOWED_REPO_PATHS:
+                rest = rest.replace(ok, "")
+            if "thompsonfabco" in rest:
+                found.append(f"{rel}:{n}: thompsonfabco")
+    assert not found, "\n".join(found)
+
+
 def test_readme_sections_a_user_needs():
     text = _readme()
     for h in ("## What it does", "## Modules", "## Supported printers", "## The phone app", "## The reader",

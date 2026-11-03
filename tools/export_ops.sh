@@ -5,7 +5,7 @@
 # sqlite's online backup API into memory (never `cp` of a live database), and the bundle is streamed straight
 # into the output: give `-` to write it to stdout, so even the bundle never lands on this machine's disk:
 #
-#   ssh spoolman-vm 'sudo bash -s -- --no-secrets -' < tools/export_ops.sh > ops-bundle.tar.gz
+#   ssh <ops-vm> 'sudo bash -s -- --no-secrets -' < tools/export_ops.sh > ops-bundle.tar.gz
 #
 # Usage: sudo bash export_ops.sh [--no-secrets] [--spoolman-db PATH [--force]] OUT.tar.gz|-
 #   --no-secrets   leave out the web passphrase hash, oauth.json and the Anthropic key (a rehearsal bundle);

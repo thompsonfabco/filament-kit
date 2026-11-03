@@ -455,7 +455,7 @@ if it is signed with the **same** key, so losing the key means everyone has to u
 1. Once: `powershell -ExecutionPolicy Bypass -File tools\android_keystore.ps1`. It creates
    `%LOCALAPPDATA%\filament-kit\release.jks` and a random password stored (encrypted with Windows DPAPI) in
    `%LOCALAPPDATA%\filament-kit\keystore.pw.dpapi`. You never type or see the password. It refuses to overwrite an
-   existing keystore. It uses `keytool` from `JAVA_HOME` if set, otherwise from `<local path>`.
+   existing keystore. It uses `keytool` from `JAVA_HOME` if set, otherwise the one on `PATH`.
 2. Each release: pick the app's version code and run, in Git Bash,
    `FK_VERSION_CODE=<n> bash tools/make_release.sh`. It builds and signs the app with that versionCode and puts
    `app/filament-kit.apk` and `app/version.txt` (containing the same number) into the tarball.

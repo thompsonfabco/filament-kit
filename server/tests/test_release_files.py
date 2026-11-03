@@ -287,9 +287,9 @@ def _run_save(tmp_path, mode, modules_csv="", server="", sets="", ai="", existin
 
 
 def test_install_save_custom_station_without_server_takes_address(tmp_path):
-    cfg = _run_save(tmp_path, "custom", ",station", server="spoolman.home.arpa")
+    cfg = _run_save(tmp_path, "custom", ",station", server="spoolman.example.lan")
     assert cfg["modules"]["station"] and not cfg["modules"]["server"]
-    assert cfg["station"]["allow"] == ["spoolman.home.arpa"]
+    assert cfg["station"]["allow"] == ["spoolman.example.lan"]
     assert "server_name" not in cfg  # apply asks the first-run questions
 
 
@@ -393,8 +393,8 @@ def test_install_mode_custom_is_rejected():
     ('echo "spoolman,server,backup"', 0, "CUSTOM=,spoolman,server,backup SETS= ADDR="),
     ('printf "web,server\\nset web.public_url=https://a.example.com/f\\nset orders.file=/o=1.json\\n"', 0,
      "CUSTOM=,web,server SETS=set web.public_url=https://a.example.com/f|set orders.file=/o=1.json ADDR="),
-    ('printf "station\\nset station.allow=srv.localdomain\\n"', 0,
-     "CUSTOM=,station SETS=set station.allow=srv.localdomain ADDR=srv.localdomain"),
+    ('printf "station\\nset station.allow=srv.example.lan\\n"', 0,
+     "CUSTOM=,station SETS=set station.allow=srv.example.lan ADDR=srv.example.lan"),
     ("exit 1", 1, "no modules chosen"),
 ])
 def test_install_menu_wrapper_cancel_and_choice(tmp_path, body, rc, expect):
@@ -455,12 +455,12 @@ def test_install_set_is_collected_and_station_address_feeds_server_addr(tmp_path
     f.write_text(script, newline="\n")
     import subprocess
     r = subprocess.run([_bash(), str(f), "--modules", "web,station", "--set", "web.public_url=https://m.example.com/f",
-                        "--set=station.allow=srv.localdomain"], capture_output=True, text=True, timeout=30,
+                        "--set=station.allow=srv.example.lan"], capture_output=True, text=True, timeout=30,
                        stdin=subprocess.DEVNULL)
     assert r.returncode == 0, r.stderr
-    assert r.stdout.splitlines() == ["MODE=custom SERVER=srv.localdomain",
+    assert r.stdout.splitlines() == ["MODE=custom SERVER=srv.example.lan",
                                      "set web.public_url=https://m.example.com/f",
-                                     "set station.allow=srv.localdomain"]
+                                     "set station.allow=srv.example.lan"]
 
 
 def test_install_save_rejects_bad_set_value(tmp_path):
@@ -514,10 +514,10 @@ def test_install_set_station_allow_refused_when_server_in_list(tmp_path):
     assert ok.returncode == 0
 
 
-SAVED_NOTE = "using the station's saved server address kit.localdomain"
+SAVED_NOTE = "using the station's saved server address kit.example.lan"
 
 
-def _saved_station_etc(tmp_path, allow=("127.0.0.1", "kit.localdomain")):
+def _saved_station_etc(tmp_path, allow=("127.0.0.1", "kit.example.lan")):
     import json
     etc = tmp_path / "etc"
     etc.mkdir(exist_ok=True)
@@ -563,9 +563,9 @@ def test_custom_run_without_terminal_uses_the_saved_address_unless_one_is_given(
     etc = _saved_station_etc(tmp_path)
     r = _install_no_tty(tmp_path, etc, "--modules", "station")
     assert SAVED_NOTE in r.stderr and "run as root" in r.stderr, r.stderr
-    r = _install_no_tty(tmp_path, etc, "--modules", "station", "--set", "station.allow=other.localdomain")
+    r = _install_no_tty(tmp_path, etc, "--modules", "station", "--set", "station.allow=other.example.lan")
     assert "saved server address" not in r.stderr and "run as root" in r.stderr, r.stderr
-    r = _install_no_tty(tmp_path, etc, "--mode", "station", "--server", "other.localdomain")
+    r = _install_no_tty(tmp_path, etc, "--mode", "station", "--server", "other.example.lan")
     assert "saved server address" not in r.stderr and "run as root" in r.stderr, r.stderr
 
 
@@ -678,8 +678,8 @@ def test_inline_python_survives_shell_single_quotes(rel):
 def test_wrapper_runs_migrate_scanner_as_root(tmp_path):
     """`migrate-scanner --apply` refuses unless root and reads the old calibration from /root: the wrapper must not
     drop it to the service user (final review I1)."""
-    assert (_wrapper_run(tmp_path, "migrate-scanner", "/root/h2d-calibration.json", "--apply")
-            == "as-root migrate-scanner /root/h2d-calibration.json --apply")
+    assert (_wrapper_run(tmp_path, "migrate-scanner", "/root/calibration.json", "--apply")
+            == "as-root migrate-scanner /root/calibration.json --apply")
 
 
 # --- final review I3 (Ruling BU): CI builds, signs and publishes library.tar.gz ----------------------------------
