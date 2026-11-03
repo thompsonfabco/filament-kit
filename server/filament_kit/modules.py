@@ -44,7 +44,7 @@ MODULES: dict[str, Module] = {m.name: m for m in (
        depends=("server",), apt=("ffmpeg",)),
     _m("presets", "Presets", "Bambu Studio preset builds and PC sync",
        units=("filament-kit-build.path",), depends=("server",)),
-    _m("library", "Library", "Daily spec-library update",
+    _m("library", "Library", "Filament spec library: downloaded on request, then a daily update",
        units=("filament-kit-library.timer",)),
     _m("backup", "Backup", "Nightly backup of Spoolman db, settings and state",
        units=("filament-kit-backup.timer",)),
@@ -58,8 +58,10 @@ MODULES: dict[str, Module] = {m.name: m for m in (
        depends=("ai_intake",)),
 )}
 
-# Switched on by hand (modules set / config menu), never by a mode: a mode is the kit as it was.
-OPT_IN = frozenset({"web", "remote", "orders"})
+# Switched on by hand (modules set / config menu), never by a mode: a mode is the kit as it was. The library is
+# not bundled: switching it on downloads it. An install that has the module on keeps it (apply leaves a configured
+# module alone); one without the key simply has no library until asked.
+OPT_IN = frozenset({"web", "remote", "orders", "library"})
 
 MODES: dict[str, frozenset[str]] = {
     "server": frozenset(MODULES) - {"station"} - OPT_IN,

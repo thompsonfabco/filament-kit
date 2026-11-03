@@ -1,8 +1,13 @@
-"""The filament spec library: the bundled snapshot, validated updates with rollback, and local additions.
+"""The filament spec library: downloaded on request, validated updates with rollback, and local additions.
+
+The program does not bundle the library (the wheel carries only the schema and an empty index, version 0);
+`update` downloads it from `library.url`, a release asset `library*.tar.gz` (or a directory URL serving
+index.json and the entries). With nothing downloaded, `load()` is an empty library and profiles are built from
+Spoolman values and the Bambu/Orca parents alone. An install that already downloaded a copy keeps using it.
 
 Layout in the state directory:
-  library/current.json            {"dir", "version", "at"}: the version directory in use (absent = bundled)
-  library/previous.json           the current.json before the last update (absent = bundled)
+  library/current.json            {"dir", "version", "at"}: the version directory in use (absent = none)
+  library/previous.json           the current.json before the last update (absent = none)
   library/last_check.json         {"at", "ok", "error", "last_ok_at"}
   library/versions/<v>-<stamp>/   index.json + library/<vendor>/<product>.json
   library-local/<vslug>/<pslug>.json   the owner's own additions; never touched by `update`
@@ -14,10 +19,12 @@ from __future__ import annotations
 import copy
 import datetime
 import hashlib
+import io
 import json
 import os
 import re
 import shutil
+import tarfile
 import threading
 import time
 import urllib.error
@@ -35,8 +42,8 @@ try:
 except ImportError:  # Windows dev PCs: no cross-process lock (the service only runs on Linux)
     fcntl = None
 
-DEFAULT_LIBRARY_URL = "https://raw.githubusercontent.com/thompsonfabco/filament-library/main/"
-BUNDLED = Path(__file__).parent / "library_data"
+DEFAULT_LIBRARY_URL = "https://github.com/thompsonfabco/filament-kit/releases/latest/download/library.tar.gz"
+BUNDLED = Path(__file__).parent / "library_data"   # schema + an empty index; the entries are downloaded
 SCHEMA_VERSION = 1
 
 INDEX_LIMIT = 8 * 2**20
@@ -46,6 +53,9 @@ MAX_ENTRIES = 20_000
 TIMEOUT = 30
 DEADLINE = 600                  # seconds for a whole update
 TOTAL_LIMIT = 256 * 2**20       # bytes downloaded by one update
+ARCHIVE_LIMIT = 64 * 2**20      # the compressed library tarball
+TAR_SUFFIXES = (".tar.gz", ".tgz")
+TOKEN_FILE = "github_token"     # in /etc/filament-kit: optional, for a private repository (testing)
 PRIVATE_STATUSES = (401, 403, 404)
 _clock = time.monotonic
 SCHEDULES = {"daily": 20 * 3600, "weekly": 6.5 * 86400, "off": None}
@@ -359,8 +369,18 @@ def _load_local() -> list[dict]:
     return out
 
 
+_EMPTY_INDEX = {"schema_version": SCHEMA_VERSION, "library_version": 0, "count": 0, "entries": []}
+
+
 def _bundled() -> tuple[Path, dict]:
-    return BUNDLED, json.loads((BUNDLED / "index.json").read_text(encoding="utf-8"))
+    """What ships in the program: an empty index (version 0), so a fresh install has no library until asked."""
+    try:
+        idx = json.loads((BUNDLED / "index.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        idx = None
+    if not (isinstance(idx, dict) and isinstance(idx.get("library_version"), int)):
+        idx = copy.deepcopy(_EMPTY_INDEX)
+    return BUNDLED, idx
 
 
 def _current() -> tuple[Path, dict, str]:
@@ -371,7 +391,7 @@ def _current() -> tuple[Path, dict, str]:
         if isinstance(idx, dict) and isinstance(idx.get("library_version"), int):
             return root, idx, "updated"
     root, idx = _bundled()
-    return root, idx, "bundled"
+    return root, idx, "bundled" if idx.get("entries") else "none"
 
 
 def load() -> Library:
@@ -429,8 +449,21 @@ def configured_url(cfg: dict | None = None) -> str:
     return (cfg.get("library") or {}).get("url") or DEFAULT_LIBRARY_URL
 
 
+def _is_archive(url: str) -> bool:
+    return urllib.parse.urlsplit(url).path.lower().endswith(TAR_SUFFIXES)
+
+
+def _token() -> str | None:
+    """The optional GitHub token (/etc/filament-kit/github_token), only ever sent as a request header."""
+    try:
+        t = (config.paths().etc / TOKEN_FILE).read_text(encoding="utf-8").strip()
+    except (OSError, ValueError):
+        return None
+    return t if t and t.isprintable() and " " not in t else None
+
+
 def _check_url(url: str) -> str:
-    """The base URL, ending in '/'. https only, except a local test server on 127.0.0.1/localhost:<port>."""
+    """The URL of a .tar.gz archive, or a base URL ending in '/'. https only, except a local test server on 127.0.0.1/localhost:<port>."""
     if not isinstance(url, str):
         raise LibraryError("the library url must be a string")
     try:
@@ -440,7 +473,7 @@ def _check_url(url: str) -> str:
         raise LibraryError("the library url is not a valid URL") from None
     if u.query or u.fragment or u.username or u.password:
         raise LibraryError("the library url must not carry a query string, fragment or credentials")
-    if not url.endswith("/"):
+    if not url.endswith("/") and not _is_archive(url):
         url += "/"
     if u.scheme == "https" and u.hostname:
         return url
@@ -468,7 +501,10 @@ class _SafeRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         if not _redirect_allowed(req.full_url, newurl):
             raise _Abort("the library server redirected to a location that is not https; refused")
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
+        new = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new is not None and urllib.parse.urlsplit(newurl).netloc != urllib.parse.urlsplit(req.full_url).netloc:
+            new.remove_header("Authorization")      # a signed asset host must never see the token
+        return new
 
 
 def _safe_opener():
@@ -499,7 +535,12 @@ class _Fetcher:
     def get(self, url: str, name: str, limit: int) -> bytes:
         timeout = max(1.0, min(TIMEOUT, self.remaining()))
         budget = TOTAL_LIMIT - self.total
-        req = urllib.request.Request(url, headers={"User-Agent": "filament-kit"})
+        headers = {"User-Agent": "filament-kit"}
+        token = _token()
+        if token:
+            headers["Authorization"] = "Bearer " + token
+            headers["Accept"] = "application/octet-stream"
+        req = urllib.request.Request(url, headers=headers)
         try:
             with self.opener(req, timeout=timeout) as r:
                 status = getattr(r, "status", 200)
@@ -509,7 +550,8 @@ class _Fetcher:
         except urllib.error.HTTPError as e:
             msg = f"{name}: HTTP {e.code}"
             if e.code in PRIVATE_STATUSES:
-                msg += f"; the library repository may be private; using version {self.version}"
+                msg += ("; the library repository may be private; using version " + str(self.version)
+                        if self.version else "; the library may be private or not published yet")
             raise _Abort(msg, e.code) from None
         except urllib.error.URLError as e:
             if isinstance(e.reason, _Abort):
@@ -524,6 +566,54 @@ class _Fetcher:
             raise _Abort(f"the update downloaded more than {TOTAL_LIMIT // 2**20} MiB; stopped")
         self.total += len(data)
         return data
+
+
+def _read_archive(raw: bytes) -> dict[str, bytes]:
+    """The index and entry files of a library tarball, in memory (nothing is extracted to disk). Files may sit
+    at the root or under one top directory; links, devices and anything else that is not a plain file are refused."""
+    files: dict[str, bytes] = {}
+    total = 0
+    try:
+        with tarfile.open(fileobj=io.BytesIO(raw), mode="r:gz") as tar:
+            members = []
+            for i, m in enumerate(tar):
+                if i > MAX_ENTRIES + 100:
+                    raise _Abort("the library archive has too many files")
+                if m.isdir():
+                    continue
+                if not m.isreg():
+                    raise _Abort(f"the library archive holds {m.name!r}, which is not a plain file; refused")
+                members.append(m)
+            names = {m.name.removeprefix("./"): m for m in members}
+            prefix = ""
+            if "index.json" not in names:
+                tops = [n[:-len("index.json")] for n in names
+                        if n.endswith("/index.json") and n.count("/") == 1]
+                if len(tops) != 1:
+                    raise _Abort("the library archive has no index.json")
+                prefix = tops[0]
+            for name, m in names.items():
+                if not name.startswith(prefix):
+                    continue
+                rel = name[len(prefix):]
+                if rel != "index.json" and not ROW_PATH.fullmatch(rel):
+                    continue                    # README, schema, anything that is not an index or an entry
+                limit = INDEX_LIMIT if rel == "index.json" else ENTRY_LIMIT
+                if m.size > limit:
+                    raise _Abort(f"{rel}: too large (over {limit // 1024} KiB)")
+                total += m.size
+                if total > TOTAL_LIMIT:
+                    raise _Abort(f"the library archive holds more than {TOTAL_LIMIT // 2**20} MiB; stopped")
+                fh = tar.extractfile(m)
+                data = fh.read(m.size + 1) if fh is not None else b""
+                if len(data) != m.size:
+                    raise _Abort(f"{rel}: the archive is damaged")
+                files[rel] = data
+    except (tarfile.TarError, EOFError, OSError, ValueError) as e:
+        raise _Abort(f"the library archive cannot be read ({type(e).__name__})") from None
+    if "index.json" not in files:
+        raise _Abort("the library archive has no index.json")
+    return files
 
 
 def _parse_index(raw: bytes, current: int) -> tuple[dict, list[dict]]:
@@ -602,7 +692,12 @@ def update(url: str | None = None, *, opener=None, now: float | None = None) -> 
         downloaded = 0
         fetch = _Fetcher(opener or _safe_opener(), cur_version)
         try:
-            raw = fetch.get(base + "index.json", "index.json", INDEX_LIMIT)
+            archive = None
+            if _is_archive(base):
+                archive = _read_archive(fetch.get(base, "library archive", ARCHIVE_LIMIT))
+                raw = archive["index.json"]
+            else:
+                raw = fetch.get(base + "index.json", "index.json", INDEX_LIMIT)
             idx, rows = _parse_index(raw, cur_version)
             new_rows = {r["path"]: r["sha256"] for r in rows}
             if idx["library_version"] == cur_version and new_rows == cur_rows:
@@ -617,6 +712,11 @@ def update(url: str | None = None, *, opener=None, now: float | None = None) -> 
                 src = cur_root / path
                 if cur_rows.get(path) == sha and _file_sha(src) == sha:
                     data = src.read_bytes()
+                elif archive is not None:
+                    data = archive.get(path)
+                    if data is None:
+                        raise _Abort(f"{path}: listed in index.json but missing from the archive")
+                    downloaded += 1
                 else:
                     data = fetch.get(base + path, path, ENTRY_LIMIT)
                     downloaded += 1
@@ -663,7 +763,7 @@ def update(url: str | None = None, *, opener=None, now: float | None = None) -> 
 
 
 def rollback() -> int:
-    """Go back to the version before the last update (the bundled snapshot if there was none); returns it.
+    """Go back to the version before the last update (none if there was no earlier one); returns it.
     The two are swapped, so a second rollback goes forward again."""
     with _locked():
         cur = _pointer("current.json")

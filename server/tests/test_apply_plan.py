@@ -26,7 +26,7 @@ def test_legacy_config_plans_todays_install():
     acts = apply.plan({})
     assert _of(acts, "enable") == [
         "spoolman.service", "filament-kit.service", "filament-kit-build.path",
-        "filament-kit-library.timer", "filament-kit-backup.timer"]
+        "filament-kit-backup.timer"]     # the library timer is on request, not part of a fresh install
     kinds = {a.kind for a in acts}
     assert not kinds & {"remove_pkg", "mask_sleep", "alsa_unmute", "udev_reload"}
     assert _of(acts, "disable") == ["filament-kit-station.service"]
