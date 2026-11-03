@@ -34,15 +34,15 @@ while [ $# -gt 0 ]; do
         *) usage ;;
     esac
 done
+case "$MODE" in
+    "" | server | station | all-in-one) ;;
+    *) die "unknown mode '$MODE' (use server, station or all-in-one; to choose single modules use --modules a,b,c)" ;;
+esac
 if [ -n "$CUSTOM" ]; then
     [ -z "$MODE" ] || die "use --mode or --modules, not both"
-    MODE=custom
-    CUSTOM=",$CUSTOM"          # names are checked, and what they need is added, when the config is written
+    MODE=custom                # internal: reached only through --modules or the installer's menu
+    CUSTOM=",$CUSTOM"          # names are checked and what they need is added just before the address check
 fi
-case "$MODE" in
-    "" | server | station | all-in-one | custom) ;;
-    *) die "unknown mode '$MODE' (use server, station or all-in-one)" ;;
-esac
 if [ -n "$SERVER_ADDR" ] && bad_addr "$SERVER_ADDR"; then
     die "--server takes one name or address, e.g. spoolman.home.arpa or 192.0.2.10"
 fi
@@ -166,6 +166,22 @@ if [ -z "$MODE" ] && [ "$FIRST_INSTALL" -eq 1 ] && [ -t 0 ]; then
         CUSTOM=",$("$VENV/bin/filament-kit" modules menu --raw)" \
             || die "no modules chosen; run ./install.sh again"
     fi
+fi
+# A custom list is closed first (what the chosen modules need goes on too), so the checks below see
+# the real set: --modules station,printers has a server and needs no address.
+if [ "$MODE" = custom ]; then
+    CUSTOM=$(FK_MODULES="$CUSTOM" "$VENV/bin/python" -I -c '
+import os, sys
+from filament_kit import modules
+try:
+    chosen, notes = modules.close_selection(os.environ["FK_MODULES"].split(","))
+except modules.ModuleError as e:
+    names = ", ".join(modules.MODULES)
+    sys.exit(f"error: {e}\nfix: use module names from: {names}")
+for note in notes:
+    print(note, file=sys.stderr)
+print("," + ",".join(n for n in modules.MODULES if n in chosen))
+') || exit 1
 fi
 # A station whose server is on another machine needs that server's address (spec section 3):
 # station mode, or custom with station on and server off.
