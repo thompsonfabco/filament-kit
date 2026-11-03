@@ -3,7 +3,8 @@
 # Settings and the certificate live in /etc/filament-kit (root-owned), so
 # `config` and `cert` run as root; so does `modules`, which installs and starts
 # services, `migrate-ops`, which replaces the Spoolman database and installs
-# secrets, and `update`, which installs a new release. Everything else touches
+# secrets, `migrate-scanner`, which reads the old calibration from /root and
+# writes the map, and `update`, which installs a new release. Everything else touches
 # the service's state in /var/lib/filament-kit and runs as the filament-kit
 # user, so the files it writes stay readable by the service.
 set -euo pipefail
@@ -11,7 +12,7 @@ set -euo pipefail
 BIN=/opt/filament-kit/venv/bin/filament-kit
 
 case "${1:-}" in
-    config | cert | modules | remote | migrate-ops | update)
+    config | cert | modules | remote | migrate-ops | migrate-scanner | update)
         exec "$BIN" "$@"
         ;;
 esac
