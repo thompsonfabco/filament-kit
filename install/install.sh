@@ -95,6 +95,20 @@ if [ "${ID:-}" != ubuntu ] || ! [ "$major" -ge 24 ] 2>/dev/null; then
     die "Ubuntu 24.04 or newer is required (found ${PRETTY_NAME:-unknown})"
 fi
 
+# --modules names are checked now, before any package or venv work, against the module registry inside the
+# wheel (a wheel is a zip file; the names are the _m("name", ...) entries of filament_kit/modules.py).
+if [ "$MODE" = custom ] && [ -n "$CUSTOM" ]; then
+    python3 - "$WHEEL" "$CUSTOM" <<'PYEOF' || exit 1
+import re, sys, zipfile
+with zipfile.ZipFile(sys.argv[1]) as z:
+    text = z.read("filament_kit/modules.py").decode("utf-8")
+known = re.findall(r'_m[(]"([a-z_]+)"', text)
+bad = [n for n in sys.argv[2].split(",") if n and n not in known]
+if bad:
+    sys.exit("error: unknown module %s\nfix: use module names from: %s" % (", ".join(bad), ", ".join(known)))
+PYEOF
+fi
+
 FIRST_INSTALL=1
 [ -f "$ETC/config.json" ] && FIRST_INSTALL=0
 
@@ -234,6 +248,11 @@ for note in notes:
 print("," + ",".join(n for n in modules.MODULES if n in chosen))
 ') || exit 1
 fi
+# With the server on this machine the station reads it over loopback; an address would break that link.
+case "$MODE:$CUSTOM,:$SETS" in
+    custom:*,server,*:*"set station.allow="*)
+        die "station.allow is for a station without the server on this machine; with server in the module list the station is linked locally, so drop --set station.allow" ;;
+esac
 # A station whose server is on another machine needs that server's address (spec section 3):
 # station mode, or custom with station on and server off.
 NEED_ADDR=0

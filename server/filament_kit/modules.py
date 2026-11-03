@@ -261,7 +261,10 @@ def preset(on, mode: str) -> tuple[frozenset[str], list[str]]:
     """The module set of install mode `mode`, keeping opt-ins already on (as set_mode does)."""
     notes: list[str] = []
     cfg = set_mode({"modules": {n: True for n in on}}, mode, say=notes.append)
-    return enabled(cfg), notes
+    result = enabled(cfg)
+    if mode == "station" and frozenset(on) == LEGACY:     # set_mode's rule for a legacy config going to station
+        result = result - {"library"}
+    return result, notes
 
 
 def menu_lines(cfg: dict, on=None) -> list[str]:
