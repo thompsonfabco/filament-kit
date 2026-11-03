@@ -125,8 +125,7 @@ class IntakeApp:
 
     def routes(self) -> list[Route]:
         return [Route(p, fn, methods=m) for p, fn, m in (
-            ("/intake", self.page, ["GET"]), ("/intake/", self.slash, ["GET"]),
-            ("/intake/login", self.login, ["POST"]),
+            ("/intake", self.page, ["GET"]), ("/intake/login", self.login, ["POST"]),
             ("/intake/logout", self.logout, ["POST"]), ("/intake/app.js", self.asset, ["GET"]),
             ("/intake/app.css", self.asset, ["GET"]), ("/intake/printers.js", self.asset, ["GET"]),
             ("/intake/icon.png", self.icon_route, ["GET"]),
@@ -183,13 +182,6 @@ class IntakeApp:
                 "push": "1" if self.printers and self.printers.push_on else "0"}
         attrs = " ".join(f"data-{k}='{html.escape(v, quote=True)}'" for k, v in data.items())
         return f"<body {attrs}><main id=app></main></body>"
-
-    async def slash(self, request: Request):
-        """/intake/ -> the page, within the public path: Starlette's own slash redirect builds the URL from the
-        request, which has lost the public path nginx strips."""
-        if not self._lan(request):
-            return self._html(HOME_ONLY, 403)
-        return RedirectResponse(self.base, 308)
 
     async def page(self, request: Request):
         if not self._lan(request):

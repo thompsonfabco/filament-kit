@@ -487,7 +487,7 @@ def test_intake_with_a_slash_redirects_within_the_public_prefix(app):
     with _client(app) as c:
         r = c.get("/intake/", follow_redirects=False)
         assert r.status_code in (301, 302, 303, 307, 308), r.status_code
-        assert r.headers["location"] == BASE
+        assert r.headers["location"] in (BASE, ORIGIN + BASE)
         assert _client(app, AWAY).get("/intake/", follow_redirects=False).status_code == 403
 
 
@@ -507,3 +507,14 @@ def test_router_streams_sse_under_the_public_prefix():
     timeout = int(re.search(r"proxy_read_timeout (\d+)s;", proxy).group(1))
     assert timeout >= 10 * printers_app.PING_SECONDS
     assert 'proxy_set_header Connection "";' in proxy and "proxy_http_version 1.1;" in proxy
+
+
+@pytest.mark.parametrize("path, target", [("/reader/printers/", "/filament/reader/printers"),
+                                          ("/intake/", BASE)])
+def test_slash_redirects_stay_within_the_public_prefix(app, path, target):
+    """M4: the app runs with the public path as its root_path, so every slash redirect keeps the prefix nginx
+    strips (not only /intake/)."""
+    with _client(app) as c:
+        r = c.get(path, follow_redirects=False)
+    assert r.status_code in (301, 302, 303, 307, 308), (r.status_code, r.text[:200])
+    assert r.headers["location"] in (target, ORIGIN + target), r.headers["location"]
