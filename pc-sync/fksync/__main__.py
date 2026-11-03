@@ -288,10 +288,16 @@ def _self_exe() -> Path:
 
 
 def cmd_timer(on: bool) -> int:
-    units = timer.units_dir(os.environ)
+    """The units go where the user manager reads them and its stamp is where the manager writes it (the manager's
+    XDG folders, which may differ from this shell's); the service gets this shell's XDG folders (timer.XDG_VARS)."""
+    sc = timer.systemctl_user
+    mgr = timer.manager_env(sc)
+    where = os.environ if mgr is None else {"HOME": mgr.get("HOME") or os.environ.get("HOME", ""),
+                                            **{v: mgr[v] for v in timer.XDG_VARS if mgr.get(v)}}
+    units = timer.units_dir(where)
     if on:
-        return timer.install(units, _self_exe(), echo=_out)
-    return timer.uninstall(units, stamp=timer.stamp_file(os.environ), echo=_out)
+        return timer.install(units, _self_exe(), env=os.environ, systemctl=sc, echo=_out)
+    return timer.uninstall(units, stamp=timer.stamp_file(where), systemctl=sc, echo=_out)
 
 
 def _linux() -> bool:

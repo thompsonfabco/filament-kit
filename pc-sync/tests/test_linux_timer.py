@@ -121,3 +121,59 @@ def test_cli_status_reads_the_linux_folders(tmp_path, monkeypatch, capsys):
     assert "Bambu Studio:    Flatpak BambuStudio, user 555" in out
     assert f"Orca folder:     {home / '.config' / 'OrcaSlicer' / 'user' / orca_fixture.USER_ID / 'filament'}" in out
     assert f"Log:             {home / '.local' / 'share' / 'filament-kit-sync' / 'sync.log'}" in out
+    assert "Orca install:    not found" in out          # M7: the guard keeps the real /usr/share, /opt out of reach
+
+
+# --- fix round 1 ---------------------------------------------------------------------------------
+
+def test_exec_start_escapes_dollar():
+    """M3: systemd expands $VAR in ExecStart; a literal $ is $$."""
+    assert 'ExecStart="/home/a$$b/filament-kit-sync" run' in timer.service_text(Path("/home/a$b/filament-kit-sync"))
+
+
+def test_service_carries_the_installing_shells_xdg_folders():
+    """M1: the user manager may not have the shell's XDG_* : the service gets them, so run reads the token pair wrote."""
+    exe = Path("/o/filament-kit-sync")
+    plain = timer.service_text(exe, {"HOME": "/h"})
+    assert "Environment=" not in plain
+    assert timer.service_text(exe, {"XDG_DATA_HOME": "", "XDG_CONFIG_HOME": ""}) == plain    # empty = unset
+    svc = timer.service_text(exe, {"HOME": "/h", "XDG_DATA_HOME": "/d a%t", "XDG_CONFIG_HOME": r'/c"x\y'})
+    assert 'Environment="XDG_DATA_HOME=/d a%%t"\n' in svc
+    assert r'Environment="XDG_CONFIG_HOME=/c\"x\\y"' + "\n" in svc
+    assert svc.index("Environment=") < svc.index("ExecStart=")
+
+
+def test_manager_env_parses_show_environment():
+    def sc(*args):
+        assert args == ("show-environment",)
+        return 0, "HOME=/h\nXDG_DATA_HOME=/m/data\nPATH=/usr/bin\n"
+    assert timer.manager_env(sc) == {"HOME": "/h", "XDG_DATA_HOME": "/m/data", "PATH": "/usr/bin"}
+    assert timer.manager_env(lambda *a: (1, "Failed to connect to bus")) is None
+
+
+def test_cli_install_timer_uses_the_managers_folders(tmp_path, monkeypatch, capsys):
+    """M1: units go where the user manager looks ($XDG_CONFIG_HOME of the manager, not the shell); the service
+    gets the shell's XDG_DATA_HOME; uninstall removes the stamp from the manager's data folder."""
+    home = tmp_path / "home"
+    calls = []
+
+    def sc(*args):
+        calls.append(args)
+        if args == ("show-environment",):
+            return 0, f"HOME={home}\n"                        # the manager has no XDG_* set
+        return 0, ""
+    monkeypatch.setattr(timer, "systemctl_user", sc)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("XDG_DATA_HOME", (tmp_path / "shell-data").as_posix())
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "shell-config"))
+    monkeypatch.setattr(cli.sys, "platform", "linux")
+    assert cli.main(["install-timer"]) == 0
+    svc = (home / ".config" / "systemd" / "user" / "filament-kit-sync.service").read_text()
+    assert f'Environment="XDG_DATA_HOME={(tmp_path / "shell-data").as_posix()}"' in svc
+    assert not (tmp_path / "shell-config" / "systemd").exists()
+    stamp = home / ".local" / "share" / "systemd" / "timers" / "stamp-filament-kit-sync.timer"
+    stamp.parent.mkdir(parents=True)
+    stamp.write_bytes(b"")
+    assert cli.main(["uninstall-timer"]) == 0
+    assert not stamp.exists()
+    assert not (home / ".config" / "systemd" / "user" / "filament-kit-sync.service").exists()

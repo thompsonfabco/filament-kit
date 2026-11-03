@@ -31,18 +31,31 @@ def stamp_file(env: Mapping[str, str]) -> Path:
     return base / "systemd" / "timers" / f"stamp-{TIMER}"
 
 
+def _escape(s: str) -> str:
+    """\\, " and % (specifiers) escaped for a double-quoted systemd word."""
+    return s.replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%")
+
+
 def _quote(path: Path) -> str:
-    """A systemd command line word: double-quoted, with % (specifiers), \\ and " escaped."""
-    s = Path(path).as_posix().replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%")
+    """A systemd command line word: double-quoted, with % (specifiers), $ (variables), \\ and " escaped."""
+    s = _escape(Path(path).as_posix()).replace("$", "$$")
     return f'"{s}"'
 
 
-def service_text(exe: Path) -> str:
+# The sync's folders follow these; the user manager may not have the installing shell's values, so the
+# service gets them (else `run` would look for the token in ~/.local/share while `pair` wrote it elsewhere).
+XDG_VARS = ("XDG_DATA_HOME", "XDG_CONFIG_HOME")
+
+
+def service_text(exe: Path, env: Mapping[str, str] | None = None) -> str:
+    """`env`: the installing shell's environment; its non-empty XDG_DATA_HOME / XDG_CONFIG_HOME go into the unit."""
+    lines = "".join(f'Environment="{v}={_escape(env[v])}"\n' for v in XDG_VARS if env and env.get(v))
     return ("[Unit]\n"
             "Description=filament-kit sync: Bambu Studio and Orca Slicer filament presets\n"
             "\n"
             "[Service]\n"
             "Type=oneshot\n"
+            f"{lines}"
             f"ExecStart={_quote(exe)} run --quiet\n")
 
 
@@ -69,11 +82,21 @@ def systemctl_user(*args: str) -> tuple[int, str]:
     return r.returncode, (r.stderr + r.stdout).strip()
 
 
-def install(units: Path, exe: Path, *, systemctl: Callable[..., tuple[int, str]] = systemctl_user,
+def manager_env(systemctl: Callable[..., tuple[int, str]] = systemctl_user) -> dict[str, str] | None:
+    """The user manager's environment (`systemctl --user show-environment`), None when it cannot be asked."""
+    rc, out = systemctl("show-environment")
+    if rc != 0:
+        return None
+    return dict(line.split("=", 1) for line in out.splitlines() if "=" in line)
+
+
+def install(units: Path, exe: Path, *, env: Mapping[str, str] | None = None,
+            systemctl: Callable[..., tuple[int, str]] = systemctl_user,
             echo: Callable[[str], None] = print) -> int:
-    """Write both units and enable + start the timer. The units stay written when systemctl fails."""
+    """Write both units and enable + start the timer. The units stay written when systemctl fails.
+    `env`: the installing shell's environment (its XDG folders go into the service)."""
     units.mkdir(parents=True, exist_ok=True)
-    (units / SERVICE).write_text(service_text(exe), encoding="utf-8", newline="\n")
+    (units / SERVICE).write_text(service_text(exe, env), encoding="utf-8", newline="\n")
     (units / TIMER).write_text(timer_text(), encoding="utf-8", newline="\n")
     for args in (("daemon-reload",), ("enable", "--now", TIMER)):
         rc, out = systemctl(*args)

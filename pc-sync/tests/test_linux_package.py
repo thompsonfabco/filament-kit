@@ -67,3 +67,25 @@ def test_release_builds_signs_and_publishes_the_tarball():
     assert "secrets." not in job
     assert "needs: [version, server, sync, sync-linux]" in text
     assert re.search(r'assets="[^"]*filament-kit-sync-linux-x86_64-\$VERSION\.tar\.gz', text)
+
+
+# --- fix round 1 ---------------------------------------------------------------------------------
+
+def test_install_cleans_a_failed_copy_and_stops_a_running_sync():
+    """M4: no $opt.new.* folder is left when the copy fails; a sync run is stopped before the swap."""
+    text = (LINUX / "install.sh").read_text(encoding="utf-8")
+    assert "trap 'rm -rf \"$new\"' ERR" in text
+    i_new, i_swap = text.index('new=$(mktemp -d "$opt.new.XXXXXX")'), text.index('mv "$new" "$opt"')
+    assert i_new < text.index("trap 'rm -rf \"$new\"' ERR") < i_swap
+    stop = "systemctl --user stop filament-kit-sync.service"
+    assert stop in text and text.index(stop) < text.index('mv "$opt" "$opt.old"')
+    assert "trap - ERR" in text[i_swap:]
+
+
+def test_uninstall_removes_leftover_copies_and_both_xdg_places():
+    """M4 + M1: leftover $opt.new.* go; units and stamp are removed from the shell's XDG folders and the defaults
+    (the user manager may not see the shell's XDG_* values)."""
+    text = (LINUX / "uninstall.sh").read_text(encoding="utf-8")
+    assert 'rm -rf "$opt" "$opt.old" "$opt".new.*' in text
+    assert 'for units in "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user" "$HOME/.config/systemd/user"; do' in text
+    assert 'for state in "${XDG_DATA_HOME:-$HOME/.local/share}" "$HOME/.local/share"; do' in text

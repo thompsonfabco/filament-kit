@@ -22,14 +22,19 @@ mkdir -p "$HOME/.local/opt" "$bin"
 
 # copy next to the old install, then swap, so a failed copy leaves the old one working
 new=$(mktemp -d "$opt.new.XXXXXX")
+trap 'rm -rf "$new"' ERR                 # a failed copy leaves no half-made $opt.new.* folder
 cp -a "$src/." "$new/"
 install -m 755 "$here/uninstall.sh" "$new/uninstall.sh"
 chmod 755 "$new"
 rm -rf "$opt.old"
+# stop a sync run in progress before its program is swapped (a preset install it stops part-way is picked up
+# again by the next run)
+systemctl --user stop filament-kit-sync.service >/dev/null 2>&1 || true
 if [ -e "$opt" ]; then
     mv "$opt" "$opt.old"
 fi
 mv "$new" "$opt"
+trap - ERR
 rm -rf "$opt.old"
 ln -sfn "$opt/filament-kit-sync" "$bin/filament-kit-sync"
 echo "Installed $("$opt/filament-kit-sync" --version) in $opt"
