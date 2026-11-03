@@ -143,7 +143,7 @@ def test_modules_menu_raw_prints_choice_only_on_stdout(monkeypatch, capsys):
     _stdin(monkeypatch, "t\n1\n\n192.168.1.5\n")   # station preset, spoolman on, Enter, the server's address
     assert cli.main(["modules", "menu", "--raw"]) == 0
     cap = capsys.readouterr()
-    assert cap.out.splitlines() == ["spoolman,library,station", "set station.allow=192.168.1.5"]
+    assert cap.out.splitlines() == ["spoolman,station", "set station.allow=192.168.1.5"]
     assert "[x]" in cap.err and "OPTIONAL AI" in cap.err
     assert "modules" not in config.load()          # --raw changes nothing
 
@@ -319,3 +319,22 @@ def test_config_menu_web_and_orders_ask_settings_and_store_them(applied, monkeyp
     assert cfg["modules"]["web"] and cfg["modules"]["orders"]
     assert cfg["web"]["public_url"] == "https://mcp.example.com/filament"
     assert cfg["orders"]["file"] == "/srv/orders.json"
+
+
+def test_raw_menu_first_install_starts_without_ai_and_library(monkeypatch, capsys):
+    _stdin(monkeypatch, "\n")                        # no config file at all: Enter on the untouched list
+    assert cli.main(["modules", "menu", "--raw"]) == 0
+    cap = capsys.readouterr()
+    chosen = set(cap.out.splitlines()[0].split(","))
+    assert chosen == modules.MODES["server"] and not {"ai_intake", "library"} & chosen
+    assert "[ ]  3 ai_intake" in cap.err and "[ ]  6 library" in cap.err
+
+
+def test_raw_menu_existing_legacy_config_keeps_legacy_set_and_station_preset_drops_library(monkeypatch, capsys):
+    config.save(config.load())                       # a config file without `modules`: a legacy install
+    _stdin(monkeypatch, "\n")
+    assert cli.main(["modules", "menu", "--raw"]) == 0
+    assert {"ai_intake", "library"} <= set(capsys.readouterr().out.splitlines()[0].split(","))
+    _stdin(monkeypatch, "t\n\n192.168.1.5\n")
+    assert cli.main(["modules", "menu", "--raw"]) == 0
+    assert capsys.readouterr().out.splitlines()[0] == "station"

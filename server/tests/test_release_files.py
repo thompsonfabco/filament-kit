@@ -444,3 +444,41 @@ def test_install_save_rejects_bad_set_value(tmp_path):
                PYTHONPATH=str(ROOT / "server"))
     r = subprocess.run([sys.executable, "-c", _save_snippet()], env=env, capture_output=True, text=True, timeout=60)
     assert r.returncode != 0 and "web.public_url" in r.stderr
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_install_unknown_module_name_is_caught_before_packages(tmp_path):
+    import subprocess
+    import zipfile
+    whl = tmp_path / "filament_kit-0.whl"
+    with zipfile.ZipFile(whl, "w") as z:
+        z.writestr("filament_kit/modules.py", (ROOT / "server" / "filament_kit" / "modules.py").read_text("utf-8"))
+    part = _install_part("# --modules names are checked now", "FIRST_INSTALL=1")
+    f = tmp_path / "early.sh"
+    f.write_text(f'MODE=custom\nWHEEL="{str(whl).replace(chr(92), "/")}"\nCUSTOM="$1"\n' + part + 'echo passed\n',
+                 newline="\n")
+    import os
+    import sys
+    venv, env = _stub_venv(tmp_path)                 # its bin/python runs the test interpreter
+    shim = tmp_path / "shim"
+    shim.mkdir()
+    exe = sys.executable.replace(chr(92), "/")
+    (shim / "python3").write_text(f'#!/bin/sh\nexec "{exe}" "$@"\n', newline="\n")
+    env = dict(os.environ, PATH=str(shim).replace(chr(92), "/") + os.pathsep + os.environ["PATH"])
+    ok = subprocess.run([_bash(), str(f), ",spoolman,server"], capture_output=True, text=True, timeout=30, env=env)
+    bad = subprocess.run([_bash(), str(f), ",server,bogus"], capture_output=True, text=True, timeout=30, env=env)
+    assert ok.returncode == 0 and "passed" in ok.stdout, ok.stderr
+    assert bad.returncode != 0 and "unknown module bogus" in bad.stderr and "passed" not in bad.stdout
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_install_set_station_allow_refused_when_server_in_list(tmp_path):
+    import subprocess
+    part = _install_part("# With the server on this machine", "# A station whose server")
+    f = tmp_path / "m.sh"
+    f.write_text('die() { echo "error: $*" >&2; exit 1; }\nMODE=custom\nCUSTOM="$1"\nSETS="set station.allow=x"\n'
+                 + part + 'echo passed\n', newline="\n")
+    bad = subprocess.run([_bash(), str(f), ",station,server"], capture_output=True, text=True, timeout=30)
+    ok = subprocess.run([_bash(), str(f), ",station"], capture_output=True, text=True, timeout=30)
+    assert bad.returncode == 1 and "drop --set station.allow" in bad.stderr
+    assert ok.returncode == 0

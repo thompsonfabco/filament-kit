@@ -1143,6 +1143,15 @@ def _modules_menu(cfg: dict) -> None:
         print(f"error: {err}")
 
 
+def _config_has_content() -> bool:
+    """False for a first install: no config file, or one with nothing in it (as set_mode counts it)."""
+    f = config.paths().etc / "config.json"
+    try:
+        return bool(json.loads(f.read_text(encoding="utf-8")))
+    except (OSError, ValueError):
+        return False
+
+
 def cmd_modules_menu(raw: bool) -> int:
     """The checklist on its own. --raw: prompts on stderr; stdout gets the chosen modules as a comma list, then
     one `set <key>=<value>` line per setting asked for (install.sh custom mode). Changes nothing."""
@@ -1151,6 +1160,8 @@ def cmd_modules_menu(raw: bool) -> int:
     if not raw:
         _modules_menu(cfg)
         return 0
+    if not _config_has_content():
+        on = modules.MODES["server"]            # a first install: AI intake and the library start off
     out = sys.stdout
     sys.stdout = sys.stderr                     # prompts and the checklist go to the terminal, not the capture
     try:
