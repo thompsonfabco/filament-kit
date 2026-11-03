@@ -467,10 +467,10 @@ def test_density_lookup_matches_by_prefix():
     src = (Path(web_app.__file__).parent / "static" / "app.js").read_text(encoding="utf-8")
     table = re.search(r"^const DENSITY = .*?;$", src, re.M).group(0)
     fn = re.search(r"^function densityFor\(.*?^}$", src, re.M | re.S).group(0)
-    probe = ["PLA", "pla+", "PLA Silk", "PETG-CF", "PA6-GF", "ASA", "Wood", "", " petg "]
+    probe = ["PLA", "pla+", "PLA Silk", "PETG-CF", "PA6-GF", "ASA", "Wood", "", " petg ", "PCTG", "pctg-cf", "PC"]
     js = f"{table}\n{fn}\nconsole.log(JSON.stringify({json.dumps(probe)}.map(densityFor)));"
     out = subprocess.run([_node(), "-e", js], capture_output=True, text=True, timeout=30, check=True).stdout
-    assert json.loads(out) == [1.24, 1.24, 1.24, 1.27, 1.14, 1.07, None, None, 1.27]
+    assert json.loads(out) == [1.24, 1.24, 1.24, 1.27, 1.14, 1.07, None, None, 1.27, 1.23, 1.23, 1.2]
 
 
 def test_picker_names_filaments_without_a_vendor():
