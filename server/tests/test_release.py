@@ -513,11 +513,27 @@ def test_make_release_tarball_passes_extract_and_the_sums_check(tmp_path, key):
         r = subprocess.run([_git_bash(), "-c", 'cygpath -u "$1" 2>/dev/null || printf %s "$1"', "_", str(p)],
                            capture_output=True, text=True)
         return r.stdout.strip() or p.as_posix()
-    dist = tmp_path / "dist"
-    env = {**os.environ, "FK_DIST": posix(dist), "FK_NO_APP": "1", "FK_LIBRARY_SRC": posix(tmp_path / "no-library")}
-    r = subprocess.run([_git_bash(), str(ROOT / "tools" / "make_release.sh")], cwd=ROOT, env=env,
-                       stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=600)
-    assert r.returncode == 0, r.stdout[-2000:] + r.stderr[-2000:]
+    # M5: build from a temporary copy of the checkout (the script writes dist/ and server/build there), never inside it
+    src = tmp_path / "src"
+    skip = shutil.ignore_patterns(".venv", "*.egg-info", "build", "dist", "__pycache__", ".pytest_cache")
+    for part in ("tools", "install", "server", "station/panel/firmware"):
+        shutil.copytree(ROOT / part, src / part, ignore=skip)
+    marker = ROOT / "server" / "build" / "f1-untouched"   # a developer's build folder in the real checkout
+    made_build = not marker.parent.exists()
+    marker.parent.mkdir(exist_ok=True)
+    marker.write_text("x")
+    try:
+        dist = tmp_path / "dist"
+        env = {**os.environ, "FK_DIST": posix(dist), "FK_NO_APP": "1",
+               "FK_LIBRARY_SRC": posix(tmp_path / "no-library")}
+        r = subprocess.run([_git_bash(), str(src / "tools" / "make_release.sh")], cwd=src, env=env,
+                           stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=600)
+        assert r.returncode == 0, r.stdout[-2000:] + r.stderr[-2000:]
+        assert marker.is_file(), "make_release.sh changed the real checkout"
+    finally:
+        marker.unlink(missing_ok=True)
+        if made_build:
+            shutil.rmtree(marker.parent, ignore_errors=True)
     version = re.search(r'^__version__ = "(.*)"', (ROOT / "server/filament_kit/__init__.py").read_text(), re.M)[1]
     tarball = dist / release.tarball_name(version)
     hw = dist / "bambu_hardware.xml"
