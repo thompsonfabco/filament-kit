@@ -78,7 +78,7 @@ def test_unknown_model_is_generic(code):
     m = hardware.load().model(code)
     assert m.known is False
     assert (m.camera, m.chamber_max, m.nozzles, m.numbering, m.preset_name, m.presence, m.light_nodes) == \
-        (None, None, 1, ("legacy",), None, None, ())
+        (None, None, None, ("legacy",), None, None, ())   # nozzles None: not known (the Ruling BM guard applies)
     assert [(e.id, e.label) for e in m.externals] == [(254, "Ext")]
     assert "unknown" in m.name.lower()
 
