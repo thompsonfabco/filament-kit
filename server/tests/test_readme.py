@@ -40,7 +40,9 @@ OWNER_DATA = ("192.0.2.10", "192.0.2.11", "192.0.2.109", "192.0.2.179", "localdo
               "spoolman-vm", "mcp.example", "h2d_token", "sv08", "G:\\")
 
 
-@pytest.mark.parametrize("rel", ["README.md", "docs/user-guide.md", "docs/testing-e2e.md"])
+@pytest.mark.parametrize("rel", ["README.md", "docs/user-guide.md", "docs/testing-e2e.md", "docs/install-server.md",
+                                 "docs/install-android-app.md", "docs/install-iphone-web-app.md",
+                                 "docs/known-gaps.md"])
 def test_public_docs_have_no_owner_specific_data(rel):
     text = (ROOT / rel).read_text(encoding="utf-8")
     for bad in OWNER_DATA:
