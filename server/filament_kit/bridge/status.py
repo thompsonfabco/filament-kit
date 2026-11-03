@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Any
 
 from . import hardware, layout
+from .fields import _d, _int, _l, _s  # noqa: F401 - re-exported (status._int ...)
 
 STAGES = {0: 'Printing', 1: 'Auto bed leveling', 2: 'Heatbed preheating', 3: 'Vibration compensation',
           4: 'Changing filament', 5: 'M400 pause', 6: 'Paused: filament runout', 7: 'Heating hotend',
@@ -110,27 +111,6 @@ def location(printer_name: str, label: str) -> str:
     return f"{printer_name} {DASH} AMS {label}"
 
 
-def _int(v: Any, default: int | None = None) -> int | None:
-    try:
-        return int(v)
-    except (TypeError, ValueError, OverflowError):  # OverflowError: JSON Infinity
-        return default
-
-
-def _d(v: Any) -> dict:
-    """`v` if it is a dict, else {}: report fields are whatever the printer sent."""
-    return v if isinstance(v, dict) else {}
-
-
-def _l(v: Any) -> list:
-    """The dict items of `v` if it is a list, else []."""
-    return [x for x in v if isinstance(x, dict)] if isinstance(v, list) else []
-
-
-def _s(v: Any) -> str:
-    return v if isinstance(v, str) else ''
-
-
 def _temp(cur: Any, tgt: Any) -> dict:
     return {'current': cur, 'target': tgt}
 
@@ -173,7 +153,11 @@ def _ams(p: dict, spools: list[dict], printer_name: str, lay) -> list[dict]:
     for u in lay.units:
         slots = []
         for sl in u.slots:
-            spool = by_location.get(location(printer_name, sl.label)) if printer_name else None
+            spool = None
+            if printer_name:
+                spool = by_location.get(location(printer_name, sl.label))
+                if spool is None and sl.alias:      # an older label of this holder ("Ext" -> "Ext-L")
+                    spool = by_location.get(location(printer_name, sl.alias))
             t = sl.raw
             slots.append({'slot': sl.tray_id, 'label': sl.label, 'say': list(sl.say),
                           'type': _s(t.get('tray_type')), 'color_hex': _s(t.get('tray_color'))[:6],
@@ -183,6 +167,14 @@ def _ams(p: dict, spools: list[dict], printer_name: str, lay) -> list[dict]:
         units.append({'unit': u.ams_id, 'label': u.label, 'kind': u.kind, 'type_name': u.type_name,
                       'say': list(u.say), 'slots': slots})
     return units
+
+
+def brief(report: dict) -> dict:
+    """The few fields the printer list needs (`Manager.summary`), without building the AMS layout."""
+    p = _d(report)
+    job = _s(p.get('subtask_name'))
+    return {'gcode_state': _s(p.get('gcode_state')) or 'UNKNOWN', 'percent': _int(p.get('mc_percent'), 0) or 0,
+            'remaining_min': _int(p.get('mc_remaining_time'), 0) or 0, 'job': job or None}
 
 
 def summarize(report: dict, spools: list[dict], *, printer_name: str = '', updated: float | None = None,

@@ -567,6 +567,7 @@ def _merge_fp(old: list, new: list) -> list:
 @dataclass
 class _Seen:
     fp: list | None = None
+    labels: frozenset | None = None
     since: float = 0.0
     pending: bool = False          # the saved map is stale: an automatic re-map may be due
     last_try: float | None = None
@@ -600,44 +601,49 @@ class LayoutWatch:
     def __call__(self, serial: str, report: dict, first: bool) -> None:
         if not isinstance(status._d(status._d(report).get('ams')).get('ams'), list):
             return
-        fp = layout.build(report, self._model(serial)).fingerprint
+        lay = layout.build(report, self._model(serial))
+        fp = lay.fingerprint
+        labels = frozenset(s.label for u in lay.units for s in u.slots)
         now = self._clock()
         with self._lock:
             seen = self._seen.setdefault(serial, _Seen())
-            if seen.fp is not None and layout.same_layout(seen.fp, fp):
+            if seen.fp is not None and layout.same_layout(seen.fp, fp) and labels == seen.labels:
                 merged = _merge_fp(seen.fp, fp)
                 learned = merged != seen.fp            # a module code told a unit's type: remember it
                 seen.fp, changed = merged, False
             else:
-                seen.fp, changed, learned = fp, True, False
+                seen.fp, seen.labels, changed, learned = fp, labels, True, False
                 seen.since, seen.tries, seen.last_try = now, 0, None
             if changed or learned:
                 if self._mapper.in_progress(serial):
                     seen.fp = None             # look again once the job is over
                     return
-                seen.pending = self._check_map(serial, seen.fp)
+                seen.pending = self._check_map(serial, seen.fp, labels)
             if seen.pending and self._due(serial, seen, report, now):
                 seen.last_try, seen.tries = now, seen.tries + 1
                 self._start(serial)
 
-    def _check_map(self, serial: str, fp: list) -> bool:
-        """Compare with the saved map, marking it stale or not; True = stale."""
+    def _check_map(self, serial: str, fp: list, labels=None) -> bool:
+        """Compare with the saved map, marking it stale or not; True = stale. Stale: the map was made for other
+        hardware (fingerprint), or one of its labels is not a slot of the current layout (a renamed label; keys
+        under an older external label were already renamed by `ams.load_map`)."""
         m = ams.load_map(serial)
         if not m.slots:
             return False
+        same = m.fingerprint is None or layout.same_layout(m.fingerprint, fp)
+        missing = sorted(k for k in m.slots if labels is not None and k not in labels)
+        stale = not same or bool(missing)
         if m.fingerprint is None:
-            m.fingerprint = fp
+            new_fp = fp
             log.info("mapping %s: the slot map adopted the printer's current layout", serial)
-        elif layout.same_layout(m.fingerprint, fp):
-            merged = _merge_fp(m.fingerprint, fp)
-            if merged == m.fingerprint and not m.stale:
-                return False
-            m.fingerprint, m.stale = merged, False
         else:
-            if m.stale:
-                return True
-            m.stale = True
-            log.warning("mapping %s: the printer's AMS layout changed; the slot map is stale", serial)
+            new_fp = _merge_fp(m.fingerprint, fp) if same else m.fingerprint
+        if new_fp == m.fingerprint and stale == m.stale:
+            return stale
+        if stale and not m.stale:
+            log.warning("mapping %s: the slot map is stale (%s)", serial,
+                        "the printer's AMS layout changed" if not same else f"no slot {', '.join(missing)} now")
+        m.fingerprint, m.stale = new_fp, stale
         try:
             ams.save_map(serial, m)
         except OSError:

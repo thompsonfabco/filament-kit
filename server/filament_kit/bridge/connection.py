@@ -24,7 +24,7 @@ import time
 from dataclasses import replace
 from typing import Any, Callable
 
-from . import layout, registry, status, tlspin
+from . import hardware, layout, registry, status, tlspin
 from ..spoolman import SpoolmanError
 
 log = logging.getLogger(__name__)
@@ -35,6 +35,7 @@ KEEPALIVE = 10                  # seconds; a dead printer is noticed within ~10-
 BACKOFF = (2, 60)               # reconnect delay, doubling from 2 s up to 60 s
 COMMAND_TIMEOUT = 10.0          # seconds to wait for the printer's reply to a command
 PUSHALL_AFTER_COMMAND = 1.5     # seconds after a command, ask for a full report
+VERSION_GAP = 15.0              # seconds at least between two get_version asks (a later one is sent then)
 QUIET_PUSHALL = 90              # a connected printer silent this long gets a pushall
 SPOOL_TTL = 30                  # seconds the Spoolman spool list is cached
 AUTH_REFUSED = {4, 5, 134, 135}  # CONNACK bad user/password, not authorized (MQTT 3.1.1 and paho v5 codes)
@@ -144,6 +145,9 @@ class PrinterConnection:
         self._stopping = False
         self._fresh = False          # no report with `gcode_state` seen yet since the last connect
         self._unit_ids: set[int] | None = None   # AMS unit ids in the last report (a change asks get_version)
+        self._version_lock = threading.Lock()
+        self._version_at: float | None = None     # monotonic time of the last get_version ask
+        self._version_timer: threading.Timer | None = None
         self._listeners = listeners if listeners is not None else []
         self.client = None
 
@@ -172,6 +176,10 @@ class PrinterConnection:
 
     def stop(self) -> None:
         self._stopping = True
+        with self._version_lock:
+            if self._version_timer is not None:
+                self._version_timer.cancel()
+                self._version_timer = None
         c = self.client
         if c is None:
             return
@@ -319,13 +327,31 @@ class PrinterConnection:
                       json.dumps({"pushing": {"sequence_id": "0", "command": "pushall"}}), qos=1)
 
     def request_version(self) -> None:
-        """Ask once per connect for the module list (`get_version`: a read-only info request Bambu Studio sends
-        too); the reply's AMS module codes ("n3f/0" -> "N3F05") land in the report under `layout.MODULES`. A
-        printer that never answers keeps resolving its units by id range and tray count."""
+        """Ask for the module list (`get_version`: a read-only info request Bambu Studio sends too) at each
+        connect and when units are plugged in or out; the reply's AMS module codes ("n3f/0" -> "N3F05") land in
+        the report under `layout.MODULES`. At most one ask per VERSION_GAP s: an ask inside the gap is sent when
+        it ends (one trailing ask). A printer that never answers keeps resolving its units by id range and tray
+        count."""
+        with self._version_lock:
+            now = time.monotonic()
+            if self._version_at is not None and now - self._version_at < VERSION_GAP:
+                if self._version_timer is None and not self._stopping:
+                    t = threading.Timer(VERSION_GAP - (now - self._version_at), self._trailing_version)
+                    t.daemon = True
+                    self._version_timer = t
+                    t.start()
+                return
+            self._version_at = now
         c = self.client
         if c is not None and self._state == 'connected':
             c.publish(f"device/{self.serial}/request",
                       json.dumps({"info": {"sequence_id": str(next(self._seq)), "command": "get_version"}}), qos=1)
+
+    def _trailing_version(self) -> None:
+        with self._version_lock:
+            self._version_timer = None
+        if not self._stopping:
+            self.request_version()
 
     # ---------------------------------------------------------------- commands
     def _messages(self, action: str) -> list[tuple[str, dict]]:
@@ -427,12 +453,15 @@ class PrinterConnection:
         return {'ok': ok, 'reply': reply}
 
 
-def slot_setting(ams_id: int, tray_id: int, setting: dict, kind: str | None = None) -> dict:
+def slot_setting(ams_id: int, tray_id: int, setting: dict, kind: str | None = None,
+                 addressing: str = "legacy") -> dict:
     """The `ams_filament_setting` command exactly as the owner's orchestrator sends it (verified on the H2D);
     `publish` adds the `sequence_id`.
 
-    An external holder (unit kind "ext"; with no kind given, ids 254 / 255, which no AMS unit uses) is addressed
-    `tray_id = ams_id, slot_id = 0` (the scanner's rule, verified on the H2D); AMS slots keep `ams_id, tray_id`.
+    `kind` = the slot's unit kind (`layout`): for an external holder ("ext") the model's `external_addressing`
+    decides: "tray-is-ams" sends `tray_id = ams_id, slot_id = 0` (the scanner's rule, verified on the H2D),
+    "legacy" sends `ams_id` = the holder id, `tray_id` 0 and no slot_id (the kit's earlier command; every model
+    but the H2D until a capture says otherwise). AMS slots are always `ams_id, tray_id`.
 
     `setting`: `tray_info_idx`, `tray_color` (RRGGBBAA, sent upper-case), `tray_type`, `nozzle_temp_min`,
     `nozzle_temp_max` (ints; the report's strings are accepted, missing = 0), optional `tray_sub_brands`,
@@ -442,7 +471,6 @@ def slot_setting(ams_id: int, tray_id: int, setting: dict, kind: str | None = No
             return int(setting.get(k) or 0)
         except (TypeError, ValueError):
             return 0
-    external = kind == layout.EXT_KIND if kind is not None else int(ams_id) in layout.EXT_DEFAULT
     cmd = {"print": {
         "command": "ams_filament_setting",
         "ams_id": int(ams_id), "tray_id": int(tray_id),
@@ -453,7 +481,7 @@ def slot_setting(ams_id: int, tray_id: int, setting: dict, kind: str | None = No
         "nozzle_temp_min": temp('nozzle_temp_min'), "nozzle_temp_max": temp('nozzle_temp_max'),
         "setting_id": str(setting.get('setting_id') or ''),
     }}
-    if external:
+    if kind == layout.EXT_KIND and addressing == "tray-is-ams":
         cmd["print"].update(tray_id=int(ams_id), slot_id=0)
     return cmd
 
@@ -578,10 +606,7 @@ class Manager:
 
     def summary(self, serial: str) -> dict:
         conn = self._conn(serial)
-        r = conn.report() if conn is not None else {}
-        s = status.summarize(r, [])
-        return {'gcode_state': s['gcode_state'], 'percent': s['percent'], 'remaining_min': s['remaining_min'],
-                'job': s['job'] or None}
+        return status.brief(conn.report() if conn is not None else {})
 
     def model(self, serial: str) -> str | None:
         """The printer's model code or name from the registry (None when unknown)."""
@@ -612,9 +637,10 @@ class Manager:
     def set_slot(self, serial: str, ams_id: int, tray_id: int, setting: dict,
                  timeout: float | None = None, kind: str | None = None) -> dict | None:
         """Write one AMS slot's filament setting (`slot_setting`; `kind` = the unit's kind, "ext" for an external
-        holder); returns the reply as `publish` does. A reply with `result` "success" means accepted, not
-        applied: confirm it with `wait_report` (a later report shows it)."""
-        return self.publish(serial, slot_setting(ams_id, tray_id, setting, kind), timeout)
+        holder, addressed as the printer's model says); returns the reply as `publish` does. A reply with
+        `result` "success" means accepted, not applied: confirm it with `wait_report` (a later report shows it)."""
+        addressing = hardware.load().model(self.model(serial)).external_addressing
+        return self.publish(serial, slot_setting(ams_id, tray_id, setting, kind, addressing), timeout)
 
     def wait_report(self, serial: str, predicate: Callable[[dict], bool], timeout: float) -> dict | None:
         """Wait up to `timeout` s for the printer's merged report to satisfy `predicate` and return that report;

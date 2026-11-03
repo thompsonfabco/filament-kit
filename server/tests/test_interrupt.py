@@ -90,10 +90,10 @@ def test_snapshot_saved_before_the_first_write_and_deleted_after_restore(rig, mo
     seen = []
     real = m.set_slot
 
-    def spy(serial, ams_id, tray_id, setting, timeout=None):
+    def spy(serial, ams_id, tray_id, setting, timeout=None, kind=None):
         if not seen:
             seen.append(snapshot.load(SERIAL))
-        return real(serial, ams_id, tray_id, setting, timeout)
+        return real(serial, ams_id, tray_id, setting, timeout, kind=kind)
     monkeypatch.setattr(m, "set_slot", spy)
     res = slottest.run(m, SERIAL, lambda t: None)
     assert res.restored is True

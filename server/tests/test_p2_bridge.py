@@ -1,6 +1,7 @@
 """P2 through the connection: the slot command for externals, module codes from get_version, a 16-unit + HT +
 two-external printer through the slot test and a load, hardware errors in the printer status."""
 import copy
+import json
 import threading
 import time
 
@@ -34,18 +35,25 @@ def big_report():
 # ---------------------------------------------------------------- the command
 
 
-def test_external_slot_command_uses_tray_id_ams_id_and_slot_id_0():
+def test_external_slot_command_by_kind_and_model_addressing():
     for ext in (254, 255):
-        pr = slot_setting(ext, 0, SETTING)["print"]
+        pr = slot_setting(ext, 0, SETTING, kind="ext", addressing="tray-is-ams")["print"]
         assert (pr["ams_id"], pr["tray_id"], pr["slot_id"]) == (ext, ext, 0)
-    pr = slot_setting(254, 0, SETTING, kind="ext")["print"]
-    assert (pr["tray_id"], pr["slot_id"]) == (254, 0)
+        pr = slot_setting(ext, 0, SETTING, kind="ext", addressing="legacy")["print"]
+        assert (pr["ams_id"], pr["tray_id"]) == (ext, 0) and "slot_id" not in pr
+    pr = slot_setting(254, 0, SETTING)["print"]                     # no kind: never the external rule
+    assert (pr["ams_id"], pr["tray_id"]) == (254, 0) and "slot_id" not in pr
+    from filament_kit.bridge import hardware
+    hw = hardware.load()
+    assert hw.model("O1D").external_addressing == "tray-is-ams"
+    others = ("P1S", "X1C", "A1", "O1E", "O1C", "N6", "nope")
+    assert {hw.model(c).external_addressing for c in others} == {"legacy"}
 
 
 def test_ams_slot_command_unchanged():
-    pr = slot_setting(3, 2, SETTING)["print"]
+    pr = slot_setting(3, 2, SETTING, kind="ams", addressing="tray-is-ams")["print"]
     assert (pr["ams_id"], pr["tray_id"]) == (3, 2) and "slot_id" not in pr
-    pr = slot_setting(129, 0, SETTING, kind="ams_ht")["print"]
+    pr = slot_setting(129, 0, SETTING, kind="ams_ht", addressing="tray-is-ams")["print"]
     assert (pr["ams_id"], pr["tray_id"]) == (129, 0) and "slot_id" not in pr
 
 
@@ -59,9 +67,11 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(connection, "COMMAND_TIMEOUT", 1.0)
     monkeypatch.setattr(slottest, "CONFIRM_TIMEOUT", 2.0)
     monkeypatch.setattr(loading, "CONFIRM_TIMEOUT", 1.0)
+    monkeypatch.setattr(connection, "VERSION_GAP", 0.0)
 
 
 class VirPrinter(FakePrinter):
+    tray_is_ams = True             # the model's external addressing (O1D); False: legacy (tray_id 0, no slot_id)
     """FakePrinter plus `vir_slot[]` holders and a get_version answer (`modules`: list of (name, hw_ver))."""
 
     def __init__(self, client, report, modules=None):
@@ -84,7 +94,10 @@ class VirPrinter(FakePrinter):
         with self.lock:
             for t in self.report.get("vir_slot", []):
                 if str(t.get("id")) == str(ams_id):
-                    assert tray_id == ams_id and pr.get("slot_id") == 0, pr   # the H2D's external rule
+                    if self.tray_is_ams:
+                        assert tray_id == ams_id and pr.get("slot_id") == 0, pr   # the H2D's external rule
+                    else:
+                        assert tray_id == 0 and "slot_id" not in pr, pr          # legacy addressing
                     self._set(t, pr)
                     return {"vir_slot": copy.deepcopy(self.report["vir_slot"])}
         return super()._apply(key, pr)
@@ -101,6 +114,7 @@ def make_rig(report, model="O1D", modules=None):
     registry.upsert(Printer(SERIAL, "Lab", model, "10.0.0.5", "13572468", True))
     m.sync()
     printer = VirPrinter(clients[0], report, modules)
+    printer.tray_is_ams = model == "O1D"
     clients[0].connected(0)
     assert m.wait_report(SERIAL, lambda r: "gcode_state" in r, 2) is not None
     return m, printer, clients[0]
@@ -152,7 +166,8 @@ def test_slot_test_confirms_every_slot_of_16_units_ht_and_two_externals():
         ext_writes = [w for w in printer.writes if w["ams_id"] in (254, 255)]
         assert ext_writes and all(w["tray_id"] == w["ams_id"] and w["slot_id"] == 0 for w in ext_writes)
         keep = ("tray_type", "tray_color", "tray_info_idx")
-        assert [{k: t[k] for k in keep} for t in printer.report["vir_slot"]] ==             [{k: t[k] for k in keep} for t in big_report()["vir_slot"]]                  # put back
+        put_back = [{k: t[k] for k in keep} for t in printer.report["vir_slot"]]
+        assert put_back == [{k: t[k] for k in keep} for t in big_report()["vir_slot"]]
     finally:
         m.stop()
 
@@ -194,3 +209,81 @@ def test_unit_set_change_asks_get_version_again_and_drops_codes_of_gone_units():
         assert asks() == 2
     finally:
         m.stop()
+
+
+
+def test_single_holder_printer_sends_legacy_external_command():
+    rep = {"gcode_state": "IDLE", "ams": {"ams": [{"id": "0", "tray": [tray(i, 0) for i in range(4)]}]},
+           "vt_tray": dict(tray(0, 254), id="254")}
+    m, printer, c = make_rig(rep, model="P1S")
+    try:
+        res = slottest.run(m, SERIAL, lambda s: None)
+        assert res.restored and "Ext" in res.confirmed, res.problems
+        ext = [w for w in printer.writes if w["ams_id"] == 254]
+        assert ext and all(w["tray_id"] == 0 and "slot_id" not in w for w in ext)
+    finally:
+        m.stop()
+
+
+def test_get_version_rate_limited_with_a_trailing_ask(monkeypatch):
+    monkeypatch.setattr(connection, "VERSION_GAP", 0.6)
+    m, printer, c = make_rig(big_report(), modules=[("n3f/0", "N3F05")])
+    try:
+        def asks():
+            return len([b for t, b in c.published if b.get("info", {}).get("command") == "get_version"])
+        rep = big_report()
+        for n in range(3):                              # three unit changes inside the gap
+            r = copy.deepcopy(rep)
+            del r["ams"]["ams"][n]
+            c.deliver({"print": {"ams": r["ams"]}})
+        assert asks() == 1                              # the connect ask; the rest waits for the gap
+        deadline = time.monotonic() + 3
+        while asks() < 2 and time.monotonic() < deadline:
+            time.sleep(0.05)
+        time.sleep(0.8)
+        assert asks() == 2                              # one trailing ask for all of them
+    finally:
+        m.stop()
+
+
+# ---------------------------------------------------------------- the old "Ext" label of the H2D's holder 254
+
+
+def test_old_ext_location_shows_on_ext_l_and_is_moved_back(spoolman_url):
+    from filament_kit.spoolman import Spoolman
+    sm = Spoolman(spoolman_url)
+    sm.ensure_fields()
+    v = sm.post("vendor", {"name": "Acme"})
+    f = sm.post("filament", {"name": "TPU", "material": "TPU", "vendor_id": v["id"], "color_hex": "00ff00",
+                             "density": 1.2, "diameter": 1.75})
+    old = sm.post("spool", {"filament_id": f["id"], "location": "Lab – AMS Ext",
+                            "extra": {"prev_location": json.dumps("Rack 1")}})
+    new = sm.post("spool", {"filament_id": f["id"], "location": "Rack 2"})
+    rep = {"gcode_state": "IDLE", "ams": {"ams": []}, "vt_tray": dict(tray(0, 254), id="254")}
+    m, printer, c = make_rig(rep)
+    m._spoolman = sm
+    try:
+        st = m.status(SERIAL)
+        (u,) = st["ams"]
+        assert u["label"] == "Ext-L" and u["slots"][0]["spool"]["id"] == old["id"]
+        out = loading.load(m, sm, SERIAL, "Ext-L", new["id"], False, preset_for=FakePresets())
+        assert [s["id"] for s in out["moved_back"]] == [old["id"]]
+        assert sm.get(f"spool/{old['id']}")["location"] == "Rack 1"
+        assert sm.get(f"spool/{new['id']}")["location"] == "Lab – AMS Ext-L"
+        out = loading.unload(m, sm, SERIAL, "Ext", False)          # the old label still names the slot
+        assert out["slot"]["label"] == "Ext-L" and out["spool"]["id"] == new["id"]
+    finally:
+        m.stop()
+
+
+def test_saved_map_key_ext_is_read_as_ext_l():
+    registry.upsert(Printer(SERIAL, "Lab", "O1D", "10.0.0.5", "13572468", True))
+    ams.save_map(SERIAL, ams.SlotMap(slots={"A1": {"ams_id": 0, "tray_id": 0, "global_id": 0},
+                                            "Ext": {"ams_id": 254, "tray_id": 0, "global_id": 254}},
+                                     calibrated=True, observe=False))
+    m = ams.load_map(SERIAL)
+    assert set(m.slots) == {"A1", "Ext-L"}
+    from filament_kit.bridge import usage
+    assert usage._labels(m)[254] == "Ext-L"                       # usage decodes 254 to Ext-L
+    registry.upsert(Printer(SERIAL, "Lab", "P1S", "10.0.0.5", "13572468", True))
+    assert set(ams.load_map(SERIAL).slots) == {"A1", "Ext"}       # a single-holder printer keeps "Ext"
