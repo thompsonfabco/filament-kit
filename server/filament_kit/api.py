@@ -99,6 +99,8 @@ def _bridge_error(e: Exception) -> JSONResponse | None:
         return _err(409, "printer_offline", str(e))
     if isinstance(e, PrinterOffline):
         return _err(409, "printer_offline", OFFLINE)
+    if isinstance(e, loading.SlotInUse):
+        return _err(409, "slot_in_use", str(e))
     if isinstance(e, loading.NoPreset):
         return _err(409, "no_preset", str(e))
     if isinstance(e, UnknownPrinter):

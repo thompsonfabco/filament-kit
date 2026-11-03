@@ -1,32 +1,42 @@
 """The bench NFC reader's API (firmware: reader/README.md, whose contract this file follows exactly).
 
 Routes of the web process, under `<public path>/reader` (nginx strips the public path), LAN only (`auth.lan_only`
-and a check here) and, but for healthz, the reader token in `X-Auth-Token`:
+and a check here), every one with the reader token in `X-Auth-Token`:
 
-    GET  /reader/healthz                  200 "ok" (the reader keeps a fresh firmware update only if this answers)
+    GET  /reader/healthz                  200 "ok" (the reader keeps a fresh firmware update only if this answers,
+                                          so an image built with a revoked token rolls itself back)
     GET  /reader/fw/manifest.json         the OTA files tools/ota_publish.py copies into FK_STATE/reader-fw
     GET  /reader/fw/firmware.bin          (/var/lib/filament-kit/reader-fw), as the old nginx /h2d/fw/ served them
     GET  /reader/printers                 [{id, name, say}]: the kit's configured printers, ids as strings
     GET  /reader/printers/{id}/slots      [{label, say, kind, present, type, spool}] in knob order (kind "ext" of
-                                          the kit is "external" here)
+                                          the kit is "external" here); at most MAX_SLOTS and MAX_SLOTS_JSON bytes,
+                                          cut at the end with a {"note"} entry (no label: the firmware skips it)
     POST /reader/scan {uid, printer, slot, dry_run}
                                           {status, message, filament}; status one of set | queued | unknown_tag |
                                           unknown_spool | archived_spool | no_preset | offline | error (the
                                           scanner's /set-slot statuses; set and queued always with 200)
 
 A scan loads the tag's spool into the slot through the kit server's own load route (KitApi, as the MCP printer
-tools do): the user's exact preset or `no_preset`, never Generic (bridge/loading.py). The reply comes within
-SCAN_WAIT seconds even when the printer's confirmation takes longer (the firmware waits 6 s): the load goes on in
-the background and the reply says "sent". Queue-on-empty (ported from the scanner): a slot the printer reports
+tools do): the user's exact preset or `no_preset`, never Generic (bridge/loading.py); mid-print only the slot that
+feeds the job is refused (Ruling BK: `slot_in_use`). The reply comes within SCAN_WAIT seconds of the request
+(a deadline from the start of the scan) even when the printer's confirmation takes longer (the firmware waits
+6 s): the load goes on in the background and the reply says "sent". Queue-on-empty (ported from the scanner): a slot the printer reports
 empty (`present` false) or still reading its tag is not set at once (the AMS resets a slot when filament goes in);
 the preset is checked with a dry run, then the tap waits in LoadQueue (memory only, QUEUE_TTL 900 s) until the slot
 is present and read, SETTLE 3 s more, is sent, and VERIFY_AFTER 4 s later must show the preset (`preset_id`, type),
 else it is sent again, MAX_TRIES 3 in all. A direct set of a slot replaces its queued tap. An unknown presence
-(`present` null) is sent directly, as the scanner did when its state was unknown.
+(`present` null) is sent directly, as the scanner did when its state was unknown. A refusal that will not change
+by waiting (write_refused, needs_developer_mode, no_preset, not_found) drops the job; a passing one (printer_busy,
+already_running, slot_in_use, unreachable, ...) keeps it waiting, logged only when the reason changes.
+
+Deviation from the scanner (1): the scanner wrote Spoolman only once the setting was verified; here each queued
+send is a kit load, which updates Spoolman when the printer takes the write. If all MAX_TRIES fail to stick,
+Spoolman already shows the spool in that slot (logged); a later tap or load corrects it.
 
 Reader tokens: `filament-kit reader token [--name X]` (root) prints a new one once, for the reader's secrets.h;
-only its sha256 is kept, in FK_STATE/web/reader_tokens (XML, 0600, the service user's), `reader tokens` lists them
-and `reader revoke <id|name>` removes one. A token file that does not validate accepts no token (and is never
+only its sha256 is kept, in FK_STATE/web/reader_tokens (XML, 0600, the service user's; the root's `next-id` keeps
+ids monotonic, so a revoked id is never reused), `reader tokens` lists them and `reader revoke <id|name>` removes
+one. A token file that does not validate accepts no token (and is never
 overwritten by the CLI), so a damaged file fails closed.
 """
 from __future__ import annotations
@@ -61,10 +71,15 @@ from .errors import Problem
 
 log = logging.getLogger(__name__)
 
-SCAN_WAIT = 4.0              # seconds a scan waits for the load before it answers "sent" (firmware timeout: 6 s)
+SCAN_WAIT = 4.0              # seconds from the start of a scan to its reply at the latest (firmware timeout: 6 s)
+MIN_WAIT = 0.5               # the load gets at least this long, even when the lookups used up SCAN_WAIT
 QUEUE_TTL = 900              # seconds a tap on an empty slot waits for the filament
 SETTLE, VERIFY_AFTER, MAX_TRIES = 3, 4, 3
 POLL = 2.0                   # seconds between queue checks
+# kit refusals that waiting does not change: the queued tap is dropped (others keep it waiting)
+FINAL_REFUSALS = ("no_preset", "not_found", "write_refused", "needs_developer_mode", "unpaired")
+MAX_SLOTS = 128              # the firmware keeps at most 128 slots ...
+MAX_SLOTS_JSON = 16 * 1024   # ... and holds the whole reply in its small RAM: keep the JSON under 16 KB
 FW_FILES = {"manifest.json": "application/json", "firmware.bin": "application/octet-stream"}
 OFFLINE_STATES = {"offline", "not_configured", "wrong_code", "cert_changed", "connecting"}
 STATUSES = ("set", "queued", "unknown_tag", "unknown_spool", "archived_spool", "no_preset", "offline", "error")
@@ -101,8 +116,9 @@ def _clean_name(name) -> str:
     return n or "reader"
 
 
-def parse_tokens(data: bytes, where: str = "reader_tokens") -> list[dict]:
-    """The tokens of a reader_tokens file ([{id, name, sha256, created}]); TokenFileError lists every problem."""
+def parse_tokens(data: bytes, where: str = "reader_tokens") -> tuple[list[dict], int]:
+    """(tokens [{id, name, sha256, created}], the next id number) of a reader_tokens file; TokenFileError lists
+    every problem."""
     errors: list[str] = []
     try:
         root = DET.fromstring(data, forbid_dtd=True, forbid_entities=True, forbid_external=True)
@@ -111,6 +127,10 @@ def parse_tokens(data: bytes, where: str = "reader_tokens") -> list[dict]:
     if root.tag != "reader-tokens":
         raise TokenFileError([f"{where}: the root element must be <reader-tokens>, not <{root.tag}>"])
     out, seen = [], set()
+    nxt = root.get("next-id", "1")
+    if not re.fullmatch(r"[1-9][0-9]{0,6}", nxt):
+        errors.append(f"{where}: next-id must be a whole number from 1")
+        nxt = "1"
     for i, el in enumerate(root):
         at = f"{where}: token {i + 1}"
         if el.tag != "token":
@@ -130,14 +150,14 @@ def parse_tokens(data: bytes, where: str = "reader_tokens") -> list[dict]:
         errors.append(f"{where}: more than {MAX_TOKENS} tokens")
     if errors:
         raise TokenFileError(errors)
-    return out
+    return out, max([int(nxt)] + [int(t["id"][1:]) + 1 for t in out])
 
 
-def render_tokens(tokens: list[dict]) -> bytes:
+def render_tokens(tokens: list[dict], next_id: int = 1) -> bytes:
     lines = ['<?xml version="1.0" encoding="utf-8"?>',
              "<!-- filament-kit reader tokens: sha256 of each token (the tokens themselves are not kept). "
              "Change with: filament-kit reader token | tokens | revoke -->",
-             '<reader-tokens version="1">']
+             f'<reader-tokens version="1" next-id="{int(next_id)}">']
     for t in tokens:
         lines.append(f"  <token id={quoteattr(t['id'])} name={quoteattr(t['name'])} sha256={quoteattr(t['sha256'])}"
                      f" created={quoteattr(t['created'])}/>")
@@ -155,13 +175,13 @@ class TokenStore:
         self._tokens: list[dict] = []
         self.errors: list[str] = []
 
-    def _read(self) -> list[dict]:
-        """Strict read for a change: [] when there is no file, TokenFileError when it does not validate."""
+    def _read(self) -> tuple[list[dict], int]:
+        """Strict read for a change: ([], 1) when there is no file, TokenFileError when it does not validate."""
         try:
             with open(self.path, "rb") as f:
                 data = f.read(MAX_FILE + 1)
         except FileNotFoundError:
-            return []
+            return [], 1
         except OSError as e:
             raise TokenFileError([f"{self.path}: cannot read: {e.strerror or e}"]) from None
         if len(data) > MAX_FILE:
@@ -180,7 +200,7 @@ class TokenStore:
             return
         self._stamp = stamp
         try:
-            self._tokens, self.errors = self._read(), []
+            self._tokens, self.errors = self._read()[0], []
         except TokenFileError as e:
             self._tokens, self.errors = [], e.errors        # fail closed
             log.error("reader tokens refused (no reader is accepted until fixed): %s", e)
@@ -199,34 +219,33 @@ class TokenStore:
 
     def list(self) -> list[dict]:
         with self._lock:
-            return [{k: t[k] for k in ("id", "name", "created")} for t in self._read()]
+            return [{k: t[k] for k in ("id", "name", "created")} for t in self._read()[0]]
 
-    def _write(self, tokens: list[dict]) -> None:
+    def _write(self, tokens: list[dict], next_id: int) -> None:
         pairing.make_state_dir(self.path.parent)
-        pairing._write_atomic(self.path, render_tokens(tokens), 0o600, state_owned=True)
+        pairing._write_atomic(self.path, render_tokens(tokens, next_id), 0o600, state_owned=True)
 
     def issue(self, name: str | None = None) -> tuple[str, str]:
         """A new token: (id, token). The token is returned once and only its sha256 is written."""
         with self._lock:
-            tokens = self._read()
+            tokens, n = self._read()
             if len(tokens) >= MAX_TOKENS:
                 raise TokenFileError([f"already {MAX_TOKENS} reader tokens: revoke one first"])
-            n = max((int(t["id"][1:]) for t in tokens), default=0) + 1
             tok = secrets.token_urlsafe(32)
             tid = f"r{n}"
             now = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
             tokens.append({"id": tid, "name": _clean_name(name), "sha256": _hash(tok), "created": now})
-            self._write(tokens)
+            self._write(tokens, n + 1)
             return tid, tok
 
     def revoke(self, ref: str) -> bool:
         """Remove the token with that id (or the only one with that name)."""
         with self._lock:
-            tokens = self._read()
+            tokens, n = self._read()
             hit = [t for t in tokens if t["id"] == ref] or [t for t in tokens if t["name"] == ref]
             if len(hit) != 1:
                 return False
-            self._write([t for t in tokens if t is not hit[0]])
+            self._write([t for t in tokens if t is not hit[0]], n)
             return True
 
 
@@ -240,6 +259,7 @@ class Job:
     sent: float = 0.0
     tries: int = 0
     preset: dict | None = None
+    waiting: str | None = None        # why the last send was refused (logged when it changes)
 
 
 class LoadQueue:
@@ -288,7 +308,14 @@ class LoadQueue:
             try:
                 self._process(key, job)
             except Exception as e:  # noqa: BLE001 - one bad job must not stop the others; it expires
-                log.warning("queued %s %s: %s: %s", key[0], key[1], type(e).__name__, e)
+                self._wait(key, job, type(e).__name__, f"{type(e).__name__}: {e}")
+
+    @staticmethod
+    def _wait(key, job: Job, reason: str, text: str) -> None:
+        """Keep the job; log only when the reason it waits for changes (no line every POLL seconds)."""
+        if job.waiting != reason:
+            job.waiting = reason
+            log.warning("queued %s %s spool %s waits: %s", key[0], key[1], job.spool_id, text)
 
     def _done(self, key, job: Job, why: str) -> None:
         with self._lock:
@@ -334,14 +361,12 @@ class LoadQueue:
             r = kit.post(f"{slots.printer_path(printer)}/slots/{label}/load",
                          {"spool_id": job.spool_id, "dry_run": False})
         except slots.SlotError as e:
-            if e.code in ("no_preset", "not_found"):
-                return self._done(key, job, f"refused: {e}")
-            raise
+            if e.code in FINAL_REFUSALS:
+                return self._done(key, job, f"refused ({e.code}): {e}")
+            return self._wait(key, job, e.code or "error", f"{e.code or 'error'}: {e}")   # not a try
+        job.waiting = None
         job.preset = (r or {}).get("preset") or job.preset
         job.sent, job.tries = self.clock(), job.tries + 1
-
-
-QUEUE = LoadQueue()          # one web process, one queue
 
 
 # ---------- routes ----------
@@ -381,7 +406,8 @@ def _kit_error(e: slots.SlotError) -> JSONResponse:
         return reply(200, "offline", msg)
     if e.code == "not_found":
         return reply(404, "error", msg)
-    if e.code in ("printer_busy", "already_running", "needs_developer_mode", "write_refused", "module_off"):
+    if e.code in ("printer_busy", "already_running", "needs_developer_mode", "write_refused", "module_off",
+                  "slot_in_use"):
         return reply(409, "error", msg)
     return reply(502, "error", msg)
 
@@ -397,13 +423,29 @@ def _short_spool(v) -> dict | None:
     return {"id": v["id"], "name": clip(v.get("name") or f"spool {v['id']}")}
 
 
+def cap_slots(rows: list[dict], printer: str = "") -> list[dict]:
+    """At most MAX_SLOTS rows and MAX_SLOTS_JSON bytes of JSON: rows are cut at the end, and a last entry without a
+    label (the firmware skips it) says how many are left out."""
+    def body(part: list[dict]) -> list[dict]:
+        left = len(rows) - len(part)
+        return part + [{"note": f"{left} more slots not listed"}] if left else part
+
+    out = rows[:MAX_SLOTS]
+    while out and len(json.dumps(body(out), ensure_ascii=False).encode("utf-8")) > MAX_SLOTS_JSON:
+        out = out[:-1]
+    if len(out) < len(rows):
+        log.warning("reader: printer %s has %d slots; the list is cut to %d", _safe(printer), len(rows), len(out))
+    return body(out)
+
+
 class Reader:
     def __init__(self, tools, sm, *, lan_cidrs=(), tokens: TokenStore | None = None, queue: LoadQueue | None = None):
         self.tools, self.sm = tools, sm
         self.nets = auth.parse_lan(lan_cidrs)
         self.tokens = tokens if tokens is not None else TokenStore()
-        self.queue = queue if queue is not None else QUEUE
-        self.queue.kit_fn = tools.kit_bridge
+        self.queue = queue if queue is not None else LoadQueue(tools.kit_bridge)
+        if self.queue.kit_fn is None:
+            self.queue.kit_fn = tools.kit_bridge
         self._pool = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="reader-load")
 
     # --- plumbing ---
@@ -411,12 +453,12 @@ class Reader:
     def _lan(self, request: Request) -> bool:
         return auth.is_lan(request.client.host if request.client else "", self.nets)
 
-    def _gated(self, fn, token: bool = True):
+    def _gated(self, fn):
         @functools.wraps(fn)
         async def wrapper(request: Request):
             if not self._lan(request):
                 return reply(403, "error", "home network only")
-            if token and not await run_in_threadpool(self.tokens.check, request.headers.get("x-auth-token")):
+            if not await run_in_threadpool(self.tokens.check, request.headers.get("x-auth-token")):
                 return reply(401, "error", "unauthorized: run filament-kit reader token")
             try:
                 return await fn(request)
@@ -429,7 +471,7 @@ class Reader:
         return wrapper
 
     def routes(self) -> list[Route]:
-        return [Route("/reader/healthz", self._gated(self.healthz, token=False), methods=["GET"]),
+        return [Route("/reader/healthz", self._gated(self.healthz), methods=["GET"]),
                 Route("/reader/fw/{name}", self._gated(self.fw), methods=["GET"]),
                 Route("/reader/printers", self._gated(self.printers), methods=["GET"]),
                 Route("/reader/printers/{id}/slots", self._gated(self.slot_list), methods=["GET"]),
@@ -472,11 +514,11 @@ class Reader:
         def build() -> list[dict]:
             view = self.tools.kit_bridge().get(slots.printer_path(pid))
             # a label is sent back as is, so one over 40 bytes is left out rather than cut (kit labels are short)
-            return [{"label": s["label"], "say": say_tokens(s.get("say")),
+            return cap_slots([{"label": s["label"], "say": say_tokens(s.get("say")),
                      "kind": clip("external" if s.get("kind") == "ext" else s.get("kind") or ""),
                      "present": s.get("present") if isinstance(s.get("present"), bool) else None,
                      "type": clip(s.get("type") or ""), "spool": _short_spool(s.get("spool"))}
-                    for s in slots.status_slots(view.get("status") or {}) if fits(s["label"], MAX_TEXT)]
+                    for s in slots.status_slots(view.get("status") or {}) if fits(s["label"], MAX_TEXT)], pid)
         return JSONResponse(await run_in_threadpool(build))
 
     async def scan(self, request: Request):
@@ -503,6 +545,7 @@ class Reader:
         return res
 
     def _scan(self, uid: str, printer: str, slot: str, dry: bool) -> JSONResponse:
+        deadline = time.monotonic() + SCAN_WAIT
         sp = inventory.by_tag(self.sm, uid)
         if sp is None:
             return reply(200, "unknown_tag", f"Tag {uid} is not linked to a spool")
@@ -544,14 +587,14 @@ class Reader:
         self.queue.drop(printer, label)                   # a direct set replaces an older queued tap
         fut = self._pool.submit(kit.post, path, {**load, "dry_run": False})
         try:
-            r = fut.result(timeout=SCAN_WAIT)
+            r = fut.result(timeout=max(MIN_WAIT, deadline - time.monotonic()))
         except concurrent.futures.TimeoutError:
             fut.add_done_callback(functools.partial(_late, printer, label))
             return reply(200, "set", f"{label}: sent", filament=name, slot=label)
         preset = (r or {}).get("preset") or {}
         msg = f"{label}: {preset.get('name') or 'set'}"
         if r and r.get("confirmed") is False:
-            msg += " (not confirmed)"
+            msg = "(not confirmed) " + msg          # first: the 40-byte cut must keep it
         return reply(200, "set", msg, filament=name, preset=preset.get("name"), slot=label)
 
 
@@ -569,4 +612,4 @@ def _safe(v) -> str:
     return s if re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", s) else "<invalid>"
 
 
-__all__ = ["LoadQueue", "QUEUE", "Reader", "TokenFileError", "TokenStore", "parse_tokens", "render_tokens"]
+__all__ = ["LoadQueue", "Reader", "cap_slots", "TokenFileError", "TokenStore", "parse_tokens", "render_tokens"]
