@@ -3,9 +3,9 @@
 The filament-kit app is how you add spools, look them up, load them into printer slots and see your printers
 from an Android phone. It talks only to your own filament-kit server at home.
 
-> **Before the first release.** The app is not in the Google Play Store or F-Droid. It comes as a file,
-> `filament-kit.apk`, on the project's GitHub Releases page. No release has been published yet, so there is
-> no signed APK to download today. See [Known gaps](known-gaps.md).
+> **Beta.** The app is not in the Google Play Store or F-Droid. It comes as a file, `filament-kit.apk`, on the
+> project's GitHub Releases page. While the repository is private, the Releases page only opens for a GitHub
+> account that can see it. See [Known gaps](known-gaps.md).
 
 ## What you need
 
@@ -89,8 +89,8 @@ filament-kit install apps: allow it, go back and tap **Tap to install** again.
 
 - **"App not installed"**: the phone has an older copy signed by someone else, for example a test build. Uninstall
   the old app first (your spools are on the server, not the phone), then install again.
-- **The download from your server fails**: the server's file is only there when it was installed from a release.
-  Use the GitHub download instead.
+- **The download from your server fails** ("no app package is installed on this server"): the server's copy
+  is only there when it was installed from a release. Use the GitHub download instead.
 - **No servers found, or "Connecting..." never finishes**:
   - Check that the phone is on the home Wi-Fi, not mobile data or a guest network.
   - On Android 17 or newer, check that **local network access** is allowed (app settings → permissions).
