@@ -190,10 +190,12 @@ def test_uninstall_removes_the_kits_remote_files():
 
 def test_install_server_flag_and_usage():
     text = _read("install/install.sh")
-    assert "[--mode server|station|all-in-one] [--server NAME-OR-IP]" in text
+    assert "[--mode server|station|all-in-one | --modules a,b,c] [--server NAME-OR-IP]" in text
     assert "--server) [ $# -ge 2 ] || usage; SERVER_ADDR=" in text
     assert "--server=*) SERVER_ADDR=" in text
     assert "run again with --server <name-or-IP>" in text
+    assert "--modules) [ $# -ge 2 ] || usage; CUSTOM=" in text
+    assert "modules menu --raw" in text and "close_selection" in text
 
 
 def _bash():
@@ -276,3 +278,8 @@ def test_install_apt_waits_for_the_dpkg_lock():
     calls = [ln for ln in _read("install/install.sh").splitlines()
              if ln.strip().startswith("apt-get")]
     assert calls and all("DPkg::Lock::Timeout=" in ln for ln in calls)
+
+
+def test_install_save_custom_adds_what_modules_need(tmp_path):
+    cfg = _run_save(tmp_path, "custom", ",spoolman,printers")
+    assert cfg["modules"]["server"] and cfg["modules"]["printers"]

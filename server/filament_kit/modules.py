@@ -26,10 +26,14 @@ class Module:
     depends: tuple[str, ...]
     apt: tuple[str, ...]
     apt_lean: tuple[str, ...] = ()  # installed with --no-install-recommends (apply's apt_lean action)
+    needs_text: str = ""            # extra "needs:" shown in the checklist that is not another module
+    optional_ai: bool = False       # marked OPTIONAL AI in the checklist
 
 
-def _m(name, title, description, units=(), depends=(), apt=(), apt_lean=()) -> Module:
-    return Module(name, title, description, tuple(units), tuple(depends), tuple(apt), tuple(apt_lean))
+def _m(name, title, description, units=(), depends=(), apt=(), apt_lean=(),
+       needs_text="", optional_ai=False) -> Module:
+    return Module(name, title, description, tuple(units), tuple(depends), tuple(apt), tuple(apt_lean),
+                  needs_text, optional_ai)
 
 
 MODULES: dict[str, Module] = {m.name: m for m in (
@@ -37,9 +41,10 @@ MODULES: dict[str, Module] = {m.name: m for m in (
        units=("spoolman.service",), apt=("unzip",)),
     # Spoolman need is checked by validate(): local module or a remote spoolman_url.
     _m("server", "Server", "App server: pairing, inventory, API, avahi announcement",
-       units=("filament-kit.service",), apt=("avahi-daemon", "qrencode")),
+       units=("filament-kit.service",), apt=("avahi-daemon", "qrencode"),
+       needs_text="Spoolman (this machine or a remote one)"),
     _m("ai_intake", "AI intake", "Claude label reading and the API key",
-       depends=("server",)),
+       depends=("server",), needs_text="an Anthropic API key", optional_ai=True),
     _m("printers", "Printers", "Bambu bridge: discovery, usage, slot mapping, camera",
        depends=("server",), apt=("ffmpeg",)),
     _m("presets", "Presets", "Bambu Studio preset builds and PC sync",
@@ -186,3 +191,126 @@ def validate(cfg: dict) -> None:
             raise ModuleError(
                 "station without the server module needs the server's address in station.allow; "
                 "fix: pass --server <name-or-IP> (modules set station --server X)")
+
+
+# ---------- the checklist menu (spec R section 2.3) ----------
+
+def needs_of(name: str) -> list[str]:
+    """What `name` needs, for display: its module dependencies, then its free-text needs."""
+    m = MODULES[name]
+    out = list(m.depends)
+    if m.needs_text:
+        out.append(m.needs_text)
+    return out
+
+
+def needs_closure(names, on=frozenset()) -> list[str]:
+    """Modules (registry order) that must also be on for `names`, not counting those already in `on`/`names`."""
+    chosen = set(names)
+    want = set(chosen)
+    todo = list(chosen)
+    while todo:
+        for d in MODULES[todo.pop()].depends:
+            if d not in want:
+                want.add(d)
+                todo.append(d)
+    return [n for n in MODULES if n in want and n not in on and n not in chosen]
+
+
+def dependents_closure(name: str, on) -> list[str]:
+    """Enabled modules (registry order) that need `name`, directly or through another module."""
+    gone = {name}
+    changed = True
+    while changed:
+        changed = False
+        for n, m in MODULES.items():
+            if n in on and n not in gone and gone & set(m.depends):
+                gone.add(n)
+                changed = True
+    return [n for n in MODULES if n in gone and n != name]
+
+
+def toggle(on, name: str) -> tuple[frozenset[str], list[str]]:
+    """Flip `name`. On: its needs go on too; off: whatever needs it goes off. Returns (new set, messages)."""
+    if name not in MODULES:
+        raise ModuleError(f"unknown module {name!r}")
+    on = frozenset(on)
+    if name in on:
+        gone = dependents_closure(name, on)
+        notes = [f"Turned off {name}; that also turns off: {', '.join(gone)}."] if gone else []
+        return on - set(gone) - {name}, notes
+    extra = needs_closure([name], on)
+    notes = []
+    if extra:
+        notes = [f"Turned on {name}; it needs {', '.join(extra)}, now on too."]
+    return on | {name} | set(extra), notes
+
+
+def preset(on, mode: str) -> tuple[frozenset[str], list[str]]:
+    """The module set of install mode `mode`, keeping opt-ins already on (as set_mode does)."""
+    notes: list[str] = []
+    cfg = set_mode({"modules": {n: True for n in on}}, mode, say=notes.append)
+    return enabled(cfg), notes
+
+
+def menu_lines(cfg: dict, on=None) -> list[str]:
+    """The checklist, one line per module in registry order. `on` overrides the set read from cfg."""
+    on = enabled(cfg) if on is None else frozenset(on)
+    width = max(len(n) for n in MODULES)
+    dw = max(len(m.description) for m in MODULES.values())
+    lines = []
+    for i, (n, m) in enumerate(MODULES.items(), 1):
+        line = f" [{'x' if n in on else ' '}] {i:>2} {n:<{width}}  {m.description:<{dw}}"
+        needs = needs_of(n)
+        if needs:
+            line += "  needs: " + ", ".join(needs)
+        if m.optional_ai:
+            line += "   OPTIONAL AI"
+        lines.append(line.rstrip())
+    return lines
+
+
+PRESET_KEYS = {"a": "all-in-one", "s": "server", "t": "station"}
+MENU_HELP = ("Type a number to switch a module on or off (several: 2 5 7). "
+             "a = all-in-one, s = server, t = station preset. Enter applies; q cancels.")
+
+
+def run_checklist(on, ask: Callable[[str], str | None], say: Callable[[str], None] = print) -> frozenset[str] | None:
+    """Interactive checklist. `ask(prompt)` returns a line (None = EOF = cancel). Returns the chosen set, or
+    None when cancelled."""
+    on = frozenset(on)
+    names = list(MODULES)
+    say(MENU_HELP)
+    while True:
+        for line in menu_lines({}, on):
+            say(line)
+        raw = ask("> ")
+        if raw is None or raw.strip().lower() in ("q", "quit", "0"):
+            return None
+        raw = raw.strip().lower()
+        if not raw:
+            return on
+        for tok in raw.replace(",", " ").split():
+            if tok in PRESET_KEYS:
+                on, notes = preset(on, PRESET_KEYS[tok])
+                say(f"Preset {PRESET_KEYS[tok]}.")
+            elif tok.isdigit() and 1 <= int(tok) <= len(names):
+                on, notes = toggle(on, names[int(tok) - 1])
+            elif tok in MODULES:
+                on, notes = toggle(on, tok)
+            else:
+                say(f"Unknown choice {tok!r}.")
+                continue
+            for note in notes:
+                say(note)
+
+
+def close_selection(names) -> tuple[frozenset[str], list[str]]:
+    """A name list (e.g. --modules a,b) plus everything it needs; unknown names raise ModuleError."""
+    names = [n.strip() for n in names if n.strip()]
+    for n in names:
+        if n not in MODULES:
+            raise ModuleError(f"unknown module {n!r}")
+    extra = needs_closure(names)
+    notes = [f"{', '.join(extra)} also turned on (needed by the modules you chose)."] if extra else []
+    return frozenset(names) | set(extra), notes

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # filament-kit installer for Ubuntu 24.04 or newer.
-# Run as root: sudo ./install.sh [--mode MODE] [--server NAME-OR-IP]
+# Run as root: sudo ./install.sh [--mode MODE | --modules a,b,c] [--server NAME-OR-IP]
 # MODE: server (default), station, all-in-one. A first install at a terminal asks for the mode
 # (and offers custom). --server gives a station the kit server's address without a terminal;
 # station mode needs it (or a terminal to ask at). Safe to run again: an existing install is upgraded and keeps its data,
@@ -16,23 +16,31 @@ VENV="$OPT/venv"
 
 say() { printf '\n==> %s\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
-usage() { echo "usage: sudo ./install.sh [--mode server|station|all-in-one] [--server NAME-OR-IP]" >&2; exit 2; }
+usage() { echo "usage: sudo ./install.sh [--mode server|station|all-in-one | --modules a,b,c] [--server NAME-OR-IP]" >&2; exit 2; }
 # one host name or address: station.allow never takes a range
 bad_addr() { case "$1" in "" | */* | *"*"* | *" "*) return 0 ;; esac; return 1; }
 
 MODE=""
+CUSTOM=""
 SERVER_ADDR=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --mode) [ $# -ge 2 ] || usage; MODE="$2"; shift 2 ;;
         --mode=*) MODE="${1#--mode=}"; shift ;;
+        --modules) [ $# -ge 2 ] || usage; CUSTOM="$2"; shift 2 ;;
+        --modules=*) CUSTOM="${1#--modules=}"; shift ;;
         --server) [ $# -ge 2 ] || usage; SERVER_ADDR="$2"; shift 2 ;;
         --server=*) SERVER_ADDR="${1#--server=}"; shift ;;
         *) usage ;;
     esac
 done
+if [ -n "$CUSTOM" ]; then
+    [ -z "$MODE" ] || die "use --mode or --modules, not both"
+    MODE=custom
+    CUSTOM=",$CUSTOM"          # names are checked, and what they need is added, when the config is written
+fi
 case "$MODE" in
-    "" | server | station | all-in-one) ;;
+    "" | server | station | all-in-one | custom) ;;
     *) die "unknown mode '$MODE' (use server, station or all-in-one)" ;;
 esac
 if [ -n "$SERVER_ADDR" ] && bad_addr "$SERVER_ADDR"; then
@@ -138,7 +146,6 @@ chmod -R go-w "$OPT"
 # ---------- 4. install mode ----------
 # First install at a terminal: ask. --mode: set it, on any install. Upgrade without --mode: no
 # questions, the modules stay as they are (a config without modules is the server mode).
-CUSTOM=""
 if [ -z "$MODE" ] && [ "$FIRST_INSTALL" -eq 1 ] && [ -t 0 ]; then
     say "Install mode"
     echo "  server      kit server with Spoolman, presets, library and backup"
@@ -155,18 +162,9 @@ if [ -z "$MODE" ] && [ "$FIRST_INSTALL" -eq 1 ] && [ -t 0 ]; then
         *) die "unknown choice '$choice'; run ./install.sh again" ;;
     esac
     if [ "$MODE" = custom ]; then
-        # module list on fd 3, so the y/N answers still come from the terminal
-        while IFS='|' read -r -u 3 name desc; do
-            yn=""
-            read -r -p "Turn on $name ($desc)? [y/N] " yn || true
-            case "$yn" in
-                [yY]*) CUSTOM="$CUSTOM,$name" ;;
-            esac
-        done 3< <("$VENV/bin/python" -I -c '
-from filament_kit import modules
-for m in modules.MODULES.values():
-    print(f"{m.name}|{m.description}")
-')
+        # the same checklist as `filament-kit config` -> Modules; prompts on the terminal, the choice on stdout
+        CUSTOM=",$("$VENV/bin/filament-kit" modules menu --raw)" \
+            || die "no modules chosen; run ./install.sh again"
     fi
 fi
 # A station whose server is on another machine needs that server's address (spec section 3):
@@ -211,7 +209,13 @@ f = config.paths().etc / "config.json"
 cfg = json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}
 mode = os.environ["FK_MODE"]
 if mode == "custom":
-    on = set(filter(None, os.environ["FK_MODULES"].split(",")))
+    try:
+        chosen, notes = modules.close_selection(os.environ["FK_MODULES"].split(","))
+    except modules.ModuleError as e:
+        sys.exit(f"error: {e}\nfix: use module names from: {', '.join(modules.MODULES)}")
+    for note in notes:
+        print(note)
+    on = set(chosen)
     cfg["modules"] = {n: n in on for n in modules.MODULES}
     if {"station", "server"} <= on:
         # station and server on one machine: as all-in-one, the server reads the local station

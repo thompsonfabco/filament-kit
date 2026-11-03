@@ -222,3 +222,75 @@ def test_validate_checks_web_lan_entries_are_networks():
             validate(cfg)
     cfg["modules"]["web"] = False
     validate(cfg)                               # only checked while web is on
+
+
+# ---------- checklist menu (R2) ----------
+
+def test_menu_lines_generic_and_marks_needs():
+    from filament_kit import modules
+    lines = modules.menu_lines({})
+    assert len(lines) == len(MODULES)
+    for i, (n, m) in enumerate(MODULES.items(), 1):
+        ln = lines[i - 1]
+        assert f" {i} {n}" in ln and m.description in ln
+        assert ("[x]" in ln) == (n in MODES["server"])
+        for d in m.depends:
+            assert d in ln.split("needs:", 1)[1]
+        if m.needs_text:
+            assert m.needs_text in ln
+        assert ("OPTIONAL AI" in ln) == m.optional_ai
+    assert any("OPTIONAL AI" in ln for ln in lines)
+
+
+def test_toggle_on_pulls_needs_and_says_so():
+    from filament_kit import modules
+    on, notes = modules.toggle(frozenset(), "remote")
+    assert on == {"remote", "web", "server"}
+    assert "web" in notes[0] and "server" in notes[0]
+
+
+def test_toggle_off_lists_transitive_dependents():
+    from filament_kit import modules
+    on, notes = modules.toggle(MODES["server"] | {"web", "remote"}, "server")
+    assert not ({"server", "web", "remote", "ai_intake", "printers", "presets"} & on)
+    assert "web" in notes[0] and "remote" in notes[0]
+
+
+def test_toggle_unknown():
+    from filament_kit import modules
+    with pytest.raises(ModuleError):
+        modules.toggle(frozenset(), "nope")
+
+
+def test_preset_keeps_opt_ins():
+    from filament_kit import modules
+    on, _ = modules.preset(MODES["server"] | {"web"}, "server")
+    assert "web" in on
+    on, _ = modules.preset(MODES["server"] | {"web"}, "station")
+    assert on == {"station"}
+
+
+def test_run_checklist_toggle_preset_apply():
+    from filament_kit import modules
+    answers = iter(["t", "1 2", "", ])
+    out = []
+    got = modules.run_checklist(frozenset(), lambda p: next(answers), out.append)
+    assert got == {"station", "spoolman", "server"}
+    assert any("Preset station" in o for o in out)
+
+
+def test_run_checklist_cancel_and_unknown():
+    from filament_kit import modules
+    answers = iter(["99", "q"])
+    out = []
+    assert modules.run_checklist(frozenset({"server"}), lambda p: next(answers), out.append) is None
+    assert any("Unknown choice" in o for o in out)
+    assert modules.run_checklist(frozenset(), lambda p: None, lambda s: None) is None
+
+
+def test_close_selection():
+    from filament_kit import modules
+    on, notes = modules.close_selection(["spoolman", "printers"])
+    assert on == {"spoolman", "printers", "server"} and notes
+    with pytest.raises(ModuleError):
+        modules.close_selection(["x"])
