@@ -391,6 +391,8 @@ def _current() -> tuple[Path, dict, str]:
         if isinstance(idx, dict) and isinstance(idx.get("library_version"), int):
             return root, idx, "updated"
     root, idx = _bundled()
+    # "bundled": only when BUNDLED holds entries, which the shipped package never does (tests use it to exercise
+    # the fallback); the shipped fallback is the empty index, "none"
     return root, idx, "bundled" if idx.get("entries") else "none"
 
 
@@ -427,6 +429,59 @@ def add_local(data: bytes) -> tuple[dict, str]:
     return entry, line_id(entry["vendor"], entry["product"])
 
 
+# ---------- adopting an older bundled copy ----------
+
+def adopt(src: Path) -> int | None:
+    """Install the library found at `src` (a folder with index.json and library/**.json, e.g. the snapshot an older
+    program version bundled) as the downloaded copy, when none is installed. Every entry is checked like a
+    download. Returns the library version adopted, or None when a copy is already installed or `src` has none.
+    Raises LibraryError when `src` is damaged; nothing is installed then."""
+    if _pointer("current.json") is not None:
+        return None
+    raw_idx = _read_json(Path(src) / "index.json")
+    if not (isinstance(raw_idx, dict) and (Path(src) / "library").is_dir()):
+        return None
+    try:
+        raw = (Path(src) / "index.json").read_bytes()
+        idx, rows = _parse_index(raw, 0)
+        if not rows:
+            return None
+        files = {}
+        for r in rows:
+            data = (Path(src) / r["path"]).read_bytes()
+            if hashlib.sha256(data).hexdigest() != r["sha256"]:
+                raise _Abort(f"{r['path']}: sha256 does not match index.json")
+            entry = json.loads(data.decode("utf-8"))
+            problems = validate(entry)
+            if problems or rel_path(entry) != r["path"]:
+                raise _Abort(f"{r['path']}: " + ("; ".join(problems) or "not at its own path"))
+            files[r["path"]] = data
+    except (_Abort, OSError, ValueError) as e:
+        raise LibraryError(f"cannot adopt the old library: {e}") from None
+    now = time.time()
+    with _locked():
+        if _pointer("current.json") is not None:
+            return None
+        make_state_dir(_dir() / "versions")
+        name = _new_dir_name(idx["library_version"], now)
+        tmp = _dir() / "versions" / (name + ".tmp")
+        try:
+            make_state_dir(tmp)
+            for path, data in files.items():
+                dest = tmp / path
+                make_state_dir(dest.parent)
+                dest.write_bytes(data)
+                give_to_state_owner(dest)
+            (tmp / "index.json").write_bytes(raw)
+            give_to_state_owner(tmp / "index.json")
+            os.replace(tmp, _dir() / "versions" / name)
+        except BaseException:
+            shutil.rmtree(tmp, ignore_errors=True)
+            raise
+        _write_json(_dir() / "current.json", {"dir": name, "version": idx["library_version"], "at": now})
+    return idx["library_version"]
+
+
 # ---------- update / rollback ----------
 
 @dataclass
@@ -449,8 +504,36 @@ def configured_url(cfg: dict | None = None) -> str:
     return (cfg.get("library") or {}).get("url") or DEFAULT_LIBRARY_URL
 
 
+ASSET_API = re.compile(r"/repos/[^/]+/[^/]+/releases/assets/\d+")
+
+
 def _is_archive(url: str) -> bool:
-    return urllib.parse.urlsplit(url).path.lower().endswith(TAR_SUFFIXES)
+    """A .tar.gz URL, or a GitHub release-asset API URL (what a private repository's asset needs)."""
+    u = urllib.parse.urlsplit(url)
+    if u.path.lower().endswith(TAR_SUFFIXES):
+        return True
+    return (u.hostname or "").lower() == "api.github.com" and ASSET_API.fullmatch(u.path) is not None
+
+
+def _github_host(host: str | None) -> bool:
+    host = (host or "").lower()
+    return host in ("github.com", "api.github.com") or host.endswith(".githubusercontent.com")
+
+
+def _auth_headers(url: str) -> dict:
+    """Extra request headers for `url`: the GitHub token (if any) only for https GitHub hosts, never for any other
+    host; GitHub's asset API also needs Accept: application/octet-stream to return the file itself."""
+    u = urllib.parse.urlsplit(url)
+    if u.scheme != "https" or not _github_host(u.hostname):
+        return {}
+    out = {}
+    if _is_archive(url) and (u.hostname or "").lower() == "api.github.com":
+        out["Accept"] = "application/octet-stream"
+    token = _token()
+    if token:
+        out["Authorization"] = "Bearer " + token
+        out.setdefault("Accept", "application/octet-stream")
+    return out
 
 
 def _token() -> str | None:
@@ -535,11 +618,7 @@ class _Fetcher:
     def get(self, url: str, name: str, limit: int) -> bytes:
         timeout = max(1.0, min(TIMEOUT, self.remaining()))
         budget = TOTAL_LIMIT - self.total
-        headers = {"User-Agent": "filament-kit"}
-        token = _token()
-        if token:
-            headers["Authorization"] = "Bearer " + token
-            headers["Accept"] = "application/octet-stream"
+        headers = {"User-Agent": "filament-kit", **_auth_headers(url)}
         req = urllib.request.Request(url, headers=headers)
         try:
             with self.opener(req, timeout=timeout) as r:
@@ -568,23 +647,26 @@ class _Fetcher:
         return data
 
 
-def _read_archive(raw: bytes) -> dict[str, bytes]:
+def _read_archive(raw: bytes, check=lambda: None) -> dict[str, bytes]:
     """The index and entry files of a library tarball, in memory (nothing is extracted to disk). Files may sit
     at the root or under one top directory; links, devices and anything else that is not a plain file are refused."""
     files: dict[str, bytes] = {}
     total = 0
     try:
         with tarfile.open(fileobj=io.BytesIO(raw), mode="r:gz") as tar:
-            members = []
+            names: dict = {}
             for i, m in enumerate(tar):
                 if i > MAX_ENTRIES + 100:
                     raise _Abort("the library archive has too many files")
+                check()
                 if m.isdir():
                     continue
                 if not m.isreg():
                     raise _Abort(f"the library archive holds {m.name!r}, which is not a plain file; refused")
-                members.append(m)
-            names = {m.name.removeprefix("./"): m for m in members}
+                name = m.name.removeprefix("./")
+                if name in names:
+                    raise _Abort(f"the library archive lists {name!r} twice; refused")
+                names[name] = m
             prefix = ""
             if "index.json" not in names:
                 tops = [n[:-len("index.json")] for n in names
@@ -593,6 +675,7 @@ def _read_archive(raw: bytes) -> dict[str, bytes]:
                     raise _Abort("the library archive has no index.json")
                 prefix = tops[0]
             for name, m in names.items():
+                check()
                 if not name.startswith(prefix):
                     continue
                 rel = name[len(prefix):]
@@ -694,7 +777,7 @@ def update(url: str | None = None, *, opener=None, now: float | None = None) -> 
         try:
             archive = None
             if _is_archive(base):
-                archive = _read_archive(fetch.get(base, "library archive", ARCHIVE_LIMIT))
+                archive = _read_archive(fetch.get(base, "library archive", ARCHIVE_LIMIT), fetch.remaining)
                 raw = archive["index.json"]
             else:
                 raw = fetch.get(base + "index.json", "index.json", INDEX_LIMIT)

@@ -25,7 +25,9 @@ def _bundled_version() -> int:
 
 
 @pytest.fixture(autouse=True)
-def env(tmp_path, monkeypatch):
+def env(tmp_path, monkeypatch, no_library):
+    # These tests exercise update/rollback against a fallback copy: the snapshot stands in as BUNDLED here.
+    monkeypatch.setattr(library, "BUNDLED", BUNDLED)
     monkeypatch.setenv("FK_ETC", str(tmp_path / "etc"))
     monkeypatch.setenv("FK_STATE", str(tmp_path / "state"))
     (tmp_path / "state").mkdir()

@@ -56,12 +56,29 @@ def _state_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("FK_STATE", str(tmp_path / "fk-state"))
 
 
-SNAPSHOT = __import__("pathlib").Path(__file__).parent / "data" / "library_snapshot"
-
-
 @pytest.fixture(autouse=True)
 def _library_snapshot(monkeypatch):
-    """The program ships no library entries (they are downloaded), so tests that need real vendor data read this
-    snapshot as if it were already installed. Tests of the empty case put `library.BUNDLED` back."""
+    """The program ships no library entries (they are downloaded), so on its first library access in a test's state
+    directory (whatever FK_STATE the test chose) the snapshot is installed there as a downloaded copy: the
+    production path. Tests of the empty case request the `no_library` fixture."""
+    from libsnap import install_snapshot
     from filament_kit import library
-    monkeypatch.setattr(library, "BUNDLED", SNAPSHOT)
+    real = library._dir
+    done = set()
+
+    def _dir():
+        d = real()
+        if d not in done:
+            done.add(d)
+            install_snapshot(d.parent)
+        return d
+
+    monkeypatch.setattr(library, "_dir", _dir)
+    monkeypatch.setattr(library, "_real_dir", real, raising=False)
+
+
+@pytest.fixture
+def no_library(monkeypatch):
+    """A fresh install: nothing downloaded."""
+    from filament_kit import library
+    monkeypatch.setattr(library, "_dir", library._real_dir)

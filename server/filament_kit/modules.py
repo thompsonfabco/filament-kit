@@ -76,11 +76,12 @@ def enabled(cfg: dict) -> frozenset[str]:
     """Names switched on; missing/None `modules` is the server mode."""
     mods = cfg.get("modules")
     if mods is None:
-        return MODES["server"]
+        return MODES["server"] | {"library"}      # a config from before modules existed had the library timer
     return frozenset(n for n, v in mods.items() if v and n in MODULES)
 
 
 def mode_of(on: frozenset[str]) -> str:
+    on = on - {"library"}                    # opt-in and not part of any mode
     for name, members in MODES.items():
         if on == members:
             return name
@@ -104,7 +105,9 @@ def set_mode(cfg: dict, mode: str, say: Callable[[str], None] | None = print) ->
     if mode not in MODES:
         raise ModuleError(f"unknown mode {mode!r}")
     out = copy.deepcopy(cfg)
-    was = enabled(cfg) if cfg.get("modules") is not None else frozenset()
+    was = enabled(cfg)
+    if cfg.get("modules") is None and mode == "station":
+        was = was - {"library"}
     on = set(MODES[mode])
     dropped = []
     for n in MODULES:                       # registry order: web before remote, so remote sees web's outcome
