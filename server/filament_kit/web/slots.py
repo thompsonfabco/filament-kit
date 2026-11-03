@@ -332,6 +332,11 @@ def printer_path(printer_id) -> str:
     return "/api/printers/" + urllib.parse.quote(str(printer_id), safe="")
 
 
+def load_path(printer_id, label: str) -> str:
+    """The kit API's load URL for a slot; the label is quoted (layout's clash suffix "#<id>" is not a fragment)."""
+    return f"{printer_path(printer_id)}/slots/{urllib.parse.quote(str(label), safe='')}/load"
+
+
 def status_slots(status: dict) -> list[dict]:
     """Every slot of a printer status (`GET /api/printers/{id}` "status"), in unit order, each with its unit's
     label (`unit`) and `kind` ("ams", "ams_2pro", "ams_ht", "ams_lite", "generic", or "ext" for a holder)."""
@@ -375,7 +380,7 @@ def bridge_set_slot(kit, spool_id: int, slot: str, dry_run: bool, printer: str |
     except SlotError:
         labels = []           # no status: the old names map as usual and the kit server checks the label
     label = kit_label(slot, labels)
-    res = kit.post(f"{printer_path(p['id'])}/slots/{label}/load",
+    res = kit.post(load_path(p["id"], label),
                    {"spool_id": int(spool_id), "dry_run": bool(dry_run)})
     res = dict(res) if isinstance(res, dict) else {"result": res}
     res.update(printer=p["id"], slot=label)
