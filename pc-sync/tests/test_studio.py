@@ -97,8 +97,8 @@ def test_running_parses_tasklist():
     assert studio.running(lambda: "") is False
 
 
-def test_running_false_when_not_windows(monkeypatch):
-    monkeypatch.setattr(studio.sys, "platform", "linux")
+def test_running_false_when_not_windows_or_linux(monkeypatch):
+    monkeypatch.setattr(studio.sys, "platform", "darwin")      # Linux reads /proc: test_linux_running
     assert studio.running() is False
 
 

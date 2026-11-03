@@ -2,7 +2,9 @@
 
 The only module that reads the real environment (%APPDATA% for Bambu Studio and Orca Slicer, %LOCALAPPDATA% for
 the sync's own files, %ProgramFiles% and the uninstall registry for the Orca Slicer install); the hidden
---appdata / --localappdata options override the first two. The pairing token is
+--appdata / --localappdata options override the first two. On Linux it reads $HOME and the XDG folders instead
+(studio.LinuxLayout, store.linux_data_dir), unless --appdata / --localappdata are given (the tests' Windows-style
+trees), and has two more commands: install-timer / uninstall-timer (the systemd user timer, fksync.timer). The pairing token is
 read from stdin (inside the pasted link, or from the server after the 6-digit code), never from the
 command line, and is never printed or logged.
 """
@@ -14,7 +16,7 @@ import sys
 import time
 from pathlib import Path
 
-from fksync import __version__, client, store, studio, sync  # absolute: PyInstaller runs this file as a script
+from fksync import __version__, client, store, studio, sync, timer  # absolute: PyInstaller runs this file as a script
 
 APP = "filament-kit-sync"
 _HOST = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,252})$")
@@ -125,7 +127,7 @@ def cmd_pair(dirs: store.AppDirs) -> int:
     return _finish_pair(dirs, cfg, token)
 
 
-def cmd_run(dirs: store.AppDirs, appdata: Path, quiet: bool) -> int:
+def cmd_run(dirs: store.AppDirs, appdata: Path | None, quiet: bool, layout: studio.LinuxLayout | None = None) -> int:
     echo = None if quiet else _out
     dirs.ensure()
     try:
@@ -138,8 +140,8 @@ def cmd_run(dirs: store.AppDirs, appdata: Path, quiet: bool) -> int:
                     if echo:
                         echo(f"This PC is not paired; run '{APP} pair'.")
                     return 1
-                folders = studio.locate(appdata, cfg)
-                orca = _locate_orca(appdata, cfg, warn=lambda m: _warn(dirs, echo, m))
+                folders = studio.locate(appdata, cfg, layout=layout)
+                orca = _locate_orca(appdata, cfg, warn=lambda m: _warn(dirs, echo, m), layout=layout)
                 c = client.Client(cfg, token, log=lambda m: store.log(dirs, m))
                 outcome = sync.run_once(c, folders, dirs, running=studio.running, now=time.time(), echo=echo,
                                         orca=orca, orca_running=studio.orca_running)
@@ -174,10 +176,11 @@ def _program_files() -> list[Path]:
     return out
 
 
-def _locate_orca(appdata: Path, cfg: dict, warn=None):
+def _locate_orca(appdata: Path | None, cfg: dict, warn=None, layout: studio.LinuxLayout | None = None):
     """This PC's Orca Slicer folders, or None (Bambu Studio only). A stale `orca_user_id` / `orca_install` pin
     (e.g. Orca upgraded into a new folder) is warned about and ignored: discovery runs without it."""
-    kw = {"program_files": _program_files(), "registry": studio._registry_entries}
+    kw = ({"layout": layout} if layout is not None
+          else {"program_files": _program_files(), "registry": studio._registry_entries})
     try:
         return studio.locate_orca(appdata, cfg, **kw)
     except studio.NotFound as e:
@@ -200,7 +203,7 @@ def _fail(dirs: store.AppDirs, echo, msg: str) -> int:
     return 1
 
 
-def cmd_status(dirs: store.AppDirs, appdata: Path) -> int:
+def cmd_status(dirs: store.AppDirs, appdata: Path | None, layout: studio.LinuxLayout | None = None) -> int:
     try:
         cfg = store.load_config(dirs)
     except ValueError as e:
@@ -217,7 +220,7 @@ def cmd_status(dirs: store.AppDirs, appdata: Path) -> int:
     else:
         _out(f"Server:          not paired; run '{APP} pair'")
     try:
-        f = studio.locate(appdata, cfg)
+        f = studio.locate(appdata, cfg, layout=layout)
         pin = " (pinned in the config)" if cfg.get("variant") or cfg.get("user_id") else ""
         _out(f"Bambu Studio:    {f.variant}, user {f.user_id}{pin}")
         _out(f"Preset folder:   {f.user_filament}")
@@ -225,7 +228,7 @@ def cmd_status(dirs: store.AppDirs, appdata: Path) -> int:
         _out(f"Bambu Studio:    {e.message}")
     st = sync.load_state(dirs)
     try:
-        o = _locate_orca(appdata, cfg, warn=lambda m: _out(f"Orca Slicer:     {m}"))
+        o = _locate_orca(appdata, cfg, warn=lambda m: _out(f"Orca Slicer:     {m}"), layout=layout)
         if o is None:
             _out("Orca Slicer:     not found on this PC (only Bambu Studio is synced)")
         else:
@@ -277,6 +280,24 @@ def cmd_unpair(dirs: store.AppDirs) -> int:
     return 0
 
 
+def _self_exe() -> Path:
+    """The program the timer should start: the frozen build itself, else this console script."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable)
+    return Path(sys.argv[0]).resolve()
+
+
+def cmd_timer(on: bool) -> int:
+    units = timer.units_dir(os.environ)
+    if on:
+        return timer.install(units, _self_exe(), echo=_out)
+    return timer.uninstall(units, stamp=timer.stamp_file(os.environ), echo=_out)
+
+
+def _linux() -> bool:
+    return sys.platform.startswith("linux")
+
+
 # --- entry ---------------------------------------------------------------------------------------
 
 def _parser() -> argparse.ArgumentParser:
@@ -285,28 +306,39 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--version", action="version", version=f"{APP} {__version__}")
     p.add_argument("--appdata", help=argparse.SUPPRESS)
     p.add_argument("--localappdata", help=argparse.SUPPRESS)
-    sub = p.add_subparsers(dest="cmd", required=True, metavar="{pair,run,status,unpair}")
+    cmds = "pair,run,status,unpair" + (",install-timer,uninstall-timer" if _linux() else "")
+    sub = p.add_subparsers(dest="cmd", required=True, metavar="{" + cmds + "}")
     sub.add_parser("pair", help="pair this PC with the server (paste the link from 'sudo filament-kit pair --pc')")
     r = sub.add_parser("run", help="run one sync now (the scheduled task runs this every 10 minutes)")
     r.add_argument("--quiet", action="store_true", help="print nothing (the log still gets every line)")
     sub.add_parser("status", help="show the server, the Bambu Studio and Orca Slicer folders, the last run and the "
                                   "installed build")
     sub.add_parser("unpair", help="forget the server and delete this PC's token")
+    if _linux():
+        sub.add_parser("install-timer", help="run the sync every 10 minutes (a systemd user timer; no root)")
+        sub.add_parser("uninstall-timer", help="stop and remove the systemd user timer")
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    appdata = Path(args.appdata or os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming")
-    local = Path(args.localappdata or os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
-    dirs = store.AppDirs(local / APP)
+    if args.cmd in ("install-timer", "uninstall-timer"):
+        return cmd_timer(args.cmd == "install-timer")
+    layout = None
+    if _linux() and not args.appdata and not args.localappdata:
+        layout = studio.LinuxLayout.from_env(os.environ)
+        appdata, dirs = None, store.AppDirs(store.linux_data_dir(os.environ))
+    else:
+        appdata = Path(args.appdata or os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming")
+        local = Path(args.localappdata or os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+        dirs = store.AppDirs(local / APP)
     if args.cmd == "pair":
         dirs.ensure()
         return cmd_pair(dirs)
     if args.cmd == "run":
-        return cmd_run(dirs, appdata, args.quiet)
+        return cmd_run(dirs, appdata, args.quiet, layout)
     if args.cmd == "status":
-        return cmd_status(dirs, appdata)
+        return cmd_status(dirs, appdata, layout)
     return cmd_unpair(dirs)
 
 

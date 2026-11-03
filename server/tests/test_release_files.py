@@ -733,6 +733,7 @@ def test_release_workflow_sums_step_runs(tmp_path, with_library):
     dist = tmp_path / "dist"
     dist.mkdir()
     for f in ("filament-kit-1.2.3.tar.gz", "filament-kit.apk", "filament-kit-sync-setup-1.2.3.exe",
+              "filament-kit-sync-linux-x86_64-1.2.3.tar.gz",
               "bambu_hardware.xml") + (("library.tar.gz",) if with_library else ()):
         (dist / f).write_bytes(f.encode())
     (tmp_path / "get.sh").write_text("#!/bin/sh\n", encoding="utf-8")
@@ -745,8 +746,10 @@ def test_release_workflow_sums_step_runs(tmp_path, with_library):
     assert ("library.tar.gz" in listed) is with_library
     files = out.read_text()
     assert ("dist/library.tar.gz" in files) is with_library
-    for f in ("dist/filament-kit-1.2.3.tar.gz", "dist/get.sh", "dist/SHA256SUMS.sig", "dist/bambu_hardware.xml"):
+    for f in ("dist/filament-kit-1.2.3.tar.gz", "dist/get.sh", "dist/SHA256SUMS.sig", "dist/bambu_hardware.xml",
+              "dist/filament-kit-sync-linux-x86_64-1.2.3.tar.gz"):
         assert f in files
+    assert "filament-kit-sync-linux-x86_64-1.2.3.tar.gz" in listed     # the Linux PC sync is signed too
 
 
 # --- final review M12: get.sh on an existing install waits for no printer job, as the updater does ---------------

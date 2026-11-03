@@ -1,8 +1,9 @@
 """The PC sync's own files: config, encrypted token, log, lock and state paths.
 
 The token is encrypted with Windows DPAPI (CurrentUser scope, entropy b"filament-kit-sync"),
-so only this Windows user on this PC can read it. Off Windows (tests, CI) it is a 0600 plain
-file. The token is never logged or printed by this module.
+so only this Windows user on this PC can read it. Off Windows (Linux, tests, CI) it is a 0600 plain
+file in a 0700 folder ($XDG_DATA_HOME or ~/.local/share, then filament-kit-sync on Linux), so only
+this user (and root) can read it. The token is never logged or printed by this module.
 """
 import contextlib
 import datetime
@@ -11,6 +12,7 @@ import os
 import sys
 import tempfile
 from pathlib import Path
+from typing import Mapping
 
 ENTROPY = b"filament-kit-sync"
 LOG_MAX = 1024 * 1024
@@ -36,6 +38,14 @@ class AppDirs:
 
     def ensure(self) -> None:
         self.base.mkdir(parents=True, exist_ok=True)
+        if sys.platform != "win32" and (self.base.stat().st_mode & 0o777) != 0o700:
+            os.chmod(self.base, 0o700)
+
+
+def linux_data_dir(env: Mapping[str, str]) -> Path:
+    """The sync's own folder on Linux: $XDG_DATA_HOME/filament-kit-sync, else ~/.local/share/filament-kit-sync."""
+    data = env.get("XDG_DATA_HOME")
+    return (Path(data) if data else Path(env.get("HOME") or Path.home()) / ".local" / "share") / "filament-kit-sync"
 
 
 def _write_atomic(path: Path, data: bytes, mode: int = 0o600) -> None:

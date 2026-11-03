@@ -2,9 +2,12 @@
 # PyInstaller 6.11.1, onedir: two executables that share one folder (one COLLECT).
 #   filament-kit-sync.exe       console: pair / status / run / unpair
 #   filament-kit-sync-task.exe  windowed: `run --quiet`, started by Task Scheduler (no console window)
+# On Linux only the first is built (filament-kit-sync; the systemd user timer runs `run --quiet` itself);
+# pc-sync/linux/build.sh packs it with install.sh / uninstall.sh.
 # Build:  pyinstaller --noconfirm pc-sync/fksync.spec   ->  dist/filament-kit-sync/
 # pc-sync runtime is stdlib only; UPX is off (packed exes trip antivirus heuristics).
 import os
+import sys
 
 HERE = SPECPATH  # noqa: F821 - defined by PyInstaller
 PKG = os.path.join(HERE, "fksync")
@@ -48,18 +51,15 @@ def _exe(a, name, console):
 
 
 cli = _analysis("__main__.py")
-task = _analysis("task_entry.py")
-
 cli_exe = _exe(cli, "filament-kit-sync", console=True)
-task_exe = _exe(task, "filament-kit-sync-task", console=False)
+parts = [cli_exe, cli.binaries, cli.datas]
+if sys.platform == "win32":
+    task = _analysis("task_entry.py")
+    task_exe = _exe(task, "filament-kit-sync-task", console=False)
+    parts += [task_exe, task.binaries, task.datas]
 
 coll = COLLECT(  # noqa: F821
-    cli_exe,
-    cli.binaries,
-    cli.datas,
-    task_exe,
-    task.binaries,
-    task.datas,
+    *parts,
     strip=False,
     upx=False,
     upx_exclude=[],
