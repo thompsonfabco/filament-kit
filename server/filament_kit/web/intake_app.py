@@ -6,9 +6,8 @@ page), on the kit's own functions: label reads go through `intake.read_labels` w
 (`intake.read_context`) and the shared daily cap (`ReadCap`, the kit server's own file), writes through the
 same `Tools` as the MCP tools, so the rules (dry run first, sealed defaults, tag checks) are the same.
 
-Home network only (`auth.lan_only` wraps the whole app; every route checks again). Sign-in uses the connector's
-passphrase and gives a 30-day session cookie `fi_session` (Secure, HttpOnly, SameSite=Strict, path = the app's
-base path); wrong passphrases count in the same `Lockout` as /login. Every POST must carry the app's own Origin.
+Home network only (`auth.lan_only` wraps the whole app; every route checks again); there is no sign-in (the
+owner's choice: the home network is the gate, as in filament-ops). Every POST must carry the app's own Origin.
 The page's CSP allows only its own script and style; the script never puts server data into innerHTML.
 """
 from __future__ import annotations
@@ -26,7 +25,7 @@ import anyio
 from pydantic import ValidationError
 from starlette.datastructures import UploadFile
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Route
 
 from .. import config, intake, inventory, modules, tagsources
@@ -39,7 +38,6 @@ from .mcp_tools import SpoolItem, Tools
 
 log = logging.getLogger(__name__)
 
-COOKIE = "fi_session"
 MAX_HINT = 2000
 STATIC = Path(__file__).parent / "static"
 
@@ -107,10 +105,8 @@ def _text(b: dict, key: str, *, required: bool = True) -> str:
 
 
 class IntakeApp:
-    def __init__(self, tools: Tools, *, store: auth.Store, lockout: auth.Lockout, public_url: str,
-                 lan_cidrs, passphrase_file: Path | str, claude=None, kit_api=None):
-        self.tools, self.store, self.lockout, self.claude = tools, store, lockout, claude
-        self.passphrase_file = passphrase_file
+    def __init__(self, tools: Tools, *, public_url: str, lan_cidrs, claude=None, kit_api=None):
+        self.tools, self.claude = tools, claude
         self.nets = auth.parse_lan(lan_cidrs)
         self.origin = auth._origin(public_url)
         self.base = urlparse(public_url).path.rstrip("/") + "/intake"  # as the browser sees it (nginx strips it)
@@ -125,8 +121,7 @@ class IntakeApp:
 
     def routes(self) -> list[Route]:
         return [Route(p, fn, methods=m) for p, fn, m in (
-            ("/intake", self.page, ["GET"]), ("/intake/login", self.login, ["POST"]),
-            ("/intake/logout", self.logout, ["POST"]), ("/intake/app.js", self.asset, ["GET"]),
+            ("/intake", self.page, ["GET"]), ("/intake/app.js", self.asset, ["GET"]),
             ("/intake/app.css", self.asset, ["GET"]), ("/intake/printers.js", self.asset, ["GET"]),
             ("/intake/icon.png", self.icon_route, ["GET"]),
             ("/intake/manifest.webmanifest", self.manifest, ["GET"]),
@@ -142,14 +137,11 @@ class IntakeApp:
             ("/intake/api/generate", self.api(self.generate), ["POST"]))] + (
                 self.printers.routes() if self.printers else [])
 
-    # ---------- session ----------
+    # ---------- home network ----------
     def _lan(self, request: Request) -> bool:
         return auth.is_lan(request.client.host if request.client else "", self.nets)
 
-    def _signed_in(self, request: Request) -> bool:
-        return self.store.check_session(request.cookies.get(COOKIE))
-
-    def _html(self, body: str, status: int = 200, signed_in: bool = False) -> HTMLResponse:
+    def _html(self, body: str, status: int = 200, app: bool = False) -> HTMLResponse:
         b = html.escape(self.base, quote=True)
         return HTMLResponse(
             "<!doctype html><html lang=en><meta charset=utf-8>"
@@ -159,7 +151,7 @@ class IntakeApp:
             f"<link rel=stylesheet href='{b}/app.css'><link rel=apple-touch-icon href='{b}/icon.png'>"
             f"<link rel=manifest href='{b}/manifest.webmanifest'>"
             + body + (("" if not self.printers else f"<script src='{b}/printers.js'></script>")
-                      + f"<script src='{b}/app.js'></script>" if signed_in else ""),
+                      + f"<script src='{b}/app.js'></script>" if app else ""),
             status_code=status, headers=self.headers())
 
     def headers(self) -> dict:
@@ -186,44 +178,7 @@ class IntakeApp:
     async def page(self, request: Request):
         if not self._lan(request):
             return self._html(HOME_ONLY, 403)
-        if not self._signed_in(request):
-            return self._html(f"<main class=login><h1>Spool intake</h1><form method=post "
-                              f"action='{html.escape(self.base, quote=True)}/login'>"
-                              "<input type=password name=passphrase placeholder=Passphrase "
-                              "autocomplete=current-password autofocus required><button>Sign in</button></form></main>")
-        return self._html(await anyio.to_thread.run_sync(self._shell), signed_in=True)
-
-    async def login(self, request: Request):
-        if not self._lan(request):
-            return self._html(HOME_ONLY, 403)
-        if request.headers.get("origin") != self.origin:
-            return self._html("<main><p>Sign in from the intake page itself.</p></main>", 403)
-        attempt = self.lockout.attempt()        # counted before the check (A-M1)
-        if attempt is None:
-            return self._html("<main><p>Too many wrong passphrases. Wait 10 minutes.</p></main>", 429)
-        form = await request.form()
-        ok = await anyio.to_thread.run_sync(auth.check_passphrase, str(form.get("passphrase", "")),
-                                            self.passphrase_file)
-        back = f"<p><a href='{html.escape(self.base, quote=True)}'>Try again</a></p></main>"
-        if ok is not False:                     # right, or no passphrase set: not a wrong guess
-            self.lockout.release(attempt)
-        if ok is None:
-            return self._html("<main class=login><p>No passphrase is set on the server yet (run: filament-kit web "
-                              "passphrase).</p>" + back, 503)
-        if not ok:
-            return self._html("<main class=login><p>Wrong passphrase.</p>" + back, 401)
-        tok = await anyio.to_thread.run_sync(self.store.new_session)
-        r = RedirectResponse(self.base, 303)
-        r.set_cookie(COOKIE, tok, max_age=auth.SESSION_TTL, path=self.base, secure=True, httponly=True,
-                     samesite="strict")
-        return r
-
-    async def logout(self, request: Request):
-        if request.headers.get("origin") == self.origin and (tok := request.cookies.get(COOKIE)):
-            await anyio.to_thread.run_sync(self.store.end_session, tok)
-        r = RedirectResponse(self.base, 303)
-        r.delete_cookie(COOKIE, path=self.base, secure=True, httponly=True, samesite="strict")
-        return r
+        return self._html(await anyio.to_thread.run_sync(self._shell), app=True)
 
     async def asset(self, request: Request):
         name = request.url.path.rsplit("/", 1)[-1]
@@ -243,8 +198,6 @@ class IntakeApp:
         async def route(request: Request):
             if not self._lan(request):
                 return JSONResponse({"error": "home network only"}, 403)
-            if not self._signed_in(request):
-                return JSONResponse({"error": "signed out: reload the page"}, 401)
             if request.method == "POST" and request.headers.get("origin") != self.origin:
                 return JSONResponse({"error": "bad origin"}, 403)
             try:

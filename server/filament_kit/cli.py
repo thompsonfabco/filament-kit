@@ -1343,8 +1343,7 @@ def cmd_web_status() -> int:
         d = json.loads((config.paths().state / "web" / "oauth.json").read_text(encoding="utf-8"))
         now = time.time()
         live = sum(1 for v in (d.get("refresh") or {}).values() if (v.get("expires_at") or 0) > now)
-        print(f"     connectors: {len(d.get('clients') or {})} registered, {live} signed in; "
-              f"phone sessions: {len(d.get('sessions') or {})}")
+        print(f"     connectors: {len(d.get('clients') or {})} registered, {live} signed in")
     except FileNotFoundError:
         print("     connectors: none signed in yet")
     except PermissionError:

@@ -204,7 +204,7 @@ Run these in a Terminal on the Ubuntu computer.
 | `sudo filament-kit profiles restore-deleted` | Brings back, at the next build, the generated presets you deleted in Bambu Studio. |
 | `sudo filament-kit library status` / `update` / `rollback` | The spec library (see [Spec library updates](#spec-library-updates)). |
 | `sudo filament-kit printer unpin <serial>` | Forgets a printer's pinned certificate; the next connection trusts the one it presents. |
-| `sudo filament-kit web passphrase` | Sets the sign-in passphrase of the Claude connector and the phone web app (see [Claude connector and phone web app](#claude-connector-and-phone-web-app)). |
+| `sudo filament-kit web passphrase` | Sets the sign-in passphrase of the Claude connector (see [Claude connector and phone web app](#claude-connector-and-phone-web-app)). |
 | `sudo filament-kit web status` | Checks the web part: public address, passphrase, the service, signed-in connectors. |
 | `sudo filament-kit remote firewall` | Prints the firewall and port-forward rules remote access needs (it changes nothing; see [Remote access](#remote-access)). |
 | `sudo filament-kit remote issue` | Gets the https certificate with certbot (port 80 must reach this computer while it runs). |
@@ -518,7 +518,8 @@ The `web` module runs one more service, `filament-kit-web`, on this computer onl
   (Web Push) are off; `"web": {"push": true}` turns them on, needs `pip install 'filament-kit[push]'` and lets the
   web service reach the browsers' push services on the internet, which the kit does not open for you.
 
-Both use one passphrase. Adding spools does a dry run first in both, as in the Android app.
+The connector needs a passphrase; the phone web app has no sign-in: it only answers your home network. Adding
+spools does a dry run first in both, as in the Android app.
 
 ### Turn it on
 
@@ -547,7 +548,7 @@ Both use one passphrase. Adding spools does a dry run first in both, as in the A
    ```
 
    `web status` shows the public address, the connector and phone app addresses, whether the passphrase is set,
-   whether the service answers, and how many connectors and phones are signed in. No line should start with
+   whether the service answers, and how many connectors are signed in. No line should start with
    `FAIL`.
 
 ### Add the connector in Claude
@@ -557,17 +558,18 @@ type the passphrase there. Claude stays signed in after that; changing the passp
 
 ### Use the phone web app
 
-Open `<public address>/intake` on the phone, type the passphrase and add the page to the home screen if you
-like. It stays signed in for 30 days.
+Open `<public address>/intake` on the phone while it is on the home network and add the page to the home screen
+if you like. There is no sign-in: anyone on your home network can use it (as with the Android app's pairing, the
+home network is the gate).
 
 ### What only works at home
 
 The sign-in pages (`/authorize`, `/login`) and the whole phone web app answer only addresses from your home
-network. Elsewhere they say that sign-in is only available from the home network. Claude's servers reach the connector itself
+network. Elsewhere they say that they only work on the home network. Claude's servers reach the connector itself
 (`/mcp` and the token exchange) from the internet, so sign Claude in from home once. The home network is the
 `192.168.0.0/16` and `10.0.0.0/8` by default (not `172.16.0.0/12`, where Docker's bridges live); set your own
 in `"web": {"lan": ["198.51.100.0/24"]}` (each entry a network; `modules apply` refuses a bad one). Five wrong passphrases
-lock the sign-in for 10 minutes.
+lock the connector's sign-in for 10 minutes.
 
 ## Remote access
 

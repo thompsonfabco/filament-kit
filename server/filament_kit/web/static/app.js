@@ -43,7 +43,6 @@ async function api(path, opts = {}) {
   const r = await fetch(BASE + "/api/" + path, init);
   let data;
   try { data = await r.json(); } catch { data = { error: `HTTP ${r.status}` }; }
-  if (r.status === 401) { location.reload(); }
   if (!r.ok || data.error) throw new Error(data.error || `HTTP ${r.status}`);
   return data;
 }
@@ -68,8 +67,7 @@ for (const [key, label] of [["add", "Add spools"], ["open", "Open spool"], ["pre
     ...(PRINTERS ? [["printers", "Printers"]] : [])]) {
   bar.append(h("button", { textContent: label, dataset: { key }, on: { click: () => show(key) } }));
 }
-app.append(bar, ...Object.values(tabs).map((t) => t.el),
-  h("form", { method: "post", action: BASE + "/logout" }, h("button", { class: "secondary", textContent: "Sign out" })));
+app.append(bar, ...Object.values(tabs).map((t) => t.el));
 function show(key) {
   for (const b of bar.children) b.classList.toggle("on", b.dataset.key === key);
   for (const [k, t] of Object.entries(tabs)) { t.el.classList.toggle("hidden", k !== key); (k === key ? t.enter : t.leave)?.(); }

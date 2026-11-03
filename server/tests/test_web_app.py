@@ -189,75 +189,52 @@ def _client(app, who=HOME):
     return TestClient(app, base_url=ORIGIN, client=who)
 
 
-def _sign_in(c) -> str:
-    r = c.post("/intake/login", data={"passphrase": PASS}, headers={"Origin": ORIGIN}, follow_redirects=False)
-    assert r.status_code == 303 and r.headers["location"] == BASE
-    cookie = r.headers["set-cookie"]
-    low = cookie.lower()
-    assert "secure" in low and "httponly" in low and "samesite=strict" in low
-    assert f"path={BASE}" in low and "max-age=2592000" in low
-    tok = cookie.split(";")[0].split("=", 1)[1]
-    c.cookies.set("fi_session", tok)    # the cookie's path is the public one (nginx strips /filament)
-    return tok
-
-
-def test_page_signed_out_then_in_with_csp(app):
+def test_page_needs_no_sign_in_and_has_csp(app):
     with _client(app) as c:
         r = c.get("/intake")
-        assert r.status_code == 200 and "Passphrase" in r.text and "app.js" not in r.text
+        assert r.status_code == 200 and "Passphrase" not in r.text and "Sign out" not in r.text
+        assert f"src='{BASE}/app.js'" in r.text and f"data-base='{BASE}'" in r.text
+        assert "data-sealed='Sealed stock'" in r.text and "Rack 1" in r.text
         csp = r.headers["content-security-policy"]
         assert "default-src 'none'" in csp and "script-src 'self'" in csp and "frame-ancestors 'none'" in csp
         assert r.headers["x-frame-options"] == "DENY" and r.headers["cache-control"] == "no-store"
-        _sign_in(c)
-        r = c.get("/intake")
-        assert f"src='{BASE}/app.js'" in r.text and f"data-base='{BASE}'" in r.text
-        assert "data-sealed='Sealed stock'" in r.text and "Rack 1" in r.text
-        assert r.headers["content-security-policy"] == csp
+        assert "set-cookie" not in r.headers
         assert c.get("/intake/app.js").text.startswith("// Spool intake")
-        assert c.get("/intake/icon.png").content[:4] == b"\x89PNG"
+        assert c.get("/intake/icon.png").content[:4] == bytes([0x89]) + b"PNG"
         assert c.get("/intake/manifest.webmanifest").json()["start_url"] == BASE
 
 
-def test_login_wrong_passphrase_and_shared_lockout(app, lockout):
+def test_no_sign_in_routes(app):
     with _client(app) as c:
-        for _ in range(5):
-            r = c.post("/intake/login", data={"passphrase": "wrong one!!!"}, headers={"Origin": ORIGIN})
-            assert r.status_code == 401
-        r = c.post("/intake/login", data={"passphrase": PASS}, headers={"Origin": ORIGIN})
-        assert r.status_code == 429
-        assert lockout.blocked()               # the same count /login reads
-        r = c.post("/login", data={"req": "x", "passphrase": PASS}, headers={"Origin": ORIGIN})
-        assert r.status_code in (400, 429)     # the request is unknown; never a sign-in
+        for path in ("/intake/login", "/intake/logout"):
+            assert c.post(path, data={"passphrase": PASS}, headers={"Origin": ORIGIN}).status_code in (404, 405), path
+
+
+def test_api_answers_without_a_session(app):
+    with _client(app) as c:
+        r = c.get("/intake/api/vendors")
+        assert r.status_code == 200, r.text
 
 
 def test_lan_only_refusal(app):
     with _client(app, AWAY) as c:
-        for path in ("/intake", "/intake/api/find", "/login", "/authorize"):
+        for path in ("/intake", "/intake/api/find", "/intake/api/vendors", "/login", "/authorize"):
             r = c.get(path)
             assert r.status_code == 403 and "home network" in r.text, path
-        assert c.post("/intake/login", data={"passphrase": PASS}, headers={"Origin": ORIGIN}).status_code == 403
+        r = c.post("/intake/api/add", json={"items": [], "dry_run": True}, headers={"Origin": ORIGIN})
+        assert r.status_code == 403
 
 
 def test_origin_refusal(app):
     with _client(app) as c:
-        assert c.post("/intake/login", data={"passphrase": PASS},
-                      headers={"Origin": "https://evil.example"}).status_code == 403
-        _sign_in(c)
         r = c.post("/intake/api/add", json={"items": [], "dry_run": True}, headers={"Origin": "https://evil.example"})
         assert r.status_code == 403 and r.json()["error"] == "bad origin"
         assert c.post("/intake/api/add", json={"items": []}).status_code == 403   # no Origin at all
 
 
-def test_api_needs_session(app):
-    with _client(app) as c:
-        r = c.get("/intake/api/find")
-        assert r.status_code == 401 and "signed out" in r.json()["error"]
-
-
 def test_read_add_link_open_flow(app, env, sm, fake):
     data = env
     with _client(app) as c:
-        _sign_in(c)
         post = {"headers": {"Origin": ORIGIN}}
         # label read: a fresh unknown tap on the reader makes the pictured spool an opened one
         data["tag"] = {"status": "ok", "nfc_id": UID, "read_at_unix": 1, "age_seconds": 8}
@@ -305,21 +282,12 @@ def test_read_add_link_open_flow(app, env, sm, fake):
 
 def test_bad_inputs_are_400(app):
     with _client(app) as c:
-        _sign_in(c)
         post = {"headers": {"Origin": ORIGIN}}
         r = c.post("/intake/api/add", json={"items": [{"vendor": "X", "name": "Y", "material": "PLA"}]}, **post)
         assert r.status_code == 400 and "net" in r.json()["error"]
         assert c.post("/intake/api/open", json={"spool": "x"}, **post).status_code == 400
         r = c.post("/intake/api/read", files=[("photos", ("a.heic", b"\x89PNG....", "image/heic"))], **post)
         assert r.status_code == 400 and "a.heic" in r.json()["error"]
-
-
-def test_logout_ends_session(app, store):
-    with _client(app) as c:
-        tok = _sign_in(c)
-        assert store.check_session(tok)
-        r = c.post("/intake/logout", headers={"Origin": ORIGIN}, follow_redirects=False)
-        assert r.status_code == 303 and not store.check_session(tok)
 
 
 def test_start_pairs_for_the_bridge_and_skips_it_with_a_slot_service(env, monkeypatch):
@@ -350,7 +318,6 @@ def test_start_survives_a_pairing_failure(env, caplog):
 
 def test_web_numbers_and_line_bodies_are_checked(app, sm):
     with _client(app) as c:
-        _sign_in(c)
         post = {"headers": {"Origin": ORIGIN}}
         for bad in ("nan", "inf", "-Infinity"):
             r = c.post("/intake/api/open", json={"spool": 1, "gross": bad, "dry_run": True}, **post)
@@ -370,7 +337,6 @@ def test_web_unexpected_errors_are_generic(app, monkeypatch, caplog):
         raise KeyError("secret detail")
     monkeypatch.setattr(mt.Tools, "find_spools", boom)
     with _client(app) as c:
-        _sign_in(c)
         with caplog.at_level(logging.ERROR, logger="filament_kit"):
             r = c.get("/intake/api/find")
     assert r.status_code == 500 and "secret detail" not in r.text
@@ -385,7 +351,6 @@ def test_web_read_refunds_only_when_claude_was_not_reached(app, sm, fake, monkey
     def count():
         return len(json.loads(reads.read_text())) if reads.exists() else 0
     with _client(app) as c:
-        _sign_in(c)
         post = {"headers": {"Origin": ORIGIN}}
         photo = [("photos", ("a.jpg", JPEG, "image/jpeg"))]
         fake.raises = RuntimeError("Claude blew up after the call")       # Claude was reached: no refund
@@ -410,7 +375,6 @@ def test_ai_off_page_hides_reading_and_manual_add_works(app, env, sm):
     cfg["modules"]["ai_intake"] = False
     config.save(cfg)
     with _client(app) as c:
-        _sign_in(c)
         post = {"headers": {"Origin": ORIGIN}}
         assert "data-ai='0'" in c.get("/intake").text
         r = c.post("/intake/api/read", files=[("photos", ("a.jpg", JPEG, "image/jpeg"))], **post)
@@ -437,7 +401,6 @@ def test_picker_tare_falls_back_to_the_vendor_and_vendorless_filaments_are_liste
                          "spool_weight": 180})
     sm.post("filament", {"name": "Mystery PLA", "material": "PLA", "density": 1.24})
     with _client(app) as c:
-        _sign_in(c)
         fils = c.get("/intake/api/filaments").json()["filaments"]
     by = {f["name"]: f for f in fils}
     assert by["PLA+ Grey"]["tare"] == 213             # no spool weight of its own: the vendor's empty spool
