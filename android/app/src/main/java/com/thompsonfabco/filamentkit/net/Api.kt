@@ -132,6 +132,15 @@ class Api(
         return call(req.get()).jsonObject["spools"]?.jsonArray.orEmpty().map { it.jsonObject }
     }
 
+    /** Spoolman's filaments (also ones without spools) whose vendor, name or material hold every word of [q]. */
+    suspend fun filaments(q: String): List<FilamentChoice> {
+        val req = request("api", "filaments") { if (q.isNotBlank()) addQueryParameter("q", q.trim()) }
+        return call(req.get()).jsonObject["filaments"]?.jsonArray.orEmpty().map { decode(it) }
+    }
+
+    suspend fun vendors(): List<VendorChoice> =
+        call(request("api", "vendors").get()).jsonObject["vendors"]?.jsonArray.orEmpty().map { decode(it) }
+
     suspend fun locations(): List<String> =
         call(request("api", "locations").get()).jsonObject["locations"]?.jsonArray.orEmpty()
             .map { it.jsonPrimitive.content }
