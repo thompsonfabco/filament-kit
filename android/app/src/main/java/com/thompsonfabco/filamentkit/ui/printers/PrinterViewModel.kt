@@ -141,18 +141,57 @@ object PrinterHelp {
 
     fun formatMinutes(min: Int): String = if (min >= 60) "${min / 60} h ${min % 60} min" else "$min min"
 
-    /** The external spool holder's slot label (the server's `Ext`). */
+    /** The single external spool holder's slot label; two-holder printers use `Ext-L` / `Ext-R`. */
     const val EXT = "Ext"
 
-    /** "AMS A", "AMS HT HT-A", "External spool holder". */
-    fun unitTitle(u: AmsUnit): String = when (u.kind) {
-        "ext" -> "External spool holder"
-        "ams_ht" -> "AMS HT ${u.label}"
+    /** The unit kind of an external spool holder. */
+    const val EXT_KIND = "ext"
+
+    /** An external holder's label (`Ext`, `Ext-L`, `Ext-R`, `Ext-<id>`), for when the unit is not known. */
+    fun isExtLabel(label: String): Boolean =
+        label.equals(EXT, ignoreCase = true) || label.startsWith("$EXT-", ignoreCase = true)
+
+    /** The unit and slot labelled [label] in [units], or null. */
+    private fun find(label: String, units: List<AmsUnit>): Pair<AmsUnit, AmsSlot>? =
+        units.firstNotNullOfOrNull { u -> u.slots.firstOrNull { it.label == label }?.let { u to it } }
+
+    /**
+     * "external left spool holder" from the server's `say` words; "external spool holder" without them (plus the
+     * label when it is not plain `Ext`, so two holders stay apart).
+     */
+    private fun holder(label: String, say: List<String>): String = when {
+        say.isNotEmpty() -> say.joinToString(" ").let { if (it.startsWith("external")) it else "external $it" } +
+            " spool holder"
+        label.equals(EXT, ignoreCase = true) -> "external spool holder"
+        else -> "external spool holder $label"
+    }
+
+    /** "AMS A", "AMS HT HT-A", "AMS 2 Pro B" (the server's type name), "External left spool holder". */
+    fun unitTitle(u: AmsUnit): String = when {
+        u.kind == EXT_KIND -> holder(u.label, u.say.ifEmpty { u.slots.singleOrNull()?.say.orEmpty() })
+            .replaceFirstChar { it.uppercase() }
+        u.typeName.isNotBlank() -> "${u.typeName} ${u.label}"
+        u.kind == "ams_ht" -> "AMS HT ${u.label}"
         else -> "AMS ${u.label}"
     }
 
-    /** "slot A1", or "the external spool holder" for `Ext`. */
-    fun slotName(label: String): String = if (label == EXT) "the external spool holder" else "slot $label"
+    /**
+     * "slot A1", or "the external left spool holder" for an external holder: a slot of a unit of kind `ext` in
+     * [units] (the printer's status when known; its `say` gives the words), else a label like `Ext` / `Ext-L`.
+     */
+    fun slotName(label: String, units: List<AmsUnit> = emptyList()): String {
+        val found = find(label, units)
+        val external = found?.first?.kind == EXT_KIND || (found == null && isExtLabel(label))
+        if (!external) return "slot $label"
+        return "the " + holder(label, found?.second?.say.orEmpty().ifEmpty { found?.first?.say.orEmpty() })
+    }
+
+    /** A slot in a list: "A1", or "Ext-L (external left spool holder)". */
+    fun slotLabel(s: AmsSlot, units: List<AmsUnit> = emptyList()): String {
+        val unit = find(s.label, units)?.first
+        val external = unit?.kind == EXT_KIND || (unit == null && isExtLabel(s.label))
+        return if (external) "${s.label} (${holder(s.label, s.say.ifEmpty { unit?.say.orEmpty() })})" else s.label
+    }
 
     /** A slot's spool as the user knows it: its name, else "spool #id". */
     fun spoolName(s: SlotSpool): String = s.name.ifBlank { "spool #${s.id ?: "?"}" }
@@ -162,9 +201,14 @@ object PrinterHelp {
         "Moved back: ${name?.ifBlank { null } ?: "#${id ?: "?"}"} → ${location.ifBlank { "its previous place" }}"
 }
 
-/** The "Unload?" question for one slot, asked after its dry run said where the spool goes. */
-data class UnloadAsk(val label: String, val spool: String, val location: String) {
-    val question: String get() = "Unload $spool from ${PrinterHelp.slotName(label)}? It goes back to $location."
+/** The "Unload?" question for one slot, asked after its dry run said where the spool goes; [slot] names the slot. */
+data class UnloadAsk(
+    val label: String,
+    val spool: String,
+    val location: String,
+    val slot: String = PrinterHelp.slotName(label),
+) {
+    val question: String get() = "Unload $spool from $slot? It goes back to $location."
 }
 
 enum class StopStep { None, First, Second }
@@ -271,7 +315,10 @@ class PrinterViewModel(
             guard(onError = ::slotError, describe = PrinterHelp::actionMessage) {
                 val r = backend.unload(id, slot.label, dryRun = true)
                 val where = r.location.ifBlank { r.movedBack.firstOrNull()?.location.orEmpty() }
-                val ask = UnloadAsk(slot.label, PrinterHelp.spoolName(spool), where.ifBlank { "its previous place" })
+                val ask = UnloadAsk(
+                    slot.label, PrinterHelp.spoolName(spool), where.ifBlank { "its previous place" },
+                    PrinterHelp.slotName(slot.label, _state.value.status?.ams.orEmpty()),
+                )
                 _state.update { it.copy(unloadAsk = ask) }
             }
             _state.update { it.copy(slotBusy = null) }
@@ -343,7 +390,7 @@ class PrinterViewModel(
     companion object {
         /** "Unloaded Acme Basic Black from slot A1." then where each spool went. */
         fun unloadLines(ask: UnloadAsk, r: UnloadResult, names: Map<Int, String>): List<String> = buildList {
-            add("Unloaded ${ask.spool} from ${PrinterHelp.slotName(ask.label)}.")
+            add("Unloaded ${ask.spool} from ${ask.slot}.")
             if (r.movedBack.isEmpty()) add(PrinterHelp.movedBackLine(ask.spool, null, r.location))
             r.movedBack.forEach { m -> add(PrinterHelp.movedBackLine(m.id?.let(names::get), m.id, m.location)) }
         }

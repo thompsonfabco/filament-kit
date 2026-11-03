@@ -8,11 +8,13 @@ import com.thompsonfabco.filamentkit.imaging.prepareJpeg
 import com.thompsonfabco.filamentkit.net.AddResult
 import com.thompsonfabco.filamentkit.net.Api
 import com.thompsonfabco.filamentkit.net.ApiError
+import com.thompsonfabco.filamentkit.net.FilamentChoice
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
 import com.thompsonfabco.filamentkit.net.LOCAL_NETWORK_MESSAGE
 import com.thompsonfabco.filamentkit.net.ParentList
 import com.thompsonfabco.filamentkit.net.Proposal
 import com.thompsonfabco.filamentkit.net.ReadResult
+import com.thompsonfabco.filamentkit.net.VendorChoice
 import com.thompsonfabco.filamentkit.tags.TagEvents
 import com.thompsonfabco.filamentkit.ui.isValidWeight
 import java.io.File
@@ -59,6 +61,11 @@ interface IntakeApi {
 
     suspend fun parents(material: String): ParentList = ParentList()
 
+    /** Filaments for the manual add's picker (`GET /api/filaments`); the defaults keep older fakes compiling. */
+    suspend fun filaments(q: String): List<FilamentChoice> = emptyList()
+
+    suspend fun vendors(): List<VendorChoice> = emptyList()
+
     companion object {
         fun of(api: Api): IntakeApi = object : IntakeApi {
             override suspend fun read(photos: List<ByteArray>, hint: String, tag: String?) = api.read(photos, hint, tag)
@@ -67,11 +74,16 @@ interface IntakeApi {
             override suspend fun locations() = api.locations()
             override suspend fun propose(vendor: String, line: String, material: String) = api.propose(vendor, line, material)
             override suspend fun parents(material: String) = api.parents(material)
+            override suspend fun filaments(q: String) = api.filaments(q)
+            override suspend fun vendors() = api.vendors()
         }
     }
 }
 
-/** Capture → (Reading) → Review → (Previewing) → Preview → (Adding) → Done. */
+/**
+ * Capture → (Reading) → Review → (Previewing) → Preview → (Adding) → Done. Adding by hand ([AddUiState.manual])
+ * starts at Review with no items: the user picks filaments or types new ones in.
+ */
 enum class Stage { Capture, Reading, Review, Previewing, Preview, Adding, Done }
 
 /**
@@ -129,7 +141,26 @@ data class AddUiState(
     val parents: Map<String, ParentList> = emptyMap(),
     /** The server refused a picked Bambu parent (`unknown_parent`); shown at the picked parent fields until an edit. */
     val parentError: String? = null,
+    /** Adding by hand: no photos, items come from the filament picker or "New filament". */
+    val manual: Boolean = false,
+    /** The picker's search text and the filaments it found (manual add). */
+    val filamentQuery: String = "",
+    val filaments: List<FilamentChoice> = emptyList(),
+    val filamentsLoading: Boolean = false,
+    val filamentsError: String? = null,
+    /** Vendor suggestions for a new filament (manual add). */
+    val vendors: List<VendorChoice> = emptyList(),
+    /** The server's complaint about one field (item index → item key → text), shown at that field until an edit. */
+    val fieldErrors: Map<Int, Map<String, String>> = emptyMap(),
 ) {
+    /** Manual add: what each item still needs before Preview (item keys); empty lists when complete. */
+    val missing: List<List<String>>
+        get() = items.map(::missingFields)
+
+    /** A manual add's items are complete; the label-photo flow leaves this to the server, as before. */
+    val complete: Boolean
+        get() = !manual || missing.all { it.isEmpty() }
+
     /** Every item has a whole spool count of at least 1 (Preview is blocked otherwise). */
     val countsValid: Boolean
         get() = items.all { ((it["count"] as? JsonPrimitive)?.intOrNull ?: 0) >= 1 }
@@ -157,8 +188,13 @@ class AddViewModel(
     private val io: CoroutineDispatcher = Dispatchers.IO,
     /** Wall clock in ms, for the age of the parent lists. */
     private val clock: () -> Long = System::currentTimeMillis,
+    /** Add by hand (no photos, no draft): starts at Review with the filament picker. */
+    private val manual: Boolean = false,
 ) : ViewModel() {
-    private val _state = MutableStateFlow(AddUiState(tag = initialTag))
+    private val _state = MutableStateFlow(
+        if (manual) AddUiState(stage = Stage.Review, tag = initialTag, manual = true, filamentsLoading = true)
+        else AddUiState(tag = initialTag),
+    )
     val state: StateFlow<AddUiState> = _state.asStateFlow()
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -178,6 +214,8 @@ class AddViewModel(
     private val parentsLoadedAt = mutableMapOf<String, Long>()
     /** Items whose parent text is being typed (free-text mode): not a pick yet, and proposals leave the text alone. */
     private val typingParent = mutableSetOf<Int>()
+    /** The running (or debounced) filament search of the manual add's picker. */
+    private var filamentJob: Job? = null
 
     init {
         viewModelScope.launch(io) {
@@ -198,7 +236,97 @@ class AddViewModel(
             } catch (_: Exception) { // suggestions only; the location field still takes free text
             }
         }
-        if (draftId != null) viewModelScope.launch { restore(draftId) }
+        if (manual) {
+            viewModelScope.launch {
+                try {
+                    val list = api.vendors()
+                    _state.update { it.copy(vendors = list) }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) { // suggestions only; the vendor field still takes free text
+                }
+            }
+            findFilaments("")
+        } else if (draftId != null) {
+            viewModelScope.launch { restore(draftId) }
+        }
+    }
+
+    // ---------- manual add: filament picker ----------
+
+    /** The picker's search text; the list follows after a short pause (each word must match). */
+    fun setFilamentQuery(q: String) {
+        if (q == _state.value.filamentQuery) return
+        _state.update { it.copy(filamentQuery = q) }
+        findFilaments(q, FILAMENT_DEBOUNCE_MS)
+    }
+
+    private fun findFilaments(q: String, wait: Long = 0) {
+        filamentJob?.cancel()
+        filamentJob = viewModelScope.launch {
+            if (wait > 0) delay(wait)
+            _state.update { it.copy(filamentsLoading = true, filamentsError = null) }
+            try {
+                val list = api.filaments(q)
+                _state.update { it.copy(filaments = list, filamentsLoading = false) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(filamentsLoading = false, filamentsError = describe(e).message, filaments = emptyList())
+                }
+            }
+        }
+    }
+
+    /** Adds a spool of a filament Spoolman already has (same vendor + name: the server reuses that filament). */
+    fun pickFilament(f: FilamentChoice) {
+        if (_state.value.stage in BUSY) return
+        val item = buildMap {
+            put("vendor", JsonPrimitive(f.vendor))
+            put("name", JsonPrimitive(f.name.orEmpty()))
+            put("material", JsonPrimitive(f.material.orEmpty()))
+            f.density?.let { put("density", number(it)) }
+            f.net?.takeIf(::isValidWeight)?.let { put("net", number(it)) }
+            f.tare?.takeIf(::isValidWeight)?.let { put("tare", number(it)) }
+            f.colorHex?.takeIf { it.isNotBlank() }?.let { put("color_hex", JsonPrimitive(it.uppercase())) }
+            f.nozzle?.let { put("nozzle", number(it)) }
+            f.bed?.let { put("bed", number(it)) }
+            put("count", JsonPrimitive(1))
+            put("sealed", JsonPrimitive(true))
+            f.id?.let { put(FROM_FILAMENT, JsonPrimitive(it)) }
+            put(FROM_SPOOLS, JsonPrimitive(f.spools))
+        }
+        addItem(JsonObject(item))
+    }
+
+    /** Adds an empty item for a filament Spoolman does not have yet. */
+    fun newFilament() {
+        if (_state.value.stage in BUSY) return
+        addItem(JsonObject(mapOf(
+            "vendor" to JsonPrimitive(""), "name" to JsonPrimitive(""), "material" to JsonPrimitive(""),
+            "count" to JsonPrimitive(1), "sealed" to JsonPrimitive(true),
+        )))
+    }
+
+    private fun addItem(item: JsonObject) {
+        _state.update { s ->
+            s.copy(items = s.items + item, generation = s.generation + 1).invalidated()
+        }
+        retryAction = null
+        save()
+    }
+
+    /** A vendor picked from the suggestions; its empty spool weight fills a blank `tare`. */
+    fun pickVendor(index: Int, v: VendorChoice) {
+        val item = _state.value.items.getOrNull(index) ?: return
+        if (_state.value.stage in BUSY) return
+        var next = item + ("vendor" to JsonPrimitive(v.name))
+        val tare = v.tare?.takeIf(::isValidWeight)
+        if (tare != null && item.num("tare") == null) next = next + ("tare" to number(tare))
+        editItem(index) { JsonObject(next) }
+        _state.update { it.copy(generation = it.generation + 1) } // the card shows the new vendor and tare
+        scheduleProposal(index)
     }
 
     // ---------- capture ----------
@@ -324,7 +452,10 @@ class AddViewModel(
         loadParentsForItems()
     }
 
-    fun backToPhotos() = _state.update { it.copy(stage = Stage.Capture, previewLines = emptyList(), error = null) }
+    /** Not in a manual add (it has no photos; the screen offers Cancel instead). */
+    fun backToPhotos() = _state.update {
+        if (it.manual) it else it.copy(stage = Stage.Capture, previewLines = emptyList(), error = null)
+    }
 
     /** From the photos back to the items already read (no new read). */
     fun showReview() = _state.update { if (it.items.isEmpty() || it.stage != Stage.Capture) it else it.copy(stage = Stage.Review, error = null) }
@@ -493,13 +624,28 @@ class AddViewModel(
      */
     private fun AddUiState.invalidated() =
         (if (stage == Stage.Preview) copy(stage = Stage.Review, previewLines = emptyList()) else this)
-            .copy(error = null, parentError = null)
+            .copy(error = null, parentError = null, fieldErrors = emptyMap())
 
     fun preview() {
         val s = _state.value
         if (s.items.isEmpty() || !s.countsValid || !s.taresValid || s.stage != Stage.Review) return
         typingParent.toList().forEach(::commitParent) // parent text still being typed counts as entered
+        fillDensities()
+        if (!_state.value.complete) return
         runAdd(dryRun = true)
+    }
+
+    /** A missing density becomes the usual one for its material (PLA 1.24, PETG 1.27, ...), shown in the card. */
+    private fun fillDensities() {
+        val s = _state.value
+        val filled = s.items.map { item ->
+            val d = item.num("density")?.takeIf(::isValidWeight)
+            val guess = if (d == null) defaultDensity(item.text("material")) else null
+            if (guess != null) JsonObject(item + ("density" to number(guess))) else item
+        }
+        if (filled == s.items) return
+        _state.update { it.copy(items = filled, generation = it.generation + 1) }
+        save()
     }
 
     /** The real add. After an add that may already have written spools, this only opens the "add again?" warning. */
@@ -554,11 +700,14 @@ class AddViewModel(
                 // Spools may exist now: a partial Spoolman failure (ids known) or a lost reply (unknown).
                 val created = (e as? ApiError)?.let(::partialIds).orEmpty()
                 val warn = !dryRun && (code == "offline" || (code == "spoolman_error" && created.isNotEmpty()))
+                val field = if (code == "bad_request") fieldError(e.message.orEmpty(), s.items) else null
+                if (field != null) err = err.copy(message = FIELD_PROBLEM)
                 _state.update {
                     it.copy(
                         stage = stage,
                         previewLines = if (stage == Stage.Review) emptyList() else it.previewLines,
                         parentError = if (badParent) UNKNOWN_PARENT else null,
+                        fieldErrors = field?.let { f -> mapOf(f.index to mapOf(f.key to f.text)) }.orEmpty(),
                         addedBefore = if (warn) {
                             AddedBefore((it.addedBefore?.spoolIds.orEmpty() + created).distinct())
                         } else it.addedBefore,
@@ -604,7 +753,15 @@ class AddViewModel(
         retryAction = null
         cancelProposals()
         parentsLoadedAt.clear() // the next read loads the parent lists again (a PC sync may have added presets)
-        _state.update { AddUiState(locations = it.locations, generation = it.generation + 1) }
+        _state.update {
+            if (it.manual) {
+                AddUiState(
+                    stage = Stage.Review, manual = true, locations = it.locations, vendors = it.vendors,
+                    filamentQuery = it.filamentQuery, generation = it.generation + 1,
+                )
+            } else AddUiState(locations = it.locations, generation = it.generation + 1)
+        }
+        if (manual) findFilaments(_state.value.filamentQuery) // spool counts changed
     }
 
     private fun showError(e: AddError) = _state.update { it.copy(error = e) }
@@ -658,6 +815,10 @@ class AddViewModel(
         internal const val PARENTS_MAX_AGE_MS = 5 * 60_000L
         /** App-only item key (kept in the draft, never sent): the user picked this item's Bambu parent. */
         internal const val PICKED = "app_parent_picked"
+        /** App-only item keys (never sent): the Spoolman filament a manual pick came from, and its spool count. */
+        internal const val FROM_FILAMENT = "app_filament_id"
+        internal const val FROM_SPOOLS = "app_filament_spools"
+        internal const val FILAMENT_DEBOUNCE_MS = 300L
         private val LINE_KEYS = listOf("vendor", "line", "material")
         private val REQUIRED_TEXT = setOf("vendor", "name", "material")
         private val BUSY = setOf(Stage.Reading, Stage.Previewing, Stage.Adding)
@@ -693,8 +854,56 @@ internal fun applyCaptureChoices(
  */
 internal fun forAdd(item: JsonObject): JsonObject {
     val picked = (item[AddViewModel.PICKED] as? JsonPrimitive)?.booleanOrNull == true
-    return JsonObject(if (picked) item - AddViewModel.PICKED else item - AddViewModel.PICKED - "bambu_parent")
+    val sent = item.filterKeys { !it.startsWith(APP_KEY) }
+    return JsonObject(if (picked) sent else sent - "bambu_parent")
 }
+
+/** Item keys the app keeps for itself start with this; [forAdd] never sends them. */
+private const val APP_KEY = "app_"
+
+/** The usual density (g/cm³) for a material's family (`PLA+` and `PLA-CF` count as PLA); null when unknown. */
+fun defaultDensity(material: String?): Double? =
+    DENSITIES[material.orEmpty().trim().uppercase().takeWhile { it.isLetter() }]
+
+private val DENSITIES = mapOf("PLA" to 1.24, "PETG" to 1.27, "ABS" to 1.04, "ASA" to 1.07, "TPU" to 1.21)
+
+/**
+ * What a manual add item still needs (item keys): vendor, name, material, net, tare and density (unless the
+ * material has a usual one), and a spool count. Empty when complete.
+ */
+internal fun missingFields(item: JsonObject): List<String> = buildList {
+    for (k in listOf("vendor", "name", "material")) if (item.text(k).isNullOrBlank()) add(k)
+    for (k in listOf("net", "tare")) if (item.num(k)?.let(::isValidWeight) != true) add(k)
+    if (item.num("density")?.let(::isValidWeight) != true && defaultDensity(item.text("material")) == null) add("density")
+    if (((item["count"] as? JsonPrimitive)?.intOrNull ?: 0) < 1) add("count")
+}
+
+/** A 400 from `add` that names one item's field: [index] into the items, [key] the field, [text] what is wrong. */
+internal data class FieldError(val index: Int, val key: String, val text: String)
+
+/**
+ * Reads the server's `"<vendor> <name>: <field> must be ..."` (or `missing <field>`) message. The item is the one
+ * with that vendor and name (or the only item); null when the message names no known field.
+ */
+internal fun fieldError(message: String, items: List<JsonObject>): FieldError? {
+    val split = message.indexOf(": ")
+    if (split < 0) return null
+    val label = message.substring(0, split)
+    val text = message.substring(split + 2).trim()
+    val words = text.split(' ')
+    val key = (if (words.firstOrNull() == "missing") words.getOrNull(1) else words.firstOrNull()) ?: return null
+    if (key !in FIELD_KEYS) return null
+    val index = items.indexOfFirst { "${it.text("vendor")} ${it.text("name")}" == label }
+        .takeIf { it >= 0 } ?: if (items.size == 1) 0 else return null
+    return FieldError(index, key, text.replaceFirstChar { it.uppercase() })
+}
+
+private val FIELD_KEYS = setOf(
+    "vendor", "name", "material", "net", "tare", "density", "count", "gross", "location", "color_hex", "line",
+    "bambu_parent", "nozzle", "bed", "lot", "note",
+)
+
+internal const val FIELD_PROBLEM = "The server could not use one of the values. Check the marked field."
 
 /** The server's rule for intake `line` and `bambu_parent` text (at most 100 characters, no `@`); null when fine. */
 fun intakeTextProblem(value: String): String? = when {
@@ -708,6 +917,10 @@ internal const val UNKNOWN_PARENT = "Bambu Studio has no preset with that parent
 
 /** A text value of an item (null when missing, JSON null or not a string). */
 private fun JsonObject.text(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
+
+/** A number value of an item (null when missing, JSON null or text). */
+private fun JsonObject.num(key: String): Double? =
+    (this[key] as? JsonPrimitive)?.takeIf { !it.isString }?.contentOrNull?.toDoubleOrNull()
 
 /** Whole numbers stay integers in the JSON (and on screen). */
 internal fun number(v: Double): JsonPrimitive =
@@ -770,6 +983,7 @@ private fun describeApi(e: ApiError): AddError {
         )
         "bad_photo" -> AddError("The server could not use a photo. Remove it and take it again.", detail = e.message)
         "bad_request" -> AddError("The server could not use these values.", detail = e.message)
+        "module_off" -> AddError("Label reading is turned off on this server. Add the spool by hand instead.")
         "unknown_parent" -> AddError(UNKNOWN_PARENT, detail = e.message)
         "bad_response" -> AddError("Unexpected response from the server")
         else -> AddError("The server hit an error. Try again later.", detail = e.message, canRetry = true)

@@ -3,10 +3,12 @@ package com.thompsonfabco.filamentkit.ui.add
 import com.thompsonfabco.filamentkit.drafts.DraftStore
 import com.thompsonfabco.filamentkit.net.AddResult
 import com.thompsonfabco.filamentkit.net.ApiError
+import com.thompsonfabco.filamentkit.net.FilamentChoice
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
 import com.thompsonfabco.filamentkit.net.ParentList
 import com.thompsonfabco.filamentkit.net.Proposal
 import com.thompsonfabco.filamentkit.net.ReadResult
+import com.thompsonfabco.filamentkit.net.VendorChoice
 import java.io.File
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -905,7 +907,7 @@ class AddViewModelTest {
     }
 }
 
-private class FakeIntakeApi : IntakeApi {
+internal class FakeIntakeApi : IntakeApi {
     data class Read(val photos: List<ByteArray>, val hint: String, val tag: String?)
     data class Add(val items: JsonArray, val dryRun: Boolean, val tag: String?)
 
@@ -957,4 +959,17 @@ private class FakeIntakeApi : IntakeApi {
         parentCalls += material
         return parentLists[material] ?: ParentList(emptyList(), synced = false)
     }
+
+    val filamentCalls = mutableListOf<String>()
+    var filamentList: (String) -> List<FilamentChoice> = { emptyList() }
+    var filamentFailure: Exception? = null
+    var vendorList = emptyList<VendorChoice>()
+
+    override suspend fun filaments(q: String): List<FilamentChoice> {
+        filamentCalls += q
+        filamentFailure?.let { throw it }
+        return filamentList(q)
+    }
+
+    override suspend fun vendors(): List<VendorChoice> = vendorList
 }
