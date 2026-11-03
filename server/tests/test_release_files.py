@@ -747,3 +747,52 @@ def test_release_workflow_sums_step_runs(tmp_path, with_library):
     assert ("dist/library.tar.gz" in files) is with_library
     for f in ("dist/filament-kit-1.2.3.tar.gz", "dist/get.sh", "dist/SHA256SUMS.sig", "dist/bambu_hardware.xml"):
         assert f in files
+
+
+# --- final review M12: get.sh on an existing install waits for no printer job, as the updater does ---------------
+
+def _get_sh_hold_function() -> str:
+    text = _read("get.sh")
+    i = text.index("fk_hold_printers() {")
+    return text[i:text.index("\n}\n", i) + 3]
+
+
+def test_get_sh_holds_the_printer_locks_before_install_sh():
+    text = _read("get.sh")
+    body = text[text.index("fk_main() {"):]
+    assert body.index("fk_hold_printers") < body.index('bash "$root/install.sh"')
+    fn = _get_sh_hold_function()
+    assert "mapping.lock" in fn and "flock -n -x" in fn and "fk_die" in fn
+
+
+@pytest.mark.skipif(not _wsl(), reason="needs WSL Ubuntu")
+def test_get_sh_refuses_while_a_printer_job_holds_its_lock(tmp_path):
+    import subprocess
+    script = tmp_path / "hold.sh"
+    script.write_text("set -euo pipefail\n"
+                      "fk_die() { printf 'error: %s\n' \"$*\" >&2; exit 1; }\n"
+                      + _get_sh_hold_function() +
+                      'st=$(mktemp -d); mkdir -p "$st/printers/S1" "$st/printers/S2"\n'
+                      ': > "$st/printers/S1/mapping.lock"; : > "$st/printers/S2/mapping.lock"\n'
+                      'FK_STATE=$st fk_hold_printers\n'
+                      # held now: another holder cannot take it, as a mapping job could not
+                      'if flock -n -x "$st/printers/S2/mapping.lock" true; then echo NOT-HELD; else echo HELD; fi\n',
+                      encoding="utf-8", newline="\n")
+    busy = tmp_path / "busy.sh"
+    busy.write_text("set -euo pipefail\n"
+                    "fk_die() { printf 'error: %s\n' \"$*\" >&2; exit 1; }\n"
+                    + _get_sh_hold_function() +
+                    'st=$(mktemp -d); mkdir -p "$st/printers/S1"; : > "$st/printers/S1/mapping.lock"\n'
+                    'flock -x "$st/printers/S1/mapping.lock" sleep 5 & sleep 0.5\n'
+                    'FK_STATE=$st fk_hold_printers; echo REACHED\n', encoding="utf-8", newline="\n")
+
+    def run(p):
+        wp = subprocess.run(["wsl", "-d", "Ubuntu", "--exec", "wslpath", "-a", str(p).replace("\\", "/")],
+                            capture_output=True, text=True, timeout=60).stdout.strip()
+        return subprocess.run(["wsl", "-d", "Ubuntu", "--exec", "bash", wp], capture_output=True, text=True,
+                              timeout=60)
+    r = run(script)
+    assert r.returncode == 0 and r.stdout.strip() == "HELD", r.stdout + r.stderr
+    r = run(busy)
+    assert r.returncode == 1 and "REACHED" not in r.stdout
+    assert "printer S1 is mapping slots or loading a spool" in r.stderr and "nothing was installed" in r.stderr
