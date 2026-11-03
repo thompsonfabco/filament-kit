@@ -21,6 +21,7 @@ Unknown → the generic record.
     code          str          primary code from the file (generic: the code asked for, upper case, maybe "")
     name          str          display name ("H2D", "X1 Carbon"); generic: "Unknown Bambu printer (...)"
     preset_name   str | None   Bambu Studio printer name ("Bambu Lab H2D"); None for the generic record
+    say           str | None   speech text for the printer ("x one carbon"); generic: "unknown printer"
     aliases       tuple[str]   other codes and typed names that find this model
     nozzles       int          number of nozzles (generic: 1)
     camera        str | None   "hls" (RTSPS, relayed as HLS), "mjpeg" (port-6000 JPEG) or None (no camera offered)
@@ -28,15 +29,16 @@ Unknown → the generic record.
     presence      str | None   presence layout key (`Hardware.presence`), None = unknown (fall back to tray_type)
     gcode_only_failed_is_finish  bool  a gcode-only calibration job ending FAILED with no print_error has finished
     ams_mapping2  bool         calibration also sends `ams_mapping2`
-    light_nodes   tuple[str]   MQTT light nodes ("chamber_light", ...)
+    light_nodes   tuple[str]   MQTT light nodes ("chamber_light", ...); generic: () (none assumed)
     externals     tuple[External]  external spool holders, each `External(id, label, say)`: id 254/255, label
                                "Ext" (single holder) or "Ext-L"/"Ext-R", say = speech text ("external left")
     numbering     tuple[str]   candidate numbering scheme keys, first guess first (generic: ("legacy",))
     ftp_dirs      tuple[str]   FTPS directories where print jobs land
     known         bool         False for the generic record (calibration required, nothing assumed)
 
-`Hardware.ams_type(ams_id, module_code, model, tray_count) -> AmsType`: by module code (longest matching prefix),
-else by the printer model (types listing model codes, e.g. AMS Lite on A1/A1 mini), else by id range and slot count
+`Hardware.ams_type(ams_id, module_code, model, tray_count) -> AmsType`: by module code (longest matching prefix; a
+code that matches no prefix gives the generic type), with no code by the printer model (types listing model codes,
+e.g. AMS Lite on A1/A1 mini), else by id range and slot count
 (first type in file order), else a generic type with the report's slot count. `model` is a code, a name, a
 `ModelInfo` or None; `module_code` and `tray_count` may be None.
 
@@ -50,7 +52,8 @@ else by the printer model (types listing model codes, e.g. AMS Lite on A1/A1 min
     ids           tuple[int, int] | None   inclusive id range the type can have, None = any
     modules       tuple[str]   module code prefixes (upper case)
     models        tuple[str]   printer model codes this type belongs to (empty = any)
-    known         bool         False for the generic type
+    known         bool         False for the generic type and for types marked verified="false" in the file
+                               (first-gen AMS until a capture confirms it)
 
 `Hardware.scheme(key) -> Scheme` (KeyError when unknown): `encode(ams_id, tray_id) -> int` (ValueError when the
 scheme cannot number that slot) and `decode(n) -> (ams_id, tray_id) | None` (None for negative or impossible
@@ -61,9 +64,13 @@ their own id) and `shift` (`bits`: unit << bits | tray).
 | None` (None = the layout does not describe that unit). Bit expressions use a tiny grammar parsed by hand (never
 eval): `id`, `tray`, integers, `+ - * <<`, parentheses.
 
-`Hardware.say(label) -> list[str]`: speech tokens for a slot or unit label ("HT-B" → ["h", "t", "b"]).
+`Hardware.say(label, model=None) -> list[str]`: speech tokens for a slot or unit label ("HT-B" → ["h", "t", "b"]);
+with a model (code, name or ModelInfo) its own external holders are matched first.
 
-`Hardware.errors -> list[str]`: problems from the last load (empty when clean).
+`Hardware.errors -> list[str]`: problems from the last load (empty when clean). Fatal: the file was refused.
+`Hardware.warnings -> list[str]`: unknown elements and attributes (ignored, the rest loads: forward compatibility).
+
+Versions: `version="major[.minor]"`; a file with another major version is refused, minor versions load.
 
 `validate(data: bytes) -> list[str]`: check a complete file without installing it.
 """
@@ -82,7 +89,7 @@ from .. import config
 
 BUNDLED = Path(__file__).with_name("bambu_hardware.xml")
 OVERRIDE_NAME = "bambu_hardware.xml"
-VERSIONS = {"1"}
+MAJOR = "1"           # file version major[.minor]: another major is refused, any minor loads
 MAX_BYTES = 1_000_000
 
 
@@ -110,6 +117,7 @@ class ModelInfo:
     code: str
     name: str
     preset_name: str | None
+    say: str | None = None
     aliases: tuple[str, ...] = ()
     nozzles: int = 1
     camera: str | None = None
@@ -127,7 +135,7 @@ class ModelInfo:
 def generic_model(code: str | None) -> ModelInfo:
     c = (code or "").strip().upper()
     return ModelInfo(code=c, name=f"Unknown Bambu printer ({c})" if c else "Unknown Bambu printer",
-                     preset_name=None, known=False)
+                     preset_name=None, say="unknown printer", light_nodes=(), known=False)
 
 
 @dataclass(frozen=True)
@@ -187,6 +195,11 @@ class Scheme:
         if self.ht_from is not None and n >= self.ht_from:
             return (n, 0) if n <= MAX_AMS_ID else None
         return divmod(n, self.per_unit)
+
+
+# Always present, also in an empty or fallback Hardware; the file's schemes of the same key win.
+BUILTIN_SCHEMES = {"legacy": Scheme("legacy", "linear", per_unit=4, ht_from=128),
+                   "shift8": Scheme("shift8", "shift", bits=8)}
 
 
 @dataclass(frozen=True)
@@ -377,12 +390,13 @@ class _E:
 
 
 _TEXT = _E(text=True)
+_VERSION = re.compile(r"(\d{1,4})(?:\.(\d{1,4}))?")
 _SCHEMA = _E(
     attrs={"version": _text}, required=("version",), once=("models", "ams-types", "numbering-schemes",
                                                              "presence-layouts", "speech"),
     children={
         "models": _E(children={"model": _E(
-            attrs={"code": _text, "name": _text, "preset-name": _text, "nozzles": _pos,
+            attrs={"code": _text, "name": _text, "preset-name": _text, "say": _text, "nozzles": _pos,
                    "camera": _enum("hls", "mjpeg", "none"), "chamber-max": _pos, "presence": _text,
                    "gcode-only-failed-is-finish": _bool, "ams-mapping2": _bool},
             required=("code", "name"),
@@ -390,7 +404,8 @@ _SCHEMA = _E(
                       "external": _E(attrs={"id": _nonneg, "label": _text, "say": _text}, required=("id", "label")),
                       "numbering": _E(attrs={"ref": _text}, required=("ref",))})}),
         "ams-types": _E(children={"ams-type": _E(
-            attrs={"key": _text, "name": _text, "slots": _pos, "label": _text, "prefix": str, "say": _text},
+            attrs={"key": _text, "name": _text, "slots": _pos, "label": _text, "prefix": str, "say": _text,
+                   "verified": _bool},
             required=("key", "name", "slots", "label"), once=("ids",),
             children={"ids": _E(attrs={"from": _nonneg, "to": _nonneg}, required=("from", "to")),
                       "module": _E(attrs={"prefix": _text}, required=("prefix",)),
@@ -412,11 +427,12 @@ def _where(el, path: str) -> str:
     return f"{path} {ident!r}" if ident else path
 
 
-def _check(el, spec: _E, path: str, errors: list[str]) -> None:
+def _check(el, spec: _E, path: str, errors: list[str], warnings: list[str]) -> None:
+    """Fatal problems go to errors; unknown attributes and elements (a newer file) go to warnings and are ignored."""
     for name, value in el.attrib.items():
         checker = spec.attrs.get(name)
         if checker is None:
-            errors.append(f"{_where(el, path)}: unknown attribute {name!r}")
+            warnings.append(f"{_where(el, path)}: unknown attribute {name!r} ignored")
             continue
         try:
             checker(value)
@@ -436,18 +452,18 @@ def _check(el, spec: _E, path: str, errors: list[str]) -> None:
             continue
         sub = spec.children.get(child.tag)
         if sub is None:
-            errors.append(f"{_where(el, path)}: unknown element <{child.tag}>")
+            warnings.append(f"{_where(el, path)}: unknown element <{child.tag}> ignored")
             continue
         seen[child.tag] = seen.get(child.tag, 0) + 1
         if child.tag in spec.once and seen[child.tag] == 2:
             errors.append(f"{_where(el, path)}: <{child.tag}> given twice")
         if (child.tail or "").strip():
             errors.append(f"{_where(el, path)}: unexpected text after <{child.tag}>")
-        _check(child, sub, f"{path}/{child.tag}", errors)
+        _check(child, sub, f"{path}/{child.tag}", errors, warnings)
 
 
 def _parse(data: bytes, where: str):
-    """Root element of a well-formed, schema-valid file, or HardwareError."""
+    """(root element, warnings) of a well-formed, schema-valid file, or HardwareError."""
     if len(data) > MAX_BYTES:
         raise HardwareError([f"{where}: larger than {MAX_BYTES} bytes"])
     try:
@@ -457,13 +473,16 @@ def _parse(data: bytes, where: str):
     if root.tag != "bambu-hardware":
         raise HardwareError([f"{where}: root element is <{root.tag}>, not <bambu-hardware>"])
     errors: list[str] = []
-    _check(root, _SCHEMA, "bambu-hardware", errors)
+    warnings: list[str] = []
+    _check(root, _SCHEMA, "bambu-hardware", errors, warnings)
     v = root.get("version")
-    if v is not None and v not in VERSIONS:
-        errors.append(f"bambu-hardware: version {v!r} not supported (this server reads {', '.join(sorted(VERSIONS))})")
+    if v is not None:
+        m = _VERSION.fullmatch(v.strip())
+        if not m or m.group(1).lstrip("0") != MAJOR:
+            errors.append(f"bambu-hardware: version {v!r} not supported (this server reads version {MAJOR}.x)")
     if errors:
         raise HardwareError([f"{where}: {e}" for e in errors])
-    return root
+    return root, [f"{where}: {w}" for w in warnings]
 
 
 # --- merging and building -----------------------------------------------------------------------------------------
@@ -525,6 +544,30 @@ def _build(sections: dict[str, dict], where: str) -> "Hardware":
             schemes[key] = Scheme(key, "linear", per_unit=int(el.get("per-unit")),
                                   ht_from=int(ht) if ht is not None else None)
 
+    ams_types: list[AmsType] = []
+    for key, el in sections["ams-types"].items():
+        ids_el = el.find("ids")
+        ids = None
+        if ids_el is not None:
+            ids = (int(ids_el.get("from")), int(ids_el.get("to")))
+            if ids[0] > ids[1] or ids[1] > MAX_AMS_ID:
+                errors.append(f"ams-type {key!r}: ids {ids[0]}-{ids[1]} is not a valid id range")
+        label = el.get("label").strip()
+        prefix = el.get("prefix")
+        if prefix is None:
+            prefix = "HT-" if label == "ht" else ""
+        ams_types.append(AmsType(
+            key=key, name=el.get("name").strip(), slots=int(el.get("slots")), label=label, label_prefix=prefix,
+            say=el.get("say"), ids=ids, modules=tuple(m.get("prefix").strip().upper() for m in el.findall("module")),
+            models=tuple(m.get("code").strip().upper() for m in el.findall("model")),
+            known=el.get("verified") != "false"))
+
+    max_slots = max((t.slots for t in ams_types), default=4)
+
+    def trays_for(i: int) -> int:
+        """Slots a unit with this id can have: the largest of the types covering the id, else of all types."""
+        return max((t.slots for t in ams_types if t.ids and t.ids[0] <= i <= t.ids[1]), default=max_slots)
+
     layouts: dict[str, Presence] = {}
     for key, el in sections["presence-layouts"].items():
         ranges, fns, used = [], [], {}
@@ -534,19 +577,26 @@ def _build(sections: dict[str, dict], where: str) -> "Hardware":
                 errors.append(f"layout {key!r}: range {lo}-{hi} is not a valid id range")
                 continue
             fn = parse_expr(src)
+            bad = False
             for i in range(lo, hi + 1):
-                try:
-                    b = fn(i, 0)
-                except ValueError as e:
-                    errors.append(f"layout {key!r}: bit {src!r} for id {i}: {e}")
+                for t in range(trays_for(i)):
+                    try:
+                        b = fn(i, t)
+                    except ValueError as e:
+                        errors.append(f"layout {key!r}: bit {src!r} for id {i} tray {t}: {e}")
+                        bad = True
+                        break
+                    if not 0 <= b < 64:
+                        errors.append(f"layout {key!r}: bit {src!r} gives {b} for id {i} tray {t} (0-63 allowed)")
+                        bad = True
+                        break
+                    if b in used and used[b] != (i, t):
+                        errors.append(f"layout {key!r}: bit {b} used by id/tray {used[b]} and {(i, t)}")
+                        bad = True
+                        break
+                    used[b] = (i, t)
+                if bad:
                     break
-                if not 0 <= b < 64:
-                    errors.append(f"layout {key!r}: bit {src!r} gives {b} for id {i} (0-63 allowed)")
-                    break
-                if b in used and used[b] != i:
-                    errors.append(f"layout {key!r}: bit {b} used by ids {used[b]} and {i}")
-                    break
-                used[b] = i
             ranges.append((lo, hi, src))
             fns.append(fn)
         layouts[key] = Presence(key, el.get("exist"), el.get("reading"), tuple(ranges), tuple(fns))
@@ -574,6 +624,7 @@ def _build(sections: dict[str, dict], where: str) -> "Hardware":
         cmax = el.get("chamber-max")
         models.append(ModelInfo(
             code=code, name=name, preset_name=(el.get("preset-name") or f"Bambu Lab {name}").strip(),
+            say=(el.get("say") or name).strip(),
             aliases=tuple(a.text.strip() for a in el.findall("alias")),
             nozzles=int(el.get("nozzles", "1")), camera=None if camera == "none" else camera,
             chamber_max=int(cmax) if cmax is not None else None, presence=presence,
@@ -583,26 +634,9 @@ def _build(sections: dict[str, dict], where: str) -> "Hardware":
             externals=tuple(externals), numbering=numbering,
             ftp_dirs=tuple(d.text.strip() for d in el.findall("ftp-dir")) or ("/", "/cache")))
 
-    ams_types: list[AmsType] = []
-    for key, el in sections["ams-types"].items():
-        ids_el = el.find("ids")
-        ids = None
-        if ids_el is not None:
-            ids = (int(ids_el.get("from")), int(ids_el.get("to")))
-            if ids[0] > ids[1] or ids[1] > MAX_AMS_ID:
-                errors.append(f"ams-type {key!r}: ids {ids[0]}-{ids[1]} is not a valid id range")
-        label = el.get("label").strip()
-        prefix = el.get("prefix")
-        if prefix is None:
-            prefix = "HT-" if label == "ht" else ""
-        ams_types.append(AmsType(
-            key=key, name=el.get("name").strip(), slots=int(el.get("slots")), label=label, label_prefix=prefix,
-            say=el.get("say"), ids=ids, modules=tuple(m.get("prefix").strip().upper() for m in el.findall("module")),
-            models=tuple(m.get("code").strip().upper() for m in el.findall("model"))))
-
     words = tuple((el.get("text").strip(), el.get("say").strip()) for el in sections["speech"].values())
 
-    hw = Hardware(models, ams_types, schemes, layouts, words)
+    hw = Hardware(models, ams_types, {**BUILTIN_SCHEMES, **schemes}, layouts, words)
     errors += hw._index_errors
     if errors:
         raise HardwareError([f"{where}: {e}" for e in errors])
@@ -612,13 +646,14 @@ def _build(sections: dict[str, dict], where: str) -> "Hardware":
 class Hardware:
     """The merged hardware facts. Build with `load()`."""
 
-    def __init__(self, models=(), ams_types=(), schemes=None, layouts=None, words=(), errors=None):
+    def __init__(self, models=(), ams_types=(), schemes=None, layouts=None, words=(), errors=None, warnings=None):
         self.models: tuple[ModelInfo, ...] = tuple(models)
         self.ams_types: tuple[AmsType, ...] = tuple(ams_types)
-        self.schemes: dict[str, Scheme] = dict(schemes or {})
+        self.schemes: dict[str, Scheme] = dict(schemes) if schemes else dict(BUILTIN_SCHEMES)
         self.layouts: dict[str, Presence] = dict(layouts or {})
         self.words: tuple[tuple[str, str], ...] = tuple(sorted(words, key=lambda w: -len(w[0])))
         self.errors: list[str] = list(errors or [])
+        self.warnings: list[str] = list(warnings or [])
         self._exact: dict[str, ModelInfo] = {}
         self._loose: dict[str, ModelInfo] = {}
         self._index_errors: list[str] = []
@@ -639,10 +674,13 @@ class Hardware:
             return
         index[key] = m
 
-    def with_errors(self, errors: list[str]) -> "Hardware":
+    def with_errors(self, errors: list[str], warnings: list[str] | None = None) -> "Hardware":
+        """A copy with these errors (and warnings; None keeps the current ones)."""
         c = object.__new__(Hardware)
         c.__dict__.update(self.__dict__)
         c.errors = list(errors)
+        if warnings is not None:
+            c.warnings = list(warnings)
         return c
 
     def model(self, code_or_name) -> ModelInfo:
@@ -669,6 +707,10 @@ class Hardware:
                         best, best_len = t, len(p)
             if best is not None:
                 return best
+            # a reported module nobody knows: never guess a type from the id or the model
+            count = tray_count if isinstance(tray_count, int) and tray_count > 0 else None
+            return AmsType(key="generic", name="Unknown AMS",
+                           slots=count or (1 if aid is not None and aid >= 128 else 4), label="letter", known=False)
         in_range = lambda t: t.ids is None or (aid is not None and t.ids[0] <= aid <= t.ids[1])
         if model is not None:
             mi = self.model(model)
@@ -690,11 +732,14 @@ class Hardware:
     def presence(self, key: str | None) -> Presence | None:
         return self.layouts.get(key) if key else None
 
-    def say(self, label: str | None) -> list[str]:
+    def say(self, label: str | None, model=None) -> list[str]:
         s = (label or "").strip()
         if not s:
             return []
-        ext = self._external_say.get(s.upper())
+        ext = None
+        if model is not None:
+            ext = next((x.say for x in self.model(model).externals if x.label.upper() == s.upper()), None)
+        ext = ext or self._external_say.get(s.upper())
         if ext:
             return ext.split()
         out, i, up = [], 0, s.upper()
@@ -725,7 +770,7 @@ def _read(p: Path, where: str) -> bytes:
 def validate(data: bytes, where: str = "bambu_hardware.xml") -> list[str]:
     """Problems with a complete hardware file (empty list = good)."""
     try:
-        root = _parse(data, where)
+        root, _warnings = _parse(data, where)
         _build(_elements(root, where), where)
     except HardwareError as e:
         return e.errors
@@ -761,7 +806,8 @@ def _fresh(ov: Path, ov_present: bool) -> Hardware:
     global _last_good
     where_b = str(BUNDLED)
     try:
-        base = _elements(_parse(_read(BUNDLED, where_b), where_b), where_b)
+        base_root, warnings = _parse(_read(BUNDLED, where_b), where_b)
+        base = _elements(base_root, where_b)
     except HardwareError as e:          # a packaging bug: keep what we had, else generic records only
         return (_last_good or Hardware()).with_errors(e.errors)
     errors: list[str] = []
@@ -769,8 +815,9 @@ def _fresh(ov: Path, ov_present: bool) -> Hardware:
     if ov_present:
         where_o = str(ov)
         try:
-            over = _elements(_parse(_read(ov, where_o), where_o), where_o)
-            hw = _build(_merge(base, over), where_o)
+            over_root, over_warnings = _parse(_read(ov, where_o), where_o)
+            hw = _build(_merge(base, _elements(over_root, where_o)), where_o)
+            warnings = warnings + over_warnings
         except HardwareError as e:
             errors = e.errors
             if _last_good is not None:
@@ -780,8 +827,8 @@ def _fresh(ov: Path, ov_present: bool) -> Hardware:
             hw = _build(base, where_b)
         except HardwareError as e:
             return (_last_good or Hardware()).with_errors(errors + e.errors)
-    _last_good = hw.with_errors([])
-    return hw.with_errors(errors)
+    _last_good = hw.with_errors([], warnings)
+    return hw.with_errors(errors, warnings)
 
 
 def load() -> Hardware:
