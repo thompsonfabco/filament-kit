@@ -274,6 +274,7 @@ class LoadQueue:
         self._start_thread = start_thread
         self._jobs: dict[tuple[str, str], Job] = {}
         self._lock = threading.Lock()
+        self._sends: dict[tuple[str, str], threading.Lock] = {}   # held around a queued send, per slot
         self._thread: threading.Thread | None = None
 
     def add(self, printer: str, label: str, spool_id: int, preset: dict | None = None) -> None:
@@ -281,9 +282,18 @@ class LoadQueue:
             self._jobs[(printer, label)] = Job(int(spool_id), self.clock(), preset=preset)
         self._ensure_thread()
 
-    def drop(self, printer: str, label: str) -> None:
+    def _send_lock(self, key: tuple[str, str]) -> threading.Lock:
         with self._lock:
-            self._jobs.pop((printer, label), None)
+            return self._sends.setdefault(key, threading.Lock())
+
+    def drop(self, printer: str, label: str) -> None:
+        """Forget the queued tap for that slot. A send of it already in progress finishes first (at most the kit
+        API's timeout), so a direct set made after drop() always lands after the older tap, never before it; a
+        tap not yet sent is never sent (final review M5)."""
+        key = (printer, label)
+        with self._send_lock(key):
+            with self._lock:
+                self._jobs.pop(key, None)
 
     def clear(self) -> None:
         with self._lock:
@@ -362,14 +372,18 @@ class LoadQueue:
         if job.tries >= MAX_TRIES:
             return self._done(key, job, f"the printer did not keep the setting after {MAX_TRIES} tries (slot shows "
                                         f"{st.get('type')!r} {st.get('preset_id')!r})")
-        job.tried = now
-        try:
-            r = kit.post(f"{slots.printer_path(printer)}/slots/{label}/load",
-                         {"spool_id": job.spool_id, "dry_run": False})
-        except slots.SlotError as e:
-            if e.code in FINAL_REFUSALS:
-                return self._done(key, job, f"refused ({e.code}): {e}")
-            return self._wait(key, job, e.code or "error", f"{e.code or 'error'}: {e}")   # not a try
+        with self._send_lock(key):
+            with self._lock:
+                if self._jobs.get(key) is not job:
+                    return                     # dropped (a direct set replaced it) or re-queued: stale, not sent
+            job.tried = now
+            try:
+                r = kit.post(slots.load_path(printer, label),
+                             {"spool_id": job.spool_id, "dry_run": False})
+            except slots.SlotError as e:
+                if e.code in FINAL_REFUSALS:
+                    return self._done(key, job, f"refused ({e.code}): {e}")
+                return self._wait(key, job, e.code or "error", f"{e.code or 'error'}: {e}")   # not a try
         job.waiting = None
         job.preset = (r or {}).get("preset") or job.preset
         job.sent, job.tries = self.clock(), job.tries + 1
@@ -589,7 +603,7 @@ class Reader:
         except slots.SlotError:
             return reply(404, "error", f"{pname} has no slot {slot}", filament=name)
         cur = next((s for s in found if s["label"] == label), {})
-        path = f"{slots.printer_path(printer)}/slots/{label}/load"
+        path = slots.load_path(printer, label)
         load = {"spool_id": int(sp["id"]), "dry_run": True}
         if cur.get("present") is False or cur.get("reading") is True:
             r = kit.post(path, load)                       # the preset check; nothing is sent

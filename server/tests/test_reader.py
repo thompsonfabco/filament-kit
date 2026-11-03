@@ -651,3 +651,64 @@ def test_slot_service_printer_slots_says_it_ignores_printer(env, monkeypatch):
     t = mcp_tools.Tools(None)
     assert "ignored" in t.printer_slots("H2D")["printer_note"]
     assert "printer_note" not in t.printer_slots()
+
+
+# ---------- final review M4, M5 ----------
+
+def test_a_hash_label_is_quoted_in_the_load_url(app, token, kit, queue):
+    """layout's clash suffix ("#<id>") must not become a URL fragment (the load would hit the wrong slot)."""
+    kit.slots["SER1"].append(slot("A1#5", say=["a", "one"]))
+    with client(app) as c:
+        assert scan(c, token, slot="A1#5").json()["status"] == "set"
+    assert kit.loads[-1][0] == "/api/printers/SER1/slots/A1%235/load"
+    q, clock = new_queue(kit)
+    q.add("SER1", "A1#5", 7)
+    q.tick()
+    clock.t += 5
+    q.tick()
+    assert kit.loads[-1] == ("/api/printers/SER1/slots/A1%235/load", {"spool_id": 7, "dry_run": False})
+
+
+def test_a_queued_tap_dropped_before_its_send_is_never_sent(kit):
+    """A direct set drops the queued tap; if the queue thread already read the slot, it must not send the older
+    spool afterwards (final review M5)."""
+    q, clock = new_queue(kit)
+    q.add("SER1", "A1", 8)
+    q.tick()                                            # seen
+    clock.t += 5
+    real_get = kit.get
+
+    def get(path):                                      # the direct set lands while the queue reads the slot
+        q.drop("SER1", "A1")
+        return real_get(path)
+    kit.get = get
+    q.tick()
+    assert kit.loads == [] and q.jobs() == {}
+
+
+def test_drop_waits_for_a_send_in_progress(kit):
+    """A send already on the wire finishes before drop returns, so the caller's newer set always lands last."""
+    q, clock = new_queue(kit)
+    q.add("SER1", "A1", 8)
+    q.tick()
+    clock.t += 5
+    started, release = threading.Event(), threading.Event()
+    real_post = kit.post
+
+    def post(path, body):
+        started.set()
+        release.wait(5)
+        return real_post(path, body)
+    kit.post = post
+    t = threading.Thread(target=q.tick)
+    t.start()
+    assert started.wait(5)
+    dropped = threading.Event()
+    d = threading.Thread(target=lambda: (q.drop("SER1", "A1"), dropped.set()))
+    d.start()
+    assert not dropped.wait(0.3)                        # held while the old send is in flight
+    release.set()
+    t.join(5)
+    d.join(5)
+    assert dropped.is_set() and q.jobs() == {}
+    assert [b["spool_id"] for _, b in kit.loads] == [8]
