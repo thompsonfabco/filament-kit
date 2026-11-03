@@ -426,3 +426,54 @@ def test_ai_off_page_hides_reading_and_manual_add_works(app, env, sm):
         cfg["modules"]["ai_intake"] = True
         config.save(cfg)
         assert "data-ai='1'" in c.get("/intake").text
+
+
+# ---------- R1 minors: the manual add's picker ----------
+
+def test_picker_tare_falls_back_to_the_vendor_and_vendorless_filaments_are_listed(app, sm):
+    v = sm.post("vendor", {"name": "SUNLU", "empty_spool_weight": 213})
+    sm.post("filament", {"name": "PLA+ Grey", "vendor_id": v["id"], "material": "PLA+", "density": 1.24})
+    sm.post("filament", {"name": "PETG Blue", "vendor_id": v["id"], "material": "PETG", "density": 1.27,
+                         "spool_weight": 180})
+    sm.post("filament", {"name": "Mystery PLA", "material": "PLA", "density": 1.24})
+    with _client(app) as c:
+        _sign_in(c)
+        fils = c.get("/intake/api/filaments").json()["filaments"]
+    by = {f["name"]: f for f in fils}
+    assert by["PLA+ Grey"]["tare"] == 213             # no spool weight of its own: the vendor's empty spool
+    assert by["PETG Blue"]["tare"] == 180             # its own wins
+    assert by["Mystery PLA"]["vendor"] == "" and by["Mystery PLA"]["tare"] is None   # listed, not dropped
+
+
+def test_picker_routes_refuse_off_lan(app):
+    with _client(app, AWAY) as c:
+        for path in ("/intake/api/filaments", "/intake/api/vendors", "/intake/api/presets", "/intake/api/parents",
+                     "/intake/api/tag"):
+            r = c.get(path)
+            assert r.status_code == 403 and "home network" in r.text, path
+
+
+def _node():
+    import shutil
+    return shutil.which("node")
+
+
+@pytest.mark.skipif(not _node(), reason="needs node")
+def test_density_lookup_matches_by_prefix():
+    """A material with no exact entry gets the density of the longest known material it starts with."""
+    import re
+    import subprocess
+    from pathlib import Path
+    src = (Path(web_app.__file__).parent / "static" / "app.js").read_text(encoding="utf-8")
+    table = re.search(r"^const DENSITY = .*?;$", src, re.M).group(0)
+    fn = re.search(r"^function densityFor\(.*?^}$", src, re.M | re.S).group(0)
+    probe = ["PLA", "pla+", "PLA Silk", "PETG-CF", "PA6-GF", "ASA", "Wood", "", " petg "]
+    js = f"{table}\n{fn}\nconsole.log(JSON.stringify({json.dumps(probe)}.map(densityFor)));"
+    out = subprocess.run([_node(), "-e", js], capture_output=True, text=True, timeout=30, check=True).stdout
+    assert json.loads(out) == [1.24, 1.24, 1.24, 1.27, 1.14, 1.07, None, None, 1.27]
+
+
+def test_picker_names_filaments_without_a_vendor():
+    from pathlib import Path
+    src = (Path(web_app.__file__).parent / "static" / "app.js").read_text(encoding="utf-8")
+    assert '"(no vendor)"' in src
