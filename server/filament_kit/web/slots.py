@@ -19,6 +19,7 @@ import re
 import ssl
 import threading
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -36,7 +37,13 @@ OPS_NOTE = "spool = the Spoolman spool assigned by an NFC tap or printer_set_slo
 
 
 class SlotError(Problem):
-    """A refusal to show the caller (bad slot, no backend, a service that cannot be reached)."""
+    """A refusal to show the caller (bad slot, no backend, a service that cannot be reached). From the kit server:
+    `code` = its error code ("no_preset", "printer_offline", "printer_busy", "not_found" ...; "unreachable" when it
+    did not answer, "unpaired" when it refused this unit's token) and `http` = its status (None: no answer)."""
+
+    def __init__(self, message: str, *, code: str | None = None, http: int | None = None):
+        super().__init__(message)
+        self.code, self.http = code, http
 
 
 # ---------- ids (port of ops h2d_tools.py) ----------
@@ -184,7 +191,7 @@ class KitApi:
         kept in FK_STATE/web/kit_token (0600). Never renewed while running: see `_refused`."""
         with self._lock:
             if self._refused:
-                raise SlotError(UNPAIRED)
+                raise SlotError(UNPAIRED, code="unpaired")
             f = self._token_file()
             try:
                 tok = f.read_text(encoding="utf-8").strip()
@@ -223,11 +230,13 @@ class KitApi:
                 err = {}
             if e.code == 401:
                 self._refuse()
-                raise SlotError(UNPAIRED) from None
-            raise SlotError((err.get("message") if isinstance(err, dict) else None)
-                            or f"the kit server answered {e.code}") from None
+                raise SlotError(UNPAIRED, code="unpaired", http=401) from None
+            err = err if isinstance(err, dict) else {}
+            raise SlotError(err.get("message") or f"the kit server answered {e.code}",
+                            code=err.get("error") if isinstance(err.get("error"), str) else None,
+                            http=e.code) from None
         except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError) as e:
-            raise SlotError(f"the kit server ({self.base}) is not reachable: {e}") from None
+            raise SlotError(f"the kit server ({self.base}) is not reachable: {e}", code="unreachable") from None
 
     def get(self, path: str):
         return self._call("GET", path)
@@ -236,49 +245,106 @@ class KitApi:
         return self._call("POST", path, body)
 
 
-def kit_label(slot) -> str:
-    """A slot as the kit names it (A1-D4, HT-A.., Ext): kit labels pass through; ops names '1'-'4' and 'HT1'-'HT3'
-    map to the first AMS's A1-A4 and HT-A..HT-C."""
+LABEL = re.compile(r"[A-Za-z0-9-]{1,16}")       # kit labels: A1 ... Z4, AA1 ..., HT-A ..., Ext, Ext-L / Ext-R
+
+
+def kit_label(slot, labels=None) -> str:
+    """A slot as the kit names it, for any printer. `labels` = that printer's slot labels (from its status); a kit
+    label matches whatever its case. The H2D's old names still work (compat parser): '1'-'4' / 'AMS slot N' ->
+    A1-A4, 'HT1' / 'AMS HT 1' -> HT-A (HT2 -> HT-B ...), 'EXT-L' / 'external left' -> Ext-L, 'EXT-R' -> Ext-R (on a
+    printer with one holder: Ext). With `labels` the result is one of them; without (no report yet) the kit
+    server checks it."""
     s = str(slot).strip()
-    m = re.fullmatch(r"(?i)(?:AMS\s*)?HT\s*([1-9])", s)
+    have = {str(x).upper(): str(x) for x in labels or () if x}
+    if s.upper() in have:
+        return have[s.upper()]
+    cand: list[str] = []
+    m = re.fullmatch(r"(?i)(?:AMS\s*)?HT\s*([1-9][0-9]?)", s)
     if m:
-        return f"HT-{chr(ord('A') + int(m.group(1)) - 1)}"
+        cand = [f"HT-{letters(int(m.group(1)) - 1)}"]
     m = re.fullmatch(r"(?i)(?:AMS\s*)?(?:SLOT\s*)?([1-4])", s)
     if m:
-        return f"A{m.group(1)}"
-    if re.fullmatch(r"(?i)EXT(?:ERNAL)?[\s_-]*(L|LEFT|R|RIGHT)", s):
-        raise SlotError("the kit bridge names the external spool 'Ext'; see printer_slots for the slot labels")
-    if not re.fullmatch(r"[A-Za-z0-9-]{1,16}", s):
-        raise SlotError(f"unknown slot {slot!r}: use a label from printer_slots (A1-D4, HT-A, Ext)")
-    return s
+        cand = [f"A{m.group(1)}"]
+    x = re.fullmatch(r"(?i)EXT(?:ERNAL)?(?:[\s_-]*(L|LEFT|R|RIGHT))?", s)
+    if x:
+        side = (x.group(1) or "").upper()[:1]
+        cand = [f"Ext-{side}", "Ext"] if side else ["Ext", "Ext-L"]
+    if not cand and LABEL.fullmatch(s):
+        cand = [s]
+    if have:
+        for c in cand:
+            if c.upper() in have:
+                return have[c.upper()]
+        raise SlotError(f"unknown slot {slot!r}: use a label from printer_slots ({', '.join(have.values())})")
+    if not cand:
+        raise SlotError(f"unknown slot {slot!r}: use a label from printer_slots (A1, B3, HT-A, Ext-L ...)")
+    return cand[0]
 
 
-def bridge_slots(kit) -> dict:
-    out = []
-    for p in kit.get("/api/printers").get("printers", []):
-        if not p.get("configured"):
-            continue
-        st = kit.get(f"/api/printers/{p['id']}").get("status") or {}
-        slots = [{"slot": sl.get("label"), "unit": u.get("label"), "type": sl.get("type"),
-                  "color_hex": sl.get("color_hex"), "feeding_now": bool(sl.get("active")), "spool": sl.get("spool")}
-                 for u in st.get("ams") or [] for sl in u.get("slots") or []]
-        out.append({"id": p["id"], "name": p.get("name"), "state": p.get("state"),
-                    "printer_state": st.get("gcode_state"), "job": st.get("job") or None, "slots": slots})
-    return {"printers": out, "note": "spool = the Spoolman spool whose location is that slot"}
+def letters(n: int) -> str:
+    """0 -> A, 25 -> Z, 26 -> AA: the kit's unit letters (as bridge.layout.letters, which this process does not
+    import)."""
+    out, n = "", int(n) + 1
+    while n > 0:
+        n, r = divmod(n - 1, 26)
+        out = chr(ord("A") + r) + out
+    return out
 
 
-def bridge_set_slot(kit, spool_id: int, slot: str, dry_run: bool, printer: str | None = None) -> dict:
-    label = kit_label(slot)
-    printers = [p for p in kit.get("/api/printers").get("printers", []) if p.get("configured")]
+def kit_printers(kit) -> list[dict]:
+    """The configured printers of the kit server (`GET /api/printers`), in its order."""
+    return [p for p in kit.get("/api/printers").get("printers", []) if p.get("configured")]
+
+
+def printer_path(printer_id) -> str:
+    return "/api/printers/" + urllib.parse.quote(str(printer_id), safe="")
+
+
+def status_slots(status: dict) -> list[dict]:
+    """Every slot of a printer status (`GET /api/printers/{id}` "status"), in unit order, each with its unit's
+    label (`unit`) and `kind` ("ams", "ams_2pro", "ams_ht", "ams_lite", "generic", or "ext" for a holder)."""
+    return [{**sl, "unit": u.get("label"), "kind": u.get("kind")}
+            for u in (status or {}).get("ams") or [] if isinstance(u, dict)
+            for sl in u.get("slots") or [] if isinstance(sl, dict) and sl.get("label")]
+
+
+def pick_printer(kit, printer: str | None) -> dict:
+    """The one printer meant: by id or name, or the only one set up."""
+    printers = kit_printers(kit)
     if printer is not None:
-        printers = [p for p in printers if printer in (p.get("id"), p.get("name"))]
+        printers = [p for p in printers if str(printer) in (str(p.get("id")), p.get("name"))]
         if not printers:
             raise SlotError(f"no printer {printer!r} is set up in the kit")
     if len(printers) != 1:
         raise SlotError("several printers are set up: name one (printer = its id or name from printer_slots)"
                         if printers else "no printer is set up in the kit")
-    p = printers[0]
-    res = kit.post(f"/api/printers/{p['id']}/slots/{label}/load", {"spool_id": int(spool_id), "dry_run": bool(dry_run)})
+    return printers[0]
+
+
+def bridge_slots(kit, printer: str | None = None) -> dict:
+    out = []
+    printers = kit_printers(kit) if printer is None else [pick_printer(kit, printer)]
+    for p in printers:
+        st = kit.get(printer_path(p["id"])).get("status") or {}
+        slots = [{"slot": sl.get("label"), "unit": sl.get("unit"), "kind": sl.get("kind"), "type": sl.get("type"),
+                  "color_hex": sl.get("color_hex"), "present": sl.get("present"),
+                  "feeding_now": bool(sl.get("active")), "spool": sl.get("spool")}
+                 for sl in status_slots(st)]
+        out.append({"id": p["id"], "name": p.get("name"), "model": p.get("model"), "state": p.get("state"),
+                    "printer_state": st.get("gcode_state"), "job": st.get("job") or None, "slots": slots})
+    return {"printers": out, "note": "spool = the Spoolman spool whose location is that slot; present = filament "
+                                     "in the slot (null: the printer does not say)"}
+
+
+def bridge_set_slot(kit, spool_id: int, slot: str, dry_run: bool, printer: str | None = None) -> dict:
+    p = pick_printer(kit, printer)
+    try:
+        labels = [sl["label"] for sl in status_slots(kit.get(printer_path(p["id"])).get("status") or {})]
+    except SlotError:
+        labels = []           # no status: the old names map as usual and the kit server checks the label
+    label = kit_label(slot, labels)
+    res = kit.post(f"{printer_path(p['id'])}/slots/{label}/load",
+                   {"spool_id": int(spool_id), "dry_run": bool(dry_run)})
     res = dict(res) if isinstance(res, dict) else {"result": res}
     res.update(printer=p["id"], slot=label)
     if dry_run:
@@ -286,5 +352,5 @@ def bridge_set_slot(kit, spool_id: int, slot: str, dry_run: bool, printer: str |
     return res
 
 
-__all__ = ["KitApi", "SlotError", "bridge_set_slot", "bridge_slots", "kit_label", "parse_slot", "service_set_slot",
-           "service_slots", "slot_label"]
+__all__ = ["KitApi", "SlotError", "bridge_set_slot", "bridge_slots", "kit_label", "kit_printers", "parse_slot",
+           "pick_printer", "printer_path", "service_set_slot", "service_slots", "slot_label", "status_slots"]

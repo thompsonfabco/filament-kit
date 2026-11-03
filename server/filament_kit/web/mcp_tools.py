@@ -249,9 +249,19 @@ class Tools:
         raise Problem("no printer slots on this server: neither slot_service is configured nor the printers "
                       "module on")
 
-    def printer_slots(self) -> dict:
+    def kit_bridge(self):
+        """The kit server's API (slots.KitApi) for the reader API; refuses when slot_service is the backend."""
         kind, b = self._slot_backend()
-        return slots.service_slots(b, self.sm) if kind == "service" else slots.bridge_slots(b)
+        if kind != "bridge":
+            raise Problem("the reader needs the printers module: slot_service is configured (the owner's own slot "
+                          "services); remove it from config.json once the printers module has the printers")
+        return b
+
+    def printer_slots(self, printer: str | None = None) -> dict:
+        kind, b = self._slot_backend()
+        if kind == "service":
+            return slots.service_slots(b, self.sm)
+        return slots.bridge_slots(b, printer)
 
     def printer_set_slot(self, spool: int, slot: str, dry_run: bool = True, printer: str | None = None) -> dict:
         kind, b = self._slot_backend()
@@ -341,8 +351,9 @@ def instructions(cfg: dict) -> str:
 # ---------- MCP registration ----------
 
 # module level: the tools' annotations are evaluated in this module's globals (postponed annotations)
-SLOT_ARG = ("'1'-'4' = 4-slot AMS, 'HT1'-'HT3' = AMS HT units, 'EXT-L' / 'EXT-R' = external spool for the "
-            "left / right nozzle; or a slot label from printer_slots (A1, HT-A ...)")
+SLOT_ARG = ("a slot label from printer_slots: A1-A4, B1 ... for 4-slot AMS units, HT-A, HT-B ... for AMS HT units, "
+            "Ext or Ext-L / Ext-R for the external spool holders. The H2D's old names still work: '1'-'4' (first "
+            "AMS), 'HT1', 'HT2' ..., 'EXT-L' / 'EXT-R'")
 
 def register(mcp, tools: Tools) -> None:
     from mcp.server.mcpserver.exceptions import ToolError
@@ -434,15 +445,17 @@ def register(mcp, tools: Tools) -> None:
         installs the build the next time the slicers are closed."""
         return await call(tools.generate)
 
-    slots_doc = ("Every printer AMS slot: what the printer has loaded (type, colour, preset) and the Spoolman spool "
-                 "assigned to it, plus the printer state.")
+    slots_doc = ("Every printer's AMS and external slots (any printer, any number of AMS units): the slot label, "
+                 "what the printer has loaded (type, colour, present) and the Spoolman spool assigned to it, plus "
+                 "the printer state. printer = an id or name to show only that printer.")
     set_doc = ("Set a printer AMS slot to a spool, exactly like tapping its NFC tag: the printer gets the user's "
                "own preset for that filament (never Generic; refused with no_preset if none exists), and Spoolman "
                "records the spool in that slot, releasing the spool that was there. Run with dry_run=true, show the "
                "user, then dry_run=false.")
 
-    async def _slots() -> str:
-        return await call(tools.printer_slots)
+    async def _slots(printer: Annotated[str | None, Field(description="printer id or name; default all")] = None
+                     ) -> str:
+        return await call(tools.printer_slots, printer)
 
     async def _set(spool: Annotated[int, Field(description="Spoolman spool id (find_spools)")],
                    slot: Annotated[str, Field(description=SLOT_ARG)], dry_run: bool = True,
@@ -459,5 +472,4 @@ def register(mcp, tools: Tools) -> None:
     # ops names, kept so a connector that learned them keeps working
     mcp.tool(name="h2d_slots", description=slots_doc + " (Same as printer_slots.)", annotations=read)(_slots)
     mcp.tool(name="h2d_set_slot", annotations=write,
-             description=set_doc + " (Same as printer_set_slot. 'EXT-L' / 'EXT-R' work only with the "
-                                   "slot_service backend; the kit bridge names the external slot 'Ext'.)")(_h2d_set)
+             description=set_doc + " (Same as printer_set_slot, for the only printer.)")(_h2d_set)
