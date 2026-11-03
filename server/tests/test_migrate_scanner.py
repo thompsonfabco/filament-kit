@@ -281,3 +281,67 @@ def test_cli_dry_run_and_apply_needs_root(env, tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(cli, "_is_root", lambda: True)
     assert cli.main(["migrate-scanner", str(cal), "--apply", "--printer", SERIAL]) == 0
     assert env["store"]["spools"][1]["location"] == loc("A1")
+
+
+# ---------- fix round 1 ----------
+
+def test_learning_scanner_seeds_as_calibrated(env, tmp_path):
+    """Ruling BP: the scanner deducted on a "learning" calibration, so the kit does too."""
+    out: list[str] = []
+    assert run(env, cal_file(tmp_path, status="learning"), out, apply=True) == 0
+    m = ams.load_map(SERIAL)
+    assert m.calibrated and not m.observe
+    assert "observe" not in "\n".join(out).split("Slot map")[-1].split("\n")[-2]
+
+
+def test_rerun_after_the_kit_learned_is_not_a_refusal(env, tmp_path):
+    cal = cal_file(tmp_path)
+    assert run(env, cal, [], apply=True) == 0
+    m = ams.load_map(SERIAL)
+    m.learned["4"] = "A4"
+    m.mismatch_streak = 1
+    ams.save_map(SERIAL, m)
+    stamp = ams.load_map(SERIAL).updated
+    out: list[str] = []
+    assert run(env, cal, out, apply=True) == 0
+    text = "\n".join(out)
+    assert "seeded earlier, since updated by the kit" in text and "Nothing to change" in text
+    assert ams.load_map(SERIAL).updated == stamp and len(backups(env)) == 1
+
+
+def test_empty_table_seeds_nothing_and_rerun_writes_nothing(env, tmp_path):
+    cal = cal_file(tmp_path, table={})
+    out: list[str] = []
+    assert run(env, cal, out, apply=True) == 0
+    assert "no slot map seeded" in "\n".join(out)
+    assert ams.load_map(SERIAL).slots == {} and not (env["tmp"] / "state" / "printers" / SERIAL / "slotmap.json").exists()
+    assert env["store"]["spools"][1]["location"] == loc("A1")          # the spools still move
+    out = []
+    assert run(env, cal, out, apply=True) == 0
+    assert "Nothing to change" in "\n".join(out) and len(backups(env)) == 1
+
+
+def test_map_saved_meanwhile_is_not_overwritten(env, tmp_path, monkeypatch):
+    """--replace-map compares and saves: a map saved between the plan and the save wins (no lost update)."""
+    ams.save_map(SERIAL, ams.SlotMap(slots={"A1": {"ams_id": 0, "tray_id": 0, "global_id": 7}}, calibrated=True,
+                                     observe=False))
+    real = Spoolman.patch
+
+    def patch(self, path, body):            # a mapping job saves while the spools are being moved
+        if not getattr(patch, "done", False):
+            patch.done = True
+            ams.save_map(SERIAL, ams.SlotMap(slots={"A1": {"ams_id": 0, "tray_id": 0, "global_id": 9}},
+                                             calibrated=True, observe=False))
+        return real(self, path, body)
+
+    monkeypatch.setattr(Spoolman, "patch", patch)
+    out: list[str] = []
+    assert run(env, cal_file(tmp_path), out, apply=True, replace_map=True) == 1
+    assert ams.load_map(SERIAL).slots["A1"]["global_id"] == 9
+    assert "changed meanwhile" in "\n".join(out)
+
+
+def test_no_private_helpers_used():
+    import inspect
+    src = inspect.getsource(migrate_scanner)
+    assert "_ProcessLock" not in src and "status._int" not in src

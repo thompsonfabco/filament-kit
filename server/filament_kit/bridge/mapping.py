@@ -134,6 +134,11 @@ def _save_status(serial: str, job: _Job) -> None:
         log.exception("mapping %s: cannot write the status file", serial)
 
 
+def job_held_elsewhere(serial: str) -> bool:
+    """A mapping job for `serial` holds the printer in another process (always False on Windows dev PCs)."""
+    return _ProcessLock.held_elsewhere(serial)
+
+
 def record_seeded(serial: str, step: str, problems: list[str] | None = None) -> None:
     """Record a slot map that came from elsewhere (`migrate_scanner`: the scanner's calibration) as the last
     finished mapping, so `view` (the app's mapping status) says where the map came from until a job maps again."""
