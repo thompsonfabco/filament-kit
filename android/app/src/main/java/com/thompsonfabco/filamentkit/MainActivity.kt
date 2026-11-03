@@ -41,6 +41,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.thompsonfabco.filamentkit.net.ProfileStatus
+import com.thompsonfabco.filamentkit.net.ServerInfo
 import com.thompsonfabco.filamentkit.session.AppViewModel
 import com.thompsonfabco.filamentkit.session.Connection
 import com.thompsonfabco.filamentkit.session.PairNotice
@@ -56,6 +57,7 @@ import com.thompsonfabco.filamentkit.ui.add.AddViewModel
 import com.thompsonfabco.filamentkit.ui.add.DebugPhotos
 import com.thompsonfabco.filamentkit.ui.add.IntakeApi
 import com.thompsonfabco.filamentkit.ui.home.HomeScreen
+import com.thompsonfabco.filamentkit.ui.home.showLabelPhotos
 import com.thompsonfabco.filamentkit.ui.pair.NetPairingBackend
 import com.thompsonfabco.filamentkit.ui.pair.PairScreen
 import com.thompsonfabco.filamentkit.ui.pair.PairViewModel
@@ -101,10 +103,13 @@ private object Routes {
     const val SETTINGS = "settings"
     const val PRINTERS = "printers"
     const val ADD_PROFILE = "profile/add"
-    const val ADD = "add?tag={tag}&draft={draft}"
+    const val ADD = "add?tag={tag}&draft={draft}&manual={manual}"
 
-    fun add(tag: String? = null, draft: String? = null): String {
-        val query = listOfNotNull(tag?.let { "tag=${Uri.encode(it)}" }, draft?.let { "draft=${Uri.encode(it)}" })
+    /** [manual]: add by hand (no photos, no draft). */
+    fun add(tag: String? = null, draft: String? = null, manual: Boolean = false): String {
+        val query = listOfNotNull(
+            tag?.let { "tag=${Uri.encode(it)}" }, draft?.let { "draft=${Uri.encode(it)}" }, "manual=true".takeIf { manual },
+        )
         return if (query.isEmpty()) "add" else "add?" + query.joinToString("&")
     }
 }
@@ -137,6 +142,18 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
     LaunchedEffect(updater, online) {
         if (online) updater?.onOnline()
     }
+    // Which modules are on (label reading is optional); read again whenever the server comes online.
+    val info by produceState<ServerInfo?>(null, api, online) {
+        val a = api
+        value = if (a == null || !online) null else try {
+            a.info()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        }
+    }
+    val labelPhotos = showLabelPhotos(info)
 
     // Global 401 / certificate change: go to Pair (once per request, also across rotation).
     val pairRequests by app.router.requests.collectAsStateWithLifecycle()
@@ -226,6 +243,8 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
                 drafts = drafts,
                 update = update,
                 onAddSpools = { nav.navigate(Routes.add()) },
+                onAddByHand = { nav.navigate(Routes.add(manual = true)) },
+                labelPhotos = labelPhotos,
                 onAddProfile = { nav.navigate(Routes.ADD_PROFILE) },
                 onSearch = { nav.navigate(Routes.SEARCH) },
                 onPrinters = { nav.navigate(Routes.PRINTERS) },
@@ -264,6 +283,7 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
             arguments = listOf(
                 navArgument("tag") { type = NavType.StringType; nullable = true; defaultValue = null },
                 navArgument("draft") { type = NavType.StringType; nullable = true; defaultValue = null },
+                navArgument("manual") { type = NavType.BoolType; defaultValue = false },
             ),
         ) { e ->
             val a = api
@@ -273,10 +293,11 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
             }
             val tag = e.arguments?.getString("tag")
             val draft = e.arguments?.getString("draft")
+            val manual = e.arguments?.getBoolean("manual") == true
             val addVm: AddViewModel = viewModel(factory = viewModelFactory {
-                initializer { AddViewModel(IntakeApi.of(a), app.drafts, draftId = draft, initialTag = tag) }
+                initializer { AddViewModel(IntakeApi.of(a), app.drafts, draftId = draft, initialTag = tag, manual = manual) }
             })
-            if (BuildConfig.DEBUG) LaunchedEffect(addVm) { DebugPhotos.photos.collect(addVm::addPhoto) }
+            if (BuildConfig.DEBUG && !manual) LaunchedEffect(addVm) { DebugPhotos.photos.collect(addVm::addPhoto) }
             AddSpoolsScreen(
                 vm = addVm,
                 onClose = { nav.popBackStack() },
@@ -332,7 +353,8 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
                             viewModel = vm,
                             onStartAdd = { tag ->
                                 close()
-                                nav.navigate(Routes.add(tag = tag))
+                                // without label reading on the server the new spool is added by hand
+                                nav.navigate(Routes.add(tag = tag, manual = !labelPhotos))
                             },
                             onPairAgain = {
                                 close()
