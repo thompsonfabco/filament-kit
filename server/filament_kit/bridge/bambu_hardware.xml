@@ -14,6 +14,11 @@
   counts of printers other than the H2D, presence="bits-v1" on every model but the H2D, ams-mapping2 everywhere
   (also the H2D), light nodes on every model but the H2D (the A1, A1 mini, P1P and A2L may have no chamber light),
   the first-gen AMS module prefix, the speech say= texts, and chamber limits marked below.
+  external-addressing (how the slot command names an external holder): "tray-is-ams" (tray_id = ams_id, slot_id 0)
+  is verified on the H2D only; every other model uses "legacy" (ams_id = holder id, tray_id 0, no slot_id: the
+  kit's earlier command), UNVERIFIED (ha-bambulab addresses an X1/P1 vt_tray as ams_id 255, tray_id 254); a
+  capture confirms or corrects it. alias="Ext" on a two-holder model's holder 254: the label the kit used for its
+  vt_tray before Ext-L / Ext-R, so old Spoolman locations and slot maps keep working.
   Unknown elements and attributes are ignored with a warning (a newer file still loads); version is major[.minor]
   and a file with another major version is refused.
 -->
@@ -24,11 +29,12 @@
          confirms. -->
     <model code="O1D" name="H2D" say="h two d"
            preset-name="Bambu Lab H2D" nozzles="2" camera="hls" chamber-max="65"
-           presence="bits-v1" gcode-only-failed-is-finish="true" ams-mapping2="true">
+           presence="bits-v1" gcode-only-failed-is-finish="true" ams-mapping2="true"
+           external-addressing="tray-is-ams">
       <alias>H2D</alias>
       <light-node>chamber_light</light-node>
       <light-node>chamber_light2</light-node>
-      <external id="254" label="Ext-L" say="external left"/>   <!-- left / deputy nozzle -->
+      <external id="254" label="Ext-L" say="external left" alias="Ext"/>   <!-- left / deputy nozzle -->
       <external id="255" label="Ext-R" say="external right"/>  <!-- right / main nozzle -->
       <numbering ref="shift8"/>
       <numbering ref="legacy"/>
@@ -41,7 +47,7 @@
            presence="bits-v1" ams-mapping2="true">
       <alias>H2DPRO</alias>
       <light-node>chamber_light</light-node>
-      <external id="254" label="Ext-L" say="external left"/>
+      <external id="254" label="Ext-L" say="external left" alias="Ext"/>
       <external id="255" label="Ext-R" say="external right"/>
       <numbering ref="shift8"/>
       <numbering ref="legacy"/>
@@ -66,7 +72,7 @@
            presence="bits-v1">
       <alias>O1C2</alias>
       <light-node>chamber_light</light-node>
-      <external id="254" label="Ext-L" say="external left"/>
+      <external id="254" label="Ext-L" say="external left" alias="Ext"/>
       <external id="255" label="Ext-R" say="external right"/>
       <numbering ref="shift8"/>
       <numbering ref="legacy"/>
@@ -78,7 +84,7 @@
            preset-name="Bambu Lab X2D" nozzles="2" camera="hls" chamber-max="65"
            presence="bits-v1">
       <light-node>chamber_light</light-node>
-      <external id="254" label="Ext-L" say="external left"/>
+      <external id="254" label="Ext-L" say="external left" alias="Ext"/>
       <external id="255" label="Ext-R" say="external right"/>
       <numbering ref="shift8"/>
       <numbering ref="legacy"/>

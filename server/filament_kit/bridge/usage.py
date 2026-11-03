@@ -74,7 +74,7 @@ from xml.etree import ElementTree
 from .. import config
 from ..pairing import give_to_state_owner, make_state_dir
 from ..spoolman import SpoolmanError
-from . import ams, ftps, registry, status, tlspin
+from . import ams, ftps, hardware, layout, registry, status, tlspin
 
 log = logging.getLogger(__name__)
 
@@ -333,13 +333,22 @@ def _labels(m: ams.SlotMap) -> dict[int, str]:
     return out
 
 
-def _guess_label(g: int) -> str | None:
-    """Uncalibrated (observe mode, for the log only): the inverse of `ams.default_global`."""
-    if g >= ams.EXT_ID:
-        return ams.EXT if g == ams.EXT_ID else None
-    if g >= status.HT_BASE:
-        return status.slot_label(g, 0)
-    return status.slot_label(g // 4, g % 4)
+def _guess_label(g: int, model=None) -> str | None:
+    """Uncalibrated (observe mode, for the log only): the inverse of `ams.default_global`: the number decoded
+    with the model's first numbering scheme, labelled as `layout` labels that slot. An external id the model
+    does not have (e.g. 255 on a single-holder printer) is None."""
+    hw = hardware.load()
+    mi = hw.model(model)
+    try:
+        dec = hw.scheme(mi.numbering[0]).decode(g)
+    except KeyError:
+        dec = None
+    if dec is None:
+        return None
+    a, t = dec
+    if a in layout.EXT_DEFAULT and not any(x.id == a for x in mi.externals):
+        return None
+    return layout.label_for(a, t, mi, hw)
 
 
 class _Watch:
@@ -453,8 +462,14 @@ def settle(serial: str, job: dict, pct: float, spoolman) -> list[dict]:
         g = status._int(mapping[f['id'] - 1]) if 1 <= f['id'] <= len(mapping) else None
         label = None
         if g is not None and g >= 0:
-            label = labels.get(g) if smap.calibrated else _guess_label(g)
-        here = spools.get(status.location(registry.display_name(p), label), []) if label else []
+            label = labels.get(g) if smap.calibrated else _guess_label(g, p.model or None)
+        here = []
+        if label:
+            pname = registry.display_name(p)
+            here = spools.get(status.location(pname, label), [])
+            old = next((a for a, cur in layout.aliases(p.model).items() if cur == label), None)
+            if old:     # a spool still at the holder's older location ("<name> – AMS Ext" for Ext-L)
+                here = here + spools.get(status.location(pname, old), [])
         spool = here[0] if len(here) == 1 else None
         entry = {'job': name, 'grams': grams, 'spool_id': spool.get('id') if spool else None, 'slot': label,
                  'observe': observe}

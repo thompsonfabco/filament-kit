@@ -21,7 +21,7 @@ from typing import Callable
 
 from .. import config
 from ..pairing import _write_atomic, make_state_dir
-from . import registry, status
+from . import layout, registry, status
 from .connection import PrinterOffline, UnknownPrinter
 
 log = logging.getLogger(__name__)
@@ -107,20 +107,8 @@ def forget(serial: str, ams_id: int, tray_id: int) -> None:
 # ---------------------------------------------------------------- restoring from the file
 
 def trays(report: dict) -> dict[tuple[int, int], dict]:
-    """(ams_id, tray_id) -> raw tray dict; the external holder as (its id, 0), as `ams.units` labels it."""
-    out: dict[tuple[int, int], dict] = {}
-    for u in status._l(status._d(status._d(report).get('ams')).get('ams')):
-        uid = status._int(u.get('id'))
-        if uid is None:
-            continue
-        for t in status._l(u.get('tray')):
-            tid = status._int(t.get('id'))
-            if tid is not None:
-                out[(uid, tid)] = t
-    vt = status._d(report).get('vt_tray')
-    if isinstance(vt, dict):
-        out[(status._int(vt.get('id'), 254), 0)] = vt
-    return out
+    """(ams_id, tray_id) -> raw tray dict; each external holder as (its id, 0) (`layout.raw_trays`)."""
+    return layout.raw_trays(report)
 
 
 def _norm(colour) -> str:
@@ -170,6 +158,8 @@ def restore(manager, serial: str, on_step: Callable[[str], None] | None = None,
         on_step("Restoring the slots an interrupted mapping changed")
     problems: list[str] = []
     now = trays(report)
+    printer = registry.load().get(serial)
+    kinds = layout.kinds(report, printer.model if printer is not None else None)   # "ext": the model's addressing
     pending_slots = []
     tests = set(snap["test_colours"])
     for s in snap["slots"]:
@@ -181,7 +171,7 @@ def restore(manager, serial: str, on_step: Callable[[str], None] | None = None,
                      snap["kind"])
             continue
         try:
-            reply = manager.set_slot(serial, key[0], key[1], s["setting"])
+            reply = manager.set_slot(serial, key[0], key[1], s["setting"], kind=kinds.get(key[0]))
         except (PrinterOffline, UnknownPrinter):
             problems.append(f"{s['label']}: not restored (printer_offline); it may still hold a test colour")
             continue

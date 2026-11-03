@@ -30,8 +30,13 @@ Unknown → the generic record.
     gcode_only_failed_is_finish  bool  a gcode-only calibration job ending FAILED with no print_error has finished
     ams_mapping2  bool         calibration also sends `ams_mapping2`
     light_nodes   tuple[str]   MQTT light nodes ("chamber_light", ...); generic: () (none assumed)
-    externals     tuple[External]  external spool holders, each `External(id, label, say)`: id 254/255, label
-                               "Ext" (single holder) or "Ext-L"/"Ext-R", say = speech text ("external left")
+    externals     tuple[External]  external spool holders, each `External(id, label, say, alias)`: id 254/255,
+                               label "Ext" (single holder) or "Ext-L"/"Ext-R", say = speech text ("external
+                               left"), alias = an older label of the same holder (None): Spoolman locations and
+                               slot-map keys under the alias count as this holder ("Ext" -> "Ext-L" on the H2D)
+    external_addressing  str   how `ams_filament_setting` names an external holder: "tray-is-ams" (tray_id =
+                               ams_id, slot_id 0; verified on the H2D) or "legacy" (ams_id = holder id, tray_id 0,
+                               no slot_id: the kit's earlier command); generic: "legacy"
     numbering     tuple[str]   candidate numbering scheme keys, first guess first (generic: ("legacy",))
     ftp_dirs      tuple[str]   FTPS directories where print jobs land
     known         bool         False for the generic record (calibration required, nothing assumed)
@@ -110,6 +115,7 @@ class External:
     id: int
     label: str
     say: str
+    alias: str | None = None
 
 
 @dataclass(frozen=True)
@@ -125,6 +131,7 @@ class ModelInfo:
     presence: str | None = None
     gcode_only_failed_is_finish: bool = False
     ams_mapping2: bool = False
+    external_addressing: str = "legacy"
     light_nodes: tuple[str, ...] = ("chamber_light",)
     externals: tuple[External, ...] = (External(254, "Ext", "external"),)
     numbering: tuple[str, ...] = ("legacy",)
@@ -398,10 +405,12 @@ _SCHEMA = _E(
         "models": _E(children={"model": _E(
             attrs={"code": _text, "name": _text, "preset-name": _text, "say": _text, "nozzles": _pos,
                    "camera": _enum("hls", "mjpeg", "none"), "chamber-max": _pos, "presence": _text,
-                   "gcode-only-failed-is-finish": _bool, "ams-mapping2": _bool},
+                   "gcode-only-failed-is-finish": _bool, "ams-mapping2": _bool,
+                   "external-addressing": _enum("tray-is-ams", "legacy")},
             required=("code", "name"),
             children={"alias": _TEXT, "light-node": _TEXT, "ftp-dir": _TEXT,
-                      "external": _E(attrs={"id": _nonneg, "label": _text, "say": _text}, required=("id", "label")),
+                      "external": _E(attrs={"id": _nonneg, "label": _text, "say": _text, "alias": _text},
+                                     required=("id", "label")),
                       "numbering": _E(attrs={"ref": _text}, required=("ref",))})}),
         "ams-types": _E(children={"ams-type": _E(
             attrs={"key": _text, "name": _text, "slots": _pos, "label": _text, "prefix": str, "say": _text,
@@ -619,7 +628,8 @@ def _build(sections: dict[str, dict], where: str) -> "Hardware":
                 errors.append(f"{tag}: external id {xid} is out of range or given twice")
                 continue
             ext_ids.add(xid)
-            externals.append(External(xid, x.get("label").strip(), (x.get("say") or x.get("label")).strip()))
+            alias = (x.get("alias") or "").strip() or None
+            externals.append(External(xid, x.get("label").strip(), (x.get("say") or x.get("label")).strip(), alias))
         camera = el.get("camera", "none")
         cmax = el.get("chamber-max")
         models.append(ModelInfo(
@@ -630,6 +640,7 @@ def _build(sections: dict[str, dict], where: str) -> "Hardware":
             chamber_max=int(cmax) if cmax is not None else None, presence=presence,
             gcode_only_failed_is_finish=el.get("gcode-only-failed-is-finish") == "true",
             ams_mapping2=el.get("ams-mapping2") == "true",
+            external_addressing=el.get("external-addressing", "legacy"),
             light_nodes=tuple(n.text.strip() for n in el.findall("light-node")) or ("chamber_light",),
             externals=tuple(externals), numbering=numbering,
             ftp_dirs=tuple(d.text.strip() for d in el.findall("ftp-dir")) or ("/", "/cache")))
