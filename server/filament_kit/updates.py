@@ -158,18 +158,24 @@ def default_run(cmd: list[str]) -> int:
 
 @contextmanager
 def _sigterm_exits():
-    """SIGTERM (systemctl stop, shutdown) raises SystemExit, so the `finally` that starts the kit again runs."""
+    """SIGTERM (systemctl stop, shutdown) and SIGHUP (an SSH session that lost its terminal) raise SystemExit, so
+    the `finally` that starts the kit again runs."""
     def _exit(signum, frame):
         raise SystemExit(128 + signum)
-    try:
-        old = signal.signal(signal.SIGTERM, _exit)
-    except ValueError:                  # not the main thread
-        old = None
+    old = {}
+    for name in ("SIGTERM", "SIGHUP"):
+        sig = getattr(signal, name, None)       # no SIGHUP on Windows
+        if sig is None:
+            continue
+        try:
+            old[sig] = signal.signal(sig, _exit)
+        except ValueError:              # not the main thread
+            pass
     try:
         yield
     finally:
-        if old is not None:
-            signal.signal(signal.SIGTERM, old)
+        for sig, handler in old.items():
+            signal.signal(sig, handler)
 
 
 def _start_again(run, services: list[str], timers: list[str]) -> None:
@@ -295,10 +301,15 @@ def update(cfg: dict, *, scheduled: bool = False, fetcher: release.Fetcher | Non
         with printers_idle():
             kept = _kept(cur)
             old_previous = st.get("previous")
-            if kept:                    # before anything changes: a half-done install can still roll back
-                _write_state(previous=cur)
-            if not _install(cfg, latest, run):
-                _write_state(failed=latest, last_ok_at=now)
+            # Before anything changes: a half-done install (killed, timed out, an exception) can still roll back,
+            # and the timer does not retry it tomorrow. Success clears `failed`.
+            _write_state(failed=latest, last_ok_at=now, **({"previous": cur} if kept else {}))
+            try:
+                ok = _install(cfg, latest, run)
+            except ReleaseError:        # re-verify or unpack refused it: nothing was stopped or changed
+                _write_state(previous=old_previous)
+                raise
+            if not ok:
                 return _restore(cfg, cur, kept, old_previous, run)
     except Busy as e:
         print(f"{'skipped' if scheduled else 'error'}: printer {e} is mapping or loading; "
