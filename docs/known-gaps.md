@@ -47,8 +47,7 @@ fixed.
     won't hit this.
 13. **Uninstalling after a one-command install** needs the user to unpack the kept tarball from
     `/opt/filament-kit/releases/<version>/` first. There is no `filament-kit uninstall`.
-14. **Not checked here:** `get.sh` against the real v0.2.0 release (`tools/e2e/run.sh` checks it against a fake
-    one), pairing from a real phone, and the APK install.
+14. **Not checked here:** pairing from a real phone, and the APK install on a phone.
 
 ## How this was checked
 
@@ -58,3 +57,9 @@ in a terminal pressing Enter at every question (server mode, no AI). It ended wi
 remote. nginx served `/filament/intake`, the manifest and the icon (HTTP 200) to an address inside `web.lan`,
 refused others with 403, and refused a POST without the app's Origin. Then `uninstall.sh` and `--purge`, and the
 packages the test added were removed.
+
+Then the real v0.2.0 release: `get.sh` from the release, run with `--token-file` in a terminal pressing Enter at
+every question. It printed `verified filament-kit 0.2.0`, installed (exit 0, status all OK), kept the release in
+`/opt/filament-kit/releases/0.2.0/`, served the 63 MB APK at `/app.apk` (HTTP 200, `apk_version` 200), and
+`update --check` said "up to date" with `updates.token_file` set (and a clear 404 message without it). Uninstalled
+with `--purge` from the kept tarball, as the server how-to says.
