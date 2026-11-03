@@ -320,7 +320,8 @@ if mode == "custom":
     try:
         chosen, notes = modules.close_selection(os.environ["FK_MODULES"].split(","))
     except modules.ModuleError as e:
-        sys.exit(f"error: {e}\nfix: use module names from: {', '.join(modules.MODULES)}")
+        names = ", ".join(modules.MODULES)
+        sys.exit(f"error: {e}\nfix: use module names from: {names}")
     for note in notes:
         print(note)
     on = set(chosen)
