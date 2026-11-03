@@ -16,11 +16,14 @@ Two changes, reported as `old → new` (a dry run, the default) or made (`--appl
      reported and left alone, like every spool elsewhere.
   2. The kit's slot map for the printer (`ams.save_map`, the file every mapping job writes): the calibration job's
      numbers as the slots' global ids, numbers learned from prints as `learned`, the scheme when the kit knows it
-     and every job number agrees with it; calibrated (deducting) when the scanner was calibrated, else observe.
+     and every job number agrees with it; calibrated (deducting) when the scanner deducted on it (status
+     "calibrated" or "learning", Ruling BP), else observe. A calibration with no usable entry seeds nothing.
      The fingerprint is left empty: `mapping.LayoutWatch` adopts the printer's layout at its first report, and
      marks the map stale (re-map when idle) if a seeded label is not a slot of it. The mapping status then says
      "Seeded from the h2d-filament-scanner calibration" until a mapping job runs. A different map already saved
-     is refused unless `--replace-map`.
+     is refused unless `--replace-map`; one with the seed's slots and scheme that the kit has updated since
+     (learned numbers, mismatch streak) is kept and reported. The save is a compare-and-save (`ams.save_map_if`): a
+     map saved meanwhile wins and the run says so.
 Nothing is guessed: a table entry that is not a number -> {slot tag, source job|print} the kit can label is listed
 as unknown and not written. A second `--apply` finds nothing to change and says so.
 
@@ -43,6 +46,7 @@ from .spoolman import Spoolman, SpoolmanError
 OLD_PREFIX = "H2D - "                           # the scanner's LOC_PREFIX (its locations, not the printer's name)
 SEEDED_STEP = "Seeded from the h2d-filament-scanner calibration (no calibration print)"
 SOURCES = ("job", "print")
+CALIBRATED = ("calibrated", "learning")     # scanner statuses it deducted on (usage_tracker.deducting)
 _TAG = re.compile(r"H2D:ams(\d+):tray(\d+)")
 _SLOT = re.compile(r"AMS slot (\d+)")
 _HT = re.compile(r"AMS HT (\d+)")
@@ -72,7 +76,8 @@ class Plan:
     notes: list[str] = field(default_factory=list)
     smap: ams.SlotMap | None = None
     old_map: dict | None = None                             # the saved map file's content, None when there is none
-    map_action: str = "new"                                 # new | same | replace | refused
+    stamp: float | None = None                              # the saved map's `updated` when planned (compare-and-save)
+    map_action: str = "new"                                 # new | same | updated | replace | refused | empty
 
 
 def _unwrap(v: Any) -> Any:
@@ -131,7 +136,7 @@ def seed_map(cal: dict, model, hw: hardware.Hardware, unknown: list[str], notes:
     learned: dict[str, str] = {}
     clash: set[str] = set()
     for key, e in cal["table"].items():
-        n = status._int(key) if isinstance(key, str) and key.strip().isdigit() else None
+        n = int(key) if isinstance(key, str) and key.isdigit() else None
         m = _TAG.fullmatch(e.get("slot") or "") if isinstance(e, dict) and isinstance(e.get("slot"), str) else None
         src = e.get("source", "job") if isinstance(e, dict) else None
         if n is None or m is None or src not in SOURCES:
@@ -182,7 +187,8 @@ def seed_map(cal: dict, model, hw: hardware.Hardware, unknown: list[str], notes:
                 sch = None
         scheme = scheme if sch is not None else None
 
-    calibrated = cal.get("status") == "calibrated" and bool(slots)
+    # Ruling BP: "learning" (calibrated by the job, still learning numbers from prints) deducted in the scanner too
+    calibrated = cal.get("status") in CALIBRATED and bool(slots)
     if not calibrated:
         notes.append(f"the scanner's calibration is {cal.get('status')!r}"
                      f"{'' if slots else ' with no job entries'}: the map is seeded in observe mode (use is only "
@@ -225,9 +231,14 @@ def make_plan(cal: dict, printer: registry.Printer, spools: list[dict], replace_
     plan.smap = seed_map(cal, model, hw, plan.unknown, plan.notes)
     old = ams.load_map(printer.serial)
     plan.old_map = _map_file(printer.serial)
-    if old.slots:
+    plan.stamp = old.updated
+    if not plan.smap.slots and not plan.smap.learned:
+        plan.map_action = "empty"
+    elif old.slots:
         if _same_map(old, plan.smap):
             plan.map_action = "same"
+        elif (old.slots, old.scheme) == (plan.smap.slots, plan.smap.scheme):
+            plan.map_action = "updated"         # our seed, since changed by the kit (learned, streak ...): keep it
         else:
             plan.map_action = "replace" if replace_map else "refused"
     return plan
@@ -245,6 +256,10 @@ def _show(plan: Plan, out: Callable[[str], None]) -> None:
     m = plan.smap
     if plan.map_action == "same":
         out("Slot map: already seeded from this calibration")
+    elif plan.map_action == "updated":
+        out("Slot map: seeded earlier, since updated by the kit (kept as it is)")
+    elif plan.map_action == "empty":
+        out("Slot map: the calibration has no usable entries; no slot map seeded (run Map slots in the app)")
     else:
         what = {"new": "Slot map (new)", "replace": "Slot map (replaces the saved one)",
                 "refused": "Slot map: a different map is saved; NOT replaced without --replace-map"}[plan.map_action]
@@ -303,7 +318,7 @@ def run(cal_path: str, *, apply: bool = False, replace_map: bool = False, serial
     if not apply:
         out("Dry run: nothing was written. Run again with --apply (as root) to migrate.")
         return 0
-    if mapping._ProcessLock.held_elsewhere(plan.serial):
+    if mapping.job_held_elsewhere(plan.serial):
         out("error: a slot mapping job is running for this printer; try again when it has finished. "
             "Nothing was changed.")
         return 1
@@ -322,7 +337,10 @@ def run(cal_path: str, *, apply: bool = False, replace_map: bool = False, serial
             return 1
         done += 1
     if seed:
-        ams.save_map(plan.serial, plan.smap)
+        if not ams.save_map_if(plan.serial, plan.smap, plan.stamp):
+            out(f"error: the printer's slot map changed meanwhile (a mapping job or usage saved it); it was not "
+                f"replaced. {done} spool(s) moved. Run again to see the map now saved; the backup is {backup}")
+            return 1
         mapping.record_seeded(plan.serial, SEEDED_STEP, plan.unknown + plan.notes)
     out(f"Done: {done} spool(s) moved{', slot map seeded' if seed else ''}.")
     return 0
