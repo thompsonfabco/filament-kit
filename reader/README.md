@@ -69,7 +69,9 @@ pinned root (ISRG Root X1 unless `READER_ROOT_CA` is set). This contract is fixe
 ```
 
 - `label` is required (entries without one are skipped) and must be unique per printer: it is what the reader
-  saves and sends back.
+  saves and sends back. The kit server keeps to this within what the reader keeps: it never sends a label over
+  40 bytes (that slot is left out, since a cut label would come back wrong), and never two slots of one printer
+  whose labels are equal ignoring case (the kit matches labels whatever their case; only the first is listed).
 - `say` is a list of tokens or one space-separated string; optional.
 - `present`: `true`, `false` or `null`/missing (unknown). `type`: filament type the printer reports.
 - `spool`: an object with `name` (or just `id`), a name string, an id number, or `null`.
