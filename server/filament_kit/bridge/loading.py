@@ -3,7 +3,7 @@
 `load(manager, sm, serial, label, spool_id, dry)`:
   1. the printer must be in the registry, the spool in Spoolman (not archived), the printer connected and idle
      (`slottest.check_idle`: the same rule as the slot test), the slot known (the calibrated slot map's address,
-     else the report's AMS units: A1-D4, HT-A..., Ext);
+     else the report's units (`ams.units`: A1 ... Z4, AA1 ..., HT-A ..., Ext or Ext-L / Ext-R));
   2. nozzle size: the report's top-level `nozzle_diameter`, else `device.nozzle.info[].diameter` of the slot's
      extruder (bits 8-11 of the unit's `info`; id 0 when the report does not say), else 0.4 with
      `nozzle_assumed: true` in the result (never refused for a missing size); preset =
@@ -51,7 +51,7 @@ import threading
 
 from .. import inventory, profiles
 from ..spoolman import SpoolmanError
-from . import ams, mapping, registry, slottest, snapshot, status
+from . import ams, layout, mapping, registry, slottest, snapshot, status
 from .connection import PrinterOffline, UnknownPrinter
 
 log = logging.getLogger(__name__)
@@ -105,16 +105,27 @@ def _spool(sm, spool_id) -> dict:
     return s
 
 
-def _address(serial: str, report: dict, label: str) -> tuple[int, int] | None:
+def _address(serial: str, report: dict, label: str) -> tuple[int, int, str | None, str | None] | None:
+    """(ams_id, tray_id, unit kind, older label) of a slot: the calibrated map's address, else the report's."""
+    model = ams.printer_model(serial)
+    lay = layout.build(report or {}, model)
+    kinds = {u.ams_id: u.kind for u in lay.units}
+    alias = next((s.alias for u in lay.units for s in u.slots if s.label == label), None)
     m = ams.load_map(serial)
     a = m.slots.get(label) if m.calibrated else None
     if isinstance(a, dict) and status._int(a.get("ams_id")) is not None and status._int(a.get("tray_id")) is not None:
-        return int(a["ams_id"]), int(a["tray_id"])
-    for u in ams.units(report or {}):
+        aid = int(a["ams_id"])
+        return aid, int(a["tray_id"]), kinds.get(aid), alias
+    for u in lay.units:
         for s in u.slots:
             if s.label == label:
-                return u.ams_id, s.tray_id
+                return u.ams_id, s.tray_id, u.kind, s.alias
     return None
+
+
+def _label(serial: str, label: str) -> str:
+    """An older external label ("Ext" on the H2D) names the holder's current one ("Ext-L")."""
+    return layout.aliases(ams.printer_model(serial)).get(label, label)
 
 
 def _mm(v) -> float | None:
@@ -165,16 +176,7 @@ def _colour(filament: dict) -> str:
 
 
 def _tray_at(report: dict, ams_id: int, tray_id: int) -> dict:
-    p = status._d(report)
-    vt = status._d(p.get("vt_tray"))
-    if vt and status._int(vt.get("id")) == ams_id:
-        return vt
-    for u in status._l(status._d(p.get("ams")).get("ams")):
-        if status._int(u.get("id")) == ams_id:
-            for t in status._l(u.get("tray")):
-                if status._int(t.get("id")) == tray_id:
-                    return t
-    return {}
+    return layout.raw_trays(report).get((ams_id, tray_id), {})
 
 
 def _shows(report: dict, ams_id: int, tray_id: int, setting: dict) -> bool:
@@ -210,8 +212,10 @@ def _send_back(sm, spools: list[dict], sealed: str, dry: bool) -> list[dict]:
     return out
 
 
-def _occupants(sm, loc: str, except_id=None) -> list[dict]:
-    return [s for s in (sm.get("spool") or []) if s.get("location") == loc and s.get("id") != except_id]
+def _occupants(sm, loc: str, except_id=None, also: str | None = None) -> list[dict]:
+    """Spools at `loc` (or at `also`, the slot's location under its older label) other than `except_id`."""
+    locs = {loc, also} - {None}
+    return [s for s in (sm.get("spool") or []) if s.get("location") in locs and s.get("id") != except_id]
 
 
 def _target_patch(s: dict, loc: str) -> dict:
@@ -238,11 +242,13 @@ def load(manager, sm, serial: str, label: str, spool_id, dry: bool, *, preset_fo
     report = manager.wait_report(serial, lambda r: True, 0)
     if report is None:
         raise PrinterOffline(serial)
+    label = _label(serial, label)
     addr = _address(serial, report, label)
     if addr is None:
         raise NotFound(f"{name} has no slot {label}")
-    ams_id, tray_id = addr
+    ams_id, tray_id, kind, alias = addr
     loc = status.location(name, label)
+    old_loc = status.location(name, alias) if alias else None
     slot = {"label": label, "ams_id": ams_id, "tray_id": tray_id, "location": loc}
     fil = spool.get("filament") or {}
     nozzle, assumed = _nozzle(report, ams_id)
@@ -259,14 +265,14 @@ def load(manager, sm, serial: str, label: str, spool_id, dry: bool, *, preset_fo
 
     if dry:
         with inventory._LOCK:
-            moved = _send_back(sm, _occupants(sm, loc, spool["id"]), sealed_location, dry=True)
+            moved = _send_back(sm, _occupants(sm, loc, spool["id"], old_loc), sealed_location, dry=True)
         patch = _target_patch(spool, loc)
         return {**result, "spool": {**spool, **patch}, "confirmed": None, "moved_back": moved,
                 "command": {"ams_id": ams_id, "tray_id": tray_id, **setting}}
 
     with mapping.load_guard(serial), _slot_lock(serial, label):
         slottest.check_idle(manager, serial)           # the printer may have started a job while we waited
-        reply = manager.set_slot(serial, ams_id, tray_id, setting)
+        reply = manager.set_slot(serial, ams_id, tray_id, setting, kind=kind)
         if reply is not None and str(reply.get("result", "")).lower() != "success":
             raise SlotWriteFailed(f"{name} refused the write to {label}: "
                                   f"{reply.get('reason') or reply.get('err_code') or reply.get('result')}")
@@ -281,7 +287,7 @@ def load(manager, sm, serial: str, label: str, spool_id, dry: bool, *, preset_fo
                                       f"{CONFIRM_TIMEOUT:g} s)")
             log.warning("load on %s: %s not confirmed", serial, label)
         with inventory._LOCK:
-            moved = _send_back(sm, _occupants(sm, loc, spool["id"]), sealed_location, dry=False)
+            moved = _send_back(sm, _occupants(sm, loc, spool["id"], old_loc), sealed_location, dry=False)
             fresh = sm.get(f"spool/{spool['id']}")
             patch = _target_patch(fresh, loc)
             if patch:
@@ -294,14 +300,17 @@ def unload(manager, sm, serial: str, label: str, dry: bool, *, sealed_location: 
     """Take the spool(s) in slot `label` of printer `serial` back to their previous location, in Spoolman only."""
     p = _printer(serial)
     name = registry.display_name(p)
+    label = _label(serial, label)
     loc = status.location(name, label)
     report = manager.wait_report(serial, lambda r: True, 0) if manager is not None else None
     addr = _address(serial, report or {}, label)
     slot = {"label": label, "ams_id": addr[0] if addr else None, "tray_id": addr[1] if addr else None,
             "location": loc}
+    alias = addr[3] if addr else next((a for a, cur in layout.aliases(p.model).items() if cur == label), None)
+    old_loc = status.location(name, alias) if alias else None
     guard = mapping.load_guard(serial) if not dry else contextlib.nullcontext()
     with guard, _slot_lock(serial, label), inventory._LOCK:
-        here = _occupants(sm, loc)
+        here = _occupants(sm, loc, also=old_loc)
         if not here:
             raise NotFound(f"no spool is in {name} slot {label}")
         moved = _send_back(sm, here, sealed_location, dry)

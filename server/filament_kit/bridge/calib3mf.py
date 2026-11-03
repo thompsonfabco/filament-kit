@@ -64,7 +64,7 @@ import zipfile
 from dataclasses import dataclass, field
 from xml.sax.saxutils import quoteattr
 
-from . import ftps, registry, snapshot, tlspin
+from . import ftps, layout, registry, snapshot, tlspin
 from .ams import SlotMap, default_global
 from .status import _d, _int, _l, _s, packed
 
@@ -227,20 +227,8 @@ def payload(serial: str, ams_mapping: list[int], name: str | None = None) -> dic
 # ---------------------------------------------------------------- report helpers
 
 def _trays(report: dict) -> dict[tuple[int, int], dict]:
-    """(ams_id, tray_id) -> raw tray dict; the external holder as (its id, 0), as `ams.units` labels it."""
-    out: dict[tuple[int, int], dict] = {}
-    for u in _l(_d(_d(report).get('ams')).get('ams')):
-        uid = _int(u.get('id'))
-        if uid is None:
-            continue
-        for t in _l(u.get('tray')):
-            tid = _int(t.get('id'))
-            if tid is not None and isinstance(t, dict):
-                out[(uid, tid)] = t
-    vt = _d(report).get('vt_tray')
-    if isinstance(vt, dict):
-        out[(_int(vt.get('id'), 254), 0)] = vt
-    return out
+    """(ams_id, tray_id) -> raw tray dict; each external holder as (its id, 0) (`layout.raw_trays`)."""
+    return layout.raw_trays(report)
 
 
 def _key(slot: dict) -> tuple[int, int] | None:

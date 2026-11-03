@@ -41,6 +41,7 @@ DEFAULTS: dict = {
         "sealed_location": "Sealed stock",
     },
     "printers": [],
+    "auto_remap": True,         # re-map a printer's slots by itself (when idle) after its AMS layout changed
     "library": {"url": None, "schedule": "daily"},
     "station": {"url": None, "allow": ["127.0.0.1"], "port": 5003,
                 "nfc_device": "auto", "beep": True, "beep_device": "",

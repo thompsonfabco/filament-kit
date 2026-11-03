@@ -102,6 +102,26 @@ def _station_lines(url: str) -> bool:
     return good
 
 
+def _hardware_lines() -> bool:
+    """The printer hardware data (`bambu_hardware.xml`, bundled + optional override): FAIL per error (a refused
+    override: the last good data stays in use), a note per warning (ignored unknown parts)."""
+    from .bridge import hardware
+    try:
+        hw = hardware.load()
+    except Exception as e:  # noqa: BLE001 - status reports, it does not crash
+        return _line(False, f"printer hardware data could not be loaded ({type(e).__name__}: {e})")
+    good = True
+    if hw.errors:
+        for e in hw.errors:
+            good &= _line(False, f"printer hardware data: {e}",
+                          f"fix or remove {hardware.override_path()} (the last good data is in use)")
+    else:
+        good &= _line(True, "printer hardware data loaded")
+    for w in hw.warnings:
+        print(f"--   printer hardware data: {w}")
+    return good
+
+
 def cmd_status(client_factory) -> int:
     cfg = config.load()
     p = config.paths()
@@ -164,6 +184,8 @@ def cmd_status(client_factory) -> int:
         print(f"--   display name: {cfg['server_name']}")
         print(f"--   paired devices: {len(pairing.devices())}")
         print(f"--   reads used today: {_reads_today()} of {cfg['reads_per_day']}")
+    if "printers" in on:
+        good &= _hardware_lines()
     if "presets" in on:
         good &= _profile_status_lines()
     elif "library" in on:
