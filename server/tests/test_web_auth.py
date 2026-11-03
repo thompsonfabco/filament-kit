@@ -455,7 +455,7 @@ def test_login_wrong_passphrase_then_lockout(store, passfile, clock):
 def test_lockout_is_shared(store, passfile, clock):
     lock = auth.Lockout()
     for _ in range(5):
-        lock.fail()  # e.g. the intake web app's sign-in
+        lock.fail()  # another wrong passphrase at /login
     with TestClient(_app(store, passfile, lockout=lock), client=HOME) as c:
         cid = _register(c).json()["client_id"]
         r, _ = _sign_in(c, cid, _pkce()[1])
@@ -567,7 +567,6 @@ def test_store_loads_ops_oauth_json_unchanged(tmp_path):
     assert client is not None and [str(u) for u in client.redirect_uris] == [CB]
     assert run(p.load_access_token("ops-access-token")).client_id == cid
     assert run(p.load_refresh_token(client, "ops-refresh-token")).scopes == ["filament"]
-    assert st.check_session("ops-session-cookie")
     st.save()  # and writes it back in the same shape
     again = json.loads(path.read_text(encoding="utf-8"))
     assert set(again) == {"clients", "codes", "access", "refresh", "used", "sessions"}
@@ -577,27 +576,6 @@ def test_store_loads_ops_oauth_json_unchanged(tmp_path):
 def test_store_starts_empty(store):
     assert set(store.d) == {"clients", "codes", "access", "refresh", "used", "sessions"}
     assert all(v == {} for v in store.d.values()) and store.pending == {}
-
-
-# ---------- sessions ----------
-
-def test_sessions(store, clock):
-    tok = store.new_session()
-    assert store.check_session(tok)
-    assert tok not in store.path.read_text(encoding="utf-8")
-    entry = store.d["sessions"][auth._h(tok)]
-    assert entry["expires_at"] == clock.now + 30 * 86400 and entry["created"] == clock.now
-    assert not store.check_session("forged") and not store.check_session("") and not store.check_session(None)
-    clock.now += 30 * 86400 + 1
-    assert not store.check_session(tok)
-
-
-def test_end_session(store):
-    tok = store.new_session()
-    store.end_session(tok)
-    assert not store.check_session(tok)
-    store.end_session("never-existed")
-    store.end_session(None)
 
 
 # ---------- passphrase ----------

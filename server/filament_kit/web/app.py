@@ -6,11 +6,11 @@
       /authorize /token /register /revoke /.well-known/...   the SDK's OAuth routes over auth.Provider
       /login                    the passphrase page that approves a sign-in (LAN only)
       /health                   "ok"
-      /intake ...               the phone web app (LAN only, cookie sessions)
+      /intake ...               the phone web app (LAN only, no sign-in; POSTs need its Origin)
       /reader/...               the bench NFC reader's API (LAN only, reader token; reader.py)
 
-The whole app is wrapped in `auth.lan_only`, so /authorize, /login, /intake and /reader answer the LAN only. One Lockout is
-shared by /login and the web app's sign-in. State: `FK_STATE/web/oauth.json`; the passphrase hash
+The whole app is wrapped in `auth.lan_only`, so /authorize, /login, /intake and /reader answer the LAN only. Wrong
+passphrases at /login count in its Lockout. State: `FK_STATE/web/oauth.json`; the passphrase hash
 `FK_ETC/web_passphrase` (set with `filament-kit web passphrase`).
 """
 from __future__ import annotations
@@ -76,8 +76,8 @@ def build_app(cfg: dict | None = None, *, sm: Spoolman | None = None, claude=Non
         return PlainTextResponse("ok")
 
     routes = [*auth.login_routes(store, public, passphrase_file(), lan_cidrs=lan, lockout=lockout),
-              *IntakeApp(tools, store=store, lockout=lockout, public_url=public, lan_cidrs=lan,
-                         passphrase_file=passphrase_file(), claude=claude, kit_api=kit_api).routes(),
+              *IntakeApp(tools, public_url=public, lan_cidrs=lan,
+                         claude=claude, kit_api=kit_api).routes(),
               *reader.Reader(tools, sm, lan_cidrs=lan, queue=reader_queue).routes()]
     mcp.custom_route("/health", methods=["GET"])(health)
     for r in routes:

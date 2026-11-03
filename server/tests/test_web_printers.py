@@ -131,11 +131,8 @@ def app(env, kit):
 
 
 def signed(app, who=HOME):
-    c = TestClient(app, base_url=ORIGIN, client=who)
-    r = c.post("/intake/login", data={"passphrase": PASS}, headers={"Origin": ORIGIN}, follow_redirects=False)
-    assert r.status_code == 303
-    c.cookies.set("fi_session", r.headers["set-cookie"].split(";")[0].split("=", 1)[1])  # cookie path is the public one
-    return c
+    """A client on the home network (the web app has no sign-in)."""
+    return TestClient(app, base_url=ORIGIN, client=who)
 
 
 P = "/intake/api/printers"
@@ -201,14 +198,13 @@ def test_script_never_uses_innerhtml():
 
 # ---------- access ----------
 
-def test_routes_need_lan_session_and_origin(app, kit):
-    away = signed(app)
+def test_routes_need_lan_and_origin(app, kit):
+    home = signed(app)
     assert TestClient(app, base_url=ORIGIN, client=AWAY).get(P).status_code == 403
-    assert TestClient(app, base_url=ORIGIN, client=HOME).get(P).status_code == 401
-    assert TestClient(app, base_url=ORIGIN, client=HOME).get(P + f"/{SERIAL}/camera.mjpeg").status_code == 401
-    r = away.post(P + f"/{SERIAL}/command", json={"action": "pause"})
+    assert TestClient(app, base_url=ORIGIN, client=AWAY).get(P + f"/{SERIAL}/camera.mjpeg").status_code == 403
+    r = home.post(P + f"/{SERIAL}/command", json={"action": "pause"})
     assert r.status_code == 403 and r.json()["error"] == "bad origin"
-    r = away.post(P + f"/{SERIAL}/command", json={"action": "pause"}, headers={"Origin": "https://evil.example"})
+    r = home.post(P + f"/{SERIAL}/command", json={"action": "pause"}, headers={"Origin": "https://evil.example"})
     assert r.status_code == 403
     assert not [x for x in kit.calls if x[0] == "POST"]
 
@@ -383,10 +379,7 @@ def test_events_route_over_http(env, kit):
 
     async def main(url):
         async with httpx2.AsyncClient(headers={"Host": "mcp.example.test", "X-Forwarded-For": "192.168.1.20"}) as hc:
-            r = await hc.post(url + "/intake/login", data={"passphrase": PASS}, headers={"Origin": ORIGIN})
-            cookie = r.headers["set-cookie"].split(";")[0]
-            async with hc.stream("GET", url + "/intake/api/printers/" + SERIAL + "/events",
-                                 headers={"Cookie": cookie}) as s:
+            async with hc.stream("GET", url + "/intake/api/printers/" + SERIAL + "/events") as s:
                 assert s.status_code == 200 and s.headers["content-type"].startswith("text/event-stream")
                 async for line in s.aiter_lines():
                     if line.startswith("data: "):
@@ -596,9 +589,7 @@ def test_stream_count_returns_to_zero_when_the_client_closes(env, kit, monkeypat
 
     async def main(url):
         async with httpx2.AsyncClient(headers={"Host": "mcp.example.test", "X-Forwarded-For": "192.168.1.20"}) as hc:
-            r = await hc.post(url + "/intake/login", data={"passphrase": PASS}, headers={"Origin": ORIGIN})
-            cookie = r.headers["set-cookie"].split(";")[0]
-            async with hc.stream("GET", url + f"/intake/api/printers/{SERIAL}/events", headers={"Cookie": cookie}) as s:
+            async with hc.stream("GET", url + f"/intake/api/printers/{SERIAL}/events") as s:
                 async for line in s.aiter_lines():
                     if line.startswith("data: "):
                         break
@@ -647,7 +638,6 @@ def test_push_caps_subscriptions_and_rate_limits_test(pushapp, env):
 
 
 def test_service_worker_is_behind_the_lan_guard(pushapp):
-    assert TestClient(pushapp, base_url=ORIGIN, client=HOME).get("/intake/sw.js").status_code == 401
     assert TestClient(pushapp, base_url=ORIGIN, client=AWAY).get("/intake/sw.js").status_code == 403
     r = signed(pushapp).get("/intake/sw.js")
     assert r.status_code == 200 and "showNotification" in r.text
