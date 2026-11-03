@@ -224,7 +224,10 @@ def test_cli_remote_issue_wired(monkeypatch):
     assert seen
 
 
-def test_cli_remote_firewall_only_prints(capsys):
+def test_cli_remote_firewall_only_prints(capsys, tmp_path, monkeypatch):
+    opt = tmp_path / "opt"
+    shutil.copytree(INSTALL / "remote", opt / "resources" / "remote")   # where an install puts them
+    monkeypatch.setenv("FK_OPT", str(opt))
     config.save(_cfg(acme_window="03:10"))
     assert cli.main(["remote", "firewall"]) == 0
     assert "443" in capsys.readouterr().out

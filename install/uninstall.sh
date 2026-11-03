@@ -57,7 +57,7 @@ rm -f /usr/local/bin/filament-kit
 REMOTE_GONE=0
 KIT_ROUTES=""
 if [ -f /etc/mcp-router/kit-routes ]; then
-    KIT_ROUTES=$(cat /etc/mcp-router/kit-routes)
+    KIT_ROUTES=$(tr -s '[:space:]' ' ' < /etc/mcp-router/kit-routes)
     for n in $KIT_ROUTES; do
         case "$n" in *[!a-z0-9-]*|"") continue ;; esac
         if [ -f "/etc/nginx/mcp.d/$n.conf" ] && grep -q 'written by mcp-route' "/etc/nginx/mcp.d/$n.conf"; then
@@ -70,7 +70,7 @@ OTHER_ROUTES=""
 for f in /etc/nginx/mcp.d/*.conf; do
     [ -f "$f" ] || continue
     n=$(basename "$f" .conf)
-    case " $(echo $KIT_ROUTES) " in *" $n "*) continue ;; esac
+    case " $KIT_ROUTES " in *" $n "*) continue ;; esac
     OTHER_ROUTES="$OTHER_ROUTES $n"
 done
 REMOTE_FILES=/etc/letsencrypt/renewal-hooks/deploy/filament-kit
