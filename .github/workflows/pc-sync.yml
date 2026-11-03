@@ -8,7 +8,11 @@ permissions:
   contents: read
 jobs:
   build:
-    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -23,11 +27,13 @@ jobs:
         run: pytest pc-sync/tests
 
       - name: PyInstaller
+        if: runner.os == 'Windows'
         run: |
           pip install pyinstaller==6.11.1
           pyinstaller --noconfirm pc-sync/fksync.spec
 
       - name: Smoke test
+        if: runner.os == 'Windows'
         run: |
           ./dist/filament-kit-sync/filament-kit-sync.exe --help
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -35,3 +41,27 @@ jobs:
             Write-Output "::error::filament-kit-sync-task.exe is missing"
             exit 1
           }
+
+      - name: shellcheck (Linux package scripts)
+        if: runner.os == 'Linux'
+        run: shellcheck pc-sync/linux/*.sh
+
+      - name: PyInstaller and the Linux tarball
+        if: runner.os == 'Linux'
+        run: |
+          pip install pyinstaller==6.11.1
+          bash pc-sync/linux/build.sh
+
+      - name: Smoke test (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          ./dist/filament-kit-sync/filament-kit-sync --help
+          ./dist/filament-kit-sync/filament-kit-sync --help | grep -F install-timer > /dev/null
+          version=$(sed -n 's/^__version__ = "\(.*\)"\r\{0,1\}$/\1/p' pc-sync/fksync/__init__.py)
+          tar -tzf "dist/filament-kit-sync-linux-x86_64-$version.tar.gz" > "$RUNNER_TEMP/list"
+          for f in install.sh uninstall.sh filament-kit-sync/filament-kit-sync; do
+            if ! grep -qxF "filament-kit-sync-linux-x86_64-$version/$f" "$RUNNER_TEMP/list"; then
+              echo "::error::$f is not in the tarball"
+              exit 1
+            fi
+          done

@@ -14,15 +14,24 @@ else the folder of DisplayIcon / UninstallString), else the newest `<Program Fil
 orca-slicer.exe; it may be missing. The packed library is `<install>\\resources\\profiles\\OrcaFilamentLibrary.opc`,
 else `%APPDATA%\\OrcaSlicer\\system\\OrcaFilamentLibrary.opc` (Ruling L).
 
-The caller passes `appdata` (and the Program Files folders); only fksync.__main__ reads the real environment.
+Linux (a LinuxLayout instead of `appdata`; checked against the slicers' sources, see LinuxLayout): Bambu Studio's
+roots are $XDG_CONFIG_HOME (else ~/.config)/BambuStudio and .../BambuStudioBeta, and the same two names under the
+Flatpak's ~/.var/app/com.bambulab.BambuStudio/config; the choice rule is the one above over all four. Orca Slicer's
+root is the newest (same rule, OrcaSlicer.conf) of $XDG_CONFIG_HOME/OrcaSlicer and the Flatpak ones (today's id and
+the old io.github.softfever one); its install is the resources folder (<share>/OrcaSlicer from a distro package or
+the Flatpak, <prefix>/resources from a tarball) and the library is `<install>/profiles/OrcaFilamentLibrary.opc`,
+else the same `<root>/system` copy. "Running" is read from /proc, and when /proc cannot be read it is "running".
+
+The caller passes `appdata` (and the Program Files folders) or a LinuxLayout; only fksync.__main__ reads the real
+environment.
 """
 import json
 import re
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Iterable
+from typing import Callable, Iterable, Mapping
 
 VARIANTS = ("BambuStudio", "BambuStudioBeta")
 CONF = "BambuStudio.conf"
@@ -67,34 +76,42 @@ def _user_filament_dirs(root: Path) -> list[tuple[float, str, Path]]:
     return out
 
 
-def _root_rank(root: Path) -> float | None:
+def _root_rank(root: Path, conf_name: str = CONF) -> float | None:
     """The root's rank, or None when it has no user/*/filament dir (a root it could never use)."""
     dirs = _user_filament_dirs(root)
     if not dirs:
         return None
-    conf = _mtime(root / CONF)
+    conf = _mtime(root / conf_name)
     return conf if conf is not None else max(d[0] for d in dirs)
 
 
-def locate(appdata: Path, pin: dict | None = None) -> StudioFolders:
-    appdata = Path(appdata)
+def _pick_root(roots: dict[str, Path], conf: str) -> str | None:
+    """The name of the root whose conf is newest (else newest user filament dir); None when none is usable."""
+    ranked = [(r, n) for n, p in roots.items() if p.is_dir() and (r := _root_rank(p, conf)) is not None]
+    return max(ranked)[1] if ranked else None
+
+
+def locate(appdata: Path | None, pin: dict | None = None, *, layout: "LinuxLayout | None" = None) -> StudioFolders:
+    """`layout`: this Linux PC's folders (then `appdata` is unused); None: Windows, appdata/<variant>."""
+    roots = dict(layout.studio_roots()) if layout else {v: Path(appdata) / v for v in VARIANTS}
     pin = pin or {}
     variant, user_id = pin.get("variant"), pin.get("user_id")
 
     if variant:
-        if variant not in VARIANTS:
-            raise NotFound(f"Bambu Studio variant {variant!r} in the sync config is not one of {', '.join(VARIANTS)}.")
-        root = appdata / variant
+        if not isinstance(variant, str) or variant not in roots:
+            raise NotFound(f"Bambu Studio variant {variant!r} in the sync config is not one of {', '.join(roots)}.")
+        root = roots[variant]
         if not root.is_dir():
             raise NotFound(f"Bambu Studio folder {root} (pinned variant {variant}) does not exist.")
     else:
-        ranked = [(r, v) for v in VARIANTS if (appdata / v).is_dir() and (r := _root_rank(appdata / v)) is not None]
-        if not ranked:
-            raise NotFound(f"Bambu Studio not found: neither {appdata / VARIANTS[0]} nor {appdata / VARIANTS[1]} "
+        variant = _pick_root(roots, CONF)
+        if variant is None:
+            where = (f"neither {roots[VARIANTS[0]]} nor {roots[VARIANTS[1]]}" if layout is None
+                     else "none of " + ", ".join(str(p) for p in roots.values()))
+            raise NotFound(f"Bambu Studio not found: {where} "
                            "has a user filament folder. Open Bambu Studio once (and sign in, if you use an "
                            "account), then run the sync again.")
-        variant = max(ranked)[1]
-        root = appdata / variant
+        root = roots[variant]
 
     if user_id:
         if not _USER_ID.match(str(user_id)):
@@ -120,22 +137,84 @@ def _tasklist(image: str = "bambu-studio.exe") -> str:
     ).stdout
 
 
-def _running(image: str, tasklist: Callable[[], str] | None) -> bool:
+def _running(image: str, tasklist: Callable[[], str] | None, proc: Path | None, app: "_LinuxApp") -> bool:
     if tasklist is None:
+        if proc is not None or sys.platform.startswith("linux"):
+            return _proc_running(app, PROC if proc is None else proc)
         if sys.platform != "win32":
             return False
         return image in (_tasklist(image) or "").lower()
     return image in (tasklist() or "").lower()
 
 
-def running(tasklist: Callable[[], str] | None = None) -> bool:
-    """True when bambu-studio.exe is running. Always False off Windows unless a tasklist is given."""
-    return _running("bambu-studio.exe", tasklist)
+def running(tasklist: Callable[[], str] | None = None, *, proc: Path | None = None) -> bool:
+    """True when Bambu Studio is running: bambu-studio.exe on Windows, /proc on Linux (unsure: True).
+    Always False elsewhere unless a tasklist is given."""
+    return _running("bambu-studio.exe", tasklist, proc, _BAMBU_APP)
 
 
-def orca_running(tasklist: Callable[[], str] | None = None) -> bool:
-    """True when orca-slicer.exe is running. Always False off Windows unless a tasklist is given."""
-    return _running("orca-slicer.exe", tasklist)
+def orca_running(tasklist: Callable[[], str] | None = None, *, proc: Path | None = None) -> bool:
+    """True when Orca Slicer is running: orca-slicer.exe on Windows, /proc on Linux (unsure: True).
+    Always False elsewhere unless a tasklist is given."""
+    return _running("orca-slicer.exe", tasklist, proc, _ORCA_APP)
+
+
+# --- Linux: the running check --------------------------------------------------------------------
+
+PROC = Path("/proc")
+
+
+@dataclass(frozen=True)
+class _LinuxApp:
+    prefix: str                 # a process name (comm, argv[0]) that starts with it, '-' / '_' / ' ' dropped
+    flatpak_ids: tuple[str, ...]
+    icon: str                   # <app key>.png next to AppRun inside the app's AppImage mount
+
+
+# Names checked against the sources: the binary is bambu-studio / orca-slicer (CMake SLIC3R_APP_CMD, also inside
+# the Flatpaks); the AppImages are named BambuStudio_*.AppImage / OrcaSlicer_Linux_*.AppImage, their runtime keeps
+# running under that name, and the app inside is renamed AppRun with <SLIC3R_APP_KEY>.png beside it.
+_BAMBU_APP = _LinuxApp("bambustudio", ("com.bambulab.BambuStudio",), "BambuStudio.png")
+_ORCA_APP = _LinuxApp("orcaslicer", ("com.orcaslicer.OrcaSlicer", "io.github.softfever.OrcaSlicer"), "OrcaSlicer.png")
+
+
+def _norm_name(name: str) -> str:
+    return name.lower().replace("-", "").replace("_", "").replace(" ", "")
+
+
+def _proc_matches(app: _LinuxApp, comm: str, argv: list[str]) -> bool:
+    arg0 = Path(argv[0]).name if argv else ""
+    if any(_norm_name(n).startswith(app.prefix) for n in (comm, arg0) if n):
+        return True
+    if any(a.split("//", 1)[0] in app.flatpak_ids for a in argv):        # flatpak run <id>[//branch]
+        return True
+    if arg0 == "AppRun" or comm == "AppRun":
+        mount = Path(argv[0]).parent if argv and Path(argv[0]).is_absolute() else None
+        if mount is None:
+            return True                                                 # an AppImage we cannot place: unsure
+        try:
+            return (mount / app.icon).exists() or not mount.is_dir()
+        except OSError:
+            return True
+    return False
+
+
+def _proc_running(app: _LinuxApp, proc: Path) -> bool:
+    """Any process of this user's view of /proc that is the app; True when /proc cannot be listed."""
+    try:
+        pids = [d for d in proc.iterdir() if d.name.isdigit()]
+    except OSError:
+        return True
+    for d in pids:
+        try:
+            comm = (d / "comm").read_text(encoding="utf-8", errors="replace").strip()
+            raw = (d / "cmdline").read_bytes()
+        except OSError:                                                 # gone, or another user's: not ours
+            continue
+        argv = [a.decode("utf-8", errors="replace") for a in raw.split(b"\0") if a]
+        if _proc_matches(app, comm, argv):
+            return True
+    return False
 
 
 # --- Orca Slicer -------------------------------------------------------------------------------
@@ -244,11 +323,35 @@ def _orca_install(pin: str | None, program_files: Iterable[Path], registry: Call
     return max(found)[2] if found else None
 
 
-def locate_orca(appdata: Path, pin: dict | None = None, *, program_files: Iterable[Path] = (),
-                registry: Callable[[], list[dict]] = _registry_entries) -> OrcaFolders | None:
-    """This PC's Orca Slicer folders, or None when Orca Slicer has no user filament folder here."""
-    root = Path(appdata) / ORCA
+def _orca_install_linux(pin: str | None, layout: "LinuxLayout", flatpak_id: str | None) -> Path | None:
+    """The resources folder (holding profiles/) of the Orca Slicer that owns this data root, else of any install."""
+    if pin:
+        p = Path(pin)
+        for cand in (p, p / "resources"):
+            if (cand / "profiles").is_dir():
+                return cand
+        raise NotFound(f"Orca Slicer install folder {p} (orca_install in the sync config) has no profiles folder.")
+    for cand in layout.orca_installs(flatpak_id):
+        if (cand / "profiles").is_dir():
+            return cand
+    return None
+
+
+def locate_orca(appdata: Path | None, pin: dict | None = None, *, program_files: Iterable[Path] = (),
+                registry: Callable[[], list[dict]] = _registry_entries,
+                layout: "LinuxLayout | None" = None) -> OrcaFolders | None:
+    """This PC's Orca Slicer folders, or None when Orca Slicer has no user filament folder here.
+    `layout`: this Linux PC's folders (then `appdata`, `program_files` and `registry` are unused)."""
     pin = pin or {}
+    flatpak_id = None
+    if layout is None:
+        root = Path(appdata) / ORCA
+    else:
+        roots = {name: (path, fid) for name, path, fid in layout.orca_roots()}
+        name = _pick_root({n: r[0] for n, r in roots.items()}, ORCA_CONF)
+        if name is None and not pin.get("orca_user_id"):
+            return None
+        root, flatpak_id = roots[name or next(iter(roots))]
     user_id = pin.get("orca_user_id")
     if user_id:
         if not _USER_ID.match(str(user_id)):
@@ -263,12 +366,83 @@ def locate_orca(appdata: Path, pin: dict | None = None, *, program_files: Iterab
         folder = _conf_preset_folder(root)
         chosen = [d for d in dirs if d[1] == folder]
         _, user_id, user_filament = chosen[0] if chosen else max(dirs)
-    install = _orca_install(pin.get("orca_install"), program_files, registry)
+    if layout is None:
+        install = _orca_install(pin.get("orca_install"), program_files, registry)
+        packed = (install / "resources" / "profiles" / LIBRARY_OPC) if install else None
+    else:
+        install = _orca_install_linux(pin.get("orca_install"), layout, flatpak_id)
+        packed = (install / "profiles" / LIBRARY_OPC) if install else None
     opc = None
-    for cand in ((install / "resources" / "profiles" / LIBRARY_OPC) if install else None,
+    for cand in (packed,
                  root / "system" / LIBRARY_OPC):
         if cand is not None and cand.is_file():
             opc = cand
             break
     return OrcaFolders(root=root, user_id=user_id, user_filament=user_filament,
                        system_bbl=root / "system" / "BBL" / "filament", install=install, library_opc=opc)
+
+
+# --- Linux: where the slicers keep their folders -------------------------------------------------
+
+BAMBU_FLATPAK = "com.bambulab.BambuStudio"
+ORCA_FLATPAKS = ("com.orcaslicer.OrcaSlicer", "io.github.softfever.OrcaSlicer")   # today's id, then the old one
+
+
+@dataclass(frozen=True)
+class LinuxLayout:
+    """This Linux user's slicer folders. Checked against the sources (see the report of task LINUX):
+    - Bambu Studio GUI_App::init_app_config: $XDG_CONFIG_HOME (unset or empty: ~/.config) + "/BambuStudio", with
+      "Beta" appended for the beta builds (BBL_INTERNAL_TESTING); an AppImage uses the same folder.
+    - Orca Slicer default_data_dir(): the same $XDG_CONFIG_HOME rule + "/OrcaSlicer" (a portable data_dir beside
+      the binary is not looked for: pin it with the sync config instead). Its Flatpak moved from
+      io.github.softfever.OrcaSlicer to com.orcaslicer.OrcaSlicer and copies the old folder on first start.
+    - Flatpak sets XDG_CONFIG_HOME to ~/.var/app/<id>/config inside the sandbox, whatever the host has.
+    - Orca resources: SLIC3R_FHS builds (distro packages and the Flatpak, prefix /app) install them as
+      <prefix>/share/OrcaSlicer; tarball / AppImage builds keep <bin>/../resources (an AppImage's is only
+      mounted while it runs, so the <data>/system copy is used then).
+    """
+    home: Path
+    xdg_config: Path
+    system_flatpak: Path = Path("/var/lib/flatpak")
+    share_dirs: tuple[Path, ...] = (Path("/usr/share"), Path("/usr/local/share"))
+    opt_dirs: tuple[Path, ...] = (Path("/opt"),)
+    user_flatpak: Path | None = field(default=None)
+
+    @classmethod
+    def from_env(cls, env: Mapping[str, str], **kw) -> "LinuxLayout":
+        home = Path(env.get("HOME") or Path.home())
+        xdg = env.get("XDG_CONFIG_HOME")
+        data = env.get("XDG_DATA_HOME")
+        user_flatpak = (Path(data) if data else home / ".local" / "share") / "flatpak"
+        return cls(home=home, xdg_config=Path(xdg) if xdg else home / ".config", user_flatpak=user_flatpak, **kw)
+
+    def _flatpak_config(self, app_id: str) -> Path:
+        return self.home / ".var" / "app" / app_id / "config"
+
+    def studio_roots(self) -> list[tuple[str, Path]]:
+        fp = self._flatpak_config(BAMBU_FLATPAK)
+        return ([(v, self.xdg_config / v) for v in VARIANTS]
+                + [(f"Flatpak {v}", fp / v) for v in VARIANTS])
+
+    def orca_roots(self) -> list[tuple[str, Path, str | None]]:
+        new, old = ORCA_FLATPAKS
+        return [(ORCA, self.xdg_config / ORCA, None),
+                (f"Flatpak {ORCA}", self._flatpak_config(new) / ORCA, new),
+                (f"Flatpak {ORCA} (io.github.softfever)", self._flatpak_config(old) / ORCA, old)]
+
+    def _flatpak_share(self, app_id: str) -> list[Path]:
+        bases = [b for b in (self.user_flatpak, self.system_flatpak) if b is not None]
+        return [b / "app" / app_id / "current" / "active" / "files" / "share" / ORCA for b in bases]
+
+    def orca_installs(self, flatpak_id: str | None) -> list[Path]:
+        """Resources folders to try, best first: this Flatpak's own (user, then system installation) for a
+        Flatpak data root; else the native ones (<share>/OrcaSlicer, /opt/OrcaSlicer*/resources)."""
+        if flatpak_id:
+            return self._flatpak_share(flatpak_id)
+        out = [d / ORCA for d in self.share_dirs]
+        for opt in self.opt_dirs:
+            try:
+                out += sorted(d / "resources" for d in Path(opt).glob(f"{ORCA}*"))
+            except OSError:
+                continue
+        return out

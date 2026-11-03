@@ -1,7 +1,8 @@
-"""Test guard: no pc-sync test may see the real %APPDATA% / %LOCALAPPDATA% / %ProgramFiles%.
+"""Test guard: no pc-sync test may see the real %APPDATA% / %LOCALAPPDATA% / %ProgramFiles%, or on Linux the real
+$HOME / $XDG_CONFIG_HOME / $XDG_DATA_HOME.
 
-Every test gets APPDATA and LOCALAPPDATA pointed at its own tmp_path, so code that
-falls back to the environment can only ever reach a fixture tree.
+Every test gets APPDATA and LOCALAPPDATA (and HOME, XDG_CONFIG_HOME, XDG_DATA_HOME) pointed at its own tmp_path,
+so code that falls back to the environment can only ever reach a fixture tree.
 """
 import os
 import sys
@@ -25,4 +26,7 @@ def _fake_appdata(tmp_path, monkeypatch):
     monkeypatch.setenv("LOCALAPPDATA", str(local))
     for var in ("ProgramFiles", "ProgramW6432", "ProgramFiles(x86)"):   # the Orca Slicer install search
         monkeypatch.setenv(var, str(tmp_path / "programfiles"))
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))                 # Linux: the slicers' folders and the timer
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "home" / ".config"))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "home" / ".local" / "share"))
     yield
