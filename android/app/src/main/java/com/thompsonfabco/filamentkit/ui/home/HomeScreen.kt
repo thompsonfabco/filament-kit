@@ -26,13 +26,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.thompsonfabco.filamentkit.drafts.Draft
 import com.thompsonfabco.filamentkit.net.ProfileStatus
+import com.thompsonfabco.filamentkit.net.ServerInfo
 import com.thompsonfabco.filamentkit.session.Connection
 import com.thompsonfabco.filamentkit.update.UpdateUi
 import java.text.DateFormat
 import java.util.Date
 
 /**
- * The start screen: server name with a connection dot, the update banner, Add spools / Search / Printers /
+ * The start screen: server name with a connection dot, the update banner, Add spool (by hand), Add from label
+ * photos (only when [labelPhotos]: the server reads labels, see [showLabelPhotos]) / Search / Printers /
  * Settings, and the unfinished adds kept on the phone ([onResumeDraft] reopens one). [extra] is for debug tools.
  */
 @Composable
@@ -42,6 +44,7 @@ fun HomeScreen(
     drafts: List<Draft>,
     update: UpdateUi,
     onAddSpools: () -> Unit,
+    onAddByHand: () -> Unit,
     onAddProfile: () -> Unit,
     onSearch: () -> Unit,
     onPrinters: () -> Unit,
@@ -55,6 +58,8 @@ fun HomeScreen(
     /** The Presets card; null while the status is unknown. [showPresets] false hides the card (not paired yet). */
     presets: ProfileStatus? = null,
     showPresets: Boolean = true,
+    /** Offer the label-photo add flow ([showLabelPhotos]). */
+    labelPhotos: Boolean = false,
     /** Shown while [connection] is [Connection.NeedsLocalNetwork] (explanation, Allow, Open app settings). */
     localNetworkPanel: @Composable () -> Unit = {},
     extra: @Composable () -> Unit = {},
@@ -68,7 +73,10 @@ fun HomeScreen(
         if (connection == Connection.NeedsLocalNetwork) localNetworkPanel()
         UpdateBanner(update, onInstallUpdate, onConfirmInstall)
 
-        Button(onClick = onAddSpools, modifier = Modifier.fillMaxWidth()) { Text("Add spools") }
+        Button(onClick = onAddByHand, modifier = Modifier.fillMaxWidth()) { Text("Add spool") }
+        if (labelPhotos) {
+            OutlinedButton(onClick = onAddSpools, modifier = Modifier.fillMaxWidth()) { Text("Add from label photos") }
+        }
         OutlinedButton(onClick = onAddProfile, modifier = Modifier.fillMaxWidth()) { Text("Add profile") }
         Button(onClick = onSearch, modifier = Modifier.fillMaxWidth()) { Text("Search") }
         Button(onClick = onPrinters, modifier = Modifier.fillMaxWidth()) { Text("Printers") }
@@ -144,3 +152,6 @@ private fun DraftRow(draft: Draft, onClick: () -> Unit) {
         }
     }
 }
+
+/** The label-photo add flow is offered only when the server says its `ai_intake` module is on ([info] null: unknown). */
+fun showLabelPhotos(info: ServerInfo?): Boolean = info?.labelReading == true

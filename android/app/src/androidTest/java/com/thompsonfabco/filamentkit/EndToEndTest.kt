@@ -95,7 +95,7 @@ class EndToEndTest {
         waitFor("Search")
 
         // Add spools: photo (injected), tag, weight → Read.
-        click("Add spools")
+        click("Add from label photos") // shown while the server has ai_intake on
         waitFor("Photos: 0 of 8")
         DebugPhotos.emit(photo)
         waitFor("Photos: 1 of 8", timeoutMs = 30_000)
@@ -172,7 +172,7 @@ class EndToEndTest {
         assumeTrue(arg("fkPhase") == "cold")
         waitFor("Pair with your server")
         waitFor(UNPAIRED_MESSAGE)
-        assertFalse(exists("Add spools"))
+        assertFalse(exists("Add spool"))
     }
 
     @Test fun forget() {
