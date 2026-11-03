@@ -385,9 +385,12 @@ copy you downloaded earlier keeps being used when the kit is upgraded.
 - `sudo filament-kit library add <file>`: adds or replaces your own entry from a JSON file.
 
 The download is the `library.tar.gz` asset of the latest release (`library.url` in the config can point to
-another `.tar.gz` or to a folder that serves `index.json` and the entries). Every entry is checked before it is
-used, and a bad download changes nothing. The token below is only ever sent to github.com, api.github.com and
-githubusercontent.com. Testing against a private repository: put a GitHub token that can read it in
+another `.tar.gz` or to a folder that serves `index.json` and the entries). The release's `library.tar.gz` is
+checked against the release's signed `SHA256SUMS`, like the program itself, and refused without it. Another
+`.tar.gz` is checked the same way when a signed `SHA256SUMS` sits next to it; otherwise (and for a folder URL)
+`library update` prints a note that it is not signature-checked. Every entry is checked before it is used, and a
+bad download changes nothing. The token below is only ever sent to api.github.com and objects.githubusercontent.com,
+as for program updates. Testing against a private repository: put a GitHub token that can read it in
 `/etc/filament-kit/github_token`; the `releases/latest/download` link does not accept a token for a private
 repository, so find the asset's id (`gh api repos/<owner>/<repo>/releases/latest --jq '.assets[] | [.name, .id]'`)
 and set `library.url` to `https://api.github.com/repos/<owner>/<repo>/releases/assets/<id>`. Until the release is public, `library update` shows an error and the daily check

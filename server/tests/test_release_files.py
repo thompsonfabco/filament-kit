@@ -28,10 +28,13 @@ def test_release_workflow_uses_both_signing_secrets():
     assert "${{ secrets.FK_KEYSTORE_B64 }}" in text
     assert "${{ secrets.FK_KEYSTORE_PASSWORD }}" in text
     # secrets only ever reach a step through env, never a run line
+    # (the one exception: actions/checkout's `token` input for the private filament-library, Ruling BU)
     for line in text.splitlines():
         if "secrets." in line:
-            assert re.match(r"\s+(FK_KEYSTORE(_B64|_PASSWORD)|FK_RELEASE_KEY): "
-                            r"\$\{\{ secrets\.(FK_KEYSTORE(_B64|_PASSWORD)|FK_RELEASE_KEY) \}\}$", line), line
+            assert (re.match(r"\s+(FK_KEYSTORE(_B64|_PASSWORD)|FK_RELEASE_KEY|FK_LIBRARY_TOKEN): "
+                             r"\$\{\{ secrets\.(FK_KEYSTORE(_B64|_PASSWORD)|FK_RELEASE_KEY|FK_LIBRARY_TOKEN) \}\}$",
+                             line)
+                    or re.match(r"\s+token: \$\{\{ secrets\.FK_LIBRARY_TOKEN \}\}$", line)), line
 
 
 def test_release_workflow_builds_sync_on_windows_with_pinned_pyinstaller():
@@ -62,7 +65,8 @@ def test_release_workflow_pins_every_action_by_commit():
         for line in _read(path).splitlines():
             assert not line or line.startswith("#") or re.fullmatch(
                 r"[\w-]+==[\w.]+ \\|    --hash=sha256:[0-9a-f]{64}( \\)?", line), line
-    assert re.search(r"sha256sum .*\\\n\s+\"filament-kit-sync-setup", text)   # M4: the continuation is kept
+    # M4: the sync installer is summed (one assets line now; test_release_workflow_sums_step_runs runs it)
+    assert re.search(r'assets="[^"]*filament-kit-sync-setup-\$VERSION\.exe', text)
 
 
 def test_pc_sync_workflow():
@@ -676,3 +680,70 @@ def test_wrapper_runs_migrate_scanner_as_root(tmp_path):
     drop it to the service user (final review I1)."""
     assert (_wrapper_run(tmp_path, "migrate-scanner", "/root/h2d-calibration.json", "--apply")
             == "as-root migrate-scanner /root/h2d-calibration.json --apply")
+
+
+# --- final review I3 (Ruling BU): CI builds, signs and publishes library.tar.gz ----------------------------------
+
+def _step(text: str, name: str) -> str:
+    i = text.index(f"- name: {name}")
+    j = text.find("\n      - ", i + 1)
+    return text[i:j if j > 0 else len(text)]
+
+
+def test_release_workflow_builds_the_library_from_the_private_repo():
+    text = _read(".github/workflows/release.yml")
+    gate = _step(text, "Filament library token")
+    assert "FK_LIBRARY_TOKEN: ${{ secrets.FK_LIBRARY_TOKEN }}" in gate
+    assert "::warning::" in gate and "FK_LIBRARY_TOKEN" in gate     # absent: a warning, never a failure
+    assert "exit 1" not in gate
+    i = text.index("repository: thompsonfabco/filament-library")
+    co = text[text.rindex("- uses: actions/checkout@", 0, i):i + 400]
+    assert "if: steps.library.outputs.have == 'true'" in co
+    assert "token: ${{ secrets.FK_LIBRARY_TOKEN }}" in co
+    assert "persist-credentials: false" in co
+    assert "path: filament-library" in co
+    build = _step(text, "Build the tarball and the signed APK")
+    assert "FK_LIBRARY_SRC: ${{ github.workspace }}/filament-library" in build
+    assert text.index("Filament library token") < text.index("Build the tarball and the signed APK")
+
+
+def test_release_workflow_signs_and_publishes_the_library_when_built():
+    text = _read(".github/workflows/release.yml")
+    assert "dist/library.tar.gz" in text                     # uploaded by the server job
+    sums = _step(text, "SHA256SUMS and its signature")
+    assert "library.tar.gz" in sums                           # in the signed SHA256SUMS when it was built
+    assert re.search(r"if \[ -f dist/library\.tar\.gz \]", sums)
+    assert "dist/library.tar.gz" in sums                      # and in the publish list
+    assert "files: ${{ steps.sums.outputs.files }}" in text
+    assert "id: sums" in sums
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+@pytest.mark.parametrize("with_library", [True, False])
+def test_release_workflow_sums_step_runs(tmp_path, with_library):
+    """Run the sums step's shell (signing stubbed) on a stand-in dist: library.tar.gz is summed and published only
+    when the build job made it."""
+    import os
+    import subprocess
+    text = _read(".github/workflows/release.yml")
+    sums = _step(text, "SHA256SUMS and its signature")
+    run = sums[sums.index("run: |") + len("run: |"):]
+    script = "\n".join(line[10:] if line.startswith(" " * 10) else line for line in run.splitlines())
+    script = script.replace("python tools/sign_release.py sign dist/SHA256SUMS", "touch dist/SHA256SUMS.sig")
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    for f in ("filament-kit-1.2.3.tar.gz", "filament-kit.apk", "filament-kit-sync-setup-1.2.3.exe",
+              "bambu_hardware.xml") + (("library.tar.gz",) if with_library else ()):
+        (dist / f).write_bytes(f.encode())
+    (tmp_path / "get.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    out = tmp_path / "out"
+    (tmp_path / "s.sh").write_text(script, encoding="utf-8", newline="\n")
+    env = dict(os.environ, FK_RELEASE_KEY="stand-in", VERSION="1.2.3", GITHUB_OUTPUT="out")
+    r = subprocess.run([_bash(), "s.sh"], cwd=tmp_path, env=env, capture_output=True, text=True, timeout=30)
+    assert r.returncode == 0, r.stdout + r.stderr
+    listed = (dist / "SHA256SUMS").read_text()
+    assert ("library.tar.gz" in listed) is with_library
+    files = out.read_text()
+    assert ("dist/library.tar.gz" in files) is with_library
+    for f in ("dist/filament-kit-1.2.3.tar.gz", "dist/get.sh", "dist/SHA256SUMS.sig", "dist/bambu_hardware.xml"):
+        assert f in files

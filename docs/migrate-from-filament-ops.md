@@ -490,3 +490,19 @@ get.sh and the updater install only releases whose `SHA256SUMS` is signed with t
 The release workflow then signs every release; without the secret, or with a key that does not match the public
 key in `release.py`, it fails instead of publishing an unsigned release. After editing `release.py`, run
 `python tools/sign_release.py sync-get` (get.sh carries a copy of it; a test checks they match).
+
+### Publishing the filament library with each release
+
+The release workflow builds `library.tar.gz` from the private `thompsonfabco/filament-library` repository, lists
+it in the signed `SHA256SUMS` and publishes it with the release. Installs check it against that signature before
+they use it, and refuse a library from the default URL without one. Once:
+
+1. Make a GitHub token that can only read `thompsonfabco/filament-library`: **Settings > Developer settings >
+   Personal access tokens > Fine-grained tokens > Generate new token**, repository access **Only select
+   repositories** with `filament-library`, permission **Contents: Read-only**. Pick an expiry and note it.
+2. Add it yourself as a GitHub Actions secret of the filament-kit repository: **Settings > Secrets and variables >
+   Actions > New repository secret**, name `FK_LIBRARY_TOKEN`, value the token.
+3. Renew the token and update the secret before it expires.
+
+Without the secret, the release is still built and published, without `library.tar.gz`; the run shows a warning
+that says so. Installs then keep the library copy they already have (or none) until a release carries one.
