@@ -485,8 +485,21 @@ def test_mcp_route_leaves_the_ops_route_alone(tmp_path):
     f.write_text(_ops_route())
     r = run("rm", "filament")
     assert r.returncode == 2 and "not ours" in r.stdout and f.read_text() == _ops_route()
+    hand = root / "etc/nginx/mcp.d/mine.conf"
+    hand.write_text("# hand-written\n")
+    r = run("add", "mine", "8102")
+    assert r.returncode == 2 and "not ours" in r.stdout and hand.read_text() == "# hand-written\n"
+
+
+def test_mcp_route_add_takes_over_the_ops_route_as_the_cut_over_does(tmp_path):
+    """migrate-from-filament-ops 1.5: `modules enable remote` replaces the ops `filament` route (saved first in
+    /root/ops-router) with the kit's; from then on it is the kit's (marker, kit-routes) and remote off removes it."""
+    root, run = _mcp_route(tmp_path)
+    f = root / "etc/nginx/mcp.d/filament.conf"
+    f.write_text(_ops_route())
     r = run("add", "filament", "8101")
-    assert r.returncode == 2 and "not ours" in r.stdout and f.read_text() == _ops_route()
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert remote.MARK in f.read_text().splitlines()[0]
 
 
 def test_mcp_route_takes_over_an_older_kit_route_and_writes_its_marker(tmp_path):
