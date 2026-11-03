@@ -507,3 +507,36 @@ def test_install_set_station_allow_refused_when_server_in_list(tmp_path):
     ok = subprocess.run([_bash(), str(f), ",station"], capture_output=True, text=True, timeout=30)
     assert bad.returncode == 1 and "drop --set station.allow" in bad.stderr
     assert ok.returncode == 0
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_station_upgrade_without_server_reuses_the_saved_address(tmp_path):
+    """The updater (or get.sh piped to bash) runs install.sh with no terminal: a station upgrade given --mode station
+    but no --server takes the server address the station already has (station.allow in its config.json) instead
+    of dying for it. It then stops at the root check here, past the address check."""
+    import json
+    import os
+    import subprocess
+    import sys
+    etc = tmp_path / "etc"
+    etc.mkdir()
+    (etc / "config.json").write_text(json.dumps({"modules": {"station": True, "server": False},
+                                                 "station": {"allow": ["127.0.0.1", "kit.localdomain"]}}),
+                                     encoding="utf-8")
+    shim = tmp_path / "bin"
+    shim.mkdir()
+    (shim / "python3").write_text(f'#!/bin/sh\nexec "{Path(sys.executable).as_posix()}" "$@"\n', encoding="utf-8")
+    (shim / "python3").chmod(0o755)
+    env = {**os.environ, "FK_ETC": str(etc)}
+    bash_path = subprocess.run([_bash(), "-c", "cygpath -u \"$1\" 2>/dev/null || printf %s \"$1\"", "_", str(shim)],
+                               capture_output=True, text=True).stdout.strip()
+    r = subprocess.run([_bash(), "-c", f'PATH="{bash_path}:$PATH" exec bash "$0" "$@"',
+                        str(ROOT / "install" / "install.sh"), "--mode", "station"],
+                       stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=60, env=env)
+    assert "needs the kit server's address" not in r.stderr, r.stderr
+    assert r.returncode == 1 and "run as root" in r.stderr, r.stderr
+    (etc / "config.json").write_text(json.dumps({"station": {"allow": ["127.0.0.1"]}}), encoding="utf-8")
+    r = subprocess.run([_bash(), "-c", f'PATH="{bash_path}:$PATH" exec bash "$0" "$@"',
+                        str(ROOT / "install" / "install.sh"), "--mode", "station"],
+                       stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=60, env=env)
+    assert "station mode needs the kit server's address" in r.stderr     # only a local address saved: still asks

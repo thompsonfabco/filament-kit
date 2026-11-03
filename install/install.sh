@@ -64,6 +64,25 @@ fi
 if [ -n "$SERVER_ADDR" ] && bad_addr "$SERVER_ADDR"; then
     die "--server takes one name or address, e.g. spoolman.home.arpa or 192.0.2.10"
 fi
+# An upgrade without --server (the updater, get.sh piped to bash: no terminal) keeps the server address the
+# station already has: the first non-local station.allow entry of its config. FK_ETC: tests only, as in the program.
+SAVED_CFG="${FK_ETC:-$ETC}/config.json"
+if [ -z "$SERVER_ADDR" ] && [ -f "$SAVED_CFG" ] && command -v python3 >/dev/null 2>&1; then
+    SAVED_ADDR=$(python3 -I - "$SAVED_CFG" <<'PYEOF' 2>/dev/null || true
+import json, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as fh:
+        allow = (json.load(fh).get("station") or {}).get("allow") or []
+except (OSError, ValueError, AttributeError):
+    allow = []
+print(next((str(a).strip() for a in allow if str(a).strip() not in ("127.0.0.1", "localhost", "::1")), ""))
+PYEOF
+)
+    SAVED_ADDR=$(printf '%s' "$SAVED_ADDR" | tr -d '\r')
+    if [ -n "$SAVED_ADDR" ] && ! bad_addr "$SAVED_ADDR"; then
+        SERVER_ADDR="$SAVED_ADDR"
+    fi
+fi
 # Checked before anything is installed: a station without the server's address would answer nobody.
 if [ "$MODE" = station ] && [ -z "$SERVER_ADDR" ] && ! [ -t 0 ]; then
     die "station mode needs the kit server's address: run again with --server <name-or-IP>"
