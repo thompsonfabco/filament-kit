@@ -1369,6 +1369,16 @@ def cmd_migrate_ops(bundle: str, apply_: bool, replace_spoolman: bool, allow_unk
                        allow_unknown_spoolman=allow_unknown_spoolman)
 
 
+def cmd_migrate_scanner(calibration: str, apply_: bool, replace_map: bool, serial: str | None) -> int:
+    """Report (default) or carry out the move of the H2D from h2d-filament-scanner (Spoolman slot locations and
+    the slot map seeded from the scanner's calibration)."""
+    from . import migrate_scanner
+    if apply_ and not _is_root():
+        print(f"error: run as root: sudo filament-kit migrate-scanner {calibration} --apply", file=sys.stderr)
+        return 1
+    return migrate_scanner.run(calibration, apply=apply_, replace_map=replace_map, serial=serial)
+
+
 def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=None, sm_factory=None) -> int:
     """The CLI. A root-only file (/etc/filament-kit/config.json and the like) read as another user is one line
     saying to run it with sudo, not a traceback (C-M7)."""
@@ -1460,6 +1470,13 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
                     help="replace a Spoolman database that already holds spools (a backup is kept)")
     mo.add_argument("--allow-unknown-spoolman", action="store_true",
                     help="accept a bundle database without a schema revision (only if it came from Spoolman 0.27.0)")
+    msc = sub.add_parser("migrate-scanner", help="move the H2D from h2d-filament-scanner: Spoolman slot locations "
+                                                 "and the slot map from its calibration (dry run unless --apply)")
+    msc.add_argument("calibration", help="the scanner's calibration.json (/var/lib/h2d-usage/calibration.json)")
+    msc.add_argument("--printer", metavar="SERIAL", help="the kit printer to migrate (needed with several printers)")
+    msc.add_argument("--apply", action="store_true", help="do it (root); without it nothing is written")
+    msc.add_argument("--replace-map", action="store_true",
+                     help="replace a slot map the printer already has (the old one goes into the backup)")
     ud = sub.add_parser("update", help="install the latest signed release (root); --check only looks, --rollback "
                                        "goes back to the version before the last update")
     udx = ud.add_mutually_exclusive_group()
@@ -1509,6 +1526,8 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
         return cmd_reader(args.reader_cmd, getattr(args, "name", None), getattr(args, "ref", None))
     if args.cmd == "migrate-ops":
         return cmd_migrate_ops(args.bundle, args.apply, args.replace_spoolman, args.allow_unknown_spoolman)
+    if args.cmd == "migrate-scanner":
+        return cmd_migrate_scanner(args.calibration, args.apply, args.replace_map, args.printer)
     if args.cmd == "remote":
         from . import remote
         cfg = config.load()
