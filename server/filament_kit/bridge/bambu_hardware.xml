@@ -11,12 +11,19 @@
   everything else is best-known and confirmed or corrected from live reports. In particular these are
   UNVERIFIED: AMS module codes other than the H2D's N3F05 / N3S05, presence bits beyond 4 AMS units (ids 0-3)
   and HT units beyond 128/129, numbering (shift8) beyond AMS 0 and HT 128/129, nozzle and external-holder
-  counts of printers other than the H2D, and chamber limits marked below.
+  counts of printers other than the H2D, presence="bits-v1" on every model but the H2D, ams-mapping2 everywhere
+  (also the H2D), light nodes on every model but the H2D (the A1, A1 mini, P1P and A2L may have no chamber light),
+  the first-gen AMS module prefix, the speech say= texts, and chamber limits marked below.
+  Unknown elements and attributes are ignored with a warning (a newer file still loads); version is major[.minor]
+  and a file with another major version is refused.
 -->
 <bambu-hardware version="1">
   <models>
-    <!-- H2D: verified on the owner's printer (externals, numbering order, presence, FAILED-as-finish). -->
-    <model code="O1D" name="H2D" preset-name="Bambu Lab H2D" nozzles="2" camera="hls" chamber-max="65"
+    <!-- H2D: verified on the owner's printer (externals, numbering order, presence, FAILED-as-finish, light
+         nodes). ams-mapping2="true" is unverified: Bambu Studio sends it to H2-series printers; calibration
+         confirms. -->
+    <model code="O1D" name="H2D" say="h two d"
+           preset-name="Bambu Lab H2D" nozzles="2" camera="hls" chamber-max="65"
            presence="bits-v1" gcode-only-failed-is-finish="true" ams-mapping2="true">
       <alias>H2D</alias>
       <light-node>chamber_light</light-node>
@@ -28,8 +35,9 @@
       <ftp-dir>/</ftp-dir>
       <ftp-dir>/cache</ftp-dir>
     </model>
-    <!-- H2D Pro: H2D hardware; unverified (externals, numbering, ams-mapping2 assumed as the H2D). -->
-    <model code="O1E" name="H2D Pro" preset-name="Bambu Lab H2D Pro" nozzles="2" camera="hls" chamber-max="65"
+    <!-- H2D Pro: H2D hardware; unverified (externals, numbering, presence, ams-mapping2 assumed as the H2D). -->
+    <model code="O1E" name="H2D Pro" say="h two d pro"
+           preset-name="Bambu Lab H2D Pro" nozzles="2" camera="hls" chamber-max="65"
            presence="bits-v1" ams-mapping2="true">
       <alias>H2DPRO</alias>
       <light-node>chamber_light</light-node>
@@ -40,8 +48,9 @@
       <ftp-dir>/</ftp-dir>
       <ftp-dir>/cache</ftp-dir>
     </model>
-    <!-- H2S: single nozzle; unverified numbering. -->
-    <model code="O1S" name="H2S" preset-name="Bambu Lab H2S" nozzles="1" camera="hls" chamber-max="65"
+    <!-- H2S: single nozzle; unverified numbering and presence. -->
+    <model code="O1S" name="H2S" say="h two s"
+           preset-name="Bambu Lab H2S" nozzles="1" camera="hls" chamber-max="65"
            presence="bits-v1">
       <light-node>chamber_light</light-node>
       <external id="254" label="Ext" say="external"/>
@@ -50,8 +59,10 @@
       <ftp-dir>/</ftp-dir>
       <ftp-dir>/cache</ftp-dir>
     </model>
-    <!-- H2C: two nozzles and two external holders assumed like the H2D (unverified). O1C2 is a second code. -->
-    <model code="O1C" name="H2C" preset-name="Bambu Lab H2C" nozzles="2" camera="hls" chamber-max="65"
+    <!-- H2C: two nozzles, two external holders and presence assumed like the H2D (unverified). O1C2 is a second
+         code. -->
+    <model code="O1C" name="H2C" say="h two c"
+           preset-name="Bambu Lab H2C" nozzles="2" camera="hls" chamber-max="65"
            presence="bits-v1">
       <alias>O1C2</alias>
       <light-node>chamber_light</light-node>
@@ -62,8 +73,9 @@
       <ftp-dir>/</ftp-dir>
       <ftp-dir>/cache</ftp-dir>
     </model>
-    <!-- X2D: chamber limit, two nozzles and externals assumed H2D-like until checked (unverified). -->
-    <model code="N6" name="X2D" preset-name="Bambu Lab X2D" nozzles="2" camera="hls" chamber-max="65"
+    <!-- X2D: chamber limit, two nozzles, externals and presence assumed H2D-like until checked (unverified). -->
+    <model code="N6" name="X2D" say="x two d"
+           preset-name="Bambu Lab X2D" nozzles="2" camera="hls" chamber-max="65"
            presence="bits-v1">
       <light-node>chamber_light</light-node>
       <external id="254" label="Ext-L" say="external left"/>
@@ -73,8 +85,9 @@
       <ftp-dir>/</ftp-dir>
       <ftp-dir>/cache</ftp-dir>
     </model>
-    <!-- P2S: unverified numbering. -->
-    <model code="N7" name="P2S" preset-name="Bambu Lab P2S" nozzles="1" camera="hls" presence="bits-v1">
+    <!-- P2S: unverified numbering and presence. -->
+    <model code="N7" name="P2S" say="p two s"
+           preset-name="Bambu Lab P2S" nozzles="1" camera="hls" presence="bits-v1">
       <light-node>chamber_light</light-node>
       <external id="254" label="Ext" say="external"/>
       <numbering ref="shift8"/>
@@ -82,8 +95,10 @@
       <ftp-dir>/</ftp-dir>
       <ftp-dir>/cache</ftp-dir>
     </model>
-    <!-- X1 Carbon: X1-series printers report their printer_type ("3DPrinter-X1-Carbon") over SSDP. -->
-    <model code="BL-P001" name="X1 Carbon" preset-name="Bambu Lab X1 Carbon" nozzles="1" camera="hls"
+    <!-- X1 series, X1E, P1 series, A1 series: presence="bits-v1" unverified (ha-bambulab reads tray_exist_bits
+         the same way for ids 0-3). X1-series printers report their printer_type ("3DPrinter-X1-Carbon") over SSDP. -->
+    <model code="BL-P001" name="X1 Carbon" say="x one carbon"
+           preset-name="Bambu Lab X1 Carbon" nozzles="1" camera="hls"
            presence="bits-v1">
       <alias>3DPrinter-X1-Carbon</alias>
       <alias>X1C</alias>
@@ -93,7 +108,8 @@
       <ftp-dir>/</ftp-dir>
       <ftp-dir>/cache</ftp-dir>
     </model>
-    <model code="BL-P002" name="X1" preset-name="Bambu Lab X1" nozzles="1" camera="hls" presence="bits-v1">
+    <model code="BL-P002" name="X1" say="x one"
+           preset-name="Bambu Lab X1" nozzles="1" camera="hls" presence="bits-v1">
       <alias>3DPrinter-X1</alias>
       <light-node>chamber_light</light-node>
       <external id="254" label="Ext" say="external"/>
@@ -102,7 +118,8 @@
       <ftp-dir>/cache</ftp-dir>
     </model>
     <!-- X1E: 60 C chamber. -->
-    <model code="C13" name="X1E" preset-name="Bambu Lab X1E" nozzles="1" camera="hls" chamber-max="60"
+    <model code="C13" name="X1E" say="x one e"
+           preset-name="Bambu Lab X1E" nozzles="1" camera="hls" chamber-max="60"
            presence="bits-v1">
       <light-node>chamber_light</light-node>
       <external id="254" label="Ext" say="external"/>
@@ -110,21 +127,25 @@
       <ftp-dir>/</ftp-dir>
       <ftp-dir>/cache</ftp-dir>
     </model>
-    <model code="C11" name="P1P" preset-name="Bambu Lab P1P" nozzles="1" camera="mjpeg" presence="bits-v1">
+    <!-- P1P (open frame), A1 mini, A1, A2L: light node chamber_light unverified (they may have no chamber light). -->
+    <model code="C11" name="P1P" say="p one p"
+           preset-name="Bambu Lab P1P" nozzles="1" camera="mjpeg" presence="bits-v1">
       <light-node>chamber_light</light-node>
       <external id="254" label="Ext" say="external"/>
       <numbering ref="legacy"/>
       <ftp-dir>/</ftp-dir>
       <ftp-dir>/cache</ftp-dir>
     </model>
-    <model code="C12" name="P1S" preset-name="Bambu Lab P1S" nozzles="1" camera="mjpeg" presence="bits-v1">
+    <model code="C12" name="P1S" say="p one s"
+           preset-name="Bambu Lab P1S" nozzles="1" camera="mjpeg" presence="bits-v1">
       <light-node>chamber_light</light-node>
       <external id="254" label="Ext" say="external"/>
       <numbering ref="legacy"/>
       <ftp-dir>/</ftp-dir>
       <ftp-dir>/cache</ftp-dir>
     </model>
-    <model code="N1" name="A1 mini" preset-name="Bambu Lab A1 mini" nozzles="1" camera="mjpeg" presence="bits-v1">
+    <model code="N1" name="A1 mini" say="a one mini"
+           preset-name="Bambu Lab A1 mini" nozzles="1" camera="mjpeg" presence="bits-v1">
       <alias>A1MINI</alias>
       <light-node>chamber_light</light-node>
       <external id="254" label="Ext" say="external"/>
@@ -132,15 +153,17 @@
       <ftp-dir>/</ftp-dir>
       <ftp-dir>/cache</ftp-dir>
     </model>
-    <model code="N2S" name="A1" preset-name="Bambu Lab A1" nozzles="1" camera="mjpeg" presence="bits-v1">
+    <model code="N2S" name="A1" say="a one"
+           preset-name="Bambu Lab A1" nozzles="1" camera="mjpeg" presence="bits-v1">
       <light-node>chamber_light</light-node>
       <external id="254" label="Ext" say="external"/>
       <numbering ref="legacy"/>
       <ftp-dir>/</ftp-dir>
       <ftp-dir>/cache</ftp-dir>
     </model>
-    <!-- A2L: unverified numbering. -->
-    <model code="N9" name="A2L" preset-name="Bambu Lab A2L" nozzles="1" camera="mjpeg" presence="bits-v1">
+    <!-- A2L: unverified numbering, presence and light node. -->
+    <model code="N9" name="A2L" say="a two l"
+           preset-name="Bambu Lab A2L" nozzles="1" camera="mjpeg" presence="bits-v1">
       <light-node>chamber_light</light-node>
       <external id="254" label="Ext" say="external"/>
       <numbering ref="shift8"/>
@@ -153,9 +176,10 @@
   <!-- A unit's type: by module code (longest matching prefix) when the printer reports one, else by the
        printer model, else by id range and slot count (first match in this order), else generic. -->
   <ams-types>
-    <ams-type key="ams" name="AMS" slots="4" label="letter">
+    <!-- First-gen AMS: unverified until a capture confirms its module code, so it resolves with known=false. -->
+    <ams-type key="ams" name="AMS" slots="4" label="letter" verified="false">
       <ids from="0" to="127"/>
-      <module prefix="AMS"/>          <!-- unverified -->
+      <module prefix="AMS"/>          <!-- unverified guess -->
     </ams-type>
     <ams-type key="ams_2pro" name="AMS 2 Pro" slots="4" label="letter">
       <ids from="0" to="127"/>

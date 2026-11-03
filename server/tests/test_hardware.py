@@ -77,8 +77,8 @@ def test_single_external_printers_keep_ext(code):
 def test_unknown_model_is_generic(code):
     m = hardware.load().model(code)
     assert m.known is False
-    assert (m.camera, m.chamber_max, m.nozzles, m.numbering, m.preset_name, m.presence) == \
-        (None, None, 1, ("legacy",), None, None)
+    assert (m.camera, m.chamber_max, m.nozzles, m.numbering, m.preset_name, m.presence, m.light_nodes) == \
+        (None, None, 1, ("legacy",), None, None, ())
     assert [(e.id, e.label) for e in m.externals] == [(254, "Ext")]
     assert "unknown" in m.name.lower()
 
@@ -96,7 +96,8 @@ def test_ams_type_by_model_and_range():
     hw = hardware.load()
     assert hw.ams_type(0, None, "N2S", 4).key == "ams_lite"
     assert hw.ams_type(0, None, hw.model("A1 mini"), 4).key == "ams_lite"
-    assert hw.ams_type(3, None, "C12", 4).key == "ams"
+    t = hw.ams_type(3, None, "C12", 4)
+    assert t.key == "ams" and t.known is False      # first-gen AMS: unverified until a capture confirms it
     assert hw.ams_type(130, None, "O1D", 1).key == "ams_ht"
     t = hw.ams_type(129, None, None, None)
     assert t.key == "ams_ht" and t.slots == 1 and t.label == "ht" and t.label_prefix == "HT-"
@@ -220,8 +221,6 @@ def test_override_reread_on_change(_etc):
     ('<models><model name="X"/></models>', "1", "code"),                            # missing required attribute
     ('<models><model code="C12" name="P1S" nozzles="two"/></models>', "1", "nozzles"),
     ('<models><model code="C12" name="P1S" camera="vhs"/></models>', "1", "camera"),
-    ('<models><model code="C12" name="P1S" bogus="1"/></models>', "1", "bogus"),     # unknown attribute
-    ('<models><printer code="C12"/></models>', "1", "printer"),                    # unknown element
     ('<models><model code="C12" name="P1S"><numbering ref="nope"/></model></models>', "1", "nope"),
     ('<models><model code="C12" name="P1S" presence="nope"/></models>', "1", "nope"),
     ('<presence-layouts><layout key="x" exist="a"><range from="0" to="3" bit="__import__(1)"/></layout>'
@@ -229,6 +228,8 @@ def test_override_reread_on_change(_etc):
     ('<numbering-schemes><scheme key="s" kind="spiral"/></numbering-schemes>', "1", "kind"),
     ('<numbering-schemes><scheme key="s" kind="shift"/></numbering-schemes>', "1", "bits"),
     ('', "2", "version"),
+    ('', "2.1", "version"),
+    ('', "one", "version"),
     ('<models><model code="C12" name="P1S"/><model code="c12" name="P1S"/></models>', "1", "twice"),
 ])
 def test_bad_override_keeps_last_good(_etc, body, version, needle):
@@ -260,3 +261,72 @@ def test_validate_rejects_bundled_style_problems():
     good = hardware.BUNDLED.read_bytes()
     assert hardware.validate(good) == []
     assert hardware.validate(b"<bambu-hardware/>")   # no version
+
+
+# --- fix round 1 --------------------------------------------------------------------------------------------------
+
+def test_unknown_module_code_is_generic():
+    hw = hardware.load()
+    t = hw.ams_type(0, "ZZZ", "C12", 4)
+    assert (t.known, t.key, t.slots) == (False, "generic", 4)
+    assert hw.ams_type(0, "ZZZ", "N2S", 4).known is False      # a code that matches nothing beats the model list
+    assert hw.ams_type(0, "N3F05", "O1D", 4).known is True
+
+
+def test_unknown_elements_and_attributes_are_warnings(_etc):
+    _override(_etc, '<models><model code="C12" name="P1S Next" bogus="1" camera="mjpeg">'
+                    '<future-thing x="1"/><numbering ref="legacy"/></model></models><gadgets><g/></gadgets>',
+              version='1.3" flavour="new')
+    hw = hardware.load()
+    assert hw.errors == []
+    assert hw.model("C12").name == "P1S Next"
+    w = " ".join(hw.warnings)
+    for needle in ("bogus", "future-thing", "gadgets", "flavour"):
+        assert needle in w
+    assert "bambu_hardware.xml" in hw.warnings[0]
+    assert hardware.load().warnings == hw.warnings
+
+
+def test_bundled_has_no_warnings():
+    assert hardware.load().warnings == []
+
+
+def test_version_major_minor(_etc):
+    _override(_etc, '<models><model code="C12" name="P1S Minor"/></models>', version="1.3")
+    assert hardware.load().model("C12").name == "P1S Minor"
+    _override(_etc, '<models><model code="C12" name="P1S Major"/></models>', version="2")
+    hw = hardware.load()
+    assert hw.model("C12").name == "P1S Minor" and "version" in hw.errors[0]
+
+
+def test_collision_check_covers_every_tray(_etc):
+    # tray 3 of unit 0 lands on bit 3 = unit 1 tray 0 with a 3-wide stride
+    _override(_etc, '<presence-layouts><layout key="bits-v1" exist="tray_exist_bits">'
+                    '<range from="0" to="3" bit="id*3+tray"/></layout></presence-layouts>')
+    hw = hardware.load()
+    assert hw.errors and "bit" in hw.errors[0]
+    _override(_etc, '<presence-layouts><layout key="bits-v1" exist="tray_exist_bits">'
+                    '<range from="0" to="3" bit="id*4+tray+50"/></layout></presence-layouts>')
+    assert hardware.load().errors and "0-63" in hardware.load().errors[0]
+
+
+def test_empty_hardware_has_builtin_schemes():
+    hw = hardware.Hardware()
+    assert hw.scheme("legacy").encode(1, 2) == 6 and hw.scheme("shift8").encode(1, 2) == 258
+    assert hw.model("O1D").known is False
+
+
+def test_say_with_model():
+    hw = hardware.load()
+    assert hw.say("Ext", "C12") == ["external"]
+    assert hw.say("Ext-L", hw.model("O1D")) == ["external", "left"]
+    assert hw.say("Ext-R", "O1D") == ["external", "right"]
+    assert hw.say("HT-A", "O1D") == ["h", "t", "a"]
+
+
+def test_model_say():
+    hw = hardware.load()
+    assert hw.model("BL-P001").say == "x one carbon"
+    assert hw.model("O1D").say == "h two d"
+    assert all(m.say for m in hw.models)
+    assert hw.model("zz").say
