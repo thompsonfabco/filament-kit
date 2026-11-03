@@ -1274,7 +1274,13 @@ def cmd_web_passphrase() -> int:
 def cmd_reader(action: str, name: str | None = None, ref: str | None = None) -> int:
     """`reader token [--name X]` (root): a new reader token, printed once for the reader's secrets.h (only its
     sha256 is kept); `reader tokens`: the tokens (id, name, made); `reader revoke <id|name>` (root)."""
-    from .web import reader  # needs the [web] extra
+    try:
+        from .web import reader  # needs the [web] extra
+    except ImportError as e:
+        print(f"error: the reader commands need the kit's [web] packages ({e.name or e} is missing); install them "
+              "into the kit's Python: <venv>/bin/python -m pip install 'filament-kit[web]' (or re-run the "
+              "installer, which adds them)", file=sys.stderr)
+        return 1
     store = reader.TokenStore()
     if action in ("token", "revoke") and not _is_root():
         print(f"error: run as root: sudo filament-kit reader {action}", file=sys.stderr)

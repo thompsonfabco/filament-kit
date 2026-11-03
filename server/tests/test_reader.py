@@ -158,8 +158,15 @@ def token(env):
 
 
 @pytest.fixture
-def app(env, sm, kit):
-    return web_app.build_app(sm=sm, kit_api=kit, store=auth.Store(web_app.oauth_file()), lockout=auth.Lockout())
+def queue(kit):
+    """The app's queue, injected (no worker thread: the queue tests tick it themselves)."""
+    return reader.LoadQueue(lambda: kit, start_thread=False)
+
+
+@pytest.fixture
+def app(env, sm, kit, queue):
+    return web_app.build_app(sm=sm, kit_api=kit, store=auth.Store(web_app.oauth_file()), lockout=auth.Lockout(),
+                             reader_queue=queue)
 
 
 @contextlib.contextmanager
@@ -244,7 +251,8 @@ def test_healthz_and_firmware_files(app, token, env):
     (fw / "firmware.bin").write_bytes(b"\xe9" + b"\0" * 100)
     (fw / "secret.txt").write_text("x", encoding="utf-8")
     with client(app) as c:
-        assert c.get("/reader/healthz").status_code == 200
+        assert c.get("/reader/healthz").status_code == 401          # I1: a revoked token fails healthz too
+        assert c.get("/reader/healthz", headers={"X-Auth-Token": token}).status_code == 200
         assert c.get("/reader/fw/manifest.json").status_code == 401
         h = {"X-Auth-Token": token}
         r = c.get("/reader/fw/manifest.json", headers=h)
@@ -348,14 +356,14 @@ def test_scan_sets_a_loaded_slot(app, token, kit):
     assert kit.loads == [("/api/printers/SER1/slots/A1/load", {"spool_id": 7, "dry_run": False})]
 
 
-def test_scan_dry_run_sends_nothing(app, token, kit):
+def test_scan_dry_run_sends_nothing(app, token, kit, queue):
     with client(app) as c:
         body = scan(c, token, dry_run=True).json()
         q = scan(c, token, slot="A2", dry_run=True).json()
     assert body["status"] == "set" and body["dry_run"] is True
     assert q["status"] == "queued" and q["dry_run"] is True
     assert all(b["dry_run"] for _, b in kit.loads)
-    assert reader.QUEUE.jobs() == {}
+    assert queue.jobs() == {}
 
 
 @pytest.mark.parametrize("uid, status", [("4:0:0:0:0:0:1", "unknown_tag"), (UID_OLD, "archived_spool")])
@@ -402,24 +410,24 @@ def test_scan_answers_before_a_slow_confirmation(app, token, kit, monkeypatch):
     assert body["status"] == "set" and "SUNLU PLA+ Grey" == body["filament"]
 
 
-def test_scan_on_an_empty_slot_is_queued(app, token, kit):
+def test_scan_on_an_empty_slot_is_queued(app, token, kit, queue):
     with client(app) as c:
         r = scan(c, token, slot="A2")
     body = r.json()
     assert r.status_code == 200 and body["status"] == "queued" and "A2" in body["message"]
     assert kit.loads == [("/api/printers/SER1/slots/A2/load", {"spool_id": 7, "dry_run": True})]   # preset check
-    assert set(reader.QUEUE.jobs()) == {("SER1", "A2")}
+    assert set(queue.jobs()) == {("SER1", "A2")}
     kit.slots["SER1"][1]["present"] = True        # a direct set to that slot replaces the queued tap
     with client(app) as c:
         assert scan(c, token, slot="A2").json()["status"] == "set"
-    assert reader.QUEUE.jobs() == {}
+    assert queue.jobs() == {}
 
 
-def test_scan_on_an_empty_slot_without_preset_is_refused(app, token, kit):
+def test_scan_on_an_empty_slot_without_preset_is_refused(app, token, kit, queue):
     kit.load_error = slots.SlotError("no preset of yours", code="no_preset", http=409)
     with client(app) as c:
         assert scan(c, token, slot="A2").json()["status"] == "no_preset"
-    assert reader.QUEUE.jobs() == {}
+    assert queue.jobs() == {}
 
 
 # ---------- queue ----------
@@ -496,16 +504,122 @@ def test_queue_waits_while_the_state_is_unknown_and_drops_on_no_preset(kit):
     assert q.jobs() == {}
 
 
-@pytest.fixture(autouse=True)
-def _empty_queue():
-    reader.QUEUE.clear()
-    yield
-    reader.QUEUE.clear()
-
-
 def test_status_slots_carry_the_preset_id_the_queue_checks():
     from filament_kit.bridge import status
     rep = {"ams": {"ams": [{"id": "0", "tray": [{"id": "0", "tray_type": "PLA", "tray_info_idx": "PFUS1"},
                                                 {"id": "1"}]}]}}
     sl = status.summarize(rep, [], model="O1D")["ams"][0]["slots"]
     assert sl[0]["preset_id"] == "PFUS1" and sl[1]["preset_id"] == ""
+
+
+# ---------- fix round 1 ----------
+
+def test_queue_drops_a_final_refusal_and_waits_quietly_on_a_passing_one(kit, caplog):
+    import logging
+    q, clock = new_queue(kit)
+    q.add("SER1", "A1", 7)
+    kit.load_error = slots.SlotError("the printer is busy", code="printer_busy", http=409)
+    q.tick()                                            # seen
+    with caplog.at_level(logging.WARNING, logger="filament_kit"):
+        for _ in range(6):
+            clock.t += 5
+            q.tick()
+    assert len(kit.loads) == 6 and set(q.jobs()) == {("SER1", "A1")}
+    assert q.jobs()[("SER1", "A1")].tries == 0                 # a passing refusal is not a try
+    assert sum("printer_busy" in r.getMessage() for r in caplog.records) == 1   # logged once, not every tick
+    kit.load_error = slots.SlotError("unreachable", code="unreachable")
+    with caplog.at_level(logging.WARNING, logger="filament_kit"):
+        clock.t += 5
+        q.tick()
+    assert sum("unreachable" in r.getMessage() for r in caplog.records) == 1    # a new reason is logged
+    kit.load_error = slots.SlotError("turn on Developer Mode", code="needs_developer_mode", http=409)
+    clock.t += 5
+    q.tick()
+    assert q.jobs() == {}
+
+
+@pytest.mark.parametrize("code", ["write_refused", "needs_developer_mode", "no_preset", "not_found"])
+def test_queue_final_refusals_drop_the_job(kit, code):
+    q, clock = new_queue(kit)
+    q.add("SER1", "A1", 7)
+    kit.load_error = slots.SlotError(code, code=code, http=409)
+    q.tick()
+    clock.t += 5
+    q.tick()
+    assert q.jobs() == {} and len(kit.loads) == 1
+
+
+def test_scan_reply_deadline_counts_from_the_start(app, token, kit, sm, monkeypatch):
+    """M1: SCAN_WAIT is a deadline from the start of the scan: slow lookups shorten the wait for the load."""
+    monkeypatch.setattr(reader, "SCAN_WAIT", 0.6)
+    monkeypatch.setattr(reader, "MIN_WAIT", 0.05)
+    slow_get = sm.get
+
+    def get(path):
+        time.sleep(0.5)
+        return slow_get(path)
+    sm.get = get
+    kit.load_delay = 2.0
+    t0 = time.monotonic()
+    with client(app) as c:
+        body = scan(c, token).json()
+    assert time.monotonic() - t0 < 1.0 and body["status"] == "set" and "sent" in body["message"]
+
+
+def test_unconfirmed_comes_first_in_the_message(app, token, kit):
+    """M2: the 40-byte cut must not drop "(not confirmed)"."""
+    kit.preset["name"] = "A very long preset name @Bambu Lab H2D 0.4 nozzle"
+    real = kit.post
+
+    def post(path, body):
+        return {**real(path, body), "confirmed": False}
+    kit.post = post
+    with client(app) as c:
+        body = scan(c, token).json()
+    assert body["status"] == "set" and body["message"].startswith("(not confirmed) A1")
+
+
+def test_token_ids_are_never_reused(env):
+    """M9: ids come from the root's next-id, so a revoked id is not handed out again."""
+    ts = reader.TokenStore()
+    assert ts.issue("a")[0] == "r1" and ts.issue("b")[0] == "r2"
+    assert ts.revoke("r2")
+    assert ts.issue("c")[0] == "r3"
+    root = DET.fromstring((env / "state" / "web" / "reader_tokens").read_bytes())
+    assert root.get("next-id") == "4"
+
+
+def test_long_slot_lists_are_cut_under_16_kb(app, token, kit):
+    """M12: at most 128 slots and 16 KB of JSON; a last entry without a label says how many are left out."""
+    kit.slots["SER1"] = [slot(f"{reader.slots.letters(i // 4)}{i % 4 + 1}", typ="PLA-CF-LONG-TYPE-NAME",
+                              spool={"id": i, "name": "A rather long spool name, cut at forty"})
+                         for i in range(200)]
+    with client(app) as c:
+        r = c.get("/reader/printers/SER1/slots", headers={"X-Auth-Token": token})
+    assert r.status_code == 200 and len(r.content) <= 16 * 1024
+    rows = r.json()
+    labelled = [x for x in rows if "label" in x]
+    assert len(labelled) <= 128 and "label" not in rows[-1]
+    assert rows[-1]["note"] == f"{200 - len(labelled)} more slots not listed"
+    assert reader.cap_slots([{"label": "A1"}]) == [{"label": "A1"}]
+
+
+def test_reader_cli_without_web_packages(env, monkeypatch, capsys):
+    """M13: a missing [web] extra gives an install hint, not a traceback."""
+    import sys
+    monkeypatch.delattr(sys.modules["filament_kit.web"], "reader", raising=False)
+    monkeypatch.setitem(sys.modules, "filament_kit.web.reader", None)
+    assert cli.main(["reader", "tokens"]) == 1
+    assert "filament-kit[web]" in capsys.readouterr().err
+
+
+def test_slot_service_printer_slots_says_it_ignores_printer(env, monkeypatch):
+    """M11"""
+    from filament_kit.web import mcp_tools
+    monkeypatch.setattr(slots, "service_slots", lambda svc, sm: {"slots": []})
+    cfg = config.load()
+    cfg["slot_service"] = {"state_url": "http://x/api/state", "set_url": "http://x/set-slot", "token_file": "t"}
+    config.save(cfg)
+    t = mcp_tools.Tools(None)
+    assert "ignored" in t.printer_slots("H2D")["printer_note"]
+    assert "printer_note" not in t.printer_slots()

@@ -57,7 +57,8 @@ def transport_security(public: str) -> TransportSecuritySettings:
 
 
 def build_app(cfg: dict | None = None, *, sm: Spoolman | None = None, claude=None, store: auth.Store | None = None,
-              lockout: auth.Lockout | None = None, tools: mcp_tools.Tools | None = None, kit_api=None):
+              lockout: auth.Lockout | None = None, tools: mcp_tools.Tools | None = None, kit_api=None,
+              reader_queue=None):
     cfg = cfg if cfg is not None else config.load()
     public = public_url(cfg)
     lan = (cfg.get("web") or {}).get("lan") or []
@@ -77,7 +78,7 @@ def build_app(cfg: dict | None = None, *, sm: Spoolman | None = None, claude=Non
     routes = [*auth.login_routes(store, public, passphrase_file(), lan_cidrs=lan, lockout=lockout),
               *IntakeApp(tools, store=store, lockout=lockout, public_url=public, lan_cidrs=lan,
                          passphrase_file=passphrase_file(), claude=claude).routes(),
-              *reader.Reader(tools, sm, lan_cidrs=lan).routes()]
+              *reader.Reader(tools, sm, lan_cidrs=lan, queue=reader_queue).routes()]
     mcp.custom_route("/health", methods=["GET"])(health)
     for r in routes:
         mcp.custom_route(r.path, methods=sorted(r.methods - {"HEAD"} if r.methods else ["GET"]))(r.endpoint)

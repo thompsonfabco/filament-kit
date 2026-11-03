@@ -260,7 +260,11 @@ class Tools:
     def printer_slots(self, printer: str | None = None) -> dict:
         kind, b = self._slot_backend()
         if kind == "service":
-            return slots.service_slots(b, self.sm)
+            out = slots.service_slots(b, self.sm)
+            if printer is not None:
+                out["printer_note"] = (f"printer {printer!r} ignored: the slot service (config slot_service) "
+                                       "serves one printer")
+            return out
         return slots.bridge_slots(b, printer)
 
     def printer_set_slot(self, spool: int, slot: str, dry_run: bool = True, printer: str | None = None) -> dict:
