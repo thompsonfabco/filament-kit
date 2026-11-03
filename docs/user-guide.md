@@ -1,8 +1,13 @@
 # filament-kit user guide
 
-Everything the [README](../README.md) leaves out: install modes, every command, printers and slot mapping, presets
-in Bambu Studio and Orca Slicer, the intake station, the Claude connector and phone web app, remote access and
-order history. The README has the one-command install, the module list and where your data lives.
+The reference for everything the [README](../README.md) and the how-tos leave out: install modes, every command,
+printers and slot mapping, presets in Bambu Studio and Orca Slicer, the intake station, the Claude connector and
+phone web app, remote access and order history.
+
+If you are setting up for the first time, start with the step-by-step how-tos instead:
+[Install the server](install-server.md), [Install the Android app](install-android-app.md) and
+[Use the web app on an iPhone](install-iphone-web-app.md). The README has the module list and where your data
+lives.
 
 ## What you need
 
@@ -10,63 +15,29 @@ order history. The README has the one-command install, the module list and where
 - Optional: an **Anthropic API key** (starts with `sk-ant-`), only for AI label reading. Without one you add
   spools by hand; you can turn label reading on later (`sudo filament-kit config`, 4 for the key and 6 for the
   `ai_intake` module).
-- An Android phone (Android 10 or newer) for the filament-kit app.
+- An Android phone (Android 10 or newer) for the filament-kit app, or an iPhone (or any phone) for the phone
+  web app.
 - Optional: a Windows PC with Bambu Studio (and, if you like, Orca Slicer), for the presets.
 - Optional: an **intake station**: a USB scale (DYMO) and a PN532 NFC reader on the same computer or on a second
   one (see [Intake station](#intake-station)).
 
 ## Install the server
 
-Do these steps on the Ubuntu computer, in a Terminal window.
-
-**One command** (it does steps 1 to 3 for you, checking the release's signature first):
+Step by step, with every question and what you see: [Install the server](install-server.md). In short, on the
+Ubuntu computer:
 
 ```
 curl -fsSL https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh | sudo bash
 ```
 
-Options go after `sudo bash -s --`, for example `... | sudo bash -s -- --mode server` or `--version 0.3.0`.
-While the repository is private, get `get.sh` with a GitHub token that can read it (for example
-`gh release download -R thompsonfabco/filament-kit -p get.sh`), save the token in a file only you can read and run
-`sudo bash get.sh --token-file <file>`. The token is never shown and is only sent to GitHub. Then answer the
-questions as in step 4. Without a terminal it asks nothing: give the mode or modules on the command line, and with
-`--modules` the settings a module needs, for example
-`--modules server,web --set web.public_url=https://filament.example.com/filament`.
+Options go after `sudo bash -s --` (or after `./install.sh` from an unpacked release): `--mode server|station|all-in-one`,
+`--server <address>` for a station, `--modules a,b` with `--set key=value` for the settings a module needs
+(for example `--modules server,web --set web.public_url=https://filament.example.com/filament`), and
+`--version 0.3.0`. Without a terminal it asks nothing and installs the `server` mode unless told otherwise.
+While the repository is private, `get.sh` needs a GitHub token: `sudo bash get.sh --token-file <file>`.
 
-Or by hand:
-
-1. Open the project's GitHub **Releases** page and download the newest `filament-kit-<version>.tar.gz`
-   (for example `filament-kit-0.1.0.tar.gz`) into your **Downloads** folder.
-2. Unpack it and go into the folder (use the version number you downloaded):
-
-   ```
-   cd ~/Downloads
-   tar xzf filament-kit-0.1.0.tar.gz
-   cd filament-kit-0.1.0
-   ```
-
-3. Run the installer. It asks for your password (that is normal for `sudo`):
-
-   ```
-   sudo ./install.sh
-   ```
-
-4. Answer the questions:
-   - **Install mode**: press Enter for `1) server`, the usual choice. The other modes are in
-     [Install modes](#install-modes).
-   - **Display name**: the name the phone app shows for this server. Any text works (spaces, accents);
-     press Enter to keep the suggested name. Phones find the server by the computer's own name, not this one.
-   - **Read spool labels from photos with Claude**: press Enter for no (spools are then added by hand), or type
-     `y` if you have an Anthropic API key.
-   - **Default storage locations**: press Enter for yes. Type `n` if you want to name your own racks and
-     boxes now (you can also change them later).
-   - **Anthropic API key** (only if you answered `y` above): paste the key and press Enter. Nothing shows while
-     you type or paste; that is on purpose.
-5. At the end the installer prints a status list (no line should start with `FAIL`) and a **QR code** with a
-   pairing code underneath.
-
-The installer takes a few minutes. You can run it again at any time; it never deletes your spools or
-settings.
+The installer takes a few minutes. You can run it again at any time; it never deletes your spools or settings.
+Running it again later (an update) asks no questions and keeps the mode you have.
 
 ## Install modes
 
@@ -144,22 +115,17 @@ module is off, the app gets the message that it is turned off for anything that 
 
 ## Install the app and pair your phone
 
-1. On your phone, download `filament-kit.apk` from the same GitHub Releases page and open it. If the phone
-   asks, allow "install unknown apps" for your browser.
-2. On the server, run:
+Step by step: [Install the Android app](install-android-app.md). In short: install `filament-kit.apk` from the
+Releases page (or from your server at `https://<computer name>.local:8710/app.apk`), run `sudo filament-kit pair`
+on the server, and scan the QR code it prints, or pick the server in the app, compare the fingerprint and type
+the 6-digit code. The code expires after about 10 minutes and works once; `sudo filament-kit pair` makes a new
+one. On Android 17 and newer the app needs **Local network** access.
 
-   ```
-   sudo filament-kit pair
-   ```
+The app updates itself: after `sudo filament-kit update` to a release with a newer app, the home screen offers
+it. `sudo filament-kit unpair` lists the paired phones; `sudo filament-kit unpair <id>` removes one.
 
-   It prints a QR code, a 6-digit pairing code and the server's certificate fingerprint in the terminal.
-3. Open the filament-kit app. On Android 17 and newer, allow **Local network** access when Android asks; the app
-   can't find or reach the server without it (if you said no, the app shows **Allow** and, if Android stops
-   asking, **Open app settings**). Then scan the QR code from the terminal.
-   If the camera can't scan it, pick the server from the list in the app (or enter its address), check that the
-   fingerprint matches the one `sudo filament-kit pair` printed, and type the 6-digit code instead.
-4. The QR code and the code expire after a few minutes. If the app says the code has expired or was already
-   used, run `sudo filament-kit pair` again.
+No Android phone? The phone web app ([Use the web app on an iPhone](install-iphone-web-app.md)) does the same
+tasks in any phone browser.
 
 ## Pair your PC
 
@@ -549,7 +515,8 @@ spools does a dry run first in both, as in the Android app.
 
    `web status` shows the public address, the connector and phone app addresses, whether the passphrase is set,
    whether the service answers, and how many connectors are signed in. No line should start with
-   `FAIL`.
+   `FAIL`. (`modules enable web` stops with an error when `web.public_url` is not set; the Modules checklist in
+   `sudo filament-kit config` asks for the address instead, so steps 2 and 4 can be done there in one go.)
 
 ### Add the connector in Claude
 
@@ -559,8 +526,9 @@ type the passphrase there. Claude stays signed in after that; changing the passp
 ### Use the phone web app
 
 Open `<public address>/intake` on the phone while it is on the home network and add the page to the home screen
-if you like. There is no sign-in: anyone on your home network can use it (as with the Android app's pairing, the
-home network is the gate).
+if you like (step by step, including a home-only setup without a public name:
+[Use the web app on an iPhone](install-iphone-web-app.md)). There is no sign-in: anyone on your home network can
+use it (as with the Android app's pairing, the home network is the gate).
 
 ### What only works at home
 
@@ -650,7 +618,7 @@ cannot be read, labels are still read, without the orders.
 
 If you ran the older filament-ops setup (filament MCP server, phone intake app, `regen.py` presets, the
 `intake-station` service and the `fpsync` task), the kit takes over all of it. The steps, checks and rollback for
-each computer are in [docs/migrate-from-filament-ops.md](migrate-from-filament-ops.md). In short:
+each computer are in [Moving from filament-ops](migrate-from-filament-ops.md). In short:
 
 1. On the old server, export a bundle with `tools/export_ops.sh` (it only reads).
 2. Install the kit in server mode, then `sudo filament-kit migrate-ops <bundle>`: it shows what it would do and

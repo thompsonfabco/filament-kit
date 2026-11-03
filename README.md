@@ -158,8 +158,10 @@ one-command install, and what stays behind: [Install the server, Uninstall](docs
 - [docs/user-guide.md](docs/user-guide.md): install modes, every command, printers and slot mapping, presets,
   the intake station, the Claude connector and phone web app, remote access, order history, troubleshooting.
 - [docs/known-gaps.md](docs/known-gaps.md): what doesn't work the way the how-tos describe yet.
-- [docs/testing-e2e.md](docs/testing-e2e.md): the end-to-end test run on WSL.
 - [docs/migrate-from-filament-ops.md](docs/migrate-from-filament-ops.md): moving from the older filament-ops
-  setup, and the maintainer's notes (release signing, the Android release build).
+  setup.
+- For maintainers and contributors: [docs/maintainer.md](docs/maintainer.md) (releases, signing keys, secrets),
+  [docs/testing-e2e.md](docs/testing-e2e.md) and [docs/android-e2e.md](docs/android-e2e.md) (the end-to-end
+  tests), and the design documents in [docs/design/](docs/design/).
 
 filament-kit is GPL-3.0 (see [LICENSE](LICENSE)).
