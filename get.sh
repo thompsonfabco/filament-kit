@@ -239,6 +239,23 @@ def parse_sums(data: bytes) -> dict[str, str]:
     return out
 
 
+_IDENTITY = (0, 1, 1, 0)
+
+
+def small_order(point) -> bool:
+    """[8]A is the identity: A is a small-order point (or the identity); such a key verifies forged signatures."""
+    return _equal(_mul(8, point), _IDENTITY)
+
+
+def check_public_key(raw: bytes) -> None:
+    """Raise ReleaseError unless `raw` is 32 bytes encoding a curve point that is not of small order."""
+    a = _decompress(raw) if len(raw) == 32 else None
+    if a is None:
+        raise ReleaseError("the release public key is not an ed25519 key")
+    if small_order(a):
+        raise ReleaseError("the release public key is a small-order point, not a real key")
+
+
 def public_key(pubkey_b64: str | None = None) -> bytes:
     text = PUBKEY if pubkey_b64 is None else pubkey_b64
     if not text:
@@ -250,6 +267,7 @@ def public_key(pubkey_b64: str | None = None) -> bytes:
         raw = b""
     if len(raw) != 32:
         raise ReleaseError("the release public key is not a base64 ed25519 key")
+    check_public_key(raw)
     return raw
 
 

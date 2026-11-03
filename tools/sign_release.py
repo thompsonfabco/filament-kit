@@ -86,6 +86,15 @@ def _release_text(root: Path) -> str:
     return (root / RELEASE_PY).read_text(encoding="utf-8")
 
 
+def _release_module(root: Path):
+    """release.py of `root`, loaded by path (it has no package imports)."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("_fk_release_check", root / RELEASE_PY)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def embedded(get_sh_text: str) -> str:
     """The release.py copy inside get.sh."""
     try:
@@ -116,6 +125,11 @@ def set_pubkey(root: Path, key_b64: str) -> None:
         raw = b""
     if len(raw) != 32:
         raise SignError("the public key must be 32 bytes in base64 (what keygen printed)")
+    rel = _release_module(root)
+    try:
+        rel.check_public_key(raw)       # a point on the curve, not of small order
+    except rel.ReleaseError as e:
+        raise SignError(str(e)) from None
     path = root / RELEASE_PY
     text = path.read_text(encoding="utf-8")
     if len(_PUBKEY_LINE.findall(text)) != 1:
