@@ -284,7 +284,7 @@ def test_saved_map_key_ext_is_read_as_ext_l():
     m = ams.load_map(SERIAL)
     assert set(m.slots) == {"A1", "Ext-L"}
     from filament_kit.bridge import usage
-    assert usage._labels(m)[254] == "Ext-L"                       # usage decodes 254 to Ext-L
+    assert usage.decode(254, m, "O1D") == ("Ext-L", "map")        # usage decodes 254 to Ext-L
     registry.upsert(Printer(SERIAL, "Lab", "P1S", "10.0.0.5", "13572468", True))
     assert set(ams.load_map(SERIAL).slots) == {"A1", "Ext"}       # a single-holder printer keeps "Ext"
 

@@ -120,6 +120,7 @@ class FakePrinter:
         self.jobs: list[dict] = []
         self.job_stuck = False
         self.answer_jobs = True        # False: job commands get no reply and nothing happens
+        self.native: str | None = None   # a numbering scheme key: report `mapping` in it from `ams_mapping2`
         self.lock = threading.Lock()
         client.responder = self.respond
 
@@ -154,13 +155,23 @@ class FakePrinter:
             deltas = [{'gcode_state': 'FAILED'}]
         else:
             deltas = [{'gcode_state': 'PREPARE', 'subtask_name': pr.get('subtask_name', ''), 'task_id': '0'},
-                      {'gcode_state': 'RUNNING', 'mapping': list(pr.get('ams_mapping') or [])}]
+                      {'gcode_state': 'RUNNING', 'mapping': self._mapping(pr)}]
             if not self.job_stuck:
                 deltas.append({'gcode_state': 'FINISH', 'mc_percent': 100})
         with self.lock:
             for d in deltas:
                 self.report.update(copy.deepcopy(d))
         return [reply] + [{'print': d} for d in deltas]
+
+    def _mapping(self, pr) -> list:
+        """The `mapping` the printer reports for a job: the sent `ams_mapping`, or with `native` set the printer's
+        own numbers for the `ams_mapping2` slots (externals as their id)."""
+        if self.native and isinstance(pr.get('ams_mapping2'), list):
+            from filament_kit.bridge import hardware
+            sch = hardware.load().scheme(self.native)
+            return [x['ams_id'] if x['ams_id'] >= 254 else sch.encode(x['ams_id'], x['slot_id'])
+                    for x in pr['ams_mapping2']]
+        return list(pr.get('ams_mapping') or [])
 
     def _apply(self, key, pr) -> dict | None:
         ams_id, tray_id = key

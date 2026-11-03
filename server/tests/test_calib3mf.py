@@ -51,7 +51,9 @@ def slotmap_for(report):
 
 class FakeManager:
     """`behaviour`: echo (mapping = ams_mapping), refuse, silent (no reply, nothing happens), remap (the printer
-    reports its own ids), clobber (the job rewrites slot A1), stuck (never finishes)."""
+    reports its own ids), clobber (the job rewrites slot A1), stuck (never finishes), native (P3: the printer
+    numbers slots by its own scheme `native`: from `ams_mapping2` when `use_mapping2`, else by decoding
+    `ams_mapping` with that scheme, -1 for a number it cannot place). `final` / `print_error`: how the job ends."""
 
     def __init__(self, ftp_root, behaviour="echo", report=None):
         self.ftp_root = ftp_root
@@ -65,6 +67,11 @@ class FakeManager:
         self.raise_on_wait: set[int] = set()     # 1-based wait_report calls that raise (connection lost)
         self.raise_on_publish = False
         self.waits = 0
+        self.native = "shift8"
+        self.use_mapping2 = False
+        self.refuse_unknown = False      # native: refuse a job with a number it cannot place
+        self.final = "FINISH"
+        self.print_error = None
 
     def state(self, serial):
         assert serial == SERIAL
@@ -104,6 +111,10 @@ class FakeManager:
         mapping = list(pr["ams_mapping"])
         if self.behaviour == "remap":
             mapping = [m if m < 128 else 0x8000 + m for m in mapping]
+        if self.behaviour == "native":
+            mapping = self._native(pr)
+            if self.refuse_unknown and -1 in mapping:
+                return {"command": "project_file", "result": "fail", "reason": "invalid ams mapping"}
         name = pr["subtask_name"]
         self.queue.append({"gcode_state": "PREPARE", "subtask_name": name, "task_id": "222"})
         running = {"gcode_state": "RUNNING", "mapping": mapping}
@@ -113,8 +124,25 @@ class FakeManager:
             running["ams"] = rep
         self.queue.append(running)
         if self.behaviour != "stuck":
-            self.queue.append({"gcode_state": "FINISH", "mc_percent": 100})
+            end = {"gcode_state": self.final, "mc_percent": 100}
+            if self.print_error is not None:
+                end["print_error"] = self.print_error
+            self.queue.append(end)
         return {"command": "project_file", "result": "success"}
+
+    def _native(self, pr):
+        from filament_kit.bridge import hardware
+        sch = hardware.load().scheme(self.native)
+        exts = {254, 255}
+        if self.use_mapping2:
+            return [x["ams_id"] if x["ams_id"] in exts else sch.encode(x["ams_id"], x["slot_id"])
+                    for x in pr["ams_mapping2"]]
+        loaded = {(int(u["id"]), int(t["id"])) for u in self.report["ams"]["ams"] for t in u["tray"]
+                  if t.get("tray_type")}
+        out = []
+        for n in pr["ams_mapping"]:
+            out.append(n if n in exts or sch.decode(n) in loaded else -1)
+        return out
 
     def set_slot(self, serial, ams_id, tray_id, setting, kind=None):
         assert serial == SERIAL
@@ -203,10 +231,12 @@ def test_echoing_printer_is_consistent(fake_ftp, printer, tmp_path):
     assert r.consistent is True, r.problems
     assert r.problems == []
     # A3 is empty: not part of the job
-    assert r.decoding == {"A1": 0, "A2": 1, "A4": 3, "HT-A": 128, "Ext": 254}
+    # the H2D's first candidate is shift8 (HT-A = 128 << 8); an external holder is sent as its own id
+    assert r.decoding == {"A1": 0, "A2": 1, "A4": 3, "HT-A": 32768, "Ext": 254}
+    assert r.scheme == "shift8" and r.tried == ["shift8"] and r.attempts == []
     assert r.skipped == ["A3"]
     pr = m.published[0]["print"]
-    assert pr["ams_mapping"] == [0, 1, 3, 128, 254]
+    assert pr["ams_mapping"] == [0, 1, 3, 32768, 254]
     assert zipfile.ZipFile(io.BytesIO(m.file_at_start)).namelist()             # uploaded before the job
     assert not (fake_ftp.root / "cache" / FILE).exists()                       # deleted afterwards
     assert r.tray_now == ["255"]
@@ -624,3 +654,116 @@ def test_should_stop_before_our_job_shows_sends_no_stop(fake_ftp, printer):
     r = calib3mf.run(m, SERIAL, slotmap_for(m.report), should_stop=stop)
     assert commands(m) == ["project_file"]
     assert any("interrupted" in p and "nothing was stopped" in p for p in r.problems), r.problems
+
+
+# ---------------------------------------------------------------- numbering schemes (P3)
+
+def owner_h2d_report():
+    """The owner's H2D facts: AMS 0 with trays 0 and 2 loaded (1, 3 empty), AMS HT 128 and 129 loaded."""
+    rep = base_report()
+    rep["ams"]["ams"] = [
+        {"id": "0", "tray": [tray(0), {"id": "1"}, tray(2, "PETG", "00FF00FF", "GFG00"), {"id": "3"}]},
+        {"id": "128", "tray": [tray(0, "PA-CF", "222222FF", "GFN03")]},
+        {"id": "129", "tray": [tray(0, "PLA", "0000FFFF", "GFA01")]},
+    ]
+    del rep["vt_tray"]
+    return rep
+
+
+def jobs(m):
+    return [p["print"] for p in m.published if p["print"]["command"] == "project_file"]
+
+
+def test_owner_h2d_shift8_proved_by_one_job(fake_ftp, printer):
+    """Observed on the owner's H2D: AMS 0 trays 0 / 2 -> 0 / 2, HT 128 / 129 -> 32768 / 33024 (shift8)."""
+    m = FakeManager(fake_ftp.root, "native", report=owner_h2d_report())
+    m.use_mapping2 = True
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert r.consistent is True and r.problems == [], r.problems
+    assert r.scheme == "shift8" and r.tried == ["shift8"]
+    assert r.decoding == {"A1": 0, "A3": 2, "HT-A": 32768, "HT-B": 33024}
+    (pr,) = jobs(m)
+    assert pr["ams_mapping"] == [0, 2, 32768, 33024]
+    assert pr["ams_mapping2"] == [{"ams_id": 0, "slot_id": 0}, {"ams_id": 0, "slot_id": 2},
+                                  {"ams_id": 128, "slot_id": 0}, {"ams_id": 129, "slot_id": 0}]
+
+
+def test_legacy_printer_answering_from_ams_mapping2_is_proved_by_the_first_job(fake_ftp, printer):
+    m = FakeManager(fake_ftp.root, "native", report=owner_h2d_report())
+    m.native, m.use_mapping2 = "legacy", True
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert r.consistent is True and r.scheme == "legacy" and len(jobs(m)) == 1
+    assert r.decoding == {"A1": 0, "A3": 2, "HT-A": 128, "HT-B": 129}
+
+
+def test_second_job_only_when_no_candidate_fits(fake_ftp, printer):
+    """A legacy printer that cannot place the shift8 numbers (-1): the next candidate's job proves legacy."""
+    m = FakeManager(fake_ftp.root, "native", report=owner_h2d_report())
+    m.native = "legacy"
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert r.consistent is True and r.scheme == "legacy", r.problems
+    assert r.tried == ["shift8", "legacy"] and len(r.attempts) == 1 and "fit no numbering" in r.attempts[0]
+    assert [p["ams_mapping"] for p in jobs(m)] == [[0, 2, 32768, 33024], [0, 2, 128, 129]]
+    assert r.decoding == {"A1": 0, "A3": 2, "HT-A": 128, "HT-B": 129}
+    assert r.problems == []
+    assert not (fake_ftp.root / "cache" / FILE).exists()
+
+
+def test_refused_numbers_try_the_next_candidate(fake_ftp, printer):
+    m = FakeManager(fake_ftp.root, "native", report=owner_h2d_report())
+    m.native, m.refuse_unknown = "legacy", True
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert r.consistent is True and r.scheme == "legacy" and r.tried == ["shift8", "legacy"]
+    assert "printer refused" in r.attempts[0]
+
+
+def test_candidates_numbering_the_loaded_slots_alike_send_one_job(fake_ftp, printer):
+    """Only AMS 0 loaded: shift8 and legacy give the same numbers, so both fit and the model's first is kept;
+    a printer that fits neither gets no second job with the same numbers."""
+    rep = owner_h2d_report()
+    rep["ams"]["ams"] = rep["ams"]["ams"][:1]
+    m = FakeManager(fake_ftp.root, report=rep)
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert r.scheme == "shift8" and len(jobs(m)) == 1
+
+    class Wrong(FakeManager):
+        def _native(self, pr):
+            return [5 for _ in pr["ams_mapping"]]
+    m = Wrong(fake_ftp.root, "native", report=rep)
+    r = calib3mf.run(m, SERIAL, slotmap_for(rep))
+    assert r.consistent is False and len(jobs(m)) == 1 and r.tried == ["shift8"]
+
+
+def test_no_candidate_fits_any_job(fake_ftp, printer):
+    m = FakeManager(fake_ftp.root, "remap", report=owner_h2d_report())
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert r.consistent is False and r.scheme is None and len(jobs(m)) == 2
+    assert any("fit no numbering scheme" in p and "shift8, legacy" in p for p in r.problems)
+
+
+def test_single_scheme_model_sends_no_ams_mapping2(fake_ftp, printer):
+    registry.upsert(Printer(serial=SERIAL, name="P1S", model="C12", ip="127.0.0.1", access_code=CODE,
+                            configured=True))
+    rep = owner_h2d_report()
+    m = FakeManager(fake_ftp.root, report=rep)
+    r = calib3mf.run(m, SERIAL, slotmap_for(rep))
+    (pr,) = jobs(m)
+    assert "ams_mapping2" not in pr and pr["ams_mapping"] == [0, 2, 128, 129]
+    assert r.scheme == "legacy" and r.consistent is True
+
+
+@pytest.mark.parametrize("model,error,finished", [
+    ("H2D", None, True),            # FAILED, no print_error: finished on a model with the rule
+    ("H2D", 0, True),
+    ("H2D", "0", True),
+    ("H2D", 50348044, False),       # a real error: not finished
+    ("C12", None, False),           # a model without the rule: FAILED is FAILED
+])
+def test_failed_as_finish_only_by_the_model_rule(fake_ftp, printer, model, error, finished):
+    registry.upsert(Printer(serial=SERIAL, name="X", model=model, ip="127.0.0.1", access_code=CODE, configured=True))
+    m = FakeManager(fake_ftp.root)
+    m.final, m.print_error = "FAILED", error
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert r.consistent is finished, r.problems
+    assert r.failed_as_finish is finished
+    assert any("ended as FAILED" in p for p in r.problems) is (not finished)

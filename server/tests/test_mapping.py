@@ -380,3 +380,48 @@ def test_cli_unpin_clears_the_pin(capsys):
 def test_cli_unpin_unknown_printer(capsys):
     assert cli.main(["printer", "unpin", "NOPE"]) == 1
     assert "no printer" in capsys.readouterr().err.lower()
+
+
+# ---------------------------------------------------------------- numbering scheme (P3)
+
+def test_scheme_saved_and_skipped_slots_numbered_by_it(stubs):
+    """The calibration proved shift8: it is saved with the map, and a confirmed slot the job skipped (empty) gets
+    its shift8 number, not a legacy guess."""
+    stubs["calib"] = CalibResult(decoding={"A1": 0, "A2": 1}, consistent=True, scheme="shift8")
+    v = mapping.Mapper(FakeManager()).run(SERIAL)
+    saved = ams.load_map(SERIAL)
+    assert saved.calibrated and saved.scheme == "shift8"
+    assert saved.slots["HT-A"]["global_id"] == 32768 and saved.slots["A2"]["global_id"] == 1
+    assert v["scheme"] == "shift8" and v["suspect"] is False
+
+
+def test_remap_clears_suspect_learned_and_streak(stubs):
+    ams.save_map(SERIAL, ams.SlotMap(slots={"A1": {"ams_id": 0, "tray_id": 0, "global_id": 0}}, calibrated=True,
+                                     observe=True, scheme="legacy", learned={"77": "A1"}, mismatch_streak=2,
+                                     suspect=True))
+    stubs["calib"] = CalibResult(decoding={"A1": 0, "A2": 1, "HT-A": 32768}, consistent=True, scheme="shift8")
+    mapping.Mapper(FakeManager()).run(SERIAL)
+    m = ams.load_map(SERIAL)
+    assert (m.scheme, m.learned, m.mismatch_streak, m.suspect, m.observe) == ("shift8", {}, 0, False, False)
+
+
+def test_inconsistent_calibration_saves_no_scheme(stubs):
+    stubs["calib"] = CalibResult(decoding={"A1": 0}, consistent=False, problems=["x"])
+    mapping.Mapper(FakeManager()).run(SERIAL)
+    assert ams.load_map(SERIAL).scheme is None
+
+
+def test_suspect_remap_step_says_why(stubs):
+    ams.save_map(SERIAL, ams.SlotMap(slots={"A1": {"ams_id": 0, "tray_id": 0, "global_id": 0}}, calibrated=True,
+                                     suspect=True))
+    gate = threading.Event()
+    stubs["gate"] = gate
+    mp = mapping.Mapper(FakeManager())
+    mp.start(SERIAL, auto=True)
+    try:
+        v = mp.view(SERIAL)
+        assert v["remapping"] is True
+    finally:
+        gate.set()
+    wait_done(mp)
+    assert mapping.REMAP_SUSPECT_STEP.startswith("Re-mapping")
