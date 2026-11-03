@@ -7,7 +7,7 @@ from filament_kit.modules import (
 
 
 def test_missing_modules_is_server_mode():
-    assert enabled({}) == LEGACY == MODES["server"] | {"ai_intake"}  # R1: the kit as it was had AI intake
+    assert enabled({}) == LEGACY == MODES["server"] | {"ai_intake", "library"}  # the kit as it was had AI intake and the library timer
     assert enabled({"modules": None}) == LEGACY
     assert mode_of(enabled({})) == "server"
 
@@ -17,8 +17,10 @@ def test_registry_order_and_modes():
                              "presets", "library", "backup", "station", "web", "remote", "orders",
                              "updates"]
     assert MODES["station"] == frozenset({"station"})
-    assert MODES["all-in-one"] == frozenset(MODULES) - {"ai_intake", "web", "remote", "orders", "updates"}
-    assert MODES["server"] == frozenset(MODULES) - {"station", "ai_intake", "web", "remote", "orders", "updates"}
+    assert MODES["all-in-one"] == frozenset(MODULES) - {"ai_intake", "web", "remote", "orders", "library",
+                                                        "updates"}
+    assert MODES["server"] == frozenset(MODULES) - {"station", "ai_intake", "web", "remote", "orders", "library",
+                                                    "updates"}
 
 
 def test_mode_of_custom():
@@ -29,7 +31,7 @@ def test_set_mode_all_in_one_points_station_at_localhost():
     cfg = set_mode({"port": 1}, "all-in-one")
     assert cfg["station"]["url"] == "http://127.0.0.1:5003"
     assert cfg["station"]["allow"] == ["127.0.0.1"]
-    assert enabled(cfg) == MODES["all-in-one"] | {"ai_intake"}  # a filled config without modules: legacy, AI kept
+    assert enabled(cfg) == MODES["all-in-one"] | {"ai_intake", "library"}  # a filled config without modules: legacy, both kept
     assert mode_of(enabled(cfg)) == "all-in-one"
 
 

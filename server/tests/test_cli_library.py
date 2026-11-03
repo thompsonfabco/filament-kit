@@ -39,7 +39,7 @@ LOCAL = {"vendor": "SUNLU", "product": "PLA+ 2.0", "material": "PLA",
 def test_status_bundled(capsys):
     assert cli.main(["library", "status"]) == 0
     out = capsys.readouterr().out
-    assert "library version 2 (bundled), 0 local additions" in out
+    assert "library version 2 (updated), 0 local additions" in out
     assert library.DEFAULT_LIBRARY_URL in out
     assert "last check: never" in out
 
@@ -126,7 +126,7 @@ def test_update_unchanged_no_rebuild(capsys, monkeypatch, rebuilds):
     assert rebuilds == []
 
 
-def test_rollback_nothing(capsys):
+def test_rollback_nothing(capsys, no_library):
     assert cli.main(["library", "rollback"]) == 1
     assert "error" in capsys.readouterr().err
 
