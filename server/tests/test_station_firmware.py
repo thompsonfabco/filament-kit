@@ -4,6 +4,7 @@ serial are fakes."""
 from __future__ import annotations
 
 import subprocess
+import os
 import sys
 import time
 import types
@@ -132,3 +133,20 @@ def test_nfc_port_stays_out_of_the_panels_way_while_flashing(fw):
     assert st.ports["panel"] == "/dev/ttyUSB1"
     from filament_kit.station import nfc
     assert nfc.nfc_path() == "tty:USB0:pn532"
+
+
+def test_bundled_firmware_is_version_6_and_flashes_an_older_panel(fw, monkeypatch):
+    """The repo's own bundled pair (not the fixture's) is what the self-flash logic picks up."""
+    bundled = os.path.join(os.path.dirname(panel.__file__), "..", "..", "..", "station", "panel", "firmware")
+    bundled = os.path.normpath(bundled)
+    monkeypatch.setitem(st.settings, "panel_fw", os.path.join(bundled, "intake-panel.bin"))
+    assert panel.fw_version() == "6"
+    FakeSerial.VERSIONS = {"/dev/ttyUSB1": "5"}
+    ser = panel.find_panel()
+    assert panel.update_firmware(ser) is True
+    assert fw == [[sys.executable, "-m", "esptool", "--chip", "esp8266", "--port", "/dev/ttyUSB1", "--baud", "460800",
+                   "write-flash", "0x0", os.path.join(bundled, "intake-panel.bin")]]
+    st.flashed.clear()
+    fw.clear()
+    FakeSerial.VERSIONS = {"/dev/ttyUSB1": "6"}
+    assert panel.update_firmware(panel.find_panel()) is False and fw == []

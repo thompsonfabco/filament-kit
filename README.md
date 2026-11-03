@@ -1,7 +1,8 @@
 # filament-kit
 
-Take photos of a filament spool's label with your phone; filament-kit reads the label and adds the spool to
-your inventory (Spoolman). Runs on a small Ubuntu computer on your home network.
+Add your filament spools to your inventory (Spoolman) from your phone: type them in, or pick a filament you
+already have. If you like, filament-kit reads the spool's label from a photo instead (optional AI label reading,
+with your own Anthropic API key). Runs on a small Ubuntu computer on your home network.
 
 It also:
 
@@ -17,7 +18,9 @@ Optional extras, all off until you turn them on: a Claude connector and a phone 
 ## What you need
 
 - A computer running **Ubuntu 24.04 or newer**, on your home network, that stays on.
-- An **Anthropic API key** (starts with `sk-ant-`). Keep it handy; the installer asks for it once.
+- Optional: an **Anthropic API key** (starts with `sk-ant-`), only for AI label reading. Without one you add
+  spools by hand; you can turn label reading on later (`sudo filament-kit config`, 4 for the key and 6 for the
+  `ai_intake` module).
 - An Android phone (Android 10 or newer) for the filament-kit app.
 - Optional: a Windows PC with Bambu Studio (and, if you like, Orca Slicer), for the presets.
 - Optional: an **intake station**: a USB scale (DYMO) and a PN532 NFC reader on the same computer or on a second
@@ -48,10 +51,12 @@ Do these steps on the Ubuntu computer, in a Terminal window.
      [Install modes](#install-modes).
    - **Display name**: the name the phone app shows for this server. Any text works (spaces, accents);
      press Enter to keep the suggested name. Phones find the server by the computer's own name, not this one.
+   - **Read spool labels from photos with Claude**: press Enter for no (spools are then added by hand), or type
+     `y` if you have an Anthropic API key.
    - **Default storage locations**: press Enter for yes. Type `n` if you want to name your own racks and
      boxes now (you can also change them later).
-   - **Anthropic API key**: paste the key and press Enter. Nothing shows while you type or paste; that is on
-     purpose.
+   - **Anthropic API key** (only if you answered `y` above): paste the key and press Enter. Nothing shows while
+     you type or paste; that is on purpose.
 5. At the end the installer prints a status list (no line should start with `FAIL`) and a **QR code** with a
    pairing code underneath.
 
@@ -66,15 +71,17 @@ for the mode on the first install:
 
 | Mode | What it installs | Use it when |
 |---|---|---|
-| `server` (1, the default) | Spoolman, the server, AI label reading, printers, presets, library, backup | One computer runs the kit. This is the kit as it always was. |
+| `server` (1, the default) | Spoolman, the server, printers, presets, backup (AI label reading and the library are switched on when you want them) | One computer runs the kit. |
 | `station` (2) | Only the intake station (USB scale and NFC reader) | The station is a second computer and the server runs on another one. It asks for the **server's address**. |
 | `all-in-one` (3) | Everything, station included | The scale and reader are plugged into the server computer. |
 | `custom` (4) | One checklist of modules: type a number to switch one, and what it needs goes on too (what depends on it is listed when you switch it off). The same checklist is in `sudo filament-kit config` > Modules | You know which parts you want. |
 
-A station-only computer needs no API key, certificate or Spoolman.
+AI label reading (the `ai_intake` module) is in no mode: the installer asks about it on the first install, and
+`sudo filament-kit modules enable ai_intake` turns it on later. Without it, spools are added by hand in the phone
+app and the phone web app. A station-only computer needs no API key, certificate or Spoolman.
 
 You can also give the mode on the command line, so the installer asks no mode question. `--mode` takes
-`server`, `station` or `all-in-one`; for `custom`, answer 4 at the question, give `--modules spoolman,server,printers` (what they need is added), or switch modules afterwards with
+`server`, `station` or `all-in-one`; for `custom`, answer 4 at the question, give `--modules spoolman,server,printers` (what they need is added; for web, orders or a station add the setting they need with `--set web.public_url=https://...`, `--set orders.file=PATH` or `--set station.allow=ADDRESS`), or switch modules afterwards with
 `sudo filament-kit modules enable <module>` and `sudo filament-kit modules disable <module>`:
 
 ```
@@ -87,7 +94,7 @@ sudo ./install.sh --mode station --server 192.0.2.10
 address, not a range. The station answers only that address and the station computer itself.
 
 Running `sudo ./install.sh` again later (an update) asks no questions and keeps the mode you have. An install
-from before modules existed counts as the `server` mode and works exactly as before.
+from before modules existed counts as the `server` mode and works exactly as before, AI label reading included.
 
 ### All-in-one on one computer
 
@@ -97,7 +104,8 @@ Plug the USB scale and the NFC reader into the Ubuntu computer, then:
 sudo ./install.sh --mode all-in-one
 ```
 
-Answer the display name, storage and API key questions as in [Install the server](#install-the-server). Besides
+Answer the label reading, display name, storage and API key questions as in
+[Install the server](#install-the-server). Besides
 the usual server, this sets up:
 
 - the station service `filament-kit-station`, which reads the scale and the reader and answers on port 5003,
@@ -367,21 +375,27 @@ Then run `sudo filament-kit profiles build` (or wait for the next sync).
 
 ## Spec library updates
 
-The library holds published filament specs (temperatures, speeds). A copy comes with the server, so it works
-at once. The server checks for a newer copy every day.
+The library holds published filament specs (temperatures, speeds). It is optional and is not part of the
+program: profiles work without it, from your Spoolman values and Bambu's or Orca's own starting presets. Ask for it
+with `sudo filament-kit library update`, or switch the **library** module on (it then also checks every day). A
+copy you downloaded earlier keeps being used when the kit is upgraded.
 
-- `sudo filament-kit library status`: shows the library version and the last check.
-- `sudo filament-kit library update`: checks for a newer version now.
+- `sudo filament-kit library status`: shows the library version (or that none is downloaded) and the last check.
+- `sudo filament-kit library update`: downloads the library, or a newer version, now.
 - `sudo filament-kit library rollback`: goes back to the version before the last update. The next daily check
   installs the newer version again. To keep the rolled-back version, turn the daily check off first: in
   `/etc/filament-kit/config.json` set `"library": {"schedule": "off"}` (or `"weekly"`; the default is
   `"daily"`), then roll back. Set it back to `"daily"` to get updates again.
 - `sudo filament-kit library add <file>`: adds or replaces your own entry from a JSON file.
 
-Updates only arrive once the library's GitHub repository is public or the server's library address points to a
-public mirror. While the library repository can't be reached, the daily check logs a warning, and running
-`sudo filament-kit library update` yourself shows an error. Neither is a failure; the bundled library keeps
-working.
+The download is the `library.tar.gz` asset of the latest release (`library.url` in the config can point to
+another `.tar.gz` or to a folder that serves `index.json` and the entries). Every entry is checked before it is
+used, and a bad download changes nothing. The token below is only ever sent to github.com, api.github.com and
+githubusercontent.com. Testing against a private repository: put a GitHub token that can read it in
+`/etc/filament-kit/github_token`; the `releases/latest/download` link does not accept a token for a private
+repository, so find the asset's id (`gh api repos/<owner>/<repo>/releases/latest --jq '.assets[] | [.name, .id]'`)
+and set `library.url` to `https://api.github.com/repos/<owner>/<repo>/releases/assets/<id>`. Until the release is public, `library update` shows an error and the daily check
+logs a warning; neither is a failure, and the library you already have (or none) keeps working.
 
 Your own `library add` entries override the shared library for that line.
 
@@ -495,8 +509,8 @@ The `web` module runs one more service, `filament-kit-web`, on this computer onl
   open a spool, check the presets and the printer slots for you (tools `find_spools`, `add_spools`, `tag_state`,
   `open_spool`, `preset_status`, `list_lines`, `find_parents`, `add_filaments_to_line`, `add_line`, `generate`,
   `printer_slots`, `printer_set_slot`);
-- a **phone web app** at `<public address>/intake`, in any phone browser (no install): add spools from label
-  photos, open a tapped spool, and see the presets.
+- a **phone web app** at `<public address>/intake`, in any phone browser (no install): add spools by hand (or
+  from label photos, with `ai_intake`), open a tapped spool, and see the presets.
 
 Both use one passphrase. Adding spools does a dry run first in both, as in the Android app.
 

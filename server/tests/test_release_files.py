@@ -190,7 +190,7 @@ def test_uninstall_removes_the_kits_remote_files():
 
 def test_install_server_flag_and_usage():
     text = _read("install/install.sh")
-    assert "[--mode server|station|all-in-one | --modules a,b,c] [--server NAME-OR-IP]" in text
+    assert "[--mode server|station|all-in-one | --modules a,b,c [--set KEY=VALUE]...] [--server NAME-OR-IP]" in text
     assert "--server) [ $# -ge 2 ] || usage; SERVER_ADDR=" in text
     assert "--server=*) SERVER_ADDR=" in text
     assert "run again with --server <name-or-IP>" in text
@@ -239,14 +239,16 @@ def _save_snippet() -> str:
     return text[start:text.index("\n'\n", start)]
 
 
-def _run_save(tmp_path, mode, modules_csv="", server="", sets=""):
+def _run_save(tmp_path, mode, modules_csv="", server="", sets="", ai="", existing=None):
     import json
     import os
     import subprocess
     import sys
     etc = tmp_path / "etc"
-    etc.mkdir(exist_ok=True)
-    env = dict(os.environ, FK_ETC=str(etc), FK_MODE=mode, FK_MODULES=modules_csv, FK_SERVER=server, FK_SETS=sets,
+    etc.mkdir(parents=True, exist_ok=True)
+    if existing is not None:
+        (etc / "config.json").write_text(json.dumps(existing), encoding="utf-8")
+    env = dict(os.environ, FK_ETC=str(etc), FK_MODE=mode, FK_MODULES=modules_csv, FK_SERVER=server, FK_AI=ai, FK_SETS=sets,
                FK_NO_SYSTEMD="1", PYTHONPATH=str(ROOT / "server"))
     r = subprocess.run([sys.executable, "-c", _save_snippet()], env=env, capture_output=True, text=True,
                        timeout=60)
@@ -384,3 +386,61 @@ def test_install_save_applies_menu_settings(tmp_path):
     assert cfg["web"]["public_url"] == "https://mcp.example.com/filament"
     assert cfg["web"]["lan"] and cfg["orders"]["file"] == "/srv/o.json"
     assert cfg["modules"]["web"] and cfg["modules"]["orders"]
+
+
+def test_install_save_new_server_has_ai_intake_off_unless_chosen(tmp_path):
+    """R1: a new install has AI label reading off; the first-install question (FK_AI) turns it on."""
+    assert _run_save(tmp_path / "a", "server")["modules"]["ai_intake"] is False
+    assert _run_save(tmp_path / "b", "all-in-one", ai="1")["modules"]["ai_intake"] is True
+
+
+def test_install_save_mode_on_a_legacy_install_keeps_ai_intake(tmp_path):
+    """An install from before modules (no `modules` key) had AI intake: `--mode` on its upgrade keeps it."""
+    cfg = _run_save(tmp_path, "server", existing={"server_name": "fk", "port": 8443})
+    assert cfg["modules"]["ai_intake"] is True and cfg["server_name"] == "fk"
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_install_set_refuses_other_keys():
+    r = _install_sh("--modules", "web", "--set", "web.port=1")
+    assert r.returncode == 1
+    assert "web.public_url" in r.stderr and "orders.file" in r.stderr and "station.allow" in r.stderr
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_install_set_needs_modules():
+    r = _install_sh("--mode", "server", "--set", "orders.file=/x")
+    assert r.returncode == 1 and "--set goes with --modules" in r.stderr
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_install_set_is_collected_and_station_address_feeds_server_addr(tmp_path):
+    # the argument block alone: repeated --set, station.allow becomes the server address
+    text = _read("install/install.sh")
+    a = text.index("# --set KEY=VALUE")
+    b = text.index("# Checked before anything is installed")
+    script = ('die() { echo "error: $*" >&2; exit 1; }\nusage() { exit 2; }\nbad_addr() { return 1; }\n'
+              + text[a:b] + 'echo "MODE=$MODE SERVER=$SERVER_ADDR"; printf "%s\n" "$SETS"\n')
+    f = tmp_path / "args.sh"
+    f.write_text(script, newline="\n")
+    import subprocess
+    r = subprocess.run([_bash(), str(f), "--modules", "web,station", "--set", "web.public_url=https://m.example.com/f",
+                        "--set=station.allow=srv.localdomain"], capture_output=True, text=True, timeout=30,
+                       stdin=subprocess.DEVNULL)
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.splitlines() == ["MODE=custom SERVER=srv.localdomain",
+                                     "set web.public_url=https://m.example.com/f",
+                                     "set station.allow=srv.localdomain"]
+
+
+def test_install_save_rejects_bad_set_value(tmp_path):
+    import os
+    import subprocess
+    import sys
+    etc = tmp_path / "etc"
+    etc.mkdir()
+    env = dict(os.environ, FK_ETC=str(etc), FK_MODE="custom", FK_MODULES=",spoolman,server,ai_intake,web",
+               FK_SERVER="", FK_AI="", FK_SETS="set web.public_url=http://nope", FK_NO_SYSTEMD="1",
+               PYTHONPATH=str(ROOT / "server"))
+    r = subprocess.run([sys.executable, "-c", _save_snippet()], env=env, capture_output=True, text=True, timeout=60)
+    assert r.returncode != 0 and "web.public_url" in r.stderr
