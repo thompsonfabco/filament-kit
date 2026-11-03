@@ -636,3 +636,24 @@ def test_wrapper_reader_revoke_as_root_and_list_as_user(tmp_path):
     (tmp_path / "b").mkdir()
     assert _wrapper_run(tmp_path / "a", "reader", "revoke", "r1") == "as-root reader revoke r1"
     assert _wrapper_run(tmp_path / "b", "reader", "tokens") == "as-user ./stubs/prog reader tokens"
+
+
+@pytest.mark.parametrize("rel", ["install/install.sh", "install/uninstall.sh", "install/spoolman.sh",
+                                 "install/backup.sh", "get.sh"])
+def test_inline_python_survives_shell_single_quotes(rel):
+    """A `python -c '...'` block is one shell single-quoted word: a ' inside it ends the word, and Python gets a
+    cut program (install.sh's custom-mode block did, so every --modules install without a terminal failed).
+    Each block must end at its closing quote on a line of its own and compile."""
+    text = _read(rel)
+    blocks = 0
+    for m in re.finditer(r"-c '\n", text):
+        start = m.end()
+        end = text.index("'", start)
+        code = text[start:end]
+        after = text[end + 1:end + 2]
+        assert after in ("\n", ")", " ", ""), f"{rel}: a ' inside the python -c block near: {code[-80:]!r}"
+        assert text[end - 1] == "\n", f"{rel}: a ' inside the python -c block near: {code[-80:]!r}"
+        compile(code, f"{rel} python -c block", "exec")
+        blocks += 1
+    if rel == "install/install.sh":
+        assert blocks >= 2
