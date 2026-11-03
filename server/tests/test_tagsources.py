@@ -164,8 +164,8 @@ def test_only_http_and_https_sources_are_read(monkeypatch):
     seen = []
     monkeypatch.setattr(tagsources, "_fetch", lambda url: seen.append(url) or None)
     cfg = {"tag_sources": [{"name": "f", "url": "file:///etc/passwd"}, {"name": "ftp", "url": "ftp://x/y"},
-                           {"name": "ok", "url": "http://lasttag.localdomain:5002/last-tag"},
-                           {"name": "tls", "url": "HTTPS://reader.localdomain/last-tag"}],
+                           {"name": "ok", "url": "http://lasttag.example.lan:5002/last-tag"},
+                           {"name": "tls", "url": "HTTPS://reader.example.lan/last-tag"}],
            "station": {"url": "file:///tmp"}}
     tagsources.latest(cfg)
-    assert seen == ["http://lasttag.localdomain:5002/last-tag", "HTTPS://reader.localdomain/last-tag"]
+    assert seen == ["http://lasttag.example.lan:5002/last-tag", "HTTPS://reader.example.lan/last-tag"]

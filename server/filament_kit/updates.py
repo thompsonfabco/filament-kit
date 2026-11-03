@@ -431,6 +431,11 @@ def hardware_feed(fetcher: release.Fetcher, rel: dict) -> None:
         return
     if _feed_owned(ov) is False:
         print(f"hardware data: hand-made override in place; hardware feed not installed ({ov} is left as it is)")
+        have = hardware.file_version(ov.read_bytes())
+        if bundled_v is not None and (have is None or have <= bundled_v):
+            print(f"hardware data: {ov} (version {_vtext(have) if have else 'none'}) is not newer than the kit's "
+                  f"own (version {_vtext(bundled_v)}), so it is ignored; give it a higher version, or remove it "
+                  f"to let the feed install release data")
         return
     for need in (release.SUMS, release.SIG):
         if need not in rel["assets"]:

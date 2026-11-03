@@ -121,7 +121,8 @@ def test_update_from_tarball_then_load(fresh, served):
     lib = library.load()
     assert lib.source == "updated"
     assert lib.lookup("SUNLU", "PLA+ 2.0").library is not None
-    assert served.requests == ["/library.tar.gz"]          # one request, not one per entry
+    # one archive request, not one per entry (after the look for a SHA256SUMS beside it: final review I3)
+    assert served.requests == ["/SHA256SUMS", "/library.tar.gz"]
 
 
 def test_tarball_under_a_top_directory(fresh, served):
@@ -261,9 +262,14 @@ def test_build_library_asset_refuses_a_bad_checkout(tmp_path):
 
 def test_auth_headers_only_for_github_hosts(env):
     (env / "etc" / "github_token").write_text("tok-123\n", encoding="utf-8")
-    gh = library._auth_headers("https://github.com/o/r/releases/latest/download/library.tar.gz")
-    assert gh["Authorization"] == "Bearer tok-123"
+    # release.py's TOKEN_HOSTS only (final review M7): github.com download URLs never take a token (a private
+    # repository's asset needs the API URL), and no *.githubusercontent.com host but objects.
+    assert "Authorization" not in library._auth_headers(
+        "https://github.com/o/r/releases/latest/download/library.tar.gz")
+    assert library._auth_headers("https://api.github.com/repos/o/r/releases/assets/12")["Authorization"] == \
+        "Bearer tok-123"
     assert library._auth_headers("https://objects.githubusercontent.com/x")["Authorization"] == "Bearer tok-123"
+    assert library._auth_headers("https://raw.githubusercontent.com/o/r/x.tar.gz") == {}
     assert library._auth_headers("https://api.github.com/repos/o/r/releases/assets/12")["Accept"] == \
         "application/octet-stream"
     for url in ("https://example.com/library.tar.gz", "https://github.com.evil.example/x.tar.gz",
@@ -297,7 +303,7 @@ def test_token_not_sent_to_a_non_github_server(fresh, served, env):
 
 
 def test_github_asset_api_url_is_an_archive():
-    url = "https://api.github.com/repos/thompsonfabco/filament-kit/releases/assets/123456"
+    url = "https://api.github.com/repos/o/r/releases/assets/123456"
     assert library._is_archive(url)
     assert library._check_url(url) == url
     assert not library._is_archive("https://api.github.com/repos/o/r/releases/latest")

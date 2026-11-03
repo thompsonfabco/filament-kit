@@ -56,7 +56,7 @@ def test_validate_remote_spoolman_required():
     mods = {"server": True, "spoolman": False}
     with pytest.raises(ModuleError, match="spoolman_url"):
         validate({"modules": mods, "spoolman_url": "http://127.0.0.1:7912"})
-    validate({"modules": mods, "spoolman_url": "http://spoolman.home.arpa:7912"})
+    validate({"modules": mods, "spoolman_url": "http://spoolman.example.lan:7912"})
 
 
 def test_validate_unknown_module():
@@ -70,7 +70,7 @@ def test_station_allow_rejects_ranges(bad):
         validate({"station": {"allow": ["127.0.0.1", bad]}})
 
 
-@pytest.mark.parametrize("ok", ["192.0.2.10", "spoolman.home.arpa"])
+@pytest.mark.parametrize("ok", ["192.0.2.10", "spoolman.example.lan"])
 def test_station_allow_accepts_single_hosts(ok):
     validate({"station": {"allow": [ok]}})
 
@@ -102,8 +102,8 @@ def test_leaving_all_in_one_drops_the_local_station_link(mode):
 
 
 def test_set_mode_keeps_a_remote_station_url():
-    cfg = set_mode({"station": {"url": "http://station.example:5003"}}, "server")
-    assert cfg["station"]["url"] == "http://station.example:5003"
+    cfg = set_mode({"station": {"url": "http://station.example.lan:5003"}}, "server")
+    assert cfg["station"]["url"] == "http://station.example.lan:5003"
 
 
 # ---------- merge-ops Task 0: web / remote / orders ----------
@@ -315,7 +315,7 @@ def test_missing_and_collect_settings():
     assert modules.collect_settings(frozenset({"web"}), cfg, lambda p: "", print) is None
     assert modules.check_setting("station.allow", "127.0.0.1")
     assert modules.check_setting("station.allow", "10.0.0.0/8")
-    assert modules.check_setting("station.allow", "srv.localdomain") is None
+    assert modules.check_setting("station.allow", "srv.example.lan") is None
 # ---------- R1: AI optional ----------
 
 def test_modes_leave_ai_intake_off():

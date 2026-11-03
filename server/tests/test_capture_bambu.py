@@ -10,7 +10,7 @@ import pytest
 TOOL = Path(__file__).resolve().parents[2] / "tools" / "capture_bambu.py"
 SERIAL = "0948ZZ0A0000999"
 CODE = "Ab12Cd34"
-IP = "192.0.2.109"
+IP = "198.51.100.109"     # synthetic (RFC 5737)
 
 
 @pytest.fixture(scope="module")

@@ -69,10 +69,17 @@ def test_a_hand_made_override_survives_a_newer_feed_and_a_kit_upgrade(env, srv, 
     newer = tmp_path / "bundled.xml"                          # the kit is upgraded: its own file is now 1.6
     newer.write_bytes(xml("1.6"))
     monkeypatch.setattr(hardware, "BUNDLED", newer)
+    capsys.readouterr()
     srv.add("1.0.1", extra={HW: xml("1.7")})
     assert _update(env, srv) == 0
     assert override.read_bytes() == mine
     assert not override.with_name(HW + ".previous").exists()
+    # the loader agrees with the feed (Ruling BT): the hand-made 1.2 is no longer newer than the kit's 1.6, so it
+    # is ignored, and the updater says so instead of implying it is still in use
+    hardware._reset_cache()
+    assert "not newer" in " ".join(hardware.load().warnings)
+    out = capsys.readouterr().out
+    assert "is not newer than the kit's own" in out and "ignored" in out
 
 
 def test_a_hand_edited_feed_file_counts_as_hand_made(env, srv, key, override, capsys):
@@ -163,6 +170,6 @@ def test_release_build_signs_and_publishes_the_hardware_file():
     make = (ROOT / "tools/make_release.sh").read_text(encoding="utf-8")
     wf = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
     assert 'cp server/filament_kit/bridge/bambu_hardware.xml "$dist/bambu_hardware.xml"' in make
-    sums = re.search(r"sha256sum (.*?)> SHA256SUMS", wf, re.S).group(1)
+    sums = re.search(r'assets="([^"]*)"', wf).group(1)       # the files the sums step signs and publishes
     assert "bambu_hardware.xml" in sums
     assert wf.count("dist/bambu_hardware.xml") >= 2           # uploaded by the build job and published
