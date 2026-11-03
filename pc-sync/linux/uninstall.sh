@@ -20,17 +20,20 @@ esac
 
 opt="$HOME/.local/opt/filament-kit-sync"
 link="$HOME/.local/bin/filament-kit-sync"
-units="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
-state="${XDG_DATA_HOME:-$HOME/.local/share}"
-data="${XDG_DATA_HOME:-$HOME/.local/share}/filament-kit-sync"
+data="${XDG_DATA_HOME:-$HOME/.local/share}/filament-kit-sync"     # where pair wrote the token (this shell's XDG)
 
 # the timer first, in shell, so this works even when the program is already gone
 if command -v systemctl >/dev/null 2>&1; then
     systemctl --user disable --now filament-kit-sync.timer >/dev/null 2>&1 || true
     systemctl --user stop filament-kit-sync.service >/dev/null 2>&1 || true
 fi
-rm -f "$units/filament-kit-sync.timer" "$units/filament-kit-sync.service"
-rm -f "$state/systemd/timers/stamp-filament-kit-sync.timer"      # Persistent=true keeps the last run time there
+# the user manager may not see this shell's XDG_* values: look in both its places and the default ones
+for units in "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user" "$HOME/.config/systemd/user"; do
+    rm -f "$units/filament-kit-sync.timer" "$units/filament-kit-sync.service"
+done
+for state in "${XDG_DATA_HOME:-$HOME/.local/share}" "$HOME/.local/share"; do
+    rm -f "$state/systemd/timers/stamp-filament-kit-sync.timer"  # Persistent=true keeps the last run time there
+done
 if command -v systemctl >/dev/null 2>&1; then
     systemctl --user daemon-reload >/dev/null 2>&1 || true
 fi
@@ -40,7 +43,7 @@ if [ -L "$link" ]; then
         "$opt"/*) rm -f "$link" ;;
     esac
 fi
-rm -rf "$opt" "$opt.old"
+rm -rf "$opt" "$opt.old" "$opt".new.*                          # .new.*: a copy an install left behind
 echo "Removed the filament-kit PC sync (timer, $opt, $link)."
 
 if [ "$PURGE" -eq 1 ]; then

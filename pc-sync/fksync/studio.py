@@ -26,6 +26,7 @@ The caller passes `appdata` (and the Program Files folders) or a LinuxLayout; on
 environment.
 """
 import json
+import os
 import re
 import subprocess
 import sys
@@ -200,16 +201,20 @@ def _proc_matches(app: _LinuxApp, comm: str, argv: list[str]) -> bool:
 
 
 def _proc_running(app: _LinuxApp, proc: Path) -> bool:
-    """Any process of this user's view of /proc that is the app; True when /proc cannot be listed."""
+    """Any process of this user that is the app; True when /proc cannot be listed. Another user's slicer only
+    writes that user's folders, so their processes (another st_uid on /proc/<pid>) are skipped."""
+    uid = os.getuid() if hasattr(os, "getuid") else None
     try:
         pids = [d for d in proc.iterdir() if d.name.isdigit()]
     except OSError:
         return True
     for d in pids:
         try:
+            if uid is not None and d.stat().st_uid != uid:
+                continue
             comm = (d / "comm").read_text(encoding="utf-8", errors="replace").strip()
             raw = (d / "cmdline").read_bytes()
-        except OSError:                                                 # gone, or another user's: not ours
+        except OSError:                                                 # gone mid-read, or unreadable: skipped
             continue
         argv = [a.decode("utf-8", errors="replace") for a in raw.split(b"\0") if a]
         if _proc_matches(app, comm, argv):

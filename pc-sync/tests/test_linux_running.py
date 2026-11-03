@@ -87,3 +87,13 @@ def test_platform_choice(monkeypatch, tmp_path):
     assert studio.running() is False
     # a tasklist given (the Windows tests) is still read on any platform
     assert studio.running(lambda: '"bambu-studio.exe","1"') is True
+
+
+def test_other_users_processes_are_skipped(tmp_path, monkeypatch):
+    """M2: another user's slicer writes only their own folders; only this user's processes count."""
+    proc = _proc(tmp_path, {4242: ("orca-slicer", ["/usr/bin/orca-slicer"])})
+    owner = (proc / "4242").stat().st_uid
+    monkeypatch.setattr(studio.os, "getuid", lambda: owner, raising=False)
+    assert studio.orca_running(proc=proc) is True
+    monkeypatch.setattr(studio.os, "getuid", lambda: owner + 1, raising=False)
+    assert studio.orca_running(proc=proc) is False

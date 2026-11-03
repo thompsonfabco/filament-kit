@@ -222,3 +222,10 @@ def test_orca_pins_on_linux(tmp_path):
     assert _orca(lay, {"orca_install": str(res.parent)}).install == res    # the folder holding resources/ works too
     with pytest.raises(studio.NotFound):
         _orca(lay, {"orca_install": str(tmp_path / "nope")})
+
+
+def test_layout_never_reaches_the_real_system_dirs(tmp_path):
+    """M7 (conftest guard): a layout made from the environment, as the CLI makes it, looks only under tmp_path."""
+    lay = studio.LinuxLayout.from_env({"HOME": str(tmp_path / "home")})
+    for p in (lay.system_flatpak, *lay.share_dirs, *lay.opt_dirs):
+        assert Path(p).resolve().is_relative_to(tmp_path.resolve()), p
