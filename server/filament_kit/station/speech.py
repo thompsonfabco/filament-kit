@@ -41,15 +41,20 @@ def synth(text):
 
 
 def to_panel(wav):
-    """WAV -> the panel's speaker samples: 8 kHz speech band, peak-normalised, as MOSFET duty bytes around 128
-    (kept within 16-240), with a ramp up from 0 (off) before and back down after."""
+    """WAV -> the panel's speaker samples, voiced for a small unbaffled headset driver (user's A/B pick 2026-11-02):
+    nothing under 450 Hz (it can't play it), +8 dB at 2.5 kHz (consonants), hard compression, normalised so all but
+    the loudest 2 % of samples fit (those clip). Then PWM duty bytes around 128 (kept within 16-240), with a ramp up
+    from 0 (off) before and back down after."""
     p = subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "wav", "-i", "pipe:0",
-                        "-af", "highpass=f=250,lowpass=f=3500", "-ar", str(RATE), "-ac", "1", "-f", "s16le", "pipe:1"],
+                        "-af", "highpass=f=450,highpass=f=450,equalizer=f=2500:t=q:w=1:g=8,lowpass=f=3600,"
+                               "acompressor=threshold=0.03:ratio=10:attack=2:release=50",
+                        "-ar", str(RATE), "-ac", "1", "-f", "s16le", "pipe:1"],
                        input=wav, capture_output=True, timeout=10)
     if p.returncode:
         raise OSError(p.stderr.decode(errors="replace").strip())
     pcm = struct.unpack(f"<{len(p.stdout) // 2}h", p.stdout[:len(p.stdout) // 2 * 2])
-    gain = 112 / max(1, max(map(abs, pcm), default=1))
+    mags = sorted(map(abs, pcm))
+    gain = 112 / max(1, mags[int(len(mags) * 0.98)] if mags else 1)
     body = bytes(128 + max(-112, min(112, round(s * gain))) for s in pcm)
     ramp = bytes(round(128 * i / RAMP) for i in range(RAMP))
     return ramp + bytes([128]) * (RATE // 20) + body + bytes([128]) * (RATE // 20) + ramp[::-1]
