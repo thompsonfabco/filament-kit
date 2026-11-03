@@ -136,7 +136,7 @@ def seed_map(cal: dict, model, hw: hardware.Hardware, unknown: list[str], notes:
     learned: dict[str, str] = {}
     clash: set[str] = set()
     for key, e in cal["table"].items():
-        n = int(key) if isinstance(key, str) and key.isdigit() else None
+        n = int(key) if isinstance(key, str) and key.isascii() and key.isdigit() else None
         m = _TAG.fullmatch(e.get("slot") or "") if isinstance(e, dict) and isinstance(e.get("slot"), str) else None
         src = e.get("source", "job") if isinstance(e, dict) else None
         if n is None or m is None or src not in SOURCES:
