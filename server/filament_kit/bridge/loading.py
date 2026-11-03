@@ -6,7 +6,7 @@
      (`ams.units`: A1 ... Z4, AA1 ..., HT-A ..., Ext or Ext-L / Ext-R)). Ruling BK: a print does not block a
      load (the owner loads a spool into a free slot while printing, as the scanner allowed); only the slot that
      feeds the running job is refused (`SlotInUse`: `ams.tray_now`, and an extruder's `snow` when the report has
-     it; Ruling BM: on a multi-nozzle model without `snow`, every slot in the job's `mapping`, and every slot
+     it; Ruling BM: on a multi-nozzle or unknown model without `snow`, every slot in the job's `mapping`, and every slot
      while the job has no `mapping` yet), and a slot mapping or calibration job (`mapping.load_guard`). Mapping
      and the slot test keep `slottest.check_idle`;
   2. nozzle size: the report's top-level `nozzle_diameter`, else `device.nozzle.info[].diameter` of the slot's
@@ -141,13 +141,15 @@ def in_use(serial: str, model, report: dict, ams_id: int, tray_id: int, label: s
     """Why this slot may not be changed now (None: it may). Only while a job is active (Ruling BK): the slot that
     feeds it (`tray_now`, an extruder's `snow`). On a model with more than one nozzle whose report has no `snow`
     (Ruling BM), `tray_now` shows one nozzle only, so every slot in the job's `mapping` counts as in use, and an
-    active job without a `mapping` refuses every slot (fails closed)."""
+    active job without a `mapping` refuses every slot (fails closed). An unknown model (nozzle count not known)
+    is treated as one with more than one nozzle."""
     gs = status._s(status._d(report).get("gcode_state"))
     if gs not in status.ACTIVE:
         return None
     if (ams_id, tray_id) in _feeding(report):
         return f"{label} feeds the print that is running ({gs})"
-    if hardware.load().model(model).nozzles > 1 and not _has_snow(report):
+    nozzles = hardware.load().model(model).nozzles
+    if (nozzles is None or nozzles > 1) and not _has_snow(report):
         labels = _job_labels(serial, model, report)
         if labels is None:
             return f"the running print ({gs}) does not say yet which slots it uses"

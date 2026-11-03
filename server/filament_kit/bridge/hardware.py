@@ -23,7 +23,7 @@ Unknown → the generic record.
     preset_name   str | None   Bambu Studio printer name ("Bambu Lab H2D"); None for the generic record
     say           str | None   speech text for the printer ("x one c"); generic: "printer"
     aliases       tuple[str]   other codes and typed names that find this model
-    nozzles       int          number of nozzles (generic: 1)
+    nozzles       int | None   number of nozzles; generic: None (not known: treated as more than one, Ruling BM)
     camera        str | None   "hls" (RTSPS, relayed as HLS), "mjpeg" (port-6000 JPEG) or None (no camera offered)
     chamber_max   int | None   highest chamber temperature in °C, None without a heated chamber
     presence      str | None   presence layout key (`Hardware.presence`), None = unknown (fall back to tray_type)
@@ -125,7 +125,7 @@ class ModelInfo:
     preset_name: str | None
     say: str | None = None
     aliases: tuple[str, ...] = ()
-    nozzles: int = 1
+    nozzles: int | None = 1
     camera: str | None = None
     chamber_max: int | None = None
     presence: str | None = None
@@ -142,7 +142,7 @@ class ModelInfo:
 def generic_model(code: str | None) -> ModelInfo:
     c = (code or "").strip().upper()
     return ModelInfo(code=c, name=f"Unknown Bambu printer ({c})" if c else "Unknown Bambu printer",
-                     preset_name=None, say="printer", light_nodes=(), known=False)
+                     preset_name=None, say="printer", nozzles=None, light_nodes=(), known=False)
 
 
 @dataclass(frozen=True)

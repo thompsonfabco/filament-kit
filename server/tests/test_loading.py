@@ -280,6 +280,18 @@ def test_dual_nozzle_job_without_mapping_fails_closed(rig, sm, fil):
         loading.load(m, sm, SERIAL, "A2", s["id"], True, preset_for=FakePresets())
 
 
+def test_unknown_model_counts_as_multi_nozzle(rig, sm, fil):
+    """Ruling BM for an unknown model: its nozzle count is not known, so without `snow` the job's mapping decides,
+    and a job without a mapping refuses every slot, as on a dual-nozzle model."""
+    m, printer, client = rig
+    registry.upsert(Printer(SERIAL, NAME, "ZZ9", "10.0.0.5", "13572468", True))      # a code nobody knows
+    printer.push({"gcode_state": "RUNNING", "ams": {"tray_now": "0"}})
+    assert m.wait_report(SERIAL, lambda r: r.get("gcode_state") == "RUNNING", 2)
+    now = m.wait_report(SERIAL, lambda r: True, 0)
+    assert "does not say yet" in (loading.in_use(SERIAL, "ZZ9", now, 0, 1, "A2") or "")
+    assert loading.in_use(SERIAL, "C12", now, 0, 1, "A2") is None                    # known single nozzle: per slot
+
+
 def test_single_nozzle_model_needs_no_mapping(rig, sm, fil):
     m, printer, client = rig
     registry.upsert(Printer(SERIAL, NAME, "C12", "10.0.0.5", "13572468", True))      # P1S: one nozzle
