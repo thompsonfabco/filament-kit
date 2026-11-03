@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -206,18 +207,25 @@ class FakeRelease:
     """A GitHub API look-alike on 127.0.0.1: /repos/o/r/releases/{latest,tags/vX}, assets served from
     /repos/o/r/releases/assets/<n> through a 302 (as GitHub does). Records every request's headers."""
 
-    def __init__(self, priv, version="1.2.3", *, tamper_sig=False, tamper_tar=False, tarball=None):
+    def __init__(self, priv, version="1.2.3", *, tamper_sig=False, tamper_tar=False, tarball=None, extra=None,
+                 unlisted=None, tamper_extra=False):
+        """`extra`: more assets {name: bytes}, listed in SHA256SUMS; `unlisted`: assets left out of it;
+        `tamper_extra`: the extra assets are changed after SHA256SUMS was made."""
         self.version = version
         tar = tarball if tarball is not None else make_tarball(version)
+        extra = dict(extra or {})
         sums = (f"{hashlib.sha256(tar).hexdigest()}  filament-kit-{version}.tar.gz\n"
-                f"{'0' * 64}  get.sh\n").encode()
+                f"{'0' * 64}  get.sh\n"
+                + "".join(f"{hashlib.sha256(d).hexdigest()}  {n}\n" for n, d in extra.items())).encode()
+        if tamper_extra:
+            extra = {n: d + b"<!-- changed -->" for n, d in extra.items()}
         sig = priv.sign(sums)
         if tamper_sig:
             sig = bytes([sig[0] ^ 1]) + sig[1:]
         if tamper_tar:
             tar = tar[:-1] + bytes([tar[-1] ^ 1])
         self.files = {f"filament-kit-{version}.tar.gz": tar, "SHA256SUMS": sums,
-                      "SHA256SUMS.sig": base64.b64encode(sig) + b"\n"}
+                      "SHA256SUMS.sig": base64.b64encode(sig) + b"\n", **extra, **(unlisted or {})}
         self.requests: list[tuple[str, dict]] = []
         outer = self
 
@@ -480,3 +488,72 @@ def test_get_sh_syntax_and_no_tracing():
     assert "set -x" not in shell and "FK_GITHUB_TOKEN" not in shell.split("set -euo pipefail", 1)[1]
     assert shell.rstrip().endswith('fk_main "$@"')
     assert "</dev/tty" in shell and "--keep /opt/filament-kit/releases" in shell
+
+
+# ---------------------------------------------------------------- the real tarball
+
+def _git_bash():
+    found = shutil.which("bash")
+    # Windows' System32 bash.exe is WSL, which cannot take a Windows path; Git Bash can.
+    return None if found and "system32" in found.lower() else found
+
+
+def _wheel_builder() -> bool:
+    if shutil.which("uv") or shutil.which("uv.cmd"):
+        return True
+    return subprocess.run([sys.executable, "-c", "import build"], capture_output=True).returncode == 0
+
+
+@pytest.mark.skipif(not _git_bash(), reason="needs bash (Git Bash on Windows)")
+@pytest.mark.skipif(not _wheel_builder(), reason="needs uv or python -m build to build the wheel")
+def test_make_release_tarball_passes_extract_and_the_sums_check(tmp_path, key):
+    """tools/make_release.sh's real tarball (no Android build) goes through the same checks as a download:
+    SHA256SUMS signed, verify_dir, then release.extract. Catches layout drift between the builder and the extractor."""
+    def posix(p: Path) -> str:
+        r = subprocess.run([_git_bash(), "-c", 'cygpath -u "$1" 2>/dev/null || printf %s "$1"', "_", str(p)],
+                           capture_output=True, text=True)
+        return r.stdout.strip() or p.as_posix()
+    # M5: build from a temporary copy of the checkout (the script writes dist/ and server/build there), never inside it
+    src = tmp_path / "src"
+    skip = shutil.ignore_patterns(".venv", "*.egg-info", "build", "dist", "__pycache__", ".pytest_cache")
+    for part in ("tools", "install", "server", "station/panel/firmware"):
+        shutil.copytree(ROOT / part, src / part, ignore=skip)
+    marker = ROOT / "server" / "build" / "f1-untouched"   # a developer's build folder in the real checkout
+    made_build = not marker.parent.exists()
+    marker.parent.mkdir(exist_ok=True)
+    marker.write_text("x")
+    try:
+        dist = tmp_path / "dist"
+        env = {**os.environ, "FK_DIST": posix(dist), "FK_NO_APP": "1",
+               "FK_LIBRARY_SRC": posix(tmp_path / "no-library")}
+        r = subprocess.run([_git_bash(), str(src / "tools" / "make_release.sh")], cwd=src, env=env,
+                           stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=600)
+        assert r.returncode == 0, r.stdout[-2000:] + r.stderr[-2000:]
+        assert marker.is_file(), "make_release.sh changed the real checkout"
+    finally:
+        marker.unlink(missing_ok=True)
+        if made_build:
+            shutil.rmtree(marker.parent, ignore_errors=True)
+    version = re.search(r'^__version__ = "(.*)"', (ROOT / "server/filament_kit/__init__.py").read_text(), re.M)[1]
+    tarball = dist / release.tarball_name(version)
+    hw = dist / "bambu_hardware.xml"
+    assert tarball.is_file() and hw.is_file()
+    assert not (dist / "stage").exists()
+    sums = "".join(f"{hashlib.sha256(f.read_bytes()).hexdigest()}  {f.name}\n" for f in (tarball, hw)).encode()
+    (dist / release.SUMS).write_bytes(sums)
+    (dist / release.SIG).write_bytes(base64.b64encode(key.sign(sums)) + b"\n")
+    assert release.verify_dir(dist, version, _pub(key)) == tarball
+    root = release.extract(tarball, version, tmp_path / "x")
+    assert root == tmp_path / "x" / f"filament-kit-{version}"
+    assert len(list(root.glob(f"filament_kit-{version}-*.whl"))) == 1
+    for rel in ("install.sh", "uninstall.sh", "install/backup.sh", "install/filament-kit-cli.sh",
+                "install/spoolman.sh", "install/export_ops.sh", "install/avahi/filament-kit.service",
+                "install/remote/route.template", "install/remote/mcp-proxy.conf", "install/panel/VERSION",
+                "install/panel/intake-panel.bin"):
+        assert (root / rel).is_file(), rel
+    units = {p.name for p in (ROOT / "install/systemd").iterdir()}
+    assert {p.name for p in (root / "install/systemd").iterdir()} == units
+    assert b"\r\n" not in (root / "install.sh").read_bytes()
+    assert not (root / "app").exists()
+    from filament_kit.bridge import hardware
+    assert hw.read_bytes() == hardware.BUNDLED.read_bytes() and hardware.validate(hw.read_bytes()) == []

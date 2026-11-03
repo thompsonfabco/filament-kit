@@ -23,7 +23,7 @@ Unknown → the generic record.
     preset_name   str | None   Bambu Studio printer name ("Bambu Lab H2D"); None for the generic record
     say           str | None   speech text for the printer ("x one c"); generic: "printer"
     aliases       tuple[str]   other codes and typed names that find this model
-    nozzles       int          number of nozzles (generic: 1)
+    nozzles       int | None   number of nozzles; generic: None (not known: treated as more than one, Ruling BM)
     camera        str | None   "hls" (RTSPS, relayed as HLS), "mjpeg" (port-6000 JPEG) or None (no camera offered)
     chamber_max   int | None   highest chamber temperature in °C, None without a heated chamber
     presence      str | None   presence layout key (`Hardware.presence`), None = unknown (fall back to tray_type)
@@ -78,6 +78,8 @@ with a model (code, name or ModelInfo) its own external holders are matched firs
 Versions: `version="major[.minor]"`; a file with another major version is refused, minor versions load.
 
 `validate(data: bytes) -> list[str]`: check a complete file without installing it.
+`file_version(data: bytes) -> (major, minor) | None`: a file's root version, for comparing files (the updater's
+hardware data feed installs a release's file as the override only when it is newer than the bundled one).
 """
 from __future__ import annotations
 
@@ -125,7 +127,7 @@ class ModelInfo:
     preset_name: str | None
     say: str | None = None
     aliases: tuple[str, ...] = ()
-    nozzles: int = 1
+    nozzles: int | None = 1
     camera: str | None = None
     chamber_max: int | None = None
     presence: str | None = None
@@ -142,7 +144,7 @@ class ModelInfo:
 def generic_model(code: str | None) -> ModelInfo:
     c = (code or "").strip().upper()
     return ModelInfo(code=c, name=f"Unknown Bambu printer ({c})" if c else "Unknown Bambu printer",
-                     preset_name=None, say="printer", light_nodes=(), known=False)
+                     preset_name=None, say="printer", nozzles=None, light_nodes=(), known=False)
 
 
 @dataclass(frozen=True)
@@ -791,6 +793,17 @@ def validate(data: bytes, where: str = "bambu_hardware.xml") -> list[str]:
     except HardwareError as e:
         return e.errors
     return []
+
+
+def file_version(data: bytes) -> tuple[int, int] | None:
+    """(major, minor) of a hardware file's root `version` ("1" is (1, 0)); None when it has none or cannot be
+    parsed. For comparing files only; `validate` says whether a file is good."""
+    try:
+        root = DET.fromstring(data, forbid_dtd=True, forbid_entities=True, forbid_external=True)
+    except Exception:  # noqa: BLE001 - ParseError, DTDForbidden, ...
+        return None
+    m = _VERSION.fullmatch((root.get("version") or "").strip())
+    return (int(m.group(1)), int(m.group(2) or 0)) if m else None
 
 
 def _merge(base: dict[str, dict], over: dict[str, dict]) -> dict[str, dict]:

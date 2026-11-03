@@ -507,7 +507,9 @@ def find(sm: Spoolman, q: str, sealed_only: bool) -> list[dict]:
 
 def filaments(sm: Spoolman, q: str = "") -> list[dict]:
     """Spoolman's filaments matching every word of `q` (vendor, name, material), with or without spools, for a
-    manual add's picker. Fields carry an add item's names (net, tare, nozzle, bed), so a client copies them."""
+    manual add's picker. Fields carry an add item's names (net, tare, nozzle, bed), so a client copies them; `tare`
+    is the filament's spool weight, else its vendor's empty spool weight. A filament without a vendor is listed with
+    vendor ""."""
     words = (q or "").lower().split()
     counts: dict = {}
     for s in sm.get("spool"):
@@ -515,11 +517,14 @@ def filaments(sm: Spoolman, q: str = "") -> list[dict]:
         counts[fid] = counts.get(fid, 0) + 1
     out = []
     for f in sm.get("filament"):
-        vendor = (f.get("vendor") or {}).get("name") or ""
+        v = f.get("vendor") or {}
+        vendor = v.get("name") or ""
         if any(w not in f"{vendor} {f.get('name') or ''} {f.get('material') or ''}".lower() for w in words):
             continue
+        tare = f.get("spool_weight")
         out.append({"id": f["id"], "vendor": vendor, "name": f.get("name"), "material": f.get("material"),
-                    "density": f.get("density"), "net": f.get("weight"), "tare": f.get("spool_weight"),
+                    "density": f.get("density"), "net": f.get("weight"),
+                    "tare": tare if tare is not None else v.get("empty_spool_weight"),
                     "color_hex": f.get("color_hex"), "nozzle": f.get("settings_extruder_temp"),
                     "bed": f.get("settings_bed_temp"), "spools": counts.get(f["id"], 0)})
     return sorted(out, key=lambda f: (f["vendor"].lower(), (f["name"] or "").lower()))

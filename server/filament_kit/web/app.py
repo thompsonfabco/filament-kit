@@ -83,4 +83,20 @@ def build_app(cfg: dict | None = None, *, sm: Spoolman | None = None, claude=Non
     for r in routes:
         mcp.custom_route(r.path, methods=sorted(r.methods - {"HEAD"} if r.methods else ["GET"]))(r.endpoint)
     app = mcp.streamable_http_app(transport_security=transport_security(public))
-    return auth.lan_only(app, lan)
+    return auth.lan_only(with_root_path(app, urlparse(public).path.rstrip("/")), lan)
+
+
+def with_root_path(app, prefix: str):
+    """Run `app` under the public path (`/filament` of https://host/filament), as uvicorn's root_path does: nginx
+    strips the prefix, so each request gets `root_path` = prefix and the prefix back in front of `path` (ASGI: path
+    includes root_path). Starlette routes on the path without root_path and builds URLs (slash redirects,
+    url_for) with it, so a redirect keeps the prefix. No prefix (a public URL at the host root): `app` as is."""
+    if not prefix:
+        return app
+
+    async def wrapped(scope, receive, send):
+        if scope["type"] in ("http", "websocket") and not scope.get("root_path"):
+            scope = {**scope, "root_path": prefix, "path": prefix + scope["path"],
+                     **({"raw_path": prefix.encode() + scope["raw_path"]} if scope.get("raw_path") else {})}
+        await app(scope, receive, send)
+    return wrapped

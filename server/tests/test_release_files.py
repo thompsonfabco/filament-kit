@@ -507,3 +507,92 @@ def test_install_set_station_allow_refused_when_server_in_list(tmp_path):
     ok = subprocess.run([_bash(), str(f), ",station"], capture_output=True, text=True, timeout=30)
     assert bad.returncode == 1 and "drop --set station.allow" in bad.stderr
     assert ok.returncode == 0
+
+
+SAVED_NOTE = "using the station's saved server address kit.localdomain"
+
+
+def _saved_station_etc(tmp_path, allow=("127.0.0.1", "kit.localdomain")):
+    import json
+    etc = tmp_path / "etc"
+    etc.mkdir(exist_ok=True)
+    (etc / "config.json").write_text(json.dumps({"modules": {"station": True, "server": False},
+                                                 "station": {"allow": list(allow)}}), encoding="utf-8")
+    return etc
+
+
+def _install_no_tty(tmp_path, etc, *args):
+    """install.sh with no terminal (as the updater and get.sh piped to bash run it), with a python3 on PATH."""
+    import os
+    import subprocess
+    import sys
+    shim = tmp_path / "bin"
+    shim.mkdir(exist_ok=True)
+    (shim / "python3").write_text(f'#!/bin/sh\nexec "{Path(sys.executable).as_posix()}" "$@"\n', encoding="utf-8")
+    (shim / "python3").chmod(0o755)
+    bash_path = subprocess.run([_bash(), "-c", "cygpath -u \"$1\" 2>/dev/null || printf %s \"$1\"", "_", str(shim)],
+                               capture_output=True, text=True).stdout.strip()
+    return subprocess.run([_bash(), "-c", f'PATH="{bash_path}:$PATH" exec bash "$0" "$@"',
+                           str(ROOT / "install" / "install.sh"), *args],
+                          stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=60,
+                          env={**os.environ, "FK_ETC": str(etc)})
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_station_upgrade_without_server_reuses_the_saved_address(tmp_path):
+    """The updater (or get.sh piped to bash) runs install.sh with no terminal: a station upgrade given --mode station
+    but no --server takes the server address the station already has (station.allow in its config.json) instead
+    of dying for it. It then stops at the root check here, past the address check."""
+    etc = _saved_station_etc(tmp_path)
+    r = _install_no_tty(tmp_path, etc, "--mode", "station")
+    assert "needs the kit server's address" not in r.stderr, r.stderr
+    assert SAVED_NOTE in r.stderr
+    assert r.returncode == 1 and "run as root" in r.stderr, r.stderr
+    etc = _saved_station_etc(tmp_path, allow=("127.0.0.1",))
+    r = _install_no_tty(tmp_path, etc, "--mode", "station")
+    assert "station mode needs the kit server's address" in r.stderr     # only a local address saved: still asks
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_custom_run_without_terminal_uses_the_saved_address_unless_one_is_given(tmp_path):
+    etc = _saved_station_etc(tmp_path)
+    r = _install_no_tty(tmp_path, etc, "--modules", "station")
+    assert SAVED_NOTE in r.stderr and "run as root" in r.stderr, r.stderr
+    r = _install_no_tty(tmp_path, etc, "--modules", "station", "--set", "station.allow=other.localdomain")
+    assert "saved server address" not in r.stderr and "run as root" in r.stderr, r.stderr
+    r = _install_no_tty(tmp_path, etc, "--mode", "station", "--server", "other.localdomain")
+    assert "saved server address" not in r.stderr and "run as root" in r.stderr, r.stderr
+
+
+def _wsl() -> bool:
+    import shutil
+    import subprocess
+    if not shutil.which("wsl"):
+        return False
+    r = subprocess.run(["wsl", "-d", "Ubuntu", "--exec", "sh", "-c", "command -v script && command -v python3"],
+                       capture_output=True, timeout=60)
+    return r.returncode == 0
+
+
+@pytest.mark.skipif(not _wsl(), reason="needs WSL Ubuntu with script(1) for a pty")
+def test_with_a_terminal_the_saved_address_is_not_used(tmp_path):
+    """At a terminal (get.sh hands install.sh /dev/tty) the saved address is not taken: the custom menu's address
+    or the "Server address" prompt decide. Run under script(1)'s pty in WSL; it stops at the root check."""
+    import subprocess
+
+    def wslpath(p):
+        return subprocess.run(["wsl", "-d", "Ubuntu", "--exec", "wslpath", "-a", str(p).replace("\\", "/")],
+                              capture_output=True, text=True, timeout=60).stdout.strip()
+    etc = _saved_station_etc(tmp_path)
+    sh = wslpath(ROOT / "install" / "install.sh")
+    for args in ("--mode station", "--modules station"):
+        r = subprocess.run(["wsl", "-d", "Ubuntu", "--exec", "env", f"FK_ETC={wslpath(etc)}", "script", "-qec",
+                            f"bash {sh} {args}", "/dev/null"],
+                           stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=120)
+        out = r.stdout + r.stderr
+        assert "run as root" in out, out
+        assert "saved server address" not in out, out
+    # without the pty, the same run takes it (the same WSL shell: the difference is only the terminal)
+    r = subprocess.run(["wsl", "-d", "Ubuntu", "--exec", "env", f"FK_ETC={wslpath(etc)}", "bash", sh, "--mode",
+                        "station"], stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=120)
+    assert SAVED_NOTE in r.stderr, r.stdout + r.stderr

@@ -3,16 +3,20 @@
 # Works on Linux and on the Windows dev PC under Git Bash.
 # Contents: install.sh, uninstall.sh, install/ (units, avahi, helper scripts),
 # the filament_kit wheel, and app/filament-kit.apk + app/version.txt (signed Android release build).
+# FK_DIST: the output folder (default dist, relative to the checkout). FK_NO_APP=1: no Android build and no
+# app/ (the tarball test in server/tests; nothing under android/ is touched).
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$ROOT"
+dist=${FK_DIST:-dist}
+mkdir -p "$dist"
 
 version=$(sed -n 's/^__version__ = "\(.*\)"\r\{0,1\}$/\1/p' server/filament_kit/__init__.py)
 [ -n "$version" ] || { echo "error: no __version__ in server/filament_kit/__init__.py" >&2; exit 1; }
 
 name="filament-kit-$version"
-stage_root="dist/stage"
+stage_root="$dist/stage"
 stage="$stage_root/$name"
 rm -rf "$stage_root"
 mkdir -p "$stage/install/systemd" "$stage/install/avahi" "$stage/install/remote" "$stage/install/panel"
@@ -64,7 +68,11 @@ export FK_VERSION_CODE
 # Signed release build runs when the keystore env is set (FK_KEYSTORE + FK_KEYSTORE_PASSWORD), or on the
 # Windows dev PC when tools/android_keystore.ps1 has created the keystore; the password goes only into an
 # env var of this process (never echoed, never on a command line).
-if [ -z "${FK_KEYSTORE:-}" ] && command -v powershell >/dev/null 2>&1 && command -v cygpath >/dev/null 2>&1; then
+if [ "${FK_NO_APP:-}" = 1 ]; then
+    FK_KEYSTORE=""
+fi
+if [ -z "${FK_KEYSTORE:-}" ] && [ "${FK_NO_APP:-}" != 1 ] && command -v powershell >/dev/null 2>&1 \
+        && command -v cygpath >/dev/null 2>&1; then
     # shellcheck disable=SC2016  # $env:LOCALAPPDATA is PowerShell's, expanded by PowerShell
     localapp=$(powershell -NoProfile -Command 'Write-Output $env:LOCALAPPDATA' | tr -d '\r')
     default_ks="$localapp\filament-kit\release.jks"
@@ -84,13 +92,15 @@ if [ -n "${FK_KEYSTORE:-}" ]; then
     rm -f "$apk_dir"/*.apk
     (cd android && ./gradlew --no-daemon assembleRelease) \
         || { echo "error: assembleRelease failed; release NOT signed or packaged" >&2; exit 1; }
+elif [ "${FK_NO_APP:-}" = 1 ]; then
+    echo "FK_NO_APP=1: no Android build; the tarball has no app/"
 else
     echo "FK_KEYSTORE not set; skipping the Android release build"
     # A stale APK from an earlier build must not be packaged with this release's version.txt.
     rm -f "$apk_dir"/*.apk
 fi
 apk=""
-if [ -f "$apk_dir/app-release.apk" ]; then
+if [ "${FK_NO_APP:-}" != 1 ] && [ -f "$apk_dir/app-release.apk" ]; then
     apk="$apk_dir/app-release.apk"
 fi
 if [ -n "$apk" ]; then
@@ -104,13 +114,19 @@ else
 fi
 
 # ---------- tarball ----------
-out="dist/$name.tar.gz"
+out="$dist/$name.tar.gz"
 tar -czf "$out" --owner=0 --group=0 --numeric-owner \
     --mode='u+rwX,go+rX,go-w' -C "$stage_root" "$name"
 rm -rf "$stage_root"
 
 echo "built $out"
 tar -tzf "$out"
+
+# ---------- hardware data asset ----------
+# The updater's hardware data feed (updates.hardware_feed) takes bambu_hardware.xml from the release, checked
+# against the signed SHA256SUMS like the tarball; it is the same file the wheel bundles.
+cp server/filament_kit/bridge/bambu_hardware.xml "$dist/bambu_hardware.xml"
+echo "built $dist/bambu_hardware.xml"
 
 # ---------- library asset (optional) ----------
 # The filament-library data is a separate release asset, library-<date>.tar.gz, plus library.tar.gz under the
@@ -121,11 +137,11 @@ lib_src=${FK_LIBRARY_SRC:-/c/CODING/filament-library}
 if [ -f "$lib_src/index.json" ]; then
     py=python3
     command -v "$py" >/dev/null 2>&1 || py=python
-    lib_out="dist/library-$(date +%Y-%m-%d).tar.gz"
+    lib_out="$dist/library-$(date +%Y-%m-%d).tar.gz"
     "$py" -I tools/build_library_asset.py --from "$lib_src" --out "$lib_out" \
         || { echo "error: library asset not built" >&2; exit 1; }
-    cp "$lib_out" dist/library.tar.gz
-    echo "built $lib_out and dist/library.tar.gz"
+    cp "$lib_out" "$dist/library.tar.gz"
+    echo "built $lib_out and $dist/library.tar.gz"
 else
     echo "no filament-library checkout at $lib_src; no library asset built"
 fi

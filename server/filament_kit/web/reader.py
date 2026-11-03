@@ -429,6 +429,23 @@ def _short_spool(v) -> dict | None:
     return {"id": v["id"], "name": clip(v.get("name") or f"spool {v['id']}")}
 
 
+def reader_slots(rows: list[dict], printer: str = "") -> list[dict]:
+    """The slots the firmware can tell apart: it keeps and sends back a label as is, cut at 40 bytes, and the kit
+    matches labels whatever their case and surrounding spaces (`slots.label_key`). A label over 40 bytes is left
+    out rather than cut (kit labels are short), and of slots with the same key only the first is listed (the one
+    `slots.kit_label` picks for it)."""
+    seen, out = set(), []
+    for s in rows:
+        key = slots.label_key(s["label"])
+        if not fits(s["label"], MAX_TEXT) or key in seen:
+            log.warning("reader: printer %s slot %s left out of the list (%s)", _safe(printer), _safe(s["label"]),
+                        "listed twice" if key in seen else f"label over {MAX_TEXT} bytes")
+            continue
+        seen.add(key)
+        out.append(s)
+    return out
+
+
 def cap_slots(rows: list[dict], printer: str = "") -> list[dict]:
     """At most MAX_SLOTS rows and MAX_SLOTS_JSON bytes of JSON: rows are cut at the end, and a last entry without a
     label (the firmware skips it) says how many are left out."""
@@ -519,12 +536,11 @@ class Reader:
 
         def build() -> list[dict]:
             view = self.tools.kit_bridge().get(slots.printer_path(pid))
-            # a label is sent back as is, so one over 40 bytes is left out rather than cut (kit labels are short)
             return cap_slots([{"label": s["label"], "say": say_tokens(s.get("say")),
                      "kind": clip("external" if s.get("kind") == "ext" else s.get("kind") or ""),
                      "present": s.get("present") if isinstance(s.get("present"), bool) else None,
                      "type": clip(s.get("type") or ""), "spool": _short_spool(s.get("spool"))}
-                    for s in slots.status_slots(view.get("status") or {}) if fits(s["label"], MAX_TEXT)], pid)
+                    for s in reader_slots(slots.status_slots(view.get("status") or {}), pid)], pid)
         return JSONResponse(await run_in_threadpool(build))
 
     async def scan(self, request: Request):
