@@ -1,4 +1,5 @@
 # filament-kit modules, install modes and intake station — design
+> Design document from the build of filament-kit (2026-11-02). It describes the plan as it was then; the code and the user guide are what is current.
 
 Date: 2026-11-02. Status: approved in conversation, awaiting written-spec review.
 Sub-project 1 of merging filament-ops into filament-kit.
@@ -23,7 +24,7 @@ install in that mode. An existing family-member install upgrades with no questio
 
 | Topic | Decision |
 |---|---|
-| Base | filament-kit (repo `C:\CODING\filament-kit`); filament-ops is ported in over sub-projects 1-4 |
+| Base | filament-kit (repo `<checkout>\filament-kit`); filament-ops is ported in over sub-projects 1-4 |
 | Name | stays "filament-kit" |
 | Spoolman | not in the package: fetched by the installer (pinned release + SHA-256, as today) when the module is on |
 | Selection | modules, grouped into modes; chosen at install, changed later in `filament-kit config` |
@@ -167,7 +168,7 @@ IPAddressAllow=localhost <each station.allow address>
 ```
 
 All-in-one: localhost only. Station mode: localhost + the server address — narrower than the current station's
-`192.168.1.0/24`. The server may be given by name (`spoolman.home.arpa`); `config.json` keeps the name and apply
+`192.0.2.0/24`. The server may be given by name (`<server>.local`); `config.json` keeps the name and apply
 resolves it to addresses for the drop-in (systemd and the station both match client IPs), printing what it used.
 Re-running apply picks up an address change.
 

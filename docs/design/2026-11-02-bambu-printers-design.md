@@ -1,8 +1,9 @@
 # Every Bambu printer, every AMS layout: folding h2d-filament-scanner into filament-kit — design
+> Design document from the build of filament-kit (2026-11-02). It describes the plan as it was then; the code and the user guide are what is current.
 
 Date: 2026-11-02. Status: awaiting owner approval. Sub-project 5 of the filament-ops merge; builds on branch
 `merge-ops` (main merged in at 03ffc67).
-Inputs: survey of `C:\CODING\h2d-filament-scanner` (orchestrator, usage tracker, /printer/ PWA, ESP32-C3 reader
+Inputs: survey of `<checkout>\h2d-filament-scanner` (orchestrator, usage tracker, /printer/ PWA, ESP32-C3 reader
 firmware) and of kit's `bridge/` (models, status, ams, connection, mapping, slottest, calib3mf, loading, usage).
 
 ## 1. Purpose and success
@@ -145,7 +146,7 @@ stored as a test fixture with the serial and IP replaced.
   backup); `extra.prev_location` kept. Dry run first.
 - Usage calibration: the scanner's learned table (shift8, values 0/2/32768/33024) seeds the kit slot map, so
   deduction continues without a new calibration print.
-- Retire h2d-scanner (:8104), h2d-usage (:8106), h2d-remote (:8105) and the `/h2d/` + `/printer/` routes after the
+- Retire the old scanner service (:8104), h2d-usage (:8106), h2d-remote (:8105) and the `/h2d/` + `/printer/` routes after the
   reader is reflashed; keep `/h2d/fw/` for OTA until the new firmware is in.
 
 ## 8. Network, security, owner decisions

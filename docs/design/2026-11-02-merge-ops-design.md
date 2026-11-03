@@ -1,4 +1,5 @@
 # Merging filament-ops into filament-kit (sub-projects 2-4): design
+> Design document from the build of filament-kit (2026-11-02). It describes the plan as it was then; the code and the user guide are what is current.
 
 Date: 2026-11-02. Status: awaiting owner approval. Follows `2026-11-02-modules-design.md` (sub-project 1, merged).
 Inputs: survey notes `explore-ops-server.md` and `explore-presets.md` (side-session notes folder).
@@ -9,7 +10,7 @@ Everything the owner's filament-ops setup does today runs from filament-kit modu
 station PC and the desktop run one product, and filament-ops is archived.
 
 **Success:**
-- claude.ai's connector keeps working at the same URL (`https://mcp.example.com/filament/mcp`) with the same
+- claude.ai's connector keeps working at the same URL (`https://filament.example.com/filament/mcp`) with the same
   tools, now served by filament-kit.
 - The phone web intake app works at the same URL with the same flows.
 - Orca Slicer (SV08 MAX + H2D) and Bambu Studio (H2D) presets come from filament-kit's generator, installed by the

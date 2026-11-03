@@ -1,4 +1,5 @@
 # filament-kit — design
+> Design document from the build of filament-kit (2026-11-01). It describes the plan as it was then; the code and the user guide are what is current.
 
 Date: 2026-11-01. Status: approved in conversation, awaiting written-spec review.
 
@@ -60,9 +61,9 @@ docs/
 Separate repo `filament-library`: the spec library (section 6).
 
 Each server module has one job and a small interface; `api.py` and `cli.py` are thin layers over the rest.
-Code is ported from the owner's working system (`C:\CODING\filament-ops\vm\intake.py`,
+Code is ported from the owner's working system (`<checkout>\filament-ops\vm\intake.py`,
 `open_spool.py`, `gen.py`, `spec.py`, `inapp.py`, `install.py`, `fpsync.py`, and the H2D orchestrator and usage
-tracker in `C:\CODING\h2d-filament-scanner`), with owner-specific locations, host names and H2D-only paths
+tracker in `<checkout>\h2d-filament-scanner`), with owner-specific locations, host names and H2D-only paths
 replaced by configuration.
 
 ## 3. Server
@@ -163,7 +164,7 @@ On demand, started by the first viewer and stopped 45 s after the last. X1-serie
 re-encoding (segments on tmpfs), served at `/api/printers/{id}/camera/index.m3u8`. P1/A1-series (JPEG stream on
 TCP 6000): read frame by frame and served as MJPEG at `/api/printers/{id}/camera.mjpeg`. Both need the Bearer
 token; the printer's entry says which kind it has. The Access Code is never on a command line. Ported from the
-owner's H2D remote (`C:\CODING\h2d-filament-scanner\remote\remote.py`), proven on hardware.
+owner's H2D remote (`<checkout>\h2d-filament-scanner\remote\remote.py`), proven on hardware.
 
 ### Connection
 
@@ -301,6 +302,6 @@ Each step gets its own implementation plan.
 
 ## 10. Dev environment (this PC)
 
-JDK 21 (Temurin) at `G:\Android\jdk-21.0.13+9`; Android SDK at `G:\Android\Sdk` (platform-tools, build-tools
+JDK 21 (Temurin) at `<jdk folder>`; Android SDK at `<android sdk>` (platform-tools, build-tools
 37.0.0, platform android-37.0, emulator, system image android-37.0 google_apis x86_64). Emulator acceleration
 needs Windows Hypervisor Platform enabled (admin) and a reboot.

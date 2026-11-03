@@ -1,4 +1,5 @@
 # filament-kit for everyone: one-command install, module menu, optional AI, updater, XML data — design
+> Design document from the build of filament-kit (2026-11-02). It describes the plan as it was then; the code and the user guide are what is current.
 
 Date: 2026-11-02. Status: awaiting owner approval. Sub-project 6. Builds on `merge-ops` and the printers design
 (`2026-11-02-bambu-printers-design.md`, sub-project 5).
@@ -20,8 +21,8 @@ Owner decisions (2026-11-02, refined 22:38): the repo goes **public only when th
 ### 2.1 Public repo, with the owner's private data scrubbed
 - Move everything owner-specific out of the public tree into a private companion repo (`filament-kit-owner`,
   private): the filament-ops migration runbook with real hostnames/IPs, `migrate-ops` owner defaults (SV08 map,
-  Cereal boxes, tare hints, H2D slot service, mcp.example.com), the panel PANEL.md wiring notes if they name the
-  owner's setup, docs that cite 192.168.1.x, test fixtures carrying the owner's serials/IPs (replaced by fakes).
+  Cereal boxes, tare hints, H2D slot service, filament.example.com), the panel PANEL.md wiring notes if they name the
+  owner's setup, docs that cite 192.0.2.x, test fixtures carrying the owner's serials/IPs (replaced by fakes).
   The public `migrate-ops` stays generic (reads a bundle + an owner profile XML from the private repo).
 - History: the public repo starts from a squashed or filtered history (`git filter-repo`) with a pre-publish scan:
   gitleaks-style secret scan, plus a word list (owner IPs, hostnames, serials, email, VM names). Nothing is pushed
