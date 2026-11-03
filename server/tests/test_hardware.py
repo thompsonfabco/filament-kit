@@ -330,3 +330,17 @@ def test_model_say():
     assert hw.model("O1D").say == "h two d"
     assert all(m.say for m in hw.models)
     assert hw.model("zz").say
+
+
+@pytest.mark.parametrize("ext", [
+    '<external id="254" label="Ext-L" alias="Ext-R"/><external id="255" label="Ext-R"/>',   # another holder's label
+    '<external id="254" label="Ext-L" alias="Ext-L"/><external id="255" label="Ext-R"/>',   # its own label
+    '<external id="254" label="Ext-L" alias="ext-r"/><external id="255" label="Ext-R"/>',   # case does not matter
+])
+def test_external_alias_must_not_name_a_label_of_the_model(_etc, ext):
+    """P3 (P2 review minor): an alias that is a current label would send that holder's spools and slot-map keys
+    to the wrong holder (or nowhere): the file is refused."""
+    _override(_etc, f'<models><model code="C12" name="P1S Bad">{ext}</model></models>')
+    hw = hardware.load()
+    assert hw.model("C12").name == "P1S" and hw.errors
+    assert "alias" in " ".join(hw.errors).lower()

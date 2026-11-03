@@ -630,6 +630,11 @@ def _build(sections: dict[str, dict], where: str) -> "Hardware":
             ext_ids.add(xid)
             alias = (x.get("alias") or "").strip() or None
             externals.append(External(xid, x.get("label").strip(), (x.get("say") or x.get("label")).strip(), alias))
+        ext_labels = {x.label.upper() for x in externals}
+        for x in externals:
+            if x.alias and x.alias.upper() in ext_labels:
+                errors.append(f"{tag}: external {x.id} alias {x.alias!r} is a current external label of the model "
+                              f"(an alias names an older label only)")
         camera = el.get("camera", "none")
         cmax = el.get("chamber-max")
         models.append(ModelInfo(

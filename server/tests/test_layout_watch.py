@@ -246,3 +246,61 @@ def test_old_ext_key_is_not_missing_on_the_h2d(rig):
     w("S1", rep, False)
     m = ams.load_map("S1")
     assert m.stale is False and "Ext-L" in m.slots
+
+
+# ---------------------------------------------------------------- suspect map (P3): re-map when idle
+
+
+def test_suspect_map_remaps_when_idle_without_a_layout_change(rig):
+    """Usage marks the map suspect (two prints disagreed with it) and asks for a re-map: the same watcher runs it
+    once the printer is idle, no layout change needed."""
+    w, mgr, mapper, clock = rig
+    mapped()
+    w("S1", report(), False)
+    clock.t += 100
+    w("S1", report(), False)
+    assert mapper.started == []
+    m = ams.load_map("S1")
+    m.suspect, m.observe = True, True
+    ams.save_map("S1", m)
+    mapping.request_remap("S1")
+    w("S1", report(state="RUNNING"), False)
+    assert mapper.started == []                                 # busy: wait
+    w("S1", report(state="FINISH"), False)
+    assert mapper.started == [("S1", True)]
+    clock.t += 5
+    w("S1", report(), False)
+    assert len(mapper.started) == 1                             # one attempt per retry window
+
+
+def test_suspect_map_found_at_start_is_remapped(rig):
+    w, mgr, mapper, clock = rig
+    m = mapped()
+    m.suspect = True
+    ams.save_map("S1", m)
+    w("S1", report(), True)                                     # the first report after a (re)start
+    clock.t += 31
+    w("S1", report(), False)
+    assert mapper.started == [("S1", True)]
+    assert ams.load_map("S1").stale is False                    # suspect is not a layout change
+
+
+def test_remap_request_without_a_suspect_map_does_nothing(rig):
+    w, mgr, mapper, clock = rig
+    mapped()
+    w("S1", report(), False)
+    mapping.request_remap("S1")
+    clock.t += 100
+    w("S1", report(), False)
+    assert mapper.started == []
+
+
+def test_view_shows_scheme_and_suspect(tmp_path, monkeypatch):
+    for name in ("etc", "state", "opt"):
+        (tmp_path / name).mkdir()
+        monkeypatch.setenv(f"FK_{name.upper()}", str(tmp_path / name))
+    m = mapped()
+    m.scheme, m.suspect = "shift8", True
+    ams.save_map("S1", m)
+    v = mapping.Mapper(FakeManager()).view("S1")
+    assert v["scheme"] == "shift8" and v["suspect"] is True
