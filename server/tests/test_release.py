@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -487,3 +488,56 @@ def test_get_sh_syntax_and_no_tracing():
     assert "set -x" not in shell and "FK_GITHUB_TOKEN" not in shell.split("set -euo pipefail", 1)[1]
     assert shell.rstrip().endswith('fk_main "$@"')
     assert "</dev/tty" in shell and "--keep /opt/filament-kit/releases" in shell
+
+
+# ---------------------------------------------------------------- the real tarball
+
+def _git_bash():
+    found = shutil.which("bash")
+    # Windows' System32 bash.exe is WSL, which cannot take a Windows path; Git Bash can.
+    return None if found and "system32" in found.lower() else found
+
+
+def _wheel_builder() -> bool:
+    if shutil.which("uv") or shutil.which("uv.cmd"):
+        return True
+    return subprocess.run([sys.executable, "-c", "import build"], capture_output=True).returncode == 0
+
+
+@pytest.mark.skipif(not _git_bash(), reason="needs bash (Git Bash on Windows)")
+@pytest.mark.skipif(not _wheel_builder(), reason="needs uv or python -m build to build the wheel")
+def test_make_release_tarball_passes_extract_and_the_sums_check(tmp_path, key):
+    """tools/make_release.sh's real tarball (no Android build) goes through the same checks as a download:
+    SHA256SUMS signed, verify_dir, then release.extract. Catches layout drift between the builder and the extractor."""
+    def posix(p: Path) -> str:
+        r = subprocess.run([_git_bash(), "-c", 'cygpath -u "$1" 2>/dev/null || printf %s "$1"', "_", str(p)],
+                           capture_output=True, text=True)
+        return r.stdout.strip() or p.as_posix()
+    dist = tmp_path / "dist"
+    env = {**os.environ, "FK_DIST": posix(dist), "FK_NO_APP": "1", "FK_LIBRARY_SRC": posix(tmp_path / "no-library")}
+    r = subprocess.run([_git_bash(), str(ROOT / "tools" / "make_release.sh")], cwd=ROOT, env=env,
+                       stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=600)
+    assert r.returncode == 0, r.stdout[-2000:] + r.stderr[-2000:]
+    version = re.search(r'^__version__ = "(.*)"', (ROOT / "server/filament_kit/__init__.py").read_text(), re.M)[1]
+    tarball = dist / release.tarball_name(version)
+    hw = dist / "bambu_hardware.xml"
+    assert tarball.is_file() and hw.is_file()
+    assert not (dist / "stage").exists()
+    sums = "".join(f"{hashlib.sha256(f.read_bytes()).hexdigest()}  {f.name}\n" for f in (tarball, hw)).encode()
+    (dist / release.SUMS).write_bytes(sums)
+    (dist / release.SIG).write_bytes(base64.b64encode(key.sign(sums)) + b"\n")
+    assert release.verify_dir(dist, version, _pub(key)) == tarball
+    root = release.extract(tarball, version, tmp_path / "x")
+    assert root == tmp_path / "x" / f"filament-kit-{version}"
+    assert len(list(root.glob(f"filament_kit-{version}-*.whl"))) == 1
+    for rel in ("install.sh", "uninstall.sh", "install/backup.sh", "install/filament-kit-cli.sh",
+                "install/spoolman.sh", "install/export_ops.sh", "install/avahi/filament-kit.service",
+                "install/remote/route.template", "install/remote/mcp-proxy.conf", "install/panel/VERSION",
+                "install/panel/intake-panel.bin"):
+        assert (root / rel).is_file(), rel
+    units = {p.name for p in (ROOT / "install/systemd").iterdir()}
+    assert {p.name for p in (root / "install/systemd").iterdir()} == units
+    assert b"\r\n" not in (root / "install.sh").read_bytes()
+    assert not (root / "app").exists()
+    from filament_kit.bridge import hardware
+    assert hw.read_bytes() == hardware.BUNDLED.read_bytes() and hardware.validate(hw.read_bytes()) == []

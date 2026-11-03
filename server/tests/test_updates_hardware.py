@@ -135,7 +135,7 @@ def test_release_build_signs_and_publishes_the_hardware_file():
     from test_updates import ROOT
     make = (ROOT / "tools/make_release.sh").read_text(encoding="utf-8")
     wf = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
-    assert "server/filament_kit/bridge/bambu_hardware.xml" in make and "dist/bambu_hardware.xml" in make
+    assert 'cp server/filament_kit/bridge/bambu_hardware.xml "$dist/bambu_hardware.xml"' in make
     sums = re.search(r"sha256sum (.*?)> SHA256SUMS", wf, re.S).group(1)
     assert "bambu_hardware.xml" in sums
     assert wf.count("dist/bambu_hardware.xml") >= 2           # uploaded by the build job and published
