@@ -42,6 +42,7 @@ _COMPANION = {
     "filament-kit-build.path": "filament-kit-build.service",
     "filament-kit-library.timer": "filament-kit-library.service",
     "filament-kit-backup.timer": "filament-kit-backup.service",
+    "filament-kit-update.timer": "filament-kit-update.service",
 }
 
 
@@ -146,7 +147,7 @@ def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) ->
     if "server" in on:
         acts += [A("install_unit", "filament-kit.service"),
                  A("server_setup", "key" if "ai_intake" in on else "")]
-    for name in ("presets", "library", "backup"):
+    for name in ("presets", "library", "backup", "updates"):
         if name in on:
             for unit in MODULES[name].units:
                 acts += [A("install_unit", u) for u in _unit_files(unit)]
@@ -190,7 +191,7 @@ def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) ->
     if "server" in on:
         acts.append(A("ensure_fields"))
         acts.append(A("enable", "filament-kit.service"))
-    for name in ("presets", "library", "backup"):
+    for name in ("presets", "library", "backup", "updates"):
         if name in on:
             acts += [A("enable", u) for u in MODULES[name].units]
     if "web" in on:
