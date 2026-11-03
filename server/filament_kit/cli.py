@@ -1102,51 +1102,98 @@ def _ask_station_server() -> str | None:
         return addr
 
 
+def _station_link(new: dict, on) -> None:
+    if not {"server", "station"} <= set(on):
+        modules.drop_local_station_link(new)
+
+
+def _apply_selection(cfg: dict, on, *, ask=None) -> str | None:
+    """Set the module set of `cfg` (in place) to `on` with the station link rules; asks for settings the modules
+    need. Returns an error text or None."""
+    old = modules.enabled(cfg)
+    new = _with_modules(cfg, on)
+    _station_link(new, on)
+    if "station" in on and "station" not in old and "server" in on:
+        _link_station(new)
+    got = modules.collect_settings(on, new, ask or _ask)
+    if got is None:
+        return "a setting was left blank; unchanged"
+    for key, value in got.items():
+        modules.set_setting(new, key, value)
+    try:
+        modules.validate(new)
+    except modules.ModuleError as e:
+        return str(e)
+    cfg.clear()
+    cfg.update(new)
+    return None
+
+
 def _modules_menu(cfg: dict) -> None:
-    names = list(modules.MODULES)
-    while True:
-        on = modules.enabled(cfg)
-        print(f"\nModules (mode: {modules.mode_of(on)})")
-        for i, n in enumerate(names, 1):
-            m = modules.MODULES[n]
-            print(f"  {i}) {'on ' if n in on else 'off'}  {m.title}: {m.description}")
-        print("  m) choose mode\n  0) back")
-        choice = _ask("> ")
-        if choice is None or choice.strip() == "0":
-            return
-        choice = choice.strip().lower()
-        if choice == "m":
-            modes = list(modules.MODES)
-            for i, m in enumerate(modes, 1):
-                print(f"  {i}) {m}")
-            pick = _ask_int("Mode: ", 1)
-            if pick is None or pick > len(modes):
-                print("Unknown mode.")
+    """One checklist: numbers toggle (needs go on too, dependents are listed), a/s/t presets, Enter applies."""
+    on = modules.enabled(cfg)
+    print()
+    print(f"Modules (mode: {modules.mode_of(on)})")
+    chosen = modules.run_checklist(on, _ask)
+    if chosen is None or chosen == on:
+        print("Unchanged.")
+        return
+    err = _apply_selection(cfg, chosen)
+    if err:
+        print(f"error: {err}")
+
+
+def _config_has_content() -> bool:
+    """False for a first install: no config file, or one with nothing in it (as set_mode counts it)."""
+    f = config.paths().etc / "config.json"
+    try:
+        return bool(json.loads(f.read_text(encoding="utf-8")))
+    except (OSError, ValueError):
+        return False
+
+
+def cmd_modules_menu(raw: bool) -> int:
+    """The checklist on its own. --raw: prompts on stderr; stdout gets the chosen modules as a comma list, then
+    one `set <key>=<value>` line per setting asked for (install.sh custom mode). Changes nothing."""
+    cfg = config.load()
+    on = modules.enabled(cfg)
+    if not raw:
+        _modules_menu(cfg)
+        return 0
+    if not _config_has_content():
+        on = modules.MODES["server"]            # a first install: AI intake and the library start off
+    out = sys.stdout
+    sys.stdout = sys.stderr                     # prompts and the checklist go to the terminal, not the capture
+    try:
+        while True:
+            chosen = modules.run_checklist(on, _ask)
+            if chosen is None:
+                return 1
+            trial = _with_modules(cfg, chosen)
+            _station_link(trial, chosen)
+            if {"server", "station"} <= set(chosen):
+                _link_station(trial)
+            got = modules.collect_settings(chosen, trial, _ask)
+            if got is None:
+                print("A setting was left blank; change the selection (q cancels).")
+                on = chosen
                 continue
-            mode = modes[pick - 1]
-            new = modules.set_mode(cfg, mode)
-            if mode == "station":
-                addr = _ask_station_server()
-                if addr is None:
-                    print("Unchanged.")
-                    continue
-                new["station"]["allow"] = [addr]
+            for key, value in got.items():
+                modules.set_setting(trial, key, value)
             try:
-                modules.validate(new)
+                modules.validate(trial)
             except modules.ModuleError as e:
                 print(f"error: {e}")
+                print("fix: change the selection and press Enter again (q cancels)")
+                on = chosen
                 continue
-            cfg.clear()
-            cfg.update(new)
-        elif choice.isdigit() and 1 <= int(choice) <= len(names):
-            name = names[int(choice) - 1]
-            err = _change_module(cfg, name, name not in on,
-                                 confirm=lambda t: (_ask(t) or "").strip().lower() in ("y", "yes"),
-                                 ask_address=_ask_station_server)
-            if err:
-                print(f"error: {err}")
-        else:
-            print("Unknown choice.")
+            break
+    finally:
+        sys.stdout = out
+    print(",".join(n for n in modules.MODULES if n in chosen))
+    for key, value in got.items():
+        print(f"set {key}={value}")
+    return 0
 
 
 # ---------- web (the MCP endpoint and phone web app) ----------
@@ -1316,6 +1363,8 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     mdsub = md.add_subparsers(dest="modules_cmd", required=True)
     mdsub.add_parser("apply", help="install, start and stop what config.json's modules say (root)")
     mdsub.add_parser("list", help="show each module on/off and the mode")
+    mm = mdsub.add_parser("menu", help="the module checklist (numbers toggle, a/s/t presets, Enter applies)")
+    mm.add_argument("--raw", action="store_true", help="print the chosen modules as a comma list; change nothing")
     ms = mdsub.add_parser("set", help="switch to an install mode and apply (root)")
     ms.add_argument("mode", choices=list(modules.MODES))
     ms.add_argument("--server", help="the kit server's name or IP (station mode)")
@@ -1405,6 +1454,8 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
             return cmd_modules_units()
         if args.modules_cmd == "list":
             return cmd_modules_list()
+        if args.modules_cmd == "menu":
+            return cmd_modules_menu(args.raw)
         if args.modules_cmd == "set":
             return cmd_modules_set(args.mode, args.server)
         if args.modules_cmd in ("enable", "disable"):

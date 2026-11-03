@@ -86,14 +86,14 @@ for the mode on the first install:
 | `server` (1, the default) | Spoolman, the server, printers, presets, backup (AI label reading and the library are switched on when you want them) | One computer runs the kit. |
 | `station` (2) | Only the intake station (USB scale and NFC reader) | The station is a second computer and the server runs on another one. It asks for the **server's address**. |
 | `all-in-one` (3) | Everything, station included | The scale and reader are plugged into the server computer. |
-| `custom` (4) | The modules you pick one by one, at the installer's question or later with `sudo filament-kit modules enable/disable` | You know which parts you want. |
+| `custom` (4) | One checklist of modules: type a number to switch one, and what it needs goes on too (what depends on it is listed when you switch it off). The same checklist is in `sudo filament-kit config` > Modules | You know which parts you want. |
 
 AI label reading (the `ai_intake` module) is in no mode: the installer asks about it on the first install, and
 `sudo filament-kit modules enable ai_intake` turns it on later. Without it, spools are added by hand in the phone
 app and the phone web app. A station-only computer needs no API key, certificate or Spoolman.
 
 You can also give the mode on the command line, so the installer asks no mode question. `--mode` takes
-`server`, `station` or `all-in-one`; for `custom`, answer 4 at the question or switch modules afterwards with
+`server`, `station` or `all-in-one`; for `custom`, answer 4 at the question, give `--modules spoolman,server,printers` (what they need is added; for web, orders or a station add the setting they need with `--set web.public_url=https://...`, `--set orders.file=PATH` or `--set station.allow=ADDRESS`), or switch modules afterwards with
 `sudo filament-kit modules enable <module>` and `sudo filament-kit modules disable <module>`:
 
 ```
