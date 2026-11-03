@@ -75,7 +75,7 @@ def build_app(cfg: dict | None = None, *, sm: Spoolman | None = None, claude=Non
 
     routes = [*auth.login_routes(store, public, passphrase_file(), lan_cidrs=lan, lockout=lockout),
               *IntakeApp(tools, store=store, lockout=lockout, public_url=public, lan_cidrs=lan,
-                         passphrase_file=passphrase_file(), claude=claude).routes()]
+                         passphrase_file=passphrase_file(), claude=claude, kit_api=kit_api).routes()]
     mcp.custom_route("/health", methods=["GET"])(health)
     for r in routes:
         mcp.custom_route(r.path, methods=sorted(r.methods - {"HEAD"} if r.methods else ["GET"]))(r.endpoint)

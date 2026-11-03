@@ -522,7 +522,14 @@ The `web` module runs one more service, `filament-kit-web`, on this computer onl
   `open_spool`, `preset_status`, `list_lines`, `find_parents`, `add_filaments_to_line`, `add_line`, `generate`,
   `printer_slots`, `printer_set_slot`);
 - a **phone web app** at `<public address>/intake`, in any phone browser (no install): add spools by hand (or
-  from label photos, with `ai_intake`), open a tapped spool, and see the presets.
+  from label photos, with `ai_intake`), open a tapped spool, and see the presets. With the `printers` module on it
+  also has a **Printers** tab (replaces the old `/printer/` page): a printer picker, live status, the camera,
+  pause / resume / stop (stop asks first), the chamber light, the filament in each AMS unit, the usage log with
+  undo, and a re-map button. The camera is a picture stream on printers that have one and an HLS video on the
+  rest (HLS plays in Safari on iPhone and Mac). The light button follows the printer's reported chamber light;
+  the kit switches both light nodes when a printer has two, as the old page did. Print alerts to the phone
+  (Web Push) are off; `"web": {"push": true}` turns them on, needs `pip install 'filament-kit[push]'` and lets the
+  web service reach the browsers' push services on the internet, which the kit does not open for you.
 
 Both use one passphrase. Adding spools does a dry run first in both, as in the Android app.
 
