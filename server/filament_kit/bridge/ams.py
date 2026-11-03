@@ -13,6 +13,7 @@ proven), and `learned` (numbers a print taught: `usage`, exactly one loaded slot
 from __future__ import annotations
 
 import json
+import threading
 import time
 from dataclasses import dataclass, field
 
@@ -163,11 +164,30 @@ def load_map(serial: str) -> SlotMap:
                    suspect=bool(d.get('suspect')))
 
 
+# Every slot-map save in this process (mapping job, layout watch, usage) runs under this lock, so a
+# compare-and-save (`save_map_if`) cannot interleave with another save. `updated` only grows, so it identifies the
+# version a reader saw.
+_SAVE_LOCK = threading.RLock()
+_last_updated = 0.0
+
+
 def save_map(serial: str, m: SlotMap) -> None:
-    f = _file(serial)
-    make_state_dir(f.parent)
-    m.updated = time.time()
-    data = {'slots': m.slots, 'calibrated': m.calibrated, 'observe': m.observe, 'updated': m.updated,
-            'fingerprint': m.fingerprint, 'stale': m.stale, 'scheme': m.scheme, 'learned': m.learned,
-            'mismatch_streak': m.mismatch_streak, 'suspect': m.suspect}
-    _write_atomic(f, json.dumps(data, indent=2).encode("utf-8"), 0o600, state_owned=True)
+    global _last_updated
+    with _SAVE_LOCK:
+        f = _file(serial)
+        make_state_dir(f.parent)
+        m.updated = _last_updated = max(time.time(), _last_updated + 0.001)
+        data = {'slots': m.slots, 'calibrated': m.calibrated, 'observe': m.observe, 'updated': m.updated,
+                'fingerprint': m.fingerprint, 'stale': m.stale, 'scheme': m.scheme, 'learned': m.learned,
+                'mismatch_streak': m.mismatch_streak, 'suspect': m.suspect}
+        _write_atomic(f, json.dumps(data, indent=2).encode("utf-8"), 0o600, state_owned=True)
+
+
+def save_map_if(serial: str, m: SlotMap, stamp) -> bool:
+    """Save `m` only if the saved map is still the version read (its `updated` == `stamp`); False (nothing
+    written) when another save came in between."""
+    with _SAVE_LOCK:
+        if load_map(serial).updated != stamp:
+            return False
+        save_map(serial, m)
+        return True

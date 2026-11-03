@@ -411,17 +411,23 @@ def test_inconsistent_calibration_saves_no_scheme(stubs):
     assert ams.load_map(SERIAL).scheme is None
 
 
-def test_suspect_remap_step_says_why(stubs):
-    ams.save_map(SERIAL, ams.SlotMap(slots={"A1": {"ams_id": 0, "tray_id": 0, "global_id": 0}}, calibrated=True,
-                                     suspect=True))
-    gate = threading.Event()
-    stubs["gate"] = gate
+def test_suspect_remap_step_says_why(stubs, monkeypatch):
+    """An automatic job on a suspect (not stale) map starts with the suspect step; on a stale map the layout step."""
+    first = []
+    real = mapping._save_status
+
+    def save_status(serial, job):
+        if not first or first[-1][0] != job.id:
+            first.append((job.id, job.step))
+        real(serial, job)
+    monkeypatch.setattr(mapping, "_save_status", save_status)
+    m = ams.SlotMap(slots={"A1": {"ams_id": 0, "tray_id": 0, "global_id": 0}}, calibrated=True, suspect=True)
+    ams.save_map(SERIAL, m)
     mp = mapping.Mapper(FakeManager())
     mp.start(SERIAL, auto=True)
-    try:
-        v = mp.view(SERIAL)
-        assert v["remapping"] is True
-    finally:
-        gate.set()
     wait_done(mp)
-    assert mapping.REMAP_SUSPECT_STEP.startswith("Re-mapping")
+    m.stale = True
+    ams.save_map(SERIAL, m)
+    mp.start(SERIAL, auto=True)
+    wait_done(mp)
+    assert [step for _, step in first] == [mapping.REMAP_SUSPECT_STEP, mapping.REMAP_STEP]

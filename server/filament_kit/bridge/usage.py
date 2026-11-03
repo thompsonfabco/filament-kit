@@ -380,9 +380,9 @@ def _same_type(a, b) -> bool:
 
 
 def _holds(slot: dict | None, f: dict) -> bool:
-    """The slot (at the print's start) held the sliced filament: same preset, or (no preset sliced, or another
-    one) the same type."""
-    if not slot or not slot.get('present'):
+    """The slot (at the print's start) held the sliced filament, the scanner's rule: same preset, or (no preset
+    sliced, or another one) the same type. The presence bit is not asked: a slot reporting a type counts."""
+    if not slot:
         return False
     return bool(f.get('idx')) and slot.get('idx') == f.get('idx') or _same_type(slot.get('type'), f.get('type'))
 
@@ -451,10 +451,8 @@ def _save_map(serial: str, smap: ams.SlotMap, stamp) -> None:
     """Save what a print taught the map, unless the map changed since it was read (a mapping job saved a new
     one: that one wins)."""
     try:
-        if ams.load_map(serial).updated != stamp:
+        if not ams.save_map_if(serial, smap, stamp):
             log.info("usage: printer %s: the slot map changed meanwhile; this print's learning is dropped", serial)
-            return
-        ams.save_map(serial, smap)
     except OSError:
         log.exception("usage: printer %s: cannot save the slot map", serial)
 

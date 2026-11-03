@@ -309,3 +309,19 @@ def test_get_version_while_disconnected_does_not_use_the_rate_limit_slot(monkeyp
         assert asks() == 2
     finally:
         m.stop()
+
+
+@pytest.mark.parametrize("state", ["wrong_code", "offline", "cert_changed"])
+def test_no_pushall_or_get_version_while_not_connected(state):
+    """P3 fix round 1: nothing is published to a printer that is not connected (a wrong code, offline...)."""
+    m, printer, c = make_rig(big_report(), modules=[("n3f/0", "N3F05")])
+    try:
+        conn = m._conns[SERIAL]
+        conn._state = state
+        conn._version_at = None
+        before = len(c.published)
+        conn.request_pushall()
+        conn.request_version()
+        assert len(c.published) == before
+    finally:
+        m.stop()

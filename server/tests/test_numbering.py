@@ -1,6 +1,6 @@
 """P3, review focus 1: a printer with 16 AMS units, 8 AMS HT units and two external holders: every slot's number
-under the model's schemes decodes back to that slot's label in usage, and a calibration over all of them proves
-the printer's scheme with one job."""
+under the model's schemes decodes back to that slot's label in usage. (The calibration over all 74 slots, one job
+proving shift8, is `test_calib3mf.test_16_units_8_ht_and_two_externals_proved_by_one_job`.)"""
 import pytest
 
 from filament_kit.bridge import ams, calib3mf, hardware, layout, registry, usage

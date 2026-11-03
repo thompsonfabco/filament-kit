@@ -165,13 +165,22 @@ class FakePrinter:
 
     def _mapping(self, pr) -> list:
         """The `mapping` the printer reports for a job: the sent `ams_mapping`, or with `native` set the printer's
-        own numbers for the `ams_mapping2` slots (externals as their id)."""
-        if self.native and isinstance(pr.get('ams_mapping2'), list):
-            from filament_kit.bridge import hardware
-            sch = hardware.load().scheme(self.native)
-            return [x['ams_id'] if x['ams_id'] >= 254 else sch.encode(x['ams_id'], x['slot_id'])
-                    for x in pr['ams_mapping2']]
-        return list(pr.get('ams_mapping') or [])
+        own numbers for the slots `ams_mapping` names (read as legacy numbers, as Bambu Studio sends them;
+        `ams_mapping2`, when sent, must name the same slots; externals stay their id)."""
+        sent = list(pr.get('ams_mapping') or [])
+        if not self.native:
+            return sent
+        from filament_kit.bridge import hardware
+        hw = hardware.load()
+        legacy, native = hw.scheme('legacy'), hw.scheme(self.native)
+        m2 = pr.get('ams_mapping2')
+        out = []
+        for i, n in enumerate(sent):
+            slot = (n, 0) if n >= 254 else legacy.decode(n)
+            if isinstance(m2, list):
+                assert (m2[i]['ams_id'], m2[i]['slot_id']) == slot, (m2[i], slot)
+            out.append(n if n >= 254 else native.encode(*slot))
+        return out
 
     def _apply(self, key, pr) -> dict | None:
         ams_id, tray_id = key
