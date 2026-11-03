@@ -33,7 +33,7 @@ from .. import config, intake, inventory, modules, tagsources
 from ..intake import CapReached, ReadCap, ReadError
 from ..spoolman import SpoolmanError
 from ..station_client import StationClient
-from . import auth, mcp_tools
+from . import auth, mcp_tools, printers_app
 from .errors import Problem
 from .mcp_tools import SpoolItem, Tools
 
@@ -108,22 +108,27 @@ def _text(b: dict, key: str, *, required: bool = True) -> str:
 
 class IntakeApp:
     def __init__(self, tools: Tools, *, store: auth.Store, lockout: auth.Lockout, public_url: str,
-                 lan_cidrs, passphrase_file: Path | str, claude=None):
+                 lan_cidrs, passphrase_file: Path | str, claude=None, kit_api=None):
         self.tools, self.store, self.lockout, self.claude = tools, store, lockout, claude
         self.passphrase_file = passphrase_file
         self.nets = auth.parse_lan(lan_cidrs)
         self.origin = auth._origin(public_url)
         self.base = urlparse(public_url).path.rstrip("/") + "/intake"  # as the browser sees it (nginx strips it)
-        self.static = {n: (STATIC / n).read_bytes() for n in ("app.js", "app.css")}
+        self.static = {n: (STATIC / n).read_bytes() for n in ("app.js", "app.css", "printers.js")}
         self.icon = icon_png()
         self.tag_cache: dict = {}
         self.station: list = [None, None]  # [url, StationClient]
+        cfg = tools.cfg()
+        self.printers = None        # the Printers tab: only with the printers module on
+        if "printers" in modules.enabled(cfg):
+            self.printers = printers_app.PrintersApp(self, kit_api, push_on=(cfg.get("web") or {}).get("push") is True)
 
     def routes(self) -> list[Route]:
         return [Route(p, fn, methods=m) for p, fn, m in (
             ("/intake", self.page, ["GET"]), ("/intake/login", self.login, ["POST"]),
             ("/intake/logout", self.logout, ["POST"]), ("/intake/app.js", self.asset, ["GET"]),
-            ("/intake/app.css", self.asset, ["GET"]), ("/intake/icon.png", self.icon_route, ["GET"]),
+            ("/intake/app.css", self.asset, ["GET"]), ("/intake/printers.js", self.asset, ["GET"]),
+            ("/intake/icon.png", self.icon_route, ["GET"]),
             ("/intake/manifest.webmanifest", self.manifest, ["GET"]),
             ("/intake/api/read", self.api(self.read), ["POST"]), ("/intake/api/add", self.api(self.add), ["POST"]),
             ("/intake/api/tag", self.api(self.tag), ["GET"]), ("/intake/api/find", self.api(self.find), ["GET"]),
@@ -134,7 +139,8 @@ class IntakeApp:
             ("/intake/api/parents", self.api(self.parents), ["GET"]),
             ("/intake/api/line_add", self.api(self.line_add), ["POST"]),
             ("/intake/api/line_new", self.api(self.line_new), ["POST"]),
-            ("/intake/api/generate", self.api(self.generate), ["POST"]))]
+            ("/intake/api/generate", self.api(self.generate), ["POST"]))] + (
+                self.printers.routes() if self.printers else [])
 
     # ---------- session ----------
     def _lan(self, request: Request) -> bool:
@@ -152,7 +158,8 @@ class IntakeApp:
             "<meta name=theme-color content='#181c24'><title>Spool intake</title>"
             f"<link rel=stylesheet href='{b}/app.css'><link rel=apple-touch-icon href='{b}/icon.png'>"
             f"<link rel=manifest href='{b}/manifest.webmanifest'>"
-            + body + (f"<script src='{b}/app.js'></script>" if signed_in else ""),
+            + body + (("" if not self.printers else f"<script src='{b}/printers.js'></script>")
+                      + f"<script src='{b}/app.js'></script>" if signed_in else ""),
             status_code=status, headers=HEADERS)
 
     def _shell(self) -> str:
@@ -161,7 +168,9 @@ class IntakeApp:
         data = {"base": self.base, "locations": json.dumps(cfg["locations"]),
                 "sealed": pl.get("sealed_location") or "", "auto": mcp_tools._placement_text(cfg),
                 "picks": json.dumps([pl.get("pla_location") or ""]),
-                "ai": "1" if "ai_intake" in modules.enabled(cfg) else "0"}  # label photos only with ai_intake
+                "ai": "1" if "ai_intake" in modules.enabled(cfg) else "0",
+                "printers": "1" if self.printers else "0",
+                "push": "1" if self.printers and self.printers.push_on else "0"}  # label photos only with ai_intake
         attrs = " ".join(f"data-{k}='{html.escape(v, quote=True)}'" for k, v in data.items())
         return f"<body {attrs}><main id=app></main></body>"
 
@@ -230,7 +239,10 @@ class IntakeApp:
             if request.method == "POST" and request.headers.get("origin") != self.origin:
                 return JSONResponse({"error": "bad origin"}, 403)
             try:
-                return JSONResponse(await fn(request), headers={"Cache-Control": "no-store"})
+                res = await fn(request)
+                if isinstance(res, Response):      # a stream or a binary (the Printers tab's camera and events)
+                    return res
+                return JSONResponse(res, headers={"Cache-Control": "no-store"})
             except CapReached as e:
                 return JSONResponse({"error": str(e)}, 429)
             except ReadError as e:

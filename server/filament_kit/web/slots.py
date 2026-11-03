@@ -36,7 +36,9 @@ OPS_NOTE = "spool = the Spoolman spool assigned by an NFC tap or printer_set_slo
 
 
 class SlotError(Problem):
-    """A refusal to show the caller (bad slot, no backend, a service that cannot be reached)."""
+    """A refusal to show the caller (bad slot, no backend, a service that cannot be reached). `status` is the HTTP
+    status the kit server answered with, None when it did not answer."""
+    status: int | None = None
 
 
 # ---------- ids (port of ops h2d_tools.py) ----------
@@ -224,10 +226,36 @@ class KitApi:
             if e.code == 401:
                 self._refuse()
                 raise SlotError(UNPAIRED) from None
-            raise SlotError((err.get("message") if isinstance(err, dict) else None)
-                            or f"the kit server answered {e.code}") from None
+            raise self._error(e.code, (err.get("message") if isinstance(err, dict) else None)
+                              or f"the kit server answered {e.code}") from None
         except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError) as e:
             raise SlotError(f"the kit server ({self.base}) is not reachable: {e}") from None
+
+    @staticmethod
+    def _error(status: int, text: str) -> SlotError:
+        e = SlotError(text)
+        e.status = status
+        return e
+
+    def raw(self, path: str, timeout: float = 30):
+        """GET a binary or streaming kit route (the camera): (status, content type, open response). The caller
+        reads it and closes it; closing ends the kit hub's viewer."""
+        req = urllib.request.Request(self.base + path, headers={"Authorization": f"Bearer {self._token()}"})
+        try:
+            r = urllib.request.urlopen(req, timeout=timeout, context=self._ctx())
+        except urllib.error.HTTPError as e:
+            try:
+                err = json.loads(e.read() or b"{}")
+            except ValueError:
+                err = {}
+            if e.code == 401:
+                self._refuse()
+                raise SlotError(UNPAIRED) from None
+            raise self._error(e.code, (err.get("message") if isinstance(err, dict) else None)
+                              or f"the kit server answered {e.code}") from None
+        except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError) as e:
+            raise SlotError(f"the kit server ({self.base}) is not reachable: {e}") from None
+        return r.status, r.headers.get_content_type(), r
 
     def get(self, path: str):
         return self._call("GET", path)
