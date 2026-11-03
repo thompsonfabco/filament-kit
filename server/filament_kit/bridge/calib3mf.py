@@ -215,6 +215,7 @@ def build(slots: list[str]) -> bytes:
         for name, data in files.items():
             info = zipfile.ZipInfo(name, _ZIP_TIME)
             info.compress_type = zipfile.ZIP_DEFLATED
+            info.create_system = 0      # the same bytes on Windows and Linux
             z.writestr(info, data)
     return buf.getvalue()
 

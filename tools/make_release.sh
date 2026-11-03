@@ -22,9 +22,10 @@ rm -rf "$stage_root"
 mkdir -p "$stage/install/systemd" "$stage/install/avahi" "$stage/install/remote" "$stage/install/panel"
 
 # ---------- wheel ----------
+case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) windows=1 ;; *) windows=0 ;; esac
 if command -v uv >/dev/null 2>&1; then
     uv build --wheel server --out-dir "$stage"
-elif command -v uv.cmd >/dev/null 2>&1; then
+elif [ "$windows" = 1 ] && command -v uv.cmd >/dev/null 2>&1; then   # Git Bash; WSL sees uv.cmd but cannot run it
     uv.cmd build --wheel server --out-dir "$stage"
 else
     python3 -m build --wheel --outdir "$stage" server
