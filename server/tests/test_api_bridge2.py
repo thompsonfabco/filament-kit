@@ -282,6 +282,7 @@ def test_load_busy_offline_cert_changed(client, mgr, monkeypatch):
     err(client.post(url, json={"spool_id": 1, "dry_run": False}), 409, "slot_in_use")
     assert mgr.writes == []
     mgr.report["ams"]["tray_now"] = "1"                  # A2 feeds it: A1 is free
+    mgr.report["mapping"] = [1]                          # the job uses A2 only (dual nozzle, no snow: Ruling BM)
     assert client.post(url, json={"spool_id": 1, "dry_run": True}).status_code == 200
     mgr.report["gcode_state"] = "IDLE"
     mgr.st = "offline"

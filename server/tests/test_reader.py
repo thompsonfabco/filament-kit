@@ -524,7 +524,7 @@ def test_queue_drops_a_final_refusal_and_waits_quietly_on_a_passing_one(kit, cap
         for _ in range(6):
             clock.t += 5
             q.tick()
-    assert len(kit.loads) == 6 and set(q.jobs()) == {("SER1", "A1")}
+    assert len(kit.loads) == 3 and set(q.jobs()) == {("SER1", "A1")}       # backed off: a send every 10 s
     assert q.jobs()[("SER1", "A1")].tries == 0                 # a passing refusal is not a try
     assert sum("printer_busy" in r.getMessage() for r in caplog.records) == 1   # logged once, not every tick
     kit.load_error = slots.SlotError("unreachable", code="unreachable")
@@ -533,7 +533,7 @@ def test_queue_drops_a_final_refusal_and_waits_quietly_on_a_passing_one(kit, cap
         q.tick()
     assert sum("unreachable" in r.getMessage() for r in caplog.records) == 1    # a new reason is logged
     kit.load_error = slots.SlotError("turn on Developer Mode", code="needs_developer_mode", http=409)
-    clock.t += 5
+    clock.t += reader.WAIT_POLL
     q.tick()
     assert q.jobs() == {}
 

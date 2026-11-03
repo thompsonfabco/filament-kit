@@ -20,8 +20,9 @@ A scan loads the tag's spool into the slot through the kit server's own load rou
 tools do): the user's exact preset or `no_preset`, never Generic (bridge/loading.py); mid-print only the slot that
 feeds the job is refused (Ruling BK: `slot_in_use`). The reply comes within SCAN_WAIT seconds of the request
 (a deadline from the start of the scan) even when the printer's confirmation takes longer (the firmware waits
-6 s): the load goes on in the background and the reply says "sent". Queue-on-empty (ported from the scanner): a slot the printer reports
-empty (`present` false) or still reading its tag is not set at once (the AMS resets a slot when filament goes in);
+6 s): the load goes on in the background and the reply says "sent". Queue-on-empty (ported from the scanner): a
+slot the printer reports empty (`present` false) or still reading its tag is not set at once (the AMS resets a
+slot when filament goes in);
 the preset is checked with a dry run, then the tap waits in LoadQueue (memory only, QUEUE_TTL 900 s) until the slot
 is present and read, SETTLE 3 s more, is sent, and VERIFY_AFTER 4 s later must show the preset (`preset_id`, type),
 else it is sent again, MAX_TRIES 3 in all. A direct set of a slot replaces its queued tap. An unknown presence
@@ -76,6 +77,7 @@ MIN_WAIT = 0.5               # the load gets at least this long, even when the l
 QUEUE_TTL = 900              # seconds a tap on an empty slot waits for the filament
 SETTLE, VERIFY_AFTER, MAX_TRIES = 3, 4, 3
 POLL = 2.0                   # seconds between queue checks
+WAIT_POLL = 10.0             # seconds between sends of a job whose last send was refused (busy, unreachable ...)
 # kit refusals that waiting does not change: the queued tap is dropped (others keep it waiting)
 FINAL_REFUSALS = ("no_preset", "not_found", "write_refused", "needs_developer_mode", "unpaired")
 MAX_SLOTS = 128              # the firmware keeps at most 128 slots ...
@@ -260,6 +262,7 @@ class Job:
     tries: int = 0
     preset: dict | None = None
     waiting: str | None = None        # why the last send was refused (logged when it changes)
+    tried: float = 0.0                # when a send was last attempted (refused or not)
 
 
 class LoadQueue:
@@ -339,6 +342,8 @@ class LoadQueue:
         now = self.clock()
         if now - job.at > QUEUE_TTL:
             return self._done(key, job, "expired, the filament was never loaded")
+        if job.waiting and now - job.tried < WAIT_POLL:
+            return                             # a refused send: back off (no kit call every POLL seconds)
         kit = self.kit_fn()
         st = self._slot(kit, printer, label)
         if st is None:
@@ -357,6 +362,7 @@ class LoadQueue:
         if job.tries >= MAX_TRIES:
             return self._done(key, job, f"the printer did not keep the setting after {MAX_TRIES} tries (slot shows "
                                         f"{st.get('type')!r} {st.get('preset_id')!r})")
+        job.tried = now
         try:
             r = kit.post(f"{slots.printer_path(printer)}/slots/{label}/load",
                          {"spool_id": job.spool_id, "dry_run": False})

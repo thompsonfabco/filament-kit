@@ -38,7 +38,7 @@ OPS_NOTE = "spool = the Spoolman spool assigned by an NFC tap or printer_set_slo
 
 class SlotError(Problem):
     """A refusal to show the caller (bad slot, no backend, a service that cannot be reached). From the kit server:
-    `code` = its error code ("no_preset", "printer_offline", "printer_busy", "not_found" ...; "unreachable" when it
+    `code` = its error code ("no_preset", "printer_offline", "slot_in_use", "not_found" ...; "unreachable" when it
     did not answer, "unpaired" when it refused this unit's token) and `http` = its status (None: no answer)."""
 
     def __init__(self, message: str, *, code: str | None = None, http: int | None = None):
