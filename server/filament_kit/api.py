@@ -577,6 +577,15 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         return JSONResponse({"spools": await run_in_threadpool(inventory.find, sm, q, sealed)})
 
     @_authed
+    async def filament_list(request: Request):
+        q = request.query_params.get("q", "")
+        return JSONResponse({"filaments": await run_in_threadpool(inventory.filaments, sm, q)})
+
+    @_authed
+    async def vendor_list(request: Request):
+        return JSONResponse({"vendors": await run_in_threadpool(inventory.vendors, sm)})
+
+    @_authed
     async def locations(request: Request):
         def names() -> list[str]:
             out = list(config.load()["locations"])
@@ -614,10 +623,12 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             *_gated([
                 Route("/api/intake/read", intake_read, methods=["POST"]),
                 Route("/api/intake/retry/{read_id}", intake_retry, methods=["POST"]),
-                Route("/api/intake/add", intake_add, methods=["POST"]),
             ], "ai_intake", on),
+            Route("/api/intake/add", intake_add, methods=["POST"]),  # adding by hand needs no AI (spec R 2.4)
             Route("/api/tags/{uid}", tag_lookup),
             Route("/api/spools", spool_search),
+            Route("/api/filaments", filament_list),
+            Route("/api/vendors", vendor_list),
             Route("/api/spools/{id:int}/link", spool_link, methods=["POST"]),
             Route("/api/spools/{id:int}", spool_update, methods=["PATCH"]),
             Route("/api/locations", locations),

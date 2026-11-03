@@ -357,3 +357,33 @@ def test_read_spoolman_down_503_refunds_cap(sm):
     r = c_dead.post(f"/api/intake/retry/{read_id}", headers=auth(tok))
     assert r.status_code == 503 and r.json()["error"] == "spoolman_unreachable"
     assert len(json.loads(reads.read_text())) == 2
+
+
+def test_filaments_and_vendors_for_a_manual_add(sm):
+    """R1: the app's manual Add lists the existing filaments (with or without spools) and vendors; a filament's
+    fields are named as an add item's, so the app can copy them into the item."""
+    c = client(sm)
+    tok = token()
+    sealed_spool(sm)
+    v = sm.post("vendor", {"name": "Elegoo", "empty_spool_weight": 160})
+    sm.post("filament", {"name": "PLA Red", "vendor_id": v["id"], "material": "PLA", "density": 1.24,
+                         "diameter": 1.75, "weight": 1000, "spool_weight": 160, "color_hex": "cc0000",
+                         "settings_extruder_temp": 210, "settings_bed_temp": 60})
+    fils = c.get("/api/filaments", headers=auth(tok)).json()["filaments"]
+    assert [(f["vendor"], f["name"]) for f in fils] == [("Elegoo", "PLA Red"), ("SUNLU", "PETG Grey")]
+    red = fils[0]
+    assert {k: red[k] for k in ("material", "density", "net", "tare", "color_hex", "nozzle", "bed")} == {
+        "material": "PLA", "density": 1.24, "net": 1000, "tare": 160, "color_hex": "cc0000", "nozzle": 210,
+        "bed": 60}
+    assert isinstance(red["id"], int) and red["spools"] == 0 and fils[1]["spools"] == 1
+    assert [f["name"] for f in c.get("/api/filaments?q=sunlu petg", headers=auth(tok)).json()["filaments"]] == [
+        "PETG Grey"]
+    vendors = c.get("/api/vendors", headers=auth(tok)).json()["vendors"]
+    assert [(x["name"], x["tare"]) for x in vendors] == [("Elegoo", 160), ("SUNLU", 213)]
+    assert c.get("/api/filaments").status_code == 401 and c.get("/api/vendors").status_code == 401
+
+    # a manual add of the existing filament reuses it
+    item = {k: red[k] for k in ("vendor", "name", "material", "density", "net", "tare")}
+    r = c.post("/api/intake/add", headers=auth(tok), json={"items": [{**item, "count": 2}], "dry_run": False})
+    assert r.status_code == 200, r.text
+    assert len(r.json()["spool_ids"]) == 2 and "existing filament" in r.json()["lines"][0]
