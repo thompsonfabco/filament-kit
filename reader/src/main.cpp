@@ -1,13 +1,18 @@
-// H2D filament scanner — ESP32 reader node
+// filament-kit reader — ESP32-C3 NFC tag reader for any printer, any slot layout
 // -----------------------------------------------------------------------------
-// Thin client. Reads an NFC tag UID over I2C (PN532), lets you pick a target AMS
-// slot with a rotary encoder (shown on an SSD1306 OLED), and POSTs {uid, ams_id,
-// tray_id} to the orchestrator on the Spoolman VM. The orchestrator does the
-// Spoolman lookup + printer MQTT and returns the result, which we buzz + show.
+// Thin client. Reads an NFC tag UID over I2C (PN532), lets you pick a printer and
+// one of its slots with a rotary encoder (shown on an SSD1306 OLED), and POSTs
+// {uid, printer, slot} to the filament-kit server's reader API. The server does
+// the Spoolman lookup + printer command and returns the result, which we buzz,
+// show and speak. The printer and slot lists come from the server, so a new
+// printer or AMS layout needs no firmware change. API contract: README.md.
 //
 // Target board: ESP32-C3 Super Mini. All wiring is in the CONFIG block below —
 // change pins freely. PN532 and OLED share the I2C bus (different addresses), so
-// the whole thing is 2 I2C pins + PN532 IRQ/RST + encoder (CLK/DT/SW) + buzzer.
+// the whole thing is 2 I2C pins + encoder (CLK/DT/SW) + buzzer.
+//
+// The pure logic (list parsing, scan statuses, say tokens, knob menu, saved
+// choice) lives in lib/reader_core and is unit-tested on the host (pio test -e native).
 // -----------------------------------------------------------------------------
 #include <Arduino.h>
 #include <Wire.h>
@@ -19,25 +24,32 @@
 #include <Adafruit_SSD1306.h>
 #include <ArduinoJson.h>
 #include <TalkiePCM.h>
-#include <Vocab_US_TI99.h>   // only for spt_LOAD (unused words are stripped at link)
+#include <Vocab_US_TI99.h>   // a few words Vocab_US_Large lacks (unused words are stripped at link)
 #include <Update.h>
 #include <esp_ota_ops.h>
 #include <mbedtls/pk.h>
 #include <mbedtls/sha256.h>
 #include <mbedtls/base64.h>
 #include <Preferences.h>
-#include "secrets.h"
+#include "secrets.h"         // WIFI_SSID, WIFI_PASS, READER_BASE, READER_TOKEN, OTA_PUBKEY
 #include "fw_build.h"        // FW_BUILD, generated per build by fw_build.py
+#include "reader_api.h"
+#include "speech.h"
+#include "menu.h"
+
+using namespace reader;
 
 // ======================= CONFIG (edit me) ====================================
-// WIFI_SSID, WIFI_PASS and AUTH_TOKEN live in secrets.h (not in this file).
+// Wi-Fi, the server's base URL, the reader token and the OTA public key live in
+// secrets.h (not in this file). Everything the reader calls hangs off READER_BASE:
+//   GET  printers                 GET  printers/<id>/slots      POST scan
+//   GET  healthz (OTA rollback)   GET  fw/manifest.json + fw/firmware.bin (OTA)
 
-// Orchestrator endpoint on the Spoolman VM (HTTPS, via the nginx router).
-static const char* ORCH_URL   = "https://mcp.example.com/h2d/set-slot";
-// h2d-remote's printer state (LAN-gated, no token): what's loaded in each slot.
-static const char* STATE_URL  = "https://mcp.example.com/printer/api/state";
-
-// Root CA to validate the server cert (ISRG Root X1 — Let's Encrypt chain).
+// Root CA to validate the server cert. Default: ISRG Root X1 (Let's Encrypt
+// chain); define READER_ROOT_CA in secrets.h for a server with another CA.
+#ifdef READER_ROOT_CA
+static const char* ROOT_CA = READER_ROOT_CA;
+#else
 static const char* ROOT_CA = R"CERT(-----BEGIN CERTIFICATE-----
 MIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAwDQYJKoZIhvcNAQELBQAw
 TzELMAkGA1UEBhMCVVMxKTAnBgNVBAoTIEludGVybmV0IFNlY3VyaXR5IFJlc2Vh
@@ -70,19 +82,7 @@ mRGunUHBcnWEvgJBQl9nJEiU0Zsnvgc/ubhPgXRR4Xq37Z0j4r7g1SgEEzwxA57d
 emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
 -----END CERTIFICATE-----
 )CERT";
-
-// --- OTA (HTTPS pull from the VM, same CA pin + X-Auth-Token). Hold the knob
-//     2 s to check; firmware/ota_publish.py builds, signs and uploads images. ---
-static const char* OTA_MANIFEST_URL = "https://mcp.example.com/h2d/fw/manifest.json";
-static const char* OTA_BIN_URL      = "https://mcp.example.com/h2d/fw/firmware.bin";
-static const char* HEALTHZ_URL      = "https://mcp.example.com/h2d/healthz";
-// ECDSA P-256 public key; images must be signed by the matching private key
-// (kept on the desktop in ~/.h2d-ota/, never on the VM).
-static const char* OTA_PUBKEY = R"KEY(-----BEGIN PUBLIC KEY-----
-MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEWCWNkQzFhqLWfDDLn8XRBf7gQDSg
-W96ZG2mxT8c4zDy/km4y5rymX4bieiLIHYC+nZbe5bux2nZwQKXBCK1dyg==
------END PUBLIC KEY-----
-)KEY";
+#endif
 
 // --- Pin map: ESP32-C3 Super Mini. Only GPIO0-10,20,21 are broken out; avoid
 //     GPIO8 (onboard LED + strap) and GPIO9 (BOOT button + strap). USB pins
@@ -104,10 +104,11 @@ static const int PN532_RESET = 10;
 static const int OLED_ADDR   = 0x3C;
 static const int OLED_W      = 128;
 static const int OLED_H      = 64;
+static const int OLED_COLS   = OLED_W / 6;   // 21 columns at text size 1
 
-// --- Rotary encoder (KY-040 style: CLK/DT quadrature + SW push, common to GND).
-//     Rotate = change slot; short press = re-send the last tag to the shown slot.
-//     If rotation feels reversed, swap CLK and DT (or the two pin numbers). ---
+// --- Rotary encoder (KY-040 style: CLK/DT quadrature + SW push).
+//     Rotate = change slot; press = re-send the last tag; hold 1 s = printer
+//     list; hold 4 s = OTA check. If rotation feels reversed, swap CLK and DT. ---
 static const int PIN_ENC_CLK = 3;
 static const int PIN_ENC_DT  = 4;
 static const int PIN_ENC_SW  = 1;
@@ -122,11 +123,11 @@ static const int  PIN_BUZZER        = 0;
 static const bool BUZZER_ACTIVE_LOW = true;
 
 // --- Voice (TI LPC speech via TalkiePCM, PWM'd out the buzzer pin) ---
-//     Speaks the slot ("A three", "H T one") once the knob settles, and
-//     "set" + slot after a successful tap. Tinny on a buzzer, but digits carry.
+//     Speaks the server's `say` tokens for the slot once the knob settles, and
+//     "set" / "load" + slot after a tap. Tinny on a buzzer, but digits carry.
 static const bool     TALK_ENABLED    = true;
 static const float    TALK_VOLUME     = 6.0f;   // >1 louder (clips sooner); 3.3 V buzzer needs a lot
-static const uint32_t SPEAK_SETTLE_MS = 600;    // knob idle time before speaking
+static const uint32_t SPEAK_SETTLE_MS = 600;    // knob idle time before speaking (and saving)
 
 // Re-scan guard: ignore the same tag if re-read within this window.
 static const uint32_t SCAN_COOLDOWN_MS = 2500;
@@ -134,31 +135,36 @@ static const uint32_t SCAN_COOLDOWN_MS = 2500;
 static const uint32_t RESULT_HOLD_MS   = 4000;
 // "Load filament" (queued) prompt stays up longer — you're walking to the AMS.
 static const uint32_t QUEUED_HOLD_MS   = 15000;
-
-// Target slots, in selection order. ams_id / tray_id are what the printer wants
-// (tray_id 0-based); label is cosmetic. Matches this H2D's topology.
-struct Slot { int ams_id; int tray_id; const char* label; };
-static const Slot SLOTS[] = {
-  {0,   0, "AMS A1"},
-  {0,   1, "AMS A2"},
-  {0,   2, "AMS A3"},
-  {0,   3, "AMS A4"},
-  {128, 0, "HT 1"},
-  {129, 0, "HT 2"},
-  {130, 0, "HT 3"},
-  {254, 0, "EXT L"},   // external spool path, left nozzle (no presence sensor: never queued)
-  {255, 0, "EXT R"},   // external spool path, right nozzle
-};
-static const int NUM_SLOTS = sizeof(SLOTS) / sizeof(SLOTS[0]);
+// Printer + slot lists: refreshed at boot, every LIST_REFRESH_MS while the screen
+// is lit, and LIST_AFTER_SET_MS after a set (to show the new contents).
+static const uint32_t LIST_REFRESH_MS   = 60000;
+static const uint32_t LIST_AFTER_SET_MS = 5000;
+// Long labels/names scroll one column per MARQUEE_STEP_MS.
+static const uint32_t MARQUEE_STEP_MS  = 350;
 // =============================================================================
 
 Adafruit_PN532 nfc(PN532_IRQ, PN532_RESET);
 Adafruit_SSD1306 display(OLED_W, OLED_H, &Wire, -1);
 
-int      selected = 0;
+// URLs, built from READER_BASE in setup()
+String urlPrinters, urlScan, urlHealthz, urlManifest, urlBin;
+
+std::vector<PrinterEntry> printers;   // from GET printers
+std::vector<SlotEntry>    slots;      // GET printers/<id>/slots for the selected printer
+Menu   menu;
+Button button;
+bool   serverOk = false;              // the last list fetch worked
+
 uint32_t lastScanMs = 0;
 String   lastUid = "";
 uint32_t resultUntil = 0;
+
+const PrinterEntry* curPrinter() {
+  return (menu.printer >= 0 && menu.printer < (int)printers.size()) ? &printers[menu.printer] : nullptr;
+}
+const SlotEntry* curSlot() {
+  return (menu.slot >= 0 && menu.slot < (int)slots.size()) ? &slots[menu.slot] : nullptr;
+}
 
 // ---- buzzer patterns --------------------------------------------------------
 // Park the pin at its "off" level (HIGH for the active-low module). Beeps drive
@@ -175,10 +181,11 @@ void beep(int freq, int ms) {
 // The 3.3 V buzzer is loud only near its resonance: 2 kHz (pleasant) and 4 kHz
 // (shrill) tested loudest, so patterns differ by rhythm, with 4 kHz for errors.
 void buzzOk()      { beep(2000, 90); delay(60); beep(2000, 90); }          // set OK
-void buzzUnknown() { beep(2000, 600); }                                    // tag not in Spoolman
-void buzzError()   { for (int i=0;i<3;i++){ beep(4000,120); delay(80);} }  // unreachable
+void buzzUnknown() { beep(2000, 600); }                                    // tag/spool not usable
+void buzzError()   { for (int i=0;i<3;i++){ beep(4000,120); delay(80);} }  // unreachable / error
 void buzzTick()    { beep(2000, 15); }                                     // knob/button
 void buzzQueued()  { beep(2000, 80); delay(80); beep(2000, 350); }         // queued: short-long
+void buzzWord()    { beep(2000, 60); delay(60); }                          // a say token with no word
 
 // ---- voice -----------------------------------------------------------------
 // TalkiePCM decodes LPC frames to 8 kHz samples and hands each one to
@@ -196,65 +203,169 @@ void talkSample(int16_t* data, int len) {
   talkNextUs += TALK_SAMPLE_US;
 }
 
-// Say a sequence of vocab words as one utterance (blocks ~0.4 s per word).
-void say(std::initializer_list<const uint8_t*> words) {
-  if (!TALK_ENABLED) return;
-  if (!ledcAttach(PIN_BUZZER, 40000, 8)) Serial.println("say: ledcAttach failed");
-  ledcWrite(PIN_BUZZER, 128);
-  talkNextUs = micros();
-  for (const uint8_t* w : words) voice.say(w);
-  ledcDetach(PIN_BUZZER); buzzIdle();
-}
-
-const uint8_t* digitWord(int n) {
-  static const uint8_t* const D[] = {sp2_ZERO, sp2_ONE, sp2_TWO, sp2_THREE, sp2_FOUR,
-                                     sp2_FIVE, sp2_SIX, sp2_SEVEN, sp2_EIGHT, sp2_NINE};
-  return D[(n >= 0 && n <= 9) ? n : 0];
-}
-
-// AMS 0 trays -> "A one".."A four"; AMS HT 128.. -> "H T one"..; external 254/255 ->
-// "E X T left/right" (matches labels; the vocab has no "external").
-// lead: optional word said first ("set", "load"), or nullptr.
-void speakSlot(int i, const uint8_t* lead) {
-  const Slot& s = SLOTS[i];
-  if (s.ams_id >= 254) {
-    const uint8_t* side = s.ams_id == 254 ? sp2_LEFT : sp2_RIGHT;
-    if (lead) say({lead, sp2_E, sp2_X, sp2_T, side}); else say({sp2_E, sp2_X, sp2_T, side});
-  } else if (s.ams_id == 0) {
-    const uint8_t* n = digitWord(s.tray_id + 1);
-    if (lead) say({lead, sp2_A, n}); else say({sp2_A, n});
-  } else {
-    const uint8_t* n = digitWord(s.ams_id - 127);
-    if (lead) say({lead, sp2_H, sp2_T, n}); else say({sp2_H, sp2_T, n});
+// LPC data for each vocabulary Word (reader_core/speech.h). Mostly Vocab_US_Large
+// (sp2_*); the TI99 set (spt_*) fills its gaps.
+const uint8_t* vocab(Word w) {
+  switch (w) {
+    case W_ZERO: return sp2_ZERO;   case W_ONE: return sp2_ONE;     case W_TWO: return sp2_TWO;
+    case W_THREE: return sp2_THREE; case W_FOUR: return sp2_FOUR;   case W_FIVE: return sp2_FIVE;
+    case W_SIX: return sp2_SIX;     case W_SEVEN: return sp2_SEVEN; case W_EIGHT: return sp2_EIGHT;
+    case W_NINE: return sp2_NINE;   case W_TEN: return sp2_TEN;     case W_ELEVEN: return sp2_ELEVEN;
+    case W_TWELVE: return sp2_TWELVE;      case W_THIRTEEN: return spt_THIRTEEN;
+    case W_FOURTEEN: return spt_FOURTEEN;  case W_FIFTEEN: return spt_FIFTEEN;
+    case W_TEEN: return sp2__TEEN;         case W_TWENTY: return sp2_TWENTY;
+    case W_THIRTY: return spt_THIRTY;      case W_FORTY: return spt_FORTY;
+    case W_FIFTY: return spt_FIFTY;        case W_SIXTY: return spt_SIXTY;
+    case W_SEVENTY: return spt_SEVENTY;    case W_EIGHTY: return spt_EIGHTY;
+    case W_NINETY: return spt_NINETY;
+    case W_A: return sp2_A; case W_B: return sp2_B; case W_C: return sp2_C; case W_D: return sp2_D;
+    case W_E: return sp2_E; case W_F: return sp2_F; case W_G: return sp2_G; case W_H: return sp2_H;
+    case W_I: return sp2_I; case W_J: return sp2_J; case W_K: return sp2_K; case W_L: return sp2_L;
+    case W_M: return sp2_M; case W_N: return sp2_N; case W_O: return sp2_O; case W_P: return sp2_P;
+    case W_Q: return sp2_Q; case W_R: return sp2_R; case W_S: return sp2_S; case W_T: return sp2_T;
+    case W_U: return sp2_U; case W_V: return sp2_V; case W_W: return sp2_W; case W_X: return sp2_X;
+    case W_Y: return sp2_Y; case W_Z: return sp2_Z;
+    case W_LEFT: return sp2_LEFT;     case W_RIGHT: return sp2_RIGHT;   case W_TOP: return spt_TOP;
+    case W_BOTTOM: return spt_BOTTOM; case W_MIDDLE: return spt_MIDDLE; case W_CENTER: return spt_CENTER;
+    case W_FRONT: return spt_FRONT;   case W_BACK: return spt_BACK;
+    case W_SET: return sp2_SET;       case W_LOAD: return spt_LOAD;     case W_READY: return sp2_READY;
+    case W_CONNECT: return sp2_CONNECT; case W_FAIL: return sp2_FAIL;   case W_POWER: return sp2_POWER;
+    case W_CYCLE: return sp2_CYCLE;   case W_PRINTER: return spt_PRINTER; case W_UNIT: return sp2_UNIT;
+    case W_NUMBER: return sp2_NUMBER; case W_PLUS: return sp2_PLUS;     case W_LIGHT: return sp2_LIGHT;
+    case W_HIGH: return sp2_HIGH;     case W_LOW: return sp2_LOW;       case W_UP: return sp2_UP;
+    case W_DOWN: return spt_DOWN;     case W_ON: return sp2_ON;         case W_OFF: return sp2_OFF;
+    case W_AND: return sp2_AND;       case W_ERROR: return spt_ERROR;
+    case W_RED: return sp2_RED;       case W_GREEN: return sp2_GREEN;   case W_BLUE: return spt_BLUE;
+    case W_YELLOW: return sp2_YELLOW; case W_BLACK: return spt_BLACK;   case W_WHITE: return spt_WHITE;
+    case W_GRAY: return spt_GRAY;
+    default: return nullptr;
   }
 }
 
+// Say one utterance (blocks ~0.4 s per word). A W_BEEP (a token the vocabulary
+// lacks) is a short beep in its place.
+void speakWords(const Word* words, size_t n) {
+  if (!TALK_ENABLED || !n) return;
+  size_t i = 0;
+  while (i < n) {
+    if (words[i] == W_BEEP || !vocab(words[i])) { buzzWord(); i++; continue; }
+    if (!ledcAttach(PIN_BUZZER, 40000, 8)) Serial.println("say: ledcAttach failed");
+    ledcWrite(PIN_BUZZER, 128);
+    talkNextUs = micros();
+    for (; i < n && words[i] != W_BEEP && vocab(words[i]); i++) voice.say(vocab(words[i]));
+    ledcDetach(PIN_BUZZER); buzzIdle();
+  }
+}
+
+// lead (W_SET, W_LOAD, ... or W_NONE) followed by the server's say tokens.
+void speak(const std::string& sayText, Word lead = W_NONE) {
+  Word w[MAX_UTTERANCE];
+  size_t n = buildUtterance(sayText.c_str(), lead, w, MAX_UTTERANCE);
+  speakWords(w, n);
+}
+void speakWord(Word a, Word b = W_NONE) {
+  Word w[2] = {a, b};
+  speakWords(w, b == W_NONE ? 1 : 2);
+}
+
 // ---- OLED screens -----------------------------------------------------------
-bool updateReady = false;        // a newer signed build is on the server
-String slotInfo[NUM_SLOTS];      // what's loaded per slot (filled by refreshTrays)
+bool     updateReady = false;     // a newer signed build is on the server
+uint32_t scrollStep = 0;          // marquee position for long names/labels
+uint32_t scrollAt = 0;
+
+bool needsScroll() {
+  if (menu.mode == MODE_PRINTERS) {
+    for (auto& p : printers) if (p.name.size() > (size_t)OLED_COLS - 2) return true;
+    return false;
+  }
+  const PrinterEntry* p = curPrinter();
+  const SlotEntry* s = curSlot();
+  if (p && p->name.size() > (size_t)OLED_COLS - 6) return true;
+  if (s) {
+    if (s->label.size() > labelColumns(labelTextSize(s->label.size()))) return true;
+    if (slotContents(*s).size() > (size_t)OLED_COLS) return true;
+  }
+  return false;
+}
+
+void header(const String& left, const String& right) {
+  display.setTextSize(1);
+  display.setCursor(0, 0);
+  display.print(left);
+  if (right.length()) {
+    display.setCursor(OLED_W - 6 * right.length(), 0);
+    display.print(right);
+  }
+  display.drawFastHLine(0, 11, OLED_W, SSD1306_WHITE);
+}
 
 void showPicker() {
   display.clearDisplay();
   display.setTextColor(SSD1306_WHITE);
-  display.setTextSize(1);
-  display.setCursor(0, 0);
-  display.print("Select slot  ");
-  display.print(selected + 1); display.print("/"); display.print(NUM_SLOTS);
-  if (updateReady) { display.setCursor(OLED_W - 18, 0); display.print("UPD"); }
-  display.drawFastHLine(0, 11, OLED_W, SSD1306_WHITE);
-  display.setTextSize(3);
-  display.setCursor(0, 20);
-  display.print(SLOTS[selected].label);
+  const PrinterEntry* p = curPrinter();
+  const SlotEntry* s = curSlot();
+  if (!p) {
+    header("filament-kit reader", "");
+    display.setTextSize(1);
+    display.setCursor(0, 20);
+    if (WiFi.status() != WL_CONNECTED) display.print("No WiFi");
+    else if (!serverOk)                display.print("Server unreachable\nretrying every 60 s");
+    else                               display.print("No printers set up\non the server");
+    if (updateReady) { display.setCursor(0, 54); display.print("update: hold knob 4s"); }
+    display.display();
+    return;
+  }
+  String right = updateReady ? String("UPD")
+                             : (slots.empty() ? String("") : String(menu.slot + 1) + "/" + String(slots.size()));
+  size_t nameCols = OLED_COLS - (right.length() ? right.length() + 1 : 0);
+  header(marquee(p->name, nameCols, scrollStep).c_str(), right);
+  if (!s) {
+    display.setTextSize(1);
+    display.setCursor(0, 24);
+    display.print(serverOk ? "No slots reported" : "Server unreachable");
+    display.display();
+    return;
+  }
+  int ts = labelTextSize(s->label.size());
+  display.setTextSize(ts);
+  display.setCursor(0, ts == 3 ? 20 : 24);
+  display.print(marquee(s->label, labelColumns(ts), scrollStep).c_str());
   display.setTextSize(1);
   display.setCursor(0, 54);
-  // what's in this slot now (cached); one line, so trim to the 21 columns
-  String info = slotInfo[selected].length() ? slotInfo[selected] : String("tap tag to assign");
-  if (updateReady && !slotInfo[selected].length()) info = "update: hold knob 2s";
-  display.print(info.substring(0, 21));
+  display.print(marquee(slotContents(*s), OLED_COLS, scrollStep).c_str());
   display.display();
 }
 
-void showResult(const char* line1, const char* line2, bool big2) {
+// Printer list: up to 4 rows around the cursor, the cursor row inverted.
+void showPrinterList() {
+  display.clearDisplay();
+  display.setTextColor(SSD1306_WHITE);
+  header("Pick printer", String(menu.cursor + 1) + "/" + String(printers.size()));
+  const int rows = 4;
+  int first = menu.cursor - rows / 2;
+  if (first > (int)printers.size() - rows) first = (int)printers.size() - rows;
+  if (first < 0) first = 0;
+  for (int r = 0; r < rows && first + r < (int)printers.size(); r++) {
+    int i = first + r;
+    int y = 14 + r * 12;
+    bool on = i == menu.cursor;
+    if (on) display.fillRect(0, y - 1, OLED_W, 11, SSD1306_WHITE);
+    display.setTextColor(on ? SSD1306_BLACK : SSD1306_WHITE);
+    display.setCursor(2, y + 1);
+    std::string name = on ? marquee(printers[i].name, OLED_COLS - 1, scrollStep)
+                          : printers[i].name.substr(0, OLED_COLS - 1);
+    display.print(name.c_str());
+  }
+  display.setTextColor(SSD1306_WHITE);
+  display.display();
+}
+
+void redraw() {
+  if (menu.mode == MODE_PRINTERS) showPrinterList(); else showPicker();
+}
+
+// line1 on top, then either one big word (big2) or small wrapped text.
+void showResult(const char* line1, const char* line2, bool big2, uint32_t holdMs = RESULT_HOLD_MS) {
   display.clearDisplay();
   display.setTextColor(SSD1306_WHITE);
   display.setTextSize(1);
@@ -262,10 +373,10 @@ void showResult(const char* line1, const char* line2, bool big2) {
   display.print(line1);
   display.drawFastHLine(0, 11, OLED_W, SSD1306_WHITE);
   display.setTextSize(big2 ? 2 : 1);
-  display.setCursor(0, big2 ? 24 : 20);
+  display.setCursor(0, big2 ? 24 : 16);
   display.print(line2);
   display.display();
-  resultUntil = millis() + RESULT_HOLD_MS;
+  resultUntil = millis() + holdMs;
 }
 
 // ---- UID formatting: match nfc2klipper / Spoolman extra.nfc_id --------------
@@ -279,20 +390,20 @@ String formatUid(const uint8_t* uid, uint8_t len) {
   return s;
 }
 
-// ---- HTTPS: one kept-alive TLS connection to the VM -------------------------
-// Taps, tray-state refreshes and update checks share it, so a tap skips the
-// ~1 s TLS handshake while nginx holds the connection open (75 s idle). A stale
-// socket fails fast and is retried once on a fresh connection (set-slot is
-// idempotent, so a repeat is harmless).
+// ---- HTTPS: one kept-alive TLS connection to the server --------------------
+// Taps, list refreshes and update checks share it, so a tap skips the ~1 s TLS
+// handshake while the server holds the connection open. A stale socket fails
+// fast and is retried once on a fresh connection (a scan is idempotent: the same
+// tag on the same slot just sets it again).
 WiFiClientSecure apiTls;
 HTTPClient       apiHttp;
-int apiRequest(const char* url, const char* body, String& resp) {
+int apiRequest(const String& url, const char* body, String& resp) {
   int code = -1;
   for (int attempt = 0; attempt < 2; attempt++) {
     apiHttp.setReuse(true);
     apiHttp.setTimeout(6000);
     if (!apiHttp.begin(apiTls, url)) { apiTls.stop(); continue; }
-    apiHttp.addHeader("X-Auth-Token", AUTH_TOKEN);
+    apiHttp.addHeader("X-Auth-Token", READER_TOKEN);
     if (body) { apiHttp.addHeader("Content-Type", "application/json"); code = apiHttp.POST(body); }
     else      code = apiHttp.GET();
     if (code > 0) { resp = apiHttp.getString(); apiHttp.end(); return code; }
@@ -301,91 +412,115 @@ int apiRequest(const char* url, const char* body, String& resp) {
   return code;
 }
 
-// ---- what's in each slot (from h2d-remote) ----------------------------------
-// Refreshed at boot, every TRAY_REFRESH_MS while the screen is on, and after a
-// set; the picker draws from this cache so turning the knob never waits.
-uint32_t traysAt = 0;
-static const uint32_t TRAY_REFRESH_MS = 60000;
-void refreshTrays() {
-  traysAt = millis();
-  if (WiFi.status() != WL_CONNECTED) return;
-  String resp;
-  if (apiRequest(STATE_URL, nullptr, resp) != 200) return;
-  JsonDocument filter; filter["ams"][0]["id"] = true;
-  JsonObject ft = filter["ams"][0]["trays"][0].to<JsonObject>();
-  ft["id"] = true; ft["type"] = true; ft["empty"] = true; ft["spool"]["name"] = true;
-  JsonDocument st;
-  if (deserializeJson(st, resp, DeserializationOption::Filter(filter))) return;
-  for (int i = 0; i < NUM_SLOTS; i++) {
-    String info = "?";
-    for (JsonObject u : st["ams"].as<JsonArray>()) {
-      if ((int)u["id"] != SLOTS[i].ams_id) continue;
-      for (JsonObject t : u["trays"].as<JsonArray>()) {
-        // tray ids arrive as numbers for AMS units and as strings for the external paths
-        int tid = t["id"].is<const char*>() ? atoi(t["id"].as<const char*>()) : t["id"].as<int>();
-        if (tid != SLOTS[i].tray_id) continue;
-        const char* type = t["type"] | "";
-        const char* name = t["spool"]["name"] | "";
-        if (t["empty"] | false) info = "empty";
-        else if (*name)        info = String(type) + " " + name;
-        else if (*type)        info = String(type) + " (no spool)";
-        else                   info = "loaded, not set";
-      }
-    }
-    slotInfo[i] = info;
-  }
+// ---- remembered choice (NVS: survives reboots and OTA updates) --------------
+// The printer by id and the slot by LABEL, so a layout change (an AMS added or
+// removed) keeps the choice whenever that label still exists.
+Preferences prefs;
+std::string savedPrinter, savedLabel;
+void savePrinter(const std::string& id) {
+  if (id == savedPrinter) return;
+  prefs.putString("printer", id.c_str());
+  savedPrinter = id;
+}
+void saveSlot(const std::string& label) {
+  if (label == savedLabel) return;
+  prefs.putString("slot_label", label.c_str());
+  savedLabel = label;
 }
 
-// ---- POST to the orchestrator ----------------------------------------------
+// ---- printer + slot lists ---------------------------------------------------
+uint32_t listsAt = 0;
+
+// Slots of the selected printer; keeps `label` selected when it still exists.
+bool fetchSlots(const std::string& label) {
+  const PrinterEntry* p = curPrinter();
+  if (!p) { slots.clear(); menu.slot = 0; return false; }
+  String resp;
+  String url = joinUrl(READER_BASE, "printers/" + urlEncode(p->id) + "/slots").c_str();
+  int code = apiRequest(url, nullptr, resp);
+  if (code != 200 || !parseSlots(resp.c_str(), slots)) {
+    Serial.printf("slots %s: HTTP %d\n", p->id.c_str(), code);
+    return false;
+  }
+  int i = findSlot(slots, label);
+  menu.slot = i < 0 ? 0 : i;
+  return true;
+}
+
+// Both lists. Keeps the current printer/slot (or the saved ones before the first
+// fetch); on any failure the last good lists stay on screen.
+void refreshLists() {
+  listsAt = millis();
+  if (WiFi.status() != WL_CONNECTED) { serverOk = false; return; }
+  std::string wantPrinter = curPrinter() ? curPrinter()->id : savedPrinter;
+  std::string wantLabel   = curSlot() ? curSlot()->label : savedLabel;
+  String resp;
+  int code = apiRequest(urlPrinters, nullptr, resp);
+  if (code != 200 || !parsePrinters(resp.c_str(), printers)) {
+    Serial.printf("printers: HTTP %d\n", code);
+    serverOk = false;
+    return;
+  }
+  int i = findPrinter(printers, wantPrinter);
+  menu.printer = i < 0 ? 0 : i;
+  serverOk = fetchSlots(wantLabel);
+}
+
+// ---- POST a scan --------------------------------------------------------------
 void sendScan(const String& uid) {
+  const PrinterEntry* p = curPrinter();
+  const SlotEntry* s = curSlot();
   if (WiFi.status() != WL_CONNECTED) { showResult("Scan", "No WiFi", true); buzzError(); return; }
+  if (!p || !s) { showResult("Scan", "No slot", true); buzzError(); return; }
+  // copy: a refresh after this call must not pull the strings out from under us
+  PrinterEntry printer = *p;
+  SlotEntry slot = *s;
 
-  JsonDocument body;
-  body["uid"]     = uid;
-  body["ams_id"]  = SLOTS[selected].ams_id;
-  body["tray_id"] = SLOTS[selected].tray_id;
-  String payload; serializeJson(body, payload);
-
+  std::string payload = scanBody(uid.c_str(), printer.id, slot.label, false);
   String resp;
   uint32_t t0 = millis();
-  int code = apiRequest(ORCH_URL, payload.c_str(), resp);
-  Serial.printf("set-slot round trip %lu ms\n", millis() - t0);
-
+  int code = apiRequest(urlScan, payload.c_str(), resp);
+  Serial.printf("scan round trip %lu ms\n", millis() - t0);
   if (code <= 0) {
     char tlsErr[120] = "";
     apiTls.lastError(tlsErr, sizeof(tlsErr));
     Serial.printf("POST failed: %d %s | TLS: %s | WiFi %s RSSI %d | heap %u\n", code,
                   HTTPClient::errorToString(code).c_str(), tlsErr,
                   WiFi.status() == WL_CONNECTED ? "up" : "DOWN", WiFi.RSSI(), ESP.getFreeHeap());
-    showResult("Scan", "Orch down", true); buzzError(); return;
-  }
-  Serial.printf("POST %d: %s\n", code, resp.c_str());
-
-  JsonDocument doc;
-  DeserializationError err = deserializeJson(doc, resp);
-  const char* status = (!err) ? (const char*)(doc["status"] | "") : "";
-  const char* fil    = (!err) ? (const char*)(doc["filament"] | "") : "";
-
-  char head[40];
-  snprintf(head, sizeof(head), "%s  %s", SLOTS[selected].label,
-           strlen(status) ? status : "resp?");
-
-  if (code == 200 && strcmp(status, "set") == 0) {
-    showResult(head, strlen(fil) ? fil : "set", false); buzzOk(); speakSlot(selected, sp2_SET);
-    traysAt = millis() - TRAY_REFRESH_MS + 5000;   // re-read slot contents in ~5 s
-  } else if (code == 200 && strcmp(status, "queued") == 0) {
-    // Empty slot: the orchestrator holds the setting (15 min) and applies it once
-    // the AMS reads the loaded filament. A success, just pending.
-    char line1[40], line2[64];
-    snprintf(line1, sizeof(line1), "Load into %s", SLOTS[selected].label);
-    snprintf(line2, sizeof(line2), "%s\nwill set when loaded", strlen(fil) ? fil : "filament");
-    showResult(line1, line2, false);
-    resultUntil = millis() + QUEUED_HOLD_MS;
-    buzzQueued(); speakSlot(selected, spt_LOAD);
-  } else if (strcmp(status, "unknown_tag") == 0) {
-    showResult(head, "Unknown tag", true); buzzUnknown();
   } else {
-    showResult(head, "Error", true); buzzError();
+    Serial.printf("POST %d: %s\n", code, resp.c_str());
+  }
+
+  ScanResult r = parseScanResult(code, resp.c_str());
+  char head[48];
+  snprintf(head, sizeof(head), "%s  %s", slot.label.c_str(), headline(r.status));
+  switch (feedbackFor(r.status)) {
+    case FB_OK: {
+      const std::string& what = !r.filament.empty() ? r.filament : r.message;
+      showResult(head, what.empty() ? "set" : what.c_str(), false);
+      buzzOk(); speak(slot.say, W_SET);
+      listsAt = millis() - LIST_REFRESH_MS + LIST_AFTER_SET_MS;   // re-read contents in ~5 s
+      break;
+    }
+    case FB_QUEUED: {
+      // Empty slot: the server holds the setting and applies it once the printer
+      // reads the loaded filament. A success, just pending.
+      char line1[48], line2[96];
+      snprintf(line1, sizeof(line1), "Load into %s", slot.label.c_str());
+      snprintf(line2, sizeof(line2), "%s\nwill set when loaded",
+               !r.filament.empty() ? r.filament.c_str() : "filament");
+      showResult(line1, line2, false, QUEUED_HOLD_MS);
+      buzzQueued(); speak(slot.say, W_LOAD);
+      break;
+    }
+    case FB_UNKNOWN:
+      showResult(head, r.message.empty() ? headline(r.status) : r.message.c_str(), r.message.empty());
+      buzzUnknown();
+      break;
+    default:
+      showResult(head, r.message.empty() ? headline(r.status) : r.message.c_str(), r.message.empty());
+      buzzError();
+      break;
   }
 }
 
@@ -412,36 +547,15 @@ void IRAM_ATTR encISR() {
   else if (encAccum <= -4) { encDetents--; encAccum = 0; }
 }
 
-// ---- encoder push button (debounced, active-low) ---------------------------
-// Short press (released before LONG_PRESS_MS) = re-send; hold = OTA check.
-enum SwEvent { SW_NONE, SW_SHORT, SW_LONG };
-bool     swPrev   = false;
-bool     swLongFired = false;
-uint32_t swLastMs = 0, swDownMs = 0;
-static const uint32_t SW_DEBOUNCE_MS = 40;
-static const uint32_t LONG_PRESS_MS  = 2000;
-SwEvent swEvent() {
-  bool now = digitalRead(PIN_ENC_SW) == (ENC_SW_TO_VCC ? HIGH : LOW);
-  if (now != swPrev && (millis() - swLastMs) > SW_DEBOUNCE_MS) {
-    swLastMs = millis();
-    swPrev   = now;
-    if (now) { swDownMs = millis(); swLongFired = false; return SW_NONE; }
-    return swLongFired ? SW_NONE : SW_SHORT;           // released
-  }
-  if (now && !swLongFired && millis() - swDownMs >= LONG_PRESS_MS) {
-    swLongFired = true;
-    return SW_LONG;
-  }
-  return SW_NONE;
-}
+bool swPressed() { return digitalRead(PIN_ENC_SW) == (ENC_SW_TO_VCC ? HIGH : LOW); }
 
 // ---- OTA --------------------------------------------------------------------
 // Manifest {"build": <unix time>, "size": N, "sha256": "<hex>", "sig": "<base64 DER>"}.
 // The image is streamed into the inactive OTA slot while hashing; it's only
 // committed if size, SHA-256 and the ECDSA signature (over the SHA-256) all
 // check out. The new image boots "pending verify" and marks itself valid once
-// Wi-Fi is up and /h2d/healthz answers 200 (see confirmOtaImage); otherwise the
-// bootloader rolls back to the previous image on the next reset.
+// Wi-Fi is up and <READER_BASE>/healthz answers 200 (see confirmOtaImage);
+// otherwise the bootloader rolls back to the previous image on the next reset.
 // core: don't auto-mark the app valid. extern "C": the core's weak default is C.
 extern "C" bool verifyRollbackLater() { return true; }
 
@@ -459,11 +573,11 @@ void showProgress(const char* title, const char* line, int pct) {
   display.display();
 }
 
-bool httpsGet(HTTPClient& http, WiFiClientSecure& tls, const char* url) {
+bool httpsGet(HTTPClient& http, WiFiClientSecure& tls, const String& url) {
   tls.setCACert(ROOT_CA);
   http.setTimeout(15000);
   if (!http.begin(tls, url)) return false;
-  http.addHeader("X-Auth-Token", AUTH_TOKEN);
+  http.addHeader("X-Auth-Token", READER_TOKEN);
   return http.GET() == 200;
 }
 
@@ -487,7 +601,7 @@ void otaFail(const char* why) {
 struct Manifest { long build = 0; size_t size = 0; String sha, sig; };
 bool fetchManifest(Manifest& m) {
   String resp;
-  if (apiRequest(OTA_MANIFEST_URL, nullptr, resp) != 200) return false;
+  if (apiRequest(urlManifest, nullptr, resp) != 200) return false;
   JsonDocument j;
   if (deserializeJson(j, resp)) return false;
   m.build = j["build"] | 0L; m.size = j["size"] | 0;
@@ -528,7 +642,7 @@ void otaCheck() {
   if (!Update.begin(size)) { otaFail("too big / no slot"); return; }
 
   WiFiClientSecure tls; HTTPClient http;
-  if (!httpsGet(http, tls, OTA_BIN_URL) || (size_t)http.getSize() != size) {
+  if (!httpsGet(http, tls, urlBin) || (size_t)http.getSize() != size) {
     http.end(); Update.abort(); otaFail("download"); return;
   }
   mbedtls_sha256_context sha; mbedtls_sha256_init(&sha); mbedtls_sha256_starts(&sha, 0);
@@ -572,7 +686,7 @@ void otaCheck() {
   ESP.restart();
 }
 
-// New OTA image: keep it only if it can reach the orchestrator.
+// New OTA image: keep it only if it can reach the server's reader API.
 void confirmOtaImage() {
   const esp_partition_t* run = esp_ota_get_running_partition();
   esp_ota_img_states_t st;
@@ -582,9 +696,9 @@ void confirmOtaImage() {
   bool ok = false;
   if (WiFi.status() == WL_CONNECTED) {
     String resp;
-    ok = apiRequest(HEALTHZ_URL, nullptr, resp) == 200;
+    ok = apiRequest(urlHealthz, nullptr, resp) == 200;
   }
-#ifdef OTA_TEST_FAIL_HEALTH  // rollback drill: PLATFORMIO_BUILD_FLAGS=-DOTA_TEST_FAIL_HEALTH py ota_publish.py
+#ifdef OTA_TEST_FAIL_HEALTH  // rollback drill: PLATFORMIO_BUILD_FLAGS=-DOTA_TEST_FAIL_HEALTH
   ok = false;
 #endif
   if (ok) {
@@ -599,7 +713,7 @@ void confirmOtaImage() {
   }
 }
 
-// ---- screen sleep (OLED burn-in) + remembered slot --------------------------
+// ---- screen sleep (OLED burn-in) --------------------------------------------
 // Dim after 2 min idle, off after 10. The first knob turn / press on a dark
 // screen only wakes it; a tag tap wakes it and is processed as usual.
 static const uint32_t DIM_AFTER_MS = 2UL * 60 * 1000;
@@ -619,14 +733,6 @@ void screenIdle() {
   uint32_t idle = millis() - lastActivity;
   if (scr == SCR_ON  && idle > DIM_AFTER_MS) { display.dim(true); scr = SCR_DIM; }
   if (scr == SCR_DIM && idle > OFF_AFTER_MS) { display.ssd1306_command(SSD1306_DISPLAYOFF); scr = SCR_OFF; }
-}
-
-Preferences prefs;                  // NVS: survives reboots and OTA updates
-int savedSlot = -1;
-void saveSlot() {
-  if (selected == savedSlot) return;
-  prefs.putUChar("slot", selected);
-  savedSlot = selected;
 }
 
 // Print every I2C address that ACKs (PN532 = 0x24, OLED = 0x3C).
@@ -653,6 +759,12 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(PIN_ENC_CLK), encISR, CHANGE);
   attachInterrupt(digitalPinToInterrupt(PIN_ENC_DT),  encISR, CHANGE);
 
+  urlPrinters = joinUrl(READER_BASE, "printers").c_str();
+  urlScan     = joinUrl(READER_BASE, "scan").c_str();
+  urlHealthz  = joinUrl(READER_BASE, "healthz").c_str();
+  urlManifest = joinUrl(READER_BASE, "fw/manifest.json").c_str();
+  urlBin      = joinUrl(READER_BASE, "fw/firmware.bin").c_str();
+
   // Idle I2C lines must read HIGH (pulled up). LOW with no internal pull-up means
   // no pull-up resistors; LOW even with the pull-up means something holds it down.
   pinMode(PIN_SDA, INPUT); pinMode(PIN_SCL, INPUT); delay(5);
@@ -666,7 +778,7 @@ void setup() {
   while (digitalRead(PIN_SCL) == LOW && millis() - w0 < 500) delay(1);
   if (digitalRead(PIN_SCL) == LOW) {
     Serial.println("I2C SCL stuck LOW (PN532 wedged?) -> unplug USB to power-cycle");
-    say({sp2_POWER, sp2_CYCLE});   // the OLED shares the stuck bus, so speak it
+    speakWord(W_POWER, W_CYCLE);   // the OLED shares the stuck bus, so speak it
   }
   Wire.begin(PIN_SDA, PIN_SCL);
   i2cScan();
@@ -678,7 +790,7 @@ void setup() {
   display.setTextColor(SSD1306_WHITE);
   display.setTextSize(1);
   display.setCursor(0, 0);
-  display.print("H2D filament scan\nconnecting WiFi...");
+  display.print("filament-kit reader\nconnecting WiFi...");
   display.display();
 
   nfc.begin();
@@ -699,56 +811,112 @@ void setup() {
   apiTls.setCACert(ROOT_CA);
   confirmOtaImage();
   prefs.begin("reader", false);
-  int s = prefs.getUChar("slot", 0);
-  selected = savedSlot = (s < NUM_SLOTS) ? s : 0;
-  refreshTrays();
+  savedPrinter = prefs.getString("printer", "").c_str();
+  savedLabel   = prefs.getString("slot_label", "").c_str();
+  if (prefs.isKey("slot")) prefs.remove("slot");   // the H2D-only firmware's slot index
+  refreshLists();
   checkForUpdate();
   lastActivity = millis();
-  showPicker();
-  if (WiFi.status() == WL_CONNECTED) say({sp2_READY});
-  else                               say({sp2_CONNECT, sp2_FAIL});
+  redraw();
+  if (WiFi.status() != WL_CONNECTED) speakWord(W_CONNECT, W_FAIL);
+  else if (!serverOk)                speakWord(W_ERROR);
+  else                               speakWord(W_READY);
 }
 
-uint32_t speakAt = 0;   // when to announce the slot after the knob stops (0 = none)
+uint32_t speakAt = 0;    // when to announce the selection after the knob stops (0 = none)
+bool swallowPress = false;  // this press woke a dark screen: ignore the rest of it
+
+void handleAction(Action a) {
+  switch (a) {
+    case ACT_SLOT_MOVED:
+    case ACT_CURSOR_MOVED:
+      buzzTick(); scrollStep = 0; redraw();
+      speakAt = millis() + SPEAK_SETTLE_MS;   // re-armed by every detent
+      break;
+    case ACT_RESEND:
+      buzzTick();
+      if (lastUid.length() && curSlot()) {
+        Serial.printf("re-send %s -> %s\n", lastUid.c_str(), curSlot()->label.c_str());
+        sendScan(lastUid);
+      } else {
+        redraw();
+      }
+      break;
+    case ACT_OPEN_LIST:
+      buzzTick(); scrollStep = 0; redraw();
+      speakAt = millis() + SPEAK_SETTLE_MS;
+      break;
+    case ACT_CLOSE_LIST:
+      speakAt = 0; scrollStep = 0; redraw();
+      break;
+    case ACT_PICK_PRINTER:
+      buzzTick(); speakAt = 0; scrollStep = 0;
+      if (curPrinter()) savePrinter(curPrinter()->id);
+      showProgress(curPrinter() ? curPrinter()->name.c_str() : "Printer", "loading slots...", -1);
+      slots.clear();
+      serverOk = fetchSlots(savedLabel);
+      if (curSlot()) saveSlot(curSlot()->label);
+      listsAt = millis();
+      redraw();
+      if (curPrinter()) speak(curPrinter()->say);
+      break;
+    case ACT_OTA:
+      buzzTick(); otaCheck();
+      break;
+    case ACT_NO_PRINTERS:
+      showResult("Printers", serverOk ? "none on the server" : "server unreachable", false);
+      buzzError();
+      break;
+    default:
+      break;
+  }
+}
 
 void loop() {
+  uint32_t now = millis();
+  int np = (int)printers.size(), ns = (int)slots.size();
+
   // rotary encoder: consume pending detents (CW = next, CCW = prev)
   int16_t d;
   noInterrupts(); d = encDetents; encDetents = 0; interrupts();
   if (d) {
-    if (wake()) {
-      showPicker();                           // dark screen: this turn only wakes it
-    } else {
-      selected = (((selected + d) % NUM_SLOTS) + NUM_SLOTS) % NUM_SLOTS;
-      buzzTick(); showPicker();
-      speakAt = millis() + SPEAK_SETTLE_MS;   // re-armed by every detent
-    }
+    if (wake()) redraw();                     // dark screen: this turn only wakes it
+    else { resultUntil = 0; handleAction(menu.rotate(d, np, ns, now)); }
   }
   if (speakAt && (int32_t)(millis() - speakAt) >= 0) {
-    speakAt = 0; saveSlot(); speakSlot(selected, nullptr);
-  }
-  // encoder push: short = re-send the last tag to the shown slot; hold 2 s = OTA
-  SwEvent ev = swEvent();
-  if (ev != SW_NONE) Serial.printf("button: %s press\n", ev == SW_LONG ? "long" : "short");
-  if (ev != SW_NONE && wake()) { showPicker(); ev = SW_NONE; }
-  if (ev == SW_LONG) { buzzTick(); otaCheck(); }
-  if (ev == SW_SHORT) {
-    buzzTick();
-    if (lastUid.length()) {
-      Serial.printf("re-send %s -> %s\n", lastUid.c_str(), SLOTS[selected].label);
-      sendScan(lastUid);
-    } else {
-      showPicker();
+    speakAt = 0;
+    if (menu.mode == MODE_PRINTERS) {
+      if (menu.cursor < np) speak(printers[menu.cursor].say);
+    } else if (curSlot()) {
+      saveSlot(curSlot()->label);
+      speak(curSlot()->say);
     }
   }
 
-  // revert from a result screen after the hold window
-  if (resultUntil && millis() > resultUntil) { resultUntil = 0; showPicker(); }
+  // encoder push: short = re-send; hold 1 s = printer list; hold 4 s = OTA
+  BtnEvent ev = button.update(swPressed(), millis());
+  if (ev != BTN_NONE) {
+    Serial.printf("button: %s\n", ev == BTN_SHORT ? "short" : ev == BTN_CUE ? "1 s" :
+                                  ev == BTN_MENU ? "menu" : "ota");
+    if (wake()) { redraw(); swallowPress = ev == BTN_CUE; ev = BTN_NONE; }
+    else if (swallowPress && ev != BTN_CUE) { swallowPress = false; ev = BTN_NONE; }
+  }
+  if (ev == BTN_CUE) { if (!swallowPress) buzzTick(); }
+  else if (ev != BTN_NONE) { resultUntil = 0; handleAction(menu.button(ev, np, millis())); }
+  if (menu.tick(millis()) == ACT_CLOSE_LIST) redraw();
 
-  // background refreshes (skipped while a result is showing)
-  if (!resultUntil) {
-    if (scr != SCR_OFF && millis() - traysAt > TRAY_REFRESH_MS) { refreshTrays(); showPicker(); }
-    if (millis() - updCheckAt > UPD_CHECK_MS) { checkForUpdate(); if (scr != SCR_OFF) showPicker(); }
+  // revert from a result screen after the hold window
+  if (resultUntil && millis() > resultUntil) { resultUntil = 0; redraw(); }
+
+  // background refreshes (skipped while a result or the printer list is showing)
+  if (!resultUntil && menu.mode == MODE_SLOTS && !speakAt) {
+    if (scr != SCR_OFF && millis() - listsAt > LIST_REFRESH_MS) { refreshLists(); redraw(); }
+    if (millis() - updCheckAt > UPD_CHECK_MS) { checkForUpdate(); if (scr != SCR_OFF) redraw(); }
+  }
+  // scroll long names/labels
+  if (!resultUntil && scr != SCR_OFF && millis() - scrollAt > MARQUEE_STEP_MS) {
+    scrollAt = millis();
+    if (needsScroll()) { scrollStep++; redraw(); }
   }
   screenIdle();
 
@@ -756,12 +924,13 @@ void loop() {
   uint8_t uid[7]; uint8_t uidLen = 0;
   if (nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, 80)) {
     String u = formatUid(uid, uidLen);
-    uint32_t now = millis();
-    if (u != lastUid || now - lastScanMs > SCAN_COOLDOWN_MS) {
-      lastUid = u; lastScanMs = now;
+    uint32_t t = millis();
+    if (u != lastUid || t - lastScanMs > SCAN_COOLDOWN_MS) {
+      lastUid = u; lastScanMs = t;
       wake();
-      Serial.printf("tag %s -> %s (ams %d tray %d)\n", u.c_str(),
-                    SLOTS[selected].label, SLOTS[selected].ams_id, SLOTS[selected].tray_id);
+      if (menu.mode == MODE_PRINTERS) { menu.mode = MODE_SLOTS; }   // a tap closes the list
+      Serial.printf("tag %s -> %s / %s\n", u.c_str(),
+                    curPrinter() ? curPrinter()->id.c_str() : "-", curSlot() ? curSlot()->label.c_str() : "-");
       sendScan(u);
     }
   }
