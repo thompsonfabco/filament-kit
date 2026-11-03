@@ -6,7 +6,7 @@
 
 Optional front panel for the intake station: a Wemos D1 mini (ESP-12F) on the station PC's USB, a 3-wire passive
 buzzer, two illuminated normally-open push buttons (**Hold** and **Discard**), a speaker that says what happened, and
-a BME280 for room air. The D1 mini is a thin I/O board; `intake_station.py` owns all the logic (and makes the speech),
+a BME280 (or BMP280 + AHT20) for room air. The D1 mini is a thin I/O board; `intake_station.py` owns all the logic (and makes the speech),
 so behaviour changes never need a reflash. A USB webcam on the station PC takes a picture of the pan at each Hold.
 
 ![wiring](panel/wiring.png)
@@ -23,7 +23,7 @@ so behaviour changes never need a reflash. A USB webcam on the station PC takes 
 | Buzzer + / − | 3V3 / G | |
 | Lamp + / lamp − | 5V / MOSFET drain (D); source (S) to G | |
 | Speaker: BS170 Q3 gate via 220 Ω, 100 kΩ gate to G | D8 | 15 |
-| BME280 SDA / SCL | D3 / D4 | 0 / 2 |
+| BME280 (or BMP280 + AHT20) SDA / SCL | D3 / D4 | 0 / 2 |
 | BME280 VIN / GND | 3V3 / G | |
 
 **Speaker stage** (BS170 driving a push-pull pair, all from the parts drawer):
@@ -70,8 +70,10 @@ look-alike 2N7000 is S G D).
 - The webcam picture (`/photo`, listed in `/state` as `photo`) is taken a moment after Hold, so the camera has set its
   exposure. It lasts as long as the hold does. `STATION_CAMERA` is a `/dev/video*` path, `auto` (the first USB camera)
   or `off`.
-- Room air from the BME280 is in `/state` as `air` (`temp_c`, `rh`, `hpa`), read every 10 s; `rh` is null on a BMP280
-  look-alike, and `air` is null when the reading is over a minute old.
+- Room air is in `/state` as `air` (`temp_c`, `rh`, `hpa`), read every 10 s, and `air` is null once the reading is
+  over a minute old. The sensor can be a BME280, or a BMP280 + AHT20 combination board like the one fitted here: the
+  BMP280 gives temperature and pressure and the AHT20 (I2C 0x38) gives humidity. A sensor that isn't there reads
+  null: `rh` on a lone BMP280, `hpa` on a lone AHT20.
 - Without the panel, a scan beeps and phrases are spoken through the PC's audio output instead.
   `STATION_SPEECH=0` turns speech off and `STATION_BEEP=0` turns beeps off.
 
@@ -83,22 +85,46 @@ look-alike 2N7000 is S G D).
 | PC → panel | `L <hold> <discard>` | lamp modes: 0 off, 1 on, 2 flash, 3 three fast blinks then off |
 | PC → panel | `B <hz> <ms> [count]` | beep(s) |
 | PC → panel | `A <n>` + n raw bytes | speech, unsigned 8-bit mono at 8 kHz (n ≤ 1024): each byte is the speaker MOSFET's duty, 0 = off |
-| panel → PC | `HELLO intake-panel <version>` | at boot and after `?` (version 2 has the speaker and BME280) |
+| panel → PC | `HELLO intake-panel <version>` | at boot and after `?` (2: speaker and BME280; 3: PWM speaker; 4: AHT20; 5-6: whine-free PWM, 160 MHz) |
 | panel → PC | `P H` / `P D` | Hold / Discard pressed |
-| panel → PC | `AIR <°C> <RH%\|-> <hPa>` | room air every 10 s |
+| panel → PC | `AIR <°C> <RH%\|-> <hPa\|->` | room air every 10 s; `-` = that sensor isn't fitted |
 
 The PC resends `L` every second; after 5 s without one (service stopped) the panel turns its lamps off.
 
-**Speech.** The PC makes each phrase with espeak-ng, then ffmpeg band-limits it (250 Hz–3.5 kHz) and resamples it to
-8 kHz. The PC peak-normalises it to duty 16–240 around 128 and adds a 150 ms ramp from 0 at each end, so C1 charges
-and discharges without a thump. It streams the result in 256-byte `A` frames in real time, 0.25 s ahead, between the
+**Speech.** The PC makes each phrase with espeak-ng. ffmpeg then voices it for a small headset driver in open air
+(picked by ear in an A/B test): everything below 450 Hz is cut (the driver can't play it), 2.5 kHz is lifted 8 dB
+for the consonants, the result is compressed hard, and it is resampled to 8 kHz. The PC normalises it to duty 16–240
+around 128, letting the loudest 2 % of samples clip, and adds a 150 ms ramp from 0 at each end, so C1 charges and
+discharges without a thump. It streams the result in 256-byte `A` frames in real time, 0.25 s ahead, between the
 lamp lines. A newer phrase cuts the current one off with a fade.
 
-The panel keeps the samples in a ring buffer (1 s). A timer1 callback plays them into the ESP8266's sigma-delta output
-on D8; it shares timer1 with `tone()`, so the buzzer still works. The sigma-delta clock is 80 MHz / 128, so pulses are
-at least 1.6 µs, long enough for RU to swing the pair's bases. With the duty kept within 16–240, the lowest output
-frequency is about 39 kHz, far above speech. If a stream stops without its ramp, the panel fades the speaker to off
-over half a second.
+The panel keeps the samples in a ring buffer (1 s). A timer1 callback plays them as 40 kHz PWM on D8, five PWM periods
+per sample. It shares timer1 with `tone()`, so the buzzer still works. Every edge has to land on time, because any
+regular timing error is audible:
+
+- The callback asks for each interrupt 3 µs before its edge, then waits out the rest in a tight loop and sets the pin
+  from the cycle counter. Edges under 8 µs away are waited out directly, since the core won't schedule interrupts
+  closer than 4 µs. This works because interrupt entry time varies (for example when `loop()` is waiting on a flash
+  read).
+- The sample bookkeeping runs after an edge, in the longer half of the period. Doing it before the edge on every
+  fifth period made an 8 kHz whine in firmware 3 and 4.
+- The ESP8266 runs at 160 MHz (firmware 6), which halves interrupt overhead. That removed the last of the whine.
+
+With the duty kept within 16–240, every pulse is at least 1.6 µs, long enough for RU to swing the pair's bases.
+While silent, the callback runs only once a millisecond. If a stream stops without its ramp, the panel fades the
+speaker to off over half a second.
+
+**Louder.** If the speech is too quiet:
+
+- Mount the driver sealed behind a hole in the enclosure (a baffle). Open-air headset drivers lose most of their
+  output to the back wave.
+- Use both drivers in parallel, and drop RU to 330 Ω. With 1 kΩ, the KSC2073's base current through RU clips the
+  positive peaks into a 32 Ω or lower load.
+
+The panel used the ESP8266's sigma-delta output up to version 2, but that was replaced. A first-order sigma-delta
+slow enough for the push-pull pair repeats its pattern every 256 clocks, which at that clock speed is an audible
+whine at about 2.4 kHz. PWM has one pulse per period at any duty, so the slow rising edge costs the same at every
+level: a constant offset rather than distortion.
 
 The panel and the PN532 reader both use CH340 USB serial chips with no serial number, so their `ttyUSB` numbers can
 swap between boots. The service finds the panel by its HELLO and gives nfcpy the other port (`NFC_DEVICE=auto`).
@@ -127,7 +153,7 @@ for the webcam.
 
 Offline tests (Linux / WSL):
 
-- `panel/test/bme280_test.cpp`: the BME280 compensation against the datasheet example
+- `panel/test/bme280_test.cpp`: the BME280 compensation against the datasheet example, and the AHT20 CRC and decoding
   (`g++ -std=c++17 -I../src bme280_test.cpp -o /tmp/bme280_test && /tmp/bme280_test` in `panel/test`).
 - `test_panel.py`: drives the PC side against a fake panel on a pty and a fake webcam (ffmpeg's test pattern). It
   covers lamps, beeps, speech framing and timing, the photo and AIR. Needs pyserial, espeak-ng and ffmpeg:
