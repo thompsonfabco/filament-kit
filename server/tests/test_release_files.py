@@ -596,3 +596,43 @@ def test_with_a_terminal_the_saved_address_is_not_used(tmp_path):
     r = subprocess.run(["wsl", "-d", "Ubuntu", "--exec", "env", f"FK_ETC={wslpath(etc)}", "bash", sh, "--mode",
                         "station"], stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=120)
     assert SAVED_NOTE in r.stderr, r.stdout + r.stderr
+
+
+def _wrapper_run(tmp_path, *args) -> str:
+    """Run install/filament-kit-cli.sh as root with stand-ins: the program prints `as-root ...`, runuser prints
+    `as-user ...`. Returns what was printed."""
+    import os
+    import subprocess
+    stubs = tmp_path / "stubs"
+    stubs.mkdir()
+    for name, body in (("id", 'echo 0'), ("runuser", 'shift 3; echo "as-user $*"'),
+                       ("prog", 'echo "as-root $*"')):
+        f = stubs / name
+        f.write_text(f"#!/usr/bin/env bash\n{body}\n", encoding="utf-8", newline="\n")
+        f.chmod(0o755)
+    text = _read("install/filament-kit-cli.sh").replace("BIN=/opt/filament-kit/venv/bin/filament-kit",
+                                                        "BIN=./stubs/prog")
+    assert "BIN=./stubs/prog" in text
+    (tmp_path / "w.sh").write_text(text, encoding="utf-8", newline="\n")
+    env = dict(os.environ, PATH="./stubs" + os.pathsep + os.environ.get("PATH", ""))
+    if os.name == "nt":                 # Git Bash takes a POSIX PATH; the relative entry needs no conversion
+        env["PATH"] = "./stubs:" + os.environ.get("PATH", "")
+    r = subprocess.run([_bash(), "w.sh", *args], cwd=tmp_path, env=env, capture_output=True, text=True, timeout=30)
+    assert r.returncode == 0, r.stderr
+    return r.stdout.strip()
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_wrapper_runs_reader_token_and_revoke_as_root(tmp_path):
+    """`reader token` and `reader revoke` refuse unless root (they write the token file, chowned to the service
+    user): `sudo filament-kit reader token` must reach the program as root. `reader tokens` (a list) drops to
+    the service user like every other read."""
+    assert _wrapper_run(tmp_path, "reader", "token", "--name", "bench") == "as-root reader token --name bench"
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_wrapper_reader_revoke_as_root_and_list_as_user(tmp_path):
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    assert _wrapper_run(tmp_path / "a", "reader", "revoke", "r1") == "as-root reader revoke r1"
+    assert _wrapper_run(tmp_path / "b", "reader", "tokens") == "as-user ./stubs/prog reader tokens"
