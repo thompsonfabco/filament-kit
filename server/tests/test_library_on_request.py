@@ -85,9 +85,11 @@ def test_library_module_is_off_for_new_installs():
     assert "library" not in modules.enabled({"modules": {}})
     assert "library" in modules.enabled({})                  # a config from before modules existed keeps it
     assert modules.mode_of(modules.enabled({})) == "server"
-    cfg = modules.set_mode({}, "server", say=None)
-    assert cfg["modules"]["library"] is True                 # a mode change on such a config keeps it
-    assert modules.set_mode({}, "station", say=None)["modules"]["library"] is False
+    new = modules.set_mode({}, "server", say=None)               # an empty config is a new install
+    assert new["modules"]["library"] is False and new["modules"]["ai_intake"] is False
+    old = modules.set_mode({"port": 1}, "server", say=None)      # a filled config without modules is legacy
+    assert old["modules"]["library"] is True and old["modules"]["ai_intake"] is True
+    assert modules.set_mode({"port": 1}, "station", say=None)["modules"]["library"] is False
     assert modules.set_mode({"modules": {"server": True}}, "server", say=None)["modules"]["library"] is False
     assert "library" not in modules.MODES["server"]
     assert "library" not in modules.MODES["all-in-one"]
@@ -329,8 +331,8 @@ def test_archive_read_checks_the_deadline(fresh):
 
 # adopting the library an older program bundled
 
-def legacy_dir(tmp_path) -> Path:
-    d = tmp_path / "old_library_data"
+def legacy_dir(tmp_path, name="old_library_data") -> Path:
+    d = tmp_path / name
     shutil.copytree(tl.FIXTURE, d)
     return d
 
@@ -341,7 +343,7 @@ def test_adopt_keeps_the_old_bundled_library(fresh, tmp_path):
     lib = library.load()
     assert lib.source == "updated" and lib.version == v
     assert lib.lookup("SUNLU", "PLA+ 2.0").library is not None
-    assert library.adopt(legacy_dir(tmp_path)) is None          # already installed: left alone
+    assert library.adopt(legacy_dir(tmp_path, "again")) is None          # already installed: left alone
 
 
 def test_adopt_refuses_a_damaged_copy(fresh, tmp_path):
