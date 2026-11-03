@@ -54,3 +54,31 @@ def _state_dir(tmp_path, monkeypatch):
     """Tests that read the printer registry indirectly (camera sources pin TLS leaves through it) never touch the
     real /var/lib/filament-kit; a test's own FK_STATE still wins."""
     monkeypatch.setenv("FK_STATE", str(tmp_path / "fk-state"))
+
+
+@pytest.fixture(autouse=True)
+def _library_snapshot(monkeypatch):
+    """The program ships no library entries (they are downloaded), so on its first library access in a test's state
+    directory (whatever FK_STATE the test chose) the snapshot is installed there as a downloaded copy: the
+    production path. Tests of the empty case request the `no_library` fixture."""
+    from libsnap import install_snapshot
+    from filament_kit import library
+    real = library._dir
+    done = set()
+
+    def _dir():
+        d = real()
+        if d not in done:
+            done.add(d)
+            install_snapshot(d.parent)
+        return d
+
+    monkeypatch.setattr(library, "_dir", _dir)
+    monkeypatch.setattr(library, "_real_dir", real, raising=False)
+
+
+@pytest.fixture
+def no_library(monkeypatch):
+    """A fresh install: nothing downloaded."""
+    from filament_kit import library
+    monkeypatch.setattr(library, "_dir", library._real_dir)

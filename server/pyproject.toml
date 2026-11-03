@@ -30,8 +30,7 @@ include = ["filament_kit*"]
 namespaces = false  # library_data/ is package data, not a namespace package
 
 [tool.setuptools.package-data]
-filament_kit = ["web/static/*", "library_data/*.json", "library_data/schema/*.json", "library_data/library/*/*.json",
-                "bridge/*.xml"]
+filament_kit = ["web/static/*", "library_data/*.json", "library_data/schema/*.json", "bridge/*.xml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

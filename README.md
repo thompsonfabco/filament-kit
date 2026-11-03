@@ -71,7 +71,7 @@ for the mode on the first install:
 
 | Mode | What it installs | Use it when |
 |---|---|---|
-| `server` (1, the default) | Spoolman, the server, printers, presets, library, backup | One computer runs the kit. |
+| `server` (1, the default) | Spoolman, the server, printers, presets, backup (AI label reading and the library are switched on when you want them) | One computer runs the kit. |
 | `station` (2) | Only the intake station (USB scale and NFC reader) | The station is a second computer and the server runs on another one. It asks for the **server's address**. |
 | `all-in-one` (3) | Everything, station included | The scale and reader are plugged into the server computer. |
 | `custom` (4) | The modules you pick one by one, at the installer's question or later with `sudo filament-kit modules enable/disable` | You know which parts you want. |
@@ -375,21 +375,27 @@ Then run `sudo filament-kit profiles build` (or wait for the next sync).
 
 ## Spec library updates
 
-The library holds published filament specs (temperatures, speeds). A copy comes with the server, so it works
-at once. The server checks for a newer copy every day.
+The library holds published filament specs (temperatures, speeds). It is optional and is not part of the
+program: profiles work without it, from your Spoolman values and Bambu's or Orca's own starting presets. Ask for it
+with `sudo filament-kit library update`, or switch the **library** module on (it then also checks every day). A
+copy you downloaded earlier keeps being used when the kit is upgraded.
 
-- `sudo filament-kit library status`: shows the library version and the last check.
-- `sudo filament-kit library update`: checks for a newer version now.
+- `sudo filament-kit library status`: shows the library version (or that none is downloaded) and the last check.
+- `sudo filament-kit library update`: downloads the library, or a newer version, now.
 - `sudo filament-kit library rollback`: goes back to the version before the last update. The next daily check
   installs the newer version again. To keep the rolled-back version, turn the daily check off first: in
   `/etc/filament-kit/config.json` set `"library": {"schedule": "off"}` (or `"weekly"`; the default is
   `"daily"`), then roll back. Set it back to `"daily"` to get updates again.
 - `sudo filament-kit library add <file>`: adds or replaces your own entry from a JSON file.
 
-Updates only arrive once the library's GitHub repository is public or the server's library address points to a
-public mirror. While the library repository can't be reached, the daily check logs a warning, and running
-`sudo filament-kit library update` yourself shows an error. Neither is a failure; the bundled library keeps
-working.
+The download is the `library.tar.gz` asset of the latest release (`library.url` in the config can point to
+another `.tar.gz` or to a folder that serves `index.json` and the entries). Every entry is checked before it is
+used, and a bad download changes nothing. The token below is only ever sent to github.com, api.github.com and
+githubusercontent.com. Testing against a private repository: put a GitHub token that can read it in
+`/etc/filament-kit/github_token`; the `releases/latest/download` link does not accept a token for a private
+repository, so find the asset's id (`gh api repos/<owner>/<repo>/releases/latest --jq '.assets[] | [.name, .id]'`)
+and set `library.url` to `https://api.github.com/repos/<owner>/<repo>/releases/assets/<id>`. Until the release is public, `library update` shows an error and the daily check
+logs a warning; neither is a failure, and the library you already have (or none) keeps working.
 
 Your own `library add` entries override the shared library for that line.
 

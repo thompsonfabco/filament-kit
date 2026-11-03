@@ -125,10 +125,12 @@ def test_cli_wrapper_library_add_uses_stdin():
     assert '[ ! -f "$3" ] || [ ! -r "$3" ]' in text  # a missing file is refused with a message
 
 
-def test_release_packages_path_units_and_checks_library_data():
+def test_release_packages_path_units_and_keeps_library_out_of_the_wheel():
     text = _text(ROOT / "tools" / "make_release.sh")
     assert "install/systemd/*.path" in text
-    assert "filament_kit/library_data/index.json" in text
+    assert "filament_kit/library_data/index.json" not in text     # no bundled-index check any more
+    assert "filament_kit/library_data/library/" in text           # the wheel must not carry entries
+    assert "build_library_asset.py" in text
 
 
 def test_readme_final_review_points():
