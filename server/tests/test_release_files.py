@@ -238,14 +238,16 @@ def _save_snippet() -> str:
     return text[start:text.index("\n'\n", start)]
 
 
-def _run_save(tmp_path, mode, modules_csv="", server=""):
+def _run_save(tmp_path, mode, modules_csv="", server="", ai="", existing=None):
     import json
     import os
     import subprocess
     import sys
     etc = tmp_path / "etc"
-    etc.mkdir(exist_ok=True)
-    env = dict(os.environ, FK_ETC=str(etc), FK_MODE=mode, FK_MODULES=modules_csv, FK_SERVER=server,
+    etc.mkdir(parents=True, exist_ok=True)
+    if existing is not None:
+        (etc / "config.json").write_text(json.dumps(existing), encoding="utf-8")
+    env = dict(os.environ, FK_ETC=str(etc), FK_MODE=mode, FK_MODULES=modules_csv, FK_SERVER=server, FK_AI=ai,
                FK_NO_SYSTEMD="1", PYTHONPATH=str(ROOT / "server"))
     r = subprocess.run([sys.executable, "-c", _save_snippet()], env=env, capture_output=True, text=True,
                        timeout=60)
@@ -277,3 +279,15 @@ def test_install_apt_waits_for_the_dpkg_lock():
     calls = [ln for ln in _read("install/install.sh").splitlines()
              if ln.strip().startswith("apt-get")]
     assert calls and all("DPkg::Lock::Timeout=" in ln for ln in calls)
+
+
+def test_install_save_new_server_has_ai_intake_off_unless_chosen(tmp_path):
+    """R1: a new install has AI label reading off; the first-install question (FK_AI) turns it on."""
+    assert _run_save(tmp_path / "a", "server")["modules"]["ai_intake"] is False
+    assert _run_save(tmp_path / "b", "all-in-one", ai="1")["modules"]["ai_intake"] is True
+
+
+def test_install_save_mode_on_a_legacy_install_keeps_ai_intake(tmp_path):
+    """An install from before modules (no `modules` key) had AI intake: `--mode` on its upgrade keeps it."""
+    cfg = _run_save(tmp_path, "server", existing={"server_name": "fk", "port": 8443})
+    assert cfg["modules"]["ai_intake"] is True and cfg["server_name"] == "fk"
