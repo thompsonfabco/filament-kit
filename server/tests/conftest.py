@@ -54,3 +54,14 @@ def _state_dir(tmp_path, monkeypatch):
     """Tests that read the printer registry indirectly (camera sources pin TLS leaves through it) never touch the
     real /var/lib/filament-kit; a test's own FK_STATE still wins."""
     monkeypatch.setenv("FK_STATE", str(tmp_path / "fk-state"))
+
+
+SNAPSHOT = __import__("pathlib").Path(__file__).parent / "data" / "library_snapshot"
+
+
+@pytest.fixture(autouse=True)
+def _library_snapshot(monkeypatch):
+    """The program ships no library entries (they are downloaded), so tests that need real vendor data read this
+    snapshot as if it were already installed. Tests of the empty case put `library.BUNDLED` back."""
+    from filament_kit import library
+    monkeypatch.setattr(library, "BUNDLED", SNAPSHOT)

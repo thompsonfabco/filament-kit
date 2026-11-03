@@ -1,6 +1,6 @@
-"""Copy the filament spec library into the server package as its bundled snapshot.
+"""Copy the filament spec library into the server package as the test snapshot (the wheel bundles no entries).
 
-    python -I tools/sync_library_snapshot.py --from <filament-library checkout> [--to server/filament_kit/library_data]
+    python -I tools/sync_library_snapshot.py --from <filament-library checkout> [--to server/tests/data/library_snapshot]
 
 Copies index.json, schema/entry.schema.json and library/<vendor>/<product>.json byte for byte, after checking
 that every entry validates (the server's own port of fl.py), sits at its own path, and matches its index sha256,
@@ -88,7 +88,7 @@ def copy(src: Path, dest: Path, paths: list[str]) -> None:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--from", dest="src", required=True, type=Path, help="filament-library checkout")
-    ap.add_argument("--to", dest="dest", type=Path, default=REPO / "server" / "filament_kit" / "library_data")
+    ap.add_argument("--to", dest="dest", type=Path, default=REPO / "server" / "tests" / "data" / "library_snapshot")
     args = ap.parse_args(argv)
     idx, paths, problems = check(args.src)
     if problems:

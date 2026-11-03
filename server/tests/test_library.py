@@ -16,7 +16,8 @@ import pytest
 from filament_kit import config, library
 
 FIXTURE = Path(__file__).parent / "data" / "library"
-BUNDLED = Path(library.__file__).parent / "library_data"
+BUNDLED = Path(__file__).parent / "data" / "library_snapshot"   # stands in for a downloaded library (conftest)
+PACKAGED = Path(library.__file__).parent / "library_data"
 
 
 def _bundled_version() -> int:
