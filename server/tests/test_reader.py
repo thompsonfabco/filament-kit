@@ -355,6 +355,19 @@ def test_slot_labels_are_unique_within_what_the_firmware_keeps(app, token, kit):
     assert len(set(cut)) == len(cut)
 
 
+def test_reader_slots_and_kit_label_agree_on_a_case_or_space_collision():
+    """M3: the reader lists the first of "A1" / "a1" / " a1 "; a scan naming it must reach that same slot."""
+    rows = [{"label": "A1"}, {"label": "a1"}, {"label": " a1 "}, {"label": "A2"}]
+    listed = [r["label"] for r in reader.reader_slots(rows)]
+    assert listed == ["A1", "A2"]
+    labels = [r["label"] for r in rows]
+    assert slots.kit_label("A1", labels) == "A1"
+    assert slots.kit_label(" A1 ", labels) == "A1"
+    assert slots.kit_label("a1", labels) == "a1"           # an exact match wins
+    assert slots.kit_label("A1", ["a1", "A1"]) == "A1"
+    assert slots.kit_label("a1", ["X", "A1", "a1 "]) == "A1"   # no exact match: the first of the collision
+
+
 # ---------- routes: scan ----------
 
 def scan(c, token, **body):

@@ -270,16 +270,26 @@ class KitApi:
 LABEL = re.compile(r"[A-Za-z0-9-]{1,16}")       # kit labels: A1 ... Z4, AA1 ..., HT-A ..., Ext, Ext-L / Ext-R
 
 
+def label_key(label) -> str:
+    """How labels are compared: case and surrounding spaces do not matter."""
+    return str(label).strip().upper()
+
+
 def kit_label(slot, labels=None) -> str:
     """A slot as the kit names it, for any printer. `labels` = that printer's slot labels (from its status); a kit
-    label matches whatever its case. The H2D's old names still work (compat parser): '1'-'4' / 'AMS slot N' ->
-    A1-A4, 'HT1' / 'AMS HT 1' -> HT-A (HT2 -> HT-B ...), 'EXT-L' / 'external left' -> Ext-L, 'EXT-R' -> Ext-R (on a
+    label matches whatever its case (an exact match first, else the first label equal by `label_key`, the one
+    the reader lists). The H2D's old names still work (compat parser): '1'-'4' / 'AMS slot N' -> A1-A4, 'HT1' / 'AMS HT 1' -> HT-A (HT2 -> HT-B ...), 'EXT-L' / 'external left' -> Ext-L, 'EXT-R' -> Ext-R (on a
     printer with one holder: Ext). With `labels` the result is one of them; without (no report yet) the kit
     server checks it."""
     s = str(slot).strip()
-    have = {str(x).upper(): str(x) for x in labels or () if x}
-    if s.upper() in have:
-        return have[s.upper()]
+    labels = [str(x) for x in labels or () if x]
+    if s in labels:
+        return s                    # an exact match wins
+    have: dict[str, str] = {}
+    for x in labels:
+        have.setdefault(label_key(x), x)    # labels equal by key: the first (the one the reader lists)
+    if label_key(s) in have:
+        return have[label_key(s)]
     cand: list[str] = []
     m = re.fullmatch(r"(?i)(?:AMS\s*)?HT\s*([1-9][0-9]?)", s)
     if m:
@@ -295,8 +305,8 @@ def kit_label(slot, labels=None) -> str:
         cand = [s]
     if have:
         for c in cand:
-            if c.upper() in have:
-                return have[c.upper()]
+            if label_key(c) in have:
+                return have[label_key(c)]
         raise SlotError(f"unknown slot {slot!r}: use a label from printer_slots ({', '.join(have.values())})")
     if not cand:
         raise SlotError(f"unknown slot {slot!r}: use a label from printer_slots (A1, B3, HT-A, Ext-L ...)")
