@@ -557,3 +557,19 @@ def test_make_release_tarball_passes_extract_and_the_sums_check(tmp_path, key):
     assert not (root / "app").exists()
     from filament_kit.bridge import hardware
     assert hw.read_bytes() == hardware.BUNDLED.read_bytes() and hardware.validate(hw.read_bytes()) == []
+
+
+@pytest.mark.skipif(_git_bash() is None or (hasattr(os, "geteuid") and os.geteuid() == 0),
+                    reason="needs bash, run as a normal user")
+def test_get_sh_takes_set_for_install_sh():
+    """`--modules ...,web` needs web.public_url; with no terminal install.sh cannot ask, so get.sh passes
+    `--set KEY=VALUE` (repeatable) on to it. Parsing accepts it (the next stop is the root check), and the usage
+    names it."""
+    def run(*args):
+        return subprocess.run([_git_bash(), str(ROOT / "get.sh"), *args], stdin=subprocess.DEVNULL,
+                              capture_output=True, text=True, timeout=30)
+    r = run("--modules", "server,web", "--set", "web.public_url=https://kit.example.net/filament",
+            "--set", "station.allow=10.0.0.5")
+    assert r.returncode == 1 and "run as root" in r.stderr, r.stderr
+    r = run("--set")
+    assert r.returncode == 2 and "--set KEY=VALUE" in r.stderr
