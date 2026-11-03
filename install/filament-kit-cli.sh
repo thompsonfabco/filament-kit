@@ -19,6 +19,11 @@ esac
 if [ "${1:-}" = web ] && [ "${2:-}" = passphrase ]; then
     exec "$BIN" "$@"
 fi
+# `reader token` / `reader revoke` write the reader token file (handed to the service user) and refuse unless root;
+# `reader tokens` only reads and runs as the user below.
+if [ "${1:-}" = reader ] && { [ "${2:-}" = token ] || [ "${2:-}" = revoke ]; }; then
+    exec "$BIN" "$@"
+fi
 
 if [ "$(id -u)" -eq 0 ]; then
     # `library add <file>`: the service user may not be able to read a file in the caller's home folder,

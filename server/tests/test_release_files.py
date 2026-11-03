@@ -596,3 +596,74 @@ def test_with_a_terminal_the_saved_address_is_not_used(tmp_path):
     r = subprocess.run(["wsl", "-d", "Ubuntu", "--exec", "env", f"FK_ETC={wslpath(etc)}", "bash", sh, "--mode",
                         "station"], stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=120)
     assert SAVED_NOTE in r.stderr, r.stdout + r.stderr
+
+
+def _wrapper_run(tmp_path, *args) -> str:
+    """Run install/filament-kit-cli.sh as root with stand-ins: the program prints `as-root ...`, runuser prints
+    `as-user ...`. Returns what was printed."""
+    import os
+    import subprocess
+    stubs = tmp_path / "stubs"
+    stubs.mkdir()
+    for name, body in (("id", 'echo 0'), ("runuser", 'shift 3; echo "as-user $*"'),
+                       ("prog", 'echo "as-root $*"')):
+        f = stubs / name
+        f.write_text(f"#!/usr/bin/env bash\n{body}\n", encoding="utf-8", newline="\n")
+        f.chmod(0o755)
+    text = _read("install/filament-kit-cli.sh").replace("BIN=/opt/filament-kit/venv/bin/filament-kit",
+                                                        "BIN=./stubs/prog")
+    assert "BIN=./stubs/prog" in text
+    (tmp_path / "w.sh").write_text(text, encoding="utf-8", newline="\n")
+    env = dict(os.environ, PATH="./stubs" + os.pathsep + os.environ.get("PATH", ""))
+    if os.name == "nt":                 # Git Bash takes a POSIX PATH; the relative entry needs no conversion
+        env["PATH"] = "./stubs:" + os.environ.get("PATH", "")
+    r = subprocess.run([_bash(), "w.sh", *args], cwd=tmp_path, env=env, capture_output=True, text=True, timeout=30)
+    assert r.returncode == 0, r.stderr
+    return r.stdout.strip()
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_wrapper_runs_reader_token_and_revoke_as_root(tmp_path):
+    """`reader token` and `reader revoke` refuse unless root (they write the token file, chowned to the service
+    user): `sudo filament-kit reader token` must reach the program as root. `reader tokens` (a list) drops to
+    the service user like every other read."""
+    assert _wrapper_run(tmp_path, "reader", "token", "--name", "bench") == "as-root reader token --name bench"
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_wrapper_reader_revoke_as_root_and_list_as_user(tmp_path):
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    assert _wrapper_run(tmp_path / "a", "reader", "revoke", "r1") == "as-root reader revoke r1"
+    assert _wrapper_run(tmp_path / "b", "reader", "tokens") == "as-user ./stubs/prog reader tokens"
+
+
+# The shell scripts with multi-line `python -c '...'` blocks (test_no_other_script_has_python_c_blocks keeps the list
+# complete): each must keep at least one block, so the check below never passes on nothing.
+PYTHON_C_SCRIPTS = ["install/install.sh"]
+
+
+def test_no_other_script_has_python_c_blocks():
+    scripts = sorted(str(p.relative_to(ROOT)).replace("\\", "/") for p in [*(ROOT / "install").rglob("*.sh"),
+                                                                           ROOT / "get.sh", *(ROOT / "tools").glob("*.sh")])
+    have = [s for s in scripts if re.search(r"-c '$", _read(s), re.M)]
+    assert have == PYTHON_C_SCRIPTS
+
+
+@pytest.mark.parametrize("rel", PYTHON_C_SCRIPTS)
+def test_inline_python_survives_shell_single_quotes(rel):
+    """A `python -c '...'` block is one shell single-quoted word: a ' inside it ends the word, and Python gets a
+    cut program (install.sh's custom-mode block did, so every --modules install without a terminal failed).
+    Each block must end at its closing quote on a line of its own and compile."""
+    text = _read(rel)
+    blocks = 0
+    for m in re.finditer(r"-c '\n", text):
+        start = m.end()
+        end = text.index("'", start)
+        code = text[start:end]
+        after = text[end + 1:end + 2]
+        assert after in ("\n", ")", " ", ""), f"{rel}: a ' inside the python -c block near: {code[-80:]!r}"
+        assert text[end - 1] == "\n", f"{rel}: a ' inside the python -c block near: {code[-80:]!r}"
+        compile(code, f"{rel} python -c block", "exec")
+        blocks += 1
+    assert blocks >= 1, f"{rel}: no python -c block left; update PYTHON_C_SCRIPTS"
