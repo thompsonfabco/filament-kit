@@ -64,8 +64,9 @@ spool holders. Slots are labelled A1 ... P4, AA1 ..., HT-A ..., Ext (or Ext-L / 
 The facts about each model and unit live in a data file, not in the program. Each release also carries that
 file (`bambu_hardware.xml`); `sudo filament-kit update` checks its signature and, when it is newer than the one in
 use, puts it in place, also when the program itself is up to date. To correct or add something yourself, put your own file at
-`/etc/filament-kit/bambu_hardware.xml`: it wins element by element over the built-in one, a bad file is refused
-whole (the last good data stays in use), and the updater never replaces a file you made. `sudo filament-kit
+`/etc/filament-kit/bambu_hardware.xml` with a version above the built-in one's: it wins element by element over
+the built-in one, a file that is not newer is ignored, a bad file is refused whole (the last good data stays in
+use), and the updater never replaces a file you made. `sudo filament-kit
 status` says whether the data loaded and names a refused file.
 
 Printers are found on the network (the computer must be on the same network segment; allow UDP 2021 and 1990 if

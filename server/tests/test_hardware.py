@@ -17,7 +17,7 @@ def _etc(tmp_path, monkeypatch):
     hardware._reset_cache()
 
 
-def _override(etc, body: str, version: str = "1"):
+def _override(etc, body: str, version: str = "1.1"):   # above the bundled 1.0: an override must be newer
     p = etc / "bambu_hardware.xml"
     p.write_text(f'<?xml version="1.0" encoding="UTF-8"?>\n<bambu-hardware version="{version}">{body}</bambu-hardware>',
                  encoding="utf-8")
@@ -344,3 +344,33 @@ def test_external_alias_must_not_name_a_label_of_the_model(_etc, ext):
     hw = hardware.load()
     assert hw.model("C12").name == "P1S" and hw.errors
     assert "alias" in " ".join(hw.errors).lower()
+
+
+# --- final review I2 (Ruling BT): an override not newer than the bundled file is ignored --------------------------
+
+@pytest.mark.parametrize("version", ["1", "1.0"])
+def test_override_not_newer_than_bundled_is_ignored_with_a_warning(_etc, version):
+    """A feed override left behind after an upgrade (or a hand-made one that never bumped its version) would win per
+    element over newer bundled data forever: an override applies only when its version is above the bundled one."""
+    assert hardware.file_version(hardware.BUNDLED.read_bytes()) == (1, 0)
+    _override(_etc, '<models><model code="C12" name="P1S Old" camera="hls"/></models>', version=version)
+    hw = hardware.load()
+    assert hw.errors == []
+    assert hw.model("C12").name == "P1S"                   # the bundled data, not the stale override
+    w = " ".join(hw.warnings)
+    assert "bambu_hardware.xml" in w and "not newer" in w and "ignored" in w
+    assert "1.0" in w                                       # says which version it must beat
+
+
+def test_override_newer_than_bundled_applies(_etc):
+    _override(_etc, '<models><model code="C12" name="P1S New"/></models>', version="1.1")
+    hw = hardware.load()
+    assert hw.model("C12").name == "P1S New" and hw.warnings == []
+
+
+def test_status_prints_the_ignored_override(_etc, capsys):
+    from filament_kit import cli
+    _override(_etc, '<models><model code="C12" name="P1S Old"/></models>', version="1")
+    assert cli._hardware_lines() is True                   # a note, not a failure
+    out = capsys.readouterr().out
+    assert "not newer" in out and "ignored" in out
