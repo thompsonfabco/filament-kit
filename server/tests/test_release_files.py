@@ -53,6 +53,15 @@ def test_release_workflow_pins_every_action_by_commit():
     req = _read("tools/release-signing-requirements.txt")
     for pkg in ("cryptography==", "cffi==", "pycparser=="):
         assert pkg in req
+    assert "--require-hashes --only-binary :all: -r tools/release-build-requirements.txt" in text
+    assert "pip install build" not in text
+    req = _read("tools/release-build-requirements.txt")
+    for pkg in ("build==", "packaging==", "pyproject_hooks=="):
+        assert pkg in req
+    for path in ("tools/release-signing-requirements.txt", "tools/release-build-requirements.txt"):
+        for line in _read(path).splitlines():
+            assert not line or line.startswith("#") or re.fullmatch(
+                r"[\w-]+==[\w.]+ \\|    --hash=sha256:[0-9a-f]{64}( \\)?", line), line
     assert re.search(r"sha256sum .*\\\n\s+\"filament-kit-sync-setup", text)   # M4: the continuation is kept
 
 

@@ -58,7 +58,9 @@ jobs:
           python-version: "3.12"
 
       - name: Install the wheel builder
-        run: pip install build
+        # exact versions and hashes: this job holds the Android keystore secrets
+        run: |
+          pip install --require-hashes --only-binary :all: -r tools/release-build-requirements.txt
 
       - uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00  # v4.7.1
         with:

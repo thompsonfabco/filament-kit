@@ -330,6 +330,55 @@ def test_update_unit_starts_the_kit_when_the_run_did_not_succeed():
     assert "systemctl start --no-block \"$$unit\"" in line and "/opt/filament-kit/venv" not in line
 
 
+@pytest.mark.skipif(not hasattr(__import__("signal"), "SIGHUP"), reason="no SIGHUP on Windows")
+def test_sighup_during_install_starts_the_units_again(env, srv, key, systemd):
+    import signal
+    srv.add("1.1.0")
+    before = signal.getsignal(signal.SIGHUP)
+    run = Runner(rc=lambda: os.kill(os.getpid(), signal.SIGHUP) or 0)
+    with pytest.raises(SystemExit) as e:
+        updates.update(_cfg(env, on=_on()), fetcher=srv.fetcher(), run=run)
+    assert e.value.code == 128 + signal.SIGHUP
+    assert run.cmds[-2:] == START and signal.getsignal(signal.SIGHUP) is before
+
+
+def _term():
+    import signal
+    signal.getsignal(signal.SIGTERM)(signal.SIGTERM, None)
+    return 0
+
+
+@pytest.mark.parametrize("kill", ["sigterm", "exception"])
+def test_killed_install_is_marked_failed_and_not_retried_by_the_timer(env, srv, key, kill):
+    srv.add("1.0.0")
+    srv.add("1.1.0")
+    cfg = _cfg(env)
+    run = Runner(rc={"filament-kit-1.1.0": _term if kill == "sigterm" else RuntimeError("boom")})
+    with pytest.raises(SystemExit if kill == "sigterm" else RuntimeError):
+        updates.update(cfg, scheduled=True, fetcher=srv.fetcher(), run=run, now=100.0)
+    st = updates._read_state()
+    assert st["failed"] == "1.1.0" and st["last_ok_at"] == 100.0 and st["previous"] == "1.0.0"
+    run = Runner()
+    assert updates.update(cfg, scheduled=True, fetcher=srv.fetcher(), run=run, now=100.0 + 86400) == 0
+    assert run.cmds == []
+    assert updates.rollback(cfg, run=run) == 0 and run.installed == ["filament-kit-1.0.0"]
+
+
+def test_refused_unpack_keeps_previous_as_it_was(env, srv, key, systemd, monkeypatch, capsys):
+    srv.add("1.0.0")
+    srv.add("1.1.0")
+    updates._write_state(previous="0.9.0")
+
+    def refuse(tarball, version, dest):
+        raise release.ReleaseError("the tarball holds an unexpected entry 'x'; nothing was installed")
+    monkeypatch.setattr(release, "extract", refuse)
+    run = Runner()
+    assert updates.update(_cfg(env, on=_on()), fetcher=srv.fetcher(), run=run) == 1
+    assert run.cmds == []                                   # nothing stopped, nothing run
+    assert updates._read_state()["previous"] == "0.9.0"
+    assert "unexpected entry" in capsys.readouterr().err
+
+
 def test_up_to_date_does_nothing(env, srv, key):
     srv.add("1.0.0")
     run = Runner()
