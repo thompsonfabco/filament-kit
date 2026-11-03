@@ -477,13 +477,12 @@ def _status_lines(capsys) -> list:
     return capsys.readouterr().out.splitlines()
 
 
-def test_status_fresh_install_profiles_lines_no_fail(capsys, spoolman_url):
+def test_status_fresh_install_profiles_lines_no_fail(capsys, spoolman_url, no_library):
     _status_setup(spoolman_url)
     assert cli.main(["status"], client_factory=_ok_client) == 0
     out = _status_lines(capsys)
     assert not any(ln.startswith("FAIL") for ln in out)
-    v = library_mod.load().version
-    assert f"--   library version {v} (bundled), 0 local additions" in out
+    assert "--   library not downloaded (filament-kit library update), 0 local additions" in out
     assert "--   profiles: no build yet (waiting for the PC sync)" in out
     assert "--   PC sync: not set up (see README: Pair your PC)" in out
 

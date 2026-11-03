@@ -723,6 +723,17 @@ def cmd_library_update(scheduled: bool) -> int:
     return 0
 
 
+def cmd_library_adopt(folder: str) -> int:
+    try:
+        v = library.adopt(Path(folder))
+    except library.LibraryError as e:
+        _err_line(str(e))
+        return 1
+    if v is not None:
+        print(f"kept the library of the earlier program version (library version {v})")
+    return 0
+
+
 def cmd_library_rollback() -> int:
     try:
         v = library.rollback()
@@ -1282,6 +1293,8 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     lu = lsub.add_parser("update", help="download or update the library (library.url)")
     lu.add_argument("--scheduled", action="store_true", help="only if config library.schedule says it is due")
     lsub.add_parser("rollback", help="go back to the library version before the last update")
+    la = lsub.add_parser("adopt", help="keep the library an older program version bundled (used by the installer)")
+    la.add_argument("folder", help="the old library_data folder (index.json and library/)")
     la = lsub.add_parser("add", help="add or replace a local entry from a JSON file ('-' reads stdin)")
     la.add_argument("file")
     _pf_help = "the generated Bambu Studio and Orca Slicer presets: build, status, lines, parents"
@@ -1349,6 +1362,8 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
             return cmd_library_update(args.scheduled)
         if args.library_cmd == "rollback":
             return cmd_library_rollback()
+        if args.library_cmd == "adopt":
+            return cmd_library_adopt(args.folder)
         return cmd_library_add(args.file)
     if args.cmd == "profiles":
         if args.profiles_cmd == "build":
