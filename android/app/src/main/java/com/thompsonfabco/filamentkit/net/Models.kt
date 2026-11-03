@@ -21,13 +21,48 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
-/** `GET /api/info`. [apkVersion] is the integer versionCode the server offers, as text; null when no app is installed. */
+/**
+ * `GET /api/info`. [apkVersion] is the integer versionCode the server offers, as text; null when no app is installed.
+ * [modules] are the modules that are on; null from an older server that does not list them (it always reads labels).
+ */
 @Serializable
 data class ServerInfo(
     val name: String,
     val version: String,
     val api: Int,
     @SerialName("apk_version") val apkVersion: String? = null,
+    val modules: List<String>? = null,
+) {
+    /** The label-photo add flow is offered: `ai_intake` is on (or the server is too old to say). */
+    val labelReading: Boolean get() = modules == null || AI_INTAKE in modules
+
+    companion object {
+        const val AI_INTAKE = "ai_intake"
+    }
+}
+
+/** One of `GET /api/filaments`; the field names are an add item's, so a pick copies them into a new item. */
+@Serializable
+data class FilamentChoice(
+    @Serializable(with = LenientNullableInt::class) val id: Int? = null,
+    val vendor: String = "",
+    val name: String? = null,
+    val material: String? = null,
+    @Serializable(with = LenientDouble::class) val density: Double? = null,
+    @Serializable(with = LenientDouble::class) val net: Double? = null,
+    @Serializable(with = LenientDouble::class) val tare: Double? = null,
+    @SerialName("color_hex") val colorHex: String? = null,
+    @Serializable(with = LenientDouble::class) val nozzle: Double? = null,
+    @Serializable(with = LenientDouble::class) val bed: Double? = null,
+    @Serializable(with = LenientInt::class) val spools: Int = 0,
+)
+
+/** One of `GET /api/vendors`; [tare] is the vendor's empty spool weight (a new filament's default). */
+@Serializable
+data class VendorChoice(
+    @Serializable(with = LenientNullableInt::class) val id: Int? = null,
+    val name: String = "",
+    @Serializable(with = LenientDouble::class) val tare: Double? = null,
 )
 
 /**
@@ -117,6 +152,10 @@ data class SlotSpool(
     @Serializable(with = LenientDouble::class) @SerialName("remaining_weight") val remainingWeight: Double? = null,
 )
 
+/**
+ * [say] is how the slot is spoken (`["external", "left"]`); [present] / [reading] are null when unknown. Older
+ * servers send none of the three.
+ */
 @Serializable
 data class AmsSlot(
     @Serializable(with = LenientInt::class) val slot: Int,
@@ -125,11 +164,57 @@ data class AmsSlot(
     @SerialName("color_hex") val colorHex: String = "",
     val active: Boolean = false,
     val spool: SlotSpool? = null,
+    @Serializable(with = SayWords::class) val say: List<String> = emptyList(),
+    @Serializable(with = LenientNullableBool::class) val present: Boolean? = null,
+    @Serializable(with = LenientNullableBool::class) val reading: Boolean? = null,
 )
 
-/** [kind] is `ams`, `ams_ht` or `ext` (the external spool holder: one slot, label `Ext`). */
+/**
+ * [kind] is an AMS type key (`ams`, `ams_ht`, `ams_2pro`, ...) or `ext`: an external spool holder, one slot labelled
+ * `Ext`, `Ext-L` or `Ext-R`. [typeName] is the type for people (`AMS 2 Pro`); blank from older servers.
+ */
 @Serializable
-data class AmsUnit(@Serializable(with = LenientInt::class) val unit: Int, val label: String = "", val kind: String = "ams", val slots: List<AmsSlot> = emptyList())
+data class AmsUnit(
+    @Serializable(with = LenientInt::class) val unit: Int,
+    val label: String = "",
+    val kind: String = "ams",
+    val slots: List<AmsSlot> = emptyList(),
+    @SerialName("type_name") val typeName: String = "",
+    @Serializable(with = SayWords::class) val say: List<String> = emptyList(),
+)
+
+/** `say`: a list of words, or one text (split at spaces); anything else is no words. */
+internal object SayWords : KSerializer<List<String>> {
+    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("SayWords", PrimitiveKind.STRING)
+    override fun deserialize(decoder: Decoder): List<String> {
+        val el = (decoder as? JsonDecoder ?: throw SerializationException("JSON only")).decodeJsonElement()
+        val words = when (el) {
+            is JsonArray -> el.mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p !is JsonNull }?.content }
+            is JsonPrimitive -> if (el is JsonNull) emptyList() else listOf(el.content)
+            else -> emptyList()
+        }
+        return words.flatMap { it.split(' ') }.filter { it.isNotBlank() }
+    }
+    override fun serialize(encoder: Encoder, value: List<String>) =
+        (encoder as JsonEncoder).encodeJsonElement(JsonArray(value.map(::JsonPrimitive)))
+}
+
+/** true / false; null or anything else reads as null (unknown). */
+@OptIn(ExperimentalSerializationApi::class)
+internal object LenientNullableBool : KSerializer<Boolean?> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("LenientNullableBool", PrimitiveKind.BOOLEAN).nullable
+    override fun deserialize(decoder: Decoder): Boolean? {
+        val el = (decoder as? JsonDecoder ?: throw SerializationException("JSON only")).decodeJsonElement()
+        return when ((el as? JsonPrimitive)?.takeIf { it !is JsonNull }?.content) {
+            "true" -> true
+            "false" -> false
+            else -> null
+        }
+    }
+    override fun serialize(encoder: Encoder, value: Boolean?) =
+        (encoder as JsonEncoder).encodeJsonElement(if (value == null) JsonNull else JsonPrimitive(value))
+}
 
 @Serializable
 data class HmsAlert(val code: String, val text: String = "")
