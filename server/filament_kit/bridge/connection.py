@@ -322,7 +322,7 @@ class PrinterConnection:
 
     def request_pushall(self) -> None:
         c = self.client
-        if c is not None and self._state == 'connected':
+        if c is not None:
             c.publish(f"device/{self.serial}/request",
                       json.dumps({"pushing": {"sequence_id": "0", "command": "pushall"}}), qos=1)
 
@@ -331,8 +331,10 @@ class PrinterConnection:
         connect and when units are plugged in or out; the reply's AMS module codes ("n3f/0" -> "N3F05") land in
         the report under `layout.MODULES`. At most one ask per VERSION_GAP s: an ask inside the gap is sent when
         it ends (one trailing ask). A printer that never answers keeps resolving its units by id range and tray
-        count."""
+        count. While not connected nothing is sent and the gap is not taken (the connect asks again)."""
         with self._version_lock:
+            if self.client is None or self._state != 'connected':
+                return
             now = time.monotonic()
             if self._version_at is not None and now - self._version_at < VERSION_GAP:
                 if self._version_timer is None and not self._stopping:
@@ -343,7 +345,7 @@ class PrinterConnection:
                 return
             self._version_at = now
         c = self.client
-        if c is not None and self._state == 'connected':
+        if c is not None:
             c.publish(f"device/{self.serial}/request",
                       json.dumps({"info": {"sequence_id": str(next(self._seq)), "command": "get_version"}}), qos=1)
 

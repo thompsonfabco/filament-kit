@@ -255,7 +255,7 @@ def test_restore_error_on_one_slot_is_reported_and_the_rest_restored(rig):
     def set_slot(serial, ams_id, tray_id, setting, timeout=None, kind=None):
         if (ams_id, tray_id) == (0, 1) and not is_test(setting["tray_color"]):
             raise RuntimeError("socket exploded")
-        return real(serial, ams_id, tray_id, setting, timeout)
+        return real(serial, ams_id, tray_id, setting, timeout, kind=kind)
     m.set_slot = set_slot
     res = slottest.run(m, SERIAL, lambda s: None)
     assert res.restored is False
