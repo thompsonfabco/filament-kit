@@ -86,6 +86,13 @@ def test_air_bme280_and_bmp280():
     assert st.state["air"] == {"temp_c": -3.05, "rh": None, "hpa": 990.10}
 
 
+def test_air_aht20_alone_has_no_pressure():
+    air.on_air(b"AIR 21.5 40.0 -")
+    assert st.state["air"] == {"temp_c": 21.5, "rh": 40.0, "hpa": None}
+    air.on_air(b"AIR 20.0 - -")  # neither sensor reading: still parsed, both null
+    assert st.state["air"] == {"temp_c": 20.0, "rh": None, "hpa": None}
+
+
 def test_air_garbage_ignored():
     air.on_air(b"AIR 21.43 45.2 1013.25")
     for bad in (b"AIR", b"AIR x y z", b"AIR 1 2"):
@@ -134,12 +141,23 @@ def test_to_panel_ramps_and_stays_in_duty_range(monkeypatch):
     seen = []
     monkeypatch.setattr(speech.subprocess, "run", lambda a, **kw: seen.append((a, kw)) or Done(pcm(4000, 20000)))
     out = speech.to_panel(b"wav")
-    assert "highpass=f=250,lowpass=f=3500" in seen[0][0] and seen[0][1]["input"] == b"wav"
+    af = seen[0][0][seen[0][0].index("-af") + 1]
+    assert af == ("highpass=f=450,highpass=f=450,equalizer=f=2500:t=q:w=1:g=8,lowpass=f=3600,"
+                  "acompressor=threshold=0.03:ratio=10:attack=2:release=50")
+    assert seen[0][1]["input"] == b"wav"
     pad = speech.RATE // 20
     body = out[speech.RAMP + pad:-(speech.RAMP + pad)]
     assert len(body) == 4000
     assert out[0] == 0 and out[-1] == 0 and out[speech.RAMP] == 128
     assert min(body) == 16 and max(body) == 240  # peak-normalised to +-112 around 128
+
+
+def test_to_panel_normalises_to_the_98th_percentile_and_clips_the_loudest(monkeypatch):
+    samples = [1000] * 99 + [20000]  # one spike in 100: the loudest 1 % sit above the 98 % mark and clip
+    monkeypatch.setattr(speech.subprocess, "run", lambda a, **kw: Done(struct.pack(f"<{len(samples)}h", *samples)))
+    out = speech.to_panel(b"wav")
+    body = out[speech.RAMP + speech.RATE // 20:-(speech.RAMP + speech.RATE // 20)]
+    assert body[0] == 240 and body[-1] == 240 and max(body) == 240  # 1000 is the 98 % level -> full scale
 
 
 def test_to_panel_ffmpeg_failure_raises(monkeypatch):
@@ -395,6 +413,17 @@ def test_state_air_and_photo():
         assert set(s) == {"tag", "scale", "last_weight", "panel", "panel_version", "air", "photo"}
         assert s["panel_version"] == "2"
         assert s["last_weight"] == {"grams": 1098.0, "age_seconds": 3, "held": True}
+    finally:
+        srv.shutdown()
+
+
+def test_state_air_without_pressure_or_humidity_shape():
+    now = time.time()
+    raw = _raw(now, air={"temp_c": 21.5, "rh": 40.0, "hpa": None}, air_at=now - 1)
+    srv, base = _serve(lambda: dict(raw), {"127.0.0.1"})
+    try:
+        s = json.loads(_fetch(base + "/state")[2])
+        assert s["air"] == {"temp_c": 21.5, "rh": 40.0, "hpa": None, "age_seconds": 1}
     finally:
         srv.shutdown()
 
