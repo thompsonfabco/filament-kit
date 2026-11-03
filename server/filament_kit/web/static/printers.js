@@ -18,9 +18,10 @@ function printersTab() {
   const usageBox = h("div");
   const mapBox = h("div");
   const msg = h("div");
+  const conn = h("p", { class: "muted" });
   const pushBox = h("div");
   const el = h("section", { class: "hidden" },
-    h("h1", { textContent: "Printers" }), picker, head, alerts, controls, camBtn, camBox, msg,
+    h("h1", { textContent: "Printers" }), picker, head, conn, alerts, controls, camBtn, camBox, msg,
     h("h2", { textContent: "Filament" }), units,
     h("h2", { textContent: "Usage" }), usageBox,
     h("h2", { textContent: "Slots" }), mapBox, pushBox);
@@ -45,7 +46,13 @@ function printersTab() {
   function choose(id) {
     current = id; picker.value = id;
     try { localStorage.setItem("printer", id); } catch {}
-    camera(false); stream(); loadUsage(); loadMap();
+    camera(false); camBtn.classList.toggle("hidden", !camKind()); stream(); loadUsage(); loadMap();
+  }
+  // "mjpeg" (an <img>) or "hls" (a <video>); null: this model has no camera we can show
+  function camKind() {
+    const p = printers.find((x) => x.id === current);
+    const k = p && p.camera && p.camera.kind;
+    return k === "mjpeg" || k === "hls" ? k : null;
   }
 
   // ----- live status -----
@@ -56,10 +63,11 @@ function printersTab() {
     es = new EventSource(`${API}/${encodeURIComponent(current)}/events`);
     es.onmessage = (ev) => {
       let d; try { d = JSON.parse(ev.data); } catch { return; }
-      if (d.error) { head.replaceChildren(h("p", { class: "err", textContent: d.error })); return; }
-      lastStatus = d; render(d);
+      if (d.error) { conn.textContent = d.error; return; }
+      conn.textContent = ""; lastStatus = d; render(d);
     };
-    es.onerror = () => { head.append(h("p", { class: "muted", textContent: "Reconnecting…" })); };
+    es.onopen = () => { conn.textContent = ""; };
+    es.onerror = () => { conn.textContent = "Reconnecting…"; };
   }
   function stopStream() { if (es) { es.close(); es = null; } }
 
@@ -104,15 +112,33 @@ function printersTab() {
 
   // ----- camera -----
   function camera(on) {
+    const kind = camKind();
+    for (const m of camBox.querySelectorAll("img, video")) { m.removeAttribute("src"); if (m.load) m.load(); }  // drops the connection: the camera stops
+    camBox.replaceChildren();
+    if (on && !kind) on = false;
     camOn = on;
     camBtn.textContent = on ? "Hide camera" : "Show camera";
     camBox.classList.toggle("hidden", !on);
-    if (on) {
-      camBox.replaceChildren(h("img", { class: "cam", alt: "Printer camera", src: `${API}/${encodeURIComponent(current)}/camera.mjpeg` }));
-    } else {
-      for (const i of camBox.querySelectorAll("img")) i.removeAttribute("src");   // drops the connection: the camera stops
-      camBox.replaceChildren();
+    if (!on) return;
+    const base = `${API}/${encodeURIComponent(current)}`;
+    if (kind === "mjpeg") {
+      camBox.append(h("img", { class: "cam", alt: "Printer camera", on: { error: () => camFail() }, src: `${base}/camera.mjpeg` }));
+      return;
     }
+    const v = h("video", { class: "cam", playsInline: true, muted: true, autoplay: true, controls: true });
+    v.muted = true;
+    if (!v.canPlayType("application/vnd.apple.mpegurl")) {
+      camBox.append(h("p", { class: "err", textContent: "This browser cannot play the printer's camera (it needs HLS: use Safari on iPhone or Mac)." }));
+      return;
+    }
+    v.addEventListener("error", () => camFail());
+    camBox.append(v);
+    v.src = `${base}/camera/index.m3u8`;
+    v.play().catch(() => {});
+  }
+  function camFail() {
+    if (!camOn) return;
+    camBox.replaceChildren(h("p", { class: "err", textContent: "The camera did not start. Check that the printer is on, LAN mode liveview is enabled, and not too many views are open." }));
   }
 
   // ----- filament per unit -----

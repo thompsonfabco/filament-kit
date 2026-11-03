@@ -62,12 +62,12 @@ class FakeKit:
         if path == "/api/printers":
             return {"printers": [
                 {"id": SERIAL, "name": "H2D", "model": "O1D", "configured": True, "state": "connected",
-                 "camera": {"kind": "rtsp"}, "summary": None, "ip": "10.0.0.1", "serial": SERIAL},
+                 "camera": {"kind": "hls"}, "summary": None, "ip": "10.0.0.1", "serial": SERIAL},
                 {"id": OTHER, "name": "X1", "model": "BL-P001", "configured": False, "state": "not_configured",
-                 "camera": {"kind": "rtsp"}, "summary": None, "ip": "10.0.0.2", "serial": OTHER}]}
+                 "camera": {"kind": "mjpeg"}, "summary": None, "ip": "10.0.0.2", "serial": OTHER}]}
         if path in (f"/api/printers/{SERIAL}",):
             return {"printer": {"id": SERIAL, "name": "H2D", "model": "O1D", "state": "connected",
-                                "camera": {"kind": "rtsp"}}, "status": copy.deepcopy(self.status), "hardware": {}}
+                                "camera": {"kind": "hls"}}, "status": copy.deepcopy(self.status), "hardware": {}}
         if path.startswith(f"/api/printers/{SERIAL}/usage"):
             return {"entries": [{"id": "u1", "at": "2026-11-02T10:00:00", "job": "benchy", "undone": False}]}
         if path == f"/api/printers/{SERIAL}/map":
@@ -160,15 +160,36 @@ def test_page_hides_the_tab_without_the_printers_module(env, kit):
     config.save(cfg)
     c = signed(make_app(env, kit))
     assert "data-printers='0'" in c.get("/intake").text
-    assert c.get(P).status_code == 404 or "printers" not in c.get(P).text
+    assert c.get(P).status_code == 404
+    assert c.get(P + f"/{SERIAL}/camera.mjpeg").status_code == 404
+    assert "printers.js" not in c.get("/intake").text
 
 
-def test_csp_is_the_intake_csp(app):
-    c = signed(app)
-    r = c.get("/intake")
+def test_csp_adds_only_media_src_self_with_the_printers_tab(app, env, kit):
     from filament_kit.web import intake_app
-    assert r.headers["content-security-policy"] == intake_app.HEADERS["Content-Security-Policy"]
-    assert "unsafe" not in r.headers["content-security-policy"]
+    base = intake_app.HEADERS["Content-Security-Policy"]
+    csp = signed(app).get("/intake").headers["content-security-policy"]
+    assert "media-src 'self';" in csp and "unsafe" not in csp
+    assert csp.replace(" media-src 'self';", "") == base
+    assert "default-src 'none'" in csp and "script-src 'self'" in csp and "frame-ancestors 'none'" in csp
+    cfg = config.load()
+    cfg["modules"]["printers"] = False
+    config.save(cfg)
+    off = signed(make_app(env, kit)).get("/intake").headers["content-security-policy"]
+    assert off == base and "media-src" not in off
+
+
+def test_camera_branches_on_the_kit_kind_in_the_script():
+    src = (STATIC / "printers.js").read_text(encoding="utf-8")
+    for needle in ('"mjpeg"', '"hls"', 'canPlayType("application/vnd.apple.mpegurl")', "playsInline", "autoplay",
+                   'removeAttribute("src")', ".load()", "camera/index.m3u8"):
+        assert needle in src, needle
+    assert 'camBtn.classList.toggle("hidden", !camKind())' in src      # no kind, no button
+
+
+def test_list_carries_the_kit_camera_kind(app):
+    c = signed(app)
+    assert c.get(P).json()["printers"][0]["camera"] == {"kind": "hls"}
 
 
 def test_script_never_uses_innerhtml():
@@ -389,8 +410,11 @@ def test_push_off_by_default_runs_no_push_code(env, kit):
 
 
 @pytest.fixture
-def pushapp(env, kit):
-    return make_app(env, kit, push=True)
+def pushapp(env, kit, monkeypatch):
+    app = make_app(env, kit, push=True)
+    from filament_kit.web import push
+    monkeypatch.setattr(push, "available", lambda: True)
+    return app
 
 
 def good_sub(host="fcm.googleapis.com"):
@@ -486,3 +510,186 @@ def test_kitapi_raw_streams_and_errors_carry_the_status(env, monkeypatch):
     with pytest.raises(slots.SlotError) as ei:
         slots.KitApi(base_url="http://127.0.0.1:1").raw("/x")
     assert ei.value.status is None
+
+
+# ---------- review round 1 ----------
+
+class _Req:
+    def __init__(self, serial=SERIAL, **path):
+        self.path_params = {"id": serial, **path}
+
+    async def is_disconnected(self):
+        return False
+
+
+def test_camera_counter_cannot_leak_when_the_response_is_never_sent(env, kit):
+    import gc
+    from filament_kit.web import printers_app
+    pa = printers_app.PrintersApp(None, kit)
+
+    async def open_one():
+        return await pa.mjpeg(_Req())
+    resp = asyncio.run(open_one())
+    assert pa.cameras == 1 and kit.closed == 0
+    del resp                                  # never started, never iterated
+    gc.collect()
+    assert pa.cameras == 0 and kit.closed == 1
+
+
+def test_camera_counter_released_after_serving_and_on_open_failure(env, kit):
+    from filament_kit.web import printers_app
+    pa = printers_app.PrintersApp(None, kit)
+
+    async def serve():
+        resp = await pa.mjpeg(_Req())
+        sent = []
+
+        async def receive():
+            return {"type": "http.disconnect"}
+
+        async def send(m):
+            sent.append(m)
+        await resp({"type": "http", "asgi": {"spec_version": "2.4"}}, receive, send)
+    asyncio.run(serve())
+    assert pa.cameras == 0 and kit.closed == 1
+    kit.down = True
+    with pytest.raises(SlotError):
+        asyncio.run(pa.mjpeg(_Req()))
+    assert pa.cameras == 0
+
+
+def test_over_the_stream_cap_the_phone_gets_a_message(env, kit):
+    from filament_kit.web import printers_app
+    pa = printers_app.PrintersApp(None, kit)
+    pa.streams = printers_app.MAX_STREAMS
+    r = asyncio.run(pa.events_route(_Req()))
+    text = r.body.decode()
+    assert text.startswith("retry: 30000") and "too many open views" in text and not kit.calls
+
+
+def test_hls_relay_passes_the_kit_error_through(app, kit):
+    c = signed(app)
+
+    def boom(path):
+        e = SlotError("the camera stream did not start; check that LAN mode liveview is enabled")
+        e.status = 503
+        raise e
+    kit.raw = boom
+    r = c.get(P + f"/{SERIAL}/camera/index.m3u8")
+    assert r.status_code == 503 and "liveview" in r.json()["error"]
+    r = c.get(P + f"/{SERIAL}/camera.mjpeg")
+    assert r.status_code == 503
+
+
+def test_stream_count_returns_to_zero_when_the_client_closes(env, kit, monkeypatch):
+    import httpx2
+    from filament_kit.web import printers_app
+    from fakes import readers_fake
+    from conftest import free_port
+    seen = []
+    orig = printers_app.PrintersApp.__init__
+
+    def spy(self, *a, **k):
+        orig(self, *a, **k)
+        self.poll = 0.05
+        seen.append(self)
+    monkeypatch.setattr(printers_app.PrintersApp, "__init__", spy)
+    app = make_app(env, kit)
+
+    async def main(url):
+        async with httpx2.AsyncClient(headers={"Host": "mcp.example.test", "X-Forwarded-For": "192.168.1.20"}) as hc:
+            r = await hc.post(url + "/intake/login", data={"passphrase": PASS}, headers={"Origin": ORIGIN})
+            cookie = r.headers["set-cookie"].split(";")[0]
+            async with hc.stream("GET", url + f"/intake/api/printers/{SERIAL}/events", headers={"Cookie": cookie}) as s:
+                async for line in s.aiter_lines():
+                    if line.startswith("data: "):
+                        break
+                assert seen[0].streams == 1
+        for _ in range(100):
+            if seen[0].streams == 0:
+                return True
+            await asyncio.sleep(0.05)
+        return False
+    with readers_fake.Served(app, free_port()) as url:
+        assert asyncio.run(main(url)) is True
+        n = len(kit.calls)
+        asyncio.run(asyncio.sleep(0.3))
+        assert len(kit.calls) <= n + 1           # polling stopped with the client
+
+
+def test_print_error_in_the_kit_status():
+    from filament_kit.bridge import status
+    assert status.summarize({"print_error": 0x0300_4001}, [])["print_error"] == "0300_4001"
+    assert status.summarize({}, [])["print_error"] == ""
+
+
+def test_push_unavailable_is_said_at_key_and_test(pushapp, monkeypatch):
+    from filament_kit.web import push
+    monkeypatch.setattr(push, "available", lambda: False)
+    c = signed(pushapp)
+    for r in (c.get(P + "/push/key"), c.post(P + "/push/test", headers=H)):
+        assert r.status_code == 400 and "pywebpush is not installed" in r.json()["error"]
+
+
+def test_push_caps_subscriptions_and_rate_limits_test(pushapp, env):
+    c = signed(pushapp)
+    for i in range(10):
+        s = good_sub()
+        s["subscription"]["endpoint"] = f"https://fcm.googleapis.com/fcm/send/{i}"
+        assert c.post(P + "/push/subscribe", json=s, headers=H).status_code == 200
+    s = good_sub()
+    s["subscription"]["endpoint"] = "https://fcm.googleapis.com/fcm/send/extra"
+    r = c.post(P + "/push/subscribe", json=s, headers=H)
+    assert r.status_code == 400 and "too many" in r.json()["error"]
+    s["subscription"]["endpoint"] = "https://fcm.googleapis.com/fcm/send/3"      # an existing one may refresh
+    assert c.post(P + "/push/subscribe", json=s, headers=H).status_code == 200
+    assert c.post(P + "/push/test", headers=H).status_code == 200
+    r = c.post(P + "/push/test", headers=H)
+    assert r.status_code == 400 and "wait" in r.json()["error"]
+
+
+def test_service_worker_is_behind_the_lan_guard(pushapp):
+    assert TestClient(pushapp, base_url=ORIGIN, client=HOME).get("/intake/sw.js").status_code == 401
+    assert TestClient(pushapp, base_url=ORIGIN, client=AWAY).get("/intake/sw.js").status_code == 403
+    r = signed(pushapp).get("/intake/sw.js")
+    assert r.status_code == 200 and "showNotification" in r.text
+
+
+def test_push_mapping_jobs_do_not_alert_and_print_error_does():
+    from filament_kit.web import push
+    base = {"gcode_state": "RUNNING", "hms": [], "job": "h2d-calib", "percent": 50, "stage": "", "print_error": ""}
+    fin = {**base, "gcode_state": "FINISH"}
+    assert push.transitions(base, fin, mapping=True) == []
+    assert push.transitions(base, fin)[0][0] == "Print finished"
+    err = {**base, "print_error": "0300_4001", "stage": "Printing"}
+    assert push.transitions(base, err)[0][0] == "Print error"
+    assert push.transitions(err, err) == []
+    assert push.transitions(err, {**err, "print_error": ""}) == []
+    # a mapping run does not hide a new error
+    assert push.transitions(base, {**err, "gcode_state": "FINISH"}, mapping=True)[0][0] == "Print error"
+
+
+def test_push_watcher_reads_the_map_state(env, kit):
+    from filament_kit.web import push
+    store = push.Store(env / "state" / "web" / "push.json")
+    store.add({"endpoint": "https://fcm.googleapis.com/a", "keys": {"p256dh": "k", "auth": "a"}})
+    sent = []
+    mapstate = {"v": "running"}
+    orig = kit.get
+
+    def get(path):
+        if path.endswith("/map"):
+            return {"state": mapstate["v"]}
+        return orig(path)
+    kit.get = get
+    w = push.Watcher(kit, store, lambda info, payload: sent.append(json.loads(payload)["title"]) or 201, "/x")
+    w.tick()                                              # first sight
+    kit.status["gcode_state"] = "FINISH"
+    w.tick()
+    assert sent == []                                     # calibration run: silent
+    kit.status["gcode_state"] = "RUNNING"
+    mapstate["v"] = "none"
+    w.tick()
+    kit.status["gcode_state"] = "FINISH"
+    w.tick()
+    assert sent == ["Print finished"]

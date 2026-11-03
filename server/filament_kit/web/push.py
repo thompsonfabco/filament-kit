@@ -24,6 +24,14 @@ log = logging.getLogger(__name__)
 
 PUSH_HOSTS = ("push.apple.com", "fcm.googleapis.com", "push.services.mozilla.com", "notify.windows.com")
 LIVE = ("RUNNING", "PAUSE", "PREPARE")
+MAX_SUBS = 10
+TEST_EVERY = 30.0       # seconds between "test" alerts
+NOT_INSTALLED = "pywebpush is not installed on the server (pip install 'filament-kit[push]'); alerts cannot be sent"
+
+
+def available() -> bool:
+    import importlib.util
+    return importlib.util.find_spec("pywebpush") is not None
 
 
 def endpoint_ok(endpoint) -> bool:
@@ -68,6 +76,8 @@ class Store:
     def add(self, info: dict) -> None:
         with self.lock:
             d = self._load()
+            if info["endpoint"] not in d["subs"] and len(d["subs"]) >= MAX_SUBS:
+                raise ValueError(f"too many subscribed phones ({MAX_SUBS}); unsubscribe one first")
             d["subs"][info["endpoint"]] = {"info": {"endpoint": info["endpoint"], "keys": info["keys"]},
                                            "created": time.time()}
             self._save(d)
@@ -94,16 +104,18 @@ def check_subscription(sub) -> dict:
 def brief(printer: dict, status: dict) -> dict:
     return {"gcode_state": status.get("gcode_state"), "job": status.get("job") or printer.get("name") or "print",
             "percent": status.get("percent") or 0, "stage": status.get("stage") or "",
+            "print_error": status.get("print_error") or "",
             "hms": [h.get("code") for h in status.get("hms") or [] if isinstance(h, dict)]}
 
 
-def transitions(prev: dict | None, cur: dict) -> list[tuple[str, str, str]]:
-    """(title, body, tag) alerts for one printer between two `brief`s. Nothing on the first sight of a printer."""
+def transitions(prev: dict | None, cur: dict, *, mapping: bool = False) -> list[tuple[str, str, str]]:
+    """(title, body, tag) alerts for one printer between two `brief`s. Nothing on the first sight of a printer.
+    `mapping`: the kit is running its slot-mapping (calibration) jobs on it, so job-state changes are not alerts."""
     if prev is None:
         return []
     out = []
     old, new, name = prev.get("gcode_state"), cur.get("gcode_state"), cur.get("job") or "print"
-    if new != old and old in LIVE:
+    if new != old and old in LIVE and not mapping:
         if new == "FINISH":
             out.append(("Print finished", name, "job"))
         elif new == "FAILED":
@@ -115,6 +127,9 @@ def transitions(prev: dict | None, cur: dict) -> list[tuple[str, str, str]]:
         code = h["code"] if isinstance(h, dict) else h
         if code not in seen:
             out.append(("Printer alert", f"HMS {code}", "hms-" + str(code)))
+    err = cur.get("print_error") or ""
+    if err and err != (prev.get("print_error") or ""):
+        out.append(("Print error", f"Error {err} - {cur.get('stage') or name}", "perr"))
     return out
 
 
@@ -190,7 +205,11 @@ class Watcher(threading.Thread):
             except Exception:  # noqa: BLE001 - one unreachable printer
                 continue
             cur = brief(p, st)
-            for title, body, tag in transitions(self.prev.get(p["id"]), cur):
+            try:
+                mapping = (self.kit.get(f"/api/printers/{p['id']}/map") or {}).get("state") == "running"
+            except Exception:  # noqa: BLE001 - unknown: treat as not mapping
+                mapping = False
+            for title, body, tag in transitions(self.prev.get(p["id"]), cur, mapping=mapping):
                 send_all(self.store, title, body, tag, sender=self.sender, url=self.url)
             self.prev[p["id"]] = cur
 
