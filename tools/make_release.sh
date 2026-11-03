@@ -112,6 +112,12 @@ rm -rf "$stage_root"
 echo "built $out"
 tar -tzf "$out"
 
+# ---------- hardware data asset ----------
+# The updater's hardware data feed (updates.hardware_feed) takes bambu_hardware.xml from the release, checked
+# against the signed SHA256SUMS like the tarball; it is the same file the wheel bundles.
+cp server/filament_kit/bridge/bambu_hardware.xml dist/bambu_hardware.xml
+echo "built dist/bambu_hardware.xml"
+
 # ---------- library asset (optional) ----------
 # The filament-library data is a separate release asset, library-<date>.tar.gz, plus library.tar.gz under the
 # fixed name the default `library.url` points at (releases/latest/download/library.tar.gz). Built from a

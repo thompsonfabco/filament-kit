@@ -1,7 +1,7 @@
 name: release
 # A tag v<x.y.z> builds and publishes one release: the server tarball (with the signed APK inside),
-# the signed APK on its own, the PC sync installer, get.sh, and SHA256SUMS of all of them with its
-# signature SHA256SUMS.sig. The tag must equal __version__ of both the server and pc-sync. The APK is
+# the signed APK on its own, the PC sync installer, get.sh, bambu_hardware.xml (the updater's hardware
+# data feed) and SHA256SUMS of all of them with its signature SHA256SUMS.sig. The tag must equal __version__ of both the server and pc-sync. The APK is
 # signed from the repository secrets FK_KEYSTORE_B64 (the keystore, base64) and FK_KEYSTORE_PASSWORD;
 # SHA256SUMS is signed (ed25519) with the secret FK_RELEASE_KEY, the private key the owner made with
 # tools/sign_release.py keygen, whose public half is in release.py and get.sh. Without these secrets
@@ -115,6 +115,7 @@ jobs:
           path: |
             dist/filament-kit-${{ needs.version.outputs.version }}.tar.gz
             dist/filament-kit.apk
+            dist/bambu_hardware.xml
           if-no-files-found: error
 
   sync:
@@ -212,7 +213,7 @@ jobs:
           fi
           cp get.sh dist/get.sh
           (cd dist && sha256sum "filament-kit-$VERSION.tar.gz" filament-kit.apk \
-              "filament-kit-sync-setup-$VERSION.exe" get.sh > SHA256SUMS)
+              "filament-kit-sync-setup-$VERSION.exe" get.sh bambu_hardware.xml > SHA256SUMS)
           # refuses (and writes no signature) when the key does not match PUBKEY in release.py
           python tools/sign_release.py sign dist/SHA256SUMS
           cat dist/SHA256SUMS
@@ -226,5 +227,6 @@ jobs:
             dist/filament-kit.apk
             dist/filament-kit-sync-setup-${{ needs.version.outputs.version }}.exe
             dist/get.sh
+            dist/bambu_hardware.xml
             dist/SHA256SUMS
             dist/SHA256SUMS.sig

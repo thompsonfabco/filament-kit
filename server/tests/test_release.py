@@ -206,18 +206,25 @@ class FakeRelease:
     """A GitHub API look-alike on 127.0.0.1: /repos/o/r/releases/{latest,tags/vX}, assets served from
     /repos/o/r/releases/assets/<n> through a 302 (as GitHub does). Records every request's headers."""
 
-    def __init__(self, priv, version="1.2.3", *, tamper_sig=False, tamper_tar=False, tarball=None):
+    def __init__(self, priv, version="1.2.3", *, tamper_sig=False, tamper_tar=False, tarball=None, extra=None,
+                 unlisted=None, tamper_extra=False):
+        """`extra`: more assets {name: bytes}, listed in SHA256SUMS; `unlisted`: assets left out of it;
+        `tamper_extra`: the extra assets are changed after SHA256SUMS was made."""
         self.version = version
         tar = tarball if tarball is not None else make_tarball(version)
+        extra = dict(extra or {})
         sums = (f"{hashlib.sha256(tar).hexdigest()}  filament-kit-{version}.tar.gz\n"
-                f"{'0' * 64}  get.sh\n").encode()
+                f"{'0' * 64}  get.sh\n"
+                + "".join(f"{hashlib.sha256(d).hexdigest()}  {n}\n" for n, d in extra.items())).encode()
+        if tamper_extra:
+            extra = {n: d + b"<!-- changed -->" for n, d in extra.items()}
         sig = priv.sign(sums)
         if tamper_sig:
             sig = bytes([sig[0] ^ 1]) + sig[1:]
         if tamper_tar:
             tar = tar[:-1] + bytes([tar[-1] ^ 1])
         self.files = {f"filament-kit-{version}.tar.gz": tar, "SHA256SUMS": sums,
-                      "SHA256SUMS.sig": base64.b64encode(sig) + b"\n"}
+                      "SHA256SUMS.sig": base64.b64encode(sig) + b"\n", **extra, **(unlisted or {})}
         self.requests: list[tuple[str, dict]] = []
         outer = self
 

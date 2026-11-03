@@ -11,12 +11,23 @@ mapping or loading: the printers' mapping.lock files are held for the whole inst
 (filament-kit-update.timer, daily) runs `update --scheduled`, which does nothing unless the module is on and
 `updates.schedule` (daily or weekly) says a check is due, and never reinstalls a version that was rolled back.
 
+Hardware data feed (Ruling BG): after the program check (up to date or updated), the latest release's
+`bambu_hardware.xml` asset is verified the same way (the signature over SHA256SUMS, then the file's hash),
+validated with `bridge.hardware.validate` and only then put in place of the override
+/etc/filament-kit/bambu_hardware.xml (atomic replace; the file it replaces is kept as bambu_hardware.xml.previous).
+It is installed only when its root `version` is newer than both the kit's bundled file and the override in place,
+so an older feed never shadows a newer kit's own file; a file the feed installed is moved aside to .previous once
+the kit's bundled file is as new (a hand-made override is never touched). A file that fails any check is never
+installed and the run returns 1.
+
 Settings (config.json, all optional): "updates": {"schedule": "daily"|"weekly", "token_file": a root-only file
 with a GitHub token for a private repo, "repo": "owner/name", "api": "https://api.github.com"}. The token can also
 come from FK_GITHUB_TOKEN; it is never printed.
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import os
 import shutil
@@ -39,6 +50,7 @@ from .release import ReleaseError
 SCHEDULES = {"daily": 20 * 3600, "weekly": 6.5 * 86400}
 STATE = "state.json"
 MODULE = "updates"
+HW_ASSET = "bambu_hardware.xml"
 
 
 class Busy(Exception):
@@ -276,22 +288,23 @@ def update(cfg: dict, *, scheduled: bool = False, fetcher: release.Fetcher | Non
             print("update check not due yet")
             return 0
         fetcher = fetcher or default_fetcher(cfg)
-        latest = fetcher.release(s["repo"])["version"]
+        rel = fetcher.release(s["repo"])
+        latest = rel["version"]
         cur = current_version()
         if not _newer(latest, cur):
             _write_state(last_ok_at=now)
             print(f"filament-kit {cur} is up to date")
-            return 0
+            return _feed(fetcher, rel)
         st = _read_state()
         if scheduled and st.get("held") == latest:
             _write_state(last_ok_at=now)
             print(f"{latest} was rolled back; the timer leaves it (sudo filament-kit update installs it)")
-            return 0
+            return _feed(fetcher, rel)
         if scheduled and st.get("failed") == latest:
             _write_state(last_ok_at=now)
             print(f"installing {latest} failed before; the timer waits for a newer release "
                   "(sudo filament-kit update tries it again)")
-            return 0
+            return _feed(fetcher, rel)
         if not _kept(cur):
             try:
                 _download(fetcher, s["repo"], cur)
@@ -322,7 +335,105 @@ def update(cfg: dict, *, scheduled: bool = False, fetcher: release.Fetcher | Non
     _write_state(last_ok_at=now, previous=cur if _kept(cur) else None, held=None, failed=None)
     _prune({latest, cur})
     print(f"updated filament-kit {cur} -> {latest}" + ("" if _kept(cur) else " (no rollback copy)"))
+    return _feed(fetcher, rel)
+
+
+# ---------------------------------------------------------------- hardware data feed
+
+def _vtext(v: tuple[int, int]) -> str:
+    return f"{v[0]}.{v[1]}"
+
+
+def _feed(fetcher: release.Fetcher, rel: dict) -> int:
+    try:
+        hardware_feed(fetcher, rel)
+    except ReleaseError as e:
+        print(f"error: hardware data: {e}", file=sys.stderr)
+        return 1
+    except OSError as e:
+        print(f"error: hardware data: cannot install {HW_ASSET}: {e}", file=sys.stderr)
+        return 1
     return 0
+
+
+def _retire_feed_file(ov: Path, bundled_v: tuple[int, int] | None) -> None:
+    """The override this feed installed, once the kit's bundled file is as new: move it to .previous (it would win
+    per element over the newer bundled data). A hand-made override (another hash) is never touched."""
+    from .bridge import hardware
+    mine = (_read_state().get("hardware") or {}).get("sha256")
+    if not mine or bundled_v is None or not ov.is_file() or release.file_sha256(ov) != mine:
+        return
+    have = hardware.file_version(ov.read_bytes())
+    if have is not None and have <= bundled_v:
+        os.replace(ov, ov.with_name(ov.name + ".previous"))
+        _write_state(hardware=None)
+        print(f"hardware data: the kit's own file (version {_vtext(bundled_v)}) is as new as the one the feed "
+              f"installed ({_vtext(have)}); that one is moved aside to {ov.name}.previous")
+
+
+def hardware_feed(fetcher: release.Fetcher, rel: dict) -> None:
+    """Install the release's bambu_hardware.xml as the override when it is verified, valid and newer (module doc).
+    Raises ReleaseError when a file fails a check (nothing is installed then)."""
+    from .bridge import hardware
+    ov = hardware.override_path()
+    bundled_v = hardware.file_version(hardware.BUNDLED.read_bytes())
+    _retire_feed_file(ov, bundled_v)
+    url = rel["assets"].get(HW_ASSET)
+    if url is None:
+        return
+    for need in (release.SUMS, release.SIG):
+        if need not in rel["assets"]:
+            raise ReleaseError(f"release {rel['version']} has no {need}; {HW_ASSET} not installed")
+    sums = fetcher.get(rel["assets"][release.SUMS], release.LIMIT_SUMS)
+    sig = fetcher.get(rel["assets"][release.SIG], release.LIMIT_SIG)
+    try:
+        table = release.verify_sums(sums, sig)
+    except ReleaseError as e:
+        raise ReleaseError(f"{e}; {HW_ASSET} not installed") from None
+    want = table.get(HW_ASSET)
+    if want is None:
+        raise ReleaseError(f"the signed {release.SUMS} does not list {HW_ASSET}; not installed")
+    data = fetcher.get(url, hardware.MAX_BYTES)
+    if not hmac.compare_digest(hashlib.sha256(data).hexdigest(), want):
+        raise ReleaseError(f"{HW_ASSET} does not match its hash in the signed {release.SUMS}; not installed")
+    where = f"release {rel['version']} {HW_ASSET}"
+    errors = hardware.validate(data, where)
+    if errors:
+        raise ReleaseError(f"{errors[0]}" + (f" (and {len(errors) - 1} more)" if len(errors) > 1 else "")
+                           + "; not installed")
+    new_v = hardware.file_version(data)
+    if new_v is None:
+        raise ReleaseError(f"{where} has no version; not installed")
+    if bundled_v is not None and new_v <= bundled_v:
+        print(f"hardware data: the kit's own file (version {_vtext(bundled_v)}) is as new as release "
+              f"{rel['version']}'s ({_vtext(new_v)}); nothing to install")
+        return
+    old = ov.read_bytes() if ov.is_file() else None
+    if old is not None:
+        if old == data:
+            return
+        have = hardware.file_version(old)
+        if have is not None and have >= new_v:
+            print(f"hardware data: {ov} (version {_vtext(have)}) is as new as release {rel['version']}'s "
+                  f"({_vtext(new_v)}); left as it is")
+            return
+    ov.parent.mkdir(parents=True, exist_ok=True)
+    tmp = ov.with_name(ov.name + ".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+            fh.flush()
+            os.fsync(fh.fileno())
+        if old is not None:
+            prev = ov.with_name(ov.name + ".previous")
+            prev.write_bytes(old)
+        os.replace(tmp, ov)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    _write_state(hardware={"version": _vtext(new_v), "sha256": want, "release": rel["version"]})
+    print(f"hardware data: installed {HW_ASSET} version {_vtext(new_v)} from release {rel['version']} as {ov}")
 
 
 def _restore(cfg: dict, cur: str, kept: bool, old_previous, run) -> int:
