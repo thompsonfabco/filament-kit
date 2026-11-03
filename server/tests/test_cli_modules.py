@@ -275,3 +275,12 @@ def test_config_menu_refused_by_plan_leaves_config_untouched(monkeypatch, capsys
     assert cli.main(["config"]) == 1
     assert "fix:" in capsys.readouterr().err
     assert (config.paths().etc / "config.json").read_bytes() == before and ran == []
+
+
+def test_modules_menu_raw_revalidates_and_reshows(monkeypatch, capsys):
+    # default server mode: 1 = spoolman off leaves a server with no Spoolman -> error, menu again, 1 back on
+    _stdin(monkeypatch, "1\n\n1\n\n")
+    assert cli.main(["modules", "menu", "--raw"]) == 0
+    cap = capsys.readouterr()
+    assert "spoolman_url" in cap.err
+    assert "spoolman" in cap.out.split(",")

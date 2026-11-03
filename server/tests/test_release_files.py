@@ -283,3 +283,91 @@ def test_install_apt_waits_for_the_dpkg_lock():
 def test_install_save_custom_adds_what_modules_need(tmp_path):
     cfg = _run_save(tmp_path, "custom", ",spoolman,printers")
     assert cfg["modules"]["server"] and cfg["modules"]["printers"]
+
+
+def _install_part(start_marker, end_marker):
+    text = _read("install/install.sh")
+    a = text.index(start_marker)
+    return text[a:text.index(end_marker, a)]
+
+
+def _stub_venv(tmp_path, kit_body=None):
+    """A fake $VENV: bin/python runs the test interpreter; bin/filament-kit runs `kit_body` if given."""
+    import os
+    import stat
+    import sys
+    b = tmp_path / "venv" / "bin"
+    b.mkdir(parents=True)
+    py = b / "python"
+    py.write_text(f'#!/bin/sh\nexec "{sys.executable.replace(chr(92), "/")}" "$@"\n', newline="\n")
+    py.chmod(py.stat().st_mode | stat.S_IEXEC)
+    if kit_body is not None:
+        kit = b / "filament-kit"
+        kit.write_text("#!/bin/sh\n" + kit_body + "\n", newline="\n")
+        kit.chmod(kit.stat().st_mode | stat.S_IEXEC)
+    env = dict(os.environ, PYTHONPATH=str(ROOT / "server"))
+    return tmp_path / "venv", env
+
+
+def _run_part(script, venv, env, tmp_path):
+    import subprocess
+    f = tmp_path / "part.sh"
+    f.write_text(script, newline="\n")
+    return subprocess.run([_bash(), str(f)], stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                          timeout=60, env=dict(env, VENV=str(venv).replace(chr(92), "/")))
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_install_modules_closed_before_address_check(tmp_path):
+    # --modules station,printers: printers pulls in the server, so no server address is needed (no terminal here)
+    venv, env = _stub_venv(tmp_path)
+    part = _install_part("# A custom list is closed first", '[ "$NEED_ADDR" -eq 1 ] || SERVER_ADDR=""')
+    script = ('die() { echo "error: $*" >&2; exit 1; }\nbad_addr() { return 1; }\n'
+              'MODE=custom\nCUSTOM=",station,printers"\nSERVER_ADDR=""\n' + part +
+              'echo "NEED=$NEED_ADDR CUSTOM=$CUSTOM"\n')
+    r = _run_part(script, venv, env, tmp_path)
+    assert r.returncode == 0, r.stderr
+    assert "NEED=0 CUSTOM=,server,printers,station" in r.stdout
+    assert "also turned on" in r.stderr
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_install_modules_station_alone_still_needs_address_without_terminal(tmp_path):
+    venv, env = _stub_venv(tmp_path)
+    part = _install_part("# A custom list is closed first", '[ "$NEED_ADDR" -eq 1 ] || SERVER_ADDR=""')
+    script = ('die() { echo "error: $*" >&2; exit 1; }\nbad_addr() { return 1; }\n'
+              'MODE=custom\nCUSTOM=",station"\nSERVER_ADDR=""\n' + part)
+    r = _run_part(script, venv, env, tmp_path)
+    assert r.returncode == 1 and "needs the kit server's address" in r.stderr
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_install_modules_unknown_name_fails(tmp_path):
+    venv, env = _stub_venv(tmp_path)
+    part = _install_part("# A custom list is closed first", "# A station whose server is on another machine")
+    r = _run_part('MODE=custom\nCUSTOM=",bogus"\n' + part, venv, env, tmp_path)
+    assert r.returncode == 1 and "unknown module 'bogus'" in r.stderr
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_install_mode_custom_is_rejected():
+    r = _install_sh("--mode", "custom")
+    assert r.returncode == 1 and "--modules" in r.stderr and "unknown mode 'custom'" in r.stderr
+
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+@pytest.mark.parametrize("body, rc, expect", [
+    ('echo "spoolman,server,backup"', 0, "CUSTOM=,spoolman,server,backup"),
+    ("exit 1", 1, "no modules chosen"),
+])
+def test_install_menu_wrapper_cancel_and_choice(tmp_path, body, rc, expect):
+    venv, env = _stub_venv(tmp_path, body)
+    text = _read("install/install.sh")
+    a = text.index('        CUSTOM=",$("$VENV/bin/filament-kit" modules menu --raw)"')
+    b = text.index("\n", text.index("|| die", a))
+    wrapper = text[a:b].strip()
+    script = 'die() { echo "error: $*" >&2; exit 1; }\n' + wrapper + '\necho "CUSTOM=$CUSTOM"\n'
+    r = _run_part(script, venv, env, tmp_path)
+    assert r.returncode == rc
+    assert expect in (r.stdout if rc == 0 else r.stderr)

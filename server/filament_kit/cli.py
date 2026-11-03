@@ -1131,11 +1131,23 @@ def cmd_modules_menu(raw: bool) -> int:
     out = sys.stdout
     sys.stdout = sys.stderr                     # prompts and the checklist go to the terminal, not the capture
     try:
-        chosen = modules.run_checklist(on, _ask)
+        while True:
+            chosen = modules.run_checklist(on, _ask)
+            if chosen is None:
+                return 1
+            trial = _with_modules(cfg, chosen)
+            if "station" in chosen and "server" not in chosen and _server_addr_missing(trial):
+                # install.sh asks for the address afterwards; a placeholder keeps validate from objecting to it
+                trial.setdefault("station", {})["allow"] = ["server.invalid"]
+            try:
+                modules.validate(trial)
+            except modules.ModuleError as e:
+                print(f"error: {e}\nfix: change the selection and press Enter again (q cancels)")
+                on = chosen
+                continue
+            break
     finally:
         sys.stdout = out
-    if chosen is None:
-        return 1
     print(",".join(n for n in modules.MODULES if n in chosen))
     return 0
 
