@@ -184,9 +184,9 @@ def test_set_station_without_address_fails(applied, capsys):
 
 
 def test_set_station_with_server(applied):
-    assert cli.main(["modules", "set", "station", "--server", "kit.localdomain"]) == 0
+    assert cli.main(["modules", "set", "station", "--server", "kit.example.lan"]) == 0
     cfg = config.load()
-    assert cfg["station"]["allow"] == ["kit.localdomain"]
+    assert cfg["station"]["allow"] == ["kit.example.lan"]
     assert cfg["modules"]["station"] is True and cfg["modules"]["server"] is False
 
 
@@ -228,10 +228,10 @@ def test_config_menu_mode_server_after_all_in_one_drops_local_url(applied, monke
 
 def test_disable_station_keeps_remote_url(applied):
     cfg = config.load()
-    cfg["station"]["url"] = "http://station.localdomain:5003"
+    cfg["station"]["url"] = "http://station.example.lan:5003"
     config.save(cfg)
     assert cli.main(["modules", "disable", "library"]) == 0
-    assert config.load()["station"]["url"] == "http://station.localdomain:5003"
+    assert config.load()["station"]["url"] == "http://station.example.lan:5003"
 
 
 def _real_plan_fake_apply(monkeypatch):

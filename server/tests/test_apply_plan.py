@@ -14,7 +14,7 @@ def _mode(mode):
     """A mode's config; station-only needs the server's address (validate)."""
     cfg = set_mode(_cfg(), mode)
     if mode == "station":
-        cfg["station"]["allow"] = ["spoolman.home.arpa"]
+        cfg["station"]["allow"] = ["spoolman.example.lan"]
     return cfg
 
 
@@ -46,8 +46,8 @@ def test_all_in_one_station_localhost_only():
 
 def test_station_mode_resolves_server_name():
     cfg = set_mode(_cfg(), "station")
-    cfg["station"]["allow"] = ["spoolman.home.arpa"]
-    acts = apply.plan(cfg, resolve=lambda h: {"spoolman.home.arpa": ["192.0.2.10"]}[h])
+    cfg["station"]["allow"] = ["spoolman.example.lan"]
+    acts = apply.plan(cfg, resolve=lambda h: {"spoolman.example.lan": ["192.0.2.10"]}[h])
     content = [a.arg[1] for a in acts if a.kind == "install_file"
                and a.arg[0].endswith("kit.conf")][0]
     assert "IPAddressAllow=localhost 192.0.2.10" in content
@@ -61,14 +61,14 @@ def test_station_mode_resolves_server_name():
 
 def test_station_unresolvable_server_fails_before_writing():
     cfg = set_mode(_cfg(), "station")
-    cfg["station"]["allow"] = ["nope.localdomain"]
+    cfg["station"]["allow"] = ["nope.example.lan"]
 
     def boom(host):
         raise OSError("no such host")
 
     with pytest.raises(ModuleError) as e:
         apply.plan(cfg, resolve=boom)
-    assert "nope.localdomain" in str(e.value) and "fix:" in str(e.value)
+    assert "nope.example.lan" in str(e.value) and "fix:" in str(e.value)
 
 
 def test_validation_error_propagates():
@@ -127,7 +127,7 @@ def test_station_udev_rule_sorts_after_the_ops_rule_and_replaces_the_old_name():
 
 
 def test_remote_spoolman_server():
-    cfg = _cfg(spoolman_url="http://spoolman.home.arpa:7912",
+    cfg = _cfg(spoolman_url="http://spoolman.example.lan:7912",
                modules={"server": True})
     acts = apply.plan(cfg)
     assert "ensure_fields" in [a.kind for a in acts]

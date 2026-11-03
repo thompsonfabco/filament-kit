@@ -422,8 +422,8 @@ def test_config_gets_the_owner_values(env, lib):
                                 "box_count": 50, "overflow": "Overflow bags", "sealed_location": "Sealed stock"}
     assert cfg["locations"][0] == "Sealed stock" and "Upper storage (unverified)" in cfg["locations"]
     assert cfg["intake"]["tare_hints"]["SUNLU"] == 213
-    assert cfg["tag_sources"] == [{"name": "printer", "url": "http://lasttag.home.arpa:5002/last-tag"}]
-    assert cfg["station"]["url"] == "http://intake.home.arpa:5003"
+    assert cfg["tag_sources"] == [{"name": "printer", "url": migrate.OPS_LASTTAG}]
+    assert cfg["station"]["url"] == migrate.OPS_STATION
     assert cfg["slot_service"] == {"state_url": "http://127.0.0.1:8105/api/state",
                                    "set_url": "http://127.0.0.1:8104/set-slot",
                                    "token_file": str(env / "etc" / "h2d_token")}

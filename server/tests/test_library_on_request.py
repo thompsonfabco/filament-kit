@@ -303,7 +303,7 @@ def test_token_not_sent_to_a_non_github_server(fresh, served, env):
 
 
 def test_github_asset_api_url_is_an_archive():
-    url = "https://api.github.com/repos/thompsonfabco/filament-kit/releases/assets/123456"
+    url = "https://api.github.com/repos/o/r/releases/assets/123456"
     assert library._is_archive(url)
     assert library._check_url(url) == url
     assert not library._is_archive("https://api.github.com/repos/o/r/releases/latest")

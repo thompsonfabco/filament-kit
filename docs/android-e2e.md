@@ -115,7 +115,7 @@ check is the hardware test.
 
 ## Task 17: real-printer check (owner's H2D, 2026-11-01)
 
-Server: WSL Ubuntu 26.04 test install (build e665ce4). The H2D (`0948ZZ0A0000001`, 192.0.2.109, firmware
+Server: WSL Ubuntu 26.04 test install (build e665ce4). The H2D (serial and address left out, firmware
 01.04.00.00, LAN mode) was added by hand with `sudo filament-kit config` → Printers (WSL is behind NAT, so SSDP
 announcements don't reach it); the owner typed the Access Code.
 
