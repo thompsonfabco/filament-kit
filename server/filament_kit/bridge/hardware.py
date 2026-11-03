@@ -73,7 +73,10 @@ eval): `id`, `tray`, integers, `+ - * <<`, parentheses.
 with a model (code, name or ModelInfo) its own external holders are matched first.
 
 `Hardware.errors -> list[str]`: problems from the last load (empty when clean). Fatal: the file was refused.
-`Hardware.warnings -> list[str]`: unknown elements and attributes (ignored, the rest loads: forward compatibility).
+`Hardware.warnings -> list[str]`: unknown elements and attributes (ignored, the rest loads: forward compatibility),
+and an override whose version is not newer than the bundled file's (the whole override is ignored then: a feed file
+left behind after an upgrade must not shadow newer bundled data, so a hand-made override must carry a higher
+version than the kit's own file).
 
 Versions: `version="major[.minor]"`; a file with another major version is refused, minor versions load.
 
@@ -802,8 +805,16 @@ def file_version(data: bytes) -> tuple[int, int] | None:
         root = DET.fromstring(data, forbid_dtd=True, forbid_entities=True, forbid_external=True)
     except Exception:  # noqa: BLE001 - ParseError, DTDForbidden, ...
         return None
+    return _root_version(root)
+
+
+def _root_version(root) -> tuple[int, int] | None:
     m = _VERSION.fullmatch((root.get("version") or "").strip())
     return (int(m.group(1)), int(m.group(2) or 0)) if m else None
+
+
+def _vtext(v: tuple[int, int]) -> str:
+    return f"{v[0]}.{v[1]}"
 
 
 def _merge(base: dict[str, dict], over: dict[str, dict]) -> dict[str, dict]:
@@ -845,8 +856,18 @@ def _fresh(ov: Path, ov_present: bool) -> Hardware:
         where_o = str(ov)
         try:
             over_root, over_warnings = _parse(_read(ov, where_o), where_o)
-            hw = _build(_merge(base, _elements(over_root, where_o)), where_o)
-            warnings = warnings + over_warnings
+            merged = _build(_merge(base, _elements(over_root, where_o)), where_o)   # a broken file is an error
+            base_v, over_v = _root_version(base_root), _root_version(over_root)
+            if base_v is not None and (over_v is None or over_v <= base_v):
+                # a feed file left behind after an upgrade, or a hand-made one that never bumped its version:
+                # applying it would shadow newer bundled data per element (final review I2, Ruling BT)
+                warnings = warnings + [
+                    f"{where_o}: override version {over_root.get('version', '').strip()} is not newer than the "
+                    f"kit's own {base_root.get('version', '').strip()}: ignored (give it a version above "
+                    f"{_vtext(base_v)} to use it)"]
+            else:
+                hw = merged
+                warnings = warnings + over_warnings
         except HardwareError as e:
             errors = e.errors
             if _last_good is not None:

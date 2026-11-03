@@ -21,6 +21,8 @@
 # installs nothing. Then it unpacks into a temporary folder, keeps a copy of the verified release in
 # /opt/filament-kit/releases/ (for `filament-kit update --rollback`), runs install.sh with the terminal (so its
 # questions work through the pipe; without a terminal install.sh asks nothing) and removes the temporary folder.
+# On an existing install it first holds every printer's mapping lock, as the updater does: it stops when a printer
+# is mapping slots or loading a spool.
 #
 # Everything runs inside fk_main, called on the last line, so a download cut short runs nothing.
 set -euo pipefail
@@ -30,6 +32,23 @@ fk_usage() {
     echo "usage: curl -fsSL <get.sh url> | sudo bash -s -- [--version X.Y.Z] [--mode M] [--modules a,b]" >&2
     echo "       [--server NAME-OR-IP] [--set KEY=VALUE]... [--token-file FILE] [--repo OWNER/NAME] [--api URL]" >&2
     exit 2
+}
+
+# An existing install: refuse while a printer is mapping slots or loading a spool, as `filament-kit update` does
+# (updates.printers_idle). Every printer's mapping.lock is held (exclusive, not waiting) until this script ends,
+# so neither can start while install.sh stops and replaces the services. A fresh install has no printers yet.
+fk_hold_printers() {
+    local state=${FK_STATE:-/var/lib/filament-kit} lock fd name
+    [ -d "$state/printers" ] || return 0
+    command -v flock >/dev/null 2>&1 || return 0
+    for lock in "$state"/printers/*/mapping.lock; do
+        [ -e "$lock" ] || continue
+        exec {fd}>>"$lock" || fk_die "cannot open $lock; nothing was installed"
+        if ! flock -n -x "$fd"; then
+            name=${lock%/mapping.lock}
+            fk_die "printer ${name##*/} is mapping slots or loading a spool; nothing was installed (try again once it is idle)"
+        fi
+    done
 }
 
 fk_main() {
@@ -554,6 +573,7 @@ FK_RELEASE_PY
     root=$(python3 -I "$tmp/fk_release.py" "${args[@]}" </dev/null) \
         || fk_die "nothing was installed"
     [ -f "$root/install.sh" ] || fk_die "nothing was installed (no install.sh)"
+    fk_hold_printers
 
     local rc=0
     if (exec </dev/tty) 2>/dev/null; then

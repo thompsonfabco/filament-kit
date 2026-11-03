@@ -28,10 +28,13 @@ def test_release_workflow_uses_both_signing_secrets():
     assert "${{ secrets.FK_KEYSTORE_B64 }}" in text
     assert "${{ secrets.FK_KEYSTORE_PASSWORD }}" in text
     # secrets only ever reach a step through env, never a run line
+    # (the one exception: actions/checkout's `token` input for the private filament-library, Ruling BU)
     for line in text.splitlines():
         if "secrets." in line:
-            assert re.match(r"\s+(FK_KEYSTORE(_B64|_PASSWORD)|FK_RELEASE_KEY): "
-                            r"\$\{\{ secrets\.(FK_KEYSTORE(_B64|_PASSWORD)|FK_RELEASE_KEY) \}\}$", line), line
+            assert (re.match(r"\s+(FK_KEYSTORE(_B64|_PASSWORD)|FK_RELEASE_KEY|FK_LIBRARY_TOKEN): "
+                             r"\$\{\{ secrets\.(FK_KEYSTORE(_B64|_PASSWORD)|FK_RELEASE_KEY|FK_LIBRARY_TOKEN) \}\}$",
+                             line)
+                    or re.match(r"\s+token: \$\{\{ secrets\.FK_LIBRARY_TOKEN \}\}$", line)), line
 
 
 def test_release_workflow_builds_sync_on_windows_with_pinned_pyinstaller():
@@ -62,7 +65,8 @@ def test_release_workflow_pins_every_action_by_commit():
         for line in _read(path).splitlines():
             assert not line or line.startswith("#") or re.fullmatch(
                 r"[\w-]+==[\w.]+ \\|    --hash=sha256:[0-9a-f]{64}( \\)?", line), line
-    assert re.search(r"sha256sum .*\\\n\s+\"filament-kit-sync-setup", text)   # M4: the continuation is kept
+    # M4: the sync installer is summed (one assets line now; test_release_workflow_sums_step_runs runs it)
+    assert re.search(r'assets="[^"]*filament-kit-sync-setup-\$VERSION\.exe', text)
 
 
 def test_pc_sync_workflow():
@@ -171,7 +175,8 @@ def test_web_extra_pins_mcp_exactly():
 
 def test_wrapper_runs_modules_as_root():
     text = _read("install/filament-kit-cli.sh")
-    assert re.search(r"^\s+config \| cert \| modules \| remote \| migrate-ops \| update\)\s*$", text, re.M)
+    assert re.search(r"^\s+config \| cert \| modules \| remote \| migrate-ops \| migrate-scanner \| update\)\s*$",
+                     text, re.M)
 
 
 def test_wrapper_runs_web_passphrase_as_root():
@@ -282,9 +287,9 @@ def _run_save(tmp_path, mode, modules_csv="", server="", sets="", ai="", existin
 
 
 def test_install_save_custom_station_without_server_takes_address(tmp_path):
-    cfg = _run_save(tmp_path, "custom", ",station", server="spoolman.home.arpa")
+    cfg = _run_save(tmp_path, "custom", ",station", server="spoolman.example.lan")
     assert cfg["modules"]["station"] and not cfg["modules"]["server"]
-    assert cfg["station"]["allow"] == ["spoolman.home.arpa"]
+    assert cfg["station"]["allow"] == ["spoolman.example.lan"]
     assert "server_name" not in cfg  # apply asks the first-run questions
 
 
@@ -388,8 +393,8 @@ def test_install_mode_custom_is_rejected():
     ('echo "spoolman,server,backup"', 0, "CUSTOM=,spoolman,server,backup SETS= ADDR="),
     ('printf "web,server\\nset web.public_url=https://a.example.com/f\\nset orders.file=/o=1.json\\n"', 0,
      "CUSTOM=,web,server SETS=set web.public_url=https://a.example.com/f|set orders.file=/o=1.json ADDR="),
-    ('printf "station\\nset station.allow=srv.localdomain\\n"', 0,
-     "CUSTOM=,station SETS=set station.allow=srv.localdomain ADDR=srv.localdomain"),
+    ('printf "station\\nset station.allow=srv.example.lan\\n"', 0,
+     "CUSTOM=,station SETS=set station.allow=srv.example.lan ADDR=srv.example.lan"),
     ("exit 1", 1, "no modules chosen"),
 ])
 def test_install_menu_wrapper_cancel_and_choice(tmp_path, body, rc, expect):
@@ -450,12 +455,12 @@ def test_install_set_is_collected_and_station_address_feeds_server_addr(tmp_path
     f.write_text(script, newline="\n")
     import subprocess
     r = subprocess.run([_bash(), str(f), "--modules", "web,station", "--set", "web.public_url=https://m.example.com/f",
-                        "--set=station.allow=srv.localdomain"], capture_output=True, text=True, timeout=30,
+                        "--set=station.allow=srv.example.lan"], capture_output=True, text=True, timeout=30,
                        stdin=subprocess.DEVNULL)
     assert r.returncode == 0, r.stderr
-    assert r.stdout.splitlines() == ["MODE=custom SERVER=srv.localdomain",
+    assert r.stdout.splitlines() == ["MODE=custom SERVER=srv.example.lan",
                                      "set web.public_url=https://m.example.com/f",
-                                     "set station.allow=srv.localdomain"]
+                                     "set station.allow=srv.example.lan"]
 
 
 def test_install_save_rejects_bad_set_value(tmp_path):
@@ -509,10 +514,10 @@ def test_install_set_station_allow_refused_when_server_in_list(tmp_path):
     assert ok.returncode == 0
 
 
-SAVED_NOTE = "using the station's saved server address kit.localdomain"
+SAVED_NOTE = "using the station's saved server address kit.example.lan"
 
 
-def _saved_station_etc(tmp_path, allow=("127.0.0.1", "kit.localdomain")):
+def _saved_station_etc(tmp_path, allow=("127.0.0.1", "kit.example.lan")):
     import json
     etc = tmp_path / "etc"
     etc.mkdir(exist_ok=True)
@@ -558,9 +563,9 @@ def test_custom_run_without_terminal_uses_the_saved_address_unless_one_is_given(
     etc = _saved_station_etc(tmp_path)
     r = _install_no_tty(tmp_path, etc, "--modules", "station")
     assert SAVED_NOTE in r.stderr and "run as root" in r.stderr, r.stderr
-    r = _install_no_tty(tmp_path, etc, "--modules", "station", "--set", "station.allow=other.localdomain")
+    r = _install_no_tty(tmp_path, etc, "--modules", "station", "--set", "station.allow=other.example.lan")
     assert "saved server address" not in r.stderr and "run as root" in r.stderr, r.stderr
-    r = _install_no_tty(tmp_path, etc, "--mode", "station", "--server", "other.localdomain")
+    r = _install_no_tty(tmp_path, etc, "--mode", "station", "--server", "other.example.lan")
     assert "saved server address" not in r.stderr and "run as root" in r.stderr, r.stderr
 
 
@@ -667,3 +672,127 @@ def test_inline_python_survives_shell_single_quotes(rel):
         compile(code, f"{rel} python -c block", "exec")
         blocks += 1
     assert blocks >= 1, f"{rel}: no python -c block left; update PYTHON_C_SCRIPTS"
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_wrapper_runs_migrate_scanner_as_root(tmp_path):
+    """`migrate-scanner --apply` refuses unless root and reads the old calibration from /root: the wrapper must not
+    drop it to the service user (final review I1)."""
+    assert (_wrapper_run(tmp_path, "migrate-scanner", "/root/calibration.json", "--apply")
+            == "as-root migrate-scanner /root/calibration.json --apply")
+
+
+# --- final review I3 (Ruling BU): CI builds, signs and publishes library.tar.gz ----------------------------------
+
+def _step(text: str, name: str) -> str:
+    i = text.index(f"- name: {name}")
+    j = text.find("\n      - ", i + 1)
+    return text[i:j if j > 0 else len(text)]
+
+
+def test_release_workflow_builds_the_library_from_the_private_repo():
+    text = _read(".github/workflows/release.yml")
+    gate = _step(text, "Filament library token")
+    assert "FK_LIBRARY_TOKEN: ${{ secrets.FK_LIBRARY_TOKEN }}" in gate
+    assert "::warning::" in gate and "FK_LIBRARY_TOKEN" in gate     # absent: a warning, never a failure
+    assert "exit 1" not in gate
+    i = text.index("repository: thompsonfabco/filament-library")
+    co = text[text.rindex("- uses: actions/checkout@", 0, i):i + 400]
+    assert "if: steps.library.outputs.have == 'true'" in co
+    assert "token: ${{ secrets.FK_LIBRARY_TOKEN }}" in co
+    assert "persist-credentials: false" in co
+    assert "path: filament-library" in co
+    build = _step(text, "Build the tarball and the signed APK")
+    assert "FK_LIBRARY_SRC: ${{ github.workspace }}/filament-library" in build
+    assert text.index("Filament library token") < text.index("Build the tarball and the signed APK")
+
+
+def test_release_workflow_signs_and_publishes_the_library_when_built():
+    text = _read(".github/workflows/release.yml")
+    assert "dist/library.tar.gz" in text                     # uploaded by the server job
+    sums = _step(text, "SHA256SUMS and its signature")
+    assert "library.tar.gz" in sums                           # in the signed SHA256SUMS when it was built
+    assert re.search(r"if \[ -f dist/library\.tar\.gz \]", sums)
+    assert "dist/library.tar.gz" in sums                      # and in the publish list
+    assert "files: ${{ steps.sums.outputs.files }}" in text
+    assert "id: sums" in sums
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+@pytest.mark.parametrize("with_library", [True, False])
+def test_release_workflow_sums_step_runs(tmp_path, with_library):
+    """Run the sums step's shell (signing stubbed) on a stand-in dist: library.tar.gz is summed and published only
+    when the build job made it."""
+    import os
+    import subprocess
+    text = _read(".github/workflows/release.yml")
+    sums = _step(text, "SHA256SUMS and its signature")
+    run = sums[sums.index("run: |") + len("run: |"):]
+    script = "\n".join(line[10:] if line.startswith(" " * 10) else line for line in run.splitlines())
+    script = script.replace("python tools/sign_release.py sign dist/SHA256SUMS", "touch dist/SHA256SUMS.sig")
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    for f in ("filament-kit-1.2.3.tar.gz", "filament-kit.apk", "filament-kit-sync-setup-1.2.3.exe",
+              "bambu_hardware.xml") + (("library.tar.gz",) if with_library else ()):
+        (dist / f).write_bytes(f.encode())
+    (tmp_path / "get.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    out = tmp_path / "out"
+    (tmp_path / "s.sh").write_text(script, encoding="utf-8", newline="\n")
+    env = dict(os.environ, FK_RELEASE_KEY="stand-in", VERSION="1.2.3", GITHUB_OUTPUT="out")
+    r = subprocess.run([_bash(), "s.sh"], cwd=tmp_path, env=env, capture_output=True, text=True, timeout=30)
+    assert r.returncode == 0, r.stdout + r.stderr
+    listed = (dist / "SHA256SUMS").read_text()
+    assert ("library.tar.gz" in listed) is with_library
+    files = out.read_text()
+    assert ("dist/library.tar.gz" in files) is with_library
+    for f in ("dist/filament-kit-1.2.3.tar.gz", "dist/get.sh", "dist/SHA256SUMS.sig", "dist/bambu_hardware.xml"):
+        assert f in files
+
+
+# --- final review M12: get.sh on an existing install waits for no printer job, as the updater does ---------------
+
+def _get_sh_hold_function() -> str:
+    text = _read("get.sh")
+    i = text.index("fk_hold_printers() {")
+    return text[i:text.index("\n}\n", i) + 3]
+
+
+def test_get_sh_holds_the_printer_locks_before_install_sh():
+    text = _read("get.sh")
+    body = text[text.index("fk_main() {"):]
+    assert body.index("fk_hold_printers") < body.index('bash "$root/install.sh"')
+    fn = _get_sh_hold_function()
+    assert "mapping.lock" in fn and "flock -n -x" in fn and "fk_die" in fn
+
+
+@pytest.mark.skipif(not _wsl(), reason="needs WSL Ubuntu")
+def test_get_sh_refuses_while_a_printer_job_holds_its_lock(tmp_path):
+    import subprocess
+    script = tmp_path / "hold.sh"
+    script.write_text("set -euo pipefail\n"
+                      "fk_die() { printf 'error: %s\n' \"$*\" >&2; exit 1; }\n"
+                      + _get_sh_hold_function() +
+                      'st=$(mktemp -d); mkdir -p "$st/printers/S1" "$st/printers/S2"\n'
+                      ': > "$st/printers/S1/mapping.lock"; : > "$st/printers/S2/mapping.lock"\n'
+                      'FK_STATE=$st fk_hold_printers\n'
+                      # held now: another holder cannot take it, as a mapping job could not
+                      'if flock -n -x "$st/printers/S2/mapping.lock" true; then echo NOT-HELD; else echo HELD; fi\n',
+                      encoding="utf-8", newline="\n")
+    busy = tmp_path / "busy.sh"
+    busy.write_text("set -euo pipefail\n"
+                    "fk_die() { printf 'error: %s\n' \"$*\" >&2; exit 1; }\n"
+                    + _get_sh_hold_function() +
+                    'st=$(mktemp -d); mkdir -p "$st/printers/S1"; : > "$st/printers/S1/mapping.lock"\n'
+                    'flock -x "$st/printers/S1/mapping.lock" sleep 5 & sleep 0.5\n'
+                    'FK_STATE=$st fk_hold_printers; echo REACHED\n', encoding="utf-8", newline="\n")
+
+    def run(p):
+        wp = subprocess.run(["wsl", "-d", "Ubuntu", "--exec", "wslpath", "-a", str(p).replace("\\", "/")],
+                            capture_output=True, text=True, timeout=60).stdout.strip()
+        return subprocess.run(["wsl", "-d", "Ubuntu", "--exec", "bash", wp], capture_output=True, text=True,
+                              timeout=60)
+    r = run(script)
+    assert r.returncode == 0 and r.stdout.strip() == "HELD", r.stdout + r.stderr
+    r = run(busy)
+    assert r.returncode == 1 and "REACHED" not in r.stdout
+    assert "printer S1 is mapping slots or loading a spool" in r.stderr and "nothing was installed" in r.stderr

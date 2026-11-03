@@ -455,7 +455,7 @@ if it is signed with the **same** key, so losing the key means everyone has to u
 1. Once: `powershell -ExecutionPolicy Bypass -File tools\android_keystore.ps1`. It creates
    `%LOCALAPPDATA%\filament-kit\release.jks` and a random password stored (encrypted with Windows DPAPI) in
    `%LOCALAPPDATA%\filament-kit\keystore.pw.dpapi`. You never type or see the password. It refuses to overwrite an
-   existing keystore. It uses `keytool` from `JAVA_HOME` if set, otherwise from `G:\Android\jdk-21.0.13+9`.
+   existing keystore. It uses `keytool` from `JAVA_HOME` if set, otherwise the one on `PATH`.
 2. Each release: pick the app's version code and run, in Git Bash,
    `FK_VERSION_CODE=<n> bash tools/make_release.sh`. It builds and signs the app with that versionCode and puts
    `app/filament-kit.apk` and `app/version.txt` (containing the same number) into the tarball.
@@ -490,3 +490,19 @@ get.sh and the updater install only releases whose `SHA256SUMS` is signed with t
 The release workflow then signs every release; without the secret, or with a key that does not match the public
 key in `release.py`, it fails instead of publishing an unsigned release. After editing `release.py`, run
 `python tools/sign_release.py sync-get` (get.sh carries a copy of it; a test checks they match).
+
+### Publishing the filament library with each release
+
+The release workflow builds `library.tar.gz` from the private `thompsonfabco/filament-library` repository, lists
+it in the signed `SHA256SUMS` and publishes it with the release. Installs check it against that signature before
+they use it, and refuse a library from the default URL without one. Once:
+
+1. Make a GitHub token that can only read `thompsonfabco/filament-library`: **Settings > Developer settings >
+   Personal access tokens > Fine-grained tokens > Generate new token**, repository access **Only select
+   repositories** with `filament-library`, permission **Contents: Read-only**. Pick an expiry and note it.
+2. Add it yourself as a GitHub Actions secret of the filament-kit repository: **Settings > Secrets and variables >
+   Actions > New repository secret**, name `FK_LIBRARY_TOKEN`, value the token.
+3. Renew the token and update the secret before it expires.
+
+Without the secret, the release is still built and published, without `library.tar.gz`; the run shows a warning
+that says so. Installs then keep the library copy they already have (or none) until a release carries one.

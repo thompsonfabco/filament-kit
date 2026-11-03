@@ -291,6 +291,20 @@ something else may be answering at the printer's address: check the printer's IP
 A backup of your spools and settings is made every night in `/var/backups/filament-kit` (the last 14 days are
 kept).
 
+### Your own printer data (override)
+
+The facts about each printer model and AMS unit come from the kit's own `bambu_hardware.xml`. To correct or add
+something, put your own file at `/etc/filament-kit/bambu_hardware.xml`. It wins element by element over the
+kit's own file, and the updater never replaces a file you made.
+
+Your file must carry a **version above the kit's own file**, in its first line: for example, when the kit's file
+says `<bambu-hardware version="1.0">`, write `<bambu-hardware version="1.1">`. A file whose version is the same
+as or lower than the kit's own is **ignored**, so an old file never hides newer data that an upgrade brings.
+`sudo filament-kit status` then shows a note: "override version ... is not newer than the kit's own ...:
+ignored". After an upgrade that ships a newer file, check that note: raise your file's version again, or delete
+your file if the new release already has what you added. A file with mistakes is refused whole (the last good
+data stays in use), and status names it.
+
 ## Presets in Bambu Studio
 
 The server builds one Bambu Studio filament preset for each filament line you own (a line is a brand's product,
@@ -371,9 +385,12 @@ copy you downloaded earlier keeps being used when the kit is upgraded.
 - `sudo filament-kit library add <file>`: adds or replaces your own entry from a JSON file.
 
 The download is the `library.tar.gz` asset of the latest release (`library.url` in the config can point to
-another `.tar.gz` or to a folder that serves `index.json` and the entries). Every entry is checked before it is
-used, and a bad download changes nothing. The token below is only ever sent to github.com, api.github.com and
-githubusercontent.com. Testing against a private repository: put a GitHub token that can read it in
+another `.tar.gz` or to a folder that serves `index.json` and the entries). The release's `library.tar.gz` is
+checked against the release's signed `SHA256SUMS`, like the program itself, and refused without it. Another
+`.tar.gz` is checked the same way when a signed `SHA256SUMS` sits next to it; otherwise (and for a folder URL)
+`library update` prints a note that it is not signature-checked. Every entry is checked before it is used, and a
+bad download changes nothing. The token below is only ever sent to api.github.com and objects.githubusercontent.com,
+as for program updates. Testing against a private repository: put a GitHub token that can read it in
 `/etc/filament-kit/github_token`; the `releases/latest/download` link does not accept a token for a private
 repository, so find the asset's id (`gh api repos/<owner>/<repo>/releases/latest --jq '.assets[] | [.name, .id]'`)
 and set `library.url` to `https://api.github.com/repos/<owner>/<repo>/releases/assets/<id>`. Until the release is public, `library update` shows an error and the daily check

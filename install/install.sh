@@ -62,7 +62,7 @@ if [ -n "$SETS" ]; then
     [ -z "$SERVER_ADDR" ] && SERVER_ADDR="$FLAG_ADDR"
 fi
 if [ -n "$SERVER_ADDR" ] && bad_addr "$SERVER_ADDR"; then
-    die "--server takes one name or address, e.g. spoolman.home.arpa or 192.0.2.10"
+    die "--server takes one name or address, e.g. kit.example.lan or 192.0.2.10"
 fi
 # A station re-run without --server and without a terminal (the updater, get.sh piped to bash) keeps the server
 # address the station already has: the first non-local station.allow entry of its config. At a terminal the
@@ -297,7 +297,7 @@ if [ "$NEED_ADDR" -eq 1 ] && [ -z "$SERVER_ADDR" ]; then
         SERVER_ADDR=""
         read -r -p "Server address (name or IP): " SERVER_ADDR || true
         if bad_addr "$SERVER_ADDR"; then
-            echo "Give one name or address, e.g. spoolman.home.arpa or 192.0.2.10."
+            echo "Give one name or address, e.g. kit.example.lan or 192.0.2.10."
         else
             break
         fi

@@ -558,3 +558,19 @@ def test_half_configured_slot_service_refuses(tools, caplog):
     assert any("slot_service" in r.getMessage() for r in caplog.records)
     with pytest.raises(Problem, match="slot_service"):
         tools.printer_set_slot(1, "1")
+
+
+def test_bridge_set_slot_quotes_a_hash_label():
+    """final review M4: a clash-suffixed label ("A1#5") is quoted, never cut at '#' into a fragment."""
+    kit = FakeKit()
+    real = kit.get
+
+    def get(path):
+        out = real(path)
+        if path != "/api/printers":
+            out["status"]["ams"].append({"unit": 5, "label": "A1#5", "kind": "ams",
+                                         "slots": [{"slot": 0, "label": "A1#5"}]})
+        return out
+    kit.get = get
+    slots.bridge_set_slot(kit, 7, "A1#5", True)
+    assert kit.loads == [("/api/printers/SER1/slots/A1%235/load", {"spool_id": 7, "dry_run": True})]

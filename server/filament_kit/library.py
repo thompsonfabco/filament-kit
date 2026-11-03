@@ -2,8 +2,12 @@
 
 The program does not bundle the library (the wheel carries only the schema and an empty index, version 0);
 `update` downloads it from `library.url`, a release asset `library*.tar.gz` (or a directory URL serving
-index.json and the entries). With nothing downloaded, `load()` is an empty library and profiles are built from
-Spoolman values and the Bambu/Orca parents alone. An install that already downloaded a copy keeps using it.
+index.json and the entries). An archive from a GitHub release (the default URL) is checked against that release's
+signed SHA256SUMS (release.verify_sums, the program's own release key) before it is unpacked, and refused without
+it; a custom mirror is checked the same way when it serves SHA256SUMS next to the archive, else only by the
+per-entry hashes in its index.json (the result carries a note saying so). With nothing downloaded, `load()` is an
+empty library and profiles are built from Spoolman values and the Bambu/Orca parents alone. An install that
+already downloaded a copy keeps using it.
 
 Layout in the state directory:
   library/current.json            {"dir", "version", "at"}: the version directory in use (absent = none)
@@ -19,6 +23,7 @@ from __future__ import annotations
 import copy
 import datetime
 import hashlib
+import hmac
 import io
 import json
 import os
@@ -34,7 +39,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import config
+from . import config, release
 from .pairing import _write_atomic, give_to_state_owner, make_state_dir, open_lock
 
 try:
@@ -491,6 +496,7 @@ class UpdateResult:
     downloaded: int
     error: str | None
     http_status: int | None = None     # set when the error was an HTTP status (401/403/404: maybe private)
+    note: str | None = None            # e.g. a custom URL that is not signature-checked
 
 
 class _Abort(Exception):
@@ -515,20 +521,31 @@ def _is_archive(url: str) -> bool:
     return (u.hostname or "").lower() == "api.github.com" and ASSET_API.fullmatch(u.path) is not None
 
 
-def _github_host(host: str | None) -> bool:
-    host = (host or "").lower()
-    return host in ("github.com", "api.github.com") or host.endswith(".githubusercontent.com")
+RELEASE_ASSET = re.compile(r"/[^/]+/[^/]+/releases/(?:latest/download|download/[^/]+)/[^/]+")
+
+
+def _release_dir(url: str) -> str | None:
+    """The release folder of a GitHub release download URL (https://github.com/<owner>/<repo>/releases/latest/
+    download/<file>, or .../releases/download/<tag>/<file>), where that release's SHA256SUMS sits; else None."""
+    u = urllib.parse.urlsplit(url)
+    if u.scheme != "https" or (u.hostname or "").lower() != "github.com" or u.port not in (None, 443):
+        return None
+    if not RELEASE_ASSET.fullmatch(u.path):
+        return None
+    return url.rsplit("/", 1)[0] + "/"
 
 
 def _auth_headers(url: str) -> dict:
-    """Extra request headers for `url`: the GitHub token (if any) only for https GitHub hosts, never for any other
-    host; GitHub's asset API also needs Accept: application/octet-stream to return the file itself."""
+    """Extra request headers for `url`: the GitHub token (if any) only for the hosts release.py sends it to
+    (release.TOKEN_HOSTS over https on port 443: one policy for the updater, get.sh and the library), never for
+    any other host; GitHub's asset API also needs Accept: application/octet-stream to return the file itself."""
     u = urllib.parse.urlsplit(url)
-    if u.scheme != "https" or not _github_host(u.hostname):
-        return {}
     out = {}
-    if _is_archive(url) and (u.hostname or "").lower() == "api.github.com":
+    if (u.scheme == "https" and _is_archive(url) and (u.hostname or "").lower() == "api.github.com"
+            and u.port in (None, 443)):
         out["Accept"] = "application/octet-stream"
+    if not release._host_ok_for_token(url):
+        return out
     token = _token()
     if token:
         out["Authorization"] = "Bearer " + token
@@ -608,6 +625,7 @@ class _Fetcher:
         self.version = version
         self.start = _clock()
         self.total = 0
+        self.missing_ok: set[str] = set()       # names whose 404 means "not there" (get returns None)
 
     def remaining(self) -> float:
         left = DEADLINE - (_clock() - self.start)
@@ -627,6 +645,8 @@ class _Fetcher:
                     raise _Abort(f"{name}: HTTP {status}", status)
                 data = r.read(min(limit, budget) + 1)
         except urllib.error.HTTPError as e:
+            if e.code == 404 and name in self.missing_ok:
+                return None
             msg = f"{name}: HTTP {e.code}"
             if e.code in PRIVATE_STATUSES:
                 msg += ("; the library repository may be private; using version " + str(self.version)
@@ -645,6 +665,45 @@ class _Fetcher:
             raise _Abort(f"the update downloaded more than {TOTAL_LIMIT // 2**20} MiB; stopped")
         self.total += len(data)
         return data
+
+
+def _signed_sums(fetch: _Fetcher, url: str) -> tuple[dict[str, str] | None, str | None]:
+    """(the verified SHA256SUMS table, None) for an archive URL, or (None, note) when a custom URL has no SHA256SUMS
+    beside it. A GitHub release URL without signed sums, a bad signature or a missing .sig raise _Abort."""
+    rel = _release_dir(url)
+    folder = rel or url.rsplit("/", 1)[0] + "/"
+    if rel is None and (urllib.parse.urlsplit(url).hostname or "").lower() == "api.github.com":
+        return None, ("the library archive comes from a GitHub asset API URL and is not signature-checked "
+                      "(only the hashes in its index.json are)")
+    if rel is None:
+        fetch.missing_ok.add(release.SUMS)
+    try:
+        sums = fetch.get(folder + release.SUMS, release.SUMS, release.LIMIT_SUMS)
+    except _Abort as e:
+        if rel is not None:
+            raise _Abort(f"{e}; the release has no signed {release.SUMS}, so the library is not installed",
+                         e.http_status) from None
+        raise
+    finally:
+        fetch.missing_ok.discard(release.SUMS)
+    if sums is None:
+        return None, (f"{url} has no {release.SUMS} beside it: the archive is not signature-checked (only the "
+                      "hashes in its index.json are)")
+    sig = fetch.get(folder + release.SIG, release.SIG, release.LIMIT_SIG)
+    try:
+        return release.verify_sums(sums, sig), None
+    except release.ReleaseError as e:
+        raise _Abort(f"{e} (library not installed)") from None
+
+
+def _check_archive(table: dict[str, str], url: str, data: bytes) -> None:
+    name = urllib.parse.unquote(urllib.parse.urlsplit(url).path.rsplit("/", 1)[-1])
+    want = table.get(name)
+    if want is None:
+        raise _Abort(f"the signed {release.SUMS} does not list {name}; the library is not installed")
+    if not hmac.compare_digest(hashlib.sha256(data).hexdigest(), want):
+        raise _Abort(f"{name} does not match its hash in the signed {release.SUMS} (a damaged or changed "
+                     "download); the library is not installed")
 
 
 def _read_archive(raw: bytes, check=lambda: None) -> dict[str, bytes]:
@@ -774,18 +833,25 @@ def update(url: str | None = None, *, opener=None, now: float | None = None) -> 
         tmp = None
         downloaded = 0
         fetch = _Fetcher(opener or _safe_opener(), cur_version)
+        note = None
         try:
             archive = None
             if _is_archive(base):
-                archive = _read_archive(fetch.get(base, "library archive", ARCHIVE_LIMIT), fetch.remaining)
+                table, note = _signed_sums(fetch, base)
+                data = fetch.get(base, "library archive", ARCHIVE_LIMIT)
+                if table is not None:
+                    _check_archive(table, base, data)
+                archive = _read_archive(data, fetch.remaining)
                 raw = archive["index.json"]
             else:
+                note = (f"{base} is a folder URL: it is not signature-checked (only the hashes in its index.json "
+                        "are)")
                 raw = fetch.get(base + "index.json", "index.json", INDEX_LIMIT)
             idx, rows = _parse_index(raw, cur_version)
             new_rows = {r["path"]: r["sha256"] for r in rows}
             if idx["library_version"] == cur_version and new_rows == cur_rows:
                 _record_check(now, None)
-                return UpdateResult(False, cur_version, 0, None)
+                return UpdateResult(False, cur_version, 0, None, note=note)
             name = _new_dir_name(idx["library_version"], now)
             tmp = _dir() / "versions" / (name + ".tmp")
             make_state_dir(tmp)
@@ -831,7 +897,7 @@ def update(url: str | None = None, *, opener=None, now: float | None = None) -> 
             _write_json(_dir() / "current.json", {"dir": name, "version": idx["library_version"], "at": now})
             _prune({name} | ({old["dir"]} if old else set()))
             _record_check(now, None)
-            return UpdateResult(True, idx["library_version"], downloaded, None)
+            return UpdateResult(True, idx["library_version"], downloaded, None, note=note)
         except Exception as e:  # noqa: BLE001 - every failure must clean up and be recorded, never half-swap
             if tmp is not None:
                 shutil.rmtree(tmp, ignore_errors=True)

@@ -730,6 +730,8 @@ def cmd_library_update(scheduled: bool) -> int:
     except (library.LibraryError, ValueError) as e:
         _err_line(str(e))
         return 1
+    if r.note:
+        print(f"note: {r.note}")
     if r.error:
         if scheduled and r.http_status in library.PRIVATE_STATUSES:
             # the library may simply not be published yet: the timer run is not a failure, the last good
