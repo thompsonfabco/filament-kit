@@ -14,11 +14,13 @@ mapping or loading: the printers' mapping.lock files are held for the whole inst
 Hardware data feed (Ruling BG): after the program check (up to date or updated), the latest release's
 `bambu_hardware.xml` asset is verified the same way (the signature over SHA256SUMS, then the file's hash),
 validated with `bridge.hardware.validate` and only then put in place of the override
-/etc/filament-kit/bambu_hardware.xml (atomic replace; the file it replaces is kept as bambu_hardware.xml.previous).
-It is installed only when its root `version` is newer than both the kit's bundled file and the override in place,
-so an older feed never shadows a newer kit's own file; a file the feed installed is moved aside to .previous once
-the kit's bundled file is as new (a hand-made override is never touched). A file that fails any check is never
-installed and the run returns 1.
+/etc/filament-kit/bambu_hardware.xml (atomic replace while no printer is mapping or loading, else the next run
+tries again; the feed's earlier file is kept as bambu_hardware.xml.previous). It is installed only when there is no
+override or the override is the feed's own file (its sha256 is in state.json `hardware`): a hand-made or hand-edited
+override is never replaced or moved. It is installed only when its root `version` is newer than both the kit's
+bundled file and the feed's file in place, so an older feed never shadows a newer kit's own file; the feed's file is
+moved aside to .previous once the kit's bundled file is as new. A file that fails any check is never installed and
+the run returns 1.
 
 Settings (config.json, all optional): "updates": {"schedule": "daily"|"weekly", "token_file": a root-only file
 with a GitHub token for a private repo, "repo": "owner/name", "api": "https://api.github.com"}. The token can also
@@ -356,19 +358,65 @@ def _feed(fetcher: release.Fetcher, rel: dict) -> int:
     return 0
 
 
+def _fsync_dir(d: Path) -> None:
+    """Make a rename in `d` durable (POSIX; Windows has no directory fsync)."""
+    if os.name != "posix":
+        return
+    fd = os.open(d, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _atomic_write(path: Path, data: bytes) -> None:
+    """Write `path` as a whole: a temporary file, fsync, os.replace, then the folder fsync."""
+    tmp = path.with_name(path.name + ".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    _fsync_dir(path.parent)
+
+
+def _feed_owned(ov: Path) -> bool | None:
+    """None: no override file; True: the override is the file the feed installed (its sha256 is in state.json);
+    False: a hand-made (or hand-edited) override, which the feed never touches."""
+    if not ov.is_file():
+        return None
+    mine = (_read_state().get("hardware") or {}).get("sha256")
+    return bool(mine) and hmac.compare_digest(release.file_sha256(ov), mine)
+
+
+def _busy_note(e: Busy) -> None:
+    print(f"hardware data: printer {e} is mapping or loading; {HW_ASSET} is left as it is, the next run tries again")
+
+
 def _retire_feed_file(ov: Path, bundled_v: tuple[int, int] | None) -> None:
     """The override this feed installed, once the kit's bundled file is as new: move it to .previous (it would win
-    per element over the newer bundled data). A hand-made override (another hash) is never touched."""
+    per element over the newer bundled data). A hand-made override is never touched."""
     from .bridge import hardware
-    mine = (_read_state().get("hardware") or {}).get("sha256")
-    if not mine or bundled_v is None or not ov.is_file() or release.file_sha256(ov) != mine:
+    if bundled_v is None or not _feed_owned(ov):
         return
     have = hardware.file_version(ov.read_bytes())
-    if have is not None and have <= bundled_v:
-        os.replace(ov, ov.with_name(ov.name + ".previous"))
-        _write_state(hardware=None)
-        print(f"hardware data: the kit's own file (version {_vtext(bundled_v)}) is as new as the one the feed "
-              f"installed ({_vtext(have)}); that one is moved aside to {ov.name}.previous")
+    if have is None or have > bundled_v:
+        return
+    try:
+        with printers_idle():
+            os.replace(ov, ov.with_name(ov.name + ".previous"))
+            _fsync_dir(ov.parent)
+    except Busy as e:
+        _busy_note(e)
+        return
+    _write_state(hardware=None)
+    print(f"hardware data: the kit's own file (version {_vtext(bundled_v)}) is as new as the one the feed "
+          f"installed ({_vtext(have)}); that one is moved aside to {ov.name}.previous")
 
 
 def hardware_feed(fetcher: release.Fetcher, rel: dict) -> None:
@@ -380,6 +428,9 @@ def hardware_feed(fetcher: release.Fetcher, rel: dict) -> None:
     _retire_feed_file(ov, bundled_v)
     url = rel["assets"].get(HW_ASSET)
     if url is None:
+        return
+    if _feed_owned(ov) is False:
+        print(f"hardware data: hand-made override in place; hardware feed not installed ({ov} is left as it is)")
         return
     for need in (release.SUMS, release.SIG):
         if need not in rel["assets"]:
@@ -408,30 +459,23 @@ def hardware_feed(fetcher: release.Fetcher, rel: dict) -> None:
         print(f"hardware data: the kit's own file (version {_vtext(bundled_v)}) is as new as release "
               f"{rel['version']}'s ({_vtext(new_v)}); nothing to install")
         return
-    old = ov.read_bytes() if ov.is_file() else None
-    if old is not None:
-        if old == data:
-            return
-        have = hardware.file_version(old)
-        if have is not None and have >= new_v:
-            print(f"hardware data: {ov} (version {_vtext(have)}) is as new as release {rel['version']}'s "
-                  f"({_vtext(new_v)}); left as it is")
-            return
-    ov.parent.mkdir(parents=True, exist_ok=True)
-    tmp = ov.with_name(ov.name + ".tmp")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
     try:
-        with os.fdopen(fd, "wb") as fh:
-            fh.write(data)
-            fh.flush()
-            os.fsync(fh.fileno())
-        if old is not None:
-            prev = ov.with_name(ov.name + ".previous")
-            prev.write_bytes(old)
-        os.replace(tmp, ov)
-    except BaseException:
-        tmp.unlink(missing_ok=True)
-        raise
+        with printers_idle():
+            if _feed_owned(ov) is False:     # changed by hand while this ran
+                print("hardware data: hand-made override in place; hardware feed not installed")
+                return
+            old = ov.read_bytes() if ov.is_file() else None      # the feed's own earlier file
+            if old is not None:
+                have = hardware.file_version(old)
+                if old == data or (have is not None and have >= new_v):
+                    return
+            ov.parent.mkdir(parents=True, exist_ok=True)
+            if old is not None:
+                _atomic_write(ov.with_name(ov.name + ".previous"), old)
+            _atomic_write(ov, data)
+    except Busy as e:
+        _busy_note(e)
+        return
     _write_state(hardware={"version": _vtext(new_v), "sha256": want, "release": rel["version"]})
     print(f"hardware data: installed {HW_ASSET} version {_vtext(new_v)} from release {rel['version']} as {ov}")
 

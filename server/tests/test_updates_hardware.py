@@ -46,22 +46,60 @@ def test_a_newer_verified_file_is_installed(env, srv, key, override, capsys):
     assert _update(env, srv) == 0 and override.read_bytes() == data
 
 
-def test_the_previous_override_is_kept(env, srv, key, override):
-    old = xml("1.2")
-    override.write_bytes(old)
-    srv.add("1.0.0", extra={HW: xml("1.5")})
+def test_the_previous_feed_file_is_kept(env, srv, key, override):
+    srv.add("1.0.0", extra={HW: xml("1.2")})
+    assert _update(env, srv) == 0 and override.read_bytes() == xml("1.2")
+    srv.add("1.0.1", extra={HW: xml("1.5")})                  # the next release carries a newer file
     assert _update(env, srv) == 0
-    assert override.with_name(HW + ".previous").read_bytes() == old
     assert override.read_bytes() == xml("1.5")
+    assert override.with_name(HW + ".previous").read_bytes() == xml("1.2")
+    assert not list(override.parent.glob("*.tmp"))
+    assert _state(env)["hardware"]["version"] == "1.5"
 
 
-def test_an_older_or_equal_override_feed_does_not_replace_a_newer_one(env, srv, key, override, capsys):
-    mine = xml("1.7")
+def test_a_hand_made_override_survives_a_newer_feed_and_a_kit_upgrade(env, srv, key, override, tmp_path,
+                                                                      monkeypatch, capsys):
+    mine = xml("1.2")
     override.write_bytes(mine)
     srv.add("1.0.0", extra={HW: xml("1.5")})
     assert _update(env, srv) == 0
     assert override.read_bytes() == mine
-    assert "as new" in capsys.readouterr().out
+    assert not override.with_name(HW + ".previous").exists()
+    assert "hand-made override in place; hardware feed not installed" in capsys.readouterr().out
+    newer = tmp_path / "bundled.xml"                          # the kit is upgraded: its own file is now 1.6
+    newer.write_bytes(xml("1.6"))
+    monkeypatch.setattr(hardware, "BUNDLED", newer)
+    srv.add("1.0.1", extra={HW: xml("1.7")})
+    assert _update(env, srv) == 0
+    assert override.read_bytes() == mine
+    assert not override.with_name(HW + ".previous").exists()
+
+
+def test_a_hand_edited_feed_file_counts_as_hand_made(env, srv, key, override, capsys):
+    srv.add("1.0.0", extra={HW: xml("1.2")})
+    assert _update(env, srv) == 0
+    edited = xml("1.2").replace(b"</bambu-hardware>", b"<!-- mine --></bambu-hardware>")
+    override.write_bytes(edited)
+    srv.add("1.0.1", extra={HW: xml("1.5")})
+    assert _update(env, srv) == 0
+    assert override.read_bytes() == edited
+    assert "hand-made override" in capsys.readouterr().out
+
+
+def test_a_busy_printer_postpones_the_swap(env, srv, key, override, monkeypatch, capsys):
+    from contextlib import contextmanager
+
+    @contextmanager
+    def busy():
+        raise updates.Busy("S1")
+        yield
+    monkeypatch.setattr(updates, "printers_idle", busy)
+    srv.add("1.0.0", extra={HW: xml("1.5")})
+    assert _update(env, srv) == 0
+    assert not override.exists()
+    assert "printer S1 is mapping or loading" in capsys.readouterr().out
+    monkeypatch.undo()
+    hardware._reset_cache()
 
 
 @pytest.mark.parametrize("version", ["1", "1.0"])
@@ -83,17 +121,6 @@ def test_a_feed_file_older_than_a_newer_kits_bundled_file_is_retired(env, srv, k
     assert not override.exists()                              # the old feed file would win per element
     assert override.with_name(HW + ".previous").read_bytes() == xml("1.5")
     assert "kit's own" in capsys.readouterr().out
-
-
-def test_a_hand_made_override_is_never_retired(env, srv, key, override, tmp_path, monkeypatch):
-    mine = xml("1.2")
-    override.write_bytes(mine)
-    srv.add("1.0.0")
-    newer = tmp_path / "bundled.xml"
-    newer.write_bytes(xml("1.6"))
-    monkeypatch.setattr(hardware, "BUNDLED", newer)
-    assert _update(env, srv) == 0
-    assert override.read_bytes() == mine
 
 
 def test_a_file_that_fails_validation_is_never_installed(env, srv, key, override, capsys):
