@@ -5,8 +5,9 @@ The program does not bundle the library (the wheel carries only the schema and a
 index.json and the entries). An archive from a GitHub release (the default URL) is checked against that release's
 signed SHA256SUMS (release.verify_sums, the program's own release key) before it is unpacked, and refused without
 it; a custom mirror is checked the same way when it serves SHA256SUMS next to the archive, else only by the
-per-entry hashes in its index.json (the result carries a note saying so). With nothing downloaded, `load()` is an empty library and profiles are built from
-Spoolman values and the Bambu/Orca parents alone. An install that already downloaded a copy keeps using it.
+per-entry hashes in its index.json (the result carries a note saying so). With nothing downloaded, `load()` is an
+empty library and profiles are built from Spoolman values and the Bambu/Orca parents alone. An install that
+already downloaded a copy keeps using it.
 
 Layout in the state directory:
   library/current.json            {"dir", "version", "at"}: the version directory in use (absent = none)
