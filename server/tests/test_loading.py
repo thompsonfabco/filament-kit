@@ -334,6 +334,22 @@ def test_unknown_model_counts_as_multi_nozzle(rig, sm, fil):
     assert loading.in_use(SERIAL, "C12", now, 0, 1, "A2") is None                    # known single nozzle: per slot
 
 
+@pytest.mark.parametrize("model", ["", "ZZ9", None])
+def test_unknown_model_takes_the_nozzle_count_from_the_report(model):
+    """Ruling BR: a hand-added printer (model "") or an unknown code: the report's extruder list says how many
+    nozzles it has; only when the report does not say either is it guarded as more than one."""
+    one = {"gcode_state": "RUNNING", "ams": {"tray_now": "0"},
+           "device": {"extruder": {"info": [{"id": 0, "temp": 0}]}}}
+    two = {"gcode_state": "RUNNING", "ams": {"tray_now": "0"},
+           "device": {"extruder": {"info": [{"id": 0, "temp": 0}, {"id": 1, "temp": 0}]}}}
+    silent = {"gcode_state": "RUNNING", "ams": {"tray_now": "0"}}
+    assert loading.in_use(SERIAL, model, one, 0, 1, "A2") is None
+    assert "does not say yet" in loading.in_use(SERIAL, model, two, 0, 1, "A2")
+    assert "does not say yet" in loading.in_use(SERIAL, model, silent, 0, 1, "A2")
+    # a known model keeps its own count whatever the report shows
+    assert "does not say yet" in loading.in_use(SERIAL, "O1D", one, 0, 1, "A2")
+
+
 def test_single_nozzle_model_needs_no_mapping(rig, sm, fil):
     m, printer, client = rig
     registry.upsert(Printer(SERIAL, NAME, "C12", "10.0.0.5", "13572468", True))      # P1S: one nozzle

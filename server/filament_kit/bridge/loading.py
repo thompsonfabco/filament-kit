@@ -104,6 +104,13 @@ def _feeding(report: dict) -> set[tuple[int, int]]:
     return out
 
 
+def reported_nozzles(report: dict) -> int | None:
+    """How many nozzles the report says the printer has (`device.extruder.info` entries), None when it does not say.
+    Used for a printer whose model is empty or unknown (Ruling BR); a known model's own count wins."""
+    n = len(status._l(status._d(status._d(status._d(report).get("device")).get("extruder")).get("info")))
+    return n or None
+
+
 def _has_snow(report: dict) -> bool:
     infos = status._l(status._d(status._d(status._d(report).get("device")).get("extruder")).get("info"))
     return any("snow" in e for e in infos)
@@ -149,13 +156,15 @@ def in_use(serial: str, model, report: dict, ams_id: int, tray_id: int, label: s
     feeds it (`tray_now`, an extruder's `snow`). On a model with more than one nozzle whose report has no `snow`
     (Ruling BM), `tray_now` shows one nozzle only, so every slot in the job's `mapping` counts as in use, and an
     active job without a `mapping` refuses every slot (fails closed). An unknown model (nozzle count not known)
-    is treated as one with more than one nozzle. `on_no_mapping()` is called on that last refusal."""
+    takes its nozzle count from the report (`device.extruder.info`, Ruling BR); when the report does not say
+    either it is treated as one with more than one nozzle. `on_no_mapping()` is called on that last refusal."""
     gs = status._s(status._d(report).get("gcode_state"))
     if gs not in status.ACTIVE:
         return None
     if (ams_id, tray_id) in _feeding(report):
         return f"{label} feeds the print that is running ({gs})"
-    nozzles = hardware.load().model(model).nozzles
+    mi = hardware.load().model(model)
+    nozzles = mi.nozzles if mi.known else reported_nozzles(report)   # Ruling BR
     if (nozzles is None or nozzles > 1) and not _has_snow(report):
         labels = _job_labels(serial, model, report)
         if labels is None:
