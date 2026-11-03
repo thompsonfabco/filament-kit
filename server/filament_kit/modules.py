@@ -44,7 +44,7 @@ MODULES: dict[str, Module] = {m.name: m for m in (
        depends=("server",), apt=("ffmpeg",)),
     _m("presets", "Presets", "Bambu Studio preset builds and PC sync",
        units=("filament-kit-build.path",), depends=("server",)),
-    _m("library", "Library", "Daily spec-library update",
+    _m("library", "Library", "Filament spec library: downloaded on request, then a daily update",
        units=("filament-kit-library.timer",)),
     _m("backup", "Backup", "Nightly backup of Spoolman db, settings and state",
        units=("filament-kit-backup.timer",)),
@@ -61,8 +61,9 @@ MODULES: dict[str, Module] = {m.name: m for m in (
 )}
 
 # Switched on by hand (modules set / config menu, the installer's question), never by a mode: a mode is the kit
-# as it was. ai_intake (spec R 2.4): AI is optional, so a new install has it off; one that had it keeps it.
-OPT_IN = frozenset({"ai_intake", "web", "remote", "orders", "updates"})
+# as it was. ai_intake (spec R 2.4): AI is optional, so a new install has it off; one that had it keeps it. The
+# library is not bundled: switching it on downloads it; one without the key has none until asked.
+OPT_IN = frozenset({"ai_intake", "web", "remote", "orders", "library", "updates"})
 
 MODES: dict[str, frozenset[str]] = {
     "server": frozenset(MODULES) - {"station"} - OPT_IN,
@@ -70,10 +71,10 @@ MODES: dict[str, frozenset[str]] = {
     "all-in-one": frozenset(MODULES) - OPT_IN,
 }
 
-# A config without `modules` is an install from before modules: the server mode as it was then, AI intake on.
-LEGACY = MODES["server"] | {"ai_intake"}
+# A config without `modules` is an install from before modules: the server mode as it was then, AI intake and the library timer on.
+LEGACY = MODES["server"] | {"ai_intake", "library"}
 # On in addition to a mode's set without making the mode "custom" (the legacy set is still the server mode).
-ADD_ONS = frozenset({"ai_intake"})
+ADD_ONS = frozenset({"ai_intake", "library"})
 
 _LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
@@ -111,7 +112,10 @@ def set_mode(cfg: dict, mode: str, say: Callable[[str], None] | None = print) ->
         raise ModuleError(f"unknown mode {mode!r}")
     out = copy.deepcopy(cfg)
     # An empty cfg is a new install (nothing was on); a filled one without `modules` is a legacy install.
+    legacy = cfg.get("modules") is None and bool(cfg)
     was = enabled(cfg) if cfg.get("modules") is not None or cfg else frozenset()
+    if legacy and mode == "station":
+        was = was - {"library"}
     on = set(MODES[mode])
     dropped = []
     for n in MODULES:                       # registry order: web before remote, so remote sees web's outcome

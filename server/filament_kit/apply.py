@@ -127,6 +127,14 @@ def _unit_files(unit: str) -> list[str]:
     return [unit, *([_COMPANION[unit]] if unit in _COMPANION else [])]
 
 
+def _library_missing() -> bool:
+    from . import library
+    try:
+        return library.load().source == "none"
+    except Exception:  # noqa: BLE001 - an unreadable state must not stop apply; the timer tries again
+        return False
+
+
 def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) -> list[Action]:
     modules.validate(cfg)
     on = modules.enabled(cfg)
@@ -205,6 +213,8 @@ def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) ->
         acts.append(A("enable", STATION_UNIT))
     if rs:  # last, so the rules are the final thing on screen before the closing line
         acts.append(A("remote_print", (rs["hostname"], rs["route"], rs["window"] or "", tuple(rs["lan"]))))
+    if "library" in on and _library_missing():
+        acts.append(A("library_fetch"))      # switching the library on downloads it (never fatal)
     if "presets" in on:
         acts.append(A("first_build"))
     return acts
@@ -601,6 +611,13 @@ def _step(ex: _Exec, a: Action) -> None:
         _remote_print(ex, arg)
     elif k == "ensure_fields":
         ex.cmd([WRAPPER, "ensure-fields"])  # the wrapper runs it as the filament-kit user
+    elif k == "library_fetch":
+        # The first download happens when the library is switched on. No network, a private or unpublished
+        # repository: a warning, never a failure (the daily timer tries again).
+        print("\n==> Downloading the filament library")
+        if not ex.ok([WRAPPER, "library", "update"]):
+            print("warning: the library could not be downloaded now; it is tried again every day "
+                  "(or run: sudo filament-kit library update)")
     elif k == "first_build":
         # Before the PC sync has uploaded the Bambu Studio presets this only prints what to do next;
         # it never stops apply.
