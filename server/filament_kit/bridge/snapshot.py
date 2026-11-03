@@ -158,6 +158,8 @@ def restore(manager, serial: str, on_step: Callable[[str], None] | None = None,
         on_step("Restoring the slots an interrupted mapping changed")
     problems: list[str] = []
     now = trays(report)
+    printer = registry.load().get(serial)
+    kinds = layout.kinds(report, printer.model if printer is not None else None)   # "ext": the model's addressing
     pending_slots = []
     tests = set(snap["test_colours"])
     for s in snap["slots"]:
@@ -169,7 +171,7 @@ def restore(manager, serial: str, on_step: Callable[[str], None] | None = None,
                      snap["kind"])
             continue
         try:
-            reply = manager.set_slot(serial, key[0], key[1], s["setting"])
+            reply = manager.set_slot(serial, key[0], key[1], s["setting"], kind=kinds.get(key[0]))
         except (PrinterOffline, UnknownPrinter):
             problems.append(f"{s['label']}: not restored (printer_offline); it may still hold a test colour")
             continue

@@ -46,11 +46,12 @@ class SlotMap:
     stale: bool = False                 # the printer's layout changed since: re-map (auto when idle)
 
 
-def default_global(ams_id: int, tray_id: int, model=None) -> int:
+def default_global(ams_id: int, tray_id: int, model=None, hw: hardware.Hardware | None = None) -> int:
     """Best guess of the printer's global slot id before calibration: the model's first numbering scheme
     (`hardware.ModelInfo.numbering`; no model / unknown model: legacy = ams_id*4+tray, an HT unit its id). A slot
-    that scheme cannot number falls back to legacy. Calibration learns the real scheme (P3)."""
-    hw = hardware.load()
+    that scheme cannot number falls back to legacy. Calibration learns the real scheme (P3). `hw`: an already
+    loaded `hardware.Hardware` (one load for many slots)."""
+    hw = hw or hardware.load()
     mi = hw.model(model)
     for key in mi.numbering[:1] + ('legacy',):
         try:
@@ -70,13 +71,15 @@ def units(report: dict, model=None) -> list[Unit]:
     report, built by `layout.build` (the same units and labels `status` shows). `model`: the printer's model
     code or name (`printer_model(serial)`), None = generic."""
     out: list[Unit] = []
-    for u in layout.build(report, model).units:
+    hw = hardware.load()
+    mi = hw.model(model)
+    for u in layout.build(report, mi, hw).units:
         if u.kind == layout.EXT_KIND:
             out.append(Unit(u.ams_id, u.kind, u.label, [_slot(s.label, u.ams_id, s.tray_id, s.raw)
                                                         for s in u.slots]))
             continue
         out.append(Unit(u.ams_id, u.kind, u.label,
-                        [_slot(s.label, default_global(u.ams_id, s.tray_id, model), s.tray_id, s.raw)
+                        [_slot(s.label, default_global(u.ams_id, s.tray_id, mi, hw), s.tray_id, s.raw)
                          for s in u.slots]))
     return out
 
@@ -94,6 +97,19 @@ def _file(serial: str):
     return config.paths().state / "printers" / serial / FILE
 
 
+def _current_labels(slots: dict, model) -> dict:
+    """Slot-map keys under an older external label ("Ext" on the H2D) renamed to the current one ("Ext-L"); a
+    key the current label already has wins. In memory only: the file changes at the next save."""
+    names = layout.aliases(model)
+    if not names or not any(k in names for k in slots):
+        return slots
+    out = {k: v for k, v in slots.items() if k not in names}
+    for k, v in slots.items():
+        if k in names:
+            out.setdefault(names[k], v)
+    return out
+
+
 def load_map(serial: str) -> SlotMap:
     f = _file(serial)
     try:
@@ -104,7 +120,8 @@ def load_map(serial: str) -> SlotMap:
         return SlotMap()
     slots = d.get('slots')
     fp = d.get('fingerprint')
-    return SlotMap(slots=slots if isinstance(slots, dict) else {}, calibrated=bool(d.get('calibrated')),
+    slots = _current_labels(slots, printer_model(serial)) if isinstance(slots, dict) else {}
+    return SlotMap(slots=slots, calibrated=bool(d.get('calibrated')),
                    observe=bool(d.get('observe', True)), updated=d.get('updated'),
                    fingerprint=fp if isinstance(fp, list) else None, stale=bool(d.get('stale')))
 

@@ -248,3 +248,24 @@ def test_usage_guess_label_uses_the_first_scheme_and_unlimited_labels():
     assert usage._guess_label((1 << 8) | 2, "O1D") == "B3"                          # H2D: shift8 first
     assert usage._guess_label(129 << 8, "O1D") == "HT-B"
     assert usage._guess_label(254 << 8, "O1D") == "Ext-L" and usage._guess_label(255 << 8, "O1D") == "Ext-R"
+
+
+
+def test_label_for_matches_build_for_a_lone_holder():
+    for model in ("P1S", "O1D", None):
+        for gid in (254, 255):
+            (u,) = layout.build({"vir_slot": [ext(gid)]}, model).units
+            assert layout.label_for(gid, 0, model) == u.label, (model, gid)
+    assert layout.label_for(255, 0, "P1S") == "Ext"
+
+
+def test_alias_on_the_h2d_holder():
+    (u,) = layout.build({"vt_tray": ext(254)}, "O1D").units
+    assert (u.label, u.slots[0].alias) == ("Ext-L", "Ext")
+    assert layout.aliases("O1D") == {"Ext": "Ext-L"} and layout.aliases("P1S") == {}
+
+
+def test_status_joins_a_spool_at_the_old_ext_location():
+    sp = [{"id": 4, "location": "Lab – AMS Ext", "filament": {"name": "x"}}]
+    st = status.summarize({"vt_tray": ext(254, "PLA")}, sp, printer_name="Lab", model="O1D")
+    assert st["ams"][0]["label"] == "Ext-L" and st["ams"][0]["slots"][0]["spool"]["id"] == 4

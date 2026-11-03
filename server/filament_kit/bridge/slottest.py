@@ -51,6 +51,7 @@ class _Target:
     ams_id: int
     tray_id: int
     snap: dict
+    kind: str | None = None        # the unit's kind ("ext": the model's external addressing)
 
 
 def check_idle(manager, serial: str) -> None:
@@ -156,7 +157,7 @@ def run(manager, serial: str, on_step: Callable[[str], None],
     model = ams.printer_model(serial)
     for u in ams.units(report, model):
         for s in u.slots:
-            targets.append(_Target(s.label, u.ams_id, s.tray_id, _snapshot(_raw_tray(report, u, s))))
+            targets.append(_Target(s.label, u.ams_id, s.tray_id, _snapshot(_raw_tray(report, u, s)), u.kind))
     by_label = {t.label: t for t in targets}
     # a slot's colour is its own even when it looks like a test colour (a real near-red spool): an interrupted
     # run is covered by the snapshot on disk, which `snapshot.pending` above already made the caller restore
@@ -205,7 +206,7 @@ def run(manager, serial: str, on_step: Callable[[str], None],
             colours.add(colour)
             current[:] = [t]
             try:
-                reply = manager.set_slot(serial, t.ams_id, t.tray_id, dict(t.snap, tray_color=colour))
+                reply = manager.set_slot(serial, t.ams_id, t.tray_id, dict(t.snap, tray_color=colour), kind=t.kind)
             except (PrinterOffline, UnknownPrinter):
                 mark(t)                  # it may have reached the printer before the drop
                 abort = "printer_offline: the printer went offline; slot test stopped"
@@ -284,7 +285,7 @@ def _restore(manager, serial: str, res: SlotTestResult, changed: list[_Target], 
     for t in order:
         step(f"Restoring slot {t.label}")
         try:
-            reply = manager.set_slot(serial, t.ams_id, t.tray_id, t.snap)
+            reply = manager.set_slot(serial, t.ams_id, t.tray_id, t.snap, kind=t.kind)
             if _failed(reply):
                 res.problems.append(f"{t.label}: restore refused ({_reason(reply)}); "
                                     f"its test colour may still be set")

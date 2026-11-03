@@ -252,7 +252,7 @@ def test_restore_error_on_one_slot_is_reported_and_the_rest_restored(rig):
     m, printer, c = rig
     real = m.set_slot
 
-    def set_slot(serial, ams_id, tray_id, setting, timeout=None):
+    def set_slot(serial, ams_id, tray_id, setting, timeout=None, kind=None):
         if (ams_id, tray_id) == (0, 1) and not is_test(setting["tray_color"]):
             raise RuntimeError("socket exploded")
         return real(serial, ams_id, tray_id, setting, timeout)

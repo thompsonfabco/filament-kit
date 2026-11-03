@@ -29,6 +29,7 @@ class FakeManager:
 class FakeMapper:
     def __init__(self):
         self.started = []
+        self.attempts = 0
         self.busy = False
         self.fail = None
 
@@ -36,6 +37,7 @@ class FakeMapper:
         return self.busy
 
     def start(self, serial, auto=False):
+        self.attempts += 1
         if self.fail:
             raise self.fail
         self.started.append((serial, auto))
@@ -168,14 +170,13 @@ def test_failed_start_retries_later_and_gives_up_after_three(rig):
     mapped()
     mapper.fail = mapping.AlreadyRunning("S1")
     w("S1", report((0, 1, 128)), False)
-    tries = 0
     for _ in range(10):
         clock.t += 601
         w("S1", report((0, 1, 128)), False)
     mapper.fail = None
     clock.t += 601
     w("S1", report((0, 1, 128)), False)
-    assert mapper.started == []                                # gave up until the layout changes again
+    assert mapper.started == [] and mapper.attempts == 3        # three tries, then it gave up
 
 
 def test_remap_done_stops_retrying(rig):
@@ -222,3 +223,26 @@ def test_view_shows_stale_and_remapping(tmp_path, monkeypatch):
     ams.save_map("S1", m)
     v = mapping.Mapper(FakeManager()).view("S1")
     assert v["stale"] is True and v["remapping"] is False
+
+
+
+def test_saved_label_missing_from_the_layout_marks_stale(rig):
+    w, mgr, mapper, clock = rig
+    m = mapped()
+    m.slots["Q9"] = {"ams_id": 16, "tray_id": 8, "global_id": 72}      # a label the layout does not have
+    ams.save_map("S1", m)
+    w("S1", report(), False)
+    assert ams.load_map("S1").stale is True
+
+
+def test_old_ext_key_is_not_missing_on_the_h2d(rig):
+    from filament_kit.bridge import registry
+    w, mgr, mapper, clock = rig
+    registry.upsert(registry.Printer("S1", "Lab", "O1D", "10.0.0.5", "13572468", True))
+    rep = report(vt_tray={"id": "254", "tray_type": "PLA"})
+    m = mapped(rep=rep)
+    m.slots["Ext"] = {"ams_id": 254, "tray_id": 0, "global_id": 254}
+    ams.save_map("S1", m)
+    w("S1", rep, False)
+    m = ams.load_map("S1")
+    assert m.stale is False and "Ext-L" in m.slots

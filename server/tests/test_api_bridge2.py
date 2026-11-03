@@ -66,7 +66,7 @@ class FakeManager:
             return None
         return self.report if predicate(self.report) else None
 
-    def set_slot(self, serial, ams_id, tray_id, setting):
+    def set_slot(self, serial, ams_id, tray_id, setting, kind=None):
         self.writes.append((ams_id, tray_id, dict(setting)))
         if self.reply.get("result") == "success":
             for u in self.report["ams"]["ams"]:
@@ -326,7 +326,7 @@ def test_load_write_refused_needs_developer_mode(client, mgr, monkeypatch):
     preset(monkeypatch)
     mgr.reply = {"result": "fail", "reason": "mqtt message verify failed", "err_code": 84033543}
 
-    def refuse(serial, ams_id, tray_id, setting):
+    def refuse(serial, ams_id, tray_id, setting, kind=None):
         mgr.st = "needs_developer_mode"      # the Manager flags it on such a reply
         return mgr.reply
     mgr.set_slot = refuse

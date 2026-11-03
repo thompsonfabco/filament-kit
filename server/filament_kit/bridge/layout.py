@@ -29,6 +29,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from . import hardware
+from .fields import _d, _int, _l, _s
 from .hardware import AmsType, ModelInfo
 
 MODULES = 'fk_modules'          # report key: {"<ams_id>": "<module code>"} from the printer's get_version reply
@@ -46,6 +47,7 @@ class SlotInfo:
     present: bool | None
     reading: bool | None
     raw: dict = field(default_factory=dict, compare=False, repr=False)
+    alias: str | None = None   # an older label of this slot (the file's external alias, "Ext" for the H2D's Ext-L)
 
 
 @dataclass(frozen=True)
@@ -79,25 +81,6 @@ def letters(n: int) -> str:
         n, r = divmod(n - 1, 26)
         out = chr(ord('A') + r) + out
     return out
-
-
-def _int(v: Any) -> int | None:
-    try:
-        return int(v)
-    except (TypeError, ValueError, OverflowError):
-        return None
-
-
-def _d(v: Any) -> dict:
-    return v if isinstance(v, dict) else {}
-
-
-def _l(v: Any) -> list:
-    return [x for x in v if isinstance(x, dict)] if isinstance(v, list) else []
-
-
-def _s(v: Any) -> str:
-    return v if isinstance(v, str) else ''
 
 
 def _hex(v: Any) -> int | None:
@@ -145,21 +128,28 @@ def _externals(p: dict) -> dict[int, dict]:
     return out
 
 
-def _ext_labels(ids: list[int], model: ModelInfo) -> dict[int, tuple[str, str | None]]:
-    """id -> (label, say text or None)."""
+def _ext_labels(ids: list[int], model: ModelInfo) -> dict[int, tuple[str, str | None, str | None]]:
+    """id -> (label, say text or None, alias or None)."""
     known = {x.id: x for x in model.externals}
     out = {}
     for i in ids:
         if i in known:
-            out[i] = (known[i].label, known[i].say)
+            out[i] = (known[i].label, known[i].say, known[i].alias)
         elif len(ids) == 1 and len(model.externals) == 1:
             x = model.externals[0]
-            out[i] = (x.label, x.say)
+            out[i] = (x.label, x.say, x.alias)
         elif i in EXT_DEFAULT and len(ids) > 1:
-            out[i] = (EXT_DEFAULT[i], None)
+            out[i] = (EXT_DEFAULT[i], None, None)
         else:
-            out[i] = ('Ext' if len(ids) == 1 else f"Ext-{i}", None)
+            out[i] = ('Ext' if len(ids) == 1 else f"Ext-{i}", None, None)
     return out
+
+
+def aliases(model=None, hw: hardware.Hardware | None = None) -> dict[str, str]:
+    """Older label -> current label for the model's external holders (the file's `alias`): {"Ext": "Ext-L"} on
+    the H2D. Spoolman locations and slot-map keys under an older label belong to the current one."""
+    mi = (hw or hardware.load()).model(model)
+    return {x.alias: x.label for x in mi.externals if x.alias and x.alias != x.label}
 
 
 def raw_trays(report: dict) -> dict[tuple[int, int], dict]:
@@ -261,11 +251,11 @@ def build(report: dict, model=None, hw: hardware.Hardware | None = None) -> Layo
     names = _ext_labels(sorted(exts), mi)
     for gid in sorted(exts):
         tr = exts[gid]
-        lab, said = names[gid]
+        lab, said, alias = names[gid]
         pr = True if _s(tr.get('tray_type')) else None
         units.append(UnitInfo(gid, EXT_KIND, 'External spool holder', lab, tuple(said.split()) if said else (),
-                              True, None, (SlotInfo(0, lab, tuple(said.split()) if said else (), pr, None, tr),),
-                              typed=True))
+                              True, None, (SlotInfo(0, lab, tuple(said.split()) if said else (), pr, None, tr,
+                                                    alias),), typed=True))
 
     units = _unique(units)
     units = [_with_say(hw, mi, u) for u in units]
@@ -283,7 +273,7 @@ def _unique(units: list[UnitInfo]) -> list[UnitInfo]:
         if any(lab in taken for lab in mine):
             suffix = f"#{u.ams_id}"
             u = UnitInfo(u.ams_id, u.kind, u.type_name, u.label + suffix, u.say, u.known, u.module,
-                         tuple(SlotInfo(s.tray_id, s.label + suffix, s.say, s.present, s.reading, s.raw)
+                         tuple(SlotInfo(s.tray_id, s.label + suffix, s.say, s.present, s.reading, s.raw, s.alias)
                                for s in u.slots), u.typed)
         taken.update(s.label for s in u.slots)
         taken.add(u.label)
@@ -294,8 +284,14 @@ def _unique(units: list[UnitInfo]) -> list[UnitInfo]:
 def _with_say(hw: hardware.Hardware, mi: ModelInfo, u: UnitInfo) -> UnitInfo:
     usay = u.say or tuple(hw.say(u.label, mi))
     slots = tuple(s if s.say else SlotInfo(s.tray_id, s.label, tuple(hw.say(s.label, mi)), s.present, s.reading,
-                                           s.raw) for s in u.slots)
+                                           s.raw, s.alias) for s in u.slots)
     return UnitInfo(u.ams_id, u.kind, u.type_name, u.label, usay, u.known, u.module, slots, u.typed)
+
+
+def kinds(report: dict, model=None) -> dict[int, str]:
+    """ams_id -> unit kind ("ext" for an external holder) as `build` sees the report: what the slot command's
+    addressing is chosen by."""
+    return {u.ams_id: u.kind for u in build(report, model).units}
 
 
 def same_layout(a, b) -> bool:
@@ -322,8 +318,9 @@ def label_for(ams_id: int, tray_id: int, model=None, hw: hardware.Hardware | Non
         return None
     mi = hw.model(model)
     if a in EXT_DEFAULT or any(x.id == a for x in mi.externals):
-        ids = sorted({x.id for x in mi.externals} | {a})
-        return _ext_labels(ids, mi)[a][0] if t == 0 else None
+        # as `build` labels this holder when it is the one the report lists (a lone 255 on a single-holder
+        # printer is "Ext" there too)
+        return _ext_labels([a], mi)[a][0] if t == 0 else None
     typ = hw.ams_type(a, None, mi, None)
     ulabel = unit_label(typ, a)
     return _slot_label(ulabel, typ.slots == 1, t)

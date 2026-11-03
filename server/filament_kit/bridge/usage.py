@@ -463,7 +463,13 @@ def settle(serial: str, job: dict, pct: float, spoolman) -> list[dict]:
         label = None
         if g is not None and g >= 0:
             label = labels.get(g) if smap.calibrated else _guess_label(g, p.model or None)
-        here = spools.get(status.location(registry.display_name(p), label), []) if label else []
+        here = []
+        if label:
+            pname = registry.display_name(p)
+            here = spools.get(status.location(pname, label), [])
+            old = next((a for a, cur in layout.aliases(p.model).items() if cur == label), None)
+            if old:     # a spool still at the holder's older location ("<name> – AMS Ext" for Ext-L)
+                here = here + spools.get(status.location(pname, old), [])
         spool = here[0] if len(here) == 1 else None
         entry = {'job': name, 'grams': grams, 'spool_id': spool.get('id') if spool else None, 'slot': label,
                  'observe': observe}

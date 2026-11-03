@@ -116,7 +116,7 @@ class FakeManager:
             self.queue.append({"gcode_state": "FINISH", "mc_percent": 100})
         return {"command": "project_file", "result": "success"}
 
-    def set_slot(self, serial, ams_id, tray_id, setting):
+    def set_slot(self, serial, ams_id, tray_id, setting, kind=None):
         assert serial == SERIAL
         self.set_slots.append((ams_id, tray_id, dict(setting)))
         rep = copy.deepcopy(self.report["ams"])
