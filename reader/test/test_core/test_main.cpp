@@ -511,6 +511,119 @@ void test_label_text_size() {
   TEST_ASSERT_EQUAL(10, labelColumns(2));
 }
 
+// ---- bounded memory --------------------------------------------------------------
+
+void test_oversize_fields_truncated() {
+  std::string longLabel(100, 'L');
+  std::string longName(100, 'N');
+  std::string j = "[{\"label\":\"" + longLabel + "\",\"say\":\"" + std::string(100, 'a') +
+                  "\",\"type\":\"" + std::string(100, 'T') + "\",\"spool\":{\"name\":\"" + longName + "\"}}]";
+  std::vector<SlotEntry> s;
+  TEST_ASSERT_TRUE(parseSlots(j.c_str(), s));
+  TEST_ASSERT_EQUAL(1, (int)s.size());
+  TEST_ASSERT_EQUAL((int)MAX_FIELD, (int)s[0].label.size());
+  TEST_ASSERT_EQUAL((int)MAX_FIELD, (int)s[0].say.size());
+  TEST_ASSERT_EQUAL((int)MAX_FIELD, (int)s[0].type.size());
+  TEST_ASSERT_EQUAL((int)MAX_FIELD, (int)s[0].spool.size());
+  std::vector<PrinterEntry> p;
+  std::string pj = "[{\"id\":\"p1\",\"name\":\"" + longName + "\",\"say\":[\"" + std::string(60, 'x') + "\"]}]";
+  TEST_ASSERT_TRUE(parsePrinters(pj.c_str(), p));
+  TEST_ASSERT_EQUAL((int)MAX_FIELD, (int)p[0].name.size());
+  TEST_ASSERT_EQUAL((int)MAX_FIELD, (int)p[0].say.size());
+}
+
+void test_truncation_keeps_utf8_whole() {
+  // 39 ASCII chars then a 2-byte char: cutting at 40 bytes would split it
+  std::string label = std::string(39, 'A') + "\xc3\xa9" + "tail";
+  std::vector<SlotEntry> s;
+  TEST_ASSERT_TRUE(parseSlots(("[{\"label\":\"" + label + "\"}]").c_str(), s));
+  TEST_ASSERT_EQUAL(39, (int)s[0].label.size());
+}
+
+void test_overlong_printer_id_skipped() {
+  // an id is never truncated (it goes back in URLs); one too long to be real is dropped
+  std::vector<PrinterEntry> p;
+  std::string j = "[{\"id\":\"" + std::string(MAX_ID + 1, 'i') + "\"},{\"id\":\"ok\"}]";
+  TEST_ASSERT_TRUE(parsePrinters(j.c_str(), p));
+  TEST_ASSERT_EQUAL(1, (int)p.size());
+  TEST_ASSERT_EQUAL_STRING("ok", p[0].id.c_str());
+}
+
+void test_oversize_list_rejected() {
+  std::string j = "[";
+  int n = 0;
+  while (j.size() <= MAX_RESPONSE_BYTES) {
+    if (n++) j += ",";
+    j += "{\"label\":\"A1\",\"kind\":\"ams\",\"type\":\"PLA\",\"spool\":{\"name\":\"Spool\"}}";
+  }
+  j += "]";
+  std::vector<SlotEntry> s = slots({"keep"});
+  TEST_ASSERT_FALSE(parseSlots(j.c_str(), s));
+  TEST_ASSERT_EQUAL(1, (int)s.size());          // last good list stays
+  std::vector<PrinterEntry> p;
+  TEST_ASSERT_FALSE(parsePrinters(j.c_str(), p));
+  TEST_ASSERT_TRUE(responseTooBig((int)MAX_RESPONSE_BYTES + 1));
+  TEST_ASSERT_FALSE(responseTooBig((int)MAX_RESPONSE_BYTES));
+  TEST_ASSERT_FALSE(responseTooBig(-1));        // unknown length (chunked): read with a cap instead
+}
+
+void test_unknown_fields_dropped() {
+  // the filter keeps only known fields, so a big unknown field costs nothing after parsing
+  std::string j = "[{\"label\":\"A1\",\"junk\":{\"deep\":[1,2,3,\"" + std::string(500, 'z') + "\"]}}]";
+  std::vector<SlotEntry> s;
+  TEST_ASSERT_TRUE(parseSlots(j.c_str(), s));
+  TEST_ASSERT_EQUAL_STRING("A1", s[0].label.c_str());
+}
+
+// ---- slots belong to one printer ---------------------------------------------------
+
+void test_slot_cache_keeps_list_on_same_printer_failure() {
+  SlotCache c;
+  c.apply("h2d", true, slots({"A1", "A2"}));
+  TEST_ASSERT_TRUE(c.usableFor("h2d"));
+  c.apply("h2d", false, {});                    // a refresh failed: keep the last good list
+  TEST_ASSERT_TRUE(c.usableFor("h2d"));
+  TEST_ASSERT_EQUAL(2, (int)c.slots.size());
+}
+
+void test_slot_cache_clears_on_other_printer_failure() {
+  SlotCache c;
+  c.apply("h2d", true, slots({"A1", "A2"}));
+  c.apply("x1c", false, {});                    // switched printer, fetch failed
+  TEST_ASSERT_FALSE(c.usableFor("x1c"));
+  TEST_ASSERT_FALSE(c.usableFor("h2d"));
+  TEST_ASSERT_EQUAL(0, (int)c.slots.size());
+  c.apply("x1c", true, slots({"Ext"}));
+  TEST_ASSERT_TRUE(c.usableFor("x1c"));
+  TEST_ASSERT_FALSE(c.usableFor("h2d"));        // never H2D's slots for another printer
+}
+
+void test_slot_cache_empty_list_not_usable() {
+  SlotCache c;
+  c.apply("p", true, {});
+  TEST_ASSERT_FALSE(c.usableFor("p"));
+}
+
+// ---- saved label wins until the knob is turned -------------------------------------
+
+void test_wanted_label_prefers_saved() {
+  TEST_ASSERT_EQUAL_STRING("HT-B", wantedLabel("HT-B", "A1", false).c_str());
+  TEST_ASSERT_EQUAL_STRING("A3", wantedLabel("HT-B", "A3", true).c_str());   // turned, not yet saved
+  TEST_ASSERT_EQUAL_STRING("A1", wantedLabel("", "A1", false).c_str());      // nothing saved yet
+}
+
+void test_unit_dropping_out_briefly_keeps_selection() {
+  std::string saved = "HT-B";
+  auto full = slots({"A1", "A2", "A3", "A4", "HT-A", "HT-B"});
+  auto dropped = slots({"A1", "A2", "A3", "A4", "HT-A"});
+  int i = findSlot(full, wantedLabel(saved, "", false));
+  TEST_ASSERT_EQUAL(5, i);
+  i = findSlot(dropped, wantedLabel(saved, full[i].label, false));
+  TEST_ASSERT_EQUAL(0, i);                      // shown on the first slot while HT-B is away...
+  i = findSlot(full, wantedLabel(saved, dropped[i].label, false));
+  TEST_ASSERT_EQUAL(5, i);                      // ...and back on HT-B when it returns
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_parse_printers_basic);
@@ -554,5 +667,15 @@ int main(int, char**) {
   RUN_TEST(test_marquee_short_text_static);
   RUN_TEST(test_marquee_long_text_scrolls);
   RUN_TEST(test_label_text_size);
+  RUN_TEST(test_oversize_fields_truncated);
+  RUN_TEST(test_truncation_keeps_utf8_whole);
+  RUN_TEST(test_overlong_printer_id_skipped);
+  RUN_TEST(test_oversize_list_rejected);
+  RUN_TEST(test_unknown_fields_dropped);
+  RUN_TEST(test_slot_cache_keeps_list_on_same_printer_failure);
+  RUN_TEST(test_slot_cache_clears_on_other_printer_failure);
+  RUN_TEST(test_slot_cache_empty_list_not_usable);
+  RUN_TEST(test_wanted_label_prefers_saved);
+  RUN_TEST(test_unit_dropping_out_briefly_keeps_selection);
   return UNITY_END();
 }

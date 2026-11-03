@@ -150,7 +150,8 @@ Adafruit_SSD1306 display(OLED_W, OLED_H, &Wire, -1);
 String urlPrinters, urlScan, urlHealthz, urlManifest, urlBin;
 
 std::vector<PrinterEntry> printers;   // from GET printers
-std::vector<SlotEntry>    slots;      // GET printers/<id>/slots for the selected printer
+SlotCache slotCache;                  // GET printers/<id>/slots, tagged with that printer's id
+std::vector<SlotEntry>& slots = slotCache.slots;
 Menu   menu;
 Button button;
 bool   serverOk = false;              // the last list fetch worked
@@ -162,7 +163,14 @@ uint32_t resultUntil = 0;
 const PrinterEntry* curPrinter() {
   return (menu.printer >= 0 && menu.printer < (int)printers.size()) ? &printers[menu.printer] : nullptr;
 }
+// Only slots fetched for the selected printer count; after a printer change whose
+// fetch failed there are none (the screen says "No slots" and scans are refused).
+bool slotsUsable() {
+  const PrinterEntry* p = curPrinter();
+  return p && slotCache.usableFor(p->id);
+}
 const SlotEntry* curSlot() {
+  if (!slotsUsable()) return nullptr;
   return (menu.slot >= 0 && menu.slot < (int)slots.size()) ? &slots[menu.slot] : nullptr;
 }
 
@@ -316,13 +324,17 @@ void showPicker() {
     return;
   }
   String right = updateReady ? String("UPD")
-                             : (slots.empty() ? String("") : String(menu.slot + 1) + "/" + String(slots.size()));
+                             : (!s ? String("") : String(menu.slot + 1) + "/" + String(slots.size()));
   size_t nameCols = OLED_COLS - (right.length() ? right.length() + 1 : 0);
   header(marquee(p->name, nameCols, scrollStep).c_str(), right);
   if (!s) {
     display.setTextSize(1);
-    display.setCursor(0, 24);
-    display.print(serverOk ? "No slots reported" : "Server unreachable");
+    display.setTextSize(2);
+    display.setCursor(0, 20);
+    display.print("No slots");
+    display.setTextSize(1);
+    display.setCursor(0, 54);
+    display.print(serverOk ? "none reported" : "server unreachable");
     display.display();
     return;
   }
@@ -397,6 +409,28 @@ String formatUid(const uint8_t* uid, uint8_t len) {
 // tag on the same slot just sets it again).
 WiFiClientSecure apiTls;
 HTTPClient       apiHttp;
+
+// A String sink that refuses bytes past `cap`, so a huge (or endless chunked)
+// reply cannot exhaust the heap; HTTPClient::writeToStream stops on the refusal.
+class CappedString : public Stream {
+ public:
+  CappedString(String& s, size_t cap) : s_(s), cap_(cap) {}
+  bool over = false;
+  size_t write(uint8_t c) override { return write(&c, 1); }
+  size_t write(const uint8_t* b, size_t n) override {
+    if (s_.length() + n > cap_) { over = true; return 0; }
+    s_.concat((const char*)b, n);
+    return n;
+  }
+  int available() override { return 0; }
+  int read() override { return -1; }
+  int peek() override { return -1; }
+ private:
+  String& s_;
+  size_t cap_;
+};
+static const int HTTP_TOO_BIG = -100;   // our code: reply refused for size
+
 int apiRequest(const String& url, const char* body, String& resp) {
   int code = -1;
   for (int attempt = 0; attempt < 2; attempt++) {
@@ -406,7 +440,26 @@ int apiRequest(const String& url, const char* body, String& resp) {
     apiHttp.addHeader("X-Auth-Token", READER_TOKEN);
     if (body) { apiHttp.addHeader("Content-Type", "application/json"); code = apiHttp.POST(body); }
     else      code = apiHttp.GET();
-    if (code > 0) { resp = apiHttp.getString(); apiHttp.end(); return code; }
+    if (code > 0) {
+      resp = "";
+      int len = apiHttp.getSize();          // -1 = unknown (chunked)
+      if (responseTooBig(len)) {
+        Serial.printf("%s: reply of %d bytes refused\n", url.c_str(), len);
+        apiHttp.end(); apiTls.stop();
+        return HTTP_TOO_BIG;
+      }
+      if (len > 0) resp.reserve(len);
+      CappedString sink(resp, MAX_RESPONSE_BYTES);
+      int r = apiHttp.writeToStream(&sink);
+      if (r < 0 || sink.over) {
+        Serial.printf("%s: reply over %u bytes or cut (%d)\n", url.c_str(), (unsigned)MAX_RESPONSE_BYTES, r);
+        resp = "";
+        apiHttp.end(); apiTls.stop();
+        return sink.over ? HTTP_TOO_BIG : r;
+      }
+      apiHttp.end();
+      return code;
+    }
     apiHttp.end(); apiTls.stop();
   }
   return code;
@@ -432,31 +485,42 @@ void saveSlot(const std::string& label) {
 uint32_t listsAt = 0;
 
 // Slots of the selected printer; keeps `label` selected when it still exists.
+// A failed fetch keeps the last good list only when it is this printer's.
 bool fetchSlots(const std::string& label) {
   const PrinterEntry* p = curPrinter();
-  if (!p) { slots.clear(); menu.slot = 0; return false; }
+  if (!p) { slotCache.apply("", false, {}); menu.slot = 0; return false; }
   String resp;
   String url = joinUrl(READER_BASE, "printers/" + urlEncode(p->id) + "/slots").c_str();
   int code = apiRequest(url, nullptr, resp);
-  if (code != 200 || !parseSlots(resp.c_str(), slots)) {
-    Serial.printf("slots %s: HTTP %d\n", p->id.c_str(), code);
-    return false;
+  std::vector<SlotEntry> fresh;
+  bool ok = code == 200 && parseSlots(resp.c_str(), fresh);
+  resp = "";                                   // free the text before keeping the list
+  if (!ok) Serial.printf("slots %s: HTTP %d\n", p->id.c_str(), code);
+  slotCache.apply(p->id, ok, std::move(fresh));
+  if (ok) {
+    int i = findSlot(slots, label);
+    menu.slot = i < 0 ? 0 : i;
   }
-  int i = findSlot(slots, label);
-  menu.slot = i < 0 ? 0 : i;
-  return true;
+  return ok;
 }
 
-// Both lists. Keeps the current printer/slot (or the saved ones before the first
-// fetch); on any failure the last good lists stay on screen.
+uint32_t speakAt = 0;    // when to announce the selection after the knob stops (0 = none)
+
+// Both lists. Re-selects the SAVED printer and slot label (the current ones only
+// while a knob turn is not saved yet), so a unit that drops out for one refresh
+// does not move the choice for good. On a failure the last good lists stay.
 void refreshLists() {
   listsAt = millis();
   if (WiFi.status() != WL_CONNECTED) { serverOk = false; return; }
-  std::string wantPrinter = curPrinter() ? curPrinter()->id : savedPrinter;
-  std::string wantLabel   = curSlot() ? curSlot()->label : savedLabel;
+  std::string wantPrinter = !savedPrinter.empty() ? savedPrinter
+                                                  : (curPrinter() ? curPrinter()->id : std::string());
+  std::string wantLabel = wantedLabel(savedLabel, curSlot() ? curSlot()->label : std::string(),
+                                      speakAt != 0 && menu.mode == MODE_SLOTS);
   String resp;
   int code = apiRequest(urlPrinters, nullptr, resp);
-  if (code != 200 || !parsePrinters(resp.c_str(), printers)) {
+  bool ok = code == 200 && parsePrinters(resp.c_str(), printers);
+  resp = "";
+  if (!ok) {
     Serial.printf("printers: HTTP %d\n", code);
     serverOk = false;
     return;
@@ -823,7 +887,6 @@ void setup() {
   else                               speakWord(W_READY);
 }
 
-uint32_t speakAt = 0;    // when to announce the selection after the knob stops (0 = none)
 bool swallowPress = false;  // this press woke a dark screen: ignore the rest of it
 
 void handleAction(Action a) {
@@ -853,9 +916,7 @@ void handleAction(Action a) {
       buzzTick(); speakAt = 0; scrollStep = 0;
       if (curPrinter()) savePrinter(curPrinter()->id);
       showProgress(curPrinter() ? curPrinter()->name.c_str() : "Printer", "loading slots...", -1);
-      slots.clear();
-      serverOk = fetchSlots(savedLabel);
-      if (curSlot()) saveSlot(curSlot()->label);
+      serverOk = fetchSlots(savedLabel);   // fails -> no slots, no scans (never the old printer's)
       listsAt = millis();
       redraw();
       if (curPrinter()) speak(curPrinter()->say);
@@ -874,7 +935,7 @@ void handleAction(Action a) {
 
 void loop() {
   uint32_t now = millis();
-  int np = (int)printers.size(), ns = (int)slots.size();
+  int np = (int)printers.size(), ns = slotsUsable() ? (int)slots.size() : 0;
 
   // rotary encoder: consume pending detents (CW = next, CCW = prev)
   int16_t d;

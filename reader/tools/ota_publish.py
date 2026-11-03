@@ -55,6 +55,21 @@ def manifest_url(base):
     return base.rstrip("/") + "/fw/manifest.json"
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuse redirects: following one would send the reader token to wherever it points."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None  # the 3xx then surfaces as an HTTPError
+
+
+def fetch_manifest(base, token, timeout=15):
+    """GET <base>/fw/manifest.json with the token, never following a redirect."""
+    opener = urllib.request.build_opener(_NoRedirect)
+    req = urllib.request.Request(manifest_url(base), headers={"X-Auth-Token": token})
+    with opener.open(req, timeout=timeout) as r:
+        return json.load(r)
+
+
 def load_or_create_key(path, create):
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric import ec
@@ -168,8 +183,7 @@ def main(argv=None):
     if not base or not token:
         sys.exit("uploaded, but cannot check it: no READER_BASE/READER_TOKEN (use --base-url and "
                  "the READER_TOKEN environment variable, or --no-verify)")
-    req = urllib.request.Request(manifest_url(base), headers={"X-Auth-Token": token})
-    live = json.load(urllib.request.urlopen(req, timeout=15))
+    live = fetch_manifest(base, token)
     if live.get("build") != build:
         sys.exit(f"published, but the server still reports build {live.get('build')}")
     print(f"published build {build}. Hold the reader's knob for 4 s to install it.")

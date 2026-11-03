@@ -88,3 +88,38 @@ def test_no_owner_specific_defaults():
     src = (Path(__file__).resolve().parent / "ota_publish.py").read_text(encoding="utf-8")
     for owner_bit in ("thompsonfabco", "spoolman-vm", "h2d-fw", ".h2d-ota"):
         assert owner_bit not in src
+
+
+def test_live_check_does_not_follow_redirects():
+    """The token must never be forwarded: a redirect from the manifest URL is an error."""
+    import http.server
+    import threading
+    import urllib.error
+
+    hits = []
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            hits.append((self.path, self.headers.get("X-Auth-Token")))
+            if self.path.startswith("/fw/"):
+                self.send_response(302)
+                self.send_header("Location", "/elsewhere")
+                self.end_headers()
+            else:
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b'{"build": 1}')
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+    t = threading.Thread(target=srv.serve_forever, daemon=True)
+    t.start()
+    try:
+        base = f"http://127.0.0.1:{srv.server_address[1]}"
+        with pytest.raises(urllib.error.HTTPError):
+            op.fetch_manifest(base, "tok")
+        assert [p for p, _ in hits] == ["/fw/manifest.json"]   # /elsewhere never requested
+    finally:
+        srv.shutdown()
