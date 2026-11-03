@@ -477,3 +477,33 @@ def test_picker_names_filaments_without_a_vendor():
     from pathlib import Path
     src = (Path(web_app.__file__).parent / "static" / "app.js").read_text(encoding="utf-8")
     assert '"(no vendor)"' in src
+
+
+# ---------- the public prefix (nginx strips it) ----------
+
+def test_intake_with_a_slash_redirects_within_the_public_prefix(app):
+    """nginx strips the public path (/filament) before the app sees a request, so a redirect the app builds from the
+    request's own URL would lose it: /filament/intake/ must lead to /filament/intake, not /intake."""
+    with _client(app) as c:
+        r = c.get("/intake/", follow_redirects=False)
+        assert r.status_code in (301, 302, 303, 307, 308), r.status_code
+        assert r.headers["location"] == BASE
+        assert _client(app, AWAY).get("/intake/", follow_redirects=False).status_code == 403
+
+
+def test_router_streams_sse_under_the_public_prefix():
+    """The Printers tab's live status (SSE) goes through the router's route: no buffering, and a read timeout far
+    above the stream's keep-alive ping; /<name> without a slash gets nginx's own redirect to /<name>/ (a prefix
+    location ending in a slash with proxy_pass)."""
+    import re
+    from pathlib import Path
+    from filament_kit.web import printers_app
+    remote = Path(__file__).resolve().parents[2] / "install" / "remote"
+    route = (remote / "route.template").read_text(encoding="utf-8")
+    proxy = (remote / "mcp-proxy.conf").read_text(encoding="utf-8")
+    assert re.search(r"location \^~ /@NAME@/ \{\s*proxy_pass http://127\.0\.0\.1:@PORT@/;", route)
+    assert route.count("include /etc/nginx/mcp-proxy.conf;") == 3
+    assert "proxy_buffering off;" in proxy and "proxy_cache off;" in proxy
+    timeout = int(re.search(r"proxy_read_timeout (\d+)s;", proxy).group(1))
+    assert timeout >= 10 * printers_app.PING_SECONDS
+    assert 'proxy_set_header Connection "";' in proxy and "proxy_http_version 1.1;" in proxy
