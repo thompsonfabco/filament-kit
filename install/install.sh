@@ -139,6 +139,7 @@ chmod -R go-w "$OPT"
 # First install at a terminal: ask. --mode: set it, on any install. Upgrade without --mode: no
 # questions, the modules stay as they are (a config without modules is the server mode).
 CUSTOM=""
+AI_INTAKE=""
 if [ -z "$MODE" ] && [ "$FIRST_INSTALL" -eq 1 ] && [ -t 0 ]; then
     say "Install mode"
     echo "  server      kit server with Spoolman, presets, library and backup"
@@ -167,6 +168,13 @@ from filament_kit import modules
 for m in modules.MODULES.values():
     print(f"{m.name}|{m.description}")
 ')
+    elif [ "$MODE" != station ]; then
+        # AI is optional (off unless chosen here or later in `filament-kit config`); spools are added by hand without it
+        yn=""
+        read -r -p "Read spool labels from photos with Claude (ai_intake; needs an Anthropic API key)? [y/N] " yn || true
+        case "$yn" in
+            [yY]*) AI_INTAKE=1 ;;
+        esac
     fi
 fi
 # A station whose server is on another machine needs that server's address (spec section 3):
@@ -204,7 +212,7 @@ fi
 if [ -n "$MODE" ]; then
     # Only the modules and the station link change; on a first install there is no
     # server_name yet, so `modules apply` asks the first-run questions.
-    FK_MODE="$MODE" FK_MODULES="$CUSTOM" FK_SERVER="$SERVER_ADDR" FK_NO_SYSTEMD=1 "$VENV/bin/python" -I -c '
+    FK_MODE="$MODE" FK_MODULES="$CUSTOM" FK_AI="$AI_INTAKE" FK_SERVER="$SERVER_ADDR" FK_NO_SYSTEMD=1 "$VENV/bin/python" -I -c '
 import json, os, sys
 from filament_kit import config, modules
 f = config.paths().etc / "config.json"
@@ -220,6 +228,8 @@ if mode == "custom":
         st["url"] = "http://127.0.0.1:5003"
 else:
     cfg = modules.set_mode(cfg, mode)
+    if os.environ.get("FK_AI"):
+        cfg["modules"]["ai_intake"] = True  # the first install question
 if os.environ["FK_SERVER"]:
     cfg.setdefault("station", {})["allow"] = [os.environ["FK_SERVER"]]
 try:

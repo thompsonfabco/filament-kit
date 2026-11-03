@@ -459,7 +459,7 @@ def cmd_config() -> int:
               f"  1) display name       {cfg['server_name']}\n"
               "  2) storage\n"
               f"  3) Claude model       {cfg['model']}, {cfg['reads_per_day']} reads/day\n"
-              "  4) Anthropic key\n"
+              "  4) Anthropic key      only for AI label reading (ai_intake)\n"
               "  5) Printers\n"
               f"  6) Modules            {modules.mode_of(modules.enabled(cfg))}\n"
               "  0) save and exit")
@@ -485,6 +485,8 @@ def cmd_config() -> int:
             if key:
                 write_key(key)
                 print("Key saved.")
+                if "ai_intake" not in modules.enabled(cfg):  # AI is optional: the key alone turns nothing on
+                    print("AI label reading is off: turn on ai_intake in 6) Modules to use the key.")
             else:
                 print("No key entered; unchanged.")
         elif choice == "5":

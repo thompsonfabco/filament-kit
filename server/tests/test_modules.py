@@ -2,13 +2,13 @@ import pytest
 
 from filament_kit import config
 from filament_kit.modules import (
-    MODES, MODULES, ModuleError, dependents, enabled, mode_of, set_mode, validate,
+    LEGACY, MODES, MODULES, ModuleError, dependents, enabled, mode_of, set_mode, validate,
 )
 
 
 def test_missing_modules_is_server_mode():
-    assert enabled({}) == MODES["server"]
-    assert enabled({"modules": None}) == MODES["server"]
+    assert enabled({}) == LEGACY == MODES["server"] | {"ai_intake"}  # R1: the kit as it was had AI intake
+    assert enabled({"modules": None}) == LEGACY
     assert mode_of(enabled({})) == "server"
 
 
@@ -17,8 +17,8 @@ def test_registry_order_and_modes():
                              "presets", "library", "backup", "station", "web", "remote", "orders",
                              "updates"]
     assert MODES["station"] == frozenset({"station"})
-    assert MODES["all-in-one"] == frozenset(MODULES) - {"web", "remote", "orders", "updates"}
-    assert MODES["server"] == frozenset(MODULES) - {"station", "web", "remote", "orders", "updates"}
+    assert MODES["all-in-one"] == frozenset(MODULES) - {"ai_intake", "web", "remote", "orders", "updates"}
+    assert MODES["server"] == frozenset(MODULES) - {"station", "ai_intake", "web", "remote", "orders", "updates"}
 
 
 def test_mode_of_custom():
@@ -29,7 +29,7 @@ def test_set_mode_all_in_one_points_station_at_localhost():
     cfg = set_mode({"port": 1}, "all-in-one")
     assert cfg["station"]["url"] == "http://127.0.0.1:5003"
     assert cfg["station"]["allow"] == ["127.0.0.1"]
-    assert enabled(cfg) == MODES["all-in-one"]
+    assert enabled(cfg) == MODES["all-in-one"] | {"ai_intake"}  # a filled config without modules: legacy, AI kept
     assert mode_of(enabled(cfg)) == "all-in-one"
 
 
@@ -80,7 +80,7 @@ def test_default_config_validates():
 
 
 def test_dependents():
-    assert dependents("server", MODES["server"]) == ["ai_intake", "printers", "presets"]
+    assert dependents("server", LEGACY) == ["ai_intake", "printers", "presets"]
     assert dependents("server", frozenset({"server"})) == []
 
 
@@ -189,11 +189,13 @@ def _with_opt_in(**on):
 
 
 def test_set_mode_keeps_hand_enabled_opt_in_modules():
-    cfg = set_mode(_with_opt_in(web=True, remote=True, orders=True), "all-in-one", say=lambda m: None)
-    assert {"web", "remote", "orders"} <= enabled(cfg)
-    assert enabled(cfg) - {"web", "remote", "orders"} == MODES["all-in-one"]
+    hand = {"ai_intake", "web", "remote", "orders"}
+    cfg = set_mode(_with_opt_in(ai_intake=True, web=True, remote=True, orders=True), "all-in-one",
+                   say=lambda m: None)
+    assert hand <= enabled(cfg)
+    assert enabled(cfg) - hand == MODES["all-in-one"]
     again = set_mode(cfg, "server", say=lambda m: None)
-    assert {"web", "remote", "orders"} <= enabled(again)
+    assert hand <= enabled(again)
 
 
 def test_set_mode_drops_opt_in_modules_whose_dependencies_go_and_says_so():
@@ -223,3 +225,31 @@ def test_validate_checks_web_lan_entries_are_networks():
             validate(cfg)
     cfg["modules"]["web"] = False
     validate(cfg)                               # only checked while web is on
+
+
+# ---------- R1: AI optional ----------
+
+def test_modes_leave_ai_intake_off():
+    """A new install's modes never switch AI label reading on: it needs an Anthropic key the owner opts into."""
+    for mode in ("server", "all-in-one"):
+        assert "ai_intake" not in MODES[mode]
+        assert "ai_intake" not in enabled(set_mode({}, mode, say=None))
+
+
+def test_config_without_modules_keeps_ai_intake():
+    """An install from before modules (no `modules` key) had AI intake; it keeps it and is still the server mode."""
+    assert "ai_intake" in enabled({})
+    assert mode_of(enabled({})) == "server"
+    assert mode_of(MODES["server"] | {"ai_intake"}) == "server"
+    assert mode_of(MODES["all-in-one"] | {"ai_intake"}) == "all-in-one"
+
+
+def test_set_mode_keeps_ai_intake_that_was_on():
+    legacy = {"server_name": "fk"}                      # an existing install's config, no modules key
+    assert "ai_intake" in enabled(set_mode(legacy, "all-in-one", say=None))
+    cfg = set_mode({}, "server", say=None)
+    cfg["modules"]["ai_intake"] = True
+    assert "ai_intake" in enabled(set_mode(cfg, "all-in-one", say=None))
+    cfg["modules"]["ai_intake"] = False
+    assert "ai_intake" not in enabled(set_mode(cfg, "server", say=None))
+    assert "ai_intake" not in enabled(set_mode(legacy, "station", say=None))  # station has no server
