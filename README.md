@@ -30,6 +30,18 @@ Optional extras, all off until you turn them on: a Claude connector and a phone 
 
 Do these steps on the Ubuntu computer, in a Terminal window.
 
+**One command** (it does steps 1 to 3 for you, checking the release's signature first):
+
+```
+curl -fsSL https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh | sudo bash
+```
+
+Options go after `sudo bash -s --`, for example `... | sudo bash -s -- --mode server` or `--version 0.3.0`.
+While the repository is private, give it a GitHub token: save the token in a file only you can read and add
+`--token-file <file>`. The token is never shown and is only sent to GitHub. Then answer the questions as in step 4.
+
+Or by hand:
+
 1. Open the project's GitHub **Releases** page and download the newest `filament-kit-<version>.tar.gz`
    (for example `filament-kit-0.1.0.tar.gz`) into your **Downloads** folder.
 2. Unpack it and go into the folder (use the version number you downloaded):
@@ -666,8 +678,37 @@ each computer are in [docs/migrate-from-filament-ops.md](docs/migrate-from-filam
 
 ## Update
 
-Download the newer `filament-kit-<version>.tar.gz`, unpack it as in step 2 above and run `sudo ./install.sh`
-again. It keeps your spools, settings, key and paired phones and asks no questions.
+`sudo filament-kit update` downloads the newest release, checks its signature and hash as get.sh does, stops the
+kit, installs it (no questions) and starts it again. It keeps your spools, settings, key and paired phones, and the
+version it replaced: `sudo filament-kit update --rollback` goes back to that one. `sudo filament-kit update --check`
+only says whether there is a newer release. It does nothing while a printer is mapping slots or loading a spool.
+
+Automatic updates: `sudo filament-kit modules enable updates` (off by default) checks once a day and installs a
+new release on its own; it never reinstalls a version you rolled back from. For a weekly check, set
+`"updates": {"schedule": "weekly"}` in `/etc/filament-kit/config.json`. For a private repository, put a GitHub
+token in a file only root can read and set `"updates": {"token_file": "/etc/filament-kit/github_token"}`.
+
+By hand: download the newer `filament-kit-<version>.tar.gz`, unpack it as in step 2 above and run
+`sudo ./install.sh` again.
+
+## Signing releases (owner)
+
+get.sh and the updater install only releases whose `SHA256SUMS` is signed with the release key. Once:
+
+1. On your PC, with Python and the `cryptography` package: `python tools/sign_release.py keygen --out
+   <a folder outside the repo>/filament-kit-release.pem`. It writes the private key there (only you can read it;
+   it never overwrites one) and prints only the public key.
+2. `python tools/sign_release.py set-pubkey <the public key>` puts the public key into
+   `server/filament_kit/release.py` and `get.sh`; commit both.
+3. Add the private key yourself as a GitHub Actions secret: repository **Settings > Secrets and variables >
+   Actions > New repository secret**, name `FK_RELEASE_KEY`, value the whole contents of the `.pem` file. The key
+   never goes into the repository.
+4. Back the `.pem` file up somewhere safe and off this PC. Losing it means a new key, and installs from before the
+   change then refuse the new releases until updated by hand.
+
+The release workflow then signs every release; without the secret, or with a key that does not match the public
+key in `release.py`, it fails instead of publishing an unsigned release. After editing `release.py`, run
+`python tools/sign_release.py sync-get` (get.sh carries a copy of it; a test checks they match).
 
 ## Uninstall
 

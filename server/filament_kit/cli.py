@@ -1341,6 +1341,13 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
                     help="replace a Spoolman database that already holds spools (a backup is kept)")
     mo.add_argument("--allow-unknown-spoolman", action="store_true",
                     help="accept a bundle database without a schema revision (only if it came from Spoolman 0.27.0)")
+    ud = sub.add_parser("update", help="install the latest signed release (root); --check only looks, --rollback "
+                                       "goes back to the version before the last update")
+    udx = ud.add_mutually_exclusive_group()
+    udx.add_argument("--check", action="store_true", help="say whether a newer release exists; change nothing")
+    udx.add_argument("--rollback", action="store_true", help="reinstall the version the last update replaced")
+    udx.add_argument("--scheduled", action="store_true", help="the timer's run: only with the updates module on "
+                                                              "and a check due")
     args = ap.parse_args(argv)
 
     if args.cmd == "status":
@@ -1385,6 +1392,14 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
         from . import remote
         cfg = config.load()
         return remote.issue(cfg) if args.remote_cmd == "issue" else remote.firewall(cfg)
+    if args.cmd == "update":
+        from . import updates
+        cfg = config.load()
+        if args.check:
+            return updates.check(cfg)
+        if args.rollback:
+            return updates.rollback(cfg)
+        return updates.update(cfg, scheduled=args.scheduled)
     if args.cmd == "modules":
         if args.modules_cmd == "units":
             return cmd_modules_units()
