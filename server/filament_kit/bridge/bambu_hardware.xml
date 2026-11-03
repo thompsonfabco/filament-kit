@@ -42,7 +42,7 @@
       <ftp-dir>/cache</ftp-dir>
     </model>
     <!-- H2D Pro: H2D hardware; unverified (externals, numbering, presence, ams-mapping2 assumed as the H2D). -->
-    <model code="O1E" name="H2D Pro" say="h two d pro"
+    <model code="O1E" name="H2D Pro" say="h two d p r o"
            preset-name="Bambu Lab H2D Pro" nozzles="2" camera="hls" chamber-max="65"
            presence="bits-v1" ams-mapping2="true">
       <alias>H2DPRO</alias>
@@ -103,7 +103,7 @@
     </model>
     <!-- X1 series, X1E, P1 series, A1 series: presence="bits-v1" unverified (ha-bambulab reads tray_exist_bits
          the same way for ids 0-3). X1-series printers report their printer_type ("3DPrinter-X1-Carbon") over SSDP. -->
-    <model code="BL-P001" name="X1 Carbon" say="x one carbon"
+    <model code="BL-P001" name="X1 Carbon" say="x one c"
            preset-name="Bambu Lab X1 Carbon" nozzles="1" camera="hls"
            presence="bits-v1">
       <alias>3DPrinter-X1-Carbon</alias>
@@ -150,7 +150,7 @@
       <ftp-dir>/</ftp-dir>
       <ftp-dir>/cache</ftp-dir>
     </model>
-    <model code="N1" name="A1 mini" say="a one mini"
+    <model code="N1" name="A1 mini" say="a one m i n i"
            preset-name="Bambu Lab A1 mini" nozzles="1" camera="mjpeg" presence="bits-v1">
       <alias>A1MINI</alias>
       <light-node>chamber_light</light-node>
@@ -221,7 +221,8 @@
   </presence-layouts>
 
   <!-- Speech tokens for the reader. Letters and digits map to the reader's built-in words; external holders
-       speak their own say= text. -->
+       speak their own say= text. Every say= token must be a word of the reader firmware (reader/lib/reader_core/
+       src/speech.cpp; a missing one beeps): test_reader.py checks it against a copy of that list. -->
   <speech>
     <word text="HT" say="h t"/>
     <word text="Ext" say="external"/>

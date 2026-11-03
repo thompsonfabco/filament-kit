@@ -109,7 +109,7 @@ class PrintersApp:
             try:
                 return await fn(request)
             except SlotError as e:
-                st = getattr(e, "status", None)
+                st = e.http
                 return JSONResponse({"error": str(e)}, st if isinstance(st, int) and 400 <= st < 600 and st != 401
                                     else 502)
         return self.intake.api(inner)
