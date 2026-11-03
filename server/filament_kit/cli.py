@@ -1,4 +1,5 @@
-"""Command line: status, pair, unpair, config, cert, ensure-fields, printer map / unpin, library, profiles, modules."""
+"""Command line: status, pair, unpair, config, cert, ensure-fields, printer map / unpin, library, profiles, modules,
+web, remote, migrate-ops."""
 from __future__ import annotations
 
 import argparse
@@ -101,6 +102,26 @@ def _station_lines(url: str) -> bool:
     return good
 
 
+def _hardware_lines() -> bool:
+    """The printer hardware data (`bambu_hardware.xml`, bundled + optional override): FAIL per error (a refused
+    override: the last good data stays in use), a note per warning (ignored unknown parts)."""
+    from .bridge import hardware
+    try:
+        hw = hardware.load()
+    except Exception as e:  # noqa: BLE001 - status reports, it does not crash
+        return _line(False, f"printer hardware data could not be loaded ({type(e).__name__}: {e})")
+    good = True
+    if hw.errors:
+        for e in hw.errors:
+            good &= _line(False, f"printer hardware data: {e}",
+                          f"fix or remove {hardware.override_path()} (the last good data is in use)")
+    else:
+        good &= _line(True, "printer hardware data loaded")
+    for w in hw.warnings:
+        print(f"--   printer hardware data: {w}")
+    return good
+
+
 def cmd_status(client_factory) -> int:
     cfg = config.load()
     p = config.paths()
@@ -163,6 +184,8 @@ def cmd_status(client_factory) -> int:
         print(f"--   display name: {cfg['server_name']}")
         print(f"--   paired devices: {len(pairing.devices())}")
         print(f"--   reads used today: {_reads_today()} of {cfg['reads_per_day']}")
+    if "printers" in on:
+        good &= _hardware_lines()
     if "presets" in on:
         good &= _profile_status_lines()
     elif "library" in on:
@@ -181,10 +204,13 @@ def _library_status_lines() -> None:
         if isinstance(at, (int, float)) and not isinstance(at, bool):
             source = f"updated {time.strftime('%Y-%m-%d', time.localtime(at))}"
     n = st["local"]
-    print(f"--   library version {st['version']} ({source}), {n} local addition{'' if n == 1 else 's'}")
+    if source == "none":
+        print(f"--   library not downloaded (filament-kit library update), {n} local addition{'' if n == 1 else 's'}")
+    else:
+        print(f"--   library version {st['version']} ({source}), {n} local addition{'' if n == 1 else 's'}")
     lc = st["last_check"]
     if lc is not None and not lc["ok"]:
-        # a warning, not a failure: the bundled or last good version stays in use
+        # a warning, not a failure: the last good version (or none) stays in use
         print(f"--   library update: {lc['error']}")
 
 
@@ -458,7 +484,7 @@ def cmd_config() -> int:
               f"  1) display name       {cfg['server_name']}\n"
               "  2) storage\n"
               f"  3) Claude model       {cfg['model']}, {cfg['reads_per_day']} reads/day\n"
-              "  4) Anthropic key\n"
+              "  4) Anthropic key      only for AI label reading (ai_intake)\n"
               "  5) Printers\n"
               f"  6) Modules            {modules.mode_of(modules.enabled(cfg))}\n"
               "  0) save and exit")
@@ -484,6 +510,8 @@ def cmd_config() -> int:
             if key:
                 write_key(key)
                 print("Key saved.")
+                if "ai_intake" not in modules.enabled(cfg):  # AI is optional: the key alone turns nothing on
+                    print("AI label reading is off: turn on ai_intake in 6) Modules to use the key.")
             else:
                 print("No key entered; unchanged.")
         elif choice == "5":
@@ -669,6 +697,9 @@ def _request_rebuild(reason: str) -> None:
 
 def _library_line(st: dict) -> str:
     n = st["local"]
+    if st["source"] == "none":
+        return (f"library not downloaded (run: filament-kit library update), "
+                f"{n} local addition{'' if n == 1 else 's'}")
     return (f"library version {st['version']} ({st['source']}), "
             f"{n} local addition{'' if n == 1 else 's'}")
 
@@ -699,10 +730,12 @@ def cmd_library_update(scheduled: bool) -> int:
     except (library.LibraryError, ValueError) as e:
         _err_line(str(e))
         return 1
+    if r.note:
+        print(f"note: {r.note}")
     if r.error:
         if scheduled and r.http_status in library.PRIVATE_STATUSES:
-            # the repository may simply not be public yet: the timer run is not a failure, the bundled
-            # or last good version stays in use
+            # the library may simply not be published yet: the timer run is not a failure, the last good
+            # version (or none) stays in use
             print(f"warning: {r.error}", file=sys.stderr)
             return 0
         _err_line(r.error)
@@ -713,6 +746,17 @@ def cmd_library_update(scheduled: bool) -> int:
     print(f"library version {r.version} installed ({r.downloaded} entr{'y' if r.downloaded == 1 else 'ies'} "
           f"downloaded)")
     _request_rebuild(f"library updated to version {r.version}")
+    return 0
+
+
+def cmd_library_adopt(folder: str) -> int:
+    try:
+        v = library.adopt(Path(folder))
+    except library.LibraryError as e:
+        _err_line(str(e))
+        return 1
+    if v is not None:
+        print(f"kept the library of the earlier program version (library version {v})")
     return 0
 
 
@@ -785,7 +829,9 @@ def cmd_profiles_status() -> int:
     b, la, inst, pc = st["build"], st["last_attempt"], st["installed"], st["pc"]
     print(f"lines: {st['lines']}")
     if b:
-        print(f"build: {b['stamp']} ({_fmt_time(b.get('created'))}), {st['presets']} presets, "
+        orca = (f"{st['orca_presets']} Orca presets, {len(st['orca_stale'])} Orca stale, "
+                if st.get("orca_presets") is not None else "")
+        print(f"build: {b['stamp']} ({_fmt_time(b.get('created'))}), {st['presets']} presets, {orca}"
               f"{b.get('problems', 0)} problems")
     else:
         print("build: no build yet")
@@ -803,6 +849,8 @@ def cmd_profiles_status() -> int:
           else "PC sync: not set up (see README: Pair your PC)")
     for name in st["stale"]:
         print(f"  delete in Bambu Studio: {name}")
+    for name in st.get("orca_stale", []):
+        print(f"  delete in Orca Slicer: {name}")
     for prob in st["problems"]:
         print(f"  problem: {prob}")
     return 0
@@ -816,7 +864,7 @@ def cmd_profiles_lines() -> int:
         return 1
     c = builds.current()
     per_line: dict[str, int] = {}
-    for row in ((builds.manifest(c["stamp"]) or {}).get("presets", []) if c else []):
+    for row in builds.bambu_rows(builds.manifest(c["stamp"]) if c else None):
         if isinstance(row, dict) and isinstance(row.get("line_id"), str):
             per_line[row["line_id"]] = per_line.get(row["line_id"], 0) + 1
     if not ls:
@@ -824,32 +872,40 @@ def cmd_profiles_lines() -> int:
     for lid in sorted(ls):
         line = ls[lid]
         parent = f"{line.bambu_parent} ({line.parent_source})" if line.bambu_parent else "none"
+        oparent = f"{line.orca_parent} ({line.orca_parent_source})" if line.orca_parent else "none"
         ids = ", ".join(str(i) for i in line.filaments) or "-"
-        print(f"{lid}  {line.vendor} {line.product}  {line.material}  parent {parent}  "
+        print(f"{lid}  {line.vendor} {line.product}  {line.material}  parent {parent}  orca {oparent}  "
               f"filaments {ids}  presets {per_line.get(lid, 0)}")
     return 0
 
 
-def cmd_profiles_set_parent(line_id: str, parent: str) -> int:
+def cmd_profiles_set_parent(line_id: str, parent: str, orca: bool = False) -> int:
     parent = parent.strip()
     try:
         if not parent:
-            raise ValueError("give the name of a Bambu Studio system preset")
+            raise ValueError("give the name of an Orca Slicer library preset (without ' @System')" if orca
+                             else "give the name of a Bambu Studio system preset")
         inventory.check_line_text("set-parent", "parent", parent)
-        lines_mod.check_parent(parent, builds.system_store())
+        if orca:
+            parent = lines_mod.check_orca_parent(parent, builds.orca_store())   # the store's spelling (fix I1)
+        else:
+            lines_mod.check_parent(parent, builds.system_store())
     except (ValueError, ProfileError) as e:
         _err_line(str(e))
         return 1
     try:
-        line = lines_mod.set_parent_saved(line_id, parent)
+        line = lines_mod.set_parent_saved(line_id, parent, target="orca" if orca else "bambu")
     except KeyError:
         _err_line(f"no line {line_id} (see: sudo filament-kit profiles lines)")
         return 1
     except lines_mod.LineStoreError as e:
         _err_line(e.message)
         return 1
-    print(f"line {line.line_id}: parent {line.bambu_parent} (set by you)")
-    _request_rebuild(f"parent of line {line.line_id} set")
+    if orca:
+        print(f"line {line.line_id}: Orca parent {line.orca_parent} (set by you)")
+    else:
+        print(f"line {line.line_id}: parent {line.bambu_parent} (set by you)")
+    _request_rebuild(f"{'Orca ' if orca else ''}parent of line {line.line_id} set")
     return 0
 
 
@@ -1070,54 +1126,275 @@ def _ask_station_server() -> str | None:
         return addr
 
 
+def _station_link(new: dict, on) -> None:
+    if not {"server", "station"} <= set(on):
+        modules.drop_local_station_link(new)
+
+
+def _apply_selection(cfg: dict, on, *, ask=None) -> str | None:
+    """Set the module set of `cfg` (in place) to `on` with the station link rules; asks for settings the modules
+    need. Returns an error text or None."""
+    old = modules.enabled(cfg)
+    new = _with_modules(cfg, on)
+    _station_link(new, on)
+    if "station" in on and "station" not in old and "server" in on:
+        _link_station(new)
+    got = modules.collect_settings(on, new, ask or _ask)
+    if got is None:
+        return "a setting was left blank; unchanged"
+    for key, value in got.items():
+        modules.set_setting(new, key, value)
+    try:
+        modules.validate(new)
+    except modules.ModuleError as e:
+        return str(e)
+    cfg.clear()
+    cfg.update(new)
+    return None
+
+
 def _modules_menu(cfg: dict) -> None:
-    names = list(modules.MODULES)
-    while True:
-        on = modules.enabled(cfg)
-        print(f"\nModules (mode: {modules.mode_of(on)})")
-        for i, n in enumerate(names, 1):
-            m = modules.MODULES[n]
-            print(f"  {i}) {'on ' if n in on else 'off'}  {m.title}: {m.description}")
-        print("  m) choose mode\n  0) back")
-        choice = _ask("> ")
-        if choice is None or choice.strip() == "0":
-            return
-        choice = choice.strip().lower()
-        if choice == "m":
-            modes = list(modules.MODES)
-            for i, m in enumerate(modes, 1):
-                print(f"  {i}) {m}")
-            pick = _ask_int("Mode: ", 1)
-            if pick is None or pick > len(modes):
-                print("Unknown mode.")
+    """One checklist: numbers toggle (needs go on too, dependents are listed), a/s/t presets, Enter applies."""
+    on = modules.enabled(cfg)
+    print()
+    print(f"Modules (mode: {modules.mode_of(on)})")
+    chosen = modules.run_checklist(on, _ask)
+    if chosen is None or chosen == on:
+        print("Unchanged.")
+        return
+    err = _apply_selection(cfg, chosen)
+    if err:
+        print(f"error: {err}")
+
+
+def _config_has_content() -> bool:
+    """False for a first install: no config file, or one with nothing in it (as set_mode counts it)."""
+    f = config.paths().etc / "config.json"
+    try:
+        return bool(json.loads(f.read_text(encoding="utf-8")))
+    except (OSError, ValueError):
+        return False
+
+
+def cmd_modules_menu(raw: bool) -> int:
+    """The checklist on its own. --raw: prompts on stderr; stdout gets the chosen modules as a comma list, then
+    one `set <key>=<value>` line per setting asked for (install.sh custom mode). Changes nothing."""
+    cfg = config.load()
+    on = modules.enabled(cfg)
+    if not raw:
+        _modules_menu(cfg)
+        return 0
+    if not _config_has_content():
+        on = modules.MODES["server"]            # a first install: AI intake and the library start off
+    out = sys.stdout
+    sys.stdout = sys.stderr                     # prompts and the checklist go to the terminal, not the capture
+    try:
+        while True:
+            chosen = modules.run_checklist(on, _ask)
+            if chosen is None:
+                return 1
+            trial = _with_modules(cfg, chosen)
+            _station_link(trial, chosen)
+            if {"server", "station"} <= set(chosen):
+                _link_station(trial)
+            got = modules.collect_settings(chosen, trial, _ask)
+            if got is None:
+                print("A setting was left blank; change the selection (q cancels).")
+                on = chosen
                 continue
-            mode = modes[pick - 1]
-            new = modules.set_mode(cfg, mode)
-            if mode == "station":
-                addr = _ask_station_server()
-                if addr is None:
-                    print("Unchanged.")
-                    continue
-                new["station"]["allow"] = [addr]
+            for key, value in got.items():
+                modules.set_setting(trial, key, value)
             try:
-                modules.validate(new)
+                modules.validate(trial)
             except modules.ModuleError as e:
                 print(f"error: {e}")
+                print("fix: change the selection and press Enter again (q cancels)")
+                on = chosen
                 continue
-            cfg.clear()
-            cfg.update(new)
-        elif choice.isdigit() and 1 <= int(choice) <= len(names):
-            name = names[int(choice) - 1]
-            err = _change_module(cfg, name, name not in on,
-                                 confirm=lambda t: (_ask(t) or "").strip().lower() in ("y", "yes"),
-                                 ask_address=_ask_station_server)
-            if err:
-                print(f"error: {err}")
-        else:
-            print("Unknown choice.")
+            break
+    finally:
+        sys.stdout = out
+    print(",".join(n for n in modules.MODULES if n in chosen))
+    for key, value in got.items():
+        print(f"set {key}={value}")
+    return 0
+
+
+# ---------- web (the MCP endpoint and phone web app) ----------
+
+WEB_PASSPHRASE = "web_passphrase"
+
+
+def _is_root() -> bool:
+    return hasattr(os, "geteuid") and os.geteuid() == 0
+
+
+def cmd_web_passphrase() -> int:
+    """Set the passphrase of the web unit's sign-ins (Claude's connector approval and the phone app). Typed twice,
+    hidden; stored as a salted scrypt hash, root:filament-kit 640, so the service can check it but not change it."""
+    from .web import auth  # needs the [web] extra
+    if not _is_root():
+        print("error: run as root: sudo filament-kit web passphrase", file=sys.stderr)
+        return 1
+    first = getpass.getpass(f"New web passphrase, at least {auth.MIN_PASSPHRASE} characters (hidden): ")
+    second = getpass.getpass("Again (hidden): ")
+    if first != second:
+        print("error: the two passphrases do not match; nothing was changed", file=sys.stderr)
+        return 1
+    try:
+        hashed = auth.hash_passphrase(first)
+    except ValueError as e:
+        print(f"error: {e}; nothing was changed", file=sys.stderr)
+        return 1
+    dest = config.paths().etc / WEB_PASSPHRASE
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(dest.name + ".tmp")
+    try:
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o640)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(hashed + "\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.chmod(tmp, 0o640)          # O_CREAT's mode does not apply to a leftover tmp file
+        try:
+            shutil.chown(tmp, user="root", group="filament-kit")
+        except (LookupError, OSError) as e:
+            tmp.unlink(missing_ok=True)
+            print(f"error: cannot give {dest} to the filament-kit group ({e}); nothing was changed\n"
+                  "     fix: install the kit first (it creates the filament-kit user and group), "
+                  "or: sudo groupadd --system filament-kit", file=sys.stderr)
+            return 1
+        os.replace(tmp, dest)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    print(f"Passphrase saved ({dest}). Sign-ins from now on use it; existing sessions and connectors stay "
+          "signed in.")
+    return 0
+
+
+def cmd_reader(action: str, name: str | None = None, ref: str | None = None) -> int:
+    """`reader token [--name X]` (root): a new reader token, printed once for the reader's secrets.h (only its
+    sha256 is kept); `reader tokens`: the tokens (id, name, made); `reader revoke <id|name>` (root)."""
+    try:
+        from .web import reader  # needs the [web] extra
+    except ImportError as e:
+        print(f"error: the reader commands need the kit's [web] packages ({e.name or e} is missing); install them "
+              "into the kit's Python: <venv>/bin/python -m pip install 'filament-kit[web]' (or re-run the "
+              "installer, which adds them)", file=sys.stderr)
+        return 1
+    store = reader.TokenStore()
+    if action in ("token", "revoke") and not _is_root():
+        print(f"error: run as root: sudo filament-kit reader {action}", file=sys.stderr)
+        return 1
+    try:
+        if action == "token":
+            tid, tok = store.issue(name)
+            print(f"New reader token {tid} ({reader._clean_name(name)}). It is shown only this once:\n\n  {tok}\n\n"
+                  "Put it in the reader's src/secrets.h as READER_TOKEN, then build and flash (reader/README.md).\n"
+                  f"Remove it later with: sudo filament-kit reader revoke {tid}")
+            return 0
+        if action == "tokens":
+            rows = store.list()
+            for t in rows:
+                print(f"{t['id']:<6} {t['name']:<24} {t['created']}")
+            if not rows:
+                print("no reader tokens (make one: sudo filament-kit reader token --name bench)")
+            return 0
+        if store.revoke(ref or ""):
+            print(f"revoked {ref}; a reader using it is refused from now on")
+            return 0
+        print(f"error: no single reader token {ref!r} (see: filament-kit reader tokens)", file=sys.stderr)
+        return 1
+    except reader.TokenFileError as e:
+        print(f"error: {e}; nothing was changed", file=sys.stderr)
+        return 1
+    except PermissionError as e:
+        print(f"error: {e} (try with sudo)", file=sys.stderr)
+        return 1
+
+
+def _web_health(port: int) -> tuple[bool, str]:
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=3) as r:
+            body = r.read().decode(errors="replace").strip()
+        return body == "ok", body or "empty answer"
+    except (OSError, http.client.HTTPException) as e:
+        return False, str(e)
+
+
+def cmd_web_status() -> int:
+    cfg = config.load()
+    web = cfg.get("web") or {}
+    on = modules.enabled(cfg)
+    ok = _line("web" in on, "web module is on", "sudo filament-kit modules enable web")
+    public = str(web.get("public_url") or "").rstrip("/")
+    ok &= _line(public.startswith("https://"), f"public URL {public or '(not set)'}",
+                "set web.public_url in config.json (e.g. https://mcp.example.com/filament)")
+    if public:
+        print(f"     connector: {public}/mcp   phone app: {public}/intake")
+    ok &= _line((config.paths().etc / WEB_PASSPHRASE).is_file(), "sign-in passphrase is set",
+                "sudo filament-kit web passphrase")
+    port = int(web.get("port") or config.DEFAULTS["web"]["port"])
+    up, why = _web_health(port)
+    ok &= _line(up, f"web unit answers on 127.0.0.1:{port}" + ("" if up else f" ({why})"),
+                "sudo systemctl restart filament-kit-web; journalctl -u filament-kit-web")
+    try:
+        d = json.loads((config.paths().state / "web" / "oauth.json").read_text(encoding="utf-8"))
+        now = time.time()
+        live = sum(1 for v in (d.get("refresh") or {}).values() if (v.get("expires_at") or 0) > now)
+        print(f"     connectors: {len(d.get('clients') or {})} registered, {live} signed in; "
+              f"phone sessions: {len(d.get('sessions') or {})}")
+    except FileNotFoundError:
+        print("     connectors: none signed in yet")
+    except PermissionError:
+        print("     connectors: cannot read (run as root)")
+    except (OSError, ValueError, AttributeError) as e:
+        print(f"     connectors: cannot read the OAuth state ({type(e).__name__})")
+    svc = cfg.get("slot_service")
+    slots = ("slot_service" if isinstance(svc, dict) and svc.get("state_url") else
+             "the kit's printer bridge" if "printers" in on else "none")
+    print(f"     printer slots: {slots}; tag readers: {len(cfg.get('tag_sources') or [])} "
+          f"+ {'station' if (cfg.get('station') or {}).get('url') else 'no station'}")
+    return 0 if ok else 1
+
+
+# ---------- migrate-ops (from filament-ops, sub-project 4) ----------
+
+def cmd_migrate_ops(bundle: str, apply_: bool, replace_spoolman: bool, allow_unknown_spoolman: bool = False) -> int:
+    """Report (default) or carry out the move of a filament-ops export bundle into this install."""
+    from . import migrate
+    if apply_ and not _is_root():
+        print(f"error: run as root: sudo filament-kit migrate-ops {bundle} --apply", file=sys.stderr)
+        return 1
+    return migrate.run(bundle, apply=apply_, replace_spoolman=replace_spoolman,
+                       allow_unknown_spoolman=allow_unknown_spoolman)
+
+
+def cmd_migrate_scanner(calibration: str, apply_: bool, replace_map: bool, serial: str | None) -> int:
+    """Report (default) or carry out the move of the H2D from h2d-filament-scanner (Spoolman slot locations and
+    the slot map seeded from the scanner's calibration)."""
+    from . import migrate_scanner
+    if apply_ and not _is_root():
+        print(f"error: run as root: sudo filament-kit migrate-scanner {calibration} --apply", file=sys.stderr)
+        return 1
+    return migrate_scanner.run(calibration, apply=apply_, replace_map=replace_map, serial=serial)
 
 
 def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=None, sm_factory=None) -> int:
+    """The CLI. A root-only file (/etc/filament-kit/config.json and the like) read as another user is one line
+    saying to run it with sudo, not a traceback (C-M7)."""
+    try:
+        return _main(argv, client_factory=client_factory, manager_factory=manager_factory, sm_factory=sm_factory)
+    except PermissionError as e:
+        args = list(sys.argv[1:] if argv is None else argv)
+        where = f"{e.filename}: " if e.filename else ""
+        print(f"error: {where}permission denied; run it with sudo: sudo filament-kit {' '.join(args)}".rstrip(),
+              file=sys.stderr)
+        return 1
+
+
+def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory=None, sm_factory=None) -> int:
     ap = argparse.ArgumentParser(prog="filament-kit")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("status", help="check services, Spoolman, key, certificate")
@@ -1137,24 +1414,32 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
     lb = sub.add_parser("library", help="the filament spec library: status, update, rollback, local additions")
     lsub = lb.add_subparsers(dest="library_cmd", required=True)
     lsub.add_parser("status", help="show the library version, local additions and the last update check")
-    lu = lsub.add_parser("update", help="fetch the latest library version")
+    lu = lsub.add_parser("update", help="download or update the library (library.url)")
     lu.add_argument("--scheduled", action="store_true", help="only if config library.schedule says it is due")
     lsub.add_parser("rollback", help="go back to the library version before the last update")
+    la = lsub.add_parser("adopt", help="keep the library an older program version bundled (used by the installer)")
+    la.add_argument("folder", help="the old library_data folder (index.json and library/)")
     la = lsub.add_parser("add", help="add or replace a local entry from a JSON file ('-' reads stdin)")
     la.add_argument("file")
-    pf = sub.add_parser("profiles", help="the generated Bambu Studio presets: build, status, lines, parents")
+    _pf_help = "the generated Bambu Studio and Orca Slicer presets: build, status, lines, parents"
+    pf = sub.add_parser("profiles", help=_pf_help, description=_pf_help)
     pfsub = pf.add_subparsers(dest="profiles_cmd", required=True)
     pfsub.add_parser("build", help="build the presets now (needs the PC sync to have run once)")
     pfsub.add_parser("status", help="show the last build, the PC sync and the problems")
-    pfsub.add_parser("lines", help="list the product lines and their Bambu Studio parents")
-    sp = pfsub.add_parser("set-parent", help="set the Bambu Studio system preset a line is built from")
+    pfsub.add_parser("lines", help="list the product lines and their Bambu Studio and Orca Slicer parents")
+    sp = pfsub.add_parser("set-parent", help="set the Bambu Studio system preset (or with --orca the Orca Slicer "
+                                             "library preset) a line is built from")
     sp.add_argument("line_id")
     sp.add_argument("parent")
+    sp.add_argument("--orca", action="store_true",
+                    help="set the line's Orca Slicer library parent instead (the name without ' @System')")
     pfsub.add_parser("restore-deleted", help="bring back the presets deleted in Bambu Studio at the next build")
     md = sub.add_parser("modules", help="the switchable parts of the kit: apply the settings, list units")
     mdsub = md.add_subparsers(dest="modules_cmd", required=True)
     mdsub.add_parser("apply", help="install, start and stop what config.json's modules say (root)")
     mdsub.add_parser("list", help="show each module on/off and the mode")
+    mm = mdsub.add_parser("menu", help="the module checklist (numbers toggle, a/s/t presets, Enter applies)")
+    mm.add_argument("--raw", action="store_true", help="print the chosen modules as a comma list; change nothing")
     ms = mdsub.add_parser("set", help="switch to an install mode and apply (root)")
     ms.add_argument("mode", choices=list(modules.MODES))
     ms.add_argument("--server", help="the kit server's name or IP (station mode)")
@@ -1164,6 +1449,43 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
     mx = mdsub.add_parser("disable", help="turn a module off and apply; its data is kept (root)")
     mx.add_argument("name")
     mdsub.add_parser("units", help="print every systemd unit of every module, one per line")
+    wb = sub.add_parser("web", help="the MCP endpoint and phone web app: passphrase, status")
+    wbsub = wb.add_subparsers(dest="web_cmd", required=True)
+    wbsub.add_parser("passphrase", help="set the sign-in passphrase (root; typed twice, hidden)")
+    wbsub.add_parser("status", help="check the web unit: public URL, passphrase, health, connectors")
+    rd = sub.add_parser("reader", help="the bench NFC reader's tokens: make, list, revoke")
+    rdsub = rd.add_subparsers(dest="reader_cmd", required=True)
+    rdt = rdsub.add_parser("token", help="make a reader token and print it once, for secrets.h (root)")
+    rdt.add_argument("--name", help="what the token is for, e.g. bench")
+    rdsub.add_parser("tokens", help="list the reader tokens (never the tokens themselves)")
+    rdr = rdsub.add_parser("revoke", help="remove a reader token (root)")
+    rdr.add_argument("ref", help="its id (r1 ...) or name")
+    rm_ = sub.add_parser("remote", help="remote access: get the certificate, show the firewall rules")
+    rmsub = rm_.add_subparsers(dest="remote_cmd", required=True)
+    rmsub.add_parser("issue", help="get the certificate with certbot (standalone on port 80) (root)")
+    rmsub.add_parser("firewall", help="print the firewall and port-forward rules to set up by hand")
+    mo = sub.add_parser("migrate-ops", help="move a filament-ops export bundle into this install (dry run unless "
+                                            "--apply)")
+    mo.add_argument("bundle", help="the bundle tools/export_ops.sh wrote (tar.gz or its folder)")
+    mo.add_argument("--apply", action="store_true", help="do it (root); without it nothing is written")
+    mo.add_argument("--replace-spoolman", action="store_true",
+                    help="replace a Spoolman database that already holds spools (a backup is kept)")
+    mo.add_argument("--allow-unknown-spoolman", action="store_true",
+                    help="accept a bundle database without a schema revision (only if it came from Spoolman 0.27.0)")
+    msc = sub.add_parser("migrate-scanner", help="move the H2D from h2d-filament-scanner: Spoolman slot locations "
+                                                 "and the slot map from its calibration (dry run unless --apply)")
+    msc.add_argument("calibration", help="the scanner's calibration.json (/var/lib/h2d-usage/calibration.json)")
+    msc.add_argument("--printer", metavar="SERIAL", help="the kit printer to migrate (needed with several printers)")
+    msc.add_argument("--apply", action="store_true", help="do it (root); without it nothing is written")
+    msc.add_argument("--replace-map", action="store_true",
+                     help="replace a slot map the printer already has (the old one goes into the backup)")
+    ud = sub.add_parser("update", help="install the latest signed release (root); --check only looks, --rollback "
+                                       "goes back to the version before the last update")
+    udx = ud.add_mutually_exclusive_group()
+    udx.add_argument("--check", action="store_true", help="say whether a newer release exists; change nothing")
+    udx.add_argument("--rollback", action="store_true", help="reinstall the version the last update replaced")
+    udx.add_argument("--scheduled", action="store_true", help="the timer's run: only with the updates module on "
+                                                              "and a check due")
     args = ap.parse_args(argv)
 
     if args.cmd == "status":
@@ -1187,6 +1509,8 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
             return cmd_library_update(args.scheduled)
         if args.library_cmd == "rollback":
             return cmd_library_rollback()
+        if args.library_cmd == "adopt":
+            return cmd_library_adopt(args.folder)
         return cmd_library_add(args.file)
     if args.cmd == "profiles":
         if args.profiles_cmd == "build":
@@ -1196,13 +1520,35 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
         if args.profiles_cmd == "lines":
             return cmd_profiles_lines()
         if args.profiles_cmd == "set-parent":
-            return cmd_profiles_set_parent(args.line_id, args.parent)
+            return cmd_profiles_set_parent(args.line_id, args.parent, orca=args.orca)
         return cmd_profiles_restore_deleted()
+    if args.cmd == "web":
+        return cmd_web_passphrase() if args.web_cmd == "passphrase" else cmd_web_status()
+    if args.cmd == "reader":
+        return cmd_reader(args.reader_cmd, getattr(args, "name", None), getattr(args, "ref", None))
+    if args.cmd == "migrate-ops":
+        return cmd_migrate_ops(args.bundle, args.apply, args.replace_spoolman, args.allow_unknown_spoolman)
+    if args.cmd == "migrate-scanner":
+        return cmd_migrate_scanner(args.calibration, args.apply, args.replace_map, args.printer)
+    if args.cmd == "remote":
+        from . import remote
+        cfg = config.load()
+        return remote.issue(cfg) if args.remote_cmd == "issue" else remote.firewall(cfg)
+    if args.cmd == "update":
+        from . import updates
+        cfg = config.load()
+        if args.check:
+            return updates.check(cfg)
+        if args.rollback:
+            return updates.rollback(cfg)
+        return updates.update(cfg, scheduled=args.scheduled)
     if args.cmd == "modules":
         if args.modules_cmd == "units":
             return cmd_modules_units()
         if args.modules_cmd == "list":
             return cmd_modules_list()
+        if args.modules_cmd == "menu":
+            return cmd_modules_menu(args.raw)
         if args.modules_cmd == "set":
             return cmd_modules_set(args.mode, args.server)
         if args.modules_cmd in ("enable", "disable"):

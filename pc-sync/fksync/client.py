@@ -235,23 +235,32 @@ class Client:
         return self._request("GET", "/api/sync/state")
 
     def upload(self, kind: str, data: bytes, user_id: str | None = None, partial: str | None = None) -> dict:
-        """`partial` (live only): the stamp of a build whose install stopped part-way in this folder (S28)."""
+        """`partial` (live and orca_live): the stamp of a build whose install stopped part-way in this folder (S28).
+        `orca_live` / `orca_system` go to the same routes with `?target=orca` (no user id; Ruling O)."""
         if kind == "live":
             q = {k: v for k, v in (("user_id", user_id), ("partial", partial)) if v}
             path = "/api/sync/live" + (f"?{urllib.parse.urlencode(q)}" if q else "")
         elif kind == "system":
             path = "/api/sync/system"
+        elif kind == "orca_live":
+            q = {"target": "orca", **({"partial": partial} if partial else {})}
+            path = f"/api/sync/live?{urllib.parse.urlencode(q)}"
+        elif kind == "orca_system":
+            path = "/api/sync/system?target=orca"
         else:
             raise ValueError(f"unknown upload kind {kind!r}")
         return self._request("PUT", path, data, "application/zip")
 
-    def rebuild(self, live_hash: str) -> dict:
-        return self._request("POST", "/api/sync/rebuild", json.dumps({"live_hash": live_hash}).encode(),
-                             "application/json")
+    def rebuild(self, live_hash: str, orca_live_hash: str | None = None) -> dict:
+        body = {"live_hash": live_hash}
+        if orca_live_hash:
+            body["orca_live_hash"] = orca_live_hash      # Ruling O
+        return self._request("POST", "/api/sync/rebuild", json.dumps(body).encode(), "application/json")
 
     def build(self, stamp: str) -> bytes:
         return self._request("GET", f"/api/sync/build?{urllib.parse.urlencode({'stamp': stamp})}", raw=True)
 
-    def installed(self, stamp: str) -> dict:
-        return self._request("POST", "/api/sync/installed", json.dumps({"stamp": stamp}).encode(),
-                             "application/json")
+    def installed(self, stamp: str, trees: list[str] | None = None) -> dict:
+        """Report an install; `trees` = what went in (Ruling AB): ["base"] or ["base", "orca"]."""
+        body = {"stamp": stamp} if trees is None else {"stamp": stamp, "trees": list(trees)}
+        return self._request("POST", "/api/sync/installed", json.dumps(body).encode(), "application/json")

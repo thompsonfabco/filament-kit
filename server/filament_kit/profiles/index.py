@@ -1,8 +1,9 @@
 """`preset_for`: the owner's preset for a Spoolman filament on a printer model and nozzle, from the last good build.
 
 Steps (Decision "preset_for source"): printer = `models.printer_preset_name(model)`, nozzle = f"{nozzle_mm:g}";
-the line is the filament's explicit `extra.line` when the build has it (a new colour of a built line, or a filament
-the owner moved), else the build's Spoolman filament-id map (where the build really put it, ruling S12), else
+only Bambu Studio preset rows (`target` "bambu_studio", or none) count; the line is the filament's explicit
+`extra.line` when the build has it (a new colour of a built line, or a filament the owner moved), else the
+build's Spoolman filament-id map (where the build really put it, ruling S12), else
 `lines.line_id_for(vendor, lines.product_of(filament, library))` (= `library.line_id`, except for a part whose slug
 is empty, matching how builds key their lines); then the build's preset of that line, printer and nozzle. A preset whose filament_id is
 not a generated id (`generate.ID_RE`), whose name could not be a file name, or that lacks either nozzle temperature
@@ -23,6 +24,7 @@ from ..bridge import models as models_mod
 from . import PresetRef, builds, generate, lines as lines_mod
 
 log = logging.getLogger(__name__)
+BAMBU_STUDIO = generate.BAMBU_STUDIO
 SETTING_ID = re.compile(r"[A-Za-z0-9_-]{1,32}")
 _cache: dict = {}
 _cache_lock = threading.Lock()
@@ -100,7 +102,9 @@ def preset_for(filament: dict, model: str, nozzle_mm: float) -> PresetRef | None
     lid = _line_of(filament, build)
     if lid is None:
         return None
+    # only Bambu Studio presets reach the AMS (a row without a target predates the Orca target, Task 6)
     row = next((p for p in build["presets"] if isinstance(p, dict) and p.get("line_id") == lid
+                and p.get("target", BAMBU_STUDIO) == BAMBU_STUDIO
                 and p.get("printer") == printer and p.get("nozzle") == nozzle), None)
     if row is None:
         return None

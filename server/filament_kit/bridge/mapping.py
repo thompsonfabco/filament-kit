@@ -50,7 +50,7 @@ from typing import Callable
 
 from .. import config
 from ..pairing import _write_atomic, make_state_dir, open_lock
-from . import ams, calib3mf, registry, slottest, snapshot
+from . import ams, calib3mf, layout, registry, slottest, snapshot, status
 from .connection import PrinterOffline, UnknownPrinter
 from .slottest import PrinterBusy
 
@@ -69,6 +69,11 @@ OBSERVE_NOTE = "slot numbering not confirmed: filament use is only logged until 
 STOPPED = "mapping was stopped (the server or command is stopping); the slots were put back first"
 SHUTDOWN_WAIT = 60.0      # seconds the service waits at shutdown for a stopped job's restore
 RECOVER_WAIT = 60.0       # seconds the service waits at start for a printer with a pending snapshot to connect
+REMAP_STEP = "Re-mapping: the printer's AMS layout changed"
+REMAP_SUSPECT_STEP = "Re-mapping: prints disagreed with the slot map"
+REMAP_SETTLE = 30.0       # seconds a new layout must stay unchanged before an automatic re-map
+REMAP_RETRY = 600.0       # seconds between automatic re-map attempts for one layout change
+REMAP_TRIES = 3           # automatic attempts per layout change; then only a manual Map slots
 
 
 class AlreadyRunning(Exception):
@@ -111,6 +116,7 @@ class _Job:
     started: float = field(default_factory=time.time)
     finished: float | None = None
     abort: _Flag = field(default_factory=_Flag)
+    auto: bool = False              # started by LayoutWatch (the printer's layout changed): the app shows re-mapping
 
 
 def _dir(serial: str):
@@ -126,6 +132,18 @@ def _save_status(serial: str, job: _Job) -> None:
         _write_atomic(d / STATUS_FILE, json.dumps(data, indent=2).encode("utf-8"), 0o600, state_owned=True)
     except OSError:
         log.exception("mapping %s: cannot write the status file", serial)
+
+
+def job_held_elsewhere(serial: str) -> bool:
+    """A mapping job for `serial` holds the printer in another process (always False on Windows dev PCs)."""
+    return _ProcessLock.held_elsewhere(serial)
+
+
+def record_seeded(serial: str, step: str, problems: list[str] | None = None) -> None:
+    """Record a slot map that came from elsewhere (`migrate_scanner`: the scanner's calibration) as the last
+    finished mapping, so `view` (the app's mapping status) says where the map came from until a job maps again."""
+    _save_status(serial, _Job(id=uuid.uuid4().hex, state="done", step=step, problems=list(problems or []),
+                              finished=time.time()))
 
 
 def _load_status(serial: str) -> dict | None:
@@ -285,7 +303,7 @@ class Mapper:
         self._abort_pending: set[str] = set()
 
     # ---------------------------------------------------------------- start / run
-    def _begin(self, serial: str) -> tuple[_Job, _ProcessLock]:
+    def _begin(self, serial: str, auto: bool = False) -> tuple[_Job, _ProcessLock]:
         if registry.load().get(serial) is None:
             raise UnknownPrinter(serial)
         with self._lock:
@@ -298,7 +316,10 @@ class Mapper:
             except BaseException:
                 _give_back(serial, plock)
                 raise
-            job = _Job(uuid.uuid4().hex)
+            job = _Job(uuid.uuid4().hex, auto=auto)
+            if auto:
+                saved = ams.load_map(serial)
+                job.step = REMAP_SUSPECT_STEP if saved.suspect and not saved.stale else REMAP_STEP
             self._jobs[serial] = job        # registered first: an abort from now on reaches it directly
             if self._closing.is_set() or serial in self._abort_pending:
                 self._abort_pending.discard(serial)
@@ -307,9 +328,10 @@ class Mapper:
         log.info("mapping %s: job %s started", serial, job.id)
         return job, plock
 
-    def start(self, serial: str) -> str:
-        """Start the job on a background thread; returns its id."""
-        job, plock = self._begin(serial)
+    def start(self, serial: str, auto: bool = False) -> str:
+        """Start the job on a background thread; returns its id. `auto`: started because the printer's layout
+        changed (`LayoutWatch`)."""
+        job, plock = self._begin(serial, auto)
         t = threading.Thread(target=self._run, args=(serial, job, plock, None), name=f"mapping-{serial}",
                              daemon=True)
         try:
@@ -459,6 +481,7 @@ class Mapper:
 
         if job.abort.is_set():
             return fail([STOPPED.split(";")[0] + "; nothing was changed"])
+        fp = _fingerprint_now(self._m, serial)
         if snapshot.pending(serial):
             _delete_leftover_job(serial)
             probs = snapshot.restore(self._m, serial, step)
@@ -479,8 +502,9 @@ class Mapper:
         if not st.confirmed:
             return fail(st.problems or ["no slot was confirmed by the slot test"])
 
+        model = ams.printer_model(serial)
         smap = ams.SlotMap(slots={lab: {"ams_id": a["ams_id"], "tray_id": a["tray_id"],
-                                        "global_id": ams.default_global(a["ams_id"], a["tray_id"])}
+                                        "global_id": ams.default_global(a["ams_id"], a["tray_id"], model)}
                                   for lab, a in st.confirmed.items()})
         step("Running the calibration job (no heating, no motion)")
         cr = calib3mf.run(self._m, serial, smap, should_stop=job.abort.is_set)
@@ -493,7 +517,9 @@ class Mapper:
             for lab, s in smap.slots.items():
                 if lab in cr.decoding:
                     s["global_id"] = cr.decoding[lab]
-            smap.calibrated, smap.observe = True, False
+                else:               # a slot the job skipped (empty): the proven scheme's number
+                    s["global_id"] = ams.scheme_global(s["ams_id"], s["tray_id"], cr.scheme, model)
+            smap.calibrated, smap.observe, smap.scheme = True, False, cr.scheme
         else:
             smap.calibrated, smap.observe = False, True
             if not cr.restored:
@@ -502,13 +528,18 @@ class Mapper:
                 problems.append("the calibration job did not confirm the slot numbering")
             problems.append(OBSERVE_NOTE)
         step("Saving the slot map")
+        smap.fingerprint, smap.stale = fp, False
         ams.save_map(serial, smap)
         job.problems = problems
         job.state = "done" if cr.restored else "failed"
 
     # ---------------------------------------------------------------- progress
     def view(self, serial: str) -> dict:
-        """`{state, step, slots: [{label, ams_id, tray_id, global}], calibrated, observe, problems}`."""
+        """`{state, step, slots: [{label, ams_id, tray_id, global}], calibrated, observe, problems, stale,
+        remapping, scheme, suspect}`: `stale` = the printer's layout changed since the map was made; `remapping` =
+        this process runs a re-map that `LayoutWatch` started (layout change or suspect map); `scheme` = the
+        numbering scheme calibration proved (None: none yet); `suspect` = two prints in a row disagreed with the
+        map (logging only until the re-map)."""
         with self._lock:
             j = self._jobs.get(serial)
             mine = None if j is None else {"job_id": j.id, "state": j.state, "step": j.step,
@@ -529,5 +560,169 @@ class Mapper:
                 slots.append({"label": label, "ams_id": s.get("ams_id"), "tray_id": s.get("tray_id"),
                               "global": s.get("global_id")})
         st = st or {"state": "none", "step": "", "problems": []}
+        remapping = bool(j is not None and j.auto and st is mine and st["state"] == "running")
         return {"state": st["state"], "step": st["step"], "slots": slots, "calibrated": m.calibrated,
-                "observe": m.observe, "problems": st["problems"]}
+                "observe": m.observe, "problems": st["problems"], "stale": m.stale, "remapping": remapping,
+                "scheme": m.scheme, "suspect": m.suspect}
+
+
+# ---------------------------------------------------------------- layout fingerprint: stale map, auto re-map
+
+def _fingerprint_now(manager, serial: str) -> list | None:
+    """The layout fingerprint of the printer's current report (None when there is none to read)."""
+    try:
+        r = manager.wait_report(serial, lambda r: True, 0)
+    except Exception:  # noqa: BLE001 - a fake or a dropped printer: no fingerprint, never a failed job
+        return None
+    if not isinstance(r, dict) or not isinstance(status._d(r.get('ams')).get('ams'), list):
+        return None
+    return layout.build(r, ams.printer_model(serial)).fingerprint
+
+
+_REMAP_REQUESTS: set[str] = set()
+_REMAP_GUARD = threading.Lock()
+
+
+def request_remap(serial: str) -> None:
+    """Ask `LayoutWatch` to look at the printer's slot map again at its next report (`usage` marked it suspect):
+    a stale or suspect map is re-mapped once the printer is idle. Cheap and safe from any thread."""
+    with _REMAP_GUARD:
+        _REMAP_REQUESTS.add(serial)
+
+
+def _take_request(serial: str) -> bool:
+    with _REMAP_GUARD:
+        if serial in _REMAP_REQUESTS:
+            _REMAP_REQUESTS.discard(serial)
+            return True
+        return False
+
+
+def _merge_fp(old: list, new: list) -> list:
+    """`new`, keeping a unit type `old` knew (from a module code) where `new` has none (same layout)."""
+    return [[n[0], n[1] if n[1] is not None else o[1], n[2]] for o, n in zip(old, new)]
+
+
+@dataclass
+class _Seen:
+    fp: list | None = None
+    labels: frozenset | None = None
+    since: float = 0.0
+    pending: bool = False          # the saved map is stale: an automatic re-map may be due
+    last_try: float | None = None
+    tries: int = 0
+
+
+class LayoutWatch:
+    """A report listener (`Manager.add_listener`): keeps each printer's slot map in step with its hardware.
+
+    On a layout change (`layout.same_layout` of the fingerprints: unit ids, slot counts, module-code types) the
+    fingerprint saved in the slot map decides: a map made for other hardware is marked `stale` (`calibrated` and
+    the slots stay: units that did not move keep their numbers), a map that matches again is un-marked, and an
+    old map without a fingerprint adopts the current one. While stale, and with config `auto_remap` (default
+    on), the mapper re-runs (`Mapper.start(serial, auto=True)`; the app shows re-mapping) once the printer is
+    connected and idle, no job maps it already, and the new layout held for REMAP_SETTLE s; at most REMAP_TRIES
+    attempts, REMAP_RETRY s apart, per layout change. A printer that was never mapped is left alone. A map `usage`
+    marked `suspect` (two prints in a row disagreed with it; `request_remap`) is re-mapped the same way, with no
+    layout change needed (and found at start from the saved map). Runs on the MQTT thread: the slot map is only
+    read when the layout changes, a re-map was requested or one is due, and the job starts on a thread of its own
+    (`sync=True`: in the caller's thread, for tests)."""
+
+    def __init__(self, manager, mapper, *, clock=time.monotonic, settle: float = REMAP_SETTLE,
+                 retry: float = REMAP_RETRY, sync: bool = False):
+        self._m, self._mapper, self._clock = manager, mapper, clock
+        self._settle, self._retry, self._sync = settle, retry, sync
+        self._seen: dict[str, _Seen] = {}
+        self._lock = threading.Lock()
+
+    def _model(self, serial: str):
+        fn = getattr(self._m, 'model', None)
+        return fn(serial) if callable(fn) else ams.printer_model(serial)
+
+    def __call__(self, serial: str, report: dict, first: bool) -> None:
+        if not isinstance(status._d(status._d(report).get('ams')).get('ams'), list):
+            return
+        lay = layout.build(report, self._model(serial))
+        fp = lay.fingerprint
+        labels = frozenset(s.label for u in lay.units for s in u.slots)
+        now = self._clock()
+        with self._lock:
+            seen = self._seen.setdefault(serial, _Seen())
+            if seen.fp is not None and layout.same_layout(seen.fp, fp) and labels == seen.labels:
+                merged = _merge_fp(seen.fp, fp)
+                learned = merged != seen.fp            # a module code told a unit's type: remember it
+                seen.fp, changed = merged, False
+            else:
+                seen.fp, seen.labels, changed, learned = fp, labels, True, False
+                seen.since, seen.tries, seen.last_try = now, 0, None
+            asked = _take_request(serial)
+            if asked and not (changed or learned):
+                seen.tries, seen.last_try = 0, None    # a new reason to re-map: a fresh set of attempts
+            if changed or learned or asked:
+                if self._mapper.in_progress(serial):
+                    seen.fp = None             # look again once the job is over
+                    if asked:
+                        request_remap(serial)
+                    return
+                seen.pending = self._check_map(serial, seen.fp, labels)
+            if seen.pending and self._due(serial, seen, report, now):
+                seen.last_try, seen.tries = now, seen.tries + 1
+                self._start(serial)
+
+    def _check_map(self, serial: str, fp: list, labels=None) -> bool:
+        """Compare with the saved map, marking it stale or not; True = a re-map is due (stale, or suspect). Stale:
+        the map was made for other hardware (fingerprint), or one of its labels is not a slot of the current layout
+        (a renamed label; keys under an older external label were already renamed by `ams.load_map`)."""
+        m = ams.load_map(serial)
+        if not m.slots:
+            return False
+        same = m.fingerprint is None or layout.same_layout(m.fingerprint, fp)
+        missing = sorted(k for k in m.slots if labels is not None and k not in labels)
+        stale = not same or bool(missing)
+        if m.fingerprint is None:
+            new_fp = fp
+            log.info("mapping %s: the slot map adopted the printer's current layout", serial)
+        else:
+            new_fp = _merge_fp(m.fingerprint, fp) if same else m.fingerprint
+        if new_fp == m.fingerprint and stale == m.stale:
+            return stale or m.suspect
+        if stale and not m.stale:
+            log.warning("mapping %s: the slot map is stale (%s)", serial,
+                        "the printer's AMS layout changed" if not same else f"no slot {', '.join(missing)} now")
+        m.fingerprint, m.stale = new_fp, stale
+        try:
+            ams.save_map(serial, m)
+        except OSError:
+            log.exception("mapping %s: cannot save the slot map", serial)
+        return m.stale or m.suspect
+
+    def _due(self, serial: str, seen: _Seen, report: dict, now: float) -> bool:
+        if seen.tries >= REMAP_TRIES or now - seen.since < self._settle:
+            return False
+        if seen.last_try is not None and now - seen.last_try < self._retry:
+            return False
+        gs = status._s(status._d(report).get('gcode_state'))
+        if not gs or gs == 'UNKNOWN' or gs in status.ACTIVE:
+            return False
+        if self._m.state(serial) not in slottest.ONLINE or self._mapper.in_progress(serial):
+            return False
+        if not config.load().get('auto_remap', True):
+            seen.last_try = now                  # off: look at the config again a retry interval later
+            return False
+        m = ams.load_map(serial)
+        if not (m.stale or m.suspect):           # a job (manual or ours) already made a fresh map
+            seen.pending = False
+            return False
+        return True
+
+    def _start(self, serial: str) -> None:
+        def go():
+            try:
+                self._mapper.start(serial, auto=True)
+                log.info("mapping %s: re-mapping, the AMS layout changed", serial)
+            except Exception as e:  # noqa: BLE001 - busy, offline, a load running: tried again later
+                log.warning("mapping %s: automatic re-map not started (%s: %s)", serial, type(e).__name__, e)
+        if self._sync:
+            go()
+        else:
+            threading.Thread(target=go, name=f"remap-{serial}", daemon=True).start()

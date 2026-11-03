@@ -16,7 +16,8 @@ import pytest
 from filament_kit import config, library
 
 FIXTURE = Path(__file__).parent / "data" / "library"
-BUNDLED = Path(library.__file__).parent / "library_data"
+BUNDLED = Path(__file__).parent / "data" / "library_snapshot"   # stands in for a downloaded library (conftest)
+PACKAGED = Path(library.__file__).parent / "library_data"
 
 
 def _bundled_version() -> int:
@@ -24,7 +25,9 @@ def _bundled_version() -> int:
 
 
 @pytest.fixture(autouse=True)
-def env(tmp_path, monkeypatch):
+def env(tmp_path, monkeypatch, no_library):
+    # These tests exercise update/rollback against a fallback copy: the snapshot stands in as BUNDLED here.
+    monkeypatch.setattr(library, "BUNDLED", BUNDLED)
     monkeypatch.setenv("FK_ETC", str(tmp_path / "etc"))
     monkeypatch.setenv("FK_STATE", str(tmp_path / "state"))
     (tmp_path / "state").mkdir()
@@ -602,3 +605,29 @@ def test_status_url_is_sanitized():
     config.save(cfg)
     assert library.status()["url"] == "https://mirror.example:8443/lib/"
     assert library.display_url("not a url") == "(invalid url)"
+
+
+# ---------- Task 3: optional orca_parent ----------
+
+def test_orca_parent_is_optional_and_checked():
+    assert library.validate(entry(orca_parent="SUNLU PLA+ 2.0")) == []
+    assert library.validate(entry(orca_parent="SUNLU PLA+ 2.0"), local=True) == []
+    assert library.validate(entry(orca_parent="")) == ["'orca_parent' must be a non-empty string"]
+    assert library.validate(entry(orca_parent=5)) == ["'orca_parent' must be a non-empty string"]
+    assert library.validate(entry(orca_parent="Generic PLA @System")) == \
+        ["orca_parent must not carry an '@' suffix (give the base name, without ' @System')"]
+    assert list(library.canonical(entry(orca_parent="X")))[5:7] == ["bambu_parent", "orca_parent"]
+
+
+def test_schema_file_lists_orca_parent():
+    schema = json.loads((BUNDLED / "schema" / "entry.schema.json").read_text(encoding="utf-8"))
+    op = schema["properties"]["orca_parent"]
+    assert op["type"] == "string" and op["pattern"] == "^[^@]+$"
+    assert "orca_parent" not in schema["required"]
+
+
+def test_local_entry_with_orca_parent_is_added():
+    e, lid = library.add_local(json.dumps({"vendor": "Acme", "product": "PLA X", "material": "PLA",
+                                           "fields": {}, "orca_parent": "Generic PLA"}).encode())
+    assert e["orca_parent"] == "Generic PLA"
+    assert library.load().lookup("Acme", "PLA X").local["orca_parent"] == "Generic PLA"

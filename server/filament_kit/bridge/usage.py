@@ -17,13 +17,24 @@ Settling (on a worker thread): the job's 3MF is fetched from the printer's SD ca
 file whose name is exactly one of those two, ignoring case, in an NLST of both (the printer has no MLSD and no
 mtimes: never "the newest file", never a similar name).
 `Metadata/slice_info.config` lists, per plate, `<filament id=N used_g=...>` with N the project filament number;
-the printer's slot for it is `mapping[N - 1]` (a global slot id), which the calibrated slot map
-(`ams.load_map`) turns into a label (A1, HT-A ...), and the spool in that slot is the Spoolman spool whose
-`location` is exactly "<printer name> – AMS <label>" (two non-archived spools there: `ambiguous_spool`, nothing
-written). Grams = `used_g` × final `mc_percent` / 100 (a FINISH
-counts as 100 %, so a late percent delta cannot under-count), rounded to 0.01 g; filaments with 0 g are
-skipped. The deduction is `Spoolman.use(spool_id, grams)` (`PUT /spool/{id}/use`). A printer whose map is not
-`calibrated`, or is `observe`, is in observe mode: entries are logged with `observe: true`, nothing is written.
+the printer's slot for it is `mapping[N - 1]` (a global slot id), which the slot map (`ams.load_map`) turns into a
+label (A1, HT-A ...) (`decode`: the calibrated map's own numbers and the numbers prints taught it, then the
+numbering scheme calibration proved, a label the printer had at the print's start; an uncalibrated map: the scheme
+it has, else the model's first candidate scheme, for the log only), and the spool in that slot is the Spoolman
+spool whose `location` is exactly "<printer name> – AMS <label>" (two non-archived spools there:
+`ambiguous_spool`, nothing written). Grams = `used_g` × final `mc_percent` / 100 (a FINISH counts as 100 %, so
+a late percent delta cannot under-count), rounded to 0.01 g; filaments with 0 g are skipped. The deduction is
+`Spoolman.use(spool_id, grams)` (`PUT /spool/{id}/use`). A printer whose map is not `calibrated`, or is
+`observe`, is in observe mode: entries are logged with `observe: true`, nothing is written.
+
+Learning and checking (calibrated maps; ported from the scanner): the slots the printer showed when the print
+started (`layout.build` of its first active report) are kept with the job. A number nothing decodes is learned
+when exactly one loaded slot at the start holds the sliced filament (same `tray_info_idx`, or with no preset in the
+slice the same type and colour): saved in the map (`SlotMap.learned`) and used from then on. A decoded slot that
+held another filament than the slice says (another preset, or with none another type) is not deducted
+(`slot_mismatch`); two prints in a row with such a slot make the map `suspect`: observe mode (from that print on)
+until `mapping.LayoutWatch` re-maps the printer when it is idle (`mapping.request_remap`). A print whose decoded
+slots all agreed resets the streak. Without a start layout (no AMS in the report) nothing is learned or checked.
 
 Log: `state/printers/<serial>/usage.jsonl`, append-only, one JSON object per line, written by this process
 only (one uvicorn worker; a module lock serialises appends and undo). Two kinds of lines:
@@ -44,7 +55,8 @@ serve):
   error     only when set: "file_not_found" | "no_slice_info" | "plate_not_found" | "printer_unreachable" |
             "cert_changed" | "no_mapping" (the job's reports never carried `mapping`) (job-level, one entry,
             nothing written) | "spoolman_unreachable" | "spoolman_failed" | "ambiguous_spool" |
-            "unmapped_slot" (calibrated map, but its slot id is not in it) (that filament's write did not happen)
+            "unmapped_slot" (calibrated map, but nothing decodes its slot id) | "slot_mismatch" (the decoded
+            slot held another filament at the print's start) (that filament's write did not happen)
 An entry was written to Spoolman iff observe is false, spool_id is set, grams > 0 and there is no error; only
 those can be undone.
 
@@ -74,7 +86,7 @@ from xml.etree import ElementTree
 from .. import config
 from ..pairing import give_to_state_owner, make_state_dir
 from ..spoolman import SpoolmanError
-from . import ams, ftps, registry, status, tlspin
+from . import ams, ftps, hardware, layout, mapping, registry, status, tlspin
 
 log = logging.getLogger(__name__)
 
@@ -324,22 +336,125 @@ def parse_filaments(data: bytes) -> dict[str | None, list[dict]]:
 
 # ---------------------------------------------------------------- settling
 
-def _labels(m: ams.SlotMap) -> dict[int, str]:
-    out = {}
-    for label, s in m.slots.items():
-        g = status._int(s.get('global_id')) if isinstance(s, dict) else None
-        if g is not None:
-            out[g] = label
-    return out
+def _guess_label(g: int, model=None) -> str | None:
+    """Uncalibrated (observe mode, for the log only): the inverse of `ams.default_global`: the number decoded
+    with the model's first numbering scheme, labelled as `layout` labels that slot. An external id the model
+    does not have (e.g. 255 on a single-holder printer) is None."""
+    hw = hardware.load()
+    mi = hw.model(model)
+    try:
+        dec = hw.scheme(mi.numbering[0]).decode(g)
+    except KeyError:
+        dec = None
+    if dec is None:
+        return None
+    a, t = dec
+    if a in layout.EXT_DEFAULT and not any(x.id == a for x in mi.externals):
+        return None
+    return layout.label_for(a, t, mi, hw)
 
 
-def _guess_label(g: int) -> str | None:
-    """Uncalibrated (observe mode, for the log only): the inverse of `ams.default_global`."""
-    if g >= ams.EXT_ID:
-        return ams.EXT if g == ams.EXT_ID else None
-    if g >= status.HT_BASE:
-        return status.slot_label(g, 0)
-    return status.slot_label(g // 4, g % 4)
+def start_slots(serial: str, report: dict) -> dict[str, dict]:
+    """label -> {ams_id, tray_id, type, idx, color, present} of every slot in the report (the print's start); {}
+    when the report shows no AMS (nothing to learn from or check against)."""
+    try:
+        if not isinstance(status._d(status._d(report).get('ams')).get('ams'), list):
+            return {}
+        out = {}
+        for u in layout.build(report, ams.printer_model(serial)).units:
+            for sl in u.slots:
+                t = sl.raw if isinstance(sl.raw, dict) else {}
+                typ = status._s(t.get('tray_type'))
+                out[sl.label] = {'ams_id': u.ams_id, 'tray_id': sl.tray_id, 'type': typ,
+                                 'idx': status._s(t.get('tray_info_idx')),
+                                 'color': status._s(t.get('tray_color')).upper()[:6],
+                                 'present': bool(typ) if sl.present is None else bool(sl.present and typ)}
+        return out
+    except Exception:  # noqa: BLE001 - an odd report: no start layout, never a lost job
+        log.exception("usage: printer %s: cannot read the slots at the print's start", serial)
+        return {}
+
+
+def _same_type(a, b) -> bool:
+    return bool(a) and str(a).strip().upper() == str(b or '').strip().upper()
+
+
+def _holds(slot: dict | None, f: dict) -> bool:
+    """The slot (at the print's start) held the sliced filament, the scanner's rule: same preset, or (no preset
+    sliced, or another one) the same type. The presence bit is not asked: a slot reporting a type counts."""
+    if not slot:
+        return False
+    return bool(f.get('idx')) and slot.get('idx') == f.get('idx') or _same_type(slot.get('type'), f.get('type'))
+
+
+def _matches_unseen(slot: dict, f: dict) -> bool:
+    """The learn rule's match: the same preset, or with no preset in the slice the same type and colour."""
+    if not slot.get('present'):
+        return False
+    if f.get('idx'):
+        return slot.get('idx') == f['idx']
+    return _same_type(slot.get('type'), f.get('type')) and \
+        slot.get('color') == str(f.get('color') or '').lstrip('#')[:6].upper()
+
+
+def decode(g: int, smap: ams.SlotMap, model=None, start: dict | None = None,
+           hw: hardware.Hardware | None = None) -> tuple[str | None, str]:
+    """A printer slot number -> (label or None, how). Calibrated: the map's numbers ("map"), then numbers prints
+    taught it ("learned"), then the scheme calibration proved ("scheme": only a label the printer had at the
+    print's start, or with no start layout one the map lists, and never one the map gives another number).
+    Uncalibrated: the map's scheme if it has one, else the model's first candidate ("model": for the log only)."""
+    hw = hw or hardware.load()
+    mi = hw.model(model)
+    if g is None or g < 0:
+        return None, 'unused'
+    if smap.calibrated:
+        for label, sl in smap.slots.items():
+            if isinstance(sl, dict) and status._int(sl.get('global_id')) == g:
+                return label, 'map'
+        if str(g) in smap.learned:
+            return smap.learned[str(g)], 'learned'
+    if smap.scheme:
+        if g in layout.EXT_DEFAULT or any(x.id == g for x in mi.externals):
+            dec = (g, 0)
+        else:
+            try:
+                dec = hw.scheme(smap.scheme).decode(g)
+            except KeyError:
+                dec = None
+        label = None
+        if dec is not None and start:       # the label the printer gave that slot at the print's start
+            label = next((lab for lab, sl in start.items() if (sl.get('ams_id'), sl.get('tray_id')) == dec), None)
+        elif dec is not None:               # no start layout: only a label the map lists for that slot
+            lab = layout.label_for(*dec, mi, hw)
+            sl = smap.slots.get(lab) if lab else None
+            if isinstance(sl, dict) and (status._int(sl.get('ams_id')), status._int(sl.get('tray_id'))) == dec:
+                label = lab
+        if label is not None:
+            mine = smap.slots.get(label)
+            other = isinstance(mine, dict) and status._int(mine.get('global_id')) not in (None, g)
+            if not (smap.calibrated and other):
+                return label, 'scheme'
+    if smap.calibrated:
+        return None, 'unknown'
+    if start:                               # the model's first candidate, labelled as the printer showed it
+        try:
+            dec = (g, 0) if g in layout.EXT_DEFAULT else hw.scheme(mi.numbering[0]).decode(g)
+        except (KeyError, IndexError):
+            dec = None
+        hit = next((lab for lab, sl in start.items() if (sl.get('ams_id'), sl.get('tray_id')) == dec), None)
+        if hit is not None:
+            return hit, 'model'
+    return _guess_label(g, mi), 'model'
+
+
+def _save_map(serial: str, smap: ams.SlotMap, stamp) -> None:
+    """Save what a print taught the map, unless the map changed since it was read (a mapping job saved a new
+    one: that one wins)."""
+    try:
+        if not ams.save_map_if(serial, smap, stamp):
+            log.info("usage: printer %s: the slot map changed meanwhile; this print's learning is dropped", serial)
+    except OSError:
+        log.exception("usage: printer %s: cannot save the slot map", serial)
 
 
 class _Watch:
@@ -380,8 +495,12 @@ class Tracker:
             w = self._watch.setdefault(serial, _Watch())
             prev, w.prev = w.prev, gs
             if gs in ACTIVE:
-                w.job = {'subtask': str(report.get('subtask_name') or ''), 'plate': _plate_of(report),
-                         'mapping': report.get('mapping')}
+                sub = str(report.get('subtask_name') or '')
+                slots = w.job.get('slots') if w.job is not None and w.job['subtask'] == sub else None
+                if slots is None:
+                    slots = start_slots(serial, report)
+                w.job = {'subtask': sub, 'plate': _plate_of(report), 'mapping': report.get('mapping'),
+                         'slots': slots}
                 return
             job, w.job = w.job, None
             if first or gs not in TERMINAL or prev not in ACTIVE or job is None:
@@ -433,8 +552,10 @@ def settle(serial: str, job: dict, pct: float, spoolman) -> list[dict]:
         return fail('plate_not_found')
 
     smap = ams.load_map(serial)
-    observe = not smap.calibrated or smap.observe
-    labels = _labels(smap)
+    stamp = smap.updated
+    hw = hardware.load()
+    model = p.model or None
+    start = job.get('slots') if isinstance(job.get('slots'), dict) else {}
     spools: dict[str, list[dict]] = {}
     spool_error = None
     try:
@@ -443,23 +564,64 @@ def settle(serial: str, job: dict, pct: float, spoolman) -> list[dict]:
     except SpoolmanError as e:
         log.warning("usage: printer %s: cannot list spools: %s", serial, e)
         spool_error = 'spoolman_unreachable'
-    mapping = job.get('mapping') if isinstance(job.get('mapping'), list) else []
+    mapping_ = job.get('mapping') if isinstance(job.get('mapping'), list) else []
     frac = max(0.0, min(100.0, pct)) / 100.0
-    out = []
+
+    # decode every filament first: learning and the mismatch streak decide observe mode for this very print
+    plan, mismatches, checked, changed = [], 0, 0, False
     for f in fils:
         grams = round(f['used_g'] * frac, 2)
         if grams <= 0:
             continue
-        g = status._int(mapping[f['id'] - 1]) if 1 <= f['id'] <= len(mapping) else None
-        label = None
-        if g is not None and g >= 0:
-            label = labels.get(g) if smap.calibrated else _guess_label(g)
-        here = spools.get(status.location(registry.display_name(p), label), []) if label else []
+        g = status._int(mapping_[f['id'] - 1]) if 1 <= f['id'] <= len(mapping_) else None
+        label, how = decode(g, smap, model, start, hw) if g is not None else (None, 'no mapping entry')
+        if label is None and smap.calibrated and g is not None and g >= 0 and start:
+            cands = [lab for lab, sl in start.items() if _matches_unseen(sl, f)]
+            if len(cands) == 1:
+                label, how = cands[0], 'learned from this print'
+                smap.learned[str(g)] = label
+                changed = True
+                log.info("usage: printer %s: learned slot number %s = %s from %r", serial, g, label, name)
+        ok = True
+        if smap.calibrated and label and start:
+            ok = _holds(start.get(label), f)
+            checked += 1
+            if not ok:
+                mismatches += 1
+        plan.append((f, grams, g, label, how, ok))
+    if smap.calibrated and checked:
+        before = (smap.mismatch_streak, smap.suspect)
+        if mismatches:
+            smap.mismatch_streak += 1
+            if smap.mismatch_streak >= 2 and not smap.suspect:
+                smap.suspect, smap.observe = True, True
+                log.warning("usage: printer %s: two prints in a row disagreed with the slot map: logging only "
+                            "until it is re-mapped", serial)
+        else:
+            smap.mismatch_streak = 0
+        changed = changed or (smap.mismatch_streak, smap.suspect) != before
+    if changed:
+        _save_map(serial, smap, stamp)
+        if smap.suspect:
+            mapping.request_remap(serial)
+    observe = not smap.calibrated or smap.observe
+
+    out = []
+    for f, grams, g, label, how, ok in plan:
+        here = []
+        if label:
+            pname = registry.display_name(p)
+            here = spools.get(status.location(pname, label), [])
+            old = next((a for a, cur in layout.aliases(p.model).items() if cur == label), None)
+            if old:     # a spool still at the holder's older location ("<name> – AMS Ext" for Ext-L)
+                here = here + spools.get(status.location(pname, old), [])
         spool = here[0] if len(here) == 1 else None
         entry = {'job': name, 'grams': grams, 'spool_id': spool.get('id') if spool else None, 'slot': label,
                  'observe': observe}
         if smap.calibrated and g is not None and g >= 0 and label is None:
             entry['error'] = 'unmapped_slot'     # a slot the map does not know: run Map slots
+        elif not ok:
+            entry['error'] = 'slot_mismatch'     # the slot held another filament than the slice says
         elif spool_error and label:
             entry['error'] = spool_error
         elif len(here) > 1:
@@ -472,8 +634,8 @@ def settle(serial: str, job: dict, pct: float, spoolman) -> list[dict]:
             except SpoolmanError as e:
                 log.warning("usage: printer %s: cannot deduct %s g from spool %s: %s", serial, grams, spool['id'], e)
                 entry['error'] = 'spoolman_failed'
-        log.info("usage: printer %s: %s %s g filament %s (mapping %s) -> %s spool %s%s", serial,
-                 'would deduct' if observe else 'deducted', grams, f['id'], g, label, entry['spool_id'],
+        log.info("usage: printer %s: %s %s g filament %s (mapping %s, %s) -> %s spool %s%s", serial,
+                 'would deduct' if observe else 'deducted', grams, f['id'], g, how, label, entry['spool_id'],
                  f" [{entry['error']}]" if entry.get('error') else '')
         out.append(append(serial, entry))
     log.info("usage: printer %s: job %r settled from %s (%d entries%s)", serial, name, path, len(out),

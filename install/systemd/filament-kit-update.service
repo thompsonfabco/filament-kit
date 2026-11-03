@@ -1,0 +1,15 @@
+[Unit]
+Description=filament-kit auto-update (module updates): install the latest signed release when one is due
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# root: it stops the kit's services and runs the release's install.sh (packages, /opt, units)
+ExecStart=/opt/filament-kit/venv/bin/filament-kit update --scheduled
+# Belt and braces: the updater starts what it stopped itself (also on SIGTERM), but if it was killed outright or
+# failed, start every enabled kit unit again. Plain systemctl, so it works even with a half-installed venv.
+ExecStopPost=/bin/sh -c 'if [ "$$SERVICE_RESULT" != success ]; then systemctl list-unit-files --state=enabled --no-legend spoolman.service "filament-kit*" | while read -r unit _; do systemctl start --no-block "$$unit"; done; fi'
+Nice=10
+TimeoutStartSec=1h
+# no IPAddressDeny: GitHub's address ranges change

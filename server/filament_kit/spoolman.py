@@ -10,6 +10,8 @@ from typing import Any
 EXTRA_FIELDS: list[tuple[str, str, str]] = [
     ("spool", "nfc_id", "text"),
     ("spool", "prev_location", "text"),
+    ("spool", "box_humidity", "float"),          # open_spool: box hygrometer % ...
+    ("spool", "humidity_checked", "datetime"),   # ... and when it was read (UTC)
     ("filament", "nozzle_range", "text"),
     ("filament", "bed_range", "text"),
     ("filament", "line", "text"),

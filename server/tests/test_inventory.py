@@ -698,3 +698,60 @@ def test_system_store_cache_hit_needs_no_live_lock():
     t.join(5)
     r.join(5)
     assert quick and quick[0] is first
+
+
+# ---------- merge-ops: open_spool humidity/remaining, pick by filament, one-byte-apart tags ----------
+
+def test_open_spool_humidity_and_remaining(sm):
+    s = _spool(sm, material="PETG", name="H1")
+    out = inventory.open_spool(sm, s["id"], UID, RULES, humidity=38.5, remaining=640, dry=False)
+    ex = out["extra"]
+    assert json.loads(ex["box_humidity"]) == 38.5
+    checked = json.loads(ex["humidity_checked"])
+    assert checked.endswith("Z") and checked[:4].isdigit()
+    assert tags.stored(out) == UID                      # the tag patch is kept beside the humidity fields
+    assert out["remaining_weight"] == 640
+
+
+def test_open_spool_humidity_dry_run_writes_nothing(sm):
+    s = _spool(sm, material="PETG", name="H2")
+    dry = inventory.open_spool(sm, s["id"], UID, RULES, humidity=40, dry=True)
+    assert json.loads(dry["extra"]["box_humidity"]) == 40
+    assert "box_humidity" not in (sm.get(f"spool/{s['id']}").get("extra") or {})
+
+
+def test_open_spool_gross_and_remaining_conflict_and_negative(sm):
+    s = _spool(sm, material="PETG", name="H3")
+    with pytest.raises(ValueError):
+        inventory.open_spool(sm, s["id"], UID, RULES, gross=900, remaining=600, dry=False)
+    with pytest.raises(ValueError):
+        inventory.open_spool(sm, s["id"], UID, RULES, remaining=-1, dry=False)
+    for bad in (True, "40", 101):
+        with pytest.raises(ValueError):
+            inventory.open_spool(sm, s["id"], UID, RULES, humidity=bad, dry=False)
+    for bad in (True, "600", [1]):                          # remaining must be a number too
+        with pytest.raises(ValueError, match="remaining"):
+            inventory.open_spool(sm, s["id"], UID, RULES, remaining=bad, dry=False)
+    assert tags.stored(sm.get(f"spool/{s['id']}")) is None   # refused before linking
+
+
+def test_pick_sealed_lowest_id_sealed_spool(sm):
+    r = inventory.add_spools(sm, [item(name="Pick", count=3)], RULES, dry=False)
+    a, b, c = r.spool_ids
+    fid = sm.get(f"spool/{a}")["filament"]["id"]
+    inventory.open_spool(sm, a, UID, RULES, dry=False)       # a is opened: no longer sealed
+    assert inventory.pick_sealed(sm, fid) == b
+    assert inventory.pick_sealed(sm, 9999) is None
+    inventory.open_spool(sm, b, UID2, RULES, dry=False)
+    inventory.open_spool(sm, c, "4:77:91:e:9:22:89", RULES, dry=False)
+    assert inventory.pick_sealed(sm, fid) is None
+
+
+def test_tag_neighbours_one_byte_apart(sm):
+    a, b, c = (_spool(sm, name=n) for n in ("N1", "N2", "N3"))
+    inventory.link_tag(sm, a["id"], UID, force=False, dry=False)               # 4:77:90:e:9:22:89
+    inventory.link_tag(sm, b["id"], "4:77:90:e:9:22:8a", force=False, dry=False)  # last byte differs
+    inventory.link_tag(sm, c["id"], "4:78:91:e:9:22:89", force=False, dry=False)  # two bytes differ
+    assert inventory.tag_neighbours(sm, UID2) == [a["id"]]                     # 4:77:8f:... vs 4:77:90:...
+    assert sorted(inventory.tag_neighbours(sm, "04:77:90:0E:09:22:8B")) == [a["id"], b["id"]]
+    assert inventory.tag_neighbours(sm, UID) == [b["id"]]                      # its own spool is not a neighbour

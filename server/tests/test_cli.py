@@ -5,7 +5,7 @@ import sys
 
 import pytest
 
-from filament_kit import cli, config, pairing
+from filament_kit import cli, config, modules, pairing
 
 
 @pytest.fixture(autouse=True)
@@ -477,13 +477,12 @@ def _status_lines(capsys) -> list:
     return capsys.readouterr().out.splitlines()
 
 
-def test_status_fresh_install_profiles_lines_no_fail(capsys, spoolman_url):
+def test_status_fresh_install_profiles_lines_no_fail(capsys, spoolman_url, no_library):
     _status_setup(spoolman_url)
     assert cli.main(["status"], client_factory=_ok_client) == 0
     out = _status_lines(capsys)
     assert not any(ln.startswith("FAIL") for ln in out)
-    v = library_mod.load().version
-    assert f"--   library version {v} (bundled), 0 local additions" in out
+    assert "--   library not downloaded (filament-kit library update), 0 local additions" in out
     assert "--   profiles: no build yet (waiting for the PC sync)" in out
     assert "--   PC sync: not set up (see README: Pair your PC)" in out
 
@@ -549,7 +548,7 @@ def test_profiles_lines_and_set_parent(capsys, monkeypatch):
     out = capsys.readouterr().out
     assert "elegoo--petg-hf" in out and "Bambu PETG HF (library)" in out
     asked = []
-    monkeypatch.setattr(builds, "request_rebuild", lambda reason, live_hash=None: asked.append(reason))
+    monkeypatch.setattr(builds, "request_rebuild", lambda reason, live_hash=None, *, orca_live_hash=None: asked.append(reason))
     assert cli.main(["profiles", "set-parent", "elegoo--petg-hf", "Generic PETG"]) == 0
     line = lines_mod.load()["elegoo--petg-hf"]
     assert (line.bambu_parent, line.parent_source) == ("Generic PETG", "user")
@@ -569,7 +568,7 @@ def test_profiles_set_parent_unknown_with_store(capsys, monkeypatch):
     lines_mod.ensure_saved("ELEGOO", "PETG HF", "PETG", bambu_parent=None, library=lib, store=None)
     TB.pair("a")
     builds.store_upload("system", _io.BytesIO(TB.system_zip()), device_id="a")
-    monkeypatch.setattr(builds, "request_rebuild", lambda reason, live_hash=None: None)
+    monkeypatch.setattr(builds, "request_rebuild", lambda reason, live_hash=None, *, orca_live_hash=None: None)
     assert cli.main(["profiles", "set-parent", "elegoo--petg-hf", "No Such Preset"]) == 1
     assert "not a usable" in capsys.readouterr().err
     assert lines_mod.load()["elegoo--petg-hf"].parent_source == "library"
@@ -579,7 +578,7 @@ def test_profiles_status_and_restore_deleted(capsys, monkeypatch):
     assert cli.main(["profiles", "status"]) == 0
     assert "no build yet" in capsys.readouterr().out
     asked = []
-    monkeypatch.setattr(builds, "request_rebuild", lambda reason, live_hash=None: asked.append(reason))
+    monkeypatch.setattr(builds, "request_rebuild", lambda reason, live_hash=None, *, orca_live_hash=None: asked.append(reason))
     assert cli.main(["profiles", "restore-deleted"]) == 0
     assert (config.paths().state / "profiles" / "restore-deleted").exists() and asked
 
@@ -587,3 +586,78 @@ def test_profiles_status_and_restore_deleted(capsys, monkeypatch):
 def test_import_guard_removed():
     import inspect
     assert "ImportError" not in inspect.getsource(cli._request_rebuild)
+
+
+def test_profiles_lines_shows_orca_parent_and_set_parent_orca(capsys, monkeypatch):
+    import io as _io
+
+    import test_builds as TB
+    lib = library_mod.load()
+    lines_mod.ensure_saved("ELEGOO", "PETG HF", "PETG", bambu_parent=None, library=lib, store=None)
+    assert cli.main(["profiles", "lines"]) == 0
+    assert "orca Generic PETG (material)" in capsys.readouterr().out
+    asked = []
+    monkeypatch.setattr(builds, "request_rebuild", lambda reason, live_hash=None, *, orca_live_hash=None: asked.append(reason))
+    assert cli.main(["profiles", "set-parent", "elegoo--petg-hf", "Overture PLA Pro", "--orca"]) == 0
+    assert "Orca parent Overture PLA Pro (set by you)" in capsys.readouterr().out
+    line = lines_mod.load()["elegoo--petg-hf"]
+    assert (line.orca_parent, line.orca_parent_source) == ("Overture PLA Pro", "user")
+    assert line.parent_source == "library" and asked
+    assert cli.main(["profiles", "lines"]) == 0
+    assert "orca Overture PLA Pro (user)" in capsys.readouterr().out
+    # with an Orca store uploaded the name is checked against its library index
+    TB.pair("a")
+    builds.store_upload("orca_system", _io.BytesIO(TB.orca_system_zip()), device_id="a")
+    assert cli.main(["profiles", "set-parent", "elegoo--petg-hf", "No Such", "--orca"]) == 1
+    assert "not an Orca Slicer library preset" in capsys.readouterr().err
+    assert cli.main(["profiles", "set-parent", "elegoo--petg-hf", "Generic PETG @System", "--orca"]) == 1
+    assert "@" in capsys.readouterr().err
+    assert lines_mod.load()["elegoo--petg-hf"].orca_parent == "Overture PLA Pro"
+
+
+
+def test_profiles_set_parent_orca_canonical_spelling(capsys, monkeypatch):
+    import io as _io
+
+    import test_builds as TB
+    lines_mod.ensure_saved("ELEGOO", "PETG HF", "PETG", bambu_parent=None, library=library_mod.load(), store=None)
+    monkeypatch.setattr(builds, "request_rebuild", lambda reason, live_hash=None, *, orca_live_hash=None: None)
+    TB.pair("a")
+    builds.store_upload("orca_system", _io.BytesIO(TB.orca_system_zip()), device_id="a")
+    assert cli.main(["profiles", "set-parent", "elegoo--petg-hf", "generic petg", "--orca"]) == 0
+    assert "Orca parent Generic PETG (set by you)" in capsys.readouterr().out
+    assert lines_mod.load()["elegoo--petg-hf"].orca_parent == "Generic PETG"
+
+
+def test_profiles_help_mentions_orca(capsys):
+    with pytest.raises(SystemExit):
+        cli.main(["profiles", "--help"])
+    out = " ".join(capsys.readouterr().out.split())
+    assert "Bambu Studio and Orca Slicer presets" in out
+    assert "or with --orca the Orca Slicer library preset" in out
+
+
+# ---------- C-M7: a root-only file read as another user ----------
+
+@pytest.mark.parametrize("argv", [["modules", "list"], ["remote", "firewall"], ["migrate-ops", "bundle.tar.gz"]])
+def test_unreadable_config_says_run_with_sudo(argv, monkeypatch, capsys):
+    def denied(*a, **k):
+        raise PermissionError(13, "Permission denied", "/etc/filament-kit/config.json")
+
+    monkeypatch.setattr(config, "load", denied)
+    assert cli.main(argv) == 1
+    err = capsys.readouterr().err
+    assert "/etc/filament-kit/config.json" in err and f"sudo filament-kit {argv[0]}" in err
+    assert "Traceback" not in err
+
+
+def test_key_saved_with_ai_intake_off_says_how_to_turn_it_on(monkeypatch, capsys):
+    """R1: AI is optional; a key alone does not switch label reading on, so the menu says where to do that."""
+    cfg = config.load()
+    cfg["modules"] = {n: n in modules.MODES["server"] for n in modules.MODULES}
+    config.save(cfg)
+    monkeypatch.setattr(sys, "stdin", io.StringIO("4\n0\n"))
+    monkeypatch.setattr("getpass.getpass", lambda prompt="": "sk-ant-TOPSECRET")
+    assert cli.main(["config"]) == 0
+    out = capsys.readouterr().out
+    assert "Key saved." in out and "ai_intake" in out and "6) Modules" in out

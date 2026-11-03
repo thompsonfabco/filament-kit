@@ -44,8 +44,7 @@ def test_intake_off_returns_module_off():
     assert r.status_code == 409
     body = r.json()
     assert body["error"] == "module_off" and body["module"] == "ai_intake"
-    for method, path in (("POST", "/api/intake/retry/abc"), ("POST", "/api/intake/add")):
-        assert c.request(method, path, headers=auth()).json()["module"] == "ai_intake"
+    assert c.post("/api/intake/retry/abc", headers=auth()).json()["module"] == "ai_intake"
 
 
 def test_gated_route_still_needs_pairing():
@@ -200,6 +199,9 @@ def test_main_with_printers_builds_bridge(monkeypatch):
 
         def state(self, s):
             return "not_configured"
+
+        def add_listener(self, fn):
+            pass
     monkeypatch.setattr(m, "Manager", Fake)
     monkeypatch.setattr(m.usage, "Tracker", Fake)
     monkeypatch.setattr(m.camera, "Hub", Fake)
@@ -207,3 +209,14 @@ def test_main_with_printers_builds_bridge(monkeypatch):
     monkeypatch.setattr(m, "serve", lambda app, hub, **kw: None)
     m.main()
     assert len(built) == 4
+
+
+def test_manual_add_works_without_ai_intake():
+    """R1: adding spools by hand needs no AI: /api/intake/add answers (here: the bad body), not module_off."""
+    c = app(MODES["server"])
+    assert "ai_intake" not in MODES["server"]
+    r = c.post("/api/intake/add", headers=auth(), json={"items": []})
+    assert (r.status_code, r.json()["error"]) == (400, "bad_request")
+    for path in ("/api/filaments", "/api/vendors"):  # Spoolman is down here: answered, not gated
+        assert c.get(path, headers=auth()).json()["error"] == "spoolman_unreachable"
+    assert c.post("/api/intake/add", json={"items": []}).status_code == 401

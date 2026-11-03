@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "source": "OrcaFilamentLibrary.opc 2026-11-01T05:06:00Z",
+  "presets": [
+    {"name": "Generic PLA @System", "setting_id": "OGFSL99", "filament_id": "OGFL99", "filament_type": "PLA", "inherits": null},
+    {"name": "Generic PETG @System", "setting_id": "OGFSG99", "filament_id": "OGFG99", "filament_type": "PETG", "inherits": null},
+    {"name": "Generic TPU @System", "setting_id": "OGFSU99", "filament_id": "OGFU99", "filament_type": "TPU", "inherits": null},
+    {"name": "Generic PPS @System", "setting_id": null, "filament_id": null, "filament_type": "PPS", "inherits": null},
+    {"name": "Generic PLA Silk @System", "setting_id": "OGFSL98", "filament_id": "OGFL98", "filament_type": "PLA", "inherits": "Generic PLA @System"},
+    {"name": "SUNLU PLA+ 2.0 @System", "setting_id": "8EZyKHm5JquwOtfP", "filament_id": "OGFSNL04", "filament_type": "PLA", "inherits": null},
+    {"name": "Overture PLA Pro @System", "setting_id": "pynx7PjoLrNXAj6f", "filament_id": "OGFOVR01", "filament_type": "PLA", "inherits": null}
+  ]
+}

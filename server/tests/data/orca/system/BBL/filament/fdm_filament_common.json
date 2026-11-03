@@ -1,0 +1,40 @@
+{
+	"type": "filament",
+	"name": "fdm_filament_common",
+	"from": "system",
+	"instantiation": "false",
+	"filament_density": [
+		"0"
+	],
+	"filament_flow_ratio": [
+		"1"
+	],
+	"filament_max_volumetric_speed": [
+		"12"
+	],
+	"filament_type": [
+		"PLA"
+	],
+	"filament_vendor": [
+		"Generic"
+	],
+	"filament_extruder_variant": [
+		"Direct Drive Standard"
+	],
+	"hot_plate_temp": [
+		"60"
+	],
+	"nozzle_temperature_range_low": [
+		"190"
+	],
+	"nozzle_temperature_range_high": [
+		"240"
+	],
+	"nozzle_temperature": [
+		"200"
+	],
+	"compatible_printers": [],
+	"filament_start_gcode": [
+		"; filament start gcode\n"
+	]
+}

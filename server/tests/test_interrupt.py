@@ -90,10 +90,10 @@ def test_snapshot_saved_before_the_first_write_and_deleted_after_restore(rig, mo
     seen = []
     real = m.set_slot
 
-    def spy(serial, ams_id, tray_id, setting, timeout=None):
+    def spy(serial, ams_id, tray_id, setting, timeout=None, kind=None):
         if not seen:
             seen.append(snapshot.load(SERIAL))
-        return real(serial, ams_id, tray_id, setting, timeout)
+        return real(serial, ams_id, tray_id, setting, timeout, kind=kind)
     monkeypatch.setattr(m, "set_slot", spy)
     res = slottest.run(m, SERIAL, lambda t: None)
     assert res.restored is True
@@ -241,7 +241,7 @@ def test_stale_restore_leaves_a_slot_the_owner_changed_since(rig):
     assert snapshot.restore(m, SERIAL) == []
     assert sorted({(w["ams_id"], w["tray_id"]) for w in printer.writes}) == [(0, 0), (0, 1)]
     assert printer.tray(0, 2)["tray_color"] == "123456FF"
-    assert_back_to_original(printer, ["A1", "A2", "A4", "HT-A", "Ext"])
+    assert_back_to_original(printer, ["A1", "A2", "A4", "HT-A", "Ext-L"])
     assert not snapshot.pending(SERIAL)
 
 

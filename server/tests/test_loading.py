@@ -209,7 +209,7 @@ def test_per_extruder_nozzle_follows_the_slots_unit(rig, sm, fil):
     presets = FakePresets()
     a = loading.load(m, sm, SERIAL, "A2", s["id"], True, preset_for=presets)
     ht = loading.load(m, sm, SERIAL, "HT-A", s["id"], True, preset_for=presets)
-    ext = loading.load(m, sm, SERIAL, "Ext", s["id"], True, preset_for=presets)   # unit unknown: nozzle id 0
+    ext = loading.load(m, sm, SERIAL, "Ext-L", s["id"], True, preset_for=presets)   # unit unknown: nozzle id 0
     assert [c[2] for c in presets.calls] == [0.6, 0.4, 0.4]
     assert not (a["nozzle_assumed"] or ht["nozzle_assumed"] or ext["nozzle_assumed"])
 
@@ -224,14 +224,151 @@ def test_no_unit_info_uses_nozzle_0(rig, sm, fil):
 
 
 @pytest.mark.parametrize("dry", [False, True])
-def test_busy_refuses(rig, sm, fil, dry):
+def test_active_slot_refused_mid_print(rig, sm, fil, dry):
+    """Ruling BK: the slot that feeds the running print is refused with SlotInUse (API: slot_in_use)."""
     m, printer, client = rig
-    printer.push({"gcode_state": "RUNNING"})
+    printer.push({"gcode_state": "RUNNING", "ams": {"tray_now": "1"}})      # legacy 1 = AMS 0 tray 1 = A2
     assert m.wait_report(SERIAL, lambda r: r.get("gcode_state") == "RUNNING", 2)
     s = spool(sm, fil, "Rack 1")
-    with pytest.raises(slottest.PrinterBusy):
+    with pytest.raises(loading.SlotInUse, match="A2"):
         loading.load(m, sm, SERIAL, "A2", s["id"], dry, preset_for=FakePresets())
     assert settings(client) == [] and sm.get(f"spool/{s['id']}")["location"] == "Rack 1"
+
+
+def test_active_slot_by_extruder_snow_refused_mid_print(rig, sm, fil):
+    m, printer, client = rig
+    printer.push({"gcode_state": "RUNNING", "ams": {"tray_now": "255"},
+                  "device": {"extruder": {"info": [{"id": 0, "snow": 0xFFFF}, {"id": 1, "snow": (128 << 8) | 0}]}}})
+    assert m.wait_report(SERIAL, lambda r: r.get("gcode_state") == "RUNNING", 2)
+    s = spool(sm, fil, "Rack 1")
+    with pytest.raises(loading.SlotInUse):
+        loading.load(m, sm, SERIAL, "HT-A", s["id"], False, preset_for=FakePresets())
+    assert settings(client) == []
+
+
+def test_mid_print_load_into_another_slot_goes_through(rig, sm, fil):
+    """Ruling BK: a print does not block a load into a slot it is not feeding (the scanner's behaviour)."""
+    m, printer, client = rig
+    # printing from A1 (the H2D has two nozzles and no snow here: the job's mapping names its slots, Ruling BM)
+    printer.push({"gcode_state": "RUNNING", "ams": {"tray_now": "0"}, "mapping": [0]})
+    assert m.wait_report(SERIAL, lambda r: r.get("gcode_state") == "RUNNING", 2)
+    s = spool(sm, fil, "Rack 1")
+    r = loading.load(m, sm, SERIAL, "A2", s["id"], False, preset_for=FakePresets())
+    assert len(settings(client)) == 1 and int(settings(client)[0]["tray_id"]) == 1
+    assert r["spool"]["location"] == LOC_A2
+
+
+def test_dual_nozzle_without_snow_refuses_every_slot_of_the_job_mapping(rig, sm, fil):
+    """Ruling BM: on a model with two nozzles and no `snow`, tray_now shows one nozzle only; every slot in the
+    running job's mapping is in use (HT-A here, on the other nozzle), a slot outside it is still free."""
+    m, printer, client = rig
+    printer.push({"gcode_state": "RUNNING", "ams": {"tray_now": "0"}, "mapping": [0, 128]})   # A1 + HT-A
+    assert m.wait_report(SERIAL, lambda r: r.get("mapping") == [0, 128], 2)
+    s = spool(sm, fil, "Rack 1")
+    with pytest.raises(loading.SlotInUse, match="HT-A is used by the print"):
+        loading.load(m, sm, SERIAL, "HT-A", s["id"], False, preset_for=FakePresets())
+    assert settings(client) == []
+    loading.load(m, sm, SERIAL, "A2", s["id"], True, preset_for=FakePresets())        # not in the mapping
+
+
+def test_dual_nozzle_job_without_mapping_fails_closed(rig, sm, fil):
+    m, printer, client = rig
+    printer.push({"gcode_state": "RUNNING", "ams": {"tray_now": "0"}})
+    assert m.wait_report(SERIAL, lambda r: r.get("gcode_state") == "RUNNING", 2)
+    s = spool(sm, fil, "Rack 1")
+    with pytest.raises(loading.SlotInUse, match="does not say yet"):
+        loading.load(m, sm, SERIAL, "A2", s["id"], True, preset_for=FakePresets())
+
+
+def pushalls(client):
+    return sum(1 for _, b in client.published if b.get("pushing", {}).get("command") == "pushall")
+
+
+def test_missing_mapping_asks_for_a_pushall_at_most_every_30_s(rig, sm, fil, monkeypatch):
+    """A dual-nozzle job without a mapping: the refusal asks the printer for a full report (the mapping comes back
+    with it) instead of refusing every load for the whole print; at most once per 30 s per printer."""
+    m, printer, client = rig
+    clock = [1000.0]
+    monkeypatch.setattr(loading, "_clock", lambda: clock[0])
+    monkeypatch.setattr(loading, "_PUSHALL_AT", {})
+    printer.push({"gcode_state": "RUNNING", "ams": {"tray_now": "0"}})
+    assert m.wait_report(SERIAL, lambda r: r.get("gcode_state") == "RUNNING", 2)
+    s = spool(sm, fil, "Rack 1")
+    before = pushalls(client)
+    with pytest.raises(loading.SlotInUse, match="does not say yet"):
+        loading.load(m, sm, SERIAL, "A2", s["id"], True, preset_for=FakePresets())
+    assert pushalls(client) == before + 1
+    clock[0] += 29
+    with pytest.raises(loading.SlotInUse, match="does not say yet"):
+        loading.load(m, sm, SERIAL, "A2", s["id"], True, preset_for=FakePresets())
+    with pytest.raises(loading.SlotInUse, match="does not say yet"):
+        loading.unload(m, sm, SERIAL, "A2", True)
+    assert pushalls(client) == before + 1                                   # within 30 s: not again
+    clock[0] += 2
+    with pytest.raises(loading.SlotInUse, match="does not say yet"):
+        loading.load(m, sm, SERIAL, "A2", s["id"], True, preset_for=FakePresets())
+    assert pushalls(client) == before + 2
+
+
+def test_a_feeding_slot_refusal_asks_for_no_pushall(rig, sm, fil, monkeypatch):
+    m, printer, client = rig
+    monkeypatch.setattr(loading, "_PUSHALL_AT", {})
+    printer.push({"gcode_state": "RUNNING", "ams": {"tray_now": "1"}, "mapping": [1]})
+    assert m.wait_report(SERIAL, lambda r: r.get("mapping") == [1], 2)
+    s = spool(sm, fil, "Rack 1")
+    before = pushalls(client)
+    with pytest.raises(loading.SlotInUse, match="feeds the print"):
+        loading.load(m, sm, SERIAL, "A2", s["id"], True, preset_for=FakePresets())
+    assert pushalls(client) == before
+
+
+def test_unknown_model_counts_as_multi_nozzle(rig, sm, fil):
+    """Ruling BM for an unknown model: its nozzle count is not known, so without `snow` the job's mapping decides,
+    and a job without a mapping refuses every slot, as on a dual-nozzle model."""
+    m, printer, client = rig
+    registry.upsert(Printer(SERIAL, NAME, "ZZ9", "10.0.0.5", "13572468", True))      # a code nobody knows
+    printer.push({"gcode_state": "RUNNING", "ams": {"tray_now": "0"}})
+    assert m.wait_report(SERIAL, lambda r: r.get("gcode_state") == "RUNNING", 2)
+    now = m.wait_report(SERIAL, lambda r: True, 0)
+    assert "does not say yet" in (loading.in_use(SERIAL, "ZZ9", now, 0, 1, "A2") or "")
+    assert loading.in_use(SERIAL, "C12", now, 0, 1, "A2") is None                    # known single nozzle: per slot
+
+
+@pytest.mark.parametrize("model", ["", "ZZ9", None])
+def test_unknown_model_takes_the_nozzle_count_from_the_report(model):
+    """Ruling BR: a hand-added printer (model "") or an unknown code: the report's extruder list says how many
+    nozzles it has; only when the report does not say either is it guarded as more than one."""
+    one = {"gcode_state": "RUNNING", "ams": {"tray_now": "0"},
+           "device": {"extruder": {"info": [{"id": 0, "temp": 0}]}}}
+    two = {"gcode_state": "RUNNING", "ams": {"tray_now": "0"},
+           "device": {"extruder": {"info": [{"id": 0, "temp": 0}, {"id": 1, "temp": 0}]}}}
+    silent = {"gcode_state": "RUNNING", "ams": {"tray_now": "0"}}
+    assert loading.in_use(SERIAL, model, one, 0, 1, "A2") is None
+    assert "does not say yet" in loading.in_use(SERIAL, model, two, 0, 1, "A2")
+    assert "does not say yet" in loading.in_use(SERIAL, model, silent, 0, 1, "A2")
+    # a known model keeps its own count whatever the report shows
+    assert "does not say yet" in loading.in_use(SERIAL, "O1D", one, 0, 1, "A2")
+
+
+def test_single_nozzle_model_needs_no_mapping(rig, sm, fil):
+    m, printer, client = rig
+    registry.upsert(Printer(SERIAL, NAME, "C12", "10.0.0.5", "13572468", True))      # P1S: one nozzle
+    printer.push({"gcode_state": "RUNNING", "ams": {"tray_now": "0"}})
+    assert m.wait_report(SERIAL, lambda r: r.get("gcode_state") == "RUNNING", 2)
+    s = spool(sm, fil, "Rack 1")
+    assert loading.in_use(SERIAL, "C12", m.wait_report(SERIAL, lambda r: True, 0), 0, 1, "A2") is None
+    with pytest.raises(loading.SlotInUse):
+        loading.load(m, sm, SERIAL, "A1", s["id"], True, preset_for=FakePresets())
+
+
+def test_unload_of_the_active_slot_is_refused_mid_print(rig, sm, fil):
+    m, printer, client = rig
+    printer.push({"gcode_state": "RUNNING", "ams": {"tray_now": "1"}})
+    assert m.wait_report(SERIAL, lambda r: r.get("gcode_state") == "RUNNING", 2)
+    s = spool(sm, fil, LOC_A2, prev="Rack 1")
+    with pytest.raises(loading.SlotInUse):
+        loading.unload(m, sm, SERIAL, "A2", False)
+    assert sm.get(f"spool/{s['id']}")["location"] == LOC_A2
 
 
 def test_offline_refuses(rig, sm, fil):
@@ -314,10 +451,11 @@ def test_external_and_ht_slots(rig, sm, fil):
     m, printer, client = rig
     s1 = spool(sm, fil, "Rack 1")
     s2 = spool(sm, fil, "Rack 1")
-    assert loading.load(m, sm, SERIAL, "Ext", s1["id"], False, preset_for=FakePresets())["confirmed"]
+    assert loading.load(m, sm, SERIAL, "Ext-L", s1["id"], False, preset_for=FakePresets())["confirmed"]
     assert loading.load(m, sm, SERIAL, "HT-A", s2["id"], False, preset_for=FakePresets())["confirmed"]
-    assert [(w["ams_id"], w["tray_id"]) for w in settings(client)] == [(254, 0), (128, 0)]
-    assert sm.get(f"spool/{s1['id']}")["location"] == "Office H2D – AMS Ext"
+    # an external holder: tray_id = ams_id, slot_id 0 (P2, the H2D rule); an AMS HT slot as before
+    assert [(w["ams_id"], w["tray_id"], w.get("slot_id")) for w in settings(client)] == [(254, 254, 0), (128, 0, None)]
+    assert sm.get(f"spool/{s1['id']}")["location"] == "Office H2D – AMS Ext-L"
     assert sm.get(f"spool/{s2['id']}")["location"] == "Office H2D – AMS HT-A"
 
 
@@ -524,3 +662,13 @@ def test_real_flock_mapping_refused_while_another_process_loads(rig, tmp_path):
             mapping.Mapper(m).start(SERIAL)
         assert mapping.Mapper(m).in_progress(SERIAL) is False
         fcntl.flock(other.fileno(), fcntl.LOCK_UN)
+
+
+def test_calibrated_external_missing_from_the_report_keeps_kind_ext(rig):
+    """P3 (P2 review minor): a calibrated map's external holder the live report does not list (no vir_slot entry
+    right now) is still addressed as an external of the model, never as an AMS slot."""
+    ams.save_map(SERIAL, ams.SlotMap(slots={"Ext-R": {"ams_id": 255, "tray_id": 0, "global_id": 255}},
+                                     calibrated=True))
+    assert loading._address(SERIAL, {"ams": {"ams": []}}, "Ext-R") == (255, 0, "ext", None)
+    ams.save_map(SERIAL, ams.SlotMap(slots={"A9": {"ams_id": 9, "tray_id": 0, "global_id": 36}}, calibrated=True))
+    assert loading._address(SERIAL, {"ams": {"ams": []}}, "A9") == (9, 0, None, None)

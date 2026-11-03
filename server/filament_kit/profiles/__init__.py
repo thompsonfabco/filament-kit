@@ -9,7 +9,7 @@ sync's live upload. No build yet, an unknown model or a nozzle without a preset 
 `no_preset`).
 
 Modules: `builds` (sync storage, builds with last-good fallback), `index` (preset_for), `generate`, `lines`,
-`values`, `inapp`, `bbl`, `errors`.
+`values`, `inapp`, `bbl`, `orca` (the Orca Slicer system store), `errors`.
 """
 from __future__ import annotations
 

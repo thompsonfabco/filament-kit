@@ -41,9 +41,22 @@ DEFAULTS: dict = {
         "sealed_location": "Sealed stock",
     },
     "printers": [],
+    "auto_remap": True,         # re-map a printer's slots by itself (when idle) after its AMS layout changed
     "library": {"url": None, "schedule": "daily"},
     "station": {"url": None, "allow": ["127.0.0.1"], "port": 5003,
-                "nfc_device": "auto", "beep": True, "beep_device": ""},
+                "nfc_device": "auto", "beep": True, "beep_device": "",
+                "speech": True, "camera": "auto", "panel_flash": True},
+    # merge-ops: web unit, remote access, orders file, tag readers, slot service, slicer/presets/intake extras
+    "web": {"port": 8101, "public_url": None, "push": False,   # push: Web Push alerts (needs internet egress)
+            "lan": ["192.168.0.0/16", "10.0.0.0/8"]},   # not 172.16/12: Docker's bridges live there (A-M6)
+    "remote": {"hostname": None, "acme_window": None, "email": None},
+    "orders": {"file": None},
+    "tag_sources": [],          # [{"name": str, "url": str}]: extra readers speaking the lasttag shape
+    "slot_service": None,       # {"state_url", "set_url", "token_file"}
+    "slicer_printers": [],
+    "presets_orca": False,
+    "intake": {"tare_hints": {}, "model": None},
+    "web_instructions": None,
 }
 
 

@@ -14,7 +14,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Callable
 
-from . import ams, snapshot, status
+from . import ams, layout, snapshot, status
 from .connection import PrinterOffline, UnknownPrinter
 
 log = logging.getLogger(__name__)
@@ -51,6 +51,7 @@ class _Target:
     ams_id: int
     tray_id: int
     snap: dict
+    kind: str | None = None        # the unit's kind ("ext": the model's external addressing)
 
 
 def check_idle(manager, serial: str) -> None:
@@ -85,15 +86,7 @@ def _busy(report: dict) -> bool:
 
 
 def _raw_tray(report: dict, unit: ams.Unit, slot: ams.Slot) -> dict:
-    p = status._d(report)
-    if unit.label == ams.EXT:
-        return status._d(p.get('vt_tray'))
-    for u in status._l(status._d(p.get('ams')).get('ams')):
-        if status._int(u.get('id')) == unit.ams_id:
-            for t in status._l(u.get('tray')):
-                if status._int(t.get('id')) == slot.tray_id:
-                    return t
-    return {}
+    return layout.raw_trays(report).get((unit.ams_id, slot.tray_id), {})
 
 
 def _snapshot(t: dict) -> dict:
@@ -101,8 +94,8 @@ def _snapshot(t: dict) -> dict:
         {k: t.get(k) for k in ('nozzle_temp_min', 'nozzle_temp_max')}
 
 
-def _slots(report: dict) -> dict[str, ams.Slot]:
-    return {s.label: s for u in ams.units(report) for s in u.slots}
+def _slots(report: dict, model=None) -> dict[str, ams.Slot]:
+    return {s.label: s for u in ams.units(report, model) for s in u.slots}
 
 
 def _norm(colour: str) -> str:
@@ -110,14 +103,14 @@ def _norm(colour: str) -> str:
     return '' if c in ('', '00000000') else c
 
 
-def _showing(report: dict, colour: str) -> list[str]:
+def _showing(report: dict, colour: str, model=None) -> list[str]:
     """Labels whose slot shows `colour`."""
     c = _norm(colour)
-    return [lab for lab, s in _slots(report).items() if _norm(s.color) == c]
+    return [lab for lab, s in _slots(report, model).items() if _norm(s.color) == c]
 
 
-def _matches(report: dict, t: _Target) -> bool:
-    s = _slots(report).get(t.label)
+def _matches(report: dict, t: _Target, model=None) -> bool:
+    s = _slots(report, model).get(t.label)
     return s is not None and s.preset == t.snap['tray_info_idx'] and s.type == t.snap['tray_type'] and \
         _norm(s.color) == _norm(t.snap['tray_color'])
 
@@ -161,9 +154,10 @@ def run(manager, serial: str, on_step: Callable[[str], None],
     if report is None:
         raise PrinterOffline(serial)
     targets = []
-    for u in ams.units(report):
+    model = ams.printer_model(serial)
+    for u in ams.units(report, model):
         for s in u.slots:
-            targets.append(_Target(s.label, u.ams_id, s.tray_id, _snapshot(_raw_tray(report, u, s))))
+            targets.append(_Target(s.label, u.ams_id, s.tray_id, _snapshot(_raw_tray(report, u, s)), u.kind))
     by_label = {t.label: t for t in targets}
     # a slot's colour is its own even when it looks like a test colour (a real near-red spool): an interrupted
     # run is covered by the snapshot on disk, which `snapshot.pending` above already made the caller restore
@@ -212,7 +206,7 @@ def run(manager, serial: str, on_step: Callable[[str], None],
             colours.add(colour)
             current[:] = [t]
             try:
-                reply = manager.set_slot(serial, t.ams_id, t.tray_id, dict(t.snap, tray_color=colour))
+                reply = manager.set_slot(serial, t.ams_id, t.tray_id, dict(t.snap, tray_color=colour), kind=t.kind)
             except (PrinterOffline, UnknownPrinter):
                 mark(t)                  # it may have reached the printer before the drop
                 abort = "printer_offline: the printer went offline; slot test stopped"
@@ -232,7 +226,7 @@ def run(manager, serial: str, on_step: Callable[[str], None],
                 continue
             mark(t)
             current.clear()
-            r = manager.wait_report(serial, lambda r, c=colour: _busy(r) or bool(_showing(r, c)), CONFIRM_TIMEOUT)
+            r = manager.wait_report(serial, lambda r, c=colour: _busy(r) or bool(_showing(r, c, model)), CONFIRM_TIMEOUT)
             if r is None:
                 if manager.state(serial) not in ONLINE:
                     abort = "printer_offline: the printer went offline; slot test stopped"
@@ -241,7 +235,7 @@ def run(manager, serial: str, on_step: Callable[[str], None],
                                     f"{CONFIRM_TIMEOUT:g} s)")
                 reported.add(t.label)
                 continue
-            where = _showing(r, colour)
+            where = _showing(r, colour, model)
             for lab in where:                # before any abort: wherever the colour landed gets restored
                 if lab in by_label:
                     mark(by_label[lab])
@@ -285,18 +279,19 @@ def run(manager, serial: str, on_step: Callable[[str], None],
 
 def _restore(manager, serial: str, res: SlotTestResult, changed: list[_Target], colours: set[str], step) -> None:
     """Put every changed slot back to its snapshot and confirm it; then check no test colour is left anywhere."""
+    model = ams.printer_model(serial)
     # unconfirmed addresses first, so a mis-addressed write is overwritten by the right slot's restore
     order = [t for t in changed if t.label not in res.confirmed] + [t for t in changed if t.label in res.confirmed]
     for t in order:
         step(f"Restoring slot {t.label}")
         try:
-            reply = manager.set_slot(serial, t.ams_id, t.tray_id, t.snap)
+            reply = manager.set_slot(serial, t.ams_id, t.tray_id, t.snap, kind=t.kind)
             if _failed(reply):
                 res.problems.append(f"{t.label}: restore refused ({_reason(reply)}); "
                                     f"its test colour may still be set")
                 res.restored = False
                 continue
-            if manager.wait_report(serial, lambda r, t=t: _matches(r, t), CONFIRM_TIMEOUT) is None:
+            if manager.wait_report(serial, lambda r, t=t: _matches(r, t, model), CONFIRM_TIMEOUT) is None:
                 res.problems.append(f"{t.label}: restore not confirmed (no report showed its original setting "
                                     f"within {CONFIRM_TIMEOUT:g} s)")
                 res.restored = False
@@ -313,7 +308,7 @@ def _restore(manager, serial: str, res: SlotTestResult, changed: list[_Target], 
         final = manager.wait_report(serial, lambda r: True, 0)
         if final is not None:
             left = {_norm(c) for c in colours}
-            for lab, s in _slots(final).items():
+            for lab, s in _slots(final, model).items():
                 if _norm(s.color) in left:
                     res.problems.append(f"{lab}: test colour {s.color} still in the slot")
                     res.restored = False

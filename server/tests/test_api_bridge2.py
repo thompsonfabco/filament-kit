@@ -66,7 +66,7 @@ class FakeManager:
             return None
         return self.report if predicate(self.report) else None
 
-    def set_slot(self, serial, ams_id, tray_id, setting):
+    def set_slot(self, serial, ams_id, tray_id, setting, kind=None):
         self.writes.append((ams_id, tray_id, dict(setting)))
         if self.reply.get("result") == "success":
             for u in self.report["ams"]["ams"]:
@@ -184,7 +184,7 @@ def test_map_none_before_any_job(client):
     r = client.get(f"/api/printers/{SERIAL}/map")
     assert r.status_code == 200
     assert r.json() == {"state": "none", "step": "", "slots": [], "calibrated": False, "observe": True,
-                        "problems": []}
+                        "problems": [], "stale": False, "remapping": False, "scheme": None, "suspect": False}
 
 
 def test_map_job_runs_and_reports(client, stubs, caplog):
@@ -205,7 +205,8 @@ def test_map_job_runs_and_reports(client, stubs, caplog):
     assert sorted(body["slots"], key=lambda s: s["label"]) == [
         {"label": "A1", "ams_id": 0, "tray_id": 0, "global": 0},
         {"label": "A2", "ams_id": 0, "tray_id": 1, "global": 1}]
-    assert set(body) == {"state", "step", "slots", "calibrated", "observe", "problems"}
+    assert set(body) == {"state", "step", "slots", "calibrated", "observe", "problems", "stale", "remapping",
+                         "scheme", "suspect"}
     audit = [rec.getMessage() for rec in caplog.records if "slot mapping" in rec.getMessage()]
     assert any(f"serial={SERIAL}" in a and "device_id=" in a for a in audit)
 
@@ -276,8 +277,14 @@ def test_load_no_preset(client, mgr):
 def test_load_busy_offline_cert_changed(client, mgr, monkeypatch):
     preset(monkeypatch)
     url = f"/api/printers/{SERIAL}/slots/A1/load"
+    # Ruling BK: mid-print, only the slot that feeds the job is refused (slot_in_use); another slot goes through
     mgr.report["gcode_state"] = "PREPARE"
-    err(client.post(url, json={"spool_id": 1, "dry_run": False}), 409, "printer_busy")
+    mgr.report["ams"]["tray_now"] = "0"                  # A1 feeds the job
+    err(client.post(url, json={"spool_id": 1, "dry_run": False}), 409, "slot_in_use")
+    assert mgr.writes == []
+    mgr.report["ams"]["tray_now"] = "1"                  # A2 feeds it: A1 is free
+    mgr.report["mapping"] = [1]                          # the job uses A2 only (dual nozzle, no snow: Ruling BM)
+    assert client.post(url, json={"spool_id": 1, "dry_run": True}).status_code == 200
     mgr.report["gcode_state"] = "IDLE"
     mgr.st = "offline"
     err(client.post(url, json={"spool_id": 1, "dry_run": False}), 409, "printer_offline")
@@ -326,7 +333,7 @@ def test_load_write_refused_needs_developer_mode(client, mgr, monkeypatch):
     preset(monkeypatch)
     mgr.reply = {"result": "fail", "reason": "mqtt message verify failed", "err_code": 84033543}
 
-    def refuse(serial, ams_id, tray_id, setting):
+    def refuse(serial, ams_id, tray_id, setting, kind=None):
         mgr.st = "needs_developer_mode"      # the Manager flags it on such a reply
         return mgr.reply
     mgr.set_slot = refuse

@@ -30,8 +30,8 @@ $ErrorActionPreference = 'Stop'
 $dir = Join-Path $env:LOCALAPPDATA 'filament-kit'
 $jks = Join-Path $dir 'release.jks'
 $pwFile = Join-Path $dir 'keystore.pw.dpapi'
-# Prefer the JDK in JAVA_HOME; the dev PC's JDK 21 is the fallback.
-$keytool = '<local path>\bin\keytool.exe'
+# The JDK in JAVA_HOME, else keytool on PATH.
+$keytool = 'keytool.exe'
 if ($env:JAVA_HOME -and (Test-Path (Join-Path $env:JAVA_HOME 'bin\keytool.exe'))) {
     $keytool = Join-Path $env:JAVA_HOME 'bin\keytool.exe'
 }

@@ -14,11 +14,14 @@ dependencies = [
     "anthropic>=2.3.0",  # fallbacks= on beta.messages.create
     "cryptography>=44",
     "paho-mqtt>=2.0",
+    "defusedxml==0.7.1",  # hardware XML: no DTD, entities or external references
 ]
 
 [project.optional-dependencies]
 test = ["pytest", "httpx", "pyftpdlib>=2.0", "pyopenssl>=24"]  # pyftpdlib + pyopenssl: the fake printer FTPS server
-station = ["nfcpy==1.0.4", "pyserial>=3.5"]
+station = ["nfcpy==1.0.4", "pyserial>=3.5", "esptool==5.6.0"]
+web = ["mcp==2.3.0"]  # exact: the web unit imports SDK internals and install.sh upgrades; the server process never imports it
+push = ["pywebpush>=2.0,<3"]  # only for config web.push (Printers tab alerts); the sender imports it when used
 
 [project.scripts]
 filament-kit = "filament_kit.cli:main"
@@ -28,7 +31,7 @@ include = ["filament_kit*"]
 namespaces = false  # library_data/ is package data, not a namespace package
 
 [tool.setuptools.package-data]
-filament_kit = ["library_data/*.json", "library_data/schema/*.json", "library_data/library/*/*.json"]
+filament_kit = ["web/static/*", "library_data/*.json", "library_data/schema/*.json", "bridge/*.xml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,4 +1,4 @@
-"""Test guard: no pc-sync test may see the real %APPDATA% / %LOCALAPPDATA%.
+"""Test guard: no pc-sync test may see the real %APPDATA% / %LOCALAPPDATA% / %ProgramFiles%.
 
 Every test gets APPDATA and LOCALAPPDATA pointed at its own tmp_path, so code that
 falls back to the environment can only ever reach a fixture tree.
@@ -23,4 +23,6 @@ def _fake_appdata(tmp_path, monkeypatch):
     local.mkdir()
     monkeypatch.setenv("APPDATA", str(appdata))
     monkeypatch.setenv("LOCALAPPDATA", str(local))
+    for var in ("ProgramFiles", "ProgramW6432", "ProgramFiles(x86)"):   # the Orca Slicer install search
+        monkeypatch.setenv(var, str(tmp_path / "programfiles"))
     yield
