@@ -103,10 +103,11 @@ def test_summarize_lists_the_external_spool_holder():
     assert status.summarize({"vt_tray": {"id": "x"}}, [])["ams"][0]["unit"] == 254
 
 def test_labels_for_more_units():
-    assert status.unit_label(3) == ("D", "ams")
-    assert status.slot_label(3, 3) == "D4"
-    assert status.unit_label(130) == ("HT-C", "ams_ht")
-    assert status.slot_label(130, 0) == "HT-C"
+    # one label builder (final review M3): layout.label_for; status's id-only helpers are gone
+    from filament_kit.bridge import layout
+    assert not hasattr(status, "unit_label") and not hasattr(status, "slot_label")
+    assert layout.label_for(3, 3) == "D4"
+    assert layout.label_for(130, 0) == "HT-C"
     assert status.tray_now_tag("129") == "129:0"
     assert status.tray_now_tag(254) == "254:0" and status.tray_now_tag(255) is None
     assert status.tray_now_tag("6") == "1:2"
