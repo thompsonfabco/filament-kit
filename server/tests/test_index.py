@@ -147,3 +147,20 @@ def test_recorded_line_wins_over_a_longer_library_prefix(built, monkeypatch):
     # an explicit line the build doesn't have yet: the map still gives the recorded line
     elsewhere = dict(SUNLU[0], extra={"line": json.dumps("PLA+ 3.0")})
     assert profiles.preset_for(elsewhere, "O1D", 0.4).name == NAME
+
+
+def test_orca_rows_never_serve_the_ams(built):
+    """Task 6: an Orca preset of the same line, printer and nozzle (listed first) is not the AMS preset; a row
+    without `target` (a build made before the Orca target) still counts as Bambu Studio."""
+    fid, stamp = built
+    path = config.paths().state / "profiles" / "builds" / stamp / "BUILD.json"
+    m = json.loads(path.read_text(encoding="utf-8"))
+    row = next(p for p in m["presets"] if p["name"] == NAME)
+    orca_row = dict(row, name="SUNLU PLA+ 2.0 @H2D 0.4", target="orca", filament_id="Pdeadbe1")
+    m["presets"].insert(0, orca_row)
+    path.write_text(json.dumps(m), encoding="utf-8")
+    _tamper(stamp, lambda p: None)
+    got = profiles.preset_for(SUNLU[0], "O1D", 0.4)
+    assert got is not None and got.name == NAME and got.filament_id == fid
+    _tamper(stamp, lambda p: p.update(target="bambu_studio"))
+    assert profiles.preset_for(SUNLU[0], "O1D", 0.4).name == NAME

@@ -69,9 +69,24 @@ def test_build_path_unit():
 def test_install_ships_units_and_state_dirs():
     """install.sh copies the units as resources; `modules apply` installs and enables them (apply.plan)."""
     text = _text(INSTALL / "install.sh")
-    assert 'cp -R "$RES/systemd" "$RES/avahi" "$OPT/resources/"' in text
+    assert 'cp -R "$RES/systemd" "$RES/avahi" "$RES/remote" "$OPT/resources/"' in text
     assert ('install -d -m 750 -o filament-kit -g filament-kit '
             '"$STATE/profiles" "$STATE/library" "$STATE/library-local"') in text
+
+
+def test_install_copies_the_panel_firmware_pair_as_a_resource():
+    text = _text(INSTALL / "install.sh")
+    assert '"$OPT/resources/panel/"' in text and "intake-panel.bin" in text and "VERSION" in text
+    rel = _text(INSTALL.parent / "tools" / "make_release.sh")
+    assert "station/panel/firmware/intake-panel.bin" in rel
+    fw = INSTALL.parent / "station" / "panel" / "firmware"
+    assert (fw / "intake-panel.bin").read_bytes()[:1] == b"\xe9"  # an ESP8266 image, untouched by line-ending rules
+    assert (fw / "VERSION").read_text().strip().isdigit()
+    assert "firmware/*.bin binary" in _text(INSTALL.parent / ".gitattributes")
+
+
+def test_station_extra_has_esptool():
+    assert "esptool==5.6.0" in _text(INSTALL.parent / "server" / "pyproject.toml")
 
 
 def test_uninstall_fallback_lists_every_unit():
@@ -82,7 +97,7 @@ def test_uninstall_fallback_lists_every_unit():
 
 
 STATION = {"User": "filament-kit-station", "Group": "filament-kit-station",
-           "SupplementaryGroups": "dialout audio",
+           "SupplementaryGroups": "dialout audio video",
            "ExecStart": "/opt/filament-kit/venv/bin/python -I -m filament_kit.station",
            "Restart": "always", "ProtectSystem": "strict", "ProtectHome": "yes", "PrivateTmp": "yes",
            "NoNewPrivileges": "yes", "CapabilityBoundingSet": "", "IPAddressDeny": "any"}
@@ -110,18 +125,21 @@ def test_cli_wrapper_library_add_uses_stdin():
     assert '[ ! -f "$3" ] || [ ! -r "$3" ]' in text  # a missing file is refused with a message
 
 
-def test_release_packages_path_units_and_checks_library_data():
+def test_release_packages_path_units_and_keeps_library_out_of_the_wheel():
     text = _text(ROOT / "tools" / "make_release.sh")
     assert "install/systemd/*.path" in text
-    assert "filament_kit/library_data/index.json" in text
+    assert "filament_kit/library_data/index.json" not in text     # no bundled-index check any more
+    assert "filament_kit/library_data/library/" in text           # the wheel must not carry entries
+    assert "build_library_asset.py" in text
 
 
 def test_readme_final_review_points():
-    """Final review: README documents restore-deleted, the real pairing order, that unpair covers the PC, and that
-    a library rollback is undone by the next scheduled update unless updates are off."""
-    readme = _text(ROOT / "README.md")
+    """Final review: the user guide (moved out of the README by F2) documents restore-deleted, the real pairing
+    order, that unpair covers the PC, and that a library rollback is undone by the next scheduled update unless
+    updates are off."""
+    readme = _text(ROOT / "docs" / "user-guide.md")
     assert "sudo filament-kit profiles restore-deleted" in readme
-    pair = readme[readme.index("## Pair your PC"):readme.index("## Building the Android app release")]
+    pair = readme[readme.index("## Pair your PC"):readme.index("## Everyday commands")]
     assert pair.index("Finish") < pair.index("paste the link")
     assert "Pair this PC with the filament-kit server now" in pair
     row = next(line for line in readme.splitlines() if line.startswith("| `sudo filament-kit unpair`"))

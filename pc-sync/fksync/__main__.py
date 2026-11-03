@@ -1,7 +1,8 @@
 """filament-kit-sync: pair this PC with a filament-kit server, run one sync, show status, unpair.
 
-The only module that reads the real environment (%APPDATA% for Bambu Studio, %LOCALAPPDATA% for the
-sync's own files); the hidden --appdata / --localappdata options override both. The pairing token is
+The only module that reads the real environment (%APPDATA% for Bambu Studio and Orca Slicer, %LOCALAPPDATA% for
+the sync's own files, %ProgramFiles% and the uninstall registry for the Orca Slicer install); the hidden
+--appdata / --localappdata options override the first two. The pairing token is
 read from stdin (inside the pasted link, or from the server after the 6-digit code), never from the
 command line, and is never printed or logged.
 """
@@ -56,7 +57,7 @@ def _finish_pair(dirs: store.AppDirs, cfg: dict, token: str) -> int:
         old = store.load_config(dirs)
     except ValueError:
         pass
-    for key in ("variant", "user_id"):  # a pinned Bambu Studio folder survives re-pairing
+    for key in ("variant", "user_id", "orca_user_id", "orca_install"):  # pinned app folders survive re-pairing
         if key in old:
             cfg[key] = old[key]
     store.save_config(dirs, cfg)
@@ -75,7 +76,7 @@ def _finish_pair(dirs: store.AppDirs, cfg: dict, token: str) -> int:
     store.log(dirs, f"paired with {info.get('name', 'the server')} at {cfg['host']}:{cfg['port']} "
                     f"(device {cfg['device']})")
     _out(f"Paired with {info.get('name', 'the server')} ({cfg['host']}:{cfg['port']}). "
-         "The sync runs every 10 minutes and waits while Bambu Studio is open.")
+         "The sync runs every 10 minutes and waits while Bambu Studio (or Orca Slicer) is open.")
     return 0
 
 
@@ -138,8 +139,10 @@ def cmd_run(dirs: store.AppDirs, appdata: Path, quiet: bool) -> int:
                         echo(f"This PC is not paired; run '{APP} pair'.")
                     return 1
                 folders = studio.locate(appdata, cfg)
+                orca = _locate_orca(appdata, cfg, warn=lambda m: _warn(dirs, echo, m))
                 c = client.Client(cfg, token, log=lambda m: store.log(dirs, m))
-                outcome = sync.run_once(c, folders, dirs, running=studio.running, now=time.time(), echo=echo)
+                outcome = sync.run_once(c, folders, dirs, running=studio.running, now=time.time(), echo=echo,
+                                        orca=orca, orca_running=studio.orca_running)
             except studio.NotFound as e:
                 return _fail(dirs, echo, e.message)
             except client.ApiError as e:
@@ -160,6 +163,34 @@ def cmd_run(dirs: store.AppDirs, appdata: Path, quiet: bool) -> int:
             echo("Another sync run is in progress.")
         return 0
     return 0 if outcome in sync.OUTCOMES else 1
+
+
+def _program_files() -> list[Path]:
+    out = []
+    for var in ("ProgramFiles", "ProgramW6432", "ProgramFiles(x86)"):
+        v = os.environ.get(var)
+        if v and Path(v) not in out:
+            out.append(Path(v))
+    return out
+
+
+def _locate_orca(appdata: Path, cfg: dict, warn=None):
+    """This PC's Orca Slicer folders, or None (Bambu Studio only). A stale `orca_user_id` / `orca_install` pin
+    (e.g. Orca upgraded into a new folder) is warned about and ignored: discovery runs without it."""
+    kw = {"program_files": _program_files(), "registry": studio._registry_entries}
+    try:
+        return studio.locate_orca(appdata, cfg, **kw)
+    except studio.NotFound as e:
+        if warn:
+            warn(f"{e.message} Ignoring the Orca Slicer pin and looking for Orca Slicer instead.")
+        unpinned = {k: v for k, v in cfg.items() if k not in ("orca_user_id", "orca_install")}
+        return studio.locate_orca(appdata, unpinned, **kw)
+
+
+def _warn(dirs: store.AppDirs, echo, msg: str) -> None:
+    store.log(dirs, f"warning: {msg}")
+    if echo:
+        echo(f"warning: {msg}")
 
 
 def _fail(dirs: store.AppDirs, echo, msg: str) -> int:
@@ -193,6 +224,21 @@ def cmd_status(dirs: store.AppDirs, appdata: Path) -> int:
     except studio.NotFound as e:
         _out(f"Bambu Studio:    {e.message}")
     st = sync.load_state(dirs)
+    try:
+        o = _locate_orca(appdata, cfg, warn=lambda m: _out(f"Orca Slicer:     {m}"))
+        if o is None:
+            _out("Orca Slicer:     not found on this PC (only Bambu Studio is synced)")
+        else:
+            pin = " (pinned in the config)" if cfg.get("orca_user_id") == o.user_id else ""
+            _out(f"Orca Slicer:     user {o.user_id}{pin}")
+            _out(f"Orca folder:     {o.user_filament}")
+            _out(f"Orca install:    {o.install or 'not found'}"
+                 + ("" if o.library_opc else " (no OrcaFilamentLibrary.opc: its presets are not uploaded)"))
+            note = (st.get("orca") or {}).get("note")
+            if note:
+                _out(f"Orca Slicer:     {note}")
+    except studio.NotFound as e:
+        _out(f"Orca Slicer:     {e.message}")
     last = st.get("last") or {}
     if last:
         when = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(float(last.get("at") or 0)))
@@ -210,6 +256,9 @@ def cmd_status(dirs: store.AppDirs, appdata: Path) -> int:
         _out(f"No longer generated (delete them in Bambu Studio): {', '.join(stale)}")
     else:
         _out("No longer generated: none")
+    stale_orca = st.get("stale_orca") or []
+    if stale_orca:
+        _out(f"No longer generated in Orca Slicer (delete them in Orca Slicer): {', '.join(stale_orca)}")
     _out(f"Log:             {dirs.log_file}")
     return 0
 
@@ -231,7 +280,8 @@ def cmd_unpair(dirs: store.AppDirs) -> int:
 # --- entry ---------------------------------------------------------------------------------------
 
 def _parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog=APP, description="Sync Bambu Studio filament presets with a filament-kit server.")
+    p = argparse.ArgumentParser(prog=APP, description="Sync Bambu Studio (and Orca Slicer) filament presets with a "
+                                                      "filament-kit server.")
     p.add_argument("--version", action="version", version=f"{APP} {__version__}")
     p.add_argument("--appdata", help=argparse.SUPPRESS)
     p.add_argument("--localappdata", help=argparse.SUPPRESS)
@@ -239,7 +289,8 @@ def _parser() -> argparse.ArgumentParser:
     sub.add_parser("pair", help="pair this PC with the server (paste the link from 'sudo filament-kit pair --pc')")
     r = sub.add_parser("run", help="run one sync now (the scheduled task runs this every 10 minutes)")
     r.add_argument("--quiet", action="store_true", help="print nothing (the log still gets every line)")
-    sub.add_parser("status", help="show the server, the Bambu Studio folder, the last run and the installed build")
+    sub.add_parser("status", help="show the server, the Bambu Studio and Orca Slicer folders, the last run and the "
+                                  "installed build")
     sub.add_parser("unpair", help="forget the server and delete this PC's token")
     return p
 

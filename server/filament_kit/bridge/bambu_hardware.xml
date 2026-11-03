@@ -1,0 +1,230 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Bambu printer hardware facts for filament-kit (read by bridge/hardware.py).
+
+  An override at /etc/filament-kit/bambu_hardware.xml wins per element: a <model> by code, an <ams-type>,
+  <scheme> or <layout> by key, a speech <word> by text. The server rereads both files when they change; a bad
+  override is refused whole and the last good data stays in use (status shows the error).
+
+  Codes and names come from Bambu Studio resources/printers/<model_id>.json; camera kinds from ha-bambulab
+  (RTSPS on 322 = "hls", JPEG on TCP 6000 = "mjpeg"). Facts checked on the owner's H2D are marked verified;
+  everything else is best-known and confirmed or corrected from live reports. In particular these are
+  UNVERIFIED: AMS module codes other than the H2D's N3F05 / N3S05, presence bits beyond 4 AMS units (ids 0-3)
+  and HT units beyond 128/129, numbering (shift8) beyond AMS 0 and HT 128/129, nozzle and external-holder
+  counts of printers other than the H2D, presence="bits-v1" on every model but the H2D, ams-mapping2 everywhere
+  (also the H2D), light nodes on every model but the H2D (the A1, A1 mini, P1P and A2L may have no chamber light),
+  the first-gen AMS module prefix, the speech say= texts, and chamber limits marked below.
+  external-addressing (how the slot command names an external holder): "tray-is-ams" (tray_id = ams_id, slot_id 0)
+  is verified on the H2D only; every other model uses "legacy" (ams_id = holder id, tray_id 0, no slot_id: the
+  kit's earlier command), UNVERIFIED (ha-bambulab addresses an X1/P1 vt_tray as ams_id 255, tray_id 254); a
+  capture confirms or corrects it. alias="Ext" on a two-holder model's holder 254: the label the kit used for its
+  vt_tray before Ext-L / Ext-R, so old Spoolman locations and slot maps keep working.
+  Unknown elements and attributes are ignored with a warning (a newer file still loads); version is major[.minor]
+  and a file with another major version is refused.
+-->
+<bambu-hardware version="1">
+  <models>
+    <!-- H2D: verified on the owner's printer (externals, numbering order, presence, FAILED-as-finish, light
+         nodes). ams-mapping2="true" is unverified: Bambu Studio sends it to H2-series printers; calibration
+         confirms. -->
+    <model code="O1D" name="H2D" say="h two d"
+           preset-name="Bambu Lab H2D" nozzles="2" camera="hls" chamber-max="65"
+           presence="bits-v1" gcode-only-failed-is-finish="true" ams-mapping2="true"
+           external-addressing="tray-is-ams">
+      <alias>H2D</alias>
+      <light-node>chamber_light</light-node>
+      <light-node>chamber_light2</light-node>
+      <external id="254" label="Ext-L" say="external left" alias="Ext"/>   <!-- left / deputy nozzle -->
+      <external id="255" label="Ext-R" say="external right"/>  <!-- right / main nozzle -->
+      <numbering ref="shift8"/>
+      <numbering ref="legacy"/>
+      <ftp-dir>/</ftp-dir>
+      <ftp-dir>/cache</ftp-dir>
+    </model>
+    <!-- H2D Pro: H2D hardware; unverified (externals, numbering, presence, ams-mapping2 assumed as the H2D). -->
+    <model code="O1E" name="H2D Pro" say="h two d p r o"
+           preset-name="Bambu Lab H2D Pro" nozzles="2" camera="hls" chamber-max="65"
+           presence="bits-v1" ams-mapping2="true">
+      <alias>H2DPRO</alias>
+      <light-node>chamber_light</light-node>
+      <external id="254" label="Ext-L" say="external left" alias="Ext"/>
+      <external id="255" label="Ext-R" say="external right"/>
+      <numbering ref="shift8"/>
+      <numbering ref="legacy"/>
+      <ftp-dir>/</ftp-dir>
+      <ftp-dir>/cache</ftp-dir>
+    </model>
+    <!-- H2S: single nozzle; unverified numbering and presence. -->
+    <model code="O1S" name="H2S" say="h two s"
+           preset-name="Bambu Lab H2S" nozzles="1" camera="hls" chamber-max="65"
+           presence="bits-v1">
+      <light-node>chamber_light</light-node>
+      <external id="254" label="Ext" say="external"/>
+      <numbering ref="shift8"/>
+      <numbering ref="legacy"/>
+      <ftp-dir>/</ftp-dir>
+      <ftp-dir>/cache</ftp-dir>
+    </model>
+    <!-- H2C: two nozzles, two external holders and presence assumed like the H2D (unverified). O1C2 is a second
+         code. -->
+    <model code="O1C" name="H2C" say="h two c"
+           preset-name="Bambu Lab H2C" nozzles="2" camera="hls" chamber-max="65"
+           presence="bits-v1">
+      <alias>O1C2</alias>
+      <light-node>chamber_light</light-node>
+      <external id="254" label="Ext-L" say="external left" alias="Ext"/>
+      <external id="255" label="Ext-R" say="external right"/>
+      <numbering ref="shift8"/>
+      <numbering ref="legacy"/>
+      <ftp-dir>/</ftp-dir>
+      <ftp-dir>/cache</ftp-dir>
+    </model>
+    <!-- X2D: chamber limit, two nozzles, externals and presence assumed H2D-like until checked (unverified). -->
+    <model code="N6" name="X2D" say="x two d"
+           preset-name="Bambu Lab X2D" nozzles="2" camera="hls" chamber-max="65"
+           presence="bits-v1">
+      <light-node>chamber_light</light-node>
+      <external id="254" label="Ext-L" say="external left" alias="Ext"/>
+      <external id="255" label="Ext-R" say="external right"/>
+      <numbering ref="shift8"/>
+      <numbering ref="legacy"/>
+      <ftp-dir>/</ftp-dir>
+      <ftp-dir>/cache</ftp-dir>
+    </model>
+    <!-- P2S: unverified numbering and presence. -->
+    <model code="N7" name="P2S" say="p two s"
+           preset-name="Bambu Lab P2S" nozzles="1" camera="hls" presence="bits-v1">
+      <light-node>chamber_light</light-node>
+      <external id="254" label="Ext" say="external"/>
+      <numbering ref="shift8"/>
+      <numbering ref="legacy"/>
+      <ftp-dir>/</ftp-dir>
+      <ftp-dir>/cache</ftp-dir>
+    </model>
+    <!-- X1 series, X1E, P1 series, A1 series: presence="bits-v1" unverified (ha-bambulab reads tray_exist_bits
+         the same way for ids 0-3). X1-series printers report their printer_type ("3DPrinter-X1-Carbon") over SSDP. -->
+    <model code="BL-P001" name="X1 Carbon" say="x one c"
+           preset-name="Bambu Lab X1 Carbon" nozzles="1" camera="hls"
+           presence="bits-v1">
+      <alias>3DPrinter-X1-Carbon</alias>
+      <alias>X1C</alias>
+      <light-node>chamber_light</light-node>
+      <external id="254" label="Ext" say="external"/>
+      <numbering ref="legacy"/>
+      <ftp-dir>/</ftp-dir>
+      <ftp-dir>/cache</ftp-dir>
+    </model>
+    <model code="BL-P002" name="X1" say="x one"
+           preset-name="Bambu Lab X1" nozzles="1" camera="hls" presence="bits-v1">
+      <alias>3DPrinter-X1</alias>
+      <light-node>chamber_light</light-node>
+      <external id="254" label="Ext" say="external"/>
+      <numbering ref="legacy"/>
+      <ftp-dir>/</ftp-dir>
+      <ftp-dir>/cache</ftp-dir>
+    </model>
+    <!-- X1E: 60 C chamber. -->
+    <model code="C13" name="X1E" say="x one e"
+           preset-name="Bambu Lab X1E" nozzles="1" camera="hls" chamber-max="60"
+           presence="bits-v1">
+      <light-node>chamber_light</light-node>
+      <external id="254" label="Ext" say="external"/>
+      <numbering ref="legacy"/>
+      <ftp-dir>/</ftp-dir>
+      <ftp-dir>/cache</ftp-dir>
+    </model>
+    <!-- P1P (open frame), A1 mini, A1, A2L: light node chamber_light unverified (they may have no chamber light). -->
+    <model code="C11" name="P1P" say="p one p"
+           preset-name="Bambu Lab P1P" nozzles="1" camera="mjpeg" presence="bits-v1">
+      <light-node>chamber_light</light-node>
+      <external id="254" label="Ext" say="external"/>
+      <numbering ref="legacy"/>
+      <ftp-dir>/</ftp-dir>
+      <ftp-dir>/cache</ftp-dir>
+    </model>
+    <model code="C12" name="P1S" say="p one s"
+           preset-name="Bambu Lab P1S" nozzles="1" camera="mjpeg" presence="bits-v1">
+      <light-node>chamber_light</light-node>
+      <external id="254" label="Ext" say="external"/>
+      <numbering ref="legacy"/>
+      <ftp-dir>/</ftp-dir>
+      <ftp-dir>/cache</ftp-dir>
+    </model>
+    <model code="N1" name="A1 mini" say="a one m i n i"
+           preset-name="Bambu Lab A1 mini" nozzles="1" camera="mjpeg" presence="bits-v1">
+      <alias>A1MINI</alias>
+      <light-node>chamber_light</light-node>
+      <external id="254" label="Ext" say="external"/>
+      <numbering ref="legacy"/>
+      <ftp-dir>/</ftp-dir>
+      <ftp-dir>/cache</ftp-dir>
+    </model>
+    <model code="N2S" name="A1" say="a one"
+           preset-name="Bambu Lab A1" nozzles="1" camera="mjpeg" presence="bits-v1">
+      <light-node>chamber_light</light-node>
+      <external id="254" label="Ext" say="external"/>
+      <numbering ref="legacy"/>
+      <ftp-dir>/</ftp-dir>
+      <ftp-dir>/cache</ftp-dir>
+    </model>
+    <!-- A2L: unverified numbering, presence and light node. -->
+    <model code="N9" name="A2L" say="a two l"
+           preset-name="Bambu Lab A2L" nozzles="1" camera="mjpeg" presence="bits-v1">
+      <light-node>chamber_light</light-node>
+      <external id="254" label="Ext" say="external"/>
+      <numbering ref="shift8"/>
+      <numbering ref="legacy"/>
+      <ftp-dir>/</ftp-dir>
+      <ftp-dir>/cache</ftp-dir>
+    </model>
+  </models>
+
+  <!-- A unit's type: by module code (longest matching prefix) when the printer reports one, else by the
+       printer model, else by id range and slot count (first match in this order), else generic. -->
+  <ams-types>
+    <!-- First-gen AMS: unverified until a capture confirms its module code, so it resolves with known=false. -->
+    <ams-type key="ams" name="AMS" slots="4" label="letter" verified="false">
+      <ids from="0" to="127"/>
+      <module prefix="AMS"/>          <!-- unverified guess -->
+    </ams-type>
+    <ams-type key="ams_2pro" name="AMS 2 Pro" slots="4" label="letter">
+      <ids from="0" to="127"/>
+      <module prefix="N3F05"/>        <!-- verified on the H2D -->
+    </ams-type>
+    <ams-type key="ams_ht" name="AMS HT" slots="1" label="ht" say="h t">
+      <ids from="128" to="253"/>
+      <module prefix="N3S05"/>        <!-- verified on the H2D -->
+    </ams-type>
+    <ams-type key="ams_lite" name="AMS Lite" slots="4" label="letter">
+      <model code="N1"/>              <!-- A1 mini -->
+      <model code="N2S"/>             <!-- A1 -->
+    </ams-type>
+  </ams-types>
+
+  <!-- How print-job filament numbers (`mapping`, `ams_mapping`) name a slot. Which one a printer uses is learned
+       by calibration; the model's order is only the first guess. -->
+  <numbering-schemes>
+    <!-- unit * 4 + tray; HT units are their own id. Verified on the H2D for AMS 0 and HT 128/129. -->
+    <scheme key="legacy" kind="linear" per-unit="4" ht-from="128"/>
+    <!-- (unit << 8) | tray. Verified on the H2D for AMS 0 and HT 128/129 only. -->
+    <scheme key="shift8" kind="shift" bits="8"/>
+  </numbering-schemes>
+
+  <!-- Which bit of tray_exist_bits / tray_reading_bits (hex) belongs to a slot. Units outside every range have no
+       known bit: presence then falls back to tray_type. Verified on the H2D for ids 0-3 and HT 128/129; HT ids
+       130-143 are unverified. -->
+  <presence-layouts>
+    <layout key="bits-v1" exist="tray_exist_bits" reading="tray_reading_bits">
+      <range from="0" to="3" bit="id*4+tray"/>
+      <range from="128" to="143" bit="16+id-128"/>
+    </layout>
+  </presence-layouts>
+
+  <!-- Speech tokens for the reader. Letters and digits map to the reader's built-in words; external holders
+       speak their own say= text. Every say= token must be a word of the reader firmware (reader/lib/reader_core/
+       src/speech.cpp; a missing one beeps): test_reader.py checks it against a copy of that list. -->
+  <speech>
+    <word text="HT" say="h t"/>
+    <word text="Ext" say="external"/>
+  </speech>
+</bambu-hardware>

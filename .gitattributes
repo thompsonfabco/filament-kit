@@ -3,10 +3,18 @@
 *.service  text eol=lf
 *.timer    text eol=lf
 *.path     text eol=lf
+install/remote/* text eol=lf
 *.yml      text eol=lf
 *.bat      text eol=crlf
 gradlew    text eol=lf
 
 # The spec library snapshot and its test fixture are hashed byte for byte (index.json sha256).
 server/filament_kit/library_data/** -text
+server/tests/data/library_snapshot/** -text
 server/tests/data/library/** -text
+
+# The panel firmware the station flashes is a binary, byte for byte.
+station/panel/firmware/*.bin binary
+
+# The family build golden files are compared byte for byte (test_builds_orca.py).
+server/tests/data/golden/** -text

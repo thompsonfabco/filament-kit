@@ -254,3 +254,113 @@ All steps passed after the fixes below. Details: `.superpowers/sdd/2026-11-02-mo
 - The station probes print `id: 'filament-kit-station': no such user`, `dpkg-query: package 'brltty' is not
   installed` and `not-found` (ModemManager) on a computer without them.
 - The Android app was not built for this test (`dist/` tarball without `app/`).
+
+# WSL integration test: web, remote, orders, Orca and migrate-ops
+
+The merge-ops modules on one WSL install (Ubuntu 26.04, systemd, passwordless sudo, no USB). Nothing here runs
+certbot or changes a firewall; the only contact with a live machine is the read-only export from the Spoolman
+VM (`--no-secrets`; the bundle stays in WSL and is deleted at the end).
+
+## Procedure
+
+```
+# Windows, Git Bash: the tarball without the Android app (PowerShell off PATH, so no keystore lookup)
+PATH=$(echo "$PATH" | tr ':' '\n' | grep -vi powershell | paste -sd:) bash tools/make_release.sh
+
+# WSL, in ~/t9 (copied from /mnt/c, never run from there)
+sudo ./install.sh --mode all-in-one </dev/null      # no tty: no questions, no key (the key line FAILs)
+# config.json: web.public_url https://fk-test.localhost/filament, remote.hostname fk-test.localhost,
+# orders.file /var/lib/filament-kit/t9-orders.json (a one-item fixture, root:filament-kit 640)
+python3 -c 'import secrets; print(secrets.token_urlsafe(24))' > pp    # 600, never printed
+#   typed into `sudo filament-kit web passphrase` through a pty (getpass reads the tty, not stdin)
+sudo filament-kit modules enable web
+sudo filament-kit modules enable orders
+sudo filament-kit modules enable remote             # installs nginx + certbot; certbot is NOT run
+sudo filament-kit web status
+sudo nginx -t; sudo /usr/local/sbin/mcp-route ls; sudo filament-kit remote firewall
+curl -sk --resolve fk-test.localhost:443:127.0.0.1 https://fk-test.localhost/filament/health
+```
+
+OAuth and MCP (a script with plain HTTP to `127.0.0.1:8101` for OAuth, then the `mcp` SDK's
+`streamable_http_client` + `ClientSession`, `Host: fk-test.localhost`, run with `/opt/filament-kit/venv/bin/python`):
+`/.well-known/oauth-authorization-server`, `/register` (Claude's callback; a foreign one must fail),
+`/authorize` (PKCE S256), `/login` (GET, then POST with the passphrase and `Origin: https://fk-test.localhost`),
+the callback's `code`, `/token`, then `tools/list` and `find_spools`. The same script signs in to the web app
+(`POST /intake/login` with `Origin`; the cookie is `Secure`, so send it by hand over plain http) and posts a dry
+run to `/intake/api/add`.
+
+migrate-ops: `ssh spoolman-vm 'sudo bash -s -- --no-secrets -' < tools/export_ops.sh | wsl ... 'cat > ~/t9/ops-bundle.tar.gz'`
+(umask 077). Set `tag_sources` to a local dummy first, so the migration keeps it and nothing in WSL calls the
+live tag reader afterwards (`station.url` is already the local station). Then `migrate-ops` dry (hash the data
+folders before and after), `--apply`, and `--apply` again.
+
+Orca: `sudo filament-kit pair --pc`; pc-sync's own `fksync.client.Client` with that link uploads the server
+tests' fixtures (`test_builds.system_zip()`, `test_builds_orca.orca_system_zip()`, a one-file live and Orca live
+zip) through `PUT /api/sync/system|live[?target=orca]`, asks `POST /api/sync/rebuild` with both live hashes,
+waits for the build, downloads it and reports `installed` with `["base", "orca"]`.
+
+Uninstall: `sudo ./uninstall.sh`, then `echo purge | sudo ./uninstall.sh --purge`. Clean-up afterwards:
+`apt-get purge nginx nginx-common certbot` and the packages they pulled in; remove `/etc/mcp-router`,
+`/usr/local/sbin/mcp-route`, `/usr/local/sbin/filament-kit-acme-hook`, `/etc/nginx` and `/etc/letsencrypt`;
+`systemctl unmask sleep.target suspend.target hibernate.target hybrid-sleep.target`; delete `~/t9` (bundle,
+passphrase file, token, logs).
+
+## Results, 2026-11-02 (filament-kit 0.2.0, branch `mo-t9`)
+
+- **Install** all-in-one: every line OK except `FAIL Anthropic key missing` (expected without a tty).
+- **web**: `web passphrase` wrote `/etc/filament-kit/web_passphrase` root:filament-kit 640. `web status`: module
+  on, public URL, passphrase set, `web unit answers on 127.0.0.1:8101`, printer slots `the kit's printer bridge`,
+  tag readers `0 + station`.
+- **remote**: nginx and certbot installed by the module; placeholder certificate `CN=fk-test.localhost` (30
+  days); `nginx -t` ok; `mcp-route ls` gives `filament https://fk-test.localhost/filament/ -> 127.0.0.1:8101`;
+  `remote firewall` prints 443 from Claude's ranges and the LAN, 80 "only while certbot runs", DNS, and the nginx
+  hardening drop-in, and changes nothing. Through nginx: `/health` is `router ok`, `/filament/health` is `ok`,
+  `/filament/intake` 200 over HTTP/1.1, a wrong Host is closed (444), `/filament/mcp` initialize with the token
+  200 (event stream), without it 401; both `.well-known` forms answer 200. With `remote.acme_window` set, the
+  certbot timer's next run is 03:10.
+- **orders**: on with the fixture file.
+- **OAuth**: metadata issuer `https://fk-test.localhost/filament`; DCR with a foreign callback 400
+  `invalid_redirect_uri`, with Claude's 201; `/authorize` 302 to `/login`, 403 from outside the LAN
+  (`X-Forwarded-For 203.0.113.9`); `/login` POST from another Origin 403, with the passphrase 302 to Claude's
+  callback (state kept); `/token` 200 Bearer, 3600 s, with a refresh token; the code replayed 400 `invalid_grant`.
+- **MCP**: no token 401; token with a foreign Origin 403; Host `127.0.0.1:8101` 421. With the SDK: server
+  `filament-kit 0.2.0`, 14 tools (the 12 ops tools plus the `h2d_slots`/`h2d_set_slot` aliases);
+  `find_spools("PLA")` gave 0 before the migration and 89 matches in 60 filaments after it.
+- **Web app**: page 200 with CSP; a wrong passphrase 401; login 303 with `Secure; HttpOnly; SameSite=strict;
+  Path=/filament/intake`; dry-run add `T9 Test PLA Basic Grey (new filament): 2 spool(s) @ Sealed stock ... dry
+  run: nothing written`, and `find` shows nothing afterwards; the add without Origin 403; the API from outside
+  the LAN 403.
+- **migrate-ops** (bundle: 296 spools, 213 filaments, 39 vendors, 4518 preset files, no secrets): the dry run
+  changed nothing but Spoolman's own `spoolman.log` (it logs the API reads). `--apply`: Spoolman 296/213/39,
+  116 lines (all with an Orca parent, all keeping their Bambu Studio `filament_id`), `extra.line` on 35
+  filaments, owner edits for 413 + 689 presets (7719 values), `[web] skipped` (no secrets), the keys set in
+  this test (`web.public_url`, `remote.hostname`, `tag_sources`, `station.url`, `orders.file`) kept with the ops
+  value shown, 11 keys set, the H2D model-only entry. The second `--apply` changed nothing. `spoolman.db` is
+  spoolman:spoolman 640; all units active afterwards; `web status`: 1 connector signed in, 1 phone session,
+  slots `slot_service`.
+- **Orca** (the migrated lines with the fixture slicer stores): the system uploads hold 10 Bambu Studio and 17
+  Orca presets; the build is ok with 59 `base/` and 186 `orca/` presets (each with its `.info`), for example
+  `AMOLEN PLA Glow @H2D 0.4` and `@SV08 MAX 1.0`; no Orca preset has a `nil` value or a G-code key; `BUILD.json`
+  carries the Orca live hash; 392 problems, all lines whose parents the small fixture stores do not have;
+  `installed` with both trees is recorded.
+- **Uninstall**: units, users (filament-kit, spoolman, filament-kit-station), the station drop-in and udev rule,
+  the avahi file, `/opt`, the wrapper and (with `--purge`) all data are gone; after the fix below also the kit's
+  router conf, route and deploy hook, and (purge) the certbot timer drop-in. nginx stays active with no 443
+  listener.
+- Linux-only tests: `test_migrate.py` 36 passed, 1 skipped (the wheel in a WSL venv, tests copied), including the
+  WAL export with and without `--force`.
+
+### Found and fixed
+
+- `uninstall.sh` left the kit's nginx router conf, its `filament` route (pointing at the removed web unit) and
+  its certbot deploy hook. It now removes them like `modules disable remote` (Ruling AF): only the kit's files,
+  only routes `mcp-route` wrote; nginx, certbot, the certificate, `mcp-route` and other routes stay. `--purge`
+  also removes the certbot timer drop-in. Test `test_uninstall_removes_the_kits_remote_files`; checked on WSL.
+
+### Harmless output to expect
+
+- `filament-kit web passphrase` reads the terminal (getpass); piping the passphrase into `sudo` hangs. Type it.
+- `profiles status`: `N presets` counts the Bambu Studio presets; the Orca ones are `N Orca presets` beside it
+  (since the final review fix C-I5).
+- migrate-ops copies the order list to `/var/lib/filament-kit/filament_orders.json` even when `orders.file`
+  points elsewhere (it is the path the runbook's exporter drop-in writes).

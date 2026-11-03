@@ -301,3 +301,21 @@ def test_list_survives_one_bad_summary(client, mgr):
     by = {p["id"]: p for p in r.json()["printers"]}
     assert by[SERIAL]["summary"] is None and by[SERIAL]["state"] == "connected"
     assert by["01P00A222222222"]["summary"]["percent"] == 42
+
+
+def test_printer_get_reports_hardware_errors_and_warnings(client, mgr, tmp_path):
+    from filament_kit.bridge import hardware
+    add_configured(mgr)
+    hardware._reset_cache()
+    try:
+        j = client.get(f"/api/printers/{SERIAL}").json()
+        assert j["hardware"] == {"errors": [], "warnings": []}
+        (tmp_path / "etc" / "bambu_hardware.xml").write_text("<bambu-hardware version='1'><models><nope", "utf-8")
+        j = client.get(f"/api/printers/{SERIAL}").json()
+        assert j["hardware"]["errors"] and j["printer"]["id"] == SERIAL        # last good data still serves
+        (tmp_path / "etc" / "bambu_hardware.xml").write_text(
+            "<bambu-hardware version='1.4'><future-thing/></bambu-hardware>", "utf-8")
+        j = client.get(f"/api/printers/{SERIAL}").json()
+        assert not j["hardware"]["errors"] and j["hardware"]["warnings"]
+    finally:
+        hardware._reset_cache()

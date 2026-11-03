@@ -50,16 +50,23 @@ def rig(sd):
 
 def test_mapping_end_to_end_saves_a_calibrated_map(rig, sd):
     m, printer = rig
+    printer.native = "shift8"                       # the owner's H2D numbers slots by shift8 (P3)
     steps = []
     v = mapping.Mapper(m).run(SERIAL, on_step=steps.append)
     assert v["state"] == "done", v["problems"]
-    assert v["calibrated"] is True and v["observe"] is False
-    assert {s["label"]: s["global"] for s in v["slots"]} == {"A1": 0, "A2": 1, "A3": 2, "A4": 3, "HT-A": 128,
-                                                             "Ext": 254}
+    assert v["calibrated"] is True and v["observe"] is False and v["scheme"] == "shift8"
+    # A4 is empty: numbered by the proven scheme
+    assert {s["label"]: s["global"] for s in v["slots"]} == {"A1": 0, "A2": 1, "A3": 2, "A4": 3, "HT-A": 32768,
+                                                             "Ext-L": 254}
     saved = ams.load_map(SERIAL)
     assert saved.calibrated and not saved.observe
+    # the layout the map was made for (P2): ids, types (no module codes reported: None), slot counts
+    assert saved.fingerprint == [[0, None, 4], [128, None, 1], [254, "ext", 1]] and saved.stale is False
+    assert v["stale"] is False and v["remapping"] is False
     job = printer.jobs[0]
     assert job["command"] == "project_file" and job["ams_mapping"] == [0, 1, 2, 128, 254]   # A4 is empty
+    assert job["ams_mapping2"][3] == {"ams_id": 128, "slot_id": 0}
+    assert job["ams_mapping2"][4] == {"ams_id": 254, "slot_id": 0}
     assert [j["command"] for j in printer.jobs] == ["project_file"]
     assert not (sd.root / "cache" / f"{calib3mf.job_name(SERIAL)}.gcode.3mf").exists()
     assert no_test_colour_left(printer)

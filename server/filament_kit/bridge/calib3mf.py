@@ -2,12 +2,17 @@
 
 `build(labels)` makes a minimal Bambu project 3MF with one PLA filament per slot label and a plate gcode that is
 only comments and `M400`. `run(manager, serial, slotmap)` uploads it over FTPS to `/cache/fk-calib-<serial>.gcode.3mf`,
-starts it with `ams_mapping` = filament i -> the slot's candidate global id (`ams.default_global`), waits (at most
-`JOB_TIMEOUT` s) for the job to start and end, records the `mapping` and `ams.tray_now` the printer reports, and
-compares the reported mapping with what was sent. Afterwards (always) the file is deleted and every slot whose
-settings changed since the start is set back from the snapshot taken at the start and the restore is verified
-from the next report (`CalibResult.restored` false when any slot was not confirmed back). It does not save a
-SlotMap (the mapping job does).
+starts it with `ams_mapping` = filament i -> the slot's legacy number (unit*4+tray, an HT unit its id: the command
+Bambu Studio sends and the scanner verified on the owner's H2D; an external holder as its own id) plus
+`ams_mapping2` (`[{ams_id, slot_id}]`) when the model lists it, waits (at most `JOB_TIMEOUT` s) for the job to
+start and end, records the `mapping` and `ams.tray_now` the printer reports, and decodes the reported mapping
+against every candidate scheme: the first (model order) that round-trips every loaded slot is `CalibResult.scheme`
+(another job, in the next candidate's numbers, only after a clean end that fits none or a refusal; see `run`). A
+job that ends FAILED with `print_error` absent, 0, "0" or "" counts as finished on a model with
+`gcode_only_failed_is_finish` (the H2D ends a gcode-only job so). Afterwards (always) the file is deleted and every
+slot whose settings changed since the start is set back from the snapshot taken at the start and the restore is
+verified from the next report (`CalibResult.restored` false when any slot was not confirmed back). It does not save
+a SlotMap (the mapping job does).
 
 Watchdog (the gcode never heats or loads, so either means the printer is doing something we did not ask for):
 while the job is watched, a nozzle or bed TARGET temperature above the snapshot's (`nozzle_target_temper`,
@@ -45,7 +50,8 @@ The print command, modelled on what Bambu Studio sends in LAN mode (to be confir
         "layer_inspect": false, "timelapse": false
     }}
 
-`sequence_id` is left to `Manager.publish`. Not sent (open for Task 9): `ams_mapping2`, `md5` of the file.
+`sequence_id` is left to `Manager.publish`. `ams_mapping2` is added for models that list it (see above). Not sent:
+`md5` of the file.
 
 Only loaded slots take part (an empty slot is listed in `skipped`). Refusals before anything is sent are reported
 as codes in `problems`: `printer_offline`, `printer_busy`, `not_configured`, `cert_changed` (FTPS leaf not the pinned
@@ -64,8 +70,8 @@ import zipfile
 from dataclasses import dataclass, field
 from xml.sax.saxutils import quoteattr
 
-from . import ftps, registry, snapshot, tlspin
-from .ams import SlotMap, default_global
+from . import ftps, hardware, layout, registry, snapshot, tlspin
+from .ams import SlotMap
 from .status import _d, _int, _l, _s, packed
 
 log = logging.getLogger(__name__)
@@ -97,7 +103,7 @@ def remote_path(serial: str) -> str:
 @dataclass
 class CalibResult:
     decoding: dict[str, int] = field(default_factory=dict)   # label -> the global id the printer reported
-    consistent: bool = False                                  # job finished and reported exactly what was sent
+    consistent: bool = False                                  # job finished and its mapping proved a scheme
     problems: list[str] = field(default_factory=list)
     sent: dict[str, int] = field(default_factory=dict)        # label -> the candidate global id sent
     mapping: list | None = None                               # the raw `mapping` the printer reported
@@ -107,6 +113,13 @@ class CalibResult:
     restored: bool = True     # we left nothing changed (false: a filament left loaded in the toolhead)
     job: str = ""             # this run's subtask_name (`run_name`)
     other_job: bool = False   # another print started while we watched: abandoned, never stopped
+    scheme: str | None = None                                 # the numbering scheme the reported mapping proved
+    sent_scheme: str | None = None                            # the scheme whose numbers this job sent
+    tried: list[str] = field(default_factory=list)            # schemes sent, one job each, in order
+    attempts: list[str] = field(default_factory=list)         # what each earlier job (that proved none) saw
+    failed_as_finish: bool = False                            # ended FAILED, counted as finished (model rule)
+    retry: bool = False       # the job ended but proved no scheme (or was refused): try the next candidate
+    skip: bool = False        # nothing sent: this candidate numbers the loaded slots as an earlier one did
 
 
 # ---------------------------------------------------------------- the 3MF
@@ -206,9 +219,11 @@ def build(slots: list[str]) -> bytes:
     return buf.getvalue()
 
 
-def payload(serial: str, ams_mapping: list[int], name: str | None = None) -> dict:
-    """The `project_file` print command (see the module docstring); `name` = this run's `run_name`."""
-    return {"print": {
+def payload(serial: str, ams_mapping: list[int], name: str | None = None,
+            ams_mapping2: list[dict] | None = None) -> dict:
+    """The `project_file` print command (see the module docstring); `name` = this run's `run_name`;
+    `ams_mapping2` (`[{ams_id, slot_id}]` per filament) only when given (models with `ams_mapping2`)."""
+    body = {
         "command": "project_file",
         "param": GCODE,
         "url": f"ftp://{remote_path(serial)}",
@@ -221,26 +236,17 @@ def payload(serial: str, ams_mapping: list[int], name: str | None = None) -> dic
         "ams_mapping": list(ams_mapping),
         "bed_levelling": False, "flow_cali": False, "vibration_cali": False,
         "layer_inspect": False, "timelapse": False,
-    }}
+    }
+    if ams_mapping2 is not None:
+        body["ams_mapping2"] = [dict(x) for x in ams_mapping2]
+    return {"print": body}
 
 
 # ---------------------------------------------------------------- report helpers
 
 def _trays(report: dict) -> dict[tuple[int, int], dict]:
-    """(ams_id, tray_id) -> raw tray dict; the external holder as (its id, 0), as `ams.units` labels it."""
-    out: dict[tuple[int, int], dict] = {}
-    for u in _l(_d(_d(report).get('ams')).get('ams')):
-        uid = _int(u.get('id'))
-        if uid is None:
-            continue
-        for t in _l(u.get('tray')):
-            tid = _int(t.get('id'))
-            if tid is not None and isinstance(t, dict):
-                out[(uid, tid)] = t
-    vt = _d(report).get('vt_tray')
-    if isinstance(vt, dict):
-        out[(_int(vt.get('id'), 254), 0)] = vt
-    return out
+    """(ams_id, tray_id) -> raw tray dict; each external holder as (its id, 0) (`layout.raw_trays`)."""
+    return layout.raw_trays(report)
 
 
 def _key(slot: dict) -> tuple[int, int] | None:
@@ -276,6 +282,32 @@ def _ok(reply: dict) -> bool:
 
 # ---------------------------------------------------------------- the job
 
+def _external(ams_id: int, mi: hardware.ModelInfo) -> bool:
+    return ams_id in layout.EXT_DEFAULT or any(x.id == ams_id for x in mi.externals)
+
+
+def number(hw: hardware.Hardware, mi: hardware.ModelInfo, scheme: str, ams_id: int, tray_id: int) -> int:
+    """The number to send for a slot under `scheme`; an external holder is sent as its own id (Bambu's virtual
+    tray id). ValueError / KeyError when the scheme cannot number the slot."""
+    if _external(ams_id, mi):
+        return int(ams_id)
+    return hw.scheme(scheme).encode(ams_id, tray_id)
+
+
+def fits(hw: hardware.Hardware, mi: hardware.ModelInfo, scheme: str, value, ams_id: int, tray_id: int) -> bool:
+    """`value` (a reported number) round-trips to this slot under `scheme`. An external holder also fits as its
+    own id."""
+    v = _int(value)
+    if v is None or v < 0:
+        return False
+    if _external(ams_id, mi) and v == ams_id:
+        return True
+    try:
+        return hw.scheme(scheme).decode(v) == (ams_id, tray_id)
+    except KeyError:
+        return False
+
+
 def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None = None,
         should_stop=None) -> CalibResult:
     """Run the calibration job on an idle, connected printer (see the module docstring). Never raises for
@@ -283,8 +315,50 @@ def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None
     always deleted (best effort, over a new session; skipped only for a changed leaf) and, once the job was sent,
     the slots are always restored, whatever went wrong in between. The snapshot of the loaded slots is saved to
     disk (`snapshot.save`) before the print command and deleted after a confirmed restore. `should_stop()` true
-    (CLI signal, service stopping) stops the job at once (`stop` command), then the slots are restored."""
-    res = CalibResult()
+    (CLI signal, service stopping) stops the job at once (`stop` command), then the slots are restored.
+
+    Numbering (P3, ruling BL): the first job sends `ams_mapping` in legacy numbers, Bambu Studio's command (plus
+    `ams_mapping2` when the model lists it); the mapping the printer reports (in its own numbering: the owner's H2D
+    answers [0, 2, 128, 129] with [0, 2, 32768, 33024]) is decoded against EVERY candidate scheme of the model
+    (`ModelInfo.numbering`) and the first in the model's order that round-trips all loaded slots is the result
+    (`scheme`). Only when the job finished (FINISH, or FAILED-as-finish) and no candidate fits, or the printer
+    refused the job, is another job sent, in the next candidate's numbers (a scheme that numbers the loaded slots
+    as an earlier job did is skipped; so is one that cannot number them, e.g. legacy for AMS ids >= 32). A real
+    failure, a trip, a timeout or a stop never gets a second job. The result is the last job's; `attempts` says
+    what the earlier ones saw."""
+    if printer is None:
+        printer = registry.load().get(serial)
+    hw = hardware.load()
+    mi = hw.model(printer.model if printer is not None and printer.model else None)
+    candidates = [k for k in mi.numbering if k in hw.schemes] or ['legacy']
+    sends = ['legacy'] + [k for k in candidates if k != 'legacy']     # what each job's ams_mapping is numbered in
+    tried: list[list[int]] = []
+    sent_keys: list[str] = []
+    attempts: list[str] = []
+    res: CalibResult | None = None
+    for key in sends:
+        r = _attempt(manager, serial, slotmap, printer, should_stop, hw, mi, candidates, key, tried)
+        if r.skip:
+            continue
+        if res is not None:             # the previous job proved no scheme: keep what it saw
+            attempts.append(f"numbering {res.sent_scheme}: " + ("; ".join(res.problems) or "no scheme fits"))
+        res = r
+        sent_keys.append(key)
+        stop = should_stop is not None and should_stop()
+        if not res.retry or not res.restored or res.other_job or res.cert_changed or stop:
+            break
+    if res is None:                     # no candidate can number the loaded slots
+        res = CalibResult(problems=["no numbering scheme of this printer model can number the loaded slots"])
+    res.tried, res.attempts = sent_keys, attempts
+    if attempts:
+        log.info("printer %s: calibration sent %d jobs (%s)", serial, len(sent_keys), "; ".join(attempts))
+    return res
+
+
+def _attempt(manager, serial: str, slotmap: SlotMap, printer, should_stop, hw: hardware.Hardware,
+             mi: hardware.ModelInfo, candidates: list[str], key: str, tried: list[list[int]]) -> CalibResult:
+    """One calibration job sending `key`'s numbers (see `run`)."""
+    res = CalibResult(sent_scheme=key)
     if manager.state(serial) != 'connected':
         res.problems.append('printer_offline')
         return res
@@ -299,21 +373,31 @@ def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None
 
     trays0 = _trays(snap)
     labels: list[str] = []
-    sent: list[int] = []
+    addrs: list[tuple[int, int]] = []
     for label, slot in slotmap.slots.items():
-        key = _key(slot)
-        if key is None or not _loaded(trays0.get(key)):
+        k = _key(slot)
+        if k is None or not _loaded(trays0.get(k)):
             res.skipped.append(label)
             continue
         labels.append(label)
-        sent.append(default_global(*key))
-    res.sent = dict(zip(labels, sent))
+        addrs.append(k)
     if not labels:
         res.problems.append("no loaded slots to calibrate")
         return res
+    try:
+        sent = [number(hw, mi, key, a, t) for a, t in addrs]
+    except (KeyError, ValueError):
+        res.skip = True                 # this scheme cannot number a loaded slot: nothing to send
+        return res
+    if sent in tried:
+        res.skip = True                 # the printer saw these numbers already
+        return res
+    tried.append(sent)
+    res.sent = dict(zip(labels, sent))
+    mapping2 = None
+    if mi.ams_mapping2:
+        mapping2 = [{"ams_id": a, "slot_id": 0 if _external(a, mi) else t} for a, t in addrs]
 
-    if printer is None:
-        printer = registry.load().get(serial)
     if printer is None or not printer.configured or not printer.access_code:
         res.problems.append('not_configured')
         return res
@@ -347,10 +431,11 @@ def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None
         return res
     res.job = run_name(serial)
     try:
-        _job(manager, serial, res, labels, sent, snap, should_stop)
+        _job(manager, serial, res, labels, sent, snap, should_stop,
+             numbering=(hw, mi, candidates, addrs, mapping2))
     except Exception as e:      # e.g. the MQTT connection was lost while watching the job
         log.warning("printer %s: calibration job interrupted (%s)", serial, type(e).__name__)
-        res.consistent = False
+        res.consistent = res.retry = False
         res.problems.append(f"the calibration job was interrupted: connection lost ({type(e).__name__})")
     except BaseException:       # Ctrl-C with no handler installed: stop our job (only ours), then restore
         log.warning("printer %s: calibration job interrupted; stopping it if it is ours", serial)
@@ -464,26 +549,41 @@ def _stop(manager, serial: str) -> bool:
         return False
 
 
+def _no_error(v) -> bool:
+    """`print_error` says no error: absent, 0, "0" or "" only."""
+    if v is None:
+        return True
+    if isinstance(v, bool):
+        return False
+    if isinstance(v, int):
+        return v == 0
+    return isinstance(v, str) and v.strip() in ("", "0")
+
+
 def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[int], snap: dict,
-         should_stop=None) -> None:
+         should_stop=None, *, numbering) -> None:
+    """Send and watch one job. `numbering` = (hardware, model, candidate scheme keys, (ams_id, tray_id) per label,
+    ams_mapping2 or None)."""
+    hw, mi, candidates, addrs, mapping2 = numbering
     name = res.job or run_name(serial)
     stopping = should_stop or (lambda: False)
     if stopping():
         res.problems.append("interrupted: mapping was stopped before the calibration job")
         return
     try:
-        reply = manager.publish(serial, payload(serial, sent, name))
+        reply = manager.publish(serial, payload(serial, sent, name, mapping2))
     except Exception as e:      # offline / no reply raised by the Manager
         res.problems.append(f"cannot send the calibration job ({type(e).__name__})")
         return
     if reply is not None and not _ok(reply):
         log.warning("printer %s: calibration job refused (%s)", serial, _s(reply.get('reason')) or reply.get('result'))
         res.problems.append(REFUSED)
+        res.retry = True        # the numbers may be what it refused: the next candidate's may do
         return
 
     before = (_s(snap.get('gcode_state')).upper(), _s(snap.get('subtask_name')), _s(snap.get('task_id')))
     heaters0, tray0 = heater_targets(snap), _tray_now(snap)
-    st = {'started': False, 'final': None, 'trip': None, 'other': None}
+    st = {'started': False, 'final': None, 'trip': None, 'other': None, 'error': None}
 
     def watch(r: dict) -> bool:
         gs, sub = _s(r.get('gcode_state')).upper(), _s(r.get('subtask_name'))
@@ -517,6 +617,7 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
             res.tray_now.append(tn)
         if gs in ENDED or gs == 'IDLE':
             st['final'] = gs
+            st['error'] = r.get('print_error')
             return True
         return False
 
@@ -541,24 +642,44 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
         res.problems.append(f"the calibration job did not finish within {JOB_TIMEOUT:.0f} s"
                             + _stopped_text(_stop_ours(manager, serial, name)))
         return
+    if st['final'] == 'FAILED' and mi.gcode_only_failed_is_finish and _no_error(st['error']):
+        # this model ends a gcode-only job as FAILED with no print_error (the owner's H2D, 2026-11-02): finished.
+        # Only for our own calibration job (this watch), never for a print.
+        log.info("printer %s: calibration job ended FAILED with no print_error: finished (%s rule)", serial,
+                 mi.name)
+        st['final'], res.failed_as_finish = 'FINISH', True
     if st['final'] != 'FINISH':
         res.problems.append(f"the calibration job ended as {st['final']} on the printer")
 
     if res.mapping is None:
-        res.problems.append("the printer did not report the job's slot mapping")
+        # a printer that reports no mapping will not for other numbers either: no second job, observe mode
+        res.problems.append("the printer reported no slot mapping")
         return
-    mismatch = False
+    vals = []
     for i, label in enumerate(labels):
         v = _int(res.mapping[i]) if i < len(res.mapping) else None
+        vals.append(v)
         if v is None:
             res.problems.append(f"{label}: the printer reported no slot")
-            mismatch = True
-            continue
-        res.decoding[label] = v
-        if v != sent[i]:
-            res.problems.append(f"{label}: sent slot {sent[i]}, the printer reported {v}")
-            mismatch = True
-    res.consistent = st['final'] == 'FINISH' and not mismatch
+        elif v >= 0:
+            res.decoding[label] = v
+    proved = [k for k in candidates
+              if all(addr is not None and fits(hw, mi, k, v, *addr) for v, addr in zip(vals, addrs))]
+    if len(set(v for v in vals if v is not None)) != len(vals):
+        proved = []             # two filaments on one number (or one missing): nothing is proven
+    res.scheme = proved[0] if proved else None
+    if res.scheme is None:
+        for label, s_, v in zip(labels, sent, vals):
+            if v is not None and v != s_:
+                res.problems.append(f"{label}: sent slot {s_}, the printer reported {v}")
+        res.problems.append(f"the reported slot numbers {list(res.mapping)} fit no numbering scheme of this "
+                            f"printer model ({', '.join(candidates)})")
+    elif len(proved) > 1:
+        log.info("printer %s: the loaded slots number alike under %s; taking %s (the model's first)", serial,
+                 ", ".join(proved), res.scheme)
+    res.consistent = st['final'] == 'FINISH' and res.scheme is not None
+    # another job only after a clean end that proved nothing (never after a real failure or a stop)
+    res.retry = st['final'] == 'FINISH' and res.scheme is None
 
 
 def delete_leftover(serial: str, printer: registry.Printer | None = None) -> list[str]:

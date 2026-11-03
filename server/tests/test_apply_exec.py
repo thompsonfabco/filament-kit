@@ -96,6 +96,16 @@ def test_apt_batched_once(tmp_path):
     assert run.texts() == ["apt-get -o DPkg::Lock::Timeout=300 install -y -q unzip ffmpeg", "systemctl daemon-reload"]
 
 
+def test_apt_lean_is_its_own_install_without_recommends(tmp_path):
+    run = Recorder()
+    apply.execute([Action("apt", "unzip"), Action("apt_lean", "espeak-ng"), Action("apt_lean", "ffmpeg"),
+                   Action("daemon_reload")], run=run, resources=_res(tmp_path), root=tmp_path)
+    assert run.texts() == [
+        "apt-get -o DPkg::Lock::Timeout=300 install -y -q unzip",
+        "apt-get -o DPkg::Lock::Timeout=300 install -y -q --no-install-recommends espeak-ng ffmpeg",
+        "systemctl daemon-reload"]
+
+
 def test_enable_kinds(tmp_path):
     run = Recorder()
     apply.execute([Action("enable", "a.timer"), Action("enable", "b.path")],
@@ -261,6 +271,26 @@ def test_station_off_notice_once(tmp_path, capsys):
     assert "brltty" in out and "ModemManager" in out
 
 
+def test_remove_file_unlinks_only_an_existing_file(tmp_path):
+    root = tmp_path / "root"
+    old = root / apply.OLD_UDEV_RULE.lstrip("/")
+    old.parent.mkdir(parents=True)
+    old.write_text("x", encoding="utf-8")
+    res = _res(tmp_path)
+    apply.execute([Action("remove_file", apply.OLD_UDEV_RULE)], run=Recorder(), resources=res, root=root)
+    assert not old.exists()
+    apply.execute([Action("remove_file", apply.OLD_UDEV_RULE)], run=Recorder(), resources=res, root=root)  # none
+
+
+def test_station_off_notice_for_the_old_rule_name(tmp_path, capsys):
+    root = tmp_path / "root"
+    rule = root / apply.OLD_UDEV_RULE.lstrip("/")
+    rule.parent.mkdir(parents=True)
+    rule.write_text("x", encoding="utf-8")
+    apply.execute([Action("disable", apply.STATION_UNIT)], run=Recorder(), resources=_res(tmp_path), root=root)
+    assert capsys.readouterr().out.count("left as they are") == 1
+
+
 def test_no_station_notice_without_rule(tmp_path, capsys):
     apply.execute([Action("disable", apply.STATION_UNIT)], run=Recorder(),
                   resources=_res(tmp_path), root=tmp_path / "root")
@@ -291,9 +321,10 @@ def test_cli_modules_units(capsys):
     assert units[0] == "spoolman.service"
     for u in ("filament-kit.service", "filament-kit-build.path", "filament-kit-build.service",
               "filament-kit-library.timer", "filament-kit-library.service", "filament-kit-backup.timer",
-              "filament-kit-backup.service", "filament-kit-station.service"):
+              "filament-kit-backup.service", "filament-kit-station.service", "filament-kit-web.service",
+              "filament-kit-update.timer", "filament-kit-update.service"):
         assert u in units
-    assert len(units) == len(set(units)) == 9
+    assert len(units) == len(set(units)) == 12
 
 
 def test_cli_modules_apply_dry(tmp_path, monkeypatch, capsys):

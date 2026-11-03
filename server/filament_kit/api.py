@@ -20,7 +20,7 @@ from starlette.routing import Route
 
 from . import API_VERSION, __version__, config, intake, inventory, modules, pairing, profiles_api, tags
 from .intake import CapReached, PhotoError, ReadCap, ReadError
-from .bridge import camera, loading, mapping, registry, usage
+from .bridge import camera, hardware, loading, mapping, registry, usage
 from .bridge.connection import ACTIONS, DEVELOPER_MODE_REASON, Manager, NoReply, PrinterOffline, UnknownPrinter
 from .bridge.slottest import NoStatus, PrinterBusy
 from .bridge.models import camera_kind
@@ -99,6 +99,8 @@ def _bridge_error(e: Exception) -> JSONResponse | None:
         return _err(409, "printer_offline", str(e))
     if isinstance(e, PrinterOffline):
         return _err(409, "printer_offline", OFFLINE)
+    if isinstance(e, loading.SlotInUse):
+        return _err(409, "slot_in_use", str(e))
     if isinstance(e, loading.NoPreset):
         return _err(409, "no_preset", str(e))
     if isinstance(e, UnknownPrinter):
@@ -205,6 +207,17 @@ def _printer_view(p: registry.Printer, printers) -> dict:
             "summary": summary}
 
 
+def _hardware_view() -> dict:
+    """The printer hardware data file's state (`bambu_hardware.xml`): errors = a refused override (the last good
+    data stays in use), warnings = unknown elements/attributes that were ignored."""
+    try:
+        hw = hardware.load()
+    except Exception as e:  # noqa: BLE001 - the status must still answer
+        log.exception("hardware data cannot be loaded")
+        return {"errors": [f"{type(e).__name__}: {e}"], "warnings": []}
+    return {"errors": list(hw.errors), "warnings": list(hw.warnings)}
+
+
 NOT_SEEN = "That printer hasn't been seen on the network yet"
 
 
@@ -259,7 +272,8 @@ def _printer_routes(printers) -> list[Route]:
 
         def build() -> dict:
             p = known(serial)
-            return {"printer": _printer_view(p, printers), "status": printers.status(serial)}
+            return {"printer": _printer_view(p, printers), "status": printers.status(serial),
+                    "hardware": _hardware_view()}
         return JSONResponse(await run_in_threadpool(build))
 
     @_authed
@@ -469,6 +483,14 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
     station: list = [None, None]  # [url, client]: the client (and its back-off) lives as long as the url does
     cap = ReadCap(config.paths().state / "reads.json", cfg["reads_per_day"])
 
+    def station_client() -> StationClient | None:  # sync: one client (and back-off) per station url
+        url = (config.load().get("station") or {}).get("url")
+        if not url:
+            return None
+        if station[0] != url:
+            station[:] = [url, StationClient(url)]
+        return station[1]
+
     def rules() -> dict:  # sync: call it from inside the threadpool
         return config.load()["placement"]
 
@@ -506,7 +528,8 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         def run() -> dict:
             cap.take()
             try:
-                return intake.read_labels(sm, images, hint[:MAX_HINT], uid, claude)
+                ctx = intake.read_context(config.load(), sm, station_client(), app_tag=uid is not None)
+                return intake.read_labels(sm, images, hint[:MAX_HINT], uid, claude, **ctx)
             except SpoolmanError:  # Spoolman down: the catalog fetch failed before Claude was called
                 cap.refund()
                 raise
@@ -521,7 +544,8 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
                 return intake.retry(read_id, sm, claude)
             cap.take()
             try:
-                return intake.retry(read_id, sm, claude)
+                return intake.retry(read_id, sm, claude, orders=intake.read_context(
+                    config.load(), sm, None, app_tag=True)["orders"])
             except SpoolmanError:  # Spoolman down: the catalog fetch failed before Claude was called
                 cap.refund()
                 raise
@@ -567,6 +591,15 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         return JSONResponse({"spools": await run_in_threadpool(inventory.find, sm, q, sealed)})
 
     @_authed
+    async def filament_list(request: Request):
+        q = request.query_params.get("q", "")
+        return JSONResponse({"filaments": await run_in_threadpool(inventory.filaments, sm, q)})
+
+    @_authed
+    async def vendor_list(request: Request):
+        return JSONResponse({"vendors": await run_in_threadpool(inventory.vendors, sm)})
+
+    @_authed
     async def locations(request: Request):
         def names() -> list[str]:
             out = list(config.load()["locations"])
@@ -578,13 +611,11 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
 
     @_authed
     async def station_state(request: Request):
-        url = (config.load().get("station") or {}).get("url")
-        if not url:
+        client = await run_in_threadpool(station_client)
+        if client is None:
             return _module_off("station")
-        if station[0] != url:
-            station[:] = [url, StationClient(url)]
         try:
-            return JSONResponse(await run_in_threadpool(station[1].state))
+            return JSONResponse(await run_in_threadpool(client.state))
         except StationUnreachable as e:
             log.warning("station: %s", e)
             return _err(503, "station_unreachable", "the intake station is not reachable")
@@ -606,10 +637,12 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             *_gated([
                 Route("/api/intake/read", intake_read, methods=["POST"]),
                 Route("/api/intake/retry/{read_id}", intake_retry, methods=["POST"]),
-                Route("/api/intake/add", intake_add, methods=["POST"]),
             ], "ai_intake", on),
+            Route("/api/intake/add", intake_add, methods=["POST"]),  # adding by hand needs no AI (spec R 2.4)
             Route("/api/tags/{uid}", tag_lookup),
             Route("/api/spools", spool_search),
+            Route("/api/filaments", filament_list),
+            Route("/api/vendors", vendor_list),
             Route("/api/spools/{id:int}/link", spool_link, methods=["POST"]),
             Route("/api/spools/{id:int}", spool_update, methods=["PATCH"]),
             Route("/api/locations", locations),

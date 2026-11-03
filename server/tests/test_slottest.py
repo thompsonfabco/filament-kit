@@ -30,8 +30,8 @@ REPORT = {
     "vt_tray": {"id": "254", "tray_type": "TPU", "tray_color": "FFFFFFFF", "tray_info_idx": "Pa444444",
                 "nozzle_temp_min": "220", "nozzle_temp_max": "240", "tray_sub_brands": ""},
 }
-LABELS = ["A1", "A2", "A3", "A4", "HT-A", "Ext"]
-ADDR = {"A1": (0, 0), "A2": (0, 1), "A3": (0, 2), "A4": (0, 3), "HT-A": (128, 0), "Ext": (254, 0)}
+LABELS = ["A1", "A2", "A3", "A4", "HT-A", "Ext-L"]
+ADDR = {"A1": (0, 0), "A2": (0, 1), "A3": (0, 2), "A4": (0, 3), "HT-A": (128, 0), "Ext-L": (254, 0)}
 
 
 @pytest.fixture(autouse=True)
@@ -88,7 +88,7 @@ def is_test(colour):
 
 def original(label):
     ams_id, tray_id = ADDR[label]
-    if label == "Ext":
+    if label == "Ext-L":
         return REPORT["vt_tray"]
     unit = next(u for u in REPORT["ams"]["ams"] if u["id"] == str(ams_id))
     return next(t for t in unit["tray"] if t["id"] == str(tray_id))
@@ -252,10 +252,10 @@ def test_restore_error_on_one_slot_is_reported_and_the_rest_restored(rig):
     m, printer, c = rig
     real = m.set_slot
 
-    def set_slot(serial, ams_id, tray_id, setting, timeout=None):
+    def set_slot(serial, ams_id, tray_id, setting, timeout=None, kind=None):
         if (ams_id, tray_id) == (0, 1) and not is_test(setting["tray_color"]):
             raise RuntimeError("socket exploded")
-        return real(serial, ams_id, tray_id, setting, timeout)
+        return real(serial, ams_id, tray_id, setting, timeout, kind=kind)
     m.set_slot = set_slot
     res = slottest.run(m, SERIAL, lambda s: None)
     assert res.restored is False

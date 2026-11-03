@@ -1,0 +1,81 @@
+{
+ "clients": {
+  "8d3c2f0e-ops-client": {
+   "response_types": [
+    "code"
+   ],
+   "scope": "filament",
+   "client_name": "Claude",
+   "client_uri": null,
+   "logo_uri": null,
+   "contacts": null,
+   "tos_uri": null,
+   "policy_uri": null,
+   "jwks_uri": null,
+   "jwks": null,
+   "software_id": null,
+   "software_version": null,
+   "redirect_uris": [
+    "https://claude.ai/api/mcp/auth_callback"
+   ],
+   "token_endpoint_auth_method": "none",
+   "grant_types": [
+    "authorization_code",
+    "refresh_token"
+   ],
+   "application_type": null,
+   "client_id": "8d3c2f0e-ops-client",
+   "client_secret": null,
+   "client_id_issued_at": 1761900000,
+   "client_secret_expires_at": null,
+   "issuer": null
+  }
+ },
+ "codes": {
+  "08668318d9cf4106e3589474b385ef02a12acb10a65706da9e2cbbee8a428f41": {
+   "scopes": [
+    "filament"
+   ],
+   "expires_at": 4102444800,
+   "client_id": "8d3c2f0e-ops-client",
+   "code_challenge": "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+   "redirect_uri": "https://claude.ai/api/mcp/auth_callback",
+   "redirect_uri_provided_explicitly": true,
+   "resource": null
+  }
+ },
+ "access": {
+  "67a77ff3435fb333cea7c93063c866be2350bf0786a44f70a05507f07fa6de40": {
+   "client_id": "8d3c2f0e-ops-client",
+   "scopes": [
+    "filament"
+   ],
+   "resource": null,
+   "expires_at": 4102444800
+  }
+ },
+ "refresh": {
+  "a53119893a966c43f0fe28b48419177ac39873bc5165395010ac35c368bd5b71": {
+   "client_id": "8d3c2f0e-ops-client",
+   "scopes": [
+    "filament"
+   ],
+   "resource": null,
+   "expires_at": 4102444800,
+   "access": "67a77ff3435fb333cea7c93063c866be2350bf0786a44f70a05507f07fa6de40"
+  }
+ },
+ "used": {
+  "b68a3127843454cfd2354613cf7767268fc59635c4eb79b62785c6427fd63fa0": {
+   "client_id": "8d3c2f0e-ops-client",
+   "at": 1761900100.5,
+   "expires_at": 4102444800
+  }
+ },
+ "sessions": {
+  "46e1305c9d0982d6639e8bba1bf1d8c6eab1c5758471477ce4bc44bf26603fc1": {
+   "expires_at": 4102444800,
+   "created": 1761900200.25
+  }
+ }
+}

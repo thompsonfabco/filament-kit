@@ -145,6 +145,7 @@ def main() -> None:
         tracker = usage.Tracker(manager, sm)   # listens before the manager connects: sees every first report
         hub = camera.Hub(printer_state=manager.state)  # ip / Access Code / model / pin from the registry
         mapper = mapping.Mapper(manager)               # one per process: the app's routes and the lifespan share it
+        manager.add_listener(mapping.LayoutWatch(manager, mapper))   # stale map on a layout change, idle re-map
         app = create_app(sm, printers=manager, camera_hub=hub, mapper=mapper, enabled_modules=on)
         app.router.lifespan_context = printer_lifespan(manager, camera_hub=hub, tracker=tracker, mapper=mapper)
     else:

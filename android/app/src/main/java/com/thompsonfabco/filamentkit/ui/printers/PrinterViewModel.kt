@@ -101,6 +101,7 @@ object PrinterHelp {
         "not_found" -> "The server does not know this printer."
         "exists" -> "This printer is already set up."
         "printer_busy" -> "The printer is printing. Try again when it's idle."
+        "slot_in_use" -> "This slot feeds the print that is running. Set it when the print is done, or pick another slot."
         "cert_changed" -> CERT_CHANGED
         "needs_developer_mode" -> fix("needs_developer_mode")!!
         "no_preset" -> "No preset for this filament on this printer yet. It is made at the next preset build; " +

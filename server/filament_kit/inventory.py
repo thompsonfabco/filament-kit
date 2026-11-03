@@ -8,16 +8,20 @@ rebuild is requested (also when linking the tag fails after the spools were adde
 then for the items that got a spool); a failure there is logged and never fails the add. An item for an existing
 filament whose `line` names another line than the filament's own (it was edited in the app) sets that filament's
 `extra.line` in the same add, so the filament really joins that line.
+
+Adds, placement and tag links are serialized by `_LOCK`, a lock across threads and processes
+(`FK_STATE/inventory.lock`): the `server` and `web` processes both add spools, and two adds must never pick the
+same storage box.
 """
 from __future__ import annotations
 
 import datetime
 import json
 import logging
-import threading
+import math
 from dataclasses import dataclass, field
 
-from . import library, placement, tags
+from . import config, library, locks, placement, tags
 from .profiles import builds, lines as lines_mod
 from .spoolman import Spoolman, SpoolmanError
 
@@ -25,7 +29,8 @@ log = logging.getLogger(__name__)
 
 SEALED_COMMENT = "SEALED - tag when opened"
 
-_LOCK = threading.RLock()  # serializes add + placement so two adds never pick the same box
+# serializes add + placement (in this process and the other one) so two adds never pick the same box
+_LOCK = locks.ProcessLock(lambda: config.paths().state / "inventory.lock")
 
 _REQUIRED = ("vendor", "name", "material", "net", "tare", "density", "count")
 
@@ -81,7 +86,8 @@ def _is_int(v) -> bool:
 
 
 def _is_num(v) -> bool:
-    return isinstance(v, (int, float)) and not isinstance(v, bool)
+    """A real, finite number (not a bool; NaN and infinity would slip past every < and > check)."""
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
 
 
 _OPT_NUM = ("nozzle", "bed", "price_per_kg", "gross")
@@ -381,9 +387,20 @@ def _record_lines(items: list[dict]) -> None:
 
 
 def open_spool(sm: Spoolman, spool_id: int, uid: str, rules: dict, *, gross: float | None = None,
-               location: str | None = None, force: bool = False, dry: bool) -> dict:
-    """Link the tag and mark the spool opened: first_used, SEALED comment dropped, moved out of sealed stock."""
+               location: str | None = None, force: bool = False, dry: bool,
+               humidity: float | None = None, remaining: float | None = None) -> dict:
+    """Link the tag and mark the spool opened: first_used, SEALED comment dropped, moved out of sealed stock.
+    `gross` (scale weight with the spool) or `remaining` (filament grams) sets the weight; `humidity` (the box
+    hygrometer, %) is kept as `extra.box_humidity` with `extra.humidity_checked` = now (UTC), as ops did."""
     uid = tags.normalize_uid(uid)
+    if gross is not None and remaining is not None:
+        raise ValueError("give only one of gross or remaining")
+    if remaining is not None and (not _is_num(remaining) or remaining < 0):
+        raise ValueError("remaining must be a number of grams, not negative")
+    if gross is not None and not _is_num(gross):
+        raise ValueError("gross must be a number of grams")
+    if humidity is not None and (not _is_num(humidity) or not 0 <= humidity <= 100):
+        raise ValueError("humidity must be a percentage (0-100)")
     with _LOCK:
         spool = sm.get(f"spool/{spool_id}")
         patch: dict = {}
@@ -392,6 +409,8 @@ def open_spool(sm: Spoolman, spool_id: int, uid: str, rules: dict, *, gross: flo
             if gross < tare:
                 raise ValueError(f"gross {gross} g is below the spool tare {tare} g - check the weight")
             patch["remaining_weight"] = round(gross - tare, 1)
+        elif remaining is not None:
+            patch["remaining_weight"] = remaining
         link = link_tag(sm, spool_id, uid, force=force, dry=dry)  # raises TagConflict before any other write
         if location is None and spool.get("location") in (None, "", rules["sealed_location"]):
             used = {s["location"] for s in sm.get("spool") if s.get("location") and s["id"] != spool_id}
@@ -400,18 +419,50 @@ def open_spool(sm: Spoolman, spool_id: int, uid: str, rules: dict, *, gross: flo
                 "location"]
         if location is not None and location != spool.get("location"):
             patch["location"] = location
+        moist = {} if humidity is None else {"box_humidity": json.dumps(humidity),
+                                             "humidity_checked": json.dumps(_now())}
         if dry:
             return {**spool, **link.patch, **patch,
-                    "extra": {**(spool.get("extra") or {}), "nfc_id": json.dumps(uid)}}
+                    "extra": {**(spool.get("extra") or {}), "nfc_id": json.dumps(uid), **moist}}
         fresh = sm.get(f"spool/{spool_id}")
         if not fresh.get("first_used"):
             patch["first_used"] = _now()
         comment = (fresh.get("comment") or "").replace(SEALED_COMMENT, "").strip(" |;.")
         if comment != (fresh.get("comment") or ""):
             patch["comment"] = comment
+        if moist:  # on top of the fresh extra, which now holds the linked tag
+            patch["extra"] = {**(fresh.get("extra") or {}), **moist}
         if patch:
             sm.patch(f"spool/{spool_id}", patch)
         return sm.get(f"spool/{spool_id}")
+
+
+def pick_sealed(sm: Spoolman, filament_id: int) -> int | None:
+    """The spool to open for a filament: its lowest-id spool still carrying the SEALED marker, else None."""
+    ids = [s["id"] for s in sm.get("spool")
+           if (s.get("filament") or {}).get("id") == filament_id and SEALED_COMMENT in (s.get("comment") or "")]
+    return min(ids, default=None)
+
+
+def _one_byte_apart(a: str, b: str) -> bool:
+    pa, pb = a.split(":"), b.split(":")
+    return len(pa) == len(pb) > 1 and sum(x != y for x, y in zip(pa, pb)) == 1
+
+
+def tag_neighbours(sm: Spoolman, nfc_id: str) -> list[int]:
+    """Spools whose tag differs from `nfc_id` in exactly one byte: tags cut from one roll have UIDs like that
+    (4:77:8f:... vs 4:77:90:...), so a tap may have picked up the wrong one of a batch."""
+    uid = tags.normalize_uid(nfc_id)
+    out = []
+    for s in _all_spools(sm):
+        t = tags.stored(s)
+        try:
+            t = tags.normalize_uid(t) if t else None
+        except ValueError:
+            continue
+        if t and _one_byte_apart(t, uid):
+            out.append(s["id"])
+    return sorted(out)
 
 
 def update_spool(sm: Spoolman, spool_id: int, *, gross: float | None = None, remaining: float | None = None,
@@ -452,3 +503,34 @@ def find(sm: Spoolman, q: str, sealed_only: bool) -> list[dict]:
         if all(w in hay for w in words):
             out.append(s)
     return out
+
+
+def filaments(sm: Spoolman, q: str = "") -> list[dict]:
+    """Spoolman's filaments matching every word of `q` (vendor, name, material), with or without spools, for a
+    manual add's picker. Fields carry an add item's names (net, tare, nozzle, bed), so a client copies them; `tare`
+    is the filament's spool weight, else its vendor's empty spool weight. A filament without a vendor is listed with
+    vendor ""."""
+    words = (q or "").lower().split()
+    counts: dict = {}
+    for s in sm.get("spool"):
+        fid = (s.get("filament") or {}).get("id")
+        counts[fid] = counts.get(fid, 0) + 1
+    out = []
+    for f in sm.get("filament"):
+        v = f.get("vendor") or {}
+        vendor = v.get("name") or ""
+        if any(w not in f"{vendor} {f.get('name') or ''} {f.get('material') or ''}".lower() for w in words):
+            continue
+        tare = f.get("spool_weight")
+        out.append({"id": f["id"], "vendor": vendor, "name": f.get("name"), "material": f.get("material"),
+                    "density": f.get("density"), "net": f.get("weight"),
+                    "tare": tare if tare is not None else v.get("empty_spool_weight"),
+                    "color_hex": f.get("color_hex"), "nozzle": f.get("settings_extruder_temp"),
+                    "bed": f.get("settings_bed_temp"), "spools": counts.get(f["id"], 0)})
+    return sorted(out, key=lambda f: (f["vendor"].lower(), (f["name"] or "").lower()))
+
+
+def vendors(sm: Spoolman) -> list[dict]:
+    """Spoolman's vendors (name and empty spool weight as `tare`), for a manual add's vendor choice."""
+    return sorted(({"id": v["id"], "name": v.get("name") or "", "tare": v.get("empty_spool_weight")}
+                   for v in sm.get("vendor")), key=lambda v: v["name"].lower())
