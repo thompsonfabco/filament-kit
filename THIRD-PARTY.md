@@ -17,7 +17,7 @@ Two kinds of entry:
 
 | # | Item | Why | What to do |
 |---|---|---|---|
-| 1 | **Piper voice `en_US-lessac-medium`** (planned for the station's speech in v0.3.0) | Its model card points at the Lessac Blizzard 2013 dataset licence: research use only, no commercial use, no redistribution without written consent. | Never ship it, and don't download it by default. Default to a permissively licensed voice from the same collection: `en_US-ljspeech-medium` (public domain) or `en_US-libritts_r-medium` (CC BY 4.0); `en_GB-alba-medium` is CC BY 4.0 too. Avoid `ryan` and `hfc_female` (CC BY-NC-SA). |
+| 1 | **Piper voice `en_US-lessac-medium`** (planned default for the station's speech in v0.3.0: about 63 MB, downloaded at install time from Hugging Face, not bundled) | Its model card points at the Lessac Blizzard 2013 dataset licence: research use only, no commercial use, no redistribution without written consent. Downloading it for the user is the kit handing out a research-only dataset's model. | Change the default before it is ported: `en_US-ljspeech-medium` (public domain) or `en_US-libritts_r-medium` (CC BY 4.0, keep the credit); `en_GB-alba-medium` is CC BY 4.0 too. Pin the new voice's SHA-256 as planned. Avoid `ryan` and `hfc_female` (CC BY-NC-SA). The lessac voice may stay only as something the user asks for by name, with a note that it is research-only. |
 | 2 | **Google ML Kit barcode scanning** in the Android app (`com.google.mlkit:barcode-scanning`) | Proprietary, closed source, under Google's ML Kit terms. The APK bundles it, which sits badly with GPL-3.0 §6 (no corresponding source for that part), and F-Droid refuses it. | Replace the QR scanner with ZXing (`zxing-android-embedded`, Apache-2.0), or add an explicit GPL-3.0 §7 additional permission for the app. The app session already weighed ZXing for an F-Droid build. |
 | 3 | **Licence metadata of our own packages** | `server/pyproject.toml` and `pc-sync/pyproject.toml` declare no `license`; `pip-licenses` shows filament-kit as UNKNOWN. | Add `license = "GPL-3.0-or-later"` to both (and the LICENSE file to the wheel), so installs and tools see it. |
 | 4 | **Notices in the release files** | The APK and the PC sync setup carry third-party code (AndroidX, OkHttp, PyInstaller's bootloader, ...), whose BSD/MIT/Apache terms want their notices kept. | Ship this file in the server tarball and the PC sync setup, and show it (or the Gradle-generated OSS notices) in the app's Settings. |
@@ -30,7 +30,7 @@ Everything else below is in order: GPL-3.0-compatible, or only installed and nev
 |---|---|---|
 | filament-kit (the wheel, `install.sh`, `uninstall.sh`, units, `get.sh`) | GPL-3.0-or-later | Our code. `release.py` carries its own ed25519 verifier (RFC 8032), no external library. |
 | `bambu_hardware.xml` | GPL-3.0-or-later | Our data file about Bambu Lab printers and AMS units. |
-| Button-panel firmware `install/panel/intake-panel.bin` | GPL-3.0-or-later (our source, `station/panel/src`), built with the ESP8266 Arduino core (LGPL-2.1) and Espressif's ESP8266 SDK binaries (Espressif MIT-style licence) | A compiled image. Its source is in this repository, which satisfies the LGPL's relinking terms. No third-party Arduino library is used. |
+| Button-panel firmware `install/panel/intake-panel.bin` | GPL-3.0-or-later (our source, `station/panel/src`), built with the ESP8266 Arduino core (LGPL-2.1) and Espressif's ESP8266 SDK binaries (Espressif MIT-style licence) | A compiled image. Its source is in this repository, which satisfies the LGPL's relinking terms. No third-party Arduino library is used in the shipped firmware 6. Planned for firmware 7 (the OLED display): U8g2 2.36.5, BSD-2-Clause for the library code, with the fonts under their own terms (see [Display library](#display-library-planned-firmware-7)). |
 | The Android app `app/filament-kit.apk` | see [The Android app](#the-android-app) | The same APK as on the Releases page. |
 
 ## Installed on the server by the installer
@@ -81,9 +81,11 @@ the ones pip resolved on 2026-11-07; pins are marked.
 | Transitive: typing_extensions, aiohappyeyeballs | PSF-2.0 | |
 | Transitive: sniffio | Apache-2.0 OR MIT | |
 
-Planned for v0.3.0 (not on `main` yet): **piper-tts 1.8.0** (GPL-3.0-or-later, from OHF-Voice/piper1-gpl; its
-wheel also carries g2pW under Apache-2.0) for the station's speech, and a Piper **voice model** downloaded on
-request. See open item 1 for the voice.
+Planned for v0.3.0 (not on `main` yet), as a `station` extra in the same venv: **piper-tts 1.8.0**
+(GPL-3.0-or-later, from OHF-Voice/piper1-gpl; its wheel also carries g2pW under Apache-2.0) with
+**onnxruntime** (MIT; licence to be confirmed when it lands), for the station's speech; espeak-ng (above) stays
+the fallback. The Piper **voice model** is downloaded at install time and checked against a pinned SHA-256; it
+is not in the release. Voice models carry their own dataset licences: see open item 1.
 
 ## The Android app
 
@@ -103,7 +105,7 @@ Built by the release workflow and shipped as `filament-kit.apk`. Everything belo
 | Component | Licence | Notes |
 |---|---|---|
 | filament-kit-sync (`pc-sync/fksync`) | GPL-3.0-or-later | our code; no third-party Python packages |
-| Python interpreter and standard library | PSF-2.0 | bundled by PyInstaller |
+| Python interpreter and standard library | PSF-2.0 | bundled by PyInstaller. The planned Linux PC sync (v0.3.0, PyInstaller 6.11.1) bundles CPython 3.12 the same way, with the same terms. |
 | PyInstaller bootloader and runtime hooks | GPL-2.0-or-later WITH Bootloader-exception; hooks Apache-2.0 | the exception allows bundling a program under any licence |
 | Inno Setup (the setup stub) | Inno Setup licence (permissive; keep its notice) | makes the setup `.exe` |
 
@@ -123,6 +125,22 @@ your own server. What goes into it:
 | TalkiePCM 0.1.1 (pschatzmann) | GPL-3.0 |
 
 A built image is a GPL-3.0 work (TalkiePCM is GPL-3.0; our code is GPL-3.0-or-later). The source is here.
+
+## Display library (planned, firmware 7)
+
+The button panel's OLED display (panel firmware 7, not on `main` yet) adds the PlatformIO library
+**olikraus/U8g2 2.36.5**:
+
+- **Library code**: BSD-2-Clause (Copyright (c) 2016 olikraus). Compatible with GPL-3.0-or-later in one image;
+  keep its copyright notice and disclaimer with the source and in the notices shipped with the release. The
+  2.36.5 tag exists on GitHub; whether PlatformIO's registry lists it was not confirmed (check with
+  `pio pkg show olikraus/U8g2`).
+- **Fonts**: U8g2's LICENSE says fonts are "licensed under different conditions", per font group. The fonts used
+  must be named here and checked one by one before firmware 7 ships. Checked so far: the Adobe X11 fonts
+  (`helvB08_tr`, `ncenB08_tr` and the like) allow use, copying and sale for any purpose with the notice kept; the
+  X11 monospace fonts (`6x10_tf`, `5x7_tf`) are described as public domain. Not safe without a closer look: some
+  fonts from the dafont group (Nokia Cellphone is "distribute as you wish" but asks not to be sold on media;
+  others say only "100% free"). Prefer the X11 and Adobe fonts.
 
 ## Data
 
