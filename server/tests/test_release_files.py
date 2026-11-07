@@ -34,7 +34,7 @@ def test_release_workflow_uses_both_signing_secrets():
             assert (re.match(r"\s+(FK_KEYSTORE(_B64|_PASSWORD)|FK_RELEASE_KEY|FK_LIBRARY_TOKEN): "
                              r"\$\{\{ secrets\.(FK_KEYSTORE(_B64|_PASSWORD)|FK_RELEASE_KEY|FK_LIBRARY_TOKEN) \}\}$",
                              line)
-                    or re.match(r"\s+token: \$\{\{ secrets\.FK_LIBRARY_TOKEN \}\}$", line)), line
+                    or re.match(r"\s+token: \$\{\{ secrets\.FK_LIBRARY_TOKEN( \|\| github\.token)? \}\}$", line)), line
 
 
 def test_release_workflow_builds_sync_on_windows_with_pinned_pyinstaller():
@@ -690,21 +690,21 @@ def _step(text: str, name: str) -> str:
     return text[i:j if j > 0 else len(text)]
 
 
-def test_release_workflow_builds_the_library_from_the_private_repo():
+def test_release_workflow_builds_the_library_from_the_public_repo():
+    """filament-library is public: every release checks it out (the FK_LIBRARY_TOKEN secret is optional, used when
+    set) and builds, signs and publishes library.tar.gz (queue item 9: v0.2.0 had none)."""
     text = _read(".github/workflows/release.yml")
-    gate = _step(text, "Filament library token")
-    assert "FK_LIBRARY_TOKEN: ${{ secrets.FK_LIBRARY_TOKEN }}" in gate
-    assert "::warning::" in gate and "FK_LIBRARY_TOKEN" in gate     # absent: a warning, never a failure
-    assert "exit 1" not in gate
+    assert "Filament library token" not in text and "steps.library.outputs.have" not in text
     i = text.index("repository: thompsonfabco/filament-library")
     co = text[text.rindex("- uses: actions/checkout@", 0, i):i + 400]
-    assert "if: steps.library.outputs.have == 'true'" in co
-    assert "token: ${{ secrets.FK_LIBRARY_TOKEN }}" in co
+    assert "if:" not in co
+    assert "token: ${{ secrets.FK_LIBRARY_TOKEN || github.token }}" in co
     assert "persist-credentials: false" in co
     assert "path: filament-library" in co
     build = _step(text, "Build the tarball and the signed APK")
     assert "FK_LIBRARY_SRC: ${{ github.workspace }}/filament-library" in build
-    assert text.index("Filament library token") < text.index("Build the tarball and the signed APK")
+    up = text[text.index("name: library\n"):]
+    assert "if-no-files-found: error" in up[:200]
 
 
 def test_release_workflow_signs_and_publishes_the_library_when_built():

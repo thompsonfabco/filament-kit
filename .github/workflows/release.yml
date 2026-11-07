@@ -7,9 +7,8 @@ name: release
 # SHA256SUMS is signed (ed25519) with the secret FK_RELEASE_KEY, the private key the owner made with
 # tools/sign_release.py keygen, whose public half is in release.py and get.sh. Without these secrets
 # the release fails (never an unsigned APK or SHA256SUMS).
-# library.tar.gz (the filament library, spec R 2.6) is built from the private thompsonfabco/filament-library repo
-# with the secret FK_LIBRARY_TOKEN (a read-only token for that repo) and signed in SHA256SUMS like the rest; without
-# that secret the release is built without a library asset and the run shows a warning.
+# library.tar.gz (the filament library, spec R 2.6) is built from the public thompsonfabco/filament-library repo
+# and signed in SHA256SUMS like the rest; the secret FK_LIBRARY_TOKEN (a read-only token) is used when set.
 on:
   push:
     tags:
@@ -94,23 +93,10 @@ jobs:
           fi
           echo "FK_KEYSTORE=$ks" >> "$GITHUB_ENV"
 
-      - name: Filament library token
-        id: library
-        env:
-          FK_LIBRARY_TOKEN: ${{ secrets.FK_LIBRARY_TOKEN }}
-        run: |
-          if [ -z "$FK_LIBRARY_TOKEN" ]; then
-            echo "::warning::the secret FK_LIBRARY_TOKEN is not set: this release has no library.tar.gz (installs keep the library copy they have)"
-            echo "have=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "have=true" >> "$GITHUB_OUTPUT"
-          fi
-
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
-        if: steps.library.outputs.have == 'true'
         with:
           repository: thompsonfabco/filament-library
-          token: ${{ secrets.FK_LIBRARY_TOKEN }}
+          token: ${{ secrets.FK_LIBRARY_TOKEN || github.token }}
           path: filament-library
           persist-credentials: false
 
@@ -145,7 +131,6 @@ jobs:
           if-no-files-found: error
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
-        if: steps.library.outputs.have == 'true'
         with:
           name: library
           path: dist/library.tar.gz
@@ -278,7 +263,7 @@ jobs:
           fi
           cp get.sh dist/get.sh
           assets="filament-kit-$VERSION.tar.gz filament-kit.apk filament-kit-sync-setup-$VERSION.exe filament-kit-sync-linux-x86_64-$VERSION.tar.gz get.sh bambu_hardware.xml"
-          # library.tar.gz only when the server job built it (the FK_LIBRARY_TOKEN secret is set)
+          # library.tar.gz from the server job (kept conditional so a release still builds without it)
           if [ -f dist/library.tar.gz ]; then
             assets="$assets library.tar.gz"
           fi
