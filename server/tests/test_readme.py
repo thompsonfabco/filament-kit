@@ -130,4 +130,4 @@ def test_readme_sections_a_user_needs():
               "## Pair your PC"):        # the CLI says "see README: Pair your PC"
         assert h in text, h
     for path in re.findall(r"\]\(((?:docs|reader)/[^)#]+)", text):
-        assert (ROOT / path).exists(), path      # a file, or a folder such as docs/design/
+        assert (ROOT / path).exists(), path      # a file, or a folder

@@ -162,7 +162,7 @@ one-command install, and what stays behind: [Install the server, Uninstall](docs
   setup.
 - For maintainers and contributors: [docs/maintainer.md](docs/maintainer.md) (releases, signing keys, secrets),
   [docs/testing-e2e.md](docs/testing-e2e.md) and [docs/android-e2e.md](docs/android-e2e.md) (the end-to-end
-  tests), and the design documents in [docs/design/](docs/design/).
+  tests).
 
 filament-kit is GPL-3.0 (see [LICENSE](LICENSE)). What else a release contains or installs, and under what
 terms: [THIRD-PARTY.md](THIRD-PARTY.md).

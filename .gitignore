@@ -8,6 +8,7 @@ android/local.properties
 *.apk
 dist/
 .superpowers/
+docs/design/
 .venv/
 __pycache__/
 *.egg-info/
