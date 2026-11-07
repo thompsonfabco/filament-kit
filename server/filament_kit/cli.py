@@ -267,18 +267,19 @@ def _qr_text(payload: str) -> str:
     return payload
 
 
-def cmd_pair(pc: bool = False) -> int:
+def cmd_pair(pc: bool = False, station: bool = False) -> int:
     try:
-        pr = pairing.issue(device_hint="pc") if pc else pairing.issue()
+        pr = pairing.issue(device_hint="pc" if pc else "station" if station else "")
     except pairing.PairingError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
-    if pc:
-        # the PC has no QR scanner: the link is pasted into filament-kit-sync (printed by design, never logged)
-        print("Link for filament-kit-sync (paste it when asked):")
+    if pc or station:
+        # no QR scanner there: the link is pasted (printed by design, never logged)
+        print("Link for filament-kit-sync (paste it when asked):" if pc else
+              "Link for the intake station (on the station PC: sudo filament-kit station pair, then paste it):")
         print(pr.qr)
         fp = pairing.fingerprint((config.paths().etc / "cert.pem").read_bytes())
-        print("Certificate fingerprint (check it matches the one the PC shows):")
+        print(f"Certificate fingerprint (check it matches the one the {'PC' if pc else 'station'} shows):")
     else:
         print(_qr_text(pr.qr))
         fp = pairing.fingerprint((config.paths().etc / "cert.pem").read_bytes())
@@ -287,6 +288,42 @@ def cmd_pair(pc: bool = False) -> int:
     print(f"Pairing code: {pr.code}")
     print(f"Expires at {time.strftime('%H:%M:%S', time.localtime(pr.expires))} "
           f"(in {max(0, int(pr.expires - time.time()) // 60)} min)")
+    return 0
+
+
+def cmd_station_pair(ask=input) -> int:
+    """On the station PC: take the link from `filament-kit pair --station`, check the server's fingerprint with the
+    owner, save the pairing for the button flow (station/server_api.py)."""
+    from .station import server_api
+    if hasattr(os, "geteuid") and os.geteuid() != 0:
+        print("error: run as root: sudo filament-kit station pair", file=sys.stderr)
+        return 1
+    try:
+        link = server_api.parse_link(ask("Paste the link from 'sudo filament-kit pair --station' on the server: "))
+    except ValueError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    seen = first = None
+    for ip in link.ips or [link.host]:
+        try:
+            seen, first = server_api.peer_fingerprint(ip, link.port, timeout=server_api.CONNECT_TIMEOUT), ip
+            break
+        except OSError:
+            continue
+    if seen is None:
+        print(f"error: the server is not reachable at {', '.join(link.ips or [link.host])} port {link.port}",
+              file=sys.stderr)
+        return 1
+    if seen != link.fp:
+        print("error: the server presents a different certificate than the link names; pair again", file=sys.stderr)
+        return 1
+    print("The server's certificate fingerprint:")
+    print("  " + " ".join(seen[i:i + 4] for i in range(0, len(seen), 4)))
+    if ask("Does it match the one 'sudo filament-kit pair --station' showed? [y/N] ").strip().lower() not in ("y", "yes"):
+        print("Not paired.")
+        return 1
+    server_api.save_pairing(link, first=first)
+    print("Paired. Restart the station to use it: sudo systemctl restart filament-kit-station")
     return 0
 
 
@@ -1399,6 +1436,10 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     sub.add_parser("status", help="check services, Spoolman, key, certificate")
     pp = sub.add_parser("pair", help="show a QR code and code to pair a phone (--pc: a link for the PC sync)")
     pp.add_argument("--pc", action="store_true", help="pair the Windows PC sync: print the link, no QR code")
+    pp.add_argument("--station", action="store_true", help="pair the intake station's button flow: print the link")
+    stp = sub.add_parser("station", help="intake station commands (run on the station PC)")
+    stp_sub = stp.add_subparsers(dest="station_cmd", required=True)
+    stp_sub.add_parser("pair", help="pair the station's button flow with the server (link from 'pair --station')")
     up = sub.add_parser("unpair", help="list or remove paired phones")
     up.add_argument("device_id", nargs="?")
     sub.add_parser("config", help="interactive settings menu")
@@ -1490,7 +1531,9 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     if args.cmd == "status":
         return cmd_status(client_factory or _default_client)
     if args.cmd == "pair":
-        return cmd_pair(pc=args.pc)
+        return cmd_pair(pc=args.pc, station=args.station)
+    if args.cmd == "station":
+        return cmd_station_pair()
     if args.cmd == "unpair":
         return cmd_unpair(args.device_id)
     if args.cmd == "config":

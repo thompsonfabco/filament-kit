@@ -289,7 +289,9 @@ def by_tag(sm: Spoolman, uid: str) -> dict | None:
     return next((s for s in _all_spools(sm) if tags.stored(s) == uid), None)
 
 
-def link_tag(sm: Spoolman, spool_id: int, uid: str, force: bool, dry: bool) -> LinkResult:
+def link_tag(sm: Spoolman, spool_id: int, uid: str, force: bool, dry: bool, keep_sealed: bool = False) -> LinkResult:
+    """Link the tag to the spool. Linking opens a spool (first_used set, the sealed note dropped) unless
+    `keep_sealed` (the intake station's sealed spool with its tag already on the bag)."""
     uid = tags.normalize_uid(uid)
     with _LOCK:
         target = sm.get(f"spool/{spool_id}")
@@ -302,11 +304,12 @@ def link_tag(sm: Spoolman, spool_id: int, uid: str, force: bool, dry: bool) -> L
             raise TagConflict(None, f"{describe(target)} already has tag {tags.stored(target)}; "
                                     f"tapped {uid} (force replaces it)", reason="spool_has_other_tag")
         patch: dict = {}
-        if not target.get("first_used"):
-            patch["first_used"] = _now()
-        comment = (target.get("comment") or "").replace(SEALED_COMMENT, "").strip(" |;.")
-        if comment != (target.get("comment") or ""):
-            patch["comment"] = comment
+        if not keep_sealed:
+            if not target.get("first_used"):
+                patch["first_used"] = _now()
+            comment = (target.get("comment") or "").replace(SEALED_COMMENT, "").strip(" |;.")
+            if comment != (target.get("comment") or ""):
+                patch["comment"] = comment
         result = LinkResult(spool_id, uid, dry=dry, cleared=[s["id"] for s in others], patch=patch)
         if dry:
             return result
