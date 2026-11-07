@@ -62,7 +62,7 @@ def _owner_hits(text: str) -> list[str]:
 
 
 # Every Markdown file under docs/ is public (the owner's runbooks live outside the repository).
-PUBLIC_DOCS = ["README.md", "reader/README.md"] + sorted(
+PUBLIC_DOCS = ["README.md", "THIRD-PARTY.md", "reader/README.md"] + sorted(
     p.relative_to(ROOT).as_posix() for p in (ROOT / "docs").rglob("*.md"))
 
 
