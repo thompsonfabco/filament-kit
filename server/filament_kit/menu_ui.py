@@ -160,7 +160,6 @@ def _curses_menu(st: Checklist) -> str:
     """Run the screen; "apply", "cancel" or FALLBACK. Raises curses.error/OSError when curses cannot start.
     curses.wrapper puts the terminal back on every way out (Ctrl-C included)."""
     import curses
-    os.environ.setdefault("ESCDELAY", "25")       # Esc cancels at once, not after ncurses' default second
     swapped = None
     if not os.isatty(1):
         tty = os.open("/dev/tty", os.O_RDWR)      # stdout is captured (install.sh): draw on the terminal
@@ -169,12 +168,28 @@ def _curses_menu(st: Checklist) -> str:
         swapped = os.dup(1)
         os.dup2(tty, 1)
         os.close(tty)
+    escdelay = os.environ.get("ESCDELAY")
+    os.environ["ESCDELAY"] = "25"                 # Esc cancels at once, not after ncurses' default second
     try:
         return curses.wrapper(_loop, st)
     finally:
+        if escdelay is None:
+            os.environ.pop("ESCDELAY", None)
+        else:
+            os.environ["ESCDELAY"] = escdelay
         if swapped is not None:
             os.dup2(swapped, 1)
             os.close(swapped)
+
+
+def _start_errors() -> tuple[type[BaseException], ...]:
+    """What `_curses_menu` raises when the screen cannot start: no curses module, a terminal curses does not
+    know, no /dev/tty. Anything else is a bug and is not hidden behind the numbered list."""
+    try:
+        import curses
+    except ImportError:
+        return (ImportError, OSError)
+    return (curses.error, ImportError, OSError)
 
 
 def _stdin_tty() -> bool:
@@ -198,7 +213,7 @@ def run_menu(on, ask: Callable[[str], str | None], say: Callable[[str], None] = 
             result = _curses_menu(st)
         except KeyboardInterrupt:
             return None
-        except Exception:                         # noqa: BLE001 - curses.error, no /dev/tty: use the list
+        except _start_errors():
             result = FALLBACK
         if result == "apply":
             return st.on

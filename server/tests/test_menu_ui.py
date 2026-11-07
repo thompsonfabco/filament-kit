@@ -275,3 +275,79 @@ def test_real_curses_menu_in_a_pty(tmp_path):
 def test_real_curses_menu_cancel_in_a_pty(tmp_path):
     code, out, _ = _run_in_pty(tmp_path, [b" ", b"q"])
     assert code == 1 and out == ""
+
+
+# ---------- fix round 1: which failures fall back, ESCDELAY, Ctrl-C ----------
+
+class _FakeCurses:
+    """Stands in for the curses module: `wrapper` runs `behave`."""
+
+    class error(Exception):
+        pass
+
+    def __init__(self, behave):
+        self.behave = behave
+
+    def wrapper(self, fn, *args):
+        return self.behave()
+
+
+def _tty_stdin(monkeypatch):
+    s = io.StringIO("\n")
+    s.isatty = lambda: True
+    monkeypatch.setattr(sys, "stdin", s)
+    monkeypatch.setattr(menu_ui, "_stdin_tty", lambda: True)
+    monkeypatch.setenv("TERM", "xterm")
+
+
+def test_curses_init_failure_falls_back_to_the_list(monkeypatch):
+    _tty_stdin(monkeypatch)
+    fake = _FakeCurses(lambda: (_ for _ in ()).throw(_FakeCurses.error("setupterm: could not find terminal")))
+    monkeypatch.setitem(sys.modules, "curses", fake)
+    monkeypatch.setattr(menu_ui.os, "isatty", lambda fd: True)
+    said = []
+    assert menu_ui.run_menu(modules.MODES["server"], lambda p: "", said.append) == modules.MODES["server"]
+    assert any("[x]" in line for line in said)
+
+
+def test_no_dev_tty_falls_back_to_the_list(monkeypatch):
+    _tty_stdin(monkeypatch)
+    ran = []
+    monkeypatch.setitem(sys.modules, "curses", _FakeCurses(lambda: ran.append(1) or "apply"))
+    monkeypatch.setattr(menu_ui.os, "isatty", lambda fd: False)     # stdout captured
+
+    def no_tty(path, flags, *a):
+        raise OSError(6, "No such device or address", path)
+    monkeypatch.setattr(menu_ui.os, "open", no_tty)
+    said = []
+    assert menu_ui.run_menu(modules.MODES["server"], lambda p: "", said.append) == modules.MODES["server"]
+    assert ran == [] and any("[x]" in line for line in said)
+
+
+def test_other_errors_in_the_screen_code_are_not_hidden(monkeypatch):
+    _tty_stdin(monkeypatch)
+    monkeypatch.setitem(sys.modules, "curses", _FakeCurses(lambda: 1 / 0))
+    monkeypatch.setattr(menu_ui.os, "isatty", lambda fd: True)
+    with pytest.raises(ZeroDivisionError):
+        menu_ui.run_menu(modules.MODES["server"], lambda p: "", lambda t: None)
+
+
+@pytest.mark.parametrize("before", [None, "1000"])
+def test_escdelay_is_set_only_while_the_screen_runs(monkeypatch, before):
+    _tty_stdin(monkeypatch)
+    if before is None:
+        monkeypatch.delenv("ESCDELAY", raising=False)
+    else:
+        monkeypatch.setenv("ESCDELAY", before)
+    seen = []
+    monkeypatch.setitem(sys.modules, "curses", _FakeCurses(lambda: seen.append(os.environ.get("ESCDELAY")) or "cancel"))
+    monkeypatch.setattr(menu_ui.os, "isatty", lambda fd: True)
+    assert menu_ui.run_menu(modules.MODES["server"], lambda p: "", lambda t: None) is None
+    assert seen == ["25"] and os.environ.get("ESCDELAY") == before
+
+
+@pytest.mark.skipif(sys.platform == "win32" or not _curses_ok(), reason="needs a pty and curses (Linux)")
+def test_real_curses_menu_ctrl_c_restores_the_terminal(tmp_path):
+    code, out, screen = _run_in_pty(tmp_path, [b" ", b"\x03"])
+    assert code == 1 and out == ""
+    assert b"\x1b[?1049l" in screen                  # left the alternate screen: the terminal is back
