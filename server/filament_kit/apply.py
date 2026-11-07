@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Callable
 
 from . import config, modules, remote
+from .station import voice
 from .modules import MODULES, ModuleError
 
 SPOOLMAN_INFO = "http://127.0.0.1:7912/api/v1/info"
@@ -95,6 +96,8 @@ def station_dropin(cfg: dict, addresses: list[str]) -> str:
            f"NFC_DEVICE={st['nfc_device']}",
            f"STATION_BEEP={1 if st['beep'] else 0}",
            f"STATION_SPEECH={1 if st['speech'] else 0}",
+           f"STATION_TTS={st['tts']}",
+           f"STATION_PIPER_VOICE={voice.model_path(config.paths().opt.as_posix() + '/resources/voice')}",
            f"STATION_CAMERA={st['camera']}",
            f"STATION_PANEL_FW={config.paths().opt.as_posix()}/resources/panel/intake-panel.bin",
            f"STATION_PANEL_FLASH={1 if st['panel_flash'] else 0}"]

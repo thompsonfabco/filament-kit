@@ -10,6 +10,8 @@ import os
 import re
 import threading
 
+from . import voice
+
 
 def settings_from_env() -> dict:
     return {
@@ -20,7 +22,10 @@ def settings_from_env() -> dict:
         "active": int(os.environ.get("STATION_ACTIVE", "300")),  # a scan / weight counts this long (TAG_FRESH)
         "beep": os.environ.get("STATION_BEEP", "1") != "0",
         "beep_device": os.environ.get("STATION_BEEP_DEVICE", ""),
-        "speech": os.environ.get("STATION_SPEECH", "1") != "0",  # the panel talks (espeak-ng + ffmpeg)
+        "speech": os.environ.get("STATION_SPEECH", "1") != "0",  # the panel talks (Piper or espeak-ng, + ffmpeg)
+        # auto: Piper when its voice model is installed, else espeak-ng; espeak: always espeak-ng
+        "tts": os.environ.get("STATION_TTS", "auto"),
+        "piper_voice": os.environ.get("STATION_PIPER_VOICE", voice.model_path()),
         "camera": os.environ.get("STATION_CAMERA", "auto"),  # webcam picture on Hold: auto | /dev/videoN | off
         # the bundled panel firmware (a VERSION file beside it); a panel on another version is reflashed
         "panel_fw": os.environ.get("STATION_PANEL_FW", "/opt/filament-kit/resources/panel/intake-panel.bin"),
