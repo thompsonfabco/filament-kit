@@ -231,3 +231,8 @@ def test_keep_sealed_link_does_not_open(sm):
     before = copy.deepcopy(s)
     inventory.link_tag(sm, sid, UID, force=False, dry=False, keep_sealed=True)  # already linked: no-op
     assert sm.get(f"spool/{sid}")["comment"] == before["comment"]
+
+
+def test_save_accepts_the_panels_filament_key(sm):
+    b = save(client(sm), auth(), gross_g=900, filament=ITEM).json()
+    assert b["created"] is True and b["remaining_g"] == 745

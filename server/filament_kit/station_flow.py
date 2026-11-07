@@ -177,7 +177,7 @@ def save(sm, rules: dict, body: dict) -> dict:
                 "location": v["location"],
                 "display": lines("Saved" if not dry else "Would save", v["name"] or "",
                                  f"{v['remaining_g']:.0f} g left {v['location'] or ''}".strip())}
-    item = body.get("item")
+    item = body.get("item") if body.get("item") is not None else body.get("filament")  # the panel sends "filament"
     if not isinstance(item, dict):
         raise FlowError(409, "no_filament", "a new tag needs a recognised spool (item)",
                         lines("New tag", "show the spool to the camera first"))
