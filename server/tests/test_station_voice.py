@@ -71,12 +71,14 @@ def test_settings_tts_and_piper_voice(monkeypatch):
     assert (s["tts"], s["piper_voice"]) == ("espeak", "/srv/v.onnx")
 
 
-def test_dropin_carries_tts_and_the_voice_path(monkeypatch):
-    monkeypatch.setenv("FK_OPT", "/opt/filament-kit")
+def test_dropin_carries_tts_and_the_voice_path(monkeypatch, tmp_path):
+    for name in ("etc", "state", "opt"):  # nothing is written; still, never the real paths
+        monkeypatch.setenv(f"FK_{name.upper()}", str(tmp_path / name))
+    opt = (tmp_path / "opt").as_posix()
     cfg = {"modules": {"station": True}, "station": {"allow": ["127.0.0.1"]}}
     text = apply.station_dropin(cfg, ["127.0.0.1"])
     assert "STATION_TTS=auto" in text
-    assert f"STATION_PIPER_VOICE=/opt/filament-kit/resources/voice/{voice.DEFAULT}.onnx" in text
+    assert f"STATION_PIPER_VOICE={opt}/resources/voice/{voice.DEFAULT}.onnx" in text
     cfg["station"].update(tts="espeak", voice="en_US-lessac-medium")  # the owner's explicit pick
     text = apply.station_dropin(cfg, ["127.0.0.1"])
     assert "STATION_TTS=espeak" in text and "voice/en_US-lessac-medium.onnx" in text

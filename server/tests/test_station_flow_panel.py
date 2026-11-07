@@ -110,6 +110,13 @@ def rig(monkeypatch):
         st.flow.update(saved_flow)
 
 
+def fk_paths(monkeypatch, tmp_path):
+    """Every kit path under tmp_path: pairing files (server_api.save_pairing) never reach the real /etc."""
+    for name in ("etc", "state", "opt"):
+        (tmp_path / name).mkdir(exist_ok=True)
+        monkeypatch.setenv(f"FK_{name.upper()}", str(tmp_path / name))
+
+
 def scale(grams, status="stable"):
     with st.lock:
         st.state.update(scale={"grams": grams, "status": status, "unit": 2}, scale_at=time.time())
@@ -302,7 +309,7 @@ def test_camera_missing_or_failing(rig, monkeypatch):
 # --- no server -----------------------------------------------------------------------------------------------------------
 
 def test_not_paired_or_unreachable_says_use_phone(rig, monkeypatch, tmp_path):
-    monkeypatch.setenv("FK_ETC", str(tmp_path))  # no pairing files: the real ServerApi answers without a call
+    fk_paths(monkeypatch, tmp_path)  # no pairing files: the real ServerApi answers without a call
     monkeypatch.setattr(flow, "api", lambda: server_api.ServerApi())
     nfc.on_tag("4:dd:dd")
     assert rig.step() == "phone" and rig.row(1) == "Not paired" and rig.said[-1] == "The server can't help. Use the phone."
@@ -380,7 +387,7 @@ def test_screen_rows_are_ascii_and_cut():
 # --- the api seam -------------------------------------------------------------------------------------------------------
 
 def test_server_api_built_once_and_again_after_pairing(tmp_path, monkeypatch):
-    monkeypatch.setenv("FK_ETC", str(tmp_path))
+    fk_paths(monkeypatch, tmp_path)
     monkeypatch.setattr(flow, "_api", {"key": None, "api": None})
     a = flow.api()
     assert flow.api() is a and not a.paired
@@ -391,4 +398,4 @@ def test_server_api_built_once_and_again_after_pairing(tmp_path, monkeypatch):
     assert b.timeout == st.settings["recognise_timeout"]
     os.utime(server_api.token_file(), ns=(1, 1))  # a new pairing rewrites the token
     assert flow.api() is not b
-    assert config.paths().etc == tmp_path
+    assert config.paths().etc == tmp_path / "etc"
