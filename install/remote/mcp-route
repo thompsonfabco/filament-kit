@@ -18,6 +18,12 @@ ours() {
   head -n 1 "$1" | grep -qF "$MARK" && return 0
   head -n 1 "$1" | grep -qF "$OLD_MARK" && [ -f "$BOOK" ] && tr -s '[:space:]' '\n' < "$BOOK" | grep -qxF "$2"
 }
+# take a name out of kit-routes: once the kit's route is gone, a route put back under that name is not ours
+unlist() {
+  [ -f "$BOOK" ] || return 0
+  tr -s '[:space:]' '\n' < "$BOOK" | grep -vxF "$1" > "$BOOK.new" || true
+  mv "$BOOK.new" "$BOOK"
+}
 reload() {
   nginx -t -q || return 1
   # a stopped nginx picks the route up when it starts
@@ -48,9 +54,9 @@ case "$1" in
     fi ;;
   rm)
     f="$DIR/$2.conf"
-    [ -e "$f" ] || { echo "no route $2"; exit 0; }
-    ours "$f" "$2" || { echo "$f is not ours; leaving it"; exit 2; }
-    rm -f "$f" && reload && echo "removed $2" ;;
+    [ -e "$f" ] || { unlist "$2"; echo "no route $2"; exit 0; }
+    ours "$f" "$2" || { unlist "$2"; echo "$f is not ours; leaving it"; exit 2; }
+    rm -f "$f" && unlist "$2" && reload && echo "removed $2" ;;
   ls)
     for f in "$DIR"/*.conf; do [ -e "$f" ] || continue; n=$(basename "$f" .conf); p=$(grep -o '127.0.0.1:[0-9]*' "$f" | head -1); echo "$n  https://$HOST/$n/  -> $p"; done ;;
   *) sed -n '2,8p' "$0"; exit 2 ;;

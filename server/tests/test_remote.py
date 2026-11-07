@@ -512,3 +512,82 @@ def test_mcp_route_takes_over_an_older_kit_route_and_writes_its_marker(tmp_path)
     assert remote.MARK in f.read_text().splitlines()[0]
     r = run("rm", "filament")
     assert r.returncode == 0 and not f.exists()
+
+
+# ---- fix round 1: a stale kit-routes entry must not make a restored ops route the kit's ----
+
+def _book(root):
+    return root / "etc/mcp-router/kit-routes"
+
+
+def test_remote_off_drops_the_name_from_kit_routes_then_leaves_a_restored_ops_route(tmp_path, capsys):
+    root = tmp_path / "root"
+    f = root / "etc/nginx/mcp.d/filament.conf"
+    f.parent.mkdir(parents=True)
+    f.write_text(f'# MCP server "filament" ({remote.MARK})\n')
+    _book(root).parent.mkdir(parents=True)
+    _book(root).write_text("filament\nother\n")
+    apply.execute([Action("remote_off", "filament")], run=Rec(), resources=INSTALL, root=root)
+    assert not f.exists() and _book(root).read_text().split() == ["other"]
+    f.write_text(_ops_route())                       # the owner puts the ops route back (runbook 1.5 rollback)
+    apply.execute([Action("remote_off", "filament")], run=Rec(), resources=INSTALL, root=root)
+    assert f.read_text() == _ops_route()
+
+
+def test_remote_off_drops_the_name_even_when_it_leaves_a_foreign_file(tmp_path):
+    root = tmp_path / "root"
+    f = root / "etc/nginx/mcp.d/filament.conf"
+    f.parent.mkdir(parents=True)
+    f.write_text("# hand-written\n")
+    _book(root).parent.mkdir(parents=True)
+    _book(root).write_text("filament\n")
+    apply.execute([Action("remote_off", "filament")], run=Rec(), resources=INSTALL, root=root)
+    assert f.exists() and _book(root).read_text().split() == []
+
+
+def test_mcp_route_rm_drops_the_name_then_leaves_a_restored_ops_route(tmp_path):
+    root, run = _mcp_route(tmp_path)
+    f = root / "etc/nginx/mcp.d/filament.conf"
+    f.write_text(_ops_route(port=8101))
+    _book(root).write_text("filament\namazon\n")
+    r = run("rm", "filament")                        # an older kit's route, listed: removed
+    assert r.returncode == 0 and not f.exists(), r.stdout + r.stderr
+    assert _book(root).read_text().split() == ["amazon"]
+    f.write_text(_ops_route())
+    r = run("rm", "filament")
+    assert r.returncode == 2 and f.read_text() == _ops_route()
+
+
+def _uninstall_remote_block(tmp_path):
+    """The remote block of install/uninstall.sh, its /etc paths under tmp_path, nginx and systemctl stubbed."""
+    sh = shutil.which("bash")
+    if not sh:
+        pytest.skip("no bash")
+    root = tmp_path / "r"
+    (root / "etc/mcp-router").mkdir(parents=True)
+    (root / "etc/nginx/mcp.d").mkdir(parents=True)
+    text = (INSTALL / "uninstall.sh").read_text(encoding="utf-8")
+    block = text[text.index("# remote:"):text.index("rm -rf /opt/filament-kit")]
+    script = tmp_path / "block.sh"
+    script.write_text("set -euo pipefail\n" + block.replace("/etc/", f"{root.as_posix()}/etc/"), encoding="utf-8",
+                      newline="\n")
+    bin_ = tmp_path / "bin"
+    bin_.mkdir()
+    for name in ("nginx", "systemctl"):
+        (bin_ / name).write_text("#!/bin/sh\nexit 1\n", newline="\n")
+        os.chmod(bin_ / name, 0o755)
+    env = dict(os.environ, PATH=f"{bin_.as_posix()}{os.pathsep}{os.environ['PATH']}")
+    return root, lambda: subprocess.run([sh, script.as_posix()], capture_output=True, text=True, env=env)
+
+
+def test_uninstall_leaves_a_listed_name_whose_file_is_not_the_kits(tmp_path):
+    root, run = _uninstall_remote_block(tmp_path)
+    d = root / "etc/nginx/mcp.d"
+    (d / "filament.conf").write_text(_ops_route())          # stale listing + the restored ops route
+    (d / "mine.conf").write_text("# hand-written\n")
+    (d / "kit.conf").write_text(f'# MCP server "kit" ({remote.MARK})\n')
+    _book(root).write_text("filament\nmine\nkit\n")
+    r = run()
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (d / "filament.conf").read_text() == _ops_route() and (d / "mine.conf").exists()
+    assert not (d / "kit.conf").exists()

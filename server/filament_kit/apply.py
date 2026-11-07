@@ -533,14 +533,17 @@ def _remote_off(ex: _Exec, name: str) -> None:
     not add, the router conf stays too: it is what serves them (C-I2)."""
     gone = []
     f = _under(ex.root, f"{remote.ROUTE_DIR}/{name}.conf")
+    book = _under(ex.root, remote.KIT_ROUTES)
+    listed = book.read_text(encoding="utf-8").split() if book.exists() else []
     if f.exists():
-        book = _under(ex.root, remote.KIT_ROUTES)
-        listed = book.read_text(encoding="utf-8").split() if book.exists() else []
         if not remote.is_kit_route(f.read_text(encoding="utf-8", errors="replace"), name, listed):
             print(f"Remote is off; {f} was not written by the kit, so it was left in place.")
         else:
             f.unlink()
             gone.append(f"the {name} route")
+    if name in listed:
+        # the kit no longer has this route: a stale entry would make a route put back later (the ops one) the kit's
+        book.write_text("".join(f"{n}\n" for n in listed if n != name), encoding="utf-8")
     others = _other_routes(ex, name)
     files = [(remote.DEPLOY_HOOK_FILE, "the kit's certbot deploy hook")]
     if not others:
