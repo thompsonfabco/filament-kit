@@ -1,5 +1,6 @@
-"""The webcam picture of the pan taken when Hold is pressed (ffmpeg, v4l2), kept until Discard, release or a new scan and
-served as GET /photo. STATION_CAMERA: a /dev/video path, `auto` = the first USB camera, or `off`."""
+"""The webcam picture of a new spool, taken when yellow is pressed at the camera step (ffmpeg, v4l2) for the server to
+recognise; kept until red or a new scan and served as GET /photo. STATION_CAMERA: a /dev/video path, `auto` = the first
+USB camera, or `off`."""
 from __future__ import annotations
 
 import glob
@@ -22,12 +23,12 @@ def camera_dev():
     return cams[0] if cams else None
 
 
-def take_photo(held_at):
-    """A webcam picture of the pan for the Hold pressed at held_at (dropped if that hold is gone by then). Skips the
-    first frames while the camera sets its exposure; 1080p MJPEG if the camera has it, else whatever it gives."""
+def grab_photo():
+    """(JPEG, None) from the webcam, or (None, why): "no camera" or "camera failed". Skips the first frames while the
+    camera sets its exposure; 1080p MJPEG if the camera has it, else whatever it gives."""
     dev = camera_dev()
     if not dev:
-        return
+        return None, "no camera"
     grab = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "v4l2"]
     out = ["-i", dev, "-vf", r"select=gte(n\,15)", "-frames:v", "1", "-q:v", "3", "-f", "image2pipe", "-c:v", "mjpeg",
            "pipe:1"]
@@ -44,8 +45,6 @@ def take_photo(held_at):
         err = p.stderr.decode(errors="replace").strip()
     if not jpeg:
         log.warning("camera %s: %s", dev, err)
-        return
-    with st.lock:
-        if st.state["held_at"] == held_at:
-            st.state.update(photo=jpeg, photo_at=time.time())
+        return None, "camera failed"
     log.info("photo: %d KB", len(jpeg) // 1024)
+    return jpeg, None

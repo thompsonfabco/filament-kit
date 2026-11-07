@@ -59,9 +59,7 @@ def scale_loop():
                     now = time.time()
                     with st.lock:
                         st.state.update(scale=r, scale_at=now)
-                        if st.state["suppress"] and r["grams"] < st.MIN_GRAMS:
-                            st.state["suppress"] = False  # the discarded spool came off
-                        if r["status"] == "stable" and r["grams"] >= st.MIN_GRAMS and not st.state["suppress"]:
+                        if r["status"] == "stable" and r["grams"] >= st.MIN_GRAMS:
                             st.state.update(last=r["grams"], last_at=now)
                     st.panel_dirty.set()
             finally:
