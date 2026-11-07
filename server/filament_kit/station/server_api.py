@@ -2,7 +2,7 @@
 
 Pairing: `sudo filament-kit pair --station` on the server prints an fkit://pair link; `sudo filament-kit station pair`
 on the station PC takes it, shows the server's certificate fingerprint for the owner to compare, and writes
-/etc/filament-kit/station_server.json (address, port, fingerprint) and /etc/filament-kit/station_token (0600, the
+/etc/filament-kit-station/station_server.json (address, port, fingerprint) and .../station_token (0600, the
 station user's). Calls go to https://<ip>:<port> by IP (the unit allows only the server's address: no DNS, no
 mDNS), with the certificate pinned by its SHA-256 and `Authorization: Bearer <token>`.
 
@@ -61,12 +61,19 @@ def parse_link(text: str) -> Link:
     return Link(one("h"), int(port), one("t"), one("fp").lower(), [i for i in q.get("ip", []) if i])
 
 
+def pairing_dir() -> Path:
+    """/etc/filament-kit-station: the station's own folder (root:filament-kit-station 0750). Not /etc/filament-kit,
+    which is root:filament-kit 2750 and closed to the station's service user. Beside FK_ETC in tests."""
+    etc = config.paths().etc
+    return etc.parent / f"{etc.name}-station"
+
+
 def server_file() -> Path:
-    return config.paths().etc / "station_server.json"
+    return pairing_dir() / "station_server.json"
 
 
 def token_file() -> Path:
-    return config.paths().etc / "station_token"
+    return pairing_dir() / "station_token"
 
 
 def _context() -> ssl.SSLContext:
@@ -105,10 +112,12 @@ def peer_fingerprint(ip: str, port: int, timeout: float = 10) -> str:
 
 
 def save_pairing(link: Link, owner: str | None = "filament-kit-station", first: str | None = None) -> None:
-    """Write the server file (0644) and the token (0600, owned by the station's service user when run as root).
-    `first`: the address that answered while pairing, tried first from then on."""
-    etc = config.paths().etc
-    etc.mkdir(parents=True, exist_ok=True)
+    """Write the server file (0644) and the token (0600, owned by the station's service user when run as root) into
+    pairing_dir() (0750, group of the station user). `first`: the address that answered while pairing, tried first
+    from then on."""
+    d = pairing_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    os.chmod(d, 0o750)
     ips = link.ips or [link.host]
     if first:
         ips = [first] + [i for i in ips if i != first]
@@ -125,6 +134,8 @@ def save_pairing(link: Link, owner: str | None = "filament-kit-station", first: 
             pw = pwd.getpwnam(owner)
         except KeyError:
             return
+        os.chown(d, 0, pw.pw_gid)          # root:filament-kit-station 0750: the service can read, others can't
+        os.chown(server_file(), 0, pw.pw_gid)
         os.chown(tok, pw.pw_uid, pw.pw_gid)
 
 

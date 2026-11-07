@@ -136,3 +136,21 @@ def test_station_pair_command(server, monkeypatch):
     assert api.tag_lookup(UID)[0] == 200
     answers = iter([link, "n"])
     assert cli.cmd_station_pair(ask=lambda prompt: next(answers)) == 1
+
+
+def test_pairing_files_live_in_the_stations_own_folder(tmp_path):
+    """Not /etc/filament-kit (root:filament-kit 2750, closed to the station's service user)."""
+    link = server_api.parse_link(f"fkit://pair?h=srv.local&p=8710&t={'y' * 43}&fp={FP}&ip=192.0.2.5")
+    server_api.save_pairing(link, owner=None)
+    d = server_api.pairing_dir()
+    assert d == config.paths().etc.parent / f"{config.paths().etc.name}-station"
+    assert server_api.server_file().parent == d and server_api.token_file().parent == d
+    assert not (config.paths().etc / "station_token").exists()
+    if sys.platform != "win32":
+        assert (os.stat(d).st_mode & 0o777) == 0o750
+
+
+def test_uninstall_purge_removes_the_station_pairing_folder():
+    from pathlib import Path
+    text = (Path(__file__).resolve().parents[2] / "install" / "uninstall.sh").read_text(encoding="utf-8")
+    assert "rm -rf /etc/filament-kit /etc/filament-kit-station " in text
