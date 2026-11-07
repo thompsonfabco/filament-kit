@@ -18,3 +18,6 @@ station/panel/firmware/*.bin binary
 
 # The family build golden files are compared byte for byte (test_builds_orca.py).
 server/tests/data/golden/** -text
+
+# Test fixtures are read byte for byte (golden builds are made from them): no CRLF on Windows checkouts.
+server/tests/data/** -text
