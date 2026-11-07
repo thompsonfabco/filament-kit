@@ -392,12 +392,14 @@ def missing_settings(on, cfg: dict) -> list[str]:
 
 
 def collect_settings(on, cfg: dict, ask: Callable[[str], str | None],
-                     say: Callable[[str], None] = print) -> dict[str, str] | None:
-    """Ask for each missing setting, validating the answer; returns {key: value}. A blank answer (or EOF)
-    gives None: the caller goes back to the checklist."""
+                     say: Callable[[str], None] = print, skip=()) -> dict[str, str] | None:
+    """Ask for each missing setting (not those in `skip`), validating the answer; returns {key: value}. A blank
+    answer (or EOF) gives None: the caller goes back to the checklist."""
     got: dict[str, str] = {}
     work = copy.deepcopy(cfg)
     for key in missing_settings(on, work):
+        if key in skip:
+            continue
         while True:
             raw = ask(_SETTING_PROMPTS[key])
             if raw is None or not raw.strip():

@@ -18,7 +18,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-from . import apply, config, inventory, library, modules, pairing
+from . import apply, config, inventory, library, menu_ui, modules, pairing
 from .bridge import registry
 from .profiles import builds, lines as lines_mod
 from .profiles.errors import ProfileError
@@ -267,7 +267,23 @@ def _qr_text(payload: str) -> str:
     return payload
 
 
+def _station_server(cfg: dict) -> str:
+    """The kit server's address a station-only machine answers (its first non-loopback station.allow), or ""."""
+    allow = (cfg.get("station") or {}).get("allow") or []
+    return next((str(a).strip() for a in allow if str(a).strip() not in ("127.0.0.1", "localhost", "::1")), "")
+
+
 def cmd_pair(pc: bool = False) -> int:
+    cfg = config.load()
+    if "server" not in modules.enabled(cfg):
+        # a station (or another machine without the server): no certificate here, and none is needed
+        cmd = "sudo filament-kit pair" + (" --pc" if pc else "")
+        addr = _station_server(cfg)
+        where = (f"the kit server ({addr}, from station.allow)" if addr
+                 else "the kit server (its address is not set here: station.allow names none)")
+        print(f"error: the server module is off on this machine; pairing runs on the kit server.\n"
+              f"fix: run `{cmd}` on {where}", file=sys.stderr)
+        return 1
     try:
         pr = pairing.issue(device_hint="pc") if pc else pairing.issue()
     except pairing.PairingError as e:
@@ -556,7 +572,8 @@ def cmd_ensure_fields() -> int:
     except SpoolmanError as e:
         print(f"error: Spoolman: {e}", file=sys.stderr)
         return 1
-    print("created fields: " + ", ".join(created) if created else "fields already present")
+    print("Spoolman: added the kit's extra fields: " + ", ".join(created) if created
+          else "Spoolman: the kit's extra fields are in place")
     return 0
 
 
@@ -1104,11 +1121,31 @@ def cmd_modules_toggle(name: str, want_on: bool, server: str | None = None) -> i
         if err:
             print(f"error: {err}", file=sys.stderr)
             return 1
+    if want_on and apply._tty() and name in modules.MODULES:
+        err = _ask_module_settings(cfg, name)
+        if err:
+            print(f"error: {err}", file=sys.stderr)
+            return 1
     err = _change_module(cfg, name, want_on, confirm=_tty_confirm, server=server)
     if err:
         print(f"error: {err}", file=sys.stderr)
         return 1
     return _save_and_apply(cfg)
+
+
+def _ask_module_settings(cfg: dict, name: str) -> str | None:
+    """`modules enable NAME` at a terminal: ask for the settings NAME needs (web.public_url, orders.file), with the
+    menu's prompts, into cfg (in place). Not when a dependency is off (that refusal comes first) and not for the
+    station's server address (--server and _change_module see to it). Returns an error text or None."""
+    on = modules.enabled(cfg)
+    if any(d not in on for d in modules.MODULES[name].depends):
+        return None
+    got = modules.collect_settings(on | {name}, cfg, _ask, skip=("station.allow",))
+    if got is None:
+        return "a setting was left blank; nothing was changed"
+    for key, value in got.items():
+        modules.set_setting(cfg, key, value)
+    return None
 
 
 def _ask_station_server() -> str | None:
@@ -1154,11 +1191,12 @@ def _apply_selection(cfg: dict, on, *, ask=None) -> str | None:
 
 
 def _modules_menu(cfg: dict) -> None:
-    """One checklist: numbers toggle (needs go on too, dependents are listed), a/s/t presets, Enter applies."""
+    """One checklist (menu_ui: cursor keys and Space, or numbers without a terminal): needs go on too, dependents
+    go off, a/s/t presets, Enter applies."""
     on = modules.enabled(cfg)
     print()
     print(f"Modules (mode: {modules.mode_of(on)})")
-    chosen = modules.run_checklist(on, _ask)
+    chosen = menu_ui.run_menu(on, _ask)
     if chosen is None or chosen == on:
         print("Unchanged.")
         return
@@ -1190,7 +1228,7 @@ def cmd_modules_menu(raw: bool) -> int:
     sys.stdout = sys.stderr                     # prompts and the checklist go to the terminal, not the capture
     try:
         while True:
-            chosen = modules.run_checklist(on, _ask)
+            chosen = menu_ui.run_menu(on, _ask)
             if chosen is None:
                 return 1
             trial = _with_modules(cfg, chosen)
@@ -1220,6 +1258,63 @@ def cmd_modules_menu(raw: bool) -> int:
     return 0
 
 
+# ---------- uninstall ----------
+
+def _kept_release() -> tuple[str, Path] | None:
+    """(version, tarball) of the kept release to uninstall with: the running version's copy, else the newest
+    kept one that still verifies."""
+    from . import release, updates
+    store = updates.store()
+    cur = updates.current_version()
+    others = []
+    if store.is_dir():
+        for d in store.iterdir():
+            try:
+                if d.is_dir() and not d.name.startswith(".") and d.name != cur:
+                    others.append((release.parse_version(d.name), d.name))
+            except (release.ReleaseError, ValueError):
+                continue
+    for ver in [cur] + [v for _, v in sorted(others, reverse=True)]:
+        try:
+            return ver, release.verify_dir(store / ver, ver)
+        except (release.ReleaseError, OSError):
+            continue
+    return None
+
+
+def cmd_uninstall(purge: bool, run=None) -> int:
+    """Run uninstall.sh of the kept release (/opt/filament-kit/releases/<version>/), unpacked outside /opt, which
+    it removes. Its own confirmation for --purge stays: it reads the terminal as `./uninstall.sh --purge` does."""
+    from . import release, updates
+    if not _no_systemd() and not _is_root():
+        print("error: run as root: sudo filament-kit uninstall", file=sys.stderr)
+        return 1
+    run = run or subprocess.call
+    kept = _kept_release()
+    if kept is None:
+        ver = updates.current_version()
+        print(f"error: no kept copy of a release in {updates.store()}, so there is no uninstall.sh to run.\n"
+              f"fix: download filament-kit-{ver}.tar.gz from https://github.com/{release.REPO}/releases, unpack it "
+              f"(tar xzf filament-kit-{ver}.tar.gz), then in its folder run: sudo ./uninstall.sh"
+              + (" --purge" if purge else ""), file=sys.stderr)
+        return 1
+    ver, tarball = kept
+    running = updates.current_version()
+    if ver != running:
+        print(f"Using the uninstall.sh of {ver}, the newest kept release: there is no kept copy of {running} "
+              f"(the installed version).")
+    import tempfile
+    work = Path(tempfile.mkdtemp(prefix="filament-kit-uninstall-"))
+    try:
+        root = release.extract(tarball, ver, work)
+        return run(["bash", str(root / "uninstall.sh")] + (["--purge"] if purge else []))
+    except (release.ReleaseError, OSError) as e:
+        print(f"error: cannot unpack the kept release {ver}: {e}", file=sys.stderr)
+        return 1
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
 # ---------- web (the MCP endpoint and phone web app) ----------
 
 WEB_PASSPHRASE = "web_passphrase"
@@ -1230,8 +1325,8 @@ def _is_root() -> bool:
 
 
 def cmd_web_passphrase() -> int:
-    """Set the passphrase of the web unit's sign-ins (Claude's connector approval and the phone app). Typed twice,
-    hidden; stored as a salted scrypt hash, root:filament-kit 640, so the service can check it but not change it."""
+    """Set the passphrase that approves Claude's connector on the web unit's /login (the phone web app has no
+    sign-in). Typed twice, hidden; stored as a salted scrypt hash, root:filament-kit 640, so the service can check it but not change it."""
     from .web import auth  # needs the [web] extra
     if not _is_root():
         print("error: run as root: sudo filament-kit web passphrase", file=sys.stderr)
@@ -1333,8 +1428,11 @@ def cmd_web_status() -> int:
                 "set web.public_url in config.json (e.g. https://mcp.example.com/filament)")
     if public:
         print(f"     connector: {public}/mcp   phone app: {public}/intake")
-    ok &= _line((config.paths().etc / WEB_PASSPHRASE).is_file(), "sign-in passphrase is set",
-                "sudo filament-kit web passphrase")
+    if (config.paths().etc / WEB_PASSPHRASE).is_file():
+        _line(True, "sign-in passphrase is set")
+    else:   # only Claude's connector signs in with it: not a failure for someone using the phone web app alone
+        print("--   sign-in passphrase not set: the Claude connector cannot sign in until "
+              "`sudo filament-kit web passphrase`")
     port = int(web.get("port") or config.DEFAULTS["web"]["port"])
     up, why = _web_health(port)
     ok &= _line(up, f"web unit answers on 127.0.0.1:{port}" + ("" if up else f" ({why})"),
@@ -1437,7 +1535,7 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     mdsub = md.add_subparsers(dest="modules_cmd", required=True)
     mdsub.add_parser("apply", help="install, start and stop what config.json's modules say (root)")
     mdsub.add_parser("list", help="show each module on/off and the mode")
-    mm = mdsub.add_parser("menu", help="the module checklist (numbers toggle, a/s/t presets, Enter applies)")
+    mm = mdsub.add_parser("menu", help="the module checklist (cursor keys move, Space switches, a/s/t presets, Enter applies)")
     mm.add_argument("--raw", action="store_true", help="print the chosen modules as a comma list; change nothing")
     ms = mdsub.add_parser("set", help="switch to an install mode and apply (root)")
     ms.add_argument("mode", choices=list(modules.MODES))
@@ -1485,6 +1583,9 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     udx.add_argument("--rollback", action="store_true", help="reinstall the version the last update replaced")
     udx.add_argument("--scheduled", action="store_true", help="the timer's run: only with the updates module on "
                                                               "and a check due")
+    un = sub.add_parser("uninstall", help="remove the kit with the kept release's uninstall.sh (root); --purge "
+                                          "also deletes the data, after a typed confirmation")
+    un.add_argument("--purge", action="store_true", help="also delete settings, spool data, paired phones, backups")
     args = ap.parse_args(argv)
 
     if args.cmd == "status":
@@ -1533,6 +1634,8 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
         from . import remote
         cfg = config.load()
         return remote.issue(cfg) if args.remote_cmd == "issue" else remote.firewall(cfg)
+    if args.cmd == "uninstall":
+        return cmd_uninstall(args.purge)
     if args.cmd == "update":
         from . import updates
         cfg = config.load()

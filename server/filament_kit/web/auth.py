@@ -1,9 +1,9 @@
-"""Sign-in for the `web` module: OAuth 2.1 provider + store, passphrase, LAN-only routes, cookie sessions.
+"""Sign-in for the `web` module (Claude's connector): OAuth 2.1 provider + store, passphrase, LAN-only routes.
 
 A port of filament-ops vm/server.py (Provider, Store, LanOnly, /login), unchanged in behaviour, so a migrated
 oauth.json keeps the Claude connector signed in. Claude registers itself (DCR, only its own callbacks), then the
-owner approves once on /login, which only answers the home LAN and needs the passphrase. Tokens, codes and
-session cookies are stored as sha256 hashes in one JSON file (0600).
+owner approves once on /login, which only answers the home LAN and needs the passphrase. Tokens and codes are
+stored as sha256 hashes in one JSON file (0600). The phone web app has no sign-in.
 
 Everything comes in as parameters (public URL, LAN ranges, file paths); the caller reads the config.
 """

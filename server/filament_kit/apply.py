@@ -323,9 +323,18 @@ class _Exec:
             return False
 
     def probe(self, cmd: list[str]) -> bool:
+        """A command whose exit status is the answer; its output (a uid, a package status, `no such user`) would
+        only look like an error in the install log, so it goes nowhere."""
         if self.dry:
             return True
-        return self.ok(cmd)
+        try:
+            if self._run is run_checked:
+                subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            else:
+                self._run(cmd)
+            return True
+        except (subprocess.CalledProcessError, OSError):
+            return False
 
     def write(self, dest: str, data: bytes, mode: int, owner: str = "") -> Path:
         path = _under(self.root, dest)
@@ -348,7 +357,7 @@ def _enable(ex: _Exec, unit: str) -> None:
 
 def _user(ex: _Exec, arg) -> None:
     name, groups = (arg, "") if isinstance(arg, str) else arg
-    if not ex.dry and ex.ok(["id", "-u", name]):
+    if not ex.dry and ex.probe(["id", "-u", name]):
         return
     cmd = ["useradd", "--system", "--user-group", "--no-create-home", "--home-dir", "/nonexistent",
            "--shell", "/usr/sbin/nologin"]
@@ -524,12 +533,17 @@ def _remote_off(ex: _Exec, name: str) -> None:
     not add, the router conf stays too: it is what serves them (C-I2)."""
     gone = []
     f = _under(ex.root, f"{remote.ROUTE_DIR}/{name}.conf")
+    book = _under(ex.root, remote.KIT_ROUTES)
+    listed = book.read_text(encoding="utf-8").split() if book.exists() else []
     if f.exists():
-        if remote.MARK not in f.read_text(encoding="utf-8", errors="replace"):
+        if not remote.is_kit_route(f.read_text(encoding="utf-8", errors="replace"), name, listed):
             print(f"Remote is off; {f} was not written by the kit, so it was left in place.")
         else:
             f.unlink()
             gone.append(f"the {name} route")
+    if name in listed:
+        # the kit no longer has this route: a stale entry would make a route put back later (the ops one) the kit's
+        book.write_text("".join(f"{n}\n" for n in listed if n != name), encoding="utf-8")
     others = _other_routes(ex, name)
     files = [(remote.DEPLOY_HOOK_FILE, "the kit's certbot deploy hook")]
     if not others:

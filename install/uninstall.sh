@@ -60,18 +60,21 @@ if [ -f /etc/mcp-router/kit-routes ]; then
     KIT_ROUTES=$(tr -s '[:space:]' ' ' < /etc/mcp-router/kit-routes)
     for n in $KIT_ROUTES; do
         case "$n" in *[!a-z0-9-]*|"") continue ;; esac
-        if [ -f "/etc/nginx/mcp.d/$n.conf" ] && grep -q 'written by mcp-route' "/etc/nginx/mcp.d/$n.conf"; then
+        # listed and carrying the kit's own marker. A listed name whose file has the old shared header ('written
+        # by mcp-route', the ops router's) stays: the listing may be stale and the file the ops route put back.
+        # Every apply of this kit rewrites its route with its marker, so the kit's own routes all carry it.
+        if [ -f "/etc/nginx/mcp.d/$n.conf" ] && head -n 1 "/etc/nginx/mcp.d/$n.conf" \
+                | grep -qF 'written by filament-kit mcp-route'; then
             rm -f "/etc/nginx/mcp.d/$n.conf" && REMOTE_GONE=1
         fi
     done
     rm -f /etc/mcp-router/kit-routes
 fi
+# what is left in mcp.d is not the kit's (listed or not)
 OTHER_ROUTES=""
 for f in /etc/nginx/mcp.d/*.conf; do
     [ -f "$f" ] || continue
-    n=$(basename "$f" .conf)
-    case " $KIT_ROUTES " in *" $n "*) continue ;; esac
-    OTHER_ROUTES="$OTHER_ROUTES $n"
+    OTHER_ROUTES="$OTHER_ROUTES $(basename "$f" .conf)"
 done
 REMOTE_FILES=/etc/letsencrypt/renewal-hooks/deploy/filament-kit
 if [ -z "$OTHER_ROUTES" ]; then

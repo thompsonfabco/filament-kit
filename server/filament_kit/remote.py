@@ -28,7 +28,10 @@ TLS_DIR = ROUTER_DIR + "/tls"
 TIMER_DROPIN = "/etc/systemd/system/certbot.timer.d/acme-window.conf"
 DEPLOY_HOOK_FILE = "/etc/letsencrypt/renewal-hooks/deploy/filament-kit"
 KIT_ROUTES = ROUTER_DIR + "/kit-routes"  # names of the routes this kit added, one per line
-MARK = "written by mcp-route"  # first line of every route mcp-route writes; the only files we ever remove
+# In the first line of every route the kit's mcp-route writes. The filament-ops router's mcp-route writes
+# OLD_MARK, as the kit's did before v0.3.0, so a file with OLD_MARK is the kit's only when kit-routes lists it.
+MARK = "written by filament-kit mcp-route"
+OLD_MARK = "written by mcp-route"
 DEFAULT_ROUTE = "filament"
 ANTHROPIC = "160.79.104.0/21 2607:6bc0::/48"  # the same ranges the kit's units allow for Claude
 
@@ -94,6 +97,13 @@ def read_resource(resources: Path, name: str) -> str:
 
 def sandbox_text(resources: Path, lan: list[str]) -> str:
     return read_resource(resources, "nginx-sandbox.conf").replace("@LAN@", " ".join(lan)).rstrip() + "\n"
+
+
+def is_kit_route(text: str, name: str, listed) -> bool:
+    """True when a route file (its text) is one the kit wrote: the kit's marker, or the old shared marker on a
+    route the kit's kit-routes file lists. A route the ops router wrote is never the kit's."""
+    first = text.split("\n", 1)[0]
+    return MARK in first or (OLD_MARK in first and name in set(listed))
 
 
 def route_name(cfg: dict) -> str:

@@ -9,7 +9,21 @@ set -e
 HOST=$(cat /etc/mcp-router/host)
 DIR=/etc/nginx/mcp.d
 TPL=/etc/mcp-router/route.template
-MARK='written by mcp-route'
+MARK='written by filament-kit mcp-route'
+# the filament-ops router writes the old marker too (as the kit did before v0.3.0): a file with it is ours only when
+# /etc/mcp-router/kit-routes lists it
+OLD_MARK='written by mcp-route'
+BOOK=/etc/mcp-router/kit-routes
+ours() {
+  head -n 1 "$1" | grep -qF "$MARK" && return 0
+  head -n 1 "$1" | grep -qF "$OLD_MARK" && [ -f "$BOOK" ] && tr -s '[:space:]' '\n' < "$BOOK" | grep -qxF "$2"
+}
+# take a name out of kit-routes: once the kit's route is gone, a route put back under that name is not ours
+unlist() {
+  [ -f "$BOOK" ] || return 0
+  tr -s '[:space:]' '\n' < "$BOOK" | grep -vxF "$1" > "$BOOK.new" || true
+  mv "$BOOK.new" "$BOOK"
+}
 reload() {
   nginx -t -q || return 1
   # a stopped nginx picks the route up when it starts
@@ -20,7 +34,11 @@ case "$1" in
     echo "$2" | grep -Eq '^[a-z][a-z0-9-]{1,30}$' || { echo "name: lowercase letters, digits, dashes"; exit 2; }
     echo "$3" | grep -Eq '^[0-9]{4,5}$' || { echo "port: 1024-65535"; exit 2; }
     install -d -m 755 "$DIR"
-    if [ -e "$DIR/$2.conf" ] && ! grep -q "$MARK" "$DIR/$2.conf"; then echo "$DIR/$2.conf is not ours; leaving it"; exit 2; fi
+    # add may take over a route any mcp-route wrote (the ops cut-over: the kit replaces the ops `filament` route
+    # with its own); a hand-written file stays. rm removes only routes that are ours.
+    if [ -e "$DIR/$2.conf" ] && ! ours "$DIR/$2.conf" "$2" && ! head -n 1 "$DIR/$2.conf" | grep -qF "$OLD_MARK"; then
+      echo "$DIR/$2.conf is not ours; leaving it"; exit 2
+    fi
     grep -l "127.0.0.1:$3" "$DIR"/*.conf 2>/dev/null | grep -v "/$2.conf" && { echo "port $3 already routed"; exit 2; }
     rm -f "$DIR/$2.conf.old"
     [ -e "$DIR/$2.conf" ] && cp -p "$DIR/$2.conf" "$DIR/$2.conf.old"
@@ -36,9 +54,9 @@ case "$1" in
     fi ;;
   rm)
     f="$DIR/$2.conf"
-    [ -e "$f" ] || { echo "no route $2"; exit 0; }
-    grep -q "$MARK" "$f" || { echo "$f is not ours; leaving it"; exit 2; }
-    rm -f "$f" && reload && echo "removed $2" ;;
+    [ -e "$f" ] || { unlist "$2"; echo "no route $2"; exit 0; }
+    ours "$f" "$2" || { unlist "$2"; echo "$f is not ours; leaving it"; exit 2; }
+    rm -f "$f" && unlist "$2" && reload && echo "removed $2" ;;
   ls)
     for f in "$DIR"/*.conf; do [ -e "$f" ] || continue; n=$(basename "$f" .conf); p=$(grep -o '127.0.0.1:[0-9]*' "$f" | head -1); echo "$n  https://$HOST/$n/  -> $p"; done ;;
   *) sed -n '2,8p' "$0"; exit 2 ;;

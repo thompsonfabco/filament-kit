@@ -1,4 +1,4 @@
-# MCP server "@NAME@" -> 127.0.0.1:@PORT@   (written by mcp-route; public base https://@HOST@/@NAME@)
+# MCP server "@NAME@" -> 127.0.0.1:@PORT@   (written by filament-kit mcp-route; public base https://@HOST@/@NAME@)
 location ^~ /@NAME@/ {
     proxy_pass http://127.0.0.1:@PORT@/;              # trailing slash strips the /@NAME@ prefix
     include /etc/nginx/mcp-proxy.conf;
