@@ -194,7 +194,7 @@ fi
 install -m 755 "$RES/backup.sh" "$OPT/backup.sh"
 install -m 755 "$RES/filament-kit-cli.sh" /usr/local/bin/filament-kit
 # Units, the avahi file and the Spoolman script: `modules apply` installs them from here.
-# Everything but the Piper voice (about 63 MB, checked by its hashes in step 5): that one is kept across upgrades.
+# Everything but the Piper voices (60-80 MB each, checked by its hashes in step 5): that one is kept across upgrades.
 if [ -d "$OPT/resources" ]; then
     find "$OPT/resources" -mindepth 1 -maxdepth 1 ! -name voice -exec rm -rf {} +
 fi

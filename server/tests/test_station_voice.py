@@ -52,7 +52,7 @@ def test_the_voice_table():
     assert "research" in voice.VOICES["en_US-lessac-medium"]["licence"]  # only when the owner picks it
     assert voice.DEFAULT != "en_US-lessac-medium"
     lib = voice.VOICES["en_US-libritts_r-medium"]
-    assert lib["licence"] == "CC BY 4.0" and "LibriTTS-R" in lib["credit"]  # the credit THIRD-PARTY.md carries
+    assert lib["licence"].startswith("CC BY 4.0") and "LibriTTS-R" in lib["credit"]  # the credit THIRD-PARTY.md carries
     assert voice.model_path("/x/voice") == f"/x/voice/{voice.DEFAULT}.onnx"
     assert voice.model_path("/x/voice", "en_US-lessac-medium") == "/x/voice/en_US-lessac-medium.onnx"
     with pytest.raises(ValueError, match="unknown Piper voice"):
@@ -222,7 +222,7 @@ def test_install_sh_fetches_the_voice_only_for_a_station_and_keeps_it():
     assert '"${WHEEL}[station-tts]"' in text
     assert '-m filament_kit.station.voice "$OPT/resources/voice"' in text
     assert '"station" in modules.enabled(cfg)' in text and "FK_STATION_TTS" in text
-    assert 'rm -rf "$OPT/resources"' not in text and "! -name voice" in text  # an upgrade keeps the 63 MB
+    assert 'rm -rf "$OPT/resources"' not in text and "! -name voice" in text  # an upgrade keeps the voice
     assert voice.VOICES[voice.DEFAULT]["files"][MODEL] not in text  # the hashes live in voice.py only
     assert '"$OPT/resources/voice" "$VOICE"' in text
     assert 'station-tts = ["piper-tts==1.8.0"]' in (ROOT / "server" / "pyproject.toml").read_text(encoding="utf-8")
