@@ -197,12 +197,20 @@ def test_uninstall_runs_the_kept_releases_uninstall_sh(tmp_path, fake_release):
     assert str(updates.store()) not in cmd[1]        # run from outside /opt, which it removes
 
 
-def test_uninstall_falls_back_to_the_newest_kept_release(tmp_path, fake_release):
+def test_uninstall_falls_back_to_the_newest_kept_release_and_says_so(tmp_path, fake_release, capsys):
     _kept(tmp_path, "1.0.0")
     _kept(tmp_path, "1.1.0")
     ran = []
     assert cli.cmd_uninstall(purge=False, run=lambda cmd: ran.append(Path(cmd[1]).read_text()) or 3) == 3
     assert ran == ["# 1.1.0\n"]
+    out = capsys.readouterr().out
+    assert "no kept copy of 1.2.0" in out and "uninstall.sh of 1.1.0" in out
+
+
+def test_uninstall_with_the_running_versions_copy_says_nothing_extra(tmp_path, fake_release, capsys):
+    _kept(tmp_path, "1.2.0")
+    assert cli.cmd_uninstall(purge=False, run=lambda cmd: 0) == 0
+    assert capsys.readouterr().out == ""
 
 
 def test_uninstall_without_a_kept_release_says_how_to_get_one(tmp_path, fake_release, capsys):
@@ -221,3 +229,11 @@ def test_uninstall_is_a_cli_command_run_as_root():
 def test_uninstall_sh_keeps_its_purge_confirmation():
     text = (ROOT / "install" / "uninstall.sh").read_text(encoding="utf-8")
     assert "Type 'purge' to confirm: " in text
+
+
+def test_passphrase_docstrings_name_only_the_claude_connector():
+    """The phone web app has no sign-in: the passphrase only approves Claude's connector on /login."""
+    from filament_kit.web import auth
+    assert "phone" not in cli.cmd_web_passphrase.__doc__ and "connector" in cli.cmd_web_passphrase.__doc__
+    first = auth.__doc__.splitlines()[0]
+    assert "cookie sessions" not in first

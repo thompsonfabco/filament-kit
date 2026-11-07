@@ -1299,6 +1299,10 @@ def cmd_uninstall(purge: bool, run=None) -> int:
               + (" --purge" if purge else ""), file=sys.stderr)
         return 1
     ver, tarball = kept
+    running = updates.current_version()
+    if ver != running:
+        print(f"Using the uninstall.sh of {ver}, the newest kept release: there is no kept copy of {running} "
+              f"(the installed version).")
     import tempfile
     work = Path(tempfile.mkdtemp(prefix="filament-kit-uninstall-"))
     try:
@@ -1321,8 +1325,8 @@ def _is_root() -> bool:
 
 
 def cmd_web_passphrase() -> int:
-    """Set the passphrase of the web unit's sign-ins (Claude's connector approval and the phone app). Typed twice,
-    hidden; stored as a salted scrypt hash, root:filament-kit 640, so the service can check it but not change it."""
+    """Set the passphrase that approves Claude's connector on the web unit's /login (the phone web app has no
+    sign-in). Typed twice, hidden; stored as a salted scrypt hash, root:filament-kit 640, so the service can check it but not change it."""
     from .web import auth  # needs the [web] extra
     if not _is_root():
         print("error: run as root: sudo filament-kit web passphrase", file=sys.stderr)
