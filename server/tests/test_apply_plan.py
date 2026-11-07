@@ -41,7 +41,8 @@ def test_all_in_one_station_localhost_only():
     assert dest == "/etc/systemd/system/filament-kit-station.service.d/kit.conf"
     assert "STATION_ALLOW=127.0.0.1" in content
     assert "IPAddressAllow=localhost 127.0.0.1" in content
-    assert "/" not in content.replace("/opt/filament-kit/resources/panel/intake-panel.bin", "")  # no CIDR ranges
+    fw = (config.paths().opt / "resources" / "panel" / "intake-panel.bin").as_posix()
+    assert "/" not in content.replace(fw, "")  # no CIDR ranges
 
 
 def test_station_mode_resolves_server_name():
