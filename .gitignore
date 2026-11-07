@@ -22,3 +22,19 @@ android/.idea/
 # pc-sync shared tool venv
 pc-sync/.venv/
 .pio/
+
+# Claude / agent working files never belong in the repo (plans, specs, ledgers, notes, handoffs)
+docs/superpowers/
+docs/design/
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+**/progress.md
+*.ledger.md
+OVERNIGHT-SUMMARY.md
+handoffs/
+
+# IDE and local build files anywhere under android/
+android/**/.gradle/
+android/**/.idea/
+android/**/local.properties
