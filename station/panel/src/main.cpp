@@ -17,7 +17,8 @@
 //                 "AIR <C> <RH%|-> <hPa|->" room air every 10 s: a BME280, or a BMP280 + AHT20 board ("-": no such
 //                                         sensor, e.g. RH on a lone BMP280)
 // The PC resends "L" every second; with no "L" for 5 s (station service stopped) the lamps go dark and the display
-// says the station is offline. The OLED (SSD1306 128x64, I2C 0x3C) shares the bus with the air sensor.
+// says the station is offline ("Waiting for PC" before the first "L" since boot). The OLED (SSD1306 128x64, I2C
+// 0x3C) shares the bus with the air sensor.
 //
 // Pins avoid the USB serial pins (GPIO1 TX, GPIO3 RX). Boot straps: GPIO0/D3 and GPIO2/D4 must be high at power-on,
 // which the BME280 board's I2C pull-ups keep them; GPIO15/D8 must be low, which the speaker MOSFET's gate pull-down
@@ -30,7 +31,7 @@
 #include "aht20.h"
 #include "bme280.h"
 
-static const char *VERSION = "7";
+static const char *VERSION = "8";
 static const uint8_t PIN_BUZZER = D7;       // GPIO13: buzzer module signal
 static const uint8_t PIN_BTN_HOLD = D1;     // GPIO5:  Hold button to GND (internal pull-up)
 static const uint8_t PIN_BTN_DISCARD = D2;  // GPIO4:  Discard button to GND
@@ -266,10 +267,14 @@ struct Air {
 };
 
 // ---------- OLED: SSD1306 128x64 on the shared I2C bus; the PC sends the text, the bottom line is room air ----------
+// U8g2 (BSD-2-Clause) with two fonts only: u8g2_font_helvB10_tf (title; Adobe/DEC X11 HELVB10.BDF, permissive, its
+// notice is in ../PANEL.md) and u8g2_font_6x10_tf (body + air line; X11 Misc-Fixed, public domain).
 static U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE, PIN_SCL, PIN_SDA);
 
 struct Display {
   bool present = false, dirty = true, offline = true;
+  bool seen = false;  // the station has talked to us since boot: until then the title says "Waiting for PC", not
+                      // "offline" (the station may be about to reflash us, and an older firmware leaves the OLED as is)
   uint32_t retry = 0, drawn = 0;
   char rows[5][41] = {{0}};  // 0: title, 1-4: body
 
@@ -280,7 +285,10 @@ struct Display {
     rows[row][sizeof rows[row] - 1] = 0;
     dirty = true;
   }
-  void setOffline(bool off) { if (off != offline) { offline = off; dirty = true; } }
+  void setOffline(bool off) {
+    if (!off) seen = true;
+    if (off != offline) { offline = off; dirty = true; }
+  }
   void poll(uint32_t now, const Air &air) {
     if (!present) {  // not found (yet): look again every 30 s
       if ((int32_t)(now - retry) < 0) return;
@@ -295,7 +303,7 @@ struct Display {
     dirty = false; drawn = now;
     u8g2.clearBuffer();
     u8g2.setFont(u8g2_font_helvB10_tf);
-    u8g2.drawStr(0, 11, offline ? "Station offline" : rows[0]);
+    u8g2.drawStr(0, 11, !offline ? rows[0] : seen ? "Station offline" : "Waiting for PC");
     u8g2.setFont(u8g2_font_6x10_tf);
     if (!offline)
       for (int r = 1; r <= 4; r++) u8g2.drawStr(0, 12 + r * 10, rows[r]);
