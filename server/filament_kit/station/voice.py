@@ -1,8 +1,8 @@
 """The panel's Piper voices: the one table naming them (where each comes from, its pinned SHA-256 hashes, its
 licence), and the installer's download of the chosen one.
 
-The default is `en_US-ljspeech-medium`, trained on the public-domain LJ Speech dataset. `station.voice` in the
-config picks another voice from VOICES; `modules apply` points the station at it (STATION_PIPER_VOICE) and
+DEFAULT (one line, at the top of the table) is the voice a station gets; `station.voice` in the config picks another
+voice from VOICES; `modules apply` points the station at it (STATION_PIPER_VOICE) and
 install.sh fetches it. To add a voice, add a row here with the hashes of its .onnx and .onnx.json.
 
 `python -m filament_kit.station.voice DIR [NAME]` (install.sh, station on, `station.tts` not `espeak`): fetch the
@@ -19,14 +19,25 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+# The voice every station gets unless station.voice says otherwise (the owner is A/B-testing ljspeech and libritts_r).
+DEFAULT = "en_US-ljspeech-medium"
+
 _HF = "https://huggingface.co/rhasspy/piper-voices/resolve/main/"
 VOICES = {
-    # LJ Speech: public domain (dataset and voice). The kit's default.
+    # LJ Speech: public domain (dataset and voice).
     "en_US-ljspeech-medium": {
         "url": _HF + "en/en_US/ljspeech/medium/", "licence": "public domain (LJ Speech dataset)",
         "files": {"en_US-ljspeech-medium.onnx": "6f52a751e2349abe7a76735eb09dc1875298c77ea2342ffd2fef79ff81b87f22",
                   "en_US-ljspeech-medium.onnx.json":
                       "141d612cc0a95ed7efc1ca936b845c2364967f2e9217c5dbfcf69fc4d6c65860"}},
+    # LibriTTS-R: CC BY 4.0, so the credit goes with it (THIRD-PARTY.md). 904 speakers; Piper uses its first.
+    "en_US-libritts_r-medium": {
+        "url": _HF + "en/en_US/libritts_r/medium/", "licence": "CC BY 4.0",
+        "credit": "Piper voice en_US-libritts_r-medium, trained on LibriTTS-R (Koizumi et al., 2023, "
+                  "http://www.openslr.org/141/), licensed CC BY 4.0",
+        "files": {"en_US-libritts_r-medium.onnx": "10bb85e071d616fcf4071f369f1799d0491492ab3c5d552ec19fb548fac13195",
+                  "en_US-libritts_r-medium.onnx.json":
+                      "b471dc60d2d8335e819c393d196d6fbf792817f40051257b269878505bc9afb3"}},
     # lessac: RESEARCH-ONLY (Blizzard 2013 licence on its dataset). Never a default: only when the owner sets
     # station.voice to it explicitly for their own station.
     "en_US-lessac-medium": {
@@ -35,7 +46,6 @@ VOICES = {
                   "en_US-lessac-medium.onnx.json":
                       "efe19c417bed055f2d69908248c6ba650fa135bc868b0e6abb3da181dab690a0"}},
 }
-DEFAULT = "en_US-ljspeech-medium"
 DIR = "/opt/filament-kit/resources/voice"  # install.sh puts voices here; `modules apply` points the station at one
 
 

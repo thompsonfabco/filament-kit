@@ -363,7 +363,7 @@ fi
 # ---------- 5. the station's voice ----------
 # With the station module on, the button panel speaks with Piper (the [station-tts] extra) and a Piper voice,
 # downloaded into $OPT/resources/voice and checked against the SHA-256 hashes pinned in filament_kit/station/voice.py
-# (the one table of voices: station.voice picks one, default the public-domain en_US-ljspeech-medium). A mismatch
+# (the one table of voices: station.voice picks one, else the table's DEFAULT). A mismatch
 # stops the install; no network only skips it, and espeak-ng speaks instead.
 # Off: station.tts set to espeak in the config, or FK_STATION_TTS=espeak for this run.
 TTS=$("$VENV/bin/python" -I -c '

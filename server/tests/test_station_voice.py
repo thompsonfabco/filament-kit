@@ -44,13 +44,16 @@ def urlopen_serving(served: dict, seen: list):
 # --- the one place the voice is named -------------------------------------------------------------------------------
 
 def test_the_voice_table():
-    assert voice.DEFAULT == "en_US-ljspeech-medium" and "public domain" in voice.VOICES[voice.DEFAULT]["licence"]
+    assert voice.DEFAULT in voice.VOICES and "public domain" in voice.VOICES["en_US-ljspeech-medium"]["licence"]
     for name, v in voice.VOICES.items():
         assert set(v["files"]) == {name + ".onnx", name + ".onnx.json"}
         assert all(len(h) == 64 for h in v["files"].values())
         assert v["url"].startswith("https://huggingface.co/rhasspy/piper-voices/") and v["url"].endswith("/")
     assert "research" in voice.VOICES["en_US-lessac-medium"]["licence"]  # only when the owner picks it
-    assert voice.model_path("/x/voice") == "/x/voice/en_US-ljspeech-medium.onnx"
+    assert voice.DEFAULT != "en_US-lessac-medium"
+    lib = voice.VOICES["en_US-libritts_r-medium"]
+    assert lib["licence"] == "CC BY 4.0" and "LibriTTS-R" in lib["credit"]  # the credit THIRD-PARTY.md carries
+    assert voice.model_path("/x/voice") == f"/x/voice/{voice.DEFAULT}.onnx"
     assert voice.model_path("/x/voice", "en_US-lessac-medium") == "/x/voice/en_US-lessac-medium.onnx"
     with pytest.raises(ValueError, match="unknown Piper voice"):
         voice.model_path("/x/voice", "nope")
@@ -61,7 +64,7 @@ def test_settings_tts_and_piper_voice(monkeypatch):
     monkeypatch.delenv("STATION_PIPER_VOICE", raising=False)
     s = st.settings_from_env()
     assert s["tts"] == "auto"
-    assert s["piper_voice"] == "/opt/filament-kit/resources/voice/en_US-ljspeech-medium.onnx"
+    assert s["piper_voice"] == f"/opt/filament-kit/resources/voice/{voice.DEFAULT}.onnx"
     monkeypatch.setenv("STATION_TTS", "espeak")
     monkeypatch.setenv("STATION_PIPER_VOICE", "/srv/v.onnx")
     s = st.settings_from_env()
@@ -73,7 +76,7 @@ def test_dropin_carries_tts_and_the_voice_path(monkeypatch):
     cfg = {"modules": {"station": True}, "station": {"allow": ["127.0.0.1"]}}
     text = apply.station_dropin(cfg, ["127.0.0.1"])
     assert "STATION_TTS=auto" in text
-    assert "STATION_PIPER_VOICE=/opt/filament-kit/resources/voice/en_US-ljspeech-medium.onnx" in text
+    assert f"STATION_PIPER_VOICE=/opt/filament-kit/resources/voice/{voice.DEFAULT}.onnx" in text
     cfg["station"].update(tts="espeak", voice="en_US-lessac-medium")  # the owner's explicit pick
     text = apply.station_dropin(cfg, ["127.0.0.1"])
     assert "STATION_TTS=espeak" in text and "voice/en_US-lessac-medium.onnx" in text
