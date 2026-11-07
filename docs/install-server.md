@@ -27,14 +27,18 @@ guest network.
 2. Copy this line, paste it into the Terminal (Ctrl+Shift+V) and press Enter:
 
    ```bash
-   curl -fsSL https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh | sudo bash
+   curl -fsSLO https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh && sudo bash get.sh
    ```
 
 3. Type your password when asked and press Enter. Nothing shows while you type. That is normal.
 4. Answer the questions (see [The questions](#the-questions) below).
 
-The command downloads the newest release, checks its signature and stops without installing anything if the
-check fails. Then it runs the installer.
+The first half of the line saves the installer, `get.sh`, into the folder you are in (your home folder, in a new
+Terminal); the second half runs it. `get.sh` downloads the newest release, checks its signature and stops without
+installing anything if the check fails. Then it runs the installer. You can delete `get.sh` afterwards.
+
+(An earlier form of this command piped the download straight into `sudo bash`. Don't use it: it can hang
+forever at "Installing system packages", because the installer then runs without a proper terminal.)
 
 ## While the repository is private
 
@@ -140,8 +144,8 @@ time. For a first install, pressing **Enter** at every question is fine.
 
 ### Answers on the command line
 
-To skip the questions, give the answers as options. With the one command they go after `sudo bash -s --`; with
-`get.sh` or `./install.sh`, after the file name:
+To skip the questions, give the answers as options after `get.sh` (or after `./install.sh` from an unpacked
+release):
 
 | Option | What it does |
 |---|---|
@@ -149,12 +153,12 @@ To skip the questions, give the answers as options. With the one command they go
 | `--server <name or IP>` | For `--mode station`: the address of the computer the server runs on. |
 | `--modules a,b` | A custom set of modules, for example `--modules spoolman,server,printers`. What they need is added. |
 | `--set key=value` | A setting a module in `--modules` needs, for example `--set web.public_url=https://my-server.local/filament`. |
-| `--version 0.2.0` | One command and `get.sh` only: that release instead of the newest. |
+| `--version 0.2.0` | `get.sh` only: that release instead of the newest. |
 
 For example:
 
 ```bash
-curl -fsSL https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh | sudo bash -s -- --mode all-in-one
+curl -fsSLO https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh && sudo bash get.sh --mode all-in-one
 ```
 
 ## What you see at the end
@@ -242,6 +246,29 @@ To use AI label reading later: in `sudo filament-kit config`, type `4` to enter 
 
 Every command is in the [user guide](user-guide.md#everyday-commands).
 
+## Running the server in WSL
+
+Ubuntu inside **WSL** on a Windows PC works, with one catch: WSL's default network mode (**NAT**) hides the Linux
+side behind the PC. Printers' announcements don't reach it, so none are found, and your phone and the PC sync
+can't connect to it either. Two ways out:
+
+- **Switch WSL to mirrored networking** (Windows 11 22H2 or newer). Create or edit the file `.wslconfig` in your
+  Windows user folder (`C:\Users\<you>\.wslconfig`) so it contains:
+
+  ```
+  [wsl2]
+  networkingMode=mirrored
+  ```
+
+  Then, in PowerShell, `wsl --shutdown`, and start Ubuntu again. The Linux side now shares the PC's network
+  address: printers are discovered, and phones reach the server at the PC's name or IP address. If Windows
+  Firewall is on, allow the kit's ports through it (8710 for the app, 7912 for Spoolman, 5353 for `.local`
+  names).
+- **Stay in NAT mode and add printers by hand**: `sudo filament-kit config` → **5) Printers** → **add printer**.
+  Phones still can't reach a NAT-mode server, so this only suits testing on the PC itself.
+
+Either way, the PC must stay on and awake for the server to answer.
+
 ## Common problems
 
 - **`Ubuntu 24.04 or newer is required`**: the computer runs another system or an older Ubuntu. Upgrade it, or
@@ -256,8 +283,10 @@ Every command is in the [user guide](user-guide.md#everyday-commands).
   turned on Ubuntu's firewall (`ufw`), allow the app's port and name lookups:
   `sudo ufw allow 8710/tcp` and `sudo ufw allow 5353/udp`. For Spoolman in a browser, also `sudo ufw allow 7912/tcp`.
 - **Printers don't show up**: the computer must be on the same network as the printers, and a firewall must allow
-  UDP ports 2021 and 1990. A server inside WSL or a virtual machine with NAT networking can't see printers: add
-  them by hand with `sudo filament-kit config` → **5) Printers**.
+  UDP ports 2021 and 1990. A server inside WSL or a virtual machine with NAT networking can't see printers (see
+  [Running the server in WSL](#running-the-server-in-wsl)): add them by hand with `sudo filament-kit config` →
+  **5) Printers** → **add printer**, with the name, IP address, serial number and Access Code from the printer's
+  screen.
 - **The pairing code expired**: run `sudo filament-kit pair` for a new one.
 
 ## Uninstall

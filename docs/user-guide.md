@@ -27,10 +27,10 @@ Step by step, with every question and what you see: [Install the server](install
 Ubuntu computer:
 
 ```
-curl -fsSL https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh | sudo bash
+curl -fsSLO https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh && sudo bash get.sh
 ```
 
-Options go after `sudo bash -s --` (or after `./install.sh` from an unpacked release): `--mode server|station|all-in-one`,
+Options go after `get.sh` (or after `./install.sh` from an unpacked release): `--mode server|station|all-in-one`,
 `--server <address>` for a station, `--modules a,b` with `--set key=value` for the settings a module needs
 (for example `--modules server,web --set web.public_url=https://filament.example.com/filament`), and
 `--version 0.3.0`. Without a terminal it asks nothing and installs the `server` mode unless told otherwise.
@@ -193,8 +193,10 @@ that to work:
   home network, for example `sudo ufw allow from 198.51.100.0/24 to any port 2021,1990 proto udp` (use your
   own network's range).
 - A server inside **WSL**, a virtual machine with NAT networking, or a container without host networking does
-  not receive the announcements. Add the printers by hand there: `sudo filament-kit config` → **Printers** →
-  **add printer**, and enter the name, IP address, serial number and Access Code shown on the printer's screen.
+  not receive the announcements (and phones can't reach it). In WSL, switch to mirrored networking
+  (`networkingMode=mirrored` in `.wslconfig`; see [Running the server in WSL](install-server.md#running-the-server-in-wsl)).
+  Otherwise add the printers by hand: `sudo filament-kit config` → **Printers** → **add printer**, and enter the
+  name, IP address, serial number and Access Code shown on the printer's screen.
 
 A printer appears in the app once it has been seen on the network (or added by hand with its IP address); you
 then enter its Access Code in the app to set it up.

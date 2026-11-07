@@ -20,8 +20,11 @@ def test_readme_opens_with_the_goal_then_the_one_command_install():
     assert text.startswith("# filament-kit\n")
     install = text.index("\n## Install\n")
     assert "## What you need" in text[:install]
-    assert "curl -fsSL https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh | sudo bash" \
-        in text[install:text.index("\n## ", install + 1)]
+    # download-then-run, not `curl | sudo bash`: piped into sudo, the installer hangs at apt (no controlling tty)
+    section = text[install:text.index("\n## ", install + 1)]
+    assert "curl -fsSLO https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh && sudo bash get.sh" \
+        in section
+    assert "| sudo bash" not in section
 
 
 def test_module_table_matches_the_registry():

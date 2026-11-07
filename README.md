@@ -23,11 +23,11 @@ can keep itself up to date. The whole kit is free software (GPL-3.0).
 On the Ubuntu computer, open a Terminal, paste this line and press Enter:
 
 ```bash
-curl -fsSL https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh | sudo bash
+curl -fsSLO https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh && sudo bash get.sh
 ```
 
-It downloads the newest release, checks its signature, and asks a few questions (pressing Enter at each one is
-fine). At the end it shows a QR code for pairing your phone. Step by step, with every question and what you see:
+It downloads the installer (`get.sh`) and runs it. The installer fetches the newest release, checks its
+signature, and asks a few questions (pressing Enter at each one is fine). At the end it shows a QR code for pairing your phone. Step by step, with every question and what you see:
 **[Install the server](docs/install-server.md)**.
 
 The command works once the repository is public. It is private for now (a beta), so until then the server
