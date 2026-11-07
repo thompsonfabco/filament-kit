@@ -520,6 +520,8 @@ def test_make_release_tarball_passes_extract_and_the_sums_check(tmp_path, key):
     skip = shutil.ignore_patterns(".venv", "*.egg-info", "build", "dist", "__pycache__", ".pytest_cache")
     for part in ("tools", "install", "server", "station/panel/firmware"):
         shutil.copytree(ROOT / part, src / part, ignore=skip)
+    for f in ("LICENSE", "THIRD-PARTY.md"):
+        shutil.copy(ROOT / f, src / f)
     marker = ROOT / "server" / "build" / "f1-untouched"   # a developer's build folder in the real checkout
     made_build = not marker.parent.exists()
     marker.parent.mkdir(exist_ok=True)
@@ -548,6 +550,7 @@ def test_make_release_tarball_passes_extract_and_the_sums_check(tmp_path, key):
     root = release.extract(tarball, version, tmp_path / "x")
     assert root == tmp_path / "x" / f"filament-kit-{version}"
     assert len(list(root.glob(f"filament_kit-{version}-*.whl"))) == 1
+    assert (root / "LICENSE").is_file() and (root / "THIRD-PARTY.md").is_file()
     for rel in ("install.sh", "uninstall.sh", "install/backup.sh", "install/filament-kit-cli.sh",
                 "install/spoolman.sh", "install/export_ops.sh", "install/avahi/filament-kit.service",
                 "install/remote/route.template", "install/remote/mcp-proxy.conf", "install/panel/VERSION",

@@ -52,6 +52,8 @@ ChangesEnvironment=yes
 Source: "{#DistDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "install_task.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "uninstall_task.ps1"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\THIRD-PARTY.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [InstallDelete]
 ; Files of an older build that this build no longer has.

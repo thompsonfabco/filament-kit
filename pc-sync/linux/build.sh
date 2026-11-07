@@ -26,5 +26,6 @@ trap 'rm -rf "$stage"' EXIT
 mkdir "$stage/$name"
 cp -a dist/filament-kit-sync "$stage/$name/filament-kit-sync"
 install -m 755 pc-sync/linux/install.sh pc-sync/linux/uninstall.sh "$stage/$name/"
+install -m 644 LICENSE THIRD-PARTY.md "$stage/$name/"
 tar -C "$stage" --owner=0 --group=0 --numeric-owner -czf "dist/$name.tar.gz" "$name"
 echo "dist/$name.tar.gz"

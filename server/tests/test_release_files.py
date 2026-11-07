@@ -799,3 +799,19 @@ def test_get_sh_refuses_while_a_printer_job_holds_its_lock(tmp_path):
     r = run(busy)
     assert r.returncode == 1 and "REACHED" not in r.stdout
     assert "printer S1 is mapping slots or loading a spool" in r.stderr and "nothing was installed" in r.stderr
+
+
+# --- licence audit (queue item 16): the GPL text and the third-party notices ship with everything ---------------
+
+def test_both_packages_declare_the_kit_licence():
+    for f in ("server/pyproject.toml", "pc-sync/pyproject.toml"):
+        assert 'license = {text = "GPL-3.0-or-later"}' in _read(f), f
+
+
+def test_releases_ship_license_and_third_party_notices():
+    assert (ROOT / "THIRD-PARTY.md").is_file() and (ROOT / "LICENSE").is_file()
+    assert re.search(r'^cp LICENSE THIRD-PARTY\.md "\$stage/"', _read("tools/make_release.sh"), re.M)
+    assert re.search(r'^install -m 644 LICENSE THIRD-PARTY\.md "\$stage/\$name/"', _read("pc-sync/linux/build.sh"), re.M)
+    iss = _read("pc-sync/installer/filament-kit-sync.iss")
+    assert 'Source: "..\..\LICENSE"; DestDir: "{app}"' in iss
+    assert 'Source: "..\..\THIRD-PARTY.md"; DestDir: "{app}"' in iss

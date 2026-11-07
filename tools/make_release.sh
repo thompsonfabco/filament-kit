@@ -46,6 +46,7 @@ done
 
 # ---------- scripts and units ----------
 cp install/install.sh install/uninstall.sh "$stage/"
+cp LICENSE THIRD-PARTY.md "$stage/"    # the GPL text and the third-party notices travel with every release
 cp install/backup.sh install/filament-kit-cli.sh install/spoolman.sh "$stage/install/"
 cp tools/export_ops.sh "$stage/install/"    # runs on a filament-ops VM (docs/migrate-from-filament-ops.md)
 cp install/systemd/*.service install/systemd/*.timer install/systemd/*.path "$stage/install/systemd/"

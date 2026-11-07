@@ -7,6 +7,7 @@ name = "filament-kit"
 version = "0.2.0"
 description = "Pair phones, read filament labels with Claude, write spools to Spoolman"
 requires-python = ">=3.12"
+license = {text = "GPL-3.0-or-later"}
 dependencies = [
     "starlette>=0.46",
     "uvicorn>=0.34",
