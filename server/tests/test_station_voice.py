@@ -19,11 +19,15 @@ from filament_kit.station import state as st
 ONNX, JSON = b"onnx model bytes", b'{"audio": {"sample_rate": 22050}}'
 
 
+MODEL = voice.DEFAULT + ".onnx"
+URL = "https://example.com/voices/"
+
+
 @pytest.fixture
 def fake_voice(monkeypatch):
-    """A two-file voice whose pinned hashes match ONNX and JSON."""
-    files = {voice.MODEL: hashlib.sha256(ONNX).hexdigest(), voice.MODEL + ".json": hashlib.sha256(JSON).hexdigest()}
-    monkeypatch.setattr(voice, "FILES", files)
+    """The default voice's row, with pinned hashes that match ONNX and JSON."""
+    files = {MODEL: hashlib.sha256(ONNX).hexdigest(), MODEL + ".json": hashlib.sha256(JSON).hexdigest()}
+    monkeypatch.setitem(voice.VOICES, voice.DEFAULT, {"url": URL, "licence": "test", "files": files})
     return files
 
 
@@ -39,12 +43,17 @@ def urlopen_serving(served: dict, seen: list):
 
 # --- the one place the voice is named -------------------------------------------------------------------------------
 
-def test_the_voice_is_named_once():
-    assert voice.MODEL == voice.NAME + ".onnx"
-    assert set(voice.FILES) == {voice.MODEL, voice.MODEL + ".json"}
-    assert all(len(h) == 64 for h in voice.FILES.values())
-    assert voice.URL.startswith("https://") and voice.URL.endswith("/")
-    assert voice.model_path("/x/voice").replace("\\", "/") == "/x/voice/" + voice.MODEL
+def test_the_voice_table():
+    assert voice.DEFAULT == "en_US-ljspeech-medium" and "public domain" in voice.VOICES[voice.DEFAULT]["licence"]
+    for name, v in voice.VOICES.items():
+        assert set(v["files"]) == {name + ".onnx", name + ".onnx.json"}
+        assert all(len(h) == 64 for h in v["files"].values())
+        assert v["url"].startswith("https://huggingface.co/rhasspy/piper-voices/") and v["url"].endswith("/")
+    assert "research" in voice.VOICES["en_US-lessac-medium"]["licence"]  # only when the owner picks it
+    assert voice.model_path("/x/voice") == "/x/voice/en_US-ljspeech-medium.onnx"
+    assert voice.model_path("/x/voice", "en_US-lessac-medium") == "/x/voice/en_US-lessac-medium.onnx"
+    with pytest.raises(ValueError, match="unknown Piper voice"):
+        voice.model_path("/x/voice", "nope")
 
 
 def test_settings_tts_and_piper_voice(monkeypatch):
@@ -52,7 +61,7 @@ def test_settings_tts_and_piper_voice(monkeypatch):
     monkeypatch.delenv("STATION_PIPER_VOICE", raising=False)
     s = st.settings_from_env()
     assert s["tts"] == "auto"
-    assert s["piper_voice"] == "/opt/filament-kit/resources/voice/" + voice.MODEL
+    assert s["piper_voice"] == "/opt/filament-kit/resources/voice/en_US-ljspeech-medium.onnx"
     monkeypatch.setenv("STATION_TTS", "espeak")
     monkeypatch.setenv("STATION_PIPER_VOICE", "/srv/v.onnx")
     s = st.settings_from_env()
@@ -64,30 +73,34 @@ def test_dropin_carries_tts_and_the_voice_path(monkeypatch):
     cfg = {"modules": {"station": True}, "station": {"allow": ["127.0.0.1"]}}
     text = apply.station_dropin(cfg, ["127.0.0.1"])
     assert "STATION_TTS=auto" in text
-    assert f"STATION_PIPER_VOICE=/opt/filament-kit/resources/voice/{voice.MODEL}" in text
-    cfg["station"]["tts"] = "espeak"
-    assert "STATION_TTS=espeak" in apply.station_dropin(cfg, ["127.0.0.1"])
-    assert config.DEFAULTS["station"]["tts"] == "auto"
+    assert "STATION_PIPER_VOICE=/opt/filament-kit/resources/voice/en_US-ljspeech-medium.onnx" in text
+    cfg["station"].update(tts="espeak", voice="en_US-lessac-medium")  # the owner's explicit pick
+    text = apply.station_dropin(cfg, ["127.0.0.1"])
+    assert "STATION_TTS=espeak" in text and "voice/en_US-lessac-medium.onnx" in text
+    assert config.DEFAULTS["station"]["tts"] == "auto" and config.DEFAULTS["station"]["voice"] is None
+    cfg["station"]["voice"] = "nope"
+    with pytest.raises(apply.ModuleError, match="station.voice"):
+        apply.station_dropin(cfg, ["127.0.0.1"])
 
 
 # --- the installer's download ---------------------------------------------------------------------------------------
 
 def test_fetch_writes_both_files_checked(tmp_path, fake_voice):
     seen = []
-    served = {voice.MODEL: ONNX, voice.MODEL + ".json": JSON}
+    served = {MODEL: ONNX, MODEL + ".json": JSON}
     assert voice.fetch(tmp_path, urlopen=urlopen_serving(served, seen)) == "installed"
-    assert (tmp_path / voice.MODEL).read_bytes() == ONNX and (tmp_path / (voice.MODEL + ".json")).read_bytes() == JSON
-    assert seen == [voice.URL + voice.MODEL, voice.URL + voice.MODEL + ".json"]
+    assert (tmp_path / MODEL).read_bytes() == ONNX and (tmp_path / (MODEL + ".json")).read_bytes() == JSON
+    assert seen == [URL + MODEL, URL + MODEL + ".json"]
     assert not list(tmp_path.glob("*.part"))
     seen.clear()
     assert voice.fetch(tmp_path, urlopen=urlopen_serving(served, seen)) == "present" and seen == []
 
 
 def test_fetch_refuses_a_hash_mismatch(tmp_path, fake_voice):
-    served = {voice.MODEL: b"something else", voice.MODEL + ".json": JSON}
-    with pytest.raises(voice.HashMismatch, match=voice.MODEL):
+    served = {MODEL: b"something else", MODEL + ".json": JSON}
+    with pytest.raises(voice.HashMismatch, match=MODEL):
         voice.fetch(tmp_path, urlopen=urlopen_serving(served, []))
-    assert not (tmp_path / voice.MODEL).exists() and not list(tmp_path.glob("*.part"))
+    assert not (tmp_path / MODEL).exists() and not list(tmp_path.glob("*.part"))
 
 
 def test_fetch_offline_skips_quietly(tmp_path, fake_voice):
@@ -96,21 +109,25 @@ def test_fetch_offline_skips_quietly(tmp_path, fake_voice):
 
 
 def test_fetch_replaces_a_damaged_copy(tmp_path, fake_voice):
-    (tmp_path / voice.MODEL).write_bytes(b"truncated")
-    served = {voice.MODEL: ONNX, voice.MODEL + ".json": JSON}
+    (tmp_path / MODEL).write_bytes(b"truncated")
+    served = {MODEL: ONNX, MODEL + ".json": JSON}
     assert voice.fetch(tmp_path, urlopen=urlopen_serving(served, [])) == "installed"
-    assert (tmp_path / voice.MODEL).read_bytes() == ONNX
+    assert (tmp_path / MODEL).read_bytes() == ONNX
 
 
 def test_main_exit_codes(tmp_path, fake_voice, monkeypatch, capsys):
-    monkeypatch.setattr(voice, "fetch", lambda d: "offline")
-    assert voice.main([str(tmp_path)]) == 0
-    assert "espeak-ng" in capsys.readouterr().err
+    seen = []
+    monkeypatch.setattr(voice, "fetch", lambda d, name: seen.append(name) or "offline")
+    assert voice.main([str(tmp_path)]) == 0 and voice.main([str(tmp_path), ""]) == 0
+    assert "espeak-ng" in capsys.readouterr().err and seen == [voice.DEFAULT, voice.DEFAULT]
+    assert voice.main([str(tmp_path), "en_US-lessac-medium"]) == 0 and seen[-1] == "en_US-lessac-medium"
 
-    def bad(d):
+    def bad(d, name):
         raise voice.HashMismatch("x: hash mismatch")
     monkeypatch.setattr(voice, "fetch", bad)
     assert voice.main([str(tmp_path)]) == 1
+    monkeypatch.undo()
+    assert voice.main([str(tmp_path), "nope"]) == 1  # not in the table
 
 
 # --- speech: Piper first, espeak-ng as the fallback ------------------------------------------------------------------
@@ -135,7 +152,7 @@ class FakePiper:
 
 @pytest.fixture
 def piper_env(tmp_path, monkeypatch):
-    model = tmp_path / voice.MODEL
+    model = tmp_path / MODEL
     model.write_bytes(ONNX)
     monkeypatch.setitem(st.settings, "tts", "auto")
     monkeypatch.setitem(st.settings, "piper_voice", str(model))
@@ -187,7 +204,7 @@ def test_a_phrase_piper_fails_on_goes_to_espeak(piper_env, monkeypatch):
 
 def test_engine_name(piper_env):
     model, _ = piper_env
-    assert speech.engine() == f"Piper ({voice.MODEL})"
+    assert speech.engine() == f"Piper ({MODEL})"
     st.settings["tts"] = "espeak"
     assert speech.engine() == "espeak-ng"
 
@@ -203,5 +220,6 @@ def test_install_sh_fetches_the_voice_only_for_a_station_and_keeps_it():
     assert '-m filament_kit.station.voice "$OPT/resources/voice"' in text
     assert '"station" in modules.enabled(cfg)' in text and "FK_STATION_TTS" in text
     assert 'rm -rf "$OPT/resources"' not in text and "! -name voice" in text  # an upgrade keeps the 63 MB
-    assert voice.FILES[voice.MODEL] not in text  # the hashes live in voice.py only
+    assert voice.VOICES[voice.DEFAULT]["files"][MODEL] not in text  # the hashes live in voice.py only
+    assert '"$OPT/resources/voice" "$VOICE"' in text
     assert 'station-tts = ["piper-tts==1.8.0"]' in (ROOT / "server" / "pyproject.toml").read_text(encoding="utf-8")

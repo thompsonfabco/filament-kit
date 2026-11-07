@@ -87,6 +87,14 @@ def _env_assign(a: str) -> str:
     return a
 
 
+def _voice_path(name: str | None) -> str:
+    """The Piper model the station loads: station.voice from the voice table (station/voice.py), else its DEFAULT."""
+    try:
+        return voice.model_path(config.paths().opt.as_posix() + "/resources/voice", name)
+    except ValueError as e:
+        raise ModuleError(f"station.voice: {e}; fix: pick one of those, or unset it for the default") from None
+
+
 def station_dropin(cfg: dict, addresses: list[str]) -> str:
     """Text of the station drop-in (spec section 5); `addresses` are already resolved."""
     st = config._merge(config.DEFAULTS["station"], cfg.get("station") or {})
@@ -97,7 +105,7 @@ def station_dropin(cfg: dict, addresses: list[str]) -> str:
            f"STATION_BEEP={1 if st['beep'] else 0}",
            f"STATION_SPEECH={1 if st['speech'] else 0}",
            f"STATION_TTS={st['tts']}",
-           f"STATION_PIPER_VOICE={voice.model_path(config.paths().opt.as_posix() + '/resources/voice')}",
+           f"STATION_PIPER_VOICE={_voice_path(st.get('voice'))}",
            f"STATION_CAMERA={st['camera']}",
            f"STATION_PANEL_FW={config.paths().opt.as_posix()}/resources/panel/intake-panel.bin",
            f"STATION_PANEL_FLASH={1 if st['panel_flash'] else 0}"]

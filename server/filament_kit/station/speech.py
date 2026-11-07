@@ -59,7 +59,7 @@ def engine():
 
 
 def synth(text):
-    """The phrase as WAV bytes: Piper's natural voice when installed (the owner's pick, 2026-11-04), else
+    """The phrase as WAV bytes: Piper's natural voice when installed (picked over espeak-ng, 2026-11-04), else
     espeak-ng's; None if neither works."""
     voice = piper_voice()
     if voice:

@@ -361,20 +361,26 @@ print("Install mode: " + mode)
 fi
 
 # ---------- 5. the station's voice ----------
-# With the station module on, the button panel speaks with Piper (the [station-tts] extra) and its voice, downloaded
-# into $OPT/resources/voice and checked against the SHA-256 hashes pinned in filament_kit/station/voice.py (the one
-# place the voice is named). A mismatch stops the install; no network only skips it, and espeak-ng speaks instead.
+# With the station module on, the button panel speaks with Piper (the [station-tts] extra) and a Piper voice,
+# downloaded into $OPT/resources/voice and checked against the SHA-256 hashes pinned in filament_kit/station/voice.py
+# (the one table of voices: station.voice picks one, default the public-domain en_US-ljspeech-medium). A mismatch
+# stops the install; no network only skips it, and espeak-ng speaks instead.
 # Off: station.tts set to espeak in the config, or FK_STATION_TTS=espeak for this run.
 TTS=$("$VENV/bin/python" -I -c '
 from filament_kit import config, modules
 cfg = config.load()
-print(((cfg.get("station") or {}).get("tts") or "auto") if "station" in modules.enabled(cfg) else "off")
+st = cfg.get("station") or {}
+print(((st.get("tts") or "auto") + " " + (st.get("voice") or "")) if "station" in modules.enabled(cfg) else "off")
 ' 2>/dev/null || echo off)
+VOICE=""
+case "$TTS" in *" "*) VOICE=${TTS#* } ;; esac
+TTS=${TTS%% *}
 if [ "$TTS" != off ] && [ "$TTS" != espeak ] && [ "${FK_STATION_TTS:-}" != espeak ]; then
     say "Installing the button panel's voice (Piper)"
     if "$VENV/bin/python" -m pip install -q "${WHEEL}[station-tts]"; then
-        "$VENV/bin/python" -I -m filament_kit.station.voice "$OPT/resources/voice"             || die "the Piper voice download does not match its pinned hash; fix: run ./install.sh again, or set FK_STATION_TTS=espeak"
-        [ -d "$OPT/resources/voice" ] && chmod -R a+rX,go-w "$OPT/resources/voice"
+        "$VENV/bin/python" -I -m filament_kit.station.voice "$OPT/resources/voice" "$VOICE" \
+            || die "the Piper voice was not installed (see above); fix: check station.voice, run ./install.sh again, or set FK_STATION_TTS=espeak"
+        if [ -d "$OPT/resources/voice" ]; then chmod -R a+rX,go-w "$OPT/resources/voice"; fi
     else
         echo "note: could not install piper-tts (offline?); the panel speaks with espeak-ng" >&2
     fi

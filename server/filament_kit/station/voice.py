@@ -1,12 +1,14 @@
-"""The panel's Piper voice: the one place it is named (the model, where it comes from, its pinned SHA-256 hashes),
-and the installer's download of it.
+"""The panel's Piper voices: the one table naming them (where each comes from, its pinned SHA-256 hashes, its
+licence), and the installer's download of the chosen one.
 
-The owner picked `en_US-lessac-medium` by ear over espeak-ng on the real panel (2026-11-04). To swap the voice,
-change NAME, URL and FILES here; the station's default path (STATION_PIPER_VOICE) and the drop-in follow.
+The default is `en_US-ljspeech-medium`, trained on the public-domain LJ Speech dataset. `station.voice` in the
+config picks another voice from VOICES; `modules apply` points the station at it (STATION_PIPER_VOICE) and
+install.sh fetches it. To add a voice, add a row here with the hashes of its .onnx and .onnx.json.
 
-`python -m filament_kit.station.voice DIR` (install.sh, station on, `station.tts` not `espeak`): fetch both files
-into DIR, checked against FILES. Present with the right hash: skipped. A mismatch fails (exit 1, nothing kept).
-Offline: a note and exit 0, since espeak-ng still speaks. The voice is about 63 MB; at runtime it is all offline.
+`python -m filament_kit.station.voice DIR [NAME]` (install.sh, station on, `station.tts` not `espeak`): fetch the
+voice's files into DIR, checked against its hashes. Present with the right hash: skipped. A mismatch fails (exit 1,
+nothing kept). Offline: a note and exit 0, since espeak-ng still speaks. A voice is about 63 MB; at runtime it is
+all offline.
 """
 from __future__ import annotations
 
@@ -17,22 +19,41 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-NAME = "en_US-lessac-medium"
-MODEL = NAME + ".onnx"
-URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/"
-FILES = {
-    MODEL: "5efe09e69902187827af646e1a6e9d269dee769f9877d17b16b1b46eeaaf019f",
-    MODEL + ".json": "efe19c417bed055f2d69908248c6ba650fa135bc868b0e6abb3da181dab690a0",
+_HF = "https://huggingface.co/rhasspy/piper-voices/resolve/main/"
+VOICES = {
+    # LJ Speech: public domain (dataset and voice). The kit's default.
+    "en_US-ljspeech-medium": {
+        "url": _HF + "en/en_US/ljspeech/medium/", "licence": "public domain (LJ Speech dataset)",
+        "files": {"en_US-ljspeech-medium.onnx": "6f52a751e2349abe7a76735eb09dc1875298c77ea2342ffd2fef79ff81b87f22",
+                  "en_US-ljspeech-medium.onnx.json":
+                      "141d612cc0a95ed7efc1ca936b845c2364967f2e9217c5dbfcf69fc4d6c65860"}},
+    # lessac: RESEARCH-ONLY (Blizzard 2013 licence on its dataset). Never a default: only when the owner sets
+    # station.voice to it explicitly for their own station.
+    "en_US-lessac-medium": {
+        "url": _HF + "en/en_US/lessac/medium/", "licence": "research only (Blizzard 2013)",
+        "files": {"en_US-lessac-medium.onnx": "5efe09e69902187827af646e1a6e9d269dee769f9877d17b16b1b46eeaaf019f",
+                  "en_US-lessac-medium.onnx.json":
+                      "efe19c417bed055f2d69908248c6ba650fa135bc868b0e6abb3da181dab690a0"}},
 }
-DIR = "/opt/filament-kit/resources/voice"  # install.sh puts it here; `modules apply` points the station at it
+DEFAULT = "en_US-ljspeech-medium"
+DIR = "/opt/filament-kit/resources/voice"  # install.sh puts voices here; `modules apply` points the station at one
 
 
 class HashMismatch(Exception):
     """A downloaded voice file is not the pinned one."""
 
 
-def model_path(directory: str | os.PathLike = DIR) -> str:
-    return f"{os.fspath(directory).rstrip('/')}/{MODEL}"  # a Linux path: the station and the drop-in use it
+def get(name: str | None = None) -> dict:
+    """The table row for voice `name` (default DEFAULT); ValueError for a voice the table doesn't know."""
+    name = name or DEFAULT
+    if name not in VOICES:
+        raise ValueError(f"unknown Piper voice {name!r}; known: {', '.join(VOICES)}")
+    return VOICES[name]
+
+
+def model_path(directory: str | os.PathLike = DIR, name: str | None = None) -> str:
+    get(name)
+    return f"{os.fspath(directory).rstrip('/')}/{name or DEFAULT}.onnx"  # a Linux path: the station and drop-in
 
 
 def _sha256(path: Path) -> str | None:
@@ -46,19 +67,20 @@ def _sha256(path: Path) -> str | None:
         return None
 
 
-def fetch(directory: str | os.PathLike = DIR, urlopen=urllib.request.urlopen) -> str:
-    """Put the voice's files into directory: "present" (already there, right hashes), "installed", or "offline"
+def fetch(directory: str | os.PathLike = DIR, name: str | None = None, urlopen=urllib.request.urlopen) -> str:
+    """Put voice `name`'s files into directory: "present" (already there, right hashes), "installed", or "offline"
     (not reachable; nothing kept). Raises HashMismatch for a file that isn't the pinned one."""
+    v = get(name)
     d = Path(directory)
-    todo = [(n, h) for n, h in FILES.items() if _sha256(d / n) != h]
+    todo = [(n, h) for n, h in v["files"].items() if _sha256(d / n) != h]
     if not todo:
         return "present"
     d.mkdir(parents=True, exist_ok=True)
-    for name, want in todo:
-        part = d / (name + ".part")
+    for fname, want in todo:
+        part = d / (fname + ".part")
         h = hashlib.sha256()
         try:
-            with urlopen(URL + name, timeout=60) as r, open(part, "wb") as out:
+            with urlopen(v["url"] + fname, timeout=60) as r, open(part, "wb") as out:
                 for block in iter(lambda: r.read(1 << 20), b""):
                     h.update(block)
                     out.write(block)
@@ -67,25 +89,26 @@ def fetch(directory: str | os.PathLike = DIR, urlopen=urllib.request.urlopen) ->
             return "offline"
         if h.hexdigest() != want:
             part.unlink(missing_ok=True)
-            raise HashMismatch(f"piper voice {name}: hash mismatch (got {h.hexdigest()[:16]}..., "
+            raise HashMismatch(f"piper voice {fname}: hash mismatch (got {h.hexdigest()[:16]}..., "
                                f"pinned {want[:16]}...)")
-        os.replace(part, d / name)
-        os.chmod(d / name, 0o644)
+        os.replace(part, d / fname)
+        os.chmod(d / fname, 0o644)
     return "installed"
 
 
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     directory = argv[0] if argv else DIR
+    name = argv[1] if len(argv) > 1 and argv[1] else DEFAULT
     try:
-        got = fetch(directory)
-    except HashMismatch as e:
+        got = fetch(directory, name)
+    except (HashMismatch, ValueError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
     if got == "offline":
-        print(f"note: could not download the Piper voice ({NAME}); the panel speaks with espeak-ng", file=sys.stderr)
+        print(f"note: could not download the Piper voice ({name}); the panel speaks with espeak-ng", file=sys.stderr)
     else:
-        print(f"Piper voice {NAME}: {got}")
+        print(f"Piper voice {name} ({get(name)['licence']}): {got}")
     return 0
 
 
