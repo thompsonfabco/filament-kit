@@ -45,7 +45,7 @@
   </defs>
 
   <text x="30" y="34" font-size="18" font-weight="600" fill="#111">Intake station button panel: full circuit</text>
-  <text x="30" y="54" fill="#555">Wemos D1 mini (ESP-12F) on the station PC's USB; BS170s switch the 5 V lamps and drive the speaker's push-pull pair; a BME280 reads room air.</text>
+  <text x="30" y="54" fill="#555">Wemos D1 mini (ESP-12F) on the station PC's USB; BS170s switch the lamps and drive the speaker pair; BME280 for room air; OLED for the steps.</text>
   <text x="30" y="72" fill="#555">Every ground symbol joins the D1 mini's G pin; every 5V flag joins its 5V pin; same-named labels (SDA, SCL, 3V3) are joined.</text>
 
   <!-- ===== D1 mini ===== -->
@@ -88,8 +88,8 @@
   </g>
   <use href="#sw" x="270" y="354"/><use href="#sw" x="270" y="430"/>
   <circle cx="130" cy="430" r="4" fill="#222"/>
-  <text x="220" y="322" text-anchor="middle" font-weight="600" fill="#8a5a10">HOLD button: switch (NO)</text>
-  <text x="220" y="460" text-anchor="middle" font-weight="600" fill="#9a2f2c">DISCARD button: switch (NO)</text>
+  <text x="220" y="322" text-anchor="middle" font-weight="600" fill="#8a5a10">HOLD (yellow) switch</text>
+  <text x="220" y="460" text-anchor="middle" font-weight="600" fill="#9a2f2c">DISCARD (red) switch</text>
   <text x="250" y="516" text-anchor="middle" font-size="11" fill="#555">ground bus to G</text>
   <text x="337" y="538" text-anchor="end" fill="#d22" font-weight="600">5V</text>
 
@@ -176,6 +176,24 @@
     <text x="170" y="676" text-anchor="middle">SCL</text><text x="215" y="676" text-anchor="middle">SDA</text></g>
   <text x="150" y="704" text-anchor="middle" font-weight="600" fill="#4a3a6a">BME280 module (room air)</text>
 
+  <!-- ===== OLED (same I2C bus, joined by label) ===== -->
+  <g stroke-width="2" fill="none">
+    <line x1="80" y1="810" x2="80" y2="790" stroke="#e08a00"/>
+    <line x1="125" y1="810" x2="125" y2="800" stroke="#222"/>
+    <line x1="170" y1="810" x2="170" y2="790" stroke="#7a4a9a"/>
+    <line x1="215" y1="810" x2="215" y2="790" stroke="#2c7a9a"/>
+    <rect x="50" y="810" width="200" height="90" rx="6" fill="#eef1f5" stroke="#3a4a5a"/>
+    <rect x="70" y="838" width="160" height="40" fill="#10161c" stroke="#3a4a5a"/>
+  </g>
+  <use href="#gnd" x="0" y="0" transform="translate(125 800) rotate(180)"/>
+  <text x="80" y="784" text-anchor="middle" font-weight="700" fill="#e08a00">3V3</text>
+  <text x="170" y="784" text-anchor="middle" font-weight="700" fill="#7a4a9a">SCL</text>
+  <text x="215" y="784" text-anchor="middle" font-weight="700" fill="#2c7a9a">SDA</text>
+  <g font-size="11" fill="#555"><text x="80" y="826" text-anchor="middle">VCC</text><text x="125" y="826" text-anchor="middle">GND</text>
+    <text x="170" y="826" text-anchor="middle">SCL</text><text x="215" y="826" text-anchor="middle">SDA</text></g>
+  <text x="150" y="862" text-anchor="middle" font-size="11" fill="#9fd3ff">Ready</text>
+  <text x="150" y="918" text-anchor="middle" font-weight="600" fill="#2a3a4a">OLED SSD1306 128x64 (0x3C)</text>
+
   <!-- ===== row D: speaker (D8): Q3 BS170 + 1 k pull-up drive the Q4/Q5 push-pull pair, C1 to the speakers ===== -->
   <g stroke="#222" stroke-width="2" fill="none">
     <polyline points="560,498 600,498 600,860 625,860" stroke="#2c8a7a"/>
@@ -216,7 +234,7 @@
   <text x="866" y="886" font-size="11" fill="#555">Q5 KSA940</text>
   <text x="897" y="812" text-anchor="middle" font-size="11" fill="#555">C1 470 µF</text>
   <text x="884" y="824" font-size="11" fill="#222">+</text>
-  <text x="790" y="968" text-anchor="middle" font-weight="600" fill="#1f6a5c">Speaker: two headset drivers in series</text>
+  <text x="790" y="968" text-anchor="middle" font-weight="600" fill="#1f6a5c">Speaker</text>
   <text x="790" y="984" text-anchor="middle" font-size="11" fill="#555">Q4 (NPN): C to 5V, E out. Q5 (PNP): E out, C to G. Both bases on Q3's drain.</text>
   <text x="590" y="700" font-size="11" fill="#1f6a5c" text-anchor="middle" transform="rotate(-90 590 700)">D8: speaker</text>
 
@@ -225,10 +243,10 @@
   <g fill="#333" font-size="12">
     <text x="30" y="1022"><tspan font-weight="600">Parts:</tspan> Q1-Q3 BS170 (TO-92, flat face toward you, legs D G S left to right; a 2N7000 is S G D). RG 220 Ω (100 Ω–1 kΩ is fine).</text>
     <text x="30" y="1040">RP 100 kΩ (47 kΩ–1 MΩ): keep lamps and speaker off while the ESP8266 resets. RU 1 kΩ. Q4 KSC2073, Q5 KSA940 (TO-220).</text>
-    <text x="30" y="1058">C1 470 µF electrolytic, 10 V or more, + toward the emitters. Speakers: the two headset drivers, wired in series.</text>
+    <text x="30" y="1058">C1 470 µF electrolytic, 10 V or more, + toward the emitters. Speaker: the one fitted (was two headset drivers in series).</text>
     <text x="30" y="1080"><tspan font-weight="600">Each button</tspan> has 4 terminals: 2 for the switch (no polarity) and lamp + / −. The lamp + goes to 5V, the lamp − to its BS170's drain (D).</text>
     <text x="30" y="1102"><tspan font-weight="600">Boot pins:</tspan> D3 and D4 must be high at power-on (the BME280 board's I2C pull-ups keep them so); D8 must be low (RP3). TX/RX carry the USB link.</text>
     <text x="30" y="1124"><tspan font-weight="600">Buzzer:</tspan> + to 3V3, not 5V (some modules switch the buzzer with a PNP that a 3.3 V signal can't turn off). BME280 VIN to 3V3 too.</text>
-    <text x="30" y="1146">Firmware: station/panel. Pins: D1 / D2 buttons, D5 / D6 lamps, D7 buzzer, D8 speaker, D3 SDA, D4 SCL.</text>
+    <text x="30" y="1146">Firmware: station/panel. Pins: D1 / D2 buttons (yellow / red), D5 / D6 lamps, D7 buzzer, D8 speaker, D3 SDA, D4 SCL (sensor + OLED).</text>
   </g>
 </svg>
