@@ -204,6 +204,7 @@ def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) ->
     if "station" in on:
         acts += [
             A("user", ("filament-kit-station", "dialout,audio,video")),
+            A("station_pairing_owner"),
             A("remove_file", OLD_UDEV_RULE),
             A("install_file", (UDEV_RULE, UDEV_TEXT, "0644", "root:root")),
             A("udev_reload"),
@@ -215,7 +216,7 @@ def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) ->
             A("install_unit", STATION_UNIT),
         ]
         st = config._merge(config.DEFAULTS["station"], cfg.get("station") or {})
-        if st.get("tts") != "espeak":  # Piper and its voice (station.voice, else the table's default)
+        if st.get("speech") and st.get("tts") != "espeak":  # Piper and its voice (station.voice, else the default)
             acts.append(A("station_voice", st.get("voice") or voice.DEFAULT))
     # An opt-in module nobody ever configured is not mentioned (the legacy plan stays as it was).
     configured = cfg.get("modules") or {}
@@ -273,6 +274,7 @@ _HINTS = {
     "spoolman_fetch": f"see the Spoolman messages above, then {_AGAIN}",
     "install_unit": "run ./install.sh again (the unit files live in /opt/filament-kit/resources)",
     "install_file": f"check the disk is writable, then {_AGAIN}",
+    "station_pairing_owner": f"check the station's user exists (id filament-kit-station), then {_AGAIN}",
     "remove_file": "remove it by hand: sudo rm <arg>",
     "enable": "see: journalctl -u <arg>",
     "daemon_reload": "see: journalctl -b",
@@ -287,8 +289,6 @@ _HINTS = {
     "remote_off": ("remove the kit's files by hand: sudo /usr/local/sbin/mcp-route rm <arg>; sudo rm "
                    "/etc/nginx/conf.d/filament-kit-router.conf /etc/letsencrypt/renewal-hooks/deploy/filament-kit"),
     "ensure_fields": "check Spoolman answers, then: sudo filament-kit ensure-fields",
-    "station_voice": ("the Piper voice did not match its pinned hash (see above); run `sudo filament-kit modules "
-                      "apply` again, or set station.tts to espeak"),
 }
 
 
@@ -619,7 +619,8 @@ def _tts_requirements() -> list[str]:
 
 def _station_voice(ex: _Exec, name: str) -> None:
     """Piper for the button panel's speech: the [station-tts] extra into this venv, then the voice into
-    resources/voice (pinned hashes; a mismatch fails the step). No network: a note, and espeak-ng speaks."""
+    resources/voice (pinned hashes). No network: a note; a mismatch: a warning. espeak-ng speaks either way, and
+    the install goes on (_step turns any failure here into a warning: final review I3)."""
     if os.environ.get("FK_STATION_TTS") == "espeak":
         print("FK_STATION_TTS=espeak: the panel speaks with espeak-ng (no Piper voice)")
         return
@@ -641,8 +642,24 @@ def _station_voice(ex: _Exec, name: str) -> None:
     finally:
         os.unlink(f.name)
     vdir = f"{config.paths().opt.as_posix()}/resources/voice"
-    ex.cmd([sys.executable, "-I", "-m", "filament_kit.station.voice", vdir, name])
+    if not ex.ok([sys.executable, "-I", "-m", "filament_kit.station.voice", vdir, name]):
+        print(f"warning: the Piper voice {name} was not installed (see above: it did not match its pinned hash); "
+              "the panel speaks with espeak-ng. Try again later: sudo filament-kit modules apply")
     ex.ok(["chmod", "-R", "a+rX,go-w", vdir])   # the station's user reads it whatever root's umask was
+
+
+def _station_pairing_owner(ex: _Exec) -> None:
+    """A pairing kept across a plain uninstall (it keeps /etc/filament-kit-station, it removes the user): the
+    reinstalled station user may have another uid, so hand the folder and token to the user there is now."""
+    from .station import server_api
+    if not server_api.pairing_dir().is_dir():
+        return
+    group = "root:filament-kit-station"
+    ex.cmd(["chown", group, str(server_api.pairing_dir())])
+    if server_api.server_file().exists():
+        ex.cmd(["chown", group, str(server_api.server_file())])
+    if server_api.token_file().exists():
+        ex.cmd(["chown", "filament-kit-station:filament-kit-station", str(server_api.token_file())])
 
 
 def _step(ex: _Exec, a: Action) -> None:
@@ -708,8 +725,13 @@ def _step(ex: _Exec, a: Action) -> None:
         if not ex.ok([WRAPPER, "library", "update"]):
             print("warning: the library could not be downloaded now; it is tried again every day "
                   "(or run: sudo filament-kit library update)")
+    elif k == "station_pairing_owner":
+        _station_pairing_owner(ex)
     elif k == "station_voice":
-        _station_voice(ex, arg)
+        try:  # the voice is a nicety: nothing in it may stop the install or the services after it
+            _station_voice(ex, arg)
+        except Exception as e:  # noqa: BLE001
+            print(f"warning: the Piper voice step failed ({type(e).__name__}: {e}); the panel speaks with espeak-ng")
     elif k == "first_build":
         # Before the PC sync has uploaded the Bambu Studio presets this only prints what to do next;
         # it never stops apply.
@@ -838,6 +860,12 @@ def finish(cfg: dict, *, run: Callable[[list[str]], None] = run_checked, pairing
             else:
                 # no terminal (the updater, a provisioning script): the output goes to a log, so no pairing token
                 print("\nPair a phone at a terminal: sudo filament-kit pair  (pairing links are not written to logs)")
+    if "station" in on:
+        from .station import server_api
+        lines = server_api.pairing_lines()
+        if not lines[0].startswith("OK"):  # e.g. an upgrade from v0.2.0: that station never called the server
+            print("\n==> The intake station's button flow")
+            print("\n".join(lines))
     parts = ["Done."]
     if "spoolman" in on:
         parts.append(f"Spoolman: http://{host}.local:7912")

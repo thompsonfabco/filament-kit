@@ -168,11 +168,28 @@ def save(sm, rules: dict, body: dict) -> dict:
     linked = inventory.by_tag(sm, uid)
     if body.get("spool_id") is not None or linked is not None:
         sid = body.get("spool_id") if body.get("spool_id") is not None else linked["id"]
-        if linked is None or linked["id"] != sid:
+        if linked is not None and linked["id"] != sid:
             raise FlowError(409, "tag_mismatch", f"tag {uid} is not linked to spool {sid}",
                             lines("Tag mismatch", "scan again"))
+        sealed_now = False
+        if linked is None:
+            # the retry after `tag_not_linked`: that save made spool `sid` but its link failed. Link the free tag to
+            # it now (as the first save would have: a sealed one stays sealed), so a second long press never adds a
+            # second spool. A spool with another tag is refused.
+            if not isinstance(sid, int) or isinstance(sid, bool):
+                raise FlowError(400, "bad_request", "spool_id must be a whole number", lines("Bad request"))
+            try:
+                target = sm.get(f"spool/{sid}")
+                sealed_now = inventory.SEALED_COMMENT in (target.get("comment") or "")
+                inventory.link_tag(sm, sid, uid, force=False, dry=dry, keep_sealed=sealed_now)  # opened: first_used
+            except inventory.TagConflict as e:
+                raise FlowError(409, "tag_mismatch", str(e), lines("Tag mismatch", "scan again")) from e
+            except RuntimeError as e:
+                raise FlowError(502, "tag_not_linked", str(e), lines(f"Saved #{sid}", "tag not linked:",
+                                                                     "link it on the phone"), spool_id=sid) from e
         try:
-            s = inventory.update_spool(sm, sid, gross=gross, dry=dry)
+            # a sealed spool keeps its net weight (its bag weighs too), as when it was first saved
+            s = sm.get(f"spool/{sid}") if sealed_now else inventory.update_spool(sm, sid, gross=gross, dry=dry)
         except ValueError as e:
             raise FlowError(422, "weight_out_of_range", str(e), lines("Weight too low", "check the scale")) from e
         v = _spool_view(s)

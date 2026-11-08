@@ -280,8 +280,8 @@ def test_station_voice_step_offline_and_mismatch(tmp_path, monkeypatch, capsys):
     def mismatch(cmd):
         if "filament_kit.station.voice" in cmd:
             raise subprocess.CalledProcessError(1, cmd)
-    with pytest.raises(apply.ApplyError):
-        apply.execute([act], run=mismatch, root=tmp_path)
+    apply.execute([act], run=mismatch, root=tmp_path)  # final review I3: a warning, never a failure
+    assert "warning:" in capsys.readouterr().out
     ran = []
     monkeypatch.setenv("FK_STATION_TTS", "espeak")
     apply.execute([act], run=ran.append, root=tmp_path)
@@ -342,3 +342,60 @@ def test_tick_loop_survives_a_bad_tick(monkeypatch):
     with pytest.raises(SystemExit):
         flow.tick_loop()
     assert len(calls) == 2
+
+
+# ---------- final fix wave I3, M4: pinned to a commit; a bad voice never stops the install; no voice without speech --
+
+def test_the_voice_urls_are_pinned_to_one_piper_voices_commit():
+    import re
+    assert re.fullmatch(r"[0-9a-f]{40}", voice.REVISION)
+    for v in voice.VOICES.values():
+        assert v["url"].startswith(f"https://huggingface.co/rhasspy/piper-voices/resolve/{voice.REVISION}/")
+        assert "/resolve/main/" not in v["url"]
+
+
+def test_a_voice_hash_mismatch_warns_and_apply_still_starts_the_units(tmp_path, monkeypatch, capsys, fake_voice):
+    import subprocess
+    monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
+    monkeypatch.delenv("FK_STATION_TTS", raising=False)
+    monkeypatch.setenv("FK_OPT", str(tmp_path / "opt"))
+    monkeypatch.setattr(apply, "_tts_requirements", lambda: ["piper-tts==1.8.0"])
+    served = {MODEL: b"not the pinned model", MODEL + ".json": JSON}  # main moved, a proxy, a cut download
+    monkeypatch.setattr(voice.urllib.request, "urlopen", urlopen_serving(served, []))
+    ran = []
+
+    def run(cmd):
+        ran.append(cmd)
+        if "filament_kit.station.voice" in cmd:  # the real step, in-process: exit 1 on the mismatch
+            if voice.main(cmd[cmd.index("filament_kit.station.voice") + 1:]) != 0:
+                raise subprocess.CalledProcessError(1, cmd)
+    acts = [apply.Action("station_voice", voice.DEFAULT), apply.Action("daemon_reload"),
+            apply.Action("enable", apply.STATION_UNIT)]
+    apply.execute(acts, run=run, root=tmp_path / "root")
+    out = capsys.readouterr().out
+    assert "warning:" in out and "espeak-ng" in out
+    assert ["systemctl", "enable", apply.STATION_UNIT] in ran and ["systemctl", "restart", apply.STATION_UNIT] in ran
+    assert not (tmp_path / "opt" / "resources" / "voice" / MODEL).exists()
+    assert not list((tmp_path / "opt" / "resources" / "voice").glob("*.part"))
+
+
+def test_any_failure_in_the_voice_step_is_a_warning(tmp_path, monkeypatch, capsys):
+    monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
+    monkeypatch.delenv("FK_STATION_TTS", raising=False)
+
+    def boom():
+        raise OSError("disk full")
+    monkeypatch.setattr(apply, "_tts_requirements", boom)
+    ran = []
+    apply.execute([apply.Action("station_voice", voice.DEFAULT), apply.Action("daemon_reload")], run=ran.append,
+                  root=tmp_path)
+    assert "warning:" in capsys.readouterr().out and ran == [["systemctl", "daemon-reload"]]
+
+
+def test_no_voice_download_when_speech_is_off(tmp_path, monkeypatch):
+    for name in ("etc", "state", "opt"):
+        monkeypatch.setenv(f"FK_{name.upper()}", str(tmp_path / name))
+    from filament_kit import modules
+    cfg = modules.set_mode(config._merge(config.DEFAULTS, {}), "all-in-one", say=None)
+    cfg["station"].update(speech=False)
+    assert not [a for a in apply.plan(cfg, resolve=lambda h: [h]) if a.kind == "station_voice"]

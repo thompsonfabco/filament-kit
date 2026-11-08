@@ -178,6 +178,9 @@ def cmd_status(client_factory) -> int:
     station_url = (cfg.get("station") or {}).get("url")
     if station_url:
         good &= _station_lines(station_url)
+    if "station" in on:
+        from .station import server_api
+        print("\n".join(server_api.pairing_lines()))
 
     if "server" in on:
         print(f"--   display name: {cfg['server_name']}")
@@ -310,6 +313,9 @@ def cmd_pair(pc: bool = False, station: bool = False, text: bool = False) -> int
     print(f"Pairing code: {pr.code}")
     print(f"Expires at {time.strftime('%H:%M:%S', time.localtime(pr.expires))} "
           f"(in {max(0, int(pr.expires - time.time()) // 60)} min)")
+    if station:
+        print(f"The link works for {pairing.TOKEN_TTL // 60} minutes: run `sudo filament-kit station pair` on the "
+              "station PC before then.")
     return 0
 
 
@@ -347,6 +353,19 @@ def cmd_station_pair(ask=input) -> int:
     print("  " + " ".join(seen[i:i + 4] for i in range(0, len(seen), 4)))
     if ask("Does it match the one 'sudo filament-kit pair --station' showed? [y/N] ").strip().lower() not in ("y", "yes"):
         print("Not paired.")
+        return 1
+    # one authenticated call claims the token now (unclaimed, it lapses TOKEN_TTL after `pair --station`); it runs
+    # before anything is saved, so a failed re-pair leaves the station's working pairing as it was
+    status, body = server_api.ServerApi.from_link(link, first=first, timeout=15).hello()
+    if status != 200:
+        again = "run `sudo filament-kit pair --station` on the server again, then `sudo filament-kit station pair`"
+        if status == 401:
+            why = f"the link has expired (it works for {pairing.TOKEN_TTL // 60} minutes) or was used already"
+        elif status == 0:
+            why = f"the server did not answer ({body.get('message') or body.get('error')})"
+        else:
+            why = f"the server answered {status} ({body.get('message') or body.get('error')})"
+        print(f"error: not paired: {why}.\nfix: {again} within {pairing.TOKEN_TTL // 60} minutes", file=sys.stderr)
         return 1
     server_api.save_pairing(link, first=first)
     if "station" not in on:
@@ -548,6 +567,22 @@ def _printers_menu() -> None:
             print(f"error: {e}")
 
 
+def _tts_name(cfg: dict) -> str:
+    st = config._merge(config.DEFAULTS["station"], cfg.get("station") or {})
+    if not st.get("speech"):
+        return "off (station.speech)"
+    return "espeak-ng" if st.get("tts") == "espeak" else "Piper"
+
+
+def _station_voice_menu(cfg: dict) -> None:
+    """How the button panel speaks: Piper (natural, a 60-80 MB voice download) or espeak-ng (no download)."""
+    v = _ask("The station's voice: 1) Piper (natural; downloads a 60-80 MB voice)  "
+             "2) espeak-ng (robotic; no download)  [Enter keeps it]: ")
+    v = (v or "").strip()
+    if v in ("1", "2"):
+        cfg.setdefault("station", {})["tts"] = "auto" if v == "1" else "espeak"
+
+
 def cmd_config() -> int:
     cfg = config.load()
     before = _module_state(cfg)
@@ -559,6 +594,7 @@ def cmd_config() -> int:
               "  4) Anthropic key      only for AI label reading (ai_intake)\n"
               "  5) Printers\n"
               f"  6) Modules            {modules.mode_of(modules.enabled(cfg))}\n"
+              f"  7) Station voice      {_tts_name(cfg)}\n"
               "  0) save and exit")
         choice = _ask("> ")
         if choice is None or choice.strip() == "0":
@@ -590,6 +626,8 @@ def cmd_config() -> int:
             _printers_menu()
         elif choice == "6":
             _modules_menu(cfg)
+        elif choice == "7":
+            _station_voice_menu(cfg)
         else:
             print("Unknown choice.")
     changed = _module_state(cfg) != before
@@ -1081,9 +1119,9 @@ def cmd_modules_apply() -> int:
 
 
 def _module_state(cfg: dict) -> tuple:
-    """What an apply cares about: the module set and the station link."""
+    """What an apply cares about: the module set, the station link and its voice (the drop-in, the download)."""
     st = cfg.get("station") or {}
-    return (modules.enabled(cfg), st.get("url"), tuple(st.get("allow") or ()))
+    return (modules.enabled(cfg), st.get("url"), tuple(st.get("allow") or ()), st.get("tts"))
 
 
 def _with_modules(cfg: dict, on) -> dict:
@@ -1596,12 +1634,13 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("status", help="check services, Spoolman, key, certificate")
     pp = sub.add_parser("pair", help="show a QR code and code to pair a phone (--pc: a link for the PC sync)")
-    pp.add_argument("--pc", action="store_true", help="pair the Windows PC sync: print the link, no QR code")
-    pp.add_argument("--station", action="store_true", help="pair the intake station's button flow: print the link")
+    pkind = pp.add_mutually_exclusive_group()
+    pkind.add_argument("--pc", action="store_true", help="pair the Windows PC sync: print the link, no QR code")
+    pkind.add_argument("--station", action="store_true", help="pair the intake station's button flow: print the link")
     stp = sub.add_parser("station", help="intake station commands (run on the station PC)")
     stp_sub = stp.add_subparsers(dest="station_cmd", required=True)
     stp_sub.add_parser("pair", help="pair the station's button flow with the server (link from 'pair --station')")
-    pp.add_argument("--text", action="store_true", help="print the pairing link as text instead of a QR code")
+    pkind.add_argument("--text", action="store_true", help="print the pairing link as text instead of a QR code")
     up = sub.add_parser("unpair", help="list or remove paired phones")
     up.add_argument("device_id", nargs="?")
     sub.add_parser("config", help="interactive settings menu")

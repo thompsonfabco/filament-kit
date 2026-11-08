@@ -155,6 +155,14 @@ def save(seq):
         if go("done", seq, display=d or ["Saved"]):
             beep.beep("hold")
             speech.say("Saved.")
+    elif r.get("error") == "tag_not_linked" and r.get("spool_id"):
+        # the spool was made, its tag not linked: keep it, so the next long press links that one (never a second)
+        with st.lock:
+            if seq == flow["seq"]:
+                flow["spool"] = {**(flow["filament"] or {}), "id": r["spool_id"]}
+        if go("ready", seq, message=d[0] if d else "Saved, not linked"):
+            beep.beep("nothing")
+            speech.say("Saved, but the tag is not linked. Hold yellow to try again.")
     elif go("ready", seq, message=d[0] if d else "Save failed"):
         beep.beep("nothing")
         speech.say("Save failed.")
@@ -243,6 +251,7 @@ def lamps(now):
 def screen():
     """The display's five rows (title, 4 body lines) for the current step; the panel adds room air at the bottom.
     The server's display lines fill the title and body rows 1-2; rows 3-4 are the station's hint and message."""
+    paired = api().paired  # off the lock: it looks at the pairing files
     with st.lock:
         f, held = dict(flow), st.state["held"]
     what = f["spool"] or f["filament"] or {}
@@ -252,7 +261,8 @@ def screen():
     d += ["", "", ""]
     step, msg = f["step"], f["message"]
     rows = {
-        "idle": ["Ready", "Scan a spool's tag", "", "", msg],
+        "idle": ["Ready", "Scan a spool's tag", "", "", msg] if paired else
+                ["Not paired", "On the station PC:", "sudo filament-kit", "station pair", msg],
         "lookup": ["Tag scanned", "Looking it up...", "", "", ""],
         "camera": ["New Tag Scanned", "Show the spool to", "the camera, then", "press yellow", msg],
         "recognising": ["Recognising...", "Please wait", "", "", "Red cancels"],

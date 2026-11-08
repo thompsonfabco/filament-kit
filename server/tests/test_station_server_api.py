@@ -218,6 +218,7 @@ def _pair_cli(monkeypatch, mode, link_ips, refresh):
     config.save(cfg)
     probed = []
     monkeypatch.setattr(server_api, "peer_fingerprint", lambda ip, port, timeout=10: probed.append(ip) or FP)
+    monkeypatch.setattr(server_api.ServerApi, "hello", lambda self: (200, {"ok": True}))  # no server here
     monkeypatch.setattr(server_api, "save_pairing", lambda link, owner="x", first=None, _real=server_api.save_pairing:
                         _real(link, owner=None, first=first))
     from filament_kit import apply
@@ -255,3 +256,221 @@ def test_save_pairing_server_file_is_world_readable_whatever_the_umask():
     finally:
         os.umask(old)
     assert (os.stat(server_api.server_file()).st_mode & 0o777) == 0o644
+
+
+# ---------- final fix wave I4: a request that went out is never sent again to the next address ----------
+
+class _FakeConn:
+    """Stands in for _Pinned: per address, connect() fails (refused) or works, and the request then times out
+    or answers 200."""
+    plan: dict = {}
+    seen: list = []
+
+    def __init__(self, host, port, fp, timeout):
+        self.host = host
+        self.status = 200
+
+    def connect(self):
+        if self.plan[self.host] == "refused":
+            raise ConnectionRefusedError(111, "Connection refused")
+
+    def request(self, method, path, body=None, headers=None):
+        self.seen.append((self.host, method, path))
+        if self.plan[self.host] == "timeout":
+            raise TimeoutError("The read operation timed out")
+
+    def getresponse(self):
+        conn = self
+
+        class R:
+            status = conn.status
+
+            @staticmethod
+            def read():
+                return b'{"known": false}'
+        return R()
+
+    def close(self):
+        pass
+
+
+def _fake_api(monkeypatch, plan):
+    _FakeConn.plan, _FakeConn.seen = plan, []
+    monkeypatch.setattr(server_api, "_Pinned", _FakeConn)
+    _paired(list(plan))
+    return server_api.ServerApi(timeout=3)
+
+
+def test_a_timeout_after_sending_is_final_and_not_resent(monkeypatch):
+    api = _fake_api(monkeypatch, {"192.0.2.1": "timeout", "192.0.2.2": "ok"})
+    status, body = api.save({"uid": UID, "gross_g": 900})
+    assert status == 0 and body["error"] == "timeout" and body["display"]
+    assert [s[0] for s in _FakeConn.seen] == ["192.0.2.1"]  # the second address saw no request
+
+
+def test_a_failed_connect_moves_on_to_the_next_address(monkeypatch):
+    api = _fake_api(monkeypatch, {"192.0.2.1": "refused", "192.0.2.2": "ok"})
+    status, body = api.tag_lookup(UID)
+    assert status == 200 and body == {"known": False}
+    assert [s[0] for s in _FakeConn.seen] == ["192.0.2.2"]
+
+
+def test_every_connect_failing_is_unreachable(monkeypatch):
+    api = _fake_api(monkeypatch, {"192.0.2.1": "refused", "192.0.2.2": "refused"})
+    status, body = api.tag_lookup(UID)
+    assert status == 0 and body["error"] == "unreachable" and _FakeConn.seen == []
+
+
+# ---------- final fix wave I1: `station pair` claims the token at once; M3: the station token's scope ----------
+
+def _later(monkeypatch, seconds):
+    """pairing's clock moved on (the server's devices.json ages; the TLS stack keeps the real clock)."""
+    import types
+    real = time.time
+    monkeypatch.setattr(pairing, "time", types.SimpleNamespace(time=lambda: real() + seconds))
+
+
+def _station_link(port, pr):
+    link = pr.qr.split("&ip=")[0] + "&ip=127.0.0.1"
+    return link.replace(f"p={config.load()['port']}", f"p={port}")
+
+
+def _as_root(monkeypatch):
+    if hasattr(os, "geteuid"):
+        monkeypatch.setattr(os, "geteuid", lambda: 0)
+    monkeypatch.setattr(server_api, "save_pairing", lambda link, owner="x", first=None, _real=server_api.save_pairing:
+                        _real(link, owner=None, first=first))
+
+
+def test_station_pair_claims_the_token_so_a_tap_next_day_works(server, monkeypatch, capsys):
+    port, _ = server
+    _as_root(monkeypatch)
+    answers = iter([_station_link(port, pairing.issue("station")), "y"])
+    assert cli.cmd_station_pair(ask=lambda prompt: next(answers)) == 0
+    assert "Paired" in capsys.readouterr().out
+    _later(monkeypatch, pairing.TOKEN_TTL + 3600)  # the first spool is tapped long after the link's 10 minutes
+    assert server_api.ServerApi(timeout=10).tag_lookup(UID)[0] == 200
+
+
+def test_station_pair_with_an_expired_link_does_not_say_paired(server, monkeypatch, capsys):
+    port, _ = server
+    _as_root(monkeypatch)
+    link = _station_link(port, pairing.issue("station"))
+    _later(monkeypatch, pairing.TOKEN_TTL + 1)
+    answers = iter([link, "y"])
+    assert cli.cmd_station_pair(ask=lambda prompt: next(answers)) == 1
+    out = capsys.readouterr()
+    assert "Paired" not in out.out
+    assert "10 minutes" in out.err and "sudo filament-kit pair --station" in out.err
+
+
+def test_the_station_token_reaches_only_the_station_routes(server):
+    port, _ = server
+    _pair(port)
+    api = server_api.ServerApi(timeout=10)
+    assert api.tag_lookup(UID)[0] == 200
+    assert api._call("GET", "/api/info")[0] == 200
+    for path in ("/api/spools", "/api/tags/" + UID, "/api/locations", "/api/station", "/api/printers"):
+        status, body = api._call("GET", path)
+        assert status == 403 and body["error"] == "forbidden", path
+    phone = pairing.redeem_code(pairing.issue().code)  # a phone's token is not limited
+    api.token = phone
+    assert api._call("GET", "/api/locations")[0] == 200
+
+
+# ---------- final fix wave I2: an unpaired station says so (status, the install's finish, the OLED) ----------
+
+PAIR_STEPS = ("sudo filament-kit pair --station", "sudo filament-kit station pair")
+
+
+def _station_mode(monkeypatch):
+    from filament_kit import modules
+    monkeypatch.setenv("FK_NO_SYSTEMD", "1")
+    cfg = modules.set_mode({"placement": {"box_count": 2}}, "station", say=None)
+    cfg.setdefault("station", {})["allow"] = ["192.0.2.10"]
+    config.save(cfg)
+
+
+def test_status_on_a_station_says_the_button_flow_is_not_paired(monkeypatch, capsys):
+    _station_mode(monkeypatch)
+    cli.main(["status"])
+    out = capsys.readouterr().out
+    assert "not paired" in out and all(c in out for c in PAIR_STEPS)
+    _paired(["192.0.2.10"])
+    cli.main(["status"])
+    out = capsys.readouterr().out
+    assert "station paired with the kit server" in out and PAIR_STEPS[1] not in out
+
+
+def test_finish_on_an_unpaired_station_names_both_pairing_steps(monkeypatch, capsys):
+    from filament_kit import apply
+    _station_mode(monkeypatch)
+    apply.finish(config.load(), run=lambda cmd: None)
+    out = capsys.readouterr().out
+    assert "not paired" in out and all(c in out for c in PAIR_STEPS)
+    _paired(["192.0.2.10"])
+    apply.finish(config.load(), run=lambda cmd: None)
+    assert PAIR_STEPS[1] not in capsys.readouterr().out
+
+
+def test_the_idle_screen_says_not_paired_without_a_pairing():
+    from filament_kit.station import flow
+    from filament_kit.station import state as st
+    with st.lock:
+        flow.reset()
+    flow.go("idle")
+    assert flow.screen()[0] == "Not paired"
+    _paired(["192.0.2.10"])
+    assert flow.screen()[0] == "Ready"
+
+
+# ---------- final fix wave M2: a reinstall gives the kept pairing to the station user it has now ----------
+
+def _station_plan():
+    from filament_kit import apply, modules
+    cfg = modules.set_mode(config._merge(config.DEFAULTS, {}), "all-in-one", say=None)
+    return apply.plan(cfg, resolve=lambda h: [h])
+
+
+def test_apply_gives_a_kept_pairing_to_the_current_station_user(tmp_path, monkeypatch):
+    from filament_kit import apply
+    monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
+    kinds = [a.kind for a in _station_plan()]
+    assert kinds.index("user") < kinds.index("station_pairing_owner") < kinds.index("enable")
+    ran = []
+    act = [a for a in _station_plan() if a.kind == "station_pairing_owner"]
+    apply.execute(act, run=ran.append, root=tmp_path / "root")
+    assert ran == []  # nothing paired yet: nothing to hand over
+    _paired(["192.0.2.5"])
+    apply.execute(act, run=ran.append, root=tmp_path / "root")
+    d, srv, tok = (str(p) for p in (server_api.pairing_dir(), server_api.server_file(), server_api.token_file()))
+    assert ran == [["chown", "root:filament-kit-station", d], ["chown", "root:filament-kit-station", srv],
+                   ["chown", "filament-kit-station:filament-kit-station", tok]]
+
+
+def test_a_failed_re_pair_keeps_the_working_pairing(server, monkeypatch, capsys):
+    """The new link is checked before anything is saved: an expired re-pair leaves the station's pairing as it was."""
+    port, _ = server
+    _as_root(monkeypatch)
+    answers = iter([_station_link(port, pairing.issue("station")), "y"])
+    assert cli.cmd_station_pair(ask=lambda prompt: next(answers)) == 0
+    before = (server_api.server_file().read_bytes(), server_api.token_file().read_bytes())
+    stale = _station_link(port, pairing.issue("station"))
+    _later(monkeypatch, pairing.TOKEN_TTL + 1)
+    answers = iter([stale, "y"])
+    assert cli.cmd_station_pair(ask=lambda prompt: next(answers)) == 1
+    assert (server_api.server_file().read_bytes(), server_api.token_file().read_bytes()) == before
+    assert server_api.ServerApi(timeout=10).tag_lookup(UID)[0] == 200
+
+
+def test_a_station_device_from_before_scopes_is_scoped(server):
+    """A device named "station" with no stored scope (paired by an earlier build) reaches only the station routes."""
+    port, _ = server
+    _pair(port)
+    devs = json.loads((config.paths().state / "devices.json").read_text())
+    for d in devs:
+        d.pop("scope", None)
+    (config.paths().state / "devices.json").write_text(json.dumps(devs))
+    api = server_api.ServerApi(timeout=10)
+    assert api.tag_lookup(UID)[0] == 200
+    assert api._call("GET", "/api/spools")[0] == 403
