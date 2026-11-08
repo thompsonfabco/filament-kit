@@ -277,7 +277,9 @@ def test_finish_s_skips_the_pairing_code(finish_env, monkeypatch, capsys):
     assert "sudo filament-kit pair" in out
 
 
-def test_finish_without_a_terminal_prints_both_links_and_waits_for_nothing(finish_env, monkeypatch, capsys):
+def test_finish_without_a_terminal_prints_the_app_link_and_no_pairing_token(finish_env, monkeypatch, capsys):
+    """No terminal (the updater, a provisioning script): the output ends up in a log, so the app link is printed but
+    no pairing link or code is issued; nothing waits."""
     calls, run = finish_env
     _apk()
     _stdin(monkeypatch, "", tty=False)
@@ -285,7 +287,8 @@ def test_finish_without_a_terminal_prints_both_links_and_waits_for_nothing(finis
     out = capsys.readouterr().out
     assert "https://192.0.2.5:8710/app.apk" in out and "[QR " not in out
     assert "Press Enter" not in out
-    assert [apply.WRAPPER, "pair", "--text"] in calls
+    assert not [c for c in calls if c[:2] == [apply.WRAPPER, "pair"]]
+    assert "sudo filament-kit pair" in out and "fkit://" not in out
 
 
 def test_finish_without_an_apk_goes_straight_to_pairing(finish_env, monkeypatch, capsys):

@@ -637,8 +637,11 @@ FK_RELEASE_PY
             # lines: a secret would show as typed and the module menu would get no key before Enter. Set it to
             # pass each key on, as sudo does when it runs at a terminal (this pty then echoes and edits), and put
             # it back afterwards, also when this script is stopped.
-            outer=$(fk_outer_tty)
-            if [ -n "$outer" ] && saved=$(stty -g -F "$outer" 2>/dev/null); then
+            outer=$(fk_outer_tty) || outer=""
+            if [ -z "$outer" ] || ! saved=$(stty -g -F "$outer" 2>/dev/null); then
+                saved=""
+                echo "note: could not find your terminal; what you type may show. Safer: sudo bash get.sh" >&2
+            else
                 # shellcheck disable=SC2064  # expand now
                 trap "rm -rf '$tmp'; stty -F '$outer' '$saved' 2>/dev/null || true" EXIT
                 stty -F "$outer" -echo -icanon -isig -iexten -ixon -icrnl min 1 time 0 2>/dev/null || true
