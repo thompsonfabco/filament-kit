@@ -81,7 +81,7 @@ def test_pc_sync_workflow():
 def test_server_workflow_runs_pc_sync_tests():
     text = _read(".github/workflows/server.yml")
     assert "./pc-sync[test]" in text
-    assert "pytest pc-sync/tests" in text
+    assert "pytest -rs pc-sync/tests" in text
 
 
 def test_installer_is_per_user():
@@ -891,3 +891,12 @@ def test_the_library_builder_imports_without_the_kits_dependencies():
             "print('ok')\n")
     r = subprocess.run([sys.executable, "-I", "-c", code], capture_output=True, text=True)
     assert r.returncode == 0 and r.stdout.strip() == "ok", r.stderr
+
+
+def test_ci_runs_the_web_tests_and_the_other_suites():
+    """The web module's tests skip themselves without the extra, so CI must install it: "green" must mean the same at each stage."""
+    text = _read(".github/workflows/server.yml")
+    assert '"./server[test,web]"' in text and "timeout-minutes:" in text and "pytest -rs server/tests" in text
+    for suite in ("printer-pack/tests", "integrations/orca-spool-sync/tests", "reader/tools", "test_root_links.py",
+                  "tools/test_get_e2e.py", "refs/tags/v0.3.0", "tools/e2e/*.sh", "printer-pack/*.sh"):
+        assert suite in text, suite
