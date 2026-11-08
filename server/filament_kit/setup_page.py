@@ -111,6 +111,9 @@ class HelperClient:
             return reply
         except (OSError, ValueError, AttributeError) as e:
             log.error("setup: the root helper did not answer (%s)", type(e).__name__)
+            if isinstance(e, PermissionError):     # only root and the kit server's user may use it
+                return {"ok": False, "status": 503, "error": "this process may not use the setup helper (only the "
+                                                              "kit server may)"}
             return {"ok": False, "status": 503, "error": "the setup helper is not running; at the server: "
                                                           "sudo systemctl enable --now filament-kit-setup.socket"}
 
