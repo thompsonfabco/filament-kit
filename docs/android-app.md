@@ -9,6 +9,8 @@ dot at the top shows the connection: green **Connected**, yellow **Connecting…
 access**, red **Can't reach the server** or **The server's certificate changed**, grey **Not paired**.
 **Add from label photos** is only there when AI label reading is turned on at the server.
 
+<img src="images/android-home.png" width="240" alt="The app's home screen, connected to a server">
+
 ## 1. Pair the app with your server (once per phone)
 
 1. On the server, in a Terminal:
@@ -25,6 +27,8 @@ access**, red **Can't reach the server** or **The server's certificate changed**
    opens with a green **Connected**. **Keep the white border around the QR code**: scan it from the whole
    Terminal window, and don't crop it or zoom in so far that the border is cut off.
 
+<img src="images/android-pair-start.png" width="240" alt="Pair with your server: Scan QR code or Enter address">
+
 **No camera, or the code won't scan?** On **Pair with your server**:
 
 1. Under **Servers found on this network**, tap your server. If it isn't listed, tap **Enter address** and type the
@@ -36,6 +40,8 @@ access**, red **Can't reach the server** or **The server's certificate changed**
 
 **If it fails:** the code works once and expires; run `sudo filament-kit pair` again for a new one. Other
 problems are in [Install the Android app](install-android-app.md#common-problems).
+
+<img src="images/android-pair-fingerprint.png" width="240" alt="Check the server's fingerprint: It matches or It does not match">
 
 **Unpair or pair again.** On the phone: **Settings** shows the server's name, address and certificate fingerprint.
 **Forget server** (it asks to confirm; the spools stay on the server) unpairs this phone, and then you pair again
@@ -121,6 +127,8 @@ printer's screen under **Filament used (last 7 days)**.
 5. If the preview looks right, tap **Add 1 spool** (or the number). **Spools added** shows the new spool numbers; tap
    **Add more** or **Done**. Any change after a preview needs a new preview.
 
+<img src="images/android-add-spool.png" width="240" alt="The Add spool form for a filament picked from Spoolman">
+
 ### B. From label photos (needs AI label reading)
 
 This needs the server's `ai_intake` module and an Anthropic API key ([Install the server](install-server.md#change-what-is-installed)
@@ -142,6 +150,8 @@ says how). If **Add from label photos** isn't on the home screen, it's off, and 
 
 If the server says the photos were already added, the app asks before adding them again, because that can create
 duplicates: check Spoolman first.
+
+<img src="images/android-label-capture.png" width="240" alt="Add spools: photograph the label"> <img src="images/android-label-review.png" width="240" alt="Check the spools: the fields read from the label">
 
 ### Link an NFC tag, set the weight, and the rest
 
