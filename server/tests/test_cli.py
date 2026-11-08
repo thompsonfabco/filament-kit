@@ -661,3 +661,18 @@ def test_key_saved_with_ai_intake_off_says_how_to_turn_it_on(monkeypatch, capsys
     assert cli.main(["config"]) == 0
     out = capsys.readouterr().out
     assert "Key saved." in out and "ai_intake" in out and "6) Modules" in out
+
+
+def test_pair_station_says_the_link_works_for_10_minutes(capsys):
+    _cert()
+    assert cli.main(["pair", "--station"]) == 0
+    assert "works for 10 minutes" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("flags", [["--pc", "--station"], ["--pc", "--text"], ["--station", "--text"]])
+def test_pair_kinds_are_mutually_exclusive(capsys, flags):
+    _cert()
+    with pytest.raises(SystemExit) as e:
+        cli.main(["pair", *flags])
+    assert e.value.code == 2 and "not allowed with" in capsys.readouterr().err
+    assert not (config.paths().state / "pending.json").exists()

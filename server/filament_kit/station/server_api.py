@@ -144,7 +144,7 @@ def save_pairing(link: Link, owner: str | None = "filament-kit-station", first: 
 
 
 class ServerApi:
-    """The flow's three calls. Built from the pairing files; `paired` is False until `filament-kit station pair`."""
+    """The flow's three calls (and hello, for pairing). Built from the pairing files; `paired` is False until `filament-kit station pair`."""
 
     def __init__(self, timeout: float = TIMEOUT):
         self.timeout = timeout
@@ -195,6 +195,11 @@ class ServerApi:
             finally:
                 c.close()
         return 0, {"error": "unreachable", "message": str(last), "display": list(UNREACHABLE)}
+
+    def hello(self) -> tuple[int, dict]:
+        """One authenticated call that does nothing: `station pair` makes it so the token is claimed at once (an
+        unclaimed one lapses 10 minutes after `pair --station`)."""
+        return self._call("GET", "/api/station/hello")
 
     def tag_lookup(self, uid: str) -> tuple[int, dict]:
         return self._call("GET", "/api/station/tag/" + urllib.parse.quote(uid, safe=""))

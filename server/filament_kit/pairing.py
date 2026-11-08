@@ -254,6 +254,8 @@ def issue(device_hint: str = "") -> Pairing:
             "last_seen": None,
             "expires": expires,
             "claimed": None,
+            # the intake station's token reaches only /api/station/* (api._authed); phones and the PC sync: all
+            **({"scope": "station"} if device_hint == "station" else {}),
         })
         _write("devices.json", devs)
 
@@ -295,7 +297,9 @@ def redeem_code(code: str) -> str:
         raise PairingError("device for this code no longer exists")
 
 
-def check(token: str) -> str | None:
+def authorize(token: str) -> tuple[str, str | None] | None:
+    """(device id, scope) for a live token, else None. Claims an unclaimed QR token (its first use). scope is
+    "station" for a token from `pair --station`, else None (every route)."""
     h = _hash(token)
     with _locked():
         devs = _load_devices()
@@ -310,8 +314,13 @@ def check(token: str) -> str | None:
                 elif d["last_seen"] is None or now - d["last_seen"] > LAST_SEEN_STALE:
                     d["last_seen"] = now
                     _write("devices.json", devs)
-                return d["id"]
+                return d["id"], d.get("scope")
         return None
+
+
+def check(token: str) -> str | None:
+    got = authorize(token)
+    return got[0] if got else None
 
 
 def revoke(device_id: str) -> bool:

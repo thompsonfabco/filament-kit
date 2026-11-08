@@ -218,6 +218,7 @@ def _pair_cli(monkeypatch, mode, link_ips, refresh):
     config.save(cfg)
     probed = []
     monkeypatch.setattr(server_api, "peer_fingerprint", lambda ip, port, timeout=10: probed.append(ip) or FP)
+    monkeypatch.setattr(server_api.ServerApi, "hello", lambda self: (200, {"ok": True}))  # no server here
     monkeypatch.setattr(server_api, "save_pairing", lambda link, owner="x", first=None, _real=server_api.save_pairing:
                         _real(link, owner=None, first=first))
     from filament_kit import apply
@@ -318,3 +319,60 @@ def test_every_connect_failing_is_unreachable(monkeypatch):
     api = _fake_api(monkeypatch, {"192.0.2.1": "refused", "192.0.2.2": "refused"})
     status, body = api.tag_lookup(UID)
     assert status == 0 and body["error"] == "unreachable" and _FakeConn.seen == []
+
+
+# ---------- final fix wave I1: `station pair` claims the token at once; M3: the station token's scope ----------
+
+def _later(monkeypatch, seconds):
+    """pairing's clock moved on (the server's devices.json ages; the TLS stack keeps the real clock)."""
+    import types
+    real = time.time
+    monkeypatch.setattr(pairing, "time", types.SimpleNamespace(time=lambda: real() + seconds))
+
+
+def _station_link(port, pr):
+    link = pr.qr.split("&ip=")[0] + "&ip=127.0.0.1"
+    return link.replace(f"p={config.load()['port']}", f"p={port}")
+
+
+def _as_root(monkeypatch):
+    if hasattr(os, "geteuid"):
+        monkeypatch.setattr(os, "geteuid", lambda: 0)
+    monkeypatch.setattr(server_api, "save_pairing", lambda link, owner="x", first=None, _real=server_api.save_pairing:
+                        _real(link, owner=None, first=first))
+
+
+def test_station_pair_claims_the_token_so_a_tap_next_day_works(server, monkeypatch, capsys):
+    port, _ = server
+    _as_root(monkeypatch)
+    answers = iter([_station_link(port, pairing.issue("station")), "y"])
+    assert cli.cmd_station_pair(ask=lambda prompt: next(answers)) == 0
+    assert "Paired" in capsys.readouterr().out
+    _later(monkeypatch, pairing.TOKEN_TTL + 3600)  # the first spool is tapped long after the link's 10 minutes
+    assert server_api.ServerApi(timeout=10).tag_lookup(UID)[0] == 200
+
+
+def test_station_pair_with_an_expired_link_does_not_say_paired(server, monkeypatch, capsys):
+    port, _ = server
+    _as_root(monkeypatch)
+    link = _station_link(port, pairing.issue("station"))
+    _later(monkeypatch, pairing.TOKEN_TTL + 1)
+    answers = iter([link, "y"])
+    assert cli.cmd_station_pair(ask=lambda prompt: next(answers)) == 1
+    out = capsys.readouterr()
+    assert "Paired" not in out.out
+    assert "10 minutes" in out.err and "sudo filament-kit pair --station" in out.err
+
+
+def test_the_station_token_reaches_only_the_station_routes(server):
+    port, _ = server
+    _pair(port)
+    api = server_api.ServerApi(timeout=10)
+    assert api.tag_lookup(UID)[0] == 200
+    assert api._call("GET", "/api/info")[0] == 200
+    for path in ("/api/spools", "/api/tags/" + UID, "/api/locations", "/api/station", "/api/printers"):
+        status, body = api._call("GET", path)
+        assert status == 403 and body["error"] == "forbidden", path
+    phone = pairing.redeem_code(pairing.issue().code)  # a phone's token is not limited
+    api.token = phone
+    assert api._call("GET", "/api/locations")[0] == 200

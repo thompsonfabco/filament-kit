@@ -310,6 +310,9 @@ def cmd_pair(pc: bool = False, station: bool = False, text: bool = False) -> int
     print(f"Pairing code: {pr.code}")
     print(f"Expires at {time.strftime('%H:%M:%S', time.localtime(pr.expires))} "
           f"(in {max(0, int(pr.expires - time.time()) // 60)} min)")
+    if station:
+        print(f"The link works for {pairing.TOKEN_TTL // 60} minutes: run `sudo filament-kit station pair` on the "
+              "station PC before then.")
     return 0
 
 
@@ -349,6 +352,18 @@ def cmd_station_pair(ask=input) -> int:
         print("Not paired.")
         return 1
     server_api.save_pairing(link, first=first)
+    # one authenticated call claims the token now: unclaimed, it lapses TOKEN_TTL after `pair --station`
+    status, body = server_api.ServerApi(timeout=15).hello()
+    if status != 200:
+        again = "run `sudo filament-kit pair --station` on the server again, then `sudo filament-kit station pair`"
+        if status == 401:
+            why = f"the link has expired (it works for {pairing.TOKEN_TTL // 60} minutes) or was used already"
+        elif status == 0:
+            why = f"the server did not answer ({body.get('message') or body.get('error')})"
+        else:
+            why = f"the server answered {status} ({body.get('message') or body.get('error')})"
+        print(f"error: not paired: {why}.\nfix: {again} within {pairing.TOKEN_TTL // 60} minutes", file=sys.stderr)
+        return 1
     if "station" not in on:
         print("Paired. Switch the station module on to use it: sudo filament-kit modules enable station")
         return 0
@@ -1596,12 +1611,13 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("status", help="check services, Spoolman, key, certificate")
     pp = sub.add_parser("pair", help="show a QR code and code to pair a phone (--pc: a link for the PC sync)")
-    pp.add_argument("--pc", action="store_true", help="pair the Windows PC sync: print the link, no QR code")
-    pp.add_argument("--station", action="store_true", help="pair the intake station's button flow: print the link")
+    pkind = pp.add_mutually_exclusive_group()
+    pkind.add_argument("--pc", action="store_true", help="pair the Windows PC sync: print the link, no QR code")
+    pkind.add_argument("--station", action="store_true", help="pair the intake station's button flow: print the link")
     stp = sub.add_parser("station", help="intake station commands (run on the station PC)")
     stp_sub = stp.add_subparsers(dest="station_cmd", required=True)
     stp_sub.add_parser("pair", help="pair the station's button flow with the server (link from 'pair --station')")
-    pp.add_argument("--text", action="store_true", help="print the pairing link as text instead of a QR code")
+    pkind.add_argument("--text", action="store_true", help="print the pairing link as text instead of a QR code")
     up = sub.add_parser("unpair", help="list or remove paired phones")
     up.add_argument("device_id", nargs="?")
     sub.add_parser("config", help="interactive settings menu")
