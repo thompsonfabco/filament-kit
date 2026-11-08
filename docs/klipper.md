@@ -32,7 +32,7 @@ has one; an address works too.
   again.
 - The kit keeps its printer list in `printers.xml`. It also writes the old-format `printers.json` beside it on every
   change, so that `sudo filament-kit update --rollback` to an earlier release keeps your Bambu printers. Keep both files.
-- From v0.4.0 the setup page lists your Klipper printers whenever the klipper module is on. Each row says "Klipper"
+- From v0.4.1 the setup page lists your Klipper printers whenever the klipper module is on. Each row says "Klipper"
   with the Moonraker address (host:port) and has **Test** (asks Moonraker if it answers and says Klipper's state, or
   that it wants an API key) and **Forget**. A Klipper printer has no Access Code; a Moonraker API key is set with
   `klipper api-key` above. The setup page can't add a Klipper printer: use `klipper add` above.

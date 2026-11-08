@@ -283,6 +283,8 @@ Run these in a Terminal on the Ubuntu computer.
 |---|---|
 | `sudo filament-kit status` | Checks that everything works. Anything failing shows a `fix:` line telling you what to do. |
 | `sudo filament-kit pair` | Shows a new QR code to pair another phone. |
+| `sudo filament-kit station pair` | On the intake station computer: pairs the station's button flow with the server. Paste the link from `sudo filament-kit pair --station`; without a terminal it says so and saves nothing (v0.4.1). |
+| `sudo filament-kit station pairing-state` | Prints whether the station is paired, on one line: `paired <address>:<port>`, `unpaired`, or `unchecked` when you are not root (v0.4.1). |
 | `sudo filament-kit pair --pc` | Shows the link and code to pair the PC sync tool (Windows or Linux). `--station` does the same for the intake station; `--text` prints the link instead of a QR code. The three are exclusive. |
 | `sudo filament-kit setup-code` | Shows the setup page's address and setup code (v0.4.0). `--new` replaces the code and clears a lock-out. |
 | `sudo filament-kit modules apply --no-pair` | Applies module changes without the pairing screen at the end (v0.4.0). |
@@ -573,7 +575,8 @@ hand: `sudo systemctl unmask sleep.target suspend.target hibernate.target hybrid
 
 ### Is it working?
 
-- `sudo filament-kit status` on the server shows `station answering at ...`. `station reader not seen` means no
+- `sudo filament-kit status` shows the station's real pairing state (v0.4.1; before, it asked you to run it with
+  `sudo` even when you had), and on the server it shows `station answering at ...`. `station reader not seen` means no
   tag has been read yet; `station scale not seen` means the scale has sent nothing yet (switch it on and put
   something on it).
 - On the station computer: `curl http://127.0.0.1:5003/state` shows the last tag and weight.
