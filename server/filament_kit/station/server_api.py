@@ -228,11 +228,12 @@ def pair_with_link(link: Link, confirm=None) -> PairResult:
         return PairResult("paired", "Paired. Switch the station module on to use it: "
                                     "sudo filament-kit modules enable station")
     try:  # the station's unit lets only listed addresses through: add the server's, then restart it
-        apply.refresh_station(cfg)
+        restarted = apply.refresh_station(cfg)
     except (apply.ApplyError, modules.ModuleError) as e:
         return PairResult("paired_not_restarted",
                           f"Paired, but the station could not be updated ({e}). Run: sudo filament-kit modules apply")
-    return PairResult("paired", "Paired. The station was restarted and uses the server now.")
+    return PairResult("paired", "Paired. The station was restarted and uses the server now." if restarted
+                      else "Paired. The station uses the server now; no restart was needed.")
 
 
 class ServerApi:

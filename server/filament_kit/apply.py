@@ -840,18 +840,26 @@ def execute(actions: list[Action], *, run: Callable[[list[str]], None] = run_che
 
 
 def refresh_station(cfg: dict, *, run: Callable[[list[str]], None] = run_checked, root: Path = Path("/"),
-                    resolve: Callable[[str], list[str]] = default_resolve) -> None:
+                    resolve: Callable[[str], list[str]] = default_resolve) -> bool:
     """After `filament-kit station pair`: rewrite the station drop-in (its IPAddressAllow now names the paired
-    server) and restart the station so it uses the new pairing. Raises ApplyError or ModuleError."""
+    server) and restart the station, so the unit lets it reach the server. With the drop-in already right it does
+    neither: a restart costs the reader about 6 s and resets the panel, and the running flow picks up new pairing
+    files by itself (flow.api). Returns whether it restarted. Raises ApplyError or ModuleError."""
     modules.validate(cfg)
-    text = station_dropin(cfg, _resolve_all(cfg, resolve))
+    data = station_dropin(cfg, _resolve_all(cfg, resolve)).encode("utf-8")
     ex = _Exec(run, Path("."), Path(root))
     try:
-        ex.write(DROPIN, text.encode("utf-8"), 0o644, "" if ex.dry or Path(root) != Path("/") else "root:root")
+        if _under(ex.root, DROPIN).read_bytes() == data:
+            return False
+    except OSError:  # none yet, or unreadable: write it
+        pass
+    try:
+        ex.write(DROPIN, data, 0o644, "" if ex.dry or Path(root) != Path("/") else "root:root")
         ex.cmd(["systemctl", "daemon-reload"])
         ex.cmd(["systemctl", "restart", STATION_UNIT])
     except (subprocess.CalledProcessError, OSError) as e:
         raise ApplyError(f"station drop-in: {e}") from e
+    return True
 
 
 def app_url(cfg: dict) -> str:
