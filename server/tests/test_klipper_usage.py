@@ -184,6 +184,17 @@ def test_same_spoolman_by_loopback():
     assert kusage.same_spoolman("http://localhost:7912/", "http://127.0.0.1:7912")
 
 
+def test_warning_never_shows_a_password():
+    kit = "http://other.example.com:7912"
+    for server in ("http://u:hunter/w@spoolman.example.com:7912", "http://u:hunter@spoolman.example.com:notaport",
+                   "u:hunter@spoolman.example.com:7912"):
+        assert "hunter" not in kusage.spoolman_warning({"spoolman": {"server": server}}, kit)
+
+
+def test_warning_odd_spoolman_section():
+    assert "no [spoolman] section" in kusage.spoolman_warning({"spoolman": "x"}, "http://other.example.com:7912")
+
+
 def test_short_print_seen_only_as_complete(printer):
     """A print can start and end between two Moonraker updates: standby -> complete still ends a job."""
     fam, pid, fake, sm = printer

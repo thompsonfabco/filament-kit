@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import ipaddress
+import re
 import sys
 from getpass import getpass
 
@@ -31,6 +32,7 @@ from .bridge.klipper.moonraker import Moonraker, MoonrakerError, Unauthorized
 from .release import ReleaseError
 
 PACK = "fk-printer-pack.tar.gz"
+REPO_NAME = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")     # as release.Fetcher.release checks it
 
 
 def pack_url(version: str, repo: str = release.REPO) -> str:
@@ -70,6 +72,9 @@ def pack_info(version: str, cfg: dict | None = None, *, fetcher: release.Fetcher
         release.parse_version(version)
         cfg = cfg if cfg is not None else config.load()
         repo = updates.settings(cfg)["repo"]        # one repo for the hash and the URL
+        # it goes into a shell line, and a kept copy never reaches the fetcher's own check
+        if not isinstance(repo, str) or not REPO_NAME.fullmatch(repo):
+            raise ReleaseError(f"bad repo name {repo!r} (owner/name)")
         table = _signed_table(version, cfg, fetcher)
     except (OSError, ValueError) as e:
         raise ReleaseError(str(e)) from None
@@ -124,22 +129,30 @@ def add_parser(sub) -> None:
 
 def _spoolman(client: Moonraker, kit_url: str | None) -> dict | None:
     """The Spoolman Moonraker reports usage to, as host:port (never the URL: it may carry a password), whether it is
-    the kit's own, and the server's warning line. None when Moonraker would not give its config."""
+    the kit's own (config's spoolman_url when `kit_url` is None), and the server's warning line. None when that is
+    not known: Moonraker would not give its config, gave an odd one, or the kit's own config cannot be read."""
     try:
-        server = ((client.server_config().get("spoolman") or {}).get("server")) or None
-    except MoonrakerError:
+        if kit_url is None:
+            kit_url = config.load().get("spoolman_url")
+        cfg = client.server_config()
+    except (MoonrakerError, OSError, ValueError, TypeError, AttributeError):
         return None
-    hp = kusage._host_port(server) if isinstance(server, str) else None
-    return {"server": f"{hp[0]}:{hp[1]}" if hp and hp[0] else None,
+    section = cfg.get("spoolman", {})
+    if not isinstance(section, dict):
+        return None
+    server = section.get("server") or None
+    return {"server": kusage.spoolman_address(server) if server else None,
             "same_as_kit": bool(server and kit_url and kusage.same_spoolman(server, kit_url)),
-            "warning": kusage.spoolman_warning({"spoolman": {"server": server}} if server else {}, kit_url)}
+            "warning": kusage.spoolman_warning(cfg, kit_url)}
 
 
-def detect(p: registry.Printer, *, kit_spoolman: str | None = None, client_factory=Moonraker) -> dict:
+def detect(p: registry.Printer, *, kit_spoolman: str | None = None, spoolman: bool = True,
+           client_factory=Moonraker) -> dict:
     """Ask the printer what it is (read only): the model and its slots, the filament system (single, AFC, Happy
     Hare, tool macros ...), why, and the Spoolman Moonraker reports to (compared with `kit_spoolman`, the kit's
-    own; config's spoolman_url when not given). `ok` False with `problem` "api_key" (Moonraker wants one) or
-    "offline" (any other Moonraker error) and `message` the line the CLI prints; the API key is never in it."""
+    own; config's spoolman_url when not given; `spoolman` False skips this, and the result's "spoolman" is None).
+    `ok` False with `problem` "api_key" (Moonraker wants one) or "offline" (any other Moonraker error) and `message`
+    the line the CLI prints; the API key is never in it."""
     out = {"ok": False, "problem": None, "message": "", "id": p.serial, "host": p.host, "port": p.port,
            "model_key": None, "model": None, "verified": None, "system": None, "slots": [], "reasons": [],
            "hostname": "", "spoolman": None}
@@ -155,16 +168,14 @@ def detect(p: registry.Printer, *, kit_spoolman: str | None = None, client_facto
         out.update(problem="offline", message=f"{e}; the server keeps trying once it runs")
         return out
     m = hw.model(d.model_key)
-    if kit_spoolman is None:
-        kit_spoolman = config.load().get("spoolman_url")
     out.update(ok=True, model_key=d.model_key, model=m.name, verified=d.verified, system=d.system_key,
                slots=[s.label for s in m.slots], reasons=list(d.reasons), hostname=d.hostname,
-               spoolman=_spoolman(client, kit_spoolman))
+               spoolman=_spoolman(client, kit_spoolman) if spoolman else None)
     return out
 
 
 def _describe(p: registry.Printer) -> int:
-    d = detect(p)
+    d = detect(p, spoolman=False)     # it prints no Spoolman, so a bad config.json must not stop it
     if not d["ok"]:
         print(f"  {d['message']}")
         return 0

@@ -21,6 +21,7 @@ import xml.etree.ElementTree as ET
 from ... import config
 from .. import xmlfile
 from ..family import KLIPPER_ENTRY
+from .moonraker import _host_part
 
 log = logging.getLogger(__name__)
 FILE = "usage.xml"
@@ -117,11 +118,21 @@ def entries(pid: str, days: float) -> list[dict]:
 # --- which Spoolman does Moonraker report to ----------------------------------------------------------------------
 
 def _host_port(url: str) -> tuple[str, int] | None:
+    """(host, port) of a URL, None when it has no readable host. Everything up to the last @ goes before parsing: an
+    unencoded /, # or ? in a password would otherwise make urlsplit take part of the credentials for the host."""
     try:
-        u = urllib.parse.urlsplit(url.strip())
-        return (u.hostname or "").lower(), u.port or (443 if u.scheme == "https" else 80)
+        scheme, sep, rest = url.strip().partition("://")
+        u = urllib.parse.urlsplit(f"{scheme}{sep}{rest.rpartition('@')[2]}")
+        host = (u.hostname or "").lower()
+        return (host, u.port or (443 if u.scheme == "https" else 80)) if host else None
     except (AttributeError, ValueError):
         return None
+
+
+def spoolman_address(url: str) -> str | None:
+    """A Spoolman URL as host:port, safe to show (it never holds the URL's credentials); None when unreadable."""
+    hp = _host_port(url)
+    return f"{_host_part(hp[0])}:{hp[1]}" if hp else None
 
 
 def _addrs(host: str) -> set[str]:
@@ -153,10 +164,13 @@ def same_spoolman(a: str, b: str) -> bool:
 def spoolman_warning(server_config: dict | None, kit_url: str | None) -> str | None:
     if server_config is None or not kit_url:
         return None
-    server = ((server_config or {}).get("spoolman") or {}).get("server")
+    section = server_config.get("spoolman")
+    server = section.get("server") if isinstance(section, dict) else None
     if not server:
         return "Moonraker does not report usage to Spoolman (no [spoolman] section)"
     if same_spoolman(server, kit_url):
         return None
-    hp = _host_port(server)
-    return f"usage goes to another Spoolman: {hp[0]}:{hp[1]}" if hp else f"usage goes to another Spoolman: {server}"
+    address = spoolman_address(server)
+    if address is None:     # a fixed sentence: the unreadable URL itself may hold a password
+        return "Moonraker's [spoolman] server address cannot be read; usage may not reach this Spoolman"
+    return f"usage goes to another Spoolman: {address}"

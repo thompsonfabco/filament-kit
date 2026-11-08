@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from filament_kit import klipper_cli
+from filament_kit import config, klipper_cli
 from filament_kit.bridge import registry
 from filament_kit.bridge.klipper import discovery
 from filament_kit.bridge.klipper import hardware as kh
@@ -176,6 +176,76 @@ def test_detect_spoolman_another_or_none(moonraker):
     moonraker.server_config = {"spoolman": {"server": "http://user:pw@spoolman.example.com:7912"}}
     d = klipper_cli.detect(p, kit_spoolman="http://spoolman.example.com:7912")
     assert d["spoolman"]["server"] == "spoolman.example.com:7912" and "pw" not in json.dumps(d)
+
+
+@pytest.mark.parametrize("server, address", [
+    ("http://fkuser:hunter/w@spoolman.example.com:7912", "spoolman.example.com:7912"),
+    ("http://fkuser:hunter#w@spoolman.example.com:7912", "spoolman.example.com:7912"),
+    ("http://fkuser:hunter?w@spoolman.example.com:7912", "spoolman.example.com:7912"),
+    ("http://fkuser:hunter@w@spoolman.example.com:7912", "spoolman.example.com:7912"),
+    ("http://fkuser:123/hunter@spoolman.example.com:7912", "spoolman.example.com:7912"),
+    ("http://fkuser:hunter@spoolman.example.com:notaport", None),
+    ("fkuser:hunter@spoolman.example.com:7912", None),
+    ("http://fkuser:hunter@[bad:7912", None),
+])
+def test_detect_never_returns_a_spoolman_password(moonraker, server, address):
+    moonraker.server_config = {"spoolman": {"server": server}}
+    p = registry.add_klipper("Box", moonraker.host, moonraker.port)
+    d = klipper_cli.detect(p, kit_spoolman="http://other.example.com:7912")
+    text = json.dumps(d)
+    assert "hunter" not in text and "fkuser" not in text
+    assert d["spoolman"]["server"] == address
+    assert d["spoolman"]["warning"] == (f"usage goes to another Spoolman: {address}" if address else
+                                        "Moonraker's [spoolman] server address cannot be read; usage may not "
+                                        "reach this Spoolman")
+
+
+def test_detect_brackets_an_ipv6_spoolman(moonraker):
+    moonraker.server_config = {"spoolman": {"server": "http://[fd00::1]:7912"}}
+    p = registry.add_klipper("Box", moonraker.host, moonraker.port)
+    assert klipper_cli.detect(p, kit_spoolman="http://[fd00::2]:7912")["spoolman"] == {
+        "server": "[fd00::1]:7912", "same_as_kit": False, "warning": "usage goes to another Spoolman: [fd00::1]:7912"}
+
+
+ODD_CONFIGS = [{"spoolman": "x"}, {"spoolman": ["a"]}, "abc", ["a"], 5]
+
+
+@pytest.mark.parametrize("answer", ODD_CONFIGS)
+def test_detect_odd_server_config_is_not_known(moonraker, answer):
+    moonraker.server_config = answer
+    p = registry.add_klipper("Box", moonraker.host, moonraker.port)
+    d = klipper_cli.detect(p, kit_spoolman="http://other.example.com:7912")
+    assert d["ok"] is True and d["problem"] is None and d["spoolman"] is None
+
+
+def test_detect_unreadable_config_is_not_known(moonraker):
+    (config.paths().etc / "config.json").write_text("{not json", encoding="utf-8")
+    p = registry.add_klipper("Box", moonraker.host, moonraker.port)
+    d = klipper_cli.detect(p)
+    assert d["ok"] is True and d["problem"] is None and d["spoolman"] is None
+
+
+def test_detect_without_spoolman_asks_nothing_about_it(moonraker, monkeypatch):
+    def boom(*a, **kw):
+        raise AssertionError("the Spoolman lookup ran")
+    monkeypatch.setattr(klipper_cli.Moonraker, "server_config", boom)
+    monkeypatch.setattr(klipper_cli.config, "load", boom)
+    p = registry.add_klipper("Box", moonraker.host, moonraker.port)
+    d = klipper_cli.detect(p, spoolman=False)
+    assert d["ok"] is True and d["spoolman"] is None
+
+
+@pytest.mark.parametrize("answer", ODD_CONFIGS)
+def test_cli_add_and_detect_do_not_care_about_the_spoolman(moonraker, capsys, answer):
+    """`klipper add` / `detect` print the model only; a broken config.json or /server/config must not stop them."""
+    moonraker.server_config = answer
+    (config.paths().etc / "config.json").write_text("{not json", encoding="utf-8")
+    moonraker.objects = ["print_stats", "AFC", "AFC_stepper lane1"]
+    want = "  model: Klipper printer (generic)\n  filament system: afc; slots: from the printer\n" \
+           "    no model entry matched: generic Klipper printer\n    filament system afc (object AFC)\n"
+    assert _detect_cli(moonraker, capsys, "add", "Box", moonraker.host, "--port", str(moonraker.port)) == (
+        0, f"added Box as box (127.0.0.1:PORT)\n{want}", "")
+    assert _detect_cli(moonraker, capsys, "detect", "box") == (0, f"Box (127.0.0.1:PORT)\n{want}", "")
 
 
 def test_detect_problems(moonraker):

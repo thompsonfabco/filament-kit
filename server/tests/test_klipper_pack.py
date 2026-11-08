@@ -196,6 +196,19 @@ def test_cli_error_output_is_unchanged(env, key, capsys):
         "none); nothing to run\n")
 
 
+@pytest.mark.parametrize("repo", ["x/y$(id)", "x", "a/b/c", "x/y z", "x/y\n", 5])
+def test_a_bad_repo_setting_gives_no_command(env, srv, key, capsys, repo):
+    """Checked before the kept copy is used: that path never reaches the fetcher's own check."""
+    _keep(env, srv.add("1.0.0", extra={PACK: PACK_BYTES}))
+    cfg = _cfg(env, updates={"repo": repo})
+    with pytest.raises(release.ReleaseError, match="owner/name"):
+        klipper_cli.pack_info("1.0.0", cfg, fetcher=NoNet())
+    rc = klipper_cli.pack(cfg, fetcher=NoNet())
+    out, err = capsys.readouterr()
+    assert rc == 1 and "owner/name" in err
+    _no_command(out)
+
+
 def test_pack_info_returns_the_checked_command(env, srv, key):
     fr = srv.add("1.0.0", extra={PACK: PACK_BYTES})
     _keep(env, fr)
