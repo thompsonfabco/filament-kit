@@ -1,0 +1,12 @@
+[Unit]
+Description=filament-kit background job %i, started from the setup page
+# One instance per job in setup_helper.JOBS (apply, update, rollback, check). Its own unit, so a job goes on while it
+# restarts the kit server (and the page with it). It is no module's unit: an update stops the modules' units, never
+# this one. The output goes to /run/filament-kit-setup/job.log (root:filament-kit 640), which the page shows.
+
+[Service]
+Type=oneshot
+# a job may install packages (apt), download a release or the library
+TimeoutStartSec=60min
+# %i, not %I: the name goes through unchanged, and the job checks it against the closed list
+ExecStart=/opt/filament-kit/venv/bin/python -I -m filament_kit.setup_helper job-run %i

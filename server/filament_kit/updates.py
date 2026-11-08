@@ -284,6 +284,19 @@ def _remember(latest: str, notes: str, back: str, now: float) -> None:
         pass
 
 
+def _note_release(fetcher: release.Fetcher, repo: str, rel: dict, now: float) -> tuple[str, str]:
+    """Save what `rel` says for the console; (its notes, what a rollback from the installed version means)."""
+    latest, cur = rel["version"], current_version()
+    notes = rel.get("notes") or ""
+    try:        # a rollback leaves the installed version: what it says about that
+        mine = notes if latest == cur else fetcher.release(repo, cur).get("notes") or ""
+    except ReleaseError:
+        mine = ""
+    back = going_back(mine)
+    _remember(latest, notes, back, now)
+    return notes, back
+
+
 def check_info(cfg: dict, *, fetcher: release.Fetcher | None = None, now: float | None = None) -> dict:
     """{installed, latest, newer, held, notes, going_back}: the latest release, what it says, and what a rollback
     from the installed version means. Raises ReleaseError when the latest release cannot be read."""
@@ -292,13 +305,7 @@ def check_info(cfg: dict, *, fetcher: release.Fetcher | None = None, now: float 
     rel = fetcher.release(s["repo"])
     latest, cur = rel["version"], current_version()
     newer = _newer(latest, cur)
-    notes = rel.get("notes") or ""
-    try:        # a rollback leaves the installed version: what it says about that
-        mine = notes if latest == cur else fetcher.release(s["repo"], cur).get("notes") or ""
-    except ReleaseError:
-        mine = ""
-    back = going_back(mine)
-    _remember(latest, notes, back, time.time() if now is None else now)
+    notes, back = _note_release(fetcher, s["repo"], rel, time.time() if now is None else now)
     return {"installed": cur, "latest": latest, "newer": newer, "held": _read_state().get("held"), "notes": notes,
             "going_back": back}
 
@@ -403,6 +410,7 @@ def update(cfg: dict, *, scheduled: bool = False, fetcher: release.Fetcher | Non
         rel = fetcher.release(s["repo"])
         latest = rel["version"]
         cur = current_version()
+        _note_release(fetcher, s["repo"], rel, now)     # the console shows it, and the timer keeps it fresh
         if not _newer(latest, cur):
             _write_state(last_ok_at=now)
             print(f"filament-kit {cur} is up to date")

@@ -91,20 +91,21 @@ def test_each_job_runs_the_clis_own_command_with_no_terminal(env, monkeypatch, n
     assert jobs.view(0)["name"] == name
 
 
-def test_job_run_takes_the_request_once(env, monkeypatch):  # noqa: F811
+def test_job_run_takes_its_name_from_the_instance(env, monkeypatch):  # noqa: F811
     monkeypatch.setattr(setup_helper, "run_job", lambda n: {"update": 7}[n])
-    setup_helper.job_request().parent.mkdir(parents=True)
-    setup_helper.job_request().write_text('{"name": "update"}', encoding="utf-8")
-    assert setup_helper.main(["job-run"]) == 7
-    assert not setup_helper.job_request().exists()
-    assert setup_helper.main(["job-run"]) == 2
+    assert setup_helper.main(["job-run", "update"]) == 7
 
 
-def test_job_run_refuses_a_name_off_the_list(env, monkeypatch):  # noqa: F811
+@pytest.mark.parametrize("name", ["rm -rf /", "uninstall", "", "../x"])
+def test_job_run_refuses_a_name_off_the_list(env, monkeypatch, name):  # noqa: F811
     monkeypatch.setattr(setup_helper, "run_job", lambda n: pytest.fail("ran"))
-    setup_helper.job_request().parent.mkdir(parents=True)
-    setup_helper.job_request().write_text('{"name": "rm -rf /"}', encoding="utf-8")
-    assert setup_helper.job_run() == 2
+    assert setup_helper.main(["job-run", name]) == 2
+
+
+def test_a_job_writes_its_own_end_to_the_journal(env, caplog):  # noqa: F811
+    caplog.set_level("INFO", logger="filament_kit")
+    assert setup_helper.run_job("check", [sys.executable, "-c", "pass"]) == 0
+    assert "setup: job check finished (exit 0)" in caplog.text
 
 
 def test_the_old_units_entry_still_runs_the_apply(env, monkeypatch):  # noqa: F811
@@ -145,49 +146,64 @@ def test_sigterm_waits_for_the_command_and_its_exit_lands_in_the_log(env):  # no
     assert v["exit"] == 143 and "putting the kit back" in v["text"]
 
 
-def test_starting_a_job_writes_only_its_name_and_starts_the_new_unit(env, monkeypatch):  # noqa: F811
+def systemd(monkeypatch, *, units="", jobs_="", apply_state="inactive", start_rc=0):
+    """A fake systemctl; returns the commands it saw."""
     monkeypatch.delenv("FK_NO_SYSTEMD")
     calls = []
 
     def run(cmd, **kw):
         calls.append(cmd)
-        return subprocess.CompletedProcess(cmd, 0, stdout="inactive\n", stderr="")
+        out = {"list-units": units, "list-jobs": jobs_, "show": apply_state + "\n"}.get(cmd[1], "")
+        return subprocess.CompletedProcess(cmd, start_rc if cmd[1] == "start" else 0, stdout=out, stderr="nope")
     monkeypatch.setattr(setup_helper.subprocess, "run", run)
+    return calls
+
+
+def test_starting_a_job_starts_its_instance_and_writes_no_file_it_must_trust(env, monkeypatch):  # noqa: F811
+    calls = systemd(monkeypatch)
     setup_helper._start_job("update")
-    assert ["systemctl", "start", "--no-block", setup_helper.JOB_UNIT] in calls
-    assert json.loads(setup_helper.job_request().read_text(encoding="utf-8")) == {"name": "update"}
+    assert ["systemctl", "start", "--no-block", "filament-kit-setup-job@update.service"] in calls
+    assert not list(setup_helper.run_dir().glob("*")) if setup_helper.run_dir().exists() else True
+    assert (config.paths().etc / "job.lock").exists()
 
 
-def test_a_job_that_will_not_start_leaves_no_request(env, monkeypatch):  # noqa: F811
-    monkeypatch.delenv("FK_NO_SYSTEMD")
-
-    def run(cmd, **kw):
-        return subprocess.CompletedProcess(cmd, 1 if "start" in cmd else 0, stdout="inactive\n", stderr="nope")
-    monkeypatch.setattr(setup_helper.subprocess, "run", run)
+def test_a_job_that_will_not_start_says_what_to_run(env, monkeypatch):  # noqa: F811
+    systemd(monkeypatch, start_rc=1)
     with pytest.raises(setup_helper.Refused) as e:
         setup_helper._start_job("rollback")
     assert e.value.status == 500 and "update --rollback" in e.value.message
-    assert not setup_helper.job_request().exists()
 
 
-@pytest.mark.parametrize("unit", [setup_helper.JOB_UNIT, setup_helper.APPLY_UNIT])
-def test_either_unit_running_means_a_job_is_running(env, monkeypatch, unit):  # noqa: F811
-    monkeypatch.delenv("FK_NO_SYSTEMD")
+@pytest.mark.parametrize("active,sub,busy", [("activating", "start", True), ("active", "running", True),
+                                             ("inactive", "dead", False), ("failed", "failed", False)])
+def test_a_job_unit_counts_while_its_oneshot_runs(env, monkeypatch, active, sub, busy):  # noqa: F811
+    systemd(monkeypatch, units=f"filament-kit-setup-job@update.service loaded {active} {sub} background job\n")
+    assert setup_helper._applying() is busy
 
-    def run(cmd, **kw):
-        return subprocess.CompletedProcess(cmd, 0, stdout="activating\n" if cmd[-1] == unit else "inactive\n")
-    monkeypatch.setattr(setup_helper.subprocess, "run", run)
+
+def test_the_busy_check_uses_a_pattern_over_all_units(env, monkeypatch):  # noqa: F811
+    calls = systemd(monkeypatch)
+    assert setup_helper._applying() is False
+    assert ["systemctl", "list-units", "--all", "--plain", "--no-legend", "filament-kit-setup-job@*"] in calls
+
+
+def test_a_queued_job_counts_before_its_unit_is_active(env, monkeypatch):  # noqa: F811
+    systemd(monkeypatch, jobs_="4711 filament-kit-setup-job@rollback.service start waiting\n")
+    assert setup_helper._applying() is True
+    assert setup_helper._busy_text() == setup_helper.BUSY["rollback"]
+
+
+def test_the_old_unit_running_counts_too(env, monkeypatch):  # noqa: F811
+    systemd(monkeypatch, apply_state="activating")
     assert setup_helper._applying() is True
 
 
-def test_a_request_not_picked_up_yet_counts_as_running(env, monkeypatch):  # noqa: F811
-    monkeypatch.delenv("FK_NO_SYSTEMD")
-    monkeypatch.setattr(setup_helper.subprocess, "run",
-                        lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, stdout="inactive\n", stderr=""))
-    setup_helper._start_job("update")
+def test_a_running_job_refuses_the_next_with_its_name(env, monkeypatch):  # noqa: F811
+    calls = systemd(monkeypatch, units="filament-kit-setup-job@update.service loaded activating start x\n")
     with pytest.raises(setup_helper.Refused) as e:
-        setup_helper._start_job("rollback")
-    assert e.value.status == 409
+        setup_helper._start_job("check")
+    assert e.value.status == 409 and e.value.message == setup_helper.BUSY["update"]
+    assert not any(c[1] == "start" for c in calls)
 
 
 def test_the_refusal_names_the_job_that_runs(app, env, monkeypatch):  # noqa: F811
@@ -394,6 +410,21 @@ def test_missing_fields_offer_the_fix_and_the_fix_needs_the_code(app, owned, mon
     assert "setup: Spoolman fields made from 192.0.2.20" in caplog.text
 
 
+def test_a_whole_overview_asks_the_helper_for_the_stations_pairing(app, owned, helper, monkeypatch):
+    from filament_kit.station import server_api
+    cfg = config.load()
+    cfg["modules"]["station"] = True
+    config.save(cfg)
+    monkeypatch.setattr(server_api, "pairing_state", lambda: "paired 192.0.2.50:8710")
+    c = client(app)
+    r = post(c, "overview", {}).json()
+    assert "station_pairing" in helper.calls
+    assert any(x["text"].startswith("station paired") and "192.0.2.50" in x["text"] for x in r["rows"])
+    assert post(c, "overview", {}, code="00000000").status_code == 403
+    free = c.get("/setup/api/overview")
+    assert "192.0.2.50" not in free.text
+
+
 def test_cli_status_has_no_console_rows(env, monkeypatch, capsys):  # noqa: F811
     from filament_kit import cli
     monkeypatch.setattr(cli.Spoolman, "ping", lambda self: "1.2.3")
@@ -419,6 +450,19 @@ def test_redaction_hides(text):
                                   "print_error 0x0500C010", "sudo filament-kit modules disable klipper"])
 def test_redaction_leaves_ordinary_words(text):
     assert redact.text(text, []) == text
+
+
+@pytest.mark.parametrize("text,gone", [
+    ("PUT /api/sync/live?user_id=1234567890 200", "1234567890"), ("user_id: abc123def", "abc123def"),
+    (r"C:\\AppData\\BambuStudio\\user\\7654321\\filament", "7654321"), ("/studio/user/7654321/base", "7654321"),
+    ("seen 9876543210 here", "9876543210"), ("fkit://pair?token=abcdef&fp=12", "abcdef"),
+    ("Authorization: Bearer abc.def", "abc.def"), ("bearer abc.def", "abc.def"), ("token=s3cret-value", "s3cret-value")])
+def test_redaction_hides_account_ids_pair_links_and_bearer_values(text, gone):
+    assert gone not in redact.text(text, [])
+
+
+def test_a_build_stamp_is_not_taken_for_an_account_id():
+    assert redact.text("build 20261103-164811 installed", []) == "build 20261103-164811 installed"
 
 
 def test_redaction_uses_the_values_this_server_knows(owned):
@@ -527,6 +571,18 @@ def test_check_info_returns_what_the_cli_prints_and_saves_it_for_the_page(env, m
     assert v["notes"] == "New things." and v["going_back"].endswith("Drop the thing.")
 
 
+def test_the_timers_run_keeps_the_pages_answer_fresh(env, monkeypatch):  # noqa: F811
+    monkeypatch.setattr(updates, "current_version", lambda: "0.5.0")
+    monkeypatch.setattr(updates, "_feed", lambda f, r: 0)
+    cfg = config.load()
+    cfg["modules"]["updates"] = True
+    config.save(cfg)
+    updates._write_state(held="0.6.0")           # a rolled-back release: the timer leaves it alone, and still says so
+    assert updates.update(cfg, scheduled=True, fetcher=Fetcher(), now=500.0) == 0
+    v = updates.view(cfg)
+    assert v["latest"] == "0.6.0" and v["checked_at"] == 500.0 and v["notes"] == "New things."
+
+
 def test_a_release_without_its_own_notes_still_checks(env, monkeypatch):  # noqa: F811
     monkeypatch.setattr(updates, "current_version", lambda: "0.5.0")
     assert updates.check_info(config.load(), fetcher=Fetcher(mine=None))["going_back"] == ""
@@ -615,21 +671,23 @@ def test_a_missing_release_points_at_the_version_not_a_token():
 def test_the_job_unit_is_nothing_an_update_stops():
     cfg = {"modules": {n: True for n in modules.MODULES}}
     services, others = updates._units(cfg)
-    assert setup_helper.JOB_UNIT not in services + others and setup_helper.APPLY_UNIT not in services + others
-    assert setup_helper.JOB_UNIT not in [u for m in modules.MODULES.values() for u in m.units]
+    for u in services + others + [x for m in modules.MODULES.values() for x in m.units]:
+        assert not u.startswith(setup_helper.JOB_PREFIX) and u != setup_helper.APPLY_UNIT
 
 
 def test_the_job_unit_as_shipped():
-    run = (SYSTEMD / setup_helper.JOB_UNIT).read_text(encoding="utf-8")
-    assert "setup_helper job-run" in run and "Type=oneshot" in run and "PartOf" not in run
+    run = (SYSTEMD / "filament-kit-setup-job@.service").read_text(encoding="utf-8")
+    assert "setup_helper job-run %i\n" in run and "%I" not in run
+    assert "Type=oneshot" in run and "PartOf" not in run
     timeout = int(re.search(r"TimeoutStartSec=(\d+)min", run).group(1)) * 60
     assert jobs.STALE_AFTER > timeout
-    assert setup_helper.JOB_UNIT in (ROOT / "install" / "uninstall.sh").read_text(encoding="utf-8")
+    assert "filament-kit-setup-job@.service" in (ROOT / "install" / "uninstall.sh").read_text(encoding="utf-8")
+    assert not (SYSTEMD / "filament-kit-setup-job.service").exists()
 
 
-def test_the_helper_may_write_only_the_jobs_folder_beyond_etc():
+def test_the_helper_sandbox_is_not_widened():
     svc = (SYSTEMD / "filament-kit-setup@.service").read_text(encoding="utf-8")
-    assert re.findall(r"^ReadWritePaths=(.*)$", svc, re.M) == ["/etc/filament-kit", "-/run/filament-kit-setup"]
+    assert re.findall(r"^ReadWritePaths=(.*)$", svc, re.M) == ["/etc/filament-kit"]
 
 
 def test_the_server_unit_was_not_widened():
@@ -691,6 +749,6 @@ def test_a_rollback_target_older_than_the_job_unit_finds_what_it_needs():
 
 def test_helper_ops_are_the_closed_list():
     assert set(setup_helper.OPS) == {"check", "key_set", "key_remove", "passphrase_set", "library_token_set",
-                                     "library_token_remove", "module", "setting", "apply", "mode", "job"}
+                                     "library_token_remove", "module", "setting", "apply", "mode", "job", "station_pairing"}
     assert set(setup_helper.JOBS) == {"apply", "update", "rollback", "check"}
     assert HOME and H     # the shared fixtures' constants are the ones in use

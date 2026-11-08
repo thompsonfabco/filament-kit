@@ -1,6 +1,8 @@
 """Taking the owner's addresses and serials out of text the setup console shows without the setup code (the Overview's
 rows, a job's log). Two nets: the values this server knows (its printers' serials, IPs and hosts, the station's address,
-the public URL), then the shapes of what it may not know about (URLs, IP addresses, local names, serial-like words).
+the public URL), then the shapes of what it may not know about (URLs, which covers fkit://pair links, IP addresses,
+local names, serial-like words, account ids, bearer values). Shapes, not one owner's value: this ships to every owner, and
+what must never be written anywhere can't be listed here.
 A line that loses too much only reads worse; a line that keeps too much is the failure, so it errs towards hiding.
 """
 from __future__ import annotations
@@ -17,6 +19,10 @@ _LOCAL = re.compile(r"\b(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:local|localdoma
                     r"(?::\d{1,5})?", re.I)
 # a serial: 12-20 capitals and digits with both in it (Bambu's look like this; a word of capitals or a date does not)
 _SERIAL = re.compile(r"\b(?=[0-9A-Z]*[0-9])(?=[0-9A-Z]*[A-Z])[0-9A-Z]{12,20}\b")
+# a Bambu account id: Studio's user folder and the sync's query parameter name it; any long run of digits may be one
+_ACCOUNT = re.compile(r"\buser_?id\b[=:\s\"']+[^\s&\"']+|\b\d{9,}\b", re.I)
+_USER_FOLDER = re.compile(r"([\\/]user[\\/]+)[^\\/\s]+", re.I)
+_BEARER = re.compile(r"\b(?:authorization[=:\s\"']+(?:bearer\s+)?|bearer[=:\s\"']+|token\s*[=:]\s*)[^\s&\"']+", re.I)
 
 
 def _ipv6(m: re.Match) -> str:
@@ -52,6 +58,9 @@ def text(s: str, known: list[str] | None = None) -> str:
     """`s` without addresses or serials. Loopback stays hidden too: nothing here needs it, and a rule with no
     exceptions is one a test can hold."""
     s = _URL.sub(HIDDEN, s)
+    s = _BEARER.sub(HIDDEN, s)
+    s = _USER_FOLDER.sub(lambda m: m.group(1) + HIDDEN, s)
+    s = _ACCOUNT.sub(HIDDEN, s)
     for v in known if known is not None else known_values():
         s = s.replace(v, HIDDEN)
     s = _IPV4.sub(HIDDEN, s)

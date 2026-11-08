@@ -20,6 +20,8 @@ What it accepts is a closed list (`OPS`), never a command, a path or a file name
                                                never a mode without the server, which this page is part of
     apply                                      start the job `apply`
     job {name}                                 start one of the closed list of jobs (JOBS), one at a time
+    station_pairing                            server_api.pairing_state(): the station's pairing folder is closed to the
+                                               service user, so a whole Overview asks here
 
 Every request carries the setup code and the page's client address, and this process is the only place a code is
 checked (setup_code.check on the root-only hash, against the per-client and global lockout in
@@ -28,10 +30,11 @@ the code can change nothing. Only root and the filament-kit user may connect (SO
 the web unit cannot see it). The request must arrive within READ_TIMEOUT seconds. Values are never logged, never echoed in a reply, never put in a
 command line. What the CLI functions print goes to the journal (stderr), not into the reply.
 
-Jobs: long work runs in its own unit, filament-kit-setup-job.service (`python -I -m filament_kit.setup_helper job-run`),
-so it goes on when it restarts the kit server (and the page with it). The helper writes the job's name to
-/run/filament-kit-setup/job.json (root 600; never the setup code), and the job runs the same command the CLI has, with
-its output in /run/filament-kit-setup/job.log (root:filament-kit 640), which the page reads. Without a terminal those
+Jobs: long work runs in its own unit, `filament-kit-setup-job@<name>.service` (`python -I -m filament_kit.setup_helper
+job-run <name>`), so it goes on when it restarts the kit server (and the page with it). The name passes the closed list
+here, is the unit's instance, and is checked against the list again by the job; no argument is ever a secret, since
+instance names show in systemctl and the journal. The job runs the same command the CLI has, with its output in
+/run/filament-kit-setup/job.log (root:filament-kit 640), which the page reads. Without a terminal those
 commands print neither the setup code nor a pairing link. filament-kit-setup-apply.service, the name up to 0.4.0, stays
 for one release and runs the job `apply` (`apply-run`)."""
 from __future__ import annotations
@@ -62,12 +65,12 @@ log = logging.getLogger(__name__)
 
 MAX_REQUEST = 16 * 1024
 READ_TIMEOUT = 5.0
-JOB_UNIT = "filament-kit-setup-job.service"
+JOB_PREFIX = "filament-kit-setup-job@"              # one instance per job: filament-kit-setup-job@update.service
 APPLY_UNIT = "filament-kit-setup-apply.service"     # the job unit's name up to 0.4.0
+ACTIVE = ("activating", "active", "deactivating", "reloading")      # a oneshot is "activating" while it runs
 # The closed list of jobs: the `filament-kit` arguments each one runs.
 JOBS = {"apply": ("modules", "apply", "--no-pair"), "update": ("update",), "rollback": ("update", "--rollback"),
         "check": ("update", "--check")}
-PENDING_FOR = 60.0      # seconds a job's request counts as starting, until its unit is seen active
 WRAPPER = "/usr/local/bin/filament-kit"
 FINISHED = "==> finished (exit"
 SETTINGS = ("web.public_url", "station.url")
@@ -102,8 +105,8 @@ def job_log() -> Path:
     return run_dir() / "job.log"
 
 
-def job_request() -> Path:
-    return run_dir() / "job.json"
+def job_unit(name: str) -> str:
+    return f"{JOB_PREFIX}{name}.service"
 
 
 def header(name: str) -> str:
@@ -174,25 +177,42 @@ def _plan_error(cfg: dict) -> str | None:
     return None
 
 
+def _running_jobs() -> list[str]:
+    """The jobs whose unit is running or queued. list-units takes a pattern, `show` does not; --all because a oneshot
+    is "activating" while it runs and a queued one still "inactive", which list-jobs shows."""
+    names: list[str] = []
+    pattern = JOB_PREFIX + "*"
+    units = subprocess.run(["systemctl", "list-units", "--all", "--plain", "--no-legend", pattern],
+                           capture_output=True, text=True, timeout=30, check=False).stdout
+    queued = subprocess.run(["systemctl", "list-jobs", "--plain", "--no-legend", pattern],
+                            capture_output=True, text=True, timeout=30, check=False).stdout
+    for line in units.splitlines():
+        f = line.split()
+        if len(f) >= 3 and f[0].startswith(JOB_PREFIX) and f[2] in ACTIVE:
+            names.append(f[0][len(JOB_PREFIX):].removesuffix(".service"))
+    for line in queued.splitlines():
+        unit = next((w for w in line.split() if w.startswith(JOB_PREFIX)), None)
+        if unit:
+            names.append(unit[len(JOB_PREFIX):].removesuffix(".service"))
+    return names
+
+
 def _applying() -> bool:
-    """True while a job's unit runs (one job at a time)."""
+    """True while a job's unit runs or is queued (one job at a time), under either unit name."""
     if _no_systemd():
         return False
-    states = [subprocess.run(["systemctl", "show", "--property=ActiveState", "--value", unit], capture_output=True,
-                             text=True, timeout=30, check=False).stdout.strip() for unit in (JOB_UNIT, APPLY_UNIT)]
-    # a oneshot is "activating" while it runs (is-active would say no) and "inactive" once it has finished
-    return any(s in ("activating", "active", "deactivating", "reloading") for s in states)
-
-
-def _pending() -> bool:
-    """A request the job unit has not picked up yet (`job-run` removes it first thing)."""
-    try:
-        return time.time() - job_request().stat().st_mtime < PENDING_FOR
-    except OSError:
-        return False
+    if _running_jobs():
+        return True
+    state = subprocess.run(["systemctl", "show", "--property=ActiveState", "--value", APPLY_UNIT], capture_output=True,
+                           text=True, timeout=30, check=False).stdout.strip()
+    return state in ACTIVE
 
 
 def _busy_text() -> str:
+    if not _no_systemd():
+        names = _running_jobs()
+        if names:
+            return BUSY.get(names[0], APPLYING)
     try:
         with open(job_log(), encoding="utf-8", errors="replace") as fh:
             return BUSY.get(job_name_of(fh.readline()), APPLYING)
@@ -202,10 +222,9 @@ def _busy_text() -> str:
 
 @contextmanager
 def _job_lock():
-    """Two requests at the same moment: one finds the other's job starting. /run is root's."""
-    d = run_dir()
-    d.mkdir(mode=0o750, parents=True, exist_ok=True)
-    fd = os.open(d / "job.lock", os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    """Held from the check to the start: the socket starts one helper per connection (Accept=yes), and two could both
+    see nothing running. In /etc/filament-kit, the one place this helper may write."""
+    fd = os.open(config.paths().etc / "job.lock", os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
     try:
         if fcntl is not None:
             fcntl.flock(fd, fcntl.LOCK_EX)
@@ -220,18 +239,13 @@ def _start_job(name: str, why: str = "") -> None:
     if _no_systemd():
         return
     with _job_lock():
-        if _applying() or _pending():
+        if _applying():
             raise Refused(409, _busy_text())
-        req = job_request()
-        req.unlink(missing_ok=True)
-        fd = os.open(req, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            json.dump({"name": name}, fh)
-        r = subprocess.run(["systemctl", "start", "--no-block", JOB_UNIT], capture_output=True, text=True,
+        unit = job_unit(name)
+        r = subprocess.run(["systemctl", "start", "--no-block", unit], capture_output=True, text=True,
                            timeout=60, check=False)
         if r.returncode != 0:
-            req.unlink(missing_ok=True)
-            log.error("setup helper: cannot start %s: %s", JOB_UNIT, r.stderr.strip())
+            log.error("setup helper: cannot start %s: %s", unit, r.stderr.strip())
             raise Refused(500, why or f"the job did not start; at the server: sudo filament-kit {' '.join(JOBS[name])}")
 
 
@@ -240,7 +254,7 @@ def _start_apply() -> None:
 
 
 def _not_applying() -> None:
-    if _applying() or _pending():
+    if _applying():
         raise Refused(409, _busy_text())
 
 
@@ -430,6 +444,11 @@ def _job(req: dict) -> dict:
     return {"name": name}
 
 
+def _station_pairing(req: dict) -> dict:
+    from .station import server_api
+    return {"state": server_api.pairing_state()}
+
+
 def _check(req: dict) -> dict:
     return {}
 
@@ -442,7 +461,8 @@ def _apply(req: dict) -> dict:
 
 OPS = {"check": _check, "key_set": _key_set, "key_remove": _key_remove, "passphrase_set": _passphrase_set,
        "library_token_set": _library_token_set, "library_token_remove": _library_token_remove,
-       "module": _module, "setting": _setting, "apply": _apply, "mode": _mode, "job": _job}
+       "module": _module, "setting": _setting, "apply": _apply, "mode": _mode, "job": _job,
+       "station_pairing": _station_pairing}
 
 
 def handle(req) -> dict:
@@ -498,6 +518,8 @@ def run_job(name: str, cmd: list[str] | None = None) -> int:
             if old is not None:
                 signal.signal(signal.SIGTERM, old)
         fh.write(f"\n{FINISHED} {code})\n")
+    # the page's own audit line says who started it; the page restarts during a job, so the end is logged here
+    log.info("setup: job %s finished (exit %s)", name, code)
     return code
 
 
@@ -505,14 +527,9 @@ def run_apply(cmd: list[str] | None = None) -> int:
     return run_job("apply", cmd)
 
 
-def job_run() -> int:
-    """The job unit: the job job_request() names; the request is gone once read."""
-    try:
-        name = json.loads(job_request().read_text(encoding="utf-8")).get("name")
-    except (OSError, ValueError, AttributeError):
-        print("no job was requested (the setup page starts this unit)", file=sys.stderr)
-        return 2
-    job_request().unlink(missing_ok=True)
+def job_run(name: str) -> int:
+    """The job unit: `name` is its instance (%i), which the helper checked; checked again, as anyone can start a unit
+    of that name by hand."""
     if name not in JOBS:
         print("not a job", file=sys.stderr)
         return 2
@@ -591,12 +608,12 @@ def main(argv: list[str] | None = None) -> int:
     handler.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
     logging.getLogger("filament_kit").addHandler(handler)
     logging.getLogger("filament_kit").setLevel(logging.INFO)
-    if argv == ["job-run"]:
-        return job_run()
+    if len(argv) == 2 and argv[0] == "job-run":
+        return job_run(argv[1])
     if argv == ["apply-run"]:
         return run_apply()
     if argv:
-        print("usage: python -m filament_kit.setup_helper [job-run | apply-run]", file=sys.stderr)
+        print("usage: python -m filament_kit.setup_helper [job-run NAME | apply-run]", file=sys.stderr)
         return 2
     reply_to = sys.stdout.buffer
     sys.stdout = sys.stderr            # whatever a CLI function prints goes to the journal, never into the reply
