@@ -3,8 +3,10 @@
 `build(labels, project)` makes a Bambu project 3MF with one PLA filament per slot label and a plate gcode that is
 only comments and `M400`. With a `Project` (`project_for`: the model's `<slicer-project>` in the hardware file, the
 nozzles and AMS-to-extruder links the report gives) it carries the printer fields Bambu Studio writes
-(printer_model_id, printer and nozzle settings, filament_maps, the X-BBL-Client-Version header): the X2D and P2S
-refuse a 3MF without them ("invalid 3mf"); a model without project fields gets the minimal 3MF the H2D accepted.
+(printer_model_id, printer and nozzle settings, filament_maps, the X-BBL-Client-Version header). Only a model marked
+job-file="project" gets that file: the X2D and P2S, which refuse the minimal 3MF ("invalid 3mf"); whether they accept
+this one is not known until a mapping has run on each. Every other model keeps the minimal 3MF, the file the H2D is
+known to accept; none of them has run the project file, so the attribute is set only after a model has.
 `run(manager, serial, slotmap)` uploads it over FTPS to `/cache/fk-calib-<serial>.gcode.3mf`,
 starts it with `ams_mapping` = filament i -> the slot's legacy number (unit*4+tray, an HT unit its id: the command
 Bambu Studio sends and the scanner verified on the owner's H2D) plus
@@ -217,9 +219,9 @@ def project_for(mi: hardware.ModelInfo, report: dict, addrs: list[tuple[int, int
     """The 3MF's printer fields for the loaded slots `addrs`, from the model's slicer project and the report: each
     extruder's nozzle from `device.nozzle.info[]` (by the printer's own extruder id), else the top-level
     `nozzle_diameter`, else the model's default; each filament on the extruder its AMS unit feeds (`info` bits),
-    else on the model's master extruder. None when the model has no slicer project (the minimal 3MF)."""
+    else on the model's master extruder. None (the minimal 3MF) unless the model is marked job-file="project"."""
     sp = mi.slicer
-    if sp is None:
+    if sp is None or mi.job_file != "project":
         return None
     p = _d(report)
     top = _mm(p.get('nozzle_diameter'))
@@ -251,7 +253,7 @@ def _zip(files: dict) -> bytes:
 def build(slots: list[str], project: Project | None = None) -> bytes:
     """A Bambu project 3MF with one PLA filament per slot label (filament ids 1..N in label order): with a
     `project` (`project_for`), the printer fields Bambu Studio writes (`_build_project`); without, the minimal
-    3MF (models the hardware file has no slicer project for)."""
+    3MF (every model not marked job-file="project")."""
     labels = list(slots)
     if not labels:
         raise ValueError("no slots to calibrate")
@@ -587,7 +589,11 @@ def _attempt(manager, serial: str, slotmap: SlotMap, printer, should_stop, hw: h
         res.problems.append('printer_busy')
         return res
 
-    trays0 = _trays(snap)
+    # a slot the sensor says is empty stays out even if it still names a filament, as in the slot test
+    lay = layout.build(snap, printer.model if printer is not None else None, hw)
+    ams_units = [u for u in lay.units if u.kind != layout.EXT_KIND]
+    absent = {(u.ams_id, s.tray_id) for u in ams_units for s in u.slots if s.present is False}
+    trays0 = {k: t for k, t in _trays(snap).items() if k not in absent}
     labels: list[str] = []
     addrs: list[tuple[int, int]] = []
     for label, slot in slotmap.slots.items():
@@ -603,7 +609,12 @@ def _attempt(manager, serial: str, slotmap: SlotMap, printer, should_stop, hw: h
         labels.append(label)
         addrs.append(k)
     if not labels:
-        res.problems.append(NO_AMS_LOADED)
+        if not ams_units and not res.skipped:
+            # no AMS at all: only holders, which keep their own ids, so there is nothing to prove and no job to
+            # send. Adding a unit changes the layout, and that makes the map again.
+            res.consistent = True
+        else:
+            res.problems.append(NO_AMS_LOADED)
         return res
     try:
         sent = [number(hw, mi, key, a, t) for a, t in addrs]
@@ -908,7 +919,7 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
         log.info("printer %s: the loaded slots number alike under %s; taking %s (the model's first)", serial,
                  ", ".join(proved), res.scheme)
         res.notes.append(f"the loaded slots are numbered alike under {', '.join(proved)}: the numbering of further "
-                         f"AMS units is settled when one is added (the map is made again then)")
+                         f"AMS units is not settled yet, so map again after loading a second unit")
     res.consistent = st['final'] == 'FINISH' and res.scheme is not None
     # another job only after a clean end that proved nothing (never after a real failure or a stop)
     res.retry = st['final'] == 'FINISH' and res.scheme is None

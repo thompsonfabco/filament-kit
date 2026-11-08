@@ -5,6 +5,7 @@ public Bambu Studio project fields, the serial a placeholder."""
 from __future__ import annotations
 
 import copy
+import dataclasses
 import io
 import json
 import re
@@ -13,7 +14,7 @@ import zipfile
 import pytest
 
 from fakes.fake_paho import FakeClient, FakePrinter
-from filament_kit import config
+from filament_kit import cli, config
 from filament_kit.bridge import ams, calib3mf, connection, hardware, mapping, registry, slottest
 from filament_kit.bridge.connection import Manager
 from filament_kit.bridge.registry import Printer
@@ -67,7 +68,8 @@ def test_one_unit_fits_both_schemes_takes_the_first_and_says_so(fake_ftp, x2d):
     m = FakeManager(fake_ftp.root, report=rep)
     r = calib3mf.run(m, SERIAL, x2d_map(rep))
     assert r.scheme == "shift8"
-    assert len(r.notes) == 1 and "shift8, legacy" in r.notes[0] and "added" in r.notes[0]
+    assert len(r.notes) == 1 and "shift8, legacy" in r.notes[0]
+    assert "map again after loading a second unit" in r.notes[0]
 
 
 def test_a_second_unit_settles_the_scheme_without_a_note(fake_ftp, x2d):
@@ -91,6 +93,38 @@ def test_only_holders_loaded_says_what_to_do_and_sends_nothing(fake_ftp, x2d):
     m = FakeManager(fake_ftp.root, report=rep)
     r = calib3mf.run(m, SERIAL, x2d_map(rep))
     assert r.consistent is False and r.problems == [calib3mf.NO_AMS_LOADED] and jobs(m) == []
+
+
+def test_a_printer_with_no_ams_needs_no_job_and_no_advice(fake_ftp, x2d):
+    rep = x2d_report()
+    rep["ams"]["ams"] = []
+    m = FakeManager(fake_ftp.root, report=rep)
+    r = calib3mf.run(m, SERIAL, ams.SlotMap(slots={"Ext-L": {"ams_id": 254, "tray_id": 0, "global_id": 254},
+                                                   "Ext-R": {"ams_id": 255, "tray_id": 0, "global_id": 255}}))
+    assert r.consistent is True and r.restored is True and r.problems == [] and jobs(m) == []
+    assert r.external == ["Ext-L", "Ext-R"] and r.scheme is None
+
+
+def test_a_unit_that_left_the_report_is_not_taken_for_no_ams(fake_ftp, x2d):
+    """The map still lists its slots, so they are skipped: the printer has an AMS, and the advice is right."""
+    rep = x2d_report()
+    smap = x2d_map(rep)
+    rep["ams"]["ams"] = []
+    m = FakeManager(fake_ftp.root, report=rep)
+    r = calib3mf.run(m, SERIAL, smap)
+    assert r.consistent is False and r.problems == [calib3mf.NO_AMS_LOADED] and jobs(m) == []
+
+
+def test_a_slot_the_sensor_says_is_empty_stays_out_even_if_it_names_a_filament(fake_ftp, x2d, monkeypatch):
+    rep = x2d_report()                  # all four name PLA
+    rep["ams"]["tray_exist_bits"] = "5"     # A1 and A3 present
+    saved = []
+    monkeypatch.setattr(calib3mf.snapshot, "save", lambda s, k, slots: saved.extend(slots))
+    m = FakeManager(fake_ftp.root, report=rep)
+    r = calib3mf.run(m, SERIAL, x2d_map(rep))
+    assert r.consistent is True and r.problems == [], r.problems
+    assert r.skipped == ["A2", "A4"] and jobs(m)[0]["ams_mapping"] == [0, 2]
+    assert [x["label"] for x in saved] == ["A1", "A3", "Ext-L", "Ext-R"]   # never put back: nothing to write to
 
 
 def test_a_real_failure_is_still_a_failure_and_names_the_printers_code(fake_ftp, x2d):
@@ -119,7 +153,8 @@ BASELINE = {   # public fields of unsliced Bambu Studio 02.09.01.70 projects
 
 
 def _project_files(code, report=None, addrs=((0, 0), (0, 1))):
-    mi = hardware.load().model(code)
+    """The project file of any model, as it would be with the attribute flipped."""
+    mi = dataclasses.replace(hardware.load().model(code), job_file="project")
     pr = calib3mf.project_for(mi, report or {}, list(addrs))
     z = zipfile.ZipFile(io.BytesIO(calib3mf.build([f"A{i}" for i in range(1, len(addrs) + 1)], pr)))
     return z, json.loads(z.read("Metadata/project_settings.config")), z.read("Metadata/slice_info.config").decode()
@@ -182,6 +217,32 @@ def test_a_model_without_project_fields_gets_the_minimal_file():
     z = zipfile.ZipFile(io.BytesIO(calib3mf.build(["A1"], None)))
     assert "printer_model" not in json.loads(z.read("Metadata/project_settings.config"))
     assert "printer_model_id" not in z.read("Metadata/slice_info.config").decode()
+
+
+def test_only_the_models_that_refuse_the_minimal_file_get_the_project_file():
+    hw = hardware.load()
+    assert sorted(m.code for m in hw.models if m.job_file == "project") == ["N6", "N7"]
+    for m in hw.models:
+        assert (calib3mf.project_for(m, {}, [(0, 0)]) is not None) == (m.job_file == "project"), m.name
+    assert hw.model("O1D").slicer is not None        # the H2D's fields wait in the file until it has run them
+
+
+def test_the_h2d_is_sent_the_minimal_file(fake_ftp):
+    registry.upsert(Printer(serial=SERIAL, name="H2D", model="O1D", ip="127.0.0.1", access_code=CODE,
+                            configured=True))
+    rep = x2d_report()
+    m = FakeManager(fake_ftp.root, report=rep)
+    calib3mf.run(m, SERIAL, ams.SlotMap(slots={s.label: {"ams_id": u.ams_id, "tray_id": s.tray_id,
+                                                         "global_id": s.global_id}
+                                               for u in ams.units(rep, "O1D") for s in u.slots}))
+    z = zipfile.ZipFile(io.BytesIO(m.file_at_start))
+    assert "printer_model_id" not in z.read("Metadata/slice_info.config").decode()
+
+
+def test_project_job_file_without_project_fields_is_refused():
+    xml = ('<bambu-hardware version="1"><models><model code="Z1" name="Z" job-file="project"/></models>'
+           '</bambu-hardware>')
+    assert any("job-file" in e for e in hardware.validate(xml.encode()))
 
 
 def test_the_uploaded_job_file_is_the_models(fake_ftp, x2d):
@@ -283,6 +344,28 @@ def test_a_slot_the_sensor_says_is_empty_gets_no_write(rig):
     assert "A4" not in res.confirmed and not any("A4" in p for p in res.problems), res.problems
     assert (0, 3) not in {(w["ams_id"], w["tray_id"]) for w in printer.writes}
     assert res.restored is True
+
+
+def _no_ams_report():
+    rep = copy.deepcopy(REPORT)
+    rep["ams"]["ams"] = []             # the holder stays, as `vt_tray`
+    return rep
+
+
+def test_a_printer_with_no_ams_ends_up_calibrated_with_the_holders_own_ids(rig):
+    m, printer = rig(_no_ams_report())
+    v = mapping.Mapper(m).run(SLOT_SERIAL)
+    assert v["state"] == "done" and v["calibrated"] is True and v["observe"] is False, v["problems"]
+    assert v["problems"] == [] and printer.jobs == [] and v["scheme"] is None
+    assert {s["label"]: s["global"] for s in v["slots"]} == {"Ext-L": 254}
+
+
+def test_cli_map_prints_the_notes(rig, capsys, monkeypatch):
+    m, _printer = rig(_no_ams_report())
+    real = mapping.Mapper.view
+    monkeypatch.setattr(mapping.Mapper, "view", lambda self, s: {**real(self, s), "notes": ["a settled note"]})
+    assert cli.main(["printer", "map", SLOT_SERIAL], manager_factory=lambda s: m) == 0
+    assert "  note: a settled note" in capsys.readouterr().out
 
 
 def test_a_refused_write_to_a_slot_with_no_filament_is_not_a_problem(rig):

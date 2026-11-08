@@ -38,9 +38,10 @@ Unknown → the generic record.
                                ams_id, slot_id 0; verified on the H2D) or "legacy" (ams_id = holder id, tray_id 0,
                                no slot_id: the kit's earlier command); generic: "legacy"
     numbering     tuple[str]   candidate numbering scheme keys, first guess first (generic: ("legacy",))
-    slicer        SlicerProject | None   the Bambu Studio project fields the calibration job's 3MF carries
-                               (`<slicer-project>`, from an unsliced Bambu Studio project of that model); None: the
-                               minimal 3MF (generic, or a model the file has no project fields for)
+    slicer        SlicerProject | None   the Bambu Studio project fields a calibration job's 3MF can carry
+                               (`<slicer-project>`, from an unsliced Bambu Studio project of that model)
+    job_file      str          which 3MF the calibration job sends: "project" (`slicer`'s fields, for models that
+                               refuse the minimal file; needs a `slicer`) or "minimal" (generic and everything else)
     ftp_dirs      tuple[str]   FTPS directories where print jobs land
     known         bool         False for the generic record (calibration required, nothing assumed)
 
@@ -171,6 +172,7 @@ class ModelInfo:
     ftp_dirs: tuple[str, ...] = ("/", "/cache")
     known: bool = True
     slicer: SlicerProject | None = None
+    job_file: str = "minimal"
 
 
 def generic_model(code: str | None) -> ModelInfo:
@@ -429,7 +431,7 @@ _SCHEMA = _E(
             attrs={"code": _text, "name": _text, "preset-name": _text, "say": _text, "nozzles": _pos,
                    "camera": _enum("hls", "mjpeg", "none"), "chamber-max": _pos, "presence": _text,
                    "gcode-only-failed-is-finish": _bool, "ams-mapping2": _bool,
-                   "external-addressing": _enum("tray-is-ams", "legacy")},
+                   "external-addressing": _enum("tray-is-ams", "legacy"), "job-file": _enum("minimal", "project")},
             required=("code", "name"),
             children={"alias": _TEXT, "light-node": _TEXT, "ftp-dir": _TEXT,
                       "external": _E(attrs={"id": _nonneg, "label": _text, "say": _text, "alias": _text},
@@ -602,6 +604,10 @@ def _build(sections: dict[str, dict], where: str) -> "Hardware":
                               f"(an alias names an older label only)")
         camera = el.get("camera", "none")
         cmax = el.get("chamber-max")
+        slicer = _slicer(el, tag, errors)
+        job_file = el.get("job-file", "minimal")
+        if job_file == "project" and slicer is None:
+            errors.append(f'{tag}: job-file="project" needs a slicer-project')
         models.append(ModelInfo(
             code=code, name=name, preset_name=(el.get("preset-name") or f"Bambu Lab {name}").strip(),
             say=(el.get("say") or name).strip(),
@@ -614,7 +620,7 @@ def _build(sections: dict[str, dict], where: str) -> "Hardware":
             light_nodes=tuple(n.text.strip() for n in el.findall("light-node")) or ("chamber_light",),
             externals=tuple(externals), numbering=numbering,
             ftp_dirs=tuple(d.text.strip() for d in el.findall("ftp-dir")) or ("/", "/cache"),
-            slicer=_slicer(el, tag, errors)))
+            slicer=slicer, job_file=job_file))
 
     words = tuple((el.get("text").strip(), el.get("say").strip()) for el in sections["speech"].values())
 
