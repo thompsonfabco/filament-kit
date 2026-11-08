@@ -110,6 +110,23 @@ Built by the release workflow and shipped as `filament-kit.apk`. Everything belo
 | PyInstaller bootloader and runtime hooks | GPL-2.0-or-later WITH Bootloader-exception; hooks Apache-2.0 | the exception allows bundling a program under any licence |
 | Inno Setup (the setup stub) | Inno Setup licence (permissive; keep its notice) | makes the setup `.exe` |
 
+## The Klipper printer pack (`fk-printer-pack.tar.gz`, v0.4.0)
+
+**Shipped** in the pack (our code, GPL-3.0-or-later): the gcode macros, the `lasttag` service, the helper scripts, and two
+small patches to nfc2klipper (`printer-pack/nfc2klipper/patches/`). The patches are changes to a GPL-3.0-or-later program
+and are under the same licence.
+
+**Installed on your printer** by the pack, from the projects' own sources (we do not redistribute them):
+
+| Component | Licence | Notes |
+|---|---|---|
+| nfc2klipper (a pinned commit, with the two patches) | GPL-3.0-or-later | the NFC tag reader service on the printer |
+| Its Python packages, from its own `requirements.txt` (flask and npyscreen BSD-3-Clause, gunicorn MIT, and the others, each under its own licence) | as listed | installed on the printer in a virtual environment with pip; nothing is copied into the kit |
+| Klipper, Moonraker, AFC-Klipper-Add-On, Happy Hare | GPL-3.0 | already on your printer; the kit talks to them and copies nothing from them |
+
+The OrcaSlicer plugin **Spool Sync** (`integrations/orca-spool-sync/`) is our code (GPL-3.0-or-later) and runs inside
+OrcaSlicer (AGPL-3.0).
+
 ## The bench reader firmware (built by you from `reader/`)
 
 Not in a release: you build it with PlatformIO and flash it yourself; later versions arrive over the air from
