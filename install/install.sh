@@ -137,9 +137,10 @@ FIRST_INSTALL=1
 # ---------- 1. packages (each module's packages come with `modules apply`) ----------
 say "Installing system packages"
 export DEBIAN_FRONTEND=noninteractive
-# wait for the dpkg lock: on a fresh Ubuntu, unattended-upgrades often holds it for a few minutes
-apt-get -o DPkg::Lock::Timeout=300 update -q
-apt-get -o DPkg::Lock::Timeout=300 install -y python3-venv curl
+# wait for the dpkg lock: on a fresh Ubuntu, unattended-upgrades often holds it for a few minutes. stdin from
+# /dev/null: apt never reads the terminal (the questions of this script do)
+apt-get -o DPkg::Lock::Timeout=300 update -q </dev/null
+apt-get -o DPkg::Lock::Timeout=300 install -y python3-venv curl </dev/null
 
 # ---------- 2. user and folders (the spoolman and filament-kit-station users: created by apply) ----------
 say "Creating the service user"

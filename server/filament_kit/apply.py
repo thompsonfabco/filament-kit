@@ -8,7 +8,6 @@ ever deletes data.
 """
 from __future__ import annotations
 
-import getpass
 import importlib.metadata
 import ipaddress
 import json
@@ -25,7 +24,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from . import config, modules, remote
+from . import config, modules, pairing, remote, secret_input
 from .station import voice
 from .modules import MODULES, ModuleError
 
@@ -298,7 +297,9 @@ class ApplyError(Exception):
 
 
 def run_checked(cmd: list[str]) -> None:
-    subprocess.run(cmd, check=True, env=dict(os.environ, DEBIAN_FRONTEND="noninteractive"))
+    # apt never reads the terminal: a question would wait for nobody, and a background job reading it stops
+    stdin = subprocess.DEVNULL if cmd and cmd[0] == "apt-get" else None
+    subprocess.run(cmd, check=True, stdin=stdin, env=dict(os.environ, DEBIAN_FRONTEND="noninteractive"))
 
 
 def _no_systemd() -> bool:
@@ -465,7 +466,7 @@ def _server_setup(ex: _Exec, arg: str) -> None:
     key_file = etc / cli.KEY_FILE
     # Asked whenever it is missing and someone is at the keyboard (also on upgrade).
     if arg == "key" and (not key_file.exists() or key_file.stat().st_size == 0) and _tty():
-        key = getpass.getpass("Anthropic API key (typing is hidden, Enter to skip): ").strip()
+        key = secret_input.ask("Anthropic API key (shown as *, Enter to skip): ").strip()
         if key:
             cli.write_key(key)
             print("Key saved.")
@@ -782,8 +783,35 @@ def refresh_station(cfg: dict, *, run: Callable[[list[str]], None] = run_checked
         raise ApplyError(f"station drop-in: {e}") from e
 
 
+def app_url(cfg: dict) -> str:
+    """Where a phone downloads the Android app from this server: the first address of the pairing link (its IPs),
+    else the mDNS name."""
+    ips = pairing.local_ips()
+    host = ips[0] if ips else f"{pairing.short_hostname()}.local"
+    return f"https://{host}:{int(cfg.get('port', 8710))}/app.apk"
+
+
+def _show_app(cfg: dict, tty: bool) -> bool:
+    """The Android app's download QR code (when the server has the app), then a wait until it is installed.
+    Without a terminal: the link as text, no wait. Returns False when the person skips pairing."""
+    from . import cli  # cli imports apply; import here, not at module load
+    if not (config.paths().opt / "app" / "filament-kit.apk").is_file():
+        return True
+    url = app_url(cfg)
+    if not tty:
+        print(f"\n==> Android app: download it on the phone from {url}")
+        return True
+    print("\n==> Android app: scan this code with the phone's camera to download it")
+    print(cli._qr_text(url))
+    print(f"It downloads filament-kit.apk from this server ({url}); the browser warns about the kit's own "
+          "certificate: continue, then open the file to install the app.")
+    answer = _ask("Press Enter when the app is installed and you're ready to pair (or s to skip) ")
+    return answer.strip()[:1] not in ("s", "S")
+
+
 def finish(cfg: dict, *, run: Callable[[list[str]], None] = run_checked, pairing: bool = True) -> None:
-    """install.sh step 8, for the modules that are on: status, pairing code, the closing line.
+    """install.sh step 8, for the modules that are on: status, the app's download code, the pairing code, the
+    closing line. Without a terminal both links are printed as text and nothing waits.
 
     `pairing=False` (modules set/enable/disable, config menu) prints the status only, no QR code."""
     ex = _Exec(run, Path("."), Path("/"))
@@ -801,8 +829,15 @@ def finish(cfg: dict, *, run: Callable[[list[str]], None] = run_checked, pairing
         if not ex.ok([WRAPPER, "status"]):
             print("Some checks failed; follow the 'fix:' lines above.")
         if pairing:
-            print("\n==> Pair a phone: open the filament-kit app and scan this code")
-            ex.ok([WRAPPER, "pair"])
+            tty = _tty()
+            if not _show_app(cfg, tty):
+                print("\nPairing skipped: pair a phone later with: sudo filament-kit pair")
+            elif tty:
+                print("\n==> Pair a phone: open the filament-kit app and scan this code")
+                ex.ok([WRAPPER, "pair"])
+            else:
+                # no terminal (the updater, a provisioning script): the output goes to a log, so no pairing token
+                print("\nPair a phone at a terminal: sudo filament-kit pair  (pairing links are not written to logs)")
     parts = ["Done."]
     if "spoolman" in on:
         parts.append(f"Spoolman: http://{host}.local:7912")
