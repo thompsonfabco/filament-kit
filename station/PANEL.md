@@ -34,6 +34,11 @@ spools for recognition.
 | OLED SSD1306 128x64 (I2C 0x3C) SDA / SCL, on the same bus | D3 / D4 | 0 / 2 |
 | OLED VCC / GND | 3V3 / G | |
 
+**Wired the other way round?** If yellow's button and lamp ended up on D2/D6 and red's on D1/D5, set
+`"panel_swap": true` under `"station"` in the kit config (`STATION_PANEL_SWAP=1`) instead of rewiring or reflashing.
+The station then swaps the buttons' roles and the lamp modes. This needs firmware 9 or later, where both buttons
+report short and long presses alike.
+
 **Speaker stage** (BS170 driving a push-pull pair, all from the parts drawer):
 
 - Q3 BS170: source to G; drain to 5V through RU 1 kΩ. The drain node also goes to both transistor bases.
@@ -113,10 +118,9 @@ Red cancels at any step. Yellow advances: a short press does the step's job, and
 | PC → panel | `D <row> [text]` | display text: row 0 the title (big, ~16 characters), rows 1-4 the body (21 characters); no text clears the row |
 | PC → panel | `B <hz> <ms> [count]` | beep(s) |
 | PC → panel | `A <n>` + n raw bytes | speech, unsigned 8-bit mono at 8 kHz (n ≤ 1024): each byte is the speaker MOSFET's duty, 0 = off |
-| panel → PC | `HELLO intake-panel <version>` | at boot and after `?` (2: speaker and BME280; 3: PWM speaker; 4: AHT20; 5-6: whine-free PWM, 160 MHz; 7: OLED, long press; 8: "Waiting for PC" boot title) |
-| panel → PC | `P H` | yellow pressed: sent on release, if held under 0.8 s |
-| panel → PC | `L H` | yellow held 0.8 s (a long press; its release sends nothing) |
-| panel → PC | `P D` | red pressed: sent at once |
+| panel → PC | `HELLO intake-panel <version>` | at boot and after `?` (2: speaker and BME280; 3: PWM speaker; 4: AHT20; 5-6: whine-free PWM, 160 MHz; 7: OLED, long press; 8: "Waiting for PC" boot title; 9: long press on both buttons) |
+| panel → PC | `P H` / `P D` | the D1 (yellow) / D2 (red) button pressed: sent on release, if held under 0.8 s |
+| panel → PC | `L H` / `L D` | the D1 / D2 button held 0.8 s (a long press; its release sends nothing). A long press on red cancels, like a short one. With station.panel_swap (`STATION_PANEL_SWAP=1`), H is red and D is yellow, and the `L` lamp modes go out swapped. |
 | panel → PC | `AIR <°C> <RH%\|-> <hPa\|->` | room air every 10 s; `-` = that sensor isn't fitted |
 
 The PC resends `L` every second, and `D` rows when they change. Until the first `L` since boot the title reads

@@ -7,11 +7,16 @@ again; if the flash doesn't take the panel is used as it is. STATION_PANEL_FLASH
 
 Both the panel and the PN532 board use CH340 USB serial chips (no serial numbers), so the panel is found by its HELLO
 and the reader gets the other ttyUSB port (NFC_DEVICE=auto).
-Protocol (firmware 8), 115200 baud, one line each: PC -> panel `?`, `L <yellow> <red>` (lamp modes 0-4, resent every
+Protocol (firmware 9), 115200 baud, one line each: PC -> panel `?`, `L <yellow> <red>` (lamp modes 0-4, resent every
 second), `D <row> [text]` (OLED row 0 the title, 1-4 the body; sent when it changes), `B <hz> <ms> [count]`;
 `A <n>` + n raw bytes (speech, see `speech`);
-panel -> PC `HELLO intake-panel <version>`, `P H` (yellow, a short press, on release), `L H` (yellow held 0.8 s),
-`P D` (red, at once), `AIR <C> <RH|-> <hPa>` (see `air`).
+panel -> PC `HELLO intake-panel <version>`, `P H` / `P D` (the D1 / D2 button, a short press, on release),
+`L H` / `L D` (the D1 / D2 button held 0.8 s), `AIR <C> <RH|-> <hPa>` (see `air`).
+
+D1 (`H`) is yellow and D2 (`D`) red, as PANEL.md wires them. A panel wired the other way round (yellow's button and
+lamp on D2/D6) sets station.panel_swap (STATION_PANEL_SWAP=1): the buttons' roles and the `L` lamp modes are swapped
+here, so the wiring never needs a reflash. Firmware 9 reports both buttons alike for that; a long press on red
+cancels like a short one.
 """
 from __future__ import annotations
 
@@ -29,12 +34,12 @@ log = logging.getLogger("intake-station")
 
 def on_line(line: bytes):
     """One line from the panel: a button for the flow, or the room air."""
-    if line == b"P H":
-        flow.on_yellow(False)
-    elif line == b"L H":
-        flow.on_yellow(True)
-    elif line == b"P D":
-        flow.on_red()
+    if line in (b"P H", b"L H", b"P D", b"L D"):
+        kind, pin = line.split()
+        if (pin == b"H") != st.settings["panel_swap"]:  # yellow: advance, a long press saves
+            flow.on_yellow(kind == b"L")
+        else:  # red: cancel, short or long
+            flow.on_red()
     elif line.startswith(b"AIR "):
         air.on_air(line)
 
@@ -52,7 +57,7 @@ def refresh(seen: Shown, now: float) -> bool:
     modes = flow.lamps(now)
     if modes != seen.lamps or now - seen.at >= 1 or st.panel_dirty.is_set():
         st.panel_dirty.clear()
-        if not wire.panel_send("L %d %d" % modes):
+        if not wire.panel_send("L %d %d" % (modes[::-1] if st.settings["panel_swap"] else modes)):
             return False
         seen.lamps, seen.at = modes, now
         for i, row in enumerate(flow.screen()):
@@ -143,6 +148,21 @@ def find_panel():
     return ser
 
 
+def warn_swap_needs_fw9(version):
+    """station.panel_swap with a panel older than firmware 9: its D2 button has no long press, so a swapped yellow
+    can't save. Say so; the panel is used as it is (panel_flash may be off on purpose). True when warned."""
+    if not st.settings["panel_swap"]:
+        return False
+    try:
+        if int(version) >= 9:
+            return False
+    except (TypeError, ValueError):
+        pass
+    log.warning("station.panel_swap is on but the panel runs firmware %s: yellow (on D2) can't long-press to save "
+                "until the panel has firmware 9 or later (STATION_PANEL_FLASH=1 reflashes it)", version)
+    return True
+
+
 def panel_loop():
     """Find the button panel among the USB serial ports, then relay its presses and keep its lamps current."""
     while True:
@@ -153,6 +173,7 @@ def panel_loop():
         log.info("button panel on %s (firmware %s)", ser.port, ser.panel_version)
         if update_firmware(ser):
             continue  # look for it again: it boots the new firmware and says HELLO
+        warn_swap_needs_fw9(ser.panel_version)
         with st.panel_lock:
             st.panel["ser"] = ser
         seen = Shown()

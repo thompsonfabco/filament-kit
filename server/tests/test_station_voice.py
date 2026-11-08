@@ -288,12 +288,14 @@ def test_station_voice_step_offline_and_mismatch(tmp_path, monkeypatch, capsys):
     assert ran == []
 
 
-def test_panel_md_and_panel_py_know_firmware_8():
-    """M8."""
+def test_panel_md_and_panel_py_know_the_current_firmware():
+    """PANEL.md lists every firmware version (8: the boot title, 9: long press on both buttons) and panel.py's
+    protocol is the bundled version's."""
     text = (ROOT / "station" / "PANEL.md").read_text(encoding="utf-8")
     assert '8: "Waiting for PC" boot title' in text and '"Waiting for PC"' in text.split("## Serial protocol")[1]
+    assert "9: long press on both buttons" in text
     from filament_kit.station import panel
-    assert "Protocol (firmware 8)" in panel.__doc__
+    assert "Protocol (firmware 9)" in panel.__doc__
     assert "station module switched on later" in text or "modules enable station" in text
 
 

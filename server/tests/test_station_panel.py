@@ -409,3 +409,40 @@ def test_speech_and_camera_settings_from_env(monkeypatch):
     monkeypatch.setenv("STATION_CAMERA", "/dev/video2")
     s = st.settings_from_env()
     assert s["speech"] is False and s["camera"] == "/dev/video2"
+
+
+@pytest.mark.parametrize("swap", [False, True])
+def test_buttons_and_lamps_follow_panel_swap(monkeypatch, swap):
+    """station.panel_swap: a panel wired the other way round has yellow on D2 ("D") and red on D1 ("H"); the
+    buttons' roles and the lamp modes swap to match. A long press on red cancels like a short one."""
+    calls = []
+    monkeypatch.setitem(st.settings, "panel_swap", swap)
+    monkeypatch.setattr(panel.flow, "on_yellow", lambda long_press: calls.append(("yellow", long_press)))
+    monkeypatch.setattr(panel.flow, "on_red", lambda: calls.append(("red",)))
+    yellow, red = (b"D", b"H") if swap else (b"H", b"D")
+    for line in (b"P " + yellow, b"L " + yellow, b"P " + red, b"L " + red):
+        panel.on_line(line)
+    assert calls == [("yellow", False), ("yellow", True), ("red",), ("red",)]
+
+    sent = []
+    monkeypatch.setattr(panel.flow, "lamps", lambda now: (2, 1))  # yellow blinks, red on
+    monkeypatch.setattr(panel.flow, "screen", lambda: [""] * 5)
+    monkeypatch.setattr(panel.wire, "panel_send", lambda text: sent.append(text) or True)
+    assert panel.refresh(panel.Shown(), time.time())
+    assert sent[0] == ("L 1 2" if swap else "L 2 1")
+
+
+def test_panel_swap_from_env(monkeypatch):
+    monkeypatch.delenv("STATION_PANEL_SWAP", raising=False)
+    assert st.settings_from_env()["panel_swap"] is False
+    monkeypatch.setenv("STATION_PANEL_SWAP", "1")
+    assert st.settings_from_env()["panel_swap"] is True
+
+
+@pytest.mark.parametrize("swap,version,warned", [(False, "8", False), (True, "9", False), (True, "10", False),
+                                                  (True, "8", True), (True, "?", True), (True, None, True)])
+def test_swap_on_an_older_panel_is_logged(monkeypatch, caplog, swap, version, warned):
+    monkeypatch.setitem(st.settings, "panel_swap", swap)
+    with caplog.at_level("WARNING", logger="intake-station"):
+        assert panel.warn_swap_needs_fw9(version) is warned
+    assert ("firmware 9" in caplog.text) is warned

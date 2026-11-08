@@ -11,9 +11,11 @@
 //                                         the speaker MOSFET's PWM duty (/256), 0 = off. The PC streams it in real time and
 //                                         ramps up from 0 and back down so the speaker doesn't click.
 //   panel -> PC   "HELLO intake-panel <version>"   at boot and in answer to "?"
-//                 "P H"                   Hold (yellow) pressed: sent on release, if held under LONG_MS
-//                 "L H"                   Hold held down for LONG_MS (then its release sends nothing)
-//                 "P D"                   Discard (red) pressed: sent at once (debounced, once per press)
+//                 "P H" / "P D"           the D1 / D2 button pressed: sent on release, if held under LONG_MS
+//                 "L H" / "L D"           the D1 / D2 button held down for LONG_MS (then its release sends nothing)
+//                 H is the Hold (yellow) input and D the Discard (red) one as wired in PANEL.md. Both buttons report
+//                 alike (firmware 9), so the station can swap their roles for a panel wired the other way round
+//                 (STATION_PANEL_SWAP) without a reflash; it swaps the "L" lamp modes to match.
 //                 "AIR <C> <RH%|-> <hPa|->" room air every 10 s: a BME280, or a BMP280 + AHT20 board ("-": no such
 //                                         sensor, e.g. RH on a lone BMP280)
 // The PC resends "L" every second; with no "L" for 5 s (station service stopped) the lamps go dark and the display
@@ -31,7 +33,7 @@
 #include "aht20.h"
 #include "bme280.h"
 
-static const char *VERSION = "8";
+static const char *VERSION = "9";
 static const uint8_t PIN_BUZZER = D7;       // GPIO13: buzzer module signal
 static const uint8_t PIN_BTN_HOLD = D1;     // GPIO5:  Hold button to GND (internal pull-up)
 static const uint8_t PIN_BTN_DISCARD = D2;  // GPIO4:  Discard button to GND
@@ -315,7 +317,7 @@ struct Display {
 };
 
 static Lamp hold{PIN_LAMP_HOLD}, discard{PIN_LAMP_DISCARD};
-static Button btnHold{PIN_BTN_HOLD, 'H', true}, btnDiscard{PIN_BTN_DISCARD, 'D', false};
+static Button btnHold{PIN_BTN_HOLD, 'H', true}, btnDiscard{PIN_BTN_DISCARD, 'D', true};
 static Air air;
 static Display display;
 static uint32_t lastL = 0;

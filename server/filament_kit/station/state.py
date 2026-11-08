@@ -29,6 +29,8 @@ def settings_from_env() -> dict:
         # the bundled panel firmware (a VERSION file beside it); a panel on another version is reflashed
         "panel_fw": os.environ.get("STATION_PANEL_FW", "/opt/filament-kit/resources/panel/intake-panel.bin"),
         "panel_flash": os.environ.get("STATION_PANEL_FLASH", "1") != "0",
+        # the panel is wired the other way round (yellow on D2/D6, red on D1/D5): swap the buttons and lamps
+        "panel_swap": os.environ.get("STATION_PANEL_SWAP", "0") == "1",
         # the intake flow: no progress this long and it goes back to idle; a recognition (local AI, then Claude)
         # may take this long. The server's address and token come from the pairing files (server_api).
         "flow_timeout": int(os.environ.get("STATION_FLOW_TIMEOUT", "600")),
