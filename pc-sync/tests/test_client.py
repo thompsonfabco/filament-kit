@@ -160,3 +160,27 @@ def test_api_error_and_pair(certs):
             c2.rebuild("h")
         assert (ei.value.status, ei.value.code, ei.value.message) == (409, "other_pc", "another PC syncs")
         assert json.loads(srv.requests[-1]["body"]) == {"live_hash": "h"}
+
+
+def test_heartbeat_and_fresh_upload(certs):
+    """PCBOTH: the heartbeat is a tiny JSON body (outcome, waiting_since, app), nothing else; a folder's first
+    live upload carries fresh=1."""
+    (cert, key, fp), _ = certs
+
+    def respond(m, p, b):
+        if p == "/api/sync/heartbeat":
+            return 200, "application/json", {"ok": True}
+        return 200, "application/json", {"live_hash": "h", "fresh": True}
+
+    with TlsServer(cert, key, respond=respond) as srv:
+        c = client.Client(_cfg(srv, fp), "secret-token", timeout=5)
+        assert c.heartbeat("studio_running", 1_800_000_000.0, "Bambu Studio") == {"ok": True}
+        r = srv.requests[-1]
+        assert r["method"] == "POST" and r["type"] == "application/json" and r["auth"] == "Bearer secret-token"
+        assert json.loads(r["body"]) == {"outcome": "studio_running", "waiting_since": 1_800_000_000.0,
+                                         "app": "Bambu Studio"}
+        assert len(r["body"]) < 1024
+        c.heartbeat("up_to_date")
+        assert json.loads(srv.requests[-1]["body"]) == {"outcome": "up_to_date", "waiting_since": None, "app": None}
+        assert c.upload("live", b"zip", user_id="123", fresh=True)["fresh"] is True
+        assert srv.requests[-1]["path"] == "/api/sync/live?user_id=123&fresh=1"

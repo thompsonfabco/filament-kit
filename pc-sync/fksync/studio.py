@@ -3,7 +3,8 @@
 Folder choice (Decision "Bambu Studio folder choice"): from %APPDATA%\\BambuStudio and
 %APPDATA%\\BambuStudioBeta take the root whose BambuStudio.conf is newest (a root without a conf
 is ranked by its newest user/*/filament dir; a root with no user filament dir is skipped); within it, the user/<id> whose filament dir is
-newest. A pin from the sync config (`variant`, `user_id`) wins over both choices.
+newest. A pin from the sync config (`variant`, `user_id`) wins over both choices. That folder is the primary; every
+other usable root is a secondary (`secondaries`, PCBOTH R1: the PC sync installs each build there too).
 
 Orca Slicer (locate_orca; None when %APPDATA%\\OrcaSlicer has no user/<id>/filament dir, and the sync is then
 Bambu Studio only): the user folder is the config pin `orca_user_id`, else OrcaSlicer.conf's
@@ -129,6 +130,32 @@ def locate(appdata: Path | None, pin: dict | None = None, *, layout: "LinuxLayou
 
     return StudioFolders(root=root, variant=variant, user_id=user_id, user_filament=user_filament,
                          system_filament=root / "system" / "BBL" / "filament")
+
+
+def secondaries(appdata: Path | None, primary: StudioFolders, *,
+                layout: "LinuxLayout | None" = None) -> list[StudioFolders]:
+    """Every other usable Bambu Studio root (PCBOTH R1): on Windows the other of BambuStudio / BambuStudioBeta, on
+    Linux the other three of the four roots, in that order. Usable: it has a user/<id>/filament dir. Its user is the
+    primary's id when that folder exists there, else its own newest (the pins pick the primary only)."""
+    roots = dict(layout.studio_roots()) if layout else {v: Path(appdata) / v for v in VARIANTS}
+    out = []
+    for variant, root in roots.items():
+        if variant == primary.variant or Path(root) == Path(primary.root) or not root.is_dir():
+            continue
+        dirs = _user_filament_dirs(root)
+        if not dirs:
+            continue
+        same = [d for d in dirs if d[1] == primary.user_id]
+        _, user_id, user_filament = same[0] if same else max(dirs)
+        out.append(StudioFolders(root=root, variant=variant, user_id=user_id, user_filament=user_filament,
+                                 system_filament=root / "system" / "BBL" / "filament"))
+    return out
+
+
+def folder_key(f: StudioFolders) -> str:
+    """The local store's name for one Bambu Studio user folder: `<variant>-<user id>` ("BambuStudioBeta-123",
+    "Flatpak-BambuStudio-123"), safe as a folder name."""
+    return re.sub(r"[^A-Za-z0-9_-]+", "-", f"{f.variant}-{f.user_id}")
 
 
 def _tasklist(image: str = "bambu-studio.exe") -> str:

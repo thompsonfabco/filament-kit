@@ -119,3 +119,41 @@ def test_locate_ignores_newer_conf_of_a_root_without_user_folder(tmp_path):
     _age(stable.root / "BambuStudio.conf", 3600)
     got = studio.locate(appdata)
     assert got.variant == "BambuStudio" and got.user_id == "111"
+
+
+# --- PCBOTH R1: the other Bambu Studio folders (secondaries) --------------------------------------
+
+def test_secondaries_are_the_other_usable_roots(tmp_path):
+    appdata = tmp_path / "appdata"
+    stable = studio_fixture.make(appdata, variant="BambuStudio", user_id="1234567890")
+    beta = studio_fixture.make(appdata, variant="BambuStudioBeta", user_id="1234567890")
+    _age(beta.root / "BambuStudio.conf", 3600)
+    primary = studio.locate(appdata)
+    assert primary.variant == "BambuStudio"
+    got = studio.secondaries(appdata, primary)
+    assert got == [beta]
+    assert studio.folder_key(got[0]) == "BambuStudioBeta-1234567890"
+    assert studio.folder_key(primary) == "BambuStudio-1234567890"
+    # the pin still picks the primary; the other one is the secondary
+    pinned = studio.locate(appdata, {"variant": "BambuStudioBeta"})
+    assert studio.secondaries(appdata, pinned) == [stable]
+
+
+def test_secondary_user_is_the_primarys_id_else_its_own_newest(tmp_path):
+    appdata = tmp_path / "appdata"
+    primary = studio_fixture.make(appdata, variant="BambuStudio", user_id="1234567890")
+    studio_fixture.make(appdata, variant="BambuStudioBeta", user_id="1234567890")
+    newer = studio_fixture.make(appdata, variant="BambuStudioBeta", user_id="default")
+    _age(newer.user_filament, 0)
+    _age(appdata / "BambuStudioBeta" / "user" / "1234567890" / "filament", 3600)
+    assert [s.user_id for s in studio.secondaries(appdata, primary)] == ["1234567890"]   # the same id wins
+    other = studio_fixture.make(tmp_path / "b", variant="BambuStudio", user_id="555")
+    studio_fixture.make(tmp_path / "b", variant="BambuStudioBeta", user_id="default")
+    assert [s.user_id for s in studio.secondaries(tmp_path / "b", other)] == ["default"]
+
+
+def test_a_root_without_a_user_filament_dir_is_no_secondary(tmp_path):
+    appdata = tmp_path / "appdata"
+    primary = studio_fixture.make(appdata, variant="BambuStudio", user_id="1234567890")
+    (appdata / "BambuStudioBeta" / "user").mkdir(parents=True)           # never opened / signed in
+    assert studio.secondaries(appdata, primary) == []

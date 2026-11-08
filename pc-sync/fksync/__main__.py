@@ -59,7 +59,7 @@ def _finish_pair(dirs: store.AppDirs, cfg: dict, token: str) -> int:
         old = store.load_config(dirs)
     except ValueError:
         pass
-    for key in ("variant", "user_id", "orca_user_id", "orca_install"):  # pinned app folders survive re-pairing
+    for key in ("variant", "user_id", "orca_user_id", "orca_install", "secondaries"):  # survive re-pairing
         if key in old:
             cfg[key] = old[key]
     store.save_config(dirs, cfg)
@@ -78,7 +78,8 @@ def _finish_pair(dirs: store.AppDirs, cfg: dict, token: str) -> int:
     store.log(dirs, f"paired with {info.get('name', 'the server')} at {cfg['host']}:{cfg['port']} "
                     f"(device {cfg['device']})")
     _out(f"Paired with {info.get('name', 'the server')} ({cfg['host']}:{cfg['port']}). "
-         "The sync runs every 10 minutes and waits while Bambu Studio (or Orca Slicer) is open.")
+         "The sync runs every 10 minutes and waits while Bambu Studio (or Orca Slicer) is open "
+         "('filament-kit-sync status' shows a wait).")
     return 0
 
 
@@ -141,10 +142,12 @@ def cmd_run(dirs: store.AppDirs, appdata: Path | None, quiet: bool, layout: stud
                         echo(f"This PC is not paired; run '{APP} pair'.")
                     return 1
                 folders = studio.locate(appdata, cfg, layout=layout)
+                others, on = _secondaries(appdata, cfg, folders, layout)
                 orca = _locate_orca(appdata, cfg, warn=lambda m: _warn(dirs, echo, m), layout=layout)
                 c = client.Client(cfg, token, log=lambda m: store.log(dirs, m))
                 outcome = sync.run_once(c, folders, dirs, running=studio.running, now=time.time(), echo=echo,
-                                        orca=orca, orca_running=studio.orca_running)
+                                        orca=orca, orca_running=studio.orca_running, others=others,
+                                        secondaries=on)
             except studio.NotFound as e:
                 return _fail(dirs, echo, e.message)
             except client.ApiError as e:
@@ -165,6 +168,27 @@ def cmd_run(dirs: store.AppDirs, appdata: Path | None, quiet: bool, layout: stud
             echo("Another sync run is in progress.")
         return 0
     return 0 if outcome in sync.OUTCOMES else 1
+
+
+def _secondaries(appdata: Path | None, cfg: dict, primary: studio.StudioFolders,
+                 layout: studio.LinuxLayout | None = None) -> tuple[list[studio.StudioFolders], bool]:
+    """(this PC's other usable Bambu Studio folders, whether builds are installed there too: config `secondaries`,
+    default on; off keeps the single-folder sync)."""
+    return studio.secondaries(appdata, primary, layout=layout), cfg.get("secondaries", True) is not False
+
+
+def _when(t) -> str:
+    try:
+        return time.strftime("%Y-%m-%d %H:%M", time.localtime(float(t)))
+    except (TypeError, ValueError, OverflowError, OSError):
+        return "unknown"
+
+
+def _differ_line(variant: str, names) -> None:
+    names = [n for n in names or [] if isinstance(n, str)]
+    if names:
+        more = f", and {len(names) - 20} more" if len(names) > 20 else ""
+        _out(f"Kept, differ:    {variant}: {len(names)} ({', '.join(names[:20])}{more})")
 
 
 def _program_files() -> list[Path]:
@@ -219,6 +243,8 @@ def cmd_status(dirs: store.AppDirs, appdata: Path | None, layout: studio.LinuxLa
             _out(f"Device id:       {cfg['device']}")
     else:
         _out(f"Server:          not paired; run '{APP} pair'")
+    st = sync.load_state(dirs)
+    f = None
     try:
         f = studio.locate(appdata, cfg, layout=layout)
         pin = " (pinned in the config)" if cfg.get("variant") or cfg.get("user_id") else ""
@@ -226,7 +252,23 @@ def cmd_status(dirs: store.AppDirs, appdata: Path | None, layout: studio.LinuxLa
         _out(f"Preset folder:   {f.user_filament}")
     except studio.NotFound as e:
         _out(f"Bambu Studio:    {e.message}")
-    st = sync.load_state(dirs)
+    if f is not None:
+        others, on = _secondaries(appdata, cfg, f, layout)
+        if not others:
+            _out("Also installs:   none (no other Bambu Studio folder on this PC)")
+        elif not on:
+            _out("Also installs:   none (secondaries is off in the config; "
+                 + "; ".join(f"{o.variant}, user {o.user_id}" for o in others) + " is not synced)")
+        for o in others if on else []:
+            rec = sync.load_state(store.AppDirs(dirs.base / "folders" / studio.folder_key(o)))
+            stamp = (rec.get("installed") or {}).get("stamp")
+            err = f"; last try failed: {rec['error']}" if rec.get("error") else ""
+            _out(f"Also installs:   {o.variant}, user {o.user_id}: "
+                 + (f"build {stamp}" if stamp else "nothing installed yet") + err)
+    w = st.get("waiting")
+    if isinstance(w, dict) and w.get("since"):
+        _out(f"Waiting:         for {w.get('app') or 'Bambu Studio'} to close since {_when(w['since'])} "
+             f"({int(w.get('skipped_runs') or 0)} runs skipped)")
     try:
         o = _locate_orca(appdata, cfg, warn=lambda m: _out(f"Orca Slicer:     {m}"), layout=layout)
         if o is None:
@@ -254,6 +296,12 @@ def cmd_status(dirs: store.AppDirs, appdata: Path | None, layout: studio.LinuxLa
     except (OSError, ValueError, AttributeError):
         pass
     _out(f"Installed build: {stamp or 'none yet'}")
+    if f is not None:
+        _differ_line(f.variant, st.get("differing"))
+        others, on = _secondaries(appdata, cfg, f, layout)
+        for o in others if on else []:
+            rec = sync.load_state(store.AppDirs(dirs.base / "folders" / studio.folder_key(o)))
+            _differ_line(o.variant, rec.get("differing"))
     stale = st.get("stale") or []
     if stale:
         _out(f"No longer generated (delete them in Bambu Studio): {', '.join(stale)}")
@@ -317,8 +365,9 @@ def _parser() -> argparse.ArgumentParser:
     sub.add_parser("pair", help="pair this PC with the server (paste the link from 'sudo filament-kit pair --pc')")
     r = sub.add_parser("run", help="run one sync now (the scheduled task runs this every 10 minutes)")
     r.add_argument("--quiet", action="store_true", help="print nothing (the log still gets every line)")
-    sub.add_parser("status", help="show the server, the Bambu Studio and Orca Slicer folders, the last run and the "
-                                  "installed build")
+    sub.add_parser("status", help="show the server, the Bambu Studio folders (the one uploaded and the others it "
+                                  "installs into) and Orca Slicer's, a wait for a slicer to close, the last run "
+                                  "and the installed build")
     sub.add_parser("unpair", help="forget the server and delete this PC's token")
     if _linux():
         sub.add_parser("install-timer", help="run the sync every 10 minutes (a systemd user timer; no root)")

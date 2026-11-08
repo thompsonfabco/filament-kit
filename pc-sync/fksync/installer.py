@@ -19,6 +19,9 @@ Order (each check runs before anything is written):
      a live value equal to the build's own record of the in-app values it carried (BUILD.json
      `inapp`, `orca_inapp` for Orca: the build saw it, e.g. a "nil" it filled in); a preset the build
      brought back on `profiles restore-deleted` (BUILD.json `restored`, `orca_restored`) is not a deletion;
+     into a secondary folder (`secondary`, PCBOTH: another Bambu Studio folder of this PC, which cannot ask for a
+     rebuild) nothing is refused here: a preset edited there since its last install is held (never written over,
+     accepted or not) and one deleted there is skipped (not written again);
   4. Bambu Studio (and Orca Slicer, when its tree is installed) must not be running; this is checked again
      right before the first write, and if one runs then nothing is written, not even the backup;
   5. the user filament folders (which must exist) are backed up to dirs.backups/<stamp> and
@@ -33,6 +36,8 @@ Order (each check runs before anything is written):
      gets its .info, keeping a live cloud setting_id; every file goes to a sibling `.<name>.fktmp` first and is
      renamed over the target, so a crash never leaves a half-written preset (leftover temp files are removed at
      the start of this phase);
+     The kept presets whose live copy differs from the build's (inapp.diff, either way; an inheriting preset in
+     filament/ always) are returned as `differing`, to be listed;
   7. nothing is ever deleted: presets no longer built but still live are returned as `stale` /
      `stale_orca` (they are deleted in the app, never on disk);
   8. dirs.installed is replaced with what the slicers now hold (temp dir + rename): the build, with a kept
@@ -80,6 +85,8 @@ class InstallResult:
     backup_orca: Path | None = None
     kept: list[str] = field(default_factory=list)          # already in the slicer: left as they are
     kept_orca: list[str] = field(default_factory=list)
+    differing: list[str] = field(default_factory=list)     # kept Bambu Studio presets that differ from the build's
+    skipped: list[str] = field(default_factory=list)       # secondary: deleted there since its install, not re-added
 
 
 def read_info(path: Path) -> dict:
@@ -254,6 +261,9 @@ class _Target:
     stale: list[str] = field(default_factory=list)
     write: dict = field(default_factory=dict)       # name -> the live file stem it is written to
     kept: dict = field(default_factory=dict)        # name -> the live file stem that holds it (left as it is)
+    hold: set = field(default_factory=set)          # secondary: edited there since its install (never written over)
+    gone: set = field(default_factory=set)          # secondary: deleted there since its install (not brought back)
+    skipped: list = field(default_factory=list)
 
 
 def fold(name: str) -> str:
@@ -293,14 +303,35 @@ def _plan(t: _Target, accept: dict | None, root: Path | None = None) -> None:
     for name in t.staged:
         key = fold(name)
         fname = by_file.get(key) or by_name.get(key)
-        if fname is None and (key in top_file or key in top_name):
+        if name in t.gone:
+            t.skipped.append(name)
+        elif fname is None and (key in top_file or key in top_name):
             t.kept[name] = ROOT
         elif fname is None:
             t.write[name] = f"{name}.json"
-        elif key in ok:
+        elif key in ok and name not in t.hold:
             t.write[name] = fname
         else:
             t.kept[name] = fname
+
+
+def _differing(t: _Target) -> list[str]:
+    """The kept presets whose live copy differs from the build's (by inapp.diff, either way; the owner's own
+    inheriting preset in filament/ counts as differing): listed, never written (R2)."""
+    out = []
+    for name, fname in t.kept.items():
+        if fname == ROOT:
+            out.append(name)
+            continue
+        try:
+            live = inapp.load(t.live / fname)
+        except (OSError, UnicodeDecodeError, ValueError):
+            out.append(name)
+            continue
+        new = t.new.get(name) or {}
+        if inapp.diff(new, live) or inapp.diff(live, new):
+            out.append(name)
+    return sorted(out)
 
 
 def _own_copy(name: str, fname: str) -> bool:
@@ -311,8 +342,10 @@ def _own_copy(name: str, fname: str) -> bool:
     return fname == f"{name}.json"
 
 
-def _check(t: _Target, trusted: set[str], record: dict, restored: set[str], unsafe: list, stop: list) -> None:
-    """Steps 1-3 for one target: load the staged presets, collect untrusted G-code and late app changes."""
+def _check(t: _Target, trusted: set[str], record: dict, restored: set[str], unsafe: list, stop: list,
+           secondary: bool = False) -> None:
+    """Steps 1-3 for one target: load the staged presets, collect untrusted G-code and late app changes (`secondary`:
+    those are not refusals but t.hold / t.gone: a secondary folder cannot ask for a rebuild)."""
     for name in t.staged:
         try:
             t.new[name] = inapp.load(t.stage / f"{name}.json")
@@ -330,14 +363,19 @@ def _check(t: _Target, trusted: set[str], record: dict, restored: set[str], unsa
             continue
         if now is None:
             if not reset and name.casefold() not in restored:
-                stop.append(f"{name}: deleted in {t.app} after the build was made")
+                if secondary:
+                    t.gone.add(name)
+                else:
+                    stop.append(f"{name}: deleted in {t.app} after the build was made")
             continue
         part = _load_or_none(t.half / f"{name}.json") if t.half.is_dir() else None
         seen = record.get(name, {})
         late = [k for k, v in inapp.diff(old, now).items() if inapp.norm(t.new[name].get(k)) != inapp.norm(v)
                 and not (part is not None and k in part and inapp.norm(part[k]) == inapp.norm(v))
                 and not (k in seen and inapp.norm(seen[k]) == inapp.norm(v))]
-        if late:
+        if late and secondary:
+            t.hold.add(name)
+        elif late:
             stop.append(f"{name}: edited in {t.app} after the build was made ({', '.join(late)})")
     staged_cf = {n.casefold() for n in t.staged}
     live_cf = {n.casefold() for n in live_names}
@@ -362,11 +400,16 @@ def install(build_dir: Path, folders: StudioFolders, dirs: AppDirs, *,
             running: Callable[[], bool], stamp_now: str,
             before_write: Callable[[Path], None] | None = None,
             orca: OrcaFolders | None = None, orca_running: Callable[[], bool] | None = None,
-            accept: dict | None = None) -> InstallResult:
+            accept: dict | None = None, secondary: bool = False,
+            trusted_extra: tuple[Path, ...] = ()) -> InstallResult:
     """before_write(backup_dir) runs after the backups and before the first live write (the sync
     records it so an interrupted install can be told apart from later in-app edits). `orca`: this PC's
     Orca Slicer folders (None: the build's orca/ tree is not installed). `accept`: the updates the owner accepted,
-    {"base"|"orca": [preset names]}: the only existing presets that are written over."""
+    {"base"|"orca": [preset names]}: the only existing presets that are written over.
+    `secondary` (PCBOTH R1): `folders` is another Bambu Studio folder of this PC (not the one the server builds from):
+    step 3 refuses nothing; a preset edited there since its last install is never written over (accepted or not)
+    and one deleted there is not written again (`skipped`). `trusted_extra`: more system preset folders whose G-code
+    is trusted (a secondary trusts the primary's: same PC, its Bambu Studio version may differ)."""
     build_dir = Path(build_dir)
     orca_running = orca_running or studio.orca_running
     if running():
@@ -389,7 +432,8 @@ def install(build_dir: Path, folders: StudioFolders, dirs: AppDirs, *,
 
     # 2. untrusted G-code, 3. edited / deleted after the build
     unsafe, stop = [], []
-    _check(bambu, trusted_gcode(folders.system_filament, bambu.snap), *_build_meta(build_dir), unsafe, stop)
+    _check(bambu, trusted_gcode(folders.system_filament, bambu.snap, *trusted_extra), *_build_meta(build_dir),
+           unsafe, stop, secondary=secondary)
     if o is not None:
         _check(o, set(), *_build_meta(build_dir, "orca_"), unsafe, stop)   # Orca: only the live copy's G-code
     if unsafe:
@@ -441,7 +485,8 @@ def install(build_dir: Path, folders: StudioFolders, dirs: AppDirs, *,
     _replace_installed(build_dir, dirs, skip=() if o is not None else ("orca",), targets=targets)
     return InstallResult(installed=list(bambu.write), stale=bambu.stale, backup=backup,
                          installed_orca=list(o.write) if o else [], stale_orca=o.stale if o else [],
-                         backup_orca=backup_orca, kept=list(bambu.kept), kept_orca=list(o.kept) if o else [])
+                         backup_orca=backup_orca, kept=list(bambu.kept), kept_orca=list(o.kept) if o else [],
+                         differing=_differing(bambu), skipped=list(bambu.skipped))
 
 
 __all__ = ["Refused", "InstallResult", "install", "KEEP_BACKUPS", "STUDIO_RUNNING", "ORCA_RUNNING"]

@@ -636,3 +636,72 @@ def test_owner_preset_present_before_the_first_install_is_kept(tmp_path, server,
     assert (pc.base / f"{sunlu('0.4')}.json").read_bytes() == own
     assert sunlu("0.6") in pc.names()                       # the new ones are added
     assert sunlu("0.4") in {u["name"] for u in builds.updates_view()["updates"]}
+
+
+# ---------- PCBOTH: two Bambu Studio folders on one PC (stable and Beta) ----------
+
+def test_stable_after_beta_is_a_first_sync_and_beta_stays_current(tmp_path, server, monkeypatch):
+    """The incident: builds went into Beta only; stable holds an older generation of the same presets (other
+    filament_ids, other values) and is now the folder the PC sync picks. Stable's first sync never moves a line's id
+    nor carries stable's old values as in-app edits: they are listed as updates, the line's own presets are built,
+    nothing in stable is replaced, and Beta keeps getting every build as a secondary."""
+    import os
+    _, sm = server
+    pc, b1 = installed_first_build(tmp_path, server, monkeypatch)       # into BambuStudioBeta
+    beta = pc.folders
+    fid = builds.manifest(b1)["lines"][LID]["filament_id"]
+    old_gen = {}
+    for p in sorted(pc.base.glob("*.json")):
+        cfg = json.loads(p.read_text(encoding="utf-8"))
+        cfg.update(filament_id="P0000abc", nozzle_temperature=["199"])
+        old_gen[cfg["name"]] = (cfg, {"sync_info": "", "setting_id": ""})
+    stable = studio_fixture.make(pc.appdata, variant="BambuStudio", user_id=beta.user_id, base=old_gen,
+                                 system_src=system_copy(tmp_path / "stable"))
+    old = time.time() - 3600
+    os.utime(beta.root / "BambuStudio.conf", (old, old))
+    cfg = store.load_config(pc.dirs)
+    assert studio.locate(pc.appdata, cfg) == stable
+    others = studio.secondaries(pc.appdata, stable)
+    assert others == [beta]
+    before = {p.name: p.read_bytes() for p in (stable.user_filament / "base").iterdir()}
+
+    def run():
+        pc.now += 3600
+        return sync.run_once(pc.client, stable, pc.dirs, running=lambda: False, now=pc.now, others=others)
+
+    assert run() == "rebuild_requested"                 # stable's first sync: the Beta build is not stable's
+    assert builds.state_view(cfg["device"])["installed"] is None
+    b2 = build(sm)["stamp"]
+    m = manifest(b2)
+    assert m["lines"][LID]["filament_id"] == fid
+    assert {p["filament_id"] for p in m["presets"]} == {fid}
+    assert m["inapp"] == {}                             # stable's old values are not in-app edits
+    for p in m["presets"]:
+        assert json.loads((builds._builds() / b2 / "base" / f"{p['name']}.json").read_text())[
+            "nozzle_temperature"] != ["199"]
+    assert run() == "installed"
+    assert {p.name: p.read_bytes() for p in (stable.user_filament / "base").iterdir() if p.name in before} == before
+    names = {p["name"] for p in m["presets"]}
+    assert {u["name"] for u in builds.updates_view()["updates"]} == names & set(old_gen)
+    rec = sync.load_state(store.AppDirs(pc.dirs.base / "folders" / studio.folder_key(beta)))
+    assert rec["installed"]["stamp"] == b2               # Beta got the new build too, as a secondary
+    # the owner accepts the updates: written into stable, with the line's own id, and owed to Beta as well
+    accept_all()
+    assert run() == "installed"
+    for name in names & set(old_gen):
+        got = json.loads((stable.user_filament / "base" / f"{name}.json").read_text(encoding="utf-8"))
+        assert got["filament_id"] == fid and got["nozzle_temperature"] != ["199"]
+    assert builds.updates_view()["count"] == 0
+
+
+def test_the_wait_for_bambu_studio_reaches_the_server(tmp_path, server, monkeypatch):
+    from filament_kit import cli
+    pc, _ = installed_first_build(tmp_path, server, monkeypatch)
+    pc.now += 3600
+    assert sync.run_once(pc.client, pc.folders, pc.dirs, running=lambda: True, now=pc.now) == "studio_running"
+    pc_view = builds.status()["pc"]
+    assert pc_view["waiting"]["app"] == "Bambu Studio" and pc_view["waiting"]["since"] == pc.now
+    assert builds.pc_waiting_text(pc_view).startswith("PC sync waiting for Bambu Studio to close since ")
+    assert pc.run() in ("up_to_date", "uploaded")
+    assert "waiting" not in builds.status()["pc"]
+    assert cli.main(["profiles", "status"]) == 0

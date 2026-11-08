@@ -35,6 +35,8 @@ class AppDirs:
         self.partial = self.base / "partial"      # a build whose install stopped part-way (ruling S28)
         self.state = self.base / "state.json"
         self.lock = self.base / "sync.lock"
+        # folders/<variant>-<user id>/: one AppDirs per secondary Bambu Studio folder (installed, backups, its
+        # installing.json and state.json; PCBOTH, see sync)
 
     def ensure(self) -> None:
         self.base.mkdir(parents=True, exist_ok=True)

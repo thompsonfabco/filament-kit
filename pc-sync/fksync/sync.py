@@ -1,6 +1,7 @@
 """One sync run (port of filament-ops fpsync.main, over the pinned HTTPS API instead of a share).
 
-  1. Bambu Studio running -> `studio_running`, nothing else (not even a server call).
+  1. Bambu Studio running -> `studio_running`; the only server call is the heartbeat (at most one an hour, see
+     "A wait for a running slicer" below), nothing else.
   2. `state()`; when the server already has another sync PC (`owner not in (None, you)`) ->
      `other_pc` before anything is sent.
   3. An install that crashed part-way (marker `installing.json`, written by the installer's
@@ -70,23 +71,58 @@ Orca Slicer (`orca` given: this PC has it; None: everything above, Bambu Studio 
     server diffs the Orca folder against the last build whose orca/ was installed); a report still owed after
     a crash keeps its trees (`state.json` `report_trees`).
 
+Every Bambu Studio folder of this PC (PCBOTH; `others`, `secondaries`):
+  - The primary is the folder studio.locate picks (pin, else newest conf); everything above is the primary's alone:
+    uploads, the build gate, in-app edit detection, rebuild requests, `installed(stamp)` reports. Its records stay
+    where they always were (dirs.installed, backups, partial, installing.json, state.json); state `folder`
+    {key, variant, user_id, root} says whose they are.
+  - Each other usable folder (studio.secondaries: the other of BambuStudio / BambuStudioBeta on Windows, the other
+    three roots on Linux) is a secondary, with its own records under dirs.base/folders/<variant>-<user id>/
+    (installed/, backups/, installing.json, state.json {variant, user_id, root, installed {stamp, at}, last,
+    differing, stale, skipped, owed_accept, error}). After the primary installs build X, and on a later
+    `up_to_date` / `uploaded` run when a secondary has not had X, X goes into each secondary (installer
+    `secondary=True`): only presets that folder does not have, plus the updates the owner accepted (owed to a
+    secondary, `owed_accept`, until written there); a preset edited there since its last install is never written
+    over, one deleted there is not added again. A secondary never uploads, never asks for a rebuild and never
+    stops the primary: a failure is logged, kept in its state.json (`error`, shown by `status`) and retried next
+    run; an interrupted secondary install (its own marker) is finished by the next one. Config
+    `secondaries: false`: only the primary is written.
+  - Same-name presets that differ from the build and were kept are logged in one line per folder (count and names)
+    and kept for `status` (state `differing`, and each secondary's).
+  - Another folder becoming the primary (stable <-> Beta; or an older state.json without `folder` whose install
+    snapshot matches another folder better) is that folder's first sync, logged: the old primary's records move to
+    its secondary record, the new one starts with no snapshot, partial or marker (its secondary record gives up
+    only its backups), and its live folder is uploaded with `fresh=1` (state `fresh_owed` until sent), so the
+    server forgets the other folder's install too and lists differing same-name presets as updates instead of
+    reading them as in-app edits. The server's state is read again after that upload.
+
+A wait for a running slicer (PCBOTH R3): a run that ends `studio_running` counts in state `waiting` {since,
+skipped_runs, app} (shown by `status`); after LOUD_AFTER (24 h) its log line becomes a WARNING with the age and the
+last installed build. It sends `heartbeat(outcome, waiting_since, app)` at most every HEARTBEAT_EVERY (1 h; state
+`heartbeat` {at, outcome}); the first run after the wait sends one more with its own outcome, so the server stops
+showing the wait. A heartbeat that fails is logged and never changes the outcome.
+
 Every outcome and the stale-preset list are logged in one line each. Errors other than an install
 refusal, a rejected upload or `409 other_pc` propagate (the caller logs them; the next run retries).
 """
 import json
+import os
 import shutil
 import tempfile
 import time
 from pathlib import Path
 from typing import Callable
 
-from . import inapp, installer, store, zips
-from .client import ApiError
+from . import inapp, installer, store, studio, zips
+from .client import ApiError, CertChanged, Offline
 from .studio import OrcaFolders, StudioFolders
 from .treehash import tree_hash
 
 REQUEST_RETRY = 15 * 60
 UPLOAD_BACKOFF = 6 * 3600
+HEARTBEAT_EVERY = 3600          # at most one heartbeat an hour while a slicer stays open (R3)
+LOUD_AFTER = 24 * 3600          # a wait longer than this gets a louder log line
+BAMBU, ORCA = installer.BAMBU, installer.ORCA
 LIVE_MAX = zips.LIVE_MAX
 SYSTEM_MAX = zips.SYSTEM_MAX
 
@@ -128,12 +164,16 @@ ORCA_NO_TARGET = ("the server makes no Orca Slicer presets (no Orca printers are
 class _Run:
     def __init__(self, client, folders: StudioFolders, dirs: store.AppDirs, running, install, now: float,
                  echo: Callable[[str], None] | None, orca: OrcaFolders | None = None,
-                 orca_running: Callable[[], bool] | None = None):
+                 orca_running: Callable[[], bool] | None = None, others: list[StudioFolders] | None = None,
+                 secondaries: bool = True):
         self.c, self.f, self.d = client, folders, dirs
         self.running, self.install_fn, self.now, self.echo = running, install, now, echo
         self.o, self.orca_running = orca, orca_running or (lambda: False)
+        self.others = list(others or [])                        # the other usable Bambu Studio folders
+        self.sec = self.others if secondaries else []           # the ones installed into (R1)
         self.st = load_state(dirs)
         self.uploaded = False
+        self.fresh_sent = False     # this run sent the live folder as a first sync (a primary change, R2)
         self.orca_on = False        # this run syncs Orca Slicer (set by uploads())
 
     def log(self, msg: str) -> None:
@@ -144,11 +184,53 @@ class _Run:
     def save(self) -> None:
         _save_state(self.d, self.st)
 
-    def finish(self, outcome: str, detail: str) -> str:
+    def finish(self, outcome: str, detail: str, app: str = BAMBU) -> str:
+        if outcome == "studio_running":
+            detail = self._waiting(app, detail)
         self.log(f"{outcome}: {detail}")
         self.st["last"] = {"outcome": outcome, "at": self.now, "detail": detail}
         self.save()
+        if outcome == "studio_running":
+            w = self.st["waiting"]
+            self._heartbeat(outcome, w["since"], w["app"])
+        else:
+            if self.st.pop("waiting", None) is not None:
+                self.save()
+            if (self.st.get("heartbeat") or {}).get("outcome") == "studio_running":
+                self._heartbeat(outcome, None, None)        # the wait is over: said once
         return outcome
+
+    # --- the wait for a running slicer (R3) -------------------------------------------------
+
+    def _waiting(self, app: str, detail: str) -> str:
+        """Count this run in `waiting` {since, skipped_runs, app}; after LOUD_AFTER the line says how long."""
+        w = self.st.get("waiting") if isinstance(self.st.get("waiting"), dict) else {}
+        since = w.get("since") if isinstance(w.get("since"), (int, float)) else self.now
+        self.st["waiting"] = {"since": since, "skipped_runs": int(w.get("skipped_runs") or 0) + 1, "app": app}
+        age = self.now - since
+        if age < LOUD_AFTER:
+            return detail
+        stamp = (self.st.get("installed") or {}).get("stamp") or "never"
+        return (f"WARNING: waiting {_age(age)} for {app} to close; presets not installed since {stamp} "
+                f"(close {app} to let the sync run)")
+
+    def _heartbeat(self, outcome: str, since: float | None, app: str | None) -> None:
+        """Tell the server (PCBOTH R3): at most one an hour while waiting, once when the wait is over. A heartbeat
+        that cannot be sent is logged and never changes the run."""
+        hb = self.st.get("heartbeat") or {}
+        if (outcome == "studio_running" and hb.get("outcome") == outcome
+                and self.now - float(hb.get("at") or 0) < HEARTBEAT_EVERY):
+            return
+        self.st["heartbeat"] = {"at": self.now, "outcome": outcome}
+        self.save()
+        try:
+            self.c.heartbeat(outcome, since, app)
+        except ApiError as e:
+            why = ("the server does not take heartbeats (update filament-kit on the server)" if e.status == 404
+                   else str(e))
+            store.log(self.d, f"heartbeat not sent: {why}")
+        except (Offline, CertChanged) as e:
+            store.log(self.d, f"heartbeat not sent: {e}")
 
     # --- uploads --------------------------------------------------------------------------
 
@@ -182,6 +264,15 @@ class _Run:
                 res = self.c.upload(kind, data, partial=self._partial())   # S28 for Orca too (Ruling O)
             elif kind != "live":
                 res = self.c.upload(kind, data)
+            elif self.st.get("fresh_owed"):          # this folder's first sync (R2): the server forgets the pairing
+                kw = {"partial": self._partial()} if self._partial() else {}
+                res = self.c.upload(kind, data, user_id=self.f.user_id, fresh=True, **kw)
+                self.fresh_sent = True
+                self.st.pop("fresh_owed", None)
+                if not (isinstance(res, dict) and res.get("fresh") is True):
+                    self.log("warning: the server did not confirm this Bambu Studio folder's first sync (update "
+                             "filament-kit on the server); it may read this folder's presets as edits of the "
+                             "other folder's install")
             elif self._partial():
                 res = self.c.upload(kind, data, user_id=self.f.user_id, partial=self._partial())
             else:
@@ -265,7 +356,8 @@ class _Run:
         system = tree_hash(self.f.system_filament)
         self.orca_on = self._orca_wanted(server)
         # all checked against the limits before any is sent
-        owed = bool(self.st.get("live_owed"))   # an install was reported; its live upload did not arrive
+        owed = bool(self.st.get("live_owed") or self.st.get("fresh_owed"))   # an install was reported (or the
+        # folder changed: its first sync); the live upload did not arrive yet
         live_zip = (zips.pack(self.f.user_filament, LIVE_MAX)
                     if owed or self._needs_upload("live", here, server.get("live_hash")) else None)
         sys_zip = (zips.pack(self.f.system_filament, SYSTEM_MAX)
@@ -403,8 +495,8 @@ class _Run:
             if e.code == "studio_running":
                 if not resuming:
                     self._clear_marker()  # nothing was written by this attempt
-                app = "Orca Slicer" if e.reason == installer.ORCA_RUNNING else "Bambu Studio"
-                return self.finish("studio_running", f"{app} started; build {stamp} not installed yet")
+                app = ORCA if e.reason == installer.ORCA_RUNNING else BAMBU
+                return self.finish("studio_running", f"{app} started; build {stamp} not installed yet", app)
             self._clear_marker()
             detail = f"install of build {stamp} refused ({e.code}): {e.reason}"
             if e.code == "stale_build" and self.request(tree_hash(self.f.user_filament)):
@@ -432,6 +524,7 @@ class _Run:
         self.st["live_owed"] = True             # until upload_live() succeeds (S32)
         if installed_orca:
             self.st["orca_live_owed"] = True
+        self.st["differing"] = list(getattr(res, "differing", []) or [])
         self.save()
         if res.stale:
             self.log(f"{len(res.stale)} presets are no longer generated; delete them in Bambu Studio: "
@@ -442,8 +535,10 @@ class _Run:
         if kept:
             self.log(f"{len(kept)} presets are already in the slicer and were left as they are (their updates, if "
                      "any, are listed on the server: filament-kit profiles status)")
+        self._log_differing(self.f, stamp, self.st["differing"])
         self.report(stamp, trees, written)  # first: a failed report must not leave the new live folder uploaded
         self.upload_live()
+        self.secondaries(stamp, build_dir, (accept or {}).get("base"))
         orca = f", {len(installed_orca)} Orca Slicer presets" if installed_orca else ""
         return self.finish("installed", f"installed build {stamp} ({len(res.installed)} presets{orca} written, "
                                         f"{len(kept)} kept, backup {res.backup.name})")
@@ -471,6 +566,7 @@ class _Run:
             if accept and not with_orca:
                 accept = {t: v for t, v in accept.items() if t != "orca"} or None
             if updates_only and not accept:
+                self.secondaries(stamp, build_dir)
                 return self.finish("up_to_date", f"build {stamp} is installed; the accepted Orca Slicer updates "
                                                  "wait until its presets can be installed")
             return self._install(stamp, build_dir, resuming=False, with_orca=with_orca, accept=accept)
@@ -562,13 +658,14 @@ class _Run:
     def run(self) -> str:
         if self.running():
             return self.finish("studio_running", "Bambu Studio is open; trying again next run")
+        self.check_folder()
         server = self.c.state()
         owner, you = server.get("owner"), server.get("you")
         if owner not in (None, you):
             return self._other_pc(f"the server's sync PC is device {owner}")
         # B-I2: Orca Slicer open only matters when the server makes Orca presets (asked after state())
         if self._orca_wanted(server) and self.orca_running():
-            return self.finish("studio_running", "Orca Slicer is open; trying again next run")
+            return self.finish("studio_running", "Orca Slicer is open; trying again next run", ORCA)
 
         marker = self._marker()
         if marker is not None:
@@ -583,6 +680,8 @@ class _Run:
             server = self.c.state()
 
         here = self.uploads(server)
+        if self.fresh_sent:                     # the server forgot the other folder's install (R2): read it again
+            server = self.c.state()
 
         build = server.get("build")
         if not build:
@@ -611,6 +710,7 @@ class _Run:
                 self.log(f"writing {sum(len(v) for v in accept.values())} updates you accepted for build {stamp}")
                 return self.install(stamp, self.accepted_hashes(here) | {build.get("live_hash")}, accept,
                                     orca_extra={build.get("orca_live_hash")}, updates_only=True)
+            self.secondaries(stamp)
             if self.uploaded:
                 return self.finish("uploaded", f"build {stamp} is installed; the server has your latest presets")
             return self.finish("up_to_date", f"build {stamp} is installed")
@@ -626,6 +726,185 @@ class _Run:
                 and self.request(here):
             self.log(f"build {stamp} predates your latest Orca Slicer presets; asked for a rebuild")
         return self.install(stamp, accepted, self.accepted(server, stamp))
+
+    # --- the other Bambu Studio folders (R1, R2) -------------------------------------------
+
+    def _log_differing(self, f: StudioFolders, stamp: str, names: list[str]) -> None:
+        if names:
+            self.log(f"{len(names)} presets in {f.variant} user {f.user_id} differ from build {stamp} and were kept "
+                     "(never replaced; to take the generated ones: filament-kit profiles apply-updates): "
+                     + ", ".join(names))
+
+    def secondaries(self, stamp: str, build_dir: Path | None = None, accepted: list | None = None) -> None:
+        """Install build `stamp` into each secondary folder that has not had it (or is owed accepted updates, or has
+        an interrupted install). `accepted`: the updates the owner accepted that the primary install just wrote,
+        owed to every secondary until written there. Never uploads, never asks for a rebuild; a failure is logged,
+        kept in that folder's state and retried next run, and never stops the primary."""
+        if not self.sec:
+            return
+        work = None
+        try:
+            for f in self.sec:
+                where = f"{f.variant} user {f.user_id}"
+                sd = store.AppDirs(self.d.base / "folders" / studio.folder_key(f))
+                sd.ensure()
+                rec = load_state(sd)
+                rec.update(variant=f.variant, user_id=f.user_id, root=str(f.root))
+                if accepted:
+                    rec["owed_accept"] = sorted(set(rec.get("owed_accept") or []) | set(accepted))
+                _save_state(sd, rec)
+                marker = _read_marker(sd)
+                if (rec.get("installed") or {}).get("stamp") == stamp and not rec.get("owed_accept") and not marker:
+                    continue
+                if build_dir is None:
+                    work = Path(tempfile.mkdtemp(prefix=".download.", suffix=".tmp", dir=self.d.base))
+                    try:
+                        build_dir, meta = self._download(stamp, work)
+                    except Exception as e:  # noqa: BLE001 - a secondary never stops the run
+                        build_dir, meta = None, f"build {stamp} could not be downloaded: {e}"
+                    if build_dir is None:
+                        rec["error"] = str(meta)
+                        _save_state(sd, rec)
+                        self.log(f"{where}: {meta}; trying again next run")
+                        return
+                self._secondary(f, sd, rec, stamp, build_dir, marker)
+        finally:
+            if work is not None:
+                shutil.rmtree(work, ignore_errors=True)
+
+    def _secondary(self, f: StudioFolders, sd: store.AppDirs, rec: dict, stamp: str, build_dir: Path,
+                   marker: dict | None) -> None:
+        where = f"{f.variant} user {f.user_id}"
+        names = set(rec.get("owed_accept") or [])
+        if marker is not None:
+            names |= set((marker.get("accept") or {}).get("base") or [])
+            self.log(f"finishing the interrupted install in {where} (build {marker.get('stamp')})")
+        accept = {"base": sorted(names)} if names else None
+
+        def mark(backup: Path) -> None:
+            m = {"stamp": stamp, "backup": backup.name, "at": self.now}
+            if accept:
+                m["accept"] = accept
+            store._write_atomic(marker_path(sd), json.dumps(m).encode())
+
+        try:
+            res = self.install_fn(build_dir, f, sd, running=self.running,
+                                  stamp_now=time.strftime("%Y%m%d-%H%M%S", time.localtime(self.now)),
+                                  before_write=mark, accept=accept, secondary=True,
+                                  trusted_extra=(self.f.system_filament,))
+        except Exception as e:  # noqa: BLE001 - a secondary never stops the primary (R1); retried next run
+            err = e.reason if isinstance(e, installer.Refused) else f"{type(e).__name__}: {e}"
+            if isinstance(e, installer.Refused):
+                marker_path(sd).unlink(missing_ok=True)     # refused: nothing was written
+            rec["error"] = err
+            rec["last"] = {"outcome": "failed", "at": self.now, "detail": err}
+            _save_state(sd, rec)
+            self.log(f"install of build {stamp} into {where} failed: {err}; trying again next run")
+            return
+        marker_path(sd).unlink(missing_ok=True)
+        differing = list(getattr(res, "differing", []) or [])
+        rec.update(installed={"stamp": stamp, "at": self.now}, differing=differing, stale=list(res.stale),
+                   skipped=list(getattr(res, "skipped", []) or []))
+        for key in ("owed_accept", "error"):
+            rec.pop(key, None)
+        detail = (f"installed build {stamp} into {where} ({len(res.installed)} presets written, "
+                  f"{len(getattr(res, 'kept', []) or [])} kept, backup {res.backup.name})")
+        rec["last"] = {"outcome": "installed", "at": self.now, "detail": detail}
+        _save_state(sd, rec)
+        self.log(detail)
+        self._log_differing(f, stamp, differing)
+        if rec["skipped"]:
+            self.log(f"{len(rec['skipped'])} presets deleted in {where} were not added again: "
+                     + ", ".join(rec["skipped"]))
+
+    # --- which folder the install records belong to (R2) ------------------------------------
+
+    @staticmethod
+    def _folder_rec(f: StudioFolders) -> dict:
+        return {"key": studio.folder_key(f), "variant": f.variant, "user_id": f.user_id, "root": str(f.root)}
+
+    def check_folder(self) -> None:
+        """The top-level install records (dirs.installed, backups, partial, the marker, state `installed`) belong to
+        the folder in state `folder`. When the primary is another folder now, this is that folder's first sync."""
+        cur = studio.folder_key(self.f)
+        rec = self.st.get("folder")
+        if isinstance(rec, dict) and rec.get("key"):
+            if rec["key"] != cur:
+                old = next((o for o in self.others if studio.folder_key(o) == rec["key"]), None)
+                self._primary_changed(rec["key"], f"{rec.get('variant')} user {rec.get('user_id')}", old)
+            return
+        # an older PC sync's state (one folder, no `folder`): the install snapshot tells whose it is
+        old = self._snapshot_owner()
+        if old is self.f:
+            self.st["folder"] = self._folder_rec(self.f)
+            self.save()
+        else:
+            self._primary_changed(studio.folder_key(old) if old else None,
+                                  f"{old.variant} user {old.user_id}" if old else "an unknown folder", old)
+
+    def _snapshot_owner(self) -> StudioFolders | None:
+        """The folder the install snapshot matches best: self.f when no other matches more (or when there is no
+        snapshot or no other folder); None when it matches none of them."""
+        snap = self.d.installed / "base"
+        files = sorted(snap.glob("*.json")) if snap.is_dir() else []
+        if not files or not self.others:
+            return self.f
+
+        def score(f: StudioFolders) -> int:
+            n = 0
+            for p in files:
+                try:
+                    a, b = inapp.load(p), inapp.load(f.user_filament / "base" / p.name)
+                except (OSError, UnicodeDecodeError, ValueError):
+                    continue
+                n += not inapp.diff(a, b) and not inapp.diff(b, a)
+            return n
+        scores = {studio.folder_key(f): score(f) for f in (self.f, *self.others)}
+        mine = scores[studio.folder_key(self.f)]
+        best = max(self.others, key=lambda f: scores[studio.folder_key(f)])
+        top = scores[studio.folder_key(best)]
+        if mine > 0 and mine >= top:
+            return self.f
+        return best if top > 0 else None
+
+    def _primary_changed(self, old_key: str | None, old_desc: str, old: StudioFolders | None) -> None:
+        """Another folder is the primary now (R2): the old one's records go to its own secondary record (dropped
+        when it is not known), the new one starts like a first sync (its secondary record, if any, only gives its
+        backups), and the next live upload tells the server (`fresh`)."""
+        folders = self.d.base / "folders"
+        if old_key:
+            dest = store.AppDirs(folders / old_key)
+            shutil.rmtree(dest.base, ignore_errors=True)
+            dest.ensure()
+            for src, dst in ((self.d.installed, dest.installed), (self.d.backups, dest.backups),
+                             (marker_path(self.d), marker_path(dest))):
+                if src.exists():
+                    os.replace(src, dst)
+            rec = {"variant": old.variant if old else None, "user_id": old.user_id if old else None,
+                   "root": str(old.root) if old else None, "differing": list(self.st.get("differing") or [])}
+            inst = self.st.get("installed")
+            if isinstance(inst, dict) and inst.get("stamp"):
+                rec["installed"] = {"stamp": inst["stamp"], "at": inst.get("at")}
+            _save_state(dest, rec)
+        else:
+            shutil.rmtree(self.d.installed, ignore_errors=True)
+            marker_path(self.d).unlink(missing_ok=True)
+        new = store.AppDirs(folders / studio.folder_key(self.f))
+        if new.base.is_dir():
+            if new.backups.is_dir():
+                self.d.backups.mkdir(parents=True, exist_ok=True)
+                for b in sorted(new.backups.iterdir()):
+                    if not (self.d.backups / b.name).exists():
+                        os.replace(b, self.d.backups / b.name)
+            shutil.rmtree(new.base, ignore_errors=True)
+        self._clear_partial()
+        for key in ("installed", "stale", "live_owed", "requested", "differing"):
+            self.st.pop(key, None)
+        self.st["fresh_owed"] = True
+        self.st["folder"] = self._folder_rec(self.f)
+        self.save()
+        self.log(f"Bambu Studio folder changed from {old_desc} to {self.f.variant} user {self.f.user_id}: this is "
+                 "that folder's first sync (its presets are uploaded as they are; nothing in it is replaced)")
 
     def _orca_went_in(self, stamp: str) -> bool:
         """This PC installed build `stamp`'s orca/ tree (state.json `installed.trees`; an older state.json: the
@@ -690,12 +969,28 @@ class _Run:
                                        "server ('sudo filament-kit unpair <id>') to sync from this one")
 
 
+def _age(seconds: float) -> str:
+    hours = int(seconds // 3600)
+    return f"{hours} hours" if hours < 48 else f"{hours // 24} days"
+
+
+def _read_marker(dirs: store.AppDirs) -> dict | None:
+    try:
+        m = json.loads(marker_path(dirs).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return m if isinstance(m, dict) and isinstance(m.get("stamp"), str) else None
+
+
 def run_once(client, folders: StudioFolders, dirs: store.AppDirs, *, running: Callable[[], bool],
              install=installer.install, now: float, echo: Callable[[str], None] | None = None,
-             orca: OrcaFolders | None = None, orca_running: Callable[[], bool] | None = None) -> str:
-    """`orca`: this PC's Orca Slicer folders (None: Bambu Studio only); `orca_running` its running check."""
+             orca: OrcaFolders | None = None, orca_running: Callable[[], bool] | None = None,
+             others: list[StudioFolders] | None = None, secondaries: bool = True) -> str:
+    """`orca`: this PC's Orca Slicer folders (None: Bambu Studio only); `orca_running` its running check.
+    `others`: this PC's other usable Bambu Studio folders (studio.secondaries); `secondaries` (config, default on):
+    install each build into them too (off: only `folders`, the primary, is written)."""
     dirs.ensure()
-    r = _Run(client, folders, dirs, running, install, now, echo, orca, orca_running)
+    r = _Run(client, folders, dirs, running, install, now, echo, orca, orca_running, others, secondaries)
     try:
         return r.run()
     except ApiError as e:
