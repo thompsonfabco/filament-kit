@@ -352,6 +352,9 @@ slots. **Map slots** in the app (or `sudo filament-kit printer map <serial>` on 
   every slot back as it was.
 - It then runs a short calibration job that has **no heating and no motion** (only comments and a wait), so
   the printer reports which slot it used for each filament. The job file is deleted afterwards.
+- Empty slots, and external holders (a spool holder outside the AMS, numbered as its own id), are
+  not tested and keep their numbers. A printer with no AMS unit needs no job: its holders keep their own ids and it
+  maps without one.
 - The printer must be **idle** (not printing, paused or preparing) and online, or mapping is refused.
 
 Until mapping succeeds, filament use is **only logged** (you can see it in the app's usage list) and nothing is
