@@ -493,12 +493,18 @@ hand: `sudo systemctl unmask sleep.target suspend.target hibernate.target hybrid
 - These settings are in `/etc/filament-kit/config.json` under `"station"`: `"nfc_device"` (`"auto"`, or a
   device such as `"tty:USB0:pn532"`), `"beep"` (`true` or `false`), `"beep_device"` (empty for automatic, or
   an ALSA device such as `"plughw:1,0"`), `"speech"` (`true` or `false`) and `"camera"` (`"auto"` for the first
-  USB camera, a device such as `"/dev/video0"`, or `"off"`) and `"panel_flash"` (`true` or `false`, see the
-  next point). After a change, run `sudo filament-kit modules apply`.
+  USB camera, a device such as `"/dev/video0"`, or `"off"`), `"panel_flash"` (`true` or `false`, see the
+  next point) and `"panel_swap"` (`true` or `false`, see the point after that). After a change, run `sudo filament-kit modules apply`.
 - **Panel firmware updates itself.** The station carries the panel's firmware. When it finds a panel running
   another version, it writes the bundled one to it over USB (once per version) and then uses it. If that does
   not work, the panel keeps running as it is. Set `"panel_flash": false` to never touch the panel's firmware.
   `curl http://127.0.0.1:5003/state` shows the panel's version as `"panel_version"`.
+- **Buttons and lamps the other way round (v0.4.0).** If your panel's yellow and red buttons and lamps are wired the
+  opposite way to the pin table in the panel guide (the button you press for yellow acts as red, and the lamps are
+  swapped too), set `"panel_swap": true` under `"station"` in `/etc/filament-kit/config.json`, then run
+  `sudo filament-kit modules apply`. The default is `false`. This needs the panel's firmware 9, which the station
+  installs itself unless `"panel_flash"` is `false`; with an older firmware, yellow can't do a long press, so it
+  can't save.
 
 ### Is it working?
 
