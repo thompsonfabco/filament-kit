@@ -28,6 +28,7 @@ import com.thompsonfabco.filamentkit.drafts.Draft
 import com.thompsonfabco.filamentkit.net.ProfileStatus
 import com.thompsonfabco.filamentkit.net.ServerInfo
 import com.thompsonfabco.filamentkit.session.Connection
+import com.thompsonfabco.filamentkit.update.UpdateTexts
 import com.thompsonfabco.filamentkit.update.UpdateUi
 import java.text.DateFormat
 import java.util.Date
@@ -128,7 +129,7 @@ private fun UpdateBanner(update: UpdateUi, onInstall: () -> Unit, onConfirm: () 
                         else "The server has no newer app to install yet: ask whoever runs the server for the latest filament-kit app.",
                 )
             } else {
-                Text("Update available", style = MaterialTheme.typography.titleMedium)
+                Text(UpdateTexts.bannerTitle(update.offeredVersion), style = MaterialTheme.typography.titleMedium)
             }
             if (update.needsPermission) Text("Allow filament-kit to install apps, then tap Install again.")
             update.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
