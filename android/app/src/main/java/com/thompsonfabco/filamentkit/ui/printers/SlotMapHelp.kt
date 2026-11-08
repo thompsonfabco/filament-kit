@@ -2,7 +2,7 @@ package com.thompsonfabco.filamentkit.ui.printers
 
 import com.thompsonfabco.filamentkit.net.MapStatus
 
-enum class SlotMapOutcome { NONE, RUNNING, CONFIRMED, PARTIAL, NOT_CONFIRMED, FAILED }
+enum class SlotMapOutcome { NONE, RUNNING, CONFIRMED, PARTIAL, STALE, SUSPECT, NOT_CONFIRMED, FAILED }
 
 /** What the "Slot mapping" section says about a [MapStatus]. Problems and notes are the server's text, unchanged. */
 data class SlotMapView(
@@ -23,10 +23,13 @@ object SlotMapHelp {
     private const val LEFTOVERS = "Also reported during mapping:"
     private const val OLD_PROBLEMS = "From an earlier mapping, it may be fixed by now. Map the slots again to check:"
     private const val NOTES = "Not settled yet:"
+    private const val REMAP = "A new mapping starts by itself when the printer is idle. If it does not, tap Map slots again."
 
     /**
      * `done` only says the job ended and every slot was put back; `calibrated` says whether the numbering was proven.
-     * Notes on a calibrated map mean the loaded slots fit more than one numbering scheme (the server's only notes).
+     * `stale` and `suspect` outrank a finished job, because the map it made can no longer be called confirmed; only a
+     * new job (`running`) or a failure of one says more. A stale map comes first, as in the server's own re-map step.
+     * The scheme is open when the server says so; a server without `scheme_unsettled` has only its note to go by.
      * `problemsOld`: the result is from an earlier server run, so it is reported as history, not as today's fault.
      */
     fun view(m: MapStatus?): SlotMapView {
@@ -34,10 +37,21 @@ object SlotMapHelp {
         val base = when {
             m == null -> SlotMapView(SlotMapOutcome.NONE)
             m.state == "running" -> SlotMapView(SlotMapOutcome.RUNNING, headline = m.step.ifBlank { "Mapping slots…" })
-            m.state == "done" && m.calibrated && m.notes.isNotEmpty() -> SlotMapView(
+            m.state != "failed" && m.stale -> SlotMapView(
+                SlotMapOutcome.STALE,
+                headline = "Layout changed: the map will be made again",
+                detail = REMAP,
+            )
+            m.state != "failed" && m.suspect -> SlotMapView(
+                SlotMapOutcome.SUSPECT,
+                headline = "Recent prints disagreed with the map: map again",
+                headlineIsError = true,
+                detail = REMAP,
+            )
+            m.state == "done" && m.calibrated && (m.schemeUnsettled ?: m.notes.isNotEmpty()) -> SlotMapView(
                 SlotMapOutcome.PARTIAL,
                 headline = "Slots mapped: confirmed for the loaded slots",
-                detail = "The numbering scheme is pinned down when a second unit or an HT is loaded.",
+                detail = "The numbering scheme is settled by mapping again once a second unit or an HT has a spool loaded.",
             )
             m.state == "done" && m.calibrated -> SlotMapView(
                 SlotMapOutcome.CONFIRMED,
@@ -52,7 +66,7 @@ object SlotMapHelp {
                 SlotMapOutcome.NOT_CONFIRMED,
                 headline = "Slot numbering not confirmed",
                 headlineIsError = true,
-                detail = "The slots were tested, but the calibration job did not prove how this printer numbers them.",
+                detail = "The calibration did not prove how this printer numbers its slots.",
             )
             m.state == "failed" && old -> SlotMapView(SlotMapOutcome.FAILED, headline = "The last slot mapping failed")
             m.state == "failed" -> SlotMapView(
@@ -63,7 +77,9 @@ object SlotMapHelp {
             else -> SlotMapView(SlotMapOutcome.NONE)
         }
         if (m == null) return base
-        val good = base.outcome == SlotMapOutcome.CONFIRMED || base.outcome == SlotMapOutcome.PARTIAL
+        // a calibrated map's problems did not stop it, whatever has happened to the map since
+        val good = m.calibrated && base.outcome in setOf(
+            SlotMapOutcome.CONFIRMED, SlotMapOutcome.PARTIAL, SlotMapOutcome.STALE, SlotMapOutcome.SUSPECT)
         return base.copy(
             problemsHeading = when {
                 m.problems.isEmpty() -> null

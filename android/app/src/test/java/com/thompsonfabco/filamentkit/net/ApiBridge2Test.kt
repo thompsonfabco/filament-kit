@@ -90,6 +90,13 @@ class ApiBridge2Test {
         json("""{"state":"failed","problems":["x"]}""")
         val m = api.mapStatus("0948AB")
         assertTrue(!m.problemsOld && m.notes.isEmpty() && m.finished == null)
+        assertTrue(!m.stale && !m.suspect && m.schemeUnsettled == null)
+    }
+
+    @Test fun mapStatusDecodesStaleSuspectAndTheOpenScheme() = runBlocking {
+        json("""{"state":"done","calibrated":true,"stale":true,"suspect":true,"scheme_unsettled":true}""")
+        val m = api.mapStatus("0948AB")
+        assertTrue(m.stale && m.suspect && m.schemeUnsettled == true)
     }
 
     @Test fun mapStatusNoneHasDefaults() = runBlocking {

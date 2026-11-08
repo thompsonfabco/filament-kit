@@ -50,8 +50,96 @@ class SlotMapHelpTest {
         val v = SlotMapHelp.view(MapStatus(state = "done", calibrated = true, slots = fourSlots, notes = listOf(note)))
         assertEquals(SlotMapOutcome.PARTIAL, v.outcome)
         assertEquals("Slots mapped: confirmed for the loaded slots", v.headline)
-        assertEquals("The numbering scheme is pinned down when a second unit or an HT is loaded.", v.detail)
+        assertEquals("The numbering scheme is settled by mapping again once a second unit or an HT has a spool loaded.",
+            v.detail)
         assertFalse(v.headlineIsError)
+    }
+
+    @Test fun theServersFlagDecidesPartialOverTheNote() {
+        val flagged = MapStatus(state = "done", calibrated = true, schemeUnsettled = true)
+        assertEquals(SlotMapOutcome.PARTIAL, SlotMapHelp.view(flagged).outcome)
+        val otherNote = MapStatus(state = "done", calibrated = true, slots = fourSlots, schemeUnsettled = false,
+            notes = listOf("some other remark"))
+        val v = SlotMapHelp.view(otherNote)
+        assertEquals(SlotMapOutcome.CONFIRMED, v.outcome)
+        assertEquals("the note is still shown", listOf("some other remark"), v.notes)
+    }
+
+    @Test fun anOlderServersNoteStillMeansPartial() {
+        val v = SlotMapHelp.view(MapStatus(state = "done", calibrated = true, schemeUnsettled = null, notes = listOf(note)))
+        assertEquals(SlotMapOutcome.PARTIAL, v.outcome)
+    }
+
+    // ---- a map the server no longer trusts ----
+
+    private val remap = "A new mapping starts by itself when the printer is idle. If it does not, tap Map slots again."
+
+    @Test fun aChangedLayoutIsNotConfirmed() {
+        val v = SlotMapHelp.view(MapStatus(state = "done", calibrated = true, slots = fourSlots, stale = true))
+        assertEquals(SlotMapOutcome.STALE, v.outcome)
+        assertEquals("Layout changed: the map will be made again", v.headline)
+        assertEquals(remap, v.detail)
+        assertFalse(v.headlineIsError)
+    }
+
+    @Test fun printsThatDisagreeWithTheMapAreNotConfirmed() {
+        val v = SlotMapHelp.view(MapStatus(state = "done", calibrated = true, slots = fourSlots, suspect = true))
+        assertEquals(SlotMapOutcome.SUSPECT, v.outcome)
+        assertEquals("Recent prints disagreed with the map: map again", v.headline)
+        assertEquals(remap, v.detail)
+        assertTrue(v.headlineIsError)
+    }
+
+    @Test fun staleOrSuspectIsNeverConfirmedInAnyResult() {
+        for (state in listOf("none", "done", "failed", "running")) for (notes in listOf(emptyList(), listOf(note))) {
+            for ((stale, suspect) in listOf(true to false, false to true, true to true)) {
+                val m = MapStatus(state = state, calibrated = true, stale = stale, suspect = suspect, notes = notes,
+                    schemeUnsettled = notes.isNotEmpty())
+                val o = SlotMapHelp.view(m).outcome
+                assertTrue("$m gave $o", o != SlotMapOutcome.CONFIRMED && o != SlotMapOutcome.PARTIAL)
+            }
+        }
+    }
+
+    @Test fun aStaleMapComesBeforeASuspectOne() {
+        val m = MapStatus(state = "done", calibrated = true, stale = true, suspect = true)
+        assertEquals(SlotMapOutcome.STALE, SlotMapHelp.view(m).outcome)
+    }
+
+    @Test fun aRemapUnderWaySaysSoEvenOnAStaleMap() {
+        val v = SlotMapHelp.view(MapStatus(state = "running", step = "Testing A2", calibrated = true, stale = true))
+        assertEquals(SlotMapOutcome.RUNNING, v.outcome)
+        assertEquals("Testing A2", v.headline)
+    }
+
+    @Test fun aFailedRemapOfAStaleMapStaysFailed() {
+        val v = SlotMapHelp.view(MapStatus(state = "failed", stale = true, problems = listOf("x")))
+        assertEquals(SlotMapOutcome.FAILED, v.outcome)
+        assertTrue(v.problemsAreError)
+    }
+
+    @Test fun aStaleMapSeenWithNoJobResultStillSaysSo() {
+        val v = SlotMapHelp.view(MapStatus(state = "none", calibrated = true, stale = true))
+        assertEquals(SlotMapOutcome.STALE, v.outcome)
+    }
+
+    @Test fun leftoversOfAGoodMapStayCalmOnceItIsSuspect() {
+        val v = SlotMapHelp.view(MapStatus(state = "done", calibrated = true, suspect = true, problems = listOf("x")))
+        assertEquals("Also reported during mapping:", v.problemsHeading)
+        assertFalse(v.problemsAreError)
+    }
+
+    @Test fun anUnprovenMapThatWentStaleKeepsItsProblemsRed() {
+        val v = SlotMapHelp.view(MapStatus(state = "done", calibrated = false, stale = true, problems = listOf("x")))
+        assertEquals(SlotMapOutcome.STALE, v.outcome)
+        assertEquals("Problems the server reported:", v.problemsHeading)
+        assertTrue(v.problemsAreError)
+    }
+
+    @Test fun neitherStaleNorSuspectGreysTheButton() {
+        for (m in listOf(MapStatus(state = "done", stale = true), MapStatus(state = "done", suspect = true))) {
+            assertTrue("$m", ToolsUiState(map = m).mapEnabled(canStart = true))
+        }
     }
 
     @Test fun partialKeepsTheServersNoteVerbatimUnderItsOwnHeading() {
@@ -70,8 +158,7 @@ class SlotMapHelpTest {
         val v = SlotMapHelp.view(MapStatus(state = "done", calibrated = false, observe = true, problems = problems))
         assertEquals(SlotMapOutcome.NOT_CONFIRMED, v.outcome)
         assertEquals("Slot numbering not confirmed", v.headline)
-        assertEquals("The slots were tested, but the calibration job did not prove how this printer numbers them.",
-            v.detail)
+        assertEquals("The calibration did not prove how this printer numbers its slots.", v.detail)
         assertTrue(v.headlineIsError)
         assertEquals("Problems the server reported:", v.problemsHeading)
         assertEquals(problems, v.problems)
