@@ -518,8 +518,14 @@ def _web_state(ex: _Exec) -> None:
     if ex.dry:
         print(f"would move the web unit's files to {config.paths().web} and grant {config.WEB_USER} its files")
         return
-    import pwd
-    web, kit = pwd.getpwnam(config.WEB_USER), os.stat(config.paths().state)
+    try:
+        import pwd
+        web = pwd.getpwnam(config.WEB_USER)
+    except (ImportError, KeyError):
+        raise ApplyError(f"the user {config.WEB_USER} does not exist (the user step makes it)") from None
+    state = config.paths().state
+    state.mkdir(parents=True, exist_ok=True)
+    kit = os.stat(state)
     ex.ok(["systemctl", "stop", WEB_UNIT])          # it must not write the old place while its files move
     moved = web_access.migrate(web.pw_uid, web.pw_gid)
     if moved:

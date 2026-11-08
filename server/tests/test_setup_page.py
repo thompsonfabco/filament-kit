@@ -992,3 +992,12 @@ def test_r2b_global_backoff_decays_after_quiet_hours(tmp_path, monkeypatch):
     burst()                                                          # level 1 again: 10 min, not 40
     now[0] += setup_code.LOCK_WINDOW + 1
     assert lock.attempt("192.0.2.250") is not None
+
+
+def test_r2b_web_state_without_the_web_user_stops_the_apply(env, monkeypatch):
+    import types
+    monkeypatch.delenv("FK_NO_SYSTEMD")
+    monkeypatch.setitem(sys.modules, "pwd", types.SimpleNamespace(getpwnam=lambda n: (_ for _ in ()).throw(KeyError(n))))
+    ex = apply._Exec(lambda cmd: None, Path("."), Path("/"))
+    with pytest.raises(apply.ApplyError):
+        apply._web_state(ex)

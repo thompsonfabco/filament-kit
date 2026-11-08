@@ -199,7 +199,7 @@ def test_uninstall_uses_modules_units_and_cleans_station():
     i_user = text.index("userdel filament-kit-station")
     assert text.index("for u in $UNITS") < i_user < text.index('if [ "$PURGE" -eq 1 ]; then\n    rm -rf')
     purge = text[text.index('if [ "$PURGE" -eq 1 ]; then\n    rm -rf'):]
-    assert "for u in filament-kit spoolman; do" in purge
+    assert "for u in filament-kit filament-kit-web spoolman; do" in purge
 
 
 def test_uninstall_removes_the_kits_remote_files():
