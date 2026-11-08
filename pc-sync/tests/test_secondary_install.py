@@ -83,15 +83,28 @@ def test_an_accepted_update_is_written_where_the_snapshot_proves_it_is_ours(tmp_
     assert json.loads((f.user_filament / "base" / f"{C}.json").read_text())["nozzle_temperature"] == ["225"]
 
 
-def test_an_older_snapshot_without_a_kept_list_proves_by_equality(tmp_path, beta):
-    """A snapshot from before this rule (no KEPT.json, e.g. the 11-03 install): a preset equal to its copy there
-    counts as ours."""
+def test_an_older_snapshot_without_a_kept_list_proves_nothing_in_a_secondary(tmp_path, beta):
+    """A snapshot from before the KEPT.json record (a PC synced before this rule, whose snapshot then moves to the
+    other folder when the primary changes) cannot tell the kit's copies from the owner's own: nothing is proven, so
+    an accepted update is listed as differing there, not written."""
     f, dirs = beta
     _install(_build(tmp_path, {C: _p(C)}), f, dirs, secondary=True)
     (dirs.installed / installer.KEPT).unlink()
     res = _install(_build(tmp_path, {C: _p(C, nozzle_temperature=["225"])}, n=2), f, dirs, n=2, secondary=True,
                    accept={"base": [C]})
-    assert res.installed == [C]
+    assert res.installed == [] and res.differing == [C]
+    assert json.loads((f.user_filament / "base" / f"{C}.json").read_text())["nozzle_temperature"] == ["215"]
+
+
+def test_a_legacy_snapshot_never_proves_the_owners_kept_preset(tmp_path, beta):
+    """The re-review's probe: Beta's own B (230) was kept by an install, so the snapshot holds the owner's file;
+    without KEPT.json an accepted update must still leave it at 230."""
+    f, dirs = beta
+    _install(_build(tmp_path, {A: _p(A), B: _p(B)}), f, dirs, secondary=True)       # B kept: the owner's 230
+    (dirs.installed / installer.KEPT).unlink()                                       # as an older sync left it
+    res = _install(_build(tmp_path, {B: _p(B)}, n=2), f, dirs, n=2, secondary=True, accept={"base": [B]})
+    assert res.installed == [] and res.differing == [B]
+    assert json.loads((f.user_filament / "base" / f"{B}.json").read_text())["nozzle_temperature"] == ["230"]
 
 
 def test_secondary_edits_since_its_install_are_kept_not_refused(tmp_path, beta):

@@ -323,7 +323,8 @@ def _plan(t: _Target, accept: dict | None, root: Path | None = None, secondary: 
 
 def _read_kept(installed: Path) -> set[str] | None:
     """The snapshot's KEPT.json names (copies that are the folder's own files, not the kit's); None for a snapshot
-    from before that record (then a copy equal to the live file counts as the kit's)."""
+    from before that record (in a secondary that proves nothing; in the primary a copy equal to the live file
+    counts as the kit's)."""
     try:
         d = json.loads((installed / KEPT).read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -391,7 +392,10 @@ def _check(t: _Target, trusted: set[str], record: dict, restored: set[str], unsa
         late = [k for k, v in inapp.diff(old, now).items() if inapp.norm(t.new[name].get(k)) != inapp.norm(v)
                 and not (part is not None and k in part and inapp.norm(part[k]) == inapp.norm(v))
                 and not (k in seen and inapp.norm(seen[k]) == inapp.norm(v))]
-        if not inapp.diff(old, now) and (owners is None or name not in owners):
+        # proven: unchanged since the kit wrote it. A snapshot without KEPT.json cannot tell the kit's copies from
+        # the owner's own kept files, so in a secondary it proves nothing (the preset is listed as differing and
+        # `apply-updates --folder` takes the build's copy on request); the primary keeps the equality rule.
+        if not inapp.diff(old, now) and (name not in owners if owners is not None else not secondary):
             t.proven.add(name)
         if late and secondary:
             t.hold.add(name)
