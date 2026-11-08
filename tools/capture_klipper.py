@@ -27,6 +27,14 @@ SECRET = re.compile(r"key|token|password|secret|passwd", re.I)
 MACRO = re.compile(r"gcode_macro .*(SPOOL|TOOL|\bT\d+\b)", re.I)
 
 
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *a, **kw):
+        return None     # the API key must not go wherever a redirect points; the 3xx stops the capture
+
+
+OPENER = urllib.request.build_opener(NoRedirect)
+
+
 def scrub(v):
     if isinstance(v, dict):
         return {k: scrub(x) for k, x in v.items() if not SECRET.search(str(k))}
@@ -48,7 +56,7 @@ def main(argv=None) -> int:
 
     def get(path, query=None):
         url = base + path + ("?" + urllib.parse.urlencode(query, safe=",") if query else "")
-        with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=10) as r:
+        with OPENER.open(urllib.request.Request(url, headers=headers), timeout=10) as r:
             return json.loads(r.read())["result"]
 
     out = Path(a.out)
