@@ -69,11 +69,8 @@ object SlotMapHelp {
                 detail = "The calibration did not prove how this printer numbers its slots.",
             )
             m.state == "failed" && old -> SlotMapView(SlotMapOutcome.FAILED, headline = "The last slot mapping failed")
-            m.state == "failed" -> SlotMapView(
-                SlotMapOutcome.FAILED,
-                headline = listOf("Slot mapping failed", m.step).filter { it.isNotBlank() }.joinToString(": "),
-                headlineIsError = true,
-            )
+            // not the step: a finished job's step is only the server's end word, "Mapping failed"
+            m.state == "failed" -> SlotMapView(SlotMapOutcome.FAILED, headline = "Slot mapping failed", headlineIsError = true)
             else -> SlotMapView(SlotMapOutcome.NONE)
         }
         if (m == null) return base

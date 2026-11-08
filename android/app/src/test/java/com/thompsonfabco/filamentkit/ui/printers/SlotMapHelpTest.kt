@@ -165,17 +165,20 @@ class SlotMapHelpTest {
         assertTrue(v.problemsAreError)
     }
 
-    @Test fun failedAddsTheStepAndListsTheProblems() {
-        val v = SlotMapHelp.view(MapStatus(state = "failed", step = "Slot test", problems = listOf("printer_busy: x")))
+    /** The server ends every failed job on the step "Mapping failed". */
+    @Test fun failedSaysItOnceAndListsTheProblems() {
+        val v = SlotMapHelp.view(MapStatus(state = "failed", step = "Mapping failed", problems = listOf("printer_busy: x")))
         assertEquals(SlotMapOutcome.FAILED, v.outcome)
-        assertEquals("Slot mapping failed: Slot test", v.headline)
+        assertEquals("Slot mapping failed", v.headline)
         assertTrue(v.headlineIsError)
         assertEquals("Problems the server reported:", v.problemsHeading)
         assertEquals(listOf("printer_busy: x"), v.problems)
     }
 
-    @Test fun failedWithoutAStepHasNoDanglingColon() {
-        assertEquals("Slot mapping failed", SlotMapHelp.view(MapStatus(state = "failed")).headline)
+    @Test fun failedHeadlineNeverCarriesTheStep() {
+        for (step in listOf("", "Mapping failed", "Testing A2")) {
+            assertEquals("Slot mapping failed", SlotMapHelp.view(MapStatus(state = "failed", step = step)).headline)
+        }
     }
 
     @Test fun problemsWithoutAnyListGetNoHeading() {
