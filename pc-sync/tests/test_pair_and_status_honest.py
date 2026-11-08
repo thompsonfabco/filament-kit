@@ -251,7 +251,7 @@ def _beats(srv):  # noqa: F811
 
 def test_the_server_hears_a_class_and_never_the_detail(srv, paths, monkeypatch):  # noqa: F811
     assert _main(paths, "pair", stdin=_link(srv) + "\n") == 0
-    secret = r"C:\\Users\\alex\AppData\Roaming\BambuStudio\user\1234567\filament is broken"
+    secret = r"C:\Users\alex\AppData\Roaming\BambuStudio\user\1234567\filament is broken"
     _down_for(monkeypatch, RuntimeError(secret))
     sent = []
     monkeypatch.setattr(client.Client, "heartbeat", lambda self, outcome, *a: sent.append((outcome, a)) or {})
