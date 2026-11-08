@@ -79,16 +79,108 @@ def test_a_first_pairing_that_is_refused_leaves_nothing(paths, other, capsys):  
     assert "Not paired" in capsys.readouterr().out
 
 
-def test_not_reached_keeps_the_new_one_because_its_token_is_spent(srv, paths, monkeypatch, capsys):  # noqa: F811
-    dirs, tok, _cfg = paired(srv, paths)
+def _on_trial(srv, paths, monkeypatch, capsys, new):  # noqa: F811
+    """A working pairing, then a new link while the server can't be reached. `new`: the link's server."""
+    dirs, tok, cfg = paired(srv, paths)
+
+    def down(self):
+        raise client.Offline("no answer")
+    real = client.Client.info
+    with monkeypatch.context() as m:
+        m.setattr(client.Client, "info", down)
+        capsys.readouterr()
+        assert _main(paths, "pair", stdin=_link(new) + "\n") == 1
+    assert client.Client.info is real
+    return dirs, tok, cfg
+
+
+def test_not_reached_keeps_the_new_one_on_trial_and_the_old_one_aside(srv, paths, monkeypatch, capsys):  # noqa: F811
+    dirs, tok, _cfg = _on_trial(srv, paths, monkeypatch, capsys, srv)
+    out = capsys.readouterr().out
+    assert "not confirmed yet" in out and "previous pairing comes back" in out
+    assert store.load_token(dirs) == LINK_TOKEN and store.pair_waiting(dirs)
+
+
+def test_a_first_pairing_not_reached_has_nothing_to_keep(srv, paths, monkeypatch, capsys):  # noqa: F811
+    def down(self):
+        raise client.Offline("no answer")
+    monkeypatch.setattr(client.Client, "info", down)
+    assert _main(paths, "pair", stdin=_link(srv) + "\n") == 1
+    dirs = _dirs(paths)
+    assert "previous pairing" not in capsys.readouterr().out
+    assert store.load_token(dirs) == LINK_TOKEN and not dirs.pair_aside.exists()
+
+
+def test_the_next_run_proves_it_and_the_old_one_goes(srv, paths, monkeypatch, capsys):  # noqa: F811
+    dirs, _tok, _cfg = _on_trial(srv, paths, monkeypatch, capsys, srv)
+    assert _main(paths, "run", "--quiet") == 0
+    assert store.load_token(dirs) == LINK_TOKEN and not dirs.pair_aside.exists()
+    assert store.load_config(dirs).get("device")
+
+
+def test_the_next_run_brings_the_old_one_back_when_the_link_has_died(srv, paths, other, monkeypatch, capsys):  # noqa: F811
+    dead = other(respond_with(status=401))
+    dirs, tok, cfg = _on_trial(srv, paths, monkeypatch, capsys, dead)
+    assert store.load_config(dirs).get("host") != cfg["host"] or store.load_config(dirs).get("fp") != cfg["fp"]
+    n = len(srv.requests)
+    assert _main(paths, "run", "--quiet") == 0
+    assert dirs.token.read_bytes() == tok and store.load_config(dirs) == cfg and not dirs.pair_aside.exists()
+    assert "the earlier pairing is back" in dirs.log_file.read_text(encoding="utf-8")
+    assert len(srv.requests) > n                       # and the same run went on, with the old one
+
+
+def test_still_away_it_stays_on_trial_and_the_run_is_a_warning(srv, paths, monkeypatch, capsys):  # noqa: F811
+    dirs, tok, _cfg = _on_trial(srv, paths, monkeypatch, capsys, srv)
 
     def down(self):
         raise client.Offline("no answer")
     monkeypatch.setattr(client.Client, "info", down)
+    assert _main(paths, "run", "--quiet") == 0
+    assert store.pair_waiting(dirs) and store.load_token(dirs) == LINK_TOKEN
+
+
+def test_status_leaves_a_pairing_on_trial_alone_and_says_so(srv, paths, monkeypatch, capsys):  # noqa: F811
+    dirs, _tok, _cfg = _on_trial(srv, paths, monkeypatch, capsys, srv)
     capsys.readouterr()
-    assert _main(paths, "pair", stdin=_link(srv) + "\n") == 1
+    assert _main(paths, "status") == 0
     assert "not confirmed yet" in capsys.readouterr().out
-    assert store.load_token(dirs) == LINK_TOKEN and not dirs.pair_aside.exists()
+    assert store.pair_waiting(dirs) and store.load_token(dirs) == LINK_TOKEN
+
+
+def test_a_second_link_on_trial_keeps_the_last_proven_pairing_aside(srv, paths, other, monkeypatch, capsys):  # noqa: F811
+    dirs, tok, cfg = _on_trial(srv, paths, monkeypatch, capsys, srv)
+    bad = other(respond_with(status=401))
+    capsys.readouterr()
+    assert _main(paths, "pair", stdin=_link(bad) + "\n") == 1
+    assert "your previous pairing is unchanged" in capsys.readouterr().out
+    assert dirs.token.read_bytes() == tok and store.load_config(dirs) == cfg and not dirs.pair_aside.exists()
+
+
+def test_unpair_drops_what_was_aside(srv, paths, monkeypatch, capsys):  # noqa: F811
+    dirs, _tok, _cfg = _on_trial(srv, paths, monkeypatch, capsys, srv)
+    assert _main(paths, "unpair") == 0
+    assert not dirs.pair_aside.exists() and not dirs.token.exists()
+
+
+@pytest.mark.parametrize("status,back", [(404, True), (403, True), (500, False), (503, False)])
+def test_a_4xx_restores_and_a_5xx_waits(srv, paths, other, capsys, status, back):  # noqa: F811
+    dirs, tok, cfg = paired(srv, paths)
+    bad = other(lambda m, p, b: (status, "application/json", {"error": "x", "message": "no"}))
+    assert _main(paths, "pair", stdin=_link(bad) + "\n") == 1
+    if back:
+        assert dirs.token.read_bytes() == tok and store.load_config(dirs) == cfg and not dirs.pair_aside.exists()
+    else:
+        assert store.load_token(dirs) == LINK_TOKEN and store.pair_waiting(dirs)
+
+
+def test_a_full_disk_does_not_turn_a_failure_into_a_traceback(srv, paths, monkeypatch, capsys):  # noqa: F811
+    from fksync import __main__ as cli
+    dirs, _tok, _cfg = paired(srv, paths)
+
+    def full(*a, **k):
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr(sync, "_save_state", full)
+    cli._remember_error(dirs, "crash", "x")            # no exception
 
 
 def test_a_crash_between_the_saves_brings_the_old_one_back_at_the_next_run(srv, paths, monkeypatch):  # noqa: F811
