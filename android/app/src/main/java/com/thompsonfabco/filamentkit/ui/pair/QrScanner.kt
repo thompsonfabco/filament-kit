@@ -4,10 +4,9 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.OptIn
 import androidx.camera.core.CameraSelector
-import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -34,16 +33,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.google.mlkit.vision.barcode.BarcodeScannerOptions
-import com.google.mlkit.vision.barcode.BarcodeScanning
-import com.google.mlkit.vision.barcode.common.Barcode
-import com.google.mlkit.vision.common.InputImage
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Camera preview that reports the first QR code it sees through [onResult]. Asks for the camera permission itself.
- * Uses ML Kit's bundled model, so no Google Play services are needed.
+ * Decodes with ZXing ([QrDecoder]) on the frames' brightness, so no Google Play services are needed.
  */
 @Composable
 fun QrScanner(
@@ -89,15 +84,13 @@ fun QrScanner(
     }
 }
 
-@OptIn(ExperimentalGetImage::class)
 @Composable
 private fun CameraPreview(onResult: (String) -> Unit, onFailed: () -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val executor = remember { Executors.newSingleThreadExecutor() }
-    val scanner = remember {
-        BarcodeScanning.getClient(BarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_QR_CODE).build())
-    }
+    val decoder = remember { QrDecoder() }
+    val luma = remember { LumaCopy() }
     val reported = remember { AtomicBoolean(false) }
     val currentOnResult by rememberUpdatedState(onResult)
     val currentOnFailed by rememberUpdatedState(onFailed)
@@ -114,7 +107,6 @@ private fun CameraPreview(onResult: (String) -> Unit, onFailed: () -> Unit) {
             // Unbind only our own use cases; other screens (e.g. photo capture) may have theirs bound.
             provider?.unbind(preview, analysis)
             analysis.clearAnalyzer()
-            scanner.close()
             executor.shutdown()
         }
     }
@@ -134,17 +126,15 @@ private fun CameraPreview(onResult: (String) -> Unit, onFailed: () -> Unit) {
                     currentOnFailed()
                     return@addListener
                 }
+                // Decodes on the executor; frames that arrive meanwhile are dropped (KEEP_ONLY_LATEST).
                 analysis.setAnalyzer(executor) { proxy ->
-                    val image = proxy.image
-                    if (image == null || reported.get()) {
-                        proxy.close()
-                    } else {
-                        scanner.process(InputImage.fromMediaImage(image, proxy.imageInfo.rotationDegrees))
-                            .addOnSuccessListener { codes ->
-                                val text = codes.firstNotNullOfOrNull { it.rawValue }
-                                if (text != null && reported.compareAndSet(false, true)) currentOnResult(text)
+                    proxy.use {
+                        if (!reported.get()) {
+                            val text = luma.copy(it)?.let { (bytes, w, h) -> decoder.decode(bytes, w, h) }
+                            if (text != null && reported.compareAndSet(false, true)) {
+                                ContextCompat.getMainExecutor(context).execute { currentOnResult(text) }
                             }
-                            .addOnCompleteListener { proxy.close() }
+                        }
                     }
                 }
                 try {
@@ -158,4 +148,32 @@ private fun CameraPreview(onResult: (String) -> Unit, onFailed: () -> Unit) {
             view
         },
     )
+}
+
+/** Copies the Y plane inside a frame's crop rectangle into one reused, tightly packed array. */
+private class LumaCopy {
+    private var bytes = ByteArray(0)
+
+    /** The frame's brightness as (bytes, width, height), or null if the frame has no Y plane. */
+    fun copy(proxy: ImageProxy): Triple<ByteArray, Int, Int>? {
+        val plane = proxy.planes.firstOrNull() ?: return null
+        val crop = proxy.cropRect
+        val w = crop.width()
+        val h = crop.height()
+        if (w <= 0 || h <= 0) return null
+        if (bytes.size != w * h) bytes = ByteArray(w * h)
+        val buffer = plane.buffer
+        val stride = plane.rowStride
+        val step = plane.pixelStride // 1 for the Y plane of YUV_420_888 in practice; handled anyway
+        for (y in 0 until h) {
+            val rowStart = (crop.top + y) * stride + crop.left * step
+            if (step == 1) {
+                buffer.position(rowStart)
+                buffer.get(bytes, y * w, w)
+            } else {
+                for (x in 0 until w) bytes[y * w + x] = buffer.get(rowStart + x * step)
+            }
+        }
+        return Triple(bytes, w, h)
+    }
 }
