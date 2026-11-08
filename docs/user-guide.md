@@ -283,7 +283,7 @@ Run these in a Terminal on the Ubuntu computer.
 |---|---|
 | `sudo filament-kit status` | Checks that everything works. Anything failing shows a `fix:` line telling you what to do. |
 | `sudo filament-kit pair` | Shows a new QR code to pair another phone. |
-| `sudo filament-kit station pair` | On the intake station computer: pairs the station's button flow with the server. Paste the link from `sudo filament-kit pair --station`; it needs a terminal and saves nothing without one (v0.4.1). |
+| `sudo filament-kit station pair` | On the intake station computer: pairs the station's button flow with the server. Paste the link from `sudo filament-kit pair --station`; without a terminal it says so and saves nothing (v0.4.1). |
 | `sudo filament-kit station pairing-state` | Prints whether the station is paired, on one line: `paired <address>:<port>`, `unpaired`, or `unchecked` when you are not root (v0.4.1). |
 | `sudo filament-kit pair --pc` | Shows the link and code to pair the PC sync tool (Windows or Linux). `--station` does the same for the intake station; `--text` prints the link instead of a QR code. The three are exclusive. |
 | `sudo filament-kit setup-code` | Shows the setup page's address and setup code (v0.4.0). `--new` replaces the code and clears a lock-out. |
