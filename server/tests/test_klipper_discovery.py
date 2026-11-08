@@ -1,6 +1,7 @@
 """Klipper discovery (mDNS + on-demand scan) and the `filament-kit klipper` commands."""
 import ipaddress
 import json
+import socket
 from pathlib import Path
 
 import pytest
@@ -161,17 +162,18 @@ def test_detect_returns_what_the_cli_prints(moonraker):
                  "system": "afc", "slots": [],
                  "reasons": ["no model entry matched: generic Klipper printer", "filament system afc (object AFC)"],
                  "hostname": moonraker.hostname or "",
-                 "spoolman": {"server": "spoolman.example.com:7912", "same_as_kit": True, "warning": None}}
+                 "spoolman": {"server": "spoolman.example.com:7912", "same_as_kit": True, "match": "same",
+                              "connected": True, "warning": None}}
 
 
 def test_detect_spoolman_another_or_none(moonraker):
     p = registry.add_klipper("Box", moonraker.host, moonraker.port)
     d = klipper_cli.detect(p, kit_spoolman="http://other.example.com:7912")
-    assert d["spoolman"] == {"server": "spoolman.example.com:7912", "same_as_kit": False,
-                             "warning": "usage goes to another Spoolman: spoolman.example.com:7912"}
+    assert d["spoolman"]["match"] in ("different", "unknown") and d["spoolman"]["same_as_kit"] is False
+    assert d["spoolman"]["server"] == "spoolman.example.com:7912"
     moonraker.server_config = {}
     d = klipper_cli.detect(p, kit_spoolman="http://other.example.com:7912")
-    assert d["spoolman"] == {"server": None, "same_as_kit": False,
+    assert d["spoolman"] == {"server": None, "same_as_kit": False, "match": None, "connected": True,
                              "warning": "Moonraker does not report usage to Spoolman (no [spoolman] section)"}
     moonraker.server_config = {"spoolman": {"server": "http://user:pw@spoolman.example.com:7912"}}
     d = klipper_cli.detect(p, kit_spoolman="http://spoolman.example.com:7912")
@@ -197,23 +199,43 @@ def test_detect_spoolman_another_or_none(moonraker):
     ("http://a..b:7912", "a..b:7912"),
     (f"http://{'a' * 70}.example.com:7912", f"{'a' * 70}.example.com:7912"),
 ])
-def test_detect_never_returns_a_spoolman_password(moonraker, server, address):
+def test_detect_never_returns_a_spoolman_password(moonraker, server, address, monkeypatch):
+    real = socket.getaddrinfo     # only the fake printer's own address resolves: no real lookups of these names
+
+    def lookup(host, *a, **kw):
+        if host in ("127.0.0.1", socket.gethostname()):
+            return real(host, *a, **kw)
+        if host == "a..b" or len(host) > 63:
+            raise UnicodeError("label")
+        return [(0, 0, 0, "", ("192.0.2." + str(30 if host == "other.example.com" else 40), 0))]
+    monkeypatch.setattr(socket, "getaddrinfo", lookup)
     moonraker.server_config = {"spoolman": {"server": server}}
     p = registry.add_klipper("Box", moonraker.host, moonraker.port)
     d = klipper_cli.detect(p, kit_spoolman="http://other.example.com:7912")
     text = json.dumps(d)
     assert "hunter" not in text and "fkuser" not in text
     assert d["spoolman"]["server"] == address
-    assert d["spoolman"]["warning"] == (f"usage goes to another Spoolman: {address}" if address else
-                                        "Moonraker's [spoolman] server address cannot be read; usage may not "
-                                        "reach this Spoolman")
+    if address is None:
+        assert d["spoolman"]["warning"] == ("Moonraker's [spoolman] server address cannot be read; usage may not "
+                                            "reach this Spoolman")
+    else:
+        assert address in d["spoolman"]["warning"]
+
+
+def test_detect_spoolman_not_connected(moonraker):
+    moonraker.spoolman["spoolman_connected"] = False
+    p = registry.add_klipper("Box", moonraker.host, moonraker.port)
+    s = klipper_cli.detect(p, kit_spoolman="http://spoolman.example.com:7912")["spoolman"]
+    assert s["connected"] is False and s["match"] == "same"
+    assert s["warning"] == "Moonraker cannot reach its Spoolman: usage is not getting there"
 
 
 def test_detect_brackets_an_ipv6_spoolman(moonraker):
     moonraker.server_config = {"spoolman": {"server": "http://[fd00::1]:7912"}}
     p = registry.add_klipper("Box", moonraker.host, moonraker.port)
-    assert klipper_cli.detect(p, kit_spoolman="http://[fd00::2]:7912")["spoolman"] == {
-        "server": "[fd00::1]:7912", "same_as_kit": False, "warning": "usage goes to another Spoolman: [fd00::1]:7912"}
+    s = klipper_cli.detect(p, kit_spoolman="http://[fd00::2]:7912")["spoolman"]
+    assert s["server"] == "[fd00::1]:7912" and s["same_as_kit"] is False
+    assert s["warning"] == "usage goes to another Spoolman: [fd00::1]:7912"
 
 
 ODD_CONFIGS = [{"spoolman": "x"}, {"spoolman": ["a"]}, "abc", ["a"], 5]

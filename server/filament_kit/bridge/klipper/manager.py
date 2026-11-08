@@ -61,6 +61,7 @@ class _Conn:
         self.detected: detect.Detected | None = None
         self.webcams: list[dict] = []
         self.spoolman_warning: str | None = None
+        self.spoolman_connected: bool | None = None    # Moonraker's own word; kept current by its notification
         self.nozzle: float | None = None         # [extruder] nozzle_diameter from Klipper's config
         self.lane_last: dict = {}                # lane_data values the kit last wrote (only changes are sent)
         self.job_state: str | None = None        # print_stats.state as last seen (job-end detection)
@@ -116,9 +117,10 @@ class _Conn:
         adapter = adapters.get(system.adapter) if system else adapters.get("single")
         lane_db = c.db_get("lane_data") if system and system.adapter == "lanedata" else None
         try:
-            warn = kusage.spoolman_warning(c.server_config(), getattr(self.fam.sm, "base_url", None))
+            warn = kusage.spoolman_warning(c.server_config(), getattr(self.fam.sm, "base_url", None), self.p.host)
         except MoonrakerError:
             warn = None
+        connected = kusage.spoolman_connected(c)
         try:
             ext = ((c.query({"configfile": ["settings"]}).get("configfile") or {}).get("settings") or {}).get("extruder")
             nozzle = float((ext or {}).get("nozzle_diameter")) if (ext or {}).get("nozzle_diameter") else None
@@ -130,7 +132,7 @@ class _Conn:
         wanted.update(adapter.objects_from(objs))
         with self.lock:
             self.objects, self.detected, self.webcams, self.spool_id, self.lane_db = objs, d, cams, spool, lane_db
-            self.spoolman_warning = warn
+            self.spoolman_warning, self.spoolman_connected = warn, connected
             self.nozzle = nozzle
         # set before the websocket starts: a Klipper event arriving on it afterwards must win over this
         self._set("connected" if d.model_key != "generic" else "unknown_model")
@@ -183,6 +185,9 @@ class _Conn:
     # --- subscriber callbacks ------------------------------------------------------------------------------------
     def _on_connect(self) -> None:
         """Every (re)subscribe: what may have changed while the socket was down, read again over HTTP."""
+        connected = kusage.spoolman_connected(self.client)
+        with self.lock:
+            self.spoolman_connected = connected
         try:
             spool = self.client.spool_id()
         except MoonrakerError:
@@ -232,6 +237,10 @@ class _Conn:
             with self.lock:
                 self.spool_id = v if isinstance(v, int) and not isinstance(v, bool) else None
             self.fam._emit(self.p.serial, "spool", {"spool_id": self.spool_id})
+        elif name == "notify_spoolman_status_changed":
+            v = (params[0] or {}).get("spoolman_connected") if params and isinstance(params[0], dict) else None
+            with self.lock:
+                self.spoolman_connected = v if isinstance(v, bool) else None
 
 
 class KlipperFamily(LoadsMixin):
@@ -440,7 +449,8 @@ class KlipperFamily(LoadsMixin):
             "notes": notes, "hms": [], "print_error": "", "light": None,
             "updated": int(updated) if updated else None, "family": "klipper", "state": state,
         }
-        out["spoolman_warning"] = c.spoolman_warning
+        with c.lock:
+            out["spoolman_warning"] = kusage.with_connection(c.spoolman_warning, c.spoolman_connected)
         return out
 
     # --- usage ---------------------------------------------------------------------------------------------------

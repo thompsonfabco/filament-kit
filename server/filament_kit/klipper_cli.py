@@ -127,10 +127,12 @@ def add_parser(sub) -> None:
     ks.add_parser("pack", help="print the command that installs the printer pack on a printer")
 
 
-def _spoolman(client: Moonraker, kit_url: str | None) -> dict | None:
-    """The Spoolman Moonraker reports usage to, as host:port (never the URL: it may carry a password), whether it is
-    the kit's own (config's spoolman_url when `kit_url` is None), and the server's warning line. None when that is
-    not known: Moonraker would not give its config, gave an odd one, or the kit's own config cannot be read."""
+def _spoolman(client: Moonraker, kit_url: str | None, printer_host: str) -> dict | None:
+    """The Spoolman Moonraker reports usage to, as host:port (never the URL: it may carry a password); whether it is
+    the kit's own (config's spoolman_url when `kit_url` is None): `same_as_kit`, and `match` same | different | unknown
+    (None when there's nothing to compare); `connected`, Moonraker's word on reaching it (None when it won't say); and
+    the server's warning line. None when that is not known: Moonraker would not give its config, gave an odd one, or
+    the kit's own config cannot be read."""
     try:
         if kit_url is None:
             kit_url = config.load().get("spoolman_url")
@@ -140,10 +142,10 @@ def _spoolman(client: Moonraker, kit_url: str | None) -> dict | None:
     section = cfg.get("spoolman", {})
     if not isinstance(section, dict):
         return None
-    server = section.get("server") or None
-    return {"server": kusage.spoolman_address(server) if server else None,
-            "same_as_kit": bool(server and kit_url and kusage.same_spoolman(server, kit_url)),
-            "warning": kusage.spoolman_warning(cfg, kit_url)}
+    report = kusage.spoolman_report(cfg, kit_url, printer_host)
+    connected = kusage.spoolman_connected(client)
+    return {"server": report["server"], "same_as_kit": report["match"] == "same", "match": report["match"],
+            "connected": connected, "warning": kusage.with_connection(report["warning"], connected)}
 
 
 def detect(p: registry.Printer, *, kit_spoolman: str | None = None, spoolman: bool = True,
@@ -170,7 +172,7 @@ def detect(p: registry.Printer, *, kit_spoolman: str | None = None, spoolman: bo
     m = hw.model(d.model_key)
     out.update(ok=True, model_key=d.model_key, model=m.name, verified=d.verified, system=d.system_key,
                slots=[s.label for s in m.slots], reasons=list(d.reasons), hostname=d.hostname,
-               spoolman=_spoolman(client, kit_spoolman) if spoolman else None)
+               spoolman=_spoolman(client, kit_spoolman, p.host) if spoolman else None)
     return out
 
 

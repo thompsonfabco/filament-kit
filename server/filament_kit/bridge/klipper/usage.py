@@ -6,7 +6,8 @@ file, started, ended (unix seconds), status (Moonraker's job status: completed, 
 source="moonraker". Entries cannot be undone (Moonraker wrote Spoolman; the API answers 409 recorded_by_moonraker).
 Nothing here ever writes to Spoolman or Moonraker.
 
-`spoolman_warning(server_config, kit_url)` says when Moonraker reports usage somewhere else than the kit's Spoolman.
+`spoolman_report(server_config, kit_url, printer_host)` says whether Moonraker reports usage to the kit's Spoolman: same,
+different or unknown (a name that doesn't resolve here may well resolve on the printer), with the line to show.
 """
 from __future__ import annotations
 
@@ -18,10 +19,10 @@ import time
 import urllib.parse
 import xml.etree.ElementTree as ET
 
-from ... import config
+from ... import config, pairing
 from .. import xmlfile
 from ..family import KLIPPER_ENTRY
-from .moonraker import _host_part
+from .moonraker import MoonrakerError, _host_part
 
 log = logging.getLogger(__name__)
 FILE = "usage.xml"
@@ -147,42 +148,115 @@ def spoolman_address(url: str) -> str | None:
     return f"{_host_part(hp[0])}:{hp[1]}" if hp else None
 
 
-def _addrs(host: str) -> set[str]:
+def _resolve(host: str) -> set[str] | None:
     try:
-        out = {a[4][0] for a in socket.getaddrinfo(host, None)}
+        return {a[4][0] for a in socket.getaddrinfo(host, None)}
     except (OSError, UnicodeError):     # UnicodeError: a label idna can't encode (empty, or over 63 characters)
-        return {host}
-    if any(ipaddress.ip_address(a.split("%")[0]).is_loopback for a in out):
-        out |= _local_addrs()
-    return out
+        return None
+
+
+def _is_loopback(addrs: set[str]) -> bool:
+    return any(ipaddress.ip_address(a.split("%")[0]).is_loopback for a in addrs)
 
 
 def _local_addrs() -> set[str]:
+    """This machine's addresses. local_ips too: the host name alone often resolves only to a loopback address."""
     out = {"127.0.0.1", "::1"}
     try:
         out |= {a[4][0] for a in socket.getaddrinfo(socket.gethostname(), None)}
-    except OSError:
+    except (OSError, UnicodeError):
         pass
-    return out
+    return out | set(pairing.local_ips())
 
 
-def same_spoolman(a: str, b: str) -> bool:
-    ha, hb = _host_port(a), _host_port(b)
-    if ha is None or hb is None or ha[1] != hb[1]:
+def compare_spoolman(server_url: str, kit_url: str, printer_host: str) -> str:
+    """Is Moonraker's `[spoolman] server` the kit's `spoolman_url`? "same", "different" or "unknown". A loopback address
+    means the machine that holds that setting: the printer on Moonraker's side, the kit on the kit's. So a printer
+    pointing at its own loopback is the kit's Spoolman only if the printer is on the kit's machine, or the kit's URL
+    names the printer. Each name is looked up at most once per call."""
+    server, kit = _host_port(server_url), _host_port(kit_url)
+    if server is None or kit is None:
+        return "unknown"
+    if server[1] != kit[1]:
+        return "different"
+    seen: dict[str, set[str] | None] = {}
+
+    def lookup(host: str) -> set[str] | None:
+        if host not in seen:
+            seen[host] = _resolve(host)
+        return seen[host]
+
+    def machine(host: str) -> set[str] | None:
+        addrs = lookup(host.strip("[]"))
+        return addrs | _local_addrs() if addrs and _is_loopback(addrs) else addrs
+
+    theirs = lookup(server[0])
+    if theirs is None:
+        return "same" if server[0] == kit[0] else "unknown"
+    if _is_loopback(theirs):
+        theirs = machine(printer_host)
+    ours = machine(kit[0])
+    if theirs is None or ours is None:
+        return "unknown"
+    return "same" if theirs & ours else "different"
+
+
+def _names_loopback(url: str) -> bool:
+    """Without a lookup, for the wording only: does this URL plainly name its own machine?"""
+    hp = _host_port(url)
+    if hp is None:
         return False
-    return ha[0] == hb[0] or bool(_addrs(ha[0]) & _addrs(hb[0]))
+    if hp[0] == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(hp[0]).is_loopback
+    except ValueError:
+        return False
 
 
-def spoolman_warning(server_config: dict | None, kit_url: str | None) -> str | None:
-    if server_config is None or not kit_url:
-        return None
+def spoolman_report(server_config: dict, kit_url: str | None, printer_host: str) -> dict:
+    """{"server": host:port or None, never the URL (it may hold a password); "match": "same" | "different" | "unknown" |
+    None (no [spoolman] server, or no kit URL to compare with); "warning": the line to show, or None}."""
     section = server_config.get("spoolman")
     server = section.get("server") if isinstance(section, dict) else None
     if not server:
-        return "Moonraker does not report usage to Spoolman (no [spoolman] section)"
-    if same_spoolman(server, kit_url):
-        return None
+        return {"server": None, "match": None,
+                "warning": "Moonraker does not report usage to Spoolman (no [spoolman] section)" if kit_url else None}
     address = spoolman_address(server)
+    if not kit_url:
+        return {"server": address, "match": None, "warning": None}
+    match = compare_spoolman(server, kit_url, printer_host)
     if address is None:     # a fixed sentence: the unreadable URL itself may hold a password
-        return "Moonraker's [spoolman] server address cannot be read; usage may not reach this Spoolman"
-    return f"usage goes to another Spoolman: {address}"
+        warning = "Moonraker's [spoolman] server address cannot be read; usage may not reach this Spoolman"
+    elif match == "same":
+        warning = None
+    elif match == "unknown":
+        warning = f"cannot tell whether Moonraker's Spoolman {address} is this kit's: a name does not resolve here"
+    elif _names_loopback(server):
+        warning = f"usage goes to the printer's own {address}, not this kit's Spoolman"
+    else:
+        warning = f"usage goes to another Spoolman: {address}"
+    return {"server": address, "match": match, "warning": warning}
+
+
+def spoolman_warning(server_config: dict | None, kit_url: str | None, printer_host: str) -> str | None:
+    if server_config is None:
+        return None
+    return spoolman_report(server_config, kit_url, printer_host)["warning"]
+
+
+def spoolman_connected(client) -> bool | None:
+    """Moonraker's own word on whether it reaches its Spoolman; None when it won't say (no [spoolman] section: 404)."""
+    try:
+        v = client.spoolman_status().get("spoolman_connected")
+    except (MoonrakerError, AttributeError):
+        return None
+    return v if isinstance(v, bool) else None
+
+
+def with_connection(warning: str | None, connected: bool | None) -> str | None:
+    """A warning with Moonraker's connection added: only False says anything (None is "it won't say")."""
+    if connected is not False:
+        return warning
+    lost = "Moonraker cannot reach its Spoolman: usage is not getting there"
+    return f"{warning}; {lost}" if warning else lost
