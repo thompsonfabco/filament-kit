@@ -9,6 +9,8 @@ ever deletes data.
 from __future__ import annotations
 
 import getpass
+import importlib.metadata
+import ipaddress
 import json
 import os
 import re
@@ -16,6 +18,7 @@ import socket
 import ssl
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.request
 from dataclasses import dataclass
@@ -23,6 +26,7 @@ from pathlib import Path
 from typing import Callable
 
 from . import config, modules, remote
+from .station import voice
 from .modules import MODULES, ModuleError
 
 SPOOLMAN_INFO = "http://127.0.0.1:7912/api/v1/info"
@@ -86,8 +90,35 @@ def _env_assign(a: str) -> str:
     return a
 
 
+def _voice_path(name: str | None) -> str:
+    """The Piper model the station loads: station.voice from the voice table (station/voice.py), else its DEFAULT."""
+    try:
+        return voice.model_path(config.paths().opt.as_posix() + "/resources/voice", name)
+    except ValueError as e:
+        raise ModuleError(f"station.voice: {e}; fix: pick one of those, or unset it for the default") from None
+
+
+def paired_server_ips() -> list[str]:
+    """The kit server's addresses from the station's pairing file (`filament-kit station pair`), or [] (not paired,
+    unreadable). Only literal IP addresses: they go into the unit's IPAddressAllow."""
+    from .station import server_api
+    try:
+        ips = json.loads(server_api.server_file().read_text(encoding="utf-8")).get("ips") or []
+    except (OSError, ValueError, AttributeError):
+        return []
+    out = []
+    for ip in ips if isinstance(ips, list) else []:
+        try:
+            out.append(str(ipaddress.ip_address(str(ip))))
+        except ValueError:
+            continue
+    return out
+
+
 def station_dropin(cfg: dict, addresses: list[str]) -> str:
-    """Text of the station drop-in (spec section 5); `addresses` are already resolved."""
+    """Text of the station drop-in (spec section 5); `addresses` are already resolved. The unit denies every
+    address but these, so the paired server's addresses (its LAN IPs in an all-in-one) are let through too: the
+    flow calls the server there."""
     st = config._merge(config.DEFAULTS["station"], cfg.get("station") or {})
     allow = _uniq(["127.0.0.1", *addresses])
     env = [f"STATION_ALLOW={' '.join(allow)}",
@@ -95,13 +126,15 @@ def station_dropin(cfg: dict, addresses: list[str]) -> str:
            f"NFC_DEVICE={st['nfc_device']}",
            f"STATION_BEEP={1 if st['beep'] else 0}",
            f"STATION_SPEECH={1 if st['speech'] else 0}",
+           f"STATION_TTS={st['tts']}",
+           f"STATION_PIPER_VOICE={_voice_path(st.get('voice'))}",
            f"STATION_CAMERA={st['camera']}",
            f"STATION_PANEL_FW={config.paths().opt.as_posix()}/resources/panel/intake-panel.bin",
            f"STATION_PANEL_FLASH={1 if st['panel_flash'] else 0}"]
     if st.get("beep_device"):
         env.append(f"STATION_BEEP_DEVICE={st['beep_device']}")
     env_line = "Environment=" + " ".join(_env_assign(e) for e in env)
-    ip_allow = " ".join(["localhost", *_uniq(addresses)])
+    ip_allow = " ".join(["localhost", *_uniq([*addresses, *paired_server_ips()])])
     return f"[Service]\n{env_line}\nIPAddressAllow={ip_allow}\n"
 
 
@@ -182,6 +215,9 @@ def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) ->
             A("install_file", (DROPIN, station_dropin(cfg, addrs), "0644", "root:root")),
             A("install_unit", STATION_UNIT),
         ]
+        st = config._merge(config.DEFAULTS["station"], cfg.get("station") or {})
+        if st.get("tts") != "espeak":  # Piper and its voice (station.voice, else the table's default)
+            acts.append(A("station_voice", st.get("voice") or voice.DEFAULT))
     # An opt-in module nobody ever configured is not mentioned (the legacy plan stays as it was).
     configured = cfg.get("modules") or {}
     for name, mod in MODULES.items():
@@ -252,6 +288,8 @@ _HINTS = {
     "remote_off": ("remove the kit's files by hand: sudo /usr/local/sbin/mcp-route rm <arg>; sudo rm "
                    "/etc/nginx/conf.d/filament-kit-router.conf /etc/letsencrypt/renewal-hooks/deploy/filament-kit"),
     "ensure_fields": "check Spoolman answers, then: sudo filament-kit ensure-fields",
+    "station_voice": ("the Piper voice did not match its pinned hash (see above); run `sudo filament-kit modules "
+                      "apply` again, or set station.tts to espeak"),
 }
 
 
@@ -569,6 +607,43 @@ def _remote_print(ex: _Exec, arg: tuple) -> None:
     print(remote.firewall_text(s, ex.resources))
 
 
+def _tts_requirements() -> list[str]:
+    """The [station-tts] extra's requirements, from the installed package's metadata (pyproject is the one pin)."""
+    try:
+        reqs = importlib.metadata.requires("filament-kit") or []
+    except importlib.metadata.PackageNotFoundError:
+        return []
+    return [r.split(";")[0].strip() for r in reqs if "station-tts" in r.split(";", 1)[-1]]
+
+
+def _station_voice(ex: _Exec, name: str) -> None:
+    """Piper for the button panel's speech: the [station-tts] extra into this venv, then the voice into
+    resources/voice (pinned hashes; a mismatch fails the step). No network: a note, and espeak-ng speaks."""
+    if os.environ.get("FK_STATION_TTS") == "espeak":
+        print("FK_STATION_TTS=espeak: the panel speaks with espeak-ng (no Piper voice)")
+        return
+    print(f"\n==> The button panel's voice (Piper, {name})")
+    reqs = _tts_requirements()
+    if not reqs:
+        print("note: this kit's package has no [station-tts] extra (reinstall it); the panel speaks with espeak-ng")
+        return
+    # what the kit already runs on stays as it is: piper-tts may add packages, never move the kit's own
+    pins = sorted({f"{d.metadata['Name']}=={d.version}" for d in importlib.metadata.distributions()
+                   if d.metadata["Name"]})
+    with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as f:
+        f.write("".join(p + "\n" for p in pins))
+    try:
+        if not ex.ok([sys.executable, "-m", "pip", "install", "-q", "-c", f.name, *reqs]):
+            print("note: could not install piper-tts (offline, or it conflicts with the kit's packages); "
+                  "the panel speaks with espeak-ng")
+            return
+    finally:
+        os.unlink(f.name)
+    vdir = f"{config.paths().opt.as_posix()}/resources/voice"
+    ex.cmd([sys.executable, "-I", "-m", "filament_kit.station.voice", vdir, name])
+    ex.ok(["chmod", "-R", "a+rX,go-w", vdir])   # the station's user reads it whatever root's umask was
+
+
 def _step(ex: _Exec, a: Action) -> None:
     k, arg = a.kind, a.arg
     if k == "user":
@@ -632,6 +707,8 @@ def _step(ex: _Exec, a: Action) -> None:
         if not ex.ok([WRAPPER, "library", "update"]):
             print("warning: the library could not be downloaded now; it is tried again every day "
                   "(or run: sudo filament-kit library update)")
+    elif k == "station_voice":
+        _station_voice(ex, arg)
     elif k == "first_build":
         # Before the PC sync has uploaded the Bambu Studio presets this only prints what to do next;
         # it never stops apply.
@@ -688,6 +765,21 @@ def execute(actions: list[Action], *, run: Callable[[list[str]], None] = run_che
     if not station_on and (_under(ex.root, UDEV_RULE).exists() or _under(ex.root, OLD_UDEV_RULE).exists()):
         print("Station is off: brltty removal, ModemManager, suspend masking and audio levels "
               "were left as they are.")
+
+
+def refresh_station(cfg: dict, *, run: Callable[[list[str]], None] = run_checked, root: Path = Path("/"),
+                    resolve: Callable[[str], list[str]] = default_resolve) -> None:
+    """After `filament-kit station pair`: rewrite the station drop-in (its IPAddressAllow now names the paired
+    server) and restart the station so it uses the new pairing. Raises ApplyError or ModuleError."""
+    modules.validate(cfg)
+    text = station_dropin(cfg, _resolve_all(cfg, resolve))
+    ex = _Exec(run, Path("."), Path(root))
+    try:
+        ex.write(DROPIN, text.encode("utf-8"), 0o644, "" if ex.dry or Path(root) != Path("/") else "root:root")
+        ex.cmd(["systemctl", "daemon-reload"])
+        ex.cmd(["systemctl", "restart", STATION_UNIT])
+    except (subprocess.CalledProcessError, OSError) as e:
+        raise ApplyError(f"station drop-in: {e}") from e
 
 
 def finish(cfg: dict, *, run: Callable[[list[str]], None] = run_checked, pairing: bool = True) -> None:

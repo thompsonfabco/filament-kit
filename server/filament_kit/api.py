@@ -6,6 +6,7 @@ Every route but /api/info, /api/pair and /app.apk needs `Authorization: Bearer <
 from __future__ import annotations
 
 import functools
+import json
 import logging
 import math
 import re
@@ -18,7 +19,7 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse
 from starlette.routing import Route
 
-from . import API_VERSION, __version__, config, intake, inventory, modules, pairing, profiles_api, tags
+from . import API_VERSION, __version__, config, intake, inventory, modules, pairing, profiles_api, station_flow, tags
 from .intake import CapReached, PhotoError, ReadCap, ReadError
 from .bridge import camera, hardware, loading, mapping, registry, usage
 from .bridge.connection import ACTIONS, DEVELOPER_MODE_REASON, Manager, NoReply, PrinterOffline, UnknownPrinter
@@ -559,6 +560,42 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         r = await run_in_threadpool(lambda: inventory.add_and_link(sm, body.get("items"), rules(), dry, uid))
         return JSONResponse({"spool_ids": r.spool_ids, "lines": r.lines, "dry": r.dry})
 
+    # ---------- the intake station's button flow (station_flow.py) ----------
+    def _flow(fn):
+        async def route(request: Request):
+            try:
+                return JSONResponse(await fn(request))
+            except station_flow.FlowError as e:
+                return _err(e.status, e.code, str(e), display=e.display, **e.extra)
+            except CapReached as e:
+                return _err(429, "daily_cap", str(e), display=station_flow.lines("Read limit reached", "use phone"))
+            except SpoolmanError as e:
+                r = _to_response(e)
+                return JSONResponse({**json.loads(r.body), "display": station_flow.lines("Spoolman down", "try again")},
+                                    status_code=r.status_code)
+        return _authed(route)
+
+    async def station_tag(request: Request):
+        return await run_in_threadpool(station_flow.tag_info, sm, request.path_params["uid"])
+
+    async def station_recognize(request: Request):
+        async with request.form() as form:
+            f = form.get("image")
+            if not isinstance(f, UploadFile):
+                raise station_flow.FlowError(400, "bad_request", "image must be a file upload",
+                                             station_flow.lines("No photo", "try again"))
+            data = await f.read(intake.MAX_PHOTO_BYTES + 1)
+        try:
+            (image,) = intake.check_photos([(f.filename or "station.jpg", data)])
+        except PhotoError as e:
+            raise station_flow.FlowError(400, "bad_photo", str(e), station_flow.lines("Bad photo", "try again")) from e
+        return await run_in_threadpool(
+            lambda: station_flow.recognize(sm, config.load(), image, claude, cap))
+
+    async def station_save(request: Request):
+        body = await _json(request)
+        return await run_in_threadpool(lambda: station_flow.save(sm, rules(), body))
+
     @_authed
     async def tag_lookup(request: Request):
         return JSONResponse({"spool": await run_in_threadpool(inventory.by_tag, sm, request.path_params["uid"])})
@@ -648,6 +685,9 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             Route("/api/locations", locations),
             Route("/app.apk", apk),
             Route("/api/station", station_state),
+            Route("/api/station/tag/{uid}", _flow(station_tag)),
+            Route("/api/station/recognize", _flow(station_recognize), methods=["POST"]),
+            Route("/api/station/save", _flow(station_save), methods=["POST"]),
             *_gated([*_printer_routes(printers), *_bridge_routes(printers, mapper, sm),
                      *camera.routes(camera_hub, _authed)], "printers", on),
             *_gated(profiles_api.routes(_authed, sm), "presets", on),

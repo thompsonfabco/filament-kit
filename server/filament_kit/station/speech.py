@@ -1,15 +1,20 @@
-"""The panel talks ("Held, 1042 grams"): espeak-ng speech, cut to the 8 kHz speech band by ffmpeg and streamed to the
+"""The panel talks ("1042 grams. Hold yellow to save."): Piper speech (the `voice` module's model, STATION_PIPER_VOICE)
+or, without it, espeak-ng (STATION_TTS=espeak forces it), cut to the 8 kHz speech band by ffmpeg and streamed to the
 panel's speaker in 256-byte `A <n>` frames (else played on the beep output with aplay). STATION_SPEECH=0 turns it off.
+Piper's voice loads once (about 1 s), then makes a phrase in about 0.1 s; piper-tts is the `[station-tts]` extra.
 
 A newer phrase cuts off the one playing, fading it out from where it is so the speaker's coupling capacitor doesn't
 thump; each phrase is ramped up from 0 (off) before and back down after for the same reason."""
 from __future__ import annotations
 
+import io
 import logging
+import os
 import struct
 import subprocess
 import threading
 import time
+import wave
 
 from . import beep, wire
 from . import state as st
@@ -30,8 +35,42 @@ def say(text):
         speech_ready.set()
 
 
+piper = {}  # the loaded Piper voice, kept between phrases (loading takes ~1 s, a phrase ~0.1 s)
+
+
+def piper_voice():
+    """The Piper voice if STATION_TTS allows it and its model is installed, else None (then espeak-ng speaks)."""
+    path = st.settings["piper_voice"]
+    if st.settings["tts"] == "espeak" or not os.path.exists(path):
+        return None
+    if "voice" not in piper:
+        try:
+            from piper import PiperVoice  # the [station-tts] extra
+            piper["voice"] = PiperVoice.load(path)
+        except Exception as e:  # noqa: BLE001 - piper-tts missing or the model broken: don't retry every phrase
+            log.warning("piper: %s; speaking with espeak-ng", e)
+            piper["voice"] = None
+    return piper["voice"]
+
+
+def engine():
+    """Which voice speaks: for the log at start (which also preloads Piper's)."""
+    return f"Piper ({os.path.basename(st.settings['piper_voice'])})" if piper_voice() else "espeak-ng"
+
+
 def synth(text):
-    """espeak-ng's WAV for text, or None (not installed)."""
+    """The phrase as WAV bytes: Piper's natural voice when installed (libritts_r, speaker 0: the owner's pick,
+    2026-11-07), else
+    espeak-ng's; None if neither works."""
+    voice = piper_voice()
+    if voice:
+        try:
+            buf = io.BytesIO()
+            with wave.open(buf, "wb") as w:
+                voice.synthesize_wav(text, w)
+            return buf.getvalue()
+        except Exception as e:  # noqa: BLE001 - one bad phrase: espeak-ng says it
+            log.warning("piper: %s; this phrase with espeak-ng", e)
     try:
         p = subprocess.run(["espeak-ng", "-v", "en-us", "-s", "165", "--stdout", text], capture_output=True, timeout=10)
         return p.stdout if p.returncode == 0 and p.stdout else None
@@ -93,6 +132,8 @@ def speak(text):
 
 def speech_loop():
     """Speak each phrase `say` leaves, newest only."""
+    if st.settings["speech"]:
+        log.info("speech: %s", engine())
     while True:
         speech_ready.wait()
         speech_ready.clear()

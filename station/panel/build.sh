@@ -4,7 +4,7 @@
 # reflashes a panel whose HELLO version differs from firmware/VERSION. Then deploy with install_station.sh.
 set -e
 cd "$(dirname "$0")"
-py -3 -m platformio run
+${PIO:-py -3 -m platformio} run  # PIO: another PlatformIO command if py -3 has none
 mkdir -p firmware
 cp .pio/build/d1_mini/firmware.bin firmware/intake-panel.bin
 sed -n 's/^static const char \*VERSION = "\([^"]*\)";.*/\1/p' src/main.cpp > firmware/VERSION

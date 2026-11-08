@@ -2,17 +2,23 @@
 //
 // Serial 115200, one ASCII line per message:
 //   PC -> panel   "?"                     -> "HELLO intake-panel <version>"
-//                 "L <hold> <discard>"    lamp modes: 0 off, 1 on, 2 flash, 3 three fast blinks then off
-//                                         (3 only restarts the blinks when the mode changes to it)
+//                 "L <hold> <discard>"    lamp modes: 0 off, 1 on, 2 flash, 3 three fast blinks then off,
+//                                         4 rapid blink (3 only restarts the blinks when the mode changes to it)
+//                 "D <row> [text]"        OLED text: row 0 the title (big), rows 1-4 the body; no text clears the
+//                                         row. The bottom line is the panel's own: room air, always shown.
 //                 "B <hz> <ms> [count]"   beep(s) on the passive buzzer, 60 ms apart
 //                 "A <n>" + n raw bytes   speech for the speaker: unsigned 8-bit mono at 8 kHz (n 1-1024), each byte
 //                                         the speaker MOSFET's PWM duty (/256), 0 = off. The PC streams it in real time and
 //                                         ramps up from 0 and back down so the speaker doesn't click.
 //   panel -> PC   "HELLO intake-panel <version>"   at boot and in answer to "?"
-//                 "P H" / "P D"           Hold / Discard pressed (debounced, once per press)
+//                 "P H"                   Hold (yellow) pressed: sent on release, if held under LONG_MS
+//                 "L H"                   Hold held down for LONG_MS (then its release sends nothing)
+//                 "P D"                   Discard (red) pressed: sent at once (debounced, once per press)
 //                 "AIR <C> <RH%|-> <hPa|->" room air every 10 s: a BME280, or a BMP280 + AHT20 board ("-": no such
 //                                         sensor, e.g. RH on a lone BMP280)
-// The PC resends "L" every second; with no "L" for 5 s (station service stopped) the lamps go dark.
+// The PC resends "L" every second; with no "L" for 5 s (station service stopped) the lamps go dark and the display
+// says the station is offline ("Waiting for PC" before the first "L" since boot). The OLED (SSD1306 128x64, I2C
+// 0x3C) shares the bus with the air sensor.
 //
 // Pins avoid the USB serial pins (GPIO1 TX, GPIO3 RX). Boot straps: GPIO0/D3 and GPIO2/D4 must be high at power-on,
 // which the BME280 board's I2C pull-ups keep them; GPIO15/D8 must be low, which the speaker MOSFET's gate pull-down
@@ -21,10 +27,11 @@
 #include <ESP8266WiFi.h>
 #include <Wire.h>
 #include <core_esp8266_waveform.h>
+#include <U8g2lib.h>
 #include "aht20.h"
 #include "bme280.h"
 
-static const char *VERSION = "6";
+static const char *VERSION = "8";
 static const uint8_t PIN_BUZZER = D7;       // GPIO13: buzzer module signal
 static const uint8_t PIN_BTN_HOLD = D1;     // GPIO5:  Hold button to GND (internal pull-up)
 static const uint8_t PIN_BTN_DISCARD = D2;  // GPIO4:  Discard button to GND
@@ -32,12 +39,14 @@ static const uint8_t PIN_LAMP_HOLD = D5;    // GPIO14: Hold lamp MOSFET gate (hi
 static const uint8_t PIN_LAMP_DISCARD = D6; // GPIO12: Discard lamp MOSFET gate
 static const uint8_t PIN_SPEAKER = D8;      // GPIO15: speaker MOSFET gate (40 kHz PWM); its drain drives the
                                             // push-pull pair's bases, so the speaker signal comes out inverted
-static const uint8_t PIN_SDA = D3;          // GPIO0:  BME280 SDA
-static const uint8_t PIN_SCL = D4;          // GPIO2:  BME280 SCL
+static const uint8_t PIN_SDA = D3;          // GPIO0:  I2C SDA (air sensor, OLED)
+static const uint8_t PIN_SCL = D4;          // GPIO2:  I2C SCL
 
 static const uint32_t FLASH_MS = 250;      // flash: 2 Hz
+static const uint32_t RAPID_MS = 60;       // rapid blink: about 8 Hz
 static const uint32_t BLINK3_MS = 90;      // three fast blinks: 90 ms on / 90 ms off
 static const uint32_t DEBOUNCE_MS = 30;
+static const uint32_t LONG_MS = 800;       // Hold held this long: a long press
 static const uint32_t WATCHDOG_MS = 5000;
 static const uint32_t AIR_MS = 10000;      // a forced-mode reading every 10 s: the sensor barely warms itself
 static const uint32_t SAMPLE_RATE = 8000;
@@ -46,7 +55,7 @@ struct Lamp {
   uint8_t pin, mode = 0;
   uint32_t since = 0;
   void set(uint8_t m) {
-    if (m > 3) return;
+    if (m > 4) return;
     if (m != mode) { mode = m; since = millis(); }
   }
   void update(uint32_t now) {
@@ -56,20 +65,31 @@ struct Lamp {
       case 1: lit = true; break;
       case 2: lit = (t / FLASH_MS) % 2 == 0; break;
       case 3: lit = t < 6 * BLINK3_MS && (t / BLINK3_MS) % 2 == 0; break;
+      case 4: lit = (t / RAPID_MS) % 2 == 0; break;
     }
     digitalWrite(pin, lit ? HIGH : LOW);
   }
 };
 
 struct Button {
-  uint8_t pin; char code;
-  bool down = false; uint32_t changed = 0;
+  uint8_t pin; char code; bool longPress;  // longPress: "P" on a short press's release, "L" once held LONG_MS
+  bool down = false, fired = false; uint32_t changed = 0, pressedAt = 0;
+  void send(char kind) { Serial.print(kind); Serial.print(' '); Serial.println(code); }
   void poll(uint32_t now) {
     bool pressed = digitalRead(pin) == LOW;
-    if (pressed == down) { changed = now; return; }
-    if (now - changed < DEBOUNCE_MS) return;
-    down = pressed; changed = now;
-    if (down) { Serial.print("P "); Serial.println(code); }
+    if (pressed != down) {
+      if (now - changed < DEBOUNCE_MS) return;
+      down = pressed; changed = now;
+      if (down) {
+        pressedAt = now; fired = false;
+        if (!longPress) send('P');
+      } else if (longPress && !fired) {
+        send('P');
+      }
+      return;
+    }
+    changed = now;
+    if (down && longPress && !fired && now - pressedAt >= LONG_MS) { fired = true; send('L'); }
   }
 };
 
@@ -146,6 +166,8 @@ struct Air {
   Bme280Calib cal;
   uint32_t due = 0; bool measuring = false;
   static const uint8_t AHT = 0x38;
+  char shown[24] = "";  // the display's bottom line, from the last reading
+  uint32_t shownAt = 0;
 
   bool ahtBegin() {
     Wire.beginTransmission(AHT);
@@ -234,15 +256,71 @@ struct Air {
     snprintf(out, sizeof out, "AIR %s%d.%02d %s %s", centiC < 0 ? "-" : "", abs(centiC) / 100, abs(centiC) % 100,
              rh, hpa);
     Serial.println(out);
+    // bottom line: "22.7°C 61%RH 1017hPa" (6x10 font: 21 characters)
+    int32_t tenthsC = (centiC + (centiC < 0 ? -5 : 5)) / 10;
+    int n = snprintf(shown, sizeof shown, "%s%d.%d\xb0" "C", tenthsC < 0 ? "-" : "", abs(tenthsC) / 10,
+                     abs(tenthsC) % 10);
+    if (haveRh) n += snprintf(shown + n, sizeof shown - n, " %u%%RH", (unsigned)((rhTenths + 5) / 10));
+    if (centiHpa) snprintf(shown + n, sizeof shown - n, " %uhPa", (unsigned)((centiHpa + 50) / 100));
+    shownAt = now;
   }
 };
 
+// ---------- OLED: SSD1306 128x64 on the shared I2C bus; the PC sends the text, the bottom line is room air ----------
+// U8g2 (BSD-2-Clause) with two fonts only: u8g2_font_helvB10_tf (title; Adobe/DEC X11 HELVB10.BDF, permissive, its
+// notice is in ../PANEL.md) and u8g2_font_6x10_tf (body + air line; X11 Misc-Fixed, public domain).
+static U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE, PIN_SCL, PIN_SDA);
+
+struct Display {
+  bool present = false, dirty = true, offline = true;
+  bool seen = false;  // the station has talked to us since boot: until then the title says "Waiting for PC", not
+                      // "offline" (the station may be about to reflash us, and an older firmware leaves the OLED as is)
+  uint32_t retry = 0, drawn = 0;
+  char rows[5][41] = {{0}};  // 0: title, 1-4: body
+
+  void set(int row, const char *text) {
+    if (row < 0 || row > 4) return;
+    if (strncmp(rows[row], text, sizeof rows[row] - 1) == 0) return;
+    strncpy(rows[row], text, sizeof rows[row] - 1);
+    rows[row][sizeof rows[row] - 1] = 0;
+    dirty = true;
+  }
+  void setOffline(bool off) {
+    if (!off) seen = true;
+    if (off != offline) { offline = off; dirty = true; }
+  }
+  void poll(uint32_t now, const Air &air) {
+    if (!present) {  // not found (yet): look again every 30 s
+      if ((int32_t)(now - retry) < 0) return;
+      retry = now + 30000;
+      Wire.beginTransmission(0x3C);
+      if (Wire.endTransmission() != 0) return;
+      u8g2.begin();
+      present = dirty = true;
+    }
+    if (air.shownAt != airSeen) { airSeen = air.shownAt; dirty = true; }
+    if (!dirty || now - drawn < 100) return;  // at most 10 redraws a second
+    dirty = false; drawn = now;
+    u8g2.clearBuffer();
+    u8g2.setFont(u8g2_font_helvB10_tf);
+    u8g2.drawStr(0, 11, !offline ? rows[0] : seen ? "Station offline" : "Waiting for PC");
+    u8g2.setFont(u8g2_font_6x10_tf);
+    if (!offline)
+      for (int r = 1; r <= 4; r++) u8g2.drawStr(0, 12 + r * 10, rows[r]);
+    u8g2.drawHLine(0, 53, 128);
+    u8g2.drawStr(0, 63, air.shown[0] ? air.shown : "no air sensor");
+    u8g2.sendBuffer();
+  }
+  uint32_t airSeen = 0;
+};
+
 static Lamp hold{PIN_LAMP_HOLD}, discard{PIN_LAMP_DISCARD};
-static Button btnHold{PIN_BTN_HOLD, 'H'}, btnDiscard{PIN_BTN_DISCARD, 'D'};
+static Button btnHold{PIN_BTN_HOLD, 'H', true}, btnDiscard{PIN_BTN_DISCARD, 'D', false};
 static Air air;
+static Display display;
 static uint32_t lastL = 0;
 static uint16_t beepHz = 0, beepMs = 0; static uint8_t beepsLeft = 0; static uint32_t nextBeep = 0;
-static char line[48]; static uint8_t len = 0;
+static char line[64]; static uint8_t len = 0;
 static uint16_t binLeft = 0;  // raw audio bytes still to come after an "A <n>" line
 
 static void hello() { Serial.print("HELLO intake-panel "); Serial.println(VERSION); }
@@ -251,7 +329,11 @@ static void handle(char *s) {
   if (s[0] == '?') { hello(); return; }
   if (s[0] == 'L') {
     int h, d;
-    if (sscanf(s + 1, "%d %d", &h, &d) == 2) { hold.set(h); discard.set(d); lastL = millis(); }
+    if (sscanf(s + 1, "%d %d", &h, &d) == 2) {
+      hold.set(h); discard.set(d); lastL = millis(); display.setOffline(false);
+    }
+  } else if (s[0] == 'D' && s[1] == ' ' && s[2] >= '0' && s[2] <= '4' && (s[3] == ' ' || s[3] == 0)) {
+    display.set(s[2] - '0', s[3] ? s + 4 : "");
   } else if (s[0] == 'B') {
     int hz, ms, n = 1;
     if (sscanf(s + 1, "%d %d %d", &hz, &ms, &n) >= 2 && hz >= 100 && hz <= 10000 && ms > 0 && ms <= 2000) {
@@ -298,7 +380,7 @@ void loop() {
       line[len++] = c;
     }
   }
-  if (lastL && now - lastL > WATCHDOG_MS) { hold.set(0); discard.set(0); lastL = 0; }
+  if (lastL && now - lastL > WATCHDOG_MS) { hold.set(0); discard.set(0); lastL = 0; display.setOffline(true); }
   if (beepsLeft && (int32_t)(now - nextBeep) >= 0) {
     tone(PIN_BUZZER, beepHz, beepMs);
     beepsLeft--; nextBeep = now + beepMs + 60;
@@ -306,4 +388,5 @@ void loop() {
   btnHold.poll(now); btnDiscard.poll(now);
   hold.update(now); discard.update(now);
   air.poll(now);
+  display.poll(now, air);
 }

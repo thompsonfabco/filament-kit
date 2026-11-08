@@ -73,11 +73,14 @@ def _get(url):
         return e.code, json.loads(e.read())
 
 
+IDLE = {"step": "idle", "message": "", "spool": None, "filament": None}
+
+
 def _raw(now, **kw):
     s = {"tag": "4:77:90:e:9:22:89", "tag_at": now - 10, "scale": {"grams": 1000.0, "status": "stable", "unit": 2},
          "scale_at": now - 1, "last": 1000.0, "last_at": now - 2, "held": None, "held_at": None,
-         "suppress": False, "blink_until": 0, "panel": "/dev/ttyUSB1", "panel_version": "2",
-         "air": None, "air_at": None, "photo": None, "photo_at": None}
+         "blink_until": 0, "panel": "/dev/ttyUSB1", "panel_version": "2",
+         "air": None, "air_at": None, "photo": None, "photo_at": None, "flow": IDLE}
     s.update(kw)
     return s
 
@@ -91,7 +94,7 @@ def test_state_and_last_tag_shapes():
     try:
         code, st = _get(base + "/state")
         assert code == 200
-        assert set(st) == {"tag", "scale", "last_weight", "panel", "panel_version", "air", "photo"}
+        assert set(st) == {"tag", "scale", "last_weight", "panel", "panel_version", "air", "photo", "flow"}
         iso = station_http.iso(now - 10)
         tag = {"status": "ok", "nfc_id": "4:77:90:e:9:22:89", "read_at": iso, "read_at_unix": now - 10,
                "age_seconds": 10, "held": False}
@@ -99,7 +102,7 @@ def test_state_and_last_tag_shapes():
             "tag": tag,
             "scale": {"grams": 1000.0, "status": "stable", "unit": 2, "stable": True, "age_seconds": 1},
             "last_weight": {"grams": 1000.0, "age_seconds": 2, "held": False},
-            "panel": "/dev/ttyUSB1", "panel_version": "2", "air": None, "photo": None}
+            "panel": "/dev/ttyUSB1", "panel_version": "2", "air": None, "photo": None, "flow": IDLE}
         code, lt = _get(base + "/last-tag")
         assert code == 200
         assert lt == tag
@@ -124,7 +127,8 @@ def test_state_held_and_empty():
         _, st = _get(base + "/state")
         assert st == {"tag": {"status": "ok", "nfc_id": None, "read_at": None, "read_at_unix": None,
                               "age_seconds": None, "held": False},
-                      "scale": None, "last_weight": None, "panel": None, "panel_version": None, "air": None, "photo": None}
+                      "scale": None, "last_weight": None, "panel": None, "panel_version": None, "air": None, "photo": None,
+                      "flow": IDLE}
     finally:
         srv.shutdown()
 
@@ -144,7 +148,20 @@ def test_allow_default_and_split(monkeypatch):
     monkeypatch.setenv("STATION_ALLOW", "127.0.0.1 192.0.2.10  198.51.100.7")
     s = state.settings_from_env()
     assert s["allow"] == {"127.0.0.1", "192.0.2.10", "198.51.100.7"}
-    assert (s["port"], s["nfc_device"], s["active"], s["beep"], s["beep_device"]) == (5003, "auto", 300, True, "")
+    assert (s["port"], s["nfc_device"], s["beep"], s["beep_device"]) == (5003, "auto", True, "")
+    assert "active" not in s  # the old Hold/Discard expiry (STATION_ACTIVE): the flow has its own timeout
+
+
+def test_flow_settings_from_env(monkeypatch):
+    for k in ("STATION_FLOW_TIMEOUT", "STATION_RECOGNISE_TIMEOUT"):
+        monkeypatch.delenv(k, raising=False)
+    s = state.settings_from_env()
+    assert (s["flow_timeout"], s["recognise_timeout"]) == (600, 90)
+    monkeypatch.setenv("STATION_FLOW_TIMEOUT", "120")
+    monkeypatch.setenv("STATION_RECOGNISE_TIMEOUT", "30")
+    s = state.settings_from_env()
+    assert (s["flow_timeout"], s["recognise_timeout"]) == (120, 30)
+    assert not {"server", "token_file"} & set(s)  # the pairing files (server_api) say where the server is
 
 
 # --- panel + reader port -------------------------------------------------------------------------------------------

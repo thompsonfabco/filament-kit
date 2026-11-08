@@ -1,5 +1,5 @@
-"""filament_kit.station panel v2 (speech on the panel's speaker, BME280 room air, a webcam picture on Hold): ported
-from filament-ops station/test_panel.py. That test drove a fake D1 mini on a pty with espeak-ng and ffmpeg for real;
+"""filament_kit.station panel pieces (speech on the panel's speaker, room air, the webcam picture, the HTTP view):
+ported from filament-ops station/test_panel.py; the intake flow itself is in test_station_flow_panel.py. That test drove a fake D1 mini on a pty with espeak-ng and ffmpeg for real;
 these use subprocess fakes and a recording serial port, so they run anywhere."""
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ def fresh(monkeypatch):
     with st.lock:
         saved = dict(st.state)
         st.state.update(tag=None, tag_at=None, scale=None, scale_at=None, last=None, last_at=None, held=None,
-                        held_at=None, suppress=False, blink_until=0, air=None, air_at=None, photo=None,
+                        held_at=None, blink_until=0, air=None, air_at=None, photo=None,
                         photo_at=None)
     monkeypatch.setitem(st.panel, "ser", None)
     monkeypatch.setitem(st.settings, "speech", True)
@@ -244,64 +244,6 @@ def test_speak_survives_a_missing_synth_or_ffmpeg(monkeypatch):
     assert ser.out == b""
 
 
-# --- buttons: words, photo bookkeeping -----------------------------------------------------------------------------
-
-class InlineThread:
-    """threading.Thread that runs its target when started, so a test sees the photo grab happen."""
-    def __init__(self, target, args=(), daemon=None):
-        self.target, self.args = target, args
-
-    def start(self):
-        self.target(*self.args)
-
-
-@pytest.fixture
-def photos(monkeypatch):
-    started = []
-    monkeypatch.setattr(panel.camera, "take_photo", lambda held_at: started.append(held_at))
-    monkeypatch.setattr(panel.threading, "Thread", InlineThread)
-    return started
-
-
-def scanned(weight=1098.0):
-    now = time.time()
-    with st.lock:
-        st.state.update(tag="4:aa:bb", tag_at=now, last=weight, last_at=now)
-
-
-def test_hold_speaks_the_weight_and_takes_a_photo(photos):
-    scanned()
-    panel.on_hold()
-    assert speech.speech["text"] == "Held, 1098 grams"
-    assert photos == [st.state["held_at"]]
-
-
-def test_hold_failures_speak_and_take_no_photo(photos):
-    panel.on_hold()
-    assert speech.speech["text"] == "Scan a tag first"
-    with st.lock:
-        st.state.update(tag="4:aa:bb", tag_at=time.time())
-    panel.on_hold()
-    assert speech.speech["text"] == "Put the spool on the scale"
-    assert photos == []
-
-
-def test_release_discard_and_new_scan_drop_the_photo(photos):
-    scanned()
-    panel.on_hold()
-    st.state.update(photo=JPEG, photo_at=time.time())
-    panel.on_hold()
-    assert speech.speech["text"] == "Released" and st.state["photo"] is None and st.state["photo_at"] is None
-    st.state.update(held=1.0, held_at=time.time(), photo=JPEG, photo_at=time.time())
-    panel.on_discard()
-    assert speech.speech["text"] == "Discarded" and st.state["photo"] is None
-    panel.on_discard()
-    assert speech.speech["text"] == "Nothing to discard"
-    st.state.update(photo=JPEG, photo_at=time.time())
-    nfc.on_tag("4:cc:dd")
-    assert st.state["photo"] is None and st.state["photo_at"] is None
-
-
 # --- camera --------------------------------------------------------------------------------------------------------
 
 def test_camera_dev(monkeypatch):
@@ -317,24 +259,16 @@ def test_camera_dev(monkeypatch):
     assert camera.camera_dev() is None
 
 
-def hold_now():
-    now = time.time()
-    with st.lock:
-        st.state.update(held=1000.0, held_at=now)
-    return now
-
-
-def test_take_photo_keeps_the_jpeg_for_the_current_hold(monkeypatch):
+def test_grab_photo_returns_the_jpeg(monkeypatch):
     monkeypatch.setattr(camera, "camera_dev", lambda: "/dev/video-fake")
     seen = []
     monkeypatch.setattr(camera.subprocess, "run", lambda a, **kw: seen.append(a) or Done(JPEG))
-    camera.take_photo(hold_now())
-    assert st.state["photo"] == JPEG and st.state["photo_at"] is not None
+    assert camera.grab_photo() == (JPEG, None)
     assert len(seen) == 1 and "v4l2" in seen[0] and "1920x1080" in seen[0] and "/dev/video-fake" in seen[0]
     assert r"select=gte(n\,15)" in seen[0]
 
 
-def test_take_photo_falls_back_to_the_cameras_own_format(monkeypatch):
+def test_grab_photo_falls_back_to_the_cameras_own_format(monkeypatch):
     monkeypatch.setattr(camera, "camera_dev", lambda: "/dev/video-fake")
     seen = []
 
@@ -342,23 +276,13 @@ def test_take_photo_falls_back_to_the_cameras_own_format(monkeypatch):
         seen.append(a)
         return Done(b"", 1, b"no 1080p") if "1920x1080" in a else Done(JPEG)
     monkeypatch.setattr(camera.subprocess, "run", run)
-    camera.take_photo(hold_now())
-    assert len(seen) == 2 and "1920x1080" not in seen[1] and st.state["photo"] == JPEG
-
-
-def test_take_photo_dropped_when_the_hold_is_gone(monkeypatch):
-    monkeypatch.setattr(camera, "camera_dev", lambda: "/dev/video-fake")
-    monkeypatch.setattr(camera.subprocess, "run", lambda a, **kw: Done(JPEG))
-    held_at = hold_now()
-    with st.lock:
-        st.state.update(held=None, held_at=None)
-    camera.take_photo(held_at)
-    assert st.state["photo"] is None
+    assert camera.grab_photo() == (JPEG, None)
+    assert len(seen) == 2 and "1920x1080" not in seen[1]
 
 
 @pytest.mark.parametrize("result", [Done(b"not a jpeg"), Done(b"", 1, b"busy"), FileNotFoundError("ffmpeg"),
                                     subprocess.TimeoutExpired("ffmpeg", 15)])
-def test_take_photo_failures_leave_no_photo(monkeypatch, result):
+def test_grab_photo_failures(monkeypatch, result):
     monkeypatch.setattr(camera, "camera_dev", lambda: "/dev/video-fake")
 
     def run(a, **kw):
@@ -366,15 +290,13 @@ def test_take_photo_failures_leave_no_photo(monkeypatch, result):
             raise result
         return result
     monkeypatch.setattr(camera.subprocess, "run", run)
-    camera.take_photo(hold_now())
-    assert st.state["photo"] is None
+    assert camera.grab_photo() == (None, "camera failed")
 
 
-def test_take_photo_without_a_camera(monkeypatch):
+def test_grab_photo_without_a_camera(monkeypatch):
     monkeypatch.setattr(camera, "camera_dev", lambda: None)
     monkeypatch.setattr(camera.subprocess, "run", lambda *a, **kw: pytest.fail("no camera, no ffmpeg"))
-    camera.take_photo(hold_now())
-    assert st.state["photo"] is None
+    assert camera.grab_photo() == (None, "no camera")
 
 
 # --- HTTP: air, photo, /photo, read-only ---------------------------------------------------------------------------
@@ -387,8 +309,9 @@ def _serve(view, allow):
 
 def _raw(now, **kw):
     s = {"tag": "4:aa:bb", "tag_at": now - 5, "scale": None, "scale_at": None, "last": None, "last_at": None,
-         "held": 1098.0, "held_at": now - 3, "suppress": False, "blink_until": 0, "panel": "/dev/ttyUSB1", "panel_version": "2",
-         "air": None, "air_at": None, "photo": None, "photo_at": None}
+         "held": 1098.0, "held_at": now - 3, "blink_until": 0, "panel": "/dev/ttyUSB1", "panel_version": "7",
+         "air": None, "air_at": None, "photo": None, "photo_at": None,
+         "flow": {"step": "ready", "message": "", "spool": None, "filament": {"id": 45}}}
     s.update(kw)
     return s
 
@@ -410,8 +333,9 @@ def test_state_air_and_photo():
         s = json.loads(_fetch(base + "/state")[2])
         assert s["air"] == {"temp_c": 21.43, "rh": 45.2, "hpa": 1013.25, "age_seconds": 2}
         assert s["photo"] == {"url": "/photo", "taken_at": station_http.iso(now - 1), "age_seconds": 1}
-        assert set(s) == {"tag", "scale", "last_weight", "panel", "panel_version", "air", "photo"}
-        assert s["panel_version"] == "2"
+        assert set(s) == {"tag", "scale", "last_weight", "panel", "panel_version", "air", "photo", "flow"}
+        assert s["panel_version"] == "7"
+        assert s["flow"] == {"step": "ready", "message": "", "spool": None, "filament": {"id": 45}}
         assert s["last_weight"] == {"grams": 1098.0, "age_seconds": 3, "held": True}
     finally:
         srv.shutdown()

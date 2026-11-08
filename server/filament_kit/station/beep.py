@@ -17,8 +17,8 @@ from . import state as st, wire
 
 log = logging.getLogger("intake-station")
 
-TONES = {"scan": "B 2200 90", "hold": "B 2600 60 2", "release": "B 1500 90", "discard": "B 700 180",
-         "nothing": "B 400 250"}
+# scan; a step done (two high); cancel (one low); a refused press (low buzz)
+TONES = {"scan": "B 2200 90", "hold": "B 2600 60 2", "discard": "B 700 180", "nothing": "B 400 250"}
 
 
 def beep_device():

@@ -1,16 +1,17 @@
-"""The optional button panel (station/panel/ firmware + PANEL.md in the repo): a D1 mini on USB serial with a buzzer
-and lit Hold / Discard buttons.
+"""The button panel (station/panel/ firmware + PANEL.md in the repo): a D1 mini on USB serial with a buzzer, an OLED,
+a speaker and two lit buttons, yellow (Hold) and red (Discard), relayed to the intake flow (`flow`).
 
 The station keeps the panel's firmware current: a panel whose HELLO version differs from the bundled one
 (STATION_PANEL_FW, VERSION beside it) is reflashed over USB with esptool, once per version per run, then found
 again; if the flash doesn't take the panel is used as it is. STATION_PANEL_FLASH=0 turns that off.
 
-Hold keeps the current weight with the scan (both stay current for the phone app until Discard or the next scan:
-"held" in /state); Discard forgets the scan and weight. Both the panel and the PN532 board use CH340 USB serial chips
-(no serial numbers), so the panel is found by its HELLO and the reader gets the other ttyUSB port (NFC_DEVICE=auto).
-Protocol, 115200 baud, one line each: PC -> panel `?`, `L <hold> <discard>`, `B <hz> <ms> [count]`;
+Both the panel and the PN532 board use CH340 USB serial chips (no serial numbers), so the panel is found by its HELLO
+and the reader gets the other ttyUSB port (NFC_DEVICE=auto).
+Protocol (firmware 8), 115200 baud, one line each: PC -> panel `?`, `L <yellow> <red>` (lamp modes 0-4, resent every
+second), `D <row> [text]` (OLED row 0 the title, 1-4 the body; sent when it changes), `B <hz> <ms> [count]`;
 `A <n>` + n raw bytes (speech, see `speech`);
-panel -> PC `HELLO intake-panel <version>`, `P H`, `P D`, `AIR <C> <RH|-> <hPa>` (see `air`).
+panel -> PC `HELLO intake-panel <version>`, `P H` (yellow, a short press, on release), `L H` (yellow held 0.8 s),
+`P D` (red, at once), `AIR <C> <RH|-> <hPa>` (see `air`).
 """
 from __future__ import annotations
 
@@ -18,65 +19,46 @@ import logging
 import os
 import subprocess
 import sys
-import threading
 import time
 
-from . import air, beep, camera, speech, wire
+from . import air, flow, wire
 from . import state as st
 
 log = logging.getLogger("intake-station")
 
 
-def lamps(now):
-    """Panel lamp modes (0 off, 1 on, 2 flash, 3 three blinks): Hold lit on a scan, flashing while a weight is held;
-    Discard lit while there's a scan or a weight, three blinks after a discard."""
-    with st.lock:
-        tag, weight = st.active(now)
-        held, blink = st.state["held"] is not None, now < st.state["blink_until"]
-    return (2 if held else 1 if tag else 0), (3 if blink else 1 if tag or weight is not None else 0)
+def on_line(line: bytes):
+    """One line from the panel: a button for the flow, or the room air."""
+    if line == b"P H":
+        flow.on_yellow(False)
+    elif line == b"L H":
+        flow.on_yellow(True)
+    elif line == b"P D":
+        flow.on_red()
+    elif line.startswith(b"AIR "):
+        air.on_air(line)
 
 
-def on_hold():
-    """Hold: keep the current weight for this scan (the phone app then uses it however long the photos take).
-    Pressed again while holding: let go. Needs a scan and a stable weight."""
-    now = time.time()
-    with st.lock:
-        tag, _ = st.active(now)
-        if tag and st.state["held"] is not None:
-            st.state.update(held=None, held_at=None, photo=None, photo_at=None)
-            kind, words = "release", "Released"
-        elif tag and not st.state["suppress"] and st.fresh(st.state["last_at"], now):
-            st.state.update(held=st.state["last"], held_at=now)
-            kind, words = "hold", f"Held, {st.state['last']:.0f} grams"
-        else:
-            kind, words = "nothing", "Scan a tag first" if not tag else "Put the spool on the scale"
-    log.info("hold button: %s", kind)
-    beep.beep(kind)
-    speech.say(words)
-    st.panel_dirty.set()
-    if kind == "hold":
-        threading.Thread(target=camera.take_photo, args=(now,), daemon=True).start()
+class Shown:
+    """What this panel shows: the lamp modes last sent (and when) and its five display rows."""
+
+    def __init__(self):
+        self.lamps, self.at, self.rows = None, 0.0, [None] * 5
 
 
-def on_discard():
-    """Discard: forget the scan and any held or last weight. A spool left on the scale stays ignored until the pan
-    is emptied (or the scale switches off), so the lamp doesn't come straight back on."""
-    now = time.time()
-    with st.lock:
-        tag, weight = st.active(now)
-        if tag or weight is not None:
-            sc = st.state["scale"]
-            st.state.update(tag=None, tag_at=None, held=None, held_at=None, last=None, last_at=None, photo=None,
-                            photo_at=None,
-                            suppress=bool(sc and sc["grams"] >= st.MIN_GRAMS and st.fresh(st.state["scale_at"], now)),
-                            blink_until=now + 0.7)
-            kind, words = "discard", "Discarded"
-        else:
-            kind, words = "nothing", "Nothing to discard"
-    log.info("discard button: %s", kind)
-    beep.beep(kind)
-    speech.say(words)
-    st.panel_dirty.set()
+def refresh(seen: Shown, now: float) -> bool:
+    """Keep the panel current: the lamps when they change, every second (its 5 s watchdog) or when the flow moved,
+    then any display row that changed. False when the panel went away."""
+    modes = flow.lamps(now)
+    if modes != seen.lamps or now - seen.at >= 1 or st.panel_dirty.is_set():
+        st.panel_dirty.clear()
+        if not wire.panel_send("L %d %d" % modes):
+            return False
+        seen.lamps, seen.at = modes, now
+        for i, row in enumerate(flow.screen()):
+            if row != seen.rows[i] and wire.panel_send(("D %d %s" % (i, row)).rstrip()):
+                seen.rows[i] = row
+    return True
 
 
 def fw_version():
@@ -173,23 +155,12 @@ def panel_loop():
             continue  # look for it again: it boots the new firmware and says HELLO
         with st.panel_lock:
             st.panel["ser"] = ser
-        sent, last_sent = None, 0
+        seen = Shown()
         try:
             while st.panel["ser"] is ser:
-                line = ser.readline().strip()
-                if line == b"P H":
-                    on_hold()
-                elif line == b"P D":
-                    on_discard()
-                elif line.startswith(b"AIR "):
-                    air.on_air(line)
-                now = time.time()
-                modes = lamps(now)
-                if modes != sent or now - last_sent >= 1 or st.panel_dirty.is_set():
-                    st.panel_dirty.clear()
-                    if not wire.panel_send("L %d %d" % modes):
-                        break
-                    sent, last_sent = modes, now
+                on_line(ser.readline().strip())
+                if not refresh(seen, time.time()):  # the flow's timeouts: flow.tick_loop
+                    break
         except Exception as e:  # unplugged
             log.warning("panel %s: %s", ser.port, e)
         with st.panel_lock:

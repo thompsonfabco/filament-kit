@@ -4,6 +4,7 @@ import pytest
 
 from filament_kit import apply, config, modules
 from filament_kit.modules import ModuleError, set_mode
+from filament_kit.station import voice
 
 
 def _cfg(**over):
@@ -41,8 +42,9 @@ def test_all_in_one_station_localhost_only():
     assert dest == "/etc/systemd/system/filament-kit-station.service.d/kit.conf"
     assert "STATION_ALLOW=127.0.0.1" in content
     assert "IPAddressAllow=localhost 127.0.0.1" in content
-    fw = (config.paths().opt / "resources" / "panel" / "intake-panel.bin").as_posix()
-    assert "/" not in content.replace(fw, "")  # no CIDR ranges
+    opt = config.paths().opt.as_posix()
+    assert "/" not in (content.replace(f"{opt}/resources/panel/intake-panel.bin", "")
+                       .replace(f"{opt}/resources/voice/{voice.DEFAULT}.onnx", ""))  # no CIDR ranges
 
 
 def test_station_mode_resolves_server_name():

@@ -4,8 +4,9 @@
 # `config` and `cert` run as root; so does `modules`, which installs and starts
 # services, `migrate-ops`, which replaces the Spoolman database and installs
 # secrets, `migrate-scanner`, which reads the old calibration from /root and
-# writes the map, `update`, which installs a new release, and `uninstall`, which runs the kept release's
-# uninstall.sh. Everything else touches
+# writes the map, `update`, which installs a new release, `uninstall`, which runs the kept release's
+# uninstall.sh, and `station` (the station PC: its pairing files in /etc/filament-kit-station).
+# Everything else touches
 # the service's state in /var/lib/filament-kit and runs as the filament-kit
 # user, so the files it writes stay readable by the service.
 set -euo pipefail
@@ -13,7 +14,7 @@ set -euo pipefail
 BIN=/opt/filament-kit/venv/bin/filament-kit
 
 case "${1:-}" in
-    config | cert | modules | remote | migrate-ops | migrate-scanner | update | uninstall)
+    config | cert | modules | remote | migrate-ops | migrate-scanner | update | uninstall | station)
         exec "$BIN" "$@"
         ;;
 esac
