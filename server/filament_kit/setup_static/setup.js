@@ -80,8 +80,9 @@ function keyCard() {
 // ----- printers -----
 function printersCard() {
   const P = S.printers;
-  if (!P.on) return card("Printers", h("p", { class: "muted", textContent: "The printers module is off on this server (Modules below)." }));
+  if (!P.on) return card("Printers", h("p", { class: "muted", textContent: "The printers and klipper modules are off on this server (Modules below)." }));
   const rows = P.list.map((p) => {
+    if (p.family === "klipper") return klipperRow(p);
     const box = boxFor("printer:" + p.serial), code = secret("new Access Code");
     return h("div", { class: "item" },
       h("p", {}, h("b", { textContent: p.name }), ` ${p.model || ""} · ${p.ip || "no IP yet"} · serial ${p.serial} `,
@@ -102,10 +103,26 @@ function printersCard() {
   const box = boxFor("printer-add");
   return card("Printers",
     ...(rows.length ? rows : [h("p", { class: "muted", textContent: "No printer yet. Printers on the network appear here once they announce themselves." })]),
-    h("h2", { textContent: "Add a printer by IP" }),
-    h("div", { class: "row" }, ip, ac), h("div", { class: "row" }, name, serial,
-      h("button", { textContent: "Add", on: { click: () => change(box, "printers", { ip: ip.value, access_code: ac.value, name: name.value, serial: serial.value },
-        (r) => say(box, `Added ${r.serial}.`, true), [ac]) } })),
+    P.klipper ? h("p", { class: "muted", textContent: "Klipper printers: add one at the server with sudo filament-kit klipper add <name> <host> (or klipper scan), or in the app." }) : null,
+    ...(P.bambu ? [h("h2", { textContent: "Add a Bambu printer by IP" }),
+      h("div", { class: "row" }, ip, ac), h("div", { class: "row" }, name, serial,
+        h("button", { textContent: "Add", on: { click: () => change(box, "printers", { ip: ip.value, access_code: ac.value, name: name.value, serial: serial.value },
+          (r) => say(box, `Added ${r.serial}.`, true), [ac]) } })),
+      box] : [h("p", { class: "muted", textContent: "Bambu printers: the printers module is off (Modules below)." })]));
+}
+
+// A Klipper printer (Moonraker): no Access Code and no TLS; Test asks Moonraker, Forget removes the entry.
+function klipperRow(p) {
+  const box = boxFor("printer:" + p.serial);
+  return h("div", { class: "item" },
+    h("p", {}, h("b", { textContent: p.name }), ` Klipper · ${p.model || ""} · ${p.host}:${p.port} `,
+      pill(p.state === "connected", "connected", p.state.replace(/_/g, " "))),
+    h("div", { class: "row" },
+      h("button", { class: "secondary", textContent: "Test", on: { click: async () => {
+        box.replaceChildren(h("p", { class: "muted", textContent: "Testing…" }));
+        try { const r = await api(`printers/${encodeURIComponent(p.serial)}/test`, {}); say(box, `${r.text}\nconnection: ${r.state.replace(/_/g, " ")}`, r.reachable); } catch (e) { say(box, e.message, false); }
+      } } }),
+      h("button", { class: "secondary", textContent: "Forget", on: { click: () => { if (window.confirm(`Forget ${p.name}? Its Moonraker API key, if one is saved, is deleted.`)) change(box, `printers/${encodeURIComponent(p.serial)}/forget`, {}); } } })),
     box);
 }
 

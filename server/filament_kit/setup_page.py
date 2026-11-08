@@ -30,6 +30,9 @@ Routes (JSON under /setup/api; every POST body is a JSON object, `code` = the se
     POST key {code, key}  key/remove {code}  key/check {}      the Anthropic key (check: like `status`)
     POST printers {code, ip, access_code[, name, serial, model]}  printers/{serial}/code {code, access_code}
     POST printers/{serial}/test {}  printers/{serial}/forget {code}
+        Printers are listed (and tested, forgotten) when their family's module is on: Bambu with `printers`, Klipper
+        with `klipper` (either alone is enough). Adding by IP and the Access Code are Bambu's (a Klipper printer:
+        400); Test is a TLS handshake for Bambu, Moonraker's /printer/info for Klipper (its API key never shown).
     POST passphrase {code, passphrase}  library_token {code, token}  library_token/remove {code}
     POST readers {code[, name]} (the token, shown once)  readers/{id}/revoke {code}
     POST pair {code, kind: phone|pc|station}  devices/{id}/revoke {code}
@@ -58,6 +61,7 @@ from starlette.routing import Route
 
 from . import config, lan, modules, pairing, reader_tokens, setup_code, setup_helper
 from .bridge import registry
+from .bridge.klipper.moonraker import Moonraker, MoonrakerError, Offline, Unauthorized
 
 log = logging.getLogger(__name__)
 
@@ -157,8 +161,13 @@ def _host_of(host_header: str) -> str:
 
 
 class SetupPage:
-    def __init__(self, printers=None, *, helper=None, client_factory=None, hosts=None):
-        self.printers = printers                    # the connection manager (None: the printers module is off)
+    def __init__(self, printers=None, *, families=None, helper=None, client_factory=None, hosts=None):
+        # the connection manager: the Bambu Manager or family.Printers (None: no printer module is on); `families`
+        # = the printer families whose module is on ("bambu" = the printers module, "klipper" = the klipper module)
+        self.printers = printers
+        self.families = frozenset(families if families is not None else ({"bambu"} if printers is not None else ()))
+        if printers is None:
+            self.families = frozenset()
         self.helper = helper or HelperClient()
         self.client_factory = client_factory
         self.hosts = hosts or allowed_hosts         # a function: the names the page answers to
@@ -311,11 +320,16 @@ class SetupPage:
     def _printer_rows(self) -> list[dict]:
         out = []
         for p in registry.load().values():
+            if p.family not in self.families:
+                continue                            # its module is off: nothing on this page can act on it
             state = "not_configured"
             if p.configured and self.printers is not None:
                 state = self.printers.state(p.serial)
-            out.append({"serial": p.serial, "name": registry.display_name(p), "model": p.model, "ip": p.ip,
-                        "configured": p.configured, "state": state, "pinned": bool(p.cert_fp)})
+            row = {"serial": p.serial, "name": registry.display_name(p), "model": p.model, "ip": p.ip,
+                   "configured": p.configured, "state": state, "pinned": bool(p.cert_fp), "family": p.family}
+            if p.family == "klipper":
+                row.update(host=p.host, port=p.port)   # never the API key
+            out.append(row)
         return out
 
     def _state(self) -> dict:
@@ -334,7 +348,8 @@ class SetupPage:
             "anthropic": {"set": _present(cli.KEY_FILE), "ai_intake": "ai_intake" in on},
             "passphrase": {"set": _present(cli.WEB_PASSPHRASE), "web": "web" in on},
             "library_token": {"set": _present("github_token"), "library": "library" in on},
-            "printers": {"on": self.printers is not None, "list": self._printer_rows()},
+            "printers": {"on": bool(self.families), "bambu": "bambu" in self.families,
+                         "klipper": "klipper" in self.families, "list": self._printer_rows()},
             "readers": {"list": readers, "error": readers_error},
             "devices": [{"id": d["id"], "name": d["name"], "paired": _fmt_time(d["paired"]),
                          "last_seen": _fmt_time(d["last_seen"])} for d in pairing.devices()],
@@ -407,10 +422,18 @@ class SetupPage:
         return {"ok": ok, "text": text}
 
     # ---------- printers (the server's own registry, as the CLI's printers menu) ----------
-    def _manager(self):
-        if self.printers is None:
-            raise Refused(409, "the printers module is off on this server")
+    def _manager(self, family: str = "bambu"):
+        if self.printers is None or family not in self.families:
+            raise Refused(409, f"the {'printers' if family == 'bambu' else family} module is off on this server")
         return self.printers
+
+    def _entry(self, serial: str) -> registry.Printer:
+        """The registry entry (404 when there is none); 409 when its family's module is off."""
+        p = registry.load().get(serial)
+        if p is None:
+            raise Refused(404, "no such printer")
+        self._manager(p.family)
+        return p
 
     @staticmethod
     def _serial(request: Request) -> str:
@@ -473,10 +496,15 @@ class SetupPage:
         return {"ok": True, "serial": r["serial"]}
 
     async def printer_code(self, request: Request, body: dict):
-        manager, serial, access = self._manager(), self._serial(request), self._access_code(body)
+        serial, access = self._serial(request), self._access_code(body)
 
         def run() -> None:
-            if registry.load().get(serial) is None:
+            p = registry.load().get(serial)
+            if p is not None and p.family == "klipper":
+                raise Refused(400, "a Klipper printer has no Access Code (a Moonraker API key, when it wants one: "
+                                   "sudo filament-kit klipper api-key " + serial + ")")
+            manager = self._manager()
+            if p is None:
                 raise Refused(404, "no such printer")
             registry.set_code(serial, access, replace=True)
             manager.sync()
@@ -485,16 +513,19 @@ class SetupPage:
         return {"ok": True}
 
     async def printer_test(self, request: Request, body: dict):
-        """A TLS handshake with the printer (nothing is sent, nothing is pinned) and the connection's state."""
+        """Bambu: a TLS handshake with the printer (nothing is sent, nothing is pinned); Klipper: Moonraker's
+        /printer/info. And the connection's state."""
         from .bridge import tlspin
-        manager, serial = self._manager(), self._serial(request)
+        serial = self._serial(request)
+        await anyio.to_thread.run_sync(self._entry, serial)   # 404 / 409 before the gap is spent
         self._gap()
 
         def run() -> dict:
-            p = registry.load().get(serial)
-            if p is None:
-                raise Refused(404, "no such printer")
+            p = self._entry(serial)
+            manager = self.printers
             state = manager.state(serial) if p.configured else "not_configured"
+            if p.family == "klipper":
+                return self._moonraker_test(p, state)
             try:
                 fp = tlspin.leaf_fp(p.ip, PRINTER_PORT)
             except OSError as e:
@@ -506,12 +537,32 @@ class SetupPage:
             return {"reachable": True, "state": state, "text": f"{p.ip} answers; its certificate {cert}"}
         return await anyio.to_thread.run_sync(run)
 
+    @staticmethod
+    def _moonraker_test(p: registry.Printer, state: str) -> dict:
+        where = f"{p.host}:{p.port}"
+        try:
+            info = Moonraker(p.host, p.port, p.api_key, timeout=5.0).info()
+        except Unauthorized:
+            return {"reachable": True, "state": state,
+                    "text": f"Moonraker at {where} answers but wants an API key: "
+                            f"sudo filament-kit klipper api-key {p.serial}"}
+        except Offline:
+            return {"reachable": False, "state": state,
+                    "text": f"no answer from Moonraker at {where}: check that the printer is on and the address"}
+        except MoonrakerError as e:
+            return {"reachable": False, "state": state,
+                    "text": f"{where} answers, but not as Moonraker ({str(e)[:200]})"}
+        klippy = info.get("state") if isinstance(info, dict) else None
+        klippy = klippy if isinstance(klippy, str) and klippy.isprintable() else "unknown"
+        return {"reachable": True, "state": state, "text": f"Moonraker at {where} answers; Klipper is {klippy[:32]}"}
+
     async def printer_forget(self, request: Request, body: dict):
-        manager, serial = self._manager(), self._serial(request)
+        serial = self._serial(request)
 
         def run() -> bool:
+            self._entry(serial)
             gone = registry.remove(serial)
-            manager.sync()
+            self.printers.sync()
             return gone
         if not await anyio.to_thread.run_sync(run):
             raise Refused(404, "no such printer")
