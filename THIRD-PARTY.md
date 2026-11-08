@@ -64,6 +64,7 @@ the ones pip resolved on 2026-11-07; pins are marked.
 | cryptography | Apache-2.0 OR BSD-3-Clause | the server certificate |
 | paho-mqtt | EPL-2.0 OR BSD-3-Clause (EDL) | the printer connection; we take it under the BSD-3-Clause option |
 | defusedxml 0.7.1 (pinned) | PSF-2.0 | the hardware XML |
+| zeroconf | LGPL-2.1-or-later | Klipper printer discovery (Moonraker's mDNS announcements, listen only); `>=0.136`, 0.154.0 resolved on 2026-11-08. Installed from PyPI and imported unmodified, not shipped in a release; the LGPL lets a GPL-3.0 program use it as a library. |
 | nfcpy 1.0.4 (pinned) | EUPL-1.1 "or subsequent versions" | the station's NFC reader. EUPL-1.1's own compatibility list stops at GPL-2, but nfcpy's headers allow any later EUPL, and EUPL-1.2 lists GPL-3. Imported unmodified. |
 | pyserial | BSD-3-Clause | the station's reader and panel |
 | esptool 5.6.0 (pinned) | GPL-2.0-or-later | run as a separate program to reflash the panel |
@@ -72,7 +73,7 @@ the ones pip resolved on 2026-11-07; pins are marked.
 | Transitive: aiohttp, aiosignal, frozenlist, multidict, propcache, yarl, requests, opentelemetry-api, esp-pylib | Apache-2.0 (aiohttp: Apache-2.0 AND MIT) | |
 | Transitive: packaging | Apache-2.0 OR BSD-2-Clause | |
 | Transitive: click, httpx2, httpcore2, idna, pycparser, sse-starlette, websockets, Pygments, intelhex | BSD-2/3-Clause | |
-| Transitive: anyio, attrs, annotated-types, charset-normalizer, h11, http_ece, jiter, jsonschema, jsonschema-specifications, markdown-it-py, mdurl, pydantic, pydantic_core, pyDes, PyJWT, PyYAML, referencing, rich, rich-click, rpds-py, truststore, typing-inspection, urllib3, docstring_parser | MIT | |
+| Transitive: anyio, attrs, annotated-types, charset-normalizer, h11, http_ece, ifaddr (with zeroconf), jiter, jsonschema, jsonschema-specifications, markdown-it-py, mdurl, pydantic, pydantic_core, pyDes, PyJWT, PyYAML, referencing, rich, rich-click, rpds-py, truststore, typing-inspection, urllib3, docstring_parser | MIT | |
 | Transitive: cffi, reedsolo | MIT-0 (reedsolo: MIT-0 OR Unlicense) | |
 | Transitive: ndeflib | ISC | with nfcpy |
 | Transitive: libusb1 | LGPL-2.1-or-later | with nfcpy |
@@ -174,6 +175,8 @@ The button panel's OLED display (panel firmware 7, not on `main` yet) adds the P
 ## How this was checked
 
 - Python: `pip-licenses` over a venv with `filament-kit[station,web,push]` and PyInstaller (2026-11-07).
+- zeroconf 0.154.0 and ifaddr 0.2.0: the `METADATA` (`License-Expression: LGPL-2.1-or-later`; `License: MIT`)
+  and the licence files (`COPYING`, `LICENSE.txt`) in their dist-info, in a venv with `filament-kit[test]` (2026-11-08).
 - Android: `android/gradle/libs.versions.toml` and the published licences of each artifact.
 - Firmware: `reader/platformio.ini`, `station/panel/platformio.ini` and the panel source's includes.
 - Installer: the `apt` lists in `server/filament_kit/modules.py`, `install/install.sh`, `install/spoolman.sh`.
