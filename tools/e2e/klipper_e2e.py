@@ -38,6 +38,52 @@ def mr(path, body=None):
         return json.load(r)["result"]
 
 
+def klippy_ready():
+    return mr("/printer/info")["state"] == "ready"
+
+
+def console(since):
+    """Console lines (Moonraker's gcode store) newer than `since` (a time.time())."""
+    return [g["message"] for g in mr("/server/gcode_store?count=200")["gcode_store"] if g["time"] >= since]
+
+
+def gcode(script):
+    return mr("/printer/gcode/script", {"script": script})
+
+
+def spool_check(sm, data, pid, fam):
+    """Review A2/A3: the print-start spool check on real Klipper (gcode_shell_command: the e2e stand-in)."""
+    v = sm.post("vendor", {"name": 'Silk #2 "Co"; M112'})
+    f = sm.post("filament", {"name": "Red;M112", "vendor_id": v["id"], "material": "PETG", "color_hex": "ff0000"})
+    odd = sm.post("spool", {"filament_id": f["id"], "location": "Shelf C"})
+    gcode(f"SET_ACTIVE_SPOOL ID={odd['id']}")
+    wait_for(lambda: mr("/server/spoolman/spool_id")["spool_id"] == odd["id"], what="the odd spool active")
+    gcode("FK_SPOOL_CHECK MODE=warn")
+    t = time.time()
+    # a quote, $( ) and backticks in the sliced vendor: before the fix shlex raised and Klipper shut down
+    gcode('_FK_SPOOL_CHECK FILAMENT="PLA" VENDOR="Jayo\'s $(touch /tmp/fk-e2e-pwn) `id`"')
+    assert klippy_ready(), mr("/printer/info")
+    out = console(t)
+    assert any("Spool mismatch" in m for m in out), out
+    assert not Path("/tmp/fk-e2e-pwn").exists()
+    ok("spool check, warn: a vendor with a quote, $( ) and backticks; Klipper stays ready, the mismatch is shown")
+    gcode("FK_SPOOL_CHECK MODE=cancel")
+    gcodes = Path(data) / "gcodes"
+    (gcodes / "check.gcode").write_text('_FK_SPOOL_CHECK FILAMENT="PLA" VENDOR="SUNLU"\n' + "G4 P1000\n" * 30)
+    t = time.time()
+    mr("/printer/print/start?filename=check.gcode", {})
+    wait_for(lambda: mr("/printer/objects/query?print_stats=state")["status"]["print_stats"]["state"] == "cancelled",
+             45, "the mismatched print to be cancelled")
+    assert klippy_ready(), mr("/printer/info")
+    out = console(t)
+    err = [m for m in out if m.startswith("!! Spool mismatch")]
+    assert err, out
+    assert not any("Red;M112" in m or '"Co"' in m for m in out), out      # the Spoolman names, never raw
+    ok("spool check, cancel: the print was cancelled through Moonraker; only safe characters reached gcode")
+    gcode("FK_SPOOL_CHECK MODE=warn")
+    gcode("CLEAR_ACTIVE_SPOOL")
+
+
 def main(variant, data):
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     sm = Spoolman("http://127.0.0.1:7912")
@@ -75,6 +121,7 @@ def main(variant, data):
             e = fam.usage(pid, 1)[0]
             assert e["source"] == "moonraker" and e["status"] == "completed", e
             ok(f"print finished: usage entry {e['id']} ({e['status']}, spool {e['spool_id']})")
+            spool_check(sm, data, pid, fam)
         else:
             r = fam.load(sm, pid, "C1", a["id"], False, sealed_location="Sealed stock")
             assert r["confirmed"] is True, r["problems"]

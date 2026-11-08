@@ -72,7 +72,10 @@ The kit talks to Moonraker without installing anything on the printer. The print
 - per-tool spools for toolchangers and IDEX printers, and `SET_ACTIVE_SPOOL` / `CLEAR_ACTIVE_SPOOL` when there are
   none;
 - a spool check at print start (warn or cancel when the sliced filament differs from the active spool) and the active
-  spool's load temperature (both need Klipper's `gcode_shell_command` extra);
+  spool's load temperature (both need Klipper's `gcode_shell_command` extra). The sliced type and vendor reach the
+  check with every character other than letters, digits and `-` turned into `_`, and Spoolman's names are reduced to
+  plain text before they appear in a console message, so no name can break or inject a command. In cancel mode the
+  print is cancelled through Moonraker; if that fails, the reason is in `printer_data/logs/fk_spool_check.log`;
 - an NFC tag reader on the printer (nfc2klipper with a PN532) and the read-only `lasttag` service the kit reads taps
   from;
 - Moonraker settings: report usage to the kit's Spoolman, announce Moonraker on the network.
@@ -85,8 +88,10 @@ The kit talks to Moonraker without installing anything on the printer. The print
 It asks about each part and before every change, never overwrites a file it did not write, and makes a backup before
 its only edits to your own files: one `[include filament-kit/*.cfg]` line in `printer.cfg` and the `moonraker.conf`
 sections. It restarts Klipper only when the printer is idle and you say yes. `status` shows what is installed;
-`uninstall` removes it again. An nfc2klipper that is already installed is checked against the pack's version but
-never changed.
+`uninstall` removes it again. Both can be run again at any time: a service you choose to keep at uninstall keeps
+its files and stays in the pack's list, a reinstall keeps lasttag's allow list unless you give `--allow`, and an
+nfc2klipper install that stopped halfway is finished by the next install. An nfc2klipper that is already installed
+is checked against the pack's version but never changed. If Klipper is not in `~/klipper`, give `--klipper <folder>`.
 
 ## Printer models
 

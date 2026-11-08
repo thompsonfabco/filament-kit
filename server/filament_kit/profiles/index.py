@@ -87,19 +87,28 @@ def _line_of(filament: dict, build: dict) -> str | None:
     return None
 
 
+def _same_nozzle(a, b) -> bool:
+    """Nozzle sizes as numbers: klipper_hardware.xml says "1.0", a build row or config may say "1" or 1.0."""
+    try:
+        return abs(float(a) - float(b)) < 1e-6
+    except (TypeError, ValueError):
+        return False
+
+
 def _orca_printers(model: str, nozzle: str, printer_name: str | None) -> set[str]:
     """Orca printer names a Klipper printer's rows can carry: the klipper_hardware.xml model's `<orca>` name for
     this nozzle, and every config `slicer_printers` entry that is that printer (by its name or label) or lists that
     Orca name among its compatible printers (a row's `printer` is the entry's name)."""
     from .. import config
     from ..bridge.klipper import hardware as kh
-    xml = {o.printer for o in kh.load().model(model).orca if o.nozzle == nozzle}
+    xml = {o.printer for o in kh.load().model(model).orca if _same_nozzle(o.nozzle, nozzle)}
     names = set(xml)
     for e in (config.load().get("slicer_printers") or []):
         if not isinstance(e, dict) or not isinstance(e.get("name"), str):
             continue
         compat = e.get("compatible_printers") if isinstance(e.get("compatible_printers"), dict) else {}
-        if (printer_name and printer_name in (e.get("name"), e.get("label"))) or compat.get(nozzle) in xml:
+        if (printer_name and printer_name in (e.get("name"), e.get("label"))) or \
+                any(_same_nozzle(k, nozzle) and v in xml for k, v in compat.items()):
             names.add(e["name"])
     return names
 
@@ -115,7 +124,8 @@ def _orca_preset(filament: dict, model: str, nozzle: str, printer_name: str | No
     if lid is None:
         return None
     row = next((p for p in build["presets"] if isinstance(p, dict) and p.get("target") == generate.ORCA
-                and p.get("line_id") == lid and p.get("printer") in printers and p.get("nozzle") == nozzle), None)
+                and p.get("line_id") == lid and p.get("printer") in printers
+                and _same_nozzle(p.get("nozzle"), nozzle)), None)
     if row is None:
         return None
     name, ftype, fid = row.get("name"), row.get("filament_type"), row.get("filament_id")

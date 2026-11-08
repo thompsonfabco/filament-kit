@@ -3,10 +3,14 @@
 # with sudo). No printer hardware: Klipper runs with its Linux-process MCU and `kinematics: none`, Spoolman is the
 # server tests' fake Spoolman. Steps (spec §9):
 #   1. build/run Klipper (pinned tag) + Moonraker (pinned tag) under $WORK
-#   2. printer pack: install (spool + moonraker parts, all answers yes), status, then later uninstall
+#   2. printer pack: install (spool + check + moonraker parts, all answers yes) twice (a reinstall), status, then
+#      later uninstall (twice). The spool check needs gcode_shell_command: tools/e2e/gcode_shell_command.py, a test
+#      stand-in that parses PARAMS like the real extra, is copied into the scratch Klipper's klippy/extras
 #   3. the kit's Klipper bridge (tools/e2e/klipper_e2e.py, in-process): detection, a load (SET_ACTIVE_SPOOL ->
 #      confirmed -> Spoolman location), a tap (SET_ACTIVE_SPOOL sent to Moonraker -> follow mode), a short
-#      virtual-sdcard print -> a usage entry; then the M1D-like toolchanger variant -> FK_SET_TOOL_SPOOL on real
+#      virtual-sdcard print -> a usage entry; the spool check with a quote in the vendor (Klipper stays up) and in
+#      cancel mode during a print (cancelled; the Spoolman names never reach gcode); then the M1D-like toolchanger
+#      variant -> FK_SET_TOOL_SPOOL on real
 #      Klipper -> lane_data in Moonraker's database
 # Last line on success: "klipper e2e: all checks passed". Usage: bash tools/e2e/klipper.sh  (from the repo root)
 set -euo pipefail
@@ -32,6 +36,7 @@ mkdir -p "$WORK" "$DATA"/{config,logs,gcodes,comms,database}
 log "Klipper $KLIPPER_REF"
 [ -d "$WORK/klipper" ] || git clone -q https://github.com/Klipper3d/klipper.git "$WORK/klipper"
 git -C "$WORK/klipper" fetch -q --tags && git -C "$WORK/klipper" checkout -q "$KLIPPER_REF"
+cp "$REPO/tools/e2e/gcode_shell_command.py" "$WORK/klipper/klippy/extras/gcode_shell_command.py"
 venv() {   # $1 = env dir, then pip install arguments; redone until one install succeeds
     local env=$1; shift
     [ -f "$env/.fk-ok" ] && return 0
@@ -73,6 +78,7 @@ path: $DATA/gcodes
 
 [display_status]
 [pause_resume]
+[respond]
 [save_variables]
 filename: $DATA/config/variables.cfg
 
@@ -137,9 +143,14 @@ for variant in single toolchanger; do
     rm -rf "$DATA/database" && mkdir -p "$DATA/database"   # each variant starts with an empty Moonraker database
     write_config "$variant"
     start_stack
-    log "variant $variant: printer pack install"
-    sh "$REPO/printer-pack/fk-printer-pack.sh" install --data "$DATA" --parts spool,moonraker \
-        --spoolman http://127.0.0.1:7912 --yes
+    log "variant $variant: printer pack install (twice: a reinstall)"
+    for _ in 1 2; do
+        for _ in $(seq 60); do   # the first install restarts Klipper: the second waits until it is back
+            curl -fs localhost:7125/printer/info 2>/dev/null | grep -q '"state": *"ready"' && break; sleep 1
+        done
+        sh "$REPO/printer-pack/fk-printer-pack.sh" install --data "$DATA" --klipper "$WORK/klipper" \
+            --parts spool,check,moonraker --spoolman http://127.0.0.1:7912 --yes
+    done
     for _ in $(seq 60); do
         curl -fs localhost:7125/printer/info 2>/dev/null | grep -q '"state": *"ready"' && break; sleep 1
     done
@@ -156,13 +167,22 @@ for variant in single toolchanger; do
     done
     sh "$REPO/printer-pack/fk-printer-pack.sh" status --data "$DATA" | tee "$WORK/status-$variant.txt"
     grep -q "FK_SET_TOOL_SPOOL: present" "$WORK/status-$variant.txt"
+    grep -q "FK_SPOOL_CHECK: present" "$WORK/status-$variant.txt"
+    "$PY" -c 'import json, sys; f = json.load(open(sys.argv[1]))["files"]; sys.exit(len(f) != len(set(f)))' \
+        "$DATA/config/filament-kit/.manifest"
     log "variant $variant: the kit's bridge"
     rm -rf "$WORK/state-$variant" "$WORK/etc-$variant"; mkdir -p "$WORK/state-$variant" "$WORK/etc-$variant"
     FK_STATE=$WORK/state-$variant FK_ETC=$WORK/etc-$variant "$WORK/kit-env/bin/python" \
         "$REPO/tools/e2e/klipper_e2e.py" "$variant" "$DATA"
     log "variant $variant: printer pack uninstall"
     sh "$REPO/printer-pack/fk-printer-pack.sh" uninstall --data "$DATA" --yes
-    ! grep -q "include filament-kit" "$DATA/config/printer.cfg"
+    if grep -q "include filament-kit" "$DATA/config/printer.cfg"; then
+        echo "FAILED: the include line is still in printer.cfg after uninstall" >&2; exit 1
+    fi
+    if [ -e "$DATA/config/filament-kit" ]; then
+        echo "FAILED: config/filament-kit is still there after uninstall" >&2; exit 1
+    fi
+    sh "$REPO/printer-pack/fk-printer-pack.sh" uninstall --data "$DATA" --yes   # again: nothing left, no error
     stop_stack
     "$WORK/kit-env/bin/python" -c "$SPOOLMAN_PY" "$REPO/server/tests" & PIDS+=($!)
 done

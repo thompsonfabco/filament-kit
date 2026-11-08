@@ -14,6 +14,10 @@ Parts (install asks for each; --parts picks them without asking which):
   lasttag    the read-only :5002 last-tag service the kit's tag sources read (needs nfc)
   moonraker  moonraker.conf: [spoolman] server -> the kit's Spoolman, [zeroconf] on (each its own question)
 
+Install and uninstall can be run again and again: the manifest lists each file and service once, a service the pack
+installed but you keep stays in it (with its files), and an nfc2klipper the pack started installing is finished by
+the next install.
+
 Rules: it never overwrites a file it did not write (config/filament-kit/.manifest lists what it wrote). Its only
 edits to your own files are one `[include filament-kit/*.cfg]` line in printer.cfg and the moonraker.conf sections
 above, each shown as a diff and asked y/N, with a timestamped backup. A restart is offered only while the printer is
@@ -28,6 +32,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -37,6 +42,9 @@ SAVE_CONFIG = "#*# <---------------------- SAVE_CONFIG ---------------------->"
 IDLE = ("standby", "complete", "cancelled", "error")
 NFC_REPO = "https://github.com/bofh69/nfc2klipper.git"
 PY39_PINS = ["requests<2.33", "gunicorn==23.0.0"]   # nfc2klipper's pins need Python 3.10+
+SERVICE = re.compile(r"[A-Za-z0-9_.-]{1,64}")            # a manifest service entry: a plain unit name, nothing else
+SERVICE_FILES = {"lasttag": ("lasttag/lasttag.py", "lasttag/allow")}   # files a kept service still needs
+EMPTY = {"files": [], "include": False, "services": [], "asvc": [], "moonraker": [], "nfc": None}
 
 
 class PackError(Exception):
@@ -82,11 +90,43 @@ class Pack:
 
     # --- the manifest ----------------------------------------------------------------------------------------------
     def manifest(self):
+        """The pack's manifest. The folder is writable through Moonraker's file API, so every entry is checked:
+        files are relative paths inside the pack's folder, services plain unit names; others are dropped (said)."""
         try:
             with open(self.manifest_path, encoding="utf-8") as f:
-                return json.load(f)
+                raw = json.load(f)
         except (OSError, ValueError):
-            return {"files": [], "include": False, "services": [], "asvc": [], "moonraker": []}
+            raw = {}
+        m = json.loads(json.dumps(EMPTY))
+        if not isinstance(raw, dict):
+            return m
+        for key in ("files", "services", "asvc", "moonraker"):
+            for v in raw.get(key) or []:
+                if not isinstance(v, str) or v in m[key]:
+                    continue
+                if key == "files" and not self._inside(v):
+                    self.out("  manifest: ignoring the file entry {!r} (not inside the pack's folder)".format(v))
+                    continue
+                if key in ("services", "asvc") and not SERVICE.fullmatch(v):
+                    self.out("  manifest: ignoring the service entry {!r} (not a plain unit name)".format(v))
+                    continue
+                m[key].append(v)
+        m["include"] = raw.get("include") is True
+        nfc = raw.get("nfc")
+        if isinstance(nfc, dict) and nfc.get("dir") == self.nfc_dir() and nfc.get("state") in ("started", "done"):
+            m["nfc"] = {"dir": nfc["dir"], "state": nfc["state"]}
+        return m
+
+    def _inside(self, rel):
+        if os.path.isabs(rel) or not rel or "\\" in rel:
+            return False
+        full = os.path.normpath(os.path.join(self.dest, rel))
+        return full.startswith(os.path.normpath(self.dest) + os.sep)
+
+    @staticmethod
+    def _add(lst, v):
+        if v not in lst:
+            lst.append(v)
 
     def save_manifest(self, m):
         os.makedirs(self.dest, exist_ok=True)
@@ -109,8 +149,7 @@ class Pack:
         with open(path, "w", encoding="utf-8") as f:
             f.write(text)
         os.chmod(path, mode)
-        if rel not in m["files"]:
-            m["files"].append(rel)
+        self._add(m["files"], rel)
 
     def _read_pack(self, rel):
         with open(os.path.join(HERE, rel), encoding="utf-8") as f:
@@ -222,22 +261,37 @@ class Pack:
         return True, lines
 
     def part_nfc(self, m, device, spoolman, web):
+        d = self.nfc_dir()
+        services = ["nfc2klipper_backend"] + (["nfc2klipper_api"] if web else [])
+        mine = (m.get("nfc") or {}).get("dir") == d
         present, lines = self.nfc_status()
-        if present:
-            self.out("  adopted, nothing changed:")
+        if present and not (mine and m["nfc"]["state"] == "started"):
+            self.out("  adopted, nothing changed:" if not mine else "  installed by the pack earlier:")
             for line in lines:
                 self.out("  " + line)
+            missing = [s for s in services if not os.path.exists(self.unit_path(s))
+                       and os.path.exists(os.path.join(d, s + ".service"))]
+            if missing:
+                self.out("  its service(s) {} are not installed".format(", ".join(missing)))
+                self.install_services(m, d, missing)
             return
-        d = self.nfc_dir()
-        if os.path.exists(d):
+        if os.path.exists(d) and not present:
             self.out("  {} exists but is not a git checkout of nfc2klipper; left alone (move it away to install)"
                      .format(d))
             return
-        self.out("  installing nfc2klipper into {}".format(d))
-        self.run(["git", "clone", "-q", NFC_REPO, d])
+        m["nfc"] = {"dir": d, "state": "started"}
+        self.save_manifest(m)                 # a failure below is finished by the next install, never "adopted"
+        if present:
+            self.out("  finishing the nfc2klipper install the pack started in {}".format(d))
+        else:
+            self.out("  installing nfc2klipper into {}".format(d))
+            self.run(["git", "clone", "-q", NFC_REPO, d])
         self.run(["git", "-C", d, "checkout", "-q", self.pin()])
         for p in self.patches():
-            self.run(["git", "-C", d, "apply", p])
+            applied = subprocess.run(["git", "-C", d, "apply", "--check", "--reverse", p],
+                                     capture_output=True).returncode == 0 if present else False
+            if not applied:
+                self.run(["git", "-C", d, "apply", p])
         self.run([sys.executable, "-m", "venv", os.path.join(d, "venv")])
         pip = [os.path.join(d, "venv", "bin", "pip"), "install", "-q", "-r", os.path.join(d, "requirements.txt")]
         if sys.version_info < (3, 10):
@@ -251,13 +305,25 @@ class Pack:
         with open(os.path.join(d, "nfc2klipper.cfg"), encoding="utf-8") as f:
             upstream = f.read()
         target = os.path.join(cfg_dir, "nfc2klipper.cfg")
-        if os.path.exists(target):          # someone's own config: never overwritten
+        if os.path.exists(target):          # someone's own config (or an earlier run's): never overwritten
             target += ".fk-new"
             self.out("  {} exists; the pack's version is in {} for you to compare".format(target[:-7], target))
         with open(target, "w", encoding="utf-8") as f:
             f.write(nfc_config(upstream, device, spoolman, self.moonraker, web))
-        services = ["nfc2klipper_backend"] + (["nfc2klipper_api"] if web else [])
         self.install_services(m, d, services)
+        m["nfc"]["state"] = "done"
+
+    def _stage(self, name, text):
+        """A unit file staged for `sudo install` in a private temp folder (not printer_data, which Moonraker's
+        file API can write), so what is installed is exactly what the pack wrote."""
+        d = tempfile.mkdtemp(prefix="fk-pack-")
+        path = os.path.join(d, name)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+        return path
+
+    def _unstage(self, path):
+        shutil.rmtree(os.path.dirname(path), ignore_errors=True)
 
     def install_services(self, m, d, services):
         user = os.environ.get("USER") or os.path.basename(self.home)
@@ -267,18 +333,16 @@ class Pack:
             with open(os.path.join(d, s + ".service"), encoding="utf-8") as f:
                 unit = f.read()
             unit = re.sub(r"(?m)^User=.*$", "User=" + user, unit).replace("/home/pi/", self.home + "/")
-            tmp = os.path.join(self.dest, s + ".service")
-            os.makedirs(self.dest, exist_ok=True)
-            with open(tmp, "w", encoding="utf-8") as f:
-                f.write(unit)
             if not self.ask("Install the {} service (sudo systemctl enable --now)?".format(s)):
-                os.remove(tmp)
                 continue
-            self.run(["sudo", "install", "-m", "644", tmp, self.unit_path(s)])
-            os.remove(tmp)
+            tmp = self._stage(s + ".service", unit)
+            try:
+                self.run(["sudo", "install", "-m", "644", tmp, self.unit_path(s)])
+            finally:
+                self._unstage(tmp)
             self.run(["sudo", "systemctl", "daemon-reload"])
             self.run(["sudo", "systemctl", "enable", "--now", s])
-            m["services"].append(s)
+            self._add(m["services"], s)
             self.asvc_add(m, s)
 
     def unit_path(self, service):
@@ -302,7 +366,7 @@ class Pack:
             return
         with open(path, "a", encoding="utf-8") as f:
             f.write(("" if text.endswith("\n") or not text else "\n") + service + "\n")
-        m["asvc"].append(service)
+        self._add(m["asvc"], service)
 
     def part_lasttag(self, m, allow):
         if not os.path.isdir(self.nfc_dir()):
@@ -311,21 +375,36 @@ class Pack:
         if self.foreign_unit(m, "lasttag"):
             return
         self.write(m, "lasttag/lasttag.py", self._read_pack("lasttag/lasttag.py"))
-        self.write(m, "lasttag/allow", "\n".join(["127.0.0.1"] + [a for a in allow if a]) + "\n")
+        allow_path = os.path.join(self.dest, "lasttag", "allow")
+        try:
+            with open(allow_path, encoding="utf-8") as f:
+                before = f.read()
+        except OSError:
+            before = None
+        if allow or before is None or "lasttag/allow" not in m["files"]:
+            self.write(m, "lasttag/allow", "\n".join(["127.0.0.1"] + [a for a in allow if a]) + "\n")
+        else:
+            self.out("  lasttag: keeping its allow list (give --allow to change it)")
+        with open(allow_path, encoding="utf-8") as f:
+            changed = before is not None and f.read() != before
         unit = self._read_pack("lasttag/lasttag.service").replace("@USER@", os.environ.get("USER") or
                                                                   os.path.basename(self.home))
         unit = unit.replace("@PYTHON@", os.path.join(self.nfc_dir(), "venv", "bin", "python"))
         unit = unit.replace("@LASTTAG@", os.path.join(self.dest, "lasttag", "lasttag.py"))
-        tmp = os.path.join(self.dest, "lasttag.service")
-        with open(tmp, "w", encoding="utf-8") as f:
-            f.write(unit)
+        if "lasttag" in m["services"] and os.path.exists(self.unit_path("lasttag")):
+            if changed and self.ask("lasttag's allow list changed; restart it to use the new one?"):
+                self.run(["sudo", "systemctl", "restart", "lasttag"])
+            return
         if self.ask("Install the lasttag service (port 5002, read only)?"):
-            self.run(["sudo", "install", "-m", "644", tmp, self.unit_path("lasttag")])
+            tmp = self._stage("lasttag.service", unit)
+            try:
+                self.run(["sudo", "install", "-m", "644", tmp, self.unit_path("lasttag")])
+            finally:
+                self._unstage(tmp)
             self.run(["sudo", "systemctl", "daemon-reload"])
             self.run(["sudo", "systemctl", "enable", "--now", "lasttag"])
-            m["services"].append("lasttag")
+            self._add(m["services"], "lasttag")
             self.asvc_add(m, "lasttag")
-        os.remove(tmp)
 
     def part_moonraker(self, m, spoolman):
         path = os.path.join(self.cfg, "moonraker.conf")
@@ -334,12 +413,12 @@ class Pack:
         if spoolman:
             new = set_section(text, "spoolman", {"server": spoolman})
             if self.edit(path, new, "moonraker.conf: report filament usage to the kit's Spoolman"):
-                m["moonraker"].append("[spoolman] server: " + spoolman)
+                self._add(m["moonraker"], "[spoolman] server: " + spoolman)
                 text = new
         if "[zeroconf]" not in text:
             new = text.rstrip("\n") + "\n\n[zeroconf]\n"
             if self.edit(path, new, "moonraker.conf: announce Moonraker on the LAN so filament-kit finds it"):
-                m["moonraker"].append("[zeroconf]")
+                self._add(m["moonraker"], "[zeroconf]")
 
     # --- the commands ----------------------------------------------------------------------------------------------
     def install(self, parts, scan_ok="", scan_unknown="", nfc_device="tty:USB0:pn532", spoolman="", web=False,
@@ -399,24 +478,39 @@ class Pack:
             self.out("  services installed by the pack: " + ", ".join(m["services"]))
         return 0
 
+    def _try(self, cmd):
+        """Run a command of the uninstall; a failure (a unit already gone ...) is said, and the uninstall goes on."""
+        try:
+            self.run(cmd)
+            return True
+        except (subprocess.CalledProcessError, OSError) as e:
+            self.out("  {} failed ({}); going on".format(" ".join(cmd), e))
+            return False
+
     def uninstall(self):
         m = self.manifest()
+        kept = []
+        for s in m["services"]:
+            if not self.ask("Remove the {} service the pack installed?".format(s)):
+                kept.append(s)
+                self.out("  {} kept (still listed in the pack's manifest)".format(s))
+                continue
+            self._try(["sudo", "systemctl", "disable", "--now", s])
+            self._try(["sudo", "rm", "-f", self.unit_path(s)])
+        if len(kept) < len(m["services"]):
+            self._try(["sudo", "systemctl", "daemon-reload"])
+        keep_files = [f for s in kept for f in SERVICE_FILES.get(s, ())]
         for rel in m["files"]:
             p = os.path.join(self.dest, rel)
-            if os.path.exists(p):
+            if rel not in keep_files and os.path.exists(p):
                 os.remove(p)
-        for s in m["services"]:
-            if self.ask("Remove the {} service the pack installed?".format(s)):
-                self.run(["sudo", "systemctl", "disable", "--now", s])
-                self.run(["sudo", "rm", "-f", self.unit_path(s)])
-        if m["services"]:
-            self.run(["sudo", "systemctl", "daemon-reload"])
         asvc = os.path.join(self.data, "moonraker.asvc")
-        if m["asvc"] and os.path.exists(asvc):
+        gone = [a for a in m["asvc"] if a not in kept]
+        if gone and os.path.exists(asvc):
             with open(asvc, encoding="utf-8") as f:
-                kept = [l for l in f.read().splitlines() if l.strip() not in m["asvc"]]
+                left = [l for l in f.read().splitlines() if l.strip() not in gone]
             with open(asvc, "w", encoding="utf-8") as f:
-                f.write("\n".join(kept) + "\n")
+                f.write("\n".join(left) + "\n")
         if m["include"]:
             path = os.path.join(self.cfg, "printer.cfg")
             with open(path, encoding="utf-8") as f:
@@ -429,7 +523,12 @@ class Pack:
         for d in (os.path.join(self.dest, "scripts"), os.path.join(self.dest, "lasttag")):
             if os.path.isdir(d) and not os.listdir(d):
                 os.rmdir(d)
-        if os.path.exists(self.manifest_path):
+        if kept:
+            left = json.loads(json.dumps(EMPTY))
+            left.update(files=keep_files, services=kept, asvc=[a for a in m["asvc"] if a in kept])
+            self.save_manifest(left)
+            self.out("the pack's manifest keeps what you kept: " + ", ".join(kept))
+        elif os.path.exists(self.manifest_path):
             os.remove(self.manifest_path)
         if os.path.isdir(self.dest) and not os.listdir(self.dest):
             os.rmdir(self.dest)
@@ -481,6 +580,8 @@ def main(argv=None):
     ap.add_argument("command", choices=("install", "status", "uninstall"))
     ap.add_argument("--data", default="~/printer_data", help="the printer_data folder (default ~/printer_data)")
     ap.add_argument("--moonraker", default="http://localhost:7125")
+    ap.add_argument("--klipper", default="", help="the Klipper folder (default ~/klipper; gcode_shell_command is looked "
+                                                  "for in its klippy/extras)")
     ap.add_argument("--parts", help="comma list of " + ",".join(PARTS) + " (default: asked one by one)")
     ap.add_argument("--scan-ok", default="", help="gcode for a known tag (e.g. your LED macro, {params.ID} = spool)")
     ap.add_argument("--scan-unknown", default="", help="gcode for an unknown tag")
@@ -493,7 +594,8 @@ def main(argv=None):
     if os.geteuid() == 0 if hasattr(os, "geteuid") else False:
         print("run this as the printer's normal user, not root (it uses sudo where it must)", file=sys.stderr)
         return 1
-    pack = Pack(a.data, a.moonraker, ask=(lambda q: True) if a.yes else None)
+    pack = Pack(a.data, a.moonraker, ask=(lambda q: True) if a.yes else None,
+                klipper_dir=os.path.abspath(os.path.expanduser(a.klipper)) if a.klipper else None)
     try:
         if a.command == "status":
             return pack.status()

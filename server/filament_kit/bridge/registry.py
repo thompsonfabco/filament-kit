@@ -4,12 +4,17 @@ the server.
 Layout (spec 2026-11-03-klipper-printers §5.3): `<printers version="1">` with one `<printer>` per printer; plain
 fields are attributes (`id family name model ip host port configured cert-fp lane-data`), secrets are child elements
 (`<access-code>`, `<api-key>`) so a one-line grep never shows them. `family` is "bambu" (key = serial number) or
-"klipper" (key = a slug of the name, `slug`). The older `printers.json` is converted on first read: the XML is written
-atomically and the JSON renamed to `printers.json.migrated`; while the XML is missing the JSON is read (a failed
-conversion leaves the JSON in use and logs why). The conversion is idempotent: once the XML exists the JSON is ignored.
-Unknown attributes and elements are ignored (a newer file)."""
+"klipper" (key = a slug of the name, `slug`). Unknown attributes and elements are ignored (a newer file).
+
+Rollback (`update --rollback`, a failed install's restore): the release before this one reads only `printers.json`.
+So every write also writes `printers.json` in that release's format (Bambu printers only, its six fields), and the
+XML root records the SHA-256 of the JSON it wrote (`json-sha256`). A read that finds a JSON with another hash knows
+an older release changed it (a code re-entered after a rollback): that JSON's Bambu printers replace the XML's and
+the change is logged; Klipper printers stay as the XML has them. Without an XML (an upgrade), the JSON is read and
+both files are written. The JSON is never renamed or removed."""
 from __future__ import annotations
 
+import hashlib
 import json
 import xml.etree.ElementTree as ET
 import logging
@@ -95,12 +100,18 @@ class RegistryError(Exception):
 
 
 _FIELDS = {"name", "model", "ip", "access_code", "configured", "cert_fp", "family", "host", "port", "api_key"}
+_OLD_FIELDS = ("name", "model", "ip", "access_code", "configured", "cert_fp")   # what the release before reads
 LANE_DATA = ("auto", "on", "off")
 _ATTRS = (("name", "name"), ("model", "model"), ("ip", "ip"), ("host", "host"), ("cert-fp", "cert_fp"))
 _SECRETS = (("access-code", "access_code"), ("api-key", "api_key"))
 
 
 def _from_xml(data: bytes, where) -> dict[str, Printer]:
+    return _from_xml_sha(data, where)[0]
+
+
+def _from_xml_sha(data: bytes, where) -> tuple[dict[str, Printer], str | None]:
+    """(printers, the json-sha256 the XML recorded, or None)."""
     from defusedxml.ElementTree import fromstring
     root = fromstring(data, forbid_dtd=True, forbid_entities=True, forbid_external=True)
     if root.tag != "printers":
@@ -126,11 +137,27 @@ def _from_xml(data: bytes, where) -> dict[str, Printer]:
             c = el.find(tag)
             setattr(p, name, (c.text or "").strip() if c is not None else "")
         out[pid] = p
-    return out
+    return out, root.get("json-sha256")
 
 
-def _to_xml(printers: dict[str, Printer]) -> bytes:
+def _to_json(printers: dict[str, Printer]) -> bytes:
+    """printers.json as the release before this one writes and reads it: Bambu printers only, its six fields."""
+    data = {s: {k: getattr(p, k) for k in _OLD_FIELDS} for s, p in printers.items() if p.family != "klipper"}
+    return json.dumps(data, indent=2).encode("utf-8")
+
+
+def _sha(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _old_view(p: Printer) -> tuple:
+    return tuple(getattr(p, k) for k in _OLD_FIELDS)
+
+
+def _to_xml(printers: dict[str, Printer], json_sha: str | None = None) -> bytes:
     root = ET.Element("printers", version="1")
+    if json_sha:
+        root.set("json-sha256", json_sha)
     for pid, p in printers.items():
         el = ET.SubElement(root, "printer", id=xmlfile.clean(pid), family=p.family or "bambu")
         for attr, name in _ATTRS:
@@ -150,40 +177,72 @@ def _to_xml(printers: dict[str, Printer]) -> bytes:
     return ET.tostring(root, encoding="utf-8", xml_declaration=True) + b"\n"
 
 
-def _from_json(f) -> dict[str, Printer]:
-    raw = json.loads(f.read_text(encoding="utf-8"))
-    return {s: Printer(serial=s, **{k: v for k, v in d.items() if k in _FIELDS}) for s, d in raw.items()}
+def _from_json(raw: bytes) -> dict[str, Printer]:
+    data = json.loads(raw.decode("utf-8"))
+    return {s: Printer(serial=s, **{k: v for k, v in d.items() if k in _FIELDS}) for s, d in data.items()}
 
 
 def _read() -> dict[str, Printer]:
-    """Read the file (converting printers.json once). Raises RegistryError when it exists but cannot be understood;
-    caller holds _locked()."""
+    """Read the registry (printers.json: see the module docstring). Raises RegistryError when the file in use exists
+    but cannot be understood; caller holds _locked()."""
     state = config.paths().state
     f, old = state / FILE, state / OLD_FILE
-    if f.exists():
+    if not f.exists():
         try:
-            return _from_xml(f.read_bytes(), f)
-        except Exception as e:  # noqa: BLE001 - ParseError, DTDForbidden, ValueError ...
-            raise RegistryError(f"{f} is unreadable ({e}); fix or remove it, nothing was changed") from e
-    if not old.exists():
-        return {}
+            raw = old.read_bytes()
+        except FileNotFoundError:
+            return {}
+        try:
+            printers = _from_json(raw)
+        except (OSError, ValueError, TypeError, AttributeError) as e:
+            raise RegistryError(f"{old} is unreadable ({e}); fix or remove it, nothing was changed") from e
+        try:
+            _write(printers)
+            log.info("printer registry: %s written from %s (%s is kept for a rollback)", FILE, OLD_FILE, OLD_FILE)
+        except OSError as e:
+            log.error("printer registry: cannot write %s (%s); reading %s until it can", FILE, e, OLD_FILE)
+        return printers
     try:
-        printers = _from_json(old)
-    except (OSError, ValueError, TypeError, AttributeError) as e:
-        raise RegistryError(f"{old} is unreadable ({e}); fix or remove it, nothing was changed") from e
+        printers, sha = _from_xml_sha(f.read_bytes(), f)
+    except Exception as e:  # noqa: BLE001 - ParseError, DTDForbidden, ValueError ...
+        raise RegistryError(f"{f} is unreadable ({e}); fix or remove it, nothing was changed") from e
     try:
-        _write(printers)
-        os.replace(old, old.with_name(OLD_FILE + ".migrated"))
-        log.info("printer registry converted to %s (the old file is kept as %s.migrated)", FILE, OLD_FILE)
+        raw = old.read_bytes()
+    except FileNotFoundError:
+        return printers                           # printers.json is written again at the next change
     except OSError as e:
-        log.error("printer registry: cannot convert %s to %s (%s); still using %s", OLD_FILE, FILE, e, OLD_FILE)
-    return printers
+        log.error("printer registry: cannot read %s (%s); using %s", OLD_FILE, e, FILE)
+        return printers
+    if sha is not None and _sha(raw) == sha:
+        return printers
+    try:
+        bambu = {s: p for s, p in _from_json(raw).items() if p.family != "klipper"}
+    except (ValueError, TypeError, AttributeError) as e:
+        log.error("printer registry: %s is unreadable (%s); using %s (%s is rewritten at the next change)",
+                  OLD_FILE, e, FILE, OLD_FILE)
+        return printers
+    mine = {s: p for s, p in printers.items() if p.family != "klipper"}
+    if {s: _old_view(p) for s, p in bambu.items()} == {s: _old_view(p) for s, p in mine.items()}:
+        return printers                           # the same Bambu printers (no hash recorded yet, or rewritten)
+    merged = {s: p for s, p in printers.items() if p.family == "klipper"}
+    merged.update({s: p for s, p in bambu.items() if s not in merged})
+    log.warning("printer registry: %s was changed by another program (an older filament-kit after a rollback?); "
+                "its Bambu printers replace those in %s", OLD_FILE, FILE)
+    try:
+        _write(merged)
+    except OSError as e:
+        log.error("printer registry: cannot update %s (%s)", FILE, e)
+    return merged
 
 
 def _write(printers: dict[str, Printer]) -> None:
+    """printers.json first (the release before this one reads it), then printers.xml with that file's hash: a stop
+    in between leaves a hash that doesn't match, and the next read takes the newer JSON's Bambu printers."""
     state = config.paths().state
     state.mkdir(parents=True, exist_ok=True)
-    _write_atomic(state / FILE, _to_xml(printers), 0o600, state_owned=True)
+    js = _to_json(printers)
+    _write_atomic(state / OLD_FILE, js, 0o600, state_owned=True)
+    _write_atomic(state / FILE, _to_xml(printers, _sha(js)), 0o600, state_owned=True)
 
 
 def load() -> dict[str, Printer]:

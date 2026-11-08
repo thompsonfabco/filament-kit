@@ -48,6 +48,25 @@ def test_orca_row_for_SV08(built):
         ORCA_NAME, "PLA", 200, 230, "")
 
 
+@pytest.mark.parametrize("row_nozzle", ["1.0", "1"])
+def test_1_0_mm_nozzle_finds_its_row(built, row_nozzle):
+    # review A4: f"{1.0:g}" is "1" while klipper_hardware.xml and the build rows say "1.0"; compared as numbers now
+    _add_rows(built, [_row(printer="Sovol SV08 MAX 1.0", nozzle=row_nozzle, name="X @SV08 MAX 1.0 nozzle")])
+    got = profiles.preset_for(SUNLU[0], "SOVOL-SV08-MAX", 1.0, family="klipper", printer_name="SV08 MAX")
+    assert got is not None and got.name == "X @SV08 MAX 1.0 nozzle"
+    assert profiles.preset_for(SUNLU[0], "SOVOL-SV08-MAX", 0.6, family="klipper", printer_name="SV08 MAX") is None
+
+
+def test_config_compatible_printers_1_0_key(built):
+    cfg = config.load()
+    cfg["slicer_printers"] = [{"name": "My Sovol 1.0", "slicer": "orca", "nozzles": ["1.0"],
+                               "compatible_printers": {"1.0": "Sovol SV08 MAX 1.0"}}]
+    config.save(cfg)
+    _add_rows(built, [_row(printer="My Sovol 1.0", nozzle="1.0", name="X @My Sovol 1.0")])
+    got = profiles.preset_for(SUNLU[0], "SOVOL-SV08-MAX", 1.0, family="klipper", printer_name="other")
+    assert got is not None and got.name == "X @My Sovol 1.0"
+
+
 def test_config_slicer_printers_names_the_row(built):
     # the owner's slicer_printers entry is called "My Sovol"; its compatible printers are the XML's Orca names
     cfg = config.load()

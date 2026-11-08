@@ -107,6 +107,8 @@ class LoadsMixin:
                         self._record_job(p[1])
                     else:
                         self._follow_check(p)
+                except PrinterOffline:
+                    log.info("klipper follow %s: the printer went offline; the reconcile at connect catches up", p)
                 except Exception:  # noqa: BLE001 - Spoolman down etc.: the next update tries again
                     log.exception("klipper follow %s failed", p)
 
