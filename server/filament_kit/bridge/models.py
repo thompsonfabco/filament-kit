@@ -32,6 +32,13 @@ def camera_kind(model: str | None) -> str | None:
     return m.camera if m else None
 
 
+def model_name(model: str | None) -> str:
+    """The name to show for a reported model ("O1D" -> "H2D", "3DPrinter-X1-Carbon" -> "X1 Carbon"). An unknown
+    code is shown as it is; no model gives ""."""
+    m = _known(model)
+    return m.name if m else (model or "").strip()
+
+
 def printer_preset_name(model: str | None) -> str | None:
     """The Bambu Studio printer name ("Bambu Lab H2D", "Bambu Lab X1 Carbon") used in `compatible_printers`, or
     None for an unknown model."""
