@@ -117,16 +117,28 @@ def entries(pid: str, days: float) -> list[dict]:
 
 # --- which Spoolman does Moonraker report to ----------------------------------------------------------------------
 
-def _host_port(url: str) -> tuple[str, int] | None:
-    """(host, port) of a URL, None when it has no readable host. Everything up to the last @ goes before parsing: an
-    unencoded /, # or ? in a password would otherwise make urlsplit take part of the credentials for the host."""
+def _parse_host_port(url: str) -> tuple[str, int] | None:
     try:
-        scheme, sep, rest = url.strip().partition("://")
-        u = urllib.parse.urlsplit(f"{scheme}{sep}{rest.rpartition('@')[2]}")
+        u = urllib.parse.urlsplit(url)
         host = (u.hostname or "").lower()
         return (host, u.port or (443 if u.scheme == "https" else 80)) if host else None
-    except (AttributeError, ValueError):
+    except ValueError:
         return None
+
+
+def _host_port(url: str) -> tuple[str, int] | None:
+    """(host, port) of a URL, None when it has no readable host. An unencoded /, # or ? in a password would make
+    urlsplit take part of the credentials for the host, so what comes before the last @ is dropped first. An @ after
+    one of those characters is ambiguous when the part before them reads as host[:port] too: `user:123/x@host` and
+    `host:7912/x@y` have the same shape, and guessing shows either a password or a wrong host. Those are unreadable."""
+    try:
+        scheme, sep, rest = url.strip().partition("://")
+    except AttributeError:
+        return None
+    end = next((i for i, c in enumerate(rest) if c in "/?#"), len(rest))
+    if "@" in rest[end:] and _parse_host_port(f"{scheme}{sep}{rest[:end].rpartition('@')[2]}"):
+        return None
+    return _parse_host_port(f"{scheme}{sep}{rest.rpartition('@')[2]}")
 
 
 def spoolman_address(url: str) -> str | None:
@@ -138,7 +150,7 @@ def spoolman_address(url: str) -> str | None:
 def _addrs(host: str) -> set[str]:
     try:
         out = {a[4][0] for a in socket.getaddrinfo(host, None)}
-    except OSError:
+    except (OSError, UnicodeError):     # UnicodeError: a label idna can't encode (empty, or over 63 characters)
         return {host}
     if any(ipaddress.ip_address(a.split("%")[0]).is_loopback for a in out):
         out |= _local_addrs()

@@ -191,6 +191,18 @@ def test_warning_never_shows_a_password():
         assert "hunter" not in kusage.spoolman_warning({"spoolman": {"server": server}}, kit)
 
 
+def test_host_port_with_a_plain_path_or_credentials():
+    assert kusage._host_port("http://spoolman.example.com:7912/spoolman/") == ("spoolman.example.com", 7912)
+    assert kusage._host_port("https://spoolman.example.com/x?y=1#z") == ("spoolman.example.com", 443)
+    assert kusage._host_port("http://u:p@spoolman.example.com:7912/x") == ("spoolman.example.com", 7912)
+    assert kusage._host_port("http://spoolman.example.com:7912/x@y") is None
+
+
+def test_same_spoolman_with_a_host_getaddrinfo_cannot_encode():
+    assert kusage.same_spoolman("http://a..b:7912", "http://other.example.com:7912") is False
+    assert kusage.same_spoolman("http://a..b:7912", "http://a..b:7912") is True
+
+
 def test_warning_odd_spoolman_section():
     assert "no [spoolman] section" in kusage.spoolman_warning({"spoolman": "x"}, "http://other.example.com:7912")
 

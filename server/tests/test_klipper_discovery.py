@@ -183,10 +183,19 @@ def test_detect_spoolman_another_or_none(moonraker):
     ("http://fkuser:hunter#w@spoolman.example.com:7912", "spoolman.example.com:7912"),
     ("http://fkuser:hunter?w@spoolman.example.com:7912", "spoolman.example.com:7912"),
     ("http://fkuser:hunter@w@spoolman.example.com:7912", "spoolman.example.com:7912"),
-    ("http://fkuser:123/hunter@spoolman.example.com:7912", "spoolman.example.com:7912"),
     ("http://fkuser:hunter@spoolman.example.com:notaport", None),
     ("fkuser:hunter@spoolman.example.com:7912", None),
     ("http://fkuser:hunter@[bad:7912", None),
+    # an @ after a / ? or # where what comes before reads as host:port: a path or a password? Can't tell, so unreadable
+    ("http://fkuser:123/hunter@spoolman.example.com:7912", None),
+    ("http://spoolman.example.com:7912/hunter@b", None),
+    ("http://spoolman.example.com:7912/?token=hunter@ret", None),
+    ("http://fkuser:hunter@spoolman.example.com:7912/hunter@b", None),
+    # all before the first /: everything up to the last @ is credentials, as a URL parser reads it
+    ("http://fkuser:hunter@spoolman.example.com:7912@notport", "notport:80"),
+    # a host getaddrinfo can't even encode: shown as it is, never an exception
+    ("http://a..b:7912", "a..b:7912"),
+    (f"http://{'a' * 70}.example.com:7912", f"{'a' * 70}.example.com:7912"),
 ])
 def test_detect_never_returns_a_spoolman_password(moonraker, server, address):
     moonraker.server_config = {"spoolman": {"server": server}}
