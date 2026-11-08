@@ -348,10 +348,14 @@ Then run **Map slots** (next section), and load spools into the printer from the
 Before the server takes filament off your spools in Spoolman, it has to learn how the printer numbers its AMS
 slots. **Map slots** in the app (or `sudo filament-kit printer map <serial>` on the Ubuntu computer) does that:
 
-- It briefly changes each slot's colour on the printer to a test colour, checks which slot showed it, and puts
-  every slot back as it was.
+- It briefly changes the colour of each AMS slot that holds filament, and of each external holder, to a test colour,
+  checks which slot showed it, and puts every slot back as it was. An AMS slot that the printer reports as empty is
+  skipped.
 - It then runs a short calibration job that has **no heating and no motion** (only comments and a wait), so
   the printer reports which slot it used for each filament. The job file is deleted afterwards.
+- External holders (a spool holder outside the AMS, numbered as its own id) stay out of the calibration job and keep
+  their own ids, and so do empty AMS slots. A printer with no AMS unit needs no job: its holders keep their own ids
+  and it maps without one.
 - The printer must be **idle** (not printing, paused or preparing) and online, or mapping is refused.
 
 Until mapping succeeds, filament use is **only logged** (you can see it in the app's usage list) and nothing is

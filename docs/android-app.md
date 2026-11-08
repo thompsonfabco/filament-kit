@@ -84,7 +84,7 @@ You need a Bambu Lab printer on the same network as the server, switched on.
 **add printer**, with its name, IP address, serial number and Access Code. (A server in WSL or a virtual machine
 behind NAT can't see printers; see [Running the server in WSL](install-server.md#running-the-server-in-wsl).)
 
-<img src="images/android-printer-screen.png" width="240" alt="A printer's screen: slots with Unload, and Map slots">
+<img src="images/android-printer-screen.png" width="240" alt="A printer's screen: slots with Unload, Slot mapping and Map slots">
 
 ### Slot mapping (only if you want filament use counted)
 
@@ -95,7 +95,14 @@ printer's screen under **Filament used (last 7 days)**.
 1. Open the printer, make sure it's idle, and tap **Map slots**.
 2. Read the box and tap **Map slots** again. The app briefly changes each slot's colour on the printer, one at a
    time, and runs a short job that doesn't heat or move anything; every slot is set back afterwards.
-3. **Slots mapped (n)** means it worked. **Slot mapping failed** says why; fix that and tap **Map slots again**.
+3. **Slots mapped (n)** means it worked. **Slots mapped: confirmed for the loaded slots** also works; map again once
+   a second unit or an HT has a spool loaded, to settle the numbering. **Slot numbering not confirmed** or
+   **Slot mapping failed** lists what the server reported; fix that and tap **Map slots again**. **Layout changed** or
+   **Recent prints disagreed with the map** means a new mapping is due; it starts by itself when the printer is
+   idle, or tap **Map slots again**. A result from an earlier server run is labelled as old: it may be fixed by now.
+
+The **Map slots** button is greyed only while the printer is not connected or is printing, or while a mapping runs.
+Until a mapping works, use is only logged, not taken off spools.
 
 ### Load and unload a spool
 
