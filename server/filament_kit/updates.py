@@ -145,7 +145,7 @@ def printers_idle():
         root = config.paths().state / "printers"
         if fcntl is not None and root.is_dir():
             for lock in sorted(root.glob("*/mapping.lock")):
-                fh = open(lock, "a")
+                fh = open(lock, "rb")   # a lock needs no write access: the root helper's filesystem is read-only
                 try:
                     fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
                 except OSError:

@@ -47,6 +47,8 @@ async function change(box, path, body, done, clear) {
     return r;
   } catch (e) { say(box, e.message, false); return null; }
 }
+// replaceChildren would print a null as the word "null" (h() skips it, this one does not)
+const fill = (el, ...kids) => el.replaceChildren(...kids.filter(Boolean));
 const pill = (on, yes, no) => h("span", { class: "pill " + (on ? "ok" : "no"), textContent: on ? yes : no });
 const card = (title, ...kids) => h("section", { class: "card" }, h("h2", {}, title), ...kids);
 
@@ -187,7 +189,7 @@ function pairCard() {
     if (!r) return;
     if (qrUrl) URL.revokeObjectURL(qrUrl);
     qrUrl = r.qr_svg ? URL.createObjectURL(new Blob([r.qr_svg], { type: "image/svg+xml" })) : null;
-    box.replaceChildren(
+    fill(box,
       kind === "phone" ? h("p", { textContent: "Open the filament-kit app and scan this code, or type the pairing code." }) :
         h("p", { textContent: kind === "pc" ? "Paste this link into filament-kit-sync when it asks:" : "On the station PC run: sudo filament-kit station pair, then paste this link:" }),
       qrUrl ? h("img", { class: "qr", alt: "Pairing QR code", src: qrUrl }) : null,

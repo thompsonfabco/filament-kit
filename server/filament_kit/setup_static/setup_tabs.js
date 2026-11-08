@@ -11,18 +11,17 @@ const jobOut = h("pre");
 const jobNote = h("div");
 const jobPanel = h("section", { class: "card job hidden" }, h("h2", { textContent: "Background job" }), jobState, jobOut, jobNote);
 const JOB_TITLE = { apply: "Applying the changes", update: "Updating", rollback: "Rolling back", check: "Checking for updates" };
-let jobFrom = 0, jobTimer = null, jobName = null, jobWhole = false;
+let jobFrom = 0, jobName = null, jobLive = false;     // jobLive: one poll loop at a time, or lines would come twice
 
 function followApply(fresh) {
-  if (fresh) { jobFrom = 0; jobName = null; jobOut.textContent = ""; jobWhole = false; }
-  if (jobTimer) return;
-  if (jobFrom === 0) jobOut.textContent = "";
+  if (fresh) { jobFrom = 0; jobName = null; jobOut.textContent = ""; }
   jobPanel.classList.remove("hidden");
+  if (jobLive) return;
+  jobLive = true;
   jobTick();
 }
 
 async function jobTick() {
-  jobTimer = null;
   let r;
   try {
     r = await api(`job?from=${jobFrom}`);
@@ -30,13 +29,13 @@ async function jobTick() {
     // the server restarts during an apply, an update or a rollback. A release without this route answers 404: reload.
     if (e.status === 404) { location.reload(); return; }
     jobState.textContent = "The server is restarting; waiting for it to come back…";
-    jobTimer = setTimeout(jobTick, 2000);
+    setTimeout(jobTick, 2000);
     return;
   }
   if (S && r.version !== S.version) { location.reload(); return; }        // the new release's own page
   if (r.next < jobFrom || (jobName && r.name && r.name !== jobName)) {    // another job started over
     jobFrom = 0; jobOut.textContent = ""; jobName = r.name;
-    jobTimer = setTimeout(jobTick, 200);
+    setTimeout(jobTick, 200);
     return;
   }
   jobName = r.name;
@@ -49,7 +48,8 @@ async function jobTick() {
   jobNote.replaceChildren(
     h("p", { class: "muted", textContent: "Addresses and serials are hidden here." }),
     h("button", { class: "secondary", textContent: "Show the whole log", on: { click: showWholeLog } }));
-  if (r.running || r.text) { jobTimer = setTimeout(jobTick, 1000); return; }
+  if (r.running || r.text) { setTimeout(jobTick, 1000); return; }
+  jobLive = false;
   refresh();
 }
 
@@ -99,7 +99,7 @@ function overviewTab() {
     head.replaceChildren(h("p", {}, `filament-kit ${r.version} · mode ${S.mode} `,
       u.newer ? h("span", { class: "pill no", textContent: `${u.latest} is available` }) : null,
       " ", link("updates", u.newer ? "Update" : "Updates")));
-    rowsBox.replaceChildren(...r.rows.map(rowEl),
+    fill(rowsBox, ...r.rows.map(rowEl),
       r.redacted ? h("p", { class: "muted", textContent: "Addresses and serials are hidden until the setup code is given." }) : null);
   };
   const box = h("div");
@@ -151,7 +151,7 @@ function updatesTab() {
   const out = h("div", {}, h("p", { class: "muted", textContent: "Reading…" }));
   const box = boxFor("updates");
   api("updates").then((u) => {
-    out.replaceChildren(
+    fill(out,
       card("Version",
         h("p", {}, `Installed: ${u.installed}`),
         h("p", {}, u.latest ? `Latest release: ${u.latest}${u.newer ? "" : " (up to date)"}` : "Latest release: not checked yet"),

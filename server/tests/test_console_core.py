@@ -239,6 +239,22 @@ def _busy():
     return Held()
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="flock")
+def test_the_look_at_the_locks_works_where_the_helper_may_not_write(env, monkeypatch):  # noqa: F811
+    """The root helper's filesystem is read-only outside its own folders: a lock must open read-only to be seen."""
+    import fcntl
+    d = config.paths().state / "printers" / SERIAL
+    d.mkdir(parents=True)
+    lock = d / "mapping.lock"
+    lock.touch()
+    lock.chmod(0o444)
+    held = open(lock)
+    fcntl.flock(held.fileno(), fcntl.LOCK_EX)
+    assert updates.idle_problem() == updates.BUSY_TEXT
+    held.close()
+    assert updates.idle_problem() is None
+
+
 def test_rollback_refused_with_nothing_kept_and_with_a_module_the_target_lacks(app, monkeypatch):
     monkeypatch.setattr(setup_helper, "_start_job", lambda n, why="": pytest.fail("started"))
     r = post(client(app), "job", {"name": "rollback"})
@@ -388,13 +404,13 @@ def test_cli_status_has_no_console_rows(env, monkeypatch, capsys):  # noqa: F811
 
 # ---------- the redaction ----------
 
-@pytest.mark.parametrize("text", ["see 192.0.2.5 now", "at 192.0.2.5:8883", "net 192.168.1.0/24", "https://x.example.com/a",
-                                  "http://10.0.0.2:7912", "kit.local:8710", "printer.localdomain", "fe80::1", "::1",
+@pytest.mark.parametrize("text", ["see 192.0.2.5 now", "at 192.0.2.5:8883", "net 198.51.100.0/24", "https://x.example.com/a",
+                                  "http://10.0.0.2:7912", "kit.local:8710", "printer.internal", "fe80::1", "::1",
                                   "2001:db8:1:2:3:4:5:6", SERIAL, "serial 03W00X123456789."])
 def test_redaction_hides(text):
     out = redact.text(text, [])
     assert redact.HIDDEN in out
-    for part in ("192.", "10.0", "example.com", "kit.local", "localdomain", "fe80", SERIAL, "03W00X"):
+    for part in ("192.", "198.", "10.0", "example.com", "kit.local", "printer.internal", "fe80", SERIAL, "03W00X"):
         assert part not in out
 
 
@@ -637,6 +653,21 @@ def test_the_tab_script_never_uses_innerhtml_or_talks_elsewhere():
     src = " ".join(ln for ln in lines if not ln.lstrip().startswith("//"))
     assert not re.search(r"innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|fetch\(", src)
     assert "localStorage" not in src and "sessionStorage" not in src
+
+
+def test_the_scripts_never_hand_a_null_to_replacechildren():
+    """It prints "null" on the page. `fill` and h() skip it."""
+    for name in ("setup.js", "setup_tabs.js"):
+        src = (STATIC / name).read_text(encoding="utf-8")
+        for m in re.finditer(r"\.replaceChildren\(", src):
+            depth, i = 1, m.end()
+            while depth and i < len(src):
+                depth += {"(": 1, ")": -1}.get(src[i], 0)
+                i += 1
+            top, before = src[m.end():i - 1], None
+            while top != before:        # what is inside an h(...) call is h()'s to skip
+                top, before = re.sub(r"\([^()]*\)|\{[^{}]*\}", "", top), top
+            assert ": null" not in top, (name, src[m.start():m.start() + 80])
 
 
 def test_every_tab_the_shell_lists_has_its_view():
