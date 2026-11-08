@@ -314,7 +314,8 @@ def authorize(token: str) -> tuple[str, str | None] | None:
                 elif d["last_seen"] is None or now - d["last_seen"] > LAST_SEEN_STALE:
                     d["last_seen"] = now
                     _write("devices.json", devs)
-                return d["id"], d.get("scope")
+                # a device paired as "station" before scopes existed is scoped too
+                return d["id"], d.get("scope") or ("station" if d.get("name") == "station" else None)
         return None
 
 

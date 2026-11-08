@@ -354,9 +354,9 @@ def cmd_station_pair(ask=input) -> int:
     if ask("Does it match the one 'sudo filament-kit pair --station' showed? [y/N] ").strip().lower() not in ("y", "yes"):
         print("Not paired.")
         return 1
-    server_api.save_pairing(link, first=first)
-    # one authenticated call claims the token now: unclaimed, it lapses TOKEN_TTL after `pair --station`
-    status, body = server_api.ServerApi(timeout=15).hello()
+    # one authenticated call claims the token now (unclaimed, it lapses TOKEN_TTL after `pair --station`); it runs
+    # before anything is saved, so a failed re-pair leaves the station's working pairing as it was
+    status, body = server_api.ServerApi.from_link(link, first=first, timeout=15).hello()
     if status != 200:
         again = "run `sudo filament-kit pair --station` on the server again, then `sudo filament-kit station pair`"
         if status == 401:
@@ -367,6 +367,7 @@ def cmd_station_pair(ask=input) -> int:
             why = f"the server answered {status} ({body.get('message') or body.get('error')})"
         print(f"error: not paired: {why}.\nfix: {again} within {pairing.TOKEN_TTL // 60} minutes", file=sys.stderr)
         return 1
+    server_api.save_pairing(link, first=first)
     if "station" not in on:
         print("Paired. Switch the station module on to use it: sudo filament-kit modules enable station")
         return 0

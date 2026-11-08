@@ -446,3 +446,31 @@ def test_apply_gives_a_kept_pairing_to_the_current_station_user(tmp_path, monkey
     d, srv, tok = (str(p) for p in (server_api.pairing_dir(), server_api.server_file(), server_api.token_file()))
     assert ran == [["chown", "root:filament-kit-station", d], ["chown", "root:filament-kit-station", srv],
                    ["chown", "filament-kit-station:filament-kit-station", tok]]
+
+
+def test_a_failed_re_pair_keeps_the_working_pairing(server, monkeypatch, capsys):
+    """The new link is checked before anything is saved: an expired re-pair leaves the station's pairing as it was."""
+    port, _ = server
+    _as_root(monkeypatch)
+    answers = iter([_station_link(port, pairing.issue("station")), "y"])
+    assert cli.cmd_station_pair(ask=lambda prompt: next(answers)) == 0
+    before = (server_api.server_file().read_bytes(), server_api.token_file().read_bytes())
+    stale = _station_link(port, pairing.issue("station"))
+    _later(monkeypatch, pairing.TOKEN_TTL + 1)
+    answers = iter([stale, "y"])
+    assert cli.cmd_station_pair(ask=lambda prompt: next(answers)) == 1
+    assert (server_api.server_file().read_bytes(), server_api.token_file().read_bytes()) == before
+    assert server_api.ServerApi(timeout=10).tag_lookup(UID)[0] == 200
+
+
+def test_a_station_device_from_before_scopes_is_scoped(server):
+    """A device named "station" with no stored scope (paired by an earlier build) reaches only the station routes."""
+    port, _ = server
+    _pair(port)
+    devs = json.loads((config.paths().state / "devices.json").read_text())
+    for d in devs:
+        d.pop("scope", None)
+    (config.paths().state / "devices.json").write_text(json.dumps(devs))
+    api = server_api.ServerApi(timeout=10)
+    assert api.tag_lookup(UID)[0] == 200
+    assert api._call("GET", "/api/spools")[0] == 403

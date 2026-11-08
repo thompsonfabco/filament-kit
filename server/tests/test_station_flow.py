@@ -312,3 +312,14 @@ def test_the_retry_never_takes_a_spool_with_another_tag(sm):
     r = save(c, h, gross_g=900, spool_id=sid)
     assert r.status_code == 409 and r.json()["error"] == "tag_mismatch"
     assert inventory.by_tag(sm, UID) is None
+
+
+def test_the_retry_gives_an_opened_spool_its_first_used(sm, monkeypatch):
+    c, h = client(sm), auth()
+    real = inventory.link_tag
+    monkeypatch.setattr(inventory, "link_tag", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("tag did not land")))
+    sid = save(c, h, gross_g=900, item=ITEM).json()["spool_id"]
+    assert not sm.get(f"spool/{sid}").get("first_used")
+    monkeypatch.setattr(inventory, "link_tag", real)
+    assert save(c, h, gross_g=900, spool_id=sid).status_code == 200
+    assert sm.get(f"spool/{sid}")["first_used"]

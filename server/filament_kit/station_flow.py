@@ -181,7 +181,7 @@ def save(sm, rules: dict, body: dict) -> dict:
             try:
                 target = sm.get(f"spool/{sid}")
                 sealed_now = inventory.SEALED_COMMENT in (target.get("comment") or "")
-                inventory.link_tag(sm, sid, uid, force=False, dry=dry, keep_sealed=True)
+                inventory.link_tag(sm, sid, uid, force=False, dry=dry, keep_sealed=sealed_now)  # opened: first_used
             except inventory.TagConflict as e:
                 raise FlowError(409, "tag_mismatch", str(e), lines("Tag mismatch", "scan again")) from e
             except RuntimeError as e:

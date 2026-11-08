@@ -176,6 +176,17 @@ class ServerApi:
         except (OSError, ValueError, KeyError, TypeError):
             self.ips, self.port, self.fp, self.token, self.paired = [], 0, "", "", False
 
+    @classmethod
+    def from_link(cls, link: "Link", first: str | None = None, timeout: float = TIMEOUT) -> "ServerApi":
+        """A client for a pairing link before it is saved (station pair checks it first)."""
+        api = cls.__new__(cls)
+        ips = link.ips or [link.host]
+        if first:
+            ips = [first] + [i for i in ips if i != first]
+        api.timeout, api.ips, api.port, api.fp, api.token = timeout, ips, link.port, link.fp, link.token
+        api.paired = bool(ips and link.token)
+        return api
+
     def _call(self, method: str, path: str, body: bytes | None = None, ctype: str | None = None) -> tuple[int, dict]:
         if not self.paired:
             return 0, {"error": "not_paired", "display": ["Not paired", "sudo filament-kit station pair"]}
