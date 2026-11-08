@@ -61,7 +61,7 @@ from starlette.routing import Route
 
 from . import config, lan, modules, pairing, reader_tokens, setup_code, setup_helper
 from .bridge import registry
-from .bridge.klipper.moonraker import Moonraker, MoonrakerError, Offline, Unauthorized
+from .bridge.klipper.moonraker import Moonraker, MoonrakerError, NotFound, Offline, Unauthorized
 
 log = logging.getLogger(__name__)
 
@@ -549,9 +549,9 @@ class SetupPage:
         except Offline:
             return {"reachable": False, "state": state,
                     "text": f"no answer from Moonraker at {where}: check that the printer is on and the address"}
-        except MoonrakerError as e:
-            return {"reachable": False, "state": state,
-                    "text": f"{where} answers, but not as Moonraker ({str(e)[:200]})"}
+        except MoonrakerError as e:   # a fixed line: the answer's own text is not shown to a page viewer
+            why = " (HTTP 404)" if isinstance(e, NotFound) else ""
+            return {"reachable": False, "state": state, "text": f"{where} answers, but not as Moonraker{why}"}
         klippy = info.get("state") if isinstance(info, dict) else None
         klippy = klippy if isinstance(klippy, str) and klippy.isprintable() else "unknown"
         return {"reachable": True, "state": state, "text": f"Moonraker at {where} answers; Klipper is {klippy[:32]}"}

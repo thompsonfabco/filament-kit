@@ -427,9 +427,12 @@ def test_klipper_test_asks_moonraker_not_a_tls_handshake(env, helper, manager, m
     moonraker.answer = mr.Offline("Moonraker at printer.example.com:7126 is not answering (refused)")
     j = c.post(f"/setup/api/printers/{k.serial}/test", json={}, headers=H).json()
     assert j["reachable"] is False and "no answer from Moonraker at printer.example.com:7126" in j["text"]
-    moonraker.answer = mr.MoonrakerError("GET /printer/info: not a Moonraker answer (KeyError)")
+    moonraker.answer = mr.MoonrakerError("GET /printer/info: 500 <b>the printer's own text</b>")
     j = c.post(f"/setup/api/printers/{k.serial}/test", json={}, headers=H).json()
-    assert j["reachable"] is False and "not as Moonraker" in j["text"]
+    assert j["reachable"] is False and j["text"] == "printer.example.com:7126 answers, but not as Moonraker"
+    moonraker.answer = mr.NotFound("Not Found")
+    j = c.post(f"/setup/api/printers/{k.serial}/test", json={}, headers=H).json()
+    assert j["text"] == "printer.example.com:7126 answers, but not as Moonraker (HTTP 404)"
     moonraker.answer = mr.Unauthorized("Moonraker at printer.example.com wants an API key (401)")
     j = c.post(f"/setup/api/printers/{k.serial}/test", json={}, headers=H).json()
     assert j["reachable"] is True and "api-key" in j["text"]
