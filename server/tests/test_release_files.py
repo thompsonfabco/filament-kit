@@ -175,7 +175,7 @@ def test_web_extra_pins_mcp_exactly():
 
 def test_wrapper_runs_modules_as_root():
     text = _read("install/filament-kit-cli.sh")
-    assert re.search(r"^\s+config \| cert \| modules \| remote \| migrate-ops \| migrate-scanner \| update \| uninstall \| station\)\s*$",
+    assert re.search(r"^\s+config \| cert \| modules \| remote \| migrate-ops \| migrate-scanner \| update \| uninstall \| station \| setup-code\)\s*$",
                      text, re.M)
 
 
