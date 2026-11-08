@@ -77,7 +77,7 @@ means everyone has to uninstall and reinstall the app.
 
 ### The filament library token
 
-The workflow builds `library.tar.gz` from the private `thompsonfabco/filament-library` repository, lists it in
+The workflow builds `library.tar.gz` from the `thompsonfabco/filament-library` repository (public), lists it in
 the signed `SHA256SUMS` and publishes it with the release. Installs check it against that signature before they
 use it, and refuse a library from the default URL without one.
 

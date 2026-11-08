@@ -240,7 +240,7 @@ a new code, which also clears the lock: `sudo filament-kit setup-code --new`. Th
 | Section | What you do there |
 |---|---|
 | **Anthropic API key** | Set, replace, remove or check the key for AI label reading. The page never shows the key, only whether one is set. |
-| **Printers** | Add a printer by its IP address and Access Code, change a wrong Access Code, test the connection, forget a printer. Printers on the network that announce themselves are listed. |
+| **Printers** | Add a Bambu Lab printer by its IP address and Access Code, change a wrong Access Code, test the connection, forget a printer. Printers on the network that announce themselves are listed. With the klipper module on, Klipper printers are listed too, with **Test** and **Forget** (no Access Code; add them with `sudo filament-kit klipper add`, see [Klipper printers](klipper.md)). |
 | **Web passphrase** | Set the passphrase that approves Claude's connector at its sign-in page. |
 | **Library token** | Optional. A GitHub token that lets the filament library download from a private repository. |
 | **Phones, PC and station** | Make the pairing QR code and code for a phone, or the link for the PC sync or the intake station, and remove a paired device. |
