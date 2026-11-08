@@ -46,7 +46,8 @@ def test_external_slot_command_by_kind_and_model_addressing():
     from filament_kit.bridge import hardware
     hw = hardware.load()
     assert hw.model("O1D").external_addressing == "tray-is-ams"
-    others = ("P1S", "X1C", "A1", "O1E", "O1C", "N6", "nope")
+    assert hw.model("N6").external_addressing == "tray-is-ams"      # the X2D, like the H2D (unverified)
+    others = ("P1S", "X1C", "A1", "O1E", "O1C", "nope")
     assert {hw.model(c).external_addressing for c in others} == {"legacy"}
 
 
