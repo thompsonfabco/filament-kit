@@ -9,7 +9,8 @@ A tag `v<x.y.z>` pushed to GitHub builds and publishes one release, with:
 
 - `filament-kit-<version>.tar.gz`: the server (the Python wheel, `install.sh`, `uninstall.sh`, the units) with
   the signed Android app inside (`app/filament-kit.apk`, `app/version.txt`);
-- `filament-kit.apk` on its own, and `filament-kit-sync-setup-<version>.exe` (the Windows PC sync);
+- `filament-kit.apk` on its own, `filament-kit-sync-setup-<version>.exe` (the Windows PC sync) and
+  `filament-kit-sync-linux-x86_64-<version>.tar.gz` (the Linux PC sync);
 - `get.sh` (the one-command installer) and `bambu_hardware.xml` (the printer data feed the updater reads);
 - `library.tar.gz` when the library token is set (see below);
 - `SHA256SUMS` listing all of them, and `SHA256SUMS.sig`, its ed25519 signature.

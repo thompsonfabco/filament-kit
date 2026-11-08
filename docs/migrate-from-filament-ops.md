@@ -67,10 +67,20 @@ bundle whose database is not at the Spoolman schema the kit expects.
 Check: the spool count in Spoolman matches the export; `sudo filament-kit profiles lines` lists your lines
 with both parents; `sudo filament-kit status` is all OK.
 
-Then turn on the modules you used: `sudo filament-kit modules enable web` (the connector and phone app keep
-their address and sign-ins), `orders` (with `orders.file` pointing at your order history file), and `remote`
-(see [Remote access](user-guide.md#remote-access); the kit takes over nginx and certbot, and keeps a real
-certificate it finds).
+Then turn on the modules you used. At a terminal each asks for what it needs:
+
+- `sudo filament-kit modules enable web` asks for the public address (the connector and phone app keep their
+  address and sign-ins).
+- `sudo filament-kit modules enable ai_intake`, then `sudo filament-kit modules enable orders`: `orders` needs
+  `ai_intake` (the old setup used AI label reads too), and asks for the path of your order history file
+  (`orders.file`).
+- `sudo filament-kit modules enable remote` (see [Remote access](user-guide.md#remote-access); the kit takes over
+  nginx and certbot, and keeps a real certificate it finds). It replaces the old setup's `filament` route with its
+  own, after saving the old one. The kit never removes a route it did not write: a route from the old setup stays
+  through `modules disable remote`, `mcp-route rm` and uninstall unless the kit added it
+  (`/etc/mcp-router/kit-routes` lists those).
+
+Without a terminal these commands stop with an `error: ... needs ...` line instead of asking.
 
 ## 4. The station computer
 

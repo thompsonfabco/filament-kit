@@ -95,7 +95,8 @@ paired phones.
 
 For the Bambu Studio presets: install `filament-kit-sync-setup-<version>.exe` from the Releases page on the
 Windows PC with Bambu Studio, run `sudo filament-kit pair --pc` on the server and paste the link it prints into
-the setup's console. Step by step: [Pair your PC](docs/user-guide.md#pair-your-pc) in the guide.
+the setup's console. Step by step: [Pair your PC](docs/user-guide.md#pair-your-pc) in the guide. On Linux, use
+`filament-kit-sync-linux-x86_64-<version>.tar.gz` instead: [PC sync on Linux](docs/user-guide.md#pc-sync-on-linux).
 
 ## The reader
 
@@ -147,9 +148,8 @@ with `sudo filament-kit library update`, or turn on the `library` module to also
 
 ## Uninstall
 
-`sudo ./uninstall.sh` from an unpacked release removes the programs and keeps your spools, settings and backups;
-`--purge` deletes those too (it asks you to type `purge`). Where to find the unpacked release after a
-one-command install, and what stays behind: [Install the server, Uninstall](docs/install-server.md#uninstall).
+`sudo filament-kit uninstall` removes the programs and keeps your spools, settings and backups;
+`--purge` deletes those too (it asks you to type `purge`). What stays behind, and what to do if the kit has no kept copy of the release: [Install the server, Uninstall](docs/install-server.md#uninstall).
 
 ## More
 
