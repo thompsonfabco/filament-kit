@@ -19,6 +19,13 @@
   kit's earlier command), UNVERIFIED (ha-bambulab addresses an X1/P1 vt_tray as ams_id 255, tray_id 254); a
   capture confirms or corrects it. alias="Ext" on a two-holder model's holder 254: the label the kit used for its
   vt_tray before Ext-L / Ext-R, so old Spoolman locations and slot maps keep working.
+  <slicer-project>: what Bambu Studio writes about the printer into a project (from unsliced projects of each model,
+  Bambu Studio 02.09.01.70), which the slot calibration's job file carries: model-id = printer_model_id,
+  printer-model, nozzle (default when the printer reports none), printable area and height, master-extruder
+  (master_extruder_id), filament-preset ({nozzle} = the nozzle size), client-version (X-BBL-Client-Version); one
+  <extruder> per extruder in Bambu Studio's order: type (extruder_type), physical (physical_extruder_map), volume
+  (nozzle_volume_type). A model without one gets the minimal job file. Whether a model's firmware accepts the job
+  file is UNVERIFIED on everything but the H2D until a mapping has run on it.
   Unknown elements and attributes are ignored with a warning (a newer file still loads); version is major[.minor]
   and a file with another major version is refused.
 -->
@@ -40,6 +47,12 @@
       <numbering ref="legacy"/>
       <ftp-dir>/</ftp-dir>
       <ftp-dir>/cache</ftp-dir>
+      <slicer-project model-id="O1D" printer-model="Bambu Lab H2D" nozzle="0.4" printable-width="350"
+                      printable-depth="320" printable-height="325" master-extruder="2"
+                      filament-preset="Bambu PLA Basic @BBL H2D {nozzle} nozzle" client-version="02.09.01.70">
+        <extruder type="Direct Drive" physical="1" volume="Standard"/>
+        <extruder type="Direct Drive" physical="0" volume="Standard"/>
+      </slicer-project>
     </model>
     <!-- H2D Pro: H2D hardware; unverified (externals, numbering, presence, ams-mapping2 assumed as the H2D). -->
     <model code="O1E" name="H2D Pro" say="h two d p r o"
@@ -64,6 +77,11 @@
       <numbering ref="legacy"/>
       <ftp-dir>/</ftp-dir>
       <ftp-dir>/cache</ftp-dir>
+      <slicer-project model-id="O1S" printer-model="Bambu Lab H2S" nozzle="0.4" printable-width="340"
+                      printable-depth="320" printable-height="340" master-extruder="1"
+                      filament-preset="Bambu PLA Basic @BBL H2S" client-version="02.09.01.70">
+        <extruder type="Direct Drive" physical="0" volume="Standard"/>
+      </slicer-project>
     </model>
     <!-- H2C: two nozzles, two external holders and presence assumed like the H2D (unverified). O1C2 is a second
          code. -->
@@ -78,11 +96,18 @@
       <numbering ref="legacy"/>
       <ftp-dir>/</ftp-dir>
       <ftp-dir>/cache</ftp-dir>
+      <slicer-project model-id="O1C2" printer-model="Bambu Lab H2C" nozzle="0.4" printable-width="330"
+                      printable-depth="320" printable-height="325" master-extruder="2"
+                      filament-preset="Bambu PLA Basic @BBL H2C {nozzle} nozzle" client-version="02.09.01.70">
+        <extruder type="Direct Drive" physical="1" volume="Standard"/>
+        <extruder type="Direct Drive" physical="0" volume="Standard"/>
+      </slicer-project>
     </model>
-    <!-- X2D: chamber limit, two nozzles, externals and presence assumed H2D-like until checked (unverified). -->
+    <!-- X2D: chamber limit, two nozzles, externals, presence, ams-mapping2 and external-addressing="tray-is-ams"
+         assumed H2D-like until checked (unverified): Bambu Studio treats it as an H2-generation printer. -->
     <model code="N6" name="X2D" say="x two d"
            preset-name="Bambu Lab X2D" nozzles="2" camera="hls" chamber-max="65"
-           presence="bits-v1">
+           presence="bits-v1" ams-mapping2="true" external-addressing="tray-is-ams">
       <light-node>chamber_light</light-node>
       <external id="254" label="Ext-L" say="external left" alias="Ext"/>
       <external id="255" label="Ext-R" say="external right"/>
@@ -90,6 +115,12 @@
       <numbering ref="legacy"/>
       <ftp-dir>/</ftp-dir>
       <ftp-dir>/cache</ftp-dir>
+      <slicer-project model-id="N6" printer-model="Bambu Lab X2D" nozzle="0.4" printable-width="256"
+                      printable-depth="256" printable-height="261" master-extruder="1"
+                      filament-preset="Bambu PLA Basic @BBL X2D {nozzle} nozzle" client-version="02.09.01.70">
+        <extruder type="Direct Drive" physical="1" volume="Standard"/>
+        <extruder type="Bowden" physical="0" volume="Standard"/>
+      </slicer-project>
     </model>
     <!-- P2S: unverified numbering and presence. -->
     <model code="N7" name="P2S" say="p two s"
@@ -100,6 +131,11 @@
       <numbering ref="legacy"/>
       <ftp-dir>/</ftp-dir>
       <ftp-dir>/cache</ftp-dir>
+      <slicer-project model-id="N7" printer-model="Bambu Lab P2S" nozzle="0.4" printable-width="256"
+                      printable-depth="256" printable-height="256" master-extruder="1"
+                      filament-preset="Bambu PLA Basic @BBL P2S" client-version="02.09.01.70">
+        <extruder type="Direct Drive" physical="0" volume="Standard"/>
+      </slicer-project>
     </model>
     <!-- X1 series, X1E, P1 series, A1 series: presence="bits-v1" unverified (ha-bambulab reads tray_exist_bits
          the same way for ids 0-3). X1-series printers report their printer_type ("3DPrinter-X1-Carbon") over SSDP. -->
@@ -113,6 +149,11 @@
       <numbering ref="legacy"/>
       <ftp-dir>/</ftp-dir>
       <ftp-dir>/cache</ftp-dir>
+      <slicer-project model-id="BL-P001" printer-model="Bambu Lab X1 Carbon" nozzle="0.4" printable-width="256"
+                      printable-depth="256" printable-height="250" master-extruder="1"
+                      filament-preset="Bambu PLA Basic @BBL X1C" client-version="02.09.01.70">
+        <extruder type="Direct Drive" physical="0" volume="Standard"/>
+      </slicer-project>
     </model>
     <model code="BL-P002" name="X1" say="x one"
            preset-name="Bambu Lab X1" nozzles="1" camera="hls" presence="bits-v1">
@@ -122,6 +163,11 @@
       <numbering ref="legacy"/>
       <ftp-dir>/</ftp-dir>
       <ftp-dir>/cache</ftp-dir>
+      <slicer-project model-id="BL-P002" printer-model="Bambu Lab X1" nozzle="0.4" printable-width="256"
+                      printable-depth="256" printable-height="250" master-extruder="1"
+                      filament-preset="Bambu PLA Basic @BBL X1" client-version="02.09.01.70">
+        <extruder type="Direct Drive" physical="0" volume="Standard"/>
+      </slicer-project>
     </model>
     <!-- X1E: 60 C chamber. -->
     <model code="C13" name="X1E" say="x one e"
@@ -132,6 +178,11 @@
       <numbering ref="legacy"/>
       <ftp-dir>/</ftp-dir>
       <ftp-dir>/cache</ftp-dir>
+      <slicer-project model-id="C13" printer-model="Bambu Lab X1E" nozzle="0.4" printable-width="256"
+                      printable-depth="256" printable-height="250" master-extruder="1"
+                      filament-preset="Bambu PLA Basic @BBL X1C" client-version="02.09.01.70">
+        <extruder type="Direct Drive" physical="0" volume="Standard"/>
+      </slicer-project>
     </model>
     <!-- P1P (open frame), A1 mini, A1, A2L: light node chamber_light unverified (they may have no chamber light). -->
     <model code="C11" name="P1P" say="p one p"
@@ -141,6 +192,11 @@
       <numbering ref="legacy"/>
       <ftp-dir>/</ftp-dir>
       <ftp-dir>/cache</ftp-dir>
+      <slicer-project model-id="C11" printer-model="Bambu Lab P1P" nozzle="0.4" printable-width="256"
+                      printable-depth="256" printable-height="250" master-extruder="1"
+                      filament-preset="Bambu PLA Basic @BBL P1P" client-version="02.09.01.70">
+        <extruder type="Direct Drive" physical="0" volume="Standard"/>
+      </slicer-project>
     </model>
     <model code="C12" name="P1S" say="p one s"
            preset-name="Bambu Lab P1S" nozzles="1" camera="mjpeg" presence="bits-v1">
@@ -149,6 +205,11 @@
       <numbering ref="legacy"/>
       <ftp-dir>/</ftp-dir>
       <ftp-dir>/cache</ftp-dir>
+      <slicer-project model-id="C12" printer-model="Bambu Lab P1S" nozzle="0.4" printable-width="256"
+                      printable-depth="256" printable-height="250" master-extruder="1"
+                      filament-preset="Bambu PLA Basic @BBL P1S {nozzle} nozzle" client-version="02.09.01.70">
+        <extruder type="Direct Drive" physical="0" volume="Standard"/>
+      </slicer-project>
     </model>
     <model code="N1" name="A1 mini" say="a one m i n i"
            preset-name="Bambu Lab A1 mini" nozzles="1" camera="mjpeg" presence="bits-v1">
@@ -158,6 +219,11 @@
       <numbering ref="legacy"/>
       <ftp-dir>/</ftp-dir>
       <ftp-dir>/cache</ftp-dir>
+      <slicer-project model-id="N1" printer-model="Bambu Lab A1 mini" nozzle="0.4" printable-width="180"
+                      printable-depth="180" printable-height="180" master-extruder="1"
+                      filament-preset="Bambu PLA Basic @BBL A1M" client-version="02.09.01.70">
+        <extruder type="Direct Drive" physical="0" volume="Standard"/>
+      </slicer-project>
     </model>
     <model code="N2S" name="A1" say="a one"
            preset-name="Bambu Lab A1" nozzles="1" camera="mjpeg" presence="bits-v1">
@@ -166,6 +232,11 @@
       <numbering ref="legacy"/>
       <ftp-dir>/</ftp-dir>
       <ftp-dir>/cache</ftp-dir>
+      <slicer-project model-id="N2S" printer-model="Bambu Lab A1" nozzle="0.4" printable-width="256"
+                      printable-depth="256" printable-height="256" master-extruder="1"
+                      filament-preset="Bambu PLA Basic @BBL A1" client-version="02.09.01.70">
+        <extruder type="Direct Drive" physical="0" volume="Standard"/>
+      </slicer-project>
     </model>
     <!-- A2L: unverified numbering, presence and light node. -->
     <model code="N9" name="A2L" say="a two l"
@@ -176,6 +247,11 @@
       <numbering ref="legacy"/>
       <ftp-dir>/</ftp-dir>
       <ftp-dir>/cache</ftp-dir>
+      <slicer-project model-id="N9" printer-model="Bambu Lab A2L" nozzle="0.4" printable-width="330"
+                      printable-depth="320" printable-height="325" master-extruder="1"
+                      filament-preset="Bambu PLA Basic @BBL A2L {nozzle} nozzle" client-version="02.09.01.70">
+        <extruder type="Direct Drive" physical="0" volume="Standard"/>
+      </slicer-project>
     </model>
   </models>
 

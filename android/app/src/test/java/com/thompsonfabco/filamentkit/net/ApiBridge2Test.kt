@@ -77,6 +77,21 @@ class ApiBridge2Test {
         assertEquals("/api/printers/0948AB/map", r.url.encodedPath)
     }
 
+    @Test fun mapStatusDecodesNotesAndAnOldResult() = runBlocking {
+        json("""{"state":"done","problems":["Ext-L: the printer reported no slot"],"problems_old":true,
+            "finished":1762600000.5,"notes":["numbered alike"]}""")
+        val m = api.mapStatus("0948AB")
+        assertTrue(m.problemsOld)
+        assertEquals(1762600000.5, m.finished!!, 0.0)
+        assertEquals(listOf("numbered alike"), m.notes)
+    }
+
+    @Test fun mapStatusFromAnOlderServerHasNoNotesAndIsNotOld() = runBlocking {
+        json("""{"state":"failed","problems":["x"]}""")
+        val m = api.mapStatus("0948AB")
+        assertTrue(!m.problemsOld && m.notes.isEmpty() && m.finished == null)
+    }
+
     @Test fun mapStatusNoneHasDefaults() = runBlocking {
         json("""{"state":"none"}""")
         val m = api.mapStatus("0948AB")

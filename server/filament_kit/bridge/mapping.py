@@ -23,9 +23,10 @@ Outcome (a job that ends `failed` never leaves a trusted map):
     slot map keeps its slots but is downgraded to `calibrated: false, observe: true` (a slot may still hold a
     test colour, so what the map says can no longer be trusted); also `failed` when no slot was confirmed
     (offline, busy, Developer Mode ...) or the job broke, again with the saved map downgraded;
-  - calibration consistent -> SlotMap of the confirmed slots, global ids from the calibration's decoding (a
-    confirmed slot the calibration skipped, i.e. an empty one, keeps `ams.default_global`, which the decoding
-    just proved for the loaded ones), `calibrated: true, observe: false`;
+  - calibration consistent -> SlotMap of the confirmed slots and the empty ones (the slot test writes nothing to an
+    empty slot, `SlotTestResult.empty`: its address is the report's), global ids from the calibration's decoding (a
+    slot the calibration left out, an empty one or an external holder, takes the proven scheme's number: an external
+    holder its own id), `calibrated: true, observe: false`;
   - calibration inconsistent or refused -> the same slots, default global ids, `calibrated: false, observe:
     true` (filament use is only logged), the reason in problems;
   - a calibration that left something changed (`CalibResult.restored` false: a filament left loaded in the
@@ -113,6 +114,7 @@ class _Job:
     state: str = "running"          # running | done | failed
     step: str = "Starting"
     problems: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)      # not problems: what a good result does not settle yet
     started: float = field(default_factory=time.time)
     finished: float | None = None
     abort: _Flag = field(default_factory=_Flag)
@@ -130,7 +132,7 @@ def _save_status(serial: str, job: _Job) -> None:
         d = _dir(serial)
         make_state_dir(d)
         data = {"job_id": job.id, "state": job.state, "step": job.step, "problems": job.problems,
-                "started": job.started, "finished": job.finished}
+                "notes": job.notes, "started": job.started, "finished": job.finished}
         _write_atomic(d / STATUS_FILE, json.dumps(data, indent=2).encode("utf-8"), 0o600, state_owned=True)
     except OSError:
         log.exception("mapping %s: cannot write the status file", serial)
@@ -155,9 +157,12 @@ def _load_status(serial: str) -> dict | None:
         return None
     if not isinstance(d, dict) or d.get("state") not in ("running", "done", "failed"):
         return None
-    probs = d.get("problems")
+    probs, notes = d.get("problems"), d.get("notes")
+    finished = d.get("finished")
     return {"job_id": str(d.get("job_id") or ""), "state": d["state"], "step": str(d.get("step") or ""),
-            "problems": [str(p) for p in probs] if isinstance(probs, list) else []}
+            "problems": [str(p) for p in probs] if isinstance(probs, list) else [],
+            "notes": [str(n) for n in notes] if isinstance(notes, list) else [],
+            "finished": finished if isinstance(finished, (int, float)) and not isinstance(finished, bool) else None}
 
 
 # ---------------------------------------------------------------- one writer per printer
@@ -511,7 +516,7 @@ class Mapper:
         model = ams.printer_model(serial)
         smap = ams.SlotMap(slots={lab: {"ams_id": a["ams_id"], "tray_id": a["tray_id"],
                                         "global_id": ams.default_global(a["ams_id"], a["tray_id"], model)}
-                                  for lab, a in st.confirmed.items()})
+                                  for lab, a in {**st.confirmed, **st.empty}.items()})
         step("Running the calibration job (no heating, no motion)")
         cr = calib3mf.run(self._m, serial, smap, should_stop=job.abort.is_set)
         problems = list(st.problems) + list(cr.problems)
@@ -537,19 +542,24 @@ class Mapper:
         smap.fingerprint, smap.stale = fp, False
         ams.save_map(serial, smap)
         job.problems = problems
+        job.notes = list(cr.notes)
         job.state = "done" if cr.restored else "failed"
 
     # ---------------------------------------------------------------- progress
     def view(self, serial: str) -> dict:
-        """`{state, step, slots: [{label, ams_id, tray_id, global}], calibrated, observe, problems, stale,
-        remapping, scheme, suspect}`: `stale` = the printer's layout changed since the map was made; `remapping` =
-        this process runs a re-map that `LayoutWatch` started (layout change or suspect map); `scheme` = the
-        numbering scheme calibration proved (None: none yet); `suspect` = two prints in a row disagreed with the
-        map (logging only until the re-map)."""
+        """`{state, step, slots: [{label, ams_id, tray_id, global}], calibrated, observe, problems, notes,
+        problems_old, finished, stale, remapping, scheme, suspect}`: `stale` = the printer's layout changed since the
+        map was made; `remapping` = this process runs a re-map that `LayoutWatch` started (layout change or suspect
+        map); `scheme` = the numbering scheme calibration proved (None: none yet); `suspect` = two prints in a row
+        disagreed with the map (logging only until the re-map); `notes` = what a good result does not settle yet
+        (not problems); `problems_old` = the problems are from a job an earlier server run finished, so an update or
+        a fix since may have dealt with them: they say what happened then, not what is wrong now, and they never
+        stop a new mapping; `finished` = when that job ended (epoch seconds, None: not known or still running)."""
         with self._lock:
             j = self._jobs.get(serial)
             mine = None if j is None else {"job_id": j.id, "state": j.state, "step": j.step,
-                                           "problems": list(j.problems)}
+                                           "problems": list(j.problems), "notes": list(j.notes),
+                                           "finished": j.finished}
         saved = _load_status(serial)
         # this process's own job is the truth unless the file holds a later job (run by another process); the
         # file can lag behind it (a status write that failed, or one not made yet)
@@ -567,8 +577,11 @@ class Mapper:
                               "global": s.get("global_id")})
         st = st or {"state": "none", "step": "", "problems": []}
         remapping = bool(j is not None and j.auto and st is mine and st["state"] == "running")
+        old = st is not mine and bool(st["problems"]) and not (st["state"] == "running"
+                                                               and _ProcessLock.held_elsewhere(serial))
         return {"state": st["state"], "step": st["step"], "slots": slots, "calibrated": m.calibrated,
-                "observe": m.observe, "problems": st["problems"], "stale": m.stale, "remapping": remapping,
+                "observe": m.observe, "problems": st["problems"], "notes": st.get("notes", []), "problems_old": old,
+                "finished": st.get("finished"), "stale": m.stale, "remapping": remapping,
                 "scheme": m.scheme, "suspect": m.suspect}
 
 

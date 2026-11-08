@@ -298,7 +298,9 @@ function printersTab() {
       const running = m.state === "running";
       mapBox.replaceChildren(
         h("p", { class: "muted", textContent: `${m.calibrated ? "Mapped" : "Not mapped yet"} · ${m.state}${m.step ? " · " + m.step : ""}${m.stale ? " · layout changed" : ""}` }),
-        ...(m.problems || []).map((t) => h("p", { class: "err", textContent: t })),
+        ...(m.problems_old && (m.problems || []).length ? [h("p", { class: "muted", textContent: "From an earlier mapping, it may be fixed by now. Re-map the slots to check:" })] : []),
+        ...(m.problems || []).map((t) => h("p", { class: m.problems_old ? "muted" : "err", textContent: t })),
+        ...(m.notes || []).map((t) => h("p", { class: "muted", textContent: t })),
         h("button", { class: "secondary", textContent: running ? "Mapping…" : "Re-map slots", disabled: running, on: { click: remap } }));
       if (running) mapTimer = setTimeout(loadMap, 3000);
     } catch (e) { mapBox.replaceChildren(fail(e)); }

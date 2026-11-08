@@ -1,11 +1,15 @@
 """Slot test: prove which (ams_id, tray_id) address reaches which AMS slot, then put every slot back.
 
-For each slot (AMS units, AMS HT, external holder; empty slots too) the slot's own setting is written back with
+For each slot (AMS units, AMS HT, external holder) the slot's own setting is written back with
 only the colour changed to a unique test colour (`FA<nn>00FF`, nn in hex; another prefix if a slot already holds it), and the slot counts as confirmed once a report
 shows that colour on that unit/tray (within CONFIRM_TIMEOUT). Afterwards every slot that may have changed is
 written back to its snapshot and the restore is confirmed from the report. The test stops early, and still
 restores, when the printer starts a job, goes offline, or refuses writes (Developer Mode). Nothing is saved here:
 the caller (mapping) turns the result into a SlotMap.
+
+An AMS slot the presence bits say is empty gets no write: it is not a target, and it goes into `empty` with the
+address the report gives (the X2D refuses a write to an empty slot). So does a slot with no filament type whose write
+was refused (no presence bits to tell): an empty slot's refusal is not a problem.
 
 Idle = connected (or connected but flagged `needs_developer_mode`) and `gcode_state` not in status.ACTIVE."""
 from __future__ import annotations
@@ -43,6 +47,7 @@ class SlotTestResult:
     restored: bool = True              # every changed slot confirmed back at its snapshot, no test colour left
     problems: list[str] = field(default_factory=list)          # one line per issue, "<label>: ..." for a slot
     needs_developer_mode: bool = False
+    empty: dict[str, dict] = field(default_factory=dict)       # label -> {ams_id, tray_id}: empty, not written
 
 
 @dataclass
@@ -155,8 +160,13 @@ def run(manager, serial: str, on_step: Callable[[str], None],
         raise PrinterOffline(serial)
     targets = []
     model = ams.printer_model(serial)
+    empty = {s.label for u in layout.build(report, model).units if u.kind != layout.EXT_KIND
+             for s in u.slots if s.present is False}
     for u in ams.units(report, model):
         for s in u.slots:
+            if s.label in empty:
+                res.empty[s.label] = {'ams_id': u.ams_id, 'tray_id': s.tray_id}
+                continue
             targets.append(_Target(s.label, u.ams_id, s.tray_id, _snapshot(_raw_tray(report, u, s)), u.kind))
     by_label = {t.label: t for t in targets}
     # a slot's colour is its own even when it looks like a test colour (a real near-red spool): an interrupted
@@ -213,6 +223,13 @@ def run(manager, serial: str, on_step: Callable[[str], None],
                 break
             if _failed(reply):
                 current.clear()
+                if t.kind != layout.EXT_KIND and not t.snap['tray_type']:
+                    # no filament in it, and no presence bits said so: an empty slot takes no setting
+                    log.info("slot test on %s: %s has no filament and refused the write (%s): empty", serial,
+                             t.label, _reason(reply))
+                    res.empty[t.label] = {'ams_id': t.ams_id, 'tray_id': t.tray_id}
+                    reported.add(t.label)
+                    continue
                 if manager.state(serial) == 'needs_developer_mode':
                     res.needs_developer_mode = True
                     res.problems.append(f"needs_developer_mode: the printer refused the write to {t.label} "

@@ -260,7 +260,11 @@ data class MapSlot(
     @Serializable(with = LenientNullableInt::class) val global: Int? = null,
 )
 
-/** `GET /api/printers/{id}/map`. [state] is `none`, `running`, `done` or `failed`; [observe]: usage is logged only. */
+/**
+ * `GET /api/printers/{id}/map`. [state] is `none`, `running`, `done` or `failed`; [observe]: usage is logged only.
+ * [notes]: what a good result does not settle yet (not problems). [problemsOld]: the problems are from a job an earlier
+ * server run finished (at [finished], epoch seconds), so they say what happened then, not what is wrong now.
+ */
 @Serializable
 data class MapStatus(
     val state: String = "none",
@@ -269,6 +273,9 @@ data class MapStatus(
     val calibrated: Boolean = false,
     val observe: Boolean = false,
     val problems: List<String> = emptyList(),
+    val notes: List<String> = emptyList(),
+    @SerialName("problems_old") val problemsOld: Boolean = false,
+    val finished: Double? = null,
 )
 
 @Serializable

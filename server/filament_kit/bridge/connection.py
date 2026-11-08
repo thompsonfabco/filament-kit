@@ -40,6 +40,7 @@ QUIET_PUSHALL = 90              # a connected printer silent this long gets a pu
 SPOOL_TTL = 30                  # seconds the Spoolman spool list is cached
 AUTH_REFUSED = {4, 5, 134, 135}  # CONNACK bad user/password, not authorized (MQTT 3.1.1 and paho v5 codes)
 DEVELOPER_MODE_REASON = re.compile(r'verify|auth|permission|denied|developer', re.I)
+DEVELOPER_MODE_HOLD = 600.0   # seconds a Developer Mode refusal is shown without a new one (the owner may have fixed it)
 DEVELOPER_MODE_ERR_CODES = {84033543}   # Bambu: "mqtt message verify failed" (LAN-only without Developer Mode)
 ACTIONS = ('pause', 'resume', 'stop', 'light_on', 'light_off')
 SEQ_RANGE = 1_000_000_000        # sequence ids start at a random number below this
@@ -138,6 +139,7 @@ class PrinterConnection:
         self.updated: float | None = None
         self._state = 'offline'
         self._developer_mode_needed = False
+        self._developer_mode_at = 0.0
         self._settled = threading.Event()
         self._pending: dict[str, _Waiter] = {}
         # a random start, so two sessions (the service and `printer map`) never reuse each other's sequence ids
@@ -193,12 +195,20 @@ class PrinterConnection:
     @property
     def state(self) -> str:
         if self._state == 'connected' and self._developer_mode_needed:
-            return 'needs_developer_mode'
+            if time.monotonic() - self._developer_mode_at < DEVELOPER_MODE_HOLD:
+                return 'needs_developer_mode'
+            self._developer_mode_needed = False      # not refused again since: the next refusal says so anew
         return self._state
+
+    def _developer_mode_refused(self) -> None:
+        self._developer_mode_needed = True
+        self._developer_mode_at = time.monotonic()
 
     def _set_state(self, state: str) -> None:
         if state != self._state:
             log.info("printer %s (%s): %s", self.serial, self.ip, state)
+            if state == 'connected':                 # a new session: the printer may have been set up since
+                self._developer_mode_needed = False
         self._state = state
         self._settled.set()
         with self._changed:
@@ -375,7 +385,8 @@ class PrinterConnection:
         carrying `result`, matched by `sequence_id`) or None if no reply came within `timeout` s: some commands get
         no reply, so None is not a failure by itself; confirm the effect with `wait_report`. A reply whose `result`
         is not "success" is returned as is; one refused for Developer Mode also turns the state into
-        `needs_developer_mode` (a later success clears it). Raises PrinterOffline if not connected or if the
+        `needs_developer_mode` (a later success, a new connection or DEVELOPER_MODE_HOLD seconds without another
+        refusal clear it). Raises PrinterOffline if not connected or if the
         connection drops while waiting. A full report is requested shortly afterwards."""
         if not isinstance(payload, dict) or len(payload) != 1:
             raise ValueError("payload must have exactly one top-level key")
@@ -406,7 +417,7 @@ class PrinterConnection:
             if not self._developer_mode_needed:
                 log.warning("printer %s: %s refused (%s); Developer Mode needed",
                             self.serial, body.get('command'), reply.get('reason'))
-            self._developer_mode_needed = True
+            self._developer_mode_refused()
         elif str(reply.get('result', '')).lower() == 'success':
             self._developer_mode_needed = False
         return reply
@@ -446,7 +457,7 @@ class PrinterConnection:
             if not self._developer_mode_needed:
                 log.warning("printer %s: command refused (%s); Developer Mode needed",
                             self.serial, refused[0].get('reason'))
-            self._developer_mode_needed = True
+            self._developer_mode_refused()
             reply = refused[0]
         elif ok:
             self._developer_mode_needed = False
