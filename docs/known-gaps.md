@@ -48,6 +48,11 @@ fixed.
 13. ~~Uninstalling after a one-command install needed the kept tarball.~~ Fixed in v0.3.0:
     `sudo filament-kit uninstall [--purge]` runs the kept release's uninstaller.
 14. **Not checked here:** pairing from a real phone, and the APK install on a phone.
+15. **Klipper printers (v0.4.0).** The Android app has no Add screen for them; they appear once added with
+    `sudo filament-kit klipper add`. The setup page lists them only while the Bambu printers module is on, without a host or family column, and its Access
+    Code and Test buttons are for Bambu printers only. Sovol SV08 MAX is
+    verified; Sovol M1D is an unverified placeholder. The usage entries the kit logs for a Klipper printer can't be undone
+    from the kit; correct the spool in Spoolman.
 
 ## How this was checked
 

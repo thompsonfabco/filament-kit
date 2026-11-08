@@ -7,7 +7,7 @@ filament it uses comes off that spool. It also builds slicer presets for every f
 
 The goal is a kit a normal user can set up without being a developer: one command installs it, a menu picks
 the parts you want and says what each one needs, AI is optional, every Bambu Lab printer is supported (Klipper
-and Prusa printers are planned), the facts about printers live in data files you can correct yourself, and it
+printers work through Moonraker; Prusa printers are planned), the facts about printers live in data files you can correct yourself, and it
 can keep itself up to date. The whole kit is free software (GPL-3.0).
 
 ## What you need
@@ -110,7 +110,7 @@ wiring, building and its API are in [reader/README.md](reader/README.md).
 Every Bambu Lab printer the hardware data file describes: H2D, H2D Pro, H2S, H2C, X2D, P2S, X1 Carbon, X1, X1E,
 P1P, P1S, A1 mini, A1 and A2L, with any number of AMS, AMS 2 Pro, AMS HT and AMS Lite units and the external
 spool holders. Slots are labelled by unit and position: A1 ... Z4, then AA1 ..., HT-A ... for AMS HT units, and
-Ext (or Ext-L / Ext-R) for the external holders. Klipper and Prusa printers are planned.
+Ext (or Ext-L / Ext-R) for the external holders. Klipper printers that run Moonraker work too (v0.4.0): [Klipper printers](docs/klipper.md). Prusa printers are planned.
 
 The facts about each model and unit live in a data file (`bambu_hardware.xml`), not in the program, and updates
 bring new versions of it. To correct or add something yourself, see
@@ -159,6 +159,7 @@ with `sudo filament-kit library update`, or turn on the `library` module to also
   [docs/install-iphone-web-app.md](docs/install-iphone-web-app.md): the how-tos.
 - [docs/user-guide.md](docs/user-guide.md): install modes, every command, printers and slot mapping, presets,
   the intake station, the Claude connector and phone web app, remote access, order history, troubleshooting.
+- [docs/klipper.md](docs/klipper.md): Klipper printers (Moonraker), the printer pack and Spool Sync.
 - [docs/known-gaps.md](docs/known-gaps.md): what doesn't work the way the how-tos describe yet.
 - [docs/migrate-from-filament-ops.md](docs/migrate-from-filament-ops.md): moving from the older filament-ops
   setup.
