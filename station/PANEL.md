@@ -189,8 +189,10 @@ The first flash of a new board, or a board whose firmware won't answer, is done 
 that won't boot can be reflashed this way, because the CH340 resets it into the ESP8266's ROM bootloader.
 In filament-kit, `modules apply` (run by `install.sh`, and by `filament-kit modules enable station` when the station
 module is switched on later) installs piper-tts (the `[station-tts]` extra) and the Piper voice wherever the station
-module is on: into `/opt/filament-kit/resources/voice` (60-80 MB), checked against the pinned hashes, skipped when
-offline (run `sudo filament-kit modules apply` again later), and not at all with `station.tts` set to `espeak` or
+module is on: into `/opt/filament-kit/resources/voice` (60-80 MB), from one pinned piper-voices commit and checked
+against the pinned hashes, skipped when offline (run `sudo filament-kit modules apply` again later). A file that
+doesn't match is a warning, never a failed install: espeak-ng speaks. Nothing is downloaded with `station.speech`
+off, with `station.tts` set to `espeak` (`sudo filament-kit config`, then **7) Station voice**), or with
 `FK_STATION_TTS=espeak`. It also installs espeak-ng and ffmpeg and gives the service the `video` group for the
 webcam.
 
