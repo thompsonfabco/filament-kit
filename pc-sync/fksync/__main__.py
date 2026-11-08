@@ -101,11 +101,12 @@ def _finish_pair(dirs: store.AppDirs, cfg: dict, token: str, appdata: Path | Non
     if owner and owner != st.get("you"):
         _out("Another pairing owns the sync for this server (another PC, or this PC's earlier pairing). On the server: "
              f"sudo filament-kit unpair {owner}")
-    try:
-        folders, _why = studio.primary(appdata, cfg, sync.load_state(dirs).get("folder"), layout=layout)
-        _out(f"Bambu Studio folder: {folders.user_filament}")
-    except studio.NotFound as e:
-        _out(e.message)
+    if appdata is not None or layout is not None:   # information only: the pairing is done whatever this finds
+        try:
+            folders, _why = studio.primary(appdata, cfg, sync.load_state(dirs).get("folder"), layout=layout)
+            _out(f"Bambu Studio folder: {folders.user_filament}")
+        except studio.NotFound as e:
+            _out(e.message)
     return 0
 
 
