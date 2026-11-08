@@ -178,15 +178,25 @@ def _plan_error(cfg: dict) -> str | None:
     return None
 
 
+class CannotTell(subprocess.SubprocessError):
+    """systemctl gave no answer (it can fail during a daemon-reload): not the same as "nothing is running"."""
+
+
+def _asked(*args: str) -> str:
+    """What systemctl says. No match, or a unit that doesn't exist, is still exit 0 with nothing or "inactive"."""
+    r = subprocess.run(["systemctl", *args], capture_output=True, text=True, timeout=30, check=False)
+    if r.returncode != 0:
+        raise CannotTell(f"systemctl {args[0]} exited {r.returncode}")
+    return r.stdout
+
+
 def _running_jobs() -> list[str]:
     """The jobs whose unit is running or queued. list-units takes a pattern, `show` does not; --all because a oneshot
     is "activating" while it runs and a queued one still "inactive", which list-jobs shows."""
     names: list[str] = []
     pattern = JOB_PREFIX + "*"
-    units = subprocess.run(["systemctl", "list-units", "--all", "--plain", "--no-legend", pattern],
-                           capture_output=True, text=True, timeout=30, check=False).stdout
-    queued = subprocess.run(["systemctl", "list-jobs", "--plain", "--no-legend", pattern],
-                            capture_output=True, text=True, timeout=30, check=False).stdout
+    units = _asked("list-units", "--all", "--plain", "--no-legend", pattern)
+    queued = _asked("list-jobs", "--plain", "--no-legend", pattern)
     for line in units.splitlines():
         f = line.split()
         if len(f) >= 3 and f[0].startswith(JOB_PREFIX) and f[2] in ACTIVE:
@@ -199,7 +209,8 @@ def _running_jobs() -> list[str]:
 
 
 def _applying() -> bool:
-    """True while a job's unit runs or is queued (one job at a time), under either unit name."""
+    """True while a job's unit runs or is queued (one job at a time), under either unit name. Raises CannotTell: the
+    guards then refuse, and the log's reader keeps calling the job running."""
     if _no_systemd():
         return False
     return bool(_running_jobs()) or bool(_other_units())
@@ -209,20 +220,21 @@ def _other_units() -> list[str]:
     """The old job unit and the timer's update, when they run."""
     out = []
     for unit in (APPLY_UNIT, UPDATE_UNIT):
-        state = subprocess.run(["systemctl", "show", "--property=ActiveState", "--value", unit], capture_output=True,
-                               text=True, timeout=30, check=False).stdout.strip()
-        if state in ACTIVE:
+        if _asked("show", "--property=ActiveState", "--value", unit).strip() in ACTIVE:
             out.append(unit)
     return out
 
 
 def _busy_text() -> str:
     if not _no_systemd():
-        names = _running_jobs()
-        if names:
-            return BUSY.get(names[0], APPLYING)
-        if UPDATE_UNIT in _other_units():
-            return BUSY["update"]
+        try:
+            names = _running_jobs()
+            if names:
+                return BUSY.get(names[0], APPLYING)
+            if UPDATE_UNIT in _other_units():
+                return BUSY["update"]
+        except CannotTell:      # it answered a moment ago that something runs: the log's first line can still name it
+            pass
     try:
         with open(job_log(), encoding="utf-8", errors="replace") as fh:
             return BUSY.get(job_name_of(fh.readline()), APPLYING)
@@ -252,8 +264,7 @@ def _start_job(name: str, why: str = "") -> None:
         raise Refused(400, "no such job")
     if _no_systemd():
         return
-    if _applying():
-        raise Refused(409, _busy_text())
+    _not_applying()
     unit = job_unit(name)
     r = subprocess.run(["systemctl", "start", "--no-block", unit], capture_output=True, text=True,
                        timeout=60, check=False)
@@ -267,7 +278,12 @@ def _start_apply() -> None:
 
 
 def _not_applying() -> None:
-    if _applying():
+    try:
+        busy = _applying()
+    except CannotTell:
+        log.warning("setup helper: systemctl gave no answer on what is running")
+        raise Refused(503, "The server can't tell whether a job is running just now. Try again in a moment.") from None
+    if busy:
         raise Refused(409, _busy_text())
 
 

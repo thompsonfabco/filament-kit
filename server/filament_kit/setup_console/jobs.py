@@ -26,9 +26,11 @@ from .. import __version__, redact, setup_helper
 MAX_LOG = 64 * 1024
 STALE_AFTER = 65 * 60       # past the unit's TimeoutStartSec: a job with no last line is not running any more
 GONE_AFTER = 15.0           # seconds a log may stand with no unit behind it (the unit writes it, then ends)
+GONE_MEMO = 2.0
 _FINISHED = re.compile(rb"^==> finished \(exit (-?[0-9]+)\)\s*$", re.M)
 _memo_lock = threading.Lock()
 _memo: tuple | None = None  # (the bytes it was made from, the redacted text): a page polls once a second
+_gone_memo: tuple | None = None  # (when it was asked, the answer)
 
 
 def stamp():
@@ -53,13 +55,20 @@ def _redacted(data: bytes) -> str:
 
 def _unit_gone(age: float) -> bool:
     """A job with no last line whose unit has gone (killed hard, out of memory): nothing more will come. The check runs
-    only while a log looks unfinished. Where it can't be told, the answer is no, and STALE_AFTER decides."""
+    only while a log looks unfinished. Where it can't be told, the answer is no, and STALE_AFTER decides. Asking takes
+    four systemctl runs and several places ask per poll, so an answer stands for GONE_MEMO seconds."""
+    global _gone_memo
     if setup_helper._no_systemd() or age < GONE_AFTER:
         return False
+    now = time.monotonic()
+    if _gone_memo is not None and now - _gone_memo[0] < GONE_MEMO:
+        return _gone_memo[1]
     try:
-        return not setup_helper._applying()
+        gone = not setup_helper._applying()
     except (OSError, subprocess.SubprocessError):
-        return False
+        gone = False
+    _gone_memo = (now, gone)
+    return gone
 
 
 def view(start: int, *, with_text: bool = True, whole: bool = False) -> dict:

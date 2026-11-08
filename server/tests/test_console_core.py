@@ -390,12 +390,81 @@ def test_a_running_jobs_unfinished_line_waits_for_its_end(app):
 def test_a_job_whose_unit_has_gone_stops_reading_as_running(app, monkeypatch):
     write_log(setup_helper.header("update") + "\nworking\n")
     monkeypatch.setattr(jobs, "GONE_AFTER", -1)
+    monkeypatch.setattr(jobs, "_gone_memo", None)
+    monkeypatch.setattr(jobs, "GONE_MEMO", 0)
     monkeypatch.setattr(setup_helper, "_no_systemd", lambda: False)
     monkeypatch.setattr(setup_helper, "_applying", lambda: False)
     r = jobs.view(0)
     assert r["running"] is False and r["lost"] is True
     monkeypatch.setattr(setup_helper, "_applying", lambda: True)
     assert jobs.view(0)["running"] is True
+
+
+def _systemctl_fails(monkeypatch, rc=1):
+    """As during a daemon-reload: a non-zero exit and nothing on stdout."""
+    monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
+    monkeypatch.setattr(setup_helper, "_no_systemd", lambda: False)
+    calls = []
+
+    def run(cmd, **kw):
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, rc, stdout="", stderr="Failed to connect to bus")
+    monkeypatch.setattr(setup_helper.subprocess, "run", run)
+    return calls
+
+
+def test_a_failed_systemctl_does_not_read_as_a_lost_job(app, monkeypatch):
+    write_log(setup_helper.header("update") + "\nworking\nhalf a li")
+    monkeypatch.setattr(jobs, "GONE_AFTER", -1)
+    monkeypatch.setattr(jobs, "_gone_memo", None)
+    _systemctl_fails(monkeypatch)
+    r = jobs.view(0)
+    assert r["running"] is True and r["lost"] is False
+    assert r["text"].endswith("working\n")      # and the unfinished line still waits
+
+
+@pytest.mark.parametrize("failing", ["list-units", "list-jobs", "show"])
+def test_any_one_of_the_questions_failing_is_cannot_tell(env, monkeypatch, failing):  # noqa: F811
+    monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
+    monkeypatch.setattr(setup_helper, "_no_systemd", lambda: False)
+
+    def run(cmd, **kw):
+        return subprocess.CompletedProcess(cmd, 1 if cmd[1] == failing else 0, stdout="", stderr="")
+    monkeypatch.setattr(setup_helper.subprocess, "run", run)
+    with pytest.raises(setup_helper.CannotTell):
+        setup_helper._applying()
+
+
+def test_a_job_is_not_started_when_it_cannot_be_told_what_runs(env, monkeypatch):  # noqa: F811
+    calls = _systemctl_fails(monkeypatch)
+    with pytest.raises(setup_helper.Refused) as e:
+        setup_helper._start_job("check")
+    assert e.value.status == 503 and "Try again" in e.value.message
+    assert not any(c[1] == "start" for c in calls)
+    with pytest.raises(setup_helper.Refused) as e:
+        setup_helper._not_applying()
+    assert e.value.status == 503
+
+
+def test_the_busy_text_falls_back_to_the_log_when_systemctl_stops_answering(env, monkeypatch):  # noqa: F811
+    write_log(setup_helper.header("rollback") + "\nworking\n")
+    _systemctl_fails(monkeypatch)
+    assert setup_helper._busy_text() == setup_helper.BUSY["rollback"]
+
+
+def test_the_answer_on_a_quiet_log_stands_for_a_moment(app, monkeypatch):
+    write_log(setup_helper.header("update") + "\nworking\n")
+    monkeypatch.setattr(jobs, "GONE_AFTER", -1)
+    monkeypatch.setattr(jobs, "_gone_memo", None)
+    monkeypatch.setattr(setup_helper, "_no_systemd", lambda: False)
+    asked = []
+    monkeypatch.setattr(setup_helper, "_applying", lambda: asked.append(1) or True)
+    jobs.view(0)
+    jobs.view(0)
+    assert len(asked) == 1
+    monkeypatch.setattr(jobs, "GONE_MEMO", 0)
+    jobs.view(0)
+    assert len(asked) == 2
 
 
 @pytest.mark.parametrize("text,gone", [("password=hunter2", "hunter2"), ("alice@example.org", "alice"), ("uid=99887766", "99887766"),
