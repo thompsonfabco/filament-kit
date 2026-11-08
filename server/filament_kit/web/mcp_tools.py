@@ -80,7 +80,7 @@ class Tools:
                  kit_writes: bool = False):
         self.sm = sm
         self._kit = kit_api
-        # the web unit (build_app): preset/line writes go to the kit API, which owns profiles/ (Ruling CG)
+        # the web unit (build_app): preset/line writes go to the kit API, which owns profiles/ (the web unit's user may not write it)
         self.kit_writes = kit_writes
         self._load = load_config
 

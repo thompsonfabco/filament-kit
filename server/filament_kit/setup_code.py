@@ -1,14 +1,17 @@
-"""The setup code: what the kit server's /setup page asks for before it changes anything (owner's choice A,
-2026-11-07). Viewing the page needs no code; every change of a secret, a pairing or a module does.
+"""The setup code: what the kit server's /setup page asks for before it changes anything, so that anyone on the
+home network who can open the page cannot also change the kit. Viewing the page needs no code; every change of a
+secret, a pairing or a module does.
 
   - 8 random digits, shown as 1234-5678 (`shown`); typed with or without the dash or spaces (`normalize`).
   - `/etc/filament-kit/setup_code`: "salt_hex digest_hex", salted scrypt like the web passphrase, root only
-    (600, Ruling CF): only the root helper (setup_helper.py, op `check`) ever checks a code, so a process running as
-    the service user cannot take the hash away and guess offline.
+    (600): only the root helper (setup_helper.py, op `check`) ever checks a code, so a process running as the
+    service user cannot take the hash away and guess offline.
   - `/etc/filament-kit/setup_code.plain`: the code itself, root only (600), so `sudo filament-kit setup-code` can
     show it again; `--new` replaces both and clears the lockout.
-  - `Lockout` (`/etc/filament-kit/setup_lockout`, root only, flock): at most LOCK_MAX wrong codes per LOCK_WINDOW
-    seconds per client address, counted before the (slow) check like the passphrase's (A-M1); and over all addresses
+  - `Lockout` (`/etc/filament-kit/setup_lockout.xml`, root only, under a flock on setup_lockout.lock, rewritten by
+    a temp file and a rename): at most LOCK_MAX wrong codes per LOCK_WINDOW seconds per client address, counted
+    before the (slow) check like the passphrase's, so parallel guesses cannot all pass before the first one fails;
+    and over all addresses
     at most GLOBAL_MAX per window, after which every check waits a backoff that doubles each time the ceiling is hit
     again (LOCK_WINDOW, 2x, 4x ... at most MAX_BACKOFF); a right code resets it, and every quiet hour (DECAY)
     after a backoff ends takes it one level down, so one later burst does not start at the top.
@@ -18,14 +21,17 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import json
+import math
 import os
 import re
 import secrets
-import shutil
 import threading
 import time
 from pathlib import Path
+from xml.sax.saxutils import quoteattr
+
+import defusedxml.ElementTree as DET
+from defusedxml import DefusedXmlException
 
 from . import config
 
@@ -36,7 +42,8 @@ except ImportError:  # Windows dev PCs: no cross-process lock (the helper only r
 
 HASH_FILE = "setup_code"
 PLAIN_FILE = "setup_code.plain"
-LOCK_FILE = "setup_lockout"
+LOCK_FILE = "setup_lockout.xml"
+OLD_LOCK_FILE = "setup_lockout"       # JSON, from development builds only (never released): ignored, removed by --new
 SCRYPT = {"n": 2 ** 15, "r": 8, "p": 1, "maxmem": 2 ** 26}   # as the web passphrase (web/auth.py)
 LOCK_MAX, LOCK_WINDOW = 5, 600
 GLOBAL_MAX = 30
@@ -97,6 +104,13 @@ def check(text) -> bool | None:
     return hmac.compare_digest(got, digest)
 
 
+def _gid(group: str | None) -> int:
+    if not group:
+        return 0
+    import grp
+    return grp.getgrnam(group).gr_gid
+
+
 def _write(dest: Path, data: bytes, mode: int, group: str | None) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_name(dest.name + ".tmp")
@@ -110,8 +124,8 @@ def _write(dest: Path, data: bytes, mode: int, group: str | None) -> None:
                 fh.write(data)
                 fh.flush()
                 os.fsync(fh.fileno())
-            if os.geteuid() == 0:
-                shutil.chown(tmp, user="root", group=group or "root")
+                if os.geteuid() == 0:
+                    os.fchown(fh.fileno(), 0, _gid(group))
         os.replace(tmp, dest)
     except BaseException:
         tmp.unlink(missing_ok=True)
@@ -126,6 +140,7 @@ def write(code: str) -> None:
     _write(plain_file(), (code + "\n").encode(), 0o600, None)
     _write(hash_file(), (_hash(code) + "\n").encode(), 0o600, None)
     lockout_file().unlink(missing_ok=True)
+    (config.paths().etc / OLD_LOCK_FILE).unlink(missing_ok=True)
 
 
 def read() -> str | None:
@@ -159,19 +174,50 @@ class Lockout:
         self._lock = threading.Lock()
 
     @staticmethod
-    def _load(fh) -> dict:
-        fh.seek(0)
+    def _parse(data: bytes) -> dict:
+        """The state of a setup_lockout.xml; a missing, broken or unknown file is an empty state."""
+        st = {"fails": [], "until": 0, "level": 0, "since": 0}
         try:
-            d = json.loads(fh.read() or "{}")
-        except ValueError:
-            d = {}
-        if not isinstance(d, dict):
-            d = {}
-        fails = [f for f in d.get("fails") or [] if isinstance(f, list) and len(f) == 3
-                 and isinstance(f[0], (int, float))]
-        num = lambda k: d.get(k) if isinstance(d.get(k), (int, float)) and not isinstance(d.get(k), bool) else 0  # noqa: E731
-        level = d.get("level") if isinstance(d.get("level"), int) and not isinstance(d.get("level"), bool) else 0
-        return {"fails": fails, "until": num("until"), "level": max(0, level), "since": num("since")}
+            root = DET.fromstring(data, forbid_dtd=True, forbid_entities=True, forbid_external=True)
+        except (DET.ParseError, DefusedXmlException, ValueError):
+            return st
+        if root.tag != "setup-lockout":
+            return st
+
+        def num(v, kind=float):
+            try:
+                n = kind(v)
+            except (TypeError, ValueError, OverflowError):
+                return 0
+            return n if math.isfinite(n) else 0
+        st.update(until=num(root.get("until")), since=num(root.get("since")),
+                  level=max(0, num(root.get("level"), int)))
+        for el in root.findall("fail"):
+            t, client, ticket = el.get("t"), el.get("client"), el.get("ticket")
+            if t is not None and client is not None and ticket is not None:
+                st["fails"].append([num(t), client[:64], ticket[:32]])
+        return st
+
+    @staticmethod
+    def _render(st: dict) -> bytes:
+        lines = ['<?xml version="1.0" encoding="utf-8"?>',
+                 "<!-- filament-kit setup page: recent wrong setup codes (root only). A new setup code clears "
+                 "them. -->",
+                 f'<setup-lockout version="1" until="{float(st["until"])!r}" level="{int(st["level"])}" '
+                 f'since="{float(st["since"])!r}">']
+        for t, client, ticket in st["fails"]:
+            lines.append(f"  <fail t={quoteattr(repr(float(t)))} client={quoteattr(str(client))} "
+                         f"ticket={quoteattr(str(ticket))}/>")
+        lines.append("</setup-lockout>")
+        return ("\n".join(lines) + "\n").encode("utf-8")
+
+    def _read(self) -> bytes:
+        try:   # never through a link; the rename below replaces one
+            fd = os.open(self.path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        except OSError:
+            return b""
+        with os.fdopen(fd, "rb") as fh:
+            return fh.read(256 * 1024)
 
     @staticmethod
     def _decay(st: dict, now: float) -> None:
@@ -182,23 +228,21 @@ class Lockout:
             st["since"] = base + steps * DECAY
 
     def _update(self, fn):
-        """Run fn(state, now) -> result on the pruned state, under the lock and the file's flock."""
+        """Run fn(state, now) -> result on the pruned state, under the thread lock and a flock on the .lock file
+        beside it; the new state goes to a temp file (O_NOFOLLOW, fchmod 600) renamed over the old one."""
         with self._lock:
             self.path.parent.mkdir(parents=True, exist_ok=True)
-            flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
-            fd = os.open(self.path, flags, 0o600)
-            with os.fdopen(fd, "r+", encoding="utf-8") as fh:
+            lock = self.path.with_suffix(".lock")
+            fd = os.open(lock, os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
+            with os.fdopen(fd, "r+b") as lk:
                 if fcntl is not None:
-                    fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+                    fcntl.flock(lk.fileno(), fcntl.LOCK_EX)
                 now = time.time()
-                st = self._load(fh)
+                st = self._parse(self._read())
                 st["fails"] = [f for f in st["fails"] if f[0] > now - self.window]
                 self._decay(st, now)
                 out = fn(st, now)
-                fh.seek(0)
-                fh.truncate()
-                fh.write(json.dumps(st))
-                fh.flush()
+                _write(self.path, self._render(st), 0o600, None)
                 return out
 
     def attempt(self, client: str) -> str | None:

@@ -37,10 +37,10 @@ UNPAIRED = (f"the kit server no longer accepts this web unit (the device '{DEVIC
 NOT_PAIRED = "this web unit is not paired with the kit server yet; pair it: sudo filament-kit modules apply"
 
 
-def pair_token(f: Path) -> str:
+def pair_token(f: Path, role: str | None = None) -> str:
     """Pair as the device 'web (MCP)' and keep the token in `f` (0600). Run by `modules apply` as root (then handed
     to the web unit's user), or in-process where the process may write the kit's pairings (one-user installs)."""
-    tok = pairing.issue(DEVICE_NAME).token
+    tok = pairing.issue(DEVICE_NAME, role=role).token
     pairing.check(tok)                   # claims the device, like a phone's first call
     f.parent.mkdir(parents=True, exist_ok=True)
     pairing._write_atomic(f, (tok + "\n").encode("utf-8"), 0o600)

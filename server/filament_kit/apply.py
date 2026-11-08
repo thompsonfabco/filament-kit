@@ -532,6 +532,7 @@ def _web_state(ex: _Exec) -> None:
         print(f"moved to {config.paths().web}: {', '.join(moved)}")
     web_access.shared_files(kit.st_uid, kit.st_gid)
     try:
+        web_access.mark_web_device()              # a pairing from before roles: the web-only routes serve it
         web_access.pair(web.pw_uid, web.pw_gid)
     except Exception as e:  # noqa: BLE001 - the web unit says how to pair later; the rest of the apply goes on
         print(f"the web unit could not be paired with the kit server now ({type(e).__name__}); "
@@ -927,7 +928,7 @@ def finish(cfg: dict, *, run: Callable[[list[str]], None] = run_checked, pairing
 
 
 def _setup_line(cfg: dict) -> None:
-    """The setup page's address, with its code only at a terminal (Ruling CD: no secrets in logs without one)."""
+    """The setup page's address, with its code only at a terminal: an install log must not carry the code."""
     from . import setup_code
     url = setup_code.page_url(cfg)
     code = setup_code.read() if _tty() else None

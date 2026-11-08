@@ -106,7 +106,7 @@ def _text(b: dict, key: str, *, required: bool = True) -> str:
 
 class KitCap:
     """The kit server's daily label-read cap, taken and refunded through its API: the web unit may not write the
-    kit's reads.json (Ruling CG). A 429 from the kit is the cap reached. One read per KitCap: `take` keeps the
+    kit's reads.json (no kit file is writable by its user). A 429 from the kit is the cap reached. One read per KitCap: `take` keeps the
     kit's single-use ticket, and `refund` gives back that read only (the kit refuses any other refund)."""
 
     def __init__(self, kit):
@@ -291,7 +291,7 @@ class IntakeApp:
 
         def run() -> dict:
             cfg = self.tools.cfg()
-            cap = KitCap(self.kit)                  # the kit's cap, through its API (Ruling CG)
+            cap = KitCap(self.kit)                  # the kit's cap, through its API
             cap.take()
             try:
                 ctx = intake.read_context(cfg, self.tools.sm, self._station(), orders_from=self._orders)

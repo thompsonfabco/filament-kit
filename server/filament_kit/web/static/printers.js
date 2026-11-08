@@ -168,7 +168,8 @@ function printersTab() {
   }
 
   // ----- load / unload (the kit's slot routes; the same refusals as the Android app) -----
-  let slotBusy = false, loadSlot = null, loadSpool = null;
+  // dryAgain: a dry run asked for while another slot call ran; the latest pick's runs when that call ends
+  let slotBusy = false, loadSlot = null, loadSpool = null, dryAgain = null;
   const slotPath = (label) => `${encodeURIComponent(current)}/slots/${encodeURIComponent(label)}`;
   function slotSay(lines, ok) { slotMsg.replaceChildren(h("pre", { class: ok ? "ok" : "err", textContent: [lines].flat().join("\n") })); }
   function spoolTitle(s) { return `${s.vendor || ""} ${s.name || ""}`.trim() || `spool #${s.id}`; }
@@ -219,11 +220,17 @@ function printersTab() {
     loadBox.classList.remove("hidden");
     loadBox.scrollIntoView({ behavior: "smooth", block: "start" });
   }
-  function closeLoad() { loadSlot = loadSpool = null; loadBox.classList.add("hidden"); loadBox.replaceChildren(); }
+  function closeLoad() { loadSlot = loadSpool = null; dryAgain = null; loadBox.classList.add("hidden"); loadBox.replaceChildren(); }
+  function slotDone() {
+    slotBusy = false;
+    const again = dryAgain; dryAgain = null;
+    if (again && loadSpool) doLoad(true, again.plan, again.go);
+  }
 
   // dry: the plan (preset, nozzle, spools going back); then Load sends `dry_run: false`
   async function doLoad(dry, plan, go) {
-    if (!loadSpool || !loadSlot || slotBusy) return;
+    if (!loadSpool || !loadSlot) return;
+    if (slotBusy) { if (dry) dryAgain = { plan, go }; return; }   // not dropped: runs for the latest pick after
     const s = loadSpool, label = loadSlot;
     slotBusy = true; go.disabled = true;
     plan.replaceChildren(h("p", { class: "muted", textContent: dry ? "Checking…" : "Loading…" }));
@@ -244,8 +251,8 @@ function printersTab() {
           r.confirmed ? "" : "The printer accepted it but hasn't shown the change yet", ...moved, ...(r.problems || [])].filter(Boolean), true);
       }
     } catch (e) {
-      plan.replaceChildren(fail(e));
-    } finally { slotBusy = false; }
+      if (loadSpool === s) plan.replaceChildren(fail(e));
+    } finally { slotDone(); }
   }
 
   // Spoolman only (the printer's slot setting stays): the dry run says where the spool goes, then a confirm
@@ -261,7 +268,7 @@ function printersTab() {
       const r = await pj(`${slotPath(sl.label)}/unload`, { dry_run: false });
       slotSay([`Unloaded ${name} from ${sl.label}.`,
         ...(r.moved_back || []).map((m) => `Moved back: #${m.id ?? "?"} → ${m.location || "its previous place"}`)], true);
-    } catch (e) { slotSay(e.message, false); } finally { slotBusy = false; }
+    } catch (e) { slotSay(e.message, false); } finally { slotDone(); }
   }
 
   // ----- usage + re-map -----

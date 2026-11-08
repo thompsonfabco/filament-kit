@@ -339,7 +339,7 @@ def run_apply(cmd: list[str] | None = None) -> int:
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         if root:
             os.fchmod(fh.fileno(), 0o640)
-            shutil.chown(apply_log(), user="root", group=setup_code.GROUP)
+            os.fchown(fh.fileno(), 0, setup_code._gid(setup_code.GROUP))
         cmd = cmd or [WRAPPER, "modules", "apply", "--no-pair"]
         fh.write("==> filament-kit modules apply\n")
         fh.flush()

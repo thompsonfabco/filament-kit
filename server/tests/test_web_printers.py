@@ -804,3 +804,12 @@ def test_script_has_the_load_and_unload_flows():
     src = (STATIC / "printers.js").read_text(encoding="utf-8")
     for needle in ("/slots/", "/load", "/unload", "dry_run: false", "window.confirm", "find?q=", "pj(\"tagged\")"):
         assert needle in src, needle
+
+
+def test_script_reruns_a_dry_run_asked_for_while_another_ran():
+    """Picking spool B while A's dry run is in flight queues B's (dryAgain), run when A's ends (slotDone), instead
+    of leaving an empty plan and a disabled Load button."""
+    src = (STATIC / "printers.js").read_text(encoding="utf-8")
+    assert "if (slotBusy) { if (dry) dryAgain = { plan, go }; return; }" in src
+    assert "if (again && loadSpool) doLoad(true, again.plan, again.go);" in src
+    assert src.count("finally { slotDone(); }") == 2 and "finally { slotBusy = false; }" not in src

@@ -112,7 +112,8 @@ class TokenStore:
     def _read(self) -> tuple[list[dict], int]:
         """Strict read for a change: ([], 1) when there is no file, TokenFileError when it does not validate."""
         try:
-            with open(self.path, "rb") as f:
+            # never through a link: root (the CLI) writes this file in a folder the kit server's user owns
+            with os.fdopen(os.open(self.path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)), "rb") as f:
                 data = f.read(MAX_FILE + 1)
         except FileNotFoundError:
             return [], 1

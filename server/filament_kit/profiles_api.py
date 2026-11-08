@@ -427,7 +427,7 @@ def _local_problems(raw: bytes) -> list[str]:
     return list(library_mod.validate(entry, local=True))
 
 
-# ---------- the web unit's preset writes (Ruling CG: it may not write profiles/ itself) ----------
+# ---------- the web unit's preset writes (its user may not write profiles/ itself) ----------
 
 def _ids(body: dict) -> list[int]:
     ids = body.get("ids")

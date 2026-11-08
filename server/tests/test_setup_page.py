@@ -17,7 +17,8 @@ from pathlib import Path
 import pytest
 from starlette.testclient import TestClient
 
-from filament_kit import api, apply, cli, config, library, modules, pairing, reader_tokens, setup_code, setup_helper
+from filament_kit import (api, apply, cli, config, library, modules, pairing, reader_tokens, setup_code, setup_helper,
+                          setup_page)
 from filament_kit.bridge import registry
 from filament_kit.spoolman import Spoolman
 
@@ -167,7 +168,7 @@ def test_viewing_needs_no_code(app):
 def test_every_write_needs_the_code(app, helper, manager, path, body):
     c = client(app)
     def files():
-        return sorted(p.name for p in config.paths().etc.iterdir() if p.name != setup_code.LOCK_FILE)
+        return sorted(p.name for p in config.paths().etc.iterdir() if not p.name.startswith("setup_lockout"))
     before = files()
     for code in (None, "", "99999999", "1234-567"):
         r = post(c, path, body, code=code)
@@ -238,6 +239,7 @@ def test_a_bad_key_is_refused_without_echoing_it(app):
 
 
 def test_web_passphrase_is_stored_as_the_cli_stores_it(app, caplog):
+    pytest.importorskip("mcp")  # the web extra
     from filament_kit.web import auth
     caplog.set_level(logging.INFO, logger="filament_kit")
     c = client(app)
@@ -618,7 +620,7 @@ def test_an_apply_counts_as_running_while_its_oneshot_is_activating(monkeypatch,
     assert seen == [["systemctl", "show", "--property=ActiveState", "--value", setup_helper.APPLY_UNIT]]
 
 
-# ---------- fix round 1 ----------
+# ---------- the helper's ops, the page's guards and the apply log ----------
 
 SYSTEMD = Path(__file__).resolve().parents[2] / "install" / "systemd"
 
@@ -769,7 +771,7 @@ def test_m_helper_read_times_out(env, monkeypatch):
         assert setup_helper._read_request(b.fileno()) is None
 
 
-# ---------- fix round 2: the web unit as its own user ----------
+# ---------- the web unit as its own user ----------
 
 def _web_cfg():
     cfg = modules.set_mode(config._merge(config.DEFAULTS, {}), "server", say=None)
@@ -805,6 +807,7 @@ def test_r2b_tmpfiles_makes_the_run_folder_from_boot():
 
 
 def test_r2b_web_state_lives_in_its_own_folder(env):
+    pytest.importorskip("mcp")  # the web extra
     from filament_kit.web import app as web_app, push, slots
     w = config.paths().web
     assert w != config.paths().state and w.name.endswith("-web")
@@ -812,7 +815,9 @@ def test_r2b_web_state_lives_in_its_own_folder(env):
     assert push.state_dir() == w and slots.KitApi._token_file() == w / "kit_token"
 
 
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="root runs this on Linux (descriptors, /proc)")
 def test_r2b_migration_moves_the_web_files_and_keeps_reader_tokens(env):
+    import os
     from filament_kit import web_access
     old = config.paths().state / "web"
     old.mkdir(parents=True, exist_ok=True)
@@ -821,7 +826,8 @@ def test_r2b_migration_moves_the_web_files_and_keeps_reader_tokens(env):
     (old / "vapid.pem").write_text("pem", encoding="utf-8")
     (old / "reader_tokens").write_text("<reader-tokens/>", encoding="utf-8")
     chowned = []
-    moved = web_access.migrate(5001, 5001, chown=lambda p, u, g: chowned.append((Path(p).name, u, g)))
+    moved = web_access.migrate(5001, 5001, chown=lambda fd, u, g: chowned.append((os.readlink(f"/proc/self/fd/{fd}")
+                                                                                  .rsplit("/", 1)[-1], u, g)))
     w = config.paths().web
     assert moved == ["kit_token", "oauth.json", "vapid.pem"]
     assert (w / "oauth.json").read_text(encoding="utf-8") == '{"clients": {"c1": {}}}'   # the connector stays
@@ -846,6 +852,7 @@ def test_r2b_migration_modes(env):
     assert os.stat(old / "reader_tokens").st_mode & 0o777 == 0o644
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="root runs this on Linux (folder descriptors)")
 def test_r2b_web_pairs_once_as_root_and_keeps_an_existing_token(env):
     from filament_kit import web_access
     pairing.make_cert("kit", ["192.0.2.5"], config.paths().etc)
@@ -868,6 +875,7 @@ def test_r2b_web_without_a_token_and_without_pairing_rights_says_how(env, monkey
     assert "sudo filament-kit modules apply" in str(e.value)
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="root runs this on Linux (folder descriptors)")
 def test_r2b_shared_lock_files_exist(env):
     from filament_kit import web_access
     web_access.shared_files(1000, 1000, chown=lambda *a: None)
@@ -938,6 +946,7 @@ def test_r2b_acl_encoding():
 
 
 def test_r2b_root_writers_keep_the_web_users_read(env, monkeypatch):
+    pytest.importorskip("mcp")  # the web extra
     seen = []
     monkeypatch.setattr(config, "grant_web_read", lambda path: seen.append(Path(path).name))
     config.save(config.load())
@@ -994,3 +1003,101 @@ def test_r2b_web_state_without_the_web_user_stops_the_apply(env, monkeypatch):
     ex = apply._Exec(lambda cmd: None, Path("."), Path("/"))
     with pytest.raises(apply.ApplyError):
         apply._web_state(ex)
+
+
+# ---------- the client address cannot be forged from loopback ----------
+
+def test_kit_server_takes_no_proxy_headers():
+    from filament_kit import __main__ as kit_main
+    opts = kit_main.serve_options({"port": 8710}, Path("/etc/filament-kit"))
+    assert opts["proxy_headers"] is False and opts["forwarded_allow_ips"] == ""
+
+
+def test_x_forwarded_for_from_loopback_does_not_change_the_client(tmp_path):
+    """Through uvicorn's own app wrapping, with the kit server's options: the client stays the socket's."""
+    import asyncio
+    import uvicorn
+    from filament_kit import __main__ as kit_main
+    seen = []
+
+    async def app(scope, receive, send):
+        seen.append(scope["client"])
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b""})
+    opts = {k: v for k, v in kit_main.serve_options({"port": 8710}, tmp_path).items() if not k.startswith("ssl_")}
+    cfg = uvicorn.Config(app, **opts)
+    cfg.load()
+    scope = {"type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1", "method": "POST", "scheme": "https",
+             "path": "/setup/api/key", "raw_path": b"/setup/api/key", "query_string": b"", "root_path": "",
+             "headers": [(b"host", b"localhost"), (b"x-forwarded-for", b"192.0.2.77")],
+             "client": ("127.0.0.1", 40000), "server": ("127.0.0.1", 8710)}
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(_):
+        pass
+    asyncio.run(cfg.loaded_app(scope, receive, send))
+    assert seen == [("127.0.0.1", 40000)]
+
+
+def test_every_loopback_caller_is_one_lockout_client(env, helper):
+    import types
+    key = setup_page.SetupPage._client_key
+    req = lambda host: types.SimpleNamespace(client=types.SimpleNamespace(host=host))   # noqa: E731
+    assert key(req("127.0.0.1")) == key(req("127.0.0.53")) == key(req("::1")) == key(req("::ffff:127.0.0.1")) \
+        == "loopback"
+    assert key(req("192.0.2.4")) == "192.0.2.4"
+    sent = []
+    app = make(env, lambda r: sent.append(r.get("client")) or helper(r))
+    c = TestClient(app, base_url=BASE, client=("127.0.0.1", 50000))
+    cfg = config.load()
+    cfg["web"] = {**cfg["web"], "lan": ["192.0.2.0/24", "127.0.0.0/8"]}
+    config.save(cfg)
+    for fwd in ("192.0.2.31", "192.0.2.32"):
+        post(c, "key", {"key": KEY}, code="00000000", headers={**H, "X-Forwarded-For": fwd})
+    assert sent and set(sent) == {"loopback"}
+
+
+# ---------- the lockout file is XML, written by a temp file and a rename ----------
+
+def test_lockout_state_is_kept_as_xml(tmp_path):
+    import defusedxml.ElementTree as DET
+    lock = setup_code.Lockout(tmp_path / "setup_lockout.xml")
+    t = lock.attempt("192.0.2.20")
+    root = DET.fromstring((tmp_path / "setup_lockout.xml").read_bytes())
+    assert root.tag == "setup-lockout"
+    fails = root.findall("fail")
+    assert [(f.get("client"), f.get("ticket")) for f in fails] == [("192.0.2.20", t)]
+    lock.release(t)
+    assert DET.fromstring((tmp_path / "setup_lockout.xml").read_bytes()).findall("fail") == []
+
+
+def test_lockout_file_name_is_xml_and_the_old_json_one_is_ignored(env):
+    assert setup_code.lockout_file().name == "setup_lockout.xml"
+    old = config.paths().etc / "setup_lockout"
+    old.write_text('{"until": 99999999999, "level": 9}', encoding="utf-8")   # a dev install's: never shipped
+    assert setup_helper.handle({"op": "check", "code": CODE, "client": "192.0.2.20"})["status"] == 200
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="file modes")
+def test_lockout_is_written_by_rename_never_through_a_link(tmp_path):
+    import os
+    f = tmp_path / "setup_lockout.xml"
+    victim = tmp_path / "victim"
+    victim.write_text("root's\n", encoding="utf-8")
+    os.chmod(victim, 0o644)
+    os.symlink(victim, f)
+    lock = setup_code.Lockout(f)
+    lock.attempt("192.0.2.20")
+    assert victim.read_text(encoding="utf-8") == "root's\n" and os.stat(victim).st_mode & 0o777 == 0o644
+    assert not f.is_symlink() and os.stat(f).st_mode & 0o777 == 0o600
+    ino = os.stat(f).st_ino
+    lock.attempt("192.0.2.21")
+    assert os.stat(f).st_ino != ino                                  # a new file renamed in each time
+
+
+def test_a_broken_lockout_file_starts_clean(tmp_path):
+    f = tmp_path / "setup_lockout.xml"
+    f.write_text("<not-closed", encoding="utf-8")
+    assert setup_code.Lockout(f).attempt("192.0.2.20") is not None

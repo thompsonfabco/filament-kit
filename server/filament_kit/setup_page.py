@@ -1,8 +1,8 @@
 """The setup page: `/setup` on the kit server's own HTTPS port (8710), where the owner enters keys and codes without
-the command line (owner's words: "a simple webpage after the server is installed"). Works without the web and remote
+the command line, after the server is installed. Works without the web and remote
 modules: it is part of the server.
 
-Access (owner's choice A, 2026-11-07):
+Access (a page on the home network that can change secrets, so each change needs more than reaching it):
   - home network only (config `web.lan`, the private ranges by default; loopback always), every request;
   - the Host must be one of the server's own names or addresses (its certificate's names, its current IPs), and
     every POST must carry that same `Origin`: another site in the owner's browser cannot post here, and a DNS
@@ -195,6 +195,19 @@ class SetupPage:
     def _ip(request: Request) -> str:
         return request.client.host if request.client else ""
 
+    @classmethod
+    def _client_key(cls, request: Request) -> str:
+        """Whom the helper's lockout counts a wrong code against: the address, except that every local process
+        (loopback) is one client, so a local caller cannot spread its tries over made-up addresses."""
+        ip = cls._ip(request)
+        try:
+            addr = ipaddress.ip_address(ip)
+        except ValueError:
+            return ip
+        if getattr(addr, "ipv4_mapped", None):
+            addr = addr.ipv4_mapped
+        return "loopback" if addr.is_loopback else ip
+
     def _lan(self, request: Request) -> bool:
         nets = lan.parse_lan((config.load().get("web") or {}).get("lan") or ())
         return lan.is_lan(self._ip(request), nets)
@@ -235,13 +248,13 @@ class SetupPage:
         code = body.get("code")
         if not isinstance(code, str) or not code.strip():
             raise Refused(403, NEED_CODE)
-        await self._helper({"op": "check", "code": code, "client": self._ip(request)})
+        await self._helper({"op": "check", "code": code, "client": self._client_key(request)})
 
     def guard(self, fn, write: bool | str = False):
         """`write`: True = a change the server makes itself (the helper's `check` first); "helper" = a change the
         helper makes, which checks the code in the same request."""
         async def route(request: Request):
-            _CLIENT.set(self._ip(request))
+            _CLIENT.set(self._client_key(request))
             if not self._lan(request):
                 return JSONResponse({"error": HOME_ONLY}, 403)
             if not self._host_ok(request):

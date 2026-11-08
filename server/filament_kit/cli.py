@@ -1544,7 +1544,7 @@ def cmd_web_passphrase() -> int:
 def cmd_setup_code(new: bool) -> int:
     """`setup-code [--new]` (root): the code the server's /setup page asks for before any change, made when there
     is none. At a terminal it is printed with the page's address; without one (a log) only the address and how to
-    see it (Ruling CD: no secrets in logs)."""
+    see it, as no secret may end up in a log."""
     from . import setup_code
     if not _is_root():
         print("error: run as root: sudo filament-kit setup-code", file=sys.stderr)

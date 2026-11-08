@@ -99,7 +99,7 @@ def fake():
 
 
 class CapKit:
-    """The kit API's label-read cap and order routes (Ruling CG), served from the kit's own ReadCap as api.py does."""
+    """The kit API's label-read cap and order routes, served from the kit's own ReadCap as api.py does."""
 
     def _cap(self):
         from filament_kit import intake

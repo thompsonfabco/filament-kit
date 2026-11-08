@@ -1,4 +1,4 @@
-"""WEB fix round 3 (Ruling CG): no folder of the kit is writable by the web unit's user. Its preset/line writes, the
+"""No folder of the kit is writable by the web unit's user. Its preset/line writes, the
 shared label-read cap and the order history go through the kit API; its failed reads stay in its own folder; the
 kit's writers never follow a link planted where the web could once write; the H2D slot token is readable by it."""
 from __future__ import annotations
@@ -34,8 +34,12 @@ def kit(tmp_path, monkeypatch):
 def _client(**kw):
     app = api.create_app(Spoolman("http://127.0.0.1:9"), printers=object(), camera_hub=object(), mapper=object(),
                          enabled_modules=frozenset(modules.enabled(config.load())) - {"printers"}, **kw)
-    tok = pairing.redeem_code(pairing.issue("web (MCP)").code)
+    tok = pairing.redeem_code(pairing.issue("web (MCP)", role="web").code)
     return TestClient(app), {"Authorization": f"Bearer {tok}"}
+
+
+def _bearer(name: str, role=None) -> dict:
+    return {"Authorization": f"Bearer {pairing.redeem_code(pairing.issue(name, role=role).code)}"}
 
 
 # ---------- the read cap and the orders, through the kit ----------
@@ -89,7 +93,56 @@ def test_kit_orders_route_reads_the_orders_file(kit):
     assert c.get("/api/intake/orders").status_code == 401
 
 
+def _orders_file(kit):
+    f = kit / "state" / "orders.json"
+    f.write_text(json.dumps({"items": [{"order": "o1", "asin": "B0EXAMPLE", "title": "PLA"}]}), encoding="utf-8")
+    cfg = config.load()
+    cfg["orders"] = {"file": str(f)}
+    config.save(cfg)
+
+
+@pytest.mark.parametrize("name", ["phone", "pc", "station"])
+def test_kit_orders_route_refuses_every_device_but_the_web_unit(kit, name):
+    _orders_file(kit)
+    c, h = _client()
+    r = c.get("/api/intake/orders", headers=_bearer(name))
+    assert r.status_code == 403 and r.json()["error"] == "forbidden"
+    assert c.get("/api/intake/orders", headers=h).status_code == 200
+
+
+def test_kit_orders_route_refuses_a_device_only_named_like_the_web_unit_until_apply_marks_it(kit):
+    _orders_file(kit)
+    c, _ = _client()
+    old = _bearer("web (MCP)")                           # paired before roles existed
+    assert c.get("/api/intake/orders", headers=old).status_code == 403
+    assert web_access.mark_web_device() == 1
+    assert c.get("/api/intake/orders", headers=old).json()["orders"][0]["asin"] == "B0EXAMPLE"
+    assert web_access.mark_web_device() == 0             # marked once
+
+
+@LINUX
+def test_root_pairing_of_the_web_unit_marks_its_device(kit):
+    web_access.pair(os.getuid(), os.getgid(), chown=lambda *a: None)
+    devs = json.loads((kit / "state" / "devices.json").read_text(encoding="utf-8"))
+    assert [d.get("role") for d in devs if d["name"] == "web (MCP)"] == ["web"]
+
+
+def test_apply_marks_the_web_units_old_pairing(kit, monkeypatch):
+    from filament_kit import apply
+    import types
+    seen = []
+    monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
+    monkeypatch.setitem(sys.modules, "pwd", types.SimpleNamespace(getpwnam=lambda n: types.SimpleNamespace(
+        pw_uid=54321, pw_gid=54321)))
+    for name in ("migrate", "shared_files", "pair", "grant"):
+        monkeypatch.setattr(web_access, name, lambda *a, _n=name, **k: seen.append(_n) or [])
+    monkeypatch.setattr(web_access, "mark_web_device", lambda: seen.append("mark") or 0)
+    apply._web_state(apply._Exec(lambda cmd: None, Path("."), Path("/")))
+    assert seen.index("mark") < seen.index("pair")
+
+
 def test_web_cap_asks_the_kit():
+    pytest.importorskip("mcp")  # the web extra
     from filament_kit.web import slots
     from filament_kit.web.intake_app import KitCap
 
@@ -192,7 +245,7 @@ def test_no_kit_folder_is_writable_by_the_web_user(kit, tmp_path):
         assert acl.users_of(st / d)[54321] & acl.W == 0, d
     assert 54321 not in acl.users_of(st / "failed")
     assert acl.users_of(st / "profiles", acl.DEFAULT)[54321] & acl.W == 0
-    assert acl.users_of(token) == {54321: acl.R}                     # N2: the H2D slot token
+    assert acl.users_of(token) == {54321: acl.R}                     # the H2D slot token
     assert not (st / "reads.json").exists() or 54321 not in acl.users_of(st / "reads.json")
     assert acl.users_of(st / "inventory.lock") == {54321: acl.R}       # a lock is taken on a read-only fd
 

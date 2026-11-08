@@ -716,10 +716,13 @@ def step_web(b: Bundle, ctx: _Ctx) -> None:
             ctx.fail(S, "the bundle's oauth.json is not a JSON object; not installed")
         else:
             dest = config.paths().web / "oauth.json"       # the web unit's own folder (web_access.py)
-            _install_secret(ctx, S, oauth, dest, 0o600, None,
-                            f"oauth.json ({len(d.get('clients') or {})} connector registrations)")
-            if ctx.apply and dest.exists() and config.uid_of(config.WEB_USER) is not None:
-                _chown(dest, config.WEB_USER, config.WEB_USER)
+            if dest.is_symlink():   # that folder is the web user's: root never reads or writes through a link there
+                ctx.fail(S, f"{dest} is a symbolic link; not installed (remove it, then run this again)")
+            else:
+                _install_secret(ctx, S, oauth, dest, 0o600, None,
+                                f"oauth.json ({len(d.get('clients') or {})} connector registrations)")
+                if ctx.apply and dest.exists() and config.uid_of(config.WEB_USER) is not None:
+                    _chown(dest, config.WEB_USER, config.WEB_USER)
     if phrase is not None:
         if not _HASH.fullmatch(phrase.read_text(encoding="utf-8").strip()):
             ctx.fail(S, "the bundle's passphrase file is not 'salt_hex digest_hex'; not installed")

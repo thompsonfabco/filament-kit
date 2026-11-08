@@ -258,6 +258,30 @@ def test_cap_refund_of_an_expired_ticket_is_refused(tmp_path, monkeypatch):
     assert intake.reads_today(f) == 1
 
 
+@pytest.mark.parametrize("after, ok", [(600, True), (901, False)])
+def test_cap_refund_covers_the_claude_clients_slowest_failure(tmp_path, monkeypatch, after, ok):
+    """The station refunds on the errors that come after the Anthropic client's timeout and retries (up to
+    CLAUDE_TIMEOUT x (CLAUDE_RETRIES + 1)), so a ticket lives 15 minutes."""
+    f = tmp_path / "reads.json"
+    cap = ReadCap(f, 2)
+    start = time.time()
+    monkeypatch.setattr(intake.time, "time", lambda: start)
+    t = cap.take("d")
+    monkeypatch.setattr(intake.time, "time", lambda: start + after)
+    if ok:
+        cap.refund(t, "d")
+        assert intake.reads_today(f) == 0
+    else:
+        with pytest.raises(intake.RefundRefused):
+            cap.refund(t, "d")
+        assert intake.reads_today(f) == 1
+
+
+def test_ticket_ttl_is_tied_to_the_claude_client():
+    assert intake.TICKET_TTL == 900
+    assert intake.TICKET_TTL >= intake.CLAUDE_TIMEOUT * (intake.CLAUDE_RETRIES + 1)
+
+
 def test_cap_refund_of_another_devices_ticket_is_refused(tmp_path):
     f = tmp_path / "reads.json"
     cap = ReadCap(f, 2)

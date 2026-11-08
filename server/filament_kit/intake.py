@@ -135,7 +135,12 @@ def check_photos(photos: list[tuple[str, bytes]]) -> list[bytes]:
     return out
 
 
-TICKET_TTL = 120   # seconds a take's refund ticket stays good: a read that fails before Claude fails fast
+# The Anthropic client of a label read: each try waits CLAUDE_TIMEOUT s, and it tries CLAUDE_RETRIES more times.
+CLAUDE_TIMEOUT, CLAUDE_RETRIES = 180, 2
+# Seconds a take's refund ticket stays good. The station refunds on the errors that come only after the client has
+# given up (unreachable, api_error): up to CLAUDE_TIMEOUT x (CLAUDE_RETRIES + 1) = 9 min, plus the retry backoff and
+# the Spoolman catalog fetch before it. 15 minutes covers that worst case.
+TICKET_TTL = 15 * 60
 
 
 class RefundRefused(ValueError):
@@ -263,7 +268,7 @@ def read_context(cfg: dict, sm: Spoolman, station=None, *, app_tag: bool = False
     module is on and `orders.file` exists (else None: no orders block). `station_state`: the station's GET /state
     through `station` (a StationClient, None without a station); a dead station gives None. `fresh_tag`: the
     newest reader tap when fresh and on no spool; skipped when the app sent its own tag (`app_tag`), which wins."""
-    if orders_from is not None:      # the web unit: the kit's order history through its API (Ruling CG)
+    if orders_from is not None:      # the web unit: the kit's order history through its API (it reads no kit file)
         orders = orders_from()
     else:
         path = (cfg.get("orders") or {}).get("file")
@@ -298,7 +303,7 @@ def _orders_text(orders: list[dict]) -> str:
 # ---------- failed reads kept for retry ----------
 
 def _failed_dir() -> Path:
-    """The kit's own (state/failed), or the web unit's (FK_FAILED_DIR, in its own folder: Ruling CG)."""
+    """The kit's own (state/failed), or the web unit's (FK_FAILED_DIR, in its own folder: it writes no kit folder)."""
     return Path(os.environ["FK_FAILED_DIR"]) if os.environ.get("FK_FAILED_DIR") else config.paths().state / "failed"
 
 
@@ -352,7 +357,7 @@ def _call(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | None, cli
     import anthropic
     cfg = config.load()
     if client is None:
-        client = anthropic.Anthropic(api_key=_api_key(), timeout=180, max_retries=2)
+        client = anthropic.Anthropic(api_key=_api_key(), timeout=CLAUDE_TIMEOUT, max_retries=CLAUDE_RETRIES)
     fils, vendors = sm.get("/filament"), sm.get("/vendor")
     catalog = "\n".join(
         f"F{f['id']} | {(f.get('vendor') or {}).get('name', '?')} | {f['name']} | {f.get('material')} | "

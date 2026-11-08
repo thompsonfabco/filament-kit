@@ -13,6 +13,8 @@ import stat
 import struct
 from pathlib import Path
 
+from . import nofollow
+
 ACCESS, DEFAULT = "system.posix_acl_access", "system.posix_acl_default"
 VERSION = 2
 USER_OBJ, USER, GROUP_OBJ, GROUP, MASK, OTHER = 0x01, 0x02, 0x04, 0x08, 0x10, 0x20
@@ -38,9 +40,12 @@ def decode(data: bytes) -> list[tuple[int, int, int]]:
     return [struct.unpack("<HHI", data[i:i + 8]) for i in range(4, len(data), 8)]
 
 
-def _read(path: Path, name: str) -> list[tuple[int, int, int]] | None:
+def _read(target, name: str) -> list[tuple[int, int, int]] | None:
+    """The ACL `name` of a path (never through a link) or an open descriptor."""
     try:
-        return decode(os.getxattr(path, name, follow_symlinks=False))
+        if isinstance(target, int):
+            return decode(os.getxattr(target, name))
+        return decode(os.getxattr(target, name, follow_symlinks=False))
     except OSError:
         return None
 
@@ -64,31 +69,69 @@ def _with_users(entries: list[tuple[int, int, int]], users: dict[int, int]) -> l
     return kept
 
 
+def _grant_fd(fd: int, users: dict[int, int], default: dict[int, int] | None) -> None:
+    st = os.fstat(fd)
+    acc = _read(fd, ACCESS) or _base(st.st_mode)
+    os.setxattr(fd, ACCESS, encode(_with_users(acc, users)))
+    if default and stat.S_ISDIR(st.st_mode):
+        dfl = _read(fd, DEFAULT) or [(USER_OBJ, 7, UNDEFINED), (GROUP_OBJ, 5, UNDEFINED), (OTHER, 5, UNDEFINED)]
+        os.setxattr(fd, DEFAULT, encode(_with_users(dfl, default)))
+
+
 def grant(path, users: dict[int, int], default: dict[int, int] | None = None) -> None:
     """Give each uid in `users` its perm (R/W/X bits) on `path`; on a folder `default` also becomes inherited by
-    what is made in it later. Never follows a symbolic link."""
+    what is made in it later. Never follows a symbolic link: the file itself is opened with O_NOFOLLOW and changed
+    through its descriptor (a link, FIFO or device is left alone). The folders on the way are the caller's to
+    trust; grant_at works below a folder descriptor."""
     path = Path(path)
-    st = os.lstat(path)
-    if stat.S_ISLNK(st.st_mode):
+    try:
+        dfd = nofollow.open_dir(path.parent)
+    except nofollow.LinkRefused:
         return
-    acc = _read(path, ACCESS) or _base(st.st_mode)
-    os.setxattr(path, ACCESS, encode(_with_users(acc, users)), follow_symlinks=False)
-    if default and stat.S_ISDIR(st.st_mode):
-        dfl = _read(path, DEFAULT) or [(USER_OBJ, 7, UNDEFINED), (GROUP_OBJ, 5, UNDEFINED), (OTHER, 5, UNDEFINED)]
-        os.setxattr(path, DEFAULT, encode(_with_users(dfl, default)), follow_symlinks=False)
+    try:
+        grant_at(dfd, path.name, users, default, where=path)
+    finally:
+        os.close(dfd)
+
+
+def grant_at(dir_fd: int, name: str, users: dict[int, int], default: dict[int, int] | None = None, *,
+             tree: bool = False, where=None) -> bool:
+    """`grant` on `name` in the folder `dir_fd`; with `tree`, on everything below it too, X only on folders (like
+    setfacl's capital X), never walking into or acting on a link (nofollow.walk / open_node). False when `name`
+    is missing or was skipped."""
+    where = where if where is not None else name
+    fd = nofollow.open_node(name, dir_fd, where)
+    if fd is None:
+        return False
+    try:
+        _grant_fd(fd, users, default)
+        if tree and stat.S_ISDIR(os.fstat(fd).st_mode):
+            files = {u: p & ~X for u, p in users.items()}
+            for parent, child, path in nofollow.walk(fd, where):
+                cfd = nofollow.open_node(child, parent, path)
+                if cfd is None:
+                    continue
+                try:
+                    is_dir = stat.S_ISDIR(os.fstat(cfd).st_mode)
+                    _grant_fd(cfd, users if is_dir else files, default if is_dir else None)
+                finally:
+                    os.close(cfd)
+    finally:
+        os.close(fd)
+    return True
 
 
 def grant_tree(path, users: dict[int, int], default: dict[int, int] | None = None) -> None:
-    """`grant` on `path` and everything below it; X only on folders (like setfacl's capital X)."""
+    """`grant` on `path` and everything below it (grant_at with tree)."""
     path = Path(path)
-    if not path.exists():
+    try:
+        dfd = nofollow.open_dir(path.parent)
+    except (FileNotFoundError, nofollow.LinkRefused):
         return
-    grant(path, users, default)
-    for root, dirs, files in os.walk(path):
-        for d in dirs:
-            grant(Path(root) / d, users, default)
-        for f in files:
-            grant(Path(root) / f, {u: p & ~X for u, p in users.items()})
+    try:
+        grant_at(dfd, path.name, users, default, tree=True, where=path)
+    finally:
+        os.close(dfd)
 
 
 def users_of(path, name: str = ACCESS) -> dict[int, int]:

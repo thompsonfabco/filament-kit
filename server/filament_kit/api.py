@@ -569,7 +569,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
                 raise
         return JSONResponse(await run_in_threadpool(run))
 
-    # ---------- the web unit's label reads (Ruling CG): the kit's cap and order history, never its files ----------
+    # ---------- the web unit's label reads: the kit's cap and order history, never its files ----------
     @_authed
     async def cap_take(request: Request):
         """One read off the shared cap; the ticket gives it back (cap_refund) within intake.TICKET_TTL."""
@@ -585,7 +585,12 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
 
     @_authed
     async def intake_orders(request: Request):
-        """The order history for a label read's prompt (None: the orders module is off or no file is set)."""
+        """The order history for a label read's prompt (None: the orders module is off or no file is set). Only for
+        the web unit's own device (role "web", set as root by `modules apply`): the kit's own reads use it in
+        process, and no phone or PC needs the whole history."""
+        if await run_in_threadpool(pairing.role_of, request.state.device) != pairing.WEB_ROLE:
+            return _err(403, "forbidden", "the order history is for the web unit only")
+
         def build():
             cfg = config.load()
             path = (cfg.get("orders") or {}).get("file")

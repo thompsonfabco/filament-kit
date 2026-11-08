@@ -153,9 +153,16 @@ def main() -> None:
         hub = _NoHub()
         app = create_app(sm, printers=object(), camera_hub=hub, mapper=object(), enabled_modules=on)
         app.router.lifespan_context = _idle_lifespan
-    # one worker only: the pairing and inventory locks are per process
-    serve(app, hub, host="0.0.0.0", port=cfg["port"], ssl_certfile=str(etc / "cert.pem"),
-          ssl_keyfile=str(etc / "key.pem"), workers=1, timeout_graceful_shutdown=GRACEFUL_SHUTDOWN)
+    serve(app, hub, **serve_options(cfg, etc))
+
+
+def serve_options(cfg: dict, etc) -> dict:
+    """uvicorn's options for the kit server. One worker only: the pairing and inventory locks are per process.
+    No proxy headers: nothing proxies this port, so X-Forwarded-For from a local process (uvicorn trusts loopback
+    by default) must not become the client address the setup page's LAN check, lockout and audit lines use."""
+    return {"host": "0.0.0.0", "port": cfg["port"], "ssl_certfile": str(etc / "cert.pem"),
+            "ssl_keyfile": str(etc / "key.pem"), "workers": 1, "timeout_graceful_shutdown": GRACEFUL_SHUTDOWN,
+            "proxy_headers": False, "forwarded_allow_ips": ""}
 
 
 if __name__ == "__main__":

@@ -375,6 +375,22 @@ def test_web_secrets_imported_with_modes(env, lib):
     assert "sk-test" not in text and "ab" * 32 not in text                      # never printed
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX links")
+def test_web_secrets_never_read_or_write_through_a_link_in_the_web_folder(env, lib):
+    """The web folder is the web unit's user's: migrate-ops (root) leaves a link at oauth.json alone."""
+    victim = env / "victim.json"
+    victim.write_text('{"clients": {"root-only": {}}}')
+    os.chmod(victim, 0o600)
+    oauth = config.paths().web / "oauth.json"
+    oauth.parent.mkdir(parents=True)
+    os.symlink(victim, oauth)
+    b = make_bundle(env / "bundle")
+    code, text = run(b, lib, apply=True)
+    assert oauth.is_symlink() and victim.read_text() == '{"clients": {"root-only": {}}}'
+    assert victim.stat().st_mode & 0o777 == 0o600
+    assert "symbolic link" in text and code != 0
+
+
 def test_web_step_skipped_for_a_no_secrets_bundle(env, lib):
     b = make_bundle(env / "bundle", secrets=False)
     code, text = run(b, lib, apply=True)
