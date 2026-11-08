@@ -5,7 +5,6 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.NFC" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <!-- API 37+: needed to reach the server on the LAN and to browse for it without the system device picker. -->
     <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
@@ -15,6 +14,7 @@
 
     <application
         android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:label="filament-kit"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
