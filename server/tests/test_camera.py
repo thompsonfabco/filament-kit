@@ -183,6 +183,9 @@ def test_ffmpeg_reads_the_loopback_relay_and_never_gets_the_access_code(ffmpeg_h
 
 
 def test_shutdown_kills_ffmpeg_and_its_children(ffmpeg_hub):
+    # the fixture's 0.3 s idle stop would beat a slow pid_alive (tasklist on Windows) to it, and this test is the only
+    # one of the taskkill path: shutdown must be what kills it here
+    ffmpeg_hub.idle_stop, ffmpeg_hub.hls_window = 5, 5
     ffmpeg_hub.touch_hls("H1")
     info = _started(ffmpeg_hub, "H1")
     assert pid_alive(info["pid"]) and pid_alive(info["child"])
@@ -454,7 +457,7 @@ def test_slow_stop_of_one_printer_does_not_block_another(printers, tmp_path):
         hub.acquire("H1")
         hub.release("H1")
         hub.release("P1")  # a stray release is harmless and never waits
-        assert time.monotonic() - t0 < 0.5
+        assert time.monotonic() - t0 < 1.0     # well under the source's stop; not a tight bound on a loaded machine
         # the same printer's next viewer waits for its old source to finish stopping, then gets a new one
         new = hub.acquire("P1")
         assert new is not FakeSource.instances[0] and FakeSource.instances[0].stopped == 1

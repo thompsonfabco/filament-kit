@@ -4,6 +4,8 @@
 # This was step 3 of install.sh. Safe to run again: the marker skips a finished install.
 set -euo pipefail
 
+# Raising this pin needs a pre-swap copy of the database and a downgrade path in the same release: see
+# test_a_spoolman_pin_bump_brings_its_database_copy.
 SPOOLMAN_VERSION=v0.27.0
 SPOOLMAN_URL="https://github.com/Donkie/Spoolman/releases/download/${SPOOLMAN_VERSION}/spoolman.zip"
 SPOOLMAN_SHA256=bcc961af4c20d7ad7f1740f5609cd3efd94c4556baafaeba5036122dd7e46704
