@@ -127,6 +127,24 @@ A **Spools** icon is now on your home screen. It opens the web app full screen.
 **From label photos** (**Take or choose photos**) only appears when AI label reading (the `ai_intake` module)
 is on at the server.
 
+## Load and unload a spool from the Printers tab (v0.4.0)
+
+The **Printers** tab (it needs the `printers` module) shows each printer live: status, camera, controls and the
+filament in each slot.
+
+**Load.** Next to a slot, tap **Load**. A picker opens: find the spool and tap it. The page first shows the plan
+and sends nothing: the filament preset it will set, the nozzle, and any spool that goes back to its old place.
+Check it and tap **Load**, or **Cancel**. The message then says **Loaded into** the slot (the printer confirmed) or
+**Sent to** the slot (sent, not yet confirmed by the printer). If the plan can't be made, the page says why and
+does nothing.
+
+**Unload.** Next to a slot with a spool, tap **Unload**. It asks, for example, "Unload PETG Grey from AMS1-2? It
+goes back to Shelf A." Tap **OK**. Only your inventory changes; the printer's own slot setting stays as it is.
+
+The same rules as the Android app apply: for example, while a print runs, the slot that feeds the job is refused.
+See [Using the Android app](android-app.md#load-and-unload-a-spool). The tab also has the filament usage with undo,
+re-mapping slots and optional notifications.
+
 ## Common problems
 
 - **"Spool intake only works on the home network"** while you are at home:

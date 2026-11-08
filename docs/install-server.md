@@ -191,6 +191,8 @@ Certificate fingerprint (check it matches the phone):
 Pairing code: 123456
 Expires at 10:07:30 (in 9 min)
 
+Setup page: https://my-server.local:8710/setup  (v0.4.0 and newer; its setup code, at a terminal: sudo filament-kit setup-code)
+
 Done.   Spoolman: http://my-server.local:7912   Pair another phone: sudo filament-kit pair
 ```
 
@@ -206,6 +208,51 @@ Done.   Spoolman: http://my-server.local:7912   Pair another phone: sudo filamen
   (`http://<computer name>.local:7912`).
 
 You can run the installer again at any time. It never deletes your spools or settings.
+
+## The setup page (v0.4.0)
+
+From v0.4.0 you can enter the things the installer does not ask for in a web page instead of the Terminal: the
+Anthropic key, printers and their Access Codes, the web passphrase, the library token, pairing a phone, PC or
+station, NFC reader tokens, and switching modules on or off.
+
+1. Find the address and the code. The installer prints the page's address at the end (`https://<computer
+   name>.local:8710/setup`). It prints the **setup code** only when you are at a Terminal. To see them again:
+
+   ```bash
+   sudo filament-kit setup-code
+   ```
+
+   The setup code is 8 digits, shown like `1234-5678`.
+2. Open the address in a browser on a computer or phone **on your home network**. Your browser warns about the
+   server's own certificate: continue, as you do for the app download.
+3. You can look at everything on the page without the code. **Every change asks for the setup code.**
+
+**Who can reach it.** Only devices on your home network (the private address ranges, `web.lan` in the settings;
+the server itself always). Open it by the server's own name or address; another name is refused. It is not
+available from the internet, even when you turned on remote access.
+
+**A wrong code.** Five wrong codes from one device in 10 minutes lock that device out for a while. If wrong codes
+come in from many devices (30 in 10 minutes), everyone waits: 10 minutes, doubling each time up to 24 hours. Make
+a new code, which also clears the lock: `sudo filament-kit setup-code --new`. The old code stops working.
+
+**What the page can do.**
+
+| Section | What you do there |
+|---|---|
+| **Anthropic API key** | Set, replace, remove or check the key for AI label reading. The page never shows the key, only whether one is set. |
+| **Printers** | Add a printer by its IP address and Access Code, change a wrong Access Code, test the connection, forget a printer. Printers on the network that announce themselves are listed. |
+| **Web passphrase** | Set the passphrase that approves Claude's connector at its sign-in page. |
+| **Library token** | Optional. A GitHub token that lets the filament library download from a private repository. |
+| **Phones, PC and station** | Make the pairing QR code and code for a phone, or the link for the PC sync or the intake station, and remove a paired device. |
+| **NFC readers** | Make a token for a bench NFC reader (shown once) and revoke one. |
+| **Modules** | Switch modules on or off and set the addresses they need (for example the web public address). Changes are applied in the background and the page waits while the server restarts. |
+
+Secrets are write-only: after you save one, the page only says it is set. Each change is written to the server's
+log (for example `setup: anthropic key replaced from 192.0.2.20`) without the value.
+
+Everything the page does can still be done from the Terminal, as the other sections of this guide describe.
+`sudo filament-kit modules apply --no-pair` applies module changes without the pairing screen at the end (the page
+uses it).
 
 ## Next steps
 
@@ -295,6 +342,12 @@ Either way, the PC must stay on and awake for the server to answer.
   updates in the background first. The installer waits up to 5 minutes for them. Let it run.
 - **A line in the status list starts with `FAIL`**: read the `fix:` line under it and do what it says, then run
   `sudo filament-kit status` again.
+- **The setup page says "the setup page only answers the home network"** (v0.4.0): open it from a device on your
+  home network, not from the internet or a guest network.
+- **The setup page says "open the setup page by the server's own name or address"**: use the `.local` name or the
+  IP address, as in [The setup page](#the-setup-page-v040).
+- **Locked out of the setup page after wrong codes**: `sudo filament-kit setup-code --new` makes a new code and
+  clears the lock.
 - **The phone can't find the server**: the phone and the computer must be on the same Wi-Fi network. If you
   turned on Ubuntu's firewall (`ufw`), allow the app's port and name lookups:
   `sudo ufw allow 8710/tcp` and `sudo ufw allow 5353/udp`. For Spoolman in a browser, also `sudo ufw allow 7912/tcp`.

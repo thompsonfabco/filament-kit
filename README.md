@@ -142,6 +142,7 @@ with `sudo filament-kit library update`, or turn on the `library` module to also
 |---|---|
 | `/etc/filament-kit` | Settings (`config.json`), the server certificate, the API key, the web passphrase, your hardware file |
 | `/var/lib/filament-kit` | Paired phones, printers, slot maps, usage, presets, the library, reader tokens |
+| `/var/lib/filament-kit-web` | The web app's own state (v0.4.0): Claude connector sign-ins, its token, push keys |
 | `/var/lib/spoolman` | Spoolman's database (your spools) |
 | `/var/backups/filament-kit` | Nightly backups (14 days) |
 | `/opt/filament-kit`, `/opt/spoolman` | The programs; `/opt/filament-kit/releases` keeps the verified releases for rollback |

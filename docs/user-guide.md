@@ -203,6 +203,17 @@ them too, then run `sudo filament-kit unpair <id>` on the server. Presets alread
 This was written from the code and the slicers' documented folders, and has not been tried on a Linux machine with the
 slicers running.
 
+## The setup page (v0.4.0)
+
+The kit server has a web page for setup at `https://<computer name>.local:8710/setup`, on the home network only.
+It does what the Terminal's `config` menu, `pair` and the key commands do: the Anthropic key, printers and their
+Access Codes, the web passphrase and library token, pairing a phone, the PC sync or the station, NFC reader
+tokens, and switching modules on or off. How to find the code, what it asks for, the lock-out after wrong codes
+and the full list: [Install the server, The setup page](install-server.md#the-setup-page-v040).
+
+`sudo filament-kit setup-code` shows the page's address and its 8-digit setup code (at a Terminal);
+`sudo filament-kit setup-code --new` makes a new one. Viewing needs no code; every change does.
+
 ## Everyday commands
 
 Run these in a Terminal on the Ubuntu computer.
@@ -212,6 +223,8 @@ Run these in a Terminal on the Ubuntu computer.
 | `sudo filament-kit status` | Checks that everything works. Anything failing shows a `fix:` line telling you what to do. |
 | `sudo filament-kit pair` | Shows a new QR code to pair another phone. |
 | `sudo filament-kit pair --pc` | Shows the link and code to pair the PC sync tool (Windows or Linux). `--station` does the same for the intake station; `--text` prints the link instead of a QR code. The three are exclusive. |
+| `sudo filament-kit setup-code` | Shows the setup page's address and setup code (v0.4.0). `--new` replaces the code and clears a lock-out. |
+| `sudo filament-kit modules apply --no-pair` | Applies module changes without the pairing screen at the end (v0.4.0). |
 | `sudo filament-kit uninstall` | Removes the kit (`--purge` also deletes your data). |
 | `sudo filament-kit unpair` | Lists paired devices: phones and the PC sync (named `pc`). `sudo filament-kit unpair <id>` removes one. |
 | `sudo filament-kit config` | Settings menu: display name, storage locations, Claude model and daily limit, API key, printers, modules. |
@@ -307,6 +320,12 @@ text: load them again (or fix their location in Spoolman) so filament use finds 
 If a printer's certificate changed, the server stops talking to it. If you reset the printer or its mainboard was
 replaced, add the printer again with its Access Code (or run `sudo filament-kit printer unpin <serial>`). If not,
 something else may be answering at the printer's address: check the printer's IP before re-adding it.
+
+**Backups and restore (v0.4.0).** The web unit runs as its own user, `filament-kit-web`, with its state in
+`/var/lib/filament-kit-web` (the Claude connector's sign-ins, its token, push keys). Backups include it and keep the
+file permissions (`tar --acls --xattrs`). If you restore a backup by hand, extract it with `tar --acls --xattrs`
+into a removed or empty folder, or run `sudo filament-kit modules apply` afterwards; otherwise the web unit loses
+read access to the files it needs.
 
 A backup of your spools and settings is made every night in `/var/backups/filament-kit` (the last 14 days are
 kept).
@@ -678,7 +697,8 @@ sudo filament-kit modules enable orders
 ```
 
 The kit's user must be able to read the file (for example owner `root`, group `filament-kit`, mode 640). If it
-cannot be read, labels are still read, without the orders.
+cannot be read, labels are still read, without the orders. From v0.4.0 only the web service itself can read the
+order list through the server: phones, the PC sync and the station are refused.
 
 ## Moving from filament-ops
 
