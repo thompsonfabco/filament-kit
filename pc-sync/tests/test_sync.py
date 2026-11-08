@@ -116,7 +116,7 @@ def test_studio_running_only_the_heartbeat(env):
     folders, dirs = env
     c = FakeClient(_synced_state(folders))
     assert _run(c, folders, dirs, running=lambda: True) == "studio_running"
-    assert c.calls == [("heartbeat", "studio_running")]       # PCBOTH R3: nothing else, at most one an hour
+    assert c.calls == [("heartbeat", "studio_running")]       # nothing else, at most one an hour
     assert "studio_running" in _log(dirs)
 
 

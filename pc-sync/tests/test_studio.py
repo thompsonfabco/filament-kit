@@ -121,7 +121,7 @@ def test_locate_ignores_newer_conf_of_a_root_without_user_folder(tmp_path):
     assert got.variant == "BambuStudio" and got.user_id == "111"
 
 
-# --- PCBOTH R1: the other Bambu Studio folders (secondaries) --------------------------------------
+# --- the other Bambu Studio folders (secondaries) --------------------------------------
 
 def test_secondaries_are_the_other_usable_roots(tmp_path):
     appdata = tmp_path / "appdata"
@@ -157,3 +157,43 @@ def test_a_root_without_a_user_filament_dir_is_no_secondary(tmp_path):
     primary = studio_fixture.make(appdata, variant="BambuStudio", user_id="1234567890")
     (appdata / "BambuStudioBeta" / "user").mkdir(parents=True)           # never opened / signed in
     assert studio.secondaries(appdata, primary) == []
+
+
+# --- the primary is sticky once recorded --------------------------------------------------------
+
+def _rec(f):
+    return {"key": studio.folder_key(f), "variant": f.variant, "user_id": f.user_id, "root": str(f.root)}
+
+
+def test_primary_without_a_record_is_the_newest_conf(tmp_path):
+    appdata = tmp_path / "appdata"
+    studio_fixture.make(appdata, variant="BambuStudio", user_id="1234567890")
+    beta = studio_fixture.make(appdata, variant="BambuStudioBeta", user_id="1234567890")
+    _age(beta.root / "BambuStudio.conf", 3600)
+    f, why = studio.primary(appdata, {}, None)
+    assert f.variant == "BambuStudio" and why is None
+
+
+def test_a_recorded_primary_stays_whatever_conf_is_newer(tmp_path):
+    appdata = tmp_path / "appdata"
+    stable = studio_fixture.make(appdata, variant="BambuStudio", user_id="1234567890")
+    beta = studio_fixture.make(appdata, variant="BambuStudioBeta", user_id="1234567890")
+    for newer in (stable, beta, stable):
+        _age(newer.root / "BambuStudio.conf", 0)
+        _age((beta if newer is stable else stable).root / "BambuStudio.conf", 3600)
+        f, why = studio.primary(appdata, {}, _rec(beta))
+        assert f == beta and why is None
+
+
+def test_a_pin_or_a_gone_folder_changes_the_primary_with_a_reason(tmp_path):
+    import shutil
+    appdata = tmp_path / "appdata"
+    stable = studio_fixture.make(appdata, variant="BambuStudio", user_id="1234567890")
+    beta = studio_fixture.make(appdata, variant="BambuStudioBeta", user_id="1234567890")
+    f, why = studio.primary(appdata, {"variant": "BambuStudio"}, _rec(beta))
+    assert f == stable and "pin" in why and "variant" in why
+    f, why = studio.primary(appdata, {"variant": "BambuStudioBeta"}, _rec(beta))
+    assert f == beta and why is None                             # the pin names the recorded folder
+    shutil.rmtree(beta.user_filament)
+    f, why = studio.primary(appdata, {}, _rec(beta))
+    assert f == stable and "no longer" in why and "BambuStudioBeta" in why

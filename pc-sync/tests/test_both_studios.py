@@ -1,4 +1,4 @@
-"""PCBOTH: the PC sync keeps every Bambu Studio folder of this PC current (the primary, the one the server builds
+"""The PC sync keeps every Bambu Studio folder of this PC current (the primary, the one the server builds
 from, and each secondary: stable and Beta), never replaces an existing preset in any of them, handles a change of
 primary as that folder's first sync, and makes a wait for a running Bambu Studio visible (state, status, log, a
 heartbeat to the server). All folders are fakes under tmp_path."""
@@ -51,7 +51,7 @@ def _zip(stamp=STAMP, live_hash=None, presets=None):
 
 @pytest.fixture
 def two(tmp_path):
-    """stable (the primary: newest conf) and Beta (a secondary), both with an older A."""
+    """Stable (the primary: newest conf) and Beta (a secondary), both with an older A."""
     appdata = tmp_path / "appdata"
     stable = studio_fixture.make(appdata, variant="BambuStudio", user_id=UID, base={A: (_p(A), INFO)})
     beta = studio_fixture.make(appdata, variant="BambuStudioBeta", user_id=UID,
@@ -97,7 +97,7 @@ def _build(stamp, f):
     return {"stamp": stamp, "live_hash": _live(f), "created": 1, "presets": 2, "problems": 0}
 
 
-# --- R1: primary + secondary install -------------------------------------------------------------
+# --- primary + secondary install -------------------------------------------------------------
 
 def test_install_goes_into_the_primary_and_each_secondary(two):
     stable, beta, dirs = two
@@ -132,7 +132,7 @@ def test_a_later_up_to_date_run_catches_a_secondary_up(two):
     assert [x[0] for x in c.calls] == ["state"]                          # Beta has it: nothing downloaded
 
 
-# --- R2: never replace, accepted updates everywhere ----------------------------------------------
+# --- never replace, accepted updates everywhere ----------------------------------------------
 
 def test_secondary_never_replaces_and_lists_what_differs(two):
     stable, beta, dirs = two
@@ -146,28 +146,46 @@ def test_secondary_never_replaces_and_lists_what_differs(two):
     assert sync.load_state(dirs)["differing"] == [A]
 
 
-def test_accepted_updates_are_written_into_both(two):
+def _both_have_build1(two, install=installer.install):
+    """Build STAMP installed into stable (primary) and Beta: the kit wrote NEW in both; A was already in both."""
     stable, beta, dirs = two
     c = Client2(_state(stable, build=_build(STAMP, stable)), _zip(live_hash=_live(stable)))
-    c.st["accepted_updates"] = {"stamp": STAMP, "base": [A]}
-    assert _run(c, stable, dirs, [beta]) == "installed"
-    assert _bs(stable, A)["nozzle_temperature"] == ["220"] and _bs(beta, A)["nozzle_temperature"] == ["220"]
-    assert sync.load_state(_sec(dirs)).get("differing") == []
+    assert _run(c, stable, dirs, [beta], install=install) == "installed"
+    return c
+
+
+def _build2(c, stable, accepted):
+    """Build STAMP2 (NEW and A changed), made from stable's live presets, with the owner's accepted updates."""
+    c.st["live_hash"] = _live(stable)
+    c.st["build"] = _build(STAMP2, stable)
+    c.zip = _zip(STAMP2, _live(stable), {A: _p(A, nozzle_temperature=["240"]), NEW: _p(NEW, nozzle_temperature=["240"])})
+    c.st["accepted_updates"] = {"stamp": STAMP2, "base": list(accepted)}
+
+
+def test_accepted_updates_reach_the_primary_and_the_kits_own_presets_of_a_secondary(two):
+    stable, beta, dirs = two
+    c = _both_have_build1(two)
+    _build2(c, stable, [A, NEW])
+    assert _run(c, stable, dirs, [beta], now=T0 + 600) == "installed"
+    assert _bs(stable, A)["nozzle_temperature"] == ["240"] and _bs(stable, NEW)["nozzle_temperature"] == ["240"]
+    assert _bs(beta, NEW)["nozzle_temperature"] == ["240"]              # the kit wrote it there: Beta's snapshot says so
+    assert _bs(beta, A)["nozzle_temperature"] == ["230"]                # Beta's own A: never replaced, listed
+    assert sync.load_state(_sec(dirs))["differing"] == [A]
 
 
 def test_updates_accepted_after_the_install_reach_the_secondary_too(two):
     stable, beta, dirs = two
-    c = Client2(_state(stable, build=_build(STAMP, stable)), _zip(live_hash=_live(stable)))
-    assert _run(c, stable, dirs, [beta]) == "installed"
+    c = _both_have_build1(two)
     c.st["live_hash"] = _live(stable)
-    c.st["accepted_updates"] = {"stamp": STAMP, "base": [A]}            # sudo filament-kit profiles apply-updates
+    c.zip = _zip(presets={A: _p(A, nozzle_temperature=["220"]), NEW: _p(NEW, nozzle_temperature=["240"])})
+    c.st["accepted_updates"] = {"stamp": STAMP, "base": [NEW]}          # sudo filament-kit profiles apply-updates
     assert _run(c, stable, dirs, [beta], now=T0 + 600) == "installed"
-    assert _bs(stable, A)["nozzle_temperature"] == ["220"] and _bs(beta, A)["nozzle_temperature"] == ["220"]
+    assert _bs(stable, NEW)["nozzle_temperature"] == ["240"] and _bs(beta, NEW)["nozzle_temperature"] == ["240"]
 
 
 def test_accepted_updates_are_owed_to_a_secondary_that_failed(two):
     stable, beta, dirs = two
-    boom = {"n": 1}
+    boom = {"n": 0}
 
     def flaky(build_dir, folders, d, **kw):
         if folders.variant == "BambuStudioBeta" and boom["n"]:
@@ -175,18 +193,19 @@ def test_accepted_updates_are_owed_to_a_secondary_that_failed(two):
             raise OSError("disk full")
         return installer.install(build_dir, folders, d, **kw)
 
-    c = Client2(_state(stable, build=_build(STAMP, stable)), _zip(live_hash=_live(stable)))
-    c.st["accepted_updates"] = {"stamp": STAMP, "base": [A]}
-    assert _run(c, stable, dirs, [beta], install=flaky) == "installed"
-    assert _bs(beta, A)["nozzle_temperature"] == ["230"]
+    c = _both_have_build1(two, flaky)
+    _build2(c, stable, [NEW])
+    boom["n"] = 1
+    assert _run(c, stable, dirs, [beta], now=T0 + 600, install=flaky) == "installed"
+    assert _bs(beta, NEW)["nozzle_temperature"] == ["215"]
     assert c.st["accepted_updates"]["base"] == []                       # the server took the primary's report
     c.st["live_hash"] = _live(stable)
-    assert _run(c, stable, dirs, [beta], now=T0 + 600, install=flaky) == "up_to_date"
-    assert _bs(beta, A)["nozzle_temperature"] == ["220"]                 # still written: it was owed
+    assert _run(c, stable, dirs, [beta], now=T0 + 600 + sync.UPLOAD_BACKOFF, install=flaky) == "up_to_date"
+    assert _bs(beta, NEW)["nozzle_temperature"] == ["240"]               # still written: it was owed
     assert "owed_accept" not in sync.load_state(_sec(dirs))
 
 
-# --- R1: a secondary never blocks the primary ----------------------------------------------------
+# --- a secondary never blocks the primary ----------------------------------------------------
 
 def test_a_failed_secondary_does_not_block_the_primary(two):
     stable, beta, dirs = two
@@ -203,11 +222,34 @@ def test_a_failed_secondary_does_not_block_the_primary(two):
     rec = sync.load_state(_sec(dirs))
     assert "could not back up" in rec["error"] and "installed" not in rec
     assert "BambuStudioBeta" in _log(dirs) and "could not back up" in _log(dirs)
-    # retried next run
+    # retried later (after the back-off)
     c.st["live_hash"] = _live(stable)
-    assert _run(c, stable, dirs, [beta], now=T0 + 600) == "up_to_date"
+    assert _run(c, stable, dirs, [beta], now=T0 + sync.UPLOAD_BACKOFF) == "up_to_date"
     rec = sync.load_state(_sec(dirs))
     assert rec["installed"]["stamp"] == STAMP and "error" not in rec
+
+
+def test_a_failing_secondary_backs_off_and_a_new_build_retries_at_once(two):
+    stable, beta, dirs = two
+    tries = []
+
+    def broken(build_dir, folders, d, **kw):
+        if folders.variant == "BambuStudioBeta":
+            tries.append(1)
+            raise OSError("disk full")
+        return installer.install(build_dir, folders, d, **kw)
+
+    c = Client2(_state(stable, build=_build(STAMP, stable)), _zip(live_hash=_live(stable)))
+    _run(c, stable, dirs, [beta], install=broken)
+    c.st["live_hash"] = _live(stable)
+    for k in range(1, 6):                                                 # every 10 minutes for almost an hour
+        c.calls.clear()
+        assert _run(c, stable, dirs, [beta], now=T0 + 600 * k, install=broken) == "up_to_date"
+        assert [x[0] for x in c.calls] == ["state"]                      # no download again
+    assert len(tries) == 1
+    _build2(c, stable, [])                                               # a new build: tried at once
+    _run(c, stable, dirs, [beta], now=T0 + 3600, install=broken)
+    assert len(tries) == 2
 
 
 def test_an_interrupted_secondary_install_is_resumed(two):
@@ -215,25 +257,40 @@ def test_an_interrupted_secondary_install_is_resumed(two):
     calls = []
 
     def crash(build_dir, folders, d, **kw):
-        if folders.variant == "BambuStudioBeta" and not calls:
+        if folders.variant == "BambuStudioBeta" and calls == [0]:
             calls.append(1)
             kw["before_write"](d.backups / "x")       # the marker is written, then the PC loses power
             raise OSError("power cut")
         return installer.install(build_dir, folders, d, **kw)
 
-    c = Client2(_state(stable, build=_build(STAMP, stable)), _zip(live_hash=_live(stable)))
-    c.st["accepted_updates"] = {"stamp": STAMP, "base": [A]}
-    assert _run(c, stable, dirs, [beta], install=crash) == "installed"
+    c = _both_have_build1(two, crash)
+    _build2(c, stable, [NEW])
+    calls.append(0)
+    assert _run(c, stable, dirs, [beta], now=T0 + 600, install=crash) == "installed"
     m = json.loads(sync.marker_path(_sec(dirs)).read_text())
-    assert m["stamp"] == STAMP and m["accept"] == {"base": [A]}
+    assert m["stamp"] == STAMP2 and m["accept"] == {"base": [NEW]}
     c.st["live_hash"] = _live(stable)
-    assert _run(c, stable, dirs, [beta], now=T0 + 600, install=crash) == "up_to_date"
+    assert _run(c, stable, dirs, [beta], now=T0 + 600 + sync.UPLOAD_BACKOFF, install=crash) == "up_to_date"
     assert not sync.marker_path(_sec(dirs)).exists()
-    assert _bs(beta, A)["nozzle_temperature"] == ["220"] and _bs(beta, NEW) == _p(NEW)
+    assert _bs(beta, NEW)["nozzle_temperature"] == ["240"] and _bs(beta, A)["nozzle_temperature"] == ["230"]
     assert "interrupted install" in _log(dirs)
 
 
-# --- R1: secondaries: false -----------------------------------------------------------------------
+def test_after_a_primary_change_beta_keeps_its_baseline(two):
+    """Beta was the primary (the kit wrote NEW there); stable becomes the primary. Beta's snapshot moves with its
+    record, so an update accepted later still reaches the presets the kit wrote in Beta, and only those."""
+    stable, beta, dirs = two
+    c = _installed_into_beta(two)
+    c.st["live_hash"] = _live(beta)
+    _run(c, stable, dirs, [beta], now=T0 + 600)                           # stable's first sync
+    assert json.loads((_sec(dirs).installed / "base" / f"{NEW}.json").read_text()) == _p(NEW)
+    _build2(c, stable, [A, NEW])
+    assert _run(c, stable, dirs, [beta], now=T0 + 1200) == "installed"
+    assert _bs(beta, NEW)["nozzle_temperature"] == ["240"]
+    assert _bs(beta, A)["nozzle_temperature"] == ["230"]
+
+
+# --- secondaries: false -----------------------------------------------------------------------
 
 def test_without_secondaries_only_the_primary_is_written(two):
     stable, beta, dirs = two
@@ -259,7 +316,7 @@ def test_main_passes_no_secondaries_when_switched_off(tmp_path):
     assert cli._secondaries(appdata, {"secondaries": False}, stable) == ([beta], False)
 
 
-# --- R2: a change of primary ----------------------------------------------------------------------
+# --- a change of primary ----------------------------------------------------------------------
 
 def _installed_into_beta(two):
     """Beta was the primary and has build STAMP (made from its live presets); stable now has the newest conf."""
@@ -349,7 +406,7 @@ def test_upgrade_where_the_snapshot_is_the_primarys_is_adopted(two):
     assert sync.load_state(dirs)["folder"]["key"] == f"BambuStudio-{UID}"
 
 
-# --- R3: a visible wait for a running Bambu Studio ------------------------------------------------
+# --- a visible wait for a running Bambu Studio ------------------------------------------------
 
 def test_waiting_is_recorded_and_one_heartbeat_an_hour(two):
     stable, beta, dirs = two
@@ -449,3 +506,141 @@ def test_linux_status_lists_the_other_roots(tmp_path, capsys):
     cli.cmd_status(dirs, None, lay)
     out = capsys.readouterr().out
     assert f"Also installs:   Flatpak BambuStudioBeta, user {UID}: nothing installed yet" in out
+
+
+# --- the primary is sticky -------------------------------------------------------------------------
+
+def test_switching_apps_never_flips_the_primary(two):
+    """The owner slices in both apps: whichever conf is newer, the recorded primary stays; no first sync again."""
+    stable, beta, dirs = two
+    appdata = stable.root.parent
+    c = Client2(_state(stable, build=_build(STAMP, stable)), _zip(live_hash=_live(stable)))
+    for day in range(6):
+        newer, older = (beta, stable) if day % 2 == 0 else (stable, beta)
+        os.utime(newer.root / "BambuStudio.conf", (T0 + day * 86400 + 10,) * 2)
+        os.utime(older.root / "BambuStudio.conf", (T0 + day * 86400,) * 2)
+        f, why = studio.primary(appdata, {}, sync.load_state(dirs).get("folder"))
+        if day == 0:
+            assert f.variant == "BambuStudioBeta"              # nothing recorded yet: the newest conf
+            first = f
+        assert f == first and why is None
+        c.st["live_hash"] = _live(f)
+        c.st["build"] = _build(STAMP, f)
+        _run(c, f, dirs, studio.secondaries(appdata, f), now=T0 + day * 86400)
+        assert sync.load_state(dirs)["folder"]["key"] == studio.folder_key(first)
+    assert not [x for x in c.calls if "fresh" in x]
+    assert "folder changed" not in _log(dirs)
+
+
+def test_a_pinned_change_is_logged_with_its_reason(two):
+    stable, beta, dirs = two
+    c = _installed_into_beta(two)
+    c.st["live_hash"] = _live(beta)
+    f, why = studio.primary(stable.root.parent, {"variant": "BambuStudio"}, sync.load_state(dirs)["folder"])
+    assert f == stable
+    _run(c, f, dirs, [beta], now=T0 + 600, change_reason=why)
+    line = next(ln for ln in _log(dirs).splitlines() if "folder changed" in ln)
+    assert why in line and "pin" in line
+
+
+def test_status_names_the_primary_and_how_to_change_it(two, capsys):
+    from fksync import __main__ as cli
+    stable, beta, dirs = two
+    _installed_into_beta(two)                                  # Beta recorded; stable's conf is newer
+    cli.cmd_status(dirs, stable.root.parent)
+    out = capsys.readouterr().out
+    assert f"Bambu Studio:    BambuStudioBeta, user {UID}" in out
+    assert "Primary:         BambuStudioBeta" in out and '"variant"' in out and str(dirs.config) in out
+
+
+# --- an older single-folder state: whose snapshot is it ---------------------------------------------
+
+def _legacy(two, edit=None):
+    """Stable installed by the single-folder sync, then `folder` removed (an older state.json)."""
+    stable, beta, dirs = two
+    c = Client2(_state(stable, build=_build(STAMP, stable)), _zip(live_hash=_live(stable)))
+    assert _run(c, stable, dirs) == "installed"
+    st = sync.load_state(dirs)
+    st.pop("folder")
+    sync._save_state(dirs, st)
+    c.st["live_hash"] = _live(stable)
+    return c
+
+
+def test_legacy_snapshot_edited_everywhere_still_belongs_to_the_primary(two):
+    stable, beta, dirs = two
+    c = _legacy(two)
+    for name in (A, NEW):                                         # every installed preset edited in the app since
+        p = stable.user_filament / "base" / f"{name}.json"
+        p.write_text(json.dumps(_p(name, nozzle_temperature=["205"])), encoding="utf-8")
+    c.calls.clear()
+    _run(c, stable, dirs, [beta], now=T0 + 600)
+    assert not [x for x in c.calls if "fresh" in x]
+    assert (dirs.installed / "base" / f"{NEW}.json").is_file()      # the snapshot is kept: edits stay edits
+    assert sync.load_state(dirs)["folder"]["key"] == f"BambuStudio-{UID}"
+
+
+def test_legacy_snapshot_matching_no_folder_is_kept_apart(two):
+    stable, beta, dirs = two
+    c = _legacy(two)
+    for name in (A, NEW):
+        (stable.user_filament / "base" / f"{name}.json").unlink()
+        (stable.user_filament / "base" / f"{name}.info").unlink(missing_ok=True)
+    (beta.user_filament / "base" / f"{A}.json").unlink()
+    c.calls.clear()
+    _run(c, stable, dirs, [beta], now=T0 + 600)
+    kept = [d for d in (dirs.base / "folders").iterdir() if d.name.startswith("unknown-")]
+    assert len(kept) == 1 and (kept[0] / "installed" / "base" / f"{NEW}.json").is_file()
+    assert [x for x in c.calls if "fresh" in x]                     # the primary starts as a first sync
+
+
+# --- apply-updates --folder: take the build's copy of a listed preset in one folder ----------------
+
+def _cli(two, *args):
+    from fksync import __main__ as cli
+    stable, beta, dirs = two
+    return cli.main(["--appdata", str(stable.root.parent), "--localappdata", str(dirs.base.parent), *args])
+
+
+@pytest.fixture
+def closed(monkeypatch):
+    monkeypatch.setattr(studio, "running", lambda tasklist=None: False)
+
+
+def test_apply_updates_for_one_folder(two, closed, capsys):
+    stable, beta, dirs = two
+    _both_have_build1(two)
+    assert sync.load_state(_sec(dirs))["differing"] == [A]
+    before = (beta.user_filament / "base" / f"{A}.json").read_bytes()
+    assert _cli(two, "apply-updates", "--folder", BETA_KEY, "--all", "--dry-run") == 0
+    assert A in capsys.readouterr().out
+    assert (beta.user_filament / "base" / f"{A}.json").read_bytes() == before
+    n = len(list(_sec(dirs).backups.iterdir()))
+    assert _cli(two, "apply-updates", "--folder", BETA_KEY, "--name", A) == 0
+    assert _bs(beta, A)["nozzle_temperature"] == ["220"]                     # the build's copy
+    assert installer.read_info(beta.user_filament / "base" / f"{A}.info")["user_id"] == UID
+    assert len(list(_sec(dirs).backups.iterdir())) == n + 1                  # backed up first
+    rec = sync.load_state(_sec(dirs))
+    assert rec["differing"] == []
+    assert json.loads((_sec(dirs).installed / "base" / f"{A}.json").read_text())["nozzle_temperature"] == ["220"]
+    assert A not in json.loads((_sec(dirs).installed / installer.KEPT).read_text())["base"]   # the kit's now
+    assert "apply-updates" in _log(dirs) or "build's copy" in _log(dirs)
+
+
+def test_apply_updates_refuses_what_is_not_listed(two, closed, capsys):
+    stable, beta, dirs = two
+    _both_have_build1(two)
+    assert _cli(two, "apply-updates", "--folder", BETA_KEY, "--name", NEW) == 1
+    assert "not listed" in capsys.readouterr().out.lower()
+    assert _cli(two, "apply-updates", "--folder", "Nope-1", "--all") == 1
+    assert BETA_KEY in capsys.readouterr().out                               # it names the folders it knows
+    assert _bs(beta, A)["nozzle_temperature"] == ["230"]
+
+
+def test_apply_updates_waits_while_studio_runs(two, monkeypatch, capsys):
+    stable, beta, dirs = two
+    _both_have_build1(two)
+    monkeypatch.setattr(studio, "running", lambda tasklist=None: True)
+    assert _cli(two, "apply-updates", "--folder", BETA_KEY, "--all") == 1
+    assert "close Bambu Studio" in capsys.readouterr().out
+    assert _bs(beta, A)["nozzle_temperature"] == ["230"]

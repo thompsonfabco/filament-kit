@@ -232,7 +232,7 @@ def test_layout_never_reaches_the_real_system_dirs(tmp_path):
 
 
 def test_linux_secondaries_are_the_other_three_roots(tmp_path):
-    """PCBOTH R1 on Linux: every other usable root of the four (native, Beta, and both Flatpak ones)."""
+    """On Linux: every other usable root of the four (native, Beta, and both Flatpak ones)."""
     lay = _layout(tmp_path)
     home = tmp_path / "home"
     made = {}

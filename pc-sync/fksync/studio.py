@@ -3,8 +3,9 @@
 Folder choice (Decision "Bambu Studio folder choice"): from %APPDATA%\\BambuStudio and
 %APPDATA%\\BambuStudioBeta take the root whose BambuStudio.conf is newest (a root without a conf
 is ranked by its newest user/*/filament dir; a root with no user filament dir is skipped); within it, the user/<id> whose filament dir is
-newest. A pin from the sync config (`variant`, `user_id`) wins over both choices. That folder is the primary; every
-other usable root is a secondary (`secondaries`, PCBOTH R1: the PC sync installs each build there too).
+newest. A pin from the sync config (`variant`, `user_id`) wins over both choices. That folder is the primary, and it
+stays the primary once the sync has recorded it (`primary`: only a pin, or the folder going away, changes it). Every
+other usable root is a secondary (`secondaries`): the PC sync installs each build there too.
 
 Orca Slicer (locate_orca; None when %APPDATA%\\OrcaSlicer has no user/<id>/filament dir, and the sync is then
 Bambu Studio only): the user folder is the config pin `orca_user_id`, else OrcaSlicer.conf's
@@ -132,9 +133,36 @@ def locate(appdata: Path | None, pin: dict | None = None, *, layout: "LinuxLayou
                          system_filament=root / "system" / "BBL" / "filament")
 
 
+def primary(appdata: Path | None, pin: dict | None, recorded: dict | None, *,
+            layout: "LinuxLayout | None" = None) -> tuple[StudioFolders, str | None]:
+    """(the primary folder, why it is not the recorded one or None). Once a primary is recorded (sync state
+    `folder` {variant, user_id}) it stays that folder, whichever app was opened last. It changes only when the config
+    pins another folder (`variant` / `user_id`), or when the recorded folder is gone or has no user filament folder
+    any more. With nothing recorded yet, `locate`'s rule picks it (pin, else the newest conf)."""
+    pin = pin or {}
+    rec = recorded if isinstance(recorded, dict) else {}
+    variant, user_id = rec.get("variant"), rec.get("user_id")
+    if not (isinstance(variant, str) and isinstance(user_id, str)):
+        return locate(appdata, pin, layout=layout), None
+    if pin.get("variant") or pin.get("user_id"):
+        f = locate(appdata, pin, layout=layout)
+        if (f.variant, f.user_id) == (variant, user_id):
+            return f, None
+        keys = " and ".join(f'"{k}"' for k in ("variant", "user_id") if pin.get(k))
+        return f, f"the sync config pins {f.variant} user {f.user_id} ({keys})"
+    roots = dict(layout.studio_roots()) if layout else {v: Path(appdata) / v for v in VARIANTS}
+    root = roots.get(variant)
+    if root is not None and _USER_ID.match(user_id) and (root / "user" / user_id / "filament").is_dir():
+        return StudioFolders(root=root, variant=variant, user_id=user_id,
+                             user_filament=root / "user" / user_id / "filament",
+                             system_filament=root / "system" / "BBL" / "filament"), None
+    f = locate(appdata, pin, layout=layout)
+    return f, f"{variant} user {user_id} no longer has a Bambu Studio user filament folder"
+
+
 def secondaries(appdata: Path | None, primary: StudioFolders, *,
                 layout: "LinuxLayout | None" = None) -> list[StudioFolders]:
-    """Every other usable Bambu Studio root (PCBOTH R1): on Windows the other of BambuStudio / BambuStudioBeta, on
+    """Every other usable Bambu Studio root: on Windows the other of BambuStudio / BambuStudioBeta, on
     Linux the other three of the four roots, in that order. Usable: it has a user/<id>/filament dir. Its user is the
     primary's id when that folder exists there, else its own newest (the pins pick the primary only)."""
     roots = dict(layout.studio_roots()) if layout else {v: Path(appdata) / v for v in VARIANTS}

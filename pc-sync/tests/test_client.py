@@ -163,7 +163,7 @@ def test_api_error_and_pair(certs):
 
 
 def test_heartbeat_and_fresh_upload(certs):
-    """PCBOTH: the heartbeat is a tiny JSON body (outcome, waiting_since, app), nothing else; a folder's first
+    """The heartbeat is a tiny JSON body (outcome, waiting_since, app), nothing else; a folder's first
     live upload carries fresh=1."""
     (cert, key, fp), _ = certs
 

@@ -36,7 +36,7 @@ class AppDirs:
         self.state = self.base / "state.json"
         self.lock = self.base / "sync.lock"
         # folders/<variant>-<user id>/: one AppDirs per secondary Bambu Studio folder (installed, backups, its
-        # installing.json and state.json; PCBOTH, see sync)
+        # installing.json and state.json; see sync)
 
     def ensure(self) -> None:
         self.base.mkdir(parents=True, exist_ok=True)

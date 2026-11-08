@@ -144,7 +144,7 @@ def test_orca_running_does_nothing(env):
     folders, orca, dirs = env
     c = OrcaClient(_state(folders, orca))
     assert _run(c, folders, orca, dirs, orca_running=lambda: True) == "studio_running"
-    assert c.calls == [("state",), ("heartbeat", "studio_running")]   # B-I2: the state call (is Orca synced?), then R3
+    assert c.calls == [("state",), ("heartbeat", "studio_running")]   # the state call (is Orca synced?), then the heartbeat
     assert "Orca Slicer is open" in _log(dirs)
 
 

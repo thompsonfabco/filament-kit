@@ -141,13 +141,13 @@ def cmd_run(dirs: store.AppDirs, appdata: Path | None, quiet: bool, layout: stud
                     if echo:
                         echo(f"This PC is not paired; run '{APP} pair'.")
                     return 1
-                folders = studio.locate(appdata, cfg, layout=layout)
+                folders, why = studio.primary(appdata, cfg, sync.load_state(dirs).get("folder"), layout=layout)
                 others, on = _secondaries(appdata, cfg, folders, layout)
                 orca = _locate_orca(appdata, cfg, warn=lambda m: _warn(dirs, echo, m), layout=layout)
                 c = client.Client(cfg, token, log=lambda m: store.log(dirs, m))
                 outcome = sync.run_once(c, folders, dirs, running=studio.running, now=time.time(), echo=echo,
                                         orca=orca, orca_running=studio.orca_running, others=others,
-                                        secondaries=on)
+                                        secondaries=on, change_reason=why)
             except studio.NotFound as e:
                 return _fail(dirs, echo, e.message)
             except client.ApiError as e:
@@ -184,11 +184,15 @@ def _when(t) -> str:
         return "unknown"
 
 
-def _differ_line(variant: str, names) -> None:
+def _differ_line(variant: str, names, key: str | None = None) -> None:
+    """Kept presets that differ from the build. The primary's updates are accepted on the server; another folder's
+    with apply-updates --folder on this PC (`key`)."""
     names = [n for n in names or [] if isinstance(n, str)]
     if names:
         more = f", and {len(names) - 20} more" if len(names) > 20 else ""
-        _out(f"Kept, differ:    {variant}: {len(names)} ({', '.join(names[:20])}{more})")
+        how = (f"; to take the build's copies: {APP} apply-updates --folder {key} --all (or --name <preset>)" if key
+               else "; to take the generated ones: sudo filament-kit profiles apply-updates")
+        _out(f"Kept, differ:    {variant}: {len(names)} ({', '.join(names[:20])}{more}){how}")
 
 
 def _program_files() -> list[Path]:
@@ -246,10 +250,13 @@ def cmd_status(dirs: store.AppDirs, appdata: Path | None, layout: studio.LinuxLa
     st = sync.load_state(dirs)
     f = None
     try:
-        f = studio.locate(appdata, cfg, layout=layout)
+        f, why = studio.primary(appdata, cfg, st.get("folder"), layout=layout)
         pin = " (pinned in the config)" if cfg.get("variant") or cfg.get("user_id") else ""
         _out(f"Bambu Studio:    {f.variant}, user {f.user_id}{pin}")
         _out(f"Preset folder:   {f.user_filament}")
+        _out(f"Primary:         {f.variant} (its presets are uploaded and builds are made from them; it stays this "
+             f"folder whichever app you open last; to use another, set \"variant\" (and \"user_id\") in "
+             f"{dirs.config})" + (f"; changes at the next run because {why}" if why else ""))
     except studio.NotFound as e:
         _out(f"Bambu Studio:    {e.message}")
     if f is not None:
@@ -301,7 +308,7 @@ def cmd_status(dirs: store.AppDirs, appdata: Path | None, layout: studio.LinuxLa
         others, on = _secondaries(appdata, cfg, f, layout)
         for o in others if on else []:
             rec = sync.load_state(store.AppDirs(dirs.base / "folders" / studio.folder_key(o)))
-            _differ_line(o.variant, rec.get("differing"))
+            _differ_line(o.variant, rec.get("differing"), studio.folder_key(o))
     stale = st.get("stale") or []
     if stale:
         _out(f"No longer generated (delete them in Bambu Studio): {', '.join(stale)}")
@@ -312,6 +319,17 @@ def cmd_status(dirs: store.AppDirs, appdata: Path | None, layout: studio.LinuxLa
         _out(f"No longer generated in Orca Slicer (delete them in Orca Slicer): {', '.join(stale_orca)}")
     _out(f"Log:             {dirs.log_file}")
     return 0
+
+
+def cmd_apply_updates(dirs: store.AppDirs, key: str, names: list[str] | None, dry_run: bool) -> int:
+    dirs.ensure()
+    try:
+        with store.single_instance(dirs):
+            return sync.apply_folder_updates(dirs, key, names, dry_run=dry_run, running=studio.running,
+                                             now=time.time(), echo=_out)
+    except store.AlreadyRunning:
+        _out("A sync run is in progress; try again in a minute.")
+        return 1
 
 
 def cmd_unpair(dirs: store.AppDirs) -> int:
@@ -360,7 +378,7 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--version", action="version", version=f"{APP} {__version__}")
     p.add_argument("--appdata", help=argparse.SUPPRESS)
     p.add_argument("--localappdata", help=argparse.SUPPRESS)
-    cmds = "pair,run,status,unpair" + (",install-timer,uninstall-timer" if _linux() else "")
+    cmds = "pair,run,status,unpair,apply-updates" + (",install-timer,uninstall-timer" if _linux() else "")
     sub = p.add_subparsers(dest="cmd", required=True, metavar="{" + cmds + "}")
     sub.add_parser("pair", help="pair this PC with the server (paste the link from 'sudo filament-kit pair --pc')")
     r = sub.add_parser("run", help="run one sync now (the scheduled task runs this every 10 minutes)")
@@ -369,6 +387,13 @@ def _parser() -> argparse.ArgumentParser:
                                   "installs into) and Orca Slicer's, a wait for a slicer to close, the last run "
                                   "and the installed build")
     sub.add_parser("unpair", help="forget the server and delete this PC's token")
+    au = sub.add_parser("apply-updates", help="in one of the other Bambu Studio folders, replace presets listed as "
+                                              "differing ('status': Kept, differ) with the build's copy")
+    au.add_argument("--folder", required=True, help="the folder, as <variant>-<user id> (e.g. BambuStudioBeta-123)")
+    which = au.add_mutually_exclusive_group(required=True)
+    which.add_argument("--name", action="append", help="one listed preset (repeat for more)")
+    which.add_argument("--all", action="store_true", help="every listed preset of that folder")
+    au.add_argument("--dry-run", action="store_true", help="only show what would be written")
     if _linux():
         sub.add_parser("install-timer", help="run the sync every 10 minutes (a systemd user timer; no root)")
         sub.add_parser("uninstall-timer", help="stop and remove the systemd user timer")
@@ -394,6 +419,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_run(dirs, appdata, args.quiet, layout)
     if args.cmd == "status":
         return cmd_status(dirs, appdata, layout)
+    if args.cmd == "apply-updates":
+        return cmd_apply_updates(dirs, args.folder, None if args.all else args.name, args.dry_run)
     return cmd_unpair(dirs)
 
 
