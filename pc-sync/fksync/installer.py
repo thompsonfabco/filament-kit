@@ -304,11 +304,11 @@ def _plan(t: _Target, accept: dict | None, root: Path | None = None) -> None:
 
 
 def _own_copy(name: str, fname: str) -> bool:
-    """The live file is the preset's own (the build's file name exactly, any .json suffix case): the snapshot keeps
-    it under that name. Any other file (another name, a case-only difference, the filament/ root) is not ours to
-    diff: no snapshot copy, so nothing reads it as edited or deleted (on Linux a case-only difference is another
-    path)."""
-    return fname != ROOT and Path(fname).stem == name
+    """The live file is the preset's own (exactly `<name>.json`, the path every later check reads): the snapshot
+    keeps it under that name. Any other file (another name, a case-only difference in the name or the suffix, the
+    filament/ root) is not ours to diff: no snapshot copy, so nothing reads it as edited or deleted (on Linux a
+    case-only difference is another path)."""
+    return fname == f"{name}.json"
 
 
 def _check(t: _Target, trusted: set[str], record: dict, restored: set[str], unsafe: list, stop: list) -> None:

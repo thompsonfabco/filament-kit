@@ -337,13 +337,21 @@ def test_case_only_file_name_match_is_kept_and_never_blocks_later_installs(tmp_p
 
 @pytest.mark.parametrize("layout", LAYOUTS)
 def test_upper_case_suffix_of_a_kept_preset(tmp_path, layout):
-    """M5: a kept `<name>.JSON` is copied into the snapshot by its real file name."""
+    """M5 + round 2: a kept `<name>.JSON` is "another file" (only an exact `<name>.json` is the preset's own): kept,
+    no snapshot copy, and the next installs go through (on Linux a `<name>.json` snapshot copy read as "deleted in
+    Bambu Studio")."""
     e = Env(tmp_path, layout)
     own = e.f.user_filament / "base" / f"{A}.JSON"
     own.write_text(json.dumps(_p(A)), encoding="utf-8")
-    res = e.install(e.build({A: _p(A, nozzle_temperature=["230"])}))
-    assert res.kept == [A] and json.loads(own.read_text()) == _p(A)
-    assert json.loads((e.dirs.installed / "base" / f"{A}.json").read_text()) == _p(A)
+    before = own.read_bytes()
+    res = e.install(e.build({A: _p(A, nozzle_temperature=["230"]), B: _p(B)}))
+    assert res.kept == [A] and own.read_bytes() == before
+    assert sorted(p.name for p in (e.dirs.installed / "base").iterdir()) == [f"{B}.info", f"{B}.json"]
+    res = e.install(e.build({A: _p(A, nozzle_temperature=["235"]), B: _p(B)}))
+    assert res.kept == [A, B] and own.read_bytes() == before
+    e.install(e.build({A: _p(A, nozzle_temperature=["240"]), B: _p(B)}), accept={"base": [A]})
+    assert json.loads(own.read_text())["nozzle_temperature"] == ["240"]
+    assert not (e.dirs.installed / "base" / f"{A}.json").exists()
 
 
 def test_names_match_after_unicode_normalization(tmp_path):

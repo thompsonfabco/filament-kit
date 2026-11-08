@@ -33,11 +33,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import shutil
 import unicodedata
 from pathlib import Path
 
 from . import generate, inapp as inapp_mod
+
+log = logging.getLogger(__name__)
+_told: set = set()                      # round-0 updates.json files already logged (path, content)
 
 SLICER = "SLICER.json"
 HELD = "held"
@@ -135,7 +139,7 @@ def classify(out_tree: Path, live: Path | None, held: Path, root: Path | None = 
         row = {"status": "update" if keys else "same", "keys": keys}
         if folder == root:
             row.update(file=fname, root=True)
-        elif Path(fname).stem == name:          # its own file (as the PC: the exact name, any suffix case)
+        elif fname == f"{name}.json":           # its own file (as the PC: exactly <name>.json)
             held.mkdir(parents=True, exist_ok=True)
             _hold(live / fname, held / f"{name}.json", gen, now)
         else:
@@ -200,6 +204,14 @@ def accepted(profiles_dir: Path) -> dict[str, dict[str, str]]:
     d = _read_json(_accepted_path(profiles_dir))
     acc = d.get("accepted") if isinstance(d, dict) else None
     acc = acc if isinstance(acc, dict) else {}
+    old = {t: [n for n in acc[t] if isinstance(n, str)] for t in TREES if isinstance(acc.get(t), list)}
+    if any(old.values()):               # the first format (names, no hashes): not carried, said once
+        key = (str(_accepted_path(profiles_dir)), json.dumps(old, sort_keys=True))
+        if key not in _told:
+            _told.add(key)
+            log.warning("profiles/updates.json is in an older format (accepted names without the accepted values); "
+                        "these acceptances are dropped, accept them again with 'profiles apply-updates': %s",
+                        "; ".join(f"{t}: {', '.join(v)}" for t, v in sorted(old.items()) if v))
     return {t: {n: h for n, h in acc[t].items() if isinstance(n, str) and isinstance(h, str)}
             if isinstance(acc.get(t), dict) else {} for t in TREES}
 

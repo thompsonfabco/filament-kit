@@ -274,11 +274,32 @@ def test_classify_matches_as_the_pc_does(tmp_path):
     rows = updates.classify(out, live, held, root=root)
     assert rows["Case PLA"] == {"status": "update", "keys": ["nozzle_temperature"], "file": "case pla.json"}
     assert rows[nfc]["status"] == "update" and rows[nfc]["file"] == f"{nfd}.json"
-    assert rows["Upper PLA"] == {"status": "update", "keys": ["nozzle_temperature"]}
-    assert (held / "Upper PLA.json").is_file()
+    assert rows["Upper PLA"] == {"status": "update", "keys": ["nozzle_temperature"], "file": "Upper PLA.JSON"}
     assert rows["Root PLA"]["root"] is True and rows["Root PLA"]["file"] == "Root PLA.json"
     assert rows["Mine"] == {"status": "same", "keys": []}
-    assert sorted(p.name for p in held.iterdir()) == ["Mine.json", "Upper PLA.json"]
+    assert sorted(p.name for p in held.iterdir()) == ["Mine.json"]
+
+
+def test_prune_matches_accepted_names_folded(env):
+    """An acceptance stored under another letter case survives a build with the same values."""
+    _first_install(env)
+    b2 = _rebuild(env, 1.31, TG.NOW + 1)
+    h = updates.preset_hash(TB.profiles_dir() / "builds" / b2 / "base" / f"{N06}.json")
+    builds._write_json(TB.profiles_dir() / "updates.json", {"accepted": {"base": {N06.upper(): h}, "orca": {}}})
+    TB.tick()
+    builds.request_rebuild("nothing changed")
+    builds.run_build(env, now=TG.NOW + 2)
+    assert updates.accepted(TB.profiles_dir())["base"] == {N06.upper(): h}
+    assert builds.state_view("a")["accepted_updates"]["base"] == [N06]
+
+
+def test_round_0_accepted_file_is_logged_once(env, caplog):
+    builds._write_json(TB.profiles_dir() / "updates.json", {"accepted": {"base": [N04], "orca": []}})
+    with caplog.at_level("WARNING"):
+        assert updates.accepted(TB.profiles_dir()) == {"base": {}, "orca": {}}
+        updates.accepted(TB.profiles_dir())
+    hits = [r for r in caplog.records if "older format" in r.getMessage()]
+    assert len(hits) == 1 and N04 in hits[0].getMessage()
 
 
 def test_root_presets_are_kept_not_pending_and_acceptance_flag_casefolds(env):

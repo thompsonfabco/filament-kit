@@ -761,6 +761,15 @@ def _orca_config() -> dict | None:
         if bambu or slicer else None
 
 
+def _still_accepted(build_dir: Path, rows: dict, tree: str, name: str, h: str) -> bool:
+    """The build still lists an update for `name` (matched folded, as is_accepted) with the accepted values."""
+    key = updates_mod.fold(name)
+    for n, row in rows.items():
+        if updates_mod.fold(n) == key and isinstance(row, dict) and row.get("status") == "update":
+            return updates_mod.preset_hash(build_dir / tree / f"{n}.json") == h
+    return False
+
+
 def _prune_accepted(build_dir: Path) -> None:
     """An accepted update stays accepted only while the new build lists an update for that preset with exactly the
     values the owner accepted (the same hash); otherwise (no longer an update, or other values) it is dropped and
@@ -770,9 +779,7 @@ def _prune_accepted(build_dir: Path) -> None:
         if not any(acc.values()):
             return
         rows = updates_mod.slicer(build_dir)
-        keep = {t: {n: h for n, h in acc.get(t, {}).items()
-                    if (rows.get(t, {}).get(n) or {}).get("status") == "update"
-                    and updates_mod.preset_hash(build_dir / t / f"{n}.json") == h}
+        keep = {t: {n: h for n, h in acc.get(t, {}).items() if _still_accepted(build_dir, rows.get(t, {}), t, n, h)}
                 for t in updates_mod.TREES}
         if keep != acc:
             updates_mod.save_accepted(_dir(), keep, _write_json)
