@@ -4,6 +4,9 @@ filament-kit works with Klipper printers that run Moonraker (Mainsail, Fluidd an
 Bambu printers. The app, the phone web app, the tag reader and the Claude tools show both kinds the same way: each
 printer's slots, the spool in each, loading a spool into a slot, the camera, pause / resume / stop and a usage log.
 
+The module is **opt-in**: no install mode turns it on. It has no service of its own (it runs inside the kit server), and
+the module menu lists it last, as "Klipper printers".
+
 What it needs:
 
 - the **klipper** module (`sudo filament-kit modules enable klipper`; it needs the server module);
@@ -25,6 +28,11 @@ has one; an address works too.
   most 256 addresses, only when you run it). Printers that announce themselves (Moonraker's `[zeroconf]`) appear by
   themselves.
 - **Moonraker asks for an API key?** `sudo filament-kit klipper api-key <id>` asks for it; it is never shown again.
+- **Changed the printer or its firmware?** `sudo filament-kit klipper detect <id>` reads the model and filament system
+  again.
+- The kit keeps its printer list in `printers.xml`. It also writes the old-format `printers.json` beside it on every
+  change, so that `sudo filament-kit update --rollback` to an earlier release keeps your Bambu printers. Keep both files.
+- From v0.4.0 the setup page lists Klipper printers like Bambu ones; it shows no host or printer family yet.
 - The server's API can add one too (`POST /api/printers` with `family: "klipper"` and `host`); the Android app has
   no Add screen for Klipper printers yet, but shows them once added.
 
@@ -65,6 +73,11 @@ Orca's filament slots: for a multi-tool printer it reads Moonraker's `lane_data`
 toolchangers (`sudo filament-kit klipper set <id> --lane-data auto|on|off`; never on AFC printers, AFC writes it
 itself). OrcaSlicer's own "Sync filaments" reads `lane_data` too.
 
+To install the plugin, copy `spool_sync.py` into `%APPDATA%\OrcaSlicer\orca_plugins\spool_sync\` (Windows) and enable it in
+Orca's Plugins dialog. It needs an Orca build with the preset plugin API (nightly after 2026-10-23). To use it with more
+printers, list their addresses, one per line, in `hosts.txt` in the plugin's storage folder. Details:
+`integrations/orca-spool-sync/README.md`.
+
 ## The printer pack (optional, runs on the printer)
 
 The kit talks to Moonraker without installing anything on the printer. The printer pack adds what a printer may lack:
@@ -96,7 +109,8 @@ keep that release, or when it's a build that was never released. Run it again wh
 It asks about each part and before every change, never overwrites a file it did not write, and makes a backup before
 its only edits to your own files: one `[include filament-kit/*.cfg]` line in `printer.cfg` and the `moonraker.conf`
 sections. It restarts Klipper only when the printer is idle and you say yes. `status` shows what is installed;
-`uninstall` removes it again. Both can be run again at any time: a service you choose to keep at uninstall keeps
+`uninstall` removes what the pack installed. The changes it made to `moonraker.conf` stay in place, and it tells you
+which ones. Install and uninstall can be run again at any time: a service you choose to keep at uninstall keeps
 its files and stays in the pack's list, a reinstall keeps lasttag's allow list unless you give `--allow`, and an
 nfc2klipper install that stopped halfway is finished by the next install. An nfc2klipper that is already installed
 is checked against the pack's version but never changed. If Klipper is not in `~/klipper`, give `--klipper <folder>`.

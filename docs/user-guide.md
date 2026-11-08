@@ -311,6 +311,10 @@ Your spool inventory (Spoolman) is also in a web browser on any computer at home
 
 ## Bambu Lab printers
 
+Klipper printers (through Moonraker) are a separate, opt-in module that is never part of an install mode: switch it on with
+`sudo filament-kit modules enable klipper`. See [Klipper printers](klipper.md) (v0.4.0). The rest of this section is about
+Bambu Lab printers.
+
 The server finds Bambu Lab printers by listening for the announcements they send on your home network. For
 that to work:
 
