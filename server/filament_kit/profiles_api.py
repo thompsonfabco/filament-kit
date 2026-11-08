@@ -13,8 +13,8 @@ in the threadpool through a small blocking reader, which stops at the cap (never
 over until the owner accepts them, `filament-kit profiles apply-updates`; builds.updates_view); the install report
 (`POST /api/sync/installed`) may name what the PC wrote (`written`).
 
-`PUT /api/sync/live?fresh=1` (PCBOTH R2): the PC's Bambu Studio folder changed (stable <-> Beta); the server treats
-the upload as that folder's first sync (builds.store_upload `fresh`). `POST /api/sync/heartbeat` (PCBOTH R3):
+`PUT /api/sync/live?fresh=1`: the PC's Bambu Studio folder changed (stable <-> Beta); the server treats
+the upload as that folder's first sync (builds.store_upload `fresh`). `POST /api/sync/heartbeat`:
 {outcome, waiting_since, app}, at most HEARTBEAT_MAX bytes, from the sync PC only: the PC is waiting for a slicer to
 close (or that wait is over); `GET /api/profiles/status` shows it as `pc.waiting`.
 
@@ -41,7 +41,7 @@ from .profiles.errors import ProfileError
 log = logging.getLogger(__name__)
 
 MAX_JSON = 64 << 10                     # a small JSON body (rebuild, installed, PATCH, propose)
-HEARTBEAT_MAX = 1024                    # the PC sync's heartbeat (PCBOTH R3)
+HEARTBEAT_MAX = 1024                    # the PC sync's heartbeat
 _OUTCOME = re.compile(r"[a-z_]{1,32}")
 MAX_TEXT = lines_mod.MAX_TEXT           # vendor, line, material, bambu_parent
 HASH_RE = re.compile(r"[0-9a-f]{64}")
@@ -274,7 +274,7 @@ def routes(authed, sm) -> list[Route]:
         partial = request.query_params.get("partial")
         if partial is not None and not builds.STAMP_RE.fullmatch(partial):
             raise _bad("partial must be a build stamp")
-        fresh = request.query_params.get("fresh")     # PCBOTH R2: another Bambu Studio folder's first sync
+        fresh = request.query_params.get("fresh")     # another Bambu Studio folder's first sync
         if fresh is not None and (fresh != "1" or orca):
             raise _bad("fresh must be 1 (Bambu Studio live uploads only)")
         h = await upload(request, "orca_live" if orca else "live", user_id, partial, fresh=fresh == "1")
@@ -325,7 +325,7 @@ def routes(authed, sm) -> list[Route]:
 
     @authed
     async def sync_heartbeat(request: Request):
-        """PCBOTH R3: the PC sync is waiting for Bambu Studio (or Orca Slicer) to close (at most one an hour), or
+        """The PC sync is waiting for Bambu Studio (or Orca Slicer) to close (at most one an hour), or
         that wait is over (once). A tiny body (HEARTBEAT_MAX), three plain fields, nothing else."""
         device = request.state.device
         raw = await _read_capped(request, HEARTBEAT_MAX, ProfileError(413, "too_large", "the heartbeat is too large"))

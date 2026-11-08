@@ -698,7 +698,7 @@ def test_corrupt_lines_json_adopts_the_installed_filament_id(tmp_path):
 
 
 def test_old_generation_live_presets_never_move_a_line_id(tmp_path):
-    """PCBOTH R2 (the stable/Beta incident): an older install's presets carry filament_ids that now belong to other
+    """The stable/Beta incident: an older install's presets carry filament_ids that now belong to other
     lines. Uploading them (a first sync of that folder, and with an install snapshot too) never moves a saved line's
     filament_id: every generated preset keeps its line's own id (on a first sync each differing one is reported)."""
     two = SUNLU + [fil(20, "PLA Matte Black")]

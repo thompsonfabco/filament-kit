@@ -545,7 +545,7 @@ def test_patch_orca_parent_stores_the_canonical_spelling(c, sm):
     assert lines_mod.load()[LID].orca_parent == "Overture PLA Pro"
 
 
-# ---------- PCBOTH: the PC sync's heartbeat while Bambu Studio stays open, and a folder's first sync ----------
+# ---------- the PC sync's heartbeat while Bambu Studio stays open, and a folder's first sync ----------
 
 WAIT = {"outcome": "studio_running", "waiting_since": 1_793_700_000, "app": "Bambu Studio"}
 
@@ -571,11 +571,14 @@ def test_heartbeat_is_kept_and_shown_in_status(c, sm):
     assert "waiting" not in c.get("/api/profiles/status", headers=auth(tok)).json()["pc"]
 
 
-def test_heartbeat_before_the_first_upload_names_the_pc(c):
-    tok = token()
-    assert c.post("/api/sync/heartbeat", json=WAIT, headers=auth(tok)).status_code == 200
-    pc = c.get("/api/profiles/status", headers=auth(tok)).json()["pc"]
-    assert pc["device_id"] == device_of(tok) and pc["last_upload"] is None and pc["waiting"]["app"] == "Bambu Studio"
+def test_heartbeat_before_any_sync_pc_is_not_shown(c):
+    """Only the registered sync PC's heartbeat is shown: before any PC has synced, a heartbeat (from any paired
+    device, a phone too) is taken but never makes the status say the PC sync waits."""
+    phone, pc = token(), token()
+    assert c.post("/api/sync/heartbeat", json=WAIT, headers=auth(phone)).status_code == 200
+    assert c.get("/api/profiles/status", headers=auth(phone)).json()["pc"] is None
+    assert put_zip(c, pc, "live", zip_of({"base/x.json": "{}"})).status_code == 200
+    assert "waiting" not in c.get("/api/profiles/status", headers=auth(pc)).json()["pc"]
 
 
 def test_heartbeat_checks_owner_body_and_values(c):
@@ -603,8 +606,8 @@ def test_heartbeat_audit_line(c, caplog):
 
 
 def test_fresh_live_upload_is_a_first_sync(c, sm):
-    """R2: the PC's Bambu Studio folder changed (stable <-> Beta): its live upload says `fresh=1` and the server
-    forgets the install snapshot, like a new sync PC (the owner's in-app record is kept, ruling S34)."""
+    """The PC's Bambu Studio folder changed (stable <-> Beta): its live upload says `fresh=1` and the server
+    forgets the install snapshot, like a new sync PC (the owner's in-app record is kept)."""
     tok = token()
     assert put_zip(c, tok, "live", zip_of({"base/x.json": "{}"}), "?user_id=1234567890").status_code == 200
     stamp = built(c, tok, sm)

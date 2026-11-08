@@ -638,7 +638,7 @@ def test_owner_preset_present_before_the_first_install_is_kept(tmp_path, server,
     assert sunlu("0.4") in {u["name"] for u in builds.updates_view()["updates"]}
 
 
-# ---------- PCBOTH: two Bambu Studio folders on one PC (stable and Beta) ----------
+# ---------- two Bambu Studio folders on one PC (stable and Beta) ----------
 
 def test_stable_after_beta_is_a_first_sync_and_beta_stays_current(tmp_path, server, monkeypatch):
     """The incident: builds went into Beta only; stable holds an older generation of the same presets (other

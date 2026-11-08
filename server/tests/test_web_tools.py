@@ -577,7 +577,7 @@ def test_bridge_set_slot_quotes_a_hash_label():
 
 
 def test_preset_status_says_the_pc_sync_waits(tools, sm, monkeypatch):
-    """PCBOTH R3: the phone / MCP status reads the same source as `filament-kit status`."""
+    """The phone / MCP status reads the same source as `filament-kit status`."""
     real = builds.status
 
     def waiting():

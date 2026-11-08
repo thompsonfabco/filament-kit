@@ -711,7 +711,7 @@ def test_config_menu_station_voice_piper_or_espeak(monkeypatch, capsys):
 
 
 def test_status_shows_the_pc_sync_waiting_for_studio(capsys, monkeypatch, spoolman_url):
-    """PCBOTH R3: the PC sync's last heartbeat says it waits for Bambu Studio to close."""
+    """The PC sync's last heartbeat says it waits for Bambu Studio to close."""
     _status_setup(spoolman_url)
     since = time.mktime((2026, 11, 3, 10, 0, 0, 0, 0, -1))
     _fake_profiles(monkeypatch, pc={"device_id": "d1", "last_upload": since,

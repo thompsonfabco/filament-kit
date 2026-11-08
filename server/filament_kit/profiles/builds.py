@@ -26,7 +26,7 @@ State, all under `state/profiles/`:
                              lines of the old PC's installed build, kept when the sync PC changes (ruling S34) until
                              the new PC installs
   build-state.json           {last_attempt: {at, ok, error}, handled: {at, started}} (the builder's own record)
-  pc-heartbeat.json          the sync PC's last heartbeat {device_id, at, outcome, waiting_since, app} (PCBOTH R3):
+  pc-heartbeat.json          the sync PC's last heartbeat {device_id, at, outcome, waiting_since, app}:
                              sent while Bambu Studio (or Orca Slicer) stays open on the PC; status() shows the wait
   rebuild-request            written by `request_rebuild`; watched by filament-kit-build.path (PathModified).
                              The builder only ever READS it; what was handled is kept in build-state.json.
@@ -593,7 +593,7 @@ def store_upload(kind: str, src: BinaryIO, *, device_id: str, user_id: str | Non
       orca_system  `BBL/filament/**.json` + `OrcaFilamentLibrary/index.json` (Ruling L) -> live/orca/system/
     `user_id` (the slicer's user folder id) is kept for the two live kinds. `partial` (live kinds only) names the
     build whose install stopped part-way in this live folder (ruling S28; meta `orca_partial` for orca_live, Ruling
-    O). `fresh` (kind live only, PCBOTH R2): the PC's Bambu Studio folder changed (stable <-> Beta), so this live
+    O). `fresh` (kind live only): the PC's Bambu Studio folder changed (stable <-> Beta), so this live
     folder is that folder's first sync: the install snapshot, deletions and partial build are forgotten exactly as for
     a new sync PC (`_forget_old_pc`; the owner's in-app record is kept). Raises OtherPc, BadZip or TooLarge; then
     nothing changed."""
@@ -639,7 +639,7 @@ def store_upload(kind: str, src: BinaryIO, *, device_id: str, user_id: str | Non
             now = time.time()
             if meta.get("owner") != device_id and (meta.get("owner") or _dir().joinpath("installed.json").exists()):
                 _forget_old_pc(meta)
-            elif fresh:                         # the same PC, another Bambu Studio folder: its first sync (R2)
+            elif fresh:                         # the same PC, another Bambu Studio folder: its first sync
                 _forget_old_pc(meta)
             meta["owner"] = device_id
             renew = False
@@ -1189,7 +1189,7 @@ def state_view(device_id: str) -> dict:
                                   "orca_live_hash": req["orca_live_hash"]} if req else None}
 
 
-# ---------- the PC sync's heartbeat (PCBOTH R3) ----------
+# ---------- the PC sync's heartbeat ----------
 
 HEARTBEAT = "pc-heartbeat.json"
 HEARTBEAT_APPS = ("Bambu Studio", "Orca Slicer")
@@ -1208,7 +1208,7 @@ def record_heartbeat(device_id: str, outcome: str, waiting_since: float | None, 
 
 def _pc_waiting(device_id: str | None, meta: dict) -> dict | None:
     """{since, app, at} while the sync PC's last heartbeat says it waits for a slicer to close: the heartbeat is the
-    owner's (or there is no owner yet) and no upload or install report came after it."""
+    sync PC's own and no upload or install report came after it."""
     hb = _read_obj(_dir() / HEARTBEAT)
     if hb.get("outcome") != WAITING or hb.get("device_id") != device_id:
         return None
@@ -1239,16 +1239,12 @@ def pc_waiting_text(pc: dict | None) -> str | None:
 
 
 def _pc_view(o: str | None, meta: dict, ups: list) -> dict | None:
-    """status() `pc`: the sync PC (before its first upload: the paired device whose heartbeat came) and, while it
-    waits for a slicer to close, `waiting` {since, app, at}."""
-    dev = o
-    if dev is None:
-        hb = _read_obj(_dir() / HEARTBEAT).get("device_id")
-        dev = hb if isinstance(hb, str) and hb in {d["id"] for d in pairing.devices()} else None
-    if dev is None:
+    """status() `pc`: the sync PC and, while it waits for a slicer to close, `waiting` {since, app, at}. Only the
+    registered sync PC's heartbeat counts: before any PC has synced, a heartbeat is kept but not shown."""
+    if o is None:
         return None
-    out = {"device_id": dev, "last_upload": max(ups) if ups else None}
-    wait = _pc_waiting(dev, meta)
+    out = {"device_id": o, "last_upload": max(ups) if ups else None}
+    wait = _pc_waiting(o, meta)
     if wait is not None:
         out["waiting"] = wait
     return out
