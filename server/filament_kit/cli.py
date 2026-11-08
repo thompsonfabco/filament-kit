@@ -1161,18 +1161,25 @@ def _change_module(cfg: dict, name: str, want_on: bool, *, confirm=None, ask_add
         return f"unknown module {name!r}"
     on = set(modules.enabled(cfg))
     if want_on:
-        missing = [d for d in modules.MODULES[name].depends if d not in on]
+        missing = modules.needs_closure([name], on)
         if missing:
             listed = ", ".join(missing)
-            return f"{name} needs {listed}\nfix: enable {listed} first"
+            # without a terminal it stays a refusal: a script gets the failure the docs describe
+            if confirm is None or not confirm(f"{name} needs {listed}. Also turn on {listed}? [y/N] "):
+                return f"{name} needs {listed}\nfix: enable {listed} first"
+            on |= set(missing)
+            print("
+".join(modules.change_note(name, True, missing)))
         on.add(name)
     else:
-        deps = modules.dependents(name, frozenset(on))
+        deps = modules.dependents_closure(name, on)     # not only the direct ones: the rest would refuse after the yes
         if deps:
             listed = ", ".join(deps)
             if confirm is None or not confirm(f"Also turn off {listed}? [y/N] "):
                 return f"{listed} depend on {name}\nfix: disable {listed} first"
             on -= set(deps)
+            print("
+".join(modules.change_note(name, False, deps)))
         on.discard(name)
     new = _with_modules(cfg, on)
     if not {"server", "station"} <= on:

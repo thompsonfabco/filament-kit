@@ -261,6 +261,15 @@ def dependents_closure(name: str, on) -> list[str]:
     return [n for n in MODULES if n in gone and n != name]
 
 
+def change_note(name: str, turned_on: bool, others) -> list[str]:
+    """The sentence every way of switching a module prints, when it took others with it."""
+    if not others:
+        return []
+    listed = ", ".join(others)
+    return [f"Turned on {name}; it needs {listed}, now on too." if turned_on
+            else f"Turned off {name}; that also turns off: {listed}."]
+
+
 def toggle(on, name: str) -> tuple[frozenset[str], list[str]]:
     """Flip `name`. On: its needs go on too; off: whatever needs it goes off. Returns (new set, messages)."""
     if name not in MODULES:
@@ -268,13 +277,9 @@ def toggle(on, name: str) -> tuple[frozenset[str], list[str]]:
     on = frozenset(on)
     if name in on:
         gone = dependents_closure(name, on)
-        notes = [f"Turned off {name}; that also turns off: {', '.join(gone)}."] if gone else []
-        return on - set(gone) - {name}, notes
+        return on - set(gone) - {name}, change_note(name, False, gone)
     extra = needs_closure([name], on)
-    notes = []
-    if extra:
-        notes = [f"Turned on {name}; it needs {', '.join(extra)}, now on too."]
-    return on | {name} | set(extra), notes
+    return on | {name} | set(extra), change_note(name, True, extra)
 
 
 def preset(on, mode: str) -> tuple[frozenset[str], list[str]]:

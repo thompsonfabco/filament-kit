@@ -79,6 +79,65 @@ def test_disable_with_dependents_tty_asks(applied, monkeypatch):
     assert mods["spoolman"] is True and set(mods) == set(modules.MODULES) - set(modules.NEWER)
 
 
+def _deep(cfg=None):
+    """ server, with what hangs off it two and three levels down."""
+    cfg = config.load()
+    cfg["spoolman_url"] = "http://spoolman.example:7912"
+    for n in ("ai_intake", "orders", "web", "remote"):
+        cfg.setdefault("modules", {n2: n2 in modules.MODES["server"] for n2 in modules.MODULES})[n] = True
+    cfg["web"] = {**cfg["web"], "public_url": "https://printer.example.com/filament"}
+    cfg["orders"] = {"file": None}
+    config.save(cfg)
+
+
+def test_disable_names_the_whole_set_before_asking(applied, capsys, monkeypatch):
+    _deep()
+    _stdin(monkeypatch, "")
+    assert cli.main(["modules", "disable", "server"]) == 1
+    err = capsys.readouterr().err
+    for n in ("ai_intake", "orders", "printers", "presets", "web", "remote"):
+        assert n in err.split("fix:")[1], n
+
+
+def test_disable_after_a_yes_does_what_it_said(applied, capsys, monkeypatch):
+    _deep()
+    asked = []
+    monkeypatch.setattr(cli, "_tty_confirm", lambda q: asked.append(q) or True)
+    assert cli.main(["modules", "disable", "server"]) == 0
+    mods = config.load()["modules"]
+    for n in ("server", "ai_intake", "orders", "printers", "presets", "web", "remote"):
+        assert mods[n] is False, n
+    for n in ("orders", "remote"):
+        assert n in asked[0], n
+
+
+def test_enable_at_a_terminal_offers_what_it_needs_all_the_way_down(applied, monkeypatch):
+    config.save(modules.set_mode(config.load(), "station"))
+    cfg = config.load()
+    cfg["spoolman_url"] = "http://spoolman.example:7912"
+    config.save(cfg)
+    asked = []
+    monkeypatch.setattr(cli, "_tty_confirm", lambda q: asked.append(q) or True)
+    assert cli.main(["modules", "enable", "printers"]) == 0
+    assert "server" in asked[0] and config.load()["modules"]["server"] is True
+
+
+def test_enable_at_a_terminal_refused_changes_nothing(applied, capsys, monkeypatch):
+    config.save(modules.set_mode(config.load(), "station"))
+    monkeypatch.setattr(cli, "_tty_confirm", lambda q: False)
+    assert cli.main(["modules", "enable", "printers"]) == 1
+    assert "fix: enable server first" in capsys.readouterr().err and applied == []
+
+
+def test_every_way_of_switching_says_it_in_the_same_words(applied, capsys, monkeypatch):
+    _deep()
+    monkeypatch.setattr(cli, "_tty_confirm", lambda q: True)
+    before = modules.enabled(config.load())
+    _new, notes = modules.toggle(before, "server")
+    assert cli.main(["modules", "disable", "server"]) == 0
+    assert notes[0] in capsys.readouterr().out
+
+
 def test_enable_with_dependency_off_fails(applied, capsys, monkeypatch):
     _stdin(monkeypatch, "")
     config.save(modules.set_mode(config.load(), "station"))
