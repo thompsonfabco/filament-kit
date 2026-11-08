@@ -99,12 +99,12 @@ A hand-built tarball is not signed. Users can install it with `sudo ./install.sh
 
 ## Testing
 
-- CI runs the server tests (`server/tests`, `pytest`) on every push. From v0.4.1 it installs the `[test,web]` extra, so
-  the web module's tests run too; before that CI's `server[test]` skipped them. The PC sync tests (`pc-sync/tests`),
-  the Android unit tests (`./gradlew testDebugUnitTest`) and the reader's native tests run only when files under
-  `pc-sync/`, `android/` or `reader/` change (each workflow is limited to its own folder).
-- The merge gate, before anything is pushed, runs the full set, including the Klipper end-to-end test and the tests
-  that need root, which CI does not run.
+- CI runs the server tests (`server/tests`, `pytest`) and the PC sync tests (`pc-sync/tests`) on Linux on every push.
+  CI installs `server[test]`, which skips the web module's tests; they are run before a merge instead. The PC sync
+  tests on its other systems (`pc-sync.yml`), the Android unit tests (`./gradlew testDebugUnitTest`) and the reader's
+  tests run only when files under `pc-sync/`, `android/` or `reader/` change.
+- CI does not run the Klipper end-to-end test or the tests that need root. Before a merge, also run
+  `bash tools/e2e/klipper.sh` from the repo root and, as root, `pytest server/tests/test_root_links.py`.
 - [testing-e2e.md](testing-e2e.md): the end-to-end run on a disposable Ubuntu host (WSL), with real
   Spoolman, a fake printer and a fake releases server.
 - [android-e2e.md](android-e2e.md): the Android end-to-end test on an emulator against a real server, and the
