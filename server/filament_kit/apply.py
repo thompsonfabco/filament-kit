@@ -512,12 +512,12 @@ def _server_setup(ex: _Exec, arg: str) -> None:
 
 
 def _web_state(ex: _Exec) -> None:
-    """The web unit as its own user: stop it, move its files to its folder, the shared files, its kit token, its
-    ACLs (web_access.py). Before the unit is (re)started with the new user."""
+    """The web unit as its own user: stop it, copy its files to its folder (once), the shared files, its kit
+    token, its ACLs (web_access.py). Before the unit is (re)started with the new user."""
     from . import web_access
     print("\n==> The web unit's own user and files")
     if ex.dry:
-        print(f"would move the web unit's files to {config.paths().web} and grant {config.WEB_USER} its files")
+        print(f"would copy the web unit's files to {config.paths().web} and grant {config.WEB_USER} its files")
         return
     try:
         import pwd
@@ -527,10 +527,10 @@ def _web_state(ex: _Exec) -> None:
     state = config.paths().state
     state.mkdir(parents=True, exist_ok=True)
     kit = os.stat(state)
-    ex.ok(["systemctl", "stop", WEB_UNIT])          # it must not write the old place while its files move
-    moved = web_access.migrate(web.pw_uid, web.pw_gid)
-    if moved:
-        print(f"moved to {config.paths().web}: {', '.join(moved)}")
+    ex.ok(["systemctl", "stop", WEB_UNIT])          # it must not write the old place while its files are copied
+    copied = web_access.migrate(web.pw_uid, web.pw_gid)
+    if copied:
+        print(f"copied to {config.paths().web} (the originals stay for a rollback): {', '.join(copied)}")
     web_access.shared_files(kit.st_uid, kit.st_gid)
     try:
         web_access.mark_web_device()              # a pairing from before roles: the web-only routes serve it

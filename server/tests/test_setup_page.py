@@ -816,7 +816,7 @@ def test_r2b_web_state_lives_in_its_own_folder(env):
 
 
 @pytest.mark.skipif(not sys.platform.startswith("linux"), reason="root runs this on Linux (descriptors, /proc)")
-def test_r2b_migration_moves_the_web_files_and_keeps_reader_tokens(env):
+def test_r2b_migration_copies_the_web_files_and_keeps_reader_tokens(env):
     import os
     from filament_kit import web_access
     old = config.paths().state / "web"
@@ -832,7 +832,7 @@ def test_r2b_migration_moves_the_web_files_and_keeps_reader_tokens(env):
     assert moved == ["kit_token", "oauth.json", "vapid.pem"]
     assert (w / "oauth.json").read_text(encoding="utf-8") == '{"clients": {"c1": {}}}'   # the connector stays
     assert (w / "kit_token").read_text(encoding="utf-8") == "tok-EXAMPLE\n"               # the kit pairing too
-    assert (old / "reader_tokens").exists() and not (old / "oauth.json").exists()
+    assert (old / "reader_tokens").exists() and (old / "oauth.json").exists()       # copied: 0.3.0 keeps it
     assert (w.name, 5001, 5001) in chowned and ("oauth.json", 5001, 5001) in chowned
     (old / "oauth.json").write_text("stale", encoding="utf-8")
     assert web_access.migrate(5001, 5001, chown=lambda *a: None) == []                      # never over a moved one

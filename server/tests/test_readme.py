@@ -61,9 +61,9 @@ def _owner_hits(text: str) -> list[str]:
                    if hashlib.sha256(_OWNER_SALT + t.encode()).hexdigest()[:20] in OWNER_FINGERPRINTS})
 
 
-# Every Markdown file under docs/ is public (the owner's runbooks live outside the repository).
+# Every Markdown file under docs/ and release-notes/ is public (the owner's runbooks live outside the repository).
 PUBLIC_DOCS = ["README.md", "THIRD-PARTY.md", "reader/README.md"] + sorted(
-    p.relative_to(ROOT).as_posix() for p in (ROOT / "docs").rglob("*.md"))
+    p.relative_to(ROOT).as_posix() for p in [*(ROOT / "docs").rglob("*.md"), *(ROOT / "release-notes").glob("*.md")])
 
 
 @pytest.mark.parametrize("rel", PUBLIC_DOCS)

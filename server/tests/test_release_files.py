@@ -108,6 +108,15 @@ def test_release_publishes_with_generated_notes():
     assert "generate_release_notes: true" in _read(".github/workflows/release.yml")
 
 
+def test_release_notes_are_written_for_the_current_version():
+    """The workflow refuses a tag without release-notes/v<version>.md and publishes it as the release body."""
+    text = _read(".github/workflows/release.yml")
+    assert 'release-notes/v$version.md' in text and "body_path: release-notes/v${{ needs.version.outputs.version }}.md" in text
+    version = _version("server/filament_kit/__init__.py")
+    notes = _read(f"release-notes/v{version}.md")
+    assert notes.startswith(f"# filament-kit {version}") and len(notes) > 200
+
+
 def test_task_runs_every_ten_minutes():
     text = _read("pc-sync/installer/install_task.ps1")
     assert "-RepetitionInterval (New-TimeSpan -Minutes 10)" in text
@@ -116,10 +125,10 @@ def test_task_runs_every_ten_minutes():
 
 
 def test_server_and_pc_sync_versions_match():
-    assert _version("server/filament_kit/__init__.py") == _version("pc-sync/fksync/__init__.py") == "0.3.0"
+    assert _version("server/filament_kit/__init__.py") == _version("pc-sync/fksync/__init__.py") == "0.4.0"
     # the wheel takes its version from pyproject; make_release.sh looks for the __version__ wheel
     for rel in ("server/pyproject.toml", "pc-sync/pyproject.toml"):
-        assert re.search(r'^version = "0\.3\.0"\s*$', _read(rel), re.M), rel
+        assert re.search(r'^version = "0\.4\.0"\s*$', _read(rel), re.M), rel
 
 
 SPOOLMAN_SHA = "bcc961af4c20d7ad7f1740f5609cd3efd94c4556baafaeba5036122dd7e46704"

@@ -159,7 +159,8 @@ def test_as_root_the_owners_are_right_and_the_victims_keep_theirs(kit):
     assert not os.path.lexists(v / "c")
     w = config.paths().web
     assert os.stat(w).st_uid == 54321 and os.stat(w / "push" / "subs.json").st_uid == 54321
-    assert os.lstat(w / "push" / "innocent").st_uid == 0           # the link itself was not chowned either
+    assert not os.path.lexists(w / "push" / "innocent")             # a link is never copied
+    assert os.lstat(kit / "state" / "web" / "push" / "innocent").st_uid == 0   # nor chowned where it is
     lock = kit / "state" / "profiles" / "lines.lock"
     assert os.stat(lock).st_uid == 54322 and stat.S_IMODE(os.stat(lock).st_mode) == 0o644
 
@@ -177,3 +178,139 @@ def test_root_never_reads_a_linked_devices_file_into_the_kits_state(kit):
     for f in (kit / "state").iterdir():
         if f.is_file() and not f.is_symlink():
             assert "SECRET-EXAMPLE" not in f.read_text(encoding="utf-8", errors="replace"), f
+
+
+# --- the web unit's files are copied, not moved, so `update --rollback` to 0.3.0 (which reads only state/web/)
+# keeps the connector sign-ins, push subscriptions and the web unit's pairing; a marker makes it one-time
+
+def _old_files(kit):
+    old = kit / "state" / "web"
+    (old / "push").mkdir(parents=True)
+    for rel, text in (("oauth.json", '{"clients": {"c1": {}}}'), ("kit_token", "tok-EXAMPLE\n"),
+                      ("push/subs.json", '{"ep": {}}'), ("push/vapid.pem", "pem")):
+        (old / rel).write_text(text, encoding="utf-8")
+        os.chmod(old / rel, 0o600)
+    os.chmod(old / "push", 0o750)
+    return old
+
+
+def _tree(root):
+    """{relative path: (mode, bytes or None for a folder)} of everything below `root` (links as links)."""
+    out = {}
+    for dirpath, dirs, files in os.walk(root):
+        for n in [*dirs, *files]:
+            p = os.path.join(dirpath, n)
+            s = os.lstat(p)
+            rel = os.path.relpath(p, root)
+            out[rel] = (stat.S_IMODE(s.st_mode), None if not stat.S_ISREG(s.st_mode) else open(p, "rb").read())
+    return out
+
+
+def test_migrate_copies_and_leaves_the_originals(kit):
+    old = _old_files(kit)
+    before = _tree(old)
+    web, _ = _ids()
+    copied = web_access.migrate(web, web)
+    assert copied == ["kit_token", "oauth.json", "push"]
+    assert _tree(old) == before                                     # 0.3.0 still finds every file, unchanged
+    w = config.paths().web
+    for rel, (mode, data) in before.items():
+        assert _tree(w)[rel] == (mode, data), rel                   # same bytes, same modes as the move gave
+
+
+def test_marker_is_written_once_owned_by_the_web_user_0600(kit):
+    _old_files(kit)
+    web, _ = _ids()
+    web_access.migrate(web, web)
+    m = config.paths().web / web_access.MARKER
+    s = os.lstat(m)
+    assert stat.S_ISREG(s.st_mode) and stat.S_IMODE(s.st_mode) == 0o600
+    text = m.read_text(encoding="utf-8")
+    for name in ("kit_token", "oauth.json", "push"):
+        assert name in text.split()
+    if ROOT:
+        assert (s.st_uid, s.st_gid) == (web, web)
+
+
+def test_a_file_the_web_unit_removed_later_is_never_brought_back(kit):
+    _old_files(kit)
+    web, _ = _ids()
+    web_access.migrate(web, web)
+    w = config.paths().web
+    os.unlink(w / "push" / "subs.json")                            # a revoked push subscription
+    os.unlink(w / "oauth.json")
+    assert web_access.migrate(web, web) == []
+    assert not (w / "push" / "subs.json").exists() and not (w / "oauth.json").exists()
+
+
+def test_with_the_marker_present_nothing_is_copied(kit):
+    _old_files(kit)
+    w = config.paths().web
+    w.mkdir()
+    (w / web_access.MARKER).write_text("copied earlier\n", encoding="utf-8")
+    assert web_access.migrate(*_ids()[:1] * 2) == []
+    assert sorted(os.listdir(w)) == [web_access.MARKER]
+
+
+def test_an_earlier_move_without_a_marker_gets_only_what_is_missing(kit):
+    old = _old_files(kit)
+    w = config.paths().web
+    (w / "push").mkdir(parents=True)                                # round-2 layout: these were moved already
+    (w / "oauth.json").write_text("moved-newer", encoding="utf-8")
+    (w / "push" / "subs.json").write_text("moved-newer", encoding="utf-8")
+    copied = web_access.migrate(*_ids()[:1] * 2)
+    assert (w / "oauth.json").read_text(encoding="utf-8") == "moved-newer"            # never written over
+    assert (w / "push" / "subs.json").read_text(encoding="utf-8") == "moved-newer"
+    assert (w / "kit_token").read_text(encoding="utf-8") == "tok-EXAMPLE\n"
+    assert (w / "push" / "vapid.pem").read_text(encoding="utf-8") == "pem"             # missing inside a folder
+    assert copied == ["kit_token", "push"]
+    assert (w / web_access.MARKER).is_file()
+    assert (old / "oauth.json").read_text(encoding="utf-8") == '{"clients": {"c1": {}}}'
+
+
+def test_links_and_fifos_in_the_old_folder_are_not_copied(kit, caplog):
+    old = _old_files(kit)
+    v = kit / "victim"
+    os.symlink(v / "a", old / "linked.json")
+    os.symlink(v, old / "linked_dir")
+    os.mkfifo(old / "pipe")
+    os.symlink(v / "b", old / "push" / "innocent")
+    os.mkfifo(old / "push" / "pipe")
+    caplog.set_level(logging.WARNING)
+    copied = web_access.migrate(*_ids()[:1] * 2)
+    w = config.paths().web
+    assert copied == ["kit_token", "oauth.json", "push"]
+    for rel in ("linked.json", "linked_dir", "pipe", "push/innocent", "push/pipe"):
+        assert not os.path.lexists(w / rel), rel
+        assert os.path.lexists(old / rel), rel                     # left where they were
+    _same(v / "a", 0o600)
+    _same(v / "b", 0o600)
+    assert "symbolic link" in caplog.text and "not a regular file" in caplog.text
+
+
+def test_a_name_planted_in_the_web_folder_is_never_written_through(kit):
+    old = _old_files(kit)
+    w = config.paths().web
+    w.mkdir()
+    os.symlink(kit / "victim" / "c", w / "kit_token")              # dangling: O_EXCL never makes its target
+    os.symlink(kit / "victim", w / "push")                         # a folder name planted as a link
+    web_access.migrate(*_ids()[:1] * 2)
+    assert not os.path.lexists(kit / "victim" / "c")
+    assert sorted(os.listdir(kit / "victim")) == ["a", "b"]
+    assert (old / "kit_token").read_text(encoding="utf-8") == "tok-EXAMPLE\n"
+
+
+@pytest.mark.skipif(not ROOT, reason="owners: run as root (sudo)")
+def test_as_root_copies_are_the_web_users_and_the_originals_stay_the_kits(kit):
+    old = _old_files(kit)
+    for dirpath, dirs, files in os.walk(old):
+        for n in [dirpath, *[os.path.join(dirpath, f) for f in files]]:
+            os.chown(n, 54322, 54322)
+    web_access.migrate(54321, 54321)
+    w = config.paths().web
+    for rel in ("oauth.json", "kit_token", "push", "push/subs.json", "push/vapid.pem"):
+        o, c = os.lstat(old / rel), os.lstat(w / rel)
+        assert (o.st_uid, o.st_gid) == (54322, 54322), rel                       # originals untouched
+        assert (c.st_uid, c.st_gid) == (54321, 54321), rel
+        assert stat.S_IMODE(c.st_mode) == stat.S_IMODE(o.st_mode), rel
+    assert stat.S_IMODE(os.lstat(old / "oauth.json").st_mode) == 0o600           # not widened

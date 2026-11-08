@@ -95,6 +95,21 @@ def enabled(cfg: dict) -> frozenset[str]:
     return frozenset(n for n, v in mods.items() if v and n in MODULES)
 
 
+# Modules newer than an earlier release, with the version that added them. That release's `validate` refuses the
+# name even when false, and `update --rollback` ends in its `modules apply`.
+NEWER: dict[str, tuple[int, int, int]] = {"klipper": (0, 4, 0)}
+
+
+def module_map(on, before: dict | None = None) -> dict[str, bool]:
+    """The `modules` map to write for the set `on`, replacing the one in config `before`: every module true or
+    false, as always, except that a module in NEWER that is off and was never named in `before` stays out, so a
+    rollback to a release without it can still read the config."""
+    on = set(on)
+    mods = (before or {}).get("modules") if isinstance(before, dict) else None
+    named = set(mods) if isinstance(mods, dict) else set()
+    return {n: n in on for n in MODULES if n in on or n not in NEWER or n in named}
+
+
 def mode_of(on: frozenset[str]) -> str:
     for name, members in MODES.items():
         if on == members or (on - ADD_ONS == members and "server" in members):
@@ -132,7 +147,7 @@ def set_mode(cfg: dict, mode: str, say: Callable[[str], None] | None = print) ->
                 on.add(n)
             else:
                 dropped.append(n)
-    out["modules"] = {n: n in on for n in MODULES}
+    out["modules"] = module_map(on, cfg)
     if dropped and say is not None:
         say(f"Mode {mode}: turned off {', '.join(dropped)} (they need modules this mode does not have).")
     if mode == "all-in-one":

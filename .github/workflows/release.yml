@@ -45,6 +45,11 @@ jobs:
             echo "::error::versionCode $code must be above 0"
             exit 1
           fi
+          # the release's notes are written before the tag: release-notes/v<version>.md
+          if [ ! -s "release-notes/v$version.md" ]; then
+            echo "::error::release-notes/v$version.md is missing or empty"
+            exit 1
+          fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "code=$code" >> "$GITHUB_OUTPUT"
           echo "version $version, versionCode $code"
@@ -283,6 +288,8 @@ jobs:
       - uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8  # v2.3.2
         with:
           fail_on_unmatched_files: true
+          # the written notes first; GitHub's generated list of changes is appended below them
+          body_path: release-notes/v${{ needs.version.outputs.version }}.md
           generate_release_notes: true
           # from the sums step: dist/filament-kit-<version>.tar.gz, dist/filament-kit.apk,
           # dist/filament-kit-sync-setup-<version>.exe, dist/filament-kit-sync-linux-x86_64-<version>.tar.gz,

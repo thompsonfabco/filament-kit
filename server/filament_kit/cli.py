@@ -1150,9 +1150,10 @@ def _module_state(cfg: dict) -> tuple:
 
 
 def _with_modules(cfg: dict, on) -> dict:
-    """Copy of cfg with every module name written true/false (never an empty dict)."""
+    """Copy of cfg with the module set `on` written true/false (never an empty dict; modules.module_map leaves out a
+    newer module, such as klipper, that is off and was never named)."""
     out = copy.deepcopy(cfg)
-    out["modules"] = {n: n in on for n in modules.MODULES}
+    out["modules"] = modules.module_map(on, cfg)
     return out
 
 

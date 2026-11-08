@@ -45,7 +45,8 @@ def test_modules_list_shows_mode(capsys):
 def test_modules_set_all_in_one_saves_and_applies(applied):
     assert cli.main(["modules", "set", "all-in-one"]) == 0
     cfg = config.load()
-    assert cfg["modules"] == {n: n not in modules.OPT_IN or n in ("ai_intake", "library") for n in modules.MODULES}  # legacy cfg: AI kept
+    assert cfg["modules"] == {n: n not in modules.OPT_IN or n in ("ai_intake", "library") for n in modules.MODULES
+                              if n not in modules.NEWER}  # legacy cfg: AI kept; klipper never named stays out
     assert cfg["station"]["url"] == "http://127.0.0.1:5003"
     assert cfg["station"]["allow"] == ["127.0.0.1"]
     assert applied[0]["modules"]["station"] is True
@@ -75,7 +76,7 @@ def test_disable_with_dependents_tty_asks(applied, monkeypatch):
     assert cli.main(["modules", "disable", "server"]) == 0
     mods = config.load()["modules"]
     assert mods["server"] is False and mods["printers"] is False and mods["ai_intake"] is False
-    assert mods["spoolman"] is True and len(mods) == len(modules.MODULES)
+    assert mods["spoolman"] is True and set(mods) == set(modules.MODULES) - set(modules.NEWER)
 
 
 def test_enable_with_dependency_off_fails(applied, capsys, monkeypatch):
@@ -103,7 +104,7 @@ def test_config_menu_toggle_printers_then_apply(applied, monkeypatch):
     _stdin(monkeypatch, "6\n4\n\n0\n")
     assert cli.main(["config"]) == 0
     assert config.load()["modules"]["printers"] is False
-    assert len(config.load()["modules"]) == len(modules.MODULES)
+    assert set(config.load()["modules"]) == set(modules.MODULES) - set(modules.NEWER)
     assert applied[0]["modules"]["printers"] is False
     assert ("finish", False) in applied
 
@@ -135,7 +136,8 @@ def test_config_menu_station_on_asks_address_and_refuses_range(applied, monkeypa
 def test_config_menu_choose_mode(applied, monkeypatch):
     _stdin(monkeypatch, "6\na\n\n0\n")  # a = all-in-one preset
     cli.main(["config"])
-    assert config.load()["modules"] == {n: n not in modules.OPT_IN or n in ("ai_intake", "library") for n in modules.MODULES}  # legacy cfg: AI kept
+    assert config.load()["modules"] == {n: n not in modules.OPT_IN or n in ("ai_intake", "library") for n in modules.MODULES
+                              if n not in modules.NEWER}  # legacy cfg: AI kept; klipper never named stays out
     assert config.load()["station"]["url"] == "http://127.0.0.1:5003"
 
 
