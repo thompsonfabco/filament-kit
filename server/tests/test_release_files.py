@@ -655,6 +655,56 @@ def test_wrapper_reader_revoke_as_root_and_list_as_user(tmp_path):
     assert _wrapper_run(tmp_path / "b", "reader", "tokens") == "as-user ./stubs/prog reader tokens"
 
 
+def _wrapper_status(tmp_path, *, uid="0", folder=True, prog='echo "paired 192.0.2.10:8710"') -> list[str]:
+    """Run `status` through the wrapper with stand-ins. The program answers `station pairing-state` with `prog`,
+    and every run is logged; runuser logs `as-user ...`. Returns the log."""
+    import os
+    import subprocess
+    stubs = tmp_path / "stubs"
+    stubs.mkdir()
+    prog_body = f'echo "as-caller $*" >> log\nif [ "$1" = station ]; then {prog}; fi'
+    for name, body in (("id", f"echo {uid}"), ("runuser", 'shift 3; echo "as-user $*" >> log'), ("prog", prog_body)):
+        f = stubs / name
+        f.write_text(f"#!/usr/bin/env bash\n{body}\n", encoding="utf-8", newline="\n")
+        f.chmod(0o755)
+    if folder:
+        (tmp_path / "pairing").mkdir()
+    text = _read("install/filament-kit-cli.sh")
+    for old, new in (("BIN=/opt/filament-kit/venv/bin/filament-kit", "BIN=./stubs/prog"),
+                     ("STATION_DIR=/etc/filament-kit-station", "STATION_DIR=./pairing")):
+        assert old in text
+        text = text.replace(old, new)
+    (tmp_path / "w.sh").write_text(text, encoding="utf-8", newline="\n")
+    env = dict(os.environ, PATH="./stubs" + (":" if os.name == "nt" else os.pathsep) + os.environ.get("PATH", ""))
+    r = subprocess.run([_bash(), "w.sh", "status"], cwd=tmp_path, env=env, capture_output=True, text=True, timeout=30)
+    assert r.returncode == 0, r.stderr
+    return (tmp_path / "log").read_text(encoding="utf-8").splitlines()
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_wrapper_status_checks_the_station_pairing_as_root(tmp_path):
+    """The pairing folder is closed to the service user that runs `status`: root looks, and status gets the answer."""
+    assert _wrapper_status(tmp_path) == ["as-caller station pairing-state",
+                                         "as-user ./stubs/prog status --station-pairing=paired 192.0.2.10:8710"]
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_wrapper_status_says_failed_when_the_root_check_fails(tmp_path):
+    assert _wrapper_status(tmp_path, prog="exit 3")[-1] == "as-user ./stubs/prog status --station-pairing=failed"
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_wrapper_status_skips_the_check_with_no_station_folder(tmp_path):
+    """A server without a station starts the program once, as before."""
+    assert _wrapper_status(tmp_path, folder=False) == ["as-user ./stubs/prog status"]
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_wrapper_status_without_sudo_passes_nothing(tmp_path):
+    """Not root: it can't look, so status says so itself ("run it with sudo", which is then true)."""
+    assert _wrapper_status(tmp_path, uid="1000") == ["as-caller status"]
+
+
 # The shell scripts with multi-line `python -c '...'` blocks (test_no_other_script_has_python_c_blocks keeps the list
 # complete): each must keep at least one block, so the check below never passes on nothing.
 PYTHON_C_SCRIPTS = ["get.sh", "install/install.sh"]

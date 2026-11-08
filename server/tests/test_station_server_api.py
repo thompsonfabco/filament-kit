@@ -1,5 +1,6 @@
 """The station's client for the button flow (station/server_api.py): the pairing link, the pairing files, and the
 three calls over pinned TLS against the real kit API."""
+import io
 import json
 import os
 import sys
@@ -411,6 +412,192 @@ def test_finish_on_an_unpaired_station_names_both_pairing_steps(monkeypatch, cap
     _paired(["192.0.2.10"])
     apply.finish(config.load(), run=lambda cmd: None)
     assert PAIR_STEPS[1] not in capsys.readouterr().out
+
+
+class _Unreadable:
+    """The token as the service user `filament-kit` meets it: the folder is closed to that user."""
+
+    @staticmethod
+    def read_bytes():
+        raise PermissionError(13, "Permission denied")
+
+
+def test_pairing_state_is_one_line_without_the_token(monkeypatch):
+    assert server_api.pairing_state() == "unpaired"
+    _paired(["192.0.2.10"])
+    state = server_api.pairing_state()
+    assert state == "paired 192.0.2.10:8710"
+    assert "z" * 43 not in state
+    monkeypatch.setattr(server_api, "token_file", _Unreadable)
+    assert server_api.pairing_state() == "unchecked"
+
+
+def test_pairing_lines_show_the_state_root_passed_in(monkeypatch):
+    """The state comes from root (the wrapper, the console's helper); the reader needs no access to the pairing."""
+    monkeypatch.setattr(server_api, "token_file", _Unreadable)
+    assert server_api.pairing_lines("paired 192.0.2.10:8710") == [
+        "OK   station paired with the kit server (192.0.2.10:8710)"]
+    lines = server_api.pairing_lines("unpaired")
+    assert "not paired" in lines[0] and all(c in lines[1] for c in PAIR_STEPS)
+    assert "run it with sudo" in server_api.pairing_lines("unchecked")[0]
+    for broken in ("failed", "paired", "", "paired a b"):
+        lines = server_api.pairing_lines(broken)
+        assert "could not be checked" in lines[0] and "sudo" not in lines[0].split(":")[0], broken
+    assert "run it with sudo" in server_api.pairing_lines()[0]  # asked with no state, it looks for itself
+
+
+def test_status_prints_the_state_passed_in_even_when_the_files_are_closed(monkeypatch, capsys):
+    """What `sudo filament-kit status` runs: the wrapper's root check, then status as the service user."""
+    _station_mode(monkeypatch)
+    monkeypatch.setattr(server_api, "token_file", _Unreadable)
+    cli.main(["status", "--station-pairing=paired 192.0.2.10:8710"])
+    out = capsys.readouterr().out
+    assert "OK   station paired with the kit server (192.0.2.10:8710)" in out and "run it with sudo" not in out
+    cli.main(["status", "--station-pairing=unpaired"])
+    assert PAIR_STEPS[1] in capsys.readouterr().out
+    cli.main(["status"])  # no sudo: the wrapper passes nothing, and "run it with sudo" is the true advice
+    assert "run it with sudo" in capsys.readouterr().out
+
+
+def test_station_pairing_state_command_prints_the_state(capsys):
+    assert cli.main(["station", "pairing-state"]) == 0
+    assert capsys.readouterr().out.strip() == "unpaired"
+    _paired(["192.0.2.10"])
+    assert cli.main(["station", "pairing-state"]) == 0
+    assert capsys.readouterr().out.strip() == "paired 192.0.2.10:8710"
+
+
+# ---------- item 27: `station pair` with no terminal, and the part without prompts for the console's helper ----------
+
+def _no_terminal(prompt):
+    raise EOFError
+
+
+def _nothing_saved() -> bool:
+    return not server_api.server_file().exists() and not server_api.token_file().exists()
+
+
+def _link(ips=("192.0.2.5",), fp=FP) -> "server_api.Link":
+    return server_api.parse_link(f"fkit://pair?h=kit.example.com&p=8710&t={'q' * 43}&fp={fp}"
+                                 + "".join(f"&ip={i}" for i in ips))
+
+
+def test_station_pair_with_no_terminal_at_the_link_prompt(monkeypatch, capsys):
+    _as_root(monkeypatch)
+    assert cli.cmd_station_pair(ask=_no_terminal) == 1
+    err = capsys.readouterr().err
+    assert "terminal" in err and err.startswith("error:")
+    assert _nothing_saved()
+
+
+class _BadStdin(io.StringIO):
+    """`sudo ... <&-`: Python has a stdin object, and reading it fails."""
+
+    def readline(self, *a):
+        raise OSError(9, "Bad file descriptor")
+
+
+@pytest.mark.parametrize("stdin", [io.StringIO(""), None, _BadStdin()], ids=["end-of-file", "lost", "bad-fd"])
+def test_station_pair_from_the_command_line_with_no_input(monkeypatch, capsys, stdin):
+    """The real `input`: `< /dev/null` is an EOFError; `<&-` is a RuntimeError with no sys.stdin, or an OSError with
+    one whose descriptor is gone (seen under sudo)."""
+    _as_root(monkeypatch)
+    monkeypatch.setattr(sys, "stdin", stdin)
+    assert cli.main(["station", "pair"]) == 1
+    assert "terminal" in capsys.readouterr().err
+    assert _nothing_saved()
+
+
+def _pair_fakes(monkeypatch, fp=FP):
+    """No server here: `calls` records the claim of the token."""
+    calls = []
+    monkeypatch.setattr(server_api, "peer_fingerprint", lambda ip, port, timeout=10: fp)
+    monkeypatch.setattr(server_api.ServerApi, "hello", lambda self: calls.append(self.ips) or (200, {"ok": True}))
+    return calls
+
+
+def test_a_closed_fingerprint_prompt_counts_as_no(monkeypatch, capsys):
+    _as_root(monkeypatch)
+    calls = _pair_fakes(monkeypatch)
+    _paired(["198.51.100.7"])
+    before = (server_api.server_file().read_bytes(), server_api.token_file().read_bytes())
+    answers = iter([f"fkit://pair?h=kit.example.com&p=8710&t={'q' * 43}&fp={FP}&ip=192.0.2.5"])
+
+    def ask(prompt):
+        for a in answers:
+            return a
+        raise EOFError
+    assert cli.cmd_station_pair(ask=ask) == 1
+    out = capsys.readouterr()
+    assert "terminal" in out.err and "Paired" not in out.out
+    assert calls == []  # the token was not claimed
+    assert (server_api.server_file().read_bytes(), server_api.token_file().read_bytes()) == before
+
+
+def test_pair_with_link_needs_no_prompt(monkeypatch):
+    """What the console's helper job calls: the link's fingerprint against what the server presents is the check."""
+    _as_root(monkeypatch)
+    calls = _pair_fakes(monkeypatch)
+    monkeypatch.setattr("builtins.input", _no_terminal)
+    from filament_kit import apply, modules
+    refreshed = []
+    monkeypatch.setattr(apply, "refresh_station", lambda cfg, **kw: refreshed.append(cfg))
+    config.save(modules.set_mode({"placement": {"box_count": 2}}, "all-in-one", say=None))
+    result = server_api.pair_with_link(_link())
+    assert result.status == "paired" and "restarted" in result.message
+    assert server_api.ServerApi().ips == ["127.0.0.1", "192.0.2.5"]
+    assert server_api.token_file().read_text().strip() == "q" * 43
+    assert len(calls) == 1 and len(refreshed) == 1
+    assert "q" * 43 not in result.message
+
+
+def test_pair_with_link_says_when_the_module_is_off(monkeypatch):
+    _as_root(monkeypatch)
+    _pair_fakes(monkeypatch)
+    result = server_api.pair_with_link(_link())
+    assert result.status == "paired" and "modules enable station" in result.message
+
+
+def test_pair_with_link_refuses_another_certificate_and_saves_nothing(monkeypatch):
+    _as_root(monkeypatch)
+    calls = _pair_fakes(monkeypatch, fp="cd" * 32)
+    result = server_api.pair_with_link(_link())
+    assert result.status == "failed" and "different certificate" in result.message
+    assert calls == [] and _nothing_saved()
+
+
+def test_pair_with_link_asks_confirm_with_the_fingerprint_seen(monkeypatch):
+    _as_root(monkeypatch)
+    calls = _pair_fakes(monkeypatch)
+    seen = []
+    result = server_api.pair_with_link(_link(), confirm=lambda fp: seen.append(fp) or False)
+    assert seen == [FP] and result.status == "declined"
+    assert calls == [] and _nothing_saved()
+
+
+def test_pair_with_link_reports_an_unreachable_server(monkeypatch):
+    _as_root(monkeypatch)
+
+    def refused(ip, port, timeout=10):
+        raise ConnectionRefusedError(111, "Connection refused")
+    monkeypatch.setattr(server_api, "peer_fingerprint", refused)
+    result = server_api.pair_with_link(_link())
+    assert result.status == "failed" and "not reachable" in result.message and "192.0.2.5" in result.message
+    assert _nothing_saved()
+
+
+def test_pair_with_link_says_when_the_restart_failed(monkeypatch):
+    from filament_kit import apply, modules
+    _as_root(monkeypatch)
+    _pair_fakes(monkeypatch)
+    config.save(modules.set_mode({"placement": {"box_count": 2}}, "all-in-one", say=None))
+
+    def boom(cfg, **kw):
+        raise apply.ApplyError("install_file: read-only")
+    monkeypatch.setattr(apply, "refresh_station", boom)
+    result = server_api.pair_with_link(_link())
+    assert result.status == "paired_not_restarted" and "sudo filament-kit modules apply" in result.message
+    assert server_api.ServerApi().paired
 
 
 def test_the_idle_screen_says_not_paired_without_a_pairing():

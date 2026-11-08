@@ -147,20 +147,92 @@ PAIR_STEPS = ("on the kit server: sudo filament-kit pair --station, "
               "then on the station PC: sudo filament-kit station pair")
 
 
-def pairing_lines() -> list[str]:
-    """`filament-kit status` and the install's finish, on a machine with the station on: is the button flow paired
-    with the kit server? (An upgrade from v0.2.0 leaves it unpaired: that station never called the server.)"""
+def pairing_state() -> str:
+    """Is the button flow paired, as one line with no secret in it: `paired <address>:<port>`, `unpaired`, or
+    `unchecked` (this user can't read the pairing). The token is the station user's and its folder is closed to the
+    service user `filament-kit`, so the answer has to come from root: `station pairing-state`, which the wrapper
+    runs for `sudo filament-kit status`; the console's Overview gets it from the setup helper the same way."""
     try:
         token_file().read_bytes()
-    except PermissionError:  # the token is the station user's: only root (and that user) can read it
-        return ["--   station pairing not checked: run it with sudo"]
+    except PermissionError:
+        return "unchecked"
     except OSError:
         pass
     api = ServerApi()
-    if api.paired:
-        return [f"OK   station paired with the kit server ({api.ips[0]}:{api.port})"]
-    return ['--   station button flow not paired with the kit server: a tag tap shows "Not paired"',
-            f"     fix: {PAIR_STEPS}"]
+    return f"paired {api.ips[0]}:{api.port}" if api.paired else "unpaired"
+
+
+def pairing_lines(state: str | None = None) -> list[str]:
+    """`filament-kit status` and the install's finish, on a machine with the station on: is the button flow paired
+    with the kit server? (An upgrade from v0.2.0 leaves it unpaired: that station never called the server.)
+    `state`: what pairing_state() answered for root; with none, this process looks for itself."""
+    state = pairing_state() if state is None else state
+    if state == "unchecked":
+        return ["--   station pairing not checked: run it with sudo"]
+    if state == "unpaired":
+        return ['--   station button flow not paired with the kit server: a tag tap shows "Not paired"',
+                f"     fix: {PAIR_STEPS}"]
+    m = re.fullmatch(r"paired (\S+)", state)
+    if m:
+        return [f"OK   station paired with the kit server ({m.group(1)})"]
+    return ["--   station pairing could not be checked; see: sudo filament-kit station pairing-state"]
+
+
+@dataclass
+class PairResult:
+    """What pair_with_link did. `status`: `paired`, `paired_not_restarted` (saved, but the station still needs
+    `modules apply`), `declined` (confirm said no) or `failed`; only the first two saved anything. `message` is
+    for the owner and never holds the token."""
+    status: str
+    message: str
+
+
+def pair_with_link(link: Link, confirm=None) -> PairResult:
+    """Pair this station from a link: reach the server, check the certificate it presents against the link, claim
+    the token, save the pairing, update the station's unit. Needs root; prompts for nothing, so `station pair` and
+    the console's helper job share it. `confirm(fingerprint) -> bool`: the owner's own comparison, asked after the
+    link's check; with none (the link came from this machine), the link's check is the decision."""
+    from .. import apply, modules, pairing
+    cfg = config.load()
+    on = modules.enabled(cfg)
+    if "server" in on:  # the server is on this machine: talk to it over loopback first (the link lists LAN IPs)
+        link.ips = ["127.0.0.1"] + [i for i in link.ips or [link.host] if i != "127.0.0.1"]
+    seen = first = None
+    for ip in link.ips or [link.host]:
+        try:
+            seen, first = peer_fingerprint(ip, link.port, timeout=CONNECT_TIMEOUT), ip
+            break
+        except OSError:
+            continue
+    if seen is None:
+        return PairResult("failed", f"the server is not reachable at {', '.join(link.ips or [link.host])} "
+                                    f"port {link.port}")
+    if seen != link.fp:
+        return PairResult("failed", "the server presents a different certificate than the link names; pair again")
+    if confirm is not None and not confirm(seen):
+        return PairResult("declined", "Not paired.")
+    # one authenticated call claims the token now (unclaimed, it lapses TOKEN_TTL after `pair --station`); it runs
+    # before anything is saved, so a failed re-pair leaves the station's working pairing as it was
+    status, body = ServerApi.from_link(link, first=first, timeout=15).hello()
+    if status != 200:
+        again = "run `sudo filament-kit pair --station` on the server again, then `sudo filament-kit station pair`"
+        if status == 401:
+            why = f"the link has expired (it works for {pairing.TOKEN_TTL // 60} minutes) or was used already"
+        elif status == 0:
+            why = f"the server did not answer ({body.get('message') or body.get('error')})"
+        else:
+            why = f"the server answered {status} ({body.get('message') or body.get('error')})"
+        return PairResult("failed", f"not paired: {why}.\nfix: {again} within {pairing.TOKEN_TTL // 60} minutes")
+    save_pairing(link, first=first)
+    if "station" not in on:
+        return PairResult("paired", "Paired. Switch the station module on to use it: "
+                                    "sudo filament-kit modules enable station")
+    try:  # the station's unit lets only listed addresses through: add the server's, then restart it
+        apply.refresh_station(cfg)
+    except (apply.ApplyError, modules.ModuleError) as e:
+        return PairResult("paired_not_restarted",
+                          f"Paired, but the station could not be updated ({e}). Run: sudo filament-kit modules apply")
+    return PairResult("paired", "Paired. The station was restarted and uses the server now.")
 
 
 class ServerApi:
