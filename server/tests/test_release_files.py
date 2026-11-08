@@ -172,6 +172,16 @@ def test_spoolman_sha_only_in_spoolman_script():
     assert '/etc/systemd/system/spoolman.service' in text
 
 
+def test_a_spoolman_pin_bump_brings_its_database_copy():
+    """The first bump migrates the database, and a rollback's older spoolman.sh would then reinstall the old Spoolman on it:
+    it fails to start, and with it the kit's trusted rollback. So the release that raises the pin must also copy the database
+    before the swap and put it back on a downgrade (with this pin nothing has migrated yet)."""
+    text = _read("install/spoolman.sh")
+    if "SPOOLMAN_VERSION=v0.27.0" not in text:
+        assert "pre-swap copy" in text and "alembic_version" in text, (
+            "raising the Spoolman pin needs the pre-swap database copy and the downgrade path (see this test's docstring)")
+
+
 def test_station_extra_in_pyproject():
     text = _read("server/pyproject.toml")
     assert re.search(r'^station = \["nfcpy==1\.0\.4", "pyserial>=3\.5", "esptool==5\.6\.0"\]\s*$', text, re.M)

@@ -307,6 +307,10 @@ def test_in_progress_sees_this_process_job(stubs):
     assert m.in_progress(SERIAL) is True
     gate.set()
     wait_done(m)
+    # the job says it's done a moment before it gives the lock back
+    end = time.time() + 5
+    while m.in_progress(SERIAL) and time.time() < end:
+        time.sleep(0.01)
     assert m.in_progress(SERIAL) is False
 
 
