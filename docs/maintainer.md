@@ -111,7 +111,7 @@ A hand-built tarball is not signed. Users can install it with `sudo ./install.sh
 ## Third-party licences
 
 [THIRD-PARTY.md](../THIRD-PARTY.md) lists every component a release ships or the installer fetches, with its
-licence, and the open items (the Piper voice, ML Kit, our own licence metadata, notices in the release files).
+licence, and the open items (ML Kit, our own licence metadata, notices in the release files).
 Redo the check when a dependency is added or a pin changes: `pip-licenses` in a venv with
 `filament-kit[station,web,push]`, `android/gradle/libs.versions.toml`, the two `platformio.ini` files and the
 `apt` lists in `modules.py`.

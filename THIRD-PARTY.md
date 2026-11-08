@@ -17,9 +17,9 @@ Two kinds of entry:
 
 | # | Item | Why | What to do |
 |---|---|---|---|
-| 2 | ~~**Google ML Kit barcode scanning** in the Android app (`com.google.mlkit:barcode-scanning`)~~ | Proprietary, closed source, under Google's ML Kit terms. The APK bundled it, which sat badly with GPL-3.0 §6, and F-Droid refuses it. | **Done**: the QR scanner uses zxing-cpp (Apache-2.0); ML Kit is gone from the APK. |
-| 3 | **Licence metadata of our own packages** | `server/pyproject.toml` and `pc-sync/pyproject.toml` declare no `license`; `pip-licenses` shows filament-kit as UNKNOWN. | Add `license = "GPL-3.0-or-later"` to both (and the LICENSE file to the wheel), so installs and tools see it. |
-| 4 | **Notices in the release files** | The APK and the PC sync setup carry third-party code (AndroidX, OkHttp, PyInstaller's bootloader, ...), whose BSD/MIT/Apache terms want their notices kept. | Ship this file in the server tarball and the PC sync setup, and show it (or the Gradle-generated OSS notices) in the app's Settings. **App part done**: the APK carries this file and LICENSE, shown under Settings > Licences. |
+| 1 | ~~**Google ML Kit barcode scanning** in the Android app (`com.google.mlkit:barcode-scanning`)~~ | Proprietary, closed source, under Google's ML Kit terms. The APK bundled it, which sat badly with GPL-3.0 §6, and F-Droid refuses it. | **Done**: the QR scanner uses zxing-cpp (Apache-2.0); ML Kit is gone from the APK. |
+| 2 | **Licence metadata of our own packages** | `server/pyproject.toml` and `pc-sync/pyproject.toml` declare no `license`; `pip-licenses` shows filament-kit as UNKNOWN. | Add `license = "GPL-3.0-or-later"` to both (and the LICENSE file to the wheel), so installs and tools see it. |
+| 3 | **Notices in the release files** | The APK and the PC sync setup carry third-party code (AndroidX, OkHttp, PyInstaller's bootloader, ...), whose BSD/MIT/Apache terms want their notices kept. | Ship this file in the server tarball and the PC sync setup, and show it (or the Gradle-generated OSS notices) in the app's Settings. **App part done**: the APK carries this file and LICENSE, shown under Settings > Licences. |
 
 Everything else below is in order: GPL-3.0-compatible, or only installed and never redistributed.
 
