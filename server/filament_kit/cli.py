@@ -1168,8 +1168,7 @@ def _change_module(cfg: dict, name: str, want_on: bool, *, confirm=None, ask_add
             if confirm is None or not confirm(f"{name} needs {listed}. Also turn on {listed}? [y/N] "):
                 return f"{name} needs {listed}\nfix: enable {listed} first"
             on |= set(missing)
-            print("
-".join(modules.change_note(name, True, missing)))
+            print(*modules.change_note(name, True, missing))
         on.add(name)
     else:
         deps = modules.dependents_closure(name, on)     # not only the direct ones: the rest would refuse after the yes
@@ -1178,8 +1177,7 @@ def _change_module(cfg: dict, name: str, want_on: bool, *, confirm=None, ask_add
             if confirm is None or not confirm(f"Also turn off {listed}? [y/N] "):
                 return f"{listed} depend on {name}\nfix: disable {listed} first"
             on -= set(deps)
-            print("
-".join(modules.change_note(name, False, deps)))
+            print(*modules.change_note(name, False, deps))
         on.discard(name)
     new = _with_modules(cfg, on)
     if not {"server", "station"} <= on:
