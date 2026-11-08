@@ -5,7 +5,7 @@
     klipper detect ID                       ask the printer again what it is (read only)
     klipper set ID --lane-data auto|on|off  publishing slots to Moonraker lane_data
     klipper api-key ID                      store a Moonraker API key (asked, never echoed; empty clears it)
-    klipper pack                            print the command that installs the printer pack on a printer
+    klipper pack                            print the verified command that installs this version's printer pack
 
 All read-only towards the printer except what the running server does later. Kept in its own module so cli.py only
 hooks it in (`add_parser`, `run`).
@@ -17,12 +17,69 @@ import ipaddress
 import sys
 from getpass import getpass
 
+from . import config, release, updates
 from .bridge import registry
 from .bridge.klipper import detect, discovery
 from .bridge.klipper import hardware as kh
 from .bridge.klipper.moonraker import Moonraker, MoonrakerError, Unauthorized
+from .release import ReleaseError
 
-PACK_URL = "https://github.com/thompsonfabco/filament-kit/releases/latest/download/fk-printer-pack.tar.gz"
+PACK = "fk-printer-pack.tar.gz"
+
+
+def pack_url(version: str, repo: str = release.REPO) -> str:
+    """The printer pack of release v<version> (the running kit's own version, never a moving tag) in `repo`,
+    the same repo `_signed_table` takes the hash from."""
+    return f"https://github.com/{repo}/releases/download/v{version}/{PACK}"
+
+
+def _signed_table(version: str, cfg: dict, fetcher: release.Fetcher | None) -> dict[str, str]:
+    """The signature-checked SHA256SUMS table of release `version`: the kept copy in the updater's store when
+    it has both files (a kept copy that fails the check is an error, not a reason to go to the network),
+    else both files fetched for tag v<version>. Raises ReleaseError."""
+    kept = updates.store() / version
+    sums, sig = kept / release.SUMS, kept / release.SIG
+    if sums.is_file() and sig.is_file():
+        try:
+            return release.verify_sums(sums.read_bytes(), sig.read_bytes())
+        except ReleaseError as e:
+            raise ReleaseError(f"the kept release in {kept}: {e}") from None
+    # `updates.api` (a test server, docs/testing-e2e.md) changes only where the hash is fetched; the printed URL
+    # always points at GitHub, so with a test server the printer's check fails and nothing runs.
+    f = fetcher or updates.default_fetcher(cfg)
+    rel = f.release(updates.settings(cfg)["repo"], version=version)
+    for need in (release.SUMS, release.SIG):
+        if need not in rel["assets"]:
+            raise ReleaseError(f"release {version} has no {need}")
+    return release.verify_sums(f.get(rel["assets"][release.SUMS], release.LIMIT_SUMS),
+                               f.get(rel["assets"][release.SIG], release.LIMIT_SIG))
+
+
+def pack(cfg: dict | None = None, *, fetcher: release.Fetcher | None = None) -> int:
+    """Print the printer-pack install command, pinned to this kit's version and to the pack's SHA-256 from the
+    release's signed SHA256SUMS. Prints no command at all when that hash cannot be had."""
+    version = updates.current_version()
+    try:
+        release.parse_version(version)
+        cfg = cfg if cfg is not None else config.load()
+        repo = updates.settings(cfg)["repo"]        # one repo for the hash and the URL
+        table = _signed_table(version, cfg, fetcher)
+        want = table.get(PACK)
+        if want is None:
+            raise ReleaseError(f"the signed {release.SUMS} does not list {PACK}")
+    except (ReleaseError, OSError, ValueError) as e:
+        print(f"error: cannot give a verified printer-pack command for filament-kit {version}: {e}",
+              file=sys.stderr)
+        print("error: the pack's hash comes only from the signed release of this exact version (a "
+              "development build has none); nothing to run", file=sys.stderr)
+        return 1
+    print("Run this on the printer (as its normal user, not root):")
+    print(f"  curl -fsSLo {PACK} {pack_url(version, repo)}")
+    print(f'  echo "{want}  {PACK}" | sha256sum -c - && tar xzf {PACK} '
+          f"&& sh fk-printer-pack/fk-printer-pack.sh install")
+    print(f"The hash is the one in the signed {release.SUMS} of release v{version} (checked here against the "
+          "filament-kit release key); nothing is unpacked or run unless the download matches it.")
+    return 0
 
 
 def add_parser(sub) -> None:
@@ -92,9 +149,7 @@ def run(args) -> int:
         return 0
     p = registry.load().get(getattr(args, "id", "") or "")
     if c == "pack":
-        print("Run this on the printer (as its normal user, not root):")
-        print(f"  curl -fsSL {PACK_URL} | tar xz && sh fk-printer-pack/fk-printer-pack.sh install")
-        return 0
+        return pack()
     if p is None or p.family != "klipper":
         print(f"error: no Klipper printer {getattr(args, 'id', '')!r}", file=sys.stderr)
         return 1
