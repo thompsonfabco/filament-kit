@@ -12,8 +12,8 @@ fixed.
 2. **The repository is private.** The one command only works once the repository is public. Until then the user
    needs a GitHub account that can see the repository plus a token and `get.sh --token-file`, which isn't a
    normal-user step. Downloads from the Releases page work in a browser that is signed in to GitHub.
-3. **No library asset.** v0.2.0 has no `library.tar.gz`, so `filament-kit library update` and the `library`
-   module find nothing until a release carries one (`FK_LIBRARY_TOKEN`).
+3. ~~No library asset.~~ Fixed in v0.3.0: v0.3.0 and v0.4.0 carry `library.tar.gz` (v0.2.0 does not, so
+   `filament-kit library update` finds nothing in that release).
 
 ## Android app
 
