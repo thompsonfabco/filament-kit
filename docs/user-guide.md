@@ -835,6 +835,36 @@ Use `--dry-run` first to see what would be written. New presets still arrive in 
 
 By hand: download the newer `filament-kit-<version>.tar.gz`, unpack it and run `sudo ./install.sh` again.
 
+**Going back from v0.4.0 to v0.3.0.** `sudo filament-kit update --rollback` goes back to the release it replaced.
+
+- **Klipper first.** v0.3.0 has no `klipper` module and stops at a config that names it. If it is on, run
+  `sudo filament-kit modules disable klipper` before the rollback: the rollback refuses until you do. If it is off, the
+  rollback takes the `"klipper"` entry out of `modules` in `/etc/filament-kit/config.json` for you. Your Klipper
+  printers stay in `printers.xml` for when you upgrade again.
+- **What comes back.** The web app's Claude connector sign-ins, push subscriptions and its pairing come back as they
+  were when you upgraded. v0.4.0 copies them into its new folder (`/var/lib/filament-kit-web`) and leaves the originals
+  in place. Anything you changed in them while on v0.4.0 stays behind in the new folder.
+- **The daily Claude read count.** Going back within a day restarts the day's count of label reads once.
+- **Printers.** v0.4.0 also keeps the old-format `printers.json` beside `printers.xml`, so Bambu printers survive the
+  rollback.
+- **What stays behind.** v0.3.0 works with these left in place, and has no setup page: the setup page's service files,
+  the `filament-kit-web` user and its folder, and the setup code. To remove them, run as root:
+
+  ```bash
+  systemctl disable --now filament-kit-setup.socket
+  rm -f /etc/systemd/system/filament-kit-setup.socket /etc/systemd/system/filament-kit-setup@.service \
+        /etc/systemd/system/filament-kit-setup-apply.service /etc/tmpfiles.d/filament-kit-setup.conf
+  rm -rf /run/filament-kit-setup && systemctl daemon-reload
+  setfacl -R -x u:filament-kit-web /etc/filament-kit /var/lib/filament-kit
+  find /var/lib/filament-kit -type d -exec setfacl -d -x u:filament-kit-web {} +
+  rm -rf /var/lib/filament-kit-web && userdel filament-kit-web
+  rm -f /etc/filament-kit/setup_code /etc/filament-kit/setup_code.plain /etc/filament-kit/setup_lockout.xml
+  ```
+
+  Remove the user's file permissions (the two `setfacl` lines) before the user itself. If `slot_service.token_file` in
+  `config.json` names a token file, remove that user's permission on it the same way. If you upgrade to v0.4.0 again
+  later, removing `/var/lib/filament-kit-web` first makes the upgrade copy the web app's current files again.
+
 **Upgrading a station from v0.2.0 to v0.3.0:** the station's button flow now needs pairing once. On the kit server run
 `sudo filament-kit pair --station`, then within 10 minutes run `sudo filament-kit station pair` on the station
 computer (on an all-in-one, both on the same machine) and paste the link. `sudo filament-kit status` and the install
