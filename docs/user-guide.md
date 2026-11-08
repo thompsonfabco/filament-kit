@@ -149,10 +149,70 @@ first PC that syncs is the one. To move to another PC, remove the first one with
    opens. (Missed it? Start menu, **Pair filament-kit sync**.)
 4. In that console, paste the link and press Enter. (No link? Type the server's name or address instead. The
    window shows the server's certificate fingerprint. Check that it matches the one on the Ubuntu computer and
-   type `y` to confirm it. Then it asks for the 6-digit code.) From then on the PC syncs every 10 minutes. It
-   waits while Bambu Studio is open and tries again later, so close Bambu Studio to let new presets in.
+   type `y` to confirm it. Then it asks for the 6-digit code.) From then on the PC syncs every 10 minutes. While
+   Bambu Studio is open it waits and tries again later (see [While Bambu Studio is open](#while-bambu-studio-is-open-v040)).
 
 The link and the code expire after a few minutes. If they do, run `sudo filament-kit pair --pc` again.
+
+### Stable and Beta Bambu Studio (v0.4.0)
+
+From v0.4.0 the PC sync keeps **every** Bambu Studio folder on the PC current: on Windows both
+`%APPDATA%\BambuStudio` (stable) and `%APPDATA%\BambuStudioBeta`; on Linux the native, Beta and both Flatpak
+folders.
+
+**Primary and other folders.** One folder is the **primary**: its presets are sent to the server, and the server's
+builds are made from them. The other folders receive every build too.
+
+- **The primary is sticky.** The first sync picks it: the folder you pinned in the sync's `config.json`, otherwise
+  the one whose `BambuStudio.conf` is newest. After that it stays that folder, whichever Bambu Studio you open
+  last. `filament-kit-sync status` shows the `Primary:` line.
+- **Changing the primary.** Set `"variant"` (and `"user_id"`) in the sync's `config.json` to the other folder, or
+  remove the primary's folder. The change is logged, and the new primary starts like a first sync: its presets are
+  uploaded as they are, the server lists the ones that differ as updates, and nothing in it is replaced. The server
+  must be on v0.4.0 too.
+- **Install only into the primary** (the old behaviour): set `"secondaries": false` in `config.json`. The default is
+  on, and the setting survives pairing again.
+
+**Presets are never replaced.** In every folder only **new** presets are added.
+
+- In the **primary**, the updates you accept with `sudo filament-kit profiles apply-updates` are written.
+- In the **other folders**, an accepted update is written only over a preset the kit itself put there and that you have
+  not changed. Your own presets there are never replaced. Same-name presets that differ from the build are kept and
+  listed: one line per folder in the log, and `Kept, differ:` lines in `filament-kit-sync status`.
+- To take the build's copy in one of the other folders yourself, on the PC, with Bambu Studio closed:
+
+  ```
+  filament-kit-sync apply-updates --folder BambuStudioBeta-1234567890 --all
+  ```
+
+  Use `--name "<preset>"` (repeat it for more presets) instead of `--all` to pick presets, and `--dry-run` first to
+  see what would be written. The folder is **named** `<variant>-<user id>`, as `status` shows it. The folder is backed up
+  first, and only the listed presets are written.
+
+**Backups.** Each folder has its own backups (the 5 newest are kept). The other folders' backups are in
+`%LOCALAPPDATA%\filament-kit-sync\folders\<variant>-<user id>\backups`.
+
+**A folder that fails.** If installing into one folder fails, the sync tries that folder again after 6 hours, or at
+once when a new build arrives. `status` shows the error. The other folders are not held up.
+
+`filament-kit-sync status` also shows, for each other folder, `Also installs: <folder>, user <id>: build <stamp>` (or
+"nothing installed yet", or "last try failed: ...").
+
+**Caution: two cloud copies.** Presets the sync writes into the second Bambu Studio are **local** presets of that app
+(its own user id, no cloud id). The first time that Bambu Studio syncs with its account, it may create a second cloud
+copy of a preset that has the same name, as it does for any preset you save by hand there.
+
+### While Bambu Studio is open (v0.4.0)
+
+The sync never changes presets while Bambu Studio or Orca Slicer is open. It waits and tries again at the next run.
+Any running `bambu-studio.exe` blocks **all** folders, because the program's path does not say whether it is stable or
+Beta. Close Bambu Studio to let new presets in.
+
+You can see the wait: `filament-kit-sync status` shows `Waiting: for Bambu Studio to close since <date> (<n> runs
+skipped)`. After 24 hours the log line becomes a warning saying how long it has waited. The server is told too (at
+most once an hour): `sudo filament-kit status` and `sudo filament-kit profiles status` show "PC sync waiting for
+Bambu Studio to close since <date>", and so does the preset status in the phone app and Claude's connector. It is
+shown only for the PC that is paired as the sync PC, and clears at the first sync after Studio closes.
 
 ### PC sync on Linux
 
@@ -194,8 +254,10 @@ them too, then run `sudo filament-kit unpair <id>` on the server. Presets alread
   `~/.var/app/<id>/config/OrcaSlicer`. The sync finds these by itself.
 - Native installs and AppImages use `~/.config/BambuStudio` (or `BambuStudioBeta`) and `~/.config/OrcaSlicer`
   (or `$XDG_CONFIG_HOME` if you set it).
-- If you have both a native install and the Flatpak, the sync uses the one you used last (its config file is the
-  newest).
+- From v0.4.0 the sync installs into all of them. One is the primary (see
+  [Stable and Beta Bambu Studio](#stable-and-beta-bambu-studio-v040)). To choose it, set `"variant"` in
+  `~/.local/share/filament-kit-sync/config.json` to `BambuStudio`, `BambuStudioBeta`, `Flatpak BambuStudio` or
+  `Flatpak BambuStudioBeta`.
 - The sync waits while Bambu Studio or Orca Slicer is open, including the Flatpak and AppImage versions.
 - With the Orca AppImage, the Orca filament library is read from Orca's own copy under its data folder, because the
   AppImage's files can only be read while it runs.
@@ -348,7 +410,7 @@ data stays in use), and status names it.
 
 The server builds one Bambu Studio filament preset for each filament line you own (a line is a brand's product,
 for example one brand's PLA, without the colour), for each of your printers and each nozzle size. The PC sync
-then installs them in Bambu Studio.
+then installs them in every Bambu Studio folder on the PC ([Stable and Beta Bambu Studio](#stable-and-beta-bambu-studio-v040)); presets already there are never replaced.
 
 - Names look like `<brand> <line> @Bambu Lab <printer> <nozzle> nozzle`.
 - Spoolman data for your filaments wins over the library, and the library wins over Bambu's own starting preset
@@ -726,7 +788,9 @@ each computer are in [Moving from filament-ops](migrate-from-filament-ops.md). I
   shows a `fix:` line.
 - Presets don't appear in Bambu Studio: close Bambu Studio (the sync waits while it is open), then wait up to
   10 minutes. On the PC, run `filament-kit-sync status` to see the server, the Bambu Studio folder in use and
-  the last run.
+  the last run. If it shows `Waiting: for Bambu Studio to close`, that is why. Also check you are looking at the right
+  Bambu Studio: stable and Beta each have their own folder, and the other folder only gets new presets and the updates
+  described under [Stable and Beta Bambu Studio](#stable-and-beta-bambu-studio-v040).
 - The sync log is `%LOCALAPPDATA%\filament-kit-sync\sync.log`. Backups of your Bambu Studio filament folder,
   made before each install (the 5 newest are kept), are in `%LOCALAPPDATA%\filament-kit-sync\backups`.
 - "Other PC" errors: another PC already syncs with this server. Remove it with `sudo filament-kit unpair <id>`.
@@ -743,6 +807,27 @@ Automatic updates: `sudo filament-kit modules enable updates` (off by default) c
 new release on its own; it never reinstalls a version you rolled back from. For a weekly check, set
 `"updates": {"schedule": "weekly"}` in `/etc/filament-kit/config.json`. For a private repository, put a GitHub
 token in a file only root can read and set `"updates": {"token_file": "/etc/filament-kit/github_token"}`.
+
+**Updating from v0.3.0 to v0.4.0 with a PC sync (in this order).**
+1. Update the server: `sudo filament-kit update`.
+2. Update the PC sync: run the new `filament-kit-sync-setup-<version>.exe` (Windows) or the new Linux `install.sh`.
+3. Close Bambu Studio, so the sync can run.
+4. On the server, see what the updates would change: `sudo filament-kit profiles apply-updates --all --dry-run`, then
+   apply the ones you want: `sudo filament-kit profiles apply-updates --all`. These go to the primary Bambu Studio folder;
+   for the other folders use `filament-kit-sync apply-updates --folder ...` on the PC (see
+   [Stable and Beta Bambu Studio](#stable-and-beta-bambu-studio-v040)).
+
+The server must be updated first: a PC sync that is newer than its server logs a warning.
+
+**Existing users: the other Bambu Studio folder.** A record the kit made before v0.4.0 cannot prove that a preset in the
+other folder is the kit's. So after the upgrade, that folder's accepted updates are listed as "differing" and are **not**
+written on their own. To take them, with Bambu Studio closed, run on the PC (use the folder name `status` shows):
+
+```
+filament-kit-sync apply-updates --folder BambuStudioBeta-1234567890 --all
+```
+
+Use `--dry-run` first to see what would be written. New presets still arrive in that folder by themselves.
 
 By hand: download the newer `filament-kit-<version>.tar.gz`, unpack it and run `sudo ./install.sh` again.
 
