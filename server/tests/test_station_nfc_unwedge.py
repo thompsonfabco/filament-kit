@@ -150,12 +150,10 @@ def test_a_timed_out_open_unwedges_and_retries_at_once(monkeypatch):
             return None
     _fake_nfc(monkeypatch, Frontend)
     monkeypatch.setattr(station_nfc, "pn532_unwedge", lambda dev: unwedged.append(dev) or 921600)
-    waits = []
-    monkeypatch.setattr(station_nfc.nfc_stop, "wait", lambda t=None: waits.append(t))
+    monkeypatch.setattr(station_nfc.nfc_stop, "wait", lambda t=None: opens.append(("wait", t)))
     station_nfc.nfc_loop()
     assert unwedged == ["/dev/ttyUSB0"]
-    assert len(opens) == 2
-    assert waits == []  # no 5 s pause before the retry
+    assert opens[:2] == ["tty:USB0:pn532", "tty:USB0:pn532"]  # no 5 s pause before the retry
 
 
 def test_other_open_errors_do_not_try_to_unwedge(monkeypatch):
@@ -176,3 +174,45 @@ def test_sigterm_handler_stops_the_reader_then_exits(monkeypatch):
         station_main.stop_service(15, None)
     assert e.value.code == 0
     assert calls == ["stop"]
+
+
+def test_a_healthy_chip_at_115200_does_not_skip_the_wait(monkeypatch):
+    """The open keeps failing for another reason while the chip answers at 115200: no tight reopen loop."""
+    opens = []
+
+    class Frontend:
+        def __init__(self, path):
+            opens.append(path)
+            raise OSError(errno.ENODEV, "No such device")
+    _fake_nfc(monkeypatch, Frontend)
+    monkeypatch.setattr(station_nfc, "pn532_unwedge", lambda dev: 115200)
+    waits = []
+
+    def wait(t=None):
+        waits.append(t)
+        if len(waits) == 3:
+            station_nfc.nfc_stop.set()
+    monkeypatch.setattr(station_nfc.nfc_stop, "wait", wait)
+    station_nfc.nfc_loop()
+    assert waits == [5, 5, 5]
+    assert len(opens) == 3
+
+
+def test_a_stop_during_the_port_lookup_never_opens_the_reader(monkeypatch):
+    class Frontend:
+        def __init__(self, path):
+            pytest.fail("opened after the stop")
+    _fake_nfc(monkeypatch, Frontend)
+    seen = []
+
+    def path():
+        seen.append(station_nfc.nfc_idle.is_set())  # the pass is already marked busy
+        station_nfc.nfc_stop.set()
+        return "tty:USB0:pn532"
+    monkeypatch.setattr(station_nfc, "nfc_path", path)
+    station_nfc.nfc_stop.clear()
+    t = threading.Thread(target=station_nfc.nfc_loop, daemon=True)
+    t.start()
+    t.join(3)
+    assert seen == [False]
+    assert not t.is_alive()

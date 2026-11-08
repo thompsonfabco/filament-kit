@@ -92,13 +92,18 @@ def nfc_loop():
     import nfc  # the [station] extra; only the reader loop needs it
     from nfc.clf import RemoteTarget
     stopping = nfc_stop.is_set
-    while not stopping():
-        path = nfc_path()
+    while True:
+        nfc_idle.clear()  # before the stop check: a stop() from here on waits for this pass to end
+        retry_now = False
         try:
-            if not path:
-                raise OSError("no USB serial port for the reader")
-            nfc_idle.clear()
+            if stopping():
+                return
+            path = nfc_path()
+            if stopping():  # a stop during the port lookup: don't open the reader at all
+                return
             try:
+                if not path:
+                    raise OSError("no USB serial port for the reader")
                 with nfc.ContactlessFrontend(path) as clf:  # its exit runs nfcpy's close(): 115200, idle, asleep
                     log.info("NFC reader open: %s", clf)
                     while not stopping():
@@ -110,14 +115,16 @@ def nfc_loop():
                                 time.sleep(0.2)
                         else:
                             time.sleep(0.2)
-            finally:
-                nfc_idle.set()
-        except Exception as e:  # reader unplugged, not there yet, or left at another speed
-            log.warning("NFC reader %s: %s; retrying in 5 s", path, e)
-            dev = tty_of(path)
-            if not stopping() and getattr(e, "errno", None) in (errno.ETIMEDOUT, errno.ENODEV) and dev:
-                baud = pn532_unwedge(dev)
-                if baud:
-                    log.info("NFC reader on %s answered at %d baud; set it back to 115200", dev, baud)
-                    continue
+            except Exception as e:  # reader unplugged, not there yet, or left at another speed
+                log.warning("NFC reader %s: %s; retrying in 5 s", path, e)
+                dev = tty_of(path)
+                if not stopping() and getattr(e, "errno", None) in (errno.ETIMEDOUT, errno.ENODEV) and dev:
+                    baud = pn532_unwedge(dev)
+                    # a chip that answers at 115200 was not wedged: the open failed for another reason, so wait
+                    if baud and baud != 115200:
+                        log.info("NFC reader on %s answered at %d baud; set it back to 115200", dev, baud)
+                        retry_now = True
+        finally:
+            nfc_idle.set()
+        if not retry_now:
             nfc_stop.wait(5)
