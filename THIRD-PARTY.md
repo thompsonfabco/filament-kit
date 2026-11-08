@@ -120,8 +120,14 @@ and are under the same licence.
 
 | Component | Licence | Notes |
 |---|---|---|
-| nfc2klipper (a pinned commit, with the two patches) | GPL-3.0-or-later | the NFC tag reader service on the printer |
-| Its Python packages, from its own `requirements.txt` (flask and npyscreen BSD-3-Clause, gunicorn MIT, and the others, each under its own licence) | as listed | installed on the printer in a virtual environment with pip; nothing is copied into the kit |
+| nfc2klipper, by Sebastian Andersson (a pinned commit, with the two patches) | GPL-3.0-or-later | the NFC tag reader service on the printer |
+| flask | BSD-3-Clause | nfc2klipper's requirement; installed on the printer with pip, nothing copied into the kit |
+| npyscreen | BSD-2-Clause | nfc2klipper's requirement |
+| gunicorn | MIT | nfc2klipper's requirement |
+| toml, urllib3 | MIT | nfc2klipper's requirements |
+| requests | Apache-2.0 | nfc2klipper's requirement |
+| types-toml, types-requests | Apache-2.0 | nfc2klipper's requirements |
+| nfcpy 1.0.4 | EUPL-1.1 "or subsequent versions" | nfc2klipper's requirement; see the same package in the table above |
 | Klipper, Moonraker, AFC-Klipper-Add-On, Happy Hare | GPL-3.0 | already on your printer; the kit talks to them and copies nothing from them |
 
 The OrcaSlicer plugin **Spool Sync** (`integrations/orca-spool-sync/`) is our code (GPL-3.0-or-later) and runs inside
