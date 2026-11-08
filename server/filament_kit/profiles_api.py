@@ -9,6 +9,10 @@ ruling S28; `target=orca` stores Orca Slicer's folders instead, kinds `orca_live
 Content-Length over the cap is refused at once (413), then `request.stream()` is read by `builds.store_upload`
 in the threadpool through a small blocking reader, which stops at the cap (never `await request.body()`).
 
+`GET /api/profiles/updates` lists the presets already in the slicers whose generated values differ (never written
+over until the owner accepts them, `filament-kit profiles apply-updates`; builds.updates_view); the install report
+(`POST /api/sync/installed`) may name what the PC wrote (`written`).
+
 Times in responses are ISO 8601 UTC text (`2026-11-02T08:01:00Z`, ruling S18). Every state-changing route writes
 one audit line: what, `device_id`, a few plain fields and the result; never a body, a query string or a token.
 """
@@ -180,8 +184,8 @@ def _status_view() -> dict:
     lib = library_mod.status()
     v["library"] = {"version": lib.get("version"), "source": lib.get("source"), "local": lib.get("local"),
                     "last_check": _iso_at(lib.get("last_check"))}
-    return {k: v[k] for k in ("lines", "presets", "orca_presets", "build", "last_attempt", "installed", "pc",
-                              "library", "stale", "orca_stale", "problems")}
+    return {k: v[k] for k in ("lines", "presets", "orca_presets", "build", "updates", "last_attempt", "installed",
+                              "pc", "library", "stale", "orca_stale", "problems")}
 
 
 def _preset_counts() -> dict[str, int]:
@@ -300,13 +304,18 @@ def routes(authed, sm) -> list[Route]:
         if not isinstance(stamp, str):
             raise _bad("stamp is required")
         trees = body.get("trees")               # Ruling AB: ["base"] | ["base", "orca"]; absent = ["base"]
+        written = body.get("written")           # {"base"|"orca": [names]}: what the PC wrote (absent: an older PC)
         inst = await run_in_threadpool(_audit, "sync installed", device,
-                                       lambda: builds.record_installed(stamp, device, trees), stamp=stamp)
+                                       lambda: builds.record_installed(stamp, device, trees, written), stamp=stamp)
         return JSONResponse({"installed": _iso_at(inst)})
 
     @authed
     async def profiles_status(request: Request):
         return JSONResponse(await run_in_threadpool(_status_view))
+
+    @authed
+    async def profiles_updates(request: Request):
+        return JSONResponse(await run_in_threadpool(builds.updates_view))
 
     @authed
     async def profiles_lines(request: Request):
@@ -393,6 +402,7 @@ def routes(authed, sm) -> list[Route]:
         Route("/api/sync/build", sync_build),
         Route("/api/sync/installed", sync_installed, methods=["POST"]),
         Route("/api/profiles/status", profiles_status),
+        Route("/api/profiles/updates", profiles_updates),
         Route("/api/profiles/lines", profiles_lines),
         Route("/api/profiles/lines/{line_id}", line_patch, methods=["PATCH"]),
         Route("/api/profiles/parents", parents),

@@ -918,6 +918,20 @@ def cmd_profiles_status() -> int:
                   "the build follows its upload")
     print(f"installed on the PC: {inst['stamp']} ({_fmt_time(inst.get('at'))})" if inst
           else "installed on the PC: nothing yet")
+    up = st.get("updates") or {}
+    if up.get("count"):
+        acc = f", {up['accepted']} accepted (the PC sync writes them next)" if up.get("accepted") else ""
+        print(f"{up['count']} update{'' if up['count'] == 1 else 's'} available ({up['lines']} "
+              f"line{'' if up['lines'] == 1 else 's'}){acc}: presets already in your slicers differ from the "
+              "generated ones and are never replaced on their own")
+        if up["count"] > up.get("accepted", 0):
+            print("  see them: sudo filament-kit profiles apply-updates --all --dry-run; "
+                  "apply: sudo filament-kit profiles apply-updates --line <id> | --all")
+    elif b:
+        print("updates: none (presets already in your slicers are never replaced)")
+    if up.get("yours"):
+        print(f"  {up['yours']} generated preset{'' if up['yours'] == 1 else 's'} differ from your own preset of the "
+              "same name in Bambu Studio's filament folder; yours stay (rename or delete yours to get ours)")
     print(f"PC sync: device {pc['device_id']}, last upload {_fmt_time(pc.get('last_upload'))}" if pc
           else "PC sync: not set up (see README: Pair your PC)")
     for name in st["stale"]:
@@ -979,6 +993,36 @@ def cmd_profiles_set_parent(line_id: str, parent: str, orca: bool = False) -> in
     else:
         print(f"line {line.line_id}: parent {line.bambu_parent} (set by you)")
     _request_rebuild(f"{'Orca ' if orca else ''}parent of line {line.line_id} set")
+    return 0
+
+
+def cmd_profiles_apply_updates(line_id: str | None, all_: bool, dry_run: bool) -> int:
+    """Accept the listed updates of one line or all: the next PC sync writes them over the presets in the slicers
+    (after its backup); nothing else ever writes over an existing preset."""
+    try:
+        r = builds.apply_updates(line_id=line_id, all_=all_, dry_run=dry_run)
+    except ValueError as e:
+        _err_line(str(e))
+        return 1
+    chosen = r["chosen"]
+    if r["stamp"] is None:
+        print("no build yet: nothing to update")
+        return 0
+    if not chosen:
+        print(f"no updates for line {line_id} (see: sudo filament-kit profiles status)" if line_id
+              else "no updates available")
+        return 1 if line_id else 0
+    for u in chosen:
+        app = "Orca Slicer" if u["target"] == "orca" else "Bambu Studio"
+        keys = ", ".join(u["keys"][:6]) + (", ..." if len(u["keys"]) > 6 else "")
+        where = f" (in your file {u['file']})" if u.get("file") else ""
+        print(f"  {u['line_id']}  {app}: {u['name']}{where}: {keys}")
+    lines = len({u["line_id"] for u in chosen})
+    what = f"{len(chosen)} update{'' if len(chosen) == 1 else 's'} ({lines} line{'' if lines == 1 else 's'})"
+    if dry_run:
+        print(f"dry run: {what} would be accepted; nothing was changed")
+    else:
+        print(f"accepted {what}; the PC sync writes them at its next run (after its backup)")
     return 0
 
 
@@ -1592,6 +1636,12 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     sp.add_argument("--orca", action="store_true",
                     help="set the line's Orca Slicer library parent instead (the name without ' @System')")
     pfsub.add_parser("restore-deleted", help="bring back the presets deleted in Bambu Studio at the next build")
+    au = pfsub.add_parser("apply-updates", help="write the listed updates over presets already in your slicers "
+                                                "(at the next PC sync); they are never replaced otherwise")
+    aug = au.add_mutually_exclusive_group(required=True)
+    aug.add_argument("--line", dest="line_id", help="the updates of one product line (see: profiles lines)")
+    aug.add_argument("--all", dest="all_", action="store_true", help="every listed update")
+    au.add_argument("--dry-run", action="store_true", help="only show what would be accepted")
     md = sub.add_parser("modules", help="the switchable parts of the kit: apply the settings, list units")
     mdsub = md.add_subparsers(dest="modules_cmd", required=True)
     mdsub.add_parser("apply", help="install, start and stop what config.json's modules say (root)")
@@ -1684,6 +1734,8 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
             return cmd_profiles_lines()
         if args.profiles_cmd == "set-parent":
             return cmd_profiles_set_parent(args.line_id, args.parent, orca=args.orca)
+        if args.profiles_cmd == "apply-updates":
+            return cmd_profiles_apply_updates(args.line_id, args.all_, args.dry_run)
         return cmd_profiles_restore_deleted()
     if args.cmd == "web":
         return cmd_web_passphrase() if args.web_cmd == "passphrase" else cmd_web_status()

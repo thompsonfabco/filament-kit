@@ -74,7 +74,7 @@ ROUTES = [("GET", "/api/sync/state"), ("PUT", "/api/sync/live"), ("PUT", "/api/s
           ("POST", "/api/sync/rebuild"), ("GET", "/api/sync/build?stamp=20270115-080000"),
           ("POST", "/api/sync/installed"), ("GET", "/api/profiles/status"), ("GET", "/api/profiles/lines"),
           ("PATCH", f"/api/profiles/lines/{LID}"), ("GET", "/api/profiles/parents?material=PLA"),
-          ("POST", "/api/profiles/propose"), ("POST", "/api/library/local")]
+          ("POST", "/api/profiles/propose"), ("POST", "/api/library/local"), ("GET", "/api/profiles/updates")]
 
 
 def test_every_route_needs_a_token(c):
@@ -91,7 +91,7 @@ def test_state_before_any_sync(c):
     assert r.status_code == 200
     assert r.json() == {"owner": None, "you": device_of(tok), "user_id": None, "live_hash": None,
                         "system_hash": None, "orca_live_hash": None, "orca_system_hash": None, "orca_target": False,
-                        "build": None,
+                        "build": None, "accepted_updates": None,
                         "last_attempt": None, "installed": None, "rebuild_requested": None}
 
 
@@ -245,8 +245,9 @@ def test_profiles_status(c, sm):
     r = c.get("/api/profiles/status", headers=auth(tok))
     assert r.status_code == 200
     body = r.json()
-    assert set(body) == {"lines", "presets", "orca_presets", "build", "last_attempt", "installed", "pc", "library",
-                         "stale", "orca_stale", "problems"}
+    assert set(body) == {"lines", "presets", "orca_presets", "build", "updates", "last_attempt", "installed", "pc",
+                         "library", "stale", "orca_stale", "problems"}
+    assert body["updates"] == {"count": 0, "lines": 0, "accepted": 0, "new": 0, "yours": 0}
     assert body["pc"] is None and body["build"] is None and body["lines"] == 0
     assert set(body["library"]) == {"version", "source", "local", "last_check"}
     assert body["library"]["source"] in ("bundled", "updated")

@@ -11,12 +11,16 @@ State, all under `state/profiles/`:
                              part-way on the PC (ruling S28, `PUT /api/sync/live?partial=<stamp>`), cleared by the
                              next install report; `orca_partial` the same for the Orca tree (Ruling O)
   builds/<stamp>/            one build: BUILD.json (the manifest) + base/<name>.json|.info, and with the Orca
-                             target (Task 6) a flat orca/<name>.json|.info tree
+                             target (Task 6) a flat orca/<name>.json|.info tree; SLICER.json + held/ (each
+                             preset new / same / update against the slicer, and the slicer's own copies:
+                             profiles.updates; never sent to the PC)
+  updates.json               {accepted: {base, orca}}: the updates the owner accepted (`profiles apply-updates`)
   builds/*.tmp               a build or upload in progress; removed by the next build
   current.json               the last good build {stamp, created, live_hash, presets, problems} (+ orca_live_hash
                              with the Orca target)
   installed.json             the build the sync PC installed {stamp, at, device_id} (+ orca_stamp, orca_at: the
-                             last build whose orca/ tree went in, and when; Ruling AB)
+                             last build whose orca/ tree went in, and when; Ruling AB) (+ written, orca_written:
+                             the presets the PC wrote of those builds; the rest it kept, profiles.updates)
   deleted.json               {deleted_before: [preset names deleted in the app]} (+ orca_deleted_before)
   owner-edits.json           {stamp, inapp, notes} (+ orca_inapp, orca_notes): the owner's in-app record and note
                              lines of the old PC's installed build, kept when the sync PC changes (ruling S34) until
@@ -92,7 +96,7 @@ from .. import config, pairing
 from .. import library as library_mod
 from ..bridge import registry
 from ..pairing import _write_atomic, make_state_dir, open_lock
-from . import generate, inapp as inapp_mod, lines as lines_mod
+from . import generate, inapp as inapp_mod, lines as lines_mod, updates as updates_mod
 from .bbl import Store
 from .errors import ProfileError
 from .orca import OrcaStore
@@ -312,6 +316,13 @@ def _installed() -> dict | None:
     if not (isinstance(d.get("stamp"), str) and STAMP_RE.fullmatch(d["stamp"])):
         return None
     return d if d.get("device_id") == _meta().get("owner") else None
+
+
+def _written(installed: dict | None, key: str) -> list[str] | None:
+    """installed.json `written` / `orca_written`: the presets the PC wrote of that build (None: an older PC sync's
+    report, which wrote every preset)."""
+    v = (installed or {}).get(key)
+    return [n for n in v if isinstance(n, str)] if isinstance(v, list) else None
 
 
 def _owner_record(stamp, orca_stamp=None) -> dict | None:
@@ -750,6 +761,30 @@ def _orca_config() -> dict | None:
         if bambu or slicer else None
 
 
+def _still_accepted(build_dir: Path, rows: dict, tree: str, name: str, h: str) -> bool:
+    """The build still lists an update for `name` (matched folded, as is_accepted) with the accepted values."""
+    key = updates_mod.fold(name)
+    for n, row in rows.items():
+        if updates_mod.fold(n) == key and isinstance(row, dict) and row.get("status") == "update":
+            return updates_mod.preset_hash(build_dir / tree / f"{n}.json") == h
+    return False
+
+
+def _prune_accepted(build_dir: Path) -> None:
+    """An accepted update stays accepted only while the new build lists an update for that preset with exactly the
+    values the owner accepted (the same hash); otherwise (no longer an update, or other values) it is dropped and
+    the preset is pending again, so an acceptance never covers values the owner did not see."""
+    with _locked("state.lock"):
+        acc = updates_mod.accepted(_dir())
+        if not any(acc.values()):
+            return
+        rows = updates_mod.slicer(build_dir)
+        keep = {t: {n: h for n, h in acc.get(t, {}).items() if _still_accepted(build_dir, rows.get(t, {}), t, n, h)}
+                for t in updates_mod.TREES}
+        if keep != acc:
+            updates_mod.save_accepted(_dir(), keep, _write_json)
+
+
 def _predates_install(installed: dict | None, live_at) -> bool:
     """The PC reported an install after its last upload of this live folder (S32)."""
     return bool(installed) and isinstance(live_at, (int, float)) and isinstance(installed.get("at"), (int, float)) \
@@ -767,6 +802,7 @@ def _build_once(sm, now: float) -> dict:
     tmp = root / f"{stamp}.tmp"
     live_copy = root / f"{stamp}.live.tmp"
     orca_copy = root / f"{stamp}.orca-live.tmp"
+    snap_view, osnap_view = root / f"{stamp}.snap.tmp", root / f"{stamp}.orca-snap.tmp"
     final = root / stamp
     try:
         orca_printers = _orca_config()
@@ -810,6 +846,8 @@ def _build_once(sm, now: float) -> dict:
             raise ValueError("Spoolman returned no filament list")
         models = [p.model for p in registry.load().values() if p.model]
         snapshot = root / installed["stamp"] if installed and (root / installed["stamp"]).is_dir() else None
+        if snapshot is not None:                # what the slicer holds: the presets the PC kept are its own
+            snapshot = updates_mod.view(snapshot, "base", _written(installed, "written"), snap_view)
         # a build whose install stopped part-way (S28): only while it is kept and is not the installed one
         partial = (root / part if isinstance(part, str) and STAMP_RE.fullmatch(part)
                    and (root / part / "BUILD.json").is_file() and part != (installed or {}).get("stamp") else None)
@@ -826,6 +864,8 @@ def _build_once(sm, now: float) -> dict:
             opart = meta.get("orca_partial")
             obefore = _read_obj(_dir() / "deleted.json").get("orca_deleted_before")
             osnap = root / ostamp if ostamp is not None else None
+            if osnap is not None:
+                osnap = updates_mod.view(osnap, generate.ORCA, _written(installed, "orca_written"), osnap_view)
             oe = _owner_edits() if osnap is None else None      # S34 for the Orca tree
             orca = generate.OrcaTarget(
                 store=ostore, printers=oprinters, problems=oproblems, live=orca_live, snapshot=osnap,
@@ -853,6 +893,9 @@ def _build_once(sm, now: float) -> dict:
                                 orca_user_id=meta.get("orca_user_id"))
             with open(tmp / "BUILD.json", "w", encoding="utf-8", newline="\n") as fh:
                 json.dump(manifest, fh, indent=2, ensure_ascii=False)
+            # new / same / update against the live folders this build was made from (never sent to the PC)
+            updates_mod.record(tmp, live_copy if live is not None else None,
+                               orca_copy if orca_live is not None else None, orca is not None)
             os.replace(tmp, final)
             lines_mod.save(new_lines)
         deleted = {"deleted_before": manifest.get("deleted", [])}
@@ -864,6 +907,7 @@ def _build_once(sm, now: float) -> dict:
             cur["orca_presets"] = len(manifest.get("presets", [])) - cur["presets"]
         _write_json(_dir() / "deleted.json", deleted)
         _write_json(_dir() / "current.json", cur)
+        _prune_accepted(final)
         if restore:
             try:
                 restore_flag.unlink()
@@ -885,6 +929,8 @@ def _build_once(sm, now: float) -> dict:
     finally:
         _rmtree(live_copy)
         _rmtree(orca_copy)
+        _rmtree(snap_view)
+        _rmtree(osnap_view)
 
 
 def run_build(sm, *, now: float | None = None) -> dict:
@@ -960,14 +1006,35 @@ def build_zip(stamp: str) -> bytes:
 TREES = ("base", "orca")
 
 
-def record_installed(stamp: str, device_id: str, trees: list[str] | None = None) -> dict:
+MAX_WRITTEN = 5000             # names per tree in one install report
+
+
+def _check_written(written) -> dict | None:
+    if written is None:
+        return None
+    if not (isinstance(written, dict) and all(t in TREES for t in written)
+            and all(isinstance(v, list) and len(v) <= MAX_WRITTEN and all(isinstance(n, str) and 0 < len(n) <= 255
+                                                                        for n in v) for v in written.values())):
+        raise ProfileError(400, "bad_request", "written must be {\"base\": [names], \"orca\": [names]}")
+    return written
+
+
+def _union(prev, new: list[str]) -> list[str]:
+    seen = {n.casefold() for n in new}
+    return sorted(set(new) | {n for n in (prev if isinstance(prev, list) else []) if isinstance(n, str)
+                              and n.casefold() not in seen})
+
+
+def record_installed(stamp: str, device_id: str, trees: list[str] | None = None, written: dict | None = None) -> dict:
     """The sync PC installed build `stamp`: {stamp, at}. `trees` = what went in (Ruling AB): ["base"] (also an
     older PC sync's report without it) or ["base", "orca"]; with "orca" this build becomes the Orca snapshot
-    (`orca_stamp`, `orca_at`), else the previous Orca snapshot stays. OtherPc for another device, 404 for an
-    unknown stamp, 400 for bad trees."""
+    (`orca_stamp`, `orca_at`), else the previous Orca snapshot stays. `written` = the presets the PC wrote per tree
+    (it keeps the rest, profiles.updates); summed over installs of the same build, and cleared from the owner's
+    accepted updates. OtherPc for another device, 404 for an unknown stamp, 400 for bad trees or written."""
     trees = ["base"] if trees is None else trees
     if not (isinstance(trees, list) and "base" in trees and all(t in TREES for t in trees)):
         raise ProfileError(400, "bad_request", "trees must be [\"base\"] or [\"base\", \"orca\"]")
+    written = _check_written(written)
     with _locked("live.lock"):
         check_owner(device_id)
         if not (isinstance(stamp, str) and STAMP_RE.fullmatch(stamp)
@@ -982,7 +1049,25 @@ def record_installed(stamp: str, device_id: str, trees: list[str] | None = None)
             rec.update(orca_stamp=stamp, orca_at=at)
         elif isinstance(prev.get("orca_stamp"), str):
             rec.update(orca_stamp=prev["orca_stamp"], orca_at=prev.get("orca_at"))
+            if "orca_written" in prev:
+                rec["orca_written"] = prev["orca_written"]
+        # an older PC sync's report of this same build (no `written`): it wrote every preset, which stays so
+        if written is not None and not (prev.get("stamp") == stamp and "written" not in prev):
+            rec["written"] = _union(prev.get("written") if prev.get("stamp") == stamp else None,
+                                    written.get("base", []))
+        if written is not None and "orca" in trees and not (prev.get("orca_stamp") == stamp
+                                                             and "orca_written" not in prev):
+            rec["orca_written"] = _union(prev.get("orca_written") if prev.get("orca_stamp") == stamp else None,
+                                         written.get("orca", []))
         _write_json(_dir() / "installed.json", rec)
+        if written and any(written.values()):   # written now: no longer waiting for the PC
+            with _locked("state.lock"):
+                acc = updates_mod.accepted(_dir())
+                for tree, names in written.items():
+                    if tree in trees:
+                        done = {updates_mod.fold(n) for n in names}
+                        acc[tree] = {n: h for n, h in acc.get(tree, {}).items() if updates_mod.fold(n) not in done}
+                updates_mod.save_accepted(_dir(), acc, _write_json)
         meta = _meta()
         if "partial" in meta or "orca_partial" in meta:     # a finished install ends the partial one (S28)
             meta.pop("partial", None)
@@ -1023,11 +1108,69 @@ def _installed_view() -> dict | None:
     return {"stamp": i["stamp"], "at": i.get("at")} if i else None
 
 
+def _update_items() -> tuple[str | None, list[dict], int]:
+    """(the current build's stamp, its pending updates, how many of its presets are new to the slicers)."""
+    c = current()
+    if c is None:
+        return None, [], 0
+    stamp = c["stamp"]
+    inst = _installed() or {}
+    written = {"base": _written(inst, "written") if inst.get("stamp") == stamp else None,
+               generate.ORCA: _written(inst, "orca_written") if inst.get("orca_stamp") == stamp else None}
+    folder = _builds() / stamp
+    items = updates_mod.pending(folder, manifest(stamp) or {}, written, updates_mod.accepted(_dir()))
+    return stamp, items, updates_mod.new_count(folder, written)
+
+
+def updates_view() -> dict:
+    """`GET /api/profiles/updates`: the presets in the slicers whose generated values differ, not written yet
+    {stamp, count, lines, accepted, new, updates: [{name, target, line_id, keys, accepted, file?}], yours: [names
+    that differ from your own preset of that name in Bambu Studio's filament/ folder: never written over]}."""
+    stamp, items, new = _update_items()
+    mine = updates_mod.yours(_builds() / stamp) if stamp else []
+    return {"stamp": stamp, **updates_mod.summary(items), "new": new, "updates": items, "yours": mine}
+
+
+def apply_updates(*, line_id: str | None = None, all_: bool = False, dry_run: bool = False,
+                  only: set[str] | None = None) -> dict:
+    """Accept the pending updates of one line (`line_id`) or all of them (`only`: just these preset names): the next
+    PC sync writes them over the existing presets. Each acceptance holds the hash of the values accepted (see
+    _prune_accepted). {stamp, chosen: [update rows], dry_run}; with dry_run nothing is saved. ValueError when
+    neither or both of line_id / all_ are given."""
+    if bool(line_id) == bool(all_):
+        raise ValueError("give --line <id> or --all")
+    with _locked("state.lock"):
+        stamp, items, _new = _update_items()
+        chosen = [u for u in items if (all_ or u["line_id"] == line_id) and (only is None or u["name"] in only)]
+        if chosen and not dry_run:
+            acc = updates_mod.accepted(_dir())
+            for u in chosen:
+                tree = updates_mod.tree_of(u["target"])
+                h = updates_mod.preset_hash(_builds() / stamp / tree / f"{u['name']}.json")
+                if h is not None:
+                    acc.setdefault(tree, {})[u["name"]] = h
+            updates_mod.save_accepted(_dir(), acc, _write_json)
+    return {"stamp": stamp, "chosen": chosen, "dry_run": dry_run}
+
+
+def _accepted_view() -> dict | None:
+    """The accepted updates the PC sync writes, for the current build: {stamp, base: [...], orca: [...]}."""
+    stamp, items, _new = _update_items()
+    if stamp is None:
+        return None
+    out = {"stamp": stamp, "base": [], generate.ORCA: []}
+    for u in items:
+        if u["accepted"]:
+            out[updates_mod.tree_of(u["target"])].append(u["name"])
+    return out
+
+
 def state_view(device_id: str) -> dict:
     """`GET /api/sync/state`."""
     meta = _meta()
     req = _pending_request()
     return {"owner": owner(), "you": device_id, "user_id": meta.get("user_id"),
+            "accepted_updates": _accepted_view(),
             "live_hash": meta.get("live_hash"), "system_hash": _system_hash(meta),
             "orca_live_hash": meta.get("orca_live_hash"), "orca_system_hash": _system_hash(meta, "orca_system"),
             "orca_target": _orca_config() is not None,     # B-I2: pc-sync syncs Orca only when true (Ruling X)
@@ -1052,7 +1195,10 @@ def status() -> dict:
     rows = m.get("presets") if isinstance(m.get("presets"), list) else []
     # C-I5: the Orca count (None: the build has no Orca target) and the Orca presets to delete in Orca Slicer
     orca_presets = len([p for p in rows if isinstance(p, dict) and p.get("target") == generate.ORCA])         if "orca_live_hash" in m else None
+    _stamp, items, new = _update_items()
     return {"lines": n_lines, "presets": len(bambu_rows(m)), "orca_presets": orca_presets, "build": _build_view(),
+            "updates": {**updates_mod.summary(items), "new": new,
+                        "yours": len(updates_mod.yours(_builds() / _stamp)) if _stamp else 0},
             "last_attempt": _attempt_view(), "installed": _installed_view(),
             "pc": {"device_id": o, "last_upload": max(ups) if ups else None} if o else None,
             "stale": list(m.get("stale", [])), "orca_stale": list(m.get("orca_stale", [])),

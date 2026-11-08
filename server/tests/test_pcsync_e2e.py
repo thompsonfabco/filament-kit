@@ -149,6 +149,12 @@ def manifest(stamp: str) -> dict:
     return builds.manifest(stamp)
 
 
+def accept_all() -> list[dict]:
+    """The owner accepts every listed update (`profiles apply-updates --all`): the only way the PC writes over a
+    preset that is already in Bambu Studio."""
+    return builds.apply_updates(all_=True)["chosen"]
+
+
 def choose_parent(port: int, fp: str, parent: str) -> None:
     """The phone app (its own paired device) sets the line's Bambu parent: PATCH /api/profiles/lines/<id>."""
     phone = fkclient.Client({"host": "127.0.0.1", "port": port, "fp": fp},
@@ -338,7 +344,10 @@ def test_inapp_edit_survives_a_second_rebuild(tmp_path, server, monkeypatch):
     _density(sm, 1.30)                                                       # any later reason to rebuild
     builds.request_rebuild("spoolman changed")
     b3 = build(sm)
-    assert pc.run() == "installed"
+    assert pc.run() == "installed"                                           # nothing over the existing ones
+    assert pc.preset(edited)["filament_density"] != ["1.3"]
+    assert accept_all()
+    assert pc.run() == "installed"                                           # the accepted updates
     assert pc.client.state()["installed"]["stamp"] == b3["stamp"]
     assert pc.preset(edited)["filament_density"] == ["1.3"]
     assert pc.preset(edited)["filament_flow_ratio"] == flow                  # second rebuild: still his value
@@ -398,6 +407,7 @@ def test_inapp_nil_value_installs(tmp_path, server, monkeypatch):
     pc.write(edited, cfg)
     uploaded_then_rebuild(pc)
     build(sm)
+    assert [u["name"] for u in accept_all()] == [edited]                     # the filled "nil": an update
     assert pc.run() == "installed"
     assert pc.preset(edited)["nozzle_temperature"] == ["231"] * len(temps)
 
@@ -462,6 +472,7 @@ def test_interrupted_install_is_resumed(tmp_path, server, monkeypatch):
     _density(sm, 1.31)
     builds.request_rebuild("spoolman changed")
     b2 = build(sm)
+    accept_all()
     with monkeypatch.context() as m:
         _crash_after(m, 2)                       # the first preset's .json + .info, then the disk is full
         with pytest.raises(OSError):
@@ -485,6 +496,7 @@ def test_interrupted_install_values_are_not_inapp_edits(tmp_path, server, monkey
     _density(sm, 1.31)
     builds.request_rebuild("spoolman changed")
     b2 = build(sm)
+    accept_all()
     with monkeypatch.context() as m:
         _crash_after(m, 2)
         with pytest.raises(OSError):
@@ -502,6 +514,7 @@ def test_interrupted_install_values_are_not_inapp_edits(tmp_path, server, monkey
     assert pc.run() == "rebuild_requested"
     assert not sync.marker_path(pc.dirs).exists()
     b3 = build(sm)
+    accept_all()
     out = pc.run()
     assert out == "installed", (out, sync.load_state(pc.dirs).get("last"))
     assert pc.client.state()["installed"]["stamp"] == b3["stamp"]
@@ -538,6 +551,7 @@ def test_failed_reupload_after_a_reported_install_is_sent_next_run(tmp_path, ser
     b3 = build(sm)
     m3 = manifest(b3["stamp"])
     assert m3["edits"] == [] and m3["inapp"] == {}, m3["edits"]
+    accept_all()
     assert pc.run() == "installed"
     for p in m3["presets"]:
         assert pc.preset(p["name"])["filament_density"] == ["1.35"], p["name"]
@@ -562,3 +576,63 @@ def test_unparsable_system_preset_is_a_problem_not_a_refusal(tmp_path, server, m
     r = build(sm)
     assert manifest(r["stamp"])["presets"]
     assert pc.run() == "installed"
+
+
+# ---------- existing presets are never replaced; updates are listed and applied on request ----------
+
+def test_existing_presets_stay_until_their_update_is_accepted(tmp_path, server, monkeypatch, capsys):
+    from filament_kit import cli
+    _, sm = server
+    pc, b1 = installed_first_build(tmp_path, server, monkeypatch)
+    assert pc.run() == "up_to_date"
+    before = {p.name: p.read_bytes() for p in pc.base.iterdir()}
+    _density(sm, 1.31)
+    builds.request_rebuild("spoolman changed")
+    b2 = build(sm)
+    assert pc.run() == "installed"                          # nothing new: every preset already exists
+    assert {p.name: p.read_bytes() for p in pc.base.iterdir() if p.name in before} == before
+    assert pc.run() in ("up_to_date", "uploaded")
+    names = sorted(p["name"] for p in manifest(b2["stamp"])["presets"])
+    view = builds.updates_view()
+    assert view["count"] == len(names) and view["lines"] == 1
+
+    assert cli.main(["profiles", "status"]) == 0
+    assert f"{len(names)} updates available (1 line)" in capsys.readouterr().out
+    assert cli.main(["profiles", "apply-updates", "--line", LID, "--dry-run"]) == 0
+    assert pc.run() in ("up_to_date", "uploaded")           # a dry run accepted nothing
+    assert {p.name: p.read_bytes() for p in pc.base.iterdir() if p.name in before} == before
+
+    # accept one preset's update (as the line command would, narrowed to one name): exactly that one is written
+    assert [u["name"] for u in builds.apply_updates(all_=True, only={sunlu("0.4")})["chosen"]] == [sunlu("0.4")]
+    assert pc.run() == "installed"
+    assert pc.preset(sunlu("0.4"))["filament_density"] == ["1.31"]
+    for name in names:
+        if name != sunlu("0.4"):
+            assert (pc.base / f"{name}.json").read_bytes() == before[f"{name}.json"], name
+    assert builds.updates_view()["count"] == len(names) - 1
+    assert builds.state_view(store.load_config(pc.dirs)["device"])["accepted_updates"]["base"] == []
+
+    # the rest, by line
+    assert cli.main(["profiles", "apply-updates", "--line", LID]) == 0
+    assert pc.run() == "installed"
+    for name in names:
+        assert pc.preset(name)["filament_density"] == ["1.31"], name
+    assert builds.updates_view()["count"] == 0
+    assert b1
+
+
+def test_owner_preset_present_before_the_first_install_is_kept(tmp_path, server, monkeypatch):
+    _, sm = server
+    pc = paired_pc(tmp_path, server, monkeypatch)
+    mine = {"type": "filament", "name": sunlu("0.4"), "inherits": "", "from": "User", "filament_id": "P0000abc",
+            "filament_type": ["PLA"], "nozzle_temperature": ["199"]}
+    pc.write(sunlu("0.4"), mine)
+    own = (pc.base / f"{sunlu('0.4')}.json").read_bytes()
+    assert pc.run() == "uploaded"
+    build(sm)
+    choose_parent(pc.port, store.load_config(pc.dirs)["fp"], "Generic PLA")
+    build(sm)
+    assert pc.run() == "installed"
+    assert (pc.base / f"{sunlu('0.4')}.json").read_bytes() == own
+    assert sunlu("0.6") in pc.names()                       # the new ones are added
+    assert sunlu("0.4") in {u["name"] for u in builds.updates_view()["updates"]}

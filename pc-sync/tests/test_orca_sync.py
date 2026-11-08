@@ -76,6 +76,11 @@ def _zip(stamp=STAMP, live_hash=None, orca_live_hash=None, orca=None, base=None)
     return buf.getvalue()
 
 
+def _all(stamp):
+    """The owner accepted every update of build `stamp` (the only way an existing preset is written over)."""
+    return {"stamp": stamp, "base": ["Acme PLA @BBL H2D"], "orca": [N]}
+
+
 def _log(dirs):
     return dirs.log_file.read_text(encoding="utf-8") if dirs.log_file.exists() else ""
 
@@ -191,6 +196,7 @@ def test_install_both_trees_then_report_and_upload_both(env):
     live, _, olive, _ = _hashes(folders, orca)
     c = OrcaClient(_state(folders, orca, build={"stamp": STAMP, "live_hash": live, "orca_live_hash": olive}),
                    _zip(live_hash=live, orca_live_hash=olive))
+    c.st["accepted_updates"] = _all(STAMP)          # written over the existing presets
     assert _run(c, folders, orca, dirs) == "installed"
     assert json.loads((orca.user_filament / f"{N}.json").read_text())["nozzle_temperature"] == ["225"]
     names = [x[:2] for x in c.calls]
@@ -205,6 +211,7 @@ def test_orca_live_newer_than_build_asks_for_rebuild_but_installs_bambu_studio(e
     live = _hashes(folders, orca)[0]
     c = OrcaClient(_state(folders, orca, build={"stamp": STAMP, "live_hash": live, "orca_live_hash": "older"}),
                    _zip(live_hash=live, orca_live_hash="older"))
+    c.st["accepted_updates"] = _all(STAMP)          # written over the existing presets
     assert _run(c, folders, orca, dirs) == "installed"
     assert ("rebuild", live) in c.calls
     assert c.rebuild_orca == [_hashes(folders, orca)[2]]           # Ruling O: both live hashes
@@ -346,6 +353,7 @@ def test_orca_upload_refused_backs_off_and_bambu_studio_still_installs(env):
     st = _state(folders, orca, build={"stamp": STAMP, "live_hash": live, "orca_live_hash": "older"})
     st["orca_live_hash"] = "older"
     c = OrcaClient(st, _zip(live_hash=live, orca_live_hash="older"))
+    c.st["accepted_updates"] = _all(STAMP)          # written over the existing presets
     c.fail_kind["orca_live"] = client.ApiError(400, "bad_zip", "no")
     assert _run(c, folders, orca, dirs) == "installed"
     assert not [x for x in c.calls if x[0] == "rebuild"]
@@ -411,7 +419,7 @@ def test_owed_report_keeps_its_trees(env):
     c.fail_kind = {}
     real = c.installed
 
-    def failing(stamp, trees=None):
+    def failing(stamp, trees=None, written=None):
         raise client.ApiError(503, "unavailable", "down")
 
     c.installed = failing
@@ -435,6 +443,7 @@ def test_refused_orca_upload_recovers_and_asks_for_a_rebuild(env):
     st = _state(folders, orca, build={"stamp": STAMP, "live_hash": live, "orca_live_hash": "older"})
     st["orca_live_hash"] = "older"
     c = OrcaClient(st, _zip(live_hash=live, orca_live_hash="older"))
+    c.st["accepted_updates"] = _all(STAMP)          # written over the existing presets
     c.fail_kind["orca_live"] = client.ApiError(400, "bad_zip", "no")
     assert _run(c, folders, orca, dirs) == "installed"
     assert c.trees == [["base"]]
@@ -449,6 +458,7 @@ def test_refused_orca_upload_recovers_and_asks_for_a_rebuild(env):
     live2 = treehash.tree_hash(folders.user_filament)
     c.st["build"] = {"stamp": "20261102-020000", "live_hash": live2, "orca_live_hash": olive}
     c.zip = _zip(stamp="20261102-020000", live_hash=live2, orca_live_hash=olive)
+    c.st["accepted_updates"] = _all("20261102-020000")
     assert _run(c, folders, orca, dirs, now=t + 60) == "installed"
     assert c.trees[-1] == ["base", "orca"]
     assert json.loads((orca.user_filament / f"{N}.json").read_text())["nozzle_temperature"] == ["225"]
@@ -462,6 +472,7 @@ def test_installed_build_whose_orca_tree_did_not_go_in_installs_it_once_orca_syn
     st = _state(folders, orca, build={"stamp": STAMP, "live_hash": live, "orca_live_hash": olive})
     st["orca_live_hash"] = "server-has-another"
     c = OrcaClient(st, _zip(live_hash=live, orca_live_hash=olive))
+    c.st["accepted_updates"] = _all(STAMP)          # written over the existing presets
     real = sync.zips.pack
 
     def pack(root, max_bytes=None):

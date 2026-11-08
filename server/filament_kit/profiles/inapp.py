@@ -44,7 +44,8 @@ def user_notes(installed: dict, live: dict, *, partial: dict | None = None) -> l
     kept = []
     if MARK in lines:
         kept, lines = lines[lines.index(MARK) + 1:], lines[:lines.index(MARK)]
-    old = set(notes_text(installed.get("filament_notes")).splitlines())
+    old = notes_text(installed.get("filament_notes")).splitlines()
+    old = set(old[:old.index(MARK)] if MARK in old else old)    # the owner's lines below MARK are never "generated"
     if partial is not None:
         old |= set(notes_text(partial.get("filament_notes")).splitlines())
     out = kept + [line for line in lines if line.strip() and line not in old and line not in kept]

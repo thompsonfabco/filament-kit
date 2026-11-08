@@ -68,9 +68,14 @@ class FakeClient:
         self._maybe_fail("build")
         return self.zip
 
-    def installed(self, stamp, trees=None):
+    def installed(self, stamp, trees=None, written=None):
         self.calls.append(("installed", stamp))
         self.trees = getattr(self, "trees", []) + [trees]
+        self.written = getattr(self, "written", []) + [written]
+        acc = self.st.get("accepted_updates")
+        if isinstance(acc, dict) and acc.get("stamp") == stamp and written:     # as the server: written = done
+            for tree, names in written.items():
+                acc[tree] = [n for n in acc.get(tree) or [] if n not in names]
         self._maybe_fail("installed")
         self.st["installed"] = {"stamp": stamp, "at": 1}
         return {"installed": {"stamp": stamp, "at": 1}}
@@ -162,6 +167,7 @@ def test_matching_build_installs_reuploads_and_reports(env):
     live = _hashes(folders)[0]
     c = FakeClient(_synced_state(folders, build={"stamp": STAMP, "live_hash": live, "created": 1,
                                                  "presets": 1, "problems": 0}), _build_zip(live_hash=live))
+    c.st["accepted_updates"] = {"stamp": STAMP, "base": ["Acme PLA @BBL H2D"]}   # the only way over an existing one
     assert _run(c, folders, dirs) == "installed"
     names = [x[0] for x in c.calls]
     assert names == ["state", "build", "installed", "upload"]       # the report first (fix round 1)
