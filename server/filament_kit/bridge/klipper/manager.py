@@ -120,7 +120,7 @@ class _Conn:
             warn = kusage.spoolman_warning(c.server_config(), getattr(self.fam.sm, "base_url", None), self.p.host)
         except MoonrakerError:
             warn = None
-        connected = kusage.spoolman_connected(c)
+        connected = kusage.spoolman_connected(c, self.spoolman_connected)
         try:
             ext = ((c.query({"configfile": ["settings"]}).get("configfile") or {}).get("settings") or {}).get("extruder")
             nozzle = float((ext or {}).get("nozzle_diameter")) if (ext or {}).get("nozzle_diameter") else None
@@ -185,7 +185,7 @@ class _Conn:
     # --- subscriber callbacks ------------------------------------------------------------------------------------
     def _on_connect(self) -> None:
         """Every (re)subscribe: what may have changed while the socket was down, read again over HTTP."""
-        connected = kusage.spoolman_connected(self.client)
+        connected = kusage.spoolman_connected(self.client, self.spoolman_connected)
         with self.lock:
             self.spoolman_connected = connected
         try:

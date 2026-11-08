@@ -7,6 +7,7 @@ import pytest
 
 from filament_kit.bridge import registry
 from filament_kit.bridge.klipper import hardware as kh
+from filament_kit.bridge.klipper import moonraker as mr
 from filament_kit.bridge.klipper import usage as kusage
 from filament_kit.bridge.klipper.manager import KlipperFamily
 from filament_kit.spoolman import Spoolman
@@ -183,7 +184,9 @@ def test_warning_no_spoolman_section(moonraker, spoolman_url):
 
 DNS = {"kit.example.com": "192.0.2.10", "kit-alias.example.com": "192.0.2.10", "printer.example.com": "192.0.2.20",
        "other.example.com": "192.0.2.30", "localhost": "127.0.0.1", "127.0.0.1": "127.0.0.1", "::1": "::1",
-       "192.0.2.10": "192.0.2.10", "192.0.2.20": "192.0.2.20", "192.0.2.30": "192.0.2.30", "fd00::1": "fd00::1"}
+       "192.0.2.10": "192.0.2.10", "192.0.2.20": "192.0.2.20", "192.0.2.30": "192.0.2.30", "fd00::1": "fd00::1",
+       "2001:db8::10": "2001:db8::10",
+       "kit-host": "127.0.1.1"}     # stock Ubuntu's /etc/hosts: the machine's own name is a loopback address
 
 
 @pytest.fixture
@@ -199,8 +202,8 @@ def lookups(monkeypatch):
             raise OSError("no such name")
         return [(0, 0, 0, "", (DNS[host], 0))]
     monkeypatch.setattr(kusage.socket, "getaddrinfo", getaddrinfo)
-    monkeypatch.setattr(kusage.pairing, "local_ips", lambda: ["192.0.2.10"])
-    monkeypatch.setattr(kusage.socket, "gethostname", lambda: "kit-host")   # not in DNS, as on many a small machine
+    monkeypatch.setattr(kusage.pairing, "_candidate_ips", lambda: ["192.0.2.10", "2001:db8::10"])
+    monkeypatch.setattr(kusage.socket, "gethostname", lambda: "kit-host")
     return asked
 
 
@@ -217,6 +220,12 @@ PRINTER = "printer.example.com"
     # the correct all-in-one: the printer has the kit's LAN address, the kit its own loopback
     ("http://kit.example.com:7912", KIT_LOCAL, PRINTER, "same"),
     ("http://192.0.2.10:7912", KIT_LOCAL, PRINTER, "same"),
+    # a name that resolves to loopback HERE is this machine, not the printer's own: the setting doesn't say loopback
+    ("http://kit-host:7912", KIT_LOCAL, PRINTER, "same"),
+    ("http://kit-host:7912", "http://kit.example.com:7912", PRINTER, "same"),
+    ("http://kit-host:7912", "http://other.example.com:7912", PRINTER, "different"),
+    # the kit's IPv6 LAN address counts as the kit too
+    ("http://[2001:db8::10]:7912", KIT_LOCAL, PRINTER, "same"),
     # the printer on the kit's own machine: then loopback on both sides is the same place
     ("http://localhost:7912", KIT_LOCAL, "127.0.0.1", "same"),
     ("http://127.0.0.1:7912", "http://kit.example.com:7912", "kit.example.com", "same"),
@@ -250,13 +259,79 @@ def test_compare_spoolman(lookups, server, kit, printer, want):
 
 def test_each_name_is_looked_up_once_per_call(lookups):
     r = kusage.spoolman_report({"spoolman": {"server": "http://localhost:7912"}}, f"http://{PRINTER}:7912", PRINTER)
-    assert r["match"] == "same" and sorted(lookups) == ["localhost", PRINTER]
+    assert r["match"] == "same" and lookups == [PRINTER]     # "localhost" needs no lookup: it says what it means
     lookups.clear()
     r = kusage.spoolman_report({"spoolman": {"server": "http://localhost:7912"}}, KIT_LOCAL, "127.0.0.1")
-    assert r["match"] == "same" and lookups.count("127.0.0.1") == 1 and lookups.count("localhost") == 1
+    assert r["match"] == "same" and lookups.count("127.0.0.1") == 1 and lookups.count("kit-host") == 1
     lookups.clear()
     assert kusage.spoolman_report({"spoolman": {"server": "http://x.example.com:1"}}, KIT_LOCAL, PRINTER)["match"] == "different"
     assert lookups == []     # the ports differ: nothing to look up
+
+
+def test_the_machines_own_addresses_are_found_once_per_call(lookups, monkeypatch):
+    calls = []
+    real = kusage.pairing._candidate_ips
+    monkeypatch.setattr(kusage.pairing, "_candidate_ips", lambda: calls.append(1) or real())
+    assert kusage.compare_spoolman("http://localhost:7912", KIT_LOCAL, "127.0.0.1") == "same"
+    assert len(calls) == 1 and lookups.count("kit-host") == 1
+
+
+def test_a_name_resolving_to_loopback_here_is_shown_as_another_only_when_it_is(lookups):
+    r = kusage.spoolman_report({"spoolman": {"server": "http://kit-host:7912"}}, KIT_LOCAL, PRINTER)
+    assert r == {"server": "kit-host:7912", "match": "same", "warning": None}
+    r = kusage.spoolman_report({"spoolman": {"server": "http://kit-host:7912"}}, "http://other.example.com:7912", PRINTER)
+    assert r["warning"] == "usage goes to another Spoolman: kit-host:7912"
+
+
+def test_an_unreadable_kit_url_is_named_as_the_reason(lookups):
+    r = kusage.spoolman_report({"spoolman": {"server": "http://localhost:7912"}}, "http://[bad", PRINTER)
+    assert r["match"] == "unknown"
+    assert r["warning"] == ("cannot tell whether Moonraker's Spoolman localhost:7912 is this kit's: this kit's "
+                            "spoolman_url cannot be read")
+
+
+class _Status:
+    def __init__(self, answer):
+        self.answer = answer
+
+    def spoolman_status(self):
+        if isinstance(self.answer, Exception):
+            raise self.answer
+        return self.answer
+
+
+@pytest.mark.parametrize("answer, previous, want", [
+    ({"spoolman_connected": True}, False, True),
+    ({"spoolman_connected": False}, True, False),
+    # a passing failure says nothing new: what was known stands
+    (mr.Offline("gone"), False, False),
+    (mr.MoonrakerError("500"), False, False),
+    (mr.Offline("gone"), None, None),
+    # 404: Moonraker has no [spoolman] now, so it really won't say
+    (mr.NotFound("no"), False, None),
+    ({"spoolman_connected": "x"}, False, None),
+    ([], False, None),
+])
+def test_spoolman_connected(answer, previous, want):
+    assert kusage.spoolman_connected(_Status(answer), previous) is want
+
+
+def test_a_failed_status_request_on_reconnect_keeps_the_warning(moonraker, spoolman_url):
+    moonraker.server_config = {"spoolman": {"server": spoolman_url}}
+    moonraker.spoolman["spoolman_connected"] = False
+    pid = registry.add_klipper("P", moonraker.host, moonraker.port).serial
+    fam = KlipperFamily(Spoolman(spoolman_url), backoff=(0.1, 0.4))
+    fam.start()
+    try:
+        fam.wait_settled(pid, 8)
+        conn = fam._conns[pid]
+        assert "cannot reach its Spoolman" in fam.status(pid)["spoolman_warning"]
+        real, conn.client.spoolman_status = conn.client.spoolman_status, lambda: (_ for _ in ()).throw(mr.Offline("x"))
+        conn._on_connect()
+        assert "cannot reach its Spoolman" in fam.status(pid)["spoolman_warning"]
+        conn.client.spoolman_status = real
+    finally:
+        fam.stop()
 
 
 @pytest.mark.parametrize("server, match, address, warning", [
