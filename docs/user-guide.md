@@ -136,7 +136,17 @@ first PC that syncs is the one. To move to another PC, remove the first one with
 (see [Everyday commands](#everyday-commands)); the next PC that syncs then starts fresh, like a first install.
 
 1. On the PC, download `filament-kit-sync-setup-<version>.exe` from the same GitHub Releases page and run it.
-   It does not need administrator rights.
+   It does not need administrator rights. Windows may first show **Windows protected your PC** and say it
+   prevented an unrecognized app from starting. That is because the program is not code-signed. If you downloaded
+   it from the project's Releases page, click **More info**, then **Run anyway**. To check that the download is
+   intact, run this in PowerShell in the folder where you saved it, and compare the result with the line for this
+   file in the release's `SHA256SUMS`:
+
+   ```
+   Get-FileHash .\filament-kit-sync-setup-<version>.exe -Algorithm SHA256
+   ```
+
+   That check only shows the file arrived whole; it does not show who made it.
 2. On the Ubuntu computer, run:
 
    ```
@@ -151,7 +161,7 @@ first PC that syncs is the one. To move to another PC, remove the first one with
    type `y` to confirm it. Then it asks for the 6-digit code.) From then on the PC syncs every 10 minutes. While
    Bambu Studio is open it waits and tries again later (see [While Bambu Studio is open](#while-bambu-studio-is-open-v040)).
 
-The link and the code expire after a few minutes. If they do, run `sudo filament-kit pair --pc` again.
+The link and the code expire after about 10 minutes. If they do, run `sudo filament-kit pair --pc` again.
 
 ### Stable and Beta Bambu Studio (v0.4.0)
 
@@ -213,6 +223,29 @@ most once an hour): `sudo filament-kit status` and `sudo filament-kit profiles s
 Bambu Studio to close since <date>", and so does the preset status in the phone app and Claude's connector. It is
 shown only for the PC that is paired as the sync PC, and clears at the first sync after Studio closes.
 
+### Undo an update, unpair, or remove the PC sync
+
+**Undo an installed update.** Before the sync writes presets, it copies your Bambu Studio filament folder to
+`%LOCALAPPDATA%\filament-kit-sync\backups\<date and time>` (Orca Slicer's copy is in `backups-orca` under the same
+name; the 5 newest of each are kept; a second Bambu Studio folder has its own under `folders\<name>\backups`). On
+Linux they are under `~/.local/share/filament-kit-sync`. To go back, close Bambu Studio, copy the presets from the
+backup folder over the ones in the slicer's filament folder, and start Bambu Studio again.
+
+**Warning.** The sync runs exactly when Bambu Studio is closed, so it can run again between your closing Studio and
+your copy. Copy the files back quickly, or stop the sync first (Task Scheduler on Windows, `systemctl --user stop
+filament-kit-sync.timer` on Linux). The server still holds the newer build, so the restored presets show as
+"differing" there; they are not reverted on the server.
+
+**Unpair this PC.** `filament-kit-sync unpair` deletes the PC's token and settings and prints the PC's id. It does not
+turn off the scheduled sync, which keeps running every 10 minutes and logging that the PC is not paired. The server still
+counts this PC as the sync PC, so also run `sudo filament-kit unpair <id>` on the Ubuntu computer. Until you do, another
+PC's sync is refused with "Other PC".
+
+**Remove the program on Windows.** **Uninstall filament-kit sync** (Start menu, or Windows Settings, Apps) removes the
+scheduled sync and the program's entry on your PATH. It keeps the sync's data (pairing token, settings, backups,
+log) in `%LOCALAPPDATA%\filament-kit-sync`, so a later install is still paired. Presets already in the slicers stay. To
+leave the server for good, run `filament-kit-sync unpair` first and then `sudo filament-kit unpair <id>`, as above.
+
 ### PC sync on Linux
 
 The PC sync also runs on Linux (x86_64) with Bambu Studio and Orca Slicer, whether they are installed natively, as an
@@ -257,7 +290,10 @@ them too, then run `sudo filament-kit unpair <id>` on the server. Presets alread
   [Stable and Beta Bambu Studio](#stable-and-beta-bambu-studio-v040)). To choose it, set `"variant"` in
   `~/.local/share/filament-kit-sync/config.json` to `BambuStudio`, `BambuStudioBeta`, `Flatpak BambuStudio` or
   `Flatpak BambuStudioBeta`.
-- The sync waits while Bambu Studio or Orca Slicer is open, including the Flatpak and AppImage versions.
+- The sync waits while Bambu Studio or Orca Slicer is open, including the Flatpak and AppImage versions. If it cannot
+  list the running programs (it cannot read `/proc`), it counts a slicer as running and waits. The log then says
+  Bambu Studio is open even if it is not, and closing Studio will not help. Check with `ps` that no slicer is running
+  and that `/proc` is readable by your user.
 - With the Orca AppImage, the Orca filament library is read from Orca's own copy under its data folder, because the
   AppImage's files can only be read while it runs.
 
