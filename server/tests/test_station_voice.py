@@ -295,3 +295,50 @@ def test_panel_md_and_panel_py_know_firmware_8():
     from filament_kit.station import panel
     assert "Protocol (firmware 8)" in panel.__doc__
     assert "station module switched on later" in text or "modules enable station" in text
+
+
+def test_station_voice_step_pins_the_kits_packages_and_opens_the_voice_folder(tmp_path, monkeypatch):
+    """piper-tts goes in with the kit's installed packages as constraints (it may add, never move them), and the
+    voice folder is made readable for the station's user whatever root's umask was."""
+    monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
+    monkeypatch.delenv("FK_STATION_TTS", raising=False)
+    monkeypatch.setenv("FK_OPT", str(tmp_path / "opt"))
+    monkeypatch.setattr(apply, "_tts_requirements", lambda: ["piper-tts==1.8.0"])
+    ran, seen = [], {}
+
+    def run(cmd):
+        ran.append(cmd)
+        if "pip" in cmd:
+            c = cmd[cmd.index("-c") + 1]
+            seen["pins"] = open(c, encoding="utf-8").read()
+    apply.execute([apply.Action("station_voice", voice.DEFAULT)], run=run, root=tmp_path)
+    pip = next(c for c in ran if "pip" in c)
+    assert "-c" in pip and pip[-1] == "piper-tts==1.8.0"
+    assert "starlette==" in seen["pins"].lower()
+    assert ran[-1][:3] == ["chmod", "-R", "a+rX,go-w"] and ran[-1][3].endswith("/resources/voice")
+
+
+def test_station_voice_step_says_why_when_the_extra_is_missing(tmp_path, monkeypatch, capsys):
+    monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
+    monkeypatch.delenv("FK_STATION_TTS", raising=False)
+    monkeypatch.setattr(apply, "_tts_requirements", lambda: [])
+    ran = []
+    apply.execute([apply.Action("station_voice", voice.DEFAULT)], run=ran.append, root=tmp_path)
+    assert ran == [] and "no [station-tts] extra" in capsys.readouterr().out
+
+
+def test_tick_loop_survives_a_bad_tick(monkeypatch):
+    from filament_kit.station import flow
+    calls = []
+
+    def tick(now):
+        calls.append(now)
+        if len(calls) == 1:
+            raise RuntimeError("boom")
+        if len(calls) == 2:
+            raise SystemExit  # stop the loop
+    monkeypatch.setattr(flow, "flow_tick", tick)
+    monkeypatch.setattr(flow.time, "sleep", lambda s: None)
+    with pytest.raises(SystemExit):
+        flow.tick_loop()
+    assert len(calls) == 2

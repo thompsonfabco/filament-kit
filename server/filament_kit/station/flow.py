@@ -225,7 +225,10 @@ def tick_loop():
     """The flow's timeouts once a second, panel or not: a tap's flow (and /state's tag) goes back to idle."""
     while True:
         time.sleep(1)
-        flow_tick(time.time())
+        try:
+            flow_tick(time.time())
+        except Exception:  # noqa: BLE001 - one bad tick must not end the timeouts for the rest of the run
+            log.exception("flow tick")
 
 
 def lamps(now):

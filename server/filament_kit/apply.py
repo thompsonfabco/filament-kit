@@ -18,6 +18,7 @@ import socket
 import ssl
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.request
 from dataclasses import dataclass
@@ -609,11 +610,24 @@ def _station_voice(ex: _Exec, name: str) -> None:
         return
     print(f"\n==> The button panel's voice (Piper, {name})")
     reqs = _tts_requirements()
-    if not reqs or not ex.ok([sys.executable, "-m", "pip", "install", "-q", *reqs]):
-        print("note: could not install piper-tts (offline?); the panel speaks with espeak-ng")
+    if not reqs:
+        print("note: this kit's package has no [station-tts] extra (reinstall it); the panel speaks with espeak-ng")
         return
-    ex.cmd([sys.executable, "-I", "-m", "filament_kit.station.voice",
-            f"{config.paths().opt.as_posix()}/resources/voice", name])
+    # what the kit already runs on stays as it is: piper-tts may add packages, never move the kit's own
+    pins = sorted({f"{d.metadata['Name']}=={d.version}" for d in importlib.metadata.distributions()
+                   if d.metadata["Name"]})
+    with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as f:
+        f.write("".join(p + "\n" for p in pins))
+    try:
+        if not ex.ok([sys.executable, "-m", "pip", "install", "-q", "-c", f.name, *reqs]):
+            print("note: could not install piper-tts (offline, or it conflicts with the kit's packages); "
+                  "the panel speaks with espeak-ng")
+            return
+    finally:
+        os.unlink(f.name)
+    vdir = f"{config.paths().opt.as_posix()}/resources/voice"
+    ex.cmd([sys.executable, "-I", "-m", "filament_kit.station.voice", vdir, name])
+    ex.ok(["chmod", "-R", "a+rX,go-w", vdir])   # the station's user reads it whatever root's umask was
 
 
 def _step(ex: _Exec, a: Action) -> None:
