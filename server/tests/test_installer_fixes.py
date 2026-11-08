@@ -233,6 +233,7 @@ def test_uninstall_sh_keeps_its_purge_confirmation():
 
 def test_passphrase_docstrings_name_only_the_claude_connector():
     """The phone web app has no sign-in: the passphrase only approves Claude's connector on /login."""
+    pytest.importorskip("mcp")  # the web extra
     from filament_kit.web import auth
     doc = " ".join(cli.cmd_web_passphrase.__doc__.split())
     assert "and the phone app" not in doc and "has no sign-in" in doc and "connector" in doc

@@ -113,6 +113,7 @@ def test_anthropic_key_in_config_goes_through_the_masked_prompt(monkeypatch, cap
 
 
 def test_web_passphrase_asks_twice_through_the_masked_prompt(monkeypatch):
+    pytest.importorskip("mcp")  # cmd_web_passphrase imports the web extra
     asked = []
     monkeypatch.setattr(cli, "_is_root", lambda: True)
     monkeypatch.setattr(cli.shutil, "chown", lambda *a, **k: None)

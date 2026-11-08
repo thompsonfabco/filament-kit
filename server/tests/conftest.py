@@ -88,7 +88,7 @@ def no_library(monkeypatch):
 def _no_real_kit_paths(tmp_path_factory, monkeypatch):
     """Every test starts with FK_ETC/FK_STATE/FK_OPT in a temp folder, so a test that forgets its own never writes
     (or reads) the real /etc/filament-kit, /var/lib/filament-kit or /opt/filament-kit; on Windows those resolve to
-    C:\etc\... and a stray config there changed other tests' builds. Tests that set their own still win."""
+    C:/etc/... and a stray config there changed other tests' builds. Tests that set their own still win."""
     base = tmp_path_factory.mktemp("kit-paths")
     for name in ("etc", "state", "opt"):
         (base / name).mkdir()
