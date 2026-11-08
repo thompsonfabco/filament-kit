@@ -331,7 +331,7 @@ if mode == "custom":
     for note in notes:
         print(note)
     on = set(chosen)
-    cfg["modules"] = {n: n in on for n in modules.MODULES}
+    cfg["modules"] = modules.module_map(on, cfg)
     if {"station", "server"} <= on:
         # station and server on one machine: as all-in-one, the server reads the local station
         st = cfg.setdefault("station", {})

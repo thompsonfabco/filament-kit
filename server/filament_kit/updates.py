@@ -519,6 +519,33 @@ def _restore(cfg: dict, cur: str, kept: bool, old_previous, run) -> int:
     return 1
 
 
+def _modules_fit(target: str) -> bool:
+    """Before installing `target`: refuse when a module it does not know is on, and drop such a module's false
+    entry from config.json (the newer release wrote it when it was switched off). False on refusal."""
+    f = config.paths().etc / "config.json"
+    try:
+        raw = json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}
+        old = release.parse_version(target)
+    except (OSError, ValueError, ReleaseError) as e:
+        print(f"error: cannot check config.json's modules for the rollback: {e}", file=sys.stderr)
+        return False
+    mods = raw.get("modules") if isinstance(raw, dict) else None
+    if not isinstance(mods, dict):
+        return True
+    unknown = [n for n, since in modules.NEWER.items() if old < since and n in mods]
+    on = [n for n in unknown if mods[n]]
+    if on:
+        print(f"error: filament-kit {target} has no {', '.join(on)} module; run "
+              + " and ".join(f"`sudo filament-kit modules disable {n}`" for n in on) + " first", file=sys.stderr)
+        return False
+    if unknown:
+        for n in unknown:
+            del mods[n]
+        config.save(raw)
+        print(f"Removed {', '.join(unknown)} (off) from config.json's modules: filament-kit {target} does not know it.")
+    return True
+
+
 def rollback(cfg: dict, *, run: Callable[[list[str]], int] = default_run) -> int:
     if not _require_root():
         return 1
@@ -528,6 +555,8 @@ def rollback(cfg: dict, *, run: Callable[[list[str]], int] = default_run) -> int
     if not isinstance(target, str) or not _kept(target):
         print(f"error: no verified earlier version is kept in {store()}; nothing to roll back to",
               file=sys.stderr)
+        return 1
+    if not _modules_fit(target):
         return 1
     try:
         with printers_idle():
