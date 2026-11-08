@@ -855,6 +855,45 @@ def test_a_failed_job_whose_numbers_fit_nothing_proves_nothing(fake_ftp, printer
     assert r.consistent is False and any("ended as FAILED" in p for p in r.problems) and len(jobs(m)) == 1
 
 
+OLD_PRINT = [9003, 9001, 9004, 9002, 9006, 9005]
+
+
+def _printer_repeats_the_last_print(m):
+    """The full report asked for after a command brings the kept `mapping` back, and this job never writes its own."""
+    _own_numbers(m, OLD_PRINT)
+
+
+@pytest.mark.parametrize("final,error", [("FINISH", None), ("FAILED", None), ("FAILED", 7)])
+def test_the_last_prints_numbers_coming_back_never_become_a_table(fake_ftp, printer, final, error):
+    rep = {**owner_h2d_report(), "mapping": OLD_PRINT, "subtask_name": "a real print"}
+    m = FakeManager(fake_ftp.root, report=rep)
+    _printer_repeats_the_last_print(m)
+    m.final, m.print_error = final, error
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert r.consistent is False and r.scheme is None and r.problems, r.notes
+    assert not any("kit knows: each loaded slot" in n for n in r.notes)
+
+
+def test_a_table_printers_own_numbers_on_a_second_mapping_are_still_believed(fake_ftp, printer):
+    """Its calibration job's numbers were kept in the report: they aren't a print's."""
+    numbers = [9001, 9002, 9003, 9004, 9005, 9006]
+    rep = {**owner_h2d_report(), "mapping": numbers, "subtask_name": calib3mf.job_name(SERIAL) + "-abc"}
+    m = FakeManager(fake_ftp.root, report=rep)
+    _own_numbers(m, numbers)
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert r.consistent is True and r.scheme is None and r.problems == [], r.problems
+
+
+def test_a_scheme_that_fits_is_believed_even_if_it_equals_the_last_print(fake_ftp, printer):
+    """Each number decodes to that very slot: where it came from can't make it wrong. The H2D's map again after a print."""
+    rep = owner_h2d_report()
+    first = FakeManager(fake_ftp.root, "native", report=copy.deepcopy(rep))
+    numbers = calib3mf.run(first, SERIAL, slotmap_for(rep)).mapping
+    m = FakeManager(fake_ftp.root, "native", report={**rep, "mapping": numbers, "subtask_name": "a real print"})
+    r = calib3mf.run(m, SERIAL, slotmap_for(rep))
+    assert r.consistent is True and r.scheme == "shift8" and r.problems == [], r.problems
+
+
 @pytest.mark.parametrize("numbers", [[0, 0, 2, 128], [0, 1, -1, 128], [0, 1]])
 def test_numbers_that_cannot_be_an_answer_are_refused(fake_ftp, printer, numbers):
     m = FakeManager(fake_ftp.root)

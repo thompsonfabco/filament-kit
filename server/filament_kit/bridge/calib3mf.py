@@ -16,10 +16,11 @@ against every candidate scheme: the first (model order) that round-trips every l
 (another job, in the next candidate's numbers, only after a clean end that fits none or a refusal; see `run`). The
 evidence is those numbers, not how a comments-only print ends: the job counts when it started and this job reported one
 distinct number per filament, whether it ended FINISH or FAILED (the H2D ends a gcode-only job FAILED with no error). The
-report is merged, so `mapping` from an earlier print would stay in it: it is dropped when the job is sent. A FAILED with
+report is merged, so `mapping` from an earlier print would stay in it: it is dropped when the job is sent, though the full
+report asked for after a command may bring it back. Numbers that fit a scheme are right wherever they came from. A FAILED with
 a real `print_error` whose numbers are those sent, or those of the print before, can't prove the printer read the file:
-the map is kept but `scheme_unsettled`. Numbers that fit no scheme are still the printer's numbers for those slots: a
-table, `scheme` None. Afterwards (always) the file is deleted and every
+the map is kept but `scheme_unsettled`. Numbers that fit no scheme are still the printer's numbers for those slots, a table with
+`scheme` None, unless they are the last print's: those say nothing about these slots, so the map stays in observe. Afterwards (always) the file is deleted and every
 slot whose settings changed since the start is set back from the snapshot taken at the start and the restore is
 verified from the next report (`CalibResult.restored` false when any slot was not confirmed back). It does not save
 a SlotMap (the mapping job does).
@@ -565,8 +566,9 @@ def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None
     attempts: list[str] = []
     res: CalibResult | None = None
     table: CalibResult | None = None    # a job whose numbers fit no scheme: still the printer's numbers
+    last_print: dict = {}               # the `mapping` of the print before this mapping began (the first job's snapshot)
     for key in sends:
-        r = _attempt(manager, serial, slotmap, printer, should_stop, hw, mi, candidates, key, tried)
+        r = _attempt(manager, serial, slotmap, printer, should_stop, hw, mi, candidates, key, tried, last_print)
         if r.skip:
             continue
         if res is not None:             # the previous job proved no scheme: keep what it saw
@@ -597,7 +599,8 @@ def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None
 
 
 def _attempt(manager, serial: str, slotmap: SlotMap, printer, should_stop, hw: hardware.Hardware,
-             mi: hardware.ModelInfo, candidates: list[str], key: str, tried: list[list[int]]) -> CalibResult:
+             mi: hardware.ModelInfo, candidates: list[str], key: str, tried: list[list[int]],
+             last_print: dict) -> CalibResult:
     """One calibration job sending `key`'s numbers (see `run`)."""
     res = CalibResult(sent_scheme=key)
     if manager.state(serial) != 'connected':
@@ -608,6 +611,9 @@ def _attempt(manager, serial: str, slotmap: SlotMap, printer, should_stop, hw: h
         res.problems.append('printer_offline')
         return res
     snap = copy.deepcopy(snap)
+    if "mapping" not in last_print:     # a job of ours before this one says nothing against its own numbers
+        ours = _s(snap.get('subtask_name')).startswith(job_name(serial))
+        last_print["mapping"] = None if ours else snap.get('mapping')
     if _s(snap.get('gcode_state')).upper() in BUSY:
         res.problems.append('printer_busy')
         return res
@@ -687,7 +693,7 @@ def _attempt(manager, serial: str, slotmap: SlotMap, printer, should_stop, hw: h
     res.job = run_name(serial)
     try:
         _job(manager, serial, res, labels, sent, snap, should_stop,
-             numbering=(hw, mi, candidates, addrs, mapping2))
+             numbering=(hw, mi, candidates, addrs, mapping2, last_print.get("mapping")))
     except Exception as e:      # e.g. the MQTT connection was lost while watching the job
         log.warning("printer %s: calibration job interrupted (%s)", serial, type(e).__name__)
         res.consistent = res.retry = False
@@ -825,8 +831,8 @@ def _error_text(v) -> str:
 def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[int], snap: dict,
          should_stop=None, *, numbering) -> None:
     """Send and watch one job. `numbering` = (hardware, model, candidate scheme keys, (ams_id, tray_id) per label,
-    ams_mapping2 or None)."""
-    hw, mi, candidates, addrs, mapping2 = numbering
+    ams_mapping2 or None, the last print's mapping or None)."""
+    hw, mi, candidates, addrs, mapping2, last_print = numbering
     name = res.job or run_name(serial)
     stopping = should_stop or (lambda: False)
     if stopping():
@@ -936,7 +942,12 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
     if mi.known and own:        # a scheme the model does not list is a last resort, not a rival to its own
         proved = own
     res.scheme = proved[0] if proved else None
-    if res.scheme is None and not (numbers_ok and clean):
+    stale = (res.scheme is None and numbers_ok and isinstance(last_print, list)
+             and list(res.mapping)[:len(vals)] == last_print[:len(vals)])
+    if stale:
+        res.problems.append("the printer's slot numbers are the same as its last print's and fit no numbering this kit "
+                            "knows, so they say nothing about these slots; filament use stays logged only")
+    elif res.scheme is None and not (numbers_ok and clean):
         # a failed job whose numbers fit nothing, or no usable numbers: nothing is proven
         if st['final'] != 'FINISH':
             res.problems.append(ended)
@@ -964,9 +975,9 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
             res.scheme_unsettled = True
             log.warning("printer %s: the job failed and its numbers prove little (sent %s, reported %s)", serial, sent,
                         vals)
-    res.consistent = res.scheme is not None or (numbers_ok and clean)
+    res.consistent = res.scheme is not None or (numbers_ok and clean and not stale)
     # another job only after a clean end with no scheme (never after a real failure or a stop)
-    res.retry = clean and res.scheme is None
+    res.retry = clean and res.scheme is None and not stale
 
 
 def delete_leftover(serial: str, printer: registry.Printer | None = None) -> list[str]:
