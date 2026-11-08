@@ -67,6 +67,7 @@ import com.thompsonfabco.filamentkit.ui.profile.AddProfileViewModel
 import com.thompsonfabco.filamentkit.ui.profile.ProfileApi
 import com.thompsonfabco.filamentkit.ui.search.SearchScreen
 import com.thompsonfabco.filamentkit.ui.search.SearchViewModel
+import com.thompsonfabco.filamentkit.ui.settings.LicencesScreen
 import com.thompsonfabco.filamentkit.ui.settings.SettingsScreen
 import com.thompsonfabco.filamentkit.ui.spool.ApiSpoolBackend
 import com.thompsonfabco.filamentkit.ui.spool.SpoolHost
@@ -101,6 +102,7 @@ private object Routes {
     const val HOME = "home"
     const val SEARCH = "search"
     const val SETTINGS = "settings"
+    const val LICENCES = "settings/licences"
     const val PRINTERS = "printers"
     const val ADD_PROFILE = "profile/add"
     const val ADD = "add?tag={tag}&draft={draft}&manual={manual}"
@@ -327,8 +329,11 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
                 config = config,
                 onPairAgain = app.router::pairAgain,
                 onForget = { app.forget { nav.navigateClearing(Routes.PAIR) } },
+                onLicences = { nav.navigate(Routes.LICENCES) },
             )
         }
+
+        composable(Routes.LICENCES) { LicencesScreen() }
 
         composable(Routes.PRINTERS) {
             val a = api
