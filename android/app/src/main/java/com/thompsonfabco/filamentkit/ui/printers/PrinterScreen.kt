@@ -117,9 +117,7 @@ fun PrinterScreen(
 
         Controls(state, viewModel)
 
-        // a Developer Mode refusal never blocks mapping: the slot test finds out for itself and says so
-        SlotMapping(toolsState, tools,
-            canStart = printer.state in setOf("connected", "needs_developer_mode") && !state.printing)
+        SlotMapping(toolsState, tools, printer.state, state.printing)
         FilamentUsed(toolsState, tools)
     }
 
@@ -263,35 +261,30 @@ private fun Controls(state: PrinterUiState, viewModel: PrinterViewModel) {
 }
 
 @Composable
-private fun SlotMapping(s: ToolsUiState, tools: PrinterToolsViewModel, canStart: Boolean) {
+private fun SlotMapping(s: ToolsUiState, tools: PrinterToolsViewModel, printerState: String, printing: Boolean) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("Slot mapping", style = MaterialTheme.typography.titleMedium)
+        val v = SlotMapHelp.view(s.map)
+        if (v.outcome == SlotMapOutcome.RUNNING) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        v.headline?.let {
+            if (v.headlineIsError) Text(it, color = MaterialTheme.colorScheme.error) else Text(it)
+        }
+        v.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         s.observeNotice?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
-        val m = s.map
-        when (m?.state) {
-            "running" -> {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                Text(m.step.ifBlank { "Mapping slots…" })
-            }
-            "done" -> Text(if (m.calibrated) "Slots mapped (${m.slots.size})" else "Slot mapping finished")
-            "failed" -> Text(listOf("Slot mapping failed", m.step).filter { it.isNotBlank() }.joinToString(": "),
-                color = MaterialTheme.colorScheme.error)
-            else -> Unit
+        v.problemsHeading?.let { heading ->
+            Text(heading, style = MaterialTheme.typography.labelLarge)
+            val color = if (v.problemsAreError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+            v.problems.forEach { Text(it, color = color, style = MaterialTheme.typography.bodySmall) }
         }
-        val old = m?.problemsOld == true && m.problems.isNotEmpty()
-        if (old) {
-            Text("From an earlier mapping, it may be fixed by now. Map the slots again to check:",
-                style = MaterialTheme.typography.bodySmall)
+        v.notesHeading?.let { heading ->
+            Text(heading, style = MaterialTheme.typography.labelLarge)
+            v.notes.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
         }
-        m?.problems?.forEach {
-            Text(it, color = if (old) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall)
-        }
-        m?.notes?.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
         s.mapMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        OutlinedButton(onClick = tools::askMap, enabled = canStart && !s.mapRunning && !s.mapBusy) {
-            Text(if (m?.state == "done" || m?.state == "failed") "Map slots again" else "Map slots")
+        OutlinedButton(onClick = tools::askMap, enabled = s.mapEnabled(SlotMapHelp.canStart(printerState, printing))) {
+            Text(SlotMapHelp.buttonLabel(s.map))
         }
+        SlotMapHelp.blockedReason(printerState, printing)?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
     }
 }
 

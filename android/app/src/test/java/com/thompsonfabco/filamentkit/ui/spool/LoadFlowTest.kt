@@ -490,7 +490,7 @@ class LoadFlowTest {
         val vm = toolsVm()
         vm.start()
         runCurrent()
-        assertEquals("Filament use is only being logged for this printer until slot mapping succeeds",
+        assertEquals("Filament use is only logged for this printer, not taken off spools, until slot mapping succeeds",
             vm.state.value.observeNotice)
         vm.stop()
     }
