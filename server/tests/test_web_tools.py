@@ -574,3 +574,19 @@ def test_bridge_set_slot_quotes_a_hash_label():
     kit.get = get
     slots.bridge_set_slot(kit, 7, "A1#5", True)
     assert kit.loads == [("/api/printers/SER1/slots/A1%235/load", {"spool_id": 7, "dry_run": True})]
+
+
+def test_preset_status_says_the_pc_sync_waits(tools, sm, monkeypatch):
+    """PCBOTH R3: the phone / MCP status reads the same source as `filament-kit status`."""
+    real = builds.status
+
+    def waiting():
+        st = real()
+        st["pc"] = {"device_id": "d1", "last_upload": None,
+                    "waiting": {"since": 1_793_700_000.0, "app": "Bambu Studio", "at": 1_793_703_600.0}}
+        return st
+    monkeypatch.setattr(builds, "status", waiting)
+    st = tools.preset_status()
+    assert st["pc_waiting"].startswith("PC sync waiting for Bambu Studio to close since 2026-11-0")
+    monkeypatch.setattr(builds, "status", real)
+    assert tools.preset_status()["pc_waiting"] is None

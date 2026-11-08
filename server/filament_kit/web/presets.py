@@ -67,6 +67,7 @@ def status(sm) -> dict:
             "last_build": build.get("stamp"), "installed_build": installed.get("stamp"),
             "waiting_for_desktop": bool(build.get("stamp")) and build.get("stamp") != installed.get("stamp"),
             "presets": st.get("presets"), "problems": st.get("problems", []),
+            "pc_waiting": builds.pc_waiting_text(st.get("pc")),
             "note": "an uncovered filament joins a line by its name at the next build; add it to a line here "
                     "only when that would be the wrong line"}
 

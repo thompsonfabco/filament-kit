@@ -26,6 +26,8 @@ State, all under `state/profiles/`:
                              lines of the old PC's installed build, kept when the sync PC changes (ruling S34) until
                              the new PC installs
   build-state.json           {last_attempt: {at, ok, error}, handled: {at, started}} (the builder's own record)
+  pc-heartbeat.json          the sync PC's last heartbeat {device_id, at, outcome, waiting_since, app} (PCBOTH R3):
+                             sent while Bambu Studio (or Orca Slicer) stays open on the PC; status() shows the wait
   rebuild-request            written by `request_rebuild`; watched by filament-kit-build.path (PathModified).
                              The builder only ever READS it; what was handled is kept in build-state.json.
   restore-deleted            flag: the next build brings back presets deleted in the app (consumed by it)
@@ -583,7 +585,7 @@ def _orca_presets(tree: Path) -> int:
 
 
 def store_upload(kind: str, src: BinaryIO, *, device_id: str, user_id: str | None = None,
-                 partial: str | None = None) -> str:
+                 partial: str | None = None, fresh: bool = False) -> str:
     """Store a PC sync upload and return its tree hash. Claims the sync owner. Kinds (KINDS):
       live         Bambu Studio's user filament folder        -> live/user/
       system       Bambu Studio's `system/BBL/filament`       -> live/system/
@@ -591,13 +593,18 @@ def store_upload(kind: str, src: BinaryIO, *, device_id: str, user_id: str | Non
       orca_system  `BBL/filament/**.json` + `OrcaFilamentLibrary/index.json` (Ruling L) -> live/orca/system/
     `user_id` (the slicer's user folder id) is kept for the two live kinds. `partial` (live kinds only) names the
     build whose install stopped part-way in this live folder (ruling S28; meta `orca_partial` for orca_live, Ruling
-    O). Raises OtherPc, BadZip or TooLarge; then nothing changed."""
+    O). `fresh` (kind live only, PCBOTH R2): the PC's Bambu Studio folder changed (stable <-> Beta), so this live
+    folder is that folder's first sync: the install snapshot, deletions and partial build are forgotten exactly as for
+    a new sync PC (`_forget_old_pc`; the owner's in-app record is kept). Raises OtherPc, BadZip or TooLarge; then
+    nothing changed."""
     if kind not in KINDS:
         raise ValueError(f"unknown upload kind {kind!r}")
     sub, cap, strict, prefix = KINDS[kind]
     is_live = kind in ("live", "orca_live")
     if user_id is not None and not USER_ID.fullmatch(user_id):
         raise ProfileError(400, "bad_request", "user_id may only have letters, digits, - and _ (at most 64)")
+    if fresh and kind != "live":
+        raise ProfileError(400, "bad_request", "fresh is for Bambu Studio live uploads only")
     if partial is not None and (kind not in ("live", "orca_live") or not isinstance(partial, str)
                                 or not STAMP_RE.fullmatch(partial)):
         raise ProfileError(400, "bad_request", "partial must be a build stamp (live uploads only)")
@@ -631,6 +638,8 @@ def store_upload(kind: str, src: BinaryIO, *, device_id: str, user_id: str | Non
             meta = _meta()
             now = time.time()
             if meta.get("owner") != device_id and (meta.get("owner") or _dir().joinpath("installed.json").exists()):
+                _forget_old_pc(meta)
+            elif fresh:                         # the same PC, another Bambu Studio folder: its first sync (R2)
                 _forget_old_pc(meta)
             meta["owner"] = device_id
             renew = False
@@ -1180,6 +1189,71 @@ def state_view(device_id: str) -> dict:
                                   "orca_live_hash": req["orca_live_hash"]} if req else None}
 
 
+# ---------- the PC sync's heartbeat (PCBOTH R3) ----------
+
+HEARTBEAT = "pc-heartbeat.json"
+HEARTBEAT_APPS = ("Bambu Studio", "Orca Slicer")
+WAITING = "studio_running"
+
+
+def record_heartbeat(device_id: str, outcome: str, waiting_since: float | None, app: str | None) -> dict:
+    """Keep the sync PC's last heartbeat {device_id, at, outcome, waiting_since, app} (pc-heartbeat.json): sent while
+    a run ends `studio_running` (at most one an hour), and once when that wait is over. No live data. Raises
+    OtherPc for another device than the sync PC."""
+    check_owner(device_id)
+    rec = {"device_id": device_id, "at": time.time(), "outcome": outcome, "waiting_since": waiting_since, "app": app}
+    _write_json(_dir() / HEARTBEAT, rec)
+    return rec
+
+
+def _pc_waiting(device_id: str | None, meta: dict) -> dict | None:
+    """{since, app, at} while the sync PC's last heartbeat says it waits for a slicer to close: the heartbeat is the
+    owner's (or there is no owner yet) and no upload or install report came after it."""
+    hb = _read_obj(_dir() / HEARTBEAT)
+    if hb.get("outcome") != WAITING or hb.get("device_id") != device_id:
+        return None
+    at = hb.get("at")
+    if not isinstance(at, (int, float)) or isinstance(at, bool):
+        return None
+    inst = _installed() or {}
+    later = [t for t in (meta.get("live_at"), meta.get("system_at"), meta.get("orca_live_at"),
+                         meta.get("orca_system_at"), inst.get("at"))
+             if isinstance(t, (int, float)) and not isinstance(t, bool)]
+    if any(t > at for t in later):
+        return None
+    since = hb.get("waiting_since")
+    return {"since": since if isinstance(since, (int, float)) and not isinstance(since, bool) else at,
+            "app": hb.get("app") if hb.get("app") in HEARTBEAT_APPS else "Bambu Studio", "at": at}
+
+
+def pc_waiting_text(pc: dict | None) -> str | None:
+    """"PC sync waiting for Bambu Studio to close since <local date>" from status() `pc`, else None (one text for
+    `filament-kit status`, `profiles status` and the phone / MCP preset status)."""
+    w = (pc or {}).get("waiting") if isinstance(pc, dict) else None
+    if not isinstance(w, dict):
+        return None
+    since = w.get("since")
+    if isinstance(since, (int, float)) and not isinstance(since, bool):
+        since = time.strftime("%Y-%m-%d %H:%M", time.localtime(since))
+    return f"PC sync waiting for {w.get('app') or 'Bambu Studio'} to close since {since or 'unknown'}"
+
+
+def _pc_view(o: str | None, meta: dict, ups: list) -> dict | None:
+    """status() `pc`: the sync PC (before its first upload: the paired device whose heartbeat came) and, while it
+    waits for a slicer to close, `waiting` {since, app, at}."""
+    dev = o
+    if dev is None:
+        hb = _read_obj(_dir() / HEARTBEAT).get("device_id")
+        dev = hb if isinstance(hb, str) and hb in {d["id"] for d in pairing.devices()} else None
+    if dev is None:
+        return None
+    out = {"device_id": dev, "last_upload": max(ups) if ups else None}
+    wait = _pc_waiting(dev, meta)
+    if wait is not None:
+        out["waiting"] = wait
+    return out
+
+
 def status() -> dict:
     """`GET /api/profiles/status` without the library part (the API adds it)."""
     try:
@@ -1200,6 +1274,6 @@ def status() -> dict:
             "updates": {**updates_mod.summary(items), "new": new,
                         "yours": len(updates_mod.yours(_builds() / _stamp)) if _stamp else 0},
             "last_attempt": _attempt_view(), "installed": _installed_view(),
-            "pc": {"device_id": o, "last_upload": max(ups) if ups else None} if o else None,
+            "pc": _pc_view(o, meta, ups),
             "stale": list(m.get("stale", [])), "orca_stale": list(m.get("orca_stale", [])),
             "problems": list(m.get("problems", []))[:20]}
