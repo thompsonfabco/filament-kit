@@ -146,13 +146,61 @@ def test_the_key_is_not_readable_by_others(tmp_path):
         assert (_tls(tmp_path) / "privkey.pem").stat().st_mode & 0o077 == 0
 
 
+def test_a_crash_while_it_changes_leaves_either_certificate_provably_ours():
+    """The mark names both until the new certificate is in place."""
+    old, new = self_signed(days=30), self_signed(days=825)
+    both = mark_of(new) + mark_of(old)
+    assert remote.placeholder_due(old, both, HOST, NOW)                         # the old one is still renewed
+    assert remote.placeholder_due(new, both, HOST, NOW) is None                 # the new one is recognised
+    pem = self_signed(days=825, start=NOW - datetime.timedelta(days=810))
+    assert remote.placeholder_due(pem, mark_of(new) + mark_of(pem), HOST, NOW)  # and renewed in its turn
+
+
+@pytest.mark.parametrize("step", range(3))
+def test_each_write_on_the_way_leaves_a_mark_that_holds_the_cert_on_disk(tmp_path, monkeypatch, step):
+    tls = _tls(tmp_path)
+    tls.mkdir(parents=True)
+    old = self_signed(days=30, start=datetime.datetime.now(datetime.timezone.utc))
+    (tls / "fullchain.pem").write_bytes(old)
+    calls = []
+    real = apply._Exec.write
+
+    def write(self, dest, data, mode, owner=""):
+        if "/tls/" in dest:
+            if len(calls) == step + 1:
+                raise KeyboardInterrupt
+            calls.append(dest)
+        return real(self, dest, data, mode, owner)
+    monkeypatch.setattr(apply._Exec, "write", write)
+    with pytest.raises(KeyboardInterrupt):
+        _install(tmp_path)
+    pem = (tls / "fullchain.pem").read_bytes()
+    assert hashlib.sha256(pem).hexdigest() in (tls / "placeholder.sha256").read_text()
+
+
+def test_a_mark_of_junk_bytes_is_just_not_ours(tmp_path):
+    tls = _tls(tmp_path)
+    tls.mkdir(parents=True)
+    real = signed_by_a_ca(90)
+    (tls / "fullchain.pem").write_bytes(real)
+    (tls / "placeholder.sha256").write_bytes(bytes(range(256)))
+    _install(tmp_path)
+    assert (tls / "fullchain.pem").read_bytes() == real
+
+
 @pytest.mark.parametrize("left,expect", [(31, None), (30, False), (1, False), (-1, True)])
 def test_the_warning_starts_30_days_out(left, expect):
     info = {"self_signed": True, "not_after": NOW + datetime.timedelta(days=left)}
     w = remote.certificate_warning(info, NOW)
     assert (w[0] if w else None) is expect
     if w:
-        assert "modules apply" in w[2] and "accept it again" in w[2]
+        assert "modules apply" in w[2] and "accept it again" in w[2] and "yours to replace" in w[2]
+
+
+@pytest.mark.parametrize("left,warned", [(30, False), (15, False), (14, True), (1, True)])
+def test_a_real_certificate_is_news_only_well_after_certbots_renewal(left, warned):
+    info = {"self_signed": False, "not_after": NOW + datetime.timedelta(days=left)}
+    assert bool(remote.certificate_warning(info, NOW)) is warned
 
 
 def test_a_real_certificate_near_its_end_points_at_certbot_and_nothing_answering_says_nothing():

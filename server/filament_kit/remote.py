@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import datetime
 import hashlib
-import hmac
 import ipaddress
 import os
 import re
@@ -31,6 +30,7 @@ TLS_DIR = ROUTER_DIR + "/tls"
 PLACEHOLDER_MARK = TLS_DIR + "/placeholder.sha256"  # the hash of the certificate the kit made itself
 PLACEHOLDER_DAYS = 825  # iOS refuses a server certificate over 825 days, or one without serverAuth
 RENEW_DAYS = 30         # at an apply, a placeholder this close to its end is made again; `web status` warns as well
+WARN_REAL_DAYS = 14     # certbot renews at about 30 days: a real certificate is only news well after that
 LEGACY_DAYS = 31        # up to 0.4.x the placeholder lasted 30 days and had no mark
 TIMER_DROPIN = "/etc/systemd/system/certbot.timer.d/acme-window.conf"
 DEPLOY_HOOK_FILE = "/etc/letsencrypt/renewal-hooks/deploy/filament-kit"
@@ -100,7 +100,9 @@ def placeholder_due(cert_pem: bytes | None, mark: str | None, host: str,
         ours = (cert.issuer == cert.subject and end - start <= datetime.timedelta(days=LEGACY_DAYS)
                 and host in _names(cert))
         return "the placeholder from an earlier version lasts only 30 days" if ours else None
-    if not hmac.compare_digest(hashlib.sha256(cert_pem).hexdigest(), mark.strip()):
+    # more than one line while a new placeholder is going in: see apply._remote_install
+    seen = hashlib.sha256(cert_pem).hexdigest()
+    if seen not in {line.strip() for line in mark.splitlines()}:
         return None
     if host not in _names(cert):
         return "the host name changed"
@@ -123,17 +125,18 @@ def served_certificate(port: int = 443, timeout: float = 3.0) -> dict | None:
 
 
 def certificate_warning(info: dict | None, now: datetime.datetime | None = None) -> tuple[bool, str, str] | None:
-    """(expired, text, fix) when the served certificate ends within RENEW_DAYS, else None. For a self-signed one an
-    apply is the fix (one the kit didn't make it leaves alone); certbot looks after the others."""
+    """(expired, text, fix) when the served certificate is near its end, else None: within RENEW_DAYS for a self-signed one,
+    which an apply renews if it's the kit's, within WARN_REAL_DAYS for the others, which certbot looks after."""
     if info is None:
         return None
     now = now or datetime.datetime.now(datetime.timezone.utc)
     left = info["not_after"] - now
-    if left > datetime.timedelta(days=RENEW_DAYS):
+    if left > datetime.timedelta(days=RENEW_DAYS if info["self_signed"] else WARN_REAL_DAYS):
         return None
     day = info["not_after"].strftime("%Y-%m-%d")
     kind = "self-signed certificate" if info["self_signed"] else "certificate"
-    fix = ("sudo filament-kit modules apply makes a new placeholder; the phone then asks you to accept it again"
+    fix = ("if it's the kit's placeholder, sudo filament-kit modules apply makes a new one, and the phone then asks you to "
+           "accept it again; one you placed yourself is yours to replace"
            if info["self_signed"] else "sudo certbot renew; see the remote section of the guide")
     return (left.total_seconds() <= 0, f"the web address's {kind} {'ended' if left.total_seconds() <= 0 else 'ends'} "
                                        f"on {day}", fix)
