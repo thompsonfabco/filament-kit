@@ -93,3 +93,13 @@ def _no_real_kit_paths(tmp_path_factory, monkeypatch):
     for name in ("etc", "state", "opt"):
         (base / name).mkdir()
         monkeypatch.setenv(f"FK_{name.upper()}", str(base / name))
+
+
+@pytest.fixture
+def moonraker():
+    """A running FakeMoonraker (tests/fakes/fake_moonraker.py); `.host`, `.port` set; stopped after the test."""
+    from fakes.fake_moonraker import FakeMoonraker
+    fake = FakeMoonraker()
+    fake.host, fake.port, stop = fake.serve()
+    yield fake
+    stop()

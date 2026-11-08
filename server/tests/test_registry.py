@@ -52,18 +52,18 @@ def test_detected_updates_ip_of_configured_without_touching_code_or_name():
 @pytest.mark.skipif(os.name == "nt", reason="POSIX file modes")
 def test_file_mode_600(env):
     registry.upsert(Printer("S1", access_code="x", configured=True))
-    f = env / "state" / "printers.json"
+    f = env / "state" / "printers.xml"
     assert stat.S_IMODE(f.stat().st_mode) == 0o600
 
 
-def test_file_is_json_keyed_by_serial(env):
+def test_file_is_xml_keyed_by_serial(env):
     registry.upsert(Printer("S1", "A"))
-    assert json.loads((env / "state" / "printers.json").read_text())["S1"]["name"] == "A"
+    assert '<printer id="S1" family="bambu" name="A"' in (env / "state" / "printers.xml").read_text()
 
 
 def test_detected_unchanged_does_not_rewrite(env):
     registry.detected("S4", "10.0.0.1", "M", "N")
-    f = env / "state" / "printers.json"
+    f = env / "state" / "printers.xml"
     f.write_text(f.read_text() + " ")  # marker: a rewrite would drop it
     registry.detected("S4", "10.0.0.1", "M", "N")
     assert f.read_text().endswith(" ")
@@ -89,7 +89,7 @@ def test_unknown_keys_ignored(env):
 
 def test_corrupt_file_reads_empty_and_is_never_overwritten(env, caplog):
     (env / "state").mkdir()
-    f = env / "state" / "printers.json"
+    f = env / "state" / "printers.xml"
     f.write_text("{not json")
     assert registry.load() == {}
     assert "unreadable" in caplog.text

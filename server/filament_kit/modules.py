@@ -63,12 +63,15 @@ MODULES: dict[str, Module] = {m.name: m for m in (
        depends=("ai_intake",)),
     _m("updates", "Auto-update", "Daily check for a new signed release; installs it and keeps the one before",
        units=("filament-kit-update.timer",)),
+    _m("klipper", "Klipper printers", "Moonraker bridge: discovery, spool loads, usage log, camera",
+       depends=("server",)),
 )}
 
 # Switched on by hand (modules set / config menu, the installer's question), never by a mode: a mode is the kit
 # as it was. ai_intake (spec R 2.4): AI is optional, so a new install has it off; one that had it keeps it. The
-# library is not bundled: switching it on downloads it; one without the key has none until asked.
-OPT_IN = frozenset({"ai_intake", "web", "remote", "orders", "library", "updates"})
+# library is not bundled: switching it on downloads it; one without the key has none until asked. klipper is for
+# owners of Klipper printers only (Klipper spec: opt-in, runs inside filament-kit.service).
+OPT_IN = frozenset({"ai_intake", "web", "remote", "orders", "library", "updates", "klipper"})
 
 MODES: dict[str, frozenset[str]] = {
     "server": frozenset(MODULES) - {"station"} - OPT_IN,

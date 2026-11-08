@@ -440,6 +440,91 @@ class MjpegSource:
 
 # ---------------------------------------------------------------- hub
 
+SOI, EOI = b"\xff\xd8", b"\xff\xd9"     # JPEG start / end of image
+
+
+class HttpMjpegSource:
+    """A Klipper printer's webcam: reads Moonraker's MJPEG stream URL (multipart/x-mixed-replace, e.g. crowsnest /
+    ustreamer at /webcam/?action=stream) in a thread and keeps the latest whole JPEG; reconnects with backoff. Same
+    interface as MjpegSource (`start`, `stop`, `alive`, `frame`)."""
+
+    cert_changed = False
+
+    def __init__(self, printer: registry.Printer, hub, url: str):
+        self.serial, self.url, self.printer = printer.serial, url, printer
+        self._stop = threading.Event()
+        self._lock = threading.Lock()
+        self._frame: bytes | None = None
+        self.seq = 0
+        self._resp = None
+        self._thread: threading.Thread | None = None
+
+    def __repr__(self) -> str:
+        return f"HttpMjpegSource({self.serial})"
+
+    def start(self) -> None:
+        self._thread = threading.Thread(target=self._run, daemon=True, name=f"cam-http-{self.serial}")
+        self._thread.start()
+        log.info("camera %s: started", self.serial)
+
+    def stop(self) -> None:
+        self._stop.set()
+        r = self._resp
+        if r is not None:
+            try:
+                r.close()
+            except Exception:  # noqa: BLE001
+                pass
+        if self._thread is not None:
+            self._thread.join(5)
+        log.info("camera %s: stopped", self.serial)
+
+    def alive(self) -> bool:
+        return not self._stop.is_set()
+
+    def frame(self) -> tuple[int, bytes | None]:
+        with self._lock:
+            return self.seq, self._frame
+
+    def _run(self) -> None:
+        import urllib.request
+        delay = BACKOFF[0]
+        while not self._stop.is_set():
+            try:
+                req = urllib.request.Request(self.url, headers={"User-Agent": "filament-kit"})
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    self._resp = r
+                    buf = b""
+                    while not self._stop.is_set():
+                        chunk = r.read1(65536) if hasattr(r, "read1") else r.read(65536)
+                        if not chunk:
+                            break
+                        buf += chunk
+                        while True:
+                            a = buf.find(SOI)
+                            if a < 0:
+                                buf = buf[-1:]
+                                break
+                            b = buf.find(EOI, a + 2)
+                            if b < 0:
+                                buf = buf[a:]
+                                if len(buf) > MAX_FRAME:
+                                    buf = b""      # no end marker within a frame's size: drop and resync
+                                break
+                            img, buf = buf[a:b + 2], buf[b + 2:]
+                            with self._lock:
+                                self._frame, self.seq = img, self.seq + 1
+                            delay = BACKOFF[0]
+            except (OSError, ValueError) as e:
+                if not self._stop.is_set():
+                    log.info("camera %s: %s; retry in %.0f s", self.serial, e or type(e).__name__, delay)
+            finally:
+                self._resp = None
+            if self._stop.wait(delay):
+                break
+            delay = min(delay * 2, BACKOFF[1])
+
+
 def _runtime_root() -> Path:
     rd = os.environ.get("RUNTIME_DIRECTORY", "").split(":")[0]
     return Path(rd) if rd else Path(tempfile.gettempdir()) / "filament-kit"
@@ -456,8 +541,10 @@ class Hub:
     def __init__(self, lookup: Callable[[str], registry.Printer | None] | None = None,
                  runtime_dir: Path | None = None, idle_stop: float = IDLE_STOP, hls_window: float = HLS_WINDOW,
                  sources: dict | None = None, ffmpeg=("ffmpeg",), rtsp_port: int = RTSP_PORT,
-                 jpeg_port: int = JPEG_PORT, printer_state: Callable[[str], str] | None = None):
+                 jpeg_port: int = JPEG_PORT, printer_state: Callable[[str], str] | None = None,
+                 klipper_url: Callable[[str], str | None] | None = None):
         self._lookup = lookup or (lambda serial: registry.load().get(serial))
+        self._klipper_url = klipper_url       # KlipperFamily.camera_url: a Klipper printer's webcam stream URL
         self._printer_state = printer_state   # the MQTT Manager's state(): its `cert_changed` refuses the camera too
         self.root = Path(runtime_dir) if runtime_dir else _runtime_root()
         self.idle_stop, self.hls_window = idle_stop, hls_window
@@ -486,6 +573,11 @@ class Hub:
         if not SERIAL.fullmatch(serial or ""):
             raise NoCamera("no such printer")
         p = self._lookup(serial)
+        if p is not None and p.family == "klipper":
+            url = self._klipper_url(serial) if self._klipper_url else None
+            if url is None or (kind and kind != "mjpeg"):
+                raise NoCamera("this printer has no camera of that kind")
+            return p, "mjpeg"
         k = models.camera_kind(p.model) if p else None
         if p is None or k is None or (kind and k != kind):
             raise NoCamera("this printer has no camera of that kind" if p else "no such printer")
@@ -529,7 +621,10 @@ class Hub:
 
     def _start(self, serial: str, p: registry.Printer, kind: str):
         """Start a new source for `p` and record it as running. Caller holds the printer's lock."""
-        src = self._sources[kind](p, self)
+        if p.family == "klipper":
+            src = HttpMjpegSource(p, self, self._klipper_url(serial) if self._klipper_url else "")
+        else:
+            src = self._sources[kind](p, self)
         src.start()
         with self._lock:
             self._running[serial] = src
@@ -537,8 +632,8 @@ class Hub:
         return src
 
     @staticmethod
-    def _target(p: registry.Printer) -> tuple[str, str, str]:
-        return p.ip, p.access_code, p.cert_fp
+    def _target(p: registry.Printer) -> tuple:
+        return p.ip, p.access_code, p.cert_fp, p.family, p.host, p.port
 
     def _retarget(self, serial: str, p: registry.Printer, kind: str, src):
         """The running source if it still points at the printer's (ip, Access Code, pin); otherwise it is stopped

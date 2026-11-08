@@ -1,14 +1,26 @@
-"""Printer registry: `state/printers.json` (mode 600). Holds Access Codes, so it never leaves the server."""
+"""Printer registry: `state/printers.xml` (mode 600). Holds Access Codes and Moonraker API keys, so it never leaves
+the server.
+
+Layout (spec 2026-11-03-klipper-printers §5.3): `<printers version="1">` with one `<printer>` per printer; plain
+fields are attributes (`id family name model ip host port configured cert-fp lane-data`), secrets are child elements
+(`<access-code>`, `<api-key>`) so a one-line grep never shows them. `family` is "bambu" (key = serial number) or
+"klipper" (key = a slug of the name, `slug`). The older `printers.json` is converted on first read: the XML is written
+atomically and the JSON renamed to `printers.json.migrated`; while the XML is missing the JSON is read (a failed
+conversion leaves the JSON in use and logs why). The conversion is idempotent: once the XML exists the JSON is ignored.
+Unknown attributes and elements are ignored (a newer file)."""
 from __future__ import annotations
 
 import json
+import xml.etree.ElementTree as ET
 import logging
+import os
 import re
 import threading
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 
 from .. import config
+from . import xmlfile
 from ..pairing import _write_atomic, open_lock
 
 try:
@@ -17,7 +29,9 @@ except ImportError:  # Windows dev PCs: no cross-process lock (the service only 
     fcntl = None
 
 log = logging.getLogger(__name__)
-FILE = "printers.json"
+FILE = "printers.xml"
+OLD_FILE = "printers.json"
+FAMILIES = ("bambu", "klipper")
 SERIAL = re.compile(r"[A-Za-z0-9_-]{1,64}")      # also names the camera's runtime directory
 ACCESS_CODE = re.compile(r"[A-Za-z0-9]{1,32}")
 BAD_SERIAL = "the serial number may only have letters, digits, - and _ (at most 64)"
@@ -62,6 +76,11 @@ class Printer:
     access_code: str = field(default="", repr=False)
     configured: bool = False
     cert_fp: str = ""   # SHA-256 of the printer's TLS leaf (DER, lowercase hex), pinned on first use; see tlspin
+    family: str = "bambu"   # "bambu" | "klipper" (bridge.family routes by it)
+    host: str = ""          # Klipper: Moonraker host name (a *.localdomain name preferred) or address
+    port: int = 7125        # Klipper: Moonraker port
+    api_key: str = field(default="", repr=False)   # Klipper: Moonraker API key when it wants one (never shown)
+    lane_data: str = "auto"  # Klipper: publish slots to Moonraker lane_data: auto (multi-tool) | on | off
 
 
 def display_name(p: Printer) -> str:
@@ -75,26 +94,96 @@ class RegistryError(Exception):
     pass
 
 
-_FIELDS = {"name", "model", "ip", "access_code", "configured", "cert_fp"}
+_FIELDS = {"name", "model", "ip", "access_code", "configured", "cert_fp", "family", "host", "port", "api_key"}
+LANE_DATA = ("auto", "on", "off")
+_ATTRS = (("name", "name"), ("model", "model"), ("ip", "ip"), ("host", "host"), ("cert-fp", "cert_fp"))
+_SECRETS = (("access-code", "access_code"), ("api-key", "api_key"))
+
+
+def _from_xml(data: bytes, where) -> dict[str, Printer]:
+    from defusedxml.ElementTree import fromstring
+    root = fromstring(data, forbid_dtd=True, forbid_entities=True, forbid_external=True)
+    if root.tag != "printers":
+        raise ValueError(f"root element is <{root.tag}>, not <printers>")
+    out: dict[str, Printer] = {}
+    for el in root.findall("printer"):
+        pid = el.get("id", "")
+        if not pid:
+            raise ValueError("a <printer> has no id")
+        p = Printer(serial=pid)
+        for attr, name in _ATTRS:
+            setattr(p, name, el.get(attr, ""))
+        fam = el.get("family", "bambu")
+        p.family = fam if fam in FAMILIES else "bambu"
+        p.configured = el.get("configured", "false") == "true"
+        ld = el.get("lane-data", "auto")
+        p.lane_data = ld if ld in LANE_DATA else "auto"
+        try:
+            p.port = int(el.get("port", "7125"))
+        except ValueError:
+            p.port = 7125
+        for tag, name in _SECRETS:
+            c = el.find(tag)
+            setattr(p, name, (c.text or "").strip() if c is not None else "")
+        out[pid] = p
+    return out
+
+
+def _to_xml(printers: dict[str, Printer]) -> bytes:
+    root = ET.Element("printers", version="1")
+    for pid, p in printers.items():
+        el = ET.SubElement(root, "printer", id=xmlfile.clean(pid), family=p.family or "bambu")
+        for attr, name in _ATTRS:
+            v = getattr(p, name)
+            if v:
+                el.set(attr, xmlfile.clean(v))
+        el.set("configured", "true" if p.configured else "false")
+        if p.family == "klipper":
+            el.set("port", str(p.port))
+            if p.lane_data != "auto":
+                el.set("lane-data", p.lane_data)
+        for tag, name in _SECRETS:
+            v = getattr(p, name)
+            if v:
+                ET.SubElement(el, tag).text = xmlfile.clean(v)
+    ET.indent(root)
+    return ET.tostring(root, encoding="utf-8", xml_declaration=True) + b"\n"
+
+
+def _from_json(f) -> dict[str, Printer]:
+    raw = json.loads(f.read_text(encoding="utf-8"))
+    return {s: Printer(serial=s, **{k: v for k, v in d.items() if k in _FIELDS}) for s, d in raw.items()}
 
 
 def _read() -> dict[str, Printer]:
-    """Read the file. Raises RegistryError when it exists but cannot be understood; caller holds _locked()."""
-    f = config.paths().state / FILE
-    if not f.exists():
+    """Read the file (converting printers.json once). Raises RegistryError when it exists but cannot be understood;
+    caller holds _locked()."""
+    state = config.paths().state
+    f, old = state / FILE, state / OLD_FILE
+    if f.exists():
+        try:
+            return _from_xml(f.read_bytes(), f)
+        except Exception as e:  # noqa: BLE001 - ParseError, DTDForbidden, ValueError ...
+            raise RegistryError(f"{f} is unreadable ({e}); fix or remove it, nothing was changed") from e
+    if not old.exists():
         return {}
     try:
-        raw = json.loads(f.read_text(encoding="utf-8"))
-        return {s: Printer(serial=s, **{k: v for k, v in d.items() if k in _FIELDS}) for s, d in raw.items()}
+        printers = _from_json(old)
     except (OSError, ValueError, TypeError, AttributeError) as e:
-        raise RegistryError(f"{f} is unreadable ({e}); fix or remove it, nothing was changed") from e
+        raise RegistryError(f"{old} is unreadable ({e}); fix or remove it, nothing was changed") from e
+    try:
+        _write(printers)
+        os.replace(old, old.with_name(OLD_FILE + ".migrated"))
+        log.info("printer registry converted to %s (the old file is kept as %s.migrated)", FILE, OLD_FILE)
+    except OSError as e:
+        log.error("printer registry: cannot convert %s to %s (%s); still using %s", OLD_FILE, FILE, e, OLD_FILE)
+    return printers
 
 
 def _write(printers: dict[str, Printer]) -> None:
     state = config.paths().state
     state.mkdir(parents=True, exist_ok=True)
-    data = {s: asdict(p) for s, p in printers.items()}
-    _write_atomic(state / FILE, json.dumps(data, indent=2).encode("utf-8"), 0o600, state_owned=True)
+    _write_atomic(state / FILE, _to_xml(printers), 0o600, state_owned=True)
 
 
 def load() -> dict[str, Printer]:
@@ -210,3 +299,74 @@ def clear_pin(serial: str) -> bool:
             p.cert_fp = ""
             _write(printers)
         return True
+
+
+_SLUG_RUN = re.compile(r"[^a-z0-9]+")
+
+
+def slug(name: str, taken: set[str]) -> str:
+    """A Klipper printer's id from its name: lower case, other characters -> "-", at most 48; "-2", "-3" ... on a
+    clash with `taken`; "printer" when nothing is left."""
+    base = _SLUG_RUN.sub("-", (name or "").lower()).strip("-")[:48].strip("-") or "printer"
+    out, n = base, 1
+    while out in taken:
+        n += 1
+        out = f"{base}-{n}"
+    return out
+
+
+def add_klipper(name: str, host: str, port: int = 7125) -> Printer:
+    """Add a configured Klipper printer (host = Moonraker's host name or address)."""
+    with _locked():
+        printers = _read()
+        p = Printer(serial=slug(name or host, set(printers)), name=(name or host).strip(), family="klipper",
+                    host=host.strip(), port=int(port), configured=True)
+        printers[p.serial] = p
+        _write(printers)
+        return p
+
+
+def set_api_key(pid: str, key: str) -> bool:
+    """Store (or clear, with "") a Klipper printer's Moonraker API key. False when there is no such printer."""
+    with _locked():
+        printers = _read()
+        p = printers.get(pid)
+        if p is None:
+            return False
+        p.api_key = key.strip()
+        _write(printers)
+        return True
+
+
+def klipper_names() -> set[str]:
+    """Display names of the Klipper printers (their Spoolman slot locations start with "<name> – ")."""
+    return {display_name(p) for p in load().values() if p.family == "klipper"}
+
+
+def set_lane_data(pid: str, mode: str) -> bool:
+    """Set a Klipper printer's lane_data publishing (auto | on | off). False when there is no such printer."""
+    if mode not in LANE_DATA:
+        raise ValueError(f"lane_data must be one of {', '.join(LANE_DATA)}")
+    with _locked():
+        printers = _read()
+        p = printers.get(pid)
+        if p is None:
+            return False
+        p.lane_data = mode
+        _write(printers)
+        return True
+
+
+def detected_klipper(host: str, port: int, name: str = "") -> Printer:
+    """Record a Klipper printer found on the LAN (mDNS or a scan): a new one is added unconfigured (the owner adds it
+    with `filament-kit klipper add` or the app); a known host:port is left as it is."""
+    with _locked():
+        printers = _read()
+        for p in printers.values():
+            if p.family == "klipper" and p.host == host and p.port == int(port):
+                return p
+        p = Printer(serial=slug(name or host, set(printers)), name=(name or host).strip(), family="klipper",
+                    host=host, port=int(port), configured=False)
+        printers[p.serial] = p
+        _write(printers)
+        return p

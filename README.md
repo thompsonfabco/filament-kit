@@ -82,6 +82,7 @@ the library and auto-update are off until you turn them on. Change them any time
 | `remote` | nginx in front of the web part, and a public https name (certbot) | `web`; for a public name: DNS, ports 443 and 80 |
 | `orders` | Order history file for the shop tools | `ai_intake`, an order history file (`orders.file`) |
 | `updates` | Daily check for a new signed release; installs it and keeps the one before | nothing |
+| `klipper` | Klipper printers through Moonraker: discovery, spool loads, usage log, camera ([docs/klipper.md](docs/klipper.md)) | `server`, a Klipper printer with Moonraker |
 
 ## The phone app
 

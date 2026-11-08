@@ -128,6 +128,8 @@ jobs:
             dist/filament-kit-${{ needs.version.outputs.version }}.tar.gz
             dist/filament-kit.apk
             dist/bambu_hardware.xml
+            dist/klipper_hardware.xml
+            dist/fk-printer-pack.tar.gz
           if-no-files-found: error
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
@@ -262,7 +264,7 @@ jobs:
             exit 1
           fi
           cp get.sh dist/get.sh
-          assets="filament-kit-$VERSION.tar.gz filament-kit.apk filament-kit-sync-setup-$VERSION.exe filament-kit-sync-linux-x86_64-$VERSION.tar.gz get.sh bambu_hardware.xml"
+          assets="filament-kit-$VERSION.tar.gz filament-kit.apk filament-kit-sync-setup-$VERSION.exe filament-kit-sync-linux-x86_64-$VERSION.tar.gz get.sh bambu_hardware.xml klipper_hardware.xml fk-printer-pack.tar.gz"
           # library.tar.gz from the server job (kept conditional so a release still builds without it)
           if [ -f dist/library.tar.gz ]; then
             assets="$assets library.tar.gz"
@@ -284,6 +286,6 @@ jobs:
           generate_release_notes: true
           # from the sums step: dist/filament-kit-<version>.tar.gz, dist/filament-kit.apk,
           # dist/filament-kit-sync-setup-<version>.exe, dist/filament-kit-sync-linux-x86_64-<version>.tar.gz,
-          # dist/get.sh, dist/bambu_hardware.xml,
+          # dist/get.sh, dist/bambu_hardware.xml, dist/klipper_hardware.xml, dist/fk-printer-pack.tar.gz,
           # dist/library.tar.gz (when built), dist/SHA256SUMS and dist/SHA256SUMS.sig
           files: ${{ steps.sums.outputs.files }}

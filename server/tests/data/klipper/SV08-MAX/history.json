@@ -1,0 +1,125 @@
+{
+  "count": 3,
+  "jobs": [
+    {
+      "auxiliary_data": [
+        {
+          "description": "Spool IDs used",
+          "name": "spool_ids",
+          "provider": "spoolman",
+          "units": null,
+          "value": [
+            7
+          ]
+        }
+      ],
+      "end_time": 1767277200.0,
+      "exists": true,
+      "filament_used": 4321.5,
+      "filename": "test_bracket_PLA_0.2_20m.gcode",
+      "job_id": "000003",
+      "metadata": {
+        "estimated_time": 1200,
+        "filament_name": "Example PLA @Sovol SV08 MAX",
+        "filament_type": "PLA",
+        "filament_total": 4326.5,
+        "filament_weight_total": 12.97,
+        "filament_weights": [
+          12.97
+        ],
+        "first_layer_height": 0.2,
+        "layer_height": 0.2,
+        "nozzle_diameter": 0.4,
+        "printer_model": "Sovol SV08 MAX",
+        "slicer": "OrcaSlicer",
+        "slicer_version": "2.3.0",
+        "uuid": "00000000-0000-4000-8000-000000000003"
+      },
+      "print_duration": 1170.0,
+      "start_time": 1767276000.0,
+      "status": "completed",
+      "total_duration": 1200.0,
+      "user": "_TRUSTED_USER_"
+    },
+    {
+      "auxiliary_data": [
+        {
+          "description": "Spool IDs used",
+          "name": "spool_ids",
+          "provider": "spoolman",
+          "units": null,
+          "value": [
+            7
+          ]
+        }
+      ],
+      "end_time": 1767272460.0,
+      "exists": false,
+      "filament_used": 0.0,
+      "filename": "test_bracket_PLA_0.2_20m.gcode",
+      "job_id": "000002",
+      "metadata": {
+        "estimated_time": 60,
+        "filament_name": "Example PLA @Sovol SV08 MAX",
+        "filament_type": "PLA",
+        "filament_total": 5.0,
+        "filament_weight_total": 12.97,
+        "filament_weights": [
+          12.97
+        ],
+        "first_layer_height": 0.2,
+        "layer_height": 0.2,
+        "nozzle_diameter": 0.4,
+        "printer_model": "Sovol SV08 MAX",
+        "slicer": "OrcaSlicer",
+        "slicer_version": "2.3.0",
+        "uuid": "00000000-0000-4000-8000-000000000002"
+      },
+      "print_duration": 30.0,
+      "start_time": 1767272400.0,
+      "status": "cancelled",
+      "total_duration": 60.0,
+      "user": "_TRUSTED_USER_"
+    },
+    {
+      "auxiliary_data": [
+        {
+          "description": "Spool IDs used",
+          "name": "spool_ids",
+          "provider": "spoolman",
+          "units": null,
+          "value": [
+            3
+          ]
+        }
+      ],
+      "end_time": 1767269400.0,
+      "exists": true,
+      "filament_used": 1234.5,
+      "filename": "test_cube_PLA_0.2_10m.gcode",
+      "job_id": "000001",
+      "metadata": {
+        "estimated_time": 600,
+        "filament_name": "Example PLA @Sovol SV08 MAX",
+        "filament_type": "PLA",
+        "filament_total": 1239.5,
+        "filament_weight_total": 3.7,
+        "filament_weights": [
+          3.7
+        ],
+        "first_layer_height": 0.2,
+        "layer_height": 0.2,
+        "nozzle_diameter": 0.4,
+        "printer_model": "Sovol SV08 MAX",
+        "slicer": "OrcaSlicer",
+        "slicer_version": "2.3.0",
+        "uuid": "00000000-0000-4000-8000-000000000001"
+      },
+      "print_duration": 570.0,
+      "start_time": 1767268800.0,
+      "status": "completed",
+      "total_duration": 600.0,
+      "user": "_TRUSTED_USER_"
+    }
+  ]
+}

@@ -518,7 +518,7 @@ def test_make_release_tarball_passes_extract_and_the_sums_check(tmp_path, key):
     # M5: build from a temporary copy of the checkout (the script writes dist/ and server/build there), never inside it
     src = tmp_path / "src"
     skip = shutil.ignore_patterns(".venv", "*.egg-info", "build", "dist", "__pycache__", ".pytest_cache")
-    for part in ("tools", "install", "server", "station/panel/firmware"):
+    for part in ("tools", "install", "server", "station/panel/firmware", "printer-pack"):
         shutil.copytree(ROOT / part, src / part, ignore=skip)
     for f in ("LICENSE", "THIRD-PARTY.md"):
         shutil.copy(ROOT / f, src / f)
@@ -542,6 +542,13 @@ def test_make_release_tarball_passes_extract_and_the_sums_check(tmp_path, key):
     tarball = dist / release.tarball_name(version)
     hw = dist / "bambu_hardware.xml"
     assert tarball.is_file() and hw.is_file()
+    assert (dist / "klipper_hardware.xml").is_file()
+    import tarfile
+    with tarfile.open(dist / "fk-printer-pack.tar.gz") as pack:   # the Klipper printer pack asset
+        names = pack.getnames()
+        assert "fk-printer-pack/fkpack.py" in names and "fk-printer-pack/cfg/fk_spool.cfg" in names
+        assert not any("/tests" in n or "__pycache__" in n for n in names), names
+        assert b"\r\n" not in pack.extractfile("fk-printer-pack/fk-printer-pack.sh").read()
     assert not (dist / "stage").exists()
     sums = "".join(f"{hashlib.sha256(f.read_bytes()).hexdigest()}  {f.name}\n" for f in (tarball, hw)).encode()
     (dist / release.SUMS).write_bytes(sums)

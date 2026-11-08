@@ -16,6 +16,8 @@ dependencies = [
     "cryptography>=44",
     "paho-mqtt>=2.0",
     "defusedxml==0.7.1",  # hardware XML: no DTD, entities or external references
+    "websockets>=13",     # Klipper bridge: the Moonraker websocket (sync client)
+    "zeroconf>=0.136",    # Klipper bridge: Moonraker mDNS discovery (listen only)
 ]
 
 [project.optional-dependencies]
@@ -34,7 +36,7 @@ include = ["filament_kit*"]
 namespaces = false  # library_data/ is package data, not a namespace package
 
 [tool.setuptools.package-data]
-filament_kit = ["web/static/*", "setup_static/*", "library_data/*.json", "library_data/schema/*.json", "bridge/*.xml"]
+filament_kit = ["web/static/*", "setup_static/*", "library_data/*.json", "library_data/schema/*.json", "bridge/*.xml", "bridge/klipper/*.xml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

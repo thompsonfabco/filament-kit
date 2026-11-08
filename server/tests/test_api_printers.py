@@ -99,7 +99,8 @@ def test_list_merges_detected_and_configured(client, mgr):
     a = by[SERIAL]
     assert a == {"id": SERIAL, "name": "Shop P1S", "model": "C12", "serial": SERIAL, "ip": "10.0.0.5",
                  "configured": True, "state": "connected", "camera": {"kind": "mjpeg"}, "model_name": "P1S",
-                 "summary": {"gcode_state": "RUNNING", "percent": 42, "remaining_min": 30, "job": "bracket"}}
+                 "summary": {"gcode_state": "RUNNING", "percent": 42, "remaining_min": 30, "job": "bracket"},
+                 "family": "bambu"}
     b = by["00M00B222222222"]
     assert b["configured"] is False and b["state"] == "not_configured" and b["camera"] == {"kind": "hls"}
     assert b["model"] == "BL-P001" and b["model_name"] == "X1 Carbon"   # a detected printer: the name too

@@ -1,0 +1,2 @@
+{"objects": ["webhooks", "print_stats", "toolhead", "extruder", "heater_bed", "virtual_sdcard", "mmu",
+ "mmu_encoder mmu_encoder", "mmu_machine", "gcode_macro _MMU_SOFTWARE_VARS", "gcode_macro SET_ACTIVE_SPOOL"]}

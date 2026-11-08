@@ -1,0 +1,47 @@
+diff --git a/lib/ipc.py b/lib/ipc.py
+index a58443c..d18a135 100644
+--- a/lib/ipc.py
++++ b/lib/ipc.py
+@@ -29,9 +29,17 @@ class IPCClient:  # pylint: disable=R0903
+             client: socket.socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+             client.connect(self.socket_path)
+             client.sendall(json.dumps(request_data).encode("utf-8"))
+-            response: str = client.recv(65536).decode("utf-8")
++            # LOCAL: half-close, then read until the server closes, so replies
++            # larger than one recv() (e.g. a big spool list) are not truncated.
++            client.shutdown(socket.SHUT_WR)
++            chunks = []
++            while True:
++                chunk = client.recv(65536)
++                if not chunk:
++                    break
++                chunks.append(chunk)
+             client.close()
+-            return json.loads(response)
++            return json.loads(b"".join(chunks).decode("utf-8"))
+         except (FileNotFoundError, ConnectionRefusedError) as ex:
+             logger.error("Backend not running: %s", ex)
+             return {
+@@ -156,7 +164,21 @@ class IPCServer:
+             try:
+                 conn: socket.socket
+                 conn, _ = server.accept()
+-                data: str = conn.recv(65536).decode("utf-8")
++                # LOCAL: read until the request parses or the client half-closes
++                # (old clients never shut down their write side).
++                conn.settimeout(10)
++                buf = b""
++                while True:
++                    chunk = conn.recv(65536)
++                    if not chunk:
++                        break
++                    buf += chunk
++                    try:
++                        json.loads(buf.decode("utf-8"))
++                        break
++                    except ValueError:
++                        continue
++                data: str = buf.decode("utf-8")
+                 if data:
+                     response: Dict[str, Any] = self.handle_request(data)
+                     conn.sendall(json.dumps(response).encode("utf-8"))

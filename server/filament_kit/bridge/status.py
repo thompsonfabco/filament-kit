@@ -91,8 +91,11 @@ def tray_now_tag(n: Any) -> str | None:
     return f"{a}:{t}"
 
 
-def location(printer_name: str, label: str) -> str:
-    """The Spoolman location of a spool sitting in that slot."""
+def location(printer_name: str, label: str, family: str = "bambu") -> str:
+    """The Spoolman location of a spool sitting in that slot: "<name> – AMS <label>" on a Bambu printer,
+    "<name> – <label>" on a Klipper printer (its slots are tools or lanes, not AMS trays)."""
+    if family == "klipper":
+        return f"{printer_name} {DASH} {label}"
     return f"{printer_name} {DASH} AMS {label}"
 
 

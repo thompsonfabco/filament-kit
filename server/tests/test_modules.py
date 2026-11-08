@@ -15,12 +15,12 @@ def test_missing_modules_is_server_mode():
 def test_registry_order_and_modes():
     assert list(MODULES) == ["spoolman", "server", "ai_intake", "printers",
                              "presets", "library", "backup", "station", "web", "remote", "orders",
-                             "updates"]
+                             "updates", "klipper"]
     assert MODES["station"] == frozenset({"station"})
     assert MODES["all-in-one"] == frozenset(MODULES) - {"ai_intake", "web", "remote", "orders", "library",
-                                                        "updates"}
+                                                        "updates", "klipper"}
     assert MODES["server"] == frozenset(MODULES) - {"station", "ai_intake", "web", "remote", "orders", "library",
-                                                    "updates"}
+                                                    "updates", "klipper"}
 
 
 def test_mode_of_custom():
@@ -342,3 +342,11 @@ def test_set_mode_keeps_ai_intake_that_was_on():
     cfg["modules"]["ai_intake"] = False
     assert "ai_intake" not in enabled(set_mode(cfg, "server", say=None))
     assert "ai_intake" not in enabled(set_mode(legacy, "station", say=None))  # station has no server
+
+
+def test_klipper_module_is_opt_in_and_survives_enabled():
+    """__main__ starts the Klipper bridge only when enabled() returns "klipper": an unknown name is dropped there."""
+    from filament_kit.modules import enabled
+    assert MODULES["klipper"].depends == ("server",) and MODULES["klipper"].units == ()
+    assert "klipper" not in MODES["server"] and "klipper" not in MODES["all-in-one"]
+    assert "klipper" in enabled({"modules": {"server": True, "klipper": True}})
