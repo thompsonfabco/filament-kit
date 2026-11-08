@@ -20,6 +20,7 @@ KLIPPER_REF=${KLIPPER_REF:-v0.13.0}
 MOONRAKER_REF=${MOONRAKER_REF:-v0.9.3}
 DATA=$WORK/printer_data
 # Klipper's and Moonraker's pinned requirements need Python <= 3.12; uv's managed 3.12 is used when present
+# shellcheck disable=SC2012  # a glob of uv's own version folders
 PY=${PYTHON:-$(ls -d "$HOME"/.local/share/uv/python/cpython-3.12*/bin/python3.12 2>/dev/null | tail -1)}
 PY=${PY:-python3}
 log() { printf '\n== %s\n' "$*"; }
