@@ -470,7 +470,7 @@ def test_status_shape():
                   "url": library.DEFAULT_LIBRARY_URL, "last_check": None}
     library.update("https://example.invalid/", opener=_raising_opener(404), now=123.0)
     lc = library.status()["last_check"]
-    assert set(lc) == {"at", "ok", "error"} and lc["at"] == 123.0 and lc["ok"] is False
+    assert set(lc) == {"at", "ok", "error", "skipped"} and lc["at"] == 123.0 and lc["ok"] is False
 
 
 def test_status_url_from_config():

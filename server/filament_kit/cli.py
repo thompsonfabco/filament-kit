@@ -205,6 +205,10 @@ def _library_status_lines() -> None:
     if lc is not None and not lc["ok"]:
         # a warning, not a failure: the last good version (or none) stays in use
         print(f"--   library update: {lc['error']}")
+    skipped = (lc or {}).get("skipped")
+    if isinstance(skipped, dict):
+        print(f"--   library: {skipped.get('entries', 0)} entries and {skipped.get('parts', 0)} fields skipped: newer rules; "
+              "a kit update will read them")
 
 
 def _attempt_failed(st: dict) -> str | None:
