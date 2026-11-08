@@ -113,7 +113,7 @@ keep that release, or when it's a build that was never released. Run it again wh
 
 It asks about each part and before every change, never overwrites a file it did not write, and makes a backup before
 its only edits to your own files: one `[include filament-kit/*.cfg]` line in `printer.cfg` and the `moonraker.conf`
-sections. It restarts Klipper only when the printer is idle and you say yes. `status` shows what is installed;
+sections. It restarts Klipper or Moonraker only when the printer is idle and you say yes. `status` shows what is installed;
 `uninstall` removes what the pack installed. The changes it made to `moonraker.conf` stay in place, and it tells you
 which ones. Install and uninstall can be run again at any time: a service you choose to keep at uninstall keeps
 its files and stays in the pack's list, a reinstall keeps lasttag's allow list unless you give `--allow`, and an

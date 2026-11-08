@@ -15,7 +15,7 @@
     api_key        when set, every request needs `X-Api-Key: <it>` (401 otherwise)
     gcode_errors   {script prefix: message}: a matching gcode answers 400 with Klipper's message
     ignore_gcode   True: gcode is accepted but has no effect (a printer that never confirms)
-`gcode_log` records every script; `actions` every print action. Built-in gcode: SET_ACTIVE_SPOOL ID=n,
+`gcode_log` records every script; `actions` every print action and restart. Built-in gcode: SET_ACTIVE_SPOOL ID=n,
 CLEAR_ACTIVE_SPOOL, FK_SET_TOOL_SPOOL TOOL=t ID=n (updates `gcode_macro _FK_TOOL_SPOOLS`).
 `push(delta)` merges a status delta and notifies subscribers; `event(name, params)` sends a notification;
 `drop()` closes every websocket (the client must reconnect). `serve()` → (base_url, stop()).
@@ -223,6 +223,11 @@ class FakeMoonraker:
             return ok("ok")
 
         @guard
+        async def server_restart(request):
+            fake.actions.append("server_restart")
+            return ok("ok")
+
+        @guard
         async def webcams(request):
             return ok({"webcams": fake.webcams})
 
@@ -267,6 +272,7 @@ class FakeMoonraker:
             Route("/server/database/item", db_item, methods=["GET", "POST"]),
             Route("/server/webcams/list", webcams),
             Route("/printer/restart", restart, methods=["POST"]),
+            Route("/server/restart", server_restart, methods=["POST"]),
             WebSocketRoute("/websocket", ws_endpoint),
         ])
 

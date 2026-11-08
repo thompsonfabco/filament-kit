@@ -56,6 +56,7 @@ class _Conn:
         self.state, self.message = "connecting", ""
         self.status: dict = {}
         self.spool_id: int | None = None
+        self.spool_changes = 0                 # counts spool_id updates, so set-up can tell its own read went stale
         self.lane_db: dict | None = None
         self.objects: list[str] = []
         self.detected: detect.Detected | None = None
@@ -71,6 +72,7 @@ class _Conn:
         self._stop = threading.Event()
         self._again = threading.Event()        # set up again (Klipper restarted, a key was added ...)
         self.ready = threading.Event()         # the first set-up attempt finished (any outcome)
+        self._subscribed_before = False        # the subscriber's own thread only
         self.thread = threading.Thread(target=self._run, daemon=True, name=f"klipper-{p.serial}")
 
     # --- the worker ----------------------------------------------------------------------------------------------
@@ -112,6 +114,7 @@ class _Conn:
             cams = c.webcams()
         except MoonrakerError:
             cams = []
+        changes = self.spool_changes
         spool = c.spool_id() if "spoolman" in (c.server_info().get("components") or []) else None
         model, system = hw.model(d.model_key), hw.systems.get(d.system_key)
         adapter = adapters.get(system.adapter) if system else adapters.get("single")
@@ -131,6 +134,7 @@ class _Conn:
         wanted.update({o: None for o in adapter.objects(model, system) if o in objs or o.startswith("gcode_macro")})
         wanted.update(adapter.objects_from(objs))
         with self.lock:
+            spool = self.spool_id if changes != self.spool_changes else spool   # a tap since that read wins
             self.objects, self.detected, self.webcams, self.spool_id, self.lane_db = objs, d, cams, spool, lane_db
             self.spoolman_warning, self.spoolman_connected = warn, connected
             self.nozzle = nozzle
@@ -138,7 +142,7 @@ class _Conn:
         self._set("connected" if d.model_key != "generic" else "unknown_model")
         if self.sub is None:
             self.sub = Subscriber(c, wanted, self._on_status, self._on_event, backoff=self.fam.backoff,
-                                  on_connect=self._on_connect).start()
+                                  on_connect=self._on_subscribed).start()
         else:
             self.sub.set_objects(wanted)
         # wait briefly for the first snapshot so callers see filled-in status
@@ -183,6 +187,14 @@ class _Conn:
         return state
 
     # --- subscriber callbacks ------------------------------------------------------------------------------------
+    def _on_subscribed(self) -> None:
+        """A reconnect may mean Moonraker restarted with new settings, which only set-up reads: the worker does it
+        again. Not on the first connect, which set-up itself has just started."""
+        if self._subscribed_before:
+            self._again.set()
+        self._subscribed_before = True
+        self._on_connect()
+
     def _on_connect(self) -> None:
         """Every (re)subscribe: what may have changed while the socket was down, read again over HTTP."""
         connected = kusage.spoolman_connected(self.client, self.spoolman_connected)
@@ -194,6 +206,7 @@ class _Conn:
             return
         with self.lock:
             changed, self.spool_id = spool != self.spool_id, spool
+            self.spool_changes += 1
         if changed:
             self.fam._emit(self.p.serial, "spool", {"spool_id": spool})
 
@@ -236,6 +249,7 @@ class _Conn:
             v = (params[0] or {}).get("spool_id") if params and isinstance(params[0], dict) else None
             with self.lock:
                 self.spool_id = v if isinstance(v, int) and not isinstance(v, bool) else None
+                self.spool_changes += 1
             self.fam._emit(self.p.serial, "spool", {"spool_id": self.spool_id})
         elif name == "notify_spoolman_status_changed":
             v = (params[0] or {}).get("spoolman_connected") if params and isinstance(params[0], dict) else None

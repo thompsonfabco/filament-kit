@@ -20,8 +20,9 @@ the next install.
 
 Rules: it never overwrites a file it did not write (config/filament-kit/.manifest lists what it wrote). Its only
 edits to your own files are one `[include filament-kit/*.cfg]` line in printer.cfg and the moonraker.conf sections
-above, each shown as a diff and asked y/N, with a timestamped backup. A restart is offered only while the printer is
-idle (print_stats standby / complete / cancelled / error) and only when you say yes.
+above, each shown as a diff and asked y/N, with a timestamped backup. A restart of Klipper (a macro changed) or of
+Moonraker (moonraker.conf changed) is offered only while the printer is idle (print_stats standby / complete /
+cancelled / error), each only when you say yes.
 """
 import argparse
 import datetime
@@ -71,6 +72,7 @@ class Pack:
         self.run = run or (lambda cmd, **kw: subprocess.run(cmd, check=True, **kw))
         self.manifest_path = os.path.join(self.dest, ".manifest")
         self.changed = False      # a Klipper config file was written or edited: a restart is needed
+        self.moonraker_changed = False      # moonraker.conf was edited: Moonraker reads it only when it starts
 
     # --- Moonraker -------------------------------------------------------------------------------------------------
     def _get(self, path):
@@ -422,11 +424,13 @@ class Pack:
             new = set_section(text, "spoolman", {"server": spoolman})
             if self.edit(path, new, "moonraker.conf: report filament usage to the kit's Spoolman"):
                 self._add(m["moonraker"], "[spoolman] server: " + spoolman)
+                self.moonraker_changed = True
                 text = new
         if "[zeroconf]" not in text:
             new = text.rstrip("\n") + "\n\n[zeroconf]\n"
             if self.edit(path, new, "moonraker.conf: announce Moonraker on the LAN so filament-kit finds it"):
                 self._add(m["moonraker"], "[zeroconf]")
+                self.moonraker_changed = True
 
     # --- the commands ----------------------------------------------------------------------------------------------
     def install(self, parts, scan_ok="", scan_unknown="", nfc_device="tty:USB0:pn532", spoolman="", web=False,
@@ -436,6 +440,7 @@ class Pack:
             raise PackError("no printer.cfg in {}; give --data <printer_data folder>".format(self.cfg))
         m = self.manifest()
         self.changed = False
+        self.moonraker_changed = False
         for part in parts:
             self.out("[{}]".format(part))
             if part == "spool":
@@ -452,12 +457,34 @@ class Pack:
         if any(f.endswith(".cfg") for f in m["files"]):
             self.add_include(m)
         self.save_manifest(m)
-        if self.changed and m["include"]:
-            self.offer_restart()
+        restart_klipper = self.changed and m["include"]
+        if restart_klipper or self.moonraker_changed:
+            state = self.print_state()      # once: while Klipper restarts, the state can't be read
+            if restart_klipper:
+                self.offer_restart(state)
+            if self.moonraker_changed:      # after Klipper: Klipper's restart is asked for through Moonraker
+                self.offer_moonraker_restart(state)
         return 0
 
-    def offer_restart(self):
-        state = self.print_state()
+    def offer_moonraker_restart(self, state):
+        later = "sudo systemctl restart moonraker"
+        if state not in IDLE:
+            self.out("Moonraker must restart to use its new settings; the printer is {}, so restart it yourself later "
+                     "({})".format(state, later))
+            return
+        if not self.ask("Restart Moonraker now to use its new settings?"):
+            self.out("  restart it later ({})".format(later))
+            return
+        req = urllib.request.Request(self.moonraker + "/server/restart", data=b"{}", method="POST",
+                                     headers={"Content-Type": "application/json"})
+        try:
+            urllib.request.urlopen(req, timeout=10).read()
+        except OSError as e:
+            self.out("  could not ask Moonraker to restart ({}): restart it yourself ({})".format(e, later))
+            return
+        self.out("  Moonraker is restarting")
+
+    def offer_restart(self, state):
         if state not in IDLE:
             self.out("Klipper must restart to load the macros; the printer is {}, so restart it yourself later "
                      "(RESTART in the console)".format(state))

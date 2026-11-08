@@ -149,6 +149,73 @@ def test_moonraker_edits(data, moon):
     assert "[zeroconf]" in conf and "[authorization]" in conf
 
 
+KIT = "http://kit.example.com:7912"
+
+
+def test_moonraker_edit_offers_its_own_restart(data, moon):
+    p = pack(data, moon)
+    p.install(["moonraker"], spoolman=KIT)
+    assert moon.actions == ["server_restart"]       # no Klipper restart: no Klipper config changed
+    assert any("Moonraker is restarting" in s for s in p.said)
+
+
+def test_klipper_restarts_first_and_both_use_one_idle_check(data, moon):
+    """Klipper restarting makes the printer's state unreadable, so the second question must not read it again."""
+    p = pack(data, moon)
+    states = []
+    real = p.print_state
+    p.print_state = lambda: states.append(1) or real()
+    p.install(["spool", "moonraker"], spoolman=KIT)
+    assert moon.actions == ["restart", "server_restart"] and len(states) == 1
+
+
+def test_moonraker_restart_is_its_own_question(data, moon):
+    asked = []
+    p = fkpack.Pack(str(data), moon.url, home=str(data.parent), out=lambda s: None,
+                    ask=lambda q: asked.append(q) or "Restart Moonraker" not in q)
+    p.install(["spool", "moonraker"], spoolman=KIT)
+    assert moon.actions == ["restart"]
+    assert [q for q in asked if q.startswith("Restart")] == ["Restart Klipper now to load the macros?",
+                                                             "Restart Moonraker now to use its new settings?"]
+
+
+def test_no_moonraker_restart_when_nothing_changed(data, moon):
+    pack(data, moon).install(["moonraker"], spoolman=KIT)
+    moon.actions.clear()
+    pack(data, moon).install(["moonraker"], spoolman=KIT)
+    assert moon.actions == []
+
+
+def test_no_moonraker_restart_when_the_edit_is_declined(data, moon):
+    asked = []
+    p = fkpack.Pack(str(data), moon.url, home=str(data.parent), out=lambda s: None,
+                    ask=lambda q: asked.append(q) or False)
+    p.install(["moonraker"], spoolman=KIT)
+    assert moon.actions == [] and not any("Restart" in q for q in asked)
+    assert (data / "config" / "moonraker.conf").read_text() == MOONRAKER_CONF
+
+
+def test_no_moonraker_restart_while_printing(data, moon):
+    moon.status["print_stats"]["state"] = "printing"
+    p = pack(data, moon)
+    p.install(["moonraker"], spoolman=KIT)
+    assert moon.actions == []
+    assert any("Moonraker must restart" in s and "printing" in s for s in p.said)
+
+
+def test_a_failed_moonraker_restart_only_says_so(data, moon, monkeypatch):
+    p = pack(data, moon)
+    real = fkpack.urllib.request.urlopen
+
+    def fail_restart(req, *a, **kw):
+        if getattr(req, "full_url", "").endswith("/server/restart"):
+            raise OSError("connection reset")
+        return real(req, *a, **kw)
+    monkeypatch.setattr(fkpack.urllib.request, "urlopen", fail_restart)
+    assert p.install(["moonraker"], spoolman=KIT) == 0
+    assert any("restart it yourself" in s and "connection reset" in s for s in p.said)
+
+
 def test_set_section_adds_missing():
     out = fkpack.set_section("[server]\nhost: x\n", "spoolman", {"server": "http://a:1"})
     assert out.endswith("[spoolman]\nserver: http://a:1\n")
