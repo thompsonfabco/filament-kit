@@ -9,6 +9,10 @@
 
 All read-only towards the printer except what the running server does later. Kept in its own module so cli.py only
 hooks it in (`add_parser`, `run`).
+
+The web console calls the data-returning halves; the CLI prints from them, with the same text as before:
+    detect(p) -> dict           what `klipper add` / `detect` show, plus the Spoolman Moonraker reports to
+    pack_info(version, cfg) -> {version, sha256, url, lines}   the checked command (raises ReleaseError)
 """
 from __future__ import annotations
 
@@ -19,8 +23,10 @@ from getpass import getpass
 
 from . import config, release, updates
 from .bridge import registry
-from .bridge.klipper import detect, discovery
+from .bridge.klipper import detect as kdetect
+from .bridge.klipper import discovery
 from .bridge.klipper import hardware as kh
+from .bridge.klipper import usage as kusage
 from .bridge.klipper.moonraker import Moonraker, MoonrakerError, Unauthorized
 from .release import ReleaseError
 
@@ -55,28 +61,42 @@ def _signed_table(version: str, cfg: dict, fetcher: release.Fetcher | None) -> d
                                f.get(rel["assets"][release.SIG], release.LIMIT_SIG))
 
 
-def pack(cfg: dict | None = None, *, fetcher: release.Fetcher | None = None) -> int:
-    """Print the printer-pack install command, pinned to this kit's version and to the pack's SHA-256 from the
-    release's signed SHA256SUMS. Prints no command at all when that hash cannot be had."""
-    version = updates.current_version()
+def pack_info(version: str, cfg: dict | None = None, *, fetcher: release.Fetcher | None = None) -> dict:
+    """The printer-pack install command for release `version`, pinned to the pack's SHA-256 from that release's
+    signed SHA256SUMS (the signature is checked here): {version, sha256, url, lines} with `lines` the commands
+    to run on the printer, one per line. Raises ReleaseError (a development build, no signed release, a bad
+    signature, the pack not listed, no network): then there is no command at all."""
     try:
         release.parse_version(version)
         cfg = cfg if cfg is not None else config.load()
         repo = updates.settings(cfg)["repo"]        # one repo for the hash and the URL
         table = _signed_table(version, cfg, fetcher)
-        want = table.get(PACK)
-        if want is None:
-            raise ReleaseError(f"the signed {release.SUMS} does not list {PACK}")
-    except (ReleaseError, OSError, ValueError) as e:
+    except (OSError, ValueError) as e:
+        raise ReleaseError(str(e)) from None
+    want = table.get(PACK)
+    if want is None:
+        raise ReleaseError(f"the signed {release.SUMS} does not list {PACK}")
+    url = pack_url(version, repo)
+    return {"version": version, "sha256": want, "url": url, "lines": [
+        f"curl -fsSLo {PACK} {url}",
+        f'echo "{want}  {PACK}" | sha256sum -c - && tar xzf {PACK} && sh fk-printer-pack/fk-printer-pack.sh install']}
+
+
+def pack(cfg: dict | None = None, *, fetcher: release.Fetcher | None = None) -> int:
+    """Print the printer-pack install command, pinned to this kit's version and to the pack's SHA-256 from the
+    release's signed SHA256SUMS. Prints no command at all when that hash cannot be had."""
+    version = updates.current_version()
+    try:
+        info = pack_info(version, cfg, fetcher=fetcher)
+    except ReleaseError as e:
         print(f"error: cannot give a verified printer-pack command for filament-kit {version}: {e}",
               file=sys.stderr)
         print("error: the pack's hash comes only from the signed release of this exact version (a "
               "development build has none); nothing to run", file=sys.stderr)
         return 1
     print("Run this on the printer (as its normal user, not root):")
-    print(f"  curl -fsSLo {PACK} {pack_url(version, repo)}")
-    print(f'  echo "{want}  {PACK}" | sha256sum -c - && tar xzf {PACK} '
-          f"&& sh fk-printer-pack/fk-printer-pack.sh install")
+    for line in info["lines"]:
+        print(f"  {line}")
     print(f"The hash is the one in the signed {release.SUMS} of release v{version} (checked here against the "
           "filament-kit release key); nothing is unpacked or run unless the download matches it.")
     return 0
@@ -102,19 +122,55 @@ def add_parser(sub) -> None:
     ks.add_parser("pack", help="print the command that installs the printer pack on a printer")
 
 
-def _describe(p: registry.Printer) -> int:
+def _spoolman(client: Moonraker, kit_url: str | None) -> dict | None:
+    """The Spoolman Moonraker reports usage to, as host:port (never the URL: it may carry a password), whether it is
+    the kit's own, and the server's warning line. None when Moonraker would not give its config."""
     try:
-        d = detect.probe(Moonraker(p.host, p.port, api_key=p.api_key, timeout=5), kh.load())
+        server = ((client.server_config().get("spoolman") or {}).get("server")) or None
+    except MoonrakerError:
+        return None
+    hp = kusage._host_port(server) if isinstance(server, str) else None
+    return {"server": f"{hp[0]}:{hp[1]}" if hp and hp[0] else None,
+            "same_as_kit": bool(server and kit_url and kusage.same_spoolman(server, kit_url)),
+            "warning": kusage.spoolman_warning({"spoolman": {"server": server}} if server else {}, kit_url)}
+
+
+def detect(p: registry.Printer, *, kit_spoolman: str | None = None, client_factory=Moonraker) -> dict:
+    """Ask the printer what it is (read only): the model and its slots, the filament system (single, AFC, Happy
+    Hare, tool macros ...), why, and the Spoolman Moonraker reports to (compared with `kit_spoolman`, the kit's
+    own; config's spoolman_url when not given). `ok` False with `problem` "api_key" (Moonraker wants one) or
+    "offline" (any other Moonraker error) and `message` the line the CLI prints; the API key is never in it."""
+    out = {"ok": False, "problem": None, "message": "", "id": p.serial, "host": p.host, "port": p.port,
+           "model_key": None, "model": None, "verified": None, "system": None, "slots": [], "reasons": [],
+           "hostname": "", "spoolman": None}
+    hw = kh.load()
+    client = client_factory(p.host, p.port, api_key=p.api_key, timeout=5)
+    try:
+        d = kdetect.probe(client, hw)
     except Unauthorized:
-        print(f"  {p.host}:{p.port} wants a Moonraker API key: run `filament-kit klipper api-key {p.serial}`")
-        return 0
+        out.update(problem="api_key", message=f"{p.host}:{p.port} wants a Moonraker API key: "
+                                              f"run `filament-kit klipper api-key {p.serial}`")
+        return out
     except MoonrakerError as e:
-        print(f"  {e}; the server keeps trying once it runs")
+        out.update(problem="offline", message=f"{e}; the server keeps trying once it runs")
+        return out
+    m = hw.model(d.model_key)
+    if kit_spoolman is None:
+        kit_spoolman = config.load().get("spoolman_url")
+    out.update(ok=True, model_key=d.model_key, model=m.name, verified=d.verified, system=d.system_key,
+               slots=[s.label for s in m.slots], reasons=list(d.reasons), hostname=d.hostname,
+               spoolman=_spoolman(client, kit_spoolman))
+    return out
+
+
+def _describe(p: registry.Printer) -> int:
+    d = detect(p)
+    if not d["ok"]:
+        print(f"  {d['message']}")
         return 0
-    m = kh.load().model(d.model_key)
-    print(f"  model: {m.name} ({d.model_key}){'' if d.verified else ' - unverified entry'}")
-    print(f"  filament system: {d.system_key}; slots: {', '.join(s.label for s in m.slots) or 'from the printer'}")
-    for r in d.reasons:
+    print(f"  model: {d['model']} ({d['model_key']}){'' if d['verified'] else ' - unverified entry'}")
+    print(f"  filament system: {d['system']}; slots: {', '.join(d['slots']) or 'from the printer'}")
+    for r in d["reasons"]:
         print(f"    {r}")
     return 0
 

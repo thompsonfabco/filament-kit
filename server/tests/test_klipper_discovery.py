@@ -111,3 +111,82 @@ def test_cli_scan(moonraker, capsys, monkeypatch):
     assert klipper_cli.main(["scan", "--subnet", "127.0.0.1/32"]) == 0
     assert "127.0.0.1" in capsys.readouterr().out
     assert any(p.host == "127.0.0.1" and not p.configured for p in registry.load().values())
+
+
+# ---------- detect(p) (the web console's data; console-printers stage) and the CLI's output, pinned ----------
+
+def _detect_cli(moonraker, capsys, *argv):
+    rc = klipper_cli.main(list(argv))
+    out, err = capsys.readouterr()
+    return rc, out.replace(str(moonraker.port), "PORT"), err
+
+
+def test_cli_detect_output_is_unchanged(moonraker, capsys):
+    """The exact text `klipper add` / `detect` printed before detect(p) existed (snapshot, 2026-11-08)."""
+    moonraker.objects = json.loads((DATA / "SV08-MAX" / "objects.json").read_text())["objects"]
+    moonraker.hostname = "SV08MAX"
+    assert _detect_cli(moonraker, capsys, "add", "SV08 MAX", moonraker.host, "--port", str(moonraker.port)) == (
+        0, "added SV08 MAX as sv08-max (127.0.0.1:PORT)\n  model: Sovol SV08 MAX (SOVOL-SV08-MAX)\n"
+           "  filament system: single; slots: T0\n    object gcode_macro DEMON_START\n    hostname SV08MAX*\n", "")
+    moonraker.objects = ["print_stats", "gcode_macro FK_UNVERIFIED_M1D"]
+    assert _detect_cli(moonraker, capsys, "detect", "sv08-max") == (
+        0, "SV08 MAX (127.0.0.1:PORT)\n  model: Sovol M1D (sovol-m1d) - unverified entry\n"
+           "  filament system: tool-macros; slots: L, C1, C2, C3, C4, C5, C6\n"
+           "    object gcode_macro FK_UNVERIFIED_M1D\n", "")
+    moonraker.objects = ["print_stats", "AFC", "AFC_stepper lane1"]
+    assert _detect_cli(moonraker, capsys, "detect", "sv08-max") == (
+        0, "SV08 MAX (127.0.0.1:PORT)\n  model: Klipper printer (generic)\n  filament system: afc; slots: from the "
+           "printer\n    no model entry matched: generic Klipper printer\n    filament system afc (object AFC)\n", "")
+    moonraker.api_key = "k"
+    assert _detect_cli(moonraker, capsys, "detect", "sv08-max") == (
+        0, "SV08 MAX (127.0.0.1:PORT)\n  127.0.0.1:PORT wants a Moonraker API key: run "
+           "`filament-kit klipper api-key sv08-max`\n", "")
+
+
+def test_cli_detect_offline_output_is_unchanged(capsys):
+    registry.add_klipper("Gone", "127.0.0.1", 9)
+    rc = klipper_cli.main(["detect", "gone"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert out.startswith("Gone (127.0.0.1:9)\n  Moonraker at 127.0.0.1:9 is not answering (")
+    assert out.endswith("); the server keeps trying once it runs\n") and out.count("\n") == 2
+
+
+def test_detect_returns_what_the_cli_prints(moonraker):
+    moonraker.objects = ["print_stats", "AFC", "AFC_stepper lane1"]
+    p = registry.add_klipper("Box", moonraker.host, moonraker.port)
+    d = klipper_cli.detect(p, kit_spoolman="http://spoolman.example.com:7912")
+    assert d == {"ok": True, "problem": None, "message": "", "id": "box", "host": moonraker.host,
+                 "port": moonraker.port, "model_key": "generic", "model": "Klipper printer", "verified": True,
+                 "system": "afc", "slots": [],
+                 "reasons": ["no model entry matched: generic Klipper printer", "filament system afc (object AFC)"],
+                 "hostname": moonraker.hostname or "",
+                 "spoolman": {"server": "spoolman.example.com:7912", "same_as_kit": True, "warning": None}}
+
+
+def test_detect_spoolman_another_or_none(moonraker):
+    p = registry.add_klipper("Box", moonraker.host, moonraker.port)
+    d = klipper_cli.detect(p, kit_spoolman="http://other.example.com:7912")
+    assert d["spoolman"] == {"server": "spoolman.example.com:7912", "same_as_kit": False,
+                             "warning": "usage goes to another Spoolman: spoolman.example.com:7912"}
+    moonraker.server_config = {}
+    d = klipper_cli.detect(p, kit_spoolman="http://other.example.com:7912")
+    assert d["spoolman"] == {"server": None, "same_as_kit": False,
+                             "warning": "Moonraker does not report usage to Spoolman (no [spoolman] section)"}
+    moonraker.server_config = {"spoolman": {"server": "http://user:pw@spoolman.example.com:7912"}}
+    d = klipper_cli.detect(p, kit_spoolman="http://spoolman.example.com:7912")
+    assert d["spoolman"]["server"] == "spoolman.example.com:7912" and "pw" not in json.dumps(d)
+
+
+def test_detect_problems(moonraker):
+    moonraker.api_key = "MOONRAKER-KEY-EXAMPLE"
+    p = registry.add_klipper("Box", moonraker.host, moonraker.port)
+    d = klipper_cli.detect(p)
+    assert (d["ok"], d["problem"]) == (False, "api_key") and "klipper api-key box" in d["message"]
+    registry.set_api_key("box", "MOONRAKER-KEY-EXAMPLE")
+    d = klipper_cli.detect(registry.load()["box"])
+    assert d["ok"] is True and "MOONRAKER-KEY-EXAMPLE" not in json.dumps(d)
+    gone = registry.add_klipper("Gone", "127.0.0.1", 9)
+    d = klipper_cli.detect(gone)
+    assert (d["ok"], d["problem"]) == (False, "offline") and "not answering" in d["message"]
+    assert d["model_key"] is None and d["spoolman"] is None

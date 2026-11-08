@@ -166,3 +166,57 @@ def test_a_repo_override_names_the_same_repo_in_the_url(env, srv, key, capsys):
     out, err = capsys.readouterr()
     assert rc == 0, err
     _check_command(out, PACK_SHA, repo="example/filament-kit-fork")
+
+
+# ---------- pack_info (the web console's data; console-printers stage) and the CLI's output, pinned ----------
+
+def test_cli_output_is_unchanged(env, srv, key, capsys):
+    """The exact text `klipper pack` printed before pack_info existed (snapshot, 2026-11-08)."""
+    fr = srv.add("1.0.0", extra={PACK: PACK_BYTES})
+    _keep(env, fr)
+    rc, out, err = _run(env, NoNet(), capsys)
+    url = f"https://github.com/{release.REPO}/releases/download/v1.0.0/{PACK}"
+    assert (rc, err) == (0, "")
+    assert out == (
+        "Run this on the printer (as its normal user, not root):\n"
+        f"  curl -fsSLo {PACK} {url}\n"
+        f'  echo "{PACK_SHA}  {PACK}" | sha256sum -c - && tar xzf {PACK} '
+        "&& sh fk-printer-pack/fk-printer-pack.sh install\n"
+        "The hash is the one in the signed SHA256SUMS of release v1.0.0 (checked here against the filament-kit "
+        "release key); nothing is unpacked or run unless the download matches it.\n")
+
+
+def test_cli_error_output_is_unchanged(env, key, capsys):
+    rc, out, err = _run(env, NoNet(), capsys)
+    assert (rc, out) == (1, "")
+    assert err == (
+        "error: cannot give a verified printer-pack command for filament-kit 1.0.0: cannot reach api.github.com: "
+        "offline\n"
+        "error: the pack's hash comes only from the signed release of this exact version (a development build has "
+        "none); nothing to run\n")
+
+
+def test_pack_info_returns_the_checked_command(env, srv, key):
+    fr = srv.add("1.0.0", extra={PACK: PACK_BYTES})
+    _keep(env, fr)
+    info = klipper_cli.pack_info("1.0.0", _cfg(env), fetcher=NoNet())
+    url = f"https://github.com/{release.REPO}/releases/download/v1.0.0/{PACK}"
+    assert info == {"version": "1.0.0", "sha256": PACK_SHA, "url": url, "lines": [
+        f"curl -fsSLo {PACK} {url}",
+        f'echo "{PACK_SHA}  {PACK}" | sha256sum -c - && tar xzf {PACK} '
+        "&& sh fk-printer-pack/fk-printer-pack.sh install"]}
+
+
+@pytest.mark.parametrize("case", ["bad_sig", "unlisted", "offline", "dev"])
+def test_pack_info_raises_release_error_and_gives_no_command(env, srv, key, case):
+    version = "1.0.0"
+    if case == "bad_sig":
+        fr = srv.add("1.0.0", extra={PACK: PACK_BYTES})
+        d = _keep(env, fr)
+        (d / release.SIG).write_bytes(b"not a signature")
+    elif case == "unlisted":
+        _keep(env, srv.add("1.0.0", unlisted={PACK: PACK_BYTES}))
+    elif case == "dev":
+        version = "0.3.0.dev1"
+    with pytest.raises(release.ReleaseError):
+        klipper_cli.pack_info(version, _cfg(env), fetcher=NoNet())
