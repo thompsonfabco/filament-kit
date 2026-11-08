@@ -1,0 +1,65 @@
+{
+  "extruder": {
+    "can_extrude": false,
+    "power": 0.0,
+    "pressure_advance": 0.0,
+    "smooth_time": 0.04,
+    "target": 0.0,
+    "temperature": 24.0
+  },
+  "gcode_macro CLEAR_ACTIVE_SPOOL": {},
+  "gcode_macro SET_ACTIVE_SPOOL": {},
+  "heater_bed": {
+    "power": 0.0,
+    "target": 0.0,
+    "temperature": 23.0
+  },
+  "print_stats": {
+    "filament_used": 0.0,
+    "filename": "",
+    "info": {
+      "current_layer": null,
+      "total_layer": null
+    },
+    "message": "",
+    "print_duration": 0.0,
+    "state": "standby",
+    "total_duration": 0.0
+  },
+  "toolhead": {
+    "axis_maximum": [
+      500.0,
+      500.0,
+      500.0,
+      0
+    ],
+    "axis_minimum": [
+      0.0,
+      0.0,
+      0.0,
+      0
+    ],
+    "extruder": "extruder",
+    "homed_axes": "",
+    "max_accel": 6000.0,
+    "max_velocity": 700.0,
+    "position": [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "print_time": 0.0
+  },
+  "virtual_sdcard": {
+    "file_path": null,
+    "file_position": 0,
+    "file_size": 0,
+    "is_active": false,
+    "progress": 0.0
+  },
+  "webhooks": {
+    "state": "ready",
+    "state_message": "Printer is ready"
+  }
+}

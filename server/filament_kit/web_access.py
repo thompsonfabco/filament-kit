@@ -23,7 +23,7 @@ its reach. It gets exactly what it uses, as POSIX ACLs (acl.py) on named files a
 No folder of the kit is writable by it. Root still works here on folders that other users own (the state folder is
 the kit server's user's, the web folder the web unit's), so every step goes through nofollow.py: descriptors and
 O_NOFOLLOW, never a name that might be a link; a link found is skipped with a warning. Everything else in the
-state folder (printers.json with Access Codes, devices.json, pending.json ...) is 600 and out of its reach;
+state folder (printers.xml and printers.json with Access Codes, devices.json, pending.json ...) is 600 and out of its reach;
 nothing in /etc beyond the files above."""
 from __future__ import annotations
 

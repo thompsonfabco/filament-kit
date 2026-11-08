@@ -86,16 +86,14 @@ hardware data feed installs a release's file as the override only when it is new
 """
 from __future__ import annotations
 
-import os
 import re
-import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-import defusedxml.ElementTree as DET
 
 from .. import config
+from . import xmlfile
 
 BUNDLED = Path(__file__).with_name("bambu_hardware.xml")
 OVERRIDE_NAME = "bambu_hardware.xml"
@@ -107,10 +105,8 @@ def override_path() -> Path:
     return config.paths().etc / OVERRIDE_NAME
 
 
-class HardwareError(Exception):
-    def __init__(self, errors: list[str]):
-        super().__init__("; ".join(errors))
-        self.errors = errors
+class HardwareError(xmlfile.XmlError):
+    pass
 
 
 # --- records ------------------------------------------------------------------------------------------------------
@@ -344,47 +340,8 @@ def parse_expr(src: str) -> Callable[[int, int], int]:
 
 # --- the validator ------------------------------------------------------------------------------------------------
 
-_INT_RE = re.compile(r"-?\d{1,9}")
-
-
-def _int(v: str) -> int:
-    if not _INT_RE.fullmatch(v):
-        raise ValueError("is not an integer")
-    return int(v)
-
-
-def _pos(v: str) -> int:
-    n = _int(v)
-    if n < 1:
-        raise ValueError("is not a positive integer")
-    return n
-
-
-def _nonneg(v: str) -> int:
-    n = _int(v)
-    if n < 0:
-        raise ValueError("is negative")
-    return n
-
-
-def _bool(v: str) -> bool:
-    if v not in ("true", "false"):
-        raise ValueError("is not true or false")
-    return v == "true"
-
-
-def _text(v: str) -> str:
-    if not v.strip():
-        raise ValueError("is empty")
-    return v.strip()
-
-
-def _enum(*allowed):
-    def f(v: str) -> str:
-        if v not in allowed:
-            raise ValueError(f"is not one of {', '.join(allowed)}")
-        return v
-    return f
+_int, _pos, _nonneg, _bool, _text, _enum = (xmlfile.integer, xmlfile.pos, xmlfile.nonneg, xmlfile.boolean,
+                                         xmlfile.text, xmlfile.enum)
 
 
 def _expr(v: str) -> str:
@@ -392,17 +349,9 @@ def _expr(v: str) -> str:
     return v
 
 
-@dataclass(frozen=True)
-class _E:
-    attrs: dict = field(default_factory=dict)        # name -> checker
-    required: tuple = ()
-    children: dict = field(default_factory=dict)     # tag -> _E
-    text: bool = False                               # element carries text (checked non-empty)
-    once: tuple = ()                                 # child tags allowed at most once
-
-
-_TEXT = _E(text=True)
-_VERSION = re.compile(r"(\d{1,4})(?:\.(\d{1,4}))?")
+_E = xmlfile.E
+_TEXT = xmlfile.TEXT
+_VERSION = xmlfile.VERSION
 _SCHEMA = _E(
     attrs={"version": _text}, required=("version",), once=("models", "ams-types", "numbering-schemes",
                                                              "presence-layouts", "speech"),
@@ -436,67 +385,14 @@ _SCHEMA = _E(
     })
 
 
-def _where(el, path: str) -> str:
-    ident = el.get("code") or el.get("key") or el.get("text")
-    return f"{path} {ident!r}" if ident else path
-
-
-def _check(el, spec: _E, path: str, errors: list[str], warnings: list[str]) -> None:
-    """Fatal problems go to errors; unknown attributes and elements (a newer file) go to warnings and are ignored."""
-    for name, value in el.attrib.items():
-        checker = spec.attrs.get(name)
-        if checker is None:
-            warnings.append(f"{_where(el, path)}: unknown attribute {name!r} ignored")
-            continue
-        try:
-            checker(value)
-        except ValueError as e:
-            errors.append(f"{_where(el, path)}: {name}={value!r} {e}")
-    for name in spec.required:
-        if name not in el.attrib:
-            errors.append(f"{_where(el, path)}: missing required attribute {name!r}")
-    if spec.text:
-        if not (el.text or "").strip():
-            errors.append(f"{path}: empty text")
-    elif (el.text or "").strip():
-        errors.append(f"{_where(el, path)}: unexpected text {(el.text or '').strip()[:20]!r}")
-    seen: dict[str, int] = {}
-    for child in el:
-        if not isinstance(child.tag, str):
-            continue
-        sub = spec.children.get(child.tag)
-        if sub is None:
-            warnings.append(f"{_where(el, path)}: unknown element <{child.tag}> ignored")
-            continue
-        seen[child.tag] = seen.get(child.tag, 0) + 1
-        if child.tag in spec.once and seen[child.tag] == 2:
-            errors.append(f"{_where(el, path)}: <{child.tag}> given twice")
-        if (child.tail or "").strip():
-            errors.append(f"{_where(el, path)}: unexpected text after <{child.tag}>")
-        _check(child, sub, f"{path}/{child.tag}", errors, warnings)
+_where = xmlfile.where
+_check = xmlfile.check
 
 
 def _parse(data: bytes, where: str):
     """(root element, warnings) of a well-formed, schema-valid file, or HardwareError."""
-    if len(data) > MAX_BYTES:
-        raise HardwareError([f"{where}: larger than {MAX_BYTES} bytes"])
-    try:
-        root = DET.fromstring(data, forbid_dtd=True, forbid_entities=True, forbid_external=True)
-    except Exception as e:  # ParseError, DTDForbidden, EntitiesForbidden, ...
-        raise HardwareError([f"{where}: parse error: {type(e).__name__}: {e}"]) from None
-    if root.tag != "bambu-hardware":
-        raise HardwareError([f"{where}: root element is <{root.tag}>, not <bambu-hardware>"])
-    errors: list[str] = []
-    warnings: list[str] = []
-    _check(root, _SCHEMA, "bambu-hardware", errors, warnings)
-    v = root.get("version")
-    if v is not None:
-        m = _VERSION.fullmatch(v.strip())
-        if not m or m.group(1).lstrip("0") != MAJOR:
-            errors.append(f"bambu-hardware: version {v!r} not supported (this server reads version {MAJOR}.x)")
-    if errors:
-        raise HardwareError([f"{where}: {e}" for e in errors])
-    return root, [f"{where}: {w}" for w in warnings]
+    return xmlfile.parse(data, where, root_tag="bambu-hardware", schema=_SCHEMA, major=MAJOR, max_bytes=MAX_BYTES,
+                         err=HardwareError)
 
 
 # --- merging and building -----------------------------------------------------------------------------------------
@@ -512,21 +408,7 @@ _SECTIONS = {  # section -> (element tag, identity attribute, case-insensitive)
 
 def _elements(root, where: str) -> dict[str, dict]:
     """section -> {identity: element} in file order; an identity given twice in one file is an error."""
-    out: dict[str, dict] = {}
-    errors = []
-    for section, (tag, ident, fold) in _SECTIONS.items():
-        found: dict = {}
-        for sec in root.findall(section):
-            for el in sec.findall(tag):
-                k = el.get(ident, "")
-                k = k.strip().upper() if fold else k.strip()
-                if k in found:
-                    errors.append(f"{where}: <{tag} {ident}={el.get(ident)!r}> given twice")
-                found[k] = el
-        out[section] = found
-    if errors:
-        raise HardwareError(errors)
-    return out
+    return xmlfile.elements(root, _SECTIONS, where, HardwareError)
 
 
 def _norm(s: str) -> str:
@@ -780,12 +662,7 @@ class Hardware:
 # --- loading ------------------------------------------------------------------------------------------------------
 
 def _read(p: Path, where: str) -> bytes:
-    try:
-        with open(p, "rb") as f:
-            data = f.read(MAX_BYTES + 1)
-    except OSError as e:
-        raise HardwareError([f"{where}: cannot read: {e.strerror or e}"]) from None
-    return data
+    return xmlfile.read_capped(p, where, MAX_BYTES, HardwareError)
 
 
 def validate(data: bytes, where: str = "bambu_hardware.xml") -> list[str]:
@@ -798,97 +675,21 @@ def validate(data: bytes, where: str = "bambu_hardware.xml") -> list[str]:
     return []
 
 
-def file_version(data: bytes) -> tuple[int, int] | None:
-    """(major, minor) of a hardware file's root `version` ("1" is (1, 0)); None when it has none or cannot be
-    parsed. For comparing files only; `validate` says whether a file is good."""
-    try:
-        root = DET.fromstring(data, forbid_dtd=True, forbid_entities=True, forbid_external=True)
-    except Exception:  # noqa: BLE001 - ParseError, DTDForbidden, ...
-        return None
-    return _root_version(root)
+file_version = xmlfile.file_version
+_root_version = xmlfile.root_version
+_vtext = xmlfile.vtext
+_merge = xmlfile.merge
+_stamp = xmlfile.stamp
 
-
-def _root_version(root) -> tuple[int, int] | None:
-    m = _VERSION.fullmatch((root.get("version") or "").strip())
-    return (int(m.group(1)), int(m.group(2) or 0)) if m else None
-
-
-def _vtext(v: tuple[int, int]) -> str:
-    return f"{v[0]}.{v[1]}"
-
-
-def _merge(base: dict[str, dict], over: dict[str, dict]) -> dict[str, dict]:
-    return {section: {**base[section], **over.get(section, {})} for section in base}
-
-
-def _stamp(p: Path):
-    try:
-        st = os.stat(p)
-    except FileNotFoundError:
-        return None
-    except OSError as e:
-        return ("error", type(e).__name__)
-    return (st.st_mtime_ns, st.st_size)
-
-
-_lock = threading.Lock()
-_cache: tuple | None = None
-_last_good: Hardware | None = None
+_loader = xmlfile.Cached(BUNDLED, lambda: override_path(), parse=lambda d, w: _parse(d, w), elements=lambda r, w: _elements(r, w),
+                         build=lambda s, w: _build(s, w), empty=lambda: Hardware(), max_bytes=MAX_BYTES, err=HardwareError)
 
 
 def _reset_cache() -> None:
-    global _cache, _last_good
-    with _lock:
-        _cache, _last_good = None, None
-
-
-def _fresh(ov: Path, ov_present: bool) -> Hardware:
-    global _last_good
-    where_b = str(BUNDLED)
-    try:
-        base_root, warnings = _parse(_read(BUNDLED, where_b), where_b)
-        base = _elements(base_root, where_b)
-    except HardwareError as e:          # a packaging bug: keep what we had, else generic records only
-        return (_last_good or Hardware()).with_errors(e.errors)
-    errors: list[str] = []
-    hw = None
-    if ov_present:
-        where_o = str(ov)
-        try:
-            over_root, over_warnings = _parse(_read(ov, where_o), where_o)
-            merged = _build(_merge(base, _elements(over_root, where_o)), where_o)   # a broken file is an error
-            base_v, over_v = _root_version(base_root), _root_version(over_root)
-            if base_v is not None and (over_v is None or over_v <= base_v):
-                # a feed file left behind after an upgrade, or a hand-made one that never bumped its version:
-                # applying it would shadow newer bundled data per element (final review I2, Ruling BT)
-                warnings = warnings + [
-                    f"{where_o}: override version {over_root.get('version', '').strip()} is not newer than the "
-                    f"kit's own {base_root.get('version', '').strip()}: ignored (give it a version above "
-                    f"{_vtext(base_v)} to use it)"]
-            else:
-                hw = merged
-                warnings = warnings + over_warnings
-        except HardwareError as e:
-            errors = e.errors
-            if _last_good is not None:
-                return _last_good.with_errors(errors)
-    if hw is None:
-        try:
-            hw = _build(base, where_b)
-        except HardwareError as e:
-            return (_last_good or Hardware()).with_errors(errors + e.errors)
-    _last_good = hw.with_errors([], warnings)
-    return hw.with_errors(errors, warnings)
+    _loader.reset()
 
 
 def load() -> Hardware:
     """The merged hardware facts; rebuilt when the bundled file or the override changes (mtime or size)."""
-    global _cache
-    ov = override_path()
-    key = (str(ov), _stamp(BUNDLED), _stamp(ov))
-    with _lock:
-        if _cache is not None and _cache[0] == key:
-            return _cache[1]
-        hw = _fresh(ov, key[2] is not None)
-        _cache = (key, hw)
-        return hw
+    _loader.bundled = BUNDLED      # tests point BUNDLED elsewhere
+    return _loader.load()

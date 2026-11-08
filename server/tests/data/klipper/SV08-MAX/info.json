@@ -1,0 +1,14 @@
+{
+  "config_file": "/home/sovol/printer_data/config/printer.cfg",
+  "cpu_info": "4 core ?",
+  "group_id": 1000,
+  "hostname": "SV08MAX",
+  "klipper_path": "/home/sovol/klipper",
+  "log_file": "/home/sovol/printer_data/logs/klippy.log",
+  "process_id": 1234,
+  "python_path": "/home/sovol/klippy-env/bin/python",
+  "software_version": "v0.13.0",
+  "state": "ready",
+  "state_message": "Printer is ready",
+  "user_id": 1000
+}

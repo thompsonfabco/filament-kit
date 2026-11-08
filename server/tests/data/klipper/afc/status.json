@@ -1,0 +1,17 @@
+{
+  "print_stats": {"state": "standby", "filename": "", "info": {}},
+  "toolhead": {"extruder": "extruder"},
+  "AFC": {"current_load": "lane2", "lanes": ["lane1", "lane2", "lane3", "lane4"], "units": ["Turtle_1"]},
+  "AFC_lane lane1": {"name": "lane1", "unit": "Turtle_1", "lane": 1, "map": "T0", "load": true, "prep": true,
+                     "tool_loaded": false, "material": "PLA", "spool_id": 11, "color": "#FF0000", "weight": 812,
+                     "status": "Ready"},
+  "AFC_lane lane2": {"name": "lane2", "unit": "Turtle_1", "lane": 2, "map": "T1", "load": true, "prep": true,
+                     "tool_loaded": true, "material": "PETG", "spool_id": 12, "color": "#00FF00", "weight": 640,
+                     "status": "Tooled"},
+  "AFC_lane lane3": {"name": "lane3", "unit": "Turtle_1", "lane": 3, "map": "T2", "load": false, "prep": false,
+                     "tool_loaded": false, "material": "", "spool_id": null, "color": "#000000", "weight": 0,
+                     "status": "None"},
+  "AFC_lane lane4": {"name": "lane4", "unit": "Turtle_1", "lane": 4, "map": "T3", "load": false, "prep": true,
+                     "tool_loaded": false, "material": "ABS", "spool_id": 14, "color": "#0000FF", "weight": 900,
+                     "status": "Loaded"}
+}

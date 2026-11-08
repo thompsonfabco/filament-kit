@@ -118,14 +118,15 @@ def test_screen_rows_scroll_to_keep_the_cursor_visible():
     st.cursor = len(NAMES) - 1
     rows = menu_ui.screen(st, height=10, width=80)
     texts = [t for _, t, _ in rows]
-    assert any(t.lstrip().startswith("[ ] updates") for t in texts)
+    last = NAMES[-1]                                 # the registry's last module (klipper since the Klipper work)
+    assert any(t.lstrip().startswith(f"[ ] {last}") for t in texts)
     cur = [t for _, t, a in rows if a == "cursor"]
-    assert len(cur) == 1 and "updates" in cur[0]
+    assert len(cur) == 1 and last in cur[0]
     assert all(len(t) < 80 for t in texts)
     assert texts[-1].startswith("Up/Down")          # the key help is always on the last line
     st.cursor = 0
     texts = [t for _, t, _ in menu_ui.screen(st, height=10, width=80)]
-    assert any("spoolman" in t for t in texts) and not any("updates" in t for t in texts[:-3])
+    assert any("spoolman" in t for t in texts) and not any(f"[ ] {last}" in t for t in texts[:-3])
 
 
 def test_screen_shows_the_needs_and_optional_ai_of_the_row():

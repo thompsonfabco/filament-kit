@@ -129,6 +129,15 @@ tar -tzf "$out"
 # against the signed SHA256SUMS like the tarball; it is the same file the wheel bundles.
 cp server/filament_kit/bridge/bambu_hardware.xml "$dist/bambu_hardware.xml"
 echo "built $dist/bambu_hardware.xml"
+# klipper_hardware.xml the same way (Klipper printers, updates.HW_ASSETS).
+cp server/filament_kit/bridge/klipper/klipper_hardware.xml "$dist/klipper_hardware.xml"
+echo "built $dist/klipper_hardware.xml"
+
+# ---------- Klipper printer pack ----------
+# fk-printer-pack.tar.gz unpacks to fk-printer-pack/ on a printer (`filament-kit klipper pack` prints the command);
+# run with sh, so no file needs an exec bit.
+tar -czf "$dist/fk-printer-pack.tar.gz" --owner=0 --group=0 --numeric-owner --mode='u+rwX,go+rX,go-w'     --exclude=tests --exclude=__pycache__ --transform='s,^printer-pack,fk-printer-pack,' printer-pack
+echo "built $dist/fk-printer-pack.tar.gz"
 
 # ---------- library asset (optional) ----------
 # The filament-library data is a separate release asset, library-<date>.tar.gz, plus library.tar.gz under the

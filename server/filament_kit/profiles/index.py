@@ -87,8 +87,67 @@ def _line_of(filament: dict, build: dict) -> str | None:
     return None
 
 
-def preset_for(filament: dict, model: str, nozzle_mm: float) -> PresetRef | None:
-    """The owner's preset for this Spoolman `filament` on a printer `model` with a `nozzle_mm` nozzle, or None."""
+def _same_nozzle(a, b) -> bool:
+    """Nozzle sizes as numbers: klipper_hardware.xml says "1.0", a build row or config may say "1" or 1.0."""
+    try:
+        return abs(float(a) - float(b)) < 1e-6
+    except (TypeError, ValueError):
+        return False
+
+
+def _orca_printers(model: str, nozzle: str, printer_name: str | None) -> set[str]:
+    """Orca printer names a Klipper printer's rows can carry: the klipper_hardware.xml model's `<orca>` name for
+    this nozzle, and every config `slicer_printers` entry that is that printer (by its name or label) or lists that
+    Orca name among its compatible printers (a row's `printer` is the entry's name)."""
+    from .. import config
+    from ..bridge.klipper import hardware as kh
+    xml = {o.printer for o in kh.load().model(model).orca if _same_nozzle(o.nozzle, nozzle)}
+    names = set(xml)
+    for e in (config.load().get("slicer_printers") or []):
+        if not isinstance(e, dict) or not isinstance(e.get("name"), str):
+            continue
+        compat = e.get("compatible_printers") if isinstance(e.get("compatible_printers"), dict) else {}
+        if (printer_name and printer_name in (e.get("name"), e.get("label"))) or \
+                any(_same_nozzle(k, nozzle) and v in xml for k, v in compat.items()):
+            names.add(e["name"])
+    return names
+
+
+def _orca_preset(filament: dict, model: str, nozzle: str, printer_name: str | None) -> PresetRef | None:
+    """Klipper printers: the build's Orca preset row (target "orca"). Nothing of it is sent to the printer, so the
+    filament_id need not be a generated id; the name and both temperatures must still be usable."""
+    printers = _orca_printers(model, nozzle, printer_name)
+    build = _build()
+    if not printers or build is None:
+        return None
+    lid = _line_of(filament, build)
+    if lid is None:
+        return None
+    row = next((p for p in build["presets"] if isinstance(p, dict) and p.get("target") == generate.ORCA
+                and p.get("line_id") == lid and p.get("printer") in printers
+                and _same_nozzle(p.get("nozzle"), nozzle)), None)
+    if row is None:
+        return None
+    name, ftype, fid = row.get("name"), row.get("filament_type"), row.get("filament_id")
+    lo, hi = _int(row.get("nozzle_temp_min")), _int(row.get("nozzle_temp_max"))
+    if not generate.safe_name(name) or lo is None or hi is None or not (isinstance(ftype, str) and ftype):
+        return None
+    return PresetRef(filament_id=fid if isinstance(fid, str) else "", name=name, nozzle_temp_min=lo,
+                     nozzle_temp_max=hi, filament_type=ftype, setting_id="")
+
+
+def preset_for(filament: dict, model: str, nozzle_mm: float, *, family: str = "bambu",
+               printer_name: str | None = None) -> PresetRef | None:
+    """The owner's preset for this Spoolman `filament` on a printer `model` with a `nozzle_mm` nozzle, or None.
+    `family="klipper"`: `model` is the klipper_hardware.xml model key and the preset is the build's Orca row
+    (`_orca_preset`); `printer_name` is the printer's registry name (matches a config `slicer_printers` entry)."""
+    if family == "klipper":
+        if not isinstance(filament, dict):
+            return None
+        try:
+            return _orca_preset(filament, model, f"{float(nozzle_mm):g}", printer_name)
+        except (TypeError, ValueError):
+            return None
     printer = models_mod.printer_preset_name(model)
     if printer is None or not isinstance(filament, dict):
         return None

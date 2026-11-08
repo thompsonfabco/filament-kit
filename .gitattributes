@@ -21,3 +21,4 @@ server/tests/data/golden/** -text
 
 # Test fixtures are read byte for byte (golden builds are made from them): no CRLF on Windows checkouts.
 server/tests/data/** -text
+printer-pack/** text eol=lf

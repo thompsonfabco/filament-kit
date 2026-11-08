@@ -53,6 +53,10 @@ SCHEDULES = {"daily": 20 * 3600, "weekly": 6.5 * 86400}
 STATE = "state.json"
 MODULE = "updates"
 HW_ASSET = "bambu_hardware.xml"
+# (release asset, module with BUNDLED/override_path/validate/file_version/MAX_BYTES, state.json key). The Bambu key
+# stays "hardware" so existing installs keep recognising the file their feed installed.
+HW_ASSETS = (("bambu_hardware.xml", "filament_kit.bridge.hardware", "hardware"),
+             ("klipper_hardware.xml", "filament_kit.bridge.klipper.hardware", "hardware_klipper"))
 
 
 class Busy(Exception):
@@ -347,15 +351,19 @@ def _vtext(v: tuple[int, int]) -> str:
 
 
 def _feed(fetcher: release.Fetcher, rel: dict) -> int:
-    try:
-        hardware_feed(fetcher, rel)
-    except ReleaseError as e:
-        print(f"error: hardware data: {e}", file=sys.stderr)
-        return 1
-    except OSError as e:
-        print(f"error: hardware data: cannot install {HW_ASSET}: {e}", file=sys.stderr)
-        return 1
-    return 0
+    """Every hardware data asset (HW_ASSETS); one that fails does not stop the others."""
+    rc = 0
+    for asset in HW_ASSETS:
+        name = asset[0]
+        try:
+            hardware_feed(fetcher, rel, asset)
+        except ReleaseError as e:
+            print(f"error: hardware data: {e}", file=sys.stderr)
+            rc = 1
+        except OSError as e:
+            print(f"error: hardware data: cannot install {name}: {e}", file=sys.stderr)
+            rc = 1
+    return rc
 
 
 def _fsync_dir(d: Path) -> None:
@@ -385,24 +393,26 @@ def _atomic_write(path: Path, data: bytes) -> None:
     _fsync_dir(path.parent)
 
 
-def _feed_owned(ov: Path) -> bool | None:
+def _feed_owned(ov: Path, key: str = "hardware") -> bool | None:
     """None: no override file; True: the override is the file the feed installed (its sha256 is in state.json);
     False: a hand-made (or hand-edited) override, which the feed never touches."""
     if not ov.is_file():
         return None
-    mine = (_read_state().get("hardware") or {}).get("sha256")
+    mine = (_read_state().get(key) or {}).get("sha256")
     return bool(mine) and hmac.compare_digest(release.file_sha256(ov), mine)
 
 
-def _busy_note(e: Busy) -> None:
-    print(f"hardware data: printer {e} is mapping or loading; {HW_ASSET} is left as it is, the next run tries again")
+def _busy_note(e: Busy, name: str = HW_ASSET) -> None:
+    print(f"hardware data: printer {e} is mapping or loading; {name} is left as it is, the next run tries again")
 
 
-def _retire_feed_file(ov: Path, bundled_v: tuple[int, int] | None) -> None:
+def _retire_feed_file(ov: Path, bundled_v: tuple[int, int] | None, hardware=None, key: str = "hardware",
+                      name: str = HW_ASSET) -> None:
     """The override this feed installed, once the kit's bundled file is as new: move it to .previous (it would win
     per element over the newer bundled data). A hand-made override is never touched."""
-    from .bridge import hardware
-    if bundled_v is None or not _feed_owned(ov):
+    if hardware is None:
+        from .bridge import hardware
+    if bundled_v is None or not _feed_owned(ov, key):
         return
     have = hardware.file_version(ov.read_bytes())
     if have is None or have > bundled_v:
@@ -412,24 +422,27 @@ def _retire_feed_file(ov: Path, bundled_v: tuple[int, int] | None) -> None:
             os.replace(ov, ov.with_name(ov.name + ".previous"))
             _fsync_dir(ov.parent)
     except Busy as e:
-        _busy_note(e)
+        _busy_note(e, name)
         return
-    _write_state(hardware=None)
+    _write_state(**{key: None})
     print(f"hardware data: the kit's own file (version {_vtext(bundled_v)}) is as new as the one the feed "
           f"installed ({_vtext(have)}); that one is moved aside to {ov.name}.previous")
 
 
-def hardware_feed(fetcher: release.Fetcher, rel: dict) -> None:
-    """Install the release's bambu_hardware.xml as the override when it is verified, valid and newer (module doc).
-    Raises ReleaseError when a file fails a check (nothing is installed then)."""
-    from .bridge import hardware
+def hardware_feed(fetcher: release.Fetcher, rel: dict, asset: tuple = HW_ASSETS[0]) -> None:
+    """Install the release's hardware data file `asset` (an HW_ASSETS entry; bambu_hardware.xml by default) as the
+    override when it is verified, valid and newer (module doc). Raises ReleaseError when a file fails a check
+    (nothing is installed then)."""
+    import importlib
+    HW_ASSET, module, key = asset
+    hardware = importlib.import_module(module)
     ov = hardware.override_path()
     bundled_v = hardware.file_version(hardware.BUNDLED.read_bytes())
-    _retire_feed_file(ov, bundled_v)
+    _retire_feed_file(ov, bundled_v, hardware, key, HW_ASSET)
     url = rel["assets"].get(HW_ASSET)
     if url is None:
         return
-    if _feed_owned(ov) is False:
+    if _feed_owned(ov, key) is False:
         print(f"hardware data: hand-made override in place; hardware feed not installed ({ov} is left as it is)")
         have = hardware.file_version(ov.read_bytes())
         if bundled_v is not None and (have is None or have <= bundled_v):
@@ -466,7 +479,7 @@ def hardware_feed(fetcher: release.Fetcher, rel: dict) -> None:
         return
     try:
         with printers_idle():
-            if _feed_owned(ov) is False:     # changed by hand while this ran
+            if _feed_owned(ov, key) is False:     # changed by hand while this ran
                 print("hardware data: hand-made override in place; hardware feed not installed")
                 return
             old = ov.read_bytes() if ov.is_file() else None      # the feed's own earlier file
@@ -479,9 +492,9 @@ def hardware_feed(fetcher: release.Fetcher, rel: dict) -> None:
                 _atomic_write(ov.with_name(ov.name + ".previous"), old)
             _atomic_write(ov, data)
     except Busy as e:
-        _busy_note(e)
+        _busy_note(e, HW_ASSET)
         return
-    _write_state(hardware={"version": _vtext(new_v), "sha256": want, "release": rel["version"]})
+    _write_state(**{key: {"version": _vtext(new_v), "sha256": want, "release": rel["version"]}})
     print(f"hardware data: installed {HW_ASSET} version {_vtext(new_v)} from release {rel['version']} as {ov}")
 
 

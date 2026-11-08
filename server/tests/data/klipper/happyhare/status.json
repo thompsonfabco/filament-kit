@@ -1,0 +1,7 @@
+{
+  "print_stats": {"state": "printing", "filename": "x.gcode", "info": {}},
+  "toolhead": {"extruder": "extruder"},
+  "mmu": {"gate": 1, "tool": 1, "num_gates": 4, "gate_status": [1, 2, 0, -1], "gate_spool_id": [21, 22, -1, -1],
+          "gate_material": ["PLA", "PETG", "", ""], "gate_color": ["FF0000", "00FF00", "", ""],
+          "ttg_map": [0, 1, 2, 3]}
+}

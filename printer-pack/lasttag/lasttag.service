@@ -1,0 +1,16 @@
+[Unit]
+Description=lasttag: read-only last NFC tag for filament-kit (port 5002)
+After=nfc2klipper_backend.service
+Wants=nfc2klipper_backend.service
+
+[Service]
+User=@USER@
+ExecStart=@PYTHON@ -I @LASTTAG@
+Restart=always
+RestartSec=10
+NoNewPrivileges=yes
+ProtectSystem=strict
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

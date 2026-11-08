@@ -24,7 +24,7 @@ from starlette.routing import Route
 from . import (API_VERSION, __version__, config, intake, inventory, modules, pairing, profiles_api, setup_page,
                station_flow, tags)
 from .intake import CapReached, PhotoError, ReadCap, ReadError, RefundRefused
-from .bridge import camera, hardware, loading, mapping, registry, usage
+from .bridge import camera, family, hardware, loading, mapping, registry, usage
 from .bridge.connection import ACTIONS, DEVELOPER_MODE_REASON, Manager, NoReply, PrinterOffline, UnknownPrinter
 from .bridge.slottest import NoStatus, PrinterBusy
 from .bridge.models import camera_kind, model_name
@@ -113,6 +113,13 @@ def _bridge_error(e: Exception) -> JSONResponse | None:
         return _err(404, "not_found", "no such printer")
     if isinstance(e, loading.NotFound):
         return _err(404, "not_found", str(e))
+    if isinstance(e, family.ModuleOff):
+        return _module_off(e.family)
+    if isinstance(e, family.NotSupported):
+        return _err(409, "not_supported", str(e) or "this printer does not support that")
+    if isinstance(e, family.RecordedByMoonraker):
+        return _err(409, "recorded_by_moonraker", "Moonraker recorded this usage in Spoolman; correct it in "
+                    "Spoolman (the kit cannot undo it)")
     return None
 
 
@@ -214,10 +221,27 @@ def _printer_view(p: registry.Printer, printers) -> dict:
     except Exception:  # noqa: BLE001 - one odd report must not fail the whole printer list
         log.exception("printer %s: cannot summarize its report", p.serial)
         summary = None
-    return {"id": p.serial, "name": registry.display_name(p), "model": p.model, "serial": p.serial, "ip": p.ip,
+    fam = getattr(p, "family", "bambu")
+    view = {"id": p.serial, "name": registry.display_name(p), "model": p.model, "serial": p.serial, "ip": p.ip,
             "configured": p.configured, "state": state, "camera": {"kind": camera_kind(p.model)},
             "model_name": model_name(p.model),
-            "summary": summary}
+            "summary": summary, "family": fam}
+    if fam == "klipper":
+        kf = getattr(printers, "klipper", None)
+        view["host"] = p.host
+        view["verified"] = bool(kf.verified(p.serial)) if kf is not None else None
+        view["camera"] = {"kind": kf.camera_kind(p.serial) if kf is not None else None}
+        view["model_name"] = _klipper_model_name(p, kf)
+    return view
+
+
+def _klipper_model_name(p: registry.Printer, kf) -> str:
+    """A Klipper printer's name from klipper_hardware.xml ("Sovol SV08 MAX"); the model text when nothing matched."""
+    try:
+        m = kf.model(p.serial)[0] if kf is not None else None
+    except Exception:  # noqa: BLE001 - an unreadable detection must not fail the printer list
+        m = None
+    return m.name if m is not None and m.key != "generic" else (p.model or "").strip()
 
 
 def _hardware_view() -> dict:
@@ -232,6 +256,7 @@ def _hardware_view() -> dict:
 
 
 NOT_SEEN = "That printer hasn't been seen on the network yet"
+HOST = re.compile(r"[A-Za-z0-9.:\[\]-]{1,253}")   # a host name, IPv4 or bracketed IPv6
 
 
 def _printer_routes(printers) -> list[Route]:
@@ -247,9 +272,28 @@ def _printer_routes(printers) -> list[Route]:
             return [_printer_view(p, printers) for p in registry.load().values()]
         return JSONResponse({"printers": await run_in_threadpool(build)})
 
+    async def klipper_add(body: dict):
+        host, name, port = body.get("host"), _opt(body, "name", str), _opt(body, "port", int, 7125)
+        if not isinstance(host, str) or not HOST.fullmatch(host.strip()):
+            raise BadRequest("host is required: the Moonraker host name or address (letters, digits, . - :)")
+        if isinstance(port, bool) or not 1 <= port <= 65535:
+            raise BadRequest("port must be between 1 and 65535")
+
+        def run() -> dict:
+            p = registry.add_klipper((name or "").strip() or host.strip(), host.strip(), port)
+            printers.sync()
+            printers.wait_settled(p.serial, FIRST_STATE_WAIT)
+            return _printer_view(p, printers)
+        return JSONResponse({"printer": await run_in_threadpool(run)})
+
     @_authed
     async def printer_add(request: Request):
         body = await _json(request)
+        fam = body.get("family", "bambu")
+        if fam == "klipper":
+            return await klipper_add(body)
+        if fam != "bambu":
+            raise BadRequest("family must be bambu or klipper")
         serial, code = body.get("serial"), body.get("access_code")
         if not isinstance(serial, str) or not serial.strip():
             raise BadRequest("serial is required")
@@ -322,11 +366,29 @@ def _printer_routes(printers) -> list[Route]:
             return _err(504, "no_reply", "the printer did not answer in time")
         except UnknownPrinter:
             return _err(404, "not_found", "no such printer")
+        except family.ModuleOff as e:
+            return _module_off(e.family)
         return JSONResponse({"ok": True, "reply": reply})
+
+    @_authed
+    async def printer_scan(request: Request):
+        """`POST /api/printers/scan {subnet?}`: the owner's Scan for Klipper printers (Moonraker on this machine's
+        /24 unless a subnet is given). Found printers are listed unconfigured; add one with POST /api/printers."""
+        body = await _json(request)
+        subnet = _opt(body, "subnet", str)
+        kf = getattr(printers, "klipper", None)
+        if kf is None:
+            return _module_off("klipper")
+        try:
+            found = await run_in_threadpool(kf.scan, subnet)
+        except ValueError as e:
+            raise BadRequest(str(e)) from None
+        return JSONResponse({"found": found})
 
     return [
         Route("/api/printers", printer_list),
         Route("/api/printers", printer_add, methods=["POST"]),
+        Route("/api/printers/scan", printer_scan, methods=["POST"]),
         Route("/api/printers/{id}", printer_get),
         Route("/api/printers/{id}/command", printer_command, methods=["POST"]),
     ]
@@ -344,6 +406,22 @@ def _bridge_routes(printers, mapper: mapping.Mapper, sm) -> list[Route]:
         if p is None:
             raise UnknownPrinter(serial)
         return p
+
+    def klipper_of(serial: str):
+        """The Klipper family when `serial` is a Klipper printer, else None (a Bambu printer)."""
+        p = registry.load().get(serial)
+        if p is None or p.family != "klipper":
+            return None
+        kf = getattr(printers, "klipper", None)
+        if kf is None:
+            raise family.ModuleOff("klipper")
+        return kf
+
+    def bambu_only(serial: str) -> None:
+        p = registry.load().get(serial)
+        if p is not None and p.family == "klipper":
+            raise family.NotSupported("slot mapping is for Bambu printers; a Klipper printer's slots are its "
+                                      "tools or lanes")
 
     def label_of(request: Request) -> str:
         label = request.path_params["label"]
@@ -381,6 +459,7 @@ def _bridge_routes(printers, mapper: mapping.Mapper, sm) -> list[Route]:
     @_authed
     async def map_start(request: Request):
         serial = request.path_params["id"]
+        await run_in_threadpool(bambu_only, serial)
         job = await run_in_threadpool(audited, "slot mapping", request.state.device,
                                       lambda: mapper.start(serial), serial=serial)
         return JSONResponse({"job_id": job}, status_code=202)
@@ -391,6 +470,7 @@ def _bridge_routes(printers, mapper: mapping.Mapper, sm) -> list[Route]:
 
         def build() -> dict:
             known(serial)
+            bambu_only(serial)
             return mapper.view(serial)
         return JSONResponse(await run_in_threadpool(build))
 
@@ -405,6 +485,10 @@ def _bridge_routes(printers, mapper: mapping.Mapper, sm) -> list[Route]:
 
         def run() -> dict:
             known(serial)
+            kf = klipper_of(serial)
+            if kf is not None:
+                r = kf.load(sm, serial, label, spool_id, dry, sealed_location=sealed())
+                return {**r, "confirmed": r.get("confirmed") if dry else bool(r.get("confirmed"))}
             not_cert_changed(serial)
             not_mapping(serial)
             try:
@@ -429,8 +513,12 @@ def _bridge_routes(printers, mapper: mapping.Mapper, sm) -> list[Route]:
 
         def run() -> dict:
             known(serial)
-            not_mapping(serial)
-            r = loading.unload(printers, sm, serial, label, dry, sealed_location=sealed())
+            kf = klipper_of(serial)
+            if kf is not None:
+                r = kf.unload(sm, serial, label, dry, sealed_location=sealed())
+            else:
+                not_mapping(serial)
+                r = loading.unload(printers, sm, serial, label, dry, sealed_location=sealed())
             first = next((m for m in r["moved_back"] if m["id"] == r["spool"].get("id")), None)
             return {**r, "location": first["location"] if first else r["spool"].get("location")}
         return JSONResponse(await run_in_threadpool(audited, "slot unload", request.state.device, run,
@@ -449,12 +537,15 @@ def _bridge_routes(printers, mapper: mapping.Mapper, sm) -> list[Route]:
 
         def build() -> list[dict]:
             known(serial)
-            return usage.entries(serial, days)
+            kf = klipper_of(serial)
+            return kf.usage(serial, days) if kf is not None else usage.entries(serial, days)
         return JSONResponse({"entries": await run_in_threadpool(build)})
 
     @_authed
     async def usage_undo(request: Request):
         entry_id = request.path_params["entry_id"]
+        if family.is_klipper_entry(entry_id):
+            raise family.RecordedByMoonraker(entry_id)
         e = await run_in_threadpool(audited, "usage undo", request.state.device,
                                     lambda: usage.undo(entry_id, sm), entry=entry_id)
         return JSONResponse({"entry": e})
@@ -744,7 +835,8 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             Route("/api/station/recognize", _flow(station_recognize), methods=["POST"]),
             Route("/api/station/save", _flow(station_save), methods=["POST"]),
             *_gated([*_printer_routes(printers), *_bridge_routes(printers, mapper, sm),
-                     *camera.routes(camera_hub, _authed)], "printers", on),
+                     *camera.routes(camera_hub, _authed)],
+                    "klipper" if "klipper" in on and "printers" not in on else "printers", on),
             *_gated(profiles_api.routes(_authed, sm), "presets", on),
             *setup_page.routes(printers if "printers" in on else None, **(setup or {})),
         ],

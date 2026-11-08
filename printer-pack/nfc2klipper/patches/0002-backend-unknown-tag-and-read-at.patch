@@ -1,0 +1,84 @@
+diff --git a/nfc2klipper_backend.py b/nfc2klipper_backend.py
+index b5cee36..447fd90 100755
+--- a/nfc2klipper_backend.py
++++ b/nfc2klipper_backend.py
+@@ -13,12 +13,14 @@
+ 
+ """Backend service for NFC handling and communication with Moonraker/Spoolman."""
+ 
++import requests
+ import argparse
+ import logging
+ import os
+ import signal
+ import sys
+ import threading
++import time
+ from typing import Any, Dict, List, Optional, Union
+ 
+ from lib.config import Nfc2KlipperConfig
+@@ -111,6 +113,7 @@ else:
+ 
+ last_nfc_id: Optional[str] = None  # pylint: disable=C0103
+ last_spool_id: Optional[str] = None  # pylint: disable=C0103
++last_read_at: Optional[float] = None  # pylint: disable=C0103  # local patch: unix time of the last tag read
+ 
+ # Create IPC server instance
+ ipc_server: IPCServer = IPCServer(socket_path)
+@@ -202,12 +205,27 @@ def should_clear_spool() -> bool:
+     return False
+ 
+ 
++def moonraker_post_gcode(commands: List[str]) -> None:
++    """Local patch: send raw gcode commands through Moonraker"""
++    assert args is not None  # nosec
++    response = requests.post(
++        args["moonraker"]["moonraker-url"] + "/api/printer/command",
++        timeout=10,
++        json={"commands": commands},
++    )
++    if response.status_code != 200:
++        raise ValueError(f"Request to moonraker failed: {response}")
++
++
+ def on_nfc_tag_present(ndef_data: Any, identifier: str) -> None:
+     """Handles a read tag"""
+ 
+     if identifier:
+-        global last_nfc_id  # pylint: disable=W0603
++        global last_nfc_id, last_read_at  # pylint: disable=W0603
+         last_nfc_id = identifier
++        last_read_at = time.time()  # local patch: lets lasttag report when the tag was read
++        global last_spool_id  # pylint: disable=W0603
++        last_spool_id = None  # local patch: an unknown tag must not keep reporting the previous spool
+ 
+     # Try each parser in order until one returns valid spool and filament data
+     spool: Optional[str] = None
+@@ -222,7 +240,6 @@ def on_nfc_tag_present(ndef_data: Any, identifier: str) -> None:
+                 break
+ 
+     if spool:
+-        global last_spool_id  # pylint: disable=W0603
+         last_spool_id = spool
+ 
+     if spool and filament:
+@@ -235,6 +252,11 @@ def on_nfc_tag_present(ndef_data: Any, identifier: str) -> None:
+             "Did not find spool and filament data in tag (%s)",
+             identifier,
+         )
++        # Local patch: tell Klipper a tag was read but matched no spool (LED feedback)
++        try:
++            moonraker_post_gcode(["_FK_SCAN_UNKNOWN"])
++        except Exception as ex:  # pylint: disable=W0718
++            logger.error(ex)
+ 
+ 
+ def on_nfc_no_tag_present() -> None:
+@@ -282,6 +304,7 @@ def handle_get_state() -> Dict[str, Any]:
+         "status": "ok",
+         "nfc_id": last_nfc_id,
+         "spool_id": last_spool_id,
++        "read_at": last_read_at,  # local patch
+     }
+ 
+ 

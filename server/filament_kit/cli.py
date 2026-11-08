@@ -17,7 +17,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-from . import apply, config, inventory, library, menu_ui, modules, pairing, secret_input
+from . import apply, config, inventory, klipper_cli, library, menu_ui, modules, pairing, secret_input
 from .bridge import registry
 from .profiles import builds, lines as lines_mod
 from .profiles.errors import ProfileError
@@ -1804,8 +1804,11 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     sc = sub.add_parser("setup-code", help="show the setup page's address and its setup code (root); --new "
                                            "replaces the code")
     sc.add_argument("--new", action="store_true", help="make a new setup code; the old one stops working")
+    klipper_cli.add_parser(sub)       # its own module (Klipper printers), see klipper_cli.py
     args = ap.parse_args(argv)
 
+    if args.cmd == "klipper":
+        return klipper_cli.run(args)
     if args.cmd == "status":
         return cmd_status(client_factory or _default_client)
     if args.cmd == "pair":

@@ -330,7 +330,13 @@ def _prev(s: dict) -> str:
 
 
 def _is_slot_location(loc: str) -> bool:
-    return SLOT_MARK in (loc or "")
+    """A printer slot: a Bambu AMS location, or "<Klipper printer name> – <label>"."""
+    loc = loc or ""
+    if SLOT_MARK in loc:
+        return True
+    if f" {status.DASH} " not in loc:
+        return False
+    return any(loc.startswith(f"{n} {status.DASH} ") for n in registry.klipper_names())
 
 
 def _send_back(sm, spools: list[dict], sealed: str, dry: bool) -> list[dict]:
@@ -464,3 +470,7 @@ def unload(manager, sm, serial: str, label: str, dry: bool, *, sealed_location: 
         else:
             spool = sm.get(f"spool/{first['id']}")
     return {"spool": spool, "slot": slot, "preset": None, "dry_run": bool(dry), "moved_back": moved}
+
+
+# the Spoolman moves, shared with the Klipper family (bridge.klipper.loads)
+send_back, occupants, target_patch, prev_location = _send_back, _occupants, _target_patch, _prev

@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Klipper/Moonraker printer facts for filament-kit (how to edit it: docs/klipper.md).
+
+  Edit freely in an override at /etc/filament-kit/klipper_hardware.xml (same layout; give its root a version above
+  this file's, e.g. 1.1, or it is ignored). The override wins per element: a <system> or <model> by key, a speech
+  <word> by text. Gcode templates are one line; the only placeholders are {spool} {tool} {lane} {gate}.
+
+  filament systems (adapter = the code that reads the printer):
+    single       Moonraker's one active spool (SET_ACTIVE_SPOOL / CLEAR_ACTIVE_SPOOL)
+    toolchanger  one spool per tool, kept by the filament-kit printer pack's _FK_TOOL_SPOOLS macro
+    afc          AFC-Klipper-Add-On (Box Turtle ...): AFC_lane objects
+    happyhare    Happy Hare: the mmu object's gate arrays
+    lanedata     Moonraker's lane_data database namespace (read only)
+  A model with system="auto" picks the first system whose detect-object / detect-namespace the printer has, else single.
+-->
+<klipper-hardware version="1">
+  <filament-systems>
+    <system key="single" adapter="single">
+      <set-gcode>SET_ACTIVE_SPOOL ID={spool}</set-gcode>
+      <clear-gcode>CLEAR_ACTIVE_SPOOL</clear-gcode>
+    </system>
+    <system key="tool-macros" adapter="toolchanger">
+      <spool-var macro="_FK_TOOL_SPOOLS" var="t{tool}"/>
+      <set-gcode>FK_SET_TOOL_SPOOL TOOL={tool} ID={spool}</set-gcode>
+      <clear-gcode>FK_SET_TOOL_SPOOL TOOL={tool} ID=0</clear-gcode>
+    </system>
+    <system key="afc" adapter="afc" detect-object="AFC">
+      <set-gcode>SET_SPOOL_ID LANE={lane} SPOOL_ID={spool}</set-gcode>
+      <clear-gcode>SET_SPOOL_ID LANE={lane} SPOOL_ID=</clear-gcode>
+    </system>
+    <system key="happy-hare" adapter="happyhare" detect-object="mmu">
+      <set-gcode>MMU_GATE_MAP GATE={gate} SPOOLID={spool}</set-gcode>
+      <clear-gcode>MMU_GATE_MAP GATE={gate} SPOOLID=-1</clear-gcode>
+    </system>
+    <system key="lane-data" adapter="lanedata" detect-namespace="lane_data"/>
+  </filament-systems>
+
+  <models>
+    <!-- read from the owner's printer 2026-11-03 (Demon Klipper Essentials, single extruder) -->
+    <model key="SOVOL-SV08-MAX" name="Sovol SV08 MAX" say="s v zero eight max" system="single" verified="true">
+      <detect>
+        <object>gcode_macro DEMON_START</object>
+        <hostname>SV08MAX*</hostname>
+      </detect>
+      <slot label="T0" say="tool"/>
+      <orca nozzle="0.4" printer="Sovol SV08 MAX"/>
+      <orca nozzle="0.6" printer="Sovol SV08 MAX 0.6"/>
+      <orca nozzle="1.0" printer="Sovol SV08 MAX 1.0"/>
+      <light on="SET_LED LED=chamber_light WHITE=1 SYNC=0" off="SET_LED LED=chamber_light WHITE=0 SYNC=0"/>
+      <scan-feedback ok="_SPOOL_SCANNED ID={spool}" unknown="_SPOOL_SCAN_UNKNOWN"/>
+      <tag-source url="http://{host}:5002/last-tag"/>
+    </model>
+
+    <!-- NOT VERIFIED: Sovol has published no M1D firmware or names yet (2026-11-03). IDEX "DualX 1+6": one fixed head
+         on the left carriage, a 6-head toolchanger on the right. The labels below are placeholders; fill this entry in
+         from `tools/capture_klipper.py` output when the printer arrives, then set verified="true". The detect rule
+         matches nothing on purpose until then. -->
+    <model key="sovol-m1d" name="Sovol M1D" say="m one d" system="tool-macros" verified="false">
+      <detect>
+        <object>gcode_macro FK_UNVERIFIED_M1D</object>
+      </detect>
+      <tool n="0" label="L" say="left"/>
+      <tool n="1" label="C1" say="changer one"/>
+      <tool n="2" label="C2" say="changer two"/>
+      <tool n="3" label="C3" say="changer three"/>
+      <tool n="4" label="C4" say="changer four"/>
+      <tool n="5" label="C5" say="changer five"/>
+      <tool n="6" label="C6" say="changer six"/>
+    </model>
+
+    <model key="generic" name="Klipper printer" say="printer" system="auto"/>
+  </models>
+
+  <speech>
+    <word text="T0" say="tool zero"/>
+  </speech>
+</klipper-hardware>

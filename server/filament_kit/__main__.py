@@ -10,8 +10,10 @@ from uvicorn.main import STARTUP_FAILURE
 
 from . import config, modules
 from .api import create_app
-from .bridge import camera, discovery, mapping, registry, usage
+from .bridge import camera, discovery, family, mapping, registry, usage
 from .bridge.connection import Manager
+from .bridge.klipper import discovery as klipper_discovery
+from .bridge.klipper.manager import KlipperFamily
 from .spoolman import Spoolman
 
 log = logging.getLogger(__name__)
@@ -40,7 +42,8 @@ def discovery_callback(manager):
     return found
 
 
-def printer_lifespan(manager, listener_factory=discovery.Listener, camera_hub=None, tracker=None, mapper=None):
+def printer_lifespan(manager, listener_factory=discovery.Listener, camera_hub=None, tracker=None, mapper=None,
+                     klipper=None):
     """Starlette lifespan: the printer connection manager and the SSDP listener live as long as the app.
     A listener that cannot bind (port in use) is logged and skipped; printers already set up still work.
     The slot mapper (if given) restores, once its printer is connected and idle, any slot snapshot a killed job
@@ -51,11 +54,14 @@ def printer_lifespan(manager, listener_factory=discovery.Listener, camera_hub=No
     async def lifespan(app):
         listener = None
         try:
-            try:
-                listener = listener_factory(discovery_callback(manager)).start()
-            except OSError as e:
-                log.warning("printer discovery is off: %s", e)
-            manager.start()
+            if manager is not None:
+                try:
+                    listener = listener_factory(discovery_callback(manager)).start()
+                except OSError as e:
+                    log.warning("printer discovery is off: %s", e)
+                manager.start()
+            if klipper is not None:
+                klipper.start()
             if mapper is not None:
                 try:
                     mapper.recover_pending()
@@ -69,7 +75,10 @@ def printer_lifespan(manager, listener_factory=discovery.Listener, camera_hub=No
                         await anyio.to_thread.run_sync(mapper.shutdown)
                     except Exception:
                         log.exception("mapping: shutdown failed")
-                await anyio.to_thread.run_sync(manager.stop)
+                if klipper is not None:
+                    await anyio.to_thread.run_sync(klipper.stop)
+                if manager is not None:
+                    await anyio.to_thread.run_sync(manager.stop)
                 if listener is not None:
                     await anyio.to_thread.run_sync(listener.stop)
                 if tracker is not None:
@@ -140,14 +149,24 @@ def main() -> None:
     etc = config.paths().etc
     on = modules.enabled(cfg)
     sm = Spoolman(cfg["spoolman_url"])
+    klipper = KlipperFamily(sm, browser_factory=klipper_discovery.Browser) if "klipper" in on else None
     if "printers" in on:
         manager = Manager(spoolman=sm)
         tracker = usage.Tracker(manager, sm)   # listens before the manager connects: sees every first report
-        hub = camera.Hub(printer_state=manager.state)  # ip / Access Code / model / pin from the registry
+        hub = camera.Hub(printer_state=manager.state,  # ip / Access Code / model / pin from the registry
+                         klipper_url=klipper.camera_url if klipper else None)
         mapper = mapping.Mapper(manager)               # one per process: the app's routes and the lifespan share it
         manager.add_listener(mapping.LayoutWatch(manager, mapper))   # stale map on a layout change, idle re-map
-        app = create_app(sm, printers=manager, camera_hub=hub, mapper=mapper, enabled_modules=on)
-        app.router.lifespan_context = printer_lifespan(manager, camera_hub=hub, tracker=tracker, mapper=mapper)
+        app = create_app(sm, printers=family.Printers(bambu=manager, klipper=klipper), camera_hub=hub, mapper=mapper,
+                         enabled_modules=on)
+        app.router.lifespan_context = printer_lifespan(manager, camera_hub=hub, tracker=tracker, mapper=mapper,
+                                                       klipper=klipper)
+    elif klipper is not None:
+        # Klipper printers only: no Bambu Manager, SSDP listener, usage tracker or slot mapper
+        printers = family.Printers(bambu=None, klipper=klipper)
+        hub = camera.Hub(printer_state=printers.state, klipper_url=klipper.camera_url)
+        app = create_app(sm, printers=printers, camera_hub=hub, mapper=object(), enabled_modules=on)
+        app.router.lifespan_context = printer_lifespan(None, camera_hub=hub, klipper=klipper)
     else:
         # no bridge at all: the printer routes answer 409 module_off and never reach these stand-ins
         hub = _NoHub()
