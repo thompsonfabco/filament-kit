@@ -11,8 +11,9 @@ A tag `v<x.y.z>` pushed to GitHub builds and publishes one release, with:
   the signed Android app inside (`app/filament-kit.apk`, `app/version.txt`);
 - `filament-kit.apk` on its own, `filament-kit-sync-setup-<version>.exe` (the Windows PC sync) and
   `filament-kit-sync-linux-x86_64-<version>.tar.gz` (the Linux PC sync);
-- `get.sh` (the one-command installer) and `bambu_hardware.xml` (the printer data feed the updater reads);
-- `library.tar.gz` when the library token is set (see below);
+- `get.sh` (the one-command installer), `bambu_hardware.xml` and `klipper_hardware.xml` (the printer data feeds
+  the updater reads) and `fk-printer-pack.tar.gz` (the Klipper printer pack);
+- the filament library, `library.tar.gz` (see [The filament library](#the-filament-library) below);
 - `SHA256SUMS` listing all of them, and `SHA256SUMS.sig`, its ed25519 signature.
 
 `get.sh` and `filament-kit update` refuse anything whose hash is not in a correctly signed `SHA256SUMS`.
