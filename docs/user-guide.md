@@ -108,7 +108,8 @@ Use either way. Both install what the new mode needs, start it, and stop what it
   lacks a module they need (then they go off, and the command says so).
 - One module at a time: `sudo filament-kit modules enable <name>` or `sudo filament-kit modules disable <name>`,
   for example `sudo filament-kit modules disable printers`. `sudo filament-kit modules list` shows the names and
-  which are on.
+  which are on. Turning one off also turns off what needs it, and says so; turning one on at a terminal offers to turn on
+  what it needs.
 
 Turning a module off **never deletes its data**. Spoolman's spools, settings and paired phones stay where they
 are and come back when you turn the module on again. Only `sudo filament-kit uninstall --purge` deletes data. While a
