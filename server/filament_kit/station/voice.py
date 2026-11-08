@@ -7,8 +7,8 @@ install.sh fetches it. To add a voice, add a row here with the hashes of its .on
 
 `python -m filament_kit.station.voice DIR [NAME]` (the `station_voice` step of `modules apply`, station on,
 `station.tts` not `espeak`): fetch the voice's files into DIR, checked against its hashes. Present with the right
-hash: skipped. A mismatch fails (exit 1, that file not kept). Offline: a note and exit 0, since espeak-ng still
-speaks. A voice is 60-80 MB; at runtime it is
+hash: skipped. A mismatch exits 1 (that file not kept); `modules apply` turns that into a warning, never a failed
+install. Offline: a note and exit 0. Either way espeak-ng speaks. A voice is 60-80 MB; at runtime it is
 all offline.
 """
 from __future__ import annotations
@@ -24,7 +24,11 @@ from pathlib import Path
 # multi-speaker model), the owner's pick by ear on the panel (2026-11-07), knowing the licence caveat below.
 DEFAULT = "en_US-libritts_r-medium"
 
-_HF = "https://huggingface.co/rhasspy/piper-voices/resolve/main/"
+# One rhasspy/piper-voices commit (main on 2026-11-02, checked 2026-11-07: all six hashes below match its files), never
+# `main`: a later edit there (the .onnx.json files have been changed after release) can't move under the hashes. A new
+# voice from a later commit: pin that commit here and check the other rows' hashes still match it.
+REVISION = "e7229f7d33a10e145e109b886d661984201ac3c4"
+_HF = f"https://huggingface.co/rhasspy/piper-voices/resolve/{REVISION}/"
 VOICES = {
     # LJ Speech: public domain (dataset and voice), trained from scratch: the pick with no licence question.
     "en_US-ljspeech-medium": {
@@ -81,11 +85,12 @@ def _sha256(path: Path) -> str | None:
         return None
 
 
-def fetch(directory: str | os.PathLike = DIR, name: str | None = None, urlopen=urllib.request.urlopen) -> str:
+def fetch(directory: str | os.PathLike = DIR, name: str | None = None, urlopen=None) -> str:
     """Put voice `name`'s files into directory: "present" (already there, right hashes), "installed", or "offline"
     (a file not reachable: its partial download is dropped, but a file that already arrived and matched its hash
     is kept, so the next run fetches only what is missing). Raises HashMismatch for a file that isn't the pinned
     one (that file is not kept)."""
+    urlopen = urlopen or urllib.request.urlopen
     v = get(name)
     d = Path(directory)
     todo = [(n, h) for n, h in v["files"].items() if _sha256(d / n) != h]
