@@ -61,6 +61,14 @@ def test_its_own_unit_with_another_description_is_refused(tmp_path):
 
 
 @needs_bash
+def test_someone_elses_unit_with_no_folder_is_refused_and_says_what_to_do(tmp_path):
+    r = _check(tmp_path, opt=False, unit="[Unit]\nDescription=My Spoolman\n")
+    assert r.returncode == 1 and "went-on" not in r.stdout
+    assert "Your Spoolman was not changed" in r.stderr and "spoolman.service" in r.stderr
+    assert "modules disable spoolman" in r.stderr and ".fk-installed" not in r.stderr
+
+
+@needs_bash
 def test_an_upgrade_never_refuses(tmp_path):
     assert "went-on" in _check(tmp_path, marker=True).stdout
 
@@ -97,6 +105,8 @@ echo "kit=$KIT_SPOOLMAN"
 @needs_bash
 @pytest.mark.parametrize("kw,want", [({"opt": False}, "kit=1"), ({"marker": True}, "kit=1"), ({}, "kit=0"),
                                      ({"unit": "Description=Spoolman\n"}, "kit=0"),
+                                     ({"opt": False, "unit": "Description=Spoolman\n"}, "kit=0"),
+                                     ({"opt": False, "unit": "Description=Spoolman filament inventory (v0.27.0)\n"}, "kit=1"),
                                      ({"unit": "Description=Spoolman filament inventory (v0.27.0)\n"}, "kit=1")])
 def test_uninstall_tells_the_same_way_whose_spoolman_it_is(tmp_path, kw, want):
     assert _uninstall_says(tmp_path, **kw) == want
@@ -104,10 +114,27 @@ def test_uninstall_tells_the_same_way_whose_spoolman_it_is(tmp_path, kw, want):
 
 def test_uninstall_leaves_a_foreign_spoolman_whole_and_says_so():
     assert 'rm -rf /opt/spoolman' in UNINSTALL.split('if [ "$KIT_SPOOLMAN" -eq 1 ]; then', 1)[1]
-    for piece in ("Left the Spoolman in /opt/spoolman", '[ "$u" = spoolman.service ] && [ "$KIT_SPOOLMAN" -eq 0 ]',
+    for piece in ("Left the Spoolman the kit did not install", '[ "$u" = spoolman.service ] && [ "$KIT_SPOOLMAN" -eq 0 ]',
                   'KIT_USERS="$KIT_USERS spoolman"'):
         assert piece in UNINSTALL, piece
     assert "/var/lib/filament-kit-web /var/lib/spoolman" not in UNINSTALL.split("--purge")[-1].split("Kept:")[0]
+
+
+def test_uninstalls_last_lines_name_what_really_went():
+    """Only the part from the choice on: the rest removes real things."""
+    part = UNINSTALL[UNINSTALL.index('if [ "$KIT_SPOOLMAN" -eq 1 ]; then\n    rm -rf /opt/spoolman'):]
+    assert "rm -rf /opt/spoolman /opt/spoolman.new /opt/spoolman.old /etc/systemd/system/spoolman.service.d" in part
+    assert part.index("service.d") < part.index("else")     # someone else's Spoolman keeps its own settings
+    assert "filament-kit and Spoolman removed" not in part and '"$REMOVED removed' in part
+    assert "web$KEPT_SPOOLMAN /var/backups" in part and "/var/lib/spoolman /var/backups" not in part
+
+
+def test_the_step_line_names_the_file_not_its_text(capsys):
+    act = apply.Action("spoolman_allow", apply.spoolman_dropin({}))
+    assert apply._label(act) == f"spoolman_allow {apply.SPOOLMAN_DROPIN}"
+    with pytest.raises(apply.ApplyError) as e:
+        apply._fail(act, OSError("disk"))
+    assert "IPAddressDeny" not in str(e.value) and "IPAddressDeny" not in capsys.readouterr().out
 
 
 def test_the_check_comes_before_anything_is_replaced():

@@ -827,6 +827,8 @@ def _step(ex: _Exec, a: Action) -> None:
 
 
 def _label(a: Action) -> str:
+    if a.kind == "spoolman_allow":      # its arg is the file's text
+        return f"{a.kind} {SPOOLMAN_DROPIN}"
     if isinstance(a.arg, tuple):
         return f"{a.kind} {a.arg[0]}"
     return f"{a.kind} {a.arg}".rstrip()

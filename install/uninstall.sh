@@ -21,12 +21,12 @@ if [ "$PURGE" -eq 1 ]; then
 fi
 
 # BEGIN foreign-spoolman check
-# A Spoolman the kit did not install is someone's: its program, unit, data and user all stay. The kit's own has the marker
-# (from its first release), or, if an install stopped between the swap and the marker, the kit's unit.
+# A Spoolman the kit did not install is someone's, wherever its program is: its program, unit, data and user all stay. The
+# kit's own has the marker (from its first release), or, if an install stopped between the swap and the marker, the kit's unit.
 SPOOLMAN_OPT=${SPOOLMAN_OPT:-/opt/spoolman}
 SPOOLMAN_UNIT=${SPOOLMAN_UNIT:-/etc/systemd/system/spoolman.service}
 KIT_SPOOLMAN=1
-if [ -d "$SPOOLMAN_OPT" ] && [ ! -f "$SPOOLMAN_OPT/.fk-installed" ] \
+if [ ! -f "$SPOOLMAN_OPT/.fk-installed" ] && { [ -d "$SPOOLMAN_OPT" ] || [ -f "$SPOOLMAN_UNIT" ]; } \
         && ! grep -qs '^Description=Spoolman filament inventory' "$SPOOLMAN_UNIT"; then
     KIT_SPOOLMAN=0
 fi
@@ -110,11 +110,14 @@ if [ "$REMOTE_GONE" -eq 1 ]; then
 fi
 rm -rf /opt/filament-kit
 if [ "$KIT_SPOOLMAN" -eq 1 ]; then
-    rm -rf /opt/spoolman /opt/spoolman.new /opt/spoolman.old
+    rm -rf /opt/spoolman /opt/spoolman.new /opt/spoolman.old /etc/systemd/system/spoolman.service.d
+    REMOVED="filament-kit and Spoolman"
+    KEPT_SPOOLMAN=" /var/lib/spoolman"
 else
-    echo "Left the Spoolman in /opt/spoolman, its unit, its data and its user: the kit did not install it."
+    echo "Left the Spoolman the kit did not install: its program, unit, settings, data and user."
+    REMOVED="filament-kit"
+    KEPT_SPOOLMAN=""
 fi
-rm -rf /etc/systemd/system/spoolman.service.d
 
 if [ "$PURGE" -eq 1 ]; then
     rm -rf /etc/filament-kit /etc/filament-kit-station /var/lib/filament-kit /var/lib/filament-kit-web /var/backups/filament-kit
@@ -137,9 +140,9 @@ if [ "$PURGE" -eq 1 ]; then
             userdel "$u" || true
         fi
     done
-    echo "filament-kit and Spoolman removed, including all data."
+    echo "$REMOVED removed, including all data."
 else
-    echo "filament-kit and Spoolman removed."
-    echo "Kept: /etc/filament-kit /etc/filament-kit-station /var/lib/filament-kit /var/lib/filament-kit-web /var/lib/spoolman /var/backups/filament-kit"
+    echo "$REMOVED removed."
+    echo "Kept: /etc/filament-kit /etc/filament-kit-station /var/lib/filament-kit /var/lib/filament-kit-web$KEPT_SPOOLMAN /var/backups/filament-kit"
     echo "Run again with --purge to delete them too."
 fi
