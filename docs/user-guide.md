@@ -122,7 +122,7 @@ the 6-digit code. The code expires after about 10 minutes and works once; `sudo 
 one. On Android 17 and newer the app needs **Local network** access.
 
 The app updates itself: after `sudo filament-kit update` to a release with a newer app, the home screen offers
-it. `sudo filament-kit unpair` lists the paired phones; `sudo filament-kit unpair <id>` removes one.
+it. `sudo filament-kit unpair` lists the paired phones; `sudo filament-kit unpair <id>` removes one. Using the app (printers, adding spools by hand or from label photos): [Using the Android app](android-app.md).
 
 No Android phone? The phone web app ([Use the web app on an iPhone](install-iphone-web-app.md)) does the same
 tasks in any phone browser.
