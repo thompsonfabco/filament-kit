@@ -114,14 +114,11 @@ Redo the check when a dependency is added or a pin changes: `pip-licenses` in a 
 `filament-kit[station,web,push]`, `android/gradle/libs.versions.toml`, the two `platformio.ini` files and the
 `apt` lists in `modules.py`.
 
-## Before the repository goes public
+## Checks before a release goes out
 
 - Close the open items in [THIRD-PARTY.md](../THIRD-PARTY.md), or decide to live with them.
 - Scan the tree and the git history for private addresses, host names, serials and secrets.
   `server/tests/test_readme.py` scans the public docs and code for a list of such strings; extend the list
   rather than the exceptions.
-- The one-command install in the README only works once the repository is public; remove the "private for
-  now" notes from the README and the how-tos, and the `--token-file` route from
-  [install-server.md](install-server.md).
 - Google's developer verification for sideloaded Android apps (rolling out 2026–2027) may apply to the APK on
   the Releases page; check the current rules.

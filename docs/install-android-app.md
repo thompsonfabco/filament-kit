@@ -4,8 +4,7 @@ The filament-kit app is how you add spools, look them up, load them into printer
 from an Android phone. It talks only to your own filament-kit server at home.
 
 > **Beta.** The app is not in the Google Play Store or F-Droid. It comes as a file, `filament-kit.apk`, on the
-> project's GitHub Releases page. While the repository is private, the Releases page only opens for a GitHub
-> account that can see it. See [Known gaps](known-gaps.md).
+> project's GitHub Releases page. See [Known gaps](known-gaps.md).
 
 ## What you need
 

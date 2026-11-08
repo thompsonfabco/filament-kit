@@ -34,7 +34,6 @@ Options go after `get.sh` (or after `./install.sh` from an unpacked release): `-
 `--server <address>` for a station, `--modules a,b` with `--set key=value` for the settings a module needs
 (for example `--modules server,web --set web.public_url=https://filament.example.com/filament`), and
 `--version 0.3.0`. Without a terminal it asks nothing and installs the `server` mode unless told otherwise.
-While the repository is private, `get.sh` needs a GitHub token: `sudo bash get.sh --token-file <file>`.
 
 The installer takes a few minutes. You can run it again at any time; it never deletes your spools or settings.
 Running it again later (an update) asks no questions and keeps the mode you have.
@@ -498,7 +497,7 @@ bad download changes nothing. The token below is only ever sent to api.github.co
 as for program updates. Testing against a private repository: put a GitHub token that can read it in
 `/etc/filament-kit/github_token`; the `releases/latest/download` link does not accept a token for a private
 repository, so find the asset's id (`gh api repos/<owner>/<repo>/releases/latest --jq '.assets[] | [.name, .id]'`)
-and set `library.url` to `https://api.github.com/repos/<owner>/<repo>/releases/assets/<id>`. Until the release is public, `library update` shows an error and the daily check
+and set `library.url` to `https://api.github.com/repos/<owner>/<repo>/releases/assets/<id>`. While that release is private, `library update` shows an error and the daily check
 logs a warning; neither is a failure, and the library you already have (or none) keeps working.
 
 Your own `library add` entries override the shared library for that line.
