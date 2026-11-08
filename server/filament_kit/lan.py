@@ -14,8 +14,9 @@ def parse_lan(cidrs: Iterable[str]) -> Networks:
 # Why an IPv6 client on the home Wi-Fi was refused: most home IPv6 is a global prefix that no default could name, and a
 # wide default such as fd00::/8 would take in Tailscale's and Docker's ranges. Never the client's address: this gets
 # screenshotted.
-IPV6_HINT = ("This device reached the server over IPv6. To let it in, add your home network's IPv6 prefix to web.lan in "
-             "the server's settings (the user guide says how).")
+IPV6_HELP = "The home network ranges"     # the user guide's heading; a test holds the two together
+IPV6_HINT = ("This device reached the server over IPv6. To let it in, add your home network's IPv6 prefix to web.lan: "
+             f"see the user guide, {IPV6_HELP}.")
 
 
 def over_ipv6(host: str) -> bool:

@@ -251,6 +251,13 @@ def test_over_ipv6(host, yes):
     assert lan.over_ipv6(host) is yes
 
 
+def test_the_hint_names_a_section_the_guide_has():
+    """Held to merge with the docs branch that adds the section."""
+    guide = (Path(__file__).resolve().parents[2] / "docs" / "user-guide.md").read_text(encoding="utf-8")
+    assert any(ln.lstrip("#").strip().startswith(lan.IPV6_HELP) for ln in guide.splitlines() if ln.startswith("#"))
+    assert lan.IPV6_HELP in lan.IPV6_HINT
+
+
 def test_the_hint_never_holds_the_clients_address():
     assert "2001" not in lan.IPV6_HINT and "IPv6" in lan.IPV6_HINT and "web.lan" in lan.IPV6_HINT
 
