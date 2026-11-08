@@ -37,8 +37,9 @@ access**, red **Can't reach the server** or **The server's certificate changed**
 **If it fails:** the code works once and expires; run `sudo filament-kit pair` again for a new one. Other
 problems are in [Install the Android app](install-android-app.md#common-problems).
 
-**Unpair or pair again.** On the phone: **Settings** → **Forget server** (the spools stay on the server), then pair
-again as above. **Pair again** in Settings does the same in one step. On the server, `sudo filament-kit unpair`
+**Unpair or pair again.** On the phone: **Settings** shows the server's name, address and certificate fingerprint.
+**Forget server** (it asks to confirm; the spools stay on the server) unpairs this phone, and then you pair again
+as above. **Pair again** does it in one step. On the server, `sudo filament-kit unpair`
 lists paired phones and `sudo filament-kit unpair <id>` removes one; that phone is then asked to pair again. If the
 app shows **The server's certificate changed**, compare the two fingerprints it shows: if you reinstalled the
 server it's expected, so tap **Pair again**; if not, don't continue.
@@ -57,7 +58,8 @@ You need a Bambu Lab printer on the same network as the server, switched on.
 
 **If the state says something else:**
 
-- **Wrong Access Code**: tap the printer, enter the code again.
+- **Wrong Access Code** (the row says **Tap to enter the Access Code again**): tap the printer, enter the code
+  again.
 - **Needs Developer Mode**: on the printer open **Settings → Network/LAN**, turn on **LAN Only mode** and then
   **Developer Mode**, and try again. Without it the printer refuses commands.
 - **Offline**: check the printer is on and on the same network as the server.
@@ -149,7 +151,8 @@ With the app open, tap a spool's NFC tag on the back of the phone.
   **Update weight**; the app shows `Remaining would change from … g to … g`, and **Confirm** saves it. **Move** changes
   its location, **Mark empty** records it as used up, **Load into printer** is described above.
 - **A tag not linked yet** offers **Link to a sealed spool** (search for the spool by brand, name or colour, add a
-  weight if you like, and **Confirm link**) or **Add as new** (the label-photo flow above, with the tag attached).
+  weight if you like, and **Confirm link**) or **Add as new**, which opens the add screen with this tag attached: label photos if your server reads labels,
+  otherwise the **Add spool** form.
   If the tag is already used by another spool, the app says so and offers to move it here.
 - **Search** on the home screen finds spools by brand, material or colour (**Sealed spools only** narrows it) and
   opens the same card.
