@@ -172,7 +172,7 @@ builds are made from them. The other folders receive every build too.
 - **Install only into the primary** (the old behaviour): set `"secondaries": false` in `config.json`. The default is
   on, and the setting survives pairing again.
 
-**Presets are never replaced.** In every folder only **new** presets are added.
+**Presets are never replaced unless you accept an update.** In every folder only **new** presets are added.
 
 - In the **primary**, the updates you accept with `sudo filament-kit profiles apply-updates` are written.
 - In the **other folders**, an accepted update is written only over a preset the kit itself put there and that you have
@@ -294,6 +294,7 @@ Run these in a Terminal on the Ubuntu computer.
 | `sudo filament-kit modules list` | Shows each module on or off and the mode. `modules set <mode>`, `modules enable <name>` and `modules disable <name>` change them (see [Change the mode later](#change-the-mode-later)); `modules apply` sets the computer up again from the saved settings. |
 | `sudo filament-kit printer map <serial>` | Maps a printer's AMS slots (see [Map slots](#map-slots)), printing each step. |
 | `sudo filament-kit profiles status` / `build` | Shows or rebuilds the Bambu Studio and Orca Slicer presets (see [Presets](#presets-in-bambu-studio)). |
+| `sudo filament-kit profiles apply-updates --all` (or `--line <id>`; add `--dry-run` to only look) | Writes the updated presets you accept over the ones in the primary Bambu Studio folder (see [Stable and Beta Bambu Studio](#stable-and-beta-bambu-studio-v040)). |
 | `sudo filament-kit profiles lines` / `set-parent <line_id> <parent>` | Lists the filament lines; sets a line's Bambu Studio parent (`--orca`: its Orca Slicer parent). |
 | `sudo filament-kit profiles restore-deleted` | Brings back, at the next build, the generated presets you deleted in Bambu Studio. |
 | `sudo filament-kit library status` / `update` / `rollback` | The spec library (see [Spec library updates](#spec-library-updates)). |
@@ -415,7 +416,7 @@ data stays in use), and status names it.
 
 The server builds one Bambu Studio filament preset for each filament line you own (a line is a brand's product,
 for example one brand's PLA, without the colour), for each of your printers and each nozzle size. The PC sync
-then installs them in every Bambu Studio folder on the PC ([Stable and Beta Bambu Studio](#stable-and-beta-bambu-studio-v040)); presets already there are never replaced.
+then installs them in every Bambu Studio folder on the PC ([Stable and Beta Bambu Studio](#stable-and-beta-bambu-studio-v040)); presets already there are never replaced unless you accept an update.
 
 - Names look like `<brand> <line> @Bambu Lab <printer> <nozzle> nozzle`.
 - Spoolman data for your filaments wins over the library, and the library wins over Bambu's own starting preset
@@ -519,7 +520,7 @@ the `station` module, on the server computer (`all-in-one`) or on a second compu
   build and flash it: [station/PANEL.md](../station/PANEL.md).
 - Optional: a speaker (USB or the computer's headphone socket) for the scan beep when there is no panel.
 - Optional, with the panel: a **BME280** sensor for room temperature and humidity, a small speaker on the panel
-  (it says things like "Held, 1042 grams") and a **USB webcam** that takes a picture of the spool when you press
+  (it says things like "1042 grams. Hold yellow to save.") and a **USB webcam** that takes a picture of the spool when you press
   Hold. All of it is in [station/PANEL.md](../station/PANEL.md). The station installs `espeak-ng` and `ffmpeg` for
   the speech and the picture, and its user joins the `video` group to read the camera.
 
@@ -661,7 +662,7 @@ spools does a dry run first in both, as in the Android app.
    "web": {"public_url": "https://filament.example.com/filament"}
    ```
 
-3. Set the passphrase (at least 12 characters; you type it twice and nothing shows):
+3. Set the passphrase (at least 12 characters; you type it twice and each character shows as a `*`):
 
    ```
    sudo filament-kit web passphrase
@@ -676,8 +677,9 @@ spools does a dry run first in both, as in the Android app.
 
    `web status` shows the public address, the connector and phone app addresses, whether the passphrase is set,
    whether the service answers, and how many connectors are signed in. No line should start with
-   `FAIL`. (`modules enable web` stops with an error when `web.public_url` is not set; the Modules checklist in
-   `sudo filament-kit config` asks for the address instead, so steps 2 and 4 can be done there in one go.)
+   `FAIL`. (At a terminal, `modules enable web` asks for `web.public_url` if it is not set; without a terminal it stops
+   with an error. The Modules checklist in `sudo filament-kit config` asks for it too, so steps 2 and 4 can be done
+   there in one go.)
 
 ### Add the connector in Claude
 
@@ -808,6 +810,8 @@ each computer are in [Moving from filament-ops](migrate-from-filament-ops.md). I
 kit, installs it (no questions) and starts it again. It keeps your spools, settings, key and paired phones, and the
 version it replaced: `sudo filament-kit update --rollback` goes back to that one. `sudo filament-kit update --check`
 only says whether there is a newer release. It does nothing while a printer is mapping slots or loading a spool.
+If an update fails, the previous version is put back and the daily timer does not try the failed version again until
+a newer release appears; `sudo filament-kit update` by hand tries it again.
 
 Automatic updates: `sudo filament-kit modules enable updates` (off by default) checks once a day and installs a
 new release on its own; it never reinstalls a version you rolled back from. For a weekly check, set

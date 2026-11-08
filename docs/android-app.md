@@ -86,11 +86,16 @@ behind NAT can't see printers; see [Running the server in WSL](install-server.md
 
 <img src="images/android-printer-screen.png" width="240" alt="A printer's screen: slots with Unload, and Map slots">
 
-### Slot mapping (only if you want filament use counted)
+### Map slots: needed before filament use is taken off spools
 
 Loading a spool into a slot works without it. Mapping teaches the server how the printer numbers its slots, so
 that after a print the filament used is taken off the right spools. Until then, use is only logged on the
 printer's screen under **Filament used (last 7 days)**.
+
+Once a printer has been mapped, the server maps it again by itself when its AMS layout changes (you add or remove a
+unit) and stays unchanged for 30 seconds, or after two prints in a row that disagreed with the map. It waits until
+the printer is idle and tries up to 3 times, 10 minutes apart. The slot colours change briefly while it runs, without
+you tapping anything. To switch this off, set `"auto_remap": false` in `/etc/filament-kit/config.json`.
 
 1. Open the printer, make sure it's idle, and tap **Map slots**.
 2. Read the box and tap **Map slots** again. The app briefly changes each slot's colour on the printer, one at a

@@ -52,7 +52,7 @@ fixed.
     one either. Sovol SV08 MAX is verified; Sovol M1D is an unverified placeholder. The usage entries the kit logs for a Klipper printer can't be undone
     from the kit; correct the spool in Spoolman.
 
-## How this was checked
+## How this was first checked (v0.2.0)
 
 On WSL Ubuntu 26.04: a tarball built from main with `tools/make_release.sh` (`FK_NO_APP=1`), `sudo ./install.sh`
 in a terminal pressing Enter at every question (server mode, no AI). It ended with every status line `OK` or

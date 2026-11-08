@@ -54,8 +54,8 @@ There is no sign-in: anyone on your home Wi-Fi can use it.
    sudo filament-kit config
    ```
 
-3. Type `6` and press Enter (**Modules**). A checklist of modules appears. Type `9 10` and press Enter: that
-   ticks **web** and **remote**. Then press Enter on an empty line to apply.
+3. Type `6` and press Enter (**Modules**). A checklist of modules appears. Move with the arrow keys and press Space
+   on **web** and on **remote** to tick them. Then press Enter to apply.
 4. When it asks `web needs its public https address`, type your address, for example
    `https://my-server.local/filament`, and press Enter.
 5. Back at the settings menu, type `0` and press Enter to save. The kit installs nginx and sets it up. Among its
@@ -68,7 +68,7 @@ There is no sign-in: anyone on your home Wi-Fi can use it.
    ```
 
    You should see `OK   web module is on`, `OK   public URL ...` and `OK   web unit answers`. It also shows
-   `FAIL sign-in passphrase is set`. That passphrase is only for the Claude connector, not for the phone web
+   `--   sign-in passphrase not set`. That passphrase is only for the Claude connector, not for the phone web
    app, so you can ignore it (or set one with `sudo filament-kit web passphrase`).
 
 nginx now serves the web app with a certificate the server made itself. Safari doesn't know that certificate, so
@@ -111,7 +111,9 @@ More about this, and keeping port 80 closed most of the time: [user guide, Remot
 5. Tap the **Share** button (the square with an arrow), scroll down and tap **Add to Home Screen**.
 6. The name is **Spools**. Change it if you like and tap **Add**.
 
-A **Spools** icon is now on your home screen. It opens the web app full screen.
+A **Spools** icon is now on your home screen. It opens the web app full screen. (Way A: whether a home-screen web app
+keeps working with an accepted self-signed certificate has not been tried on a real iPhone; see
+[Known gaps](known-gaps.md).)
 
 ## Add a spool
 
@@ -158,8 +160,9 @@ re-mapping slots and optional notifications.
 - **Safari can't find the server** (way A): `.local` names need the iPhone and the server on the same network.
   Check `sudo filament-kit status` on the server. If Ubuntu's firewall (`ufw`) is on, allow
   `sudo ufw allow 443/tcp` and `sudo ufw allow 5353/udp`.
-- **`web needs web.public_url set`** when you run `sudo filament-kit modules enable web`: that command doesn't
-  ask for the address. Use `sudo filament-kit config` → **6) Modules** as above instead.
+- **`web needs web.public_url set`** when you run `sudo filament-kit modules enable web` without a terminal: it can
+  only ask for the address at a terminal. Run it in a Terminal, or use `sudo filament-kit config` → **6) Modules**
+  as above.
 - **The certificate warning comes back** (way A): each time the server's certificate changes (after
   reinstalling), Safari asks again. Accept it again.
 - **Printer camera doesn't play**: the camera needs the `printers` module and a printer added in the app or in
