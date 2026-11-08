@@ -103,7 +103,7 @@ fun PrinterScreen(
 
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Spacer(Modifier.size(12.dp).clip(CircleShape).background(stateColor(printer.state)))
-            Text(listOfNotNull(printer.model, PrinterHelp.stateLabel(printer.state)).joinToString(" · "))
+            Text(listOfNotNull(printer.shownModel, PrinterHelp.stateLabel(printer.state)).joinToString(" · "))
         }
         PrinterHelp.fix(printer.state)?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         state.message?.let { Text(it, color = MaterialTheme.colorScheme.error) }

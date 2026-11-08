@@ -21,10 +21,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from cryptography import x509
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.x509.oid import NameOID
+# cryptography is imported where a certificate is read or made, so the file helpers below (_write_atomic,
+# open_lock ...) import without it: the release job's library build uses them with a plain Python.
 
 from . import config
 
@@ -73,6 +71,8 @@ class Pairing:
 
 
 def fingerprint(cert_pem: bytes) -> str:
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes
     cert = x509.load_pem_x509_certificate(cert_pem)
     return cert.fingerprint(hashes.SHA256()).hex()
 
@@ -191,6 +191,10 @@ def short_hostname() -> str:
 
 
 def make_cert(hostname: str, ips: list[str], dest: Path, extra_dns: list[str] = ()) -> str:
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.x509.oid import NameOID
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
     key = ec.generate_private_key(ec.SECP256R1())
@@ -279,6 +283,8 @@ def issue(device_hint: str = "") -> Pairing:
             "last_seen": None,
             "expires": expires,
             "claimed": None,
+            # the intake station's token reaches only /api/station/* (api._authed); phones and the PC sync: all
+            **({"scope": "station"} if device_hint == "station" else {}),
         })
         _write("devices.json", devs)
 
@@ -320,7 +326,9 @@ def redeem_code(code: str) -> str:
         raise PairingError("device for this code no longer exists")
 
 
-def check(token: str) -> str | None:
+def authorize(token: str) -> tuple[str, str | None] | None:
+    """(device id, scope) for a live token, else None. Claims an unclaimed QR token (its first use). scope is
+    "station" for a token from `pair --station`, else None (every route)."""
     h = _hash(token)
     with _locked():
         devs = _load_devices()
@@ -335,8 +343,14 @@ def check(token: str) -> str | None:
                 elif d["last_seen"] is None or now - d["last_seen"] > LAST_SEEN_STALE:
                     d["last_seen"] = now
                     _write("devices.json", devs)
-                return d["id"]
+                # a device paired as "station" before scopes existed is scoped too
+                return d["id"], d.get("scope") or ("station" if d.get("name") == "station" else None)
         return None
+
+
+def check(token: str) -> str | None:
+    got = authorize(token)
+    return got[0] if got else None
 
 
 def revoke(device_id: str) -> bool:

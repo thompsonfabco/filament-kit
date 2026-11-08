@@ -1,7 +1,8 @@
 """HTTPS JSON API for the phone app.
 
-Every route but /api/info, /api/pair and /app.apk needs `Authorization: Bearer <token>`. Errors are
-`{"error": <code>, "message": <text>}`; tracebacks are logged here and never sent.
+Every route but /api/info, /api/pair and /app.apk needs `Authorization: Bearer <token>`; the intake station's token
+(`pair --station`) reaches only /api/station/* (403 elsewhere). Errors are `{"error": <code>, "message": <text>}`;
+tracebacks are logged here and never sent.
 """
 from __future__ import annotations
 
@@ -26,7 +27,7 @@ from .intake import CapReached, PhotoError, ReadCap, ReadError, RefundRefused
 from .bridge import camera, hardware, loading, mapping, registry, usage
 from .bridge.connection import ACTIONS, DEVELOPER_MODE_REASON, Manager, NoReply, PrinterOffline, UnknownPrinter
 from .bridge.slottest import NoStatus, PrinterBusy
-from .bridge.models import camera_kind
+from .bridge.models import camera_kind, model_name
 from .inventory import AddFailed, TagConflict
 from .profiles.errors import ProfileError
 from .spoolman import Spoolman, SpoolmanError
@@ -141,16 +142,22 @@ def _handle(fn):
     return wrapper
 
 
+STATION_PREFIX = "/api/station/"  # all a `pair --station` token may call (and /api/info, which needs none)
+
+
 def _authed(fn):
     @functools.wraps(fn)
     async def wrapper(request: Request):
         header = request.headers.get("authorization", "")
         scheme, _, tok = header.partition(" ")
-        device = None
+        got = None
         if scheme.lower() == "bearer" and tok.strip():
-            device = await run_in_threadpool(pairing.check, tok.strip())
-        if device is None:
+            got = await run_in_threadpool(pairing.authorize, tok.strip())
+        if got is None:
             return _err(401, "unauthorized", "pair this phone with the server first (missing or revoked token)")
+        device, scope = got
+        if scope == "station" and not request.url.path.startswith(STATION_PREFIX):
+            return _err(403, "forbidden", "the intake station's token is for the station's routes only")
         request.state.device = device
         return await fn(request)
     return _handle(wrapper)
@@ -209,6 +216,7 @@ def _printer_view(p: registry.Printer, printers) -> dict:
         summary = None
     return {"id": p.serial, "name": registry.display_name(p), "model": p.model, "serial": p.serial, "ip": p.ip,
             "configured": p.configured, "state": state, "camera": {"kind": camera_kind(p.model)},
+            "model_name": model_name(p.model),
             "summary": summary}
 
 
@@ -625,6 +633,11 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             lambda: station_flow.recognize(sm, config.load(), image, claude, cap,
                                            getattr(request.state, "device", None)))
 
+    @_authed
+    async def station_hello(request: Request):
+        """`filament-kit station pair` calls this once: the first authenticated call claims the station's token."""
+        return JSONResponse({"ok": True})
+
     async def station_save(request: Request):
         body = await _json(request)
         return await run_in_threadpool(lambda: station_flow.save(sm, rules(), body))
@@ -721,6 +734,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             Route("/api/locations", locations),
             Route("/app.apk", apk),
             Route("/api/station", station_state),
+            Route("/api/station/hello", station_hello),
             Route("/api/station/tag/{uid}", _flow(station_tag)),
             Route("/api/station/recognize", _flow(station_recognize), methods=["POST"]),
             Route("/api/station/save", _flow(station_save), methods=["POST"]),

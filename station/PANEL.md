@@ -124,9 +124,8 @@ The PC resends `L` every second, and `D` rows when they change. Until the first 
 it is). After 5 s without an `L` (service stopped), the panel turns its lamps off and the display shows
 "Station offline" above the room air.
 
-**Speech.** The PC makes each phrase with Piper, using its `en_US-libritts_r-medium` voice, speaker 0 (picked by
-ear on the panel, 2026-11-07). It was chosen over `en_US-ljspeech-medium`, and replaces `en_US-lessac-medium`, whose
-licence is research-only. See the third-party notices below. The voices the kit knows are one table in
+**Speech.** The PC makes each phrase with Piper, using its `en_US-libritts_r-medium` voice, speaker 0 (see the
+third-party notices below). The voices the kit knows are one table in
 `filament_kit/station/voice.py`, with their download address, pinned SHA-256 hashes and licence; the default voice is
 one line at its top, and `station.voice` (or `STATION_PIPER_VOICE`, a model path) picks another. The service loads the voice once at start, which takes about a second, and then makes each phrase in about
 0.1 s. Without Piper or its voice model, or with `station.tts` set to `espeak` (`STATION_TTS=espeak`), it uses
@@ -189,8 +188,10 @@ The first flash of a new board, or a board whose firmware won't answer, is done 
 that won't boot can be reflashed this way, because the CH340 resets it into the ESP8266's ROM bootloader.
 In filament-kit, `modules apply` (run by `install.sh`, and by `filament-kit modules enable station` when the station
 module is switched on later) installs piper-tts (the `[station-tts]` extra) and the Piper voice wherever the station
-module is on: into `/opt/filament-kit/resources/voice` (60-80 MB), checked against the pinned hashes, skipped when
-offline (run `sudo filament-kit modules apply` again later), and not at all with `station.tts` set to `espeak` or
+module is on: into `/opt/filament-kit/resources/voice` (60-80 MB), from one pinned piper-voices commit and checked
+against the pinned hashes, skipped when offline (run `sudo filament-kit modules apply` again later). A file that
+doesn't match is a warning, never a failed install: espeak-ng speaks. Nothing is downloaded with `station.speech`
+off, with `station.tts` set to `espeak` (`sudo filament-kit config`, then **7) Station voice**), or with
 `FK_STATION_TTS=espeak`. It also installs espeak-ng and ffmpeg and gives the service the `video` group for the
 webcam.
 
@@ -207,11 +208,8 @@ Offline tests (Linux / WSL):
 
 **Speech voice.** Piper (piper-tts, GPL-3.0-or-later) speaks with `en_US-libritts_r-medium` from the Piper voices
 repository (rhasspy/piper-voices). Its model card gives the dataset as LibriTTS-R (Koizumi et al., 2023,
-http://www.openslr.org/141/), licensed CC BY 4.0, and says the voice was fine-tuned from Piper's `en_US-lessac-medium`
-voice. That parent voice's dataset licence is research-only, so the fine-tuned weights may carry that restriction too.
-The owner chose this voice knowingly (2026-11-07). For a voice with no such question, set `station.voice` to
-`en_US-ljspeech-medium` (trained from scratch on the public-domain LJ Speech dataset) and run `install.sh` again, or
-point `STATION_PIPER_VOICE` at its model.
+http://www.openslr.org/141/), licensed CC BY 4.0. To use the public-domain `en_US-ljspeech-medium` voice (LJ Speech)
+instead, set `station.voice` to it and run `install.sh` again, or point `STATION_PIPER_VOICE` at its model.
 
 **Panel firmware.** It uses the U8g2 library by olikraus (BSD-2-Clause) and two of its fonts:
 

@@ -31,22 +31,22 @@ fixed.
    working with an accepted self-signed certificate is unconfirmed.
 7. **A public name needs split DNS or NAT loopback** so the phone reaches the server directly at home; otherwise
    the phone looks like it is away from home and is refused.
-8. **`sudo filament-kit modules enable web` doesn't ask for the address.** It stops with
-   `error: web needs web.public_url set ...`. Only the `config` → Modules checklist asks for it.
-9. **`sudo filament-kit web status` shows `FAIL sign-in passphrase is set`** for a user who only wants the phone
-   web app. The passphrase is only for the Claude connector.
+8. ~~`modules enable web` doesn't ask for the address.~~ Fixed in v0.3.0: at a terminal it asks for
+   `web.public_url`; without a terminal it still stops with `error: ... needs ...`.
+9. ~~`web status` showed `FAIL` without a passphrase.~~ Fixed in v0.3.0: it shows `--   sign-in passphrase not set`
+   (exit 0); the passphrase is only for the Claude connector.
 10. **Home networks in 172.16.0.0/12 are not "home" by default** (it's left out because of Docker). Those users
     must edit `web.lan` in `config.json` by hand; there is no menu or prompt for it.
 
 ## Server install
 
-11. **Confusing lines in the installer output.** A first install prints `id: 'spoolman': no such user`, and an
-    apply prints a bare number (`997`) and `fields already present`. They are harmless, but look like errors.
+11. ~~Confusing lines in the installer output.~~ Fixed in v0.3.0: no `no such user` line or bare number; the Spoolman
+    line reads `Spoolman: the kit's extra fields are in place` or `... added the kit's extra fields: ...`.
 12. **No firewall help.** The installer doesn't mention or open `ufw` ports (8710/tcp for the app, 5353/udp for
     `.local` names, 7912/tcp for Spoolman, 443/tcp for the web app). Ubuntu ships with `ufw` off, so most users
     won't hit this.
-13. **Uninstalling after a one-command install** needs the user to unpack the kept tarball from
-    `/opt/filament-kit/releases/<version>/` first. There is no `filament-kit uninstall`.
+13. ~~Uninstalling after a one-command install needed the kept tarball.~~ Fixed in v0.3.0:
+    `sudo filament-kit uninstall [--purge]` runs the kept release's uninstaller.
 14. **Not checked here:** pairing from a real phone, and the APK install on a phone.
 
 ## How this was checked

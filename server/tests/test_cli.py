@@ -457,6 +457,24 @@ def test_pair_pc_prints_link_not_qr(capsys, monkeypatch):
     assert [d["name"] for d in pairing.devices()] == ["pc"]
 
 
+def test_pair_qr_has_four_module_quiet_zone(capsys, monkeypatch):
+    _cert()
+    seen = {}
+
+    def fake_run(args, **kw):
+        seen["args"] = args
+        return cli.subprocess.CompletedProcess(args, 0, stdout="QR\n", stderr="")
+
+    monkeypatch.setattr(cli.shutil, "which", lambda name: "/usr/bin/qrencode")
+    monkeypatch.setattr(cli.subprocess, "run", fake_run)
+    assert cli.main(["pair"]) == 0
+    args = seen["args"]
+    assert args[:3] == ["qrencode", "-t", "ansiutf8"]
+    assert args[args.index("-m") + 1] == "4"
+    assert args[-1].startswith("fkit://pair?")
+    assert "QR" in capsys.readouterr().out
+
+
 def _ok_client(key):
     class Models:
         def list(self):
@@ -661,3 +679,32 @@ def test_key_saved_with_ai_intake_off_says_how_to_turn_it_on(monkeypatch, capsys
     assert cli.main(["config"]) == 0
     out = capsys.readouterr().out
     assert "Key saved." in out and "ai_intake" in out and "6) Modules" in out
+
+
+def test_pair_station_says_the_link_works_for_10_minutes(capsys):
+    _cert()
+    assert cli.main(["pair", "--station"]) == 0
+    assert "works for 10 minutes" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("flags", [["--pc", "--station"], ["--pc", "--text"], ["--station", "--text"]])
+def test_pair_kinds_are_mutually_exclusive(capsys, flags):
+    _cert()
+    with pytest.raises(SystemExit) as e:
+        cli.main(["pair", *flags])
+    assert e.value.code == 2 and "not allowed with" in capsys.readouterr().err
+    assert not (config.paths().state / "pending.json").exists()
+
+
+def test_config_menu_station_voice_piper_or_espeak(monkeypatch, capsys):
+    """Final review M5: the menu switches the station's speech between Piper and espeak-ng (no download)."""
+    monkeypatch.setattr(cli, "_run_apply", lambda pairing=True: print("APPLIED") or 0)
+    monkeypatch.setattr(sys, "stdin", io.StringIO("7\n2\n0\n"))
+    assert cli.main(["config"]) == 0
+    assert config.load()["station"]["tts"] == "espeak" and "APPLIED" in capsys.readouterr().out
+    monkeypatch.setattr(sys, "stdin", io.StringIO("7\n1\n0\n"))
+    assert cli.main(["config"]) == 0
+    assert config.load()["station"]["tts"] == "auto" and "APPLIED" in capsys.readouterr().out
+    monkeypatch.setattr(sys, "stdin", io.StringIO("7\n\n0\n"))  # a blank answer keeps it
+    assert cli.main(["config"]) == 0
+    assert config.load()["station"]["tts"] == "auto" and "APPLIED" not in capsys.readouterr().out

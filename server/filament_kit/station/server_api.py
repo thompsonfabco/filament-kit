@@ -6,7 +6,9 @@ on the station PC takes it, shows the server's certificate fingerprint for the o
 station user's). Calls go to https://<ip>:<port> by IP (the unit allows only the server's address: no DNS, no
 mDNS), with the certificate pinned by its SHA-256 and `Authorization: Bearer <token>`.
 
-Each call returns (http_status, json); status 0 means the server was not reached (json carries `display`).
+Each call returns (http_status, json); status 0 means no answer (json carries `display`): `unreachable` (no address
+accepted the connection: the next address is tried only then) or `timeout` (the request went out, so it is never
+sent again to another address: the server may have done it).
 """
 from __future__ import annotations
 
@@ -28,6 +30,7 @@ CONNECT_TIMEOUT = 5  # s per address: the link lists every server address, some 
 _TOKEN = re.compile(r"^[A-Za-z0-9_-]{16,128}$")
 _FP = re.compile(r"^[0-9a-fA-F]{64}$")
 UNREACHABLE = ["Server offline", "check the network"]
+NO_ANSWER = ["No answer", "server timed out"]  # the request was sent: it may have worked
 
 
 @dataclass
@@ -140,8 +143,28 @@ def save_pairing(link: Link, owner: str | None = "filament-kit-station", first: 
         os.chown(tok, pw.pw_uid, pw.pw_gid)
 
 
+PAIR_STEPS = ("on the kit server: sudo filament-kit pair --station, "
+              "then on the station PC: sudo filament-kit station pair")
+
+
+def pairing_lines() -> list[str]:
+    """`filament-kit status` and the install's finish, on a machine with the station on: is the button flow paired
+    with the kit server? (An upgrade from v0.2.0 leaves it unpaired: that station never called the server.)"""
+    try:
+        token_file().read_bytes()
+    except PermissionError:  # the token is the station user's: only root (and that user) can read it
+        return ["--   station pairing not checked: run it with sudo"]
+    except OSError:
+        pass
+    api = ServerApi()
+    if api.paired:
+        return [f"OK   station paired with the kit server ({api.ips[0]}:{api.port})"]
+    return ['--   station button flow not paired with the kit server: a tag tap shows "Not paired"',
+            f"     fix: {PAIR_STEPS}"]
+
+
 class ServerApi:
-    """The flow's three calls. Built from the pairing files; `paired` is False until `filament-kit station pair`."""
+    """The flow's three calls (and hello, for pairing). Built from the pairing files; `paired` is False until `filament-kit station pair`."""
 
     def __init__(self, timeout: float = TIMEOUT):
         self.timeout = timeout
@@ -153,6 +176,17 @@ class ServerApi:
         except (OSError, ValueError, KeyError, TypeError):
             self.ips, self.port, self.fp, self.token, self.paired = [], 0, "", "", False
 
+    @classmethod
+    def from_link(cls, link: "Link", first: str | None = None, timeout: float = TIMEOUT) -> "ServerApi":
+        """A client for a pairing link before it is saved (station pair checks it first)."""
+        api = cls.__new__(cls)
+        ips = link.ips or [link.host]
+        if first:
+            ips = [first] + [i for i in ips if i != first]
+        api.timeout, api.ips, api.port, api.fp, api.token = timeout, ips, link.port, link.fp, link.token
+        api.paired = bool(ips and link.token)
+        return api
+
     def _call(self, method: str, path: str, body: bytes | None = None, ctype: str | None = None) -> tuple[int, dict]:
         if not self.paired:
             return 0, {"error": "not_paired", "display": ["Not paired", "sudo filament-kit station pair"]}
@@ -163,26 +197,40 @@ class ServerApi:
         for ip in self.ips:
             c = _Pinned(ip, self.port, self.fp, self.timeout)
             try:
-                c.request(method, path, body=body, headers=headers)
-                r = c.getresponse()
-                raw = r.read()
+                try:  # only a failed connect (nothing sent yet) moves on to the next address
+                    c.connect()
+                except ssl.SSLError as e:
+                    if "certificate changed" in str(e):
+                        return 0, {"error": "cert_changed", "message": str(e),
+                                   "display": ["Server changed", "pair the station again"]}
+                    last = e
+                    continue
+                except (OSError, http.client.HTTPException) as e:
+                    last = e
+                    continue
+                try:  # the request went out: a timeout or reset now is final, never re-sent (a save twice)
+                    c.request(method, path, body=body, headers=headers)
+                    r = c.getresponse()
+                    raw = r.read()
+                except (OSError, http.client.HTTPException) as e:
+                    return 0, {"error": "timeout", "message": str(e), "display": list(NO_ANSWER)}
                 try:
                     data = json.loads(raw or b"{}")
                 except ValueError:
                     data = {"error": "bad_answer"}
+                if not isinstance(data, dict):
+                    data = {"error": "bad_answer"}
                 if r.status == 401:
                     data.setdefault("display", ["Not paired", "pair the station again"])
-                return r.status, data if isinstance(data, dict) else {"error": "bad_answer"}
-            except ssl.SSLError as e:
-                if "certificate changed" in str(e):
-                    return 0, {"error": "cert_changed", "message": str(e),
-                               "display": ["Server changed", "pair the station again"]}
-                last = e
-            except (OSError, http.client.HTTPException) as e:
-                last = e
+                return r.status, data
             finally:
                 c.close()
         return 0, {"error": "unreachable", "message": str(last), "display": list(UNREACHABLE)}
+
+    def hello(self) -> tuple[int, dict]:
+        """One authenticated call that does nothing: `station pair` makes it so the token is claimed at once (an
+        unclaimed one lapses 10 minutes after `pair --station`)."""
+        return self._call("GET", "/api/station/hello")
 
     def tag_lookup(self, uid: str) -> tuple[int, dict]:
         return self._call("GET", "/api/station/tag/" + urllib.parse.quote(uid, safe=""))

@@ -98,9 +98,11 @@ Until a tag has been read and the scale has been switched on, `status` shows `st
 
 Use either way. Both install what the new mode needs, start it, and stop what it no longer uses:
 
-- `sudo filament-kit config`, then **6) Modules**. Pick **m) choose mode**, or type a module's number to turn it
-  on or off. Turning a module off that others need asks to turn those off too. Choosing `station` asks for the
-  server's address. Then **0) back** and **0) save and exit**.
+- `sudo filament-kit config`, then **6) Modules** (or `sudo filament-kit modules menu`). Move with Up/Down (or
+  `k`/`j`), switch a module on or off with Space, press `a`, `s` or `t` for the all-in-one, server or station set,
+  Enter to apply, `q` or Esc to cancel. A module's needs are switched on with it, and switching one off switches off
+  what needs it. Choosing `station` asks for the server's address. Then **0) save and exit**. Without a usable
+  terminal a numbered list runs instead: type numbers, Enter applies, `q` cancels.
 - `sudo filament-kit modules set <mode>`, for example `sudo filament-kit modules set all-in-one`. For the station
   mode, add the server's address: `sudo filament-kit modules set station --server 192.0.2.10`.
   A mode never turns `web`, `remote` or `orders` on or off: the ones you turned on stay on, unless the new mode
@@ -110,7 +112,7 @@ Use either way. Both install what the new mode needs, start it, and stop what it
   which are on.
 
 Turning a module off **never deletes its data**. Spoolman's spools, settings and paired phones stay where they
-are and come back when you turn the module on again. Only `sudo ./uninstall.sh --purge` deletes data. While a
+are and come back when you turn the module on again. Only `sudo filament-kit uninstall --purge` deletes data. While a
 module is off, the app gets the message that it is turned off for anything that needs it.
 
 ## Install the app and pair your phone
@@ -122,14 +124,14 @@ the 6-digit code. The code expires after about 10 minutes and works once; `sudo 
 one. On Android 17 and newer the app needs **Local network** access.
 
 The app updates itself: after `sudo filament-kit update` to a release with a newer app, the home screen offers
-it. `sudo filament-kit unpair` lists the paired phones; `sudo filament-kit unpair <id>` removes one.
+it. `sudo filament-kit unpair` lists the paired phones; `sudo filament-kit unpair <id>` removes one. Using the app (printers, adding spools by hand or from label photos): [Using the Android app](android-app.md).
 
 No Android phone? The phone web app ([Use the web app on an iPhone](install-iphone-web-app.md)) does the same
 tasks in any phone browser.
 
 ## Pair your PC
 
-Do this once, on the Windows PC where you use Bambu Studio. The PC sync tool sends your Bambu Studio filament
+Do this once, on the PC where you use Bambu Studio (Windows below; Linux in [PC sync on Linux](#pc-sync-on-linux)). The PC sync tool sends your Bambu Studio filament
 list to the server and installs the presets the server builds. One server works with **one** sync PC: the
 first PC that syncs is the one. To move to another PC, remove the first one with `sudo filament-kit unpair`
 (see [Everyday commands](#everyday-commands)); the next PC that syncs then starts fresh, like a first install.
@@ -152,6 +154,55 @@ first PC that syncs is the one. To move to another PC, remove the first one with
 
 The link and the code expire after a few minutes. If they do, run `sudo filament-kit pair --pc` again.
 
+### PC sync on Linux
+
+The PC sync also runs on Linux (x86_64) with Bambu Studio and Orca Slicer, whether they are installed natively, as an
+AppImage or from Flathub. It installs for your user only, without root. The server side is the same as above: one
+server works with one sync PC.
+
+**Install.** Download `filament-kit-sync-linux-x86_64-<version>.tar.gz` from the release (check it against the
+release's `SHA256SUMS`), then:
+
+```
+tar -xzf filament-kit-sync-linux-x86_64-<version>.tar.gz
+bash filament-kit-sync-linux-x86_64-<version>/install.sh
+```
+
+This puts the program in `~/.local/opt/filament-kit-sync`, links `~/.local/bin/filament-kit-sync`, and turns on a
+systemd user timer (`filament-kit-sync.timer`) that runs the sync a couple of minutes after you log in and every 10
+minutes after that. If `~/.local/bin` is not on your PATH yet, log out and in again. Run the same `install.sh` again
+to update.
+
+**Pair.** On the server run `sudo filament-kit pair --pc`. On the PC run `filament-kit-sync pair` and paste the link
+(or type the server address and the 6-digit code), as on Windows.
+
+**Status.** `filament-kit-sync status` shows the server, the Bambu Studio and Orca Slicer folders it found, the last run
+and the installed build. `systemctl --user list-timers filament-kit-sync.timer` shows the next run. The log is
+`~/.local/share/filament-kit-sync/sync.log`. `filament-kit-sync run` runs one sync now.
+
+**While logged out.** The timer runs only while you are logged in. To run it while you are logged out too, run
+`loginctl enable-linger` once (the install does not do this).
+
+**Uninstall.** `~/.local/opt/filament-kit-sync/uninstall.sh` turns the timer off and removes the program. Your pairing
+token and settings stay in `~/.local/share/filament-kit-sync`, so a reinstall is still paired. Add `--purge` to delete
+them too, then run `sudo filament-kit unpair <id>` on the server. Presets already installed in the slicers stay.
+
+**Flatpak and AppImage.**
+
+- Flathub Bambu Studio (`com.bambulab.BambuStudio`) keeps its presets in
+  `~/.var/app/com.bambulab.BambuStudio/config/BambuStudio`. Flathub Orca Slicer keeps them in
+  `~/.var/app/<id>/config/OrcaSlicer`. The sync finds these by itself.
+- Native installs and AppImages use `~/.config/BambuStudio` (or `BambuStudioBeta`) and `~/.config/OrcaSlicer`
+  (or `$XDG_CONFIG_HOME` if you set it).
+- If you have both a native install and the Flatpak, the sync uses the one you used last (its config file is the
+  newest).
+- The sync waits while Bambu Studio or Orca Slicer is open, including the Flatpak and AppImage versions.
+- With the Orca AppImage, the Orca filament library is read from Orca's own copy under its data folder, because the
+  AppImage's files can only be read while it runs.
+
+This was written from the code and the slicers' documented folders, and has not been tried on a Linux machine with the
+slicers running.
+
 ## Everyday commands
 
 Run these in a Terminal on the Ubuntu computer.
@@ -160,7 +211,8 @@ Run these in a Terminal on the Ubuntu computer.
 |---|---|
 | `sudo filament-kit status` | Checks that everything works. Anything failing shows a `fix:` line telling you what to do. |
 | `sudo filament-kit pair` | Shows a new QR code to pair another phone. |
-| `sudo filament-kit pair --pc` | Shows the link and code to pair the Windows PC sync tool. |
+| `sudo filament-kit pair --pc` | Shows the link and code to pair the PC sync tool (Windows or Linux). `--station` does the same for the intake station; `--text` prints the link instead of a QR code. The three are exclusive. |
+| `sudo filament-kit uninstall` | Removes the kit (`--purge` also deletes your data). |
 | `sudo filament-kit unpair` | Lists paired devices: phones and the PC sync (named `pc`). `sudo filament-kit unpair <id>` removes one. |
 | `sudo filament-kit config` | Settings menu: display name, storage locations, Claude model and daily limit, API key, printers, modules. |
 | `sudo filament-kit modules list` | Shows each module on or off and the mode. `modules set <mode>`, `modules enable <name>` and `modules disable <name>` change them (see [Change the mode later](#change-the-mode-later)); `modules apply` sets the computer up again from the saved settings. |
@@ -409,6 +461,13 @@ hand: `sudo systemctl unmask sleep.target suspend.target hibernate.target hybrid
   the reader gets the first USB serial port.
 - A scan beeps on the panel's buzzer, or, without a panel, through a USB speaker or the headphone socket
   (`STATION_BEEP`).
+- **The speaking voice.** The station speaks with the Piper voice `en_US-libritts_r-medium` (speaker 0), downloaded
+  when the station is installed (60 to 80 MB, checked against a pinned hash). If the download fails or the file
+  does not match, the install carries on with a warning and espeak-ng speaks. To use espeak-ng on purpose (no
+  download), choose **7) Station voice** in `sudo filament-kit config`. The voice is licensed **CC BY 4.0**
+  (LibriTTS-R; credit in [THIRD-PARTY.md](../THIRD-PARTY.md#speech-voice)). To use the public-domain
+  `en_US-ljspeech-medium` voice instead, set `station.voice` to it in `/etc/filament-kit/config.json` and run
+  `sudo filament-kit modules apply`.
 - With the panel, Hold and Discard also speak (`"speech"`), and Hold takes a picture with the webcam
   (`"camera"`). `curl http://127.0.0.1:5003/state` then shows `"air"` (the BME280 reading) and `"photo"`, and the
   picture itself is at `/photo`. The station only answers GET requests, and only the addresses it allows.
@@ -431,6 +490,13 @@ hand: `sudo systemctl unmask sleep.target suspend.target hibernate.target hybrid
   `sudo journalctl -u filament-kit-station -n 30` shows what the station is doing; `NFC reader ...; retrying in
   5 s` means the reader is not plugged in or not found.
 - The station answers only its own computer and the server's address. Anything else gets no answer.
+- The button flow talks to the server with its own pairing (v0.3.0 and newer). On the kit server run
+  `sudo filament-kit pair --station`, then within 10 minutes run `sudo filament-kit station pair` on the station
+  computer and paste the link; it checks the link with the server and says "expired" if you were late. On an
+  all-in-one both run on the same machine. The station's pairing can reach only the station part of the server.
+  `sudo filament-kit pair` on a station-only computer says that pairing runs on the kit server.
+- After the panel says "Saved #N / tag not linked", holding yellow again links the tag to that spool instead of
+  saving a duplicate.
 - A station on a second computer: on the **server**, put the station's address in
   `/etc/filament-kit/config.json` under `"station"`, for example `"url": "http://station.local:5003"`. If the
   server's address changes, run `sudo filament-kit modules apply` on the station computer so it answers the new
@@ -603,13 +669,11 @@ tool of yours, in this shape:
             "qty": 2, "unit_price": 19.99, "seller": "SUNLU"}]}
 ```
 
-Put its path into `/etc/filament-kit/config.json` and turn the module on (it needs `ai_intake`):
+The module needs `ai_intake`, so turn that on first. Then turn `orders` on; at a terminal it asks for the path to
+the file (it is saved as `orders.file` in `/etc/filament-kit/config.json`):
 
 ```
-"orders": {"file": "/var/lib/filament-kit/filament_orders.json"}
-```
-
-```
+sudo filament-kit modules enable ai_intake
 sudo filament-kit modules enable orders
 ```
 
@@ -654,16 +718,21 @@ new release on its own; it never reinstalls a version you rolled back from. For 
 `"updates": {"schedule": "weekly"}` in `/etc/filament-kit/config.json`. For a private repository, put a GitHub
 token in a file only root can read and set `"updates": {"token_file": "/etc/filament-kit/github_token"}`.
 
-By hand: download the newer `filament-kit-<version>.tar.gz`, unpack it as in step 2 above and run
-`sudo ./install.sh` again.
+By hand: download the newer `filament-kit-<version>.tar.gz`, unpack it and run `sudo ./install.sh` again.
+
+**Upgrading a station from v0.2.0 to v0.3.0:** the station's button flow now needs pairing once. On the kit server run
+`sudo filament-kit pair --station`, then within 10 minutes run `sudo filament-kit station pair` on the station
+computer (on an all-in-one, both on the same machine) and paste the link. `sudo filament-kit status` and the install
+say so until it is done.
 
 ## Uninstall
 
-From the unpacked folder:
+```
+sudo filament-kit uninstall
+```
 
-```
-sudo ./uninstall.sh
-```
+This runs the uninstaller of the release copy the kit kept. With no kept copy it says where to download the release
+file, and you run `sudo ./uninstall.sh` from the unpacked folder.
 
 This removes the programs (Spoolman and the intake station too, with the station's user and udev rule) but
 **keeps** your spools, settings and backups, so a later install picks up where you left off, in the same mode.
@@ -675,7 +744,7 @@ router file stays while other routes in `/etc/nginx/mcp.d` need it (it says so).
 all spool data and backups:
 
 ```
-sudo ./uninstall.sh --purge
+sudo filament-kit uninstall --purge
 ```
 
 It asks you to type `purge` to confirm. `--purge` also removes the certbot timer drop-in

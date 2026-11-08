@@ -68,6 +68,23 @@ class ApiPrintersTest {
         assertEquals("Bearer tok-123", r.headers["Authorization"])
     }
 
+    @Test fun showsTheModelNameAndFallsBackToTheCode() = runBlocking {
+        json("""{"printers":[
+            {"id":"A","name":"Shop H2D","model":"O1D","model_name":"H2D","serial":"A","configured":true},
+            {"id":"B","name":"Old server","model":"C12","serial":"B"},
+            {"id":"C","name":"Unknown","model":"ZZ9","model_name":"ZZ9","serial":"C"},
+            {"id":"D","name":"Nothing","model":null,"serial":"D"},
+            {"id":"E","name":"Blank name","model":"N1","model_name":"","serial":"E"}]}""")
+        val list = api.printers()
+        assertEquals("O1D", list[0].model)
+        assertEquals("H2D", list[0].shownModel)
+        assertNull("an older server sends no model_name", list[1].modelName)
+        assertEquals("C12", list[1].shownModel)
+        assertEquals("ZZ9", list[2].shownModel)
+        assertNull(list[3].shownModel)
+        assertEquals("N1", list[4].shownModel)
+    }
+
     @Test fun addPrinterPostsSerialCodeAndName() = runBlocking {
         json("""{"printer":$printerJson}""")
         val p = api.addPrinter("0948AB", "12345678", "Garage H2D")

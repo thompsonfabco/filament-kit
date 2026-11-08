@@ -37,8 +37,8 @@ The first half of the line saves the installer, `get.sh`, into the folder you ar
 Terminal); the second half runs it. `get.sh` downloads the newest release, checks its signature and stops without
 installing anything if the check fails. Then it runs the installer. You can delete `get.sh` afterwards.
 
-(An earlier form of this command piped the download straight into `sudo bash`. Don't use it: it can hang
-forever at "Installing system packages", because the installer then runs without a proper terminal.)
+(The piped form, `curl -fsSL .../get.sh | sudo bash`, also works since v0.3.0. Version 0.2.0 could hang at
+"Installing system packages" with it; use the two-step form above if you must install that version.)
 
 ## While the repository is private
 
@@ -76,13 +76,13 @@ somewhere only root can read, for example `/etc/filament-kit/github_token`, and 
 This does the same as the one command, by hand:
 
 1. Open the project's GitHub **Releases** page and download `filament-kit-<version>.tar.gz`, for example
-   `filament-kit-0.2.0.tar.gz`, into your **Downloads** folder.
+   `filament-kit-0.3.0.tar.gz`, into your **Downloads** folder.
 2. In Terminal, unpack it and go into the folder. Use the version number you downloaded:
 
    ```bash
    cd ~/Downloads
-   tar xzf filament-kit-0.2.0.tar.gz
-   cd filament-kit-0.2.0
+   tar xzf filament-kit-0.3.0.tar.gz
+   cd filament-kit-0.3.0
    ```
 
 3. Start the installer:
@@ -153,7 +153,7 @@ release):
 | `--server <name or IP>` | For `--mode station`: the address of the computer the server runs on. |
 | `--modules a,b` | A custom set of modules, for example `--modules spoolman,server,printers`. What they need is added. |
 | `--set key=value` | A setting a module in `--modules` needs, for example `--set web.public_url=https://my-server.local/filament`. |
-| `--version 0.2.0` | `get.sh` only: that release instead of the newest. |
+| `--version 0.3.0` | `get.sh` only: that release instead of the newest. |
 
 For example:
 
@@ -163,7 +163,7 @@ curl -fsSLO https://github.com/thompsonfabco/filament-kit/releases/latest/downlo
 
 ## What you see at the end
 
-The installer finishes with a status list, a QR code and a pairing code:
+The installer finishes with a status list, a QR code to download the Android app, and a pairing code:
 
 ```
 ==> Status
@@ -176,6 +176,12 @@ OK   certificate present, fingerprint 7616...2eb8
 --   paired devices: 0
 ...
 --   PC sync: not set up (see README: Pair your PC)
+
+==> Android app: scan this code with the phone's camera to download it
+(a large QR code)
+It downloads filament-kit.apk from this server (https://192.0.2.10:8710/app.apk); the browser warns about the
+kit's own certificate: continue, then open the file to install the app.
+Press Enter when the app is installed and you're ready to pair (or s to skip)
 
 ==> Pair a phone: open the filament-kit app and scan this code
 (a large QR code)
@@ -190,8 +196,12 @@ Done.   Spoolman: http://my-server.local:7912   Pair another phone: sudo filamen
 
 - **No line should start with `FAIL`.** Lines starting with `--` are information. On a new install, "library not
   downloaded", "no build yet" and "PC sync: not set up" are expected.
-- The **QR code** and the **pairing code** are for the Android app. They expire after about 10 minutes. If you
-  are not ready, ignore them and run `sudo filament-kit pair` later to get new ones.
+- The **first QR code** downloads the Android app to the phone (it only appears when this server has the app).
+  The installer then waits. Press **Enter** when the app is installed to see the **pairing QR code and pairing
+  code**, or type **s** to skip pairing. They expire after about 10 minutes. If you are not ready, skip, and run
+  `sudo filament-kit pair` later to get new ones. Without a terminal (a script) the app link is printed as text and
+  nothing waits; pair later with `sudo filament-kit pair`.
+- Typing a secret (the Access Code, the Anthropic key, the web passphrase) shows a `*` for each character.
 - **Spoolman**, where your spool list lives, opens in any web browser at home at the address on the `Done` line
   (`http://<computer name>.local:7912`).
 
@@ -214,7 +224,7 @@ filament-kit is made of parts called **modules**. To see or change them:
 sudo filament-kit config
 ```
 
-Type `6` for **Modules**. A checklist appears. Each line says what the module needs:
+Type `6` for **Modules**. A menu appears. Each line says what the module needs:
 
 ```
  [x]  1 spoolman   Spoolman filament database, run on this machine
@@ -226,10 +236,16 @@ Type `6` for **Modules**. A checklist appears. Each line says what the module ne
  [ ] 10 remote     Public https name for the web UI (nginx, certbot)          needs: web
 ```
 
-Type a module's number (or several, like `9 10`) and press Enter to tick or untick it. What it needs is ticked
-too, and unticking one that others need asks about those. Press Enter on an empty line to apply, answer any
-question it asks (for example `web` asks for its https address), then type `0` at the settings menu to save
-and exit. The kit installs and starts what you turned on. Turning a module off never deletes its data.
+Move with **Up/Down** (or `k`/`j`; **Home**, **End**, **PgUp**, **PgDn** too) and press **Space** to switch a
+module on or off. What it needs is switched on too, and switching one off switches off whatever needs it; the
+bottom lines show the row's needs, what the last key did, and the keys. The letters `a`, `s` and `t` pick the
+all-in-one, server or station set. Press **Enter** to apply, or `q` or **Esc** to cancel (nothing changes). Then
+answer any question it asks (for example `web` asks for its https address), and type `0` at the settings menu
+to save and exit. The kit installs and starts what you turned on. Turning a module off never deletes its data.
+
+Without a usable terminal (no terminal, `TERM` unset or `dumb`, or one smaller than 40 by 8) a numbered list
+appears instead: type a module's number (or several, like `9 10`) and press Enter to tick or untick it, Enter on an
+empty line to apply, `q` to cancel.
 
 To use AI label reading later: in `sudo filament-kit config`, type `4` to enter the API key, then `6` and tick
 `ai_intake`.
@@ -291,21 +307,13 @@ Either way, the PC must stay on and awake for the server to answer.
 
 ## Uninstall
 
-The uninstaller is in the release file. If you installed with the one command, the kit kept a copy of that file;
-unpack it into your home folder first (use your version number; `ls /opt/filament-kit/releases` shows it):
-
 ```bash
-cd ~
-tar xzf /opt/filament-kit/releases/0.2.0/filament-kit-0.2.0.tar.gz
-cd filament-kit-0.2.0
+sudo filament-kit uninstall
 ```
 
-If you installed from a downloaded file, go into that unpacked folder instead. Then:
-
-```bash
-sudo ./uninstall.sh
-```
-
-This removes the programs and keeps your spools, settings and backups, so a later install picks up where you left
-off. `sudo ./uninstall.sh --purge` deletes those too; it asks you to type `purge` first. If you turned on remote
+This runs the uninstaller of the release copy the kit kept in `/opt/filament-kit/releases/`. It removes the
+programs and keeps your spools, settings and backups, so a later install picks up where you left off.
+`sudo filament-kit uninstall --purge` deletes those too; it asks you to type `purge` first. If the kit has no kept
+copy, it says where to download the release file; unpack it (`tar xzf filament-kit-<version>.tar.gz`) and run
+`sudo ./uninstall.sh` (or with `--purge`) in its folder instead. If you turned on remote
 access, nginx and certbot stay installed; remove them with `apt` if nothing else uses them.

@@ -9,7 +9,8 @@ A tag `v<x.y.z>` pushed to GitHub builds and publishes one release, with:
 
 - `filament-kit-<version>.tar.gz`: the server (the Python wheel, `install.sh`, `uninstall.sh`, the units) with
   the signed Android app inside (`app/filament-kit.apk`, `app/version.txt`);
-- `filament-kit.apk` on its own, and `filament-kit-sync-setup-<version>.exe` (the Windows PC sync);
+- `filament-kit.apk` on its own, `filament-kit-sync-setup-<version>.exe` (the Windows PC sync) and
+  `filament-kit-sync-linux-x86_64-<version>.tar.gz` (the Linux PC sync);
 - `get.sh` (the one-command installer) and `bambu_hardware.xml` (the printer data feed the updater reads);
 - `library.tar.gz` when the library token is set (see below);
 - `SHA256SUMS` listing all of them, and `SHA256SUMS.sig`, its ed25519 signature.
@@ -110,7 +111,7 @@ A hand-built tarball is not signed. Users can install it with `sudo ./install.sh
 ## Third-party licences
 
 [THIRD-PARTY.md](../THIRD-PARTY.md) lists every component a release ships or the installer fetches, with its
-licence, and the open items (the Piper voice, ML Kit, our own licence metadata, notices in the release files).
+licence, and the open items (ML Kit, our own licence metadata, notices in the release files).
 Redo the check when a dependency is added or a pin changes: `pip-licenses` in a venv with
 `filament-kit[station,web,push]`, `android/gradle/libs.versions.toml`, the two `platformio.ini` files and the
 `apt` lists in `modules.py`.

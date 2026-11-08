@@ -60,7 +60,9 @@ Pairing lets the app trust your server and lets the server know your phone. You 
      access**. Tap **Allow**. Without it, the app can't find or reach your server. If you said no, the app shows
      **Allow** again; if Android no longer asks, tap **Open app settings** and allow it there.
 3. Tap **Scan QR code** and allow the camera when asked. Point it at the QR code in the Terminal. That's it: the
-   app opens its home screen.
+   app opens its home screen. **Keep the white border around the QR code:** scan it from the whole Terminal
+   window, and don't crop it or zoom in so far that the border is cut off. (`sudo filament-kit pair` draws the code
+   with its own white background, so a dark Terminal is fine.)
 
 **If the camera can't read the QR code** (a small or blurry Terminal window helps neither):
 

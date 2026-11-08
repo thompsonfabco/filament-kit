@@ -35,7 +35,7 @@ how-to has the private route, and [Known gaps](docs/known-gaps.md) lists what el
 
 Then, on your phone:
 
-- **Android:** [Install the Android app](docs/install-android-app.md) and pair it with the server.
+- **Android:** [Install the Android app](docs/install-android-app.md) and pair it with the server, then see [Using the Android app](docs/android-app.md) for printers and adding spools.
 - **iPhone** (or any phone browser): [Use the web app on an iPhone](docs/install-iphone-web-app.md).
 
 Optional afterwards: the PC sync for Bambu Studio presets ([Pair your PC](#pair-your-pc)), an intake station with
@@ -86,7 +86,7 @@ the library and auto-update are off until you turn them on. Change them any time
 ## The phone app
 
 On Android, install `filament-kit.apk` from the Releases page (Android 10 or newer), run `sudo filament-kit pair`
-on the server and scan the QR code it prints: [Install the Android app](docs/install-android-app.md). On an iPhone
+on the server and scan the QR code it prints: [Install the Android app](docs/install-android-app.md), then [Using the Android app](docs/android-app.md) for printers and spools. On an iPhone
 or in any phone browser, the `web` module gives the same tasks as a web app you can put on the home screen:
 [Use the web app on an iPhone](docs/install-iphone-web-app.md). `sudo filament-kit unpair` lists and removes
 paired phones.
@@ -95,7 +95,8 @@ paired phones.
 
 For the Bambu Studio presets: install `filament-kit-sync-setup-<version>.exe` from the Releases page on the
 Windows PC with Bambu Studio, run `sudo filament-kit pair --pc` on the server and paste the link it prints into
-the setup's console. Step by step: [Pair your PC](docs/user-guide.md#pair-your-pc) in the guide.
+the setup's console. Step by step: [Pair your PC](docs/user-guide.md#pair-your-pc) in the guide. On Linux, use
+`filament-kit-sync-linux-x86_64-<version>.tar.gz` instead: [PC sync on Linux](docs/user-guide.md#pc-sync-on-linux).
 
 ## The reader
 
@@ -147,13 +148,12 @@ with `sudo filament-kit library update`, or turn on the `library` module to also
 
 ## Uninstall
 
-`sudo ./uninstall.sh` from an unpacked release removes the programs and keeps your spools, settings and backups;
-`--purge` deletes those too (it asks you to type `purge`). Where to find the unpacked release after a
-one-command install, and what stays behind: [Install the server, Uninstall](docs/install-server.md#uninstall).
+`sudo filament-kit uninstall` removes the programs and keeps your spools, settings and backups;
+`--purge` deletes those too (it asks you to type `purge`). What stays behind, and what to do if the kit has no kept copy of the release: [Install the server, Uninstall](docs/install-server.md#uninstall).
 
 ## More
 
-- [docs/install-server.md](docs/install-server.md), [docs/install-android-app.md](docs/install-android-app.md),
+- [docs/install-server.md](docs/install-server.md), [docs/install-android-app.md](docs/install-android-app.md), [docs/android-app.md](docs/android-app.md),
   [docs/install-iphone-web-app.md](docs/install-iphone-web-app.md): the how-tos.
 - [docs/user-guide.md](docs/user-guide.md): install modes, every command, printers and slot mapping, presets,
   the intake station, the Claude connector and phone web app, remote access, order history, troubleshooting.

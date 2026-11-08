@@ -17,10 +17,9 @@ Two kinds of entry:
 
 | # | Item | Why | What to do |
 |---|---|---|---|
-| 1 | **Piper voice `en_US-lessac-medium`** (planned default for the station's speech in v0.3.0: about 63 MB, downloaded at install time from Hugging Face, not bundled) | Its model card points at the Lessac Blizzard 2013 dataset licence: research use only, no commercial use, no redistribution without written consent. Downloading it for the user is the kit handing out a research-only dataset's model. | Change the default before it is ported: `en_US-ljspeech-medium` (public domain) or `en_US-libritts_r-medium` (CC BY 4.0, keep the credit); `en_GB-alba-medium` is CC BY 4.0 too. Pin the new voice's SHA-256 as planned. Avoid `ryan` and `hfc_female` (CC BY-NC-SA). The lessac voice may stay only as something the user asks for by name, with a note that it is research-only. |
-| 2 | **Google ML Kit barcode scanning** in the Android app (`com.google.mlkit:barcode-scanning`) | Proprietary, closed source, under Google's ML Kit terms. The APK bundles it, which sits badly with GPL-3.0 §6 (no corresponding source for that part), and F-Droid refuses it. | Replace the QR scanner with ZXing (`zxing-android-embedded`, Apache-2.0), or add an explicit GPL-3.0 §7 additional permission for the app. The app session already weighed ZXing for an F-Droid build. |
-| 3 | **Licence metadata of our own packages** | `server/pyproject.toml` and `pc-sync/pyproject.toml` declare no `license`; `pip-licenses` shows filament-kit as UNKNOWN. | Add `license = "GPL-3.0-or-later"` to both (and the LICENSE file to the wheel), so installs and tools see it. |
-| 4 | **Notices in the release files** | The APK and the PC sync setup carry third-party code (AndroidX, OkHttp, PyInstaller's bootloader, ...), whose BSD/MIT/Apache terms want their notices kept. | Ship this file in the server tarball and the PC sync setup, and show it (or the Gradle-generated OSS notices) in the app's Settings. |
+| 1 | ~~**Google ML Kit barcode scanning** in the Android app (`com.google.mlkit:barcode-scanning`)~~ | Proprietary, closed source, under Google's ML Kit terms. The APK bundled it, which sat badly with GPL-3.0 §6, and F-Droid refuses it. | **Done**: the QR scanner uses zxing-cpp (Apache-2.0); ML Kit is gone from the APK. |
+| 2 | **Licence metadata of our own packages** | `server/pyproject.toml` and `pc-sync/pyproject.toml` declare no `license`; `pip-licenses` shows filament-kit as UNKNOWN. | Add `license = "GPL-3.0-or-later"` to both (and the LICENSE file to the wheel), so installs and tools see it. |
+| 3 | **Notices in the release files** | The APK and the PC sync setup carry third-party code (AndroidX, OkHttp, PyInstaller's bootloader, ...), whose BSD/MIT/Apache terms want their notices kept. | Ship this file in the server tarball and the PC sync setup, and show it (or the Gradle-generated OSS notices) in the app's Settings. **App part done**: the APK carries this file and LICENSE, shown under Settings > Licences. |
 
 Everything else below is in order: GPL-3.0-compatible, or only installed and never redistributed.
 
@@ -81,11 +80,11 @@ the ones pip resolved on 2026-11-07; pins are marked.
 | Transitive: typing_extensions, aiohappyeyeballs | PSF-2.0 | |
 | Transitive: sniffio | Apache-2.0 OR MIT | |
 
-Planned for v0.3.0 (not on `main` yet), as a `station` extra in the same venv: **piper-tts 1.8.0**
+From v0.3.0, as a `station` extra in the same venv: **piper-tts 1.8.0**
 (GPL-3.0-or-later, from OHF-Voice/piper1-gpl; its wheel also carries g2pW under Apache-2.0) with
-**onnxruntime** (MIT; licence to be confirmed when it lands), for the station's speech; espeak-ng (above) stays
+**onnxruntime** (MIT; licence not re-checked since it landed), for the station's speech; espeak-ng (above) stays
 the fallback. The Piper **voice model** is downloaded at install time and checked against a pinned SHA-256; it
-is not in the release. Voice models carry their own dataset licences: see open item 1.
+is not in the release. Voice models carry their own dataset licences: see [Speech voice](#speech-voice).
 
 ## The Android app
 
@@ -97,15 +96,15 @@ Built by the release workflow and shipped as `filament-kit.apk`. Everything belo
 | Kotlin standard library, kotlinx-coroutines, kotlinx-serialization | Apache-2.0 | |
 | AndroidX: core, activity, compose (BOM 2026.09), material3, lifecycle, navigation, datastore, camera (CameraX), exifinterface, media3 (ExoPlayer, HLS, OkHttp datasource, UI) | Apache-2.0 | |
 | OkHttp, okhttp-tls | Apache-2.0 | |
-| **Google ML Kit barcode scanning 17.3.0** | **proprietary** (Google ML Kit terms + Google APIs Terms of Service) | the QR pairing scanner. See open item 2. |
-| Test-only (not in the APK): JUnit 4 (EPL-1.0), Robolectric (MIT), AndroidX test, Espresso (Apache-2.0), MockWebServer (Apache-2.0) | | |
+| [zxing-cpp](https://github.com/zxing-cpp/zxing-cpp) Android library 3.1.1 (`io.github.zxing-cpp:android`) | Apache-2.0 | the QR pairing scanner. A native library (`libzxingcpp_android.so`, one per CPU type) with a small Kotlin wrapper. Its source also carries libzueci (BSD-3-Clause, from upstream's headers; not re-checked for 3.1.1). |
+| Test-only (not in the APK): JUnit 4 (EPL-1.0), Robolectric (MIT), AndroidX test, Espresso (Apache-2.0), MockWebServer (Apache-2.0); Google ML Kit barcode scanning (proprietary) and ZXing core (Apache-2.0), only in the scanner comparison test | | |
 
 ## The Windows PC sync (`filament-kit-sync-setup-<version>.exe`)
 
 | Component | Licence | Notes |
 |---|---|---|
 | filament-kit-sync (`pc-sync/fksync`) | GPL-3.0-or-later | our code; no third-party Python packages |
-| Python interpreter and standard library | PSF-2.0 | bundled by PyInstaller. The planned Linux PC sync (v0.3.0, PyInstaller 6.11.1) bundles CPython 3.12 the same way, with the same terms. |
+| Python interpreter and standard library | PSF-2.0 | bundled by PyInstaller. The Linux PC sync (v0.3.0, PyInstaller 6.11.1) bundles CPython 3.12 the same way, with the same terms. |
 | PyInstaller bootloader and runtime hooks | GPL-2.0-or-later WITH Bootloader-exception; hooks Apache-2.0 | the exception allows bundling a program under any licence |
 | Inno Setup (the setup stub) | Inno Setup licence (permissive; keep its notice) | makes the setup `.exe` |
 
@@ -125,6 +124,23 @@ your own server. What goes into it:
 | TalkiePCM 0.1.1 (pschatzmann) | GPL-3.0 |
 
 A built image is a GPL-3.0 work (TalkiePCM is GPL-3.0; our code is GPL-3.0-or-later). The source is here.
+
+## Speech voice
+
+The station's speech uses Piper with a voice model downloaded at install time (about 79 MB) from
+`huggingface.co/rhasspy/piper-voices`, checked against pinned SHA-256 hashes. Not bundled in any release.
+
+| Voice | Dataset | Licence | Status |
+|---|---|---|---|
+| `en_US-libritts_r-medium`, speaker 0 | LibriTTS-R (openslr.org/141) | CC BY 4.0 | default |
+| `en_US-ljspeech-medium` | LJ Speech | public domain | selectable (`station.voice`) |
+
+- **Attribution (CC BY 4.0), to keep with the voice and in the notices:** the voice is based on LibriTTS-R, the
+  sound-quality-restored version of LibriTTS (Koizumi et al., 2023; openslr.org/141), licensed CC BY 4.0
+  (creativecommons.org/licenses/by/4.0/), converted for Piper by the rhasspy/piper-voices project. Changes: none
+  by filament-kit; the model is used as published.
+- Pinned in the installer: the `.onnx` file's hash is Hugging Face's published one; the `.onnx.json` is hashed by us.
+  The voice's hashes live in the installer's code, not here.
 
 ## Display library (planned, firmware 7)
 

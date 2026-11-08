@@ -1,5 +1,7 @@
 """Release and packaging files: checked as text (CI files are written and linted here, run on GitHub)."""
 import re
+import subprocess
+import sys
 
 import pytest
 from pathlib import Path
@@ -114,10 +116,10 @@ def test_task_runs_every_ten_minutes():
 
 
 def test_server_and_pc_sync_versions_match():
-    assert _version("server/filament_kit/__init__.py") == _version("pc-sync/fksync/__init__.py") == "0.2.0"
+    assert _version("server/filament_kit/__init__.py") == _version("pc-sync/fksync/__init__.py") == "0.3.0"
     # the wheel takes its version from pyproject; make_release.sh looks for the __version__ wheel
     for rel in ("server/pyproject.toml", "pc-sync/pyproject.toml"):
-        assert re.search(r'^version = "0\.2\.0"\s*$', _read(rel), re.M), rel
+        assert re.search(r'^version = "0\.3\.0"\s*$', _read(rel), re.M), rel
 
 
 SPOOLMAN_SHA = "bcc961af4c20d7ad7f1740f5609cd3efd94c4556baafaeba5036122dd7e46704"
@@ -814,5 +816,19 @@ def test_releases_ship_license_and_third_party_notices():
     assert re.search(r'^cp LICENSE THIRD-PARTY\.md "\$stage/"', _read("tools/make_release.sh"), re.M)
     assert re.search(r'^install -m 644 LICENSE THIRD-PARTY\.md "\$stage/\$name/"', _read("pc-sync/linux/build.sh"), re.M)
     iss = _read("pc-sync/installer/filament-kit-sync.iss")
-    assert 'Source: "..\..\LICENSE"; DestDir: "{app}"' in iss
-    assert 'Source: "..\..\THIRD-PARTY.md"; DestDir: "{app}"' in iss
+    assert r'Source: "..\..\LICENSE"; DestDir: "{app}"' in iss
+    assert r'Source: "..\..\THIRD-PARTY.md"; DestDir: "{app}"' in iss
+
+
+def test_the_library_builder_imports_without_the_kits_dependencies():
+    """release.yml builds library.tar.gz with the runner's plain Python (tools/build_library_asset.py imports
+    filament_kit.library): it must not need cryptography or any other kit dependency (v0.3.0's first release run
+    failed with ModuleNotFoundError: cryptography)."""
+    code = ("import sys\n"
+            "for m in ('cryptography', 'starlette', 'uvicorn', 'httpx', 'anthropic', 'mcp', 'defusedxml'):\n"
+            "    sys.modules[m] = None\n"
+            f"sys.path.insert(0, {str(ROOT / 'tools')!r}); sys.path.insert(0, {str(ROOT / 'server')!r})\n"
+            "import sync_library_snapshot\n"
+            "print('ok')\n")
+    r = subprocess.run([sys.executable, "-I", "-c", code], capture_output=True, text=True)
+    assert r.returncode == 0 and r.stdout.strip() == "ok", r.stderr
