@@ -132,7 +132,12 @@ data class Printer(
     val camera: PrinterCamera = PrinterCamera(),
     /** Null when the server could not summarise the printer's report; the list then shows the state only. */
     val summary: PrinterSummary? = null,
-)
+    /** The model's name ("H2D" for "O1D"); servers before 0.3 send only [model]. */
+    @SerialName("model_name") val modelName: String? = null,
+) {
+    /** What to show for the model: its name, else the code an older server sent, else null. */
+    val shownModel: String? get() = modelName?.takeIf { it.isNotBlank() } ?: model?.takeIf { it.isNotBlank() }
+}
 
 @Serializable
 data class Temp(

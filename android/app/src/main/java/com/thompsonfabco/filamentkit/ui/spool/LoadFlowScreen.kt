@@ -27,7 +27,7 @@ fun LoadFlow(state: LoadUiState, vm: LoadViewModel, onDone: (LoadUiState.Done) -
                 list.isEmpty() && state.error == null -> Text("No printers are set up yet. Add one on the Printers screen.")
                 else -> list.forEach { p ->
                     OutlinedButton(onClick = { vm.pickPrinter(p) }, modifier = Modifier.fillMaxWidth()) {
-                        Text(listOfNotNull(p.name, p.model, PrinterHelp.stateLabel(p.state)).joinToString(" · "))
+                        Text(listOfNotNull(p.name, p.shownModel, PrinterHelp.stateLabel(p.state)).joinToString(" · "))
                     }
                 }
             }
