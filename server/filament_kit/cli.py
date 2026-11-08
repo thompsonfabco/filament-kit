@@ -566,6 +566,22 @@ def _printers_menu() -> None:
             print(f"error: {e}")
 
 
+def _tts_name(cfg: dict) -> str:
+    st = config._merge(config.DEFAULTS["station"], cfg.get("station") or {})
+    if not st.get("speech"):
+        return "off (station.speech)"
+    return "espeak-ng" if st.get("tts") == "espeak" else "Piper"
+
+
+def _station_voice_menu(cfg: dict) -> None:
+    """How the button panel speaks: Piper (natural, a 60-80 MB voice download) or espeak-ng (no download)."""
+    v = _ask("The station's voice: 1) Piper (natural; downloads a 60-80 MB voice)  "
+             "2) espeak-ng (robotic; no download)  [Enter keeps it]: ")
+    v = (v or "").strip()
+    if v in ("1", "2"):
+        cfg.setdefault("station", {})["tts"] = "auto" if v == "1" else "espeak"
+
+
 def cmd_config() -> int:
     cfg = config.load()
     before = _module_state(cfg)
@@ -577,6 +593,7 @@ def cmd_config() -> int:
               "  4) Anthropic key      only for AI label reading (ai_intake)\n"
               "  5) Printers\n"
               f"  6) Modules            {modules.mode_of(modules.enabled(cfg))}\n"
+              f"  7) Station voice      {_tts_name(cfg)}\n"
               "  0) save and exit")
         choice = _ask("> ")
         if choice is None or choice.strip() == "0":
@@ -608,6 +625,8 @@ def cmd_config() -> int:
             _printers_menu()
         elif choice == "6":
             _modules_menu(cfg)
+        elif choice == "7":
+            _station_voice_menu(cfg)
         else:
             print("Unknown choice.")
     changed = _module_state(cfg) != before
@@ -1099,9 +1118,9 @@ def cmd_modules_apply() -> int:
 
 
 def _module_state(cfg: dict) -> tuple:
-    """What an apply cares about: the module set and the station link."""
+    """What an apply cares about: the module set, the station link and its voice (the drop-in, the download)."""
     st = cfg.get("station") or {}
-    return (modules.enabled(cfg), st.get("url"), tuple(st.get("allow") or ()))
+    return (modules.enabled(cfg), st.get("url"), tuple(st.get("allow") or ()), st.get("tts"))
 
 
 def _with_modules(cfg: dict, on) -> dict:

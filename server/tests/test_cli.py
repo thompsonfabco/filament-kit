@@ -676,3 +676,17 @@ def test_pair_kinds_are_mutually_exclusive(capsys, flags):
         cli.main(["pair", *flags])
     assert e.value.code == 2 and "not allowed with" in capsys.readouterr().err
     assert not (config.paths().state / "pending.json").exists()
+
+
+def test_config_menu_station_voice_piper_or_espeak(monkeypatch, capsys):
+    """Final review M5: the menu switches the station's speech between Piper and espeak-ng (no download)."""
+    monkeypatch.setattr(cli, "_run_apply", lambda pairing=True: print("APPLIED") or 0)
+    monkeypatch.setattr(sys, "stdin", io.StringIO("7\n2\n0\n"))
+    assert cli.main(["config"]) == 0
+    assert config.load()["station"]["tts"] == "espeak" and "APPLIED" in capsys.readouterr().out
+    monkeypatch.setattr(sys, "stdin", io.StringIO("7\n1\n0\n"))
+    assert cli.main(["config"]) == 0
+    assert config.load()["station"]["tts"] == "auto" and "APPLIED" in capsys.readouterr().out
+    monkeypatch.setattr(sys, "stdin", io.StringIO("7\n\n0\n"))  # a blank answer keeps it
+    assert cli.main(["config"]) == 0
+    assert config.load()["station"]["tts"] == "auto" and "APPLIED" not in capsys.readouterr().out
