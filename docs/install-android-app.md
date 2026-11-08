@@ -51,7 +51,8 @@ Pairing lets the app trust your server and lets the server know your phone. You 
    ```
 
    It shows a QR code, the server's certificate fingerprint and a 6-digit pairing code. They are good for about
-   10 minutes. (The installer showed the same at the end of the install; if that code is still fresh, use it.)
+   10 minutes. (The installer showed the same at the end of the install; if that code is still fresh, use it. The server's setup page,
+   `https://<computer name>.local:8710/setup`, can show a pairing code too.)
 
 2. **On the phone**, the app opens on **Pair with your server**. It asks for each permission only when it first
    needs it, not at the start:
@@ -65,11 +66,13 @@ Pairing lets the app trust your server and lets the server know your phone. You 
 
 **If the camera can't read the QR code** (a small or blurry Terminal window helps neither):
 
-1. Under **Servers found on this network**, tap your server. If it's not listed, tap **Enter address** and type
-   the computer's name with `.local` (for example `my-server.local`) or its IP address. Leave **Port** at 8710.
-2. The app shows **Check the server's fingerprint**. Compare it with the fingerprint `sudo filament-kit pair`
-   printed. If they are the same, tap **It matches**. If not, tap **It does not match** and stop: something else
-   is answering at that address.
+1. Under **Servers found on this network**, tap your server: it goes straight to the fingerprint check. If it's not
+   listed, tap **Enter address** and type the computer's name with `.local` (for example `my-server.local`) or its IP
+   address. Leave **Port** at 8710.
+2. The app shows **Check the server's fingerprint** with two groups left blank. Find the fingerprint shown with the
+   pairing code (in the Terminal, or on the server's setup page) and type the two missing groups. If they are the
+   same, tap **Continue**. If they differ, tap **It does not match** and stop: something else is answering at that
+   address.
 3. Under **Enter the pairing code**, type the 6-digit code.
 
 To pair another phone, run `sudo filament-kit pair` again: each code works once.
@@ -85,6 +88,13 @@ The home screen shows the buttons **Add spool**, **Add profile**, **Search**, **
 The app updates itself from your server. When the server has a newer app (after `sudo filament-kit update`),
 the home screen shows **Update available**. Tap **Tap to install**. The first time, Android asks to let
 filament-kit install apps: allow it, go back and tap **Tap to install** again.
+
+### Update refused
+
+If the app's own update says **Don't install this update** and you did not build the app yourself, don't uninstall
+the app. A release update is always signed like the app you already have, so a refusal means this file is not from
+the same maker: check who runs the server and where its app came from. (This is different from **App not installed**
+below, which happens when you install a downloaded file over an older copy signed by someone else.)
 
 ## Common problems
 
