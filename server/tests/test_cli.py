@@ -457,6 +457,24 @@ def test_pair_pc_prints_link_not_qr(capsys, monkeypatch):
     assert [d["name"] for d in pairing.devices()] == ["pc"]
 
 
+def test_pair_qr_has_four_module_quiet_zone(capsys, monkeypatch):
+    _cert()
+    seen = {}
+
+    def fake_run(args, **kw):
+        seen["args"] = args
+        return cli.subprocess.CompletedProcess(args, 0, stdout="QR\n", stderr="")
+
+    monkeypatch.setattr(cli.shutil, "which", lambda name: "/usr/bin/qrencode")
+    monkeypatch.setattr(cli.subprocess, "run", fake_run)
+    assert cli.main(["pair"]) == 0
+    args = seen["args"]
+    assert args[:3] == ["qrencode", "-t", "ansiutf8"]
+    assert args[args.index("-m") + 1] == "4"
+    assert args[-1].startswith("fkit://pair?")
+    assert "QR" in capsys.readouterr().out
+
+
 def _ok_client(key):
     class Models:
         def list(self):
