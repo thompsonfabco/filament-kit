@@ -255,3 +255,66 @@ def test_save_pairing_server_file_is_world_readable_whatever_the_umask():
     finally:
         os.umask(old)
     assert (os.stat(server_api.server_file()).st_mode & 0o777) == 0o644
+
+
+# ---------- final fix wave I4: a request that went out is never sent again to the next address ----------
+
+class _FakeConn:
+    """Stands in for _Pinned: per address, connect() fails (refused) or works, and the request then times out
+    or answers 200."""
+    plan: dict = {}
+    seen: list = []
+
+    def __init__(self, host, port, fp, timeout):
+        self.host = host
+        self.status = 200
+
+    def connect(self):
+        if self.plan[self.host] == "refused":
+            raise ConnectionRefusedError(111, "Connection refused")
+
+    def request(self, method, path, body=None, headers=None):
+        self.seen.append((self.host, method, path))
+        if self.plan[self.host] == "timeout":
+            raise TimeoutError("The read operation timed out")
+
+    def getresponse(self):
+        conn = self
+
+        class R:
+            status = conn.status
+
+            @staticmethod
+            def read():
+                return b'{"known": false}'
+        return R()
+
+    def close(self):
+        pass
+
+
+def _fake_api(monkeypatch, plan):
+    _FakeConn.plan, _FakeConn.seen = plan, []
+    monkeypatch.setattr(server_api, "_Pinned", _FakeConn)
+    _paired(list(plan))
+    return server_api.ServerApi(timeout=3)
+
+
+def test_a_timeout_after_sending_is_final_and_not_resent(monkeypatch):
+    api = _fake_api(monkeypatch, {"192.0.2.1": "timeout", "192.0.2.2": "ok"})
+    status, body = api.save({"uid": UID, "gross_g": 900})
+    assert status == 0 and body["error"] == "timeout" and body["display"]
+    assert [s[0] for s in _FakeConn.seen] == ["192.0.2.1"]  # the second address saw no request
+
+
+def test_a_failed_connect_moves_on_to_the_next_address(monkeypatch):
+    api = _fake_api(monkeypatch, {"192.0.2.1": "refused", "192.0.2.2": "ok"})
+    status, body = api.tag_lookup(UID)
+    assert status == 200 and body == {"known": False}
+    assert [s[0] for s in _FakeConn.seen] == ["192.0.2.2"]
+
+
+def test_every_connect_failing_is_unreachable(monkeypatch):
+    api = _fake_api(monkeypatch, {"192.0.2.1": "refused", "192.0.2.2": "refused"})
+    status, body = api.tag_lookup(UID)
+    assert status == 0 and body["error"] == "unreachable" and _FakeConn.seen == []
