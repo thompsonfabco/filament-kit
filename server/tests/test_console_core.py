@@ -164,7 +164,6 @@ def test_starting_a_job_starts_its_instance_and_writes_no_file_it_must_trust(env
     setup_helper._start_job("update")
     assert ["systemctl", "start", "--no-block", "filament-kit-setup-job@update.service"] in calls
     assert not list(setup_helper.run_dir().glob("*")) if setup_helper.run_dir().exists() else True
-    assert (config.paths().etc / "job.lock").exists()
 
 
 def test_a_job_that_will_not_start_says_what_to_run(env, monkeypatch):  # noqa: F811
@@ -196,6 +195,40 @@ def test_a_queued_job_counts_before_its_unit_is_active(env, monkeypatch):  # noq
 def test_the_old_unit_running_counts_too(env, monkeypatch):  # noqa: F811
     systemd(monkeypatch, apply_state="activating")
     assert setup_helper._applying() is True
+
+
+def test_the_timers_update_counts_and_is_named(env, monkeypatch):  # noqa: F811
+    monkeypatch.delenv("FK_NO_SYSTEMD")
+
+    def run(cmd, **kw):
+        active = cmd[1] == "show" and cmd[-1] == setup_helper.UPDATE_UNIT
+        return subprocess.CompletedProcess(cmd, 0, stdout="activating\n" if active else "", stderr="")
+    monkeypatch.setattr(setup_helper.subprocess, "run", run)
+    assert setup_helper._applying() is True and setup_helper._busy_text() == setup_helper.BUSY["update"]
+
+
+def test_a_change_holds_the_lock_from_its_check_to_its_start(env, monkeypatch):  # noqa: F811
+    """Two requests at once must not both save and one then be told it's busy."""
+    order = []
+
+    class Held:
+        def __enter__(self):
+            order.append("lock")
+
+        def __exit__(self, *a):
+            order.append("unlock")
+    monkeypatch.setattr(setup_helper, "_job_lock", Held)
+    real = setup_helper.config.save
+    monkeypatch.setattr(setup_helper.config, "save", lambda c: order.append("save") or real(c))
+    monkeypatch.setattr(setup_helper, "_start_apply", lambda: order.append("start"))
+    r = setup_helper.handle({"op": "mode", "code": CODE, "mode": "all-in-one"})
+    assert r["ok"] is True and order == ["lock", "save", "start", "unlock"]
+
+
+def test_the_lock_file_is_made_when_systemd_is_there(env, monkeypatch):  # noqa: F811
+    systemd(monkeypatch)
+    setup_helper.handle({"op": "job", "code": CODE, "name": "check"})
+    assert (config.paths().etc / "job.lock").exists()
 
 
 def test_a_running_job_refuses_the_next_with_its_name(env, monkeypatch):  # noqa: F811
@@ -302,14 +335,79 @@ def test_job_view_follows_a_log_from_an_offset(app):
     assert c.get("/setup/api/job?from=x").status_code == 400
 
 
-def test_an_address_cut_by_the_chunk_size_is_not_shown(app, monkeypatch):
-    monkeypatch.setattr(jobs, "MAX_LOG", 64)
-    head = setup_helper.header("apply") + "\n"
-    line = "x" * (64 - len(head) - 4) + " 192.0.2.77 end\n"
-    write_log(head + line)
+PLANTED_LOG = [
+    "at 192.0.2.41 now", "Spoolman http://192.0.2.31:7912/api", "PUT /api/sync/live?user_id=1234567890 200",
+    "fkit://pair?h=kit&t=PAIRTOKEN&fp=ab", "http://me:hunter2@kit.mylan.net:7912/x", f"serial {SERIAL} seen",
+    "password=hunter2 access_code=87654321", "certbot mailed alice@example.org", "Authorization: Bearer abc.def.ghi",
+    "key sk-ant-api03-abcdef ghp_abcdefghij", "at kit.local:8710 and fe80::1 too"]
+FRAGMENTS = ("192.0", ".0.2", "7912", "1234567", "34567890", "PAIRTOKEN", "hunter2", "mylan", "0948ZZ", "ZZ0A", "A000",
+             "87654321", "alice", "example.org", "abc.def", "api03", "abcdefghij", "kit.local", "fe80")
+
+
+def _planted(done: bool) -> str:
+    return (setup_helper.header("apply") + "\n" + "\n".join(PLANTED_LOG) + "\n"
+            + ("\n==> finished (exit 0)\n" if done else "half a line http://192.0.2.99:1/secr"))
+
+
+@pytest.mark.parametrize("done", [True, False], ids=["finished", "running"])
+@pytest.mark.parametrize("route", ["job", "apply"])
+def test_no_starting_point_gets_past_the_redaction(app, done, route):
+    """The start of a slice is the caller's: every `from` there is, on every value the redaction hides."""
+    log = _planted(done)
+    write_log(log)
     c = client(app)
-    r = c.get("/setup/api/job").json()
-    assert r["text"] == head and "192" not in r["text"]
+    for start in range(len(log.encode()) + 2):
+        r = c.get(f"/setup/api/{route}?from={start}")
+        assert r.status_code == 200
+        for bad in FRAGMENTS:
+            assert bad not in r.text, (start, bad, r.json()["text"][:60])
+
+
+@pytest.mark.parametrize("size", [8, 16, 64, 1024])
+@pytest.mark.parametrize("done", [True, False], ids=["finished", "running"])
+def test_paging_at_any_size_shows_nothing_and_loses_nothing(app, monkeypatch, size, done):
+    monkeypatch.setattr(jobs, "MAX_LOG", size)
+    write_log(_planted(done))
+    c = client(app)
+    at, pages = 0, []
+    while True:
+        r = c.get(f"/setup/api/job?from={at}").json()
+        if not r["text"]:
+            break
+        pages.append(r["text"])
+        at = r["next"]
+    text = "".join(pages)
+    for bad in FRAGMENTS:
+        assert bad not in text, bad
+    assert "at <hidden> now" in text and setup_helper.header("apply") in text
+
+
+def test_a_running_jobs_unfinished_line_waits_for_its_end(app):
+    write_log(setup_helper.header("apply") + "\nfirst\nhttp://192.0.2.9")
+    assert client(app).get("/setup/api/job").json()["text"].endswith("first\n")
+
+
+def test_a_job_whose_unit_has_gone_stops_reading_as_running(app, monkeypatch):
+    write_log(setup_helper.header("update") + "\nworking\n")
+    monkeypatch.setattr(jobs, "GONE_AFTER", -1)
+    monkeypatch.setattr(setup_helper, "_no_systemd", lambda: False)
+    monkeypatch.setattr(setup_helper, "_applying", lambda: False)
+    r = jobs.view(0)
+    assert r["running"] is False and r["lost"] is True
+    monkeypatch.setattr(setup_helper, "_applying", lambda: True)
+    assert jobs.view(0)["running"] is True
+
+
+@pytest.mark.parametrize("text,gone", [("password=hunter2", "hunter2"), ("alice@example.org", "alice"), ("uid=99887766", "99887766"),
+                                       ("user-id=99887766", "99887766"), ("access_code=12345678", "12345678"),
+                                       ("sk-ant-api03-abc", "api03"), ("ghp_abcd1234", "abcd1234")])
+def test_redaction_hides_more_shapes(text, gone):
+    assert gone not in redact.text(text, [])
+
+
+def test_a_word_like_token_or_password_in_a_sentence_stays():
+    for s in ("reader token r1 made", "the web passphrase is set", "Password: not asked"[:8] + " prompt"):
+        assert redact.text(s, []) == s
 
 
 def test_a_job_with_no_last_line_is_given_up_on_after_the_units_timeout(app, monkeypatch):

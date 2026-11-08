@@ -20,9 +20,12 @@ _LOCAL = re.compile(r"\b(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:local|localdoma
 # a serial: 12-20 capitals and digits with both in it (Bambu's look like this; a word of capitals or a date does not)
 _SERIAL = re.compile(r"\b(?=[0-9A-Z]*[0-9])(?=[0-9A-Z]*[A-Z])[0-9A-Z]{12,20}\b")
 # a Bambu account id: Studio's user folder and the sync's query parameter name it; any long run of digits may be one
-_ACCOUNT = re.compile(r"\buser_?id\b[=:\s\"']+[^\s&\"']+|\b\d{9,}\b", re.I)
+_ACCOUNT = re.compile(r"\b(?:user[_-]?id|uid)\b[=:\s\"']+[^\s&\"']+|\b\d{9,}\b", re.I)
 _USER_FOLDER = re.compile(r"([\\/]user[\\/]+)[^\\/\s]+", re.I)
-_BEARER = re.compile(r"\b(?:authorization[=:\s\"']+(?:bearer\s+)?|bearer[=:\s\"']+|token\s*[=:]\s*)[^\s&\"']+", re.I)
+_BEARER = re.compile(r"\b(?:authorization[=:\s\"']+(?:bearer\s+)?|bearer[=:\s\"']+"
+                     r"|(?:token|password|passwd|secret|access_code|api_?key)\s*[=:]\s*)[^\s&\"']+", re.I)
+_KEYS = re.compile(r"\b(?:sk-ant-[\w-]+|gh[pousr]_\w+|github_pat_\w+)")
+_EMAIL = re.compile(r"\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b")
 
 
 def _ipv6(m: re.Match) -> str:
@@ -56,9 +59,12 @@ def known_values(cfg: dict | None = None) -> list[str]:
 
 def text(s: str, known: list[str] | None = None) -> str:
     """`s` without addresses or serials. Loopback stays hidden too: nothing here needs it, and a rule with no
-    exceptions is one a test can hold."""
+    exceptions is one a test can hold. Give it whole lines: the patterns need the start of what they hide, so a slice that
+    begins inside a value shows the rest of it."""
     s = _URL.sub(HIDDEN, s)
     s = _BEARER.sub(HIDDEN, s)
+    s = _KEYS.sub(HIDDEN, s)
+    s = _EMAIL.sub(HIDDEN, s)
     s = _USER_FOLDER.sub(lambda m: m.group(1) + HIDDEN, s)
     s = _ACCOUNT.sub(HIDDEN, s)
     for v in known if known is not None else known_values():

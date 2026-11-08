@@ -1,8 +1,13 @@
 """The background jobs (setup_helper.JOBS) as the page sees them.
 
-    GET  job?from=N             the log from byte N with addresses and serials taken out, and whether it finished
-    POST job/log {code, from}   the same log whole
+    GET  job?from=N             the log with addresses and serials taken out, from character N of that redacted text, and
+                                whether it finished
+    POST job/log {code, from}   the log whole, from byte N
     POST job {code, name}       start a job (the root helper checks the code and the guards)
+
+The redaction runs on whole lines of the whole log, and `from` indexes its result. It must never run on a slice: its patterns
+need the start of what they hide, so a caller choosing where a slice begins could read past them. A running job's unfinished last
+line waits until it has ended.
 
 The server restarts during apply, update and rollback; the log lives in /run, so the page comes back and reads on.
 `version` tells it when the server it reloaded under is another release.
@@ -10,6 +15,8 @@ The server restarts during apply, update and rollback; the log lives in /run, so
 from __future__ import annotations
 
 import re
+import subprocess
+import threading
 import time
 
 import anyio
@@ -18,7 +25,10 @@ from .. import __version__, redact, setup_helper
 
 MAX_LOG = 64 * 1024
 STALE_AFTER = 65 * 60       # past the unit's TimeoutStartSec: a job with no last line is not running any more
+GONE_AFTER = 15.0           # seconds a log may stand with no unit behind it (the unit writes it, then ends)
 _FINISHED = re.compile(rb"^==> finished \(exit (-?[0-9]+)\)\s*$", re.M)
+_memo_lock = threading.Lock()
+_memo: tuple | None = None  # (the bytes it was made from, the redacted text): a page polls once a second
 
 
 def stamp():
@@ -27,6 +37,29 @@ def stamp():
         return setup_helper.job_log().stat().st_mtime
     except OSError:
         return None
+
+
+def _redacted(data: bytes) -> str:
+    """The whole of `data`, whole lines only, redacted."""
+    global _memo
+    with _memo_lock:
+        if _memo is not None and _memo[0] == data:
+            return _memo[1]
+    text = redact.text(data.decode("utf-8", "replace"))
+    with _memo_lock:
+        _memo = (data, text)
+    return text
+
+
+def _unit_gone(age: float) -> bool:
+    """A job with no last line whose unit has gone (killed hard, out of memory): nothing more will come. The check runs
+    only while a log looks unfinished. Where it can't be told, the answer is no, and STALE_AFTER decides."""
+    if setup_helper._no_systemd() or age < GONE_AFTER:
+        return False
+    try:
+        return not setup_helper._applying()
+    except (OSError, subprocess.SubprocessError):
+        return False
 
 
 def view(start: int, *, with_text: bool = True, whole: bool = False) -> dict:
@@ -39,21 +72,22 @@ def view(start: int, *, with_text: bool = True, whole: bool = False) -> dict:
         return empty
     ends = list(_FINISHED.finditer(data))
     done = bool(ends)
-    lost = not done and age > STALE_AFTER
-    start = max(0, min(start, len(data)))
-    chunk = data[start:start + MAX_LOG] if with_text else b""
-    # whole lines only, unless the job has ended: an address cut in two would pass the redaction
-    if chunk and not done and not chunk.endswith(b"\n"):
-        last = chunk.rfind(b"\n")
-        if last >= 0:
-            chunk = chunk[:last + 1]
-        elif len(chunk) < MAX_LOG:
-            chunk = b""
-    text = chunk.decode("utf-8", "replace")
-    return {"seen": True, "name": setup_helper.job_name_of(data.split(b"\n", 1)[0].decode("utf-8", "replace")),
-            "running": not done and not lost, "exit": int(ends[-1].group(1)) if done else None, "lost": lost,
-            "text": text if whole else redact.text(text), "next": start + len(chunk),
-            "version": __version__, "redacted": not whole}
+    lost = not done and (age > STALE_AFTER or _unit_gone(age))
+    out = {"seen": True, "name": setup_helper.job_name_of(data.split(b"\n", 1)[0].decode("utf-8", "replace")),
+           "running": not done and not lost, "exit": int(ends[-1].group(1)) if done else None, "lost": lost,
+           "version": __version__, "redacted": not whole, "text": "", "next": 0}
+    if not with_text:
+        return out
+    if whole:
+        start = max(0, min(start, len(data)))
+        chunk = data[start:start + MAX_LOG]
+        return {**out, "text": chunk.decode("utf-8", "replace"), "next": start + len(chunk)}
+    # an unfinished last line stays back until it has its end; a job that has ended has no more coming
+    complete = data if done or lost else data[:data.rfind(b"\n") + 1]
+    text = _redacted(complete)
+    start = max(0, min(start, len(text)))
+    chunk = text[start:start + MAX_LOG]
+    return {**out, "text": chunk, "next": start + len(chunk)}
 
 
 def _from(value) -> int:

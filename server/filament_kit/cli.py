@@ -163,11 +163,11 @@ def cmd_pair(pc: bool = False, station: bool = False, text: bool = False) -> int
         # no terminal (an install log): the link as text, for a phone that gets it some other way
         print(f"Pairing link: {pr.qr}")
         fp = pairing.fingerprint((config.paths().etc / "cert.pem").read_bytes())
-        print("Certificate fingerprint (check it matches the phone):")
+        print("Certificate fingerprint (the phone asks for two groups of it):")
     else:
         print(_qr_text(pr.qr))
         fp = pairing.fingerprint((config.paths().etc / "cert.pem").read_bytes())
-        print("Certificate fingerprint (check it matches the phone):")
+        print("Certificate fingerprint (the phone asks for two groups of it):")
     print("  " + " ".join(fp[i:i + 4] for i in range(0, len(fp), 4)))
     print(f"Pairing code: {pr.code}")
     print(f"Expires at {time.strftime('%H:%M:%S', time.localtime(pr.expires))} "

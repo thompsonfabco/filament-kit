@@ -67,6 +67,7 @@ MAX_REQUEST = 16 * 1024
 READ_TIMEOUT = 5.0
 JOB_PREFIX = "filament-kit-setup-job@"              # one instance per job: filament-kit-setup-job@update.service
 APPLY_UNIT = "filament-kit-setup-apply.service"     # the job unit's name up to 0.4.0
+UPDATE_UNIT = "filament-kit-update.service"         # the timer's update; `sudo filament-kit update` at a terminal has no unit
 ACTIVE = ("activating", "active", "deactivating", "reloading")      # a oneshot is "activating" while it runs
 # The closed list of jobs: the `filament-kit` arguments each one runs.
 JOBS = {"apply": ("modules", "apply", "--no-pair"), "update": ("update",), "rollback": ("update", "--rollback"),
@@ -201,11 +202,18 @@ def _applying() -> bool:
     """True while a job's unit runs or is queued (one job at a time), under either unit name."""
     if _no_systemd():
         return False
-    if _running_jobs():
-        return True
-    state = subprocess.run(["systemctl", "show", "--property=ActiveState", "--value", APPLY_UNIT], capture_output=True,
-                           text=True, timeout=30, check=False).stdout.strip()
-    return state in ACTIVE
+    return bool(_running_jobs()) or bool(_other_units())
+
+
+def _other_units() -> list[str]:
+    """The old job unit and the timer's update, when they run."""
+    out = []
+    for unit in (APPLY_UNIT, UPDATE_UNIT):
+        state = subprocess.run(["systemctl", "show", "--property=ActiveState", "--value", unit], capture_output=True,
+                               text=True, timeout=30, check=False).stdout.strip()
+        if state in ACTIVE:
+            out.append(unit)
+    return out
 
 
 def _busy_text() -> str:
@@ -213,6 +221,8 @@ def _busy_text() -> str:
         names = _running_jobs()
         if names:
             return BUSY.get(names[0], APPLYING)
+        if UPDATE_UNIT in _other_units():
+            return BUSY["update"]
     try:
         with open(job_log(), encoding="utf-8", errors="replace") as fh:
             return BUSY.get(job_name_of(fh.readline()), APPLYING)
@@ -222,8 +232,12 @@ def _busy_text() -> str:
 
 @contextmanager
 def _job_lock():
-    """Held from the check to the start: the socket starts one helper per connection (Accept=yes), and two could both
-    see nothing running. In /etc/filament-kit, the one place this helper may write."""
+    """Held from the check through any save to the start: the socket starts one helper per connection (Accept=yes), and two
+    could both see nothing running, or both save and one then be told it's busy. In /etc/filament-kit, the one place this
+    helper may write."""
+    if _no_systemd():
+        yield
+        return
     fd = os.open(config.paths().etc / "job.lock", os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
     try:
         if fcntl is not None:
@@ -238,15 +252,14 @@ def _start_job(name: str, why: str = "") -> None:
         raise Refused(400, "no such job")
     if _no_systemd():
         return
-    with _job_lock():
-        if _applying():
-            raise Refused(409, _busy_text())
-        unit = job_unit(name)
-        r = subprocess.run(["systemctl", "start", "--no-block", unit], capture_output=True, text=True,
-                           timeout=60, check=False)
-        if r.returncode != 0:
-            log.error("setup helper: cannot start %s: %s", unit, r.stderr.strip())
-            raise Refused(500, why or f"the job did not start; at the server: sudo filament-kit {' '.join(JOBS[name])}")
+    if _applying():
+        raise Refused(409, _busy_text())
+    unit = job_unit(name)
+    r = subprocess.run(["systemctl", "start", "--no-block", unit], capture_output=True, text=True,
+                       timeout=60, check=False)
+    if r.returncode != 0:
+        log.error("setup helper: cannot start %s: %s", unit, r.stderr.strip())
+        raise Refused(500, why or f"the job did not start; at the server: sudo filament-kit {' '.join(JOBS[name])}")
 
 
 def _start_apply() -> None:
@@ -465,12 +478,19 @@ OPS = {"check": _check, "key_set": _key_set, "key_remove": _key_remove, "passphr
        "station_pairing": _station_pairing}
 
 
+# what may save a setting and start a job: these run under _job_lock, whole
+LOCKED_OPS = ("module", "setting", "mode", "apply", "job")
+
+
 def handle(req) -> dict:
     """One request -> one reply {ok, status[, error][, ...]}. Never raises; the reply never holds a value."""
     try:
         if not isinstance(req, dict) or req.get("op") not in OPS:
             raise Refused(400, "unknown request")
         _check_code(req.get("code"), req.get("client"))
+        if req["op"] in LOCKED_OPS:
+            with _job_lock():
+                return {"ok": True, "status": 200, **OPS[req["op"]](req)}
         return {"ok": True, "status": 200, **OPS[req["op"]](req)}
     except Refused as e:
         return {"ok": False, "status": e.status, "error": e.message, **e.extra}

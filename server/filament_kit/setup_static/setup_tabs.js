@@ -45,7 +45,8 @@ async function jobTick() {
   jobState.textContent = r.running ? `${title}…` :
     r.lost ? `${title}: it stopped without finishing. See the log, or at the server: sudo journalctl -u filament-kit-setup-job` :
     r.exit === 0 ? `${title}: done.` : r.exit == null ? "" : `${title}: failed (exit ${r.exit}). See the lines above.`;
-  jobNote.replaceChildren(
+  // the whole log counts in bytes and this view in its own text, so they don't mix: offered once the job has ended
+  if (!r.running) jobNote.replaceChildren(
     h("p", { class: "muted", textContent: "Addresses and serials are hidden here." }),
     h("button", { class: "secondary", textContent: "Show the whole log", on: { click: showWholeLog } }));
   if (r.running || r.text) { setTimeout(jobTick, 1000); return; }
@@ -64,7 +65,7 @@ async function showWholeLog() {
       if (r.next === at) break;
       at = r.next;
     }
-    jobOut.textContent = text; jobFrom = at;
+    jobOut.textContent = text;
   } catch (e) { say(box, e.message, false); }
 }
 

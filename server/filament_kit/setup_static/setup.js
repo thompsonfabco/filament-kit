@@ -195,7 +195,7 @@ function pairCard() {
       qrUrl ? h("img", { class: "qr", alt: "Pairing QR code", src: qrUrl }) : null,
       kind === "phone" ? null : h("pre", { class: "ok", textContent: r.link }),
       h("p", {}, "Pairing code: ", h("b", { textContent: r.code })),
-      h("p", { class: "muted", textContent: `Certificate fingerprint (check it matches): ${r.fingerprint}` }),
+      h("p", { class: "muted", textContent: `Certificate fingerprint (${kind === "phone" ? "the phone asks for two groups of it" : "check it matches"}): ${r.fingerprint}` }),
       h("p", { class: "muted", textContent: `Expires in ${Math.round(r.expires_in / 60)} min.` }));
   }
   return card("Phones, PC and station",
