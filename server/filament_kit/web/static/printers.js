@@ -301,7 +301,7 @@ function printersTab() {
         ...(m.problems_old && (m.problems || []).length ? [h("p", { class: "muted", textContent: "From an earlier mapping, it may be fixed by now. Re-map the slots to check:" })] : []),
         ...(m.problems || []).map((t) => h("p", { class: m.problems_old ? "muted" : "err", textContent: t })),
         ...(m.notes || []).map((t) => h("p", { class: "muted", textContent: t })),
-        ...(m.report_wanted ? [h("p", { class: "muted", textContent: "This printer's slot layout is not recognised yet. Collect a report that helps add it." }),
+        ...(m.report_wanted ? [h("p", { class: "muted", textContent: m.report_why || "A printer report would help." }),
           h("button", { class: "secondary", textContent: "Collect a report", on: { click: collectReport } })] : []),
         h("button", { class: "secondary", textContent: running ? "Mapping…" : "Re-map slots", disabled: running, on: { click: remap } }));
       if (running) mapTimer = setTimeout(loadMap, 3000);

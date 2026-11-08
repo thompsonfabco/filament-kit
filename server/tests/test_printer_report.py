@@ -111,6 +111,46 @@ def test_firmware_from_version_takes_no_serial():
     assert connection.firmware_from_version({"command": "other"}) == []
 
 
+@pytest.mark.parametrize("value", [SERIAL, PLANTED["ip"], PLANTED["host"], "0123456789AB"])
+def test_a_serial_address_or_host_in_a_copied_name_is_left_out(value):
+    r = {"ams": {"ams": [{"id": "0", "tray": [{"id": "0", "tray_type": value}]}]},
+         "fk_firmware": [{"name": value, "version": "01.02"}, {"name": "ota", "version": value}]}
+    assert value not in printer_report.build(r, value).decode("utf-8")
+    assert value not in printer_report.file_name(value)
+
+
+def test_a_real_module_type_and_model_still_go_in():
+    r = {"ams": {"ams": [{"id": "0", "info": "10003003", "tray": [{"id": "0", "tray_type": "PETG-HF"}]}]},
+         "fk_firmware": [{"name": "ams_f1/0", "version": "00.00.06.49"}]}
+    text = printer_report.build(r, "BL-P001").decode("utf-8")
+    for want in ("PETG-HF", "ams_f1/0", "00.00.06.49", "BL-P001", "10003003"):
+        assert want in text, want
+    assert printer_report.file_name("BL-P001").startswith("printer-report-BL-P001-")
+
+
+def test_someones_name_for_the_printer_is_not_a_model_code():
+    assert 'model-code' not in printer_report.build({}, "kitchen-printer").decode("utf-8")
+    assert "kitchen" not in printer_report.file_name("kitchen-printer")
+
+
+@pytest.mark.parametrize("key", ["0948zz0a0000001", "user_4242424242"])
+def test_a_key_with_an_id_in_it_is_left_out(key):
+    assert key not in printer_report.build({key: 1, "ams_rfid_status": 2}, "N6").decode("utf-8")
+    assert "ams_rfid_status" in printer_report.build({key: 1, "ams_rfid_status": 2}, "N6").decode("utf-8")
+
+
+def test_every_reason_has_its_sentence_and_none_claims_the_wrong_thing():
+    for w in printer_report.WANTED:
+        assert printer_report.why(w)
+    assert printer_report.why(None) is None
+    assert "doesn't know" not in printer_report.why("job_refused")
+
+
+def test_the_issue_template_offers_only_what_exists():
+    text = (ROOT / ".github/ISSUE_TEMPLATE/printer-report.md").read_text(encoding="utf-8")
+    assert "the app" not in text and "web app" in text and "printer report <serial>" in text
+
+
 # ---------- report_wanted through a mapping ----------
 
 @pytest.fixture

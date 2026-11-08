@@ -786,7 +786,7 @@ def cmd_printer_map(serial: str, manager_factory) -> int:
     for note in v["notes"]:
         print(f"  note: {note}")
     if v.get("report_wanted"):
-        print(f"  This printer's slot layout is not recognised yet. To collect a report that helps add it: "
+        print(f"  {v.get('report_why') or 'A printer report would help.'} To collect one: "
               f"sudo filament-kit printer report {serial}")
     if stopped:
         print("Mapping stopped. Any slot listed above as not restored may still hold a test colour; the next "

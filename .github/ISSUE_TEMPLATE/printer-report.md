@@ -5,7 +5,7 @@ title: "Printer report: <your printer model>"
 labels: printer-report
 ---
 
-Attach the report file here. Make it from the app, the web app, or at the server:
+Attach the report file here. Make it from the web app's printer page, or at the server:
 
     sudo filament-kit printer report <serial>
 

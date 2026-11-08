@@ -604,7 +604,8 @@ class Mapper:
         disagreed with the map (logging only until the re-map); `notes` = what a good result does not settle yet
         (not problems); `scheme_unsettled` = several numbering schemes fit and the model's first was taken, the reason
         to map again after loading a second unit (a client keys on this, never on a note's text); `report_wanted` =
-        why a printer report would help (printer_report.WANTED), None when it wouldn't; `problems_old` = the problems are from a job an earlier server run finished, so an update or
+        why a printer report would help (printer_report.WANTED), None when it wouldn't; `report_why` = that as a sentence;
+        `problems_old` = the problems are from a job an earlier server run finished, so an update or
         a fix since may have dealt with them: they say what happened then, not what is wrong now, and they never
         stop a new mapping; `finished` = when that job ended (epoch seconds, None: not known or still running)."""
         with self._lock:
@@ -638,7 +639,8 @@ class Mapper:
         return {"state": st["state"], "step": st["step"], "slots": slots, "calibrated": m.calibrated,
                 "observe": m.observe, "problems": st["problems"], "notes": st.get("notes", []),
                 "scheme_unsettled": st.get("scheme_unsettled", False),
-                "report_wanted": st.get("report_wanted"), "problems_old": old,
+                "report_wanted": st.get("report_wanted"), "report_why": printer_report.why(st.get("report_wanted")),
+                "problems_old": old,
                 "finished": st.get("finished"), "stale": m.stale, "remapping": remapping,
                 "scheme": m.scheme, "suspect": m.suspect}
 
