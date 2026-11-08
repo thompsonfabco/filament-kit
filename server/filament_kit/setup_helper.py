@@ -1,13 +1,15 @@
 """The root side of the kit server's /setup page (setup_page.py): the few writes the server, running as
 filament-kit, cannot make itself, because they land in root's /etc/filament-kit or start a `modules apply`.
 
-How it runs: `filament-kit-setup.socket` listens on /run/filament-kit-setup.sock (root:filament-kit 660, so only
+How it runs: `filament-kit-setup.socket` listens on /run/filament-kit-setup/setup.sock (root:filament-kit 660, so only
 the service user and root can connect) with Accept=yes; each connection starts one `filament-kit-setup@.service`
 (root, ProtectSystem=strict, writes only /etc/filament-kit) running `python -I -m filament_kit.setup_helper`, which
 reads ONE request line (JSON, at most MAX_REQUEST bytes) from the socket, answers ONE line and exits.
 
 What it accepts is a closed list (`OPS`), never a command, a path or a file name:
 
+    check                                      only the code check: the page's own writes (printers, pairings,
+                                               readers) ask this first; the server never checks a code itself
     key_set {key}  key_remove                  the Anthropic key (cli.write_key / cli.remove_key)
     passphrase_set {passphrase}                the web passphrase (cli.write_passphrase: scrypt, root:filament-kit 640)
     library_token_set {token}  library_token_remove   /etc/filament-kit/github_token (library.write_token)
@@ -16,9 +18,11 @@ What it accepts is a closed list (`OPS`), never a command, a path or a file name
     setting {key, value}                       web.public_url or station.url, checked, saved, then an apply
     apply                                      start `modules apply --no-pair` (filament-kit-setup-apply.service)
 
-Every request carries the setup code, which this process checks itself (setup_code.check) against its own lockout
-in /etc/filament-kit/setup_lockout (root only), before it reads anything else: a local process that reaches the
-socket without the code can change nothing. Values are never logged, never echoed in a reply, never put in a
+Every request carries the setup code and the page's client address, and this process is the only place a code is
+checked (setup_code.check on the root-only hash, against the per-client and global lockout in
+/etc/filament-kit/setup_lockout), before it reads anything else: a local process that reaches the socket without
+the code can change nothing. Only root and the filament-kit user may connect (SO_PEERCRED; the socket is 660 and
+the web unit cannot see it). The request must arrive within READ_TIMEOUT seconds. Values are never logged, never echoed in a reply, never put in a
 command line. What the CLI functions print goes to the journal (stderr), not into the reply.
 
 `python -I -m filament_kit.setup_helper apply-run` is what filament-kit-setup-apply.service runs: `modules apply
@@ -29,7 +33,10 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import shutil
+import socket
+import struct
 import subprocess
 import sys
 from pathlib import Path
@@ -40,12 +47,13 @@ from . import config, modules, setup_code
 log = logging.getLogger(__name__)
 
 MAX_REQUEST = 16 * 1024
+READ_TIMEOUT = 5.0
 APPLY_UNIT = "filament-kit-setup-apply.service"
 WRAPPER = "/usr/local/bin/filament-kit"
 FINISHED = "==> finished (exit"
 SETTINGS = ("web.public_url", "station.url")
 WRONG = "wrong setup code"
-LOCKED = "too many wrong setup codes: wait 10 minutes"
+LOCKED = "too many wrong setup codes: wait 10 minutes (longer after many from everywhere)"
 NO_CODE = "no setup code is set on this server yet; make one at the server: sudo filament-kit setup-code"
 APPLYING = "the last change is still being applied; wait until it has finished"
 # the checklist's setting prompts, back to their keys (cli._apply_selection asks by prompt)
@@ -83,9 +91,9 @@ def _text(req: dict, key: str, limit: int, *, word: bool = False, blank: bool = 
     return v
 
 
-def _check_code(text) -> None:
+def _check_code(text, client) -> None:
     lock = setup_code.Lockout(setup_code.lockout_file())
-    ticket = lock.attempt()
+    ticket = lock.attempt(client if isinstance(client, str) else "?")
     if ticket is None:
         raise Refused(429, LOCKED)
     ok = setup_code.check(text)
@@ -94,7 +102,35 @@ def _check_code(text) -> None:
         raise Refused(503, NO_CODE)
     if not ok:
         raise Refused(403, WRONG)
-    lock.release(ticket)
+    lock.release(ticket, ok=True)
+
+
+_HOSTNAME = re.compile(r"(?=.{1,253}$)([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}"
+                       r"[A-Za-z0-9])?)*\.?")
+
+
+def _no_dns(host: str) -> list[str]:
+    """apply.plan's `resolve` here: the helper has no network (PrivateNetwork), so a station.allow name is only
+    checked for its form; the apply unit resolves it."""
+    import ipaddress
+    try:
+        ipaddress.ip_address(host)
+        return [host]
+    except ValueError:
+        pass
+    if not _HOSTNAME.fullmatch(str(host)):
+        raise OSError(f"{host!r} is not a host name")
+    return [host]
+
+
+def _plan_error(cfg: dict) -> str | None:
+    """cli._plan_error without name lookups (see _no_dns)."""
+    from . import apply
+    try:
+        apply.plan(cfg, resolve=_no_dns)
+    except modules.ModuleError as e:
+        return str(e)
+    return None
 
 
 def _applying() -> bool:
@@ -173,8 +209,24 @@ def _answers(raw) -> dict[str, str]:
         err = modules.check_setting(key, value)
         if err:
             raise Refused(400, f"{key}: {err}")
+        if key == "orders.file":
+            _orders_file(value.strip())
         out[key] = value.strip()
     return out
+
+
+def _orders_file(value: str) -> None:
+    """The order history file must be a regular .json file in the kit's state folder (the server reads it as the
+    service user; the page may not point it anywhere else)."""
+    state = config.paths().state.resolve()
+    p = Path(value)
+    try:
+        real = p.resolve(strict=True)
+    except (OSError, RuntimeError):
+        real = None
+    if (not p.is_absolute() or p.suffix.lower() != ".json" or real is None or not real.is_file()
+            or state not in real.parents):
+        raise Refused(400, f"orders.file must be an existing .json file in {state}")
 
 
 def _module(req: dict) -> dict:
@@ -197,7 +249,7 @@ def _module(req: dict) -> dict:
         raise Refused(400, f"{name} needs {', '.join(need)} first", needs=need)
     err = cli._apply_selection(cfg, chosen, ask=lambda prompt: answers.get(_PROMPT_KEYS.get(prompt, "")))
     if err is None:
-        err = cli._plan_error(cfg)
+        err = _plan_error(cfg)
     if err:
         raise Refused(400, err)
     config.save(cfg)
@@ -219,7 +271,6 @@ def station_url_error(value: str) -> str | None:
 
 
 def _setting(req: dict) -> dict:
-    from . import cli
     key = req.get("key")
     if key not in SETTINGS:
         raise Refused(400, "key must be one of: " + ", ".join(SETTINGS))
@@ -235,11 +286,15 @@ def _setting(req: dict) -> dict:
         modules.validate(cfg)
     except modules.ModuleError as e:
         raise Refused(400, str(e)) from None
-    err = cli._plan_error(cfg)
+    err = _plan_error(cfg)
     if err:
         raise Refused(400, err)
     config.save(cfg)
     _start_apply()
+    return {}
+
+
+def _check(req: dict) -> dict:
     return {}
 
 
@@ -249,7 +304,7 @@ def _apply(req: dict) -> dict:
     return {}
 
 
-OPS = {"key_set": _key_set, "key_remove": _key_remove, "passphrase_set": _passphrase_set,
+OPS = {"check": _check, "key_set": _key_set, "key_remove": _key_remove, "passphrase_set": _passphrase_set,
        "library_token_set": _library_token_set, "library_token_remove": _library_token_remove,
        "module": _module, "setting": _setting, "apply": _apply}
 
@@ -259,7 +314,7 @@ def handle(req) -> dict:
     try:
         if not isinstance(req, dict) or req.get("op") not in OPS:
             raise Refused(400, "unknown request")
-        _check_code(req.get("code"))
+        _check_code(req.get("code"), req.get("client"))
         return {"ok": True, "status": 200, **OPS[req["op"]](req)}
     except Refused as e:
         return {"ok": False, "status": e.status, "error": e.message, **e.extra}
@@ -298,6 +353,72 @@ def run_apply(cmd: list[str] | None = None) -> int:
     return code
 
 
+def _stdin_fd() -> int | None:
+    try:
+        return sys.stdin.fileno()
+    except (AttributeError, OSError, ValueError):
+        return None
+
+
+def _is_socket(fd: int) -> bool:
+    import stat
+    try:
+        return stat.S_ISSOCK(os.fstat(fd).st_mode)
+    except OSError:
+        return False
+
+
+def _allowed_uids() -> set[int]:
+    uids = {0}
+    try:
+        import pwd
+        uids.add(pwd.getpwnam(setup_code.GROUP).pw_uid)
+    except (ImportError, KeyError):
+        pass
+    return uids
+
+
+def _peer_ok(fd: int) -> bool | None:
+    """True/False: the peer of the unix socket `fd` is / is not root or the service user (SO_PEERCRED); None when
+    `fd` is no unix socket (run by hand at a terminal: then the caller's own rights apply)."""
+    if fd < 0 or not _is_socket(fd) or not hasattr(socket, "SO_PEERCRED"):
+        return None
+    s = socket.socket(fileno=os.dup(fd))
+    try:
+        _pid, uid, _gid = struct.unpack("3i", s.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED,
+                                                           struct.calcsize("3i")))
+    except OSError:
+        return False
+    finally:
+        s.close()
+    return uid in _allowed_uids()
+
+
+def _read_request(fd: int) -> bytes | None:
+    """One line from the socket `fd` within READ_TIMEOUT seconds in all; None when it does not come in time. More
+    than MAX_REQUEST bytes come back as they are (the caller refuses them)."""
+    import time
+    s = socket.socket(fileno=os.dup(fd))
+    data = b""
+    end = time.monotonic() + READ_TIMEOUT
+    try:
+        while b"\n" not in data and len(data) <= MAX_REQUEST:
+            left = end - time.monotonic()
+            if left <= 0:
+                return None
+            s.settimeout(left)
+            try:
+                chunk = s.recv(4096)
+            except (TimeoutError, socket.timeout):
+                return None
+            if not chunk:
+                break
+            data += chunk
+    finally:
+        s.close()
+    return data.split(b"\n", 1)[0] if b"\n" in data else data
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     handler = logging.StreamHandler(sys.stderr)
@@ -311,15 +432,22 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     reply_to = sys.stdout.buffer
     sys.stdout = sys.stderr            # whatever a CLI function prints goes to the journal, never into the reply
-    raw = sys.stdin.buffer.readline(MAX_REQUEST + 1)
-    if len(raw) > MAX_REQUEST:
-        reply = {"ok": False, "status": 413, "error": "request too large"}
+    fd = _stdin_fd()
+    if fd is not None and _peer_ok(fd) is False:
+        log.warning("setup helper: refused a connection from a user that is neither root nor filament-kit")
+        reply = {"ok": False, "status": 403, "error": "not allowed"}
     else:
-        try:
-            req = json.loads(raw or b"null")
-        except ValueError:
-            req = None
-        reply = handle(req)
+        raw = _read_request(fd) if fd is not None and _is_socket(fd) else sys.stdin.buffer.readline(MAX_REQUEST + 1)
+        if raw is None:
+            reply = {"ok": False, "status": 408, "error": "no complete request in time"}
+        elif len(raw) > MAX_REQUEST:
+            reply = {"ok": False, "status": 413, "error": "request too large"}
+        else:
+            try:
+                req = json.loads(raw or b"null")
+            except ValueError:
+                req = None
+            reply = handle(req)
     reply_to.write(json.dumps(reply).encode("utf-8") + b"\n")
     reply_to.flush()
     return 0

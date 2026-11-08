@@ -8,7 +8,9 @@ Access (owner's choice A, 2026-11-07):
     every POST must carry that same `Origin`: another site in the owner's browser cannot post here, and a DNS
     rebinding name is refused;
   - viewing needs nothing more; every change of a secret, a pairing, a printer or a module needs the setup code
-    (setup_code.py), at most 5 wrong codes per 10 minutes for the whole page (`Lockout`, like the passphrase);
+    (setup_code.py). The server never checks a code: it hands it, with the client's address, to the root helper
+    (op `check`, or the write itself), the only reader of the root-only hash, which keeps the lockout (5 wrong per
+    10 minutes per address, a global ceiling with a doubling backoff);
   - the page's CSP allows only its own script and style (no external assets); the script never uses innerHTML.
 
 Secret fields are write-only: the state says "set" / "not set", never a value; values never appear in logs, URLs or
@@ -35,6 +37,7 @@ Routes (JSON under /setup/api; every POST body is a JSON object, `code` = the se
 """
 from __future__ import annotations
 
+import contextvars
 import html
 import ipaddress
 import json
@@ -73,6 +76,7 @@ CHECK_GAP = 3.0                 # seconds between two key checks / printer tests
 KINDS = {"phone": "", "pc": "pc", "station": "station"}
 ENTRY = re.compile(r"[A-Za-z0-9_-]{1,64}")
 PRINTER_PORT = 8883
+_CLIENT: contextvars.ContextVar[str] = contextvars.ContextVar("setup_client", default="?")
 
 
 class Refused(Exception):
@@ -85,7 +89,7 @@ class HelperClient:
     """One request to the root helper over its socket: one JSON line out, one back."""
 
     def __init__(self, path: str | None = None, timeout: float = 120):
-        self.path = path or os.environ.get("FK_SETUP_SOCKET", "/run/filament-kit-setup.sock")
+        self.path = path or os.environ.get("FK_SETUP_SOCKET", "/run/filament-kit-setup/setup.sock")
         self.timeout = timeout
 
     def __call__(self, req: dict) -> dict:
@@ -150,11 +154,9 @@ def _host_of(host_header: str) -> str:
 
 
 class SetupPage:
-    def __init__(self, printers=None, *, helper=None, lockout: setup_code.Lockout | None = None,
-                 client_factory=None, hosts=None):
+    def __init__(self, printers=None, *, helper=None, client_factory=None, hosts=None):
         self.printers = printers                    # the connection manager (None: the printers module is off)
         self.helper = helper or HelperClient()
-        self.lockout = lockout or setup_code.Lockout()
         self.client_factory = client_factory
         self.hosts = hosts or allowed_hosts         # a function: the names the page answers to
         self.last_check = 0.0
@@ -164,21 +166,22 @@ class SetupPage:
     def routes(self) -> list[Route]:
         g = self.guard
         w = lambda fn: self.guard(fn, write=True)  # noqa: E731
+        hw = lambda fn: self.guard(fn, write="helper")  # noqa: E731
         table = [
             ("/state", g(self.state), "GET"), ("/modules/preview", g(self.preview), "GET"),
             ("/apply", g(self.apply_get), "GET"),
-            ("/key", w(self.key_set), "POST"), ("/key/remove", w(self.key_remove), "POST"),
+            ("/key", hw(self.key_set), "POST"), ("/key/remove", hw(self.key_remove), "POST"),
             ("/key/check", g(self.key_check), "POST"),
             ("/printers", w(self.printer_add), "POST"), ("/printers/{serial}/code", w(self.printer_code), "POST"),
             ("/printers/{serial}/test", g(self.printer_test), "POST"),
             ("/printers/{serial}/forget", w(self.printer_forget), "POST"),
-            ("/passphrase", w(self.passphrase), "POST"),
-            ("/library_token", w(self.library_token), "POST"),
-            ("/library_token/remove", w(self.library_token_remove), "POST"),
+            ("/passphrase", hw(self.passphrase), "POST"),
+            ("/library_token", hw(self.library_token), "POST"),
+            ("/library_token/remove", hw(self.library_token_remove), "POST"),
             ("/readers", w(self.reader_add), "POST"), ("/readers/{id}/revoke", w(self.reader_revoke), "POST"),
             ("/pair", w(self.pair), "POST"), ("/devices/{id}/revoke", w(self.device_revoke), "POST"),
-            ("/modules", w(self.module), "POST"), ("/settings", w(self.setting), "POST"),
-            ("/apply", w(self.apply_start), "POST")]
+            ("/modules", hw(self.module), "POST"), ("/settings", hw(self.setting), "POST"),
+            ("/apply", hw(self.apply_start), "POST")]
         return ([Route("/setup", self.page, methods=["GET"]),
                  Route("/setup/setup.js", self.asset, methods=["GET"]),
                  Route("/setup/setup.css", self.asset, methods=["GET"])]
@@ -204,9 +207,18 @@ class SetupPage:
         log.info("setup: %s from %s", what, self._ip(request))
 
     async def _body(self, request: Request) -> dict:
-        raw = await request.body()
-        if len(raw) > MAX_BODY:
+        """The JSON body, refused past MAX_BODY bytes: by Content-Length before reading, else while streaming."""
+        try:
+            declared = int(request.headers.get("content-length") or 0)
+        except ValueError:
+            raise Refused(400, "bad Content-Length") from None
+        if declared > MAX_BODY:
             raise Refused(413, "request too large")
+        raw = b""
+        async for chunk in request.stream():
+            raw += chunk
+            if len(raw) > MAX_BODY:
+                raise Refused(413, "request too large")
         try:
             b = json.loads(raw or b"{}")
         except ValueError:
@@ -215,23 +227,18 @@ class SetupPage:
             raise Refused(400, "the request body must be a JSON object")
         return b
 
-    async def _code_ok(self, body: dict) -> None:
+    async def _code_ok(self, request: Request, body: dict) -> None:
+        """The root helper checks the code (op `check`); a missing one is refused here and counts nowhere."""
         code = body.get("code")
         if not isinstance(code, str) or not code.strip():
             raise Refused(403, NEED_CODE)
-        ticket = self.lockout.attempt()            # counted before the (slow) check, as the passphrase (A-M1)
-        if ticket is None:
-            raise Refused(429, setup_helper.LOCKED)
-        ok = await anyio.to_thread.run_sync(setup_code.check, code)
-        if ok is None:
-            self.lockout.release(ticket)
-            raise Refused(503, setup_helper.NO_CODE)
-        if not ok:
-            raise Refused(403, setup_helper.WRONG)
-        self.lockout.release(ticket)
+        await self._helper({"op": "check", "code": code, "client": self._ip(request)})
 
-    def guard(self, fn, write: bool = False):
+    def guard(self, fn, write: bool | str = False):
+        """`write`: True = a change the server makes itself (the helper's `check` first); "helper" = a change the
+        helper makes, which checks the code in the same request."""
         async def route(request: Request):
+            _CLIENT.set(self._ip(request))
             if not self._lan(request):
                 return JSONResponse({"error": HOME_ONLY}, 403)
             if not self._host_ok(request):
@@ -242,8 +249,11 @@ class SetupPage:
                     if not self._origin_ok(request):
                         return JSONResponse({"error": "bad origin"}, 403)
                     body = await self._body(request)
-                    if write:
-                        await self._code_ok(body)
+                    if write == "helper":
+                        if not isinstance(body.get("code"), str) or not body["code"].strip():
+                            raise Refused(403, NEED_CODE)
+                    elif write:
+                        await self._code_ok(request, body)
                 res = await fn(request, body)
                 return JSONResponse(res, headers={"Cache-Control": "no-store"})
             except Refused as e:
@@ -254,6 +264,7 @@ class SetupPage:
         return route
 
     async def _helper(self, req: dict) -> dict:
+        req.setdefault("client", _CLIENT.get())       # the address the helper's lockout counts against
         r = await anyio.to_thread.run_sync(self.helper, req)
         if not r.get("ok"):
             extra = {k: r[k] for k in ("needs",) if k in r}

@@ -4,7 +4,7 @@ Description=filament-kit setup page helper socket (the root writes of https://<h
 # and the helper itself checks the setup code in it before it changes anything.
 
 [Socket]
-ListenStream=/run/filament-kit-setup.sock
+ListenStream=/run/filament-kit-setup/setup.sock
 SocketUser=root
 SocketGroup=filament-kit
 SocketMode=0660

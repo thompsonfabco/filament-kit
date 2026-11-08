@@ -2,13 +2,15 @@
 2026-11-07). Viewing the page needs no code; every change of a secret, a pairing or a module does.
 
   - 8 random digits, shown as 1234-5678 (`shown`); typed with or without the dash or spaces (`normalize`).
-  - `/etc/filament-kit/setup_code`: "salt_hex digest_hex", salted scrypt like the web passphrase,
-    root:filament-kit 640: the server checks a code, it cannot learn it.
+  - `/etc/filament-kit/setup_code`: "salt_hex digest_hex", salted scrypt like the web passphrase, root only
+    (600, Ruling CF): only the root helper (setup_helper.py, op `check`) ever checks a code, so a process running as
+    the service user cannot take the hash away and guess offline.
   - `/etc/filament-kit/setup_code.plain`: the code itself, root only (600), so `sudo filament-kit setup-code` can
-    show it again; `--new` replaces both.
-  - `Lockout`: at most LOCK_MAX wrong codes per LOCK_WINDOW seconds, counted before the (slow) check like the
-    passphrase's (A-M1). The page keeps one in memory; the root helper (one process per request) keeps one in
-    `/etc/filament-kit/setup_lockout` (root only), so a local process cannot reset it.
+    show it again; `--new` replaces both and clears the lockout.
+  - `Lockout` (`/etc/filament-kit/setup_lockout`, root only, flock): at most LOCK_MAX wrong codes per LOCK_WINDOW
+    seconds per client address, counted before the (slow) check like the passphrase's (A-M1); and over all addresses
+    at most GLOBAL_MAX per window, after which every check waits a backoff that doubles each time the ceiling is hit
+    again (LOCK_WINDOW, 2x, 4x ... at most MAX_BACKOFF), until a right code resets it.
 
 Nothing here logs or prints a code."""
 from __future__ import annotations
@@ -36,6 +38,8 @@ PLAIN_FILE = "setup_code.plain"
 LOCK_FILE = "setup_lockout"
 SCRYPT = {"n": 2 ** 15, "r": 8, "p": 1, "maxmem": 2 ** 26}   # as the web passphrase (web/auth.py)
 LOCK_MAX, LOCK_WINDOW = 5, 600
+GLOBAL_MAX = 30
+MAX_BACKOFF = 24 * 3600
 DIGITS = 8
 GROUP = "filament-kit"
 
@@ -113,12 +117,13 @@ def _write(dest: Path, data: bytes, mode: int, group: str | None) -> None:
 
 
 def write(code: str) -> None:
-    """Store `code` (root): its hash for the server (640, group filament-kit), itself for root (600). The plain
-    file goes first: a hash whose code nobody can show again would lock the owner out of the page."""
+    """Store `code` (root): its hash and itself, both root only (600). The plain file goes first: a hash whose code
+    nobody can show again would lock the owner out of the page. A new code starts with a clear lockout."""
     if normalize(code) != code:
         raise ValueError("a setup code is 8 digits")
     _write(plain_file(), (code + "\n").encode(), 0o600, None)
-    _write(hash_file(), (_hash(code) + "\n").encode(), 0o640, GROUP)
+    _write(hash_file(), (_hash(code) + "\n").encode(), 0o600, None)
+    lockout_file().unlink(missing_ok=True)
 
 
 def read() -> str | None:
@@ -141,38 +146,34 @@ def ensure() -> str:
 
 
 class Lockout:
-    """At most `max_fails` wrong codes per `window` seconds, for the whole page (only the LAN can reach it).
+    """Wrong codes per client address and over all of them, in `path` (root only, locked with flock), shared by
+    every helper process. `attempt(client)` counts one try before the check and returns a ticket (None, and nothing
+    counted, when that client or everyone is locked out); a right code `release(ticket, ok=True)`s it, which also
+    ends a global backoff; a check that could not run `release(ticket)`s it."""
 
-    `attempt()` counts one try before the check and returns a ticket (None, and nothing counted, when locked out);
-    a right code (or a check that could not run) `release()`s it. With `path` the count lives in that file
-    (root only, locked with flock), shared by every helper process."""
-
-    def __init__(self, path: Path | None = None, max_fails: int = LOCK_MAX, window: float = LOCK_WINDOW):
-        self.path, self.max, self.window = path, max_fails, window
-        self._fails: list[list] = []         # [[time, ticket]]
+    def __init__(self, path: Path, max_fails: int = LOCK_MAX, window: float = LOCK_WINDOW,
+                 global_max: int = GLOBAL_MAX):
+        self.path, self.max, self.window, self.global_max = Path(path), max_fails, window, global_max
         self._lock = threading.Lock()
 
-    def _load(self, fh) -> list[list]:
+    @staticmethod
+    def _load(fh) -> dict:
         fh.seek(0)
         try:
-            data = json.loads(fh.read() or "[]")
-            return [f for f in data if isinstance(f, list) and len(f) == 2 and isinstance(f[0], (int, float))]
+            d = json.loads(fh.read() or "{}")
         except ValueError:
-            return []
-
-    def _store(self, fh, fails: list[list]) -> None:
-        fh.seek(0)
-        fh.truncate()
-        fh.write(json.dumps(fails))
-        fh.flush()
+            d = {}
+        if not isinstance(d, dict):
+            d = {}
+        fails = [f for f in d.get("fails") or [] if isinstance(f, list) and len(f) == 3
+                 and isinstance(f[0], (int, float))]
+        until = d.get("until") if isinstance(d.get("until"), (int, float)) else 0
+        level = d.get("level") if isinstance(d.get("level"), int) else 0
+        return {"fails": fails, "until": until, "level": level}
 
     def _update(self, fn):
-        """Run fn(fails) -> result on the pruned list, under the lock (and the file's flock with a path)."""
+        """Run fn(state, now) -> result on the pruned state, under the lock and the file's flock."""
         with self._lock:
-            if self.path is None:
-                now = time.time()
-                self._fails[:] = [f for f in self._fails if f[0] > now - self.window]
-                return fn(self._fails)
             self.path.parent.mkdir(parents=True, exist_ok=True)
             flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
             fd = os.open(self.path, flags, 0o600)
@@ -180,27 +181,41 @@ class Lockout:
                 if fcntl is not None:
                     fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
                 now = time.time()
-                fails = [f for f in self._load(fh) if f[0] > now - self.window]
-                out = fn(fails)
-                self._store(fh, fails)
+                st = self._load(fh)
+                st["fails"] = [f for f in st["fails"] if f[0] > now - self.window]
+                out = fn(st, now)
+                fh.seek(0)
+                fh.truncate()
+                fh.write(json.dumps(st))
+                fh.flush()
                 return out
 
-    def blocked(self) -> bool:
-        return self._update(lambda fails: len(fails) >= self.max)
+    def attempt(self, client: str) -> str | None:
+        client = str(client or "?")[:64]
 
-    def attempt(self) -> str | None:
-        def take(fails):
-            if len(fails) >= self.max:
+        def take(st, now):
+            if now < st["until"]:
+                return None
+            if sum(1 for f in st["fails"] if f[1] == client) >= self.max:
                 return None
             ticket = secrets.token_hex(8)
-            fails.append([time.time(), ticket])
+            st["fails"].append([now, client, ticket])
+            if len(st["fails"]) >= self.global_max:     # the ceiling: everyone waits, longer each time
+                st["until"] = now + min(self.window * 2 ** st["level"], MAX_BACKOFF)
+                st["level"] += 1
+                st["fails"] = []
             return ticket
         return self._update(take)
 
-    def release(self, ticket: str | None) -> None:
+    def release(self, ticket: str | None, ok: bool = False) -> None:
         if ticket is None:
             return
-        self._update(lambda fails: fails.__setitem__(slice(None), [f for f in fails if f[1] != ticket]))
+
+        def drop(st, now):
+            st["fails"] = [f for f in st["fails"] if f[2] != ticket]
+            if ok:
+                st["level"] = 0
+        self._update(drop)
 
 
 def lockout_file() -> Path:

@@ -15,6 +15,9 @@ ProtectSystem=strict
 ReadWritePaths=/var/lib/filament-kit
 ProtectHome=yes
 NoNewPrivileges=yes
+# the setup page's root helper socket (and its apply log) are the kit server's only, never this internet-facing
+# unit's: the whole folder is hidden, so a socket made again later stays hidden too
+InaccessiblePaths=-/run/filament-kit-setup
 PrivateTmp=yes
 CapabilityBoundingSet=
 AmbientCapabilities=

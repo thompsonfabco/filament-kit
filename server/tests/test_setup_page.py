@@ -166,12 +166,14 @@ def test_viewing_needs_no_code(app):
 @pytest.mark.parametrize("path,body", WRITES)
 def test_every_write_needs_the_code(app, helper, manager, path, body):
     c = client(app)
-    before = sorted(p.name for p in config.paths().etc.iterdir())
+    def files():
+        return sorted(p.name for p in config.paths().etc.iterdir() if p.name != setup_code.LOCK_FILE)
+    before = files()
     for code in (None, "", "99999999", "1234-567"):
         r = post(c, path, body, code=code)
         assert r.status_code == 403, (path, code, r.text)
-    assert not helper.calls and manager.synced == 0
-    assert sorted(p.name for p in config.paths().etc.iterdir()) == before
+    assert len(helper.calls) == 2 and manager.synced == 0      # the two typed codes, refused by the helper
+    assert files() == before
     assert not registry.load()
 
 
@@ -181,7 +183,7 @@ def test_wrong_codes_lock_the_page_for_ten_minutes(app, helper):
         assert post(c, "key", {"key": KEY}, code="00000000").status_code == 403
     r = post(c, "key", {"key": KEY})                  # even the right code, now
     assert r.status_code == 429 and "10 minutes" in r.json()["error"]
-    assert not _etc("anthropic_key").exists() and not helper.calls
+    assert not _etc("anthropic_key").exists()
 
 
 def test_a_missing_code_does_not_count_towards_the_lockout(app):
@@ -349,10 +351,13 @@ def test_module_switch_uses_the_checklist_rules_and_starts_an_apply(app, env, ca
     assert [n["key"] for n in pv["needs"]] == ["orders.file"]
     r = post(c, "modules", {"name": "orders", "on": True})
     assert r.status_code == 400 and r.json()["needs"] == ["orders.file"] and not env
-    r = post(c, "modules", {"name": "orders", "on": True, "settings": {"orders.file": "/srv/orders.json"}})
+    orders = config.paths().state / "orders.json"
+    orders.parent.mkdir(parents=True, exist_ok=True)
+    orders.write_text("[]", encoding="utf-8")
+    r = post(c, "modules", {"name": "orders", "on": True, "settings": {"orders.file": str(orders)}})
     assert r.status_code == 200 and r.json()["changed"] is True
     cfg = config.load()
-    assert {"orders", "ai_intake"} <= modules.enabled(cfg) and cfg["orders"]["file"] == "/srv/orders.json"
+    assert {"orders", "ai_intake"} <= modules.enabled(cfg) and cfg["orders"]["file"] == str(orders)
     assert env == [True]                                       # the background apply was started
     assert "setup: module orders switched on from 192.0.2.20" in caplog.text
 
@@ -463,6 +468,7 @@ def _stdin(monkeypatch, tty):
 
 
 def test_setup_code_cli_prints_it_at_a_terminal_only(env, monkeypatch, capsys):
+    monkeypatch.setattr(cli, "_is_root", lambda: True)
     monkeypatch.setattr(pairing, "short_hostname", lambda: "kit")
     _stdin(monkeypatch, True)
     assert cli.main(["setup-code"]) == 0
@@ -474,6 +480,7 @@ def test_setup_code_cli_prints_it_at_a_terminal_only(env, monkeypatch, capsys):
 
 
 def test_setup_code_new_replaces_it(env, monkeypatch, capsys):
+    monkeypatch.setattr(cli, "_is_root", lambda: True)
     _stdin(monkeypatch, True)
     assert cli.main(["setup-code", "--new"]) == 0
     new = setup_code.read()
@@ -598,3 +605,154 @@ def test_an_apply_counts_as_running_while_its_oneshot_is_activating(monkeypatch,
     monkeypatch.setattr(setup_helper.subprocess, "run", run)
     assert setup_helper._applying() is running
     assert seen == [["systemctl", "show", "--property=ActiveState", "--value", setup_helper.APPLY_UNIT]]
+
+
+# ---------- fix round 1 ----------
+
+SYSTEMD = Path(__file__).resolve().parents[2] / "install" / "systemd"
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="file modes")
+def test_r1_the_hash_file_is_root_only(env):
+    import os
+    st = os.stat(setup_code.hash_file())
+    assert st.st_mode & 0o777 == 0o600
+
+
+def test_r1_hash_is_written_without_a_group(monkeypatch, env):
+    seen = []
+    monkeypatch.setattr(setup_code, "_write", lambda dest, data, mode, group: seen.append((dest.name, mode, group)))
+    setup_code.write(CODE)
+    assert ("setup_code", 0o600, None) in seen and ("setup_code.plain", 0o600, None) in seen
+
+
+def test_r1_the_check_op_is_the_only_code_check(app, helper, monkeypatch):
+    from filament_kit import setup_page
+    assert not hasattr(setup_page.SetupPage(None, helper=helper), "lockout")
+    src = Path(setup_page.__file__).read_text(encoding="utf-8")
+    assert "setup_code.check" not in src and "Lockout" not in src.replace("lockout (", "")  # never in the server
+    c = client(app)
+    assert post(c, "readers", {"name": "bench"}).status_code == 200      # a state-dir write: the helper checks
+    assert helper.calls == ["check"]
+    assert post(c, "key", {"key": KEY}).status_code == 200               # a helper write: checked in that request
+    assert helper.calls == ["check", "key_set"]
+
+
+def test_r1_check_op_answers_right_and_wrong(env):
+    assert setup_helper.handle({"op": "check", "code": CODE, "client": "192.0.2.20"}) == {"ok": True, "status": 200}
+    assert setup_helper.handle({"op": "check", "code": "00000000", "client": "192.0.2.20"})["status"] == 403
+
+
+def test_r1_web_unit_cannot_reach_the_helper_socket():
+    web = (SYSTEMD / "filament-kit-web.service").read_text(encoding="utf-8")
+    assert "InaccessiblePaths=-/run/filament-kit-setup\n" in web     # the folder: a remade socket stays hidden
+    sock = (SYSTEMD / "filament-kit-setup.socket").read_text(encoding="utf-8")
+    assert "ListenStream=/run/filament-kit-setup/setup.sock\n" in sock
+
+
+def test_r2_lockout_is_per_client(env):
+    for _ in range(setup_code.LOCK_MAX):
+        assert setup_helper.handle({"op": "check", "code": "00000000", "client": "192.0.2.20"})["status"] == 403
+    assert setup_helper.handle({"op": "check", "code": CODE, "client": "192.0.2.20"})["status"] == 429
+    assert setup_helper.handle({"op": "check", "code": CODE, "client": "192.0.2.21"})["status"] == 200
+
+
+def test_r2_global_ceiling_with_doubling_backoff(tmp_path, monkeypatch):
+    now = [1000.0]
+    monkeypatch.setattr(setup_code.time, "time", lambda: now[0])
+    lock = setup_code.Lockout(tmp_path / "lock")
+    for i in range(setup_code.GLOBAL_MAX):
+        assert lock.attempt(f"192.0.2.{i}") is not None           # one wrong code each from many addresses
+    assert lock.attempt("192.0.2.200") is None                    # the ceiling: everyone waits
+    now[0] += setup_code.LOCK_WINDOW + 1
+    assert lock.attempt("192.0.2.200") is not None                # first backoff (one window) is over
+    for i in range(setup_code.GLOBAL_MAX):
+        lock.attempt(f"192.0.2.{i}")
+    now[0] += setup_code.LOCK_WINDOW + 1
+    assert lock.attempt("192.0.2.201") is None                    # the second backoff is twice as long
+    now[0] += setup_code.LOCK_WINDOW
+    assert lock.attempt("192.0.2.201") is not None
+
+
+def test_r2_new_code_clears_the_lockout(env, monkeypatch, capsys):
+    for _ in range(setup_code.LOCK_MAX):
+        setup_helper.handle({"op": "check", "code": "00000000", "client": "192.0.2.20"})
+    monkeypatch.setattr(cli, "_is_root", lambda: True)
+    _stdin(monkeypatch, True)
+    assert cli.main(["setup-code", "--new"]) == 0
+    new = setup_code.read()
+    assert setup_helper.handle({"op": "check", "code": new, "client": "192.0.2.20"})["status"] == 200
+
+
+def test_r3_helper_unit_is_hardened():
+    svc = (SYSTEMD / "filament-kit-setup@.service").read_text(encoding="utf-8")
+    for line in ("CapabilityBoundingSet=CAP_CHOWN CAP_FOWNER CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH",
+                 "RestrictAddressFamilies=AF_UNIX", "SystemCallFilter=@system-service",
+                 "SystemCallArchitectures=native", "ProtectKernelTunables=yes", "ProtectKernelModules=yes",
+                 "ProtectKernelLogs=yes", "ProtectControlGroups=yes", "PrivateDevices=yes", "RestrictNamespaces=yes",
+                 "RestrictSUIDSGID=yes", "LockPersonality=yes", "MemoryDenyWriteExecute=yes", "UMask=0077",
+                 "IPAddressDeny=any", "NoNewPrivileges=yes", "ProtectSystem=strict",
+                 "ReadWritePaths=/etc/filament-kit"):
+        assert line + "\n" in svc, line
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="unix sockets")
+def test_m_peer_must_be_root_or_the_service_user(env, monkeypatch):
+    import socket
+    a, b = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
+    with a, b:
+        monkeypatch.setattr(setup_helper, "_allowed_uids", lambda: {12345})
+        assert setup_helper._peer_ok(b.fileno()) is False
+        monkeypatch.setattr(setup_helper, "_allowed_uids", lambda: {__import__("os").getuid()})
+        assert setup_helper._peer_ok(b.fileno()) is True
+    assert setup_helper._peer_ok(io.BytesIO().fileno() if False else -1) is None
+
+
+def test_m_orders_file_must_be_a_json_file_in_the_state_folder(app, env, tmp_path):
+    c = client(app)
+    good = config.paths().state / "orders.json"
+    good.parent.mkdir(parents=True, exist_ok=True)
+    good.write_text("[]", encoding="utf-8")
+    for bad in ("/etc/shadow", str(config.paths().state / "orders.txt"), str(config.paths().state / "none.json"),
+                str(tmp_path / "x.json")):
+        r = post(c, "modules", {"name": "orders", "on": True, "settings": {"orders.file": bad}})
+        assert r.status_code == 400, bad
+    r = post(c, "modules", {"name": "orders", "on": True, "settings": {"orders.file": str(good)}})
+    assert r.status_code == 200
+
+
+def test_m_plan_check_in_the_helper_does_not_resolve_names(env, monkeypatch):
+    import socket
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *a, **k: pytest.fail("no DNS in the helper"))
+    cfg = config.load()
+    cfg["modules"]["station"] = True
+    cfg["station"] = {**cfg["station"], "allow": ["station.example.com"]}
+    assert setup_helper._plan_error(cfg) is None
+    cfg["station"]["allow"] = ["bad..name"]
+    assert setup_helper._plan_error(cfg)
+
+
+def test_m_body_size_is_capped_before_reading(app):
+    from filament_kit import setup_page
+    c = client(app)
+    r = c.post("/setup/api/key", content=b"x" * (setup_page.MAX_BODY + 1),
+               headers={**H, "Content-Type": "application/json"})
+    assert r.status_code == 413
+    r = c.post("/setup/api/key", content=b"{}", headers={**H, "Content-Length": str(10 ** 9)})
+    assert r.status_code == 413
+
+
+def test_m_setup_code_refuses_non_root_even_without_systemd(env, monkeypatch, capsys):
+    monkeypatch.setattr(cli, "_is_root", lambda: False)
+    assert cli.main(["setup-code"]) == 1
+    assert "run as root" in capsys.readouterr().err
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="unix sockets")
+def test_m_helper_read_times_out(env, monkeypatch):
+    import socket
+    monkeypatch.setattr(setup_helper, "READ_TIMEOUT", 0.3)
+    a, b = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
+    with a, b:
+        a.sendall(b'{"op": "check"')               # no newline, never finished
+        assert setup_helper._read_request(b.fileno()) is None

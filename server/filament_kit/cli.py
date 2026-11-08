@@ -1508,7 +1508,7 @@ def cmd_setup_code(new: bool) -> int:
     is none. At a terminal it is printed with the page's address; without one (a log) only the address and how to
     see it (Ruling CD: no secrets in logs)."""
     from . import setup_code
-    if not _is_root() and not _no_systemd():
+    if not _is_root():
         print("error: run as root: sudo filament-kit setup-code", file=sys.stderr)
         return 1
     if new:
