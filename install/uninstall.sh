@@ -20,6 +20,18 @@ if [ "$PURGE" -eq 1 ]; then
     [ "$answer" = purge ] || { echo "Cancelled; nothing removed."; exit 1; }
 fi
 
+# BEGIN foreign-spoolman check
+# A Spoolman the kit did not install is someone's: its program, unit, data and user all stay. The kit's own has the marker
+# (from its first release), or, if an install stopped between the swap and the marker, the kit's unit.
+SPOOLMAN_OPT=${SPOOLMAN_OPT:-/opt/spoolman}
+SPOOLMAN_UNIT=${SPOOLMAN_UNIT:-/etc/systemd/system/spoolman.service}
+KIT_SPOOLMAN=1
+if [ -d "$SPOOLMAN_OPT" ] && [ ! -f "$SPOOLMAN_OPT/.fk-installed" ] \
+        && ! grep -qs '^Description=Spoolman filament inventory' "$SPOOLMAN_UNIT"; then
+    KIT_SPOOLMAN=0
+fi
+# END foreign-spoolman check
+
 # Every unit of every module, from the installed program; the list below if it is already gone.
 UNITS=""
 if [ -x /opt/filament-kit/venv/bin/filament-kit ]; then
@@ -30,6 +42,9 @@ if [ -z "$UNITS" ]; then
     UNITS="filament-kit-setup.socket filament-kit-setup@.service filament-kit-setup-apply.service filament-kit-web.service filament-kit-station.service filament-kit-build.path filament-kit-build.service filament-kit-library.timer filament-kit-library.service filament-kit-backup.timer filament-kit-backup.service filament-kit-update.timer filament-kit-update.service filament-kit.service spoolman.service"
 fi
 for u in $UNITS; do
+    if [ "$u" = spoolman.service ] && [ "$KIT_SPOOLMAN" -eq 0 ]; then
+        continue
+    fi
     systemctl disable --now "$u" 2>/dev/null || true
     rm -f "/etc/systemd/system/$u"
 done
@@ -93,11 +108,19 @@ if [ "$REMOTE_GONE" -eq 1 ]; then
     echo "Removed the kit's own remote files. nginx, certbot, the certificate in /etc/mcp-router and"
     echo "mcp-route were left; remove them with apt and rm if nothing else uses them."
 fi
-rm -rf /opt/filament-kit /opt/spoolman /opt/spoolman.new /opt/spoolman.old
+rm -rf /opt/filament-kit
+if [ "$KIT_SPOOLMAN" -eq 1 ]; then
+    rm -rf /opt/spoolman /opt/spoolman.new /opt/spoolman.old
+else
+    echo "Left the Spoolman in /opt/spoolman, its unit, its data and its user: the kit did not install it."
+fi
 rm -rf /etc/systemd/system/spoolman.service.d
 
 if [ "$PURGE" -eq 1 ]; then
-    rm -rf /etc/filament-kit /etc/filament-kit-station /var/lib/filament-kit /var/lib/filament-kit-web /var/lib/spoolman /var/backups/filament-kit
+    rm -rf /etc/filament-kit /etc/filament-kit-station /var/lib/filament-kit /var/lib/filament-kit-web /var/backups/filament-kit
+    if [ "$KIT_SPOOLMAN" -eq 1 ]; then
+        rm -rf /var/lib/spoolman
+    fi
     rm -f /etc/tmpfiles.d/filament-kit-setup.conf
     # the certbot timer pin (remote.acme_window) is a setting of the kit's
     if [ -f /etc/systemd/system/certbot.timer.d/acme-window.conf ]; then
@@ -105,7 +128,11 @@ if [ "$PURGE" -eq 1 ]; then
         rmdir /etc/systemd/system/certbot.timer.d 2>/dev/null || true
         systemctl daemon-reload
     fi
-    for u in filament-kit filament-kit-web spoolman; do
+    KIT_USERS="filament-kit filament-kit-web"
+    if [ "$KIT_SPOOLMAN" -eq 1 ]; then
+        KIT_USERS="$KIT_USERS spoolman"
+    fi
+    for u in $KIT_USERS; do
         if id -u "$u" >/dev/null 2>&1; then
             userdel "$u" || true
         fi

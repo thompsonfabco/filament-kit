@@ -217,8 +217,7 @@ def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) ->
 
     # Phase 1: users, files and unit files; nothing is enabled until daemon_reload.
     if "spoolman" in on:
-        acts += [A("user", "spoolman"), A("spoolman_fetch"),
-                 A("install_file", (SPOOLMAN_DROPIN, spoolman_dropin(cfg), "0644", "root:root"))]
+        acts += [A("user", "spoolman"), A("spoolman_fetch"), A("spoolman_allow", spoolman_dropin(cfg))]
     if "server" in on:
         acts += [A("install_unit", u) for unit in MODULES["server"].units for u in _unit_files(unit)]
         acts.append(A("server_setup", "key" if "ai_intake" in on else ""))
@@ -311,6 +310,7 @@ _HINTS = {
     "apt_lean": f"check the network and run `sudo apt-get update`, then {_AGAIN}",
     "user": f"see the useradd message above, then {_AGAIN}",
     "spoolman_fetch": f"see the Spoolman messages above, then {_AGAIN}",
+    "spoolman_allow": f"check the disk is writable, then {_AGAIN}",
     "install_unit": "run ./install.sh again (the unit files live in /opt/filament-kit/resources)",
     "install_file": f"check the disk is writable, then {_AGAIN}",
     "station_pairing_owner": f"check the station's user exists (id filament-kit-station), then {_AGAIN}",
@@ -741,6 +741,14 @@ def _step(ex: _Exec, a: Action) -> None:
         _user(ex, arg)
     elif k == "spoolman_fetch":
         ex.cmd(["bash", str(ex.resources / "spoolman.sh")])
+    elif k == "spoolman_allow":
+        first = not _under(ex.root, SPOOLMAN_DROPIN).exists()
+        ex.write(SPOOLMAN_DROPIN, arg.encode("utf-8"), 0o644)
+        if first:
+            print("\nSpoolman now answers only this machine and these networks: "
+                  f"{arg.split('IPAddressAllow=localhost')[1].strip() or 'none'}. A client elsewhere (Tailscale, Docker, "
+                  "another subnet) needs its network in spoolman.allow in /etc/filament-kit/config.json, then: "
+                  "sudo filament-kit modules apply")
     elif k == "install_unit":
         ex.write(f"/etc/systemd/system/{arg}", (ex.resources / "systemd" / arg).read_bytes(), 0o644)
     elif k == "install_file":

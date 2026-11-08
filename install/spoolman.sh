@@ -33,8 +33,8 @@ SPOOLMAN_STAMP="$SPOOLMAN_VERSION $PYVER"
 SPOOLMAN_UNIT=${SPOOLMAN_UNIT:-/etc/systemd/system/spoolman.service}
 if [ -d "$SPOOLMAN_OPT" ] && [ ! -f "$SPOOLMAN_MARKER" ] \
         && ! grep -qs '^Description=Spoolman filament inventory' "$SPOOLMAN_UNIT"; then
-    die "a Spoolman the kit did not install is in $SPOOLMAN_OPT, and installing would replace it. Nothing was changed.
-To use that one: sudo filament-kit modules disable spoolman, and set spoolman_url in /etc/filament-kit/config.json to its address.
+    die "a Spoolman the kit did not install is in $SPOOLMAN_OPT, and installing would replace it. Your Spoolman was not changed.
+To use that one: set spoolman_url in /etc/filament-kit/config.json to its address, then: sudo filament-kit modules disable spoolman
 To let the kit replace its program (its database is not touched): sudo touch $SPOOLMAN_MARKER, and run the same command again."
 fi
 # END foreign-spoolman check

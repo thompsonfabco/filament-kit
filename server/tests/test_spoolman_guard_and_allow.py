@@ -50,7 +50,9 @@ def test_a_fresh_machine_goes_on(tmp_path):
 def test_a_spoolman_the_kit_did_not_install_is_refused_and_says_what_to_do(tmp_path):
     r = _check(tmp_path)
     assert r.returncode == 1 and "went-on" not in r.stdout
-    assert "modules disable spoolman" in r.stderr and ".fk-installed" in r.stderr and "Nothing was changed" in r.stderr
+    assert "modules disable spoolman" in r.stderr and ".fk-installed" in r.stderr
+    assert "Your Spoolman was not changed" in r.stderr
+    assert r.stderr.index("set spoolman_url") < r.stderr.index("modules disable spoolman")
 
 
 @needs_bash
@@ -67,6 +69,45 @@ def test_an_upgrade_never_refuses(tmp_path):
 def test_an_install_stopped_before_the_marker_is_still_the_kits(tmp_path):
     unit = (ROOT / "install" / "systemd" / "spoolman.service").read_text(encoding="utf-8")
     assert "went-on" in _check(tmp_path, unit=unit).stdout
+
+
+UNINSTALL = (ROOT / "install" / "uninstall.sh").read_text(encoding="utf-8")
+
+
+def _uninstall_says(tmp_path, *, opt=True, marker=False, unit=None):
+    block = UNINSTALL[UNINSTALL.index("# BEGIN foreign-spoolman check"):UNINSTALL.index("# END foreign-spoolman check")]
+    o = tmp_path / "opt-spoolman"
+    if opt:
+        o.mkdir()
+    if marker:
+        (o / ".fk-installed").write_text("old\n")
+    u = tmp_path / "spoolman.service"
+    if unit:
+        u.write_text(unit)
+    script = tmp_path / "check.sh"
+    script.write_text(f"""set -euo pipefail
+SPOOLMAN_OPT={o.as_posix()}
+SPOOLMAN_UNIT={u.as_posix()}
+{block}
+echo "kit=$KIT_SPOOLMAN"
+""", newline="\n")
+    return subprocess.run(["bash", str(script)], capture_output=True, text=True, check=False).stdout.strip()
+
+
+@needs_bash
+@pytest.mark.parametrize("kw,want", [({"opt": False}, "kit=1"), ({"marker": True}, "kit=1"), ({}, "kit=0"),
+                                     ({"unit": "Description=Spoolman\n"}, "kit=0"),
+                                     ({"unit": "Description=Spoolman filament inventory (v0.27.0)\n"}, "kit=1")])
+def test_uninstall_tells_the_same_way_whose_spoolman_it_is(tmp_path, kw, want):
+    assert _uninstall_says(tmp_path, **kw) == want
+
+
+def test_uninstall_leaves_a_foreign_spoolman_whole_and_says_so():
+    assert 'rm -rf /opt/spoolman' in UNINSTALL.split('if [ "$KIT_SPOOLMAN" -eq 1 ]; then', 1)[1]
+    for piece in ("Left the Spoolman in /opt/spoolman", '[ "$u" = spoolman.service ] && [ "$KIT_SPOOLMAN" -eq 0 ]',
+                  'KIT_USERS="$KIT_USERS spoolman"'):
+        assert piece in UNINSTALL, piece
+    assert "/var/lib/filament-kit-web /var/lib/spoolman" not in UNINSTALL.split("--purge")[-1].split("Kept:")[0]
 
 
 def test_the_check_comes_before_anything_is_replaced():
@@ -105,17 +146,26 @@ def test_a_bad_list_is_refused_naming_the_setting(bad, word):
 
 def test_the_plan_installs_it_only_with_the_module_on():
     on = {"modules": {n: n in {"spoolman"} for n in modules.MODULES}, "spoolman_url": "http://127.0.0.1:7912"}
-    files = [a.arg for a in apply.plan(on) if a.kind == "install_file"]
-    assert any(f[0] == apply.SPOOLMAN_DROPIN and f[2:] == ("0644", "root:root") for f in files)
+    assert [a.arg for a in apply.plan(on) if a.kind == "spoolman_allow"] == [apply.spoolman_dropin(on)]
     off = {"modules": {n: n in {"server"} for n in modules.MODULES}, "spoolman_url": "http://192.0.2.31:7912"}
-    assert not any(a.kind == "install_file" and a.arg[0] == apply.SPOOLMAN_DROPIN for a in apply.plan(off))
+    assert not any(a.kind == "spoolman_allow" for a in apply.plan(off))
 
 
 def test_the_dropin_goes_in_before_the_unit_is_started():
     on = {"modules": {n: n in {"spoolman"} for n in modules.MODULES}, "spoolman_url": "http://127.0.0.1:7912"}
     kinds = [(a.kind, a.arg) for a in apply.plan(on)]
-    at = next(i for i, (k, x) in enumerate(kinds) if k == "install_file" and x[0] == apply.SPOOLMAN_DROPIN)
+    at = next(i for i, (k, x) in enumerate(kinds) if k == "spoolman_allow")
     assert at < kinds.index(("daemon_reload", "")) < kinds.index(("enable", "spoolman.service"))
+
+
+def test_the_first_time_it_appears_it_says_who_was_cut_off(tmp_path, capsys):
+    act = apply.Action("spoolman_allow", apply.spoolman_dropin({}))
+    apply.execute([act], run=lambda cmd: None, resources=ROOT / "install", root=tmp_path)
+    out = capsys.readouterr().out
+    assert "192.168.0.0/16 10.0.0.0/8" in out and "spoolman.allow" in out and "Tailscale" in out
+    assert (tmp_path / apply.SPOOLMAN_DROPIN.lstrip("/")).read_text() == apply.spoolman_dropin({})
+    apply.execute([act], run=lambda cmd: None, resources=ROOT / "install", root=tmp_path)
+    assert "spoolman.allow" not in capsys.readouterr().out      # an apply after that says nothing
 
 
 def test_uninstall_removes_it():
