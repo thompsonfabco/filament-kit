@@ -367,7 +367,7 @@ def test_overview_with_the_code_is_whole_and_a_wrong_code_counts(app, owned, hel
     r = post(c, "overview", {}).json()
     assert r["redacted"] is False
     assert f"Spoolman reachable at {SPOOLMAN} (v1.2.3)" in [x["text"] for x in r["rows"]]
-    assert helper.calls == ["check"]
+    assert helper.calls == ["station_pairing"]     # the helper checks the code in that request
     assert post(c, "overview", {}, code="00000000").status_code == 403
     assert post(c, "overview", {}, code=None).status_code == 403
 
@@ -677,7 +677,8 @@ def test_the_job_unit_is_nothing_an_update_stops():
 
 def test_the_job_unit_as_shipped():
     run = (SYSTEMD / "filament-kit-setup-job@.service").read_text(encoding="utf-8")
-    assert "setup_helper job-run %i\n" in run and "%I" not in run
+    assert re.findall(r"^ExecStart=.*$", run, re.M) == [
+        "ExecStart=/opt/filament-kit/venv/bin/python -I -m filament_kit.setup_helper job-run %i"]
     assert "Type=oneshot" in run and "PartOf" not in run
     timeout = int(re.search(r"TimeoutStartSec=(\d+)min", run).group(1)) * 60
     assert jobs.STALE_AFTER > timeout
