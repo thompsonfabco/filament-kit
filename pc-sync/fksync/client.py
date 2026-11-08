@@ -234,11 +234,14 @@ class Client:
     def state(self) -> dict:
         return self._request("GET", "/api/sync/state")
 
-    def upload(self, kind: str, data: bytes, user_id: str | None = None, partial: str | None = None) -> dict:
+    def upload(self, kind: str, data: bytes, user_id: str | None = None, partial: str | None = None,
+               fresh: bool = False) -> dict:
         """`partial` (live and orca_live): the stamp of a build whose install stopped part-way in this folder (S28).
+        `fresh` (live only): the Bambu Studio folder changed; this is that folder's first sync.
         `orca_live` / `orca_system` go to the same routes with `?target=orca` (no user id; Ruling O)."""
         if kind == "live":
-            q = {k: v for k, v in (("user_id", user_id), ("partial", partial)) if v}
+            q = {k: v for k, v in (("user_id", user_id), ("partial", partial), ("fresh", "1" if fresh else None))
+                 if v}
             path = "/api/sync/live" + (f"?{urllib.parse.urlencode(q)}" if q else "")
         elif kind == "system":
             path = "/api/sync/system"
@@ -250,6 +253,12 @@ class Client:
         else:
             raise ValueError(f"unknown upload kind {kind!r}")
         return self._request("PUT", path, data, "application/zip")
+
+    def heartbeat(self, outcome: str, waiting_since: float | None = None, app: str | None = None) -> dict:
+        """Tell the server the sync is waiting for `app` to close since `waiting_since` (outcome
+        studio_running), or that the wait is over (another outcome). Three plain fields; no live data."""
+        body = {"outcome": outcome, "waiting_since": waiting_since, "app": app}
+        return self._request("POST", "/api/sync/heartbeat", json.dumps(body).encode(), "application/json")
 
     def rebuild(self, live_hash: str, orca_live_hash: str | None = None) -> dict:
         body = {"live_hash": live_hash}

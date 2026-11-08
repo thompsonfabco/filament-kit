@@ -58,6 +58,11 @@ class FakeClient:
         self.uploaded[kind] = names
         return {f"{kind}_hash": self.st[f"{kind}_hash"]}
 
+    def heartbeat(self, outcome, waiting_since=None, app=None):
+        self.calls.append(("heartbeat", outcome))
+        self._maybe_fail("heartbeat")
+        return {"ok": True}
+
     def rebuild(self, live_hash):
         self.calls.append(("rebuild", live_hash))
         self._maybe_fail("rebuild")
@@ -107,11 +112,11 @@ def _run(c, folders, dirs, now=T0, running=lambda: False, **kw):
     return sync.run_once(c, folders, dirs, running=running, now=now, **kw)
 
 
-def test_studio_running_no_client_call(env):
+def test_studio_running_only_the_heartbeat(env):
     folders, dirs = env
     c = FakeClient(_synced_state(folders))
     assert _run(c, folders, dirs, running=lambda: True) == "studio_running"
-    assert c.calls == []
+    assert c.calls == [("heartbeat", "studio_running")]       # nothing else, at most one an hour
     assert "studio_running" in _log(dirs)
 
 

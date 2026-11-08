@@ -708,3 +708,25 @@ def test_config_menu_station_voice_piper_or_espeak(monkeypatch, capsys):
     monkeypatch.setattr(sys, "stdin", io.StringIO("7\n\n0\n"))  # a blank answer keeps it
     assert cli.main(["config"]) == 0
     assert config.load()["station"]["tts"] == "auto" and "APPLIED" not in capsys.readouterr().out
+
+
+def test_status_shows_the_pc_sync_waiting_for_studio(capsys, monkeypatch, spoolman_url):
+    """The PC sync's last heartbeat says it waits for Bambu Studio to close."""
+    _status_setup(spoolman_url)
+    since = time.mktime((2026, 11, 3, 10, 0, 0, 0, 0, -1))
+    _fake_profiles(monkeypatch, pc={"device_id": "d1", "last_upload": since,
+                                    "waiting": {"since": since, "app": "Bambu Studio", "at": since + 3600}})
+    _fake_library(monkeypatch)
+    assert cli.main(["status"], client_factory=_ok_client) == 0
+    out = _status_lines(capsys)
+    assert "--   PC sync waiting for Bambu Studio to close since 2026-11-03 10:00" in out
+    assert cli.main(["profiles", "status"]) == 0
+    assert "PC sync waiting for Bambu Studio to close since 2026-11-03 10:00" in capsys.readouterr().out
+
+
+def test_status_without_a_wait_has_no_waiting_line(capsys, monkeypatch, spoolman_url):
+    _status_setup(spoolman_url)
+    _fake_profiles(monkeypatch, pc={"device_id": "d1", "last_upload": 1.0})
+    _fake_library(monkeypatch)
+    cli.main(["status"], client_factory=_ok_client)
+    assert not any("waiting for Bambu Studio" in ln for ln in _status_lines(capsys))

@@ -19,6 +19,9 @@ Order (each check runs before anything is written):
      a live value equal to the build's own record of the in-app values it carried (BUILD.json
      `inapp`, `orca_inapp` for Orca: the build saw it, e.g. a "nil" it filled in); a preset the build
      brought back on `profiles restore-deleted` (BUILD.json `restored`, `orca_restored`) is not a deletion;
+     into a secondary folder (`secondary`, another Bambu Studio folder of this PC, which cannot ask for a
+     rebuild) nothing is refused here: a preset edited there since its last install is held (never written over,
+     accepted or not) and one deleted there is skipped (not written again);
   4. Bambu Studio (and Orca Slicer, when its tree is installed) must not be running; this is checked again
      right before the first write, and if one runs then nothing is written, not even the backup;
   5. the user filament folders (which must exist) are backed up to dirs.backups/<stamp> and
@@ -33,6 +36,8 @@ Order (each check runs before anything is written):
      gets its .info, keeping a live cloud setting_id; every file goes to a sibling `.<name>.fktmp` first and is
      renamed over the target, so a crash never leaves a half-written preset (leftover temp files are removed at
      the start of this phase);
+     The kept presets whose live copy differs from the build's (inapp.diff, either way; an inheriting preset in
+     filament/ always) are returned as `differing`, to be listed;
   7. nothing is ever deleted: presets no longer built but still live are returned as `stale` /
      `stale_orca` (they are deleted in the app, never on disk);
   8. dirs.installed is replaced with what the slicers now hold (temp dir + rename): the build, with a kept
@@ -58,6 +63,7 @@ KEEP_BACKUPS = 5
 STUDIO_RUNNING = "Bambu Studio is running"
 ORCA_RUNNING = "Orca Slicer is running"
 TMP_SUFFIX = ".fktmp"
+KEPT = "KEPT.json"              # dirs.installed/KEPT.json {"base": [names]}: snapshot copies that are the folder's own
 BAMBU, ORCA = "Bambu Studio", "Orca Slicer"
 
 
@@ -80,6 +86,8 @@ class InstallResult:
     backup_orca: Path | None = None
     kept: list[str] = field(default_factory=list)          # already in the slicer: left as they are
     kept_orca: list[str] = field(default_factory=list)
+    differing: list[str] = field(default_factory=list)     # kept Bambu Studio presets that differ from the build's
+    skipped: list[str] = field(default_factory=list)       # secondary: deleted there since its install, not re-added
 
 
 def read_info(path: Path) -> dict:
@@ -228,6 +236,10 @@ def _replace_installed(build_dir: Path, dirs: AppDirs, skip: tuple[str, ...] = (
                     (new / t.tree / f"{name}{suffix}").unlink(missing_ok=True)
                 if _own_copy(name, fname):
                     shutil.copyfile(t.live / fname, new / t.tree / f"{name}.json")
+        for t in targets:                                   # whose each snapshot copy is (an accepted update may
+            if t.tree == "base":                            # only replace one the kit wrote, in a secondary)
+                own = sorted(n for n in t.kept if n not in t.proven)
+                (new / KEPT).write_text(json.dumps({"base": own}), encoding="utf-8")
         old = work / "old"
         if dirs.installed.exists():
             dirs.installed.rename(old)
@@ -254,6 +266,10 @@ class _Target:
     stale: list[str] = field(default_factory=list)
     write: dict = field(default_factory=dict)       # name -> the live file stem it is written to
     kept: dict = field(default_factory=dict)        # name -> the live file stem that holds it (left as it is)
+    hold: set = field(default_factory=set)          # secondary: edited there since its install (never written over)
+    proven: set = field(default_factory=set)        # unchanged since the kit wrote it (the snapshot says so)
+    gone: set = field(default_factory=set)          # secondary: deleted there since its install (not brought back)
+    skipped: list = field(default_factory=list)
 
 
 def fold(name: str) -> str:
@@ -282,7 +298,7 @@ def _existing(folder: Path) -> tuple[dict[str, str], dict[str, str]]:
 ROOT = "\0root"                 # t.kept value: the preset lives in Bambu Studio's filament/ root, never written
 
 
-def _plan(t: _Target, accept: dict | None, root: Path | None = None) -> None:
+def _plan(t: _Target, accept: dict | None, root: Path | None = None, secondary: bool = False) -> None:
     """Step 6's plan for one target: what is written (new presets, accepted updates) and what is kept. `root`:
     Bambu Studio's filament/ folder, where the user presets that inherit a system preset live (base/ holds the
     flattened ones it writes): a preset of the same name there is the owner's and is never written over, accepted
@@ -293,14 +309,47 @@ def _plan(t: _Target, accept: dict | None, root: Path | None = None) -> None:
     for name in t.staged:
         key = fold(name)
         fname = by_file.get(key) or by_name.get(key)
-        if fname is None and (key in top_file or key in top_name):
+        if name in t.gone:
+            t.skipped.append(name)
+        elif fname is None and (key in top_file or key in top_name):
             t.kept[name] = ROOT
         elif fname is None:
             t.write[name] = f"{name}.json"
-        elif key in ok:
-            t.write[name] = fname
+        elif key in ok and name not in t.hold and (not secondary or name in t.proven):
+            t.write[name] = fname           # in a secondary only over a preset the kit wrote there (never the owner's)
         else:
             t.kept[name] = fname
+
+
+def _read_kept(installed: Path) -> set[str] | None:
+    """The snapshot's KEPT.json names (copies that are the folder's own files, not the kit's); None for a snapshot
+    from before that record (in a secondary that proves nothing; in the primary a copy equal to the live file
+    counts as the kit's)."""
+    try:
+        d = json.loads((installed / KEPT).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    names = d.get("base") if isinstance(d, dict) else None
+    return {n for n in names if isinstance(n, str)} if isinstance(names, list) else None
+
+
+def _differing(t: _Target) -> list[str]:
+    """The kept presets whose live copy differs from the build's (by inapp.diff, either way; the owner's own
+    inheriting preset in filament/ counts as differing): listed, never written."""
+    out = []
+    for name, fname in t.kept.items():
+        if fname == ROOT:
+            out.append(name)
+            continue
+        try:
+            live = inapp.load(t.live / fname)
+        except (OSError, UnicodeDecodeError, ValueError):
+            out.append(name)
+            continue
+        new = t.new.get(name) or {}
+        if inapp.diff(new, live) or inapp.diff(live, new):
+            out.append(name)
+    return sorted(out)
 
 
 def _own_copy(name: str, fname: str) -> bool:
@@ -311,8 +360,10 @@ def _own_copy(name: str, fname: str) -> bool:
     return fname == f"{name}.json"
 
 
-def _check(t: _Target, trusted: set[str], record: dict, restored: set[str], unsafe: list, stop: list) -> None:
-    """Steps 1-3 for one target: load the staged presets, collect untrusted G-code and late app changes."""
+def _check(t: _Target, trusted: set[str], record: dict, restored: set[str], unsafe: list, stop: list,
+           secondary: bool = False) -> None:
+    """Steps 1-3 for one target: load the staged presets, collect untrusted G-code and late app changes (`secondary`:
+    those are not refusals but t.hold / t.gone: a secondary folder cannot ask for a rebuild)."""
     for name in t.staged:
         try:
             t.new[name] = inapp.load(t.stage / f"{name}.json")
@@ -320,6 +371,7 @@ def _check(t: _Target, trusted: set[str], record: dict, restored: set[str], unsa
             raise Refused(f"build preset {name} is not valid JSON: {e}") from None
     before = _names(t.snap)
     live_names = _names(t.live)
+    owners = _read_kept(t.snap.parent) if t.tree == "base" else set()
     reset = inapp.is_reset(set(before), set(live_names))
     label = "" if t.app == BAMBU else f"{ORCA} "
     for name in t.staged:
@@ -330,43 +382,76 @@ def _check(t: _Target, trusted: set[str], record: dict, restored: set[str], unsa
             continue
         if now is None:
             if not reset and name.casefold() not in restored:
-                stop.append(f"{name}: deleted in {t.app} after the build was made")
+                if secondary:
+                    t.gone.add(name)
+                else:
+                    stop.append(f"{name}: deleted in {t.app} after the build was made")
             continue
         part = _load_or_none(t.half / f"{name}.json") if t.half.is_dir() else None
         seen = record.get(name, {})
         late = [k for k, v in inapp.diff(old, now).items() if inapp.norm(t.new[name].get(k)) != inapp.norm(v)
                 and not (part is not None and k in part and inapp.norm(part[k]) == inapp.norm(v))
                 and not (k in seen and inapp.norm(seen[k]) == inapp.norm(v))]
-        if late:
+        # proven: unchanged since the kit wrote it. A snapshot without KEPT.json cannot tell the kit's copies from
+        # the owner's own kept files, so in a secondary it proves nothing (the preset is listed as differing and
+        # `apply-updates --folder` takes the build's copy on request); the primary keeps the equality rule.
+        if not inapp.diff(old, now) and (name not in owners if owners is not None else not secondary):
+            t.proven.add(name)
+        if late and secondary:
+            t.hold.add(name)
+        elif late:
             stop.append(f"{name}: edited in {t.app} after the build was made ({', '.join(late)})")
     staged_cf = {n.casefold() for n in t.staged}
     live_cf = {n.casefold() for n in live_names}
     t.stale = [n for n in before if n.casefold() not in staged_cf and n.casefold() in live_cf]
 
 
-def _copy_in(t: _Target) -> None:
-    """Step 6 for one target: copy presets, merging .info so a live cloud setting_id is kept
-    (each file is written to a temp file next to it, then renamed over it)."""
+def local_info(info: dict, user_id: str) -> dict:
+    """The .info of a fresh local preset of this folder, as Bambu Studio saves one: its own user id, no cloud
+    setting_id (Studio uploads such a preset under the signed-in account itself), no base_id (the preset is
+    flattened), no sync_info. Only updated_time is kept from the build's."""
+    out = {"sync_info": "", "user_id": user_id, "setting_id": "", "base_id": ""}
+    out["updated_time"] = info.get("updated_time") or "0"
+    return out
+
+
+def write_preset(live: Path, fname: str, src_json: Path, src_info: Path, own_user: str | None = None) -> None:
+    """Write one preset (`src_json` + `src_info`) as live/<fname>, merging .info so a live cloud setting_id is kept;
+    each file goes to a temp file next to it, then is renamed over it. `own_user` (a secondary folder): the build's
+    .info is the primary's, so the preset gets that folder's own local .info instead (its user id; never the
+    primary's cloud setting_id, only the folder's own one when the preset already had it)."""
+    stem = Path(fname).stem
+    _write_live(live / fname, src_json.read_bytes())
+    info, old_info = read_info(src_info), read_info(live / f"{stem}.info")
+    if own_user is not None:
+        info = local_info(info, own_user)
+    if old_info.get("setting_id") and not info.get("setting_id"):  # synced to the cloud since the build
+        info.update(setting_id=old_info["setting_id"], base_id=old_info.get("base_id", ""), sync_info="update")
+    _write_live(live / f"{stem}.info", _info_bytes(info))
+
+
+def _copy_in(t: _Target, own_user: str | None = None) -> None:
+    """Step 6 for one target: copy the presets planned for writing (write_preset)."""
     t.live.mkdir(parents=True, exist_ok=True)
     _remove_leftover_tmp(t.live)
     for name, fname in t.write.items():
-        stem = Path(fname).stem
-        _write_live(t.live / fname, (t.stage / f"{name}.json").read_bytes())
-        info, old_info = read_info(t.stage / f"{name}.info"), read_info(t.live / f"{stem}.info")
-        if old_info.get("setting_id") and not info.get("setting_id"):  # synced to the cloud since the build
-            info.update(setting_id=old_info["setting_id"], base_id=old_info.get("base_id", ""), sync_info="update")
-        _write_live(t.live / f"{stem}.info", _info_bytes(info))
+        write_preset(t.live, fname, t.stage / f"{name}.json", t.stage / f"{name}.info", own_user)
 
 
 def install(build_dir: Path, folders: StudioFolders, dirs: AppDirs, *,
             running: Callable[[], bool], stamp_now: str,
             before_write: Callable[[Path], None] | None = None,
             orca: OrcaFolders | None = None, orca_running: Callable[[], bool] | None = None,
-            accept: dict | None = None) -> InstallResult:
+            accept: dict | None = None, secondary: bool = False,
+            trusted_extra: tuple[Path, ...] = ()) -> InstallResult:
     """before_write(backup_dir) runs after the backups and before the first live write (the sync
     records it so an interrupted install can be told apart from later in-app edits). `orca`: this PC's
     Orca Slicer folders (None: the build's orca/ tree is not installed). `accept`: the updates the owner accepted,
-    {"base"|"orca": [preset names]}: the only existing presets that are written over."""
+    {"base"|"orca": [preset names]}: the only existing presets that are written over.
+    `secondary`: `folders` is another Bambu Studio folder of this PC (not the one the server builds from):
+    step 3 refuses nothing; a preset edited there since its last install is never written over (accepted or not)
+    and one deleted there is not written again (`skipped`). `trusted_extra`: more system preset folders whose G-code
+    is trusted (a secondary trusts the primary's: same PC, its Bambu Studio version may differ)."""
     build_dir = Path(build_dir)
     orca_running = orca_running or studio.orca_running
     if running():
@@ -389,7 +474,8 @@ def install(build_dir: Path, folders: StudioFolders, dirs: AppDirs, *,
 
     # 2. untrusted G-code, 3. edited / deleted after the build
     unsafe, stop = [], []
-    _check(bambu, trusted_gcode(folders.system_filament, bambu.snap), *_build_meta(build_dir), unsafe, stop)
+    _check(bambu, trusted_gcode(folders.system_filament, bambu.snap, *trusted_extra), *_build_meta(build_dir),
+           unsafe, stop, secondary=secondary)
     if o is not None:
         _check(o, set(), *_build_meta(build_dir, "orca_"), unsafe, stop)   # Orca: only the live copy's G-code
     if unsafe:
@@ -409,7 +495,7 @@ def install(build_dir: Path, folders: StudioFolders, dirs: AppDirs, *,
                       "Slicer once, then run the sync again")
 
     for t in targets:                   # what step 6 writes and keeps (read before anything is written)
-        _plan(t, accept, root=folders.user_filament if t is bambu else None)
+        _plan(t, accept, root=folders.user_filament if t is bambu else None, secondary=secondary and t is bambu)
 
     # 4. right before the first write
     if running():
@@ -435,13 +521,15 @@ def install(build_dir: Path, folders: StudioFolders, dirs: AppDirs, *,
 
     # 6. copy the new presets and the accepted updates
     for t in targets:
-        _copy_in(t)
+        _copy_in(t, folders.user_id if secondary and t is bambu else None)
 
     # 7. nothing deleted; 8. snapshot (without an orca/ tree that was not installed here)
     _replace_installed(build_dir, dirs, skip=() if o is not None else ("orca",), targets=targets)
     return InstallResult(installed=list(bambu.write), stale=bambu.stale, backup=backup,
                          installed_orca=list(o.write) if o else [], stale_orca=o.stale if o else [],
-                         backup_orca=backup_orca, kept=list(bambu.kept), kept_orca=list(o.kept) if o else [])
+                         backup_orca=backup_orca, kept=list(bambu.kept), kept_orca=list(o.kept) if o else [],
+                         differing=_differing(bambu), skipped=list(bambu.skipped))
 
 
-__all__ = ["Refused", "InstallResult", "install", "KEEP_BACKUPS", "STUDIO_RUNNING", "ORCA_RUNNING"]
+__all__ = ["Refused", "InstallResult", "install", "write_preset", "local_info", "KEEP_BACKUPS", "KEPT",
+           "STUDIO_RUNNING", "ORCA_RUNNING"]

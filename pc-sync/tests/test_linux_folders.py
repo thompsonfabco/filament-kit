@@ -229,3 +229,23 @@ def test_layout_never_reaches_the_real_system_dirs(tmp_path):
     lay = studio.LinuxLayout.from_env({"HOME": str(tmp_path / "home")})
     for p in (lay.system_flatpak, *lay.share_dirs, *lay.opt_dirs):
         assert Path(p).resolve().is_relative_to(tmp_path.resolve()), p
+
+
+def test_linux_secondaries_are_the_other_three_roots(tmp_path):
+    """On Linux: every other usable root of the four (native, Beta, and both Flatpak ones)."""
+    lay = _layout(tmp_path)
+    home = tmp_path / "home"
+    made = {}
+    for variant, base in (("BambuStudio", home / ".config"), ("BambuStudioBeta", home / ".config"),
+                          ("BambuStudio", home / FP_BAMBU), ("BambuStudioBeta", home / FP_BAMBU)):
+        made[(variant, base)] = studio_fixture.make(base, variant=variant, user_id="1234567890")
+    for f in made.values():
+        _age(f.root / "BambuStudio.conf", 3600)
+    _age(home / FP_BAMBU / "BambuStudio" / "BambuStudio.conf", 0)
+    primary = studio.locate(None, layout=lay)
+    assert primary.variant == "Flatpak BambuStudio"
+    got = studio.secondaries(None, primary, layout=lay)
+    assert [s.variant for s in got] == ["BambuStudio", "BambuStudioBeta", "Flatpak BambuStudioBeta"]
+    assert all(s.user_id == "1234567890" for s in got)
+    assert got[2].user_filament == home / FP_BAMBU / "BambuStudioBeta" / "user" / "1234567890" / "filament"
+    assert studio.folder_key(primary) == "Flatpak-BambuStudio-1234567890"

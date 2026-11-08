@@ -224,7 +224,7 @@ def test_run_while_studio_open_exits_0(srv, paths, monkeypatch, capsys):
     n = len(srv.requests)
     assert _main(paths, "run") == 0
     assert "studio_running" in capsys.readouterr().out
-    assert len(srv.requests) == n
+    assert [r["path"] for r in srv.requests[n:]] == ["/api/sync/heartbeat"]   # only the heartbeat
 
 
 def test_run_with_orca_and_an_old_server_sends_nothing_for_orca(srv, paths, capsys):

@@ -240,6 +240,9 @@ def _profile_status_lines() -> bool:
         inst = st.get("installed")
         print(f"--   PC sync: last upload {_fmt_time(pc.get('last_upload'))}, "
               + (f"installed build {inst['stamp']}" if inst else "no build installed yet"))
+        wait = builds.pc_waiting_text(pc)
+        if wait:
+            print(f"--   {wait}")
     else:
         print("--   PC sync: not set up (see README: Pair your PC)")
     return good
@@ -991,6 +994,9 @@ def cmd_profiles_status() -> int:
               "same name in Bambu Studio's filament folder; yours stay (rename or delete yours to get ours)")
     print(f"PC sync: device {pc['device_id']}, last upload {_fmt_time(pc.get('last_upload'))}" if pc
           else "PC sync: not set up (see README: Pair your PC)")
+    wait = builds.pc_waiting_text(pc)
+    if wait:
+        print(f"  {wait}")
     for name in st["stale"]:
         print(f"  delete in Bambu Studio: {name}")
     for name in st.get("orca_stale", []):

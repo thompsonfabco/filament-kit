@@ -52,7 +52,7 @@ _OWNER_SALT = b"filament-kit owner-data v1:"
 OWNER_FINGERPRINTS = frozenset({
     "d760cbea97a1228524ab", "92ce0773c1c5a2e0ca4a", "95fb2cac257df2546230", "87bf20b4038304003845",
     "17b7f0c3556139cbbfd1", "107b22d060e0f4dce62d", "dbf1988c2971e2f59646", "4cff4dd88d4eba517032",
-    "c9f6ef41de056225a7cf"})
+    "c9f6ef41de056225a7cf", "e44aa6a688481d0bf3fb"})
 _OWNER_TOKEN = re.compile(r"\d{1,3}(?:\.\d{1,3}){3}|[A-Za-z0-9][A-Za-z0-9-]*")
 
 

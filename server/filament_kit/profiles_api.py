@@ -13,6 +13,11 @@ in the threadpool through a small blocking reader, which stops at the cap (never
 over until the owner accepts them, `filament-kit profiles apply-updates`; builds.updates_view); the install report
 (`POST /api/sync/installed`) may name what the PC wrote (`written`).
 
+`PUT /api/sync/live?fresh=1`: the PC's Bambu Studio folder changed (stable <-> Beta); the server treats
+the upload as that folder's first sync (builds.store_upload `fresh`). `POST /api/sync/heartbeat`:
+{outcome, waiting_since, app}, at most HEARTBEAT_MAX bytes, from the sync PC only: the PC is waiting for a slicer to
+close (or that wait is over); `GET /api/profiles/status` shows it as `pc.waiting`.
+
 Times in responses are ISO 8601 UTC text (`2026-11-02T08:01:00Z`, ruling S18). Every state-changing route writes
 one audit line: what, `device_id`, a few plain fields and the result; never a body, a query string or a token.
 """
@@ -36,6 +41,8 @@ from .profiles.errors import ProfileError
 log = logging.getLogger(__name__)
 
 MAX_JSON = 64 << 10                     # a small JSON body (rebuild, installed, PATCH, propose)
+HEARTBEAT_MAX = 1024                    # the PC sync's heartbeat
+_OUTCOME = re.compile(r"[a-z_]{1,32}")
 MAX_TEXT = lines_mod.MAX_TEXT           # vendor, line, material, bambu_parent
 HASH_RE = re.compile(r"[0-9a-f]{64}")
 USER_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
@@ -181,6 +188,9 @@ def _status_view() -> dict:
     v["last_attempt"] = _iso_at(v.get("last_attempt"))
     v["installed"] = _iso_at(v.get("installed"))
     v["pc"] = _iso_at(v.get("pc"), "last_upload")
+    if isinstance(v["pc"], dict) and isinstance(v["pc"].get("waiting"), dict):
+        w = v["pc"]["waiting"]
+        v["pc"]["waiting"] = {"since": iso(w.get("since")), "app": w.get("app"), "at": iso(w.get("at"))}
     lib = library_mod.status()
     v["library"] = {"version": lib.get("version"), "source": lib.get("source"), "local": lib.get("local"),
                     "last_check": _iso_at(lib.get("last_check"))}
@@ -231,7 +241,8 @@ def _parents(material: str) -> dict:
 # ---------- routes ----------
 
 def routes(authed, sm) -> list[Route]:
-    async def upload(request: Request, kind: str, user_id: str | None, partial: str | None = None):
+    async def upload(request: Request, kind: str, user_id: str | None, partial: str | None = None,
+                     fresh: bool = False):
         device = request.state.device
         cap = builds.KINDS[kind][1]
         declared = request.headers.get("content-length")
@@ -244,7 +255,7 @@ def routes(authed, sm) -> list[Route]:
         reader = _StreamReader(request)
 
         def run() -> str:
-            h = builds.store_upload(kind, reader, device_id=device, user_id=user_id, partial=partial)
+            h = builds.store_upload(kind, reader, device_id=device, user_id=user_id, partial=partial, fresh=fresh)
             if kind in ("system", "orca_system"):
                 builds.request_rebuild(f"{kind.replace('_', ' ')} upload")
             return h
@@ -263,8 +274,11 @@ def routes(authed, sm) -> list[Route]:
         partial = request.query_params.get("partial")
         if partial is not None and not builds.STAMP_RE.fullmatch(partial):
             raise _bad("partial must be a build stamp")
-        h = await upload(request, "orca_live" if orca else "live", user_id, partial)
-        return JSONResponse({"live_hash": h})
+        fresh = request.query_params.get("fresh")     # another Bambu Studio folder's first sync
+        if fresh is not None and (fresh != "1" or orca):
+            raise _bad("fresh must be 1 (Bambu Studio live uploads only)")
+        h = await upload(request, "orca_live" if orca else "live", user_id, partial, fresh=fresh == "1")
+        return JSONResponse({"live_hash": h, **({"fresh": True} if fresh == "1" else {})})
 
     @authed
     async def sync_system(request: Request):
@@ -308,6 +322,30 @@ def routes(authed, sm) -> list[Route]:
         inst = await run_in_threadpool(_audit, "sync installed", device,
                                        lambda: builds.record_installed(stamp, device, trees, written), stamp=stamp)
         return JSONResponse({"installed": _iso_at(inst)})
+
+    @authed
+    async def sync_heartbeat(request: Request):
+        """The PC sync is waiting for Bambu Studio (or Orca Slicer) to close (at most one an hour), or
+        that wait is over (once). A tiny body (HEARTBEAT_MAX), three plain fields, nothing else."""
+        device = request.state.device
+        raw = await _read_capped(request, HEARTBEAT_MAX, ProfileError(413, "too_large", "the heartbeat is too large"))
+        try:
+            body = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, ValueError, RecursionError):
+            raise _bad("the request body must be JSON") from None
+        if not isinstance(body, dict) or set(body) - {"outcome", "waiting_since", "app"}:
+            raise _bad("a heartbeat has only outcome, waiting_since and app")
+        outcome, since, app = body.get("outcome"), body.get("waiting_since"), body.get("app")
+        if not (isinstance(outcome, str) and _OUTCOME.fullmatch(outcome)):
+            raise _bad("outcome must be a sync outcome")
+        if since is not None and (isinstance(since, bool) or not isinstance(since, (int, float))
+                                  or not 0 <= since < 1e11):
+            raise _bad("waiting_since must be epoch seconds")
+        if app is not None and app not in builds.HEARTBEAT_APPS:
+            raise _bad("app must be Bambu Studio or Orca Slicer")
+        await run_in_threadpool(_audit, "sync heartbeat", device,
+                                lambda: builds.record_heartbeat(device, outcome, since, app), outcome=outcome)
+        return JSONResponse({"ok": True})
 
     @authed
     async def profiles_status(request: Request):
@@ -401,6 +439,7 @@ def routes(authed, sm) -> list[Route]:
         Route("/api/sync/rebuild", sync_rebuild, methods=["POST"]),
         Route("/api/sync/build", sync_build),
         Route("/api/sync/installed", sync_installed, methods=["POST"]),
+        Route("/api/sync/heartbeat", sync_heartbeat, methods=["POST"]),
         Route("/api/profiles/status", profiles_status),
         Route("/api/profiles/updates", profiles_updates),
         Route("/api/profiles/lines", profiles_lines),

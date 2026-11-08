@@ -74,7 +74,8 @@ ROUTES = [("GET", "/api/sync/state"), ("PUT", "/api/sync/live"), ("PUT", "/api/s
           ("POST", "/api/sync/rebuild"), ("GET", "/api/sync/build?stamp=20270115-080000"),
           ("POST", "/api/sync/installed"), ("GET", "/api/profiles/status"), ("GET", "/api/profiles/lines"),
           ("PATCH", f"/api/profiles/lines/{LID}"), ("GET", "/api/profiles/parents?material=PLA"),
-          ("POST", "/api/profiles/propose"), ("POST", "/api/library/local"), ("GET", "/api/profiles/updates")]
+          ("POST", "/api/profiles/propose"), ("POST", "/api/library/local"), ("GET", "/api/profiles/updates"),
+          ("POST", "/api/sync/heartbeat")]
 
 
 def test_every_route_needs_a_token(c):
@@ -542,3 +543,82 @@ def test_patch_orca_parent_stores_the_canonical_spelling(c, sm):
     assert r.status_code == 200, r.text
     assert r.json()["line"]["orca_parent"] == "Overture PLA Pro"
     assert lines_mod.load()[LID].orca_parent == "Overture PLA Pro"
+
+
+# ---------- the PC sync's heartbeat while Bambu Studio stays open, and a folder's first sync ----------
+
+WAIT = {"outcome": "studio_running", "waiting_since": 1_793_700_000, "app": "Bambu Studio"}
+
+
+def test_heartbeat_is_kept_and_shown_in_status(c, sm):
+    tok = token()
+    me = device_of(tok)
+    assert put_zip(c, tok, "live", zip_of({"base/x.json": "{}"})).status_code == 200
+    r = c.post("/api/sync/heartbeat", json=WAIT, headers=auth(tok))
+    assert r.status_code == 200 and r.json() == {"ok": True}
+    hb = builds._read_obj(config.paths().state / "profiles" / "pc-heartbeat.json")
+    assert hb["device_id"] == me and hb["outcome"] == "studio_running" and hb["app"] == "Bambu Studio"
+    assert hb["waiting_since"] == WAIT["waiting_since"] and isinstance(hb["at"], float)
+    pc = c.get("/api/profiles/status", headers=auth(tok)).json()["pc"]
+    assert pc["waiting"] == {"app": "Bambu Studio", "since": "2026-11-03T10:00:00Z", "at": pc["waiting"]["at"]}
+    assert ISO.fullmatch(pc["waiting"]["at"])
+    # the wait is over: the PC says so once (any other outcome), or it uploads again
+    assert c.post("/api/sync/heartbeat", json={"outcome": "up_to_date"}, headers=auth(tok)).status_code == 200
+    assert "waiting" not in c.get("/api/profiles/status", headers=auth(tok)).json()["pc"]
+    assert c.post("/api/sync/heartbeat", json=WAIT, headers=auth(tok)).status_code == 200
+    assert "waiting" in c.get("/api/profiles/status", headers=auth(tok)).json()["pc"]
+    assert put_zip(c, tok, "live", zip_of({"base/y.json": "{}"})).status_code == 200
+    assert "waiting" not in c.get("/api/profiles/status", headers=auth(tok)).json()["pc"]
+
+
+def test_heartbeat_before_any_sync_pc_is_not_shown(c):
+    """Only the registered sync PC's heartbeat is shown: before any PC has synced, a heartbeat (from any paired
+    device, a phone too) is taken but never makes the status say the PC sync waits."""
+    phone, pc = token(), token()
+    assert c.post("/api/sync/heartbeat", json=WAIT, headers=auth(phone)).status_code == 200
+    assert c.get("/api/profiles/status", headers=auth(phone)).json()["pc"] is None
+    assert put_zip(c, pc, "live", zip_of({"base/x.json": "{}"})).status_code == 200
+    assert "waiting" not in c.get("/api/profiles/status", headers=auth(pc)).json()["pc"]
+
+
+def test_heartbeat_checks_owner_body_and_values(c):
+    a, b = token(), token()
+    assert put_zip(c, a, "live", zip_of({"base/x.json": "{}"})).status_code == 200
+    r = c.post("/api/sync/heartbeat", json=WAIT, headers=auth(b))
+    assert r.status_code == 409 and r.json()["error"] == "other_pc"
+    r = c.post("/api/sync/heartbeat", content=b"{" + b" " * 2048 + b"}",
+               headers={**auth(a), "Content-Type": "application/json"})
+    assert r.status_code == 413
+    for bad in ({}, {"outcome": "x y"}, {"outcome": "studio_running", "waiting_since": "soon"},
+                {"outcome": "studio_running", "app": "Photoshop"}, {**WAIT, "live": "data"},
+                {"outcome": "studio_running", "waiting_since": True}):
+        r = c.post("/api/sync/heartbeat", json=bad, headers=auth(a))
+        assert r.status_code == 400 and r.json()["error"] == "bad_request", bad
+    assert not (config.paths().state / "profiles" / "pc-heartbeat.json").exists()
+
+
+def test_heartbeat_audit_line(c, caplog):
+    caplog.set_level(logging.INFO)
+    tok = token()
+    c.post("/api/sync/heartbeat", json=WAIT, headers=auth(tok))
+    assert any(r.getMessage().startswith("sync heartbeat device_id=") and "outcome=studio_running" in r.getMessage()
+               for r in caplog.records)
+
+
+def test_fresh_live_upload_is_a_first_sync(c, sm):
+    """The PC's Bambu Studio folder changed (stable <-> Beta): its live upload says `fresh=1` and the server
+    forgets the install snapshot, like a new sync PC (the owner's in-app record is kept)."""
+    tok = token()
+    assert put_zip(c, tok, "live", zip_of({"base/x.json": "{}"}), "?user_id=1234567890").status_code == 200
+    stamp = built(c, tok, sm)
+    assert c.post("/api/sync/installed", json={"stamp": stamp}, headers=auth(tok)).status_code == 200
+    assert c.get("/api/sync/state", headers=auth(tok)).json()["installed"]["stamp"] == stamp
+    r = put_zip(c, tok, "live", zip_of({"base/y.json": "{}"}), "?user_id=1234567890")
+    assert r.status_code == 200 and "fresh" not in r.json()
+    assert c.get("/api/sync/state", headers=auth(tok)).json()["installed"]["stamp"] == stamp
+    r = put_zip(c, tok, "live", zip_of({"base/z.json": "{}"}), "?user_id=1234567890&fresh=1")
+    assert r.status_code == 200 and r.json()["fresh"] is True
+    st = c.get("/api/sync/state", headers=auth(tok)).json()
+    assert st["installed"] is None and st["owner"] == device_of(tok)
+    assert builds._read_obj(config.paths().state / "profiles" / "owner-edits.json")["stamp"] == stamp
+    assert put_zip(c, tok, "live", zip_of({"base/z.json": "{}"}), "?fresh=yes").status_code == 400
