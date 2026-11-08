@@ -123,6 +123,7 @@ def save_pairing(link: Link, owner: str | None = "filament-kit-station", first: 
         ips = [first] + [i for i in ips if i != first]
     server_file().write_text(json.dumps({"ips": ips, "port": link.port, "fp": link.fp,
                                          "host": link.host}, indent=1) + "\n", encoding="utf-8")
+    os.chmod(server_file(), 0o644)  # whatever root's umask: the station's service user reads it
     tok = token_file()
     fd = os.open(tok, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as f:

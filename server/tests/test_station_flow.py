@@ -236,3 +236,49 @@ def test_keep_sealed_link_does_not_open(sm):
 def test_save_accepts_the_panels_filament_key(sm):
     b = save(client(sm), auth(), gross_g=900, filament=ITEM).json()
     assert b["created"] is True and b["remaining_g"] == 745
+
+
+# ---------- fix round 1 ----------
+
+SEALED = {**ITEM, "sealed": True, "sealed_reason": "in vacuum bag"}
+
+
+def _spools(sm):
+    return len(sm.get("spool?allow_archived=true"))
+
+
+def test_sealed_save_refuses_a_tag_linked_meanwhile_before_adding(sm, monkeypatch):
+    """M1: the by_tag check, the add and the link run under one inventory lock: a tag another save linked since
+    station_flow looked (a race) is refused before a second spool is written."""
+    c, h = client(sm), auth()
+    first = save(c, h, gross_g=1180, item=SEALED).json()["spool_id"]
+    n = _spools(sm)
+    real, calls = inventory.by_tag, []
+
+    def stale_first_look(s, uid):  # station_flow's own look misses the link; the locked check sees it
+        calls.append(uid)
+        return None if len(calls) == 1 else real(s, uid)
+    monkeypatch.setattr(inventory, "by_tag", stale_first_look)
+    r = save(c, h, gross_g=1180, item=SEALED)
+    assert r.status_code == 409 and r.json()["error"] == "tag_in_use", r.json()
+    assert _spools(sm) == n and tags.stored(sm.get(f"spool/{first}")) == tags.normalize_uid(UID)
+
+
+def test_sealed_save_link_failure_reports_the_added_spool(sm, monkeypatch):
+    """M1: a link that fails after the add says which spool exists, so the panel doesn't invite a blind retry."""
+    def broken_link(*a, **kw):
+        raise RuntimeError("tag did not land")
+    monkeypatch.setattr(inventory, "link_tag", broken_link)
+    r = save(client(sm), auth(), gross_g=1180, item=SEALED)
+    body = r.json()
+    assert r.status_code == 502 and body["error"] == "tag_not_linked", body
+    sid = body["spool_id"]
+    assert sm.get(f"spool/{sid}") and body["display"][0] == f"Saved #{sid}"[:16]
+
+
+def test_sealed_by_weight_counts_a_bagged_spool_as_sealed():
+    """M2: a spool still in its bag or box weighs more than a bare full spool: heavier is sealed too."""
+    it = {"net": 1000, "tare": 155}
+    assert station_flow.sealed_by_weight(it, 1300) and station_flow.sealed_by_weight(it, 1135)
+    assert not station_flow.sealed_by_weight(it, 1134)
+    assert "bag" in station_flow.sealed_by_weight.__doc__

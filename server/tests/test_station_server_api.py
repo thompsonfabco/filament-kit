@@ -154,3 +154,104 @@ def test_uninstall_purge_removes_the_station_pairing_folder():
     from pathlib import Path
     text = (Path(__file__).resolve().parents[2] / "install" / "uninstall.sh").read_text(encoding="utf-8")
     assert "rm -rf /etc/filament-kit /etc/filament-kit-station " in text
+
+
+# ---------- the station's network allow-list follows the pairing (fix round 1, I1) ----------
+
+def _paired(ips):
+    link = server_api.parse_link(f"fkit://pair?h=kit.example.com&p=8710&t={'z' * 43}&fp={FP}"
+                                 + "".join(f"&ip={i}" for i in ips))
+    server_api.save_pairing(link, owner=None)
+
+
+def _allow_line(text: str) -> str:
+    return next(ln for ln in text.splitlines() if ln.startswith("IPAddressAllow="))
+
+
+def test_station_mode_dropin_allows_the_paired_servers_addresses():
+    from filament_kit import apply, modules
+    cfg = modules.set_mode(config._merge(config.DEFAULTS, {}), "station")
+    cfg["station"]["allow"] = ["192.0.2.10"]
+    assert _allow_line(apply.station_dropin(cfg, ["192.0.2.10"])) == "IPAddressAllow=localhost 192.0.2.10"
+    _paired(["192.0.2.10", "198.51.100.7"])
+    text = apply.station_dropin(cfg, ["192.0.2.10"])
+    assert _allow_line(text) == "IPAddressAllow=localhost 192.0.2.10 198.51.100.7"
+    assert '"STATION_ALLOW=127.0.0.1 192.0.2.10"' in text  # the HTTP answers are not widened
+
+
+def test_all_in_one_dropin_allows_the_paired_lan_address():
+    from filament_kit import apply, modules
+    cfg = modules.set_mode(config._merge(config.DEFAULTS, {}), "all-in-one")
+    _paired(["127.0.0.1", "192.0.2.5"])  # the server's LAN address from its link, loopback first
+    assert _allow_line(apply.station_dropin(cfg, ["127.0.0.1"])) == "IPAddressAllow=localhost 127.0.0.1 192.0.2.5"
+
+
+def test_a_broken_pairing_file_does_not_stop_the_dropin():
+    from filament_kit import apply, modules
+    cfg = modules.set_mode(config._merge(config.DEFAULTS, {}), "all-in-one")
+    server_api.pairing_dir().mkdir(parents=True, exist_ok=True)
+    server_api.server_file().write_text("{not json", encoding="utf-8")
+    assert _allow_line(apply.station_dropin(cfg, ["127.0.0.1"])) == "IPAddressAllow=localhost 127.0.0.1"
+    server_api.server_file().write_text(json.dumps({"ips": ["10.0.0.1; rm -rf /", "192.0.2.9"]}), encoding="utf-8")
+    assert _allow_line(apply.station_dropin(cfg, ["127.0.0.1"])) == "IPAddressAllow=localhost 127.0.0.1 192.0.2.9"
+
+
+def test_refresh_station_rewrites_the_dropin_and_restarts(tmp_path, monkeypatch):
+    from filament_kit import apply, modules
+    monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
+    cfg = modules.set_mode(config._merge(config.DEFAULTS, {}), "all-in-one")
+    _paired(["127.0.0.1", "192.0.2.5"])
+    ran = []
+    apply.refresh_station(cfg, run=ran.append, root=tmp_path / "root")
+    dropin = (tmp_path / "root" / apply.DROPIN.lstrip("/")).read_text(encoding="utf-8")
+    assert "192.0.2.5" in _allow_line(dropin)
+    assert ran == [["systemctl", "daemon-reload"], ["systemctl", "restart", apply.STATION_UNIT]]
+
+
+def _pair_cli(monkeypatch, mode, link_ips, refresh):
+    from filament_kit import modules
+    if hasattr(os, "geteuid"):
+        monkeypatch.setattr(os, "geteuid", lambda: 0)
+    cfg = modules.set_mode({"placement": {"box_count": 2}}, mode, say=None)
+    if mode == "station":
+        cfg.setdefault("station", {})["allow"] = ["192.0.2.10"]
+    config.save(cfg)
+    probed = []
+    monkeypatch.setattr(server_api, "peer_fingerprint", lambda ip, port, timeout=10: probed.append(ip) or FP)
+    monkeypatch.setattr(server_api, "save_pairing", lambda link, owner="x", first=None, _real=server_api.save_pairing:
+                        _real(link, owner=None, first=first))
+    from filament_kit import apply
+    monkeypatch.setattr(apply, "refresh_station", refresh)
+    link = f"fkit://pair?h=kit.example.com&p=8710&t={'q' * 43}&fp={FP}" + "".join(f"&ip={i}" for i in link_ips)
+    answers = iter([link, "y"])
+    return cli.cmd_station_pair(ask=lambda prompt: next(answers)), probed
+
+
+def test_station_pair_on_the_servers_machine_uses_loopback_first_and_refreshes(monkeypatch, capsys):
+    refreshed = []
+    code, probed = _pair_cli(monkeypatch, "all-in-one", ["192.0.2.5"], lambda cfg, **kw: refreshed.append(cfg))
+    assert code == 0 and probed == ["127.0.0.1"]
+    assert server_api.ServerApi().ips == ["127.0.0.1", "192.0.2.5"]
+    assert len(refreshed) == 1 and "restarted" in capsys.readouterr().out
+
+
+def test_station_pair_says_the_command_when_the_refresh_fails(monkeypatch, capsys):
+    from filament_kit import apply
+
+    def boom(cfg, **kw):
+        raise apply.ApplyError("install_file: read-only")
+    code, probed = _pair_cli(monkeypatch, "station", ["192.0.2.5"], boom)
+    assert code == 0 and probed == ["192.0.2.5"]  # no local server: the link's address only
+    out = capsys.readouterr()
+    assert "sudo filament-kit modules apply" in out.out + out.err
+
+
+def test_save_pairing_server_file_is_world_readable_whatever_the_umask():
+    if sys.platform == "win32":
+        pytest.skip("POSIX modes")
+    old = os.umask(0o077)
+    try:
+        _paired(["192.0.2.5"])
+    finally:
+        os.umask(old)
+    assert (os.stat(server_api.server_file()).st_mode & 0o777) == 0o644

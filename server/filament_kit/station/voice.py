@@ -5,9 +5,10 @@ DEFAULT (one line, at the top of the table) is the voice a station gets; `statio
 voice from VOICES; `modules apply` points the station at it (STATION_PIPER_VOICE) and
 install.sh fetches it. To add a voice, add a row here with the hashes of its .onnx and .onnx.json.
 
-`python -m filament_kit.station.voice DIR [NAME]` (install.sh, station on, `station.tts` not `espeak`): fetch the
-voice's files into DIR, checked against its hashes. Present with the right hash: skipped. A mismatch fails (exit 1,
-nothing kept). Offline: a note and exit 0, since espeak-ng still speaks. A voice is 60-80 MB; at runtime it is
+`python -m filament_kit.station.voice DIR [NAME]` (the `station_voice` step of `modules apply`, station on,
+`station.tts` not `espeak`): fetch the voice's files into DIR, checked against its hashes. Present with the right
+hash: skipped. A mismatch fails (exit 1, that file not kept). Offline: a note and exit 0, since espeak-ng still
+speaks. A voice is 60-80 MB; at runtime it is
 all offline.
 """
 from __future__ import annotations
@@ -82,7 +83,9 @@ def _sha256(path: Path) -> str | None:
 
 def fetch(directory: str | os.PathLike = DIR, name: str | None = None, urlopen=urllib.request.urlopen) -> str:
     """Put voice `name`'s files into directory: "present" (already there, right hashes), "installed", or "offline"
-    (not reachable; nothing kept). Raises HashMismatch for a file that isn't the pinned one."""
+    (a file not reachable: its partial download is dropped, but a file that already arrived and matched its hash
+    is kept, so the next run fetches only what is missing). Raises HashMismatch for a file that isn't the pinned
+    one (that file is not kept)."""
     v = get(name)
     d = Path(directory)
     todo = [(n, h) for n, h in v["files"].items() if _sha256(d / n) != h]

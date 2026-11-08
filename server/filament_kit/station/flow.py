@@ -111,6 +111,9 @@ def lookup(seq, nfc_id):
 
 def recognise(seq, nfc_id):
     """Picture -> the server's recognition (local AI, then Claude): the filament, or why not."""
+    with st.lock:
+        if seq != flow["seq"]:  # red or a new tag since yellow: nothing to recognise
+            return
     jpeg, err = camera.grab_photo()
     if not jpeg:
         if err == "no camera":
@@ -140,6 +143,8 @@ def recognise(seq, nfc_id):
 def save(seq):
     """The long press: the server updates the linked spool's weight, or adds the recognised one and links the tag."""
     with st.lock:
+        if seq != flow["seq"]:  # red or a new tag since the long press: nothing to save
+            return
         sp = flow["spool"] or {}
         body = {"uid": st.state["tag"], "gross_g": st.state["held"]}
         # the filament exactly as recognize gave it (its `item`); the server takes "filament" or "item"
@@ -161,11 +166,11 @@ def on_yellow(long_press):
         step, seq, nfc_id = flow["step"], flow["seq"], st.state["tag"]
     log.info("yellow %s at %s", "long" if long_press else "press", step)
     if long_press and step == "ready":
-        go("saving", seq)
-        spawn(save, seq)
+        if go("saving", seq):  # only for the attempt the press was on
+            spawn(save, seq)
     elif not long_press and step == "camera":
-        go("recognising", seq)
-        spawn(recognise, seq, nfc_id)
+        if go("recognising", seq):
+            spawn(recognise, seq, nfc_id)
     elif not long_press and step in ("weigh", "ready"):
         with st.lock:
             grams = weight_now()
@@ -214,6 +219,13 @@ def flow_tick(now):
         reset()
     log.info("flow timeout at %s", step)
     go("idle")
+
+
+def tick_loop():
+    """The flow's timeouts once a second, panel or not: a tap's flow (and /state's tag) goes back to idle."""
+    while True:
+        time.sleep(1)
+        flow_tick(time.time())
 
 
 def lamps(now):

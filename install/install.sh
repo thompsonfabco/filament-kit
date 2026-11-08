@@ -194,7 +194,7 @@ fi
 install -m 755 "$RES/backup.sh" "$OPT/backup.sh"
 install -m 755 "$RES/filament-kit-cli.sh" /usr/local/bin/filament-kit
 # Units, the avahi file and the Spoolman script: `modules apply` installs them from here.
-# Everything but the Piper voices (60-80 MB each, checked by its hashes in step 5): that one is kept across upgrades.
+# Everything but the Piper voices (60-80 MB each; `modules apply` checks their hashes): kept across upgrades.
 if [ -d "$OPT/resources" ]; then
     find "$OPT/resources" -mindepth 1 -maxdepth 1 ! -name voice -exec rm -rf {} +
 fi
@@ -360,31 +360,6 @@ print("Install mode: " + mode)
     chmod 640 "$ETC/config.json"
 fi
 
-# ---------- 5. the station's voice ----------
-# With the station module on, the button panel speaks with Piper (the [station-tts] extra) and a Piper voice,
-# downloaded into $OPT/resources/voice and checked against the SHA-256 hashes pinned in filament_kit/station/voice.py
-# (the one table of voices: station.voice picks one, else the table's DEFAULT). A mismatch
-# stops the install; no network only skips it, and espeak-ng speaks instead.
-# Off: station.tts set to espeak in the config, or FK_STATION_TTS=espeak for this run.
-TTS=$("$VENV/bin/python" -I -c '
-from filament_kit import config, modules
-cfg = config.load()
-st = cfg.get("station") or {}
-print(((st.get("tts") or "auto") + " " + (st.get("voice") or "")) if "station" in modules.enabled(cfg) else "off")
-' 2>/dev/null || echo off)
-VOICE=""
-case "$TTS" in *" "*) VOICE=${TTS#* } ;; esac
-TTS=${TTS%% *}
-if [ "$TTS" != off ] && [ "$TTS" != espeak ] && [ "${FK_STATION_TTS:-}" != espeak ]; then
-    say "Installing the button panel's voice (Piper)"
-    if "$VENV/bin/python" -m pip install -q "${WHEEL}[station-tts]"; then
-        "$VENV/bin/python" -I -m filament_kit.station.voice "$OPT/resources/voice" "$VOICE" \
-            || die "the Piper voice was not installed (see above); fix: check station.voice, run ./install.sh again, or set FK_STATION_TTS=espeak"
-        if [ -d "$OPT/resources/voice" ]; then chmod -R a+rX,go-w "$OPT/resources/voice"; fi
-    else
-        echo "note: could not install piper-tts (offline?); the panel speaks with espeak-ng" >&2
-    fi
-fi
-
-# ---------- 6. the modules ----------
+# ---------- 5. the modules ----------
+# (with the station on, `modules apply` also installs Piper, the [station-tts] extra, and its voice)
 exec /usr/local/bin/filament-kit modules apply

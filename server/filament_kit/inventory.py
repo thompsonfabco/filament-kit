@@ -322,14 +322,16 @@ def link_tag(sm: Spoolman, spool_id: int, uid: str, force: bool, dry: bool, keep
         return result
 
 
-def add_and_link(sm: Spoolman, items: list[dict], rules: dict, dry: bool, uid: str | None) -> AddResult:
-    """Add the spools (and link the tag of a single opened one). The Bambu parents are checked before _LOCK is
+def add_and_link(sm: Spoolman, items: list[dict], rules: dict, dry: bool, uid: str | None,
+                 keep_sealed: bool = False) -> AddResult:
+    """Add the spools (and link the tag of a single opened one; with `keep_sealed`, of a single sealed one too,
+    which the link leaves sealed: the intake station's spool with its tag on the bag). The Bambu parents are checked before _LOCK is
     taken and the lines recorded after it is released: both may wait for a build (live.lock, the lines lock), and
     a spool load needs _LOCK meanwhile (final review I6)."""
     if uid is not None:
         uid = tags.normalize_uid(uid)  # refuse before anything is written
     single_opened = (isinstance(items, list) and len(items) == 1 and isinstance(items[0], dict)
-                     and items[0].get("count") == 1 and items[0].get("sealed") is False)
+                     and items[0].get("count") == 1 and (items[0].get("sealed") is False or keep_sealed))
     _validate(items)
     _check_parents(items)
     record: list[dict] = []
@@ -355,7 +357,7 @@ def add_and_link(sm: Spoolman, items: list[dict], rules: dict, dry: bool, uid: s
                 result.lines.append(f"would link tag {uid}")
             else:
                 try:
-                    link_tag(sm, result.spool_ids[0], uid, force=False, dry=False)
+                    link_tag(sm, result.spool_ids[0], uid, force=False, dry=False, keep_sealed=keep_sealed)
                 except (SpoolmanError, RuntimeError) as e:  # the spool exists; report it so a retry doesn't
                     record = result.added                  # duplicate it, and it joins its line all the same
                     raise AddFailed(f"spool {result.spool_ids[0]} was added but linking tag {uid} failed: {e}",

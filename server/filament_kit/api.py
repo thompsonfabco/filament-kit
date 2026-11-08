@@ -566,7 +566,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             try:
                 return JSONResponse(await fn(request))
             except station_flow.FlowError as e:
-                return _err(e.status, e.code, str(e), display=e.display)
+                return _err(e.status, e.code, str(e), display=e.display, **e.extra)
             except CapReached as e:
                 return _err(429, "daily_cap", str(e), display=station_flow.lines("Read limit reached", "use phone"))
             except SpoolmanError as e:

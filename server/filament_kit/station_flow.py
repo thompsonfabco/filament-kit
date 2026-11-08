@@ -34,9 +34,9 @@ LOCAL_MODULE = "filament_kit.local_ai"
 class FlowError(Exception):
     """A refusal the station shows: `code` for the station's logic, `display` for its screen."""
 
-    def __init__(self, status: int, code: str, message: str, display: list[str]):
+    def __init__(self, status: int, code: str, message: str, display: list[str], **extra):
         super().__init__(message)
-        self.status, self.code, self.display = status, code, display
+        self.status, self.code, self.display, self.extra = status, code, display, extra
 
 
 def _ascii(s: str) -> str:
@@ -146,6 +146,9 @@ def _number(v, what: str) -> float:
 
 
 def sealed_by_weight(item: dict, gross: float) -> bool:
+    """Sealed when the scale reads at least a bare full spool (net + tare) less SEALED_TOLERANCE. Heavier counts as
+    sealed too, on purpose: a spool still in its bag or box (desiccant, cardboard) weighs more than a bare full one;
+    only a reading clearly under full means some filament was used."""
     full = (item.get("net") or 0) + (item.get("tare") or 0)
     return full > 0 and gross >= full - SEALED_TOLERANCE
 
@@ -191,14 +194,16 @@ def save(sm, rules: dict, body: dict) -> dict:
     if not sealed:
         it["gross"] = gross
     try:
-        if sealed:
-            r = inventory.add_and_link(sm, [it], rules, dry, None)
-            if not dry:
-                inventory.link_tag(sm, r.spool_ids[0], uid, force=False, dry=False, keep_sealed=True)
-        else:
-            r = inventory.add_and_link(sm, [it], rules, dry, uid)
+        # one inventory lock around the tag check, the add and the link (a sealed spool's link keeps it sealed)
+        r = inventory.add_and_link(sm, [it], rules, dry, uid, keep_sealed=sealed)
     except inventory.TagConflict as e:
         raise FlowError(409, "tag_in_use", str(e), lines("Tag in use", "linked to another spool")) from e
+    except inventory.AddFailed as e:  # Spoolman failed part-way: say which spool exists, so nobody saves it twice
+        if e.partial.spool_ids:
+            sid = e.partial.spool_ids[0]
+            raise FlowError(502, "tag_not_linked", str(e), lines(f"Saved #{sid}", "tag not linked:",
+                                                                 "link it on the phone"), spool_id=sid) from e
+        raise FlowError(502, "spoolman_error", str(e), lines("Save failed", "Spoolman error, try again")) from e
     except ValueError as e:
         raise FlowError(422, "invalid", str(e), lines("Can't save:", str(e))) from e
     if dry:

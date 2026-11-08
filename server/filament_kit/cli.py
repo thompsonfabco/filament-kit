@@ -303,6 +303,10 @@ def cmd_station_pair(ask=input) -> int:
     except ValueError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
+    cfg = config.load()
+    on = modules.enabled(cfg)
+    if "server" in on:  # the server is on this machine: talk to it over loopback first (the link lists LAN IPs)
+        link.ips = ["127.0.0.1"] + [i for i in link.ips or [link.host] if i != "127.0.0.1"]
     seen = first = None
     for ip in link.ips or [link.host]:
         try:
@@ -323,7 +327,16 @@ def cmd_station_pair(ask=input) -> int:
         print("Not paired.")
         return 1
     server_api.save_pairing(link, first=first)
-    print("Paired. Restart the station to use it: sudo systemctl restart filament-kit-station")
+    if "station" not in on:
+        print("Paired. Switch the station module on to use it: sudo filament-kit modules enable station")
+        return 0
+    try:  # the station's unit lets only listed addresses through: add the server's, then restart it
+        apply.refresh_station(cfg)
+    except (apply.ApplyError, modules.ModuleError) as e:
+        print(f"Paired, but the station could not be updated ({e}). Run: sudo filament-kit modules apply",
+              file=sys.stderr)
+        return 0
+    print("Paired. The station was restarted and uses the server now.")
     return 0
 
 

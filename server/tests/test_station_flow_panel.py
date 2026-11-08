@@ -399,3 +399,54 @@ def test_server_api_built_once_and_again_after_pairing(tmp_path, monkeypatch):
     os.utime(server_api.token_file(), ns=(1, 1))  # a new pairing rewrites the token
     assert flow.api() is not b
     assert config.paths().etc == tmp_path / "etc"
+
+
+# --- fix round 1 ---------------------------------------------------------------------------------------------------
+
+def test_no_server_call_when_the_step_change_was_dropped(rig, monkeypatch):
+    """M3: save / recognise start only when go() moved the flow (a red press in between drops them)."""
+    recognised_and_weighed(rig)
+    started = []
+    monkeypatch.setattr(flow, "spawn", lambda fn, *args: started.append(fn.__name__))
+    monkeypatch.setattr(flow, "go", lambda *a, **kw: False)
+    panel.on_line(b"L H")
+    assert started == []
+    with st.lock:
+        st.flow["step"] = "camera"
+    panel.on_line(b"P H")
+    assert started == []
+
+
+def test_a_stale_save_or_recognise_does_nothing(rig):
+    """M3: save() and recognise() check the attempt under the lock before they call the server."""
+    recognised_and_weighed(rig)
+    old = flow.flow["seq"]
+    flow.on_red()
+    calls = len(rig.api.calls)
+    flow.save(old)
+    flow.recognise(old, "4:bb:bb")
+    assert len(rig.api.calls) == calls and rig.step() == "idle"
+
+
+def test_the_flow_times_out_without_a_panel(rig, monkeypatch):
+    """M5: the flow's timer runs on its own thread, so a tap's flow (and /state's tag) still times out."""
+    st.panel["ser"] = None
+    nfc.on_tag(LINKED)
+    with st.lock:
+        st.flow["at"] -= st.settings["flow_timeout"] + 1
+    rounds = []
+
+    def one_round(s):
+        rounds.append(s)
+        if len(rounds) > 1:
+            raise SystemExit
+    monkeypatch.setattr(flow.time, "sleep", one_round)
+    with pytest.raises(SystemExit):
+        flow.tick_loop()
+    assert rig.step() == "idle" and st.state["tag"] is None and rounds[0] == 1
+
+
+def test_main_starts_the_flow_timer():
+    import inspect
+    from filament_kit.station import __main__ as station_main
+    assert "flow.tick_loop" in inspect.getsource(station_main.main)

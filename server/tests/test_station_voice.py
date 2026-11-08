@@ -219,12 +219,79 @@ def test_engine_name(piper_env):
 ROOT = Path(__file__).resolve().parents[2]  # from the test file: CI installs the package
 
 
-def test_install_sh_fetches_the_voice_only_for_a_station_and_keeps_it():
+def test_install_sh_keeps_the_voice_and_leaves_the_fetch_to_modules_apply():
     text = (ROOT / "install" / "install.sh").read_text(encoding="utf-8")
-    assert '"${WHEEL}[station-tts]"' in text
-    assert '-m filament_kit.station.voice "$OPT/resources/voice"' in text
-    assert '"station" in modules.enabled(cfg)' in text and "FK_STATION_TTS" in text
     assert 'rm -rf "$OPT/resources"' not in text and "! -name voice" in text  # an upgrade keeps the voice
-    assert voice.VOICES[voice.DEFAULT]["files"][MODEL] not in text  # the hashes live in voice.py only
-    assert '"$OPT/resources/voice" "$VOICE"' in text
+    assert "filament_kit.station.voice" not in text and '"${WHEEL}[station-tts]"' not in text  # apply's step
+    assert "exec /usr/local/bin/filament-kit modules apply" in text
     assert 'station-tts = ["piper-tts==1.8.0"]' in (ROOT / "server" / "pyproject.toml").read_text(encoding="utf-8")
+
+
+# --- fix round 1 ----------------------------------------------------------------------------------------------------
+
+def test_fetch_keeps_the_model_when_the_json_fails(tmp_path, fake_voice):
+    """M6: the .onnx that arrived stays (checked); only the missing .json is fetched on the next run."""
+    assert voice.fetch(tmp_path, urlopen=urlopen_serving({MODEL: ONNX}, [])) == "offline"
+    assert (tmp_path / MODEL).read_bytes() == ONNX and not (tmp_path / (MODEL + ".json")).exists()
+    assert "nothing kept" not in voice.fetch.__doc__ and "is kept" in voice.fetch.__doc__
+    seen = []
+    assert voice.fetch(tmp_path, urlopen=urlopen_serving({MODEL: ONNX, MODEL + ".json": JSON}, seen)) == "installed"
+    assert seen == [URL + MODEL + ".json"]
+
+
+def _station_plan(tts="auto", name=None):
+    from filament_kit import modules
+    cfg = modules.set_mode(config._merge(config.DEFAULTS, {}), "all-in-one", say=None)
+    cfg["station"].update(tts=tts, voice=name)
+    return apply.plan(cfg, resolve=lambda h: [h])
+
+
+def test_the_station_module_brings_piper_and_its_voice(tmp_path, monkeypatch):
+    """M7: `modules enable station` (any apply with the station on) installs the [station-tts] extra and the voice,
+    not only install.sh."""
+    for name in ("etc", "state", "opt"):
+        monkeypatch.setenv(f"FK_{name.upper()}", str(tmp_path / name))
+    acts = [a for a in _station_plan() if a.kind == "station_voice"]
+    assert [a.arg for a in acts] == [voice.DEFAULT]
+    assert [a for a in _station_plan(name="en_US-ljspeech-medium") if a.kind == "station_voice"][0].arg \
+        == "en_US-ljspeech-medium"
+    assert not [a for a in _station_plan(tts="espeak") if a.kind == "station_voice"]
+    monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
+    monkeypatch.delenv("FK_STATION_TTS", raising=False)
+    ran = []
+    apply.execute(acts, run=ran.append, root=tmp_path / "root")
+    assert ran[0][:4] == [sys.executable, "-m", "pip", "install"] and "piper-tts==1.8.0" in ran[0]
+    assert ran[1] == [sys.executable, "-I", "-m", "filament_kit.station.voice",
+                      f"{(tmp_path / 'opt').as_posix()}/resources/voice", voice.DEFAULT]
+
+
+def test_station_voice_step_offline_and_mismatch(tmp_path, monkeypatch, capsys):
+    import subprocess
+    monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
+    monkeypatch.setenv("FK_OPT", str(tmp_path / "opt"))
+    act = apply.Action("station_voice", voice.DEFAULT)
+
+    def pip_offline(cmd):
+        if "pip" in cmd:
+            raise subprocess.CalledProcessError(1, cmd)
+    apply.execute([act], run=pip_offline, root=tmp_path)  # a note, never a failure
+    assert "espeak-ng" in capsys.readouterr().out
+
+    def mismatch(cmd):
+        if "filament_kit.station.voice" in cmd:
+            raise subprocess.CalledProcessError(1, cmd)
+    with pytest.raises(apply.ApplyError):
+        apply.execute([act], run=mismatch, root=tmp_path)
+    ran = []
+    monkeypatch.setenv("FK_STATION_TTS", "espeak")
+    apply.execute([act], run=ran.append, root=tmp_path)
+    assert ran == []
+
+
+def test_panel_md_and_panel_py_know_firmware_8():
+    """M8."""
+    text = (ROOT / "station" / "PANEL.md").read_text(encoding="utf-8")
+    assert '8: "Waiting for PC" boot title' in text and '"Waiting for PC"' in text.split("## Serial protocol")[1]
+    from filament_kit.station import panel
+    assert "Protocol (firmware 8)" in panel.__doc__
+    assert "station module switched on later" in text or "modules enable station" in text

@@ -113,14 +113,16 @@ Red cancels at any step. Yellow advances: a short press does the step's job, and
 | PC → panel | `D <row> [text]` | display text: row 0 the title (big, ~16 characters), rows 1-4 the body (21 characters); no text clears the row |
 | PC → panel | `B <hz> <ms> [count]` | beep(s) |
 | PC → panel | `A <n>` + n raw bytes | speech, unsigned 8-bit mono at 8 kHz (n ≤ 1024): each byte is the speaker MOSFET's duty, 0 = off |
-| panel → PC | `HELLO intake-panel <version>` | at boot and after `?` (2: speaker and BME280; 3: PWM speaker; 4: AHT20; 5-6: whine-free PWM, 160 MHz; 7: OLED, long press) |
+| panel → PC | `HELLO intake-panel <version>` | at boot and after `?` (2: speaker and BME280; 3: PWM speaker; 4: AHT20; 5-6: whine-free PWM, 160 MHz; 7: OLED, long press; 8: "Waiting for PC" boot title) |
 | panel → PC | `P H` | yellow pressed: sent on release, if held under 0.8 s |
 | panel → PC | `L H` | yellow held 0.8 s (a long press; its release sends nothing) |
 | panel → PC | `P D` | red pressed: sent at once |
 | panel → PC | `AIR <°C> <RH%\|-> <hPa\|->` | room air every 10 s; `-` = that sensor isn't fitted |
 
-The PC resends `L` every second, and `D` rows when they change. After 5 s without an `L` (service stopped), the panel
-turns its lamps off and the display shows "Station offline" above the room air.
+The PC resends `L` every second, and `D` rows when they change. Until the first `L` since boot the title reads
+"Waiting for PC" (firmware 8: the station may be about to reflash the panel, and an older firmware leaves the OLED as
+it is). After 5 s without an `L` (service stopped), the panel turns its lamps off and the display shows
+"Station offline" above the room air.
 
 **Speech.** The PC makes each phrase with Piper, using its `en_US-libritts_r-medium` voice, speaker 0 (picked by
 ear on the panel, 2026-11-07). It was chosen over `en_US-ljspeech-medium`, and replaces `en_US-lessac-medium`, whose
@@ -185,10 +187,12 @@ To ship a firmware change:
 The first flash of a new board, or a board whose firmware won't answer, is done on the desktop. Plug it in and run
 `py -3 -m platformio run -t upload` in `panel/` (add `--upload-port COMn` if there are several ports). Even a board
 that won't boot can be reflashed this way, because the CH340 resets it into the ESP8266's ROM bootloader.
-In filament-kit, `install.sh` installs piper-tts (the `[station-tts]` extra) and the Piper voice where the station
+In filament-kit, `modules apply` (run by `install.sh`, and by `filament-kit modules enable station` when the station
+module is switched on later) installs piper-tts (the `[station-tts]` extra) and the Piper voice wherever the station
 module is on: into `/opt/filament-kit/resources/voice` (60-80 MB), checked against the pinned hashes, skipped when
-offline, and not at all with `FK_STATION_TTS=espeak`. `modules apply` installs espeak-ng and ffmpeg and gives the
-service the `video` group for the webcam.
+offline (run `sudo filament-kit modules apply` again later), and not at all with `station.tts` set to `espeak` or
+`FK_STATION_TTS=espeak`. It also installs espeak-ng and ffmpeg and gives the service the `video` group for the
+webcam.
 
 Offline tests (Linux / WSL):
 

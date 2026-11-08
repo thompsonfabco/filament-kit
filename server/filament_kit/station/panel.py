@@ -7,7 +7,7 @@ again; if the flash doesn't take the panel is used as it is. STATION_PANEL_FLASH
 
 Both the panel and the PN532 board use CH340 USB serial chips (no serial numbers), so the panel is found by its HELLO
 and the reader gets the other ttyUSB port (NFC_DEVICE=auto).
-Protocol (firmware 7), 115200 baud, one line each: PC -> panel `?`, `L <yellow> <red>` (lamp modes 0-4, resent every
+Protocol (firmware 8), 115200 baud, one line each: PC -> panel `?`, `L <yellow> <red>` (lamp modes 0-4, resent every
 second), `D <row> [text]` (OLED row 0 the title, 1-4 the body; sent when it changes), `B <hz> <ms> [count]`;
 `A <n>` + n raw bytes (speech, see `speech`);
 panel -> PC `HELLO intake-panel <version>`, `P H` (yellow, a short press, on release), `L H` (yellow held 0.8 s),
@@ -159,9 +159,7 @@ def panel_loop():
         try:
             while st.panel["ser"] is ser:
                 on_line(ser.readline().strip())
-                now = time.time()
-                flow.flow_tick(now)
-                if not refresh(seen, now):
+                if not refresh(seen, time.time()):  # the flow's timeouts: flow.tick_loop
                     break
         except Exception as e:  # unplugged
             log.warning("panel %s: %s", ser.port, e)

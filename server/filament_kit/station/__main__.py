@@ -19,7 +19,7 @@ def main():
              if s["beep"] else "off")
     log.info("camera: %s", camera.camera_dev() or "none found (looked for again at each new spool)")
     log.info("kit server: %s", "paired" if flow.api().paired else "not paired (sudo filament-kit station pair)")
-    for fn in (panel.panel_loop, nfc.nfc_loop, scale.scale_loop, speech.speech_loop):
+    for fn in (panel.panel_loop, nfc.nfc_loop, scale.scale_loop, speech.speech_loop, flow.tick_loop):
         threading.Thread(target=fn, daemon=True).start()
     ThreadingHTTPServer(("0.0.0.0", s["port"]), http.make_handler(st.view, s["allow"])).serve_forever()
 
