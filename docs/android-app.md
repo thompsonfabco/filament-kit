@@ -56,6 +56,8 @@ You need a Bambu Lab printer on the same network as the server, switched on.
 
 1. Open **Printers**. The server finds printers by itself; each shows its name, model and state. If the list is
    empty, check the printer is on and tap **Refresh**.
+<img src="images/android-printers-list.png" width="240" alt="Printers: one connected, one found but not set up"> <img src="images/android-add-printer.png" width="240" alt="Add printer: serial, name and Access Code">
+
 2. A printer marked **Tap to add this printer** is found but not set up. Tap it. The **Add printer** box shows its
    serial. Optionally give it a **Name**, type its **Access Code**, and tap **Add**. The code is on the printer:
    **Settings → Network/LAN → Access Code**.
@@ -76,6 +78,8 @@ You need a Bambu Lab printer on the same network as the server, switched on.
 **Printer not in the list at all?** Add it from the server instead: `sudo filament-kit config` → **5) Printers** →
 **add printer**, with its name, IP address, serial number and Access Code. (A server in WSL or a virtual machine
 behind NAT can't see printers; see [Running the server in WSL](install-server.md#running-the-server-in-wsl).)
+
+<img src="images/android-printer-screen.png" width="240" alt="A printer's screen: slots with Unload, and Map slots">
 
 ### Slot mapping (only if you want filament use counted)
 
@@ -156,6 +160,8 @@ duplicates: check Spoolman first.
 ### Link an NFC tag, set the weight, and the rest
 
 With the app open, tap a spool's NFC tag on the back of the phone.
+
+<img src="images/android-spool-card.png" width="240" alt="A spool's card: Update weight, Move, Mark empty, Load into printer">
 
 - **A tag already linked** opens the spool's card: type **Gross weight (g)** (the spool on a scale) and tap
   **Update weight**; the app shows `Remaining would change from … g to … g`, and **Confirm** saves it. **Move** changes
