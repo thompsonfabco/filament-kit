@@ -64,6 +64,7 @@ the ones pip resolved on 2026-11-07; pins are marked.
 | cryptography | Apache-2.0 OR BSD-3-Clause | the server certificate |
 | paho-mqtt | EPL-2.0 OR BSD-3-Clause (EDL) | the printer connection; we take it under the BSD-3-Clause option |
 | defusedxml 0.7.1 (pinned) | PSF-2.0 | the hardware XML |
+| websockets | BSD-3-Clause | the Klipper bridge (Moonraker's websocket); `>=13`, 17.4 checked on 2026-11-08 |
 | zeroconf | LGPL-2.1-or-later | Klipper printer discovery (Moonraker's mDNS announcements, listen only); `>=0.136`, 0.154.0 resolved on 2026-11-08. Installed from PyPI and imported unmodified, not shipped in a release; the LGPL lets a GPL-3.0 program use it as a library. |
 | nfcpy 1.0.4 (pinned) | EUPL-1.1 "or subsequent versions" | the station's NFC reader. EUPL-1.1's own compatibility list stops at GPL-2, but nfcpy's headers allow any later EUPL, and EUPL-1.2 lists GPL-3. Imported unmodified. |
 | pyserial | BSD-3-Clause | the station's reader and panel |
@@ -72,7 +73,7 @@ the ones pip resolved on 2026-11-07; pins are marked.
 | pywebpush, py-vapid | MPL-2.0 | Web Push (optional); MPL-2.0 names GPL-3.0 as a secondary licence |
 | Transitive: aiohttp, aiosignal, frozenlist, multidict, propcache, yarl, requests, opentelemetry-api, esp-pylib | Apache-2.0 (aiohttp: Apache-2.0 AND MIT) | |
 | Transitive: packaging | Apache-2.0 OR BSD-2-Clause | |
-| Transitive: click, httpx2, httpcore2, idna, pycparser, sse-starlette, websockets, Pygments, intelhex | BSD-2/3-Clause | |
+| Transitive: click, httpx2, httpcore2, idna, pycparser, sse-starlette, Pygments, intelhex | BSD-2/3-Clause | |
 | Transitive: anyio, attrs, annotated-types, charset-normalizer, h11, http_ece, ifaddr (with zeroconf), jiter, jsonschema, jsonschema-specifications, markdown-it-py, mdurl, pydantic, pydantic_core, pyDes, PyJWT, PyYAML, referencing, rich, rich-click, rpds-py, truststore, typing-inspection, urllib3, docstring_parser | MIT | |
 | Transitive: cffi, reedsolo | MIT-0 (reedsolo: MIT-0 OR Unlicense) | |
 | Transitive: ndeflib | ISC | with nfcpy |
