@@ -30,8 +30,7 @@ It downloads the installer (`get.sh`) and runs it. The installer fetches the new
 signature, and asks a few questions (pressing Enter at each one is fine). At the end it shows a QR code for pairing your phone. Step by step, with every question and what you see:
 **[Install the server](docs/install-server.md)**.
 
-The command works once the repository is public. It is private for now (a beta), so until then the server
-how-to has the private route, and [Known gaps](docs/known-gaps.md) lists what else is still rough.
+This is a beta: [Known gaps](docs/known-gaps.md) lists what is still rough.
 
 Then, on your phone:
 

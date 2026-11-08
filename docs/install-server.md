@@ -3,10 +3,8 @@
 This guide puts filament-kit on a Linux computer at home. The server keeps your spool list and talks to your
 printers. The Android app, the iPhone web app and the PC sync all connect to it, so install it first.
 
-> **Beta.** The one-command install below needs a public repository, and the repository is private for now. Until
-> it goes public, use [While the repository is private](#while-the-repository-is-private) or
-> [Install from a downloaded file](#install-from-a-downloaded-file) (signed in to GitHub). What else is still rough
-> is in [Known gaps](known-gaps.md).
+> **Beta.** What is still rough is in [Known gaps](known-gaps.md). If the one command does not suit you, use
+> [Install from a downloaded file](#install-from-a-downloaded-file).
 
 ## What you need
 
@@ -39,37 +37,6 @@ installing anything if the check fails. Then it runs the installer. You can dele
 
 (The piped form, `curl -fsSL .../get.sh | sudo bash`, also works since v0.3.0. Version 0.2.0 could hang at
 "Installing system packages" with it; use the two-step form above if you must install that version.)
-
-## While the repository is private
-
-The command above only works once the repository is public. Until then you need a GitHub account that can see
-the repository and a GitHub token that can read it:
-
-1. Get `get.sh` from the newest release, for example with the GitHub CLI (`sudo apt install gh`, then
-   `gh auth login` once):
-
-   ```bash
-   gh release download -R thompsonfabco/filament-kit -p get.sh
-   ```
-
-2. Save the token in a file only you can read, for example `~/fk-token` (`chmod 600 ~/fk-token`).
-3. Run the installer with that file:
-
-   ```bash
-   sudo bash get.sh --token-file ~/fk-token
-   ```
-
-The token is never shown on screen and is only sent to GitHub. The first thing it prints is
-`verified filament-kit <version>`; then the installer runs as below.
-
-Later updates need the token too, or `sudo filament-kit update --check` answers
-`api.github.com answered HTTP 404: no such release (a private repo needs a token ...)`. Keep the token file
-somewhere only root can read, for example `/etc/filament-kit/github_token`, and add to
-`/etc/filament-kit/config.json`:
-
-```
-"updates": {"token_file": "/etc/filament-kit/github_token"}
-```
 
 ## Install from a downloaded file
 
@@ -336,8 +303,9 @@ Either way, the PC must stay on and awake for the server to answer.
 
 - **`Ubuntu 24.04 or newer is required`**: the computer runs another system or an older Ubuntu. Upgrade it, or
   use another computer.
-- **`curl: (22) The requested URL returned error: 404`** from the one command: the repository is still private.
-  See [While the repository is private](#while-the-repository-is-private).
+- **`curl: (22) The requested URL returned error: 404`** from the one command: check that the address was copied
+  whole. If it still fails, download `get.sh` from the project's Releases page and run `sudo bash get.sh`, or use
+  [Install from a downloaded file](#install-from-a-downloaded-file).
 - **The install stops at "Installing system packages" for several minutes**: a new Ubuntu often installs its own
   updates in the background first. The installer waits up to 5 minutes for them. Let it run.
 - **A line in the status list starts with `FAIL`**: read the `fix:` line under it and do what it says, then run

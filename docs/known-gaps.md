@@ -9,9 +9,8 @@ fixed.
 1. ~~No release exists.~~ Fixed 2026-11-03: v0.2.0 (beta) carries the signed tarball, APK, PC sync setup, `get.sh`,
    `bambu_hardware.xml` and the signed `SHA256SUMS`. The release signing key is in `release.py` and `get.sh`, and
    the repository secrets are set.
-2. **The repository is private.** The one command only works once the repository is public. Until then the user
-   needs a GitHub account that can see the repository plus a token and `get.sh --token-file`, which isn't a
-   normal-user step. Downloads from the Releases page work in a browser that is signed in to GitHub.
+2. ~~The repository is private.~~ Fixed 2026-11-03: the repository is public, so the one command and the
+   Releases page downloads need no GitHub account.
 3. ~~No library asset.~~ Fixed in v0.3.0: v0.3.0 and v0.4.0 carry `library.tar.gz` (v0.2.0 does not, so
    `filament-kit library update` finds nothing in that release).
 
@@ -19,7 +18,7 @@ fixed.
 
 4. **No store.** The app is not on Google Play or F-Droid; it is sideloaded from the Releases page (or from the
    server). Google's developer verification for sideloaded apps is due to reach most phones in 2026–2027; check
-   before the public release.
+   the current rules.
 5. **The APK from the server shows a certificate warning.** `https://<server>.local:8710/app.apk` (served
    without sign-in) uses the server's self-signed certificate, so Chrome shows a warning first. Not tried on a
    phone.
