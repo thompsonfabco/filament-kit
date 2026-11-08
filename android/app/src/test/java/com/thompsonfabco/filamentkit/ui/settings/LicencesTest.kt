@@ -17,7 +17,7 @@ class LicencesTest {
     fun buildCarriesTheRepositoryNotices() {
         val notices = asset(THIRD_PARTY_ASSET)
         assertTrue(notices.startsWith("# Third-party software and data"))
-        assertTrue("ZXing is listed", notices.contains("ZXing"))
+        assertTrue("the QR decoder is listed", notices.contains("zxing-cpp"))
         assertTrue(asset(LICENSE_ASSET).contains("GNU GENERAL PUBLIC LICENSE"))
     }
 

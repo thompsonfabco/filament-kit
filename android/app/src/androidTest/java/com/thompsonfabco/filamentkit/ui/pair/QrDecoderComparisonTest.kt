@@ -1,8 +1,11 @@
 package com.thompsonfabco.filamentkit.ui.pair
 
 import android.content.ContextWrapper
+import android.graphics.ImageFormat
 import android.graphics.Rect
 import android.util.Log
+import androidx.camera.core.ImageInfo
+import androidx.camera.core.ImageProxy
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.android.gms.tasks.Tasks
@@ -11,47 +14,32 @@ import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
-import com.google.zxing.BinaryBitmap
-import com.google.zxing.DecodeHintType
-import com.google.zxing.PlanarYUVLuminanceSource
-import com.google.zxing.ReaderException
-import com.google.zxing.common.HybridBinarizer
-import com.google.zxing.qrcode.QRCodeReader
 import java.io.File
+import java.lang.reflect.Proxy
+import java.nio.ByteBuffer
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
-import zxingcpp.BarcodeReader
 
 private const val TAG = "QrCompare"
 
 /**
  * The gate for dropping ML Kit: decodes every picture of [QrTestImages] with ML Kit (the scanner the app used to
- * ship) and with [QrDecoder] fed the same brightness plane the camera path gives it. ZXing must read at least as
- * many, and every text it returns must be the exact URI. Results go to logcat (tag QrCompare) as CSV and a
- * per-category summary, and to files/qr-compare.csv of the app under test.
- *
- * "zxing_basic" is ZXing with only the hybrid binariser and TRY_HARDER, i.e. [QrDecoder] without its fallbacks.
- * "zxing_cpp" is the C++ port of ZXing (zxing-cpp, Apache-2.0), fed the same grey picture; reported, not asserted.
+ * ship) and with the app's [QrDecoder] (zxing-cpp), fed the picture's brightness as a YUV camera frame, the way
+ * the scanner gets it. zxing-cpp must read at least as many, and every text it returns must be the exact URI.
+ * Results go to logcat (tag QrCompare) as CSV and a per-category summary, and to files/qr-compare.csv of the app
+ * under test.
  */
 @RunWith(AndroidJUnit4::class)
 class QrDecoderComparisonTest {
-    private class Row(
-        val case: QrTestImages.Case,
-        val mlkit: String?,
-        val basic: String?,
-        val zxing: String?,
-        val cpp: String?,
-    ) {
+    private class Row(val case: QrTestImages.Case, val mlkit: String?, val zxing: String?) {
         val expected get() = case.params.text
         val mlkitOk get() = mlkit == expected
-        val basicOk get() = basic == expected
         val zxingOk get() = zxing == expected
-        val cppOk get() = cpp == expected
     }
 
     @Test
-    fun zxingReadsAtLeastAsManyAsMlKit() {
+    fun zxingCppReadsAtLeastAsManyAsMlKit() {
         // ML Kit normally starts from its content provider, which only runs in the app's own APK, not the test APK.
         // Its components are declared in the test APK's manifest, so start it on that context (which has no
         // application context of its own, hence the wrapper).
@@ -63,14 +51,7 @@ class QrDecoderComparisonTest {
             BarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_QR_CODE).build(),
         )
         val decoder = QrDecoder()
-        val cpp = BarcodeReader().apply {
-            options.formats = setOf(BarcodeReader.Format.QR_CODE)
-            options.tryHarder = true
-            options.tryInvert = true
-            options.tryRotate = true
-            options.tryDownscale = true
-        }
-        val nanos = LongArray(3) // ML Kit, QrDecoder, zxing-cpp
+        val nanos = LongArray(2) // ML Kit, QrDecoder
         val rows = QrTestImages.cases().map { case ->
             val bitmap = QrTestImages.render(case.params)
             val w = bitmap.width
@@ -79,39 +60,31 @@ class QrDecoderComparisonTest {
             val mlkit = Tasks.await(scanner.process(InputImage.fromBitmap(bitmap, 0)))
                 .firstNotNullOfOrNull { it.rawValue }
             nanos[0] += System.nanoTime() - t
-            val luma = QrTestImages.luma(bitmap)
-            t = System.nanoTime()
-            val zxing = decoder.decode(luma, w, h)
-            nanos[1] += System.nanoTime() - t
-            t = System.nanoTime()
-            val cppText = cpp.read(bitmap, Rect(0, 0, w, h), 0).firstNotNullOfOrNull { it.text }
-            nanos[2] += System.nanoTime() - t
+            val frame = yuvFrame(QrTestImages.luma(bitmap), w, h)
             bitmap.recycle()
-            Row(case, mlkit, basicZxing(luma, w, h), zxing, cppText)
+            t = System.nanoTime()
+            val zxing = decoder.decode(frame)
+            nanos[1] += System.nanoTime() - t
+            Row(case, mlkit, zxing)
         }
         scanner.close()
 
         val csv = buildList {
-            add("id,category,params,mlkit,zxing_basic,zxing,zxing_cpp,zxing_text_ok")
+            add("id,category,params,mlkit,zxing_cpp,zxing_text_ok")
             rows.forEach { r ->
-                add("${r.case.id},${r.case.category},${r.case.params.describe()},${r.mlkitOk.pf()},${r.basicOk.pf()}," +
-                    "${r.zxingOk.pf()},${r.cppOk.pf()},${r.zxing == null || r.zxingOk}")
+                add("${r.case.id},${r.case.category},${r.case.params.describe()},${r.mlkitOk.pf()},${r.zxingOk.pf()}," +
+                    "${r.zxing == null || r.zxingOk}")
             }
         }
         csv.forEach { Log.i(TAG, "csv $it") }
         val target = InstrumentationRegistry.getInstrumentation().targetContext
         File(target.filesDir, "qr-compare.csv").writeText(csv.joinToString("\n", postfix = "\n"))
 
-        Log.i(TAG, "summary category,images,mlkit,zxing_basic,zxing,zxing_cpp")
+        Log.i(TAG, "summary category,images,mlkit,zxing_cpp")
         for ((cat, list) in rows.groupBy { it.case.category } + ("ALL" to rows)) {
-            Log.i(
-                TAG,
-                "summary $cat,${list.size},${list.count { it.mlkitOk }},${list.count { it.basicOk }}," +
-                    "${list.count { it.zxingOk }},${list.count { it.cppOk }}",
-            )
+            Log.i(TAG, "summary $cat,${list.size},${list.count { it.mlkitOk }},${list.count { it.zxingOk }}")
         }
-        Log.i(TAG, "ms per image: mlkit ${nanos[0] / 1_000_000 / rows.size}, zxing ${nanos[1] / 1_000_000 / rows.size}, " +
-            "zxing_cpp ${nanos[2] / 1_000_000 / rows.size}")
+        Log.i(TAG, "ms per image: mlkit ${nanos[0] / 1_000_000 / rows.size}, zxing_cpp ${nanos[1] / 1_000_000 / rows.size}")
         rows.filter { it.mlkitOk && !it.zxingOk }.forEach {
             Log.i(TAG, "mlkit-only ${it.case.id} ${it.case.category} ${it.case.params.describe()}")
         }
@@ -120,18 +93,65 @@ class QrDecoderComparisonTest {
         }
 
         val wrong = rows.filter { it.zxing != null && !it.zxingOk }
-        assertTrue("ZXing returned wrong text for ${wrong.map { it.case.id }}", wrong.isEmpty())
+        assertTrue("zxing-cpp returned wrong text for ${wrong.map { it.case.id }}", wrong.isEmpty())
         val ml = rows.count { it.mlkitOk }
         val zx = rows.count { it.zxingOk }
-        assertTrue("ZXing read $zx of ${rows.size}, ML Kit $ml", zx >= ml)
+        assertTrue("zxing-cpp read $zx of ${rows.size}, ML Kit $ml", zx >= ml)
     }
 
-    private fun basicZxing(luma: ByteArray, w: Int, h: Int): String? = try {
-        val source = PlanarYUVLuminanceSource(luma, w, h, 0, 0, w, h, false)
-        QRCodeReader().decode(BinaryBitmap(HybridBinarizer(source)), mapOf(DecodeHintType.TRY_HARDER to true)).text
-    } catch (_: ReaderException) {
-        null
+    /**
+     * A YUV_420_888 camera frame whose Y plane is [luma] (in a direct buffer, rows padded like a camera's), with
+     * flat chroma. Only what zxing-cpp's read(ImageProxy) uses is real; ImageProxy has members that are internal
+     * to CameraX, hence a dynamic proxy rather than a class.
+     */
+    private fun yuvFrame(luma: ByteArray, w: Int, h: Int): ImageProxy {
+        val stride = w + 64
+        val y = ByteBuffer.allocateDirect(stride * h)
+        for (row in 0 until h) {
+            y.position(row * stride)
+            y.put(luma, row * w, w)
+        }
+        y.rewind()
+        val chroma = ByteBuffer.allocateDirect(w * h / 2).apply { while (hasRemaining()) put(0x80.toByte()); rewind() }
+        fun plane(buf: ByteBuffer, rowStride: Int, pixelStride: Int) =
+            proxy<ImageProxy.PlaneProxy> { name ->
+                when (name) {
+                    "getBuffer" -> buf
+                    "getRowStride" -> rowStride
+                    "getPixelStride" -> pixelStride
+                    else -> null
+                }
+            }
+        val planes = arrayOf(plane(y, stride, 1), plane(chroma, w, 2), plane(chroma, w, 2))
+        val info = proxy<ImageInfo> { name ->
+            when (name) {
+                "getRotationDegrees" -> 0
+                "getTimestamp" -> 0L
+                else -> null
+            }
+        }
+        return proxy { name ->
+            when (name) {
+                "getFormat" -> ImageFormat.YUV_420_888
+                "getWidth" -> w
+                "getHeight" -> h
+                "getCropRect" -> Rect(0, 0, w, h)
+                "getPlanes" -> planes
+                "getImageInfo" -> info
+                else -> null // close(), setCropRect(), getImage()
+            }
+        }
     }
+
+    private inline fun <reified T> proxy(crossinline answer: (String) -> Any?): T =
+        Proxy.newProxyInstance(T::class.java.classLoader, arrayOf(T::class.java)) { self, method, args ->
+            when (method.name) {
+                "hashCode" -> System.identityHashCode(self)
+                "equals" -> self === args?.get(0)
+                "toString" -> "fake ${T::class.java.simpleName}"
+                else -> answer(method.name)
+            }
+        } as T
 
     private fun Boolean.pf() = if (this) "pass" else "fail"
 }

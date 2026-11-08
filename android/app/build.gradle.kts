@@ -100,7 +100,7 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
     implementation(libs.androidx.navigation.compose)
-    implementation(libs.zxing.core)
+    implementation(libs.zxing.cpp)
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.exoplayer.hls)
     implementation(libs.androidx.media3.datasource.okhttp)
@@ -121,9 +121,9 @@ dependencies {
     androidTestImplementation(libs.androidx.test.espresso.core)
     androidTestImplementation(libs.okhttp.tls)
     androidTestImplementation(libs.okhttp.mockwebserver3)
-    // Only for QrDecoderComparisonTest, which checks ZXing against the scanner it replaced (ML Kit) and the
-    // C++ port of ZXing (a candidate if ZXing falls short). Never in the APK.
+    // Only for QrDecoderComparisonTest: ML Kit is the scanner zxing-cpp replaced, ZXing core draws the test QR
+    // codes. Neither is in the APK.
     androidTestImplementation(libs.mlkit.barcode.scanning)
-    androidTestImplementation(libs.zxing.cpp)
+    androidTestImplementation(libs.zxing.core)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 }

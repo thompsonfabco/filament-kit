@@ -38,7 +38,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Camera preview that reports the first QR code it sees through [onResult]. Asks for the camera permission itself.
- * Decodes with ZXing ([QrDecoder]) on the frames' brightness, so no Google Play services are needed.
+ * Decodes with zxing-cpp ([QrDecoder]), so no Google Play services are needed.
  */
 @Composable
 fun QrScanner(
@@ -89,9 +89,10 @@ private fun CameraPreview(onResult: (String) -> Unit, onFailed: () -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val executor = remember { Executors.newSingleThreadExecutor() }
-    val decoder = remember { QrDecoder() }
-    val luma = remember { LumaCopy() }
-    val reported = remember { AtomicBoolean(false) }
+    val gate = remember {
+        val decoder = QrDecoder()
+        QrFrameGate<ImageProxy>(decoder::decode)
+    }
     val currentOnResult by rememberUpdatedState(onResult)
     val currentOnFailed by rememberUpdatedState(onFailed)
     val preview = remember { Preview.Builder().build() }
@@ -126,15 +127,10 @@ private fun CameraPreview(onResult: (String) -> Unit, onFailed: () -> Unit) {
                     currentOnFailed()
                     return@addListener
                 }
-                // Decodes on the executor; frames that arrive meanwhile are dropped (KEEP_ONLY_LATEST).
+                // Decodes on the executor; frames that arrive meanwhile are dropped (KEEP_ONLY_LATEST and the gate).
                 analysis.setAnalyzer(executor) { proxy ->
-                    proxy.use {
-                        if (!reported.get()) {
-                            val text = luma.copy(it)?.let { (bytes, w, h) -> decoder.decode(bytes, w, h) }
-                            if (text != null && reported.compareAndSet(false, true)) {
-                                ContextCompat.getMainExecutor(context).execute { currentOnResult(text) }
-                            }
-                        }
+                    gate.offer(proxy, proxy::close)?.let { text ->
+                        ContextCompat.getMainExecutor(context).execute { currentOnResult(text) }
                     }
                 }
                 try {
@@ -148,32 +144,4 @@ private fun CameraPreview(onResult: (String) -> Unit, onFailed: () -> Unit) {
             view
         },
     )
-}
-
-/** Copies the Y plane inside a frame's crop rectangle into one reused, tightly packed array. */
-private class LumaCopy {
-    private var bytes = ByteArray(0)
-
-    /** The frame's brightness as (bytes, width, height), or null if the frame has no Y plane. */
-    fun copy(proxy: ImageProxy): Triple<ByteArray, Int, Int>? {
-        val plane = proxy.planes.firstOrNull() ?: return null
-        val crop = proxy.cropRect
-        val w = crop.width()
-        val h = crop.height()
-        if (w <= 0 || h <= 0) return null
-        if (bytes.size != w * h) bytes = ByteArray(w * h)
-        val buffer = plane.buffer
-        val stride = plane.rowStride
-        val step = plane.pixelStride // 1 for the Y plane of YUV_420_888 in practice; handled anyway
-        for (y in 0 until h) {
-            val rowStart = (crop.top + y) * stride + crop.left * step
-            if (step == 1) {
-                buffer.position(rowStart)
-                buffer.get(bytes, y * w, w)
-            } else {
-                for (x in 0 until w) bytes[y * w + x] = buffer.get(rowStart + x * step)
-            }
-        }
-        return Triple(bytes, w, h)
-    }
 }

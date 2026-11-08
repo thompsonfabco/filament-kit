@@ -1,92 +1,65 @@
 package com.thompsonfabco.filamentkit.ui.pair
 
-import com.google.zxing.BarcodeFormat
-import com.google.zxing.EncodeHintType
-import com.google.zxing.qrcode.QRCodeWriter
-import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
-import java.awt.Color
-import java.awt.RenderingHints
-import java.awt.geom.AffineTransform
-import java.awt.image.BufferedImage
-import java.awt.image.DataBufferByte
-import kotlin.random.Random
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import kotlin.concurrent.thread
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
+// QrDecoder itself is native (zxing-cpp) and is checked on a device by QrDecoderComparisonTest; this covers the
+// frame handling around it.
 class QrDecoderTest {
-    // What the server's pairing QR holds (server/filament_kit/pairing.py issue()).
-    private val uri = "fkit://pair?h=kit.local&p=8443&t=Ab-_x9y2zQwErTyUiOpAsDfGhJkLzXcVbNm1234567&fp=" +
-        "0f".repeat(32) + "&ip=192.168.1.20&ip=10.0.0.5"
+    private val uri = "fkit://pair?h=kit.local&p=8443&t=tok&fp=" + "0f".repeat(32)
 
     @Test
-    fun readsCleanCode() {
-        assertEquals(uri, decode(frame(uri)))
+    fun reportsTheFirstTextOnceAndClosesEveryFrame() {
+        val frames = listOf(null, uri, "fkit://pair?other", uri)
+        var decoded = 0
+        var closed = 0
+        val gate = QrFrameGate<String?> { decoded++; it }
+
+        val results = frames.map { gate.offer(it) { closed++ } }
+
+        assertEquals(listOf(null, uri, null, null), results)
+        assertEquals("frames after the find are not decoded", 2, decoded)
+        assertEquals(4, closed)
     }
 
     @Test
-    fun readsRotatedCode() {
-        for (deg in listOf(15.0, 45.0, 90.0, 180.0, 270.0)) {
-            assertEquals("at $deg degrees", uri, decode(frame(uri, rotation = deg)))
+    fun dropsFramesWhileOneIsDecoding() {
+        val started = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val gate = QrFrameGate<String> { frame ->
+            if (frame == "slow") {
+                started.countDown()
+                release.await(5, TimeUnit.SECONDS)
+                null
+            } else {
+                frame
+            }
         }
+        var slowClosed = false
+        val worker = thread { gate.offer("slow") { slowClosed = true } }
+        assertTrue(started.await(5, TimeUnit.SECONDS))
+
+        var droppedClosed = false
+        assertNull("busy: dropped unread", gate.offer(uri) { droppedClosed = true })
+        assertTrue(droppedClosed)
+
+        release.countDown()
+        worker.join(5000)
+        assertTrue(slowClosed)
+        assertEquals("free again after the slow frame", uri, gate.offer(uri) {})
     }
 
     @Test
-    fun readsInvertedCode() {
-        assertEquals(uri, decode(frame(uri, inverted = true)))
-    }
-
-    @Test
-    fun readsCodeInsideCropOfLargerRow() {
-        val f = frame(uri)
-        // The same picture with 64 junk bytes after each row and 10 junk rows on top, as a camera buffer can have.
-        val stride = f.width + 64
-        val junk = Random(7)
-        val big = ByteArray(stride * (f.height + 10)) { junk.nextInt(256).toByte() }
-        for (y in 0 until f.height) System.arraycopy(f.bytes, y * f.width, big, (y + 10) * stride, f.width)
-        assertEquals(uri, QrDecoder().decode(big, stride, f.height + 10, left = 0, top = 10, width = f.width, height = f.height))
-    }
-
-    @Test
-    fun noCodeGivesNull() {
-        val noise = Random(1)
-        val w = 640
-        val h = 480
-        assertNull(QrDecoder().decode(ByteArray(w * h) { noise.nextInt(256).toByte() }, w, h))
-        assertNull(QrDecoder().decode(ByteArray(w * h) { 0x80.toByte() }, w, h))
-    }
-
-    private class Frame(val bytes: ByteArray, val width: Int, val height: Int)
-
-    private fun decode(f: Frame) = QrDecoder().decode(f.bytes, f.width, f.height)
-
-    /** A 640x480 grey frame with the code in the middle, 4 px per module, light grey background. */
-    private fun frame(text: String, rotation: Double = 0.0, inverted: Boolean = false): Frame {
-        val matrix = QRCodeWriter().encode(
-            text, BarcodeFormat.QR_CODE, 0, 0,
-            mapOf(EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.L, EncodeHintType.MARGIN to 4),
-        )
-        val dark = if (inverted) Color(235, 235, 235) else Color(20, 20, 20)
-        val light = if (inverted) Color(20, 20, 20) else Color(235, 235, 235)
-        val module = 4
-        val img = BufferedImage(640, 480, BufferedImage.TYPE_BYTE_GRAY)
-        val g = img.createGraphics()
-        g.color = Color(150, 150, 150)
-        g.fillRect(0, 0, 640, 480)
-        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR)
-        val side = matrix.width * module
-        g.transform = AffineTransform().apply {
-            translate(320.0, 240.0)
-            rotate(Math.toRadians(rotation))
-            translate(-side / 2.0, -side / 2.0)
-        }
-        g.color = light
-        g.fillRect(0, 0, side, side)
-        g.color = dark
-        for (y in 0 until matrix.height) for (x in 0 until matrix.width) {
-            if (matrix[x, y]) g.fillRect(x * module, y * module, module, module)
-        }
-        g.dispose()
-        return Frame((img.raster.dataBuffer as DataBufferByte).data, 640, 480)
+    fun aFailingDecodeStillClosesTheFrame() {
+        var closed = false
+        val gate = QrFrameGate<String> { if (it == "bad") error("boom") else it }
+        runCatching { gate.offer("bad") { closed = true } }
+        assertTrue(closed)
+        assertEquals("not stuck busy", uri, gate.offer(uri) {})
     }
 }
