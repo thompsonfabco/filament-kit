@@ -3,6 +3,7 @@ three calls over pinned TLS against the real kit API."""
 import io
 import json
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -203,10 +204,50 @@ def test_refresh_station_rewrites_the_dropin_and_restarts(tmp_path, monkeypatch)
     cfg = modules.set_mode(config._merge(config.DEFAULTS, {}), "all-in-one")
     _paired(["127.0.0.1", "192.0.2.5"])
     ran = []
-    apply.refresh_station(cfg, run=ran.append, root=tmp_path / "root")
+    assert apply.refresh_station(cfg, run=ran.append, root=tmp_path / "root") == "restarted"
     dropin = (tmp_path / "root" / apply.DROPIN.lstrip("/")).read_text(encoding="utf-8")
     assert "192.0.2.5" in _allow_line(dropin)
     assert ran == [["systemctl", "daemon-reload"], ["systemctl", "restart", apply.STATION_UNIT]]
+
+
+def test_refresh_station_leaves_the_station_alone_when_the_dropin_is_the_same(tmp_path, monkeypatch):
+    """A restart costs the reader about 6 s and resets the panel; the running flow picks up new pairing files itself."""
+    from filament_kit import apply, modules
+    monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
+    cfg = modules.set_mode(config._merge(config.DEFAULTS, {}), "all-in-one")
+    _paired(["127.0.0.1", "192.0.2.5"])
+    root = tmp_path / "root"
+    apply.refresh_station(cfg, run=lambda cmd: None, root=root)
+    installed = root / apply.DROPIN.lstrip("/")
+    before = installed.stat().st_mtime_ns
+    ran = []
+    assert apply.refresh_station(cfg, run=ran.append, root=root) == "unchanged"
+    assert ran == [["systemctl", "is-active", "--quiet", apply.STATION_UNIT]]  # running: only asked
+    assert installed.stat().st_mtime_ns == before
+    ran.clear()
+    _paired(["127.0.0.1", "198.51.100.7"])  # a new address: the unit's filter has to change, so it does restart
+    assert apply.refresh_station(cfg, run=ran.append, root=root) == "restarted"
+    assert ran == [["systemctl", "daemon-reload"], ["systemctl", "restart", apply.STATION_UNIT]]
+    assert "198.51.100.7" in _allow_line(installed.read_text(encoding="utf-8"))
+
+
+def test_refresh_station_starts_a_stopped_station_when_the_dropin_is_the_same(tmp_path, monkeypatch):
+    """Pairing a station someone stopped still leaves it running: started, not restarted, and no reload."""
+    from filament_kit import apply, modules
+    monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
+    cfg = modules.set_mode(config._merge(config.DEFAULTS, {}), "all-in-one")
+    _paired(["127.0.0.1", "192.0.2.5"])
+    root = tmp_path / "root"
+    apply.refresh_station(cfg, run=lambda cmd: None, root=root)
+    ran = []
+
+    def stopped(cmd):
+        ran.append(cmd)
+        if "is-active" in cmd:
+            raise subprocess.CalledProcessError(3, cmd)
+    assert apply.refresh_station(cfg, run=stopped, root=root) == "started"
+    assert ran == [["systemctl", "is-active", "--quiet", apply.STATION_UNIT],
+                   ["systemctl", "start", apply.STATION_UNIT]]
 
 
 def _pair_cli(monkeypatch, mode, link_ips, refresh):
@@ -231,7 +272,7 @@ def _pair_cli(monkeypatch, mode, link_ips, refresh):
 
 def test_station_pair_on_the_servers_machine_uses_loopback_first_and_refreshes(monkeypatch, capsys):
     refreshed = []
-    code, probed = _pair_cli(monkeypatch, "all-in-one", ["192.0.2.5"], lambda cfg, **kw: refreshed.append(cfg))
+    code, probed = _pair_cli(monkeypatch, "all-in-one", ["192.0.2.5"], lambda cfg, **kw: refreshed.append(cfg) or "restarted")
     assert code == 0 and probed == ["127.0.0.1"]
     assert server_api.ServerApi().ips == ["127.0.0.1", "192.0.2.5"]
     assert len(refreshed) == 1 and "restarted" in capsys.readouterr().out
@@ -541,7 +582,7 @@ def test_pair_with_link_needs_no_prompt(monkeypatch):
     monkeypatch.setattr("builtins.input", _no_terminal)
     from filament_kit import apply, modules
     refreshed = []
-    monkeypatch.setattr(apply, "refresh_station", lambda cfg, **kw: refreshed.append(cfg))
+    monkeypatch.setattr(apply, "refresh_station", lambda cfg, **kw: refreshed.append(cfg) or "restarted")
     config.save(modules.set_mode({"placement": {"box_count": 2}}, "all-in-one", say=None))
     result = server_api.pair_with_link(_link())
     assert result.status == "paired" and "restarted" in result.message
@@ -549,6 +590,21 @@ def test_pair_with_link_needs_no_prompt(monkeypatch):
     assert server_api.token_file().read_text().strip() == "q" * 43
     assert len(calls) == 1 and len(refreshed) == 1
     assert "q" * 43 not in result.message
+
+
+@pytest.mark.parametrize("outcome, message", [
+    ("restarted", "Paired. The station was restarted and uses the server now."),
+    ("started", "Paired. The station was started and uses the server now."),
+    ("unchanged", "Paired. The station uses the server now; no restart was needed."),
+])
+def test_pair_with_link_says_what_happened_to_the_station(monkeypatch, outcome, message):
+    from filament_kit import apply, modules
+    _as_root(monkeypatch)
+    _pair_fakes(monkeypatch)
+    monkeypatch.setattr(apply, "refresh_station", lambda cfg, **kw: outcome)
+    config.save(modules.set_mode({"placement": {"box_count": 2}}, "all-in-one", say=None))
+    result = server_api.pair_with_link(_link())
+    assert result.status == "paired" and result.message == message
 
 
 def test_pair_with_link_says_when_the_module_is_off(monkeypatch):
