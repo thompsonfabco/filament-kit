@@ -742,6 +742,23 @@ network. Elsewhere they say that they only work on the home network. Claude's se
 in `"web": {"lan": ["198.51.100.0/24"]}` (each entry a network; `modules apply` refuses a bad one). Five wrong passphrases
 lock the connector's sign-in for 10 minutes.
 
+### The home network ranges (web.lan)
+
+The ranges above are IPv4. A phone or computer that reaches the web address over IPv6 is refused with "This device
+reached the server over IPv6" until you add your home network's IPv6 prefix. (The setup page is IPv4 only.) To do it:
+
+1. On the server, find your prefix: `ip -6 addr show scope global`. A line such as
+   `inet6 2001:db8:1234:5678::abcd/64` has the prefix `2001:db8:1234:5678::/64`: the first four groups of the address,
+   then `::/64`. (`2001:db8` is the range reserved for examples; yours comes from your provider and can change.)
+2. Edit `/etc/filament-kit/config.json` (for example `sudo nano /etc/filament-kit/config.json`) and set the list. Your list
+   replaces the default, so keep the IPv4 ranges you want in it:
+
+   ```
+   "web": {"lan": ["192.168.0.0/16", "10.0.0.0/8", "2001:db8:1234:5678::/64"]}
+   ```
+
+3. Apply it: `sudo filament-kit modules apply`. It refuses an entry that is not a network.
+
 ## Remote access
 
 The `remote` module puts the web part on a public `https://` name, with a free certificate from Let's Encrypt.

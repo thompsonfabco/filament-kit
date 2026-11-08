@@ -168,10 +168,8 @@ re-mapping slots and optional notifications.
   `sudo filament-kit modules apply` makes a new one within 30 days of its end (`sudo filament-kit web status` warns
   before that), and Safari asks you to accept it again.
 - **The page says "This device reached the server over IPv6"**: the web address answers only the ranges in `web.lan`,
-  and none of them is an IPv6 range by default. On the server, run `ip -6 addr show scope global`: an address such as
-  `2001:db8:1234:5678::abcd/64` has the prefix `2001:db8:1234:5678::/64` (the first four groups). Add that prefix to
-  `web.lan` in `/etc/filament-kit/config.json`, next to the existing ranges, then run `sudo filament-kit modules
-  apply`. A home network's IPv6 prefix can change when your provider changes it. The setup page is IPv4 only.
+  and none of them is an IPv6 range by default. Add your home network's IPv6 prefix:
+  [The home network ranges](user-guide.md#the-home-network-ranges-weblan). The setup page is IPv4 only.
 - **Printer camera doesn't play**: the camera needs the `printers` module and a printer added in the app or in
   `sudo filament-kit config` → **5) Printers**.
 
