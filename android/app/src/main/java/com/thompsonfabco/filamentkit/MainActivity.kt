@@ -1,15 +1,20 @@
 package com.thompsonfabco.filamentkit
 
+import android.graphics.Color as AndroidColor
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -79,11 +84,8 @@ import com.thompsonfabco.filamentkit.update.UpdateUi
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent {
-            MaterialTheme {
-                Surface(Modifier.fillMaxSize()) { FilamentKitApp() }
-            }
-        }
+        lightEdgeToEdge()
+        setContent { AppFrame { FilamentKitApp() } }
     }
 
     override fun onResume() {
@@ -371,6 +373,28 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Android draws apps edge to edge (target SDK 35+). The app is always light, so the status and navigation bars get
+ * dark icons over the app's own background.
+ */
+internal fun ComponentActivity.lightEdgeToEdge() = enableEdgeToEdge(
+    statusBarStyle = SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT),
+    navigationBarStyle = SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT),
+)
+
+/**
+ * The app's root: the background fills the whole window, behind the bars too, and every screen is kept clear of the
+ * status bar, navigation bar, cutouts and keyboard, here once.
+ */
+@Composable
+internal fun AppFrame(content: @Composable () -> Unit) {
+    MaterialTheme {
+        Surface(Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxSize().safeDrawingPadding()) { content() }
         }
     }
 }
