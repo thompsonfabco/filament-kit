@@ -99,8 +99,12 @@ A hand-built tarball is not signed. Users can install it with `sudo ./install.sh
 
 ## Testing
 
-- `server/tests` (`pytest`), `pc-sync/tests`, the Android unit tests (`./gradlew testDebugUnitTest`) and the
-  reader's native tests run in CI on every push.
+- CI runs the server tests (`server/tests`, `pytest`) on every push. From v0.4.1 it installs the `[test,web]` extra, so
+  the web module's tests run too; before that CI's `server[test]` skipped them. The PC sync tests (`pc-sync/tests`),
+  the Android unit tests (`./gradlew testDebugUnitTest`) and the reader's native tests run only when files under
+  `pc-sync/`, `android/` or `reader/` change (each workflow is limited to its own folder).
+- The merge gate, before anything is pushed, runs the full set, including the Klipper end-to-end test and the tests
+  that need root, which CI does not run.
 - [testing-e2e.md](testing-e2e.md): the end-to-end run on a disposable Ubuntu host (WSL), with real
   Spoolman, a fake printer and a fake releases server.
 - [android-e2e.md](android-e2e.md): the Android end-to-end test on an emulator against a real server, and the
