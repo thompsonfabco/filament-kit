@@ -856,6 +856,9 @@ def cmd_profiles_status() -> int:
                   "apply: sudo filament-kit profiles apply-updates --line <id> | --all")
     elif b:
         print("updates: none (presets already in your slicers are never replaced)")
+    if up.get("yours"):
+        print(f"  {up['yours']} generated preset{'' if up['yours'] == 1 else 's'} differ from your own preset of the "
+              "same name in Bambu Studio's filament folder; yours stay (rename or delete yours to get ours)")
     print(f"PC sync: device {pc['device_id']}, last upload {_fmt_time(pc.get('last_upload'))}" if pc
           else "PC sync: not set up (see README: Pair your PC)")
     for name in st["stale"]:

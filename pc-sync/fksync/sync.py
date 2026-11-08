@@ -340,7 +340,7 @@ class _Run:
 
     def report(self, stamp: str, trees: list[str] | None = None, written: dict | None = None) -> None:
         trees = list(trees) if trees else ["base"]
-        written = written if isinstance(written, dict) else {t: [] for t in trees}
+        written = written if isinstance(written, dict) else None    # owed by an older PC sync: it wrote them all
         self.st["report"] = stamp
         self.st["report_trees"] = trees
         self.st["report_written"] = written

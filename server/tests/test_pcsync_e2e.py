@@ -603,10 +603,7 @@ def test_existing_presets_stay_until_their_update_is_accepted(tmp_path, server, 
     assert {p.name: p.read_bytes() for p in pc.base.iterdir() if p.name in before} == before
 
     # accept one preset's update (as the line command would, narrowed to one name): exactly that one is written
-    from filament_kit.profiles import updates as updates_mod
-    acc = updates_mod.accepted(config.paths().state / "profiles")
-    acc["base"] = {sunlu("0.4")}
-    updates_mod.save_accepted(config.paths().state / "profiles", acc, builds._write_json)
+    assert [u["name"] for u in builds.apply_updates(all_=True, only={sunlu("0.4")})["chosen"]] == [sunlu("0.4")]
     assert pc.run() == "installed"
     assert pc.preset(sunlu("0.4"))["filament_density"] == ["1.31"]
     for name in names:

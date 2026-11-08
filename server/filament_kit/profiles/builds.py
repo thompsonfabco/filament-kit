@@ -762,14 +762,17 @@ def _orca_config() -> dict | None:
 
 
 def _prune_accepted(build_dir: Path) -> None:
-    """An accepted update stays accepted while the new build still lists an update for that preset; one that is no
-    longer an update (the owner changed it in the app to match, say) is dropped, so it never comes back accepted."""
+    """An accepted update stays accepted only while the new build lists an update for that preset with exactly the
+    values the owner accepted (the same hash); otherwise (no longer an update, or other values) it is dropped and
+    the preset is pending again, so an acceptance never covers values the owner did not see."""
     with _locked("state.lock"):
         acc = updates_mod.accepted(_dir())
         if not any(acc.values()):
             return
         rows = updates_mod.slicer(build_dir)
-        keep = {t: {n for n in acc.get(t, set()) if (rows.get(t, {}).get(n) or {}).get("status") == "update"}
+        keep = {t: {n: h for n, h in acc.get(t, {}).items()
+                    if (rows.get(t, {}).get(n) or {}).get("status") == "update"
+                    and updates_mod.preset_hash(build_dir / t / f"{n}.json") == h}
                 for t in updates_mod.TREES}
         if keep != acc:
             updates_mod.save_accepted(_dir(), keep, _write_json)
@@ -884,7 +887,7 @@ def _build_once(sm, now: float) -> dict:
             with open(tmp / "BUILD.json", "w", encoding="utf-8", newline="\n") as fh:
                 json.dump(manifest, fh, indent=2, ensure_ascii=False)
             # new / same / update against the live folders this build was made from (never sent to the PC)
-            updates_mod.record(tmp, live_copy / "base" if live is not None else None,
+            updates_mod.record(tmp, live_copy if live is not None else None,
                                orca_copy if orca_live is not None else None, orca is not None)
             os.replace(tmp, final)
             lines_mod.save(new_lines)
@@ -1055,8 +1058,8 @@ def record_installed(stamp: str, device_id: str, trees: list[str] | None = None,
                 acc = updates_mod.accepted(_dir())
                 for tree, names in written.items():
                     if tree in trees:
-                        done = {n.casefold() for n in names}
-                        acc[tree] = {n for n in acc.get(tree, set()) if n.casefold() not in done}
+                        done = {updates_mod.fold(n) for n in names}
+                        acc[tree] = {n: h for n, h in acc.get(tree, {}).items() if updates_mod.fold(n) not in done}
                 updates_mod.save_accepted(_dir(), acc, _write_json)
         meta = _meta()
         if "partial" in meta or "orca_partial" in meta:     # a finished install ends the partial one (S28)
@@ -1114,24 +1117,31 @@ def _update_items() -> tuple[str | None, list[dict], int]:
 
 def updates_view() -> dict:
     """`GET /api/profiles/updates`: the presets in the slicers whose generated values differ, not written yet
-    {stamp, count, lines, accepted, new, updates: [{name, target, line_id, keys, accepted, file?}]}."""
+    {stamp, count, lines, accepted, new, updates: [{name, target, line_id, keys, accepted, file?}], yours: [names
+    that differ from your own preset of that name in Bambu Studio's filament/ folder: never written over]}."""
     stamp, items, new = _update_items()
-    return {"stamp": stamp, **updates_mod.summary(items), "new": new, "updates": items}
+    mine = updates_mod.yours(_builds() / stamp) if stamp else []
+    return {"stamp": stamp, **updates_mod.summary(items), "new": new, "updates": items, "yours": mine}
 
 
-def apply_updates(*, line_id: str | None = None, all_: bool = False, dry_run: bool = False) -> dict:
-    """Accept the pending updates of one line (`line_id`) or all of them: the next PC sync writes them over the
-    existing presets. {stamp, chosen: [update rows], dry_run}; with dry_run nothing is saved. ValueError when
-    neither or both are given."""
+def apply_updates(*, line_id: str | None = None, all_: bool = False, dry_run: bool = False,
+                  only: set[str] | None = None) -> dict:
+    """Accept the pending updates of one line (`line_id`) or all of them (`only`: just these preset names): the next
+    PC sync writes them over the existing presets. Each acceptance holds the hash of the values accepted (see
+    _prune_accepted). {stamp, chosen: [update rows], dry_run}; with dry_run nothing is saved. ValueError when
+    neither or both of line_id / all_ are given."""
     if bool(line_id) == bool(all_):
         raise ValueError("give --line <id> or --all")
     with _locked("state.lock"):
         stamp, items, _new = _update_items()
-        chosen = [u for u in items if all_ or u["line_id"] == line_id]
+        chosen = [u for u in items if (all_ or u["line_id"] == line_id) and (only is None or u["name"] in only)]
         if chosen and not dry_run:
             acc = updates_mod.accepted(_dir())
             for u in chosen:
-                acc.setdefault(updates_mod.tree_of(u["target"]), set()).add(u["name"])
+                tree = updates_mod.tree_of(u["target"])
+                h = updates_mod.preset_hash(_builds() / stamp / tree / f"{u['name']}.json")
+                if h is not None:
+                    acc.setdefault(tree, {})[u["name"]] = h
             updates_mod.save_accepted(_dir(), acc, _write_json)
     return {"stamp": stamp, "chosen": chosen, "dry_run": dry_run}
 
@@ -1180,7 +1190,8 @@ def status() -> dict:
     orca_presets = len([p for p in rows if isinstance(p, dict) and p.get("target") == generate.ORCA])         if "orca_live_hash" in m else None
     _stamp, items, new = _update_items()
     return {"lines": n_lines, "presets": len(bambu_rows(m)), "orca_presets": orca_presets, "build": _build_view(),
-            "updates": {**updates_mod.summary(items), "new": new},
+            "updates": {**updates_mod.summary(items), "new": new,
+                        "yours": len(updates_mod.yours(_builds() / _stamp)) if _stamp else 0},
             "last_attempt": _attempt_view(), "installed": _installed_view(),
             "pc": {"device_id": o, "last_upload": max(ups) if ups else None} if o else None,
             "stale": list(m.get("stale", [])), "orca_stale": list(m.get("orca_stale", [])),

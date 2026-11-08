@@ -247,7 +247,7 @@ def test_profiles_status(c, sm):
     body = r.json()
     assert set(body) == {"lines", "presets", "orca_presets", "build", "updates", "last_attempt", "installed", "pc",
                          "library", "stale", "orca_stale", "problems"}
-    assert body["updates"] == {"count": 0, "lines": 0, "accepted": 0, "new": 0}
+    assert body["updates"] == {"count": 0, "lines": 0, "accepted": 0, "new": 0, "yours": 0}
     assert body["pc"] is None and body["build"] is None and body["lines"] == 0
     assert set(body["library"]) == {"version", "source", "local", "last_check"}
     assert body["library"]["source"] in ("bundled", "updated")

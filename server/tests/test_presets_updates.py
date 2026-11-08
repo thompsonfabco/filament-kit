@@ -90,7 +90,7 @@ def test_changed_values_are_listed_as_updates_then_accepted_and_cleared(env, cap
     assert cli.main(["profiles", "apply-updates", "--all", "--dry-run"]) == 0
     out = capsys.readouterr().out
     assert "dry run" in out and N04 in out
-    assert updates.accepted(TB.profiles_dir()) == {"base": set(), "orca": set()}
+    assert updates.accepted(TB.profiles_dir()) == {"base": {}, "orca": {}}
     assert builds.state_view("a")["accepted_updates"]["base"] == []
 
     # an unknown line: nothing accepted
@@ -171,10 +171,10 @@ def test_a_preset_the_owner_made_before_is_an_update_never_new(env):
     b1 = builds.run_build(env, now=TG.NOW + 1)["stamp"]
     rows = _slicer(b1)
     assert rows[N04]["status"] == "update" and "nozzle_temperature" in rows[N04]["keys"]
-    assert rows[N06]["status"] == "update" and rows[N06]["file"] == "my sovol copy"
+    assert rows[N06]["status"] == "update" and rows[N06]["file"] == "my sovol copy.json"
     assert {r["status"] for n, r in rows.items() if n not in (N04, N06)} == {"new"}
     items = {u["name"]: u for u in builds.updates_view()["updates"]}
-    assert items[N06]["file"] == "my sovol copy"
+    assert items[N06]["file"] == "my sovol copy.json"
     # installed with nothing over them: the next build's snapshot has the owner's copy, none for the other file
     builds.record_installed(b1, "a", ["base"], {"base": [n for n in rows if n not in (N04, N06)]})
     view = updates.view(TB.profiles_dir() / "builds" / b1, "base",
@@ -209,9 +209,24 @@ def test_an_accepted_update_that_is_no_longer_one_is_dropped(env):
     assert builds.status()["updates"]["accepted"] > 0
     _rebuild(env, 1.24, TG.NOW + 2)                                 # back to what the slicer holds: no update
     assert builds.updates_view()["count"] == 0
-    assert updates.accepted(TB.profiles_dir()) == {"base": set(), "orca": set()}
+    assert updates.accepted(TB.profiles_dir()) == {"base": {}, "orca": {}}
     _rebuild(env, 1.35, TG.NOW + 3)                                 # a new update is not accepted on its own
     assert builds.status()["updates"]["accepted"] == 0
+    # I2: accepted, then the values change again (still an update): the acceptance was for the old values
+    builds.apply_updates(all_=True)
+    assert builds.status()["updates"]["accepted"] == builds.status()["updates"]["count"] > 0
+    _rebuild(env, 1.36, TG.NOW + 4)
+    st = builds.status()["updates"]
+    assert st["count"] > 0 and st["accepted"] == 0                 # pending again, for the owner to look at
+    assert builds.state_view("a")["accepted_updates"]["base"] == []
+    assert updates.accepted(TB.profiles_dir()) == {"base": {}, "orca": {}}
+    # the same values in a new build keep it
+    builds.apply_updates(all_=True)
+    n = builds.status()["updates"]["accepted"]
+    TB.tick()
+    builds.request_rebuild("nothing changed")
+    builds.run_build(env, now=TG.NOW + 5)
+    assert builds.status()["updates"]["accepted"] == n > 0
 
 
 def test_updates_api(env):
@@ -227,3 +242,63 @@ def test_updates_api(env):
     assert set(body["updates"][0]) >= {"name", "target", "line_id", "keys", "accepted"}
     st = c.get("/api/profiles/status", headers={"Authorization": f"Bearer {tok}"}).json()
     assert st["updates"]["count"] == body["count"]
+
+
+# ---------- fix round 1 ----------
+
+import unicodedata  # noqa: E402
+
+
+def _tree(folder, presets: dict):
+    folder.mkdir(parents=True, exist_ok=True)
+    for fname, cfg in presets.items():
+        (folder / fname).write_text(json.dumps(cfg), encoding="utf-8")
+
+
+def test_classify_matches_as_the_pc_does(tmp_path):
+    """I1: a case-only file-name match is "another file" (no held copy, never diffed); M4: names match after NFC +
+    casefold; M5: a `.JSON` file of the preset's own name is its own; a preset of the same name in Bambu Studio's
+    filament/ root is the owner's (`root`), never listed as an update to apply."""
+    nfc = unicodedata.normalize("NFC", "Acme Café PLA @BBL H2D")
+    nfd = unicodedata.normalize("NFD", nfc)
+    out = tmp_path / "out"
+    gen = {n: {"name": n, "nozzle_temperature": ["230"]} for n in ("Case PLA", nfc, "Upper PLA", "Root PLA", "Mine")}
+    _tree(out, {f"{n}.json": c for n, c in gen.items()})
+    live, root = tmp_path / "user" / "base", tmp_path / "user"
+    _tree(live, {"case pla.json": dict(gen["Case PLA"], nozzle_temperature=["215"]),
+                 f"{nfd}.json": dict(gen[nfc], name=nfd, nozzle_temperature=["215"]),
+                 "Upper PLA.JSON": dict(gen["Upper PLA"], nozzle_temperature=["215"]),
+                 "Mine.json": gen["Mine"]})
+    _tree(root, {"Root PLA.json": dict(gen["Root PLA"], inherits="Generic PLA @BBL H2D")})
+    held = tmp_path / "held"
+    rows = updates.classify(out, live, held, root=root)
+    assert rows["Case PLA"] == {"status": "update", "keys": ["nozzle_temperature"], "file": "case pla.json"}
+    assert rows[nfc]["status"] == "update" and rows[nfc]["file"] == f"{nfd}.json"
+    assert rows["Upper PLA"] == {"status": "update", "keys": ["nozzle_temperature"]}
+    assert (held / "Upper PLA.json").is_file()
+    assert rows["Root PLA"]["root"] is True and rows["Root PLA"]["file"] == "Root PLA.json"
+    assert rows["Mine"] == {"status": "same", "keys": []}
+    assert sorted(p.name for p in held.iterdir()) == ["Mine.json", "Upper PLA.json"]
+
+
+def test_root_presets_are_kept_not_pending_and_acceptance_flag_casefolds(env):
+    TB.synced(env)
+    b0 = builds.run_build(env, now=TG.NOW)["stamp"]
+    mine = json.loads((TB.profiles_dir() / "builds" / b0 / "base" / f"{N04}.json").read_text(encoding="utf-8"))
+    files = {f"{N04}.json": json.dumps(dict(mine, inherits="Generic PLA @BBL H2D", nozzle_temperature=["199"]))}
+    builds.store_upload("live", io.BytesIO(TB.zip_of(files)), device_id="a", user_id="1")
+    TB.tick()
+    builds.request_rebuild("live")
+    b1 = builds.run_build(env, now=TG.NOW + 1)["stamp"]
+    assert _slicer(b1)[N04]["root"] is True
+    view = builds.updates_view()
+    assert N04 not in {u["name"] for u in view["updates"]} and view["yours"] == [N04]
+    assert builds.status()["updates"]["yours"] == 1
+    assert cli.main(["profiles", "status"]) == 0
+    # M6: the accepted flag matches names casefolded, like the clearing
+    _first_install(env)
+    b2 = _rebuild(env, 1.31, TG.NOW + 3)
+    h = updates.preset_hash(TB.profiles_dir() / "builds" / b2 / "base" / f"{N06}.json")
+    builds._write_json(TB.profiles_dir() / "updates.json", {"accepted": {"base": {N06.upper(): h}, "orca": {}}})
+    assert {u["name"] for u in builds.updates_view()["updates"] if u["accepted"]} == {N06}
+    assert builds.state_view("a")["accepted_updates"]["base"] == [N06]

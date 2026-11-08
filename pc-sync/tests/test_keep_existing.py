@@ -308,5 +308,78 @@ def test_accepted_orca_update_that_cannot_go_in_does_not_reinstall_every_run(tmp
     c.st.update(_ostate(folders, orca, build=c.st["build"], installed={"stamp": STAMP}))
     c.st["accepted_updates"] = {"stamp": STAMP, "base": [], "orca": [ON]}
     n = len(list(dirs.backups.iterdir()))
-    assert run(T0 + 60) in ("up_to_date", "rebuild_requested", "waiting")
+    assert run(T0 + 60) == "rebuild_requested"                        # its Orca presets are newer: a rebuild
     assert len(list(dirs.backups.iterdir())) == n                   # no install, no backup churn
+
+
+# --- fix round 1 ---------------------------------------------------------------------------------------------
+
+import unicodedata  # noqa: E402
+
+
+@pytest.mark.parametrize("layout", LAYOUTS)
+def test_case_only_file_name_match_is_kept_and_never_blocks_later_installs(tmp_path, layout):
+    """I1: `acme pla @bbl h2d.json` holds the generated preset: kept, not in the snapshot (not ours to diff), and the
+    next installs go through (on Linux the build-cased snapshot copy read as "deleted in Bambu Studio")."""
+    e = Env(tmp_path, layout)
+    own = e.f.user_filament / "base" / f"{A.lower()}.json"
+    own.write_text(json.dumps(_p(A)), encoding="utf-8")
+    before = own.read_bytes()
+    r1 = e.install(e.build({A: _p(A, nozzle_temperature=["230"]), B: _p(B)}))
+    assert r1.kept == [A] and r1.installed == [B]
+    assert sorted(p.name for p in (e.dirs.installed / "base").glob("*.json")) == [f"{B}.json"]
+    r2 = e.install(e.build({A: _p(A, nozzle_temperature=["235"]), B: _p(B)}))
+    assert r2.kept == [A, B] and own.read_bytes() == before
+    e.install(e.build({A: _p(A, nozzle_temperature=["240"]), B: _p(B)}), accept={"base": [A]})
+    assert json.loads(own.read_text())["nozzle_temperature"] == ["240"]
+    assert sorted(p.name for p in (e.dirs.installed / "base").glob("*.json")) == [f"{B}.json"]
+
+
+@pytest.mark.parametrize("layout", LAYOUTS)
+def test_upper_case_suffix_of_a_kept_preset(tmp_path, layout):
+    """M5: a kept `<name>.JSON` is copied into the snapshot by its real file name."""
+    e = Env(tmp_path, layout)
+    own = e.f.user_filament / "base" / f"{A}.JSON"
+    own.write_text(json.dumps(_p(A)), encoding="utf-8")
+    res = e.install(e.build({A: _p(A, nozzle_temperature=["230"])}))
+    assert res.kept == [A] and json.loads(own.read_text()) == _p(A)
+    assert json.loads((e.dirs.installed / "base" / f"{A}.json").read_text()) == _p(A)
+
+
+def test_names_match_after_unicode_normalization(tmp_path):
+    """M4: a live file (and `name`) in NFD is the same preset as the build's NFC name."""
+    nfc = unicodedata.normalize("NFC", "Acme Café PLA @BBL H2D")
+    nfd = unicodedata.normalize("NFD", nfc)
+    assert nfc != nfd
+    e = Env(tmp_path, "windows")
+    (e.f.user_filament / "base" / f"{nfd}.json").write_text(json.dumps(_p(nfd)), encoding="utf-8")
+    res = e.install(e.build({nfc: _p(nfc, nozzle_temperature=["230"])}))
+    assert res.kept == [nfc] and res.installed == []
+    assert sorted(p.name for p in (e.f.user_filament / "base").glob("*.json")) == [f"{nfd}.json"]
+
+
+@pytest.mark.parametrize("layout", LAYOUTS)
+def test_same_name_preset_in_the_filament_root_is_never_written_over(tmp_path, layout):
+    """Bambu Studio keeps the user presets that inherit a system preset in filament/ itself (only the flattened,
+    `inherits: ""` ones in filament/base/). One of the same name there is the owner's: kept, also when accepted
+    (writing base/<name>.json would make two presets of one name)."""
+    e = Env(tmp_path, layout)
+    root = e.f.user_filament / f"{A}.json"
+    root.write_text(json.dumps(_p(A, inherits="Generic PLA @BBL H2D")), encoding="utf-8")
+    before = root.read_bytes()
+    for accept in (None, {"base": [A]}):
+        res = e.install(e.build({A: _p(A, nozzle_temperature=["230"])}), accept=accept)
+        assert res.kept == [A] and res.installed == []
+        assert root.read_bytes() == before and not e.bs(A).exists()
+        assert not (e.dirs.installed / "base" / f"{A}.json").exists()
+
+
+def test_report_owed_from_before_the_upgrade_sends_no_written(senv):
+    """M3: an owed report without `report_written` (saved by the older PC sync) sends written=None: the server
+    keeps its old behaviour (that install wrote every preset)."""
+    folders, dirs = senv
+    live = treehash.tree_hash(folders.user_filament)
+    c = FakeClient(_synced_state(folders, build={"stamp": STAMP, "live_hash": live}, installed={"stamp": STAMP}))
+    sync._save_state(dirs, {"report": STAMP, "report_trees": ["base"]})
+    sync.run_once(c, folders, dirs, running=lambda: False, now=T0)
+    assert c.written == [None]
