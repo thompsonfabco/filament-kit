@@ -381,3 +381,11 @@ def test_a_status_file_from_before_this_change_still_loads(tmp_path, monkeypatch
                                                      "problems": ["x"]}), encoding="utf-8")
     v = mapping.Mapper(_NoManager()).view(SERIAL)
     assert v["state"] == "failed" and v["problems_old"] is True and v["finished"] is None and v["notes"] == []
+
+
+def test_a_job_another_process_finished_just_now_is_not_old(tmp_path, monkeypatch):
+    """`printer map` at the CLI, while the server runs: its problems are current."""
+    monkeypatch.setenv("FK_STATE", str(tmp_path / "state3"))
+    monkeypatch.setattr(mapping, "_STARTED", 100.0)
+    _status(SERIAL, finished=200.0)
+    assert mapping.Mapper(_NoManager()).view(SERIAL)["problems_old"] is False

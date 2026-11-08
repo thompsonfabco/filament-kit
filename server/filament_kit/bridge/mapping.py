@@ -61,6 +61,7 @@ except ImportError:  # Windows dev PCs: one process only (the service runs on Li
     fcntl = None
 
 log = logging.getLogger(__name__)
+_STARTED = time.time()     # this server process's start: a job that ended before it is an earlier run's
 
 STATUS_FILE = "mapping.json"
 LOCK_FILE = "mapping.lock"
@@ -577,8 +578,10 @@ class Mapper:
                               "global": s.get("global_id")})
         st = st or {"state": "none", "step": "", "problems": []}
         remapping = bool(j is not None and j.auto and st is mine and st["state"] == "running")
-        old = st is not mine and bool(st["problems"]) and not (st["state"] == "running"
-                                                               and _ProcessLock.held_elsewhere(serial))
+        # finished before this server started (a `printer map` at the CLI just now is not old)
+        ended = st.get("finished")
+        old = (st is not mine and bool(st["problems"]) and (ended is None or ended < _STARTED)
+               and not (st["state"] == "running" and _ProcessLock.held_elsewhere(serial)))
         return {"state": st["state"], "step": st["step"], "slots": slots, "calibrated": m.calibrated,
                 "observe": m.observe, "problems": st["problems"], "notes": st.get("notes", []), "problems_old": old,
                 "finished": st.get("finished"), "stale": m.stale, "remapping": remapping,
