@@ -178,10 +178,12 @@ def main() -> None:
 def serve_options(cfg: dict, etc) -> dict:
     """uvicorn's options for the kit server. One worker only: the pairing and inventory locks are per process.
     No proxy headers: nothing proxies this port, so X-Forwarded-For from a local process (uvicorn trusts loopback
-    by default) must not become the client address the setup page's LAN check, lockout and audit lines use."""
+    by default) must not become the client address the setup page's LAN check, lockout and audit lines use.
+    No access log: request lines go to the journal, and a query string or path can hold what must stay out of it (the
+    PC sync's Bambu Studio user id, printer serials); the kit's own log lines say what happened."""
     return {"host": "0.0.0.0", "port": cfg["port"], "ssl_certfile": str(etc / "cert.pem"),
             "ssl_keyfile": str(etc / "key.pem"), "workers": 1, "timeout_graceful_shutdown": GRACEFUL_SHUTDOWN,
-            "proxy_headers": False, "forwarded_allow_ips": ""}
+            "proxy_headers": False, "forwarded_allow_ips": "", "access_log": False}
 
 
 if __name__ == "__main__":
