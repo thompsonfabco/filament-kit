@@ -422,3 +422,27 @@ def test_the_idle_screen_says_not_paired_without_a_pairing():
     assert flow.screen()[0] == "Not paired"
     _paired(["192.0.2.10"])
     assert flow.screen()[0] == "Ready"
+
+
+# ---------- final fix wave M2: a reinstall gives the kept pairing to the station user it has now ----------
+
+def _station_plan():
+    from filament_kit import apply, modules
+    cfg = modules.set_mode(config._merge(config.DEFAULTS, {}), "all-in-one", say=None)
+    return apply.plan(cfg, resolve=lambda h: [h])
+
+
+def test_apply_gives_a_kept_pairing_to_the_current_station_user(tmp_path, monkeypatch):
+    from filament_kit import apply
+    monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
+    kinds = [a.kind for a in _station_plan()]
+    assert kinds.index("user") < kinds.index("station_pairing_owner") < kinds.index("enable")
+    ran = []
+    act = [a for a in _station_plan() if a.kind == "station_pairing_owner"]
+    apply.execute(act, run=ran.append, root=tmp_path / "root")
+    assert ran == []  # nothing paired yet: nothing to hand over
+    _paired(["192.0.2.5"])
+    apply.execute(act, run=ran.append, root=tmp_path / "root")
+    d, srv, tok = (str(p) for p in (server_api.pairing_dir(), server_api.server_file(), server_api.token_file()))
+    assert ran == [["chown", "root:filament-kit-station", d], ["chown", "root:filament-kit-station", srv],
+                   ["chown", "filament-kit-station:filament-kit-station", tok]]

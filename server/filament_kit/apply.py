@@ -204,6 +204,7 @@ def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) ->
     if "station" in on:
         acts += [
             A("user", ("filament-kit-station", "dialout,audio,video")),
+            A("station_pairing_owner"),
             A("remove_file", OLD_UDEV_RULE),
             A("install_file", (UDEV_RULE, UDEV_TEXT, "0644", "root:root")),
             A("udev_reload"),
@@ -273,6 +274,7 @@ _HINTS = {
     "spoolman_fetch": f"see the Spoolman messages above, then {_AGAIN}",
     "install_unit": "run ./install.sh again (the unit files live in /opt/filament-kit/resources)",
     "install_file": f"check the disk is writable, then {_AGAIN}",
+    "station_pairing_owner": f"check the station's user exists (id filament-kit-station), then {_AGAIN}",
     "remove_file": "remove it by hand: sudo rm <arg>",
     "enable": "see: journalctl -u <arg>",
     "daemon_reload": "see: journalctl -b",
@@ -646,6 +648,20 @@ def _station_voice(ex: _Exec, name: str) -> None:
     ex.ok(["chmod", "-R", "a+rX,go-w", vdir])   # the station's user reads it whatever root's umask was
 
 
+def _station_pairing_owner(ex: _Exec) -> None:
+    """A pairing kept across a plain uninstall (it keeps /etc/filament-kit-station, it removes the user): the
+    reinstalled station user may have another uid, so hand the folder and token to the user there is now."""
+    from .station import server_api
+    if not server_api.pairing_dir().is_dir():
+        return
+    group = "root:filament-kit-station"
+    ex.cmd(["chown", group, str(server_api.pairing_dir())])
+    if server_api.server_file().exists():
+        ex.cmd(["chown", group, str(server_api.server_file())])
+    if server_api.token_file().exists():
+        ex.cmd(["chown", "filament-kit-station:filament-kit-station", str(server_api.token_file())])
+
+
 def _step(ex: _Exec, a: Action) -> None:
     k, arg = a.kind, a.arg
     if k == "user":
@@ -709,6 +725,8 @@ def _step(ex: _Exec, a: Action) -> None:
         if not ex.ok([WRAPPER, "library", "update"]):
             print("warning: the library could not be downloaded now; it is tried again every day "
                   "(or run: sudo filament-kit library update)")
+    elif k == "station_pairing_owner":
+        _station_pairing_owner(ex)
     elif k == "station_voice":
         try:  # the voice is a nicety: nothing in it may stop the install or the services after it
             _station_voice(ex, arg)
