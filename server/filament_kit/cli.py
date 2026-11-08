@@ -261,7 +261,8 @@ def _profile_status_lines() -> bool:
 def _qr_text(payload: str) -> str:
     if shutil.which("qrencode"):
         try:
-            r = subprocess.run(["qrencode", "-t", "ansiutf8", payload], capture_output=True,
+            # -m 4: the 4-module quiet zone QR readers expect (qrencode's default, kept explicit)
+            r = subprocess.run(["qrencode", "-t", "ansiutf8", "-m", "4", payload], capture_output=True,
                                text=True, timeout=10, check=True)
             return r.stdout
         except (OSError, subprocess.SubprocessError):

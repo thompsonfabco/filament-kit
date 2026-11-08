@@ -3,6 +3,7 @@ package com.thompsonfabco.filamentkit.ui.spool
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -131,14 +132,12 @@ private fun SpoolCard(card: SpoolUiState.Card, vm: SpoolViewModel, onClose: () -
         singleLine = true,
         modifier = Modifier.fillMaxWidth(),
     )
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(
-            onClick = { parseWeight(gross)?.let(vm::previewWeight) },
-            enabled = parseWeight(gross) != null,
-        ) { Text("Update weight") }
-        OutlinedButton(onClick = vm::openMove) { Text("Move") }
-        OutlinedButton(onClick = vm::askMarkEmpty) { Text("Mark empty") }
-    }
+    SpoolActions(
+        canUpdate = parseWeight(gross) != null,
+        onUpdate = { parseWeight(gross)?.let(vm::previewWeight) },
+        onMove = vm::openMove,
+        onMarkEmpty = vm::askMarkEmpty,
+    )
     onLoad?.let { Button(onClick = it, modifier = Modifier.fillMaxWidth()) { Text("Load into printer") } }
 
     card.weightPreview?.let { p ->
@@ -171,6 +170,22 @@ private fun SpoolCard(card: SpoolUiState.Card, vm: SpoolViewModel, onClose: () -
     Spacer(Modifier.height(4.dp))
     TextButton(onClick = onClose) { Text("Done") }
 }
+
+/**
+ * The card's three actions. They wrap onto a second line when the card is narrow (small phones, large font) and each
+ * label stays on one line.
+ */
+@Composable
+internal fun SpoolActions(canUpdate: Boolean, onUpdate: () -> Unit, onMove: () -> Unit, onMarkEmpty: () -> Unit) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Button(onClick = onUpdate, enabled = canUpdate) { OneLine("Update weight") }
+        OutlinedButton(onClick = onMove) { OneLine("Move") }
+        OutlinedButton(onClick = onMarkEmpty) { OneLine("Mark empty") }
+    }
+}
+
+@Composable
+private fun OneLine(text: String) = Text(text, maxLines = 1, softWrap = false)
 
 @Composable
 private fun UnknownTagChoice(onLink: () -> Unit, onAddNew: () -> Unit, onClose: () -> Unit) {

@@ -18,9 +18,9 @@ Two kinds of entry:
 | # | Item | Why | What to do |
 |---|---|---|---|
 | 1 | **Piper voice for the station's speech** (v0.3.0; downloaded at install time from Hugging Face, not bundled). Decision of 2026-11-07: default **`en_US-libritts_r-medium`** (CC BY 4.0), with a **caveat** (see [Speech voice](#speech-voice-planned-v030)). | The voice first planned, `en_US-lessac-medium`, is research-only (Lessac Blizzard 2013 licence: no commercial use, no redistribution without written consent) and is dropped. The chosen `libritts_r` voice's model card says it was **fine-tuned from `en_US-lessac-medium`**, so its weights may inherit that restriction even though its own dataset is CC BY 4.0. The owner was told and chose it anyway. | Accepted risk, not a clean bill: if the kit is ever used or offered commercially, or a rights holder objects, switch the default to **`en_US-ljspeech-medium`** (public domain, trained from scratch), which stays selectable now (`STATION_PIPER_VOICE`). Keep the CC BY credit below with the voice. Avoid `ryan` and `hfc_female` (CC BY-NC-SA). |
-| 2 | **Google ML Kit barcode scanning** in the Android app (`com.google.mlkit:barcode-scanning`) | Proprietary, closed source, under Google's ML Kit terms. The APK bundles it, which sits badly with GPL-3.0 §6 (no corresponding source for that part), and F-Droid refuses it. | Replace the QR scanner with ZXing (`zxing-android-embedded`, Apache-2.0), or add an explicit GPL-3.0 §7 additional permission for the app. The app session already weighed ZXing for an F-Droid build. |
+| 2 | ~~**Google ML Kit barcode scanning** in the Android app (`com.google.mlkit:barcode-scanning`)~~ | Proprietary, closed source, under Google's ML Kit terms. The APK bundled it, which sat badly with GPL-3.0 §6, and F-Droid refuses it. | **Done**: the QR scanner uses zxing-cpp (Apache-2.0); ML Kit is gone from the APK. |
 | 3 | **Licence metadata of our own packages** | `server/pyproject.toml` and `pc-sync/pyproject.toml` declare no `license`; `pip-licenses` shows filament-kit as UNKNOWN. | Add `license = "GPL-3.0-or-later"` to both (and the LICENSE file to the wheel), so installs and tools see it. |
-| 4 | **Notices in the release files** | The APK and the PC sync setup carry third-party code (AndroidX, OkHttp, PyInstaller's bootloader, ...), whose BSD/MIT/Apache terms want their notices kept. | Ship this file in the server tarball and the PC sync setup, and show it (or the Gradle-generated OSS notices) in the app's Settings. |
+| 4 | **Notices in the release files** | The APK and the PC sync setup carry third-party code (AndroidX, OkHttp, PyInstaller's bootloader, ...), whose BSD/MIT/Apache terms want their notices kept. | Ship this file in the server tarball and the PC sync setup, and show it (or the Gradle-generated OSS notices) in the app's Settings. **App part done**: the APK carries this file and LICENSE, shown under Settings > Licences. |
 
 Everything else below is in order: GPL-3.0-compatible, or only installed and never redistributed.
 
@@ -97,8 +97,8 @@ Built by the release workflow and shipped as `filament-kit.apk`. Everything belo
 | Kotlin standard library, kotlinx-coroutines, kotlinx-serialization | Apache-2.0 | |
 | AndroidX: core, activity, compose (BOM 2026.09), material3, lifecycle, navigation, datastore, camera (CameraX), exifinterface, media3 (ExoPlayer, HLS, OkHttp datasource, UI) | Apache-2.0 | |
 | OkHttp, okhttp-tls | Apache-2.0 | |
-| **Google ML Kit barcode scanning 17.3.0** | **proprietary** (Google ML Kit terms + Google APIs Terms of Service) | the QR pairing scanner. See open item 2. |
-| Test-only (not in the APK): JUnit 4 (EPL-1.0), Robolectric (MIT), AndroidX test, Espresso (Apache-2.0), MockWebServer (Apache-2.0) | | |
+| [zxing-cpp](https://github.com/zxing-cpp/zxing-cpp) Android library 3.1.1 (`io.github.zxing-cpp:android`) | Apache-2.0 | the QR pairing scanner. A native library (`libzxingcpp_android.so`, one per CPU type) with a small Kotlin wrapper. Its source also carries libzueci (BSD-3-Clause, from upstream's headers; not re-checked for 3.1.1). |
+| Test-only (not in the APK): JUnit 4 (EPL-1.0), Robolectric (MIT), AndroidX test, Espresso (Apache-2.0), MockWebServer (Apache-2.0); Google ML Kit barcode scanning (proprietary) and ZXing core (Apache-2.0), only in the scanner comparison test | | |
 
 ## The Windows PC sync (`filament-kit-sync-setup-<version>.exe`)
 

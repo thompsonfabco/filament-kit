@@ -22,13 +22,17 @@ import androidx.compose.ui.unit.dp
 import com.thompsonfabco.filamentkit.data.ServerConfig
 import com.thompsonfabco.filamentkit.ui.pair.groupFingerprint
 
-/** Shows the paired server. [onPairAgain] opens pairing; [onForget] should call `Settings.clear()` and go to pairing. */
+/**
+ * Shows the paired server. [onPairAgain] opens pairing; [onForget] should call `Settings.clear()` and go to pairing.
+ * [onLicences] opens the licences screen.
+ */
 @Composable
 fun SettingsScreen(
     config: ServerConfig?,
     onPairAgain: () -> Unit,
     onForget: () -> Unit,
     modifier: Modifier = Modifier,
+    onLicences: () -> Unit = {},
 ) {
     var confirmForget by remember { mutableStateOf(false) }
     Column(
@@ -49,6 +53,7 @@ fun SettingsScreen(
         if (config != null) {
             OutlinedButton(onClick = { confirmForget = true }, modifier = Modifier.fillMaxWidth()) { Text("Forget server") }
         }
+        TextButton(onClick = onLicences, modifier = Modifier.fillMaxWidth()) { Text("Licences and third-party software") }
     }
     if (confirmForget) {
         AlertDialog(

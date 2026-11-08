@@ -58,6 +58,28 @@ android {
     }
 }
 
+// THIRD-PARTY.md and LICENSE live at the repository root; the APK gets copies as assets for the Licences screen.
+abstract class CopyNotices : DefaultTask() {
+    @get:InputFiles abstract val notices: ConfigurableFileCollection
+    @get:OutputDirectory abstract val outputDir: DirectoryProperty
+    @TaskAction fun copy() {
+        val out = outputDir.get().asFile
+        out.deleteRecursively()
+        out.mkdirs()
+        notices.files.forEach { it.copyTo(out.resolve(it.name)) }
+    }
+}
+
+val copyNotices = tasks.register<CopyNotices>("copyNotices") {
+    notices.from(rootProject.file("../THIRD-PARTY.md"), rootProject.file("../LICENSE"))
+}
+
+androidComponents {
+    onVariants { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(copyNotices, CopyNotices::outputDir)
+    }
+}
+
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.core.ktx)
@@ -78,7 +100,7 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
     implementation(libs.androidx.navigation.compose)
-    implementation(libs.mlkit.barcode.scanning)
+    implementation(libs.zxing.cpp)
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.exoplayer.hls)
     implementation(libs.androidx.media3.datasource.okhttp)
@@ -99,5 +121,9 @@ dependencies {
     androidTestImplementation(libs.androidx.test.espresso.core)
     androidTestImplementation(libs.okhttp.tls)
     androidTestImplementation(libs.okhttp.mockwebserver3)
+    // Only for QrDecoderComparisonTest: ML Kit is the scanner zxing-cpp replaced, ZXing core draws the test QR
+    // codes. Neither is in the APK.
+    androidTestImplementation(libs.mlkit.barcode.scanning)
+    androidTestImplementation(libs.zxing.core)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
