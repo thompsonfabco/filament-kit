@@ -109,14 +109,13 @@ A hand-built tarball is not signed. Users can install it with `sudo ./install.sh
 ## Third-party licences
 
 [THIRD-PARTY.md](../THIRD-PARTY.md) lists every component a release ships or the installer fetches, with its
-licence, and the open items (ML Kit, our own licence metadata, notices in the release files).
+licence. It holds component, licence and attribution only.
 Redo the check when a dependency is added or a pin changes: `pip-licenses` in a venv with
 `filament-kit[station,web,push]`, `android/gradle/libs.versions.toml`, the two `platformio.ini` files and the
 `apt` lists in `modules.py`.
 
 ## Checks before a release goes out
 
-- Close the open items in [THIRD-PARTY.md](../THIRD-PARTY.md), or decide to live with them.
 - Scan the tree and the git history for private addresses, host names, serials and secrets.
   `server/tests/test_readme.py` scans the public docs and code for a list of such strings; extend the list
   rather than the exceptions.
