@@ -134,6 +134,25 @@ def marker_path(dirs: store.AppDirs) -> Path:
     return dirs.base / "installing.json"
 
 
+# What the server may hear about a failed run: a class, which it words itself. The detail stays on this PC (it can hold a
+# path with the Bambu Studio user folder). 401, another certificate and offline can't be told at all.
+REPORTED_FAILURES = {"no_studio": "error_no_studio", "server": "error_server", "crash": "error_crash"}
+
+
+def report_failure(dirs: store.AppDirs, c, outcome: str) -> None:
+    """Tell the server once per failure kind, and again at most hourly; never changes the run."""
+    st = load_state(dirs)
+    hb = st.get("heartbeat") or {}
+    if hb.get("outcome") == outcome and time.time() - float(hb.get("at") or 0) < HEARTBEAT_EVERY:
+        return
+    st["heartbeat"] = {"at": time.time(), "outcome": outcome}
+    _save_state(dirs, st)
+    try:
+        c.heartbeat(outcome)
+    except Exception as e:  # noqa: BLE001 - it failed already; this is only the news
+        store.log(dirs, f"heartbeat not sent: {type(e).__name__}")
+
+
 def load_state(dirs: store.AppDirs) -> dict:
     try:
         st = json.loads(dirs.state.read_text(encoding="utf-8"))
@@ -190,6 +209,7 @@ class _Run:
             detail = self._waiting(app, detail)
         self.log(f"{outcome}: {detail}")
         self.st["last"] = {"outcome": outcome, "at": self.now, "detail": detail}
+        self.st.pop("last_error", None)
         self.save()
         if outcome == "studio_running":
             w = self.st["waiting"]
@@ -197,8 +217,9 @@ class _Run:
         else:
             if self.st.pop("waiting", None) is not None:
                 self.save()
-            if (self.st.get("heartbeat") or {}).get("outcome") == "studio_running":
-                self._heartbeat(outcome, None, None)        # the wait is over: said once
+            told = (self.st.get("heartbeat") or {}).get("outcome")
+            if told == "studio_running" or told in REPORTED_FAILURES.values():
+                self._heartbeat(outcome, None, None)        # the wait or the failure is over: said once
         return outcome
 
     # --- the wait for a running slicer -------------------------------------------------
