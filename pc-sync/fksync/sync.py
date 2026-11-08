@@ -35,6 +35,14 @@
   `uploaded` is returned when this run uploaded something and the build step had nothing to do
   (`no_build` / `up_to_date`).
 
+  Existing presets are never replaced (the owner's rule, 2026-11-06): an install writes only the presets the
+  slicer does not have yet (installer step 6). The updates the owner accepted on the server
+  (`sudo filament-kit profiles apply-updates`; state `accepted_updates: {stamp, base, orca}`) are the only ones
+  written over an existing preset: with the build they belong to when it is installed, or, for the build that is
+  already installed (nothing changed in the app since), by installing it again with them. The report names what
+  was written (`installed(stamp, trees, written)`, kept as `report_written` while it is owed), and the server
+  clears those from its list; an interrupted install resumes with the same accepted names (marker `accept`).
+
   An install refused as `stale_build` asks for a rebuild (same 15 min limiter): the server built from
   these live presets, so only a new build can settle the difference.
 
@@ -330,19 +338,22 @@ class _Run:
 
     # --- install --------------------------------------------------------------------------
 
-    def report(self, stamp: str, trees: list[str] | None = None) -> None:
+    def report(self, stamp: str, trees: list[str] | None = None, written: dict | None = None) -> None:
         trees = list(trees) if trees else ["base"]
+        written = written if isinstance(written, dict) else {t: [] for t in trees}
         self.st["report"] = stamp
         self.st["report_trees"] = trees
+        self.st["report_written"] = written
         self.save()
         try:
-            self.c.installed(stamp, trees)
+            self.c.installed(stamp, trees, written=written)
         except ApiError as e:
             if e.status != 404:
                 raise
             self.log(f"build {stamp} is no longer on the server; its install was not recorded there")
         self.st.pop("report", None)
         self.st.pop("report_trees", None)
+        self.st.pop("report_written", None)
         self.save()
 
     def _download(self, stamp: str, work: Path):
@@ -354,19 +365,40 @@ class _Run:
         except ValueError as e:
             return None, f"build {stamp}: {e}"
 
-    def _write_marker(self, stamp: str, backup: Path, with_orca: bool) -> None:
-        store._write_atomic(marker_path(self.d), json.dumps(
-            {"stamp": stamp, "backup": backup.name, "at": self.now, "orca": with_orca}).encode())
+    def _write_marker(self, stamp: str, backup: Path, with_orca: bool, accept: dict | None = None) -> None:
+        m = {"stamp": stamp, "backup": backup.name, "at": self.now, "orca": with_orca}
+        if accept:
+            m["accept"] = accept
+        store._write_atomic(marker_path(self.d), json.dumps(m).encode())
 
-    def _install(self, stamp: str, build_dir: Path, resuming: bool, with_orca: bool = True) -> str:
-        """Install the build; its orca/ tree only `with_orca` (and when this PC has Orca Slicer)."""
+    def accepted(self, server: dict, stamp: str) -> dict:
+        """The updates the owner accepted for build `stamp` ({"base"|"orca": [names]}, only the non-empty ones;
+        Orca's only when Orca is synced this run)."""
+        acc = server.get("accepted_updates")
+        if not isinstance(acc, dict) or acc.get("stamp") != stamp:
+            return {}
+        out = {}
+        for tree in ("base", "orca"):
+            names = acc.get(tree)
+            if tree == "orca" and not self.orca_on:
+                continue
+            if isinstance(names, list) and any(isinstance(n, str) for n in names):
+                out[tree] = sorted(n for n in names if isinstance(n, str))
+        return out
+
+    def _install(self, stamp: str, build_dir: Path, resuming: bool, with_orca: bool = True,
+                 accept: dict | None = None) -> str:
+        """Install the build; its orca/ tree only `with_orca` (and when this PC has Orca Slicer). `accept`: the
+        accepted updates, the only existing presets written over."""
         with_orca = with_orca and self.o is not None
-        orca_kw = {"orca": self.o, "orca_running": self.orca_running} if with_orca else {}
+        kw = {"orca": self.o, "orca_running": self.orca_running} if with_orca else {}
+        if accept:
+            kw["accept"] = accept
         try:
             res = self.install_fn(build_dir, self.f, self.d, running=self.running,
                                   stamp_now=time.strftime("%Y%m%d-%H%M%S", time.localtime(self.now)),
-                                  before_write=lambda backup: self._write_marker(stamp, backup, with_orca),
-                                  **orca_kw)
+                                  before_write=lambda backup: self._write_marker(stamp, backup, with_orca, accept),
+                                  **kw)
         except installer.Refused as e:
             if e.code == "studio_running":
                 if not resuming:
@@ -388,10 +420,15 @@ class _Run:
             self.st["stale_orca"] = stale_orca
         self.st.pop("requested", None)
         trees = ["base", "orca"] if with_orca and (build_dir / "orca").is_dir() else ["base"]
+        written = {"base": list(res.installed)}
+        if "orca" in trees:
+            written["orca"] = installed_orca
+        kept = list(getattr(res, "kept", []) or []) + list(getattr(res, "kept_orca", []) or [])
         # orca_synced: Orca was synced and the build made from its presets (its orca/ in, or it had none)
         self.st["installed"] = {"stamp": stamp, "at": self.now, "trees": trees, "orca_synced": bool(with_orca)}
         self.st["report"] = stamp
         self.st["report_trees"] = trees
+        self.st["report_written"] = written
         self.st["live_owed"] = True             # until upload_live() succeeds (S32)
         if installed_orca:
             self.st["orca_live_owed"] = True
@@ -402,13 +439,20 @@ class _Run:
         if stale_orca:
             self.log(f"{len(stale_orca)} Orca Slicer presets are no longer generated; delete them in Orca Slicer: "
                      + ", ".join(stale_orca))
-        self.report(stamp, trees)           # first: a failed report must not leave the new live folder uploaded
+        if kept:
+            self.log(f"{len(kept)} presets are already in the slicer and were left as they are (their updates, if "
+                     "any, are listed on the server: filament-kit profiles status)")
+        self.report(stamp, trees, written)  # first: a failed report must not leave the new live folder uploaded
         self.upload_live()
         orca = f", {len(installed_orca)} Orca Slicer presets" if installed_orca else ""
-        return self.finish("installed", f"installed build {stamp} ({len(res.installed)} presets{orca}, "
-                                        f"backup {res.backup.name})")
+        return self.finish("installed", f"installed build {stamp} ({len(res.installed)} presets{orca} written, "
+                                        f"{len(kept)} kept, backup {res.backup.name})")
 
-    def install(self, stamp: str, accepted: set[str]) -> str:
+    def install(self, stamp: str, accepted: set[str], accept: dict | None = None,
+                orca_extra: set | None = None, updates_only: bool = False) -> str:
+        """`accept`: the accepted updates to write; `orca_extra`: more Orca live hashes that count as these Orca
+        presets (the installed build's own, when it is installed again for its accepted updates: `updates_only`,
+        which installs nothing when none of them can go in this run)."""
         work = Path(tempfile.mkdtemp(prefix=".download.", suffix=".tmp", dir=self.d.base))
         try:
             build_dir, meta = self._download(stamp, work)
@@ -417,12 +461,19 @@ class _Run:
             if meta.get("stamp") not in (None, stamp) or meta.get("live_hash") not in (None, *accepted):
                 return self.finish("refused", f"build {stamp}: its BUILD.json does not match the server's state")
             orca_ok = self.orca_accepted()
+            if orca_ok is not None and orca_extra:
+                orca_ok |= orca_extra
             with_orca = orca_ok is not None and meta.get("orca_live_hash") in orca_ok
             if not with_orca and self.o is not None and (build_dir / "orca").is_dir():
                 why = ("Orca Slicer is not synced this run" if orca_ok is None
                        else "the build was not made from your current Orca Slicer presets")
                 self.log(f"Orca presets not installed this run ({why}); Bambu Studio presets are")
-            return self._install(stamp, build_dir, resuming=False, with_orca=with_orca)
+            if accept and not with_orca:
+                accept = {t: v for t, v in accept.items() if t != "orca"} or None
+            if updates_only and not accept:
+                return self.finish("up_to_date", f"build {stamp} is installed; the accepted Orca Slicer updates "
+                                                 "wait until its presets can be installed")
+            return self._install(stamp, build_dir, resuming=False, with_orca=with_orca, accept=accept)
         finally:
             shutil.rmtree(work, ignore_errors=True)
 
@@ -471,7 +522,9 @@ class _Run:
                 self.log(f"interrupted install of build {stamp} not resumed: " + "; ".join(where))
                 return None
             self.log(f"finishing the interrupted install of build {stamp}")
-            return self._install(stamp, build_dir, resuming=True, with_orca=marker.get("orca", True) is not False)
+            acc = marker.get("accept") if isinstance(marker.get("accept"), dict) else None
+            return self._install(stamp, build_dir, resuming=True, with_orca=marker.get("orca", True) is not False,
+                                 accept=acc)
         finally:
             shutil.rmtree(work, ignore_errors=True)
 
@@ -526,7 +579,7 @@ class _Run:
 
         pending = self.st.get("report")
         if pending:
-            self.report(pending, self.st.get("report_trees"))
+            self.report(pending, self.st.get("report_trees"), self.st.get("report_written"))
             server = self.c.state()
 
         here = self.uploads(server)
@@ -540,7 +593,7 @@ class _Run:
         stamp = build.get("stamp")
         installed = (server.get("installed") or {}).get("stamp")
         if installed == stamp:
-            done = self._orca_catch_up(stamp, build, here)
+            done = self._orca_catch_up(stamp, build, here, server)
             if done is not None:
                 return done
             if self.changed_since_install():
@@ -551,6 +604,13 @@ class _Run:
                                                             "rebuild asked for")
                 at = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.st["requested"]["at"]))
                 return self.finish("waiting", f"waiting for the rebuild asked at {at}")
+            accept = self.accepted(server, stamp)
+            if accept:
+                # the owner accepted updates of this installed build (nothing changed in the app since): install it
+                # again with them; the presets it installed are unchanged, so its own live hashes count
+                self.log(f"writing {sum(len(v) for v in accept.values())} updates you accepted for build {stamp}")
+                return self.install(stamp, self.accepted_hashes(here) | {build.get("live_hash")}, accept,
+                                    orca_extra={build.get("orca_live_hash")}, updates_only=True)
             if self.uploaded:
                 return self.finish("uploaded", f"build {stamp} is installed; the server has your latest presets")
             return self.finish("up_to_date", f"build {stamp} is installed")
@@ -565,7 +625,7 @@ class _Run:
         if orca_ok is not None and "orca_live_hash" in build and build["orca_live_hash"] not in orca_ok \
                 and self.request(here):
             self.log(f"build {stamp} predates your latest Orca Slicer presets; asked for a rebuild")
-        return self.install(stamp, accepted)
+        return self.install(stamp, accepted, self.accepted(server, stamp))
 
     def _orca_went_in(self, stamp: str) -> bool:
         """This PC installed build `stamp`'s orca/ tree (state.json `installed.trees`; an older state.json: the
@@ -575,7 +635,7 @@ class _Run:
             return "orca" in inst["trees"] or inst.get("orca_synced") is True   # a build without orca/: settled
         return (self.d.installed / "orca").is_dir()
 
-    def _orca_catch_up(self, stamp: str, build: dict, here: str) -> str | None:
+    def _orca_catch_up(self, stamp: str, build: dict, here: str, server: dict) -> str | None:
         """B-I1: the installed build's orca/ tree did not go in (Orca was not synced on that run, e.g. a refused
         Orca upload). Once Orca syncs again: install it when the build was made from these Orca presets, else ask
         for a rebuild. None when there is nothing to catch up (the normal installed-build checks follow)."""
@@ -587,7 +647,8 @@ class _Run:
                 return None                     # Bambu Studio edits since: those ask for a rebuild first
             self.log(f"installing the Orca Slicer presets of build {stamp} (they did not go in with its install)")
             # the base/ tree is this PC's install of the same build, unchanged since: its live hash may differ
-            return self.install(stamp, self.accepted_hashes(here) | {build.get("live_hash")})
+            return self.install(stamp, self.accepted_hashes(here) | {build.get("live_hash")},
+                                self.accepted(server, stamp))
         if self.request(here):
             return self.finish("rebuild_requested", f"build {stamp} is installed without your Orca Slicer "
                                                     "presets; they were sent and a rebuild asked for")

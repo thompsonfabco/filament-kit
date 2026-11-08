@@ -21,7 +21,7 @@ does not take their absence from Bambu Studio for a deletion made after the buil
 
 A saved line's filament_id never changes (ruling S12). Only a line created in this run takes the filament_id of an
 existing preset of the same name made in the app, or of its installed presets (lines.json was lost); for a saved
-line that preset is reported and replaced.
+line that preset is reported and listed as an update (the PC never replaces it unless the owner accepts it).
 
 A preset name the PC sync could not use as a file name (`safe_name`, its own rule) is skipped with a problem line:
 the PC refuses a build zip holding one.
@@ -490,7 +490,8 @@ def _build_line(line: Line, fs: list[dict], ids: list[int], *, printers, store: 
             new_line = False                # adopt once
             continue
         problems.append(f"your preset {name} has filament_id {fid}; line keeps {line.filament_id}, "
-                        f"the generated preset replaces it")
+                        "the generated preset is listed as an update (yours is never replaced unless you "
+                        "accept it: profiles apply-updates)")
 
     rows = []
     for printer, chamber, nozzle, name in plan:

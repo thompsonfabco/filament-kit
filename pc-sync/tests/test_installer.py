@@ -63,8 +63,10 @@ class Env:
         shutil.rmtree(self.dirs.installed)
         self.snapshot(presets)
 
-    def install(self, build_dir, stamp="20261102-010000", running=lambda: False):
-        return installer.install(build_dir, self.folders, self.dirs, running=running, stamp_now=stamp)
+    def install(self, build_dir, stamp="20261102-010000", running=lambda: False, update=False):
+        """`update`: the owner accepted every update of this build (existing presets are written over too)."""
+        accept = {"base": [p.stem for p in (Path(build_dir) / "base").glob("*.json")]} if update else None
+        return installer.install(build_dir, self.folders, self.dirs, running=running, stamp_now=stamp, accept=accept)
 
 
 def _info(setting_id="", **kw):
@@ -98,7 +100,7 @@ def test_happy_path_writes_files_and_keeps_setting_id(tmp_path):
     new_a, new_b = _preset("A"), _preset("B", filament_id="P0000001")
     build = env.build({"A": new_a, "B": new_b})
 
-    res = env.install(build, stamp="20261102-011500")
+    res = env.install(build, update=True, stamp="20261102-011500")
 
     assert res.installed == ["A", "B"]
     assert res.stale == []
@@ -119,7 +121,7 @@ def test_sixth_install_leaves_five_backups(tmp_path):
     env = Env(tmp_path)
     for i in range(6):
         build = env.build({"A": _preset("A", nozzle_temperature=[str(200 + i)] * 2)})
-        env.install(build, stamp=f"20261102-01000{i}")
+        env.install(build, update=True, stamp=f"20261102-01000{i}")
     left = sorted(p.name for p in env.dirs.backups.iterdir())
     assert left == [f"20261102-01000{i}" for i in range(1, 6)]
     assert json.loads((env.live / "A.json").read_text(encoding="utf-8"))["nozzle_temperature"] == ["205", "205"]
@@ -137,7 +139,7 @@ def test_installed_equals_build_after_success(tmp_path):
     env.snapshot({"OLD": _preset("OLD")})
     build = env.build({"A": _preset("A"), "B": _preset("B")})
     env.install(build)
-    assert tree_hash(env.dirs.installed) == tree_hash(build)
+    assert tree_hash(env.dirs.installed / "base") == tree_hash(build / "base")
     assert sorted(p.name for p in (env.dirs.installed / "base").iterdir()) == ["A.info", "A.json", "B.info", "B.json"]
     assert (env.dirs.installed / "BUILD.json").read_bytes() == (build / "BUILD.json").read_bytes()
     # no temp or old dirs left next to it
@@ -173,7 +175,7 @@ def test_gcode_from_system_or_live_is_trusted(tmp_path):
         "A": _preset("A", filament_start_gcode=SYS_GCODE, filament_end_gcode=["; my own end"]),
         "B": _preset("B", filament_start_gcode=SYS_GCODE),
     })
-    assert env.install(build).installed == ["A", "B"]
+    assert env.install(build, update=True).installed == ["A", "B"]
 
 
 def test_gcode_not_equal_to_live_value_refused(tmp_path):
@@ -204,7 +206,7 @@ def test_edit_carried_by_build_is_fine(tmp_path):
     env = Env(tmp_path, live={"A": (_preset("A", filament_flow_ratio=["0.95"]), _info())})
     env.snapshot({"A": _preset("A")})
     build = env.build({"A": _preset("A", filament_flow_ratio=["0.95"], nozzle_temperature=["225", "225"])})
-    assert env.install(build).installed == ["A"]
+    assert env.install(build, update=True).installed == ["A"]
 
 
 def test_partial_build_values_are_not_late_edits(tmp_path):
@@ -216,7 +218,7 @@ def test_partial_build_values_are_not_late_edits(tmp_path):
         env.install(build)
     assert e.value.code == "stale_build" and "filament_density" in e.value.reason
     _write_build(env.dirs.partial, {"A": _preset("A", filament_density=["1.31"])})
-    assert env.install(build).installed == ["A"]
+    assert env.install(build, update=True).installed == ["A"]
     # a value that differs from the partial copy too is still the owner's edit
     env.live.joinpath("A.json").write_text(json.dumps(_preset("A", filament_density=["1.29"])), encoding="utf-8")
     env.snapshot_replace({"A": _preset("A", filament_density=["1.24"])})
@@ -240,7 +242,7 @@ def test_app_reset_is_not_a_deletion(tmp_path):
     env = Env(tmp_path, live={"D": (_preset("D"), _info())})  # 3 of 4 vanished: app reset
     env.snapshot({n: _preset(n) for n in names})
     build = env.build({n: _preset(n) for n in names})
-    assert env.install(build).installed == names
+    assert env.install(build, update=True).installed == names
     assert all((env.live / f"{n}.json").exists() for n in names)
 
 
@@ -340,7 +342,7 @@ def test_failure_mid_copy_never_leaves_a_half_written_preset(tmp_path, monkeypat
 
     monkeypatch.setattr("builtins.open", fake_open)
     with pytest.raises(OSError):
-        env.install(build)
+        env.install(build, update=True)
     monkeypatch.undo()
 
     assert writes[2].startswith(".") and writes[2].endswith(".fktmp")  # never the live file itself
@@ -351,7 +353,7 @@ def test_failure_mid_copy_never_leaves_a_half_written_preset(tmp_path, monkeypat
     assert not env.dirs.installed.exists()  # the snapshot is only replaced after a full install
 
     # the next run completes the install
-    env.install(build, stamp="20261102-020000")
+    env.install(build, update=True, stamp="20261102-020000")
     assert _valid_json_files(env.live) == {f"{n}.json": d for n, d in new.items()}
 
 
@@ -364,7 +366,7 @@ def test_leftover_tmp_removed_only_after_second_studio_check(tmp_path):
     with pytest.raises(installer.Refused):
         env.install(build, running=lambda: next(answers))
     assert leftover.exists()  # Studio was running: nothing touched
-    env.install(build)
+    env.install(build, update=True)
     assert not leftover.exists()
     assert json.loads((env.live / "A.json").read_text(encoding="utf-8"))["nozzle_temperature"] == ["230", "230"]
 
@@ -445,7 +447,7 @@ def test_gcode_already_installed_once_is_trusted(tmp_path):
     env = Env(tmp_path, live={"D": (_preset("D"), _info())})              # 3 of 4 gone: an app reset
     env.snapshot({n: _preset(n, filament_end_gcode=mine) if n == "A" else _preset(n) for n in names})
     build = env.build({n: _preset(n, filament_end_gcode=mine) if n == "A" else _preset(n) for n in names})
-    assert env.install(build).installed == names
+    assert env.install(build, update=True).installed == names
     # a value that was never installed nor in a system preset is still refused
     env2 = Env(tmp_path / "two", live={"D": (_preset("D"), _info())})
     env2.snapshot({n: _preset(n) for n in names})
@@ -462,7 +464,7 @@ def test_restored_presets_are_not_deletions(tmp_path):
     env.snapshot({n: _preset(n) for n in names})
     build = env.build({n: _preset(n) for n in names})
     _manifest(build, restored=["a"])                                     # casefolded match
-    assert env.install(build).installed == names
+    assert env.install(build, update=True).installed == names
     assert (env.live / "A.json").exists()
 
 
@@ -476,7 +478,7 @@ def test_nil_edit_the_build_carried_is_not_late(tmp_path):
         env.install(build)
     assert e.value.code == "stale_build"
     _manifest(build, inapp={"A": {"nozzle_temperature": ["225", "nil"]}})
-    assert env.install(build).installed == ["A"]
+    assert env.install(build, update=True).installed == ["A"]
     # a later edit (another value than the record's) still refuses
     env.live.joinpath("A.json").write_text(json.dumps(_preset("A", nozzle_temperature=["230", "nil"])),
                                            encoding="utf-8")

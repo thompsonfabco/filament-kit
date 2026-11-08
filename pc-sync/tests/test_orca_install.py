@@ -162,7 +162,7 @@ def test_installs_orca_tree_flat_with_backup_and_snapshot(tmp_path):
     live_before = (e.orca.user_filament / f"{N}.json").read_bytes()
     b = e.build({N: _orca_preset(N, nozzle_temperature=["220"]), "New PLA @SV08 MAX 0.4": _orca_preset("New")},
                 {"Acme PLA @BBL H2D": {"name": "Acme PLA @BBL H2D", "from": "User"}})
-    res = e.install(b)
+    res = e.install(b, accept={"orca": [N]})          # the owner accepted its update
     assert json.loads((e.orca.user_filament / f"{N}.json").read_text())["nozzle_temperature"] == ["220"]
     assert (e.orca.user_filament / "New PLA @SV08 MAX 0.4.json").is_file()
     assert not (e.orca.user_filament / "base" / f"{N}.json").exists()           # Orca's folder is flat
@@ -249,7 +249,7 @@ def test_orca_inapp_record_and_restored(tmp_path):
         e.install(e.build(presets))
     assert "Gone: deleted in Orca Slicer" in ei.value.reason and "filament_flow_ratio" in ei.value.reason
     meta = {"orca_inapp": {N: {"filament_flow_ratio": ["nil"]}}, "orca_restored": ["gone"]}
-    res = e.install(e.build(presets, meta=meta))
+    res = e.install(e.build(presets, meta=meta), accept={"orca": [N]})
     assert res.installed_orca == [N, "Gone"]
     assert (e.orca.user_filament / "Gone.json").is_file()       # restored, not reported as deleted
     assert "Gone" not in res.stale_orca and res.stale_orca == ["B", "C", "D", "E"]  # not built: listed only

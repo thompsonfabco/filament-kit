@@ -24,13 +24,21 @@ Order (each check runs before anything is written):
   5. the user filament folders (which must exist) are backed up to dirs.backups/<stamp> and
      dirs.orca_backups/<same name> (the 5 newest of each are kept); a backup that fails part-way is removed
      and the install refused;
-  6. each staged .json is copied in and its .info written, keeping a live cloud setting_id; every
-     file goes to a sibling `.<name>.fktmp` first and is renamed over the target, so a crash never
-     leaves a half-written preset (leftover temp files are removed at the start of this phase);
+  6. only presets the slicer does not have yet are copied in (the owner's rule, 2026-11-06: never replace one
+     that exists, only add new ones). A preset exists when its file is there (names compared casefolded) or
+     another .json there holds the same preset `name`; it is left exactly as it is (`kept`, `kept_orca`) unless
+     the owner accepted its update on the server (`accept`, {"base"|"orca": [names]}): then it is written over
+     that existing file (after the backup); this is the only path that overwrites a preset. Each written .json
+     gets its .info, keeping a live cloud setting_id; every file goes to a sibling `.<name>.fktmp` first and is
+     renamed over the target, so a crash never leaves a half-written preset (leftover temp files are removed at
+     the start of this phase);
   7. nothing is ever deleted: presets no longer built but still live are returned as `stale` /
      `stale_orca` (they are deleted in the app, never on disk);
-  8. dirs.installed is replaced with a copy of the build (temp dir + rename); an orca/ tree not installed this
-     time keeps the previous snapshot's orca/ (B-I1: Orca edits are still diffed against what Orca holds).
+  8. dirs.installed is replaced with what the slicers now hold (temp dir + rename): the build, with a kept
+     preset's own live .json in place of the build's copy (the owner's file: its G-code counts as theirs) and no
+     copy at all of a preset that lives under another file name (it is not ours to diff); an orca/ tree not
+     installed this time keeps the previous snapshot's orca/ (B-I1: Orca edits are still diffed against what
+     Orca holds).
 """
 import json
 import os
@@ -62,12 +70,14 @@ class Refused(Exception):
 
 @dataclass
 class InstallResult:
-    installed: list[str]
+    installed: list[str]        # written this time (new, or an accepted update)
     stale: list[str]
     backup: Path
     installed_orca: list[str] = field(default_factory=list)
     stale_orca: list[str] = field(default_factory=list)
     backup_orca: Path | None = None
+    kept: list[str] = field(default_factory=list)          # already in the slicer: left as they are
+    kept_orca: list[str] = field(default_factory=list)
 
 
 def read_info(path: Path) -> dict:
@@ -102,7 +112,7 @@ def _load_or_none(path: Path) -> dict | None:
 
 def trusted_gcode(system_filament: Path, *more: Path) -> set[str]:
     """Every G-code value in this PC's Bambu Studio system filament presets (and in the `more` folders, e.g. the
-    installed snapshot's base/)."""
+    installed snapshot's base/: the builds this PC accepted, and the owner's own presets it kept)."""
     ok = set()
     for folder in (system_filament, *more):
         if not folder.is_dir():
@@ -190,9 +200,11 @@ def _remove_leftover_tmp(live: Path) -> None:
             p.unlink()
 
 
-def _replace_installed(build_dir: Path, dirs: AppDirs, skip: tuple[str, ...] = ()) -> None:
-    """dirs.installed becomes a copy of the build; a `skip`ped tree (not installed here) keeps the previous
-    snapshot's copy, if any: it is still what the app holds (the server's Orca snapshot too, Ruling AB)."""
+def _replace_installed(build_dir: Path, dirs: AppDirs, skip: tuple[str, ...] = (), targets=()) -> None:
+    """dirs.installed becomes what the slicers hold now: a copy of the build, with each target's kept presets
+    swapped for their live copy (or dropped when they live under another file name); a `skip`ped tree (not
+    installed here) keeps the previous snapshot's copy, if any: it is still what the app holds (the server's
+    Orca snapshot too, Ruling AB)."""
     dirs.ensure()
     work = Path(tempfile.mkdtemp(prefix=".installed.", suffix=".tmp", dir=dirs.base))
     try:
@@ -202,6 +214,16 @@ def _replace_installed(build_dir: Path, dirs: AppDirs, skip: tuple[str, ...] = (
         for tree in skip:
             if (dirs.installed / tree).is_dir():
                 shutil.copytree(dirs.installed / tree, new / tree)
+        for t in targets:
+            for name, stem in sorted(t.write.items()):     # an accepted update written over another file name
+                if stem.casefold() != name.casefold():
+                    for suffix in (".json", ".info"):
+                        (new / t.tree / f"{name}{suffix}").unlink(missing_ok=True)
+            for name, stem in sorted(t.kept.items()):
+                for suffix in (".json", ".info"):
+                    (new / t.tree / f"{name}{suffix}").unlink(missing_ok=True)
+                if stem.casefold() == name.casefold():
+                    shutil.copyfile(t.live / f"{stem}.json", new / t.tree / f"{name}.json")
         old = work / "old"
         if dirs.installed.exists():
             dirs.installed.rename(old)
@@ -226,6 +248,37 @@ class _Target:
     staged: list[str] = field(default_factory=list)
     new: dict = field(default_factory=dict)
     stale: list[str] = field(default_factory=list)
+    write: dict = field(default_factory=dict)       # name -> the live file stem it is written to
+    kept: dict = field(default_factory=dict)        # name -> the live file stem that holds it (left as it is)
+
+
+def _existing(live: Path) -> tuple[dict[str, str], dict[str, str]]:
+    """({casefolded file stem: stem}, {casefolded preset `name`: stem}) of the presets in a live folder."""
+    by_file, by_name = {}, {}
+    for stem in _names(live):
+        by_file.setdefault(stem.casefold(), stem)
+        try:
+            n = inapp.load(live / f"{stem}.json").get("name")
+        except (OSError, UnicodeDecodeError, ValueError):
+            continue
+        if isinstance(n, str) and n:
+            by_name.setdefault(n.casefold(), stem)
+    return by_file, by_name
+
+
+def _plan(t: _Target, accept: dict | None) -> None:
+    """Step 6's plan for one target: what is written (new presets, accepted updates) and what is kept."""
+    ok = {n.casefold() for n in (accept or {}).get(t.tree, []) if isinstance(n, str)}
+    by_file, by_name = _existing(t.live)
+    for name in t.staged:
+        key = name.casefold()
+        stem = by_file.get(key) or by_name.get(key)
+        if stem is None:
+            t.write[name] = name
+        elif key in ok:
+            t.write[name] = stem
+        else:
+            t.kept[name] = stem
 
 
 def _check(t: _Target, trusted: set[str], record: dict, restored: set[str], unsafe: list, stop: list) -> None:
@@ -266,21 +319,23 @@ def _copy_in(t: _Target) -> None:
     (each file is written to a temp file next to it, then renamed over it)."""
     t.live.mkdir(parents=True, exist_ok=True)
     _remove_leftover_tmp(t.live)
-    for name in t.staged:
-        _write_live(t.live / f"{name}.json", (t.stage / f"{name}.json").read_bytes())
-        info, old_info = read_info(t.stage / f"{name}.info"), read_info(t.live / f"{name}.info")
+    for name, stem in t.write.items():
+        _write_live(t.live / f"{stem}.json", (t.stage / f"{name}.json").read_bytes())
+        info, old_info = read_info(t.stage / f"{name}.info"), read_info(t.live / f"{stem}.info")
         if old_info.get("setting_id") and not info.get("setting_id"):  # synced to the cloud since the build
             info.update(setting_id=old_info["setting_id"], base_id=old_info.get("base_id", ""), sync_info="update")
-        _write_live(t.live / f"{name}.info", _info_bytes(info))
+        _write_live(t.live / f"{stem}.info", _info_bytes(info))
 
 
 def install(build_dir: Path, folders: StudioFolders, dirs: AppDirs, *,
             running: Callable[[], bool], stamp_now: str,
             before_write: Callable[[Path], None] | None = None,
-            orca: OrcaFolders | None = None, orca_running: Callable[[], bool] | None = None) -> InstallResult:
+            orca: OrcaFolders | None = None, orca_running: Callable[[], bool] | None = None,
+            accept: dict | None = None) -> InstallResult:
     """before_write(backup_dir) runs after the backups and before the first live write (the sync
     records it so an interrupted install can be told apart from later in-app edits). `orca`: this PC's
-    Orca Slicer folders (None: the build's orca/ tree is not installed)."""
+    Orca Slicer folders (None: the build's orca/ tree is not installed). `accept`: the updates the owner accepted,
+    {"base"|"orca": [preset names]}: the only existing presets that are written over."""
     build_dir = Path(build_dir)
     orca_running = orca_running or studio.orca_running
     if running():
@@ -322,6 +377,9 @@ def install(build_dir: Path, folders: StudioFolders, dirs: AppDirs, *,
         raise Refused(f"the Orca Slicer user filament folder {orca.user_filament} does not exist; open Orca "
                       "Slicer once, then run the sync again")
 
+    for t in targets:                   # what step 6 writes and keeps (read before anything is written)
+        _plan(t, accept)
+
     # 4. right before the first write
     if running():
         raise Refused(STUDIO_RUNNING, "studio_running")
@@ -344,15 +402,15 @@ def install(build_dir: Path, folders: StudioFolders, dirs: AppDirs, *,
     if before_write is not None:
         before_write(backup)
 
-    # 6. copy presets
+    # 6. copy the new presets and the accepted updates
     for t in targets:
         _copy_in(t)
 
     # 7. nothing deleted; 8. snapshot (without an orca/ tree that was not installed here)
-    _replace_installed(build_dir, dirs, skip=() if o is not None else ("orca",))
-    return InstallResult(installed=bambu.staged, stale=bambu.stale, backup=backup,
-                         installed_orca=o.staged if o else [], stale_orca=o.stale if o else [],
-                         backup_orca=backup_orca)
+    _replace_installed(build_dir, dirs, skip=() if o is not None else ("orca",), targets=targets)
+    return InstallResult(installed=list(bambu.write), stale=bambu.stale, backup=backup,
+                         installed_orca=list(o.write) if o else [], stale_orca=o.stale if o else [],
+                         backup_orca=backup_orca, kept=list(bambu.kept), kept_orca=list(o.kept) if o else [])
 
 
 __all__ = ["Refused", "InstallResult", "install", "KEEP_BACKUPS", "STUDIO_RUNNING", "ORCA_RUNNING"]
