@@ -45,13 +45,37 @@ def test_kit_cap_routes_take_and_refund_the_kits_cap(kit):
     cfg["reads_per_day"] = 2
     config.save(cfg)
     c, h = _client()
-    assert c.post("/api/intake/cap/take", headers=h, json={}).status_code == 200
+    t1 = c.post("/api/intake/cap/take", headers=h, json={}).json()["ticket"]
     assert c.post("/api/intake/cap/take", headers=h, json={}).status_code == 200
     r = c.post("/api/intake/cap/take", headers=h, json={})
     assert r.status_code == 429 and r.json()["error"] == "daily_cap"
-    assert c.post("/api/intake/cap/refund", headers=h, json={}).status_code == 200
+    assert c.post("/api/intake/cap/refund", headers=h, json={"ticket": t1}).status_code == 200
     assert c.post("/api/intake/cap/take", headers=h, json={}).status_code == 200
     assert c.post("/api/intake/cap/take", json={}).status_code == 401
+
+
+def test_kit_cap_refund_needs_a_live_ticket_of_the_same_device(kit):
+    c, h = _client()
+    other = {"Authorization": f"Bearer {pairing.redeem_code(pairing.issue('phone').code)}"}
+    reads = kit / "state" / "reads.json"
+    t = c.post("/api/intake/cap/take", headers=h, json={}).json()["ticket"]
+    for body in ({}, {"ticket": "made-up"}, {"ticket": 5}):
+        r = c.post("/api/intake/cap/refund", headers=h, json=body)
+        assert r.status_code == 409 and r.json()["error"] == "refund_refused", body
+    r = c.post("/api/intake/cap/refund", headers=other, json={"ticket": t})
+    assert r.status_code == 409 and intake.reads_today(reads) == 1
+    assert c.post("/api/intake/cap/refund", headers=h, json={"ticket": t}).status_code == 200
+    assert intake.reads_today(reads) == 0
+    assert c.post("/api/intake/cap/refund", headers=h, json={"ticket": t}).status_code == 409
+    assert c.post("/api/intake/cap/refund", json={"ticket": t}).status_code == 401
+
+
+def test_kit_orders_route_leaves_the_block_out_for_a_missing_file(kit):
+    cfg = config.load()
+    cfg["orders"] = {"file": str(kit / "state" / "no-such-orders.json")}
+    config.save(cfg)
+    c, h = _client()
+    assert c.get("/api/intake/orders", headers=h).json() == {"orders": None}
 
 
 def test_kit_orders_route_reads_the_orders_file(kit):
@@ -74,17 +98,19 @@ def test_web_cap_asks_the_kit():
             self.calls = []
 
         def post(self, path, body):
-            self.calls.append(path)
+            self.calls.append((path, body))
             if len(self.calls) > 1 and path.endswith("/take"):
                 raise slots.SlotError("daily limit of 60 label reads reached", code="daily_cap", http=429)
-            return {"ok": True}
+            return {"ok": True, "ticket": "T1"} if path.endswith("/take") else {"ok": True}
     k = Kit()
     cap = KitCap(k)
     cap.take()
-    with pytest.raises(intake.CapReached):
-        cap.take()
     cap.refund()
-    assert k.calls == ["/api/intake/cap/take", "/api/intake/cap/take", "/api/intake/cap/refund"]
+    assert k.calls == [("/api/intake/cap/take", {}), ("/api/intake/cap/refund", {"ticket": "T1"})]
+    with pytest.raises(intake.CapReached):
+        KitCap(k).take()
+    KitCap(k).refund()                     # nothing taken: nothing to give back, no call
+    assert len(k.calls) == 3
 
 
 def test_read_context_takes_the_orders_from_the_kit(kit, monkeypatch):
@@ -191,6 +217,35 @@ def test_a_lock_is_taken_on_a_file_the_process_may_only_read(kit):
     with pairing.open_lock(f) as fh:
         fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
         fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+
+
+@pytest.mark.parametrize("err", [13, 1, 30])     # EACCES, EPERM, EROFS
+def test_open_lock_falls_back_to_read_only_on_any_refused_write(kit, monkeypatch, err):
+    f = kit / "state" / "ro.lock"
+    f.write_text("", encoding="utf-8")
+    real = os.open
+
+    def opener(path, flags, *a):
+        if flags & (os.O_WRONLY | os.O_RDWR):
+            raise OSError(err, os.strerror(err), str(path))
+        return real(path, flags, *a)
+    monkeypatch.setattr(pairing.os, "open", opener)
+    with pairing.open_lock(f) as fh:
+        assert fh.mode == "r"
+
+
+def test_open_lock_says_what_is_wrong_when_a_read_only_lock_is_missing(kit, monkeypatch):
+    f = kit / "state" / "gone.lock"
+
+    def opener(path, flags, *a):
+        if flags & (os.O_WRONLY | os.O_RDWR):
+            raise OSError(30, "Read-only file system", str(path))
+        raise FileNotFoundError(2, "No such file or directory", str(path))
+    monkeypatch.setattr(pairing.os, "open", opener)
+    with pytest.raises(pairing.LockUnavailable) as e:
+        pairing.open_lock(f)
+    assert "gone.lock" in str(e.value) and "modules apply" in str(e.value)
+    assert isinstance(e.value, OSError)
 
 
 def test_web_grant_includes_the_slot_token_whenever_config_is_saved(kit, monkeypatch):

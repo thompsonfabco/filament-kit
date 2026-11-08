@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import errno
 import hashlib
 import hmac
 import ipaddress
@@ -102,14 +103,28 @@ def make_state_dir(path) -> None:
             give_to_state_owner(d)
 
 
+_REFUSED = (errno.EACCES, errno.EPERM, errno.EROFS)
+
+
+class LockUnavailable(OSError):
+    """A lock this process may not create, and that does not exist yet (made by the kit's install as root)."""
+
+
 def open_lock(path: Path):
     """Open (creating if needed) a lock file in the state directory, owned like the state directory."""
     nofollow = getattr(os, "O_NOFOLLOW", 0)
     try:
         fh = os.fdopen(os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | nofollow, 0o644), "a")
-    except PermissionError:
-        # a lock this process may only read (the web unit's user on the kit's locks): flock works on it all the same
-        fh = os.fdopen(os.open(path, os.O_RDONLY | nofollow), "r")
+    except OSError as e:
+        if e.errno not in _REFUSED:
+            raise
+        # a lock this process may only read (the web unit's user on the kit's locks, or a read-only mount under
+        # ProtectSystem=strict): flock works on a read-only descriptor all the same
+        try:
+            fh = os.fdopen(os.open(path, os.O_RDONLY | nofollow), "r")
+        except FileNotFoundError:
+            raise LockUnavailable(e.errno, f"the lock {path} is missing and this process may not create it; "
+                                  "run `sudo filament-kit modules apply` to make the shared locks", str(path)) from e
     try:
         give_to_state_owner(path)
     except BaseException:

@@ -10,6 +10,7 @@ import json
 import logging
 import math
 import re
+from pathlib import Path
 
 from starlette.applications import Starlette
 from starlette.concurrency import run_in_threadpool
@@ -21,7 +22,7 @@ from starlette.routing import Route
 
 from . import (API_VERSION, __version__, config, intake, inventory, modules, pairing, profiles_api, setup_page,
                station_flow, tags)
-from .intake import CapReached, PhotoError, ReadCap, ReadError
+from .intake import CapReached, PhotoError, ReadCap, ReadError, RefundRefused
 from .bridge import camera, hardware, loading, mapping, registry, usage
 from .bridge.connection import ACTIONS, DEVELOPER_MODE_REASON, Manager, NoReply, PrinterOffline, UnknownPrinter
 from .bridge.slottest import NoStatus, PrinterBusy
@@ -61,6 +62,8 @@ def _to_response(e: Exception) -> JSONResponse:
         return _err(400, "bad_photo", str(e))
     if isinstance(e, CapReached):
         return _err(429, "daily_cap", str(e))
+    if isinstance(e, RefundRefused):
+        return _err(409, "refund_refused", str(e))
     if isinstance(e, ReadError):
         return _err(404 if e.code == "not_found" else 502, e.code, e.message, read_id=e.read_id)
     if isinstance(e, TagConflict):
@@ -529,41 +532,47 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             raise BadRequest("hint and tag must be text fields")
         images = intake.check_photos(photos)
         uid = tags.normalize_uid(tag) if tag.strip() else None
+        device = request.state.device
+
         def run() -> dict:
-            cap.take()
+            ticket = cap.take(device)
             try:
                 ctx = intake.read_context(config.load(), sm, station_client(), app_tag=uid is not None)
                 return intake.read_labels(sm, images, hint[:MAX_HINT], uid, claude, **ctx)
             except SpoolmanError:  # Spoolman down: the catalog fetch failed before Claude was called
-                cap.refund()
+                intake.refund_quietly(cap, ticket, device)
                 raise
         return JSONResponse(await run_in_threadpool(run))
 
     @_authed
     async def intake_retry(request: Request):
         read_id = request.path_params["read_id"]
+        device = request.state.device
 
         def run() -> dict:
             if not intake.is_kept(read_id):  # an unknown or expired read fails with not_found, using no read
                 return intake.retry(read_id, sm, claude)
-            cap.take()
+            ticket = cap.take(device)
             try:
                 return intake.retry(read_id, sm, claude, orders=intake.read_context(
                     config.load(), sm, None, app_tag=True)["orders"])
             except SpoolmanError:  # Spoolman down: the catalog fetch failed before Claude was called
-                cap.refund()
+                intake.refund_quietly(cap, ticket, device)
                 raise
         return JSONResponse(await run_in_threadpool(run))
 
     # ---------- the web unit's label reads (Ruling CG): the kit's cap and order history, never its files ----------
     @_authed
     async def cap_take(request: Request):
-        await run_in_threadpool(cap.take)
-        return JSONResponse({"ok": True})
+        """One read off the shared cap; the ticket gives it back (cap_refund) within intake.TICKET_TTL."""
+        ticket = await run_in_threadpool(cap.take, request.state.device)
+        return JSONResponse({"ok": True, "ticket": ticket})
 
     @_authed
     async def cap_refund(request: Request):
-        await run_in_threadpool(cap.refund)
+        """Give back the read of one live ticket this device's take returned (409 refund_refused otherwise)."""
+        ticket = (await _json(request)).get("ticket")
+        await run_in_threadpool(cap.refund, ticket, request.state.device)
         return JSONResponse({"ok": True})
 
     @_authed
@@ -572,7 +581,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         def build():
             cfg = config.load()
             path = (cfg.get("orders") or {}).get("file")
-            return intake.load_orders(cfg) if path else None
+            return intake.load_orders(cfg) if path and Path(path).is_file() else None  # as read_context's
         return JSONResponse({"orders": await run_in_threadpool(build)})
 
     @_authed
@@ -613,7 +622,8 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         except PhotoError as e:
             raise station_flow.FlowError(400, "bad_photo", str(e), station_flow.lines("Bad photo", "try again")) from e
         return await run_in_threadpool(
-            lambda: station_flow.recognize(sm, config.load(), image, claude, cap))
+            lambda: station_flow.recognize(sm, config.load(), image, claude, cap,
+                                           getattr(request.state, "device", None)))
 
     async def station_save(request: Request):
         body = await _json(request)

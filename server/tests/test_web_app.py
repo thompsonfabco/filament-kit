@@ -110,18 +110,26 @@ class CapKit:
         from filament_kit.web.slots import SlotError
         if path == "/api/intake/cap/take":
             try:
-                self._cap().take()
+                return {"ok": True, "ticket": self._cap().take("web (MCP)")}
             except intake.CapReached as e:
                 raise SlotError(str(e), code="daily_cap", http=429) from None
-            return {"ok": True}
         if path == "/api/intake/cap/refund":
-            self._cap().refund()
+            if self.refund_down:
+                raise SlotError("the kit server did not answer", code="unreachable")
+            try:
+                self._cap().refund(body.get("ticket"), "web (MCP)")
+            except intake.RefundRefused as e:
+                raise SlotError(str(e), code="refund_refused", http=409) from None
             return {"ok": True}
         raise SlotError("the kit server answered 404", http=404)
+
+    refund_down = orders_down = False
 
     def get(self, path):
         from filament_kit.web.slots import SlotError
         if path == "/api/intake/orders":
+            if self.orders_down:
+                raise SlotError("the kit server answered 401", code="unpaired", http=401)
             return {"orders": None}
         raise SlotError("the kit server answered 404", http=404)
 
@@ -394,6 +402,36 @@ def test_web_read_refunds_only_when_claude_was_not_reached(app, sm, fake, monkey
         monkeypatch.setattr(sm, "get", down)                             # catalog fetch fails: refunded
         r = c.post("/intake/api/read", files=photo, **post)
         assert r.status_code == 400 and count() == 1
+
+
+def test_web_read_goes_on_without_orders_when_the_kit_cannot_give_them(sm, store, lockout, fake):
+    kit = CapKit()
+    kit.orders_down = True
+    app = web_app.build_app(sm=sm, store=store, lockout=lockout, claude=fake, kit_api=kit)
+    with _client(app) as c:
+        r = c.post("/intake/api/read", files=[("photos", ("a.jpg", JPEG, "image/jpeg"))],
+                   headers={"Origin": ORIGIN})
+    assert r.status_code == 200, r.text
+    assert fake.calls
+
+
+def test_web_read_failed_refund_never_hides_the_spoolman_error(sm, store, lockout, fake, monkeypatch, caplog):
+    from filament_kit.spoolman import SpoolmanError
+    kit = CapKit()
+    kit.refund_down = True
+    app = web_app.build_app(sm=sm, store=store, lockout=lockout, claude=fake, kit_api=kit)
+    orig = sm.get
+
+    def down(path, *a, **kw):
+        if "filament" in path:
+            raise SpoolmanError("spoolman_unreachable", status=None)
+        return orig(path, *a, **kw)
+    monkeypatch.setattr(sm, "get", down)
+    with _client(app) as c:
+        r = c.post("/intake/api/read", files=[("photos", ("a.jpg", JPEG, "image/jpeg"))],
+                   headers={"Origin": ORIGIN})
+    assert r.status_code == 400 and "spoolman" in r.text.lower(), r.text
+    assert "refund" in caplog.text.lower()
 
 
 def test_ai_off_page_hides_reading_and_manual_add_works(app, env, sm):

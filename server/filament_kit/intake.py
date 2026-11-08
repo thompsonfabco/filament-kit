@@ -17,6 +17,7 @@ spool with a fresh (or held) station weight above its tare gets `gross`.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import os
 import re
@@ -133,48 +134,110 @@ def check_photos(photos: list[tuple[str, bytes]]) -> list[bytes]:
     return out
 
 
+TICKET_TTL = 120   # seconds a take's refund ticket stays good: a read that fails before Claude fails fast
+
+
+class RefundRefused(ValueError):
+    """A cap refund with no live ticket of this device's take (unknown, expired, used, or another device's)."""
+
+
+def _hash(ticket: str) -> str:
+    return hashlib.sha256(ticket.encode()).hexdigest()
+
+
+def _stamps(raw) -> list[dict]:
+    """reads.json's entries as {t, ticket?, device?}: a bare number is the old format (a stamp, no ticket)."""
+    out = []
+    for e in raw if isinstance(raw, list) else []:
+        if isinstance(e, (int, float)) and not isinstance(e, bool):
+            out.append({"t": float(e)})
+        elif isinstance(e, dict) and isinstance(e.get("t"), (int, float)):
+            out.append(e)
+    return out
+
+
+def reads_today(path: Path) -> int:
+    """The reads taken in the last 24 h (`doctor`'s count and the tests'), in either format of reads.json."""
+    try:
+        raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return 0
+    return sum(1 for e in _stamps(raw) if e["t"] > time.time() - 86400)
+
+
 class ReadCap:
-    """At most `per_day` reads in any 24 h; timestamps persist in `path` so restarts don't reset the cap."""
+    """At most `per_day` reads in any 24 h; timestamps persist in `path` so restarts don't reset the cap.
+
+    `take` gives a single-use ticket for its stamp; `refund` (a read that never reached Claude) needs that ticket,
+    from the same device, within TICKET_TTL, and removes exactly that stamp. Kept hashed in reads.json under its
+    lock, so the kit's own reads and the web unit's (through the kit API) share one cap across restarts."""
 
     def __init__(self, path: Path, per_day: int):
         self.path, self.per_day = Path(path), per_day
-        # `reads.lock` beside the file: the server and web processes share one cap
+        # `reads.lock` beside the file: one cap however many threads and processes take from it
         self._lock = locks.ProcessLock(self.path.with_name("reads.lock"))
 
-    def _load(self, now: float) -> list[float]:
+    def _load(self, now: float) -> list[dict]:
         try:
-            return [t for t in json.loads(self.path.read_text(encoding="utf-8")) if t > now - 86400]
-        except (OSError, ValueError, TypeError):
+            raw = json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
             return []
+        out = []
+        for e in _stamps(raw):
+            if e["t"] <= now - 86400:
+                continue
+            if "ticket" in e and e["t"] < now - TICKET_TTL:   # a dead ticket: keep only the stamp
+                e = {"t": e["t"]}
+            out.append(e)
+        return out
 
-    def _save(self, stamps: list[float]) -> None:
+    def _save(self, stamps: list[dict]) -> None:
         """A temp file and a rename, so a crash never resets the cap. The kit's own file: the web unit takes its
         reads through the kit API (/api/intake/cap/take)."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_name(self.path.name + ".tmp")
         fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o644)
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(json.dumps(stamps))
+            fh.write(json.dumps([e if "ticket" in e else e["t"] for e in stamps]))
             fh.flush()
             os.fsync(fh.fileno())
         os.replace(tmp, self.path)
 
-    def take(self) -> None:
+    def take(self, device: str | None = None) -> str:
+        """Use one read; returns the ticket that may give it back (`refund`)."""
         with self._lock:
             now = time.time()
             stamps = self._load(now)
             if len(stamps) >= self.per_day:
                 raise CapReached(f"daily limit of {self.per_day} label reads reached (reads_per_day)")
-            stamps.append(now)
+            ticket = secrets.token_urlsafe(16)
+            stamps.append({"t": now, "ticket": _hash(ticket), "device": device})
             self._save(stamps)
+            return ticket
 
-    def refund(self) -> None:
-        """Give back the newest read (one that never reached Claude)."""
+    def refund(self, ticket, device: str | None = None) -> None:
+        """Give back the read `ticket` took (one that never reached Claude). Refused, changing nothing, unless the
+        ticket is live, unused and this device's."""
+        if not isinstance(ticket, str) or not ticket:
+            raise RefundRefused("a refund needs the ticket its take returned")
         with self._lock:
             stamps = self._load(time.time())
-            if stamps:
-                stamps.remove(max(stamps))
-            self._save(stamps)
+            h = _hash(ticket)
+            for i, e in enumerate(stamps):
+                if e.get("ticket") == h and e.get("device") == device:
+                    del stamps[i]
+                    self._save(stamps)
+                    return
+        raise RefundRefused(f"no live read to refund for this ticket (unknown, used, from another device, "
+                            f"or older than {TICKET_TTL} s)")
+
+
+def refund_quietly(cap, ticket, device=None) -> None:
+    """A refund on a failure path: logged when refused, never hiding the error being handled."""
+    try:
+        cap.refund(ticket, device)
+    except Exception as e:  # noqa: BLE001 - best effort; the original error is the one to report
+        log.warning("cap refund failed: %s", e)
 
 
 # ---------- order history (the `orders` module) ----------

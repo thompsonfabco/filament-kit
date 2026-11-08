@@ -66,11 +66,8 @@ def _line(ok: bool, text: str, fix: str = "") -> bool:
 
 
 def _reads_today() -> int:
-    try:
-        stamps = json.loads((config.paths().state / "reads.json").read_text(encoding="utf-8"))
-        return sum(1 for t in stamps if t > time.time() - 86400)
-    except (OSError, ValueError, TypeError):
-        return 0
+    from .intake import reads_today
+    return reads_today(config.paths().state / "reads.json")
 
 
 def _api_answers(port: int) -> tuple[bool, str]:
