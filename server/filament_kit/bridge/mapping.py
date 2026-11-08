@@ -116,6 +116,7 @@ class _Job:
     step: str = "Starting"
     problems: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)      # not problems: what a good result does not settle yet
+    scheme_unsettled: bool = False                      # several numbering schemes fit; the model's first was taken
     started: float = field(default_factory=time.time)
     finished: float | None = None
     abort: _Flag = field(default_factory=_Flag)
@@ -133,7 +134,7 @@ def _save_status(serial: str, job: _Job) -> None:
         d = _dir(serial)
         make_state_dir(d)
         data = {"job_id": job.id, "state": job.state, "step": job.step, "problems": job.problems,
-                "notes": job.notes, "started": job.started, "finished": job.finished}
+                "notes": job.notes, "scheme_unsettled": job.scheme_unsettled, "started": job.started, "finished": job.finished}
         _write_atomic(d / STATUS_FILE, json.dumps(data, indent=2).encode("utf-8"), 0o600, state_owned=True)
     except OSError:
         log.exception("mapping %s: cannot write the status file", serial)
@@ -163,6 +164,7 @@ def _load_status(serial: str) -> dict | None:
     return {"job_id": str(d.get("job_id") or ""), "state": d["state"], "step": str(d.get("step") or ""),
             "problems": [str(p) for p in probs] if isinstance(probs, list) else [],
             "notes": [str(n) for n in notes] if isinstance(notes, list) else [],
+            "scheme_unsettled": d.get("scheme_unsettled") is True,
             "finished": finished if isinstance(finished, (int, float)) and not isinstance(finished, bool) else None}
 
 
@@ -546,6 +548,7 @@ class Mapper:
         ams.save_map(serial, smap)
         job.problems = problems
         job.notes = list(cr.notes)
+        job.scheme_unsettled = cr.scheme_unsettled
         job.state = "done" if cr.restored else "failed"
 
     # ---------------------------------------------------------------- progress
@@ -555,13 +558,15 @@ class Mapper:
         map was made; `remapping` = this process runs a re-map that `LayoutWatch` started (layout change or suspect
         map); `scheme` = the numbering scheme calibration proved (None: none yet); `suspect` = two prints in a row
         disagreed with the map (logging only until the re-map); `notes` = what a good result does not settle yet
-        (not problems); `problems_old` = the problems are from a job an earlier server run finished, so an update or
+        (not problems); `scheme_unsettled` = several numbering schemes fit and the model's first was taken, the reason
+        to map again after loading a second unit (a client keys on this, never on a note's text); `problems_old` = the problems are from a job an earlier server run finished, so an update or
         a fix since may have dealt with them: they say what happened then, not what is wrong now, and they never
         stop a new mapping; `finished` = when that job ended (epoch seconds, None: not known or still running)."""
         with self._lock:
             j = self._jobs.get(serial)
             mine = None if j is None else {"job_id": j.id, "state": j.state, "step": j.step,
                                            "problems": list(j.problems), "notes": list(j.notes),
+                                           "scheme_unsettled": j.scheme_unsettled,
                                            "finished": j.finished}
         saved = _load_status(serial)
         # this process's own job is the truth unless the file holds a later job (run by another process); the
@@ -585,7 +590,8 @@ class Mapper:
         old = (st is not mine and bool(st["problems"]) and (ended is None or ended < _STARTED)
                and not (st["state"] == "running" and _ProcessLock.held_elsewhere(serial)))
         return {"state": st["state"], "step": st["step"], "slots": slots, "calibrated": m.calibrated,
-                "observe": m.observe, "problems": st["problems"], "notes": st.get("notes", []), "problems_old": old,
+                "observe": m.observe, "problems": st["problems"], "notes": st.get("notes", []),
+                "scheme_unsettled": st.get("scheme_unsettled", False), "problems_old": old,
                 "finished": st.get("finished"), "stale": m.stale, "remapping": remapping,
                 "scheme": m.scheme, "suspect": m.suspect}
 

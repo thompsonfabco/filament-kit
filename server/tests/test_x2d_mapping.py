@@ -70,6 +70,7 @@ def test_one_unit_fits_both_schemes_takes_the_first_and_says_so(fake_ftp, x2d):
     assert r.scheme == "shift8"
     assert len(r.notes) == 1 and "shift8, legacy" in r.notes[0]
     assert "map again after loading a second unit" in r.notes[0]
+    assert r.scheme_unsettled is True
 
 
 def test_a_second_unit_settles_the_scheme_without_a_note(fake_ftp, x2d):
@@ -78,6 +79,7 @@ def test_a_second_unit_settles_the_scheme_without_a_note(fake_ftp, x2d):
     m = FakeManager(fake_ftp.root, "native", report=rep)
     r = calib3mf.run(m, SERIAL, x2d_map(rep))
     assert r.scheme == "shift8" and r.notes == [] and r.decoding["B1"] == 1 << 8, r.problems
+    assert r.scheme_unsettled is False
 
 
 def test_empty_ams_slot_stays_out_of_the_job(fake_ftp, x2d):
@@ -454,6 +456,22 @@ def test_notes_survive_the_status_file(tmp_path, monkeypatch):
     monkeypatch.setenv("FK_STATE", str(tmp_path / "state3"))
     _status(SERIAL, problems=[], notes=["numbered alike"])
     assert mapping.Mapper(_NoManager()).view(SERIAL)["notes"] == ["numbered alike"]
+
+
+def test_scheme_unsettled_survives_the_status_file(tmp_path, monkeypatch):
+    monkeypatch.setenv("FK_STATE", str(tmp_path / "state3"))
+    _status(SERIAL, problems=[], scheme_unsettled=True)
+    assert mapping.Mapper(_NoManager()).view(SERIAL)["scheme_unsettled"] is True
+    _status(SERIAL, problems=[])
+    assert mapping.Mapper(_NoManager()).view(SERIAL)["scheme_unsettled"] is False
+
+
+def test_the_view_says_the_scheme_is_unsettled_after_a_real_run(rig, monkeypatch):
+    monkeypatch.setattr(calib3mf, "run", lambda *a, **k: calib3mf.CalibResult(
+        consistent=True, scheme="shift8", scheme_unsettled=True, notes=["numbered alike"]))
+    m, _printer = rig(_with_presence("7"))
+    v = mapping.Mapper(m).run(SLOT_SERIAL)
+    assert v["calibrated"] is True and v["scheme_unsettled"] is True and v["notes"] == ["numbered alike"]
 
 
 def test_a_status_file_from_before_this_change_still_loads(tmp_path, monkeypatch):

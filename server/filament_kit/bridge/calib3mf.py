@@ -122,6 +122,7 @@ class CalibResult:
     skipped: list[str] = field(default_factory=list)          # empty slots, not part of the job
     external: list[str] = field(default_factory=list)         # external holders: never part of the job (own id)
     notes: list[str] = field(default_factory=list)            # not problems: what the result does not settle yet
+    scheme_unsettled: bool = False                            # several schemes fit; the model's first was taken
     cert_changed: bool = False
     restored: bool = True     # we left nothing changed (false: a filament left loaded in the toolhead)
     job: str = ""             # this run's subtask_name (`run_name`)
@@ -916,6 +917,7 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
         res.problems.append(f"the reported slot numbers {list(res.mapping)} fit no numbering scheme of this "
                             f"printer model ({', '.join(candidates)})")
     elif len(proved) > 1:
+        res.scheme_unsettled = True
         log.info("printer %s: the loaded slots number alike under %s; taking %s (the model's first)", serial,
                  ", ".join(proved), res.scheme)
         res.notes.append(f"the loaded slots are numbered alike under {', '.join(proved)}: the numbering of further "
