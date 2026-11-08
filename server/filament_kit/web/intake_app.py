@@ -28,7 +28,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Route
 
-from .. import intake, inventory, modules, tagsources
+from .. import intake, inventory, lan, modules, tagsources
 from ..intake import CapReached, ReadError
 from ..spoolman import SpoolmanError
 from ..station_client import StationClient
@@ -208,7 +208,9 @@ class IntakeApp:
 
     async def page(self, request: Request):
         if not self._lan(request):
-            return self._html(HOME_ONLY, 403)
+            client = request.client.host if request.client else ""
+            hint = f"<main><p>{lan.IPV6_HINT}</p></main>" if lan.over_ipv6(client) else ""
+            return self._html(HOME_ONLY + hint, 403)
         return self._html(await anyio.to_thread.run_sync(self._shell), app=True)
 
     async def asset(self, request: Request):

@@ -7,6 +7,9 @@ it for the run.
 """
 from __future__ import annotations
 
+import datetime
+import hashlib
+import hmac
 import ipaddress
 import os
 import re
@@ -25,6 +28,10 @@ PROXY_CONF = "/etc/nginx/mcp-proxy.conf"
 ROUTE_DIR = "/etc/nginx/mcp.d"
 ROUTER_DIR = "/etc/mcp-router"
 TLS_DIR = ROUTER_DIR + "/tls"
+PLACEHOLDER_MARK = TLS_DIR + "/placeholder.sha256"  # the hash of the certificate the kit made itself
+PLACEHOLDER_DAYS = 825  # iOS refuses a server certificate over 825 days, or one without serverAuth
+RENEW_DAYS = 30         # at an apply, a placeholder this close to its end is made again; `web status` warns as well
+LEGACY_DAYS = 31        # up to 0.4.x the placeholder lasted 30 days and had no mark
 TIMER_DROPIN = "/etc/systemd/system/certbot.timer.d/acme-window.conf"
 DEPLOY_HOOK_FILE = "/etc/letsencrypt/renewal-hooks/deploy/filament-kit"
 KIT_ROUTES = ROUTER_DIR + "/kit-routes"  # names of the routes this kit added, one per line
@@ -39,6 +46,97 @@ _HOST = re.compile(r"^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$")
 _NAME = re.compile(r"^[a-z][a-z0-9-]{1,30}$")
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _WINDOW = re.compile(r"^(\d{1,2}):(\d{2})(?: ([A-Za-z0-9_+/-]+))?$")
+
+
+def make_placeholder(host: str, now: datetime.datetime | None = None) -> tuple[bytes, bytes]:
+    """(certificate, key) in PEM: self-signed for `host`, lasting PLACEHOLDER_DAYS, with serverAuth."""
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, host)])
+    cert = (x509.CertificateBuilder().subject_name(name).issuer_name(name).public_key(key.public_key())
+            .serial_number(x509.random_serial_number())
+            .not_valid_before(now - datetime.timedelta(minutes=5))
+            .not_valid_after(now + datetime.timedelta(days=PLACEHOLDER_DAYS))
+            .add_extension(x509.SubjectAlternativeName([x509.DNSName(host)]), critical=False)
+            .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), critical=False)
+            .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+            .sign(key, hashes.SHA256()))
+    return (cert.public_bytes(serialization.Encoding.PEM),
+            key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.TraditionalOpenSSL,
+                              serialization.NoEncryption()))
+
+
+def _names(cert) -> set[str]:
+    from cryptography import x509
+    from cryptography.x509.oid import NameOID
+    out = {a.value for a in cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)}
+    try:
+        out |= set(cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+                   .get_values_for_type(x509.DNSName))
+    except x509.ExtensionNotFound:
+        pass
+    return out
+
+
+def placeholder_due(cert_pem: bytes | None, mark: str | None, host: str,
+                    now: datetime.datetime | None = None) -> str | None:
+    """Why the kit should make its placeholder now, or None. Only a certificate that is provably the kit's own is ever
+    replaced: its hash is in the mark, or (from before the mark) it is self-issued for this host and lasted LEGACY_DAYS
+    or less. Anything else, a Let's Encrypt certificate or one placed by hand, however old, is left alone."""
+    if cert_pem is None:
+        return "there is none yet"
+    from cryptography import x509
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    try:
+        cert = x509.load_pem_x509_certificate(cert_pem)
+    except ValueError:
+        return None
+    start, end = cert.not_valid_before_utc, cert.not_valid_after_utc
+    if mark is None or not mark.strip():
+        ours = (cert.issuer == cert.subject and end - start <= datetime.timedelta(days=LEGACY_DAYS)
+                and host in _names(cert))
+        return "the placeholder from an earlier version lasts only 30 days" if ours else None
+    if not hmac.compare_digest(hashlib.sha256(cert_pem).hexdigest(), mark.strip()):
+        return None
+    if host not in _names(cert):
+        return "the host name changed"
+    if end - now <= datetime.timedelta(days=RENEW_DAYS):
+        return f"it ends within {RENEW_DAYS} days"
+    return None
+
+
+def served_certificate(port: int = 443, timeout: float = 3.0) -> dict | None:
+    """What nginx serves here, by a handshake: {self_signed, not_after (a datetime, UTC)}. The certificate's folder is
+    root's and this runs as the service user. None when nothing answers there."""
+    from cryptography import x509
+
+    from .bridge import tlspin
+    try:
+        cert = x509.load_der_x509_certificate(tlspin._leaf_der("127.0.0.1", port, timeout))
+    except (OSError, ValueError):
+        return None
+    return {"self_signed": cert.issuer == cert.subject, "not_after": cert.not_valid_after_utc}
+
+
+def certificate_warning(info: dict | None, now: datetime.datetime | None = None) -> tuple[bool, str, str] | None:
+    """(expired, text, fix) when the served certificate ends within RENEW_DAYS, else None. For a self-signed one an
+    apply is the fix (one the kit didn't make it leaves alone); certbot looks after the others."""
+    if info is None:
+        return None
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    left = info["not_after"] - now
+    if left > datetime.timedelta(days=RENEW_DAYS):
+        return None
+    day = info["not_after"].strftime("%Y-%m-%d")
+    kind = "self-signed certificate" if info["self_signed"] else "certificate"
+    fix = ("sudo filament-kit modules apply makes a new placeholder; the phone then asks you to accept it again"
+           if info["self_signed"] else "sudo certbot renew; see the remote section of the guide")
+    return (left.total_seconds() <= 0, f"the web address's {kind} {'ended' if left.total_seconds() <= 0 else 'ends'} "
+                                       f"on {day}", fix)
 
 
 def settings(cfg: dict) -> dict:

@@ -8,6 +8,7 @@ ever deletes data.
 """
 from __future__ import annotations
 
+import hashlib
 import importlib.metadata
 import ipaddress
 import json
@@ -566,12 +567,18 @@ def _remote_install(ex: _Exec, host: str) -> None:
         os.chmod(_under(ex.root, d), mode)
     cert = _under(ex.root, f"{remote.TLS_DIR}/fullchain.pem")
     key = _under(ex.root, f"{remote.TLS_DIR}/privkey.pem")
-    if not cert.exists():  # never replaces a real certificate
-        print(f"\n==> Placeholder certificate for {host} (replaced when certbot succeeds)")
-        ex.cmd(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "30",
-                "-subj", f"/CN={host}", "-addext", f"subjectAltName=DNS:{host}",
-                "-keyout", str(key), "-out", str(cert)])
-        ex.cmd(["chmod", "600", str(key)])
+    mark = _under(ex.root, remote.PLACEHOLDER_MARK)
+    cert_was = cert.exists()
+    why = remote.placeholder_due(cert.read_bytes() if cert.exists() else None,
+                                 mark.read_text(encoding="utf-8") if mark.exists() else None, host)
+    if why:         # never a real certificate: see placeholder_due
+        print(f"\n==> Placeholder certificate for {host}, because {why} (replaced when certbot succeeds)")
+        if cert.exists():
+            print("A phone that accepted the old one asks you to accept this one too.")
+        cert_pem, key_pem = remote.make_placeholder(host)
+        ex.write(f"{remote.TLS_DIR}/privkey.pem", key_pem, 0o600)
+        ex.write(f"{remote.TLS_DIR}/fullchain.pem", cert_pem, 0o644)
+        ex.write(remote.PLACEHOLDER_MARK, (hashlib.sha256(cert_pem).hexdigest() + "\n").encode("ascii"), 0o644)
     try:
         ex.cmd(["nginx", "-t"])
     except (subprocess.CalledProcessError, OSError):
@@ -587,6 +594,8 @@ def _remote_install(ex: _Exec, host: str) -> None:
         print("nginx -t failed: " + "; ".join(([f"put back the previous {', '.join(back)}"] if back else [])
                                                + ([f"removed {', '.join(gone)} again"] if gone else [])))
         raise
+    if why and cert_was:
+        ex.ok(["systemctl", "reload", "nginx"])  # nginx holds the old one until told; a stopped nginx needs nothing
 
 
 def _remote_route(ex: _Exec, name: str, port: int) -> None:
