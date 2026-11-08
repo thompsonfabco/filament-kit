@@ -17,6 +17,36 @@ class UpdateTextsTest {
         assertEquals("Update available", UpdateTexts.bannerTitle(" "))
     }
 
+    /** The guide can't be the only advice: it needs the internet, and its other lines are about manual installs. */
+    @Test fun theRefusalSaysWhatToDoOnItsOwn() {
+        assertTrue("Check who runs your server" in UpdateTexts.NOT_SIGNED_LIKE_YOUR_APP)
+    }
+
+    /** That paragraph, unlike the page's "App not installed" line, doesn't tell the user to uninstall. */
+    @Test fun theRefusalLinksToItsOwnGuideParagraph() {
+        assertTrue(UpdateTexts.REFUSED_GUIDE_URL.endsWith("docs/install-android-app.md#update-refused"))
+        assertTrue(UpdateTexts.REFUSED_GUIDE_URL.startsWith("https://"))
+    }
+
+    @Test fun afterARefusalTheButtonDoesNotSayInstall() {
+        val refused = UpdateUi(available = 7, error = UpdateTexts.NOT_SIGNED_LIKE_YOUR_APP)
+        assertTrue(UpdateTexts.refused(refused))
+        assertEquals("Try again after fixing the server", UpdateTexts.installLabel(refused))
+    }
+
+    @Test fun anyOtherFailureKeepsThePlainButton() {
+        val other = UpdateUi(available = 7, error = "Not enough storage on this phone to install the update.")
+        assertFalse(UpdateTexts.refused(other))
+        assertEquals("Install", UpdateTexts.installLabel(other))
+        assertEquals("Install", UpdateTexts.installLabel(UpdateUi(available = 7)))
+        assertEquals("Downloading…", UpdateTexts.installLabel(UpdateUi(available = 7, busy = true)))
+    }
+
+    @Test fun aRetryUnderWaySaysDownloading() {
+        val retry = UpdateUi(available = 7, busy = true, error = UpdateTexts.NOT_SIGNED_LIKE_YOUR_APP)
+        assertEquals("Downloading…", UpdateTexts.installLabel(retry))
+    }
+
     @Test fun nothingToSayWhenItWorkedWaitsOrWasCancelled() {
         for (s in listOf(PackageInstaller.STATUS_SUCCESS, PackageInstaller.STATUS_PENDING_USER_ACTION,
             PackageInstaller.STATUS_FAILURE_ABORTED)) {
