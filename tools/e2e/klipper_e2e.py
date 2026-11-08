@@ -106,6 +106,12 @@ def main(variant, data):
         ok(f"connected to real Moonraker, state {state}, verified={fam.verified(pid)}")
         st = fam.status(pid)
         assert st["gcode_state"] == "IDLE", st["gcode_state"]
+        # real Moonraker's own answer, and the kit agrees where it points: the printer here is on the kit's machine
+        connected = mr("/server/spoolman/status")["spoolman_connected"]
+        assert isinstance(connected, bool), connected
+        want_warning = "Moonraker cannot reach its Spoolman: usage is not getting there" if not connected else None
+        assert st["spoolman_warning"] == want_warning, st["spoolman_warning"]
+        ok(f"Moonraker's Spoolman is the kit's; Moonraker says connected={connected}")
         if variant == "single":
             r = fam.load(sm, pid, "T0", a["id"], False, sealed_location="Sealed stock")
             assert r["confirmed"] is True, r["problems"]

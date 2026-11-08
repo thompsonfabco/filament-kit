@@ -9,7 +9,8 @@ host or another: real Moonraker doesn't send them, and the key must not go where
 `Subscriber(client, objects, on_status, on_event, backoff=(2, 60))`: a thread that keeps one websocket open to
 `/websocket`, subscribes to `objects` (`printer.objects.subscribe`), calls `on_status(status)` with the full snapshot
 after each (re)subscribe and with each `notify_status_update` delta, and `on_event(name, params)` for
-`notify_klippy_ready|shutdown|disconnected` and `notify_active_spool_set`. It re-subscribes after
+`notify_klippy_ready|shutdown|disconnected`, `notify_active_spool_set` and `notify_spoolman_status_changed`. It
+re-subscribes after
 `notify_klippy_ready` (Klipper restarted: subscriptions are gone) and reconnects with doubling backoff. Callbacks
 run on the subscriber's thread and must not block for long.
 """
@@ -28,7 +29,8 @@ from typing import Callable
 
 log = logging.getLogger(__name__)
 ACTIONS = ("pause", "resume", "cancel")
-EVENTS = ("notify_klippy_ready", "notify_klippy_shutdown", "notify_klippy_disconnected", "notify_active_spool_set")
+EVENTS = ("notify_klippy_ready", "notify_klippy_shutdown", "notify_klippy_disconnected", "notify_active_spool_set",
+          "notify_spoolman_status_changed")
 MAX_BODY = 8_000_000
 
 
