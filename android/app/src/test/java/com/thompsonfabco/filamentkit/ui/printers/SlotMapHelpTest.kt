@@ -1,0 +1,175 @@
+package com.thompsonfabco.filamentkit.ui.printers
+
+import com.thompsonfabco.filamentkit.net.MapSlot
+import com.thompsonfabco.filamentkit.net.MapStatus
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class SlotMapHelpTest {
+    private val fourSlots = listOf("A1", "A2", "A3", "A4").map { MapSlot(label = it) }
+    private val note = "the loaded slots are numbered alike under shift8, legacy: the numbering of further " +
+        "AMS units is settled when one is added (the map is made again then)"
+
+    // ---- the states ----
+
+    @Test fun noMapYetSaysNothing() {
+        val v = SlotMapHelp.view(MapStatus(state = "none"))
+        assertEquals(SlotMapOutcome.NONE, v.outcome)
+        assertNull(v.headline)
+        assertNull(v.detail)
+    }
+
+    @Test fun noStatusLoadedYetSaysNothing() {
+        assertEquals(SlotMapOutcome.NONE, SlotMapHelp.view(null).outcome)
+    }
+
+    @Test fun runningShowsTheServersStep() {
+        val v = SlotMapHelp.view(MapStatus(state = "running", step = "Testing A2"))
+        assertEquals(SlotMapOutcome.RUNNING, v.outcome)
+        assertEquals("Testing A2", v.headline)
+        assertFalse(v.headlineIsError)
+    }
+
+    @Test fun runningWithoutAStepStillSaysSomething() {
+        assertEquals("Mapping slots…", SlotMapHelp.view(MapStatus(state = "running")).headline)
+    }
+
+    @Test fun confirmedCountsTheSlots() {
+        val v = SlotMapHelp.view(MapStatus(state = "done", calibrated = true, slots = fourSlots))
+        assertEquals(SlotMapOutcome.CONFIRMED, v.outcome)
+        assertEquals("Slots mapped (4)", v.headline)
+        assertEquals("The slot numbering is confirmed.", v.detail)
+        assertFalse(v.headlineIsError)
+        assertNull(v.problemsHeading)
+    }
+
+    @Test fun partialSaysWhatIsConfirmedAndWhatPinsDownTheScheme() {
+        val v = SlotMapHelp.view(MapStatus(state = "done", calibrated = true, slots = fourSlots, notes = listOf(note)))
+        assertEquals(SlotMapOutcome.PARTIAL, v.outcome)
+        assertEquals("Slots mapped: confirmed for the loaded slots", v.headline)
+        assertEquals("The numbering scheme is pinned down when a second unit or an HT is loaded.", v.detail)
+        assertFalse(v.headlineIsError)
+    }
+
+    @Test fun partialKeepsTheServersNoteVerbatimUnderItsOwnHeading() {
+        val v = SlotMapHelp.view(MapStatus(state = "done", calibrated = true, notes = listOf(note)))
+        assertEquals("Not settled yet:", v.notesHeading)
+        assertEquals(listOf(note), v.notes)
+        assertNull("a note is not a problem", v.problemsHeading)
+    }
+
+    /** The X2D report: this used to read "Slot mapping finished" with a list of failures under it. */
+    @Test fun doneButNotCalibratedIsNeverCalledFinished() {
+        val problems = listOf(
+            "the calibration job ended as FAILED on the printer",
+            "slot numbering not confirmed: filament use is only logged until mapping succeeds",
+        )
+        val v = SlotMapHelp.view(MapStatus(state = "done", calibrated = false, observe = true, problems = problems))
+        assertEquals(SlotMapOutcome.NOT_CONFIRMED, v.outcome)
+        assertEquals("Slot numbering not confirmed", v.headline)
+        assertEquals("The slots were tested, but the calibration job did not prove how this printer numbers them.",
+            v.detail)
+        assertTrue(v.headlineIsError)
+        assertEquals("Problems the server reported:", v.problemsHeading)
+        assertEquals(problems, v.problems)
+        assertTrue(v.problemsAreError)
+    }
+
+    @Test fun failedAddsTheStepAndListsTheProblems() {
+        val v = SlotMapHelp.view(MapStatus(state = "failed", step = "Slot test", problems = listOf("printer_busy: x")))
+        assertEquals(SlotMapOutcome.FAILED, v.outcome)
+        assertEquals("Slot mapping failed: Slot test", v.headline)
+        assertTrue(v.headlineIsError)
+        assertEquals("Problems the server reported:", v.problemsHeading)
+        assertEquals(listOf("printer_busy: x"), v.problems)
+    }
+
+    @Test fun failedWithoutAStepHasNoDanglingColon() {
+        assertEquals("Slot mapping failed", SlotMapHelp.view(MapStatus(state = "failed")).headline)
+    }
+
+    @Test fun problemsWithoutAnyListGetNoHeading() {
+        val v = SlotMapHelp.view(MapStatus(state = "failed"))
+        assertNull(v.problemsHeading)
+        assertTrue(v.problems.isEmpty())
+    }
+
+    @Test fun aConfirmedMapWithLeftoverProblemsStaysConfirmedAndCalm() {
+        val v = SlotMapHelp.view(MapStatus(state = "done", calibrated = true, slots = fourSlots,
+            problems = listOf("could not delete the job file")))
+        assertEquals(SlotMapOutcome.CONFIRMED, v.outcome)
+        assertFalse(v.headlineIsError)
+        assertEquals("Also reported during mapping:", v.problemsHeading)
+        assertFalse(v.problemsAreError)
+    }
+
+    // ---- a result from an earlier server run ----
+
+    @Test fun anOldFailureSaysItIsOldAndIsNotRed() {
+        val v = SlotMapHelp.view(MapStatus(state = "failed", step = "Slot test", problems = listOf("x"), problemsOld = true))
+        assertEquals(SlotMapOutcome.FAILED, v.outcome)
+        assertEquals("The last slot mapping failed", v.headline)
+        assertFalse(v.headlineIsError)
+        assertEquals("From an earlier mapping, it may be fixed by now. Map the slots again to check:", v.problemsHeading)
+        assertEquals(listOf("x"), v.problems)
+        assertFalse(v.problemsAreError)
+    }
+
+    @Test fun anOldUnconfirmedResultSaysItIsOldAndIsNotRed() {
+        val v = SlotMapHelp.view(MapStatus(state = "done", problems = listOf("x"), problemsOld = true))
+        assertEquals(SlotMapOutcome.NOT_CONFIRMED, v.outcome)
+        assertEquals("The last slot mapping did not confirm the numbering", v.headline)
+        assertNull(v.detail)
+        assertFalse(v.headlineIsError)
+        assertFalse(v.problemsAreError)
+    }
+
+    // ---- the button ----
+
+    @Test fun connectedAndIdleCanStart() {
+        assertTrue(SlotMapHelp.canStart("connected", printing = false))
+    }
+
+    @Test fun aDeveloperModeRefusalDoesNotBlockMapping() {
+        assertTrue(SlotMapHelp.canStart("needs_developer_mode", printing = false))
+    }
+
+    @Test fun printingOrOfflineCannotStart() {
+        assertFalse(SlotMapHelp.canStart("connected", printing = true))
+        assertFalse(SlotMapHelp.canStart("offline", printing = false))
+    }
+
+    @Test fun aGreyedButtonSaysWhy() {
+        assertEquals("Available when the printer is idle.", SlotMapHelp.blockedReason("connected", printing = true))
+        assertEquals("Available when the printer is connected.", SlotMapHelp.blockedReason("offline", printing = false))
+        assertNull(SlotMapHelp.blockedReason("connected", printing = false))
+    }
+
+    @Test fun noFinishedResultEverGreysTheButton() {
+        val results = listOf(
+            MapStatus(state = "failed", problems = listOf("x")),
+            MapStatus(state = "failed", problems = listOf("x"), problemsOld = true),
+            MapStatus(state = "done", observe = true, problems = listOf("x")),
+            MapStatus(state = "done", calibrated = true, notes = listOf(note)),
+            MapStatus(state = "done", calibrated = true),
+            MapStatus(state = "none", observe = true),
+        )
+        for (m in results) assertTrue("$m", ToolsUiState(map = m).mapEnabled(canStart = true))
+    }
+
+    @Test fun onlyARunningJobOrAPendingStartGreysIt() {
+        assertFalse(ToolsUiState(map = MapStatus(state = "running")).mapEnabled(canStart = true))
+        assertFalse(ToolsUiState(mapBusy = true).mapEnabled(canStart = true))
+        assertFalse(ToolsUiState(map = MapStatus(state = "failed")).mapEnabled(canStart = false))
+    }
+
+    @Test fun theButtonSaysAgainOnceAResultExists() {
+        assertEquals("Map slots", SlotMapHelp.buttonLabel(null))
+        assertEquals("Map slots", SlotMapHelp.buttonLabel(MapStatus(state = "none")))
+        assertEquals("Map slots again", SlotMapHelp.buttonLabel(MapStatus(state = "done")))
+        assertEquals("Map slots again", SlotMapHelp.buttonLabel(MapStatus(state = "failed")))
+    }
+}

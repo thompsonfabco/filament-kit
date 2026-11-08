@@ -26,7 +26,7 @@ interface PrinterToolsBackend {
 
 /** Texts for the "Filament used" list. */
 object UsageHelp {
-    const val OBSERVE_NOTICE = "Filament use is only being logged for this printer until slot mapping succeeds"
+    const val OBSERVE_NOTICE = "Filament use is only logged for this printer, not taken off spools, until slot mapping succeeds"
 
     /** Only a real deduction can be undone: not logged-only, not failed, not already undone. */
     fun canUndo(e: UsageEntry): Boolean = !e.observe && !e.undone && e.error == null && e.grams != null && e.spoolId != null
@@ -80,6 +80,9 @@ data class ToolsUiState(
 ) {
     val mapRunning: Boolean get() = map?.state == "running"
     val observeNotice: String? get() = if (map?.observe == true) UsageHelp.OBSERVE_NOTICE else null
+
+    /** Greyed only by the printer ([canStart]) or a job under way or being started, never by a past result. */
+    fun mapEnabled(canStart: Boolean): Boolean = canStart && !mapRunning && !mapBusy
 }
 
 /**
