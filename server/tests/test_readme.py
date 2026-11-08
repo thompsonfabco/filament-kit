@@ -52,13 +52,23 @@ _OWNER_SALT = b"filament-kit owner-data v1:"
 OWNER_FINGERPRINTS = frozenset({
     "d760cbea97a1228524ab", "92ce0773c1c5a2e0ca4a", "95fb2cac257df2546230", "87bf20b4038304003845",
     "17b7f0c3556139cbbfd1", "107b22d060e0f4dce62d", "dbf1988c2971e2f59646", "4cff4dd88d4eba517032",
-    "c9f6ef41de056225a7cf", "e44aa6a688481d0bf3fb"})
+    "c9f6ef41de056225a7cf", "e44aa6a688481d0bf3fb", "c65d6e88416e61346130", "e61de7055a6e495661f4"})
 _OWNER_TOKEN = re.compile(r"\d{1,3}(?:\.\d{1,3}){3}|[A-Za-z0-9][A-Za-z0-9-]*")
+# Some names are ordinary words alone, so only their host or user form is banned: a second pass, on top of the parts above.
+_OWNER_FORM = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]*(?:\.local\b|@)", re.I)
+TREE_WIDE_FINGERPRINTS = frozenset({"c65d6e88416e61346130", "e61de7055a6e495661f4"})
+
+
+def _owner_tokens(text: str) -> set[str]:
+    return set(_OWNER_TOKEN.findall(text)) | {m.lower() for m in _OWNER_FORM.findall(text)}
+
+
+def _fingerprint(token: str) -> str:
+    return hashlib.sha256(_OWNER_SALT + token.encode()).hexdigest()[:20]
 
 
 def _owner_hits(text: str) -> list[str]:
-    return sorted({t for t in _OWNER_TOKEN.findall(text)
-                   if hashlib.sha256(_OWNER_SALT + t.encode()).hexdigest()[:20] in OWNER_FINGERPRINTS})
+    return sorted(t for t in _owner_tokens(text) if _fingerprint(t) in OWNER_FINGERPRINTS)
 
 
 # Every Markdown file under docs/ and release-notes/ is public (the owner's runbooks live outside the repository).
@@ -98,6 +108,46 @@ def _public_code_files() -> list[str]:
     out = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-z", "--", *CODE_SCAN], capture_output=True,
                          check=True).stdout.decode("utf-8")
     return [f for f in out.split("\0") if f and f not in CODE_SCAN_SKIP]
+
+
+def test_the_owners_host_name_is_nowhere_in_the_tree():
+    """Every tracked text file, the app and the workflows too, not only what the other scans cover."""
+    import subprocess
+    try:
+        names = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-z"], capture_output=True, check=True,
+                               ).stdout.decode("utf-8").split("\0")
+    except (subprocess.CalledProcessError, OSError):       # a copy with no .git: never a skip, this is the leak guard
+        names = [f.relative_to(ROOT).as_posix() for f in ROOT.rglob("*") if f.is_file()]
+    found = []
+    for rel in filter(None, names):
+        try:
+            text = (ROOT / rel).read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        if TREE_WIDE_FINGERPRINTS & {_fingerprint(t) for t in _owner_tokens(text)}:
+            found.append(rel)
+    assert not found, found
+
+
+def test_a_host_or_user_form_is_read_whole_and_its_parts_too():
+    assert _owner_tokens("open Kit.local:8710 or me@host now") == {"open", "Kit", "local", "kit.local", "8710", "or", "me",
+                                                                   "me@", "host", "now"}
+    assert not _owner_hits("kit.local")
+
+
+@pytest.mark.parametrize("text", ["secrethost9", "http://secrethost9:7912", "secrethost9.local", "http://secrethost9.local:7912",
+                                  "secrethost9.localdomain", "user@secrethost9.local"])
+def test_a_banned_bare_name_is_caught_in_every_form(monkeypatch, text):
+    monkeypatch.setitem(globals(), "OWNER_FINGERPRINTS", frozenset({_fingerprint("secrethost9")}))
+    assert _owner_hits(text) == ["secrethost9"]
+
+
+@pytest.mark.parametrize("text,token", [("secrethost9.local", "secrethost9.local"), ("SecretHost9.LOCAL:1", "secrethost9.local"),
+                                        ("ssh secrethost9@server", "secrethost9@"), ("SecretHost9@example.org", "secrethost9@")])
+def test_a_banned_form_is_caught_in_any_case_and_the_bare_word_is_not(monkeypatch, text, token):
+    monkeypatch.setitem(globals(), "OWNER_FINGERPRINTS", frozenset({_fingerprint(token)}))
+    assert _owner_hits(text) == [token]
+    assert not _owner_hits("the secrethost9 variable")
 
 
 def test_public_code_and_tests_have_no_owner_specific_data():
