@@ -695,3 +695,32 @@ def test_corrupt_lines_json_adopts_the_installed_filament_id(tmp_path):
     assert ls2["sunlu--pla-plus-2-0"].filament_id == keep
     assert {p["filament_id"] for p in m2["presets"]} == {keep}
     assert m2["deleted"] == [] and m2["stale"] == []
+
+
+def test_old_generation_live_presets_never_move_a_line_id(tmp_path):
+    """PCBOTH R2 (the stable/Beta incident): an older install's presets carry filament_ids that now belong to other
+    lines. Uploading them (a first sync of that folder, and with an install snapshot too) never moves a saved line's
+    filament_id: every generated preset keeps its line's own id (on a first sync each differing one is reported)."""
+    two = SUNLU + [fil(20, "PLA Matte Black")]
+    m1, ls = build(tmp_path, two, out="o1")
+    a, b = "sunlu--pla-plus-2-0", "sunlu--pla-matte-black"
+    assert a in ls and b in ls, sorted(ls)
+    fa, fb = ls[a].filament_id, ls[b].filament_id
+    rows = {p["name"]: p["line_id"] for p in m1["presets"]}
+    live_root = tmp_path / "old-gen"
+    (live_root / "base").mkdir(parents=True)
+    for name, lid in rows.items():                  # the ids swapped: each line's presets hold the other's id
+        other = fb if lid == a else fa
+        cfg = read(tmp_path, name, "o1")
+        cfg.update(filament_id=other, nozzle_temperature=["199"])
+        (live_root / "base" / f"{name}.json").write_text(json.dumps(cfg), encoding="utf-8")
+    snap, _live = _install(tmp_path, "o1")
+    for snapshot, out in ((None, "first"), (snap, "snap")):
+        m, got = build(tmp_path, two, line_set=ls, live=G.Live(live_root, "1234567890"), snapshot=snapshot, out=out)
+        assert got[a].filament_id == fa and got[b].filament_id == fb
+        for p in m["presets"]:
+            assert p["filament_id"] == (fa if p["line_id"] == a else fb), p
+            assert read(tmp_path, p["name"], out)["filament_id"] == p["filament_id"]
+        if snapshot is None:                        # first sync: each differing id is reported (an update)
+            assert sum("line keeps" in p for p in m["problems"]) == len(rows), m["problems"]
+        assert not any("filament_id" in e for e in m["edits"]), m["edits"]
