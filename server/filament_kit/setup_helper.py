@@ -433,11 +433,13 @@ def main(argv: list[str] | None = None) -> int:
     reply_to = sys.stdout.buffer
     sys.stdout = sys.stderr            # whatever a CLI function prints goes to the journal, never into the reply
     fd = _stdin_fd()
+    # the request is read (within READ_TIMEOUT) before any answer, even a refusal: closing a socket with unread
+    # data resets it, and the caller would never see why
+    raw = _read_request(fd) if fd is not None and _is_socket(fd) else sys.stdin.buffer.readline(MAX_REQUEST + 1)
     if fd is not None and _peer_ok(fd) is False:
         log.warning("setup helper: refused a connection from a user that is neither root nor filament-kit")
         reply = {"ok": False, "status": 403, "error": "not allowed"}
     else:
-        raw = _read_request(fd) if fd is not None and _is_socket(fd) else sys.stdin.buffer.readline(MAX_REQUEST + 1)
         if raw is None:
             reply = {"ok": False, "status": 408, "error": "no complete request in time"}
         elif len(raw) > MAX_REQUEST:

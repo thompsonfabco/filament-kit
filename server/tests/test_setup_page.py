@@ -547,22 +547,33 @@ def test_helper_client_over_a_real_socket_like_systemd_accept(env, tmp_path):
     import subprocess
     import threading
     from filament_kit import setup_page
-    path = str(tmp_path / "setup.sock")
-    srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    srv.bind(path)
-    srv.listen(1)
+    # the test user is neither root nor filament-kit: one helper as shipped (refused by SO_PEERCRED), one that also
+    # accepts this test's uid
+    as_shipped = [sys.executable, "-I", "-m", "filament_kit.setup_helper"]
+    this_uid = [sys.executable, "-I", "-c", "import os, sys; from filament_kit import setup_helper as h; "
+                "h._allowed_uids = lambda: {0, os.getuid()}; sys.exit(h.main([]))"]
 
-    def serve():
-        conn, _ = srv.accept()
-        with conn:
-            subprocess.run([sys.executable, "-I", "-m", "filament_kit.setup_helper"], stdin=conn.fileno(),
-                           stdout=conn.fileno(), env={**os.environ}, check=False, timeout=60)
-    t = threading.Thread(target=serve, daemon=True)
-    t.start()
-    reply = setup_page.HelperClient(path)({"op": "key_set", "code": CODE, "key": KEY})
-    t.join(30)
-    srv.close()
-    assert reply == {"ok": True, "status": 200}
+    def one(cmd, name):
+        path = str(tmp_path / name)
+        srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        srv.bind(path)
+        srv.listen(1)
+
+        def serve():
+            conn, _ = srv.accept()
+            with conn:
+                subprocess.run(cmd, stdin=conn.fileno(), stdout=conn.fileno(), env={**os.environ}, check=False,
+                               timeout=60)
+        t = threading.Thread(target=serve, daemon=True)
+        t.start()
+        reply = setup_page.HelperClient(path)({"op": "key_set", "code": CODE, "key": KEY})
+        t.join(30)
+        srv.close()
+        return reply
+    if os.getuid() != 0:
+        assert one(as_shipped, "a.sock")["status"] == 403
+        assert not _etc(cli.KEY_FILE).exists()
+    assert one(this_uid, "b.sock") == {"ok": True, "status": 200}
     assert _etc(cli.KEY_FILE).read_text(encoding="utf-8") == KEY + "\n"
     assert setup_page.HelperClient(str(tmp_path / "none.sock"))({"op": "apply", "code": CODE})["status"] == 503
 
