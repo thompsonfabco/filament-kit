@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import hmac
 import json
 import os
 import re
@@ -224,7 +225,7 @@ class ReadCap:
             stamps = self._load(time.time())
             h = _hash(ticket)
             for i, e in enumerate(stamps):
-                if e.get("ticket") == h and e.get("device") == device:
+                if hmac.compare_digest(str(e.get("ticket") or ""), h) and e.get("device") == device:
                     del stamps[i]
                     self._save(stamps)
                     return
