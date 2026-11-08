@@ -1,4 +1,4 @@
-"""What the web unit's own user (`filament-kit-web`) may touch, and the move of its state on upgrade (apply's
+"""What the web unit's own user (`filament-kit-web`) may touch, and the copy of its state on upgrade (apply's
 `web_state` step, run as root before the web unit starts).
 
 The web unit faces the internet (Claude's connector), so it runs as its own user, not in the filament-kit group:
@@ -7,7 +7,8 @@ its reach. It gets exactly what it uses, as POSIX ACLs (acl.py) on named files a
 
   its own folder  /var/lib/filament-kit-web (750, its owner): the OAuth store (oauth.json), the kit API token
                   (kit_token), the Web Push keys and subscriptions, its failed label reads kept for retry
-                  (failed/, FK_FAILED_DIR in its unit); moved here from /var/lib/filament-kit/web/
+                  (failed/, FK_FAILED_DIR in its unit); copied here once from /var/lib/filament-kit/web/
+                  (migrate; the originals stay there, as they were, for `update --rollback` to 0.3.0)
   settings        /etc/filament-kit: pass (x); config.json, web_passphrase, anthropic_key and the owner's H2D slot
                   token (slot_service.token_file): read (r); every root writer of these keeps the grant
                   (config.save, cli.write_passphrase, cli.write_key)
@@ -27,15 +28,16 @@ state folder (printers.xml and printers.json with Access Codes, devices.json, pe
 nothing in /etc beyond the files above."""
 from __future__ import annotations
 
-import errno
 import os
 import shutil
 import stat
+from datetime import datetime, timezone
 from pathlib import Path
 
 from . import acl, config, nofollow, pairing
 
 KEEP_IN_STATE = ("reader_tokens",)          # stays in state/web/: the CLI and the setup page write it
+MARKER = ".migrated"                       # in the web folder: the one-time copy from state/web/ is done
 # the locks both units take (flock works on a read-only fd: pairing.open_lock); made here, read by the web user
 LOCK_FILES = ("inventory.lock", "profiles/lines.lock", "profiles/live.lock", "profiles/state.lock",
               "profiles/build.lock")
@@ -57,75 +59,111 @@ def _own_tree(dfd: int, where, uid: int, gid: int, chown) -> None:
                 os.close(fd)
 
 
-def _copy_tree(src_dir: int, dst_dir: int, name: str, where) -> None:
-    """Copy `name` (a regular file, or a folder of them) between two folders by descriptor, links skipped: the
-    move when the two folders are on different file systems."""
+def _copy(src_dir: int, dst_dir: int, name: str, where, dwhere, uid: int, gid: int, chown) -> bool:
+    """Copy `name` (a regular file, or a folder of them) from `src_dir` into `dst_dir` by descriptor, only what
+    `dst_dir` does not have yet: a link, FIFO or device is skipped (logged), no link is followed on either side and
+    nothing is written over (each file made with O_CREAT | O_EXCL | O_NOFOLLOW). A copy is `uid:gid` with the
+    source's permission bits (what the move gave). True when anything was copied."""
     st = nofollow.lstat_at(name, src_dir)
     if st is None:
-        return
+        return False
+    if not (stat.S_ISREG(st.st_mode) or stat.S_ISDIR(st.st_mode)):
+        nofollow.skipped(where, "a symbolic link" if stat.S_ISLNK(st.st_mode) else "not a regular file or folder")
+        return False
     if stat.S_ISDIR(st.st_mode):
-        os.mkdir(name, 0o700, dir_fd=dst_dir)
-        s = nofollow.open_dir_at(src_dir, name, where)
         try:
-            d = nofollow.open_dir_at(dst_dir, name, where)
+            s = nofollow.open_dir_at(src_dir, name, where)
+        except (FileNotFoundError, nofollow.LinkRefused):
+            nofollow.skipped(where, "changed while it was being copied")
+            return False
+        try:
+            got = os.fstat(s)
+            if (got.st_dev, got.st_ino) != (st.st_dev, st.st_ino):
+                nofollow.skipped(where, "changed while it was being copied")
+                return False
             try:
+                os.mkdir(name, 0o700, dir_fd=dst_dir)      # mkdir never follows a link at the name
+                made = True
+            except FileExistsError:
+                made = False                              # a folder already there: only what it lacks
+            try:
+                d = nofollow.open_dir_at(dst_dir, name, dwhere)
+            except (FileNotFoundError, nofollow.LinkRefused):
+                nofollow.skipped(dwhere, "a symbolic link or not a folder (nothing copied into it)")
+                return False
+            try:
+                if made:
+                    chown(d, uid, gid)
+                copied = made
                 for child in sorted(os.listdir(s)):
-                    _copy_tree(s, d, child, f"{where}/{child}")
-                os.fchmod(d, stat.S_IMODE(st.st_mode))
+                    copied |= _copy(s, d, child, f"{where}/{child}", f"{dwhere}/{child}", uid, gid, chown)
+                if made:
+                    os.fchmod(d, stat.S_IMODE(got.st_mode) & 0o777)
             finally:
                 os.close(d)
         finally:
             os.close(s)
-        return
+        return copied
     fd = nofollow.open_node(name, src_dir, where, dirs=False)
     if fd is None:
-        return
+        return False
     try:
-        out = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | nofollow.NOFOLLOW, 0o600, dir_fd=dst_dir)
-        with os.fdopen(out, "wb") as fo, os.fdopen(os.dup(fd), "rb") as fi:
-            shutil.copyfileobj(fi, fo)
-            os.fchmod(fo.fileno(), stat.S_IMODE(st.st_mode))
+        try:
+            out = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | nofollow.NOFOLLOW |
+                          getattr(os, "O_CLOEXEC", 0), 0o600, dir_fd=dst_dir)
+        except FileExistsError:
+            return False                                  # already there (or a name planted there): left alone
+        done = False
+        try:
+            with os.fdopen(out, "wb") as fo, os.fdopen(os.dup(fd), "rb") as fi:
+                chown(fo.fileno(), uid, gid)
+                shutil.copyfileobj(fi, fo)
+                fo.flush()
+                os.fchmod(fo.fileno(), stat.S_IMODE(os.fstat(fd).st_mode) & 0o777)
+            done = True
+        finally:
+            if not done:                                  # no half copy left behind to block the next try
+                try:
+                    os.unlink(name, dir_fd=dst_dir)       # unlink never follows a link
+                except OSError:
+                    pass
+        return True
     finally:
         os.close(fd)
 
 
-def _remove(dir_fd: int, name: str, where) -> None:
-    """Remove `name` below `dir_fd` (a link is removed itself, never followed)."""
-    st = nofollow.lstat_at(name, dir_fd)
-    if st is None:
-        return
-    if stat.S_ISDIR(st.st_mode):
-        d = nofollow.open_dir_at(dir_fd, name, where)
-        try:
-            for child in os.listdir(d):
-                _remove(d, child, f"{where}/{child}")
-        finally:
-            os.close(d)
-        os.rmdir(name, dir_fd=dir_fd)
-    else:
-        os.unlink(name, dir_fd=dir_fd)
-
-
-def _move(src_dir: int, dst_dir: int, name: str, where) -> None:
+def _mark(wfd: int, where, copied: list[str], uid: int, gid: int, chown) -> None:
+    """The one-time marker (MARKER) in the web folder: when, and the names copied. Made the safe way (O_EXCL |
+    O_NOFOLLOW in the folder's descriptor), the web user's, 0600; an existing name is left alone."""
     try:
-        os.rename(name, name, src_dir_fd=src_dir, dst_dir_fd=dst_dir)   # renameat moves the name, never a target
-    except OSError as e:
-        if e.errno != errno.EXDEV:
-            raise
-        _copy_tree(src_dir, dst_dir, name, where)
-        _remove(src_dir, name, where)
+        fd = os.open(MARKER, os.O_WRONLY | os.O_CREAT | os.O_EXCL | nofollow.NOFOLLOW | getattr(os, "O_CLOEXEC", 0),
+                     0o600, dir_fd=wfd)
+    except FileExistsError:
+        nofollow.skipped(where, "already there (left alone)")
+        return
+    text = (f"copied {datetime.now(timezone.utc).isoformat(timespec='seconds')} from "
+            f"{config.paths().state / 'web'} (the originals stay there for `update --rollback` to 0.3.0)\n"
+            + "".join(f"{n}\n" for n in copied))
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        chown(f.fileno(), uid, gid)
+        os.fchmod(f.fileno(), 0o600)
+        f.write(text)
 
 
 def migrate(web_uid: int, web_gid: int, chown=None) -> list[str]:
-    """Make the web unit's folder and move its files there from state/web/ (never over a file already moved).
-    Returns the names moved. No link is moved, followed or changed; `chown(fd, uid, gid)` (default os.fchown)."""
+    """Make the web unit's folder and copy its files there from state/web/, once. The originals stay in state/web/
+    untouched, so `update --rollback` to 0.3.0 (which reads only there) keeps them. Only what the web folder lacks
+    is copied (an earlier move's files are never written over); then MARKER is written and later runs copy
+    nothing, so a file the web unit removed (a revoked push subscription) never comes back from the old copy.
+    Returns the names copied. No link is copied, followed or changed; `chown(fd, uid, gid)` (default os.fchown)."""
     chown = chown or os.fchown
     p = config.paths()
     p.web.mkdir(parents=True, exist_ok=True)
-    moved = []
+    copied = []
     wfd = nofollow.open_dir(p.web)
     try:
         os.fchmod(wfd, 0o750)
+        done = nofollow.lstat_at(MARKER, wfd) is not None
         old = p.state / "web"
         try:
             ofd = nofollow.open_dir(p.state, "web")
@@ -133,23 +171,15 @@ def migrate(web_uid: int, web_gid: int, chown=None) -> list[str]:
             ofd = None
         except nofollow.LinkRefused:
             nofollow.skipped(old, "a symbolic link or not a folder")
-            ofd = None
+            ofd, done = None, True                # no marker: a fixed folder is still copied by a later apply
         if ofd is not None:
             try:
-                for name in sorted(os.listdir(ofd)):
-                    if name in KEEP_IN_STATE or name.startswith(KEEP_IN_STATE[0] + "."):
-                        continue
-                    st = nofollow.lstat_at(name, ofd)
-                    if st is None:
-                        continue
-                    if not (stat.S_ISREG(st.st_mode) or stat.S_ISDIR(st.st_mode)):
-                        nofollow.skipped(old / name, "a symbolic link" if stat.S_ISLNK(st.st_mode)
-                                         else "not a regular file or folder")
-                        continue
-                    if nofollow.lstat_at(name, wfd) is not None:
-                        continue
-                    _move(ofd, wfd, name, old / name)
-                    moved.append(name)
+                if not done:
+                    for name in sorted(os.listdir(ofd)):
+                        if name in KEEP_IN_STATE or name.startswith(KEEP_IN_STATE[0] + ".") or name == MARKER:
+                            continue
+                        if _copy(ofd, wfd, name, old / name, p.web / name, web_uid, web_gid, chown):
+                            copied.append(name)
                 tok = nofollow.open_node(KEEP_IN_STATE[0], ofd, old / KEEP_IN_STATE[0], dirs=False)
                 if tok is not None:
                     try:
@@ -158,11 +188,13 @@ def migrate(web_uid: int, web_gid: int, chown=None) -> list[str]:
                         os.close(tok)
             finally:
                 os.close(ofd)
-        # what was moved, and what a root CLI (migrate-ops) put here before the user existed
+        if not done:
+            _mark(wfd, p.web / MARKER, copied, web_uid, web_gid, chown)
+        # what was copied, and what a root CLI (migrate-ops) put here before the user existed
         _own_tree(wfd, p.web, web_uid, web_gid, chown)
     finally:
         os.close(wfd)
-    return moved
+    return copied
 
 
 def _folders(sfd: int, state: Path, folders: list[str], uid: int, gid: int, chown) -> int:
