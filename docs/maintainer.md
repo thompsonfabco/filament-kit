@@ -75,19 +75,16 @@ means everyone has to uninstall and reinstall the app.
    `FK_BACKUP_PASSPHRASE` environment variable is for test automation only; never use it for a real backup.
 4. `-Forget` deletes the keystore and the password file (it asks first).
 
-### The filament library token
+### The filament library
 
-The workflow builds `library.tar.gz` from the `thompsonfabco/filament-library` repository (public), lists it in
-the signed `SHA256SUMS` and publishes it with the release. Installs check it against that signature before they
-use it, and refuse a library from the default URL without one.
+Nothing to set up. Every release builds `library.tar.gz` from the public `thompsonfabco/filament-library`
+repository, checked out with the workflow's own `github.token`, lists it in the signed `SHA256SUMS` and publishes
+it with the release. Installs check it against that signature before they use it, and refuse a library from the
+default URL without one. A release fails if the library can't be built.
 
-1. Make a GitHub token that can only read `thompsonfabco/filament-library`: **Settings > Developer settings >
-   Personal access tokens > Fine-grained tokens > Generate new token**, repository access **Only select
-   repositories** with `filament-library`, permission **Contents: Read-only**. Pick an expiry and note it.
-2. Add it as the `FK_LIBRARY_TOKEN` secret, and renew it before it expires.
-
-Without the secret the release is still built and published, without `library.tar.gz`; the run shows a warning.
-Installs then keep the library copy they already have (or none) until a release carries one.
+`FK_LIBRARY_TOKEN` is optional and only needed if the library repository is ever made private again. When the
+secret is set, the checkout uses it instead of `github.token`, so an expired one fails the checkout and with it
+the release job: delete the secret rather than let it lapse.
 
 ## Building a release tarball by hand
 
