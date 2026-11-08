@@ -81,10 +81,10 @@ def manager():
     return FakeManager()
 
 
-def make(env, helper, manager=None, client_factory=None):
-    on = modules.enabled(config.load())
+def make(env, helper, manager=None, client_factory=None, add=frozenset(), drop=frozenset()):
+    on = (modules.enabled(config.load()) | add) - drop
     if manager is None:
-        on = on - {"printers"}
+        on = on - {"printers", "klipper"}
     return api.create_app(Spoolman("http://127.0.0.1:9"), printers=manager or object(), camera_hub=object(),
                           mapper=object(), enabled_modules=on,
                           setup={"helper": helper, "hosts": lambda: {HOSTNAME}, "client_factory": client_factory})
@@ -341,6 +341,125 @@ def test_printers_section_is_off_without_the_printers_module(env, helper):
     assert c.get("/setup/api/state").json()["printers"]["on"] is False
     r = post(c, "printers", {"ip": "192.0.2.40", "access_code": "12345678", "serial": SERIAL})
     assert r.status_code == 409 and not registry.load()
+
+
+# ---------- Klipper printers (review B9: listed with only the klipper module on; no Bambu code or TLS test) ----------
+
+class FakeMoonraker:
+    """setup_page's Moonraker client: `answer` is what /printer/info returns, or an exception to raise."""
+    made: list = []
+    answer = {"state": "ready", "state_message": "Printer is ready", "software_version": "v0.13.0"}
+
+    def __init__(self, host, port=7125, api_key="", timeout=5.0):
+        FakeMoonraker.made.append((host, port, api_key))
+
+    def info(self):
+        if isinstance(self.answer, Exception):
+            raise self.answer
+        return self.answer
+
+
+@pytest.fixture
+def moonraker(monkeypatch):
+    FakeMoonraker.made = []
+    FakeMoonraker.answer = dict(FakeMoonraker.answer, state="ready")
+    monkeypatch.setattr(setup_page, "Moonraker", FakeMoonraker)
+    return FakeMoonraker
+
+
+def _klipper(name="Workshop Printer", host="printer.example.com", port=7125, key=""):
+    p = registry.add_klipper(name, host, port)
+    if key:
+        registry.set_api_key(p.serial, key)
+    return p
+
+
+def test_klipper_only_install_lists_its_klipper_printers(env, helper, manager):
+    k = _klipper(key="MOONRAKER-KEY-EXAMPLE")
+    registry.upsert(registry.Printer(SERIAL, "H2D", "H2D", "192.0.2.40", "12345678", True))
+    c = client(make(env, helper, manager, add={"klipper"}, drop={"printers"}))
+    st = c.get("/setup/api/state")
+    P = st.json()["printers"]
+    assert (P["on"], P["bambu"], P["klipper"]) == (True, False, True)
+    assert [(p["serial"], p["family"], p["host"], p["port"]) for p in P["list"]] == \
+        [(k.serial, "klipper", "printer.example.com", 7125)]          # the Bambu entry: its module is off
+    assert P["list"][0]["state"] == "connected"
+    assert "MOONRAKER-KEY-EXAMPLE" not in st.text and "12345678" not in st.text
+    # Bambu writes stay refused: the printers module is off
+    r = post(c, "printers", {"ip": "192.0.2.41", "access_code": "12345678", "serial": "0948ZZ0A0000002"})
+    assert r.status_code == 409 and "0948ZZ0A0000002" not in registry.load()
+    assert post(c, f"printers/{SERIAL}/code", {"access_code": "87654321"}).status_code == 409
+    assert registry.load()[SERIAL].access_code == "12345678"
+
+
+def test_both_printer_modules_list_both_families(env, helper, manager):
+    k = _klipper()
+    registry.upsert(registry.Printer(SERIAL, "H2D", "H2D", "192.0.2.40", "12345678", True))
+    c = client(make(env, helper, manager, add={"klipper"}))
+    P = c.get("/setup/api/state").json()["printers"]
+    assert (P["on"], P["bambu"], P["klipper"]) == (True, True, True)
+    assert {p["serial"]: p["family"] for p in P["list"]} == {SERIAL: "bambu", k.serial: "klipper"}
+
+
+def test_a_klipper_printer_has_no_access_code_to_set(env, helper, manager):
+    k = _klipper()
+    c = client(make(env, helper, manager, add={"klipper"}))
+    r = post(c, f"printers/{k.serial}/code", {"access_code": "87654321"})
+    assert r.status_code == 400 and "Klipper" in r.json()["error"]
+    p = registry.load()[k.serial]
+    assert (p.access_code, p.configured, p.family) == ("", True, "klipper")
+
+
+def test_klipper_test_asks_moonraker_not_a_tls_handshake(env, helper, manager, moonraker, monkeypatch):
+    from filament_kit.bridge import tlspin
+    from filament_kit.bridge.klipper import moonraker as mr
+    monkeypatch.setattr(tlspin, "leaf_fp", lambda *a, **k: pytest.fail("a TLS handshake for a Klipper printer"))
+    monkeypatch.setattr(setup_page, "CHECK_GAP", 0)
+    k = _klipper(host="printer.example.com", port=7126, key="MOONRAKER-KEY-EXAMPLE")
+    c = client(make(env, helper, manager, add={"klipper"}, drop={"printers"}))
+    r = c.post(f"/setup/api/printers/{k.serial}/test", json={}, headers=H)
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert j["reachable"] is True and j["state"] == "connected"
+    assert "printer.example.com:7126" in j["text"] and "ready" in j["text"]
+    assert moonraker.made == [("printer.example.com", 7126, "MOONRAKER-KEY-EXAMPLE")]
+    assert "MOONRAKER-KEY-EXAMPLE" not in r.text
+    moonraker.answer = mr.Offline("Moonraker at printer.example.com:7126 is not answering (refused)")
+    j = c.post(f"/setup/api/printers/{k.serial}/test", json={}, headers=H).json()
+    assert j["reachable"] is False and "no answer from Moonraker at printer.example.com:7126" in j["text"]
+    moonraker.answer = mr.MoonrakerError("GET /printer/info: 500 <b>the printer's own text</b>")
+    j = c.post(f"/setup/api/printers/{k.serial}/test", json={}, headers=H).json()
+    assert j["reachable"] is False and j["text"] == "printer.example.com:7126 answers, but not as Moonraker"
+    moonraker.answer = mr.NotFound("Not Found")
+    j = c.post(f"/setup/api/printers/{k.serial}/test", json={}, headers=H).json()
+    assert j["text"] == "printer.example.com:7126 answers, but not as Moonraker (HTTP 404)"
+    moonraker.answer = mr.Unauthorized("Moonraker at printer.example.com wants an API key (401)")
+    j = c.post(f"/setup/api/printers/{k.serial}/test", json={}, headers=H).json()
+    assert j["reachable"] is True and "api-key" in j["text"]
+
+
+def test_forget_a_klipper_printer_with_only_the_klipper_module(env, helper, manager):
+    k = _klipper()
+    c = client(make(env, helper, manager, add={"klipper"}, drop={"printers"}))
+    assert post(c, f"printers/{k.serial}/forget", {}).status_code == 200
+    assert k.serial not in registry.load() and manager.synced == 1
+
+
+def test_a_bambu_printer_is_not_reachable_through_the_klipper_module(env, helper, manager):
+    registry.upsert(registry.Printer(SERIAL, "H2D", "H2D", "192.0.2.40", "12345678", True))
+    c = client(make(env, helper, manager, add={"klipper"}, drop={"printers"}))
+    assert c.post(f"/setup/api/printers/{SERIAL}/test", json={}, headers=H).status_code == 409
+    assert post(c, f"printers/{SERIAL}/forget", {}).status_code == 409 and SERIAL in registry.load()
+
+
+def test_setup_script_gives_klipper_rows_no_access_code_button():
+    src = (STATIC / "setup.js").read_text(encoding="utf-8")
+    body = src[src.index("function printersCard"):src.index("// ----- web passphrase")]
+    assert 'p.family === "klipper"' in body and "klipperRow" in body
+    kr = body[body.index("function klipperRow"):]
+    kr = kr[:kr.index("\n}")]
+    assert "/code" not in kr and "Access Code" not in kr and "/test" in kr and "/forget" in kr
+    assert "if (!P.bambu)" in body or "P.bambu &&" in body or "P.bambu ?" in body   # no add-by-IP without it
 
 
 # ---------- modules, addresses, the apply ----------
