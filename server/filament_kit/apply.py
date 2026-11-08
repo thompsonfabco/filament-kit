@@ -35,6 +35,7 @@ WEB_UNIT = "filament-kit-web.service"
 SETUP_TMPFILES = "/etc/tmpfiles.d/filament-kit-setup.conf"
 SETUP_TMPFILES_TEXT = "d /run/filament-kit-setup 0750 root filament-kit -\n"
 DROPIN = "/etc/systemd/system/filament-kit-station.service.d/kit.conf"
+SPOOLMAN_DROPIN = "/etc/systemd/system/spoolman.service.d/kit.conf"
 # udev applies rules in file-name order and the last GROUP= wins: the name sorts after the ops station's
 # 99-intake-station.rules (C-I1). OLD_UDEV_RULE is the kit's name before that; apply removes it.
 UDEV_RULE = "/etc/udev/rules.d/99-zz-filament-kit-station.rules"
@@ -119,6 +120,32 @@ def paired_server_ips() -> list[str]:
     return out
 
 
+def spoolman_allow(cfg: dict) -> list[str]:
+    """The networks that may reach the spoolman module's listener: `spoolman.allow` (a list of networks, for a Docker,
+    Tailscale or other range), else `web.lan`. Refuses a bad entry, and "every address": the listener has no sign-in."""
+    own = (cfg.get("spoolman") or {}).get("allow")
+    nets = own if own is not None else config._merge(config.DEFAULTS["web"], cfg.get("web") or {}).get("lan")
+    key = "spoolman.allow" if own is not None else "web.lan"
+    if not isinstance(nets, list):
+        raise modules.ModuleError(f"{key} must be a list of networks")
+    out = []
+    for n in nets:
+        try:
+            net = ipaddress.ip_network(str(n).strip(), strict=False)
+        except ValueError:
+            raise modules.ModuleError(f"{key}: {n!r} is not a network") from None
+        if net.prefixlen == 0:
+            raise modules.ModuleError(f"{key}: {n!r} is every address; the listener has no sign-in")
+        out.append(str(net))
+    return _uniq(out)
+
+
+def spoolman_dropin(cfg: dict) -> str:
+    """Spoolman's listener has no sign-in, so the unit answers only these. The same rule covers what Spoolman sends, so
+    its external filament database (not used by the kit) needs its address in `spoolman.allow`."""
+    return f"[Service]\nIPAddressDeny=any\nIPAddressAllow={' '.join(['localhost', *spoolman_allow(cfg)])}\n"
+
+
 def station_dropin(cfg: dict, addresses: list[str]) -> str:
     """Text of the station drop-in (spec section 5); `addresses` are already resolved. The unit denies every
     address but these, so the paired server's addresses (its LAN IPs in an all-in-one) are let through too: the
@@ -190,7 +217,8 @@ def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) ->
 
     # Phase 1: users, files and unit files; nothing is enabled until daemon_reload.
     if "spoolman" in on:
-        acts += [A("user", "spoolman"), A("spoolman_fetch")]
+        acts += [A("user", "spoolman"), A("spoolman_fetch"),
+                 A("install_file", (SPOOLMAN_DROPIN, spoolman_dropin(cfg), "0644", "root:root"))]
     if "server" in on:
         acts += [A("install_unit", u) for unit in MODULES["server"].units for u in _unit_files(unit)]
         acts.append(A("server_setup", "key" if "ai_intake" in on else ""))

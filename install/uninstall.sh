@@ -94,6 +94,7 @@ if [ "$REMOTE_GONE" -eq 1 ]; then
     echo "mcp-route were left; remove them with apt and rm if nothing else uses them."
 fi
 rm -rf /opt/filament-kit /opt/spoolman /opt/spoolman.new /opt/spoolman.old
+rm -rf /etc/systemd/system/spoolman.service.d
 
 if [ "$PURGE" -eq 1 ]; then
     rm -rf /etc/filament-kit /etc/filament-kit-station /var/lib/filament-kit /var/lib/filament-kit-web /var/lib/spoolman /var/backups/filament-kit

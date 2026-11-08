@@ -92,6 +92,8 @@ DEFAULTS: dict = {
     "web": {"port": 8101, "public_url": None, "push": False,   # push: Web Push alerts (needs internet egress)
             "lan": ["192.168.0.0/16", "10.0.0.0/8"]},   # not 172.16/12: Docker's bridges live there (A-M6)
     "remote": {"hostname": None, "acme_window": None, "email": None},
+    # who may reach the spoolman module's listener, which has no sign-in. None: the same ranges as web.lan
+    "spoolman": {"allow": None},
     "orders": {"file": None},
     "tag_sources": [],          # [{"name": str, "url": str}]: extra readers speaking the lasttag shape
     "slot_service": None,       # {"state_url", "set_url", "token_file"}
