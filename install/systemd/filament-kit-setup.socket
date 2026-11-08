@@ -1,0 +1,15 @@
+[Unit]
+Description=filament-kit setup page helper socket (the root writes of https://<host>.local:8710/setup)
+# Only root and the filament-kit group can connect; each connection is one request (filament-kit-setup@.service),
+# and the helper itself checks the setup code in it before it changes anything.
+
+[Socket]
+ListenStream=/run/filament-kit-setup.sock
+SocketUser=root
+SocketGroup=filament-kit
+SocketMode=0660
+Accept=yes
+MaxConnections=4
+
+[Install]
+WantedBy=sockets.target

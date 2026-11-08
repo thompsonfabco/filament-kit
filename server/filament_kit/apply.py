@@ -46,6 +46,8 @@ _COMPANION = {
     "filament-kit-library.timer": "filament-kit-library.service",
     "filament-kit-backup.timer": "filament-kit-backup.service",
     "filament-kit-update.timer": "filament-kit-update.service",
+    # the setup page's root helper: one instance per request, and the page's background apply
+    "filament-kit-setup.socket": ("filament-kit-setup@.service", "filament-kit-setup-apply.service"),
 }
 
 
@@ -156,7 +158,8 @@ def _resolve_all(cfg: dict, resolve: Callable[[str], list[str]]) -> list[str]:
 
 
 def _unit_files(unit: str) -> list[str]:
-    return [unit, *([_COMPANION[unit]] if unit in _COMPANION else [])]
+    extra = _COMPANION.get(unit, ())
+    return [unit, *((extra,) if isinstance(extra, str) else extra)]
 
 
 def _library_missing() -> bool:
@@ -185,8 +188,8 @@ def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) ->
     if "spoolman" in on:
         acts += [A("user", "spoolman"), A("spoolman_fetch")]
     if "server" in on:
-        acts += [A("install_unit", "filament-kit.service"),
-                 A("server_setup", "key" if "ai_intake" in on else "")]
+        acts += [A("install_unit", u) for unit in MODULES["server"].units for u in _unit_files(unit)]
+        acts.append(A("server_setup", "key" if "ai_intake" in on else ""))
     for name in ("presets", "library", "backup", "updates"):
         if name in on:
             for unit in MODULES[name].units:
@@ -234,6 +237,7 @@ def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) ->
     if "server" in on:
         acts.append(A("ensure_fields"))
         acts.append(A("enable", "filament-kit.service"))
+        acts.append(A("enable", "filament-kit-setup.socket"))
     for name in ("presets", "library", "backup", "updates"):
         if name in on:
             acts += [A("enable", u) for u in MODULES[name].units]
@@ -477,6 +481,10 @@ def _server_setup(ex: _Exec, arg: str) -> None:
         if f.exists():
             ex.cmd(["chown", "root:filament-kit", str(f)])
             ex.cmd(["chmod", "640", str(f)])
+
+    # the setup page's code (setup_code.py): made once, shown at the end (finish) and by `setup-code`
+    from . import setup_code
+    setup_code.ensure()
 
     # certificate: created once, never replaced
     print("\n==> Server certificate")
@@ -847,3 +855,16 @@ def finish(cfg: dict, *, run: Callable[[list[str]], None] = run_checked, pairing
         st = config._merge(config.DEFAULTS["station"], cfg.get("station") or {})
         parts.append(f"Station: http://{host}.local:{int(st['port'])}/state")
     print("\n" + "   ".join(parts))
+    if "server" in on and pairing:
+        _setup_line(cfg)
+
+
+def _setup_line(cfg: dict) -> None:
+    """The setup page's address, with its code only at a terminal (Ruling CD: no secrets in logs without one)."""
+    from . import setup_code
+    url = setup_code.page_url(cfg)
+    code = setup_code.read() if _tty() else None
+    if code:
+        print(f"\nOpen {url}  (setup code: {setup_code.shown(code)})")
+    else:
+        print(f"\nSetup page: {url}  (its setup code, at a terminal: sudo filament-kit setup-code)")

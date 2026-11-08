@@ -1,0 +1,19 @@
+[Unit]
+Description=filament-kit setup page helper (one request)
+# Started by filament-kit-setup.socket per connection. Reads one JSON request from the socket, answers one line,
+# exits. A closed list of operations (filament_kit/setup_helper.py), never a command or a path.
+
+[Service]
+Type=simple
+ExecStart=/opt/filament-kit/venv/bin/python -I -m filament_kit.setup_helper
+StandardInput=socket
+StandardOutput=socket
+StandardError=journal
+RuntimeMaxSec=120
+# root, but it may only write the kit's settings folder (and start the apply unit over systemd's bus)
+ProtectSystem=strict
+ReadWritePaths=/etc/filament-kit
+ProtectHome=yes
+PrivateTmp=yes
+PrivateNetwork=yes
+NoNewPrivileges=yes

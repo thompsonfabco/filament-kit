@@ -27,7 +27,7 @@ if [ -x /opt/filament-kit/venv/bin/filament-kit ]; then
     UNITS=$(/opt/filament-kit/venv/bin/filament-kit modules units 2>/dev/null) || UNITS=""
 fi
 if [ -z "$UNITS" ]; then
-    UNITS="filament-kit-web.service filament-kit-station.service filament-kit-build.path filament-kit-build.service filament-kit-library.timer filament-kit-library.service filament-kit-backup.timer filament-kit-backup.service filament-kit-update.timer filament-kit-update.service filament-kit.service spoolman.service"
+    UNITS="filament-kit-setup.socket filament-kit-setup@.service filament-kit-setup-apply.service filament-kit-web.service filament-kit-station.service filament-kit-build.path filament-kit-build.service filament-kit-library.timer filament-kit-library.service filament-kit-backup.timer filament-kit-backup.service filament-kit-update.timer filament-kit-update.service filament-kit.service spoolman.service"
 fi
 for u in $UNITS; do
     systemctl disable --now "$u" 2>/dev/null || true

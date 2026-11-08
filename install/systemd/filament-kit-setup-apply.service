@@ -1,0 +1,10 @@
+[Unit]
+Description=filament-kit modules apply, started from the setup page
+# Its own unit, so the apply goes on while it restarts the kit server (and the page with it). The output goes to
+# /run/filament-kit-setup/apply.log (root:filament-kit 640), which the page shows.
+
+[Service]
+Type=oneshot
+# an apply may install packages (apt) or download the library
+TimeoutStartSec=30min
+ExecStart=/opt/filament-kit/venv/bin/python -I -m filament_kit.setup_helper apply-run

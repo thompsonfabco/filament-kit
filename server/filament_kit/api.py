@@ -19,7 +19,8 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse
 from starlette.routing import Route
 
-from . import API_VERSION, __version__, config, intake, inventory, modules, pairing, profiles_api, station_flow, tags
+from . import (API_VERSION, __version__, config, intake, inventory, modules, pairing, profiles_api, setup_page,
+               station_flow, tags)
 from .intake import CapReached, PhotoError, ReadCap, ReadError
 from .bridge import camera, hardware, loading, mapping, registry, usage
 from .bridge.connection import ACTIONS, DEVELOPER_MODE_REASON, Manager, NoReply, PrinterOffline, UnknownPrinter
@@ -471,7 +472,9 @@ class _Refused(Exception):
 
 
 def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hub=None,
-               mapper: mapping.Mapper | None = None, enabled_modules: frozenset[str] | None = None) -> Starlette:
+               mapper: mapping.Mapper | None = None, enabled_modules: frozenset[str] | None = None,
+               setup: dict | None = None) -> Starlette:
+    """The phone app's API, plus the setup page (/setup, setup_page.py; `setup` = its test hooks)."""
     cfg = config.load()
     on = enabled_modules if enabled_modules is not None else modules.enabled(cfg)
     sm = sm if sm is not None else Spoolman(cfg["spoolman_url"])
@@ -691,6 +694,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             *_gated([*_printer_routes(printers), *_bridge_routes(printers, mapper, sm),
                      *camera.routes(camera_hub, _authed)], "printers", on),
             *_gated(profiles_api.routes(_authed, sm), "presets", on),
+            *setup_page.routes(printers if "printers" in on else None, **(setup or {})),
         ],
         exception_handlers={HTTPException: http_error},
     )

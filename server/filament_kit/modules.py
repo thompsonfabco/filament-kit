@@ -41,7 +41,7 @@ MODULES: dict[str, Module] = {m.name: m for m in (
        units=("spoolman.service",), apt=("unzip",)),
     # Spoolman need is checked by validate(): local module or a remote spoolman_url.
     _m("server", "Server", "App server: pairing, inventory, API, avahi announcement",
-       units=("filament-kit.service",), apt=("avahi-daemon", "qrencode"),
+       units=("filament-kit.service", "filament-kit-setup.socket"), apt=("avahi-daemon", "qrencode"),
        needs_text="Spoolman (this machine or a remote one)"),
     _m("ai_intake", "AI intake", "Claude reads spool labels from photos (needs an Anthropic API key)",
        depends=("server",), needs_text="an Anthropic API key", optional_ai=True),

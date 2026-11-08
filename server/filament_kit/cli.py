@@ -1,5 +1,5 @@
 """Command line: status, pair, unpair, config, cert, ensure-fields, printer map / unpin, library, profiles, modules,
-web, remote, migrate-ops."""
+web, remote, migrate-ops, setup-code."""
 from __future__ import annotations
 
 import argparse
@@ -152,21 +152,13 @@ def cmd_status(client_factory) -> int:
                           else "check that the remote Spoolman is running and spoolman_url is right")
 
     if "ai_intake" in on:
-        keyfile = p.etc / KEY_FILE
-        try:
-            key = keyfile.read_text(encoding="utf-8").strip()
-        except OSError:
-            key = ""
-        if not key:
-            good &= _line(False, f"Anthropic key missing ({keyfile})", "run: sudo filament-kit config  (option 4)")
+        ok, text = check_key(client_factory)
+        if ok:
+            good &= _line(True, text)
+        elif text.startswith("Anthropic key missing"):
+            good &= _line(False, text, "run: sudo filament-kit config  (option 4)")
         else:
-            try:
-                client_factory(key).models.list()
-                good &= _line(True, "Anthropic key accepted")
-            except Exception as e:  # noqa: BLE001 - any failure means the key/network is unusable
-                msg = str(e).replace(key, "***")
-                good &= _line(False, f"Anthropic key not accepted or API unreachable: {msg}",
-                              "run: sudo filament-kit config  (option 4) or check internet access")
+            good &= _line(False, text, "run: sudo filament-kit config  (option 4) or check internet access")
 
     if "server" in on:
         cert = p.etc / "cert.pem"
@@ -405,6 +397,34 @@ def _ask_int(prompt: str, minimum: int) -> int | None:
     except ValueError:
         print(f"Please enter a number of at least {minimum}.")
         return None
+
+
+def check_key(client_factory=None) -> tuple[bool, str]:
+    """(ok, text) for the stored Anthropic key: one models.list() call (`status` and the setup page). The text
+    never holds the key."""
+    keyfile = config.paths().etc / KEY_FILE
+    try:
+        key = keyfile.read_text(encoding="utf-8").strip()
+    except OSError:
+        key = ""
+    if not key:
+        return False, f"Anthropic key missing ({keyfile})"
+    try:
+        (client_factory or _default_client)(key).models.list()
+        return True, "Anthropic key accepted"
+    except Exception as e:  # noqa: BLE001 - any failure means the key/network is unusable
+        msg = str(e).replace(key, "***")
+        return False, f"Anthropic key not accepted or API unreachable: {msg}"
+
+
+def remove_key() -> bool:
+    """Remove the stored Anthropic key (root); False when there was none."""
+    dest = config.paths().etc / KEY_FILE
+    try:
+        dest.unlink()
+        return True
+    except FileNotFoundError:
+        return False
 
 
 def write_key(key: str) -> Path:
@@ -1076,8 +1096,8 @@ def _run_apply(*, pairing: bool = True) -> int:
     return 0
 
 
-def cmd_modules_apply() -> int:
-    return _run_apply(pairing=True)
+def cmd_modules_apply(pair: bool = True) -> int:
+    return _run_apply(pairing=pair)
 
 
 def _module_state(cfg: dict) -> tuple:
@@ -1424,23 +1444,16 @@ def _is_root() -> bool:
     return hasattr(os, "geteuid") and os.geteuid() == 0
 
 
-def cmd_web_passphrase() -> int:
-    """Set the passphrase that approves Claude's connector on the web unit's /login (the phone web app has no
-    sign-in). Typed twice, hidden; stored as a salted scrypt hash, root:filament-kit 640, so the service can check it but not change it."""
+class GroupMissing(OSError):
+    """A root-owned secret could not be given to the filament-kit group; nothing was changed."""
+
+
+def write_passphrase(text: str) -> Path:
+    """Store the web passphrase as a salted scrypt hash, root:filament-kit 640, so the service can check it but
+    not change it (root: `web passphrase` and the setup page's helper). ValueError for a short one; GroupMissing
+    when the group does not exist. Nothing changes on either."""
     from .web import auth  # needs the [web] extra
-    if not _is_root():
-        print("error: run as root: sudo filament-kit web passphrase", file=sys.stderr)
-        return 1
-    first = secret_input.ask(f"New web passphrase, at least {auth.MIN_PASSPHRASE} characters: ")
-    second = secret_input.ask("Again: ")
-    if first != second:
-        print("error: the two passphrases do not match; nothing was changed", file=sys.stderr)
-        return 1
-    try:
-        hashed = auth.hash_passphrase(first)
-    except ValueError as e:
-        print(f"error: {e}; nothing was changed", file=sys.stderr)
-        return 1
+    hashed = auth.hash_passphrase(text)
     dest = config.paths().etc / WEB_PASSPHRASE
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_name(dest.name + ".tmp")
@@ -1455,16 +1468,61 @@ def cmd_web_passphrase() -> int:
             shutil.chown(tmp, user="root", group="filament-kit")
         except (LookupError, OSError) as e:
             tmp.unlink(missing_ok=True)
-            print(f"error: cannot give {dest} to the filament-kit group ({e}); nothing was changed\n"
-                  "     fix: install the kit first (it creates the filament-kit user and group), "
-                  "or: sudo groupadd --system filament-kit", file=sys.stderr)
-            return 1
+            raise GroupMissing(f"cannot give {dest} to the filament-kit group ({e})") from None
         os.replace(tmp, dest)
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
+    return dest
+
+
+def cmd_web_passphrase() -> int:
+    """Set the passphrase that approves Claude's connector on the web unit's /login (the phone web app has no
+    sign-in). Typed twice, hidden; stored by `write_passphrase`."""
+    from .web import auth  # needs the [web] extra
+    if not _is_root():
+        print("error: run as root: sudo filament-kit web passphrase", file=sys.stderr)
+        return 1
+    first = secret_input.ask(f"New web passphrase, at least {auth.MIN_PASSPHRASE} characters: ")
+    second = secret_input.ask("Again: ")
+    if first != second:
+        print("error: the two passphrases do not match; nothing was changed", file=sys.stderr)
+        return 1
+    try:
+        dest = write_passphrase(first)
+    except GroupMissing as e:
+        print(f"error: {e}; nothing was changed\n"
+              "     fix: install the kit first (it creates the filament-kit user and group), "
+              "or: sudo groupadd --system filament-kit", file=sys.stderr)
+        return 1
+    except ValueError as e:
+        print(f"error: {e}; nothing was changed", file=sys.stderr)
+        return 1
     print(f"Passphrase saved ({dest}). Sign-ins from now on use it; existing sessions and connectors stay "
           "signed in.")
+    return 0
+
+
+def cmd_setup_code(new: bool) -> int:
+    """`setup-code [--new]` (root): the code the server's /setup page asks for before any change, made when there
+    is none. At a terminal it is printed with the page's address; without one (a log) only the address and how to
+    see it (Ruling CD: no secrets in logs)."""
+    from . import setup_code
+    if not _is_root() and not _no_systemd():
+        print("error: run as root: sudo filament-kit setup-code", file=sys.stderr)
+        return 1
+    if new:
+        code = setup_code.generate()
+        setup_code.write(code)
+    else:
+        code = setup_code.ensure()
+    url = setup_code.page_url(config.load())
+    if not apply._tty():
+        print(f"Setup page: {url}  (see its setup code at a terminal: sudo filament-kit setup-code)")
+        return 0
+    print(f"Open {url}  (setup code: {setup_code.shown(code)})")
+    if new:
+        print("The old setup code no longer works.")
     return 0
 
 
@@ -1644,7 +1702,8 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     au.add_argument("--dry-run", action="store_true", help="only show what would be accepted")
     md = sub.add_parser("modules", help="the switchable parts of the kit: apply the settings, list units")
     mdsub = md.add_subparsers(dest="modules_cmd", required=True)
-    mdsub.add_parser("apply", help="install, start and stop what config.json's modules say (root)")
+    mda = mdsub.add_parser("apply", help="install, start and stop what config.json's modules say (root)")
+    mda.add_argument("--no-pair", action="store_true", help="show no pairing code at the end (the setup page)")
     mdsub.add_parser("list", help="show each module on/off and the mode")
     mm = mdsub.add_parser("menu", help="the module checklist (cursor keys move, Space switches, a/s/t presets, Enter applies)")
     mm.add_argument("--raw", action="store_true", help="print the chosen modules as a comma list; change nothing")
@@ -1697,6 +1756,9 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     un = sub.add_parser("uninstall", help="remove the kit with the kept release's uninstall.sh (root); --purge "
                                           "also deletes the data, after a typed confirmation")
     un.add_argument("--purge", action="store_true", help="also delete settings, spool data, paired phones, backups")
+    sc = sub.add_parser("setup-code", help="show the setup page's address and its setup code (root); --new "
+                                           "replaces the code")
+    sc.add_argument("--new", action="store_true", help="make a new setup code; the old one stops working")
     args = ap.parse_args(argv)
 
     if args.cmd == "status":
@@ -1771,5 +1833,7 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
         if args.modules_cmd in ("enable", "disable"):
             return cmd_modules_toggle(args.name, args.modules_cmd == "enable",
                                       getattr(args, "server", None))
-        return cmd_modules_apply()
+        return cmd_modules_apply(pair=not args.no_pair)
+    if args.cmd == "setup-code":
+        return cmd_setup_code(args.new)
     return cmd_ensure_fields()

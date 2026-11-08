@@ -553,6 +553,45 @@ def _auth_headers(url: str) -> dict:
     return out
 
 
+def write_token(token: str) -> Path:
+    """Store the GitHub token (root; the setup page's helper), root:filament-kit 640 like the Anthropic key, so the
+    library update (the service user) can send it. ValueError for one with spaces or control characters."""
+    token = (token or "").strip()
+    if not token or not token.isprintable() or " " in token or len(token) > 400:
+        raise ValueError("a GitHub token is one word of printable characters")
+    dest = config.paths().etc / TOKEN_FILE
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(dest.name + ".tmp")
+    try:
+        if os.name == "nt":
+            tmp.write_bytes((token + "\n").encode())
+        else:
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o640)
+            with os.fdopen(fd, "wb") as fh:
+                os.fchmod(fh.fileno(), 0o640)
+                fh.write((token + "\n").encode())
+                fh.flush()
+                os.fsync(fh.fileno())
+            if os.geteuid() == 0:
+                try:
+                    shutil.chown(tmp, user="root", group="filament-kit")
+                except (LookupError, OSError):
+                    pass
+        os.replace(tmp, dest)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    return dest
+
+
+def remove_token() -> bool:
+    try:
+        (config.paths().etc / TOKEN_FILE).unlink()
+        return True
+    except FileNotFoundError:
+        return False
+
+
 def _token() -> str | None:
     """The optional GitHub token (/etc/filament-kit/github_token), only ever sent as a request header."""
     try:
