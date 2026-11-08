@@ -155,6 +155,14 @@ def save(seq):
         if go("done", seq, display=d or ["Saved"]):
             beep.beep("hold")
             speech.say("Saved.")
+    elif r.get("error") == "tag_not_linked" and r.get("spool_id"):
+        # the spool was made, its tag not linked: keep it, so the next long press links that one (never a second)
+        with st.lock:
+            if seq == flow["seq"]:
+                flow["spool"] = {**(flow["filament"] or {}), "id": r["spool_id"]}
+        if go("ready", seq, message=d[0] if d else "Saved, not linked"):
+            beep.beep("nothing")
+            speech.say("Saved, but the tag is not linked. Hold yellow to try again.")
     elif go("ready", seq, message=d[0] if d else "Save failed"):
         beep.beep("nothing")
         speech.say("Save failed.")

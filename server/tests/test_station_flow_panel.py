@@ -450,3 +450,23 @@ def test_main_starts_the_flow_timer():
     import inspect
     from filament_kit.station import __main__ as station_main
     assert "flow.tick_loop" in inspect.getsource(station_main.main)
+
+
+# --- final fix wave: tag_not_linked keeps the spool, so the next long press can't add a second ----------------------
+
+def test_tag_not_linked_keeps_the_spool_and_the_retry_sends_it(rig):
+    recognised_and_weighed(rig)
+    real = rig.api.save
+
+    def not_linked(body):
+        rig.api.calls.append(("save", body))
+        rig.api.save = real
+        return 502, {"error": "tag_not_linked", "spool_id": 124,
+                     "display": ["Saved #124", "tag not linked:", "link it on the phone"]}
+    rig.api.save = not_linked
+    panel.on_line(b"L H")
+    assert rig.step() == "ready" and rig.row(4) == "Saved #124"
+    panel.on_line(b"L H")
+    assert rig.step() == "done"
+    saves = [c[1] for c in rig.api.calls if c[0] == "save"]
+    assert len(saves) == 2 and saves[1] == {"uid": "4:bb:bb", "gross_g": 1098.0, "spool_id": 124}

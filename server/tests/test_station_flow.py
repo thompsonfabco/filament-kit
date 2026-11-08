@@ -282,3 +282,33 @@ def test_sealed_by_weight_counts_a_bagged_spool_as_sealed():
     assert station_flow.sealed_by_weight(it, 1300) and station_flow.sealed_by_weight(it, 1135)
     assert not station_flow.sealed_by_weight(it, 1134)
     assert "bag" in station_flow.sealed_by_weight.__doc__
+
+
+# ---------- final fix wave: the retry after tag_not_linked links that spool, never a second one ----------
+
+@pytest.mark.parametrize("item", [ITEM, SEALED], ids=["opened", "sealed"])
+def test_the_retry_after_tag_not_linked_links_the_same_spool(sm, monkeypatch, item):
+    c, h = client(sm), auth()
+    real = inventory.link_tag
+    monkeypatch.setattr(inventory, "link_tag", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("tag did not land")))
+    first = save(c, h, gross_g=1180, item=item).json()
+    assert first["error"] == "tag_not_linked"
+    sid, n = first["spool_id"], _spools(sm)
+    before = sm.get(f"spool/{sid}")
+    monkeypatch.setattr(inventory, "link_tag", real)
+    r = save(c, h, gross_g=1180, spool_id=sid)  # the panel's next long press sends the spool it was told about
+    assert r.status_code == 200 and r.json()["spool_id"] == sid and r.json()["created"] is False, r.json()
+    assert _spools(sm) == n and tags.stored(sm.get(f"spool/{sid}")) == tags.normalize_uid(UID)
+    after = sm.get(f"spool/{sid}")
+    assert after["comment"] == before["comment"]  # a sealed spool stays sealed
+    if item is SEALED:
+        assert after["remaining_weight"] == before["remaining_weight"]
+
+
+def test_the_retry_never_takes_a_spool_with_another_tag(sm):
+    c, h = client(sm), auth()
+    sid = c.post("/api/station/save", headers=h, json={"uid": "4:1:2:3:4:5:6", "gross_g": 900,
+                                                       "item": ITEM}).json()["spool_id"]
+    r = save(c, h, gross_g=900, spool_id=sid)
+    assert r.status_code == 409 and r.json()["error"] == "tag_mismatch"
+    assert inventory.by_tag(sm, UID) is None
