@@ -31,6 +31,9 @@ from .modules import MODULES, ModuleError
 SPOOLMAN_INFO = "http://127.0.0.1:7912/api/v1/info"
 STATION_UNIT = "filament-kit-station.service"
 WEB_UNIT = "filament-kit-web.service"
+# the setup page's run folder exists from boot (the helper socket and the apply log live there), 750 root:filament-kit
+SETUP_TMPFILES = "/etc/tmpfiles.d/filament-kit-setup.conf"
+SETUP_TMPFILES_TEXT = "d /run/filament-kit-setup 0750 root filament-kit -\n"
 DROPIN = "/etc/systemd/system/filament-kit-station.service.d/kit.conf"
 # udev applies rules in file-name order and the last GROUP= wins: the name sorts after the ops station's
 # 99-intake-station.rules (C-I1). OLD_UDEV_RULE is the kit's name before that; apply removes it.
@@ -46,6 +49,8 @@ _COMPANION = {
     "filament-kit-library.timer": "filament-kit-library.service",
     "filament-kit-backup.timer": "filament-kit-backup.service",
     "filament-kit-update.timer": "filament-kit-update.service",
+    # the setup page's root helper: one instance per request, and the page's background apply
+    "filament-kit-setup.socket": ("filament-kit-setup@.service", "filament-kit-setup-apply.service"),
 }
 
 
@@ -156,7 +161,8 @@ def _resolve_all(cfg: dict, resolve: Callable[[str], list[str]]) -> list[str]:
 
 
 def _unit_files(unit: str) -> list[str]:
-    return [unit, *([_COMPANION[unit]] if unit in _COMPANION else [])]
+    extra = _COMPANION.get(unit, ())
+    return [unit, *((extra,) if isinstance(extra, str) else extra)]
 
 
 def _library_missing() -> bool:
@@ -185,14 +191,17 @@ def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) ->
     if "spoolman" in on:
         acts += [A("user", "spoolman"), A("spoolman_fetch")]
     if "server" in on:
-        acts += [A("install_unit", "filament-kit.service"),
-                 A("server_setup", "key" if "ai_intake" in on else "")]
+        acts += [A("install_unit", u) for unit in MODULES["server"].units for u in _unit_files(unit)]
+        acts.append(A("server_setup", "key" if "ai_intake" in on else ""))
+        acts += [A("install_file", (SETUP_TMPFILES, SETUP_TMPFILES_TEXT, "0644", "root:root")),
+                 A("tmpfiles", SETUP_TMPFILES)]
     for name in ("presets", "library", "backup", "updates"):
         if name in on:
             for unit in MODULES[name].units:
                 acts += [A("install_unit", u) for u in _unit_files(unit)]
     if "web" in on:
-        acts.append(A("install_unit", WEB_UNIT))
+        # its own user (never in the filament-kit group) and exactly the files it needs (web_access.py)
+        acts += [A("user", config.WEB_USER), A("install_unit", WEB_UNIT), A("web_state")]
     rs = remote.settings(cfg) if "remote" in on else None
     if rs:
         acts.append(A("remote_install", rs["hostname"]))
@@ -235,6 +244,7 @@ def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) ->
     if "server" in on:
         acts.append(A("ensure_fields"))
         acts.append(A("enable", "filament-kit.service"))
+        acts.append(A("enable", "filament-kit-setup.socket"))
     for name in ("presets", "library", "backup", "updates"):
         if name in on:
             acts += [A("enable", u) for u in MODULES[name].units]
@@ -478,6 +488,10 @@ def _server_setup(ex: _Exec, arg: str) -> None:
             ex.cmd(["chown", "root:filament-kit", str(f)])
             ex.cmd(["chmod", "640", str(f)])
 
+    # the setup page's code (setup_code.py): made once, shown at the end (finish) and by `setup-code`
+    from . import setup_code
+    setup_code.ensure()
+
     # certificate: created once, never replaced
     print("\n==> Server certificate")
     if cli.cmd_cert() != 0:
@@ -494,6 +508,36 @@ def _server_setup(ex: _Exec, arg: str) -> None:
     ex.cmd(["systemctl", "enable", "--now", "avahi-daemon"])
     if not ex.ok(["systemctl", "reload", "avahi-daemon"]):
         ex.cmd(["systemctl", "restart", "avahi-daemon"])
+
+
+def _web_state(ex: _Exec) -> None:
+    """The web unit as its own user: stop it, move its files to its folder, the shared files, its kit token, its
+    ACLs (web_access.py). Before the unit is (re)started with the new user."""
+    from . import web_access
+    print("\n==> The web unit's own user and files")
+    if ex.dry:
+        print(f"would move the web unit's files to {config.paths().web} and grant {config.WEB_USER} its files")
+        return
+    try:
+        import pwd
+        web = pwd.getpwnam(config.WEB_USER)
+    except (ImportError, KeyError):
+        raise ApplyError(f"the user {config.WEB_USER} does not exist (the user step makes it)") from None
+    state = config.paths().state
+    state.mkdir(parents=True, exist_ok=True)
+    kit = os.stat(state)
+    ex.ok(["systemctl", "stop", WEB_UNIT])          # it must not write the old place while its files move
+    moved = web_access.migrate(web.pw_uid, web.pw_gid)
+    if moved:
+        print(f"moved to {config.paths().web}: {', '.join(moved)}")
+    web_access.shared_files(kit.st_uid, kit.st_gid)
+    try:
+        web_access.mark_web_device()              # a pairing from before roles: the web-only routes serve it
+        web_access.pair(web.pw_uid, web.pw_gid)
+    except Exception as e:  # noqa: BLE001 - the web unit says how to pair later; the rest of the apply goes on
+        print(f"the web unit could not be paired with the kit server now ({type(e).__name__}); "
+              "the next `sudo filament-kit modules apply` tries again")
+    web_access.grant(web.pw_uid, kit.st_uid)
 
 
 def _remote_install(ex: _Exec, host: str) -> None:
@@ -679,6 +723,10 @@ def _step(ex: _Exec, a: Action) -> None:
             f.unlink()
     elif k == "server_setup":
         _server_setup(ex, arg)
+    elif k == "tmpfiles":
+        ex.cmd(["systemd-tmpfiles", "--create", arg])
+    elif k == "web_state":
+        _web_state(ex)
     elif k == "udev_reload":
         ex.cmd(["udevadm", "control", "--reload"])
         ex.cmd(["udevadm", "trigger", "--subsystem-match=hidraw"])
@@ -875,3 +923,16 @@ def finish(cfg: dict, *, run: Callable[[list[str]], None] = run_checked, pairing
         st = config._merge(config.DEFAULTS["station"], cfg.get("station") or {})
         parts.append(f"Station: http://{host}.local:{int(st['port'])}/state")
     print("\n" + "   ".join(parts))
+    if "server" in on and pairing:
+        _setup_line(cfg)
+
+
+def _setup_line(cfg: dict) -> None:
+    """The setup page's address, with its code only at a terminal: an install log must not carry the code."""
+    from . import setup_code
+    url = setup_code.page_url(cfg)
+    code = setup_code.read() if _tty() else None
+    if code:
+        print(f"\nOpen {url}  (setup code: {setup_code.shown(code)})")
+    else:
+        print(f"\nSetup page: {url}  (its setup code, at a terminal: sudo filament-kit setup-code)")

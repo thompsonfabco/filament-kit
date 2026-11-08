@@ -179,6 +179,7 @@ def test_full_remote_run_issues_no_firewall_command(tmp_path, monkeypatch):
     monkeypatch.setattr(apply, "_tty", lambda: False)
     monkeypatch.setattr(apply, "_http_ok", lambda url: True)
     monkeypatch.setattr(apply.time, "sleep", lambda s: None)
+    monkeypatch.setattr(apply, "_web_state", lambda ex: None)     # needs the real filament-kit-web user
     run = Rec()
     apply.execute(_plan(_cfg(acme_window="03:10")), run=run, resources=INSTALL, root=tmp_path / "root")
     assert not [t for t in run.texts() if FORBIDDEN.search(t)]
@@ -235,7 +236,7 @@ def test_cli_remote_firewall_only_prints(capsys, tmp_path, monkeypatch):
 
 def test_wrapper_runs_remote_as_root():
     text = (INSTALL / "filament-kit-cli.sh").read_text()
-    assert "config | cert | modules | remote | migrate-ops | migrate-scanner | update | uninstall | station)" in text
+    assert "config | cert | modules | remote | migrate-ops | migrate-scanner | update | uninstall | station | setup-code)" in text
 
 
 def test_no_firewall_command_anywhere_in_the_remote_code_or_files():

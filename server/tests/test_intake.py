@@ -10,6 +10,7 @@ from fakes.claude_fake import FakeClaude
 
 from filament_kit.intake import (RULES, SCHEMA, CapReached, PhotoError, ReadCap, ReadError, check_photos,
                                  read_labels, retry)
+from filament_kit import intake
 from filament_kit.spoolman import Spoolman
 
 JPEG = b"\xff\xd8\xff\xe0" + b"x" * 100
@@ -201,21 +202,109 @@ def test_rules_mention_no_orders():
     assert SCHEMA["properties"]["items"]["items"]["required"] == list(props)
 
 
-def test_cap_refund_gives_back_newest(tmp_path):
+def test_cap_refund_gives_back_exactly_the_taken_read(tmp_path):
     f = tmp_path / "reads.json"
-    f.write_text(json.dumps([time.time() - 100]))
+    f.write_text(json.dumps([time.time() - 100]))   # the old format: bare stamps, no tickets
     cap = ReadCap(f, 2)
-    cap.take()
-    cap.refund()
+    t = cap.take("phone-1")
+    cap.refund(t, "phone-1")
     stamps = json.loads(f.read_text())
     assert len(stamps) == 1 and stamps[0] < time.time() - 50
-    cap.take()
+    cap.take("phone-1")
     with pytest.raises(CapReached):
-        cap.take()
-    cap.refund()
-    cap.refund()
-    cap.refund()  # never below empty
-    assert json.loads(f.read_text()) == []
+        cap.take("phone-1")
+
+
+def test_cap_reads_the_old_format(tmp_path):
+    f = tmp_path / "reads.json"
+    f.write_text(json.dumps([time.time() - 100, time.time() - 200]))
+    cap = ReadCap(f, 3)
+    cap.take("d")
+    with pytest.raises(CapReached):
+        cap.take("d")
+    assert intake.reads_today(f) == 3
+
+
+def test_cap_refund_without_a_take_is_refused(tmp_path):
+    f = tmp_path / "reads.json"
+    cap = ReadCap(f, 2)
+    cap.take("d")
+    with pytest.raises(intake.RefundRefused):
+        cap.refund("made-up", "d")
+    with pytest.raises(intake.RefundRefused):
+        cap.refund(None, "d")
+    assert intake.reads_today(f) == 1
+
+
+def test_cap_refund_twice_is_refused_the_second_time(tmp_path):
+    f = tmp_path / "reads.json"
+    cap = ReadCap(f, 2)
+    cap.take("d")
+    t = cap.take("d")
+    cap.refund(t, "d")
+    with pytest.raises(intake.RefundRefused):
+        cap.refund(t, "d")
+    assert intake.reads_today(f) == 1
+
+
+def test_cap_refund_of_an_expired_ticket_is_refused(tmp_path, monkeypatch):
+    f = tmp_path / "reads.json"
+    cap = ReadCap(f, 2)
+    t = cap.take("d")
+    later = time.time() + intake.TICKET_TTL + 1
+    monkeypatch.setattr(intake.time, "time", lambda: later)
+    with pytest.raises(intake.RefundRefused):
+        cap.refund(t, "d")
+    assert intake.reads_today(f) == 1
+
+
+@pytest.mark.parametrize("after, ok", [(600, True), (901, False)])
+def test_cap_refund_covers_the_claude_clients_slowest_failure(tmp_path, monkeypatch, after, ok):
+    """The station refunds on the errors that come after the Anthropic client's timeout and retries (up to
+    CLAUDE_TIMEOUT x (CLAUDE_RETRIES + 1)), so a ticket lives 15 minutes."""
+    f = tmp_path / "reads.json"
+    cap = ReadCap(f, 2)
+    start = time.time()
+    monkeypatch.setattr(intake.time, "time", lambda: start)
+    t = cap.take("d")
+    monkeypatch.setattr(intake.time, "time", lambda: start + after)
+    if ok:
+        cap.refund(t, "d")
+        assert intake.reads_today(f) == 0
+    else:
+        with pytest.raises(intake.RefundRefused):
+            cap.refund(t, "d")
+        assert intake.reads_today(f) == 1
+
+
+def test_ticket_ttl_is_tied_to_the_claude_client():
+    assert intake.TICKET_TTL == 900
+    assert intake.TICKET_TTL >= intake.CLAUDE_TIMEOUT * (intake.CLAUDE_RETRIES + 1)
+
+
+def test_cap_refund_of_another_devices_ticket_is_refused(tmp_path):
+    f = tmp_path / "reads.json"
+    cap = ReadCap(f, 2)
+    t = cap.take("phone-1")
+    with pytest.raises(intake.RefundRefused):
+        cap.refund(t, "web (MCP)")
+    assert intake.reads_today(f) == 1
+    cap.refund(t, "phone-1")         # the refused try did not use the ticket up
+    assert intake.reads_today(f) == 0
+
+
+def test_cap_looping_refunds_never_go_below_the_real_count(tmp_path):
+    f = tmp_path / "reads.json"
+    f.write_text(json.dumps([time.time() - 100]))
+    cap = ReadCap(f, 3)
+    t1, t2 = cap.take("d"), cap.take("d")
+    cap.refund(t1, "d")
+    for _ in range(5):
+        for t in (t1, "x", None):
+            with pytest.raises(intake.RefundRefused):
+                cap.refund(t, "d")
+    assert intake.reads_today(f) == 2      # the old read and t2's: both reached Claude
+    assert t2 not in f.read_text()         # tickets are kept hashed
 
 
 # ---------- Task 7b: product line at intake ----------

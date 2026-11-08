@@ -5,7 +5,8 @@
 # services, `migrate-ops`, which replaces the Spoolman database and installs
 # secrets, `migrate-scanner`, which reads the old calibration from /root and
 # writes the map, `update`, which installs a new release, `uninstall`, which runs the kept release's
-# uninstall.sh, and `station` (the station PC: its pairing files in /etc/filament-kit-station).
+# uninstall.sh, `station` (the station PC: its pairing files in /etc/filament-kit-station), and `setup-code`,
+# which shows or replaces the setup page's code in /etc/filament-kit.
 # Everything else touches
 # the service's state in /var/lib/filament-kit and runs as the filament-kit
 # user, so the files it writes stay readable by the service.
@@ -14,7 +15,7 @@ set -euo pipefail
 BIN=/opt/filament-kit/venv/bin/filament-kit
 
 case "${1:-}" in
-    config | cert | modules | remote | migrate-ops | migrate-scanner | update | uninstall | station)
+    config | cert | modules | remote | migrate-ops | migrate-scanner | update | uninstall | station | setup-code)
         exec "$BIN" "$@"
         ;;
 esac

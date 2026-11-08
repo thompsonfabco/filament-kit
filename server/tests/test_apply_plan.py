@@ -26,7 +26,7 @@ def _of(actions, kind):
 def test_legacy_config_plans_todays_install():
     acts = apply.plan({})
     assert _of(acts, "enable") == [
-        "spoolman.service", "filament-kit.service", "filament-kit-build.path",
+        "spoolman.service", "filament-kit.service", "filament-kit-setup.socket", "filament-kit-build.path",
         "filament-kit-library.timer", "filament-kit-backup.timer"]
     kinds = {a.kind for a in acts}
     assert not kinds & {"remove_pkg", "mask_sleep", "alsa_unmute", "udev_reload"}
@@ -239,3 +239,15 @@ def test_remote_adds_apt_packages():
     cfg["modules"].update(web=True, remote=True)
     cfg["web"]["public_url"] = "https://kit.example.com"
     assert {"nginx", "certbot"} <= set(_of(apply.plan(cfg), "apt"))
+
+
+def test_server_installs_the_setup_helper_units_and_starts_its_socket():
+    acts = apply.plan(set_mode(_cfg(), "server"))
+    for u in ("filament-kit-setup.socket", "filament-kit-setup@.service", "filament-kit-setup-apply.service"):
+        assert u in _of(acts, "install_unit")
+    en = _of(acts, "enable")
+    assert en.index("filament-kit-setup.socket") == en.index("filament-kit.service") + 1
+    assert "filament-kit-setup@.service" not in en and "filament-kit-setup-apply.service" not in en
+    off = apply.plan(_mode("station"), resolve=lambda h: [h])
+    assert "filament-kit-setup.socket" in _of(off, "disable")
+    assert "filament-kit-setup.socket" not in _of(off, "install_unit")

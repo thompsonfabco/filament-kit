@@ -33,7 +33,7 @@ else
 fi
 
 paths=()
-for p in etc/filament-kit var/lib/filament-kit; do
+for p in etc/filament-kit var/lib/filament-kit var/lib/filament-kit-web; do
     if [ -e "/$p" ]; then
         paths+=("$p")
     fi
@@ -43,7 +43,8 @@ out="$DEST/$(date +%F).tar.gz"
 tmp="$out.tmp"
 # Skipped: data that is downloaded again (the uploaded Bambu system presets, earlier library versions)
 # and half-written builds.
-tar -czf "$tmp" \
+# --acls/--xattrs: the web unit's grants (filament_kit/web_access.py) come back with a restore
+tar -czf "$tmp" --acls --xattrs \
     --exclude='var/lib/filament-kit/profiles/live/system' \
     --exclude='var/lib/filament-kit/library/versions' \
     --exclude='var/lib/filament-kit/profiles/builds/*.tmp' \

@@ -44,7 +44,7 @@ def endpoint_ok(endpoint) -> bool:
 
 
 def state_dir() -> Path:
-    return config.paths().state / "web"
+    return config.paths().web
 
 
 class Store:

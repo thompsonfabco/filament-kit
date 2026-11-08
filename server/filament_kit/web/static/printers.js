@@ -1,5 +1,5 @@
-// Printers tab: live status (SSE), camera (MJPEG in an <img>), controls, filament per AMS unit, usage with undo,
-// re-map, optional Web Push. Loaded before app.js (which calls printersTab() when the printers module is on).
+// Printers tab: live status (SSE), camera (MJPEG in an <img>), controls, filament per AMS unit with load / unload,
+// usage with undo, re-map, optional Web Push. Loaded before app.js (which calls printersTab() when the printers module is on).
 // Everything from the server goes in through textContent / element properties, never innerHTML.
 "use strict";
 function printersTab() {
@@ -15,6 +15,8 @@ function printersTab() {
   const camBox = h("div", { class: "card hidden" });
   const camBtn = h("button", { class: "secondary", textContent: "Show camera", on: { click: () => camera(!camOn) } });
   const units = h("div");
+  const loadBox = h("div", { class: "card hidden" });   // the load picker: outside `units`, which every update redraws
+  const slotMsg = h("div");
   const usageBox = h("div");
   const mapBox = h("div");
   const msg = h("div");
@@ -22,7 +24,7 @@ function printersTab() {
   const pushBox = h("div");
   const el = h("section", { class: "hidden" },
     h("h1", { textContent: "Printers" }), picker, head, conn, alerts, controls, camBtn, camBox, msg,
-    h("h2", { textContent: "Filament" }), units,
+    h("h2", { textContent: "Filament" }), units, slotMsg, loadBox,
     h("h2", { textContent: "Usage" }), usageBox,
     h("h2", { textContent: "Slots" }), mapBox, pushBox);
 
@@ -46,7 +48,8 @@ function printersTab() {
   function choose(id) {
     current = id; picker.value = id;
     try { localStorage.setItem("printer", id); } catch {}
-    camera(false); camBtn.classList.toggle("hidden", !camKind()); stream(); loadUsage(); loadMap();
+    camera(false); camBtn.classList.toggle("hidden", !camKind()); closeLoad(); slotMsg.replaceChildren();
+    stream(); loadUsage(); loadMap();
   }
   // "mjpeg" (an <img>) or "hls" (a <video>); null: this model has no camera we can show
   function camKind() {
@@ -155,11 +158,117 @@ function printersTab() {
           sw,
           h("b", { textContent: sl.label }),
           h("span", { textContent: sp ? sp.name : (sl.type || (state || "unknown")) }),
-          h("span", { class: "muted", textContent: sp && sp.remaining_weight != null ? `${Math.round(sp.remaining_weight)} g` : state }));
+          h("span", { class: "muted", textContent: sp && sp.remaining_weight != null ? `${Math.round(sp.remaining_weight)} g` : state }),
+          h("button", { class: "secondary fit", textContent: "Load", on: { click: () => openLoad(sl) } }),
+          sp ? h("button", { class: "secondary fit", textContent: "Unload", on: { click: () => unload(sl, sp) } }) : null);
       });
       cards.push(h("div", { class: "card" }, h("h3", { textContent: u.type_name ? `${u.label} · ${u.type_name}` : u.label }), ...rows));
     }
     units.replaceChildren(...(cards.length ? cards : [h("p", { class: "muted", textContent: "No AMS units reported." })]));
+  }
+
+  // ----- load / unload (the kit's slot routes; the same refusals as the Android app) -----
+  // dryAgain: a dry run asked for while another slot call ran; the latest pick's runs when that call ends
+  let slotBusy = false, loadSlot = null, loadSpool = null, dryAgain = null;
+  const slotPath = (label) => `${encodeURIComponent(current)}/slots/${encodeURIComponent(label)}`;
+  function slotSay(lines, ok) { slotMsg.replaceChildren(h("pre", { class: ok ? "ok" : "err", textContent: [lines].flat().join("\n") })); }
+  function spoolTitle(s) { return `${s.vendor || ""} ${s.name || ""}`.trim() || `spool #${s.id}`; }
+
+  function openLoad(sl) {
+    loadSlot = sl.label; loadSpool = null; slotMsg.replaceChildren();
+    const q = h("input", { type: "search", placeholder: "Search: brand, colour, material", enterKeyHint: "search",
+                           on: { keydown: (e) => { if (e.key === "Enter") search(); } } });
+    const results = h("div", { class: "list" });
+    const plan = h("div");
+    const go = h("button", { textContent: "Load", disabled: true, on: { click: () => doLoad(false, plan, go) } });
+    const picked = h("p", { class: "muted", textContent: "Pick a spool: tap its tag on a reader, or search." });
+    function pick(s, btn) {
+      for (const b of results.querySelectorAll(".pick")) b.classList.toggle("on", b === btn);
+      loadSpool = s; go.disabled = true; plan.replaceChildren();
+      picked.textContent = `S${s.id} ${spoolTitle(s)} (${s.location || "?"}${s.remaining_g != null ? ", " + Math.round(s.remaining_g) + " g" : ""})`;
+      doLoad(true, plan, go);           // the dry run first: the user sees the plan before anything is sent
+    }
+    function row(s) {
+      const b = h("button", { class: "pick", on: { click: () => pick(s, b) } }, h("strong", { textContent: `S${s.id} ` }), spoolTitle(s),
+        h("div", { class: "muted", textContent: `${s.location || "?"} · ${s.remaining_g ?? "?"} g` }));
+      return b;
+    }
+    async function lastTap() {
+      try {
+        const t = await pj("tagged");
+        if (!t.spool) {
+          results.replaceChildren(h("p", { class: "muted", textContent: t.nfc_id ? `Tag ${t.nfc_id} is not linked to a spool.` : "No tag read yet: tap one." }));
+          return;
+        }
+        const b = row(t.spool);
+        results.replaceChildren(b); pick(t.spool, b);
+      } catch (e) { results.replaceChildren(fail(e)); }
+    }
+    async function search() {
+      try {
+        const res = await api(`find?q=${encodeURIComponent(q.value)}&sealed=0`);
+        const rows = res.filaments.flatMap((f) => f.spools.map((s) => ({ id: s.spool_id, vendor: f.vendor, name: f.name, location: s.location, remaining_g: s.remaining_g })));
+        results.replaceChildren(...(rows.length ? rows.slice(0, 60).map(row) : [h("p", { class: "muted", textContent: "No spools match." })]));
+      } catch (e) { results.replaceChildren(fail(e)); }
+    }
+    loadBox.replaceChildren(
+      h("h3", { textContent: `Load into ${sl.label}` }),
+      h("div", { class: "row" }, h("button", { class: "secondary", textContent: "Use the last tapped tag", on: { click: lastTap } })),
+      h("div", { class: "row" }, q, h("button", { class: "fit", textContent: "Search", on: { click: search } })),
+      results, picked, plan,
+      h("div", { class: "row" }, go, h("button", { class: "secondary", textContent: "Cancel", on: { click: closeLoad } })));
+    loadBox.classList.remove("hidden");
+    loadBox.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  function closeLoad() { loadSlot = loadSpool = null; dryAgain = null; loadBox.classList.add("hidden"); loadBox.replaceChildren(); }
+  function slotDone() {
+    slotBusy = false;
+    const again = dryAgain; dryAgain = null;
+    if (again && loadSpool) doLoad(true, again.plan, again.go);
+  }
+
+  // dry: the plan (preset, nozzle, spools going back); then Load sends `dry_run: false`
+  async function doLoad(dry, plan, go) {
+    if (!loadSpool || !loadSlot) return;
+    if (slotBusy) { if (dry) dryAgain = { plan, go }; return; }   // not dropped: runs for the latest pick after
+    const s = loadSpool, label = loadSlot;
+    slotBusy = true; go.disabled = true;
+    plan.replaceChildren(h("p", { class: "muted", textContent: dry ? "Checking…" : "Loading…" }));
+    try {
+      const r = await pj(`${slotPath(label)}/load`, dry ? { spool_id: s.id, dry_run: true } : { spool_id: s.id, dry_run: false });
+      if (loadSpool !== s) return;      // another spool was picked meanwhile
+      const moved = (r.moved_back || []).filter((m) => m.id !== s.id)
+        .map((m) => `Spool #${m.id ?? "?"} now in ${label} goes back to ${m.location || "its previous place"}`);
+      if (dry) {
+        const nozzle = r.nozzle_assumed ? `Nozzle size not reported by the printer; assuming ${r.nozzle_mm ?? 0.4} mm`
+          : (r.nozzle_mm ? `Nozzle: ${r.nozzle_mm} mm` : "");
+        plan.replaceChildren(h("pre", { class: "ok", textContent: [`Load ${spoolTitle(s)} into ${label}`,
+          "Preset: " + ((r.preset && r.preset.name) || "none"), nozzle, ...moved, ...(r.problems || [])].filter(Boolean).join("\n") }));
+        go.disabled = false;
+      } else {
+        closeLoad();
+        slotSay([r.confirmed ? `Loaded into ${label}` : `Sent to ${label}`,
+          r.confirmed ? "" : "The printer accepted it but hasn't shown the change yet", ...moved, ...(r.problems || [])].filter(Boolean), true);
+      }
+    } catch (e) {
+      if (loadSpool === s) plan.replaceChildren(fail(e));
+    } finally { slotDone(); }
+  }
+
+  // Spoolman only (the printer's slot setting stays): the dry run says where the spool goes, then a confirm
+  async function unload(sl, sp) {
+    if (slotBusy) return;
+    slotBusy = true; slotMsg.replaceChildren(h("p", { class: "muted", textContent: "Checking…" }));
+    try {
+      const plan = await pj(`${slotPath(sl.label)}/unload`, { dry_run: true });
+      const where = plan.location || ((plan.moved_back || [])[0] || {}).location || "its previous place";
+      const name = sp.name || `spool #${sp.id}`;
+      slotMsg.replaceChildren();
+      if (!window.confirm(`Unload ${name} from ${sl.label}? It goes back to ${where}.`)) return;
+      const r = await pj(`${slotPath(sl.label)}/unload`, { dry_run: false });
+      slotSay([`Unloaded ${name} from ${sl.label}.`,
+        ...(r.moved_back || []).map((m) => `Moved back: #${m.id ?? "?"} → ${m.location || "its previous place"}`)], true);
+    } catch (e) { slotSay(e.message, false); } finally { slotDone(); }
   }
 
   // ----- usage + re-map -----
@@ -244,6 +353,6 @@ function printersTab() {
   return {
     el,
     enter() { if (!loaded) { loaded = true; pushUi(); load(); } else if (current) { stream(); loadUsage(); loadMap(); } },
-    leave() { stopStream(); camera(false); clearTimeout(mapTimer); },
+    leave() { stopStream(); camera(false); clearTimeout(mapTimer); closeLoad(); },
   };
 }

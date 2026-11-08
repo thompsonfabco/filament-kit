@@ -15,6 +15,7 @@ class Paths:
     state: Path
     backups: Path
     opt: Path
+    web: Path            # the web unit's own state (its OAuth store, kit token, Web Push keys), user filament-kit-web
 
 
 def paths() -> Paths:
@@ -23,7 +24,47 @@ def paths() -> Paths:
         state=Path(os.environ.get("FK_STATE", "/var/lib/filament-kit")),
         backups=Path(os.environ.get("FK_BACKUPS", "/var/backups/filament-kit")),
         opt=Path(os.environ.get("FK_OPT", "/opt/filament-kit")),
+        web=_web_state(),
     )
+
+
+def _web_state() -> Path:
+    """FK_WEB_STATE; else beside an FK_STATE given (tests, a dev copy: `<state>-web`); else the installed place."""
+    if os.environ.get("FK_WEB_STATE"):
+        return Path(os.environ["FK_WEB_STATE"])
+    if os.environ.get("FK_STATE"):
+        st = Path(os.environ["FK_STATE"])
+        return st.with_name(st.name + "-web")
+    return Path("/var/lib/filament-kit-web")
+
+
+WEB_USER = "filament-kit-web"   # the web unit's user: its own group, never in the filament-kit group
+KIT_USER = "filament-kit"
+
+
+def uid_of(user: str) -> int | None:
+    try:
+        import pwd
+        return pwd.getpwnam(user).pw_uid
+    except (ImportError, KeyError):
+        return None
+
+
+def grant_web_read(path) -> None:
+    """Let the web unit's user read `path` (a root-owned settings file it needs: config.json, web_passphrase,
+    anthropic_key) with a POSIX ACL; a no-op unless root, with that user, on a file system with ACLs."""
+    from . import acl
+    if not acl.supported() or getattr(os, "geteuid", lambda: -1)() != 0:
+        return
+    uid = uid_of(WEB_USER)
+    if uid is not None:
+        try:
+            acl.grant(path, {uid: acl.R})
+        except OSError as e:
+            import logging
+            logging.getLogger(__name__).warning(
+                "cannot let %s read %s (%s); the web unit will fail to read it: check that the file system "
+                "supports ACLs, then run: sudo filament-kit modules apply", WEB_USER, path, e)
 
 
 DEFAULTS: dict = {
@@ -95,7 +136,11 @@ def save(cfg: dict) -> None:
             fh.flush()
             os.fsync(fh.fileno())
         os.chmod(tmp, 0o640)
+        grant_web_read(tmp)
         os.replace(tmp, f)
+        token = (cfg.get("slot_service") or {}).get("token_file") if isinstance(cfg.get("slot_service"), dict) else None
+        if token and Path(token).is_file() and not Path(token).is_symlink():
+            grant_web_read(token)       # the owner's H2D slot token: the web unit's printer_set_slot reads it
     except BaseException:
         if tmp.exists():
             tmp.unlink()

@@ -322,9 +322,10 @@ def test_cli_modules_units(capsys):
     for u in ("filament-kit.service", "filament-kit-build.path", "filament-kit-build.service",
               "filament-kit-library.timer", "filament-kit-library.service", "filament-kit-backup.timer",
               "filament-kit-backup.service", "filament-kit-station.service", "filament-kit-web.service",
-              "filament-kit-update.timer", "filament-kit-update.service"):
+              "filament-kit-update.timer", "filament-kit-update.service", "filament-kit-setup.socket",
+              "filament-kit-setup@.service", "filament-kit-setup-apply.service"):
         assert u in units
-    assert len(units) == len(set(units)) == 12
+    assert len(units) == len(set(units)) == 15
 
 
 def test_cli_modules_apply_dry(tmp_path, monkeypatch, capsys):

@@ -221,7 +221,7 @@ def test_uninstall_without_a_kept_release_says_how_to_get_one(tmp_path, fake_rel
 
 def test_uninstall_is_a_cli_command_run_as_root():
     wrapper = (ROOT / "install" / "filament-kit-cli.sh").read_text(encoding="utf-8")
-    assert "| update | uninstall | station)" in wrapper
+    assert "| update | uninstall | station | setup-code)" in wrapper
     with pytest.raises(SystemExit):
         cli.main(["uninstall", "--bogus"])
 

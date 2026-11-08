@@ -408,6 +408,7 @@ def routes(authed, sm) -> list[Route]:
         Route("/api/profiles/parents", parents),
         Route("/api/profiles/propose", propose, methods=["POST"]),
         Route("/api/library/local", library_local, methods=["POST"]),
+        *web_routes(authed, sm),
     ]
 
 
@@ -424,3 +425,52 @@ def _local_problems(raw: bytes) -> list[str]:
     entry.setdefault("schema_version", library_mod.SCHEMA_VERSION)
     entry.setdefault("updated", datetime.date.today().isoformat())
     return list(library_mod.validate(entry, local=True))
+
+
+# ---------- the web unit's preset writes (its user may not write profiles/ itself) ----------
+
+def _ids(body: dict) -> list[int]:
+    ids = body.get("ids")
+    if not isinstance(ids, list) or not ids or not all(isinstance(i, int) and not isinstance(i, bool) for i in ids):
+        raise _bad("ids must be a list of Spoolman filament ids")
+    return ids
+
+
+def _text_field(body: dict, key: str, required: bool = True) -> str:
+    v = body.get(key)
+    if v is None and not required:
+        return ""
+    if not isinstance(v, str) or len(v) > 400 or (required and not v.strip()):
+        raise _bad(f"{key} must be text")
+    return v
+
+
+def web_routes(authed, sm) -> list[Route]:
+    """The MCP tools' and phone web app's preset writes, as the web unit sends them through its kit token:
+    `web.presets` runs here, in the kit (the owner of profiles/), so the web unit only reads that folder."""
+    from .web import presets
+
+    @authed
+    async def line_add(request: Request):
+        body = await _json(request)
+        line, ids = _text_field(body, "line"), _ids(body)
+        return JSONResponse(await run_in_threadpool(
+            _audit, "web line add", request.state.device, lambda: presets.add_ids(sm, line, ids)))
+
+    @authed
+    async def line_new(request: Request):
+        body = await _json(request)
+        args = (_text_field(body, "name"), _text_field(body, "vendor"), _ids(body),
+                _text_field(body, "orca_parent", False), _text_field(body, "bs_template"))
+        return JSONResponse(await run_in_threadpool(
+            _audit, "web line new", request.state.device, lambda: presets.add_line(sm, *args)))
+
+    @authed
+    async def generate(request: Request):
+        await _json(request)
+        return JSONResponse(await run_in_threadpool(
+            _audit, "web generate", request.state.device, presets.generate))
+
+    return [Route("/api/profiles/web/line_add", line_add, methods=["POST"]),
+            Route("/api/profiles/web/line_new", line_new, methods=["POST"]),
+            Route("/api/profiles/web/generate", generate, methods=["POST"])]

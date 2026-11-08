@@ -184,14 +184,16 @@ def test_update_stops_the_services_when_systemd(env, srv, key, monkeypatch):
     run = Runner()
     assert updates.update(_cfg(env, on=("spoolman", "server", "web", "updates")), fetcher=srv.fetcher(),
                           run=run) == 0
-    assert run.cmds[0] == ["systemctl", "stop", "filament-kit-update.timer"]           # timers first (M6)
+    # timers and the setup page's helper socket first (M6: nothing starts an apply mid-update)
+    assert run.cmds[0] == ["systemctl", "stop", "filament-kit-setup.socket", "filament-kit-update.timer"]
     assert run.cmds[1] == ["systemctl", "stop", "spoolman.service", "filament-kit.service",
                            "filament-kit-web.service"]
     assert run.cmds[2][0] == "bash" and len(run.cmds) == 3   # install.sh's modules apply starts them again
 
 
 START = [["systemctl", "start", "spoolman.service", "filament-kit.service"],
-         ["systemctl", "start", "filament-kit-build.path", "filament-kit-update.timer"]]
+         ["systemctl", "start", "filament-kit-setup.socket", "filament-kit-build.path",
+          "filament-kit-update.timer"]]
 
 
 @pytest.fixture

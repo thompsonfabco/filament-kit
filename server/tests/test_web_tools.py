@@ -413,7 +413,7 @@ def test_kit_api_pairs_once_and_an_unpair_is_loud_until_the_next_start(env, capl
     with readers_fake.Served(Starlette(routes=[Route("/api/printers", printers)]), free_port()) as url:
         kit = slots.KitApi(base_url=url)
         kit.ensure_paired()                                                    # at start
-        tok_file = tmp_path / "state" / "web" / "kit_token"
+        tok_file = config.paths().web / "kit_token"
         first = tok_file.read_text(encoding="utf-8").strip()
         assert [d["name"] for d in pairing.devices()] == ["web (MCP)"]
         if os.name != "nt":
@@ -427,7 +427,7 @@ def test_kit_api_pairs_once_and_an_unpair_is_loud_until_the_next_start(env, capl
         with caplog.at_level(logging.ERROR, logger="filament_kit"):
             with pytest.raises(Problem, match="unpaired"):
                 kit.get("/api/printers")
-        assert any("web (MCP)" in r.getMessage() and "restart" in r.getMessage() for r in caplog.records)
+        assert any("web (MCP)" in r.getMessage() and "modules apply" in r.getMessage() for r in caplog.records)
         with pytest.raises(Problem, match="unpaired"):
             kit.get("/api/printers")                                           # stays refused
         assert pairing.devices() == [] and not tok_file.exists()

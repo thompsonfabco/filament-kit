@@ -13,7 +13,6 @@ import hashlib
 import hmac
 import itertools
 import html
-import ipaddress
 import json
 import os
 import secrets
@@ -61,24 +60,9 @@ def _origin(public_url: str) -> str:
     return "{0.scheme}://{0.netloc}".format(urlparse(public_url))
 
 
-# ---------- LAN ----------
+# ---------- LAN (lan.py: the kit server's /setup page uses the same checks) ----------
 
-Networks = list  # of ipaddress.IPv4Network | IPv6Network
-
-
-def parse_lan(cidrs: Iterable[str]) -> Networks:
-    return [ipaddress.ip_network(n, strict=False) for n in cidrs or ()]
-
-
-def is_lan(host: str, nets: Networks) -> bool:
-    """Loopback or inside one of the LAN ranges; anything that is not an IP address is not home."""
-    try:
-        ip = ipaddress.ip_address(host)
-    except ValueError:
-        return False
-    if ip.version == 6 and ip.ipv4_mapped:  # a dual-stack socket reports IPv4 clients as ::ffff:a.b.c.d
-        ip = ip.ipv4_mapped
-    return ip.is_loopback or any(ip in n for n in nets)
+from ..lan import Networks, is_lan, parse_lan  # noqa: E402,F401  (re-exported)
 
 
 # ---------- store ----------

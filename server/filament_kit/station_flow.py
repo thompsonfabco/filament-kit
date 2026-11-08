@@ -100,7 +100,7 @@ def _confidence(item: dict, questions: list) -> str:
     return "low" if unsure else "high"
 
 
-def recognize(sm, cfg: dict, image: bytes, claude=None, cap=None) -> dict:
+def recognize(sm, cfg: dict, image: bytes, claude=None, cap=None, device=None) -> dict:
     """Read one spool photo with the first recogniser that answers. Raises FlowError (no recogniser, or the read
     failed) and lets intake.CapReached through (the API answers 429)."""
     order = recognizers(cfg)
@@ -116,15 +116,14 @@ def recognize(sm, cfg: dict, image: bytes, claude=None, cap=None) -> dict:
             log.warning("local AI recognise failed: %s: %s", e.__class__.__name__, e)
             out = None
     if out is None and "claude" in order:
-        if cap is not None:
-            cap.take()
+        ticket = cap.take(device) if cap is not None else None
         try:
             # no station weight and no reader tap: the photo alone decides sealed (the tap would force opened)
             ctx = intake.read_context(cfg, sm, None, app_tag=True)
             out, source = intake.read_labels(sm, [image], "", None, claude, **ctx), "claude"
         except intake.ReadError as e:
             if cap is not None and e.code in ("unreachable", "api_error"):
-                cap.refund()
+                intake.refund_quietly(cap, ticket, device)
             raise FlowError(502, "read_failed", str(e), lines("Read failed", "try again, or", "use the phone")) from e
     if not out or not out.get("items"):
         raise FlowError(422, "nothing_read", "no spool found in the photo", lines("No spool seen", "try again"))

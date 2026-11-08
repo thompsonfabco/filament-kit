@@ -7,8 +7,9 @@ Two backends, picked by config:
 - else, with the `printers` module on: the kit's bridge, through the kit server's own API on 127.0.0.1 (the server
   process owns the printer connections; a second MQTT session from this process would compete with it). The web
   process pairs itself once like a phone, in-process (device 'web (MCP)'), at start, and keeps that token in
-  `FK_STATE/web/kit_token` (0600). If the owner unpairs it, slot calls fail with a clear error (logged once) and
-  the token file is dropped, so the next start pairs again.
+  `<web state>/kit_token` (0600; on an install the web unit runs as its own user, which may not write the kit's
+  pairing files, so `modules apply` pairs it as root). If the owner unpairs it, slot calls fail with a clear error
+  (logged once) and the token file is dropped, so the next `modules apply` pairs again.
 """
 from __future__ import annotations
 
@@ -32,7 +33,18 @@ log = logging.getLogger(__name__)
 TIMEOUT_STATE, TIMEOUT_SET = 10, 20
 DEVICE_NAME = "web (MCP)"
 UNPAIRED = (f"the kit server no longer accepts this web unit (the device '{DEVICE_NAME}' was unpaired); "
-            "restart it to pair again: sudo systemctl restart filament-kit-web")
+            "pair it again: sudo filament-kit modules apply")
+NOT_PAIRED = "this web unit is not paired with the kit server yet; pair it: sudo filament-kit modules apply"
+
+
+def pair_token(f: Path, role: str | None = None) -> str:
+    """Pair as the device 'web (MCP)' and keep the token in `f` (0600). Run by `modules apply` as root (then handed
+    to the web unit's user), or in-process where the process may write the kit's pairings (one-user installs)."""
+    tok = pairing.issue(DEVICE_NAME, role=role).token
+    pairing.check(tok)                   # claims the device, like a phone's first call
+    f.parent.mkdir(parents=True, exist_ok=True)
+    pairing._write_atomic(f, (tok + "\n").encode("utf-8"), 0o600)
+    return tok
 OPS_NOTE = "spool = the Spoolman spool assigned by an NFC tap or printer_set_slot (null: never assigned)"
 
 
@@ -138,7 +150,8 @@ def service_set_slot(svc: dict, spool_id: int, slot: str, dry_run: bool) -> dict
     try:
         token = Path(svc["token_file"]).read_text(encoding="utf-8").strip()
     except (OSError, KeyError, TypeError):
-        raise SlotError("the slot service token file (slot_service.token_file) cannot be read") from None
+        raise SlotError("the slot service token file (slot_service.token_file) cannot be read; if it is there, let "
+                        "the web unit read it: sudo filament-kit modules apply") from None
     body = json.dumps({"spool_id": int(spool_id), "ams_id": ams_id, "tray_id": tray_id,
                        "dry_run": bool(dry_run)}).encode()
     req = urllib.request.Request(str(svc["set_url"]), data=body, method="POST",
@@ -180,7 +193,7 @@ class KitApi:
 
     @staticmethod
     def _token_file() -> Path:
-        return config.paths().state / "web" / "kit_token"
+        return config.paths().web / "kit_token"
 
     def ensure_paired(self) -> None:
         """Read this process's token, or pair as the device 'web (MCP)' when there is none (called at start)."""
@@ -188,7 +201,7 @@ class KitApi:
 
     def _token(self) -> str:
         """This process's own pairing token (device 'web (MCP)'), made in-process when the file is missing and
-        kept in FK_STATE/web/kit_token (0600). Never renewed while running: see `_refused`."""
+        kept in <web state>/kit_token (0600). Never renewed while running: see `_refused`."""
         with self._lock:
             if self._refused:
                 raise SlotError(UNPAIRED, code="unpaired")
@@ -199,21 +212,21 @@ class KitApi:
                     return tok
             except OSError:
                 pass
-            tok = pairing.issue(DEVICE_NAME).token
-            pairing.check(tok)                   # claims the device, like a phone's first call
-            pairing.make_state_dir(f.parent)
-            pairing._write_atomic(f, (tok + "\n").encode("utf-8"), 0o600, state_owned=True)
+            try:
+                tok = pair_token(f)
+            except (OSError, pairing.PairingError) as e:   # the web unit's user may not write the kit's pairings
+                raise SlotError(f"{NOT_PAIRED} ({type(e).__name__})", code="unpaired") from None
             log.info("paired with the kit server as %r", DEVICE_NAME)
             return tok
 
     def _refuse(self) -> None:
         """The kit server refused the token: the owner unpaired 'web (MCP)'. Say so loudly, drop the token so the
-        next start pairs again, and refuse until then (re-pairing behind the owner's back would undo the unpair)."""
+        next `modules apply` pairs again, and refuse until then (re-pairing behind the owner's back would undo the unpair)."""
         with self._lock:
             if not self._refused:
                 log.error("the kit server refused this web unit's pairing token (the device %r was unpaired?); "
-                          "printer slots are off until the next start, which pairs again: "
-                          "sudo systemctl restart filament-kit-web", DEVICE_NAME)
+                          "printer slots are off until it is paired again: sudo filament-kit modules apply",
+                          DEVICE_NAME)
             self._refused = True
             self._token_file().unlink(missing_ok=True)
 

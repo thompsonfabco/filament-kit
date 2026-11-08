@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import errno
 import hashlib
 import hmac
 import ipaddress
@@ -82,7 +83,7 @@ def give_to_state_owner(path) -> None:
     if getattr(os, "geteuid", lambda: -1)() != 0:
         return
     st = os.stat(config.paths().state)
-    os.chown(path, st.st_uid, st.st_gid)
+    os.chown(path, st.st_uid, st.st_gid, follow_symlinks=False)      # never through a planted link
 
 
 def make_state_dir(path) -> None:
@@ -102,9 +103,28 @@ def make_state_dir(path) -> None:
             give_to_state_owner(d)
 
 
+_REFUSED = (errno.EACCES, errno.EPERM, errno.EROFS)
+
+
+class LockUnavailable(OSError):
+    """A lock this process may not create, and that does not exist yet (made by the kit's install as root)."""
+
+
 def open_lock(path: Path):
     """Open (creating if needed) a lock file in the state directory, owned like the state directory."""
-    fh = open(path, "a")
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fh = os.fdopen(os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | nofollow, 0o644), "a")
+    except OSError as e:
+        if e.errno not in _REFUSED:
+            raise
+        # a lock this process may only read (the web unit's user on the kit's locks, or a read-only mount under
+        # ProtectSystem=strict): flock works on a read-only descriptor all the same
+        try:
+            fh = os.fdopen(os.open(path, os.O_RDONLY | nofollow), "r")
+        except FileNotFoundError:
+            raise LockUnavailable(e.errno, f"the lock {path} is missing and this process may not create it; "
+                                  "run `sudo filament-kit modules apply` to make the shared locks", str(path)) from e
     try:
         give_to_state_owner(path)
     except BaseException:
@@ -122,9 +142,14 @@ def _write_atomic(path: Path, data: bytes, mode: int, state_owned: bool = False)
             fh.write(data)
             fh.flush()
             os.fsync(fh.fileno())
-        os.chmod(tmp, mode)
-        if state_owned:
-            give_to_state_owner(tmp)
+            # mode and owner on the open file, not by name: a link swapped in at `tmp` is never followed
+            if hasattr(os, "fchmod"):
+                os.fchmod(fh.fileno(), mode)
+            else:
+                os.chmod(tmp, mode)
+            if state_owned and getattr(os, "geteuid", lambda: -1)() == 0:
+                st = os.stat(config.paths().state)
+                os.fchown(fh.fileno(), st.st_uid, st.st_gid)
         os.replace(tmp, path)
     except BaseException:
         if os.path.exists(tmp):
@@ -203,9 +228,12 @@ def make_cert(hostname: str, ips: list[str], dest: Path, extra_dns: list[str] = 
 
 def _read(name: str) -> list:
     f = config.paths().state / name
-    if not f.exists():
+    try:   # never through a link: root (modules apply) reads these too, in a folder the service user owns
+        fd = os.open(f, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    except FileNotFoundError:
         return []
-    return json.loads(f.read_text(encoding="utf-8"))
+    with os.fdopen(fd, encoding="utf-8") as fh:
+        return json.loads(fh.read())
 
 
 def _write(name: str, obj: list) -> None:
@@ -232,7 +260,9 @@ def _load_devices() -> list:
     return kept
 
 
-def issue(device_hint: str = "") -> Pairing:
+def issue(device_hint: str = "", role: str | None = None) -> Pairing:
+    """A new pairing for a device named `device_hint`. `role` marks what the device is for routes that serve only
+    one kind of device ("web": the web unit's pairing, made by `modules apply` as root; see role_of)."""
     cert = config.paths().etc / "cert.pem"
     try:
         cert_pem = cert.read_bytes()
@@ -260,6 +290,7 @@ def issue(device_hint: str = "") -> Pairing:
             "claimed": None,
             # the intake station's token reaches only /api/station/* (api._authed); phones and the PC sync: all
             **({"scope": "station"} if device_hint == "station" else {}),
+            **({"role": role} if role else {}),
         })
         _write("devices.json", devs)
 
@@ -336,6 +367,34 @@ def revoke(device_id: str) -> bool:
             return False
         _write("devices.json", kept)
         return True
+
+
+WEB_ROLE = "web"     # the web unit's pairing: the kit API's web-only routes (GET /api/intake/orders) serve it
+
+
+def role_of(device_id: str) -> str | None:
+    """The `role` of a paired device's record (None: none set, or no such device)."""
+    with _locked():
+        for d in _load_devices():
+            if d.get("id") == device_id:
+                r = d.get("role")
+                return r if isinstance(r, str) else None
+    return None
+
+
+def set_role_by_name(name: str, role: str) -> int:
+    """Give `role` to every device named `name` that has none (the upgrade of pairings made before roles
+    existed). Returns how many changed."""
+    with _locked():
+        devs = _load_devices()
+        n = 0
+        for d in devs:
+            if d.get("name") == name and not d.get("role"):
+                d["role"] = role
+                n += 1
+        if n:
+            _write("devices.json", devs)
+        return n
 
 
 def devices() -> list[dict]:

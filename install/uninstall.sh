@@ -27,7 +27,7 @@ if [ -x /opt/filament-kit/venv/bin/filament-kit ]; then
     UNITS=$(/opt/filament-kit/venv/bin/filament-kit modules units 2>/dev/null) || UNITS=""
 fi
 if [ -z "$UNITS" ]; then
-    UNITS="filament-kit-web.service filament-kit-station.service filament-kit-build.path filament-kit-build.service filament-kit-library.timer filament-kit-library.service filament-kit-backup.timer filament-kit-backup.service filament-kit-update.timer filament-kit-update.service filament-kit.service spoolman.service"
+    UNITS="filament-kit-setup.socket filament-kit-setup@.service filament-kit-setup-apply.service filament-kit-web.service filament-kit-station.service filament-kit-build.path filament-kit-build.service filament-kit-library.timer filament-kit-library.service filament-kit-backup.timer filament-kit-backup.service filament-kit-update.timer filament-kit-update.service filament-kit.service spoolman.service"
 fi
 for u in $UNITS; do
     systemctl disable --now "$u" 2>/dev/null || true
@@ -96,14 +96,15 @@ fi
 rm -rf /opt/filament-kit /opt/spoolman /opt/spoolman.new /opt/spoolman.old
 
 if [ "$PURGE" -eq 1 ]; then
-    rm -rf /etc/filament-kit /etc/filament-kit-station /var/lib/filament-kit /var/lib/spoolman /var/backups/filament-kit
+    rm -rf /etc/filament-kit /etc/filament-kit-station /var/lib/filament-kit /var/lib/filament-kit-web /var/lib/spoolman /var/backups/filament-kit
+    rm -f /etc/tmpfiles.d/filament-kit-setup.conf
     # the certbot timer pin (remote.acme_window) is a setting of the kit's
     if [ -f /etc/systemd/system/certbot.timer.d/acme-window.conf ]; then
         rm -f /etc/systemd/system/certbot.timer.d/acme-window.conf
         rmdir /etc/systemd/system/certbot.timer.d 2>/dev/null || true
         systemctl daemon-reload
     fi
-    for u in filament-kit spoolman; do
+    for u in filament-kit filament-kit-web spoolman; do
         if id -u "$u" >/dev/null 2>&1; then
             userdel "$u" || true
         fi
@@ -111,6 +112,6 @@ if [ "$PURGE" -eq 1 ]; then
     echo "filament-kit and Spoolman removed, including all data."
 else
     echo "filament-kit and Spoolman removed."
-    echo "Kept: /etc/filament-kit /etc/filament-kit-station /var/lib/filament-kit /var/lib/spoolman /var/backups/filament-kit"
+    echo "Kept: /etc/filament-kit /etc/filament-kit-station /var/lib/filament-kit /var/lib/filament-kit-web /var/lib/spoolman /var/backups/filament-kit"
     echo "Run again with --purge to delete them too."
 fi

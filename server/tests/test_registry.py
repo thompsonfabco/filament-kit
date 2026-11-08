@@ -105,7 +105,10 @@ def test_corrupt_file_reads_empty_and_is_never_overwritten(env, caplog):
 def _as_root(monkeypatch):
     calls = []
     monkeypatch.setattr(os, "geteuid", lambda: 0, raising=False)
-    monkeypatch.setattr(os, "chown", lambda path, uid, gid: calls.append((os.fspath(path), uid, gid)),
+    monkeypatch.setattr(os, "chown", lambda path, uid, gid, **kw: calls.append((os.fspath(path), uid, gid)),
+                        raising=False)
+    # a new file's owner is set on its open temp file (pairing._write_atomic), never by name
+    monkeypatch.setattr(os, "fchown", lambda fd, uid, gid: calls.append(("<open temp file>", uid, gid)),
                         raising=False)
     return calls
 
@@ -115,7 +118,7 @@ def test_root_write_gives_file_to_state_dir_owner(env, monkeypatch):
     st = os.stat(env / "state")
     calls = _as_root(monkeypatch)
     registry.upsert(Printer("S1", access_code="x", configured=True))
-    temps = [c for c in calls if os.path.basename(c[0]).startswith("printers.json.")]
+    temps = [c for c in calls if c[0] == "<open temp file>"]
     assert temps and all(c[1:] == (st.st_uid, st.st_gid) for c in temps), calls
 
 

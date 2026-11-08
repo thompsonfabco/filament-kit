@@ -441,7 +441,8 @@ def test_parse_slice_info_plates():
 def _as_root(monkeypatch):
     calls = []
     monkeypatch.setattr(os, "geteuid", lambda: 0, raising=False)
-    monkeypatch.setattr(os, "chown", lambda p, u, g: calls.append((os.fspath(p), u, g)), raising=False)
+    monkeypatch.setattr(os, "chown", lambda p, u, g, **kw: calls.append((os.fspath(p), u, g)), raising=False)
+    monkeypatch.setattr(os, "fchown", lambda fd, u, g: calls.append(("<open temp file>", u, g)), raising=False)
     return calls
 
 
@@ -451,7 +452,7 @@ def test_new_state_dirs_and_usage_log_go_to_the_state_owner(env, monkeypatch):
     st = os.stat(state)
     calls = _as_root(monkeypatch)
     usage.append(SERIAL, {"job": "x"})
-    paths = {os.path.relpath(c[0], state) for c in calls if c[1:] == (st.st_uid, st.st_gid)}
+    paths = {os.path.relpath(c[0], state) for c in calls if c[1:] == (st.st_uid, st.st_gid) and c[0][0] != "<"}
     assert {"printers", os.path.join("printers", SERIAL), os.path.join("printers", SERIAL, "usage.jsonl")} <= paths
     calls.clear()
     usage.append(SERIAL, {"job": "y"})                     # existing dir and file: nothing to hand over
@@ -463,7 +464,7 @@ def test_save_map_gives_new_dirs_to_the_state_owner(env, monkeypatch):
     state.mkdir(parents=True)
     calls = _as_root(monkeypatch)
     ams.save_map(SERIAL, ams.SlotMap())
-    paths = {os.path.relpath(c[0], state) for c in calls}
+    paths = {os.path.relpath(c[0], state) for c in calls if c[0][0] != "<"}
     assert {"printers", os.path.join("printers", SERIAL)} <= paths
 
 

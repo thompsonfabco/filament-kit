@@ -17,6 +17,8 @@ spool with a fresh (or held) station weight above its tare gets `gross`.
 from __future__ import annotations
 
 import base64
+import hashlib
+import hmac
 import json
 import os
 import re
@@ -133,42 +135,115 @@ def check_photos(photos: list[tuple[str, bytes]]) -> list[bytes]:
     return out
 
 
+# The Anthropic client of a label read: each try waits CLAUDE_TIMEOUT s, and it tries CLAUDE_RETRIES more times.
+CLAUDE_TIMEOUT, CLAUDE_RETRIES = 180, 2
+# Seconds a take's refund ticket stays good. The station refunds on the errors that come only after the client has
+# given up (unreachable, api_error): up to CLAUDE_TIMEOUT x (CLAUDE_RETRIES + 1) = 9 min, plus the retry backoff and
+# the Spoolman catalog fetch before it. 15 minutes covers that worst case.
+TICKET_TTL = 15 * 60
+
+
+class RefundRefused(ValueError):
+    """A cap refund with no live ticket of this device's take (unknown, expired, used, or another device's)."""
+
+
+def _hash(ticket: str) -> str:
+    return hashlib.sha256(ticket.encode()).hexdigest()
+
+
+def _stamps(raw) -> list[dict]:
+    """reads.json's entries as {t, ticket?, device?}: a bare number is the old format (a stamp, no ticket)."""
+    out = []
+    for e in raw if isinstance(raw, list) else []:
+        if isinstance(e, (int, float)) and not isinstance(e, bool):
+            out.append({"t": float(e)})
+        elif isinstance(e, dict) and isinstance(e.get("t"), (int, float)):
+            out.append(e)
+    return out
+
+
+def reads_today(path: Path) -> int:
+    """The reads taken in the last 24 h (`doctor`'s count and the tests'), in either format of reads.json."""
+    try:
+        raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return 0
+    return sum(1 for e in _stamps(raw) if e["t"] > time.time() - 86400)
+
+
 class ReadCap:
-    """At most `per_day` reads in any 24 h; timestamps persist in `path` so restarts don't reset the cap."""
+    """At most `per_day` reads in any 24 h; timestamps persist in `path` so restarts don't reset the cap.
+
+    `take` gives a single-use ticket for its stamp; `refund` (a read that never reached Claude) needs that ticket,
+    from the same device, within TICKET_TTL, and removes exactly that stamp. Kept hashed in reads.json under its
+    lock, so the kit's own reads and the web unit's (through the kit API) share one cap across restarts."""
 
     def __init__(self, path: Path, per_day: int):
         self.path, self.per_day = Path(path), per_day
-        # `reads.lock` beside the file: the server and web processes share one cap
+        # `reads.lock` beside the file: one cap however many threads and processes take from it
         self._lock = locks.ProcessLock(self.path.with_name("reads.lock"))
 
-    def _load(self, now: float) -> list[float]:
+    def _load(self, now: float) -> list[dict]:
         try:
-            return [t for t in json.loads(self.path.read_text(encoding="utf-8")) if t > now - 86400]
-        except (OSError, ValueError, TypeError):
+            raw = json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
             return []
+        out = []
+        for e in _stamps(raw):
+            if e["t"] <= now - 86400:
+                continue
+            if "ticket" in e and e["t"] < now - TICKET_TTL:   # a dead ticket: keep only the stamp
+                e = {"t": e["t"]}
+            out.append(e)
+        return out
 
-    def _save(self, stamps: list[float]) -> None:
+    def _save(self, stamps: list[dict]) -> None:
+        """A temp file and a rename, so a crash never resets the cap. The kit's own file: the web unit takes its
+        reads through the kit API (/api/intake/cap/take)."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_name(self.path.name + ".tmp")
-        tmp.write_text(json.dumps(stamps), encoding="utf-8")
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o644)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps([e if "ticket" in e else e["t"] for e in stamps]))
+            fh.flush()
+            os.fsync(fh.fileno())
         os.replace(tmp, self.path)
 
-    def take(self) -> None:
+    def take(self, device: str | None = None) -> str:
+        """Use one read; returns the ticket that may give it back (`refund`)."""
         with self._lock:
             now = time.time()
             stamps = self._load(now)
             if len(stamps) >= self.per_day:
                 raise CapReached(f"daily limit of {self.per_day} label reads reached (reads_per_day)")
-            stamps.append(now)
+            ticket = secrets.token_urlsafe(16)
+            stamps.append({"t": now, "ticket": _hash(ticket), "device": device})
             self._save(stamps)
+            return ticket
 
-    def refund(self) -> None:
-        """Give back the newest read (one that never reached Claude)."""
+    def refund(self, ticket, device: str | None = None) -> None:
+        """Give back the read `ticket` took (one that never reached Claude). Refused, changing nothing, unless the
+        ticket is live, unused and this device's."""
+        if not isinstance(ticket, str) or not ticket:
+            raise RefundRefused("a refund needs the ticket its take returned")
         with self._lock:
             stamps = self._load(time.time())
-            if stamps:
-                stamps.remove(max(stamps))
-            self._save(stamps)
+            h = _hash(ticket)
+            for i, e in enumerate(stamps):
+                if hmac.compare_digest(str(e.get("ticket") or ""), h) and e.get("device") == device:
+                    del stamps[i]
+                    self._save(stamps)
+                    return
+        raise RefundRefused(f"no live read to refund for this ticket (unknown, used, from another device, "
+                            f"or older than {TICKET_TTL} s)")
+
+
+def refund_quietly(cap, ticket, device=None) -> None:
+    """A refund on a failure path: logged when refused, never hiding the error being handled."""
+    try:
+        cap.refund(ticket, device)
+    except Exception as e:  # noqa: BLE001 - best effort; the original error is the one to report
+        log.warning("cap refund failed: %s", e)
 
 
 # ---------- order history (the `orders` module) ----------
@@ -187,14 +262,17 @@ def load_orders(cfg: dict) -> list[dict] | None:
     return [o for o in items if isinstance(o, dict)] if isinstance(items, list) else []
 
 
-def read_context(cfg: dict, sm: Spoolman, station=None, *, app_tag: bool = False) -> dict:
+def read_context(cfg: dict, sm: Spoolman, station=None, *, app_tag: bool = False, orders_from=None) -> dict:
     """The reader context of one label read, for `read_labels(**read_context(...))`; the kit server's
     /api/intake/read and the web app's read both use it. `orders`: the order history, only when the `orders`
     module is on and `orders.file` exists (else None: no orders block). `station_state`: the station's GET /state
     through `station` (a StationClient, None without a station); a dead station gives None. `fresh_tag`: the
     newest reader tap when fresh and on no spool; skipped when the app sent its own tag (`app_tag`), which wins."""
-    path = (cfg.get("orders") or {}).get("file")
-    orders = load_orders(cfg) if path and Path(path).is_file() else None
+    if orders_from is not None:      # the web unit: the kit's order history through its API (it reads no kit file)
+        orders = orders_from()
+    else:
+        path = (cfg.get("orders") or {}).get("file")
+        orders = load_orders(cfg) if path and Path(path).is_file() else None
     station_state = None
     if station is not None and getattr(station, "url", None):
         from .station_client import StationUnreachable
@@ -225,7 +303,15 @@ def _orders_text(orders: list[dict]) -> str:
 # ---------- failed reads kept for retry ----------
 
 def _failed_dir() -> Path:
-    return config.paths().state / "failed"
+    """The kit's own (state/failed), or the web unit's (FK_FAILED_DIR, in its own folder: it writes no kit folder)."""
+    return Path(os.environ["FK_FAILED_DIR"]) if os.environ.get("FK_FAILED_DIR") else config.paths().state / "failed"
+
+
+def _write_new(path: Path, data: bytes) -> None:
+    """Write a file, never through a link someone planted at `path`."""
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    with os.fdopen(fd, "wb") as fh:
+        fh.write(data)
 
 
 def _sweep_failed() -> None:
@@ -245,8 +331,8 @@ def _keep(read_id: str, images: list[bytes], hint: str, tag_uid: str | None) -> 
     d = _failed_dir() / read_id
     d.mkdir(parents=True, exist_ok=True)
     for i, data in enumerate(images):
-        (d / f"photo{i}.jpg").write_bytes(data)
-    (d / "meta.json").write_text(json.dumps({"hint": hint, "tag_uid": tag_uid}), encoding="utf-8")
+        _write_new(d / f"photo{i}.jpg", data)
+    _write_new(d / "meta.json", json.dumps({"hint": hint, "tag_uid": tag_uid}).encode("utf-8"))
 
 
 def _forget(read_id: str) -> None:
@@ -271,7 +357,7 @@ def _call(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | None, cli
     import anthropic
     cfg = config.load()
     if client is None:
-        client = anthropic.Anthropic(api_key=_api_key(), timeout=180, max_retries=2)
+        client = anthropic.Anthropic(api_key=_api_key(), timeout=CLAUDE_TIMEOUT, max_retries=CLAUDE_RETRIES)
     fils, vendors = sm.get("/filament"), sm.get("/vendor")
     catalog = "\n".join(
         f"F{f['id']} | {(f.get('vendor') or {}).get('name', '?')} | {f['name']} | {f.get('material')} | "
