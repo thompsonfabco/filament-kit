@@ -10,6 +10,8 @@ import com.thompsonfabco.filamentkit.net.LOCAL_NETWORK_MESSAGE
 import com.thompsonfabco.filamentkit.net.LocalNetwork
 import com.thompsonfabco.filamentkit.pairing.parsePairingUri
 import java.io.IOException
+import java.security.SecureRandom
+import java.util.Random
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,8 +33,10 @@ data class PairUi(
     val step: Step = Step.Choose,
     val host: String = "",
     val port: Int = DEFAULT_PORT,
-    /** Lowercase hex, no spaces; show it with [groupFingerprint]. */
+    /** Lowercase hex, no spaces. On the Confirm step it is shown only through [fingerprintPrompt]. */
     val fingerprint: String? = null,
+    /** Which groups of [fingerprint] the user must type from the server, 0-based; chosen once per probe. */
+    val askedGroups: List<Int> = emptyList(),
     val busy: Boolean = false,
     val error: String? = null,
     val mismatch: Mismatch? = null,
@@ -40,6 +44,27 @@ data class PairUi(
 
 /** `0123456789ab` -> `0123 4567 89ab`. */
 fun groupFingerprint(fingerprint: String): String = fingerprint.chunked(4).joinToString(" ")
+
+private const val GROUP_CHARS = 4
+private const val ASKED_GROUPS = 2
+
+/**
+ * Two different groups, not one: at the cost of a few days' grinding a forged certificate can match two chosen groups of
+ * the real fingerprint, which would pass a one-group check 1 time in 8 but a two-group check 1 time in 120.
+ */
+fun pickAskedGroups(groupCount: Int, random: Random = SecureRandom()): List<Int> =
+    (0 until groupCount).shuffled(random).take(ASKED_GROUPS).sorted()
+
+/** The fingerprint's groups in order, null where the user must type: an asked group is never on the phone's screen. */
+fun fingerprintPrompt(fingerprint: String, asked: List<Int>): List<String?> =
+    fingerprint.chunked(GROUP_CHARS).mapIndexed { i, group -> if (i in asked) null else group }
+
+/** [typed] holds one entry per [asked] group, in the same order; case does not matter. */
+fun askedGroupsMatch(fingerprint: String, asked: List<Int>, typed: List<String>): Boolean {
+    val groups = fingerprint.chunked(GROUP_CHARS)
+    return asked.isNotEmpty() && typed.size == asked.size &&
+        asked.zip(typed).all { (i, t) -> groups.getOrNull(i) == t.trim().lowercase() }
+}
 
 private val CODE = Regex("[0-9]{6}")
 private const val UNEXPECTED = "Unexpected response from the server"
@@ -50,9 +75,9 @@ const val QR_EXPIRED =
         "\"sudo filament-kit pair\" on the server."
 
 /**
- * Pairing flows: QR scan, and manual entry (address, then the server's certificate fingerprint for the user to
- * confirm, then the 6-digit code). Nothing is sent to the server except the probe handshake until the user has
- * confirmed the fingerprint. [scope] defaults to the ViewModel's own; tests pass one. [localNetworkMissing] turns
+ * Pairing flows: QR scan, and manual entry (address, then two groups of the server's certificate fingerprint for the
+ * user to type from the server, then the 6-digit code). Nothing is sent to the server except the probe handshake until
+ * they match. [pickGroups] chooses the groups from the group count. [scope] defaults to the ViewModel's own; tests pass one. [localNetworkMissing] turns
  * "can't reach the server" into the local network permission message when that permission is the cause.
  */
 class PairViewModel(
@@ -60,6 +85,7 @@ class PairViewModel(
     private val backend: PairingBackend,
     scope: CoroutineScope? = null,
     private val localNetworkMissing: () -> Boolean = { LocalNetwork.missing() },
+    private val pickGroups: (Int) -> List<Int> = { pickAskedGroups(it) },
 ) : ViewModel() {
     private val scope: CoroutineScope = scope ?: viewModelScope
     private val _state = MutableStateFlow(PairUi())
@@ -89,7 +115,8 @@ class PairViewModel(
         scope.launch {
             try {
                 val fp = backend.probe(host, port)
-                _state.value = PairUi(step = Step.Confirm, host = host, port = port, fingerprint = fp)
+                val asked = pickGroups(fp.chunked(GROUP_CHARS).size)
+                _state.value = PairUi(step = Step.Confirm, host = host, port = port, fingerprint = fp, askedGroups = asked)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -101,17 +128,25 @@ class PairViewModel(
         }
     }
 
-    /** The user compared the fingerprint with the one on the server and it matches. */
-    fun confirmFingerprint() {
+    /**
+     * The user typed the asked groups from the server. A wrong entry keeps the same groups: a typo must not hand a
+     * forged certificate another draw of the groups.
+     */
+    fun confirmFingerprint(typed: List<String>) {
         val s = _state.value
-        if (s.step != Step.Confirm || s.fingerprint == null) return
+        val fp = s.fingerprint
+        if (s.step != Step.Confirm || fp == null) return
+        if (!askedGroupsMatch(fp, s.askedGroups, typed)) {
+            _state.value = s.copy(error = PairTexts.FINGERPRINT_WRONG)
+            return
+        }
         confirmed = true
         _state.value = s.copy(step = Step.Code, error = null)
     }
 
     fun rejectFingerprint() {
         confirmed = false
-        _state.update { it.copy(step = Step.Address, fingerprint = null, error = null) }
+        _state.update { it.copy(step = Step.Address, fingerprint = null, askedGroups = emptyList(), error = null) }
     }
 
     fun submitCode(codeInput: String) {
