@@ -779,7 +779,8 @@ def cmd_printer_map(serial: str, manager_factory) -> int:
     finally:
         m.stop()
     for s in v["slots"]:
-        print(f"  {s['label']}: AMS {s['ams_id']} tray {s['tray_id']} -> printer slot {s['global']}")
+        where = "no number yet" if s["global"] is None else f"printer slot {s['global']}"
+        print(f"  {s['label']}: AMS {s['ams_id']} tray {s['tray_id']} -> {where}")
     for prob in v["problems"]:
         print(f"  problem: {prob}")
     for note in v["notes"]:

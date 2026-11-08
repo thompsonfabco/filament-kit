@@ -314,6 +314,12 @@ class PrinterConnection:
         with self._lock:
             return self._report
 
+    def forget_report_key(self, key: str) -> None:
+        """Drop `key` from the kept report, so the next value seen is one the printer has sent since."""
+        with self._changed:
+            if key in self._report:
+                self._report = {k: v for k, v in self._report.items() if k != key}
+
     def wait_report(self, predicate: Callable[[dict], bool], timeout: float) -> dict | None:
         """The merged report as soon as `predicate(report)` is true: checked on the current report, then after each
         report delta. None after `timeout` s, or at once when the connection is not (or no longer) connected.
@@ -660,6 +666,11 @@ class Manager:
         `result` "success" means accepted, not applied: confirm it with `wait_report` (a later report shows it)."""
         addressing = hardware.load().model(self.model(serial)).external_addressing
         return self.publish(serial, slot_setting(ams_id, tray_id, setting, kind, addressing), timeout)
+
+    def forget_report_key(self, serial: str, key: str) -> None:
+        c = self._conns.get(serial)
+        if c is not None:
+            c.forget_report_key(key)
 
     def wait_report(self, serial: str, predicate: Callable[[dict], bool], timeout: float) -> dict | None:
         """Wait up to `timeout` s for the printer's merged report to satisfy `predicate` and return that report;

@@ -79,6 +79,9 @@ class FakeManager:
         assert serial == SERIAL
         return self.conn_state
 
+    def forget_report_key(self, serial, key):
+        self.report = {k: v for k, v in self.report.items() if k != key}
+
     def wait_report(self, serial, predicate, timeout):
         assert serial == SERIAL and 0 < timeout <= 120
         self.waits += 1
@@ -783,6 +786,114 @@ def test_no_candidate_fits_any_job(fake_ftp, printer):
     assert any("fit no numbering scheme" in p and "shift8, legacy" in p for p in r.problems)
 
 
+def test_a_real_error_with_translated_numbers_is_mapped_and_not_flagged(fake_ftp, printer):
+    m = FakeManager(fake_ftp.root, "native", report=owner_h2d_report())
+    m.final, m.print_error = "FAILED", 7
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert r.consistent is True and r.scheme == "shift8" and r.scheme_unsettled is False, r.problems
+    assert any("ended as FAILED" in n for n in r.notes) and len(jobs(m)) == 1
+
+
+@pytest.mark.parametrize("final,error,said", [("FINISH", None, None), ("FAILED", 7, "ended as FAILED")])
+def test_no_mapping_is_a_failure_however_the_job_ends(fake_ftp, printer, final, error, said):
+    m = FakeManager(fake_ftp.root)
+    m.report_mapping, m.final, m.print_error = False, final, error
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert r.consistent is False and "the printer reported no slot mapping" in r.problems
+    assert any(said in p for p in r.problems) if said else True
+
+
+def test_the_last_prints_mapping_is_not_taken_for_this_jobs(fake_ftp, printer):
+    """The report is merged: `mapping` from the print before stays in it unless it is dropped."""
+    rep = copy.deepcopy(base_report())
+    rep["mapping"] = [0, 1, 2, 3, 4, 5, 6]
+    m = FakeManager(fake_ftp.root, report=rep)
+    m.report_mapping = False
+    r = calib3mf.run(m, SERIAL, slotmap_for(rep))
+    assert r.consistent is False and r.mapping is None and "the printer reported no slot mapping" in r.problems
+
+
+def test_the_same_numbers_as_the_last_print_after_a_real_error_are_flagged(fake_ftp, printer):
+    rep = owner_h2d_report()
+    m = FakeManager(fake_ftp.root, "native", report=rep)
+    m.final, m.print_error = "FAILED", 7
+    first = calib3mf.run(m, SERIAL, slotmap_for(rep))
+    assert first.scheme_unsettled is False
+    m2 = FakeManager(fake_ftp.root, "native", report={**owner_h2d_report(), "mapping": list(first.mapping)})
+    m2.final, m2.print_error = "FAILED", 7
+    r = calib3mf.run(m2, SERIAL, slotmap_for(rep))
+    assert r.consistent is True and r.scheme_unsettled is True
+
+
+def _own_numbers(m, numbers):
+    """A printer with its own numbering, whatever is sent."""
+    real = m.publish
+
+    def publish(serial, payload_):
+        reply = real(serial, payload_)
+        for q in m.queue:
+            if "mapping" in q:
+                q["mapping"] = numbers[:len(payload_["print"]["ams_mapping"])]
+        return reply
+    m.publish = publish
+
+
+def test_numbers_that_fit_no_scheme_are_kept_as_a_table(fake_ftp, printer):
+    m = FakeManager(fake_ftp.root, report=owner_h2d_report())
+    _own_numbers(m, [9001, 9002, 9003, 9004, 9005, 9006])
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert r.consistent is True and r.scheme is None and r.scheme_unsettled is True and r.problems == [], r.problems
+    assert sorted(r.decoding.values()) == sorted(set(r.decoding.values())) and min(r.decoding.values()) == 9001
+    assert any("fit no numbering this kit knows" in n for n in r.notes) and len(jobs(m)) == 2
+
+
+def test_a_failed_job_whose_numbers_fit_nothing_proves_nothing(fake_ftp, printer):
+    m = FakeManager(fake_ftp.root, report=owner_h2d_report())
+    _own_numbers(m, [9001, 9002, 9003, 9004, 9005, 9006])
+    m.final, m.print_error = "FAILED", 7
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert r.consistent is False and any("ended as FAILED" in p for p in r.problems) and len(jobs(m)) == 1
+
+
+@pytest.mark.parametrize("numbers", [[0, 0, 2, 128], [0, 1, -1, 128], [0, 1]])
+def test_numbers_that_cannot_be_an_answer_are_refused(fake_ftp, printer, numbers):
+    m = FakeManager(fake_ftp.root)
+    _own_numbers(m, numbers)
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert r.consistent is False and r.problems
+
+
+def test_a_scheme_the_model_does_not_list_is_a_last_resort(fake_ftp, printer):
+    """An X1 lists legacy only: one unit fits both, and that is settled by its own; a unit in shift8 numbers fits only
+    the other, and is still believed."""
+    registry.upsert(Printer(serial=SERIAL, name="X1", model="BL-P002", ip="127.0.0.1", access_code=CODE,
+                            configured=True))
+    rep = copy.deepcopy(base_report())
+    rep["ams"]["ams"] = rep["ams"]["ams"][:1]
+    m = FakeManager(fake_ftp.root, report=rep)
+    r = calib3mf.run(m, SERIAL, slotmap_for(rep))
+    assert r.scheme == "legacy" and r.scheme_unsettled is False and r.notes == [], r.notes
+    m = FakeManager(fake_ftp.root, "native", report=owner_h2d_report())
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert r.scheme == "shift8" and r.consistent is True, r.problems
+
+
+def test_a_model_the_file_does_not_know_tries_every_scheme(fake_ftp, printer):
+    registry.upsert(Printer(serial=SERIAL, name="New", model="ZZ9", ip="127.0.0.1", access_code=CODE, configured=True))
+    m = FakeManager(fake_ftp.root, "native", report=owner_h2d_report())
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert r.scheme == "shift8" and r.consistent is True, r.problems
+
+
+def test_one_unit_on_a_model_the_file_does_not_know_is_unsettled(fake_ftp, printer):
+    registry.upsert(Printer(serial=SERIAL, name="New", model="ZZ9", ip="127.0.0.1", access_code=CODE, configured=True))
+    rep = copy.deepcopy(base_report())
+    rep["ams"]["ams"] = rep["ams"]["ams"][:1]
+    m = FakeManager(fake_ftp.root, report=rep)
+    r = calib3mf.run(m, SERIAL, slotmap_for(rep))
+    assert r.consistent is True and r.scheme == "shift8" and r.scheme_unsettled is True, r.problems
+
+
 def test_single_scheme_model_sends_no_ams_mapping2(fake_ftp, printer):
     registry.upsert(Printer(serial=SERIAL, name="P1S", model="C12", ip="127.0.0.1", access_code=CODE,
                             configured=True))
@@ -821,25 +932,26 @@ def test_16_units_8_ht_and_two_externals_proved_by_one_job(fake_ftp, printer):
     assert pr["ams_mapping"][:5] == [0, 1, 2, 3, 4] and len(pr["ams_mapping2"]) == 72
 
 
-@pytest.mark.parametrize("model,error,finished", [
-    ("H2D", None, True),            # FAILED, no print_error: finished on a model with the rule
-    ("H2D", 0, True),
-    ("H2D", "0", True),
-    ("H2D", "", True),
-    ("H2D", 50348044, False),       # a real error: not finished
-    ("H2D", "abc", False),          # anything else is an error
-    ("H2D", False, False),
-    ("C12", None, False),           # a model without the rule: FAILED is FAILED
-])
-def test_failed_as_finish_only_by_the_model_rule(fake_ftp, printer, model, error, finished):
+@pytest.mark.parametrize("model", ["H2D", "C12"])
+@pytest.mark.parametrize("error", [None, 0, "0", ""])
+def test_a_failed_end_with_no_error_is_finished_on_every_model(fake_ftp, printer, model, error):
     registry.upsert(Printer(serial=SERIAL, name="X", model=model, ip="127.0.0.1", access_code=CODE, configured=True))
     m = FakeManager(fake_ftp.root)
     m.final, m.print_error = "FAILED", error
     r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
-    assert r.consistent is finished, r.problems
-    assert r.failed_as_finish is finished
-    assert any("ended as FAILED" in p for p in r.problems) is (not finished)
-    assert len(jobs(m)) == 1                       # FAILED never earns a second job
+    assert r.consistent is True and r.failed_as_finish is True and r.problems == [], r.problems
+    assert not any("FAILED" in n for n in r.notes)
+    assert len(jobs(m)) == 1
+
+
+@pytest.mark.parametrize("error", [50348044, "abc", False])
+def test_a_real_error_with_only_an_echo_is_mapped_but_flagged(fake_ftp, printer, error):
+    m = FakeManager(fake_ftp.root)
+    m.final, m.print_error = "FAILED", error
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert r.consistent is True and r.problems == [] and r.scheme_unsettled is True, r.problems
+    assert any("ended as FAILED" in n and "the numbers it reported are what count" in n for n in r.notes)
+    assert r.failed_as_finish is False and len(jobs(m)) == 1       # FAILED never earns a second job
 
 
 def test_finish_without_mapping_sends_one_job_only(fake_ftp, printer):

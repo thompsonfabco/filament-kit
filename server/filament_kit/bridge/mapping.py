@@ -533,8 +533,10 @@ class Mapper:
                     s["global_id"] = cr.decoding[lab]
                 elif lab in cr.external:    # a holder keeps its own id, with or without a proven scheme
                     s["global_id"] = s["ams_id"]
-                else:               # a slot the job skipped (empty): the proven scheme's number
+                elif cr.scheme:     # a slot the job skipped (empty): the proven scheme's number
                     s["global_id"] = ams.scheme_global(s["ams_id"], s["tray_id"], cr.scheme, model)
+                else:               # no scheme: a guess could be another slot's number, so none yet
+                    s["global_id"] = None
             smap.calibrated, smap.observe, smap.scheme = True, False, cr.scheme
         else:
             smap.calibrated, smap.observe = False, True

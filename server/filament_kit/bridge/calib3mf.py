@@ -13,9 +13,13 @@ Bambu Studio sends and the scanner verified on the owner's H2D) plus
 `ams_mapping2` (`[{ams_id, slot_id}]`) when the model lists it, waits (at most `JOB_TIMEOUT` s) for the job to
 start and end, records the `mapping` and `ams.tray_now` the printer reports, and decodes the reported mapping
 against every candidate scheme: the first (model order) that round-trips every loaded slot is `CalibResult.scheme`
-(another job, in the next candidate's numbers, only after a clean end that fits none or a refusal; see `run`). A
-job that ends FAILED with `print_error` absent, 0, "0" or "" counts as finished on a model with
-`gcode_only_failed_is_finish` (the H2D ends a gcode-only job so). Afterwards (always) the file is deleted and every
+(another job, in the next candidate's numbers, only after a clean end that fits none or a refusal; see `run`). The
+evidence is those numbers, not how a comments-only print ends: the job counts when it started and this job reported one
+distinct number per filament, whether it ended FINISH or FAILED (the H2D ends a gcode-only job FAILED with no error). The
+report is merged, so `mapping` from an earlier print would stay in it: it is dropped when the job is sent. A FAILED with
+a real `print_error` whose numbers are those sent, or those of the print before, can't prove the printer read the file:
+the map is kept but `scheme_unsettled`. Numbers that fit no scheme are still the printer's numbers for those slots: a
+table, `scheme` None. Afterwards (always) the file is deleted and every
 slot whose settings changed since the start is set back from the snapshot taken at the start and the restore is
 verified from the next report (`CalibResult.restored` false when any slot was not confirmed back). It does not save
 a SlotMap (the mapping job does).
@@ -549,12 +553,18 @@ def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None
         printer = registry.load().get(serial)
     hw = hardware.load()
     mi = hw.model(printer.model if printer is not None and printer.model else None)
-    candidates = [k for k in mi.numbering if k in hw.schemes] or ['legacy']
+    listed = [k for k in mi.numbering if k in hw.schemes]
+    others = [k for k in hw.schemes if k not in listed]
+    # every scheme is a candidate, the model's own first; a model the file does not know has none of its own, and every
+    # model the file lists two for has shift8 first
+    candidates = (listed + others) if mi.known else sorted(hw.schemes, key=lambda k: k != 'shift8')
+    candidates = candidates or ['legacy']
     sends = ['legacy'] + [k for k in candidates if k != 'legacy']     # what each job's ams_mapping is numbered in
     tried: list[list[int]] = []
     sent_keys: list[str] = []
     attempts: list[str] = []
     res: CalibResult | None = None
+    table: CalibResult | None = None    # a job whose numbers fit no scheme: still the printer's numbers
     for key in sends:
         r = _attempt(manager, serial, slotmap, printer, should_stop, hw, mi, candidates, key, tried)
         if r.skip:
@@ -563,9 +573,21 @@ def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None
             attempts.append(f"numbering {res.sent_scheme}: " + ("; ".join(res.problems) or "no scheme fits"))
         res = r
         sent_keys.append(key)
+        if r.consistent and r.scheme is None:
+            if table is not None and table.decoding != r.decoding:
+                # the numbers follow what was sent, so they say nothing about the slots
+                r.consistent, r.scheme_unsettled, r.notes, table = False, False, [], None
+                r.problems += [f"{label}: sent slot {r.sent.get(label)}, the printer reported {n}"
+                               for label, n in r.decoding.items() if n != r.sent.get(label)]
+                r.problems.append(f"the reported slot numbers {list(r.mapping or [])} fit no numbering scheme of this "
+                                  f"printer model ({', '.join(candidates)}) and changed with the numbers sent")
+            else:
+                table = r
         stop = should_stop is not None and should_stop()
         if not res.retry or not res.restored or res.other_job or res.cert_changed or stop:
             break
+    if res is not None and table is not None and not res.consistent and res.restored:
+        res = table                     # a later job, in other numbers, proved less than this one
     if res is None:                     # no candidate can number the loaded slots
         res = CalibResult(problems=["no numbering scheme of this printer model can number the loaded slots"])
     res.tried, res.attempts = sent_keys, attempts
@@ -810,7 +832,9 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
     if stopping():
         res.problems.append("interrupted: mapping was stopped before the calibration job")
         return
+    before_mapping = snap.get('mapping')
     try:
+        manager.forget_report_key(serial, 'mapping')    # what `mapping` says from now on is this job's
         reply = manager.publish(serial, payload(serial, sent, name, mapping2))
     except Exception as e:      # offline / no reply raised by the Manager
         res.problems.append(f"cannot send the calibration job ({type(e).__name__})")
@@ -882,19 +906,18 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
         res.problems.append(f"the calibration job did not finish within {JOB_TIMEOUT:.0f} s"
                             + _stopped_text(_stop_ours(manager, serial, name)))
         return
-    if st['final'] == 'FAILED' and mi.gcode_only_failed_is_finish and _no_error(st['error']):
-        # this model ends a gcode-only job as FAILED with no print_error (the owner's H2D, 2026-11-02): finished.
-        # Only for our own calibration job (this watch), never for a print.
-        log.info("printer %s: calibration job ended FAILED with no print_error: finished (%s rule)", serial,
-                 mi.name)
-        st['final'], res.failed_as_finish = 'FINISH', True
+    err = st['error']
+    code = "" if _no_error(err) else f" (print_error {_error_text(err)})"
+    ended = f"the calibration job ended as {st['final']} on the printer{code}"
+    clean = st['final'] == 'FINISH' or not code     # the H2D ends a gcode-only job FAILED with no error: finished
+    res.failed_as_finish = st['final'] != 'FINISH' and clean
     if st['final'] != 'FINISH':
-        err = st['error']
-        code = "" if _no_error(err) else f" (print_error {_error_text(err)})"
-        res.problems.append(f"the calibration job ended as {st['final']} on the printer{code}")
+        log.info("printer %s: %s", serial, ended)
 
     if res.mapping is None:
         # a printer that reports no mapping will not for other numbers either: no second job, observe mode
+        if st['final'] != 'FINISH':
+            res.problems.append(ended)
         res.problems.append("the printer reported no slot mapping")
         return
     vals = []
@@ -905,26 +928,45 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
             res.problems.append(f"{label}: the printer reported no slot")
         elif v >= 0:
             res.decoding[label] = v
+    # one number per filament, all different, none of them "no slot": the only thing that makes this an answer
+    numbers_ok = all(v is not None and v >= 0 for v in vals) and len(set(vals)) == len(vals)
     proved = [k for k in candidates
-              if all(addr is not None and fits(hw, mi, k, v, *addr) for v, addr in zip(vals, addrs))]
-    if len(set(v for v in vals if v is not None)) != len(vals):
-        proved = []             # two filaments on one number (or one missing): nothing is proven
+              if all(addr is not None and fits(hw, mi, k, v, *addr) for v, addr in zip(vals, addrs))] if numbers_ok else []
+    own = [k for k in proved if k in mi.numbering]
+    if mi.known and own:        # a scheme the model does not list is a last resort, not a rival to its own
+        proved = own
     res.scheme = proved[0] if proved else None
-    if res.scheme is None:
+    if res.scheme is None and not (numbers_ok and clean):
+        # a failed job whose numbers fit nothing, or no usable numbers: nothing is proven
+        if st['final'] != 'FINISH':
+            res.problems.append(ended)
         for label, s_, v in zip(labels, sent, vals):
             if v is not None and v != s_:
                 res.problems.append(f"{label}: sent slot {s_}, the printer reported {v}")
         res.problems.append(f"the reported slot numbers {list(res.mapping)} fit no numbering scheme of this "
                             f"printer model ({', '.join(candidates)})")
+    elif res.scheme is None:
+        log.info("printer %s: the reported numbers %s fit no scheme (%s); keeping them as they are", serial, vals,
+                 ", ".join(candidates))
+        res.scheme_unsettled = True
+        res.notes.append("the printer's slot numbers fit no numbering this kit knows: each loaded slot keeps the "
+                         "number the printer gave, and a slot that is empty now gets one when it is loaded and mapped")
     elif len(proved) > 1:
         res.scheme_unsettled = True
         log.info("printer %s: the loaded slots number alike under %s; taking %s (the model's first)", serial,
                  ", ".join(proved), res.scheme)
         res.notes.append(f"the loaded slots are numbered alike under {', '.join(proved)}: the numbering of further "
                          f"AMS units is not settled yet, so map again after loading a second unit")
-    res.consistent = st['final'] == 'FINISH' and res.scheme is not None
-    # another job only after a clean end that proved nothing (never after a real failure or a stop)
-    res.retry = st['final'] == 'FINISH' and res.scheme is None
+    if res.scheme is not None and code:
+        res.notes.append(f"{ended}; the numbers it reported are what count")
+        if vals == sent or list(res.mapping) == before_mapping:
+            # an echo, or the last print's numbers: nothing shows the printer read this job
+            res.scheme_unsettled = True
+            log.warning("printer %s: the job failed and its numbers prove little (sent %s, reported %s)", serial, sent,
+                        vals)
+    res.consistent = res.scheme is not None or (numbers_ok and clean)
+    # another job only after a clean end with no scheme (never after a real failure or a stop)
+    res.retry = clean and res.scheme is None
 
 
 def delete_leftover(serial: str, printer: registry.Printer | None = None) -> list[str]:
