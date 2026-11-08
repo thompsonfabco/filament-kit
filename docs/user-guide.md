@@ -122,7 +122,7 @@ the 6-digit code. The code expires after about 10 minutes and works once; `sudo 
 one. On Android 17 and newer the app needs **Local network** access.
 
 The app updates itself: after `sudo filament-kit update` to a release with a newer app, the home screen offers
-it. `sudo filament-kit unpair` lists the paired phones; `sudo filament-kit unpair <id>` removes one.
+it. `sudo filament-kit unpair` lists the paired phones; `sudo filament-kit unpair <id>` removes one. Using the app (printers, adding spools by hand or from label photos): [Using the Android app](android-app.md).
 
 No Android phone? The phone web app ([Use the web app on an iPhone](install-iphone-web-app.md)) does the same
 tasks in any phone browser.
@@ -409,6 +409,12 @@ hand: `sudo systemctl unmask sleep.target suspend.target hibernate.target hybrid
   the reader gets the first USB serial port.
 - A scan beeps on the panel's buzzer, or, without a panel, through a USB speaker or the headphone socket
   (`STATION_BEEP`).
+- **The speaking voice (planned for v0.3.0).** The station's speech moves from espeak-ng to the Piper voice
+  `en_US-libritts_r-medium`, downloaded when the station is installed; espeak-ng stays as the fallback. That voice
+  is licensed **CC BY 4.0** (LibriTTS-R; credit in [THIRD-PARTY.md](../THIRD-PARTY.md#speech-voice-planned-v030)),
+  and its model card says it was **fine-tuned from the research-only `en_US-lessac-medium` voice**, so it may
+  inherit that restriction. If that matters to you (for example you use the kit commercially), choose the
+  public-domain `en_US-ljspeech-medium` voice instead with `STATION_PIPER_VOICE`.
 - With the panel, Hold and Discard also speak (`"speech"`), and Hold takes a picture with the webcam
   (`"camera"`). `curl http://127.0.0.1:5003/state` then shows `"air"` (the BME280 reading) and `"photo"`, and the
   picture itself is at `/photo`. The station only answers GET requests, and only the addresses it allows.

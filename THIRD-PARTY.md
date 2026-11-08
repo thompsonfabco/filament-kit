@@ -17,7 +17,7 @@ Two kinds of entry:
 
 | # | Item | Why | What to do |
 |---|---|---|---|
-| 1 | **Piper voice `en_US-lessac-medium`** (planned default for the station's speech in v0.3.0: about 63 MB, downloaded at install time from Hugging Face, not bundled) | Its model card points at the Lessac Blizzard 2013 dataset licence: research use only, no commercial use, no redistribution without written consent. Downloading it for the user is the kit handing out a research-only dataset's model. | Change the default before it is ported: `en_US-ljspeech-medium` (public domain) or `en_US-libritts_r-medium` (CC BY 4.0, keep the credit); `en_GB-alba-medium` is CC BY 4.0 too. Pin the new voice's SHA-256 as planned. Avoid `ryan` and `hfc_female` (CC BY-NC-SA). The lessac voice may stay only as something the user asks for by name, with a note that it is research-only. |
+| 1 | **Piper voice for the station's speech** (v0.3.0; downloaded at install time from Hugging Face, not bundled). Decision of 2026-11-07: default **`en_US-libritts_r-medium`** (CC BY 4.0), with a **caveat** (see [Speech voice](#speech-voice-planned-v030)). | The voice first planned, `en_US-lessac-medium`, is research-only (Lessac Blizzard 2013 licence: no commercial use, no redistribution without written consent) and is dropped. The chosen `libritts_r` voice's model card says it was **fine-tuned from `en_US-lessac-medium`**, so its weights may inherit that restriction even though its own dataset is CC BY 4.0. The owner was told and chose it anyway. | Accepted risk, not a clean bill: if the kit is ever used or offered commercially, or a rights holder objects, switch the default to **`en_US-ljspeech-medium`** (public domain, trained from scratch), which stays selectable now (`STATION_PIPER_VOICE`). Keep the CC BY credit below with the voice. Avoid `ryan` and `hfc_female` (CC BY-NC-SA). |
 | 2 | **Google ML Kit barcode scanning** in the Android app (`com.google.mlkit:barcode-scanning`) | Proprietary, closed source, under Google's ML Kit terms. The APK bundles it, which sits badly with GPL-3.0 §6 (no corresponding source for that part), and F-Droid refuses it. | Replace the QR scanner with ZXing (`zxing-android-embedded`, Apache-2.0), or add an explicit GPL-3.0 §7 additional permission for the app. The app session already weighed ZXing for an F-Droid build. |
 | 3 | **Licence metadata of our own packages** | `server/pyproject.toml` and `pc-sync/pyproject.toml` declare no `license`; `pip-licenses` shows filament-kit as UNKNOWN. | Add `license = "GPL-3.0-or-later"` to both (and the LICENSE file to the wheel), so installs and tools see it. |
 | 4 | **Notices in the release files** | The APK and the PC sync setup carry third-party code (AndroidX, OkHttp, PyInstaller's bootloader, ...), whose BSD/MIT/Apache terms want their notices kept. | Ship this file in the server tarball and the PC sync setup, and show it (or the Gradle-generated OSS notices) in the app's Settings. |
@@ -85,7 +85,7 @@ Planned for v0.3.0 (not on `main` yet), as a `station` extra in the same venv: *
 (GPL-3.0-or-later, from OHF-Voice/piper1-gpl; its wheel also carries g2pW under Apache-2.0) with
 **onnxruntime** (MIT; licence to be confirmed when it lands), for the station's speech; espeak-ng (above) stays
 the fallback. The Piper **voice model** is downloaded at install time and checked against a pinned SHA-256; it
-is not in the release. Voice models carry their own dataset licences: see open item 1.
+is not in the release. Voice models carry their own dataset licences: see [Speech voice](#speech-voice-planned-v030).
 
 ## The Android app
 
@@ -125,6 +125,27 @@ your own server. What goes into it:
 | TalkiePCM 0.1.1 (pschatzmann) | GPL-3.0 |
 
 A built image is a GPL-3.0 work (TalkiePCM is GPL-3.0; our code is GPL-3.0-or-later). The source is here.
+
+## Speech voice (planned, v0.3.0)
+
+The station's speech uses Piper with a voice model downloaded at install time (about 79 MB) from
+`huggingface.co/rhasspy/piper-voices`, checked against pinned SHA-256 hashes. Not bundled in any release.
+
+| Voice | Dataset | Licence | Training | Status |
+|---|---|---|---|---|
+| **`en_US-libritts_r-medium`**, speaker 0 | LibriTTS-R (openslr.org/141) | CC BY 4.0 | **fine-tuned from `en_US-lessac-medium`** (per its model card) | **default** (owner's choice, 2026-11-07), with the caveat below |
+| `en_US-ljspeech-medium` | LJ Speech | public domain | from scratch | selectable (`STATION_PIPER_VOICE`); the clean fallback |
+| `en_US-lessac-medium` | Lessac Blizzard 2013 | research use only | from scratch | **not used** |
+
+- **Attribution (CC BY 4.0), to keep with the voice and in the notices:** the voice is based on LibriTTS-R, the
+  sound-quality-restored version of LibriTTS (Koizumi et al., 2023; openslr.org/141), licensed CC BY 4.0
+  (creativecommons.org/licenses/by/4.0/), converted for Piper by the rhasspy/piper-voices project. Changes: none
+  by filament-kit; the model is used as published.
+- **Caveat:** a fine-tune of a research-only model may carry that model's restriction, and neither the voice's card
+  nor this audit settles that. It was chosen over `ljspeech` for how it sounds on the panel. If the kit ships or is
+  used commercially, treat it as the first thing to swap for `ljspeech`.
+- Pinned in the installer: the `.onnx` file's hash is Hugging Face's published one; the `.onnx.json` is hashed by us.
+  The voice's hashes live in the installer's code, not here.
 
 ## Display library (planned, firmware 7)
 
