@@ -143,6 +143,26 @@ def save_pairing(link: Link, owner: str | None = "filament-kit-station", first: 
         os.chown(tok, pw.pw_uid, pw.pw_gid)
 
 
+PAIR_STEPS = ("on the kit server: sudo filament-kit pair --station, "
+              "then on the station PC: sudo filament-kit station pair")
+
+
+def pairing_lines() -> list[str]:
+    """`filament-kit status` and the install's finish, on a machine with the station on: is the button flow paired
+    with the kit server? (An upgrade from v0.2.0 leaves it unpaired: that station never called the server.)"""
+    try:
+        token_file().read_bytes()
+    except PermissionError:  # the token is the station user's: only root (and that user) can read it
+        return ["--   station pairing not checked: run it with sudo"]
+    except OSError:
+        pass
+    api = ServerApi()
+    if api.paired:
+        return [f"OK   station paired with the kit server ({api.ips[0]}:{api.port})"]
+    return ['--   station button flow not paired with the kit server: a tag tap shows "Not paired"',
+            f"     fix: {PAIR_STEPS}"]
+
+
 class ServerApi:
     """The flow's three calls (and hello, for pairing). Built from the pairing files; `paired` is False until `filament-kit station pair`."""
 

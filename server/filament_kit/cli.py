@@ -178,6 +178,9 @@ def cmd_status(client_factory) -> int:
     station_url = (cfg.get("station") or {}).get("url")
     if station_url:
         good &= _station_lines(station_url)
+    if "station" in on:
+        from .station import server_api
+        print("\n".join(server_api.pairing_lines()))
 
     if "server" in on:
         print(f"--   display name: {cfg['server_name']}")

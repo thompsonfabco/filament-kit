@@ -243,6 +243,7 @@ def lamps(now):
 def screen():
     """The display's five rows (title, 4 body lines) for the current step; the panel adds room air at the bottom.
     The server's display lines fill the title and body rows 1-2; rows 3-4 are the station's hint and message."""
+    paired = api().paired  # off the lock: it looks at the pairing files
     with st.lock:
         f, held = dict(flow), st.state["held"]
     what = f["spool"] or f["filament"] or {}
@@ -252,7 +253,8 @@ def screen():
     d += ["", "", ""]
     step, msg = f["step"], f["message"]
     rows = {
-        "idle": ["Ready", "Scan a spool's tag", "", "", msg],
+        "idle": ["Ready", "Scan a spool's tag", "", "", msg] if paired else
+                ["Not paired", "On the station PC:", "sudo filament-kit", "station pair", msg],
         "lookup": ["Tag scanned", "Looking it up...", "", "", ""],
         "camera": ["New Tag Scanned", "Show the spool to", "the camera, then", "press yellow", msg],
         "recognising": ["Recognising...", "Please wait", "", "", "Red cancels"],

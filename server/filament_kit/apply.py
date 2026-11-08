@@ -838,6 +838,12 @@ def finish(cfg: dict, *, run: Callable[[list[str]], None] = run_checked, pairing
             else:
                 # no terminal (the updater, a provisioning script): the output goes to a log, so no pairing token
                 print("\nPair a phone at a terminal: sudo filament-kit pair  (pairing links are not written to logs)")
+    if "station" in on:
+        from .station import server_api
+        lines = server_api.pairing_lines()
+        if not lines[0].startswith("OK"):  # e.g. an upgrade from v0.2.0: that station never called the server
+            print("\n==> The intake station's button flow")
+            print("\n".join(lines))
     parts = ["Done."]
     if "spoolman" in on:
         parts.append(f"Spoolman: http://{host}.local:7912")

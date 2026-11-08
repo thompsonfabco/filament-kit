@@ -376,3 +376,49 @@ def test_the_station_token_reaches_only_the_station_routes(server):
     phone = pairing.redeem_code(pairing.issue().code)  # a phone's token is not limited
     api.token = phone
     assert api._call("GET", "/api/locations")[0] == 200
+
+
+# ---------- final fix wave I2: an unpaired station says so (status, the install's finish, the OLED) ----------
+
+PAIR_STEPS = ("sudo filament-kit pair --station", "sudo filament-kit station pair")
+
+
+def _station_mode(monkeypatch):
+    from filament_kit import modules
+    monkeypatch.setenv("FK_NO_SYSTEMD", "1")
+    cfg = modules.set_mode({"placement": {"box_count": 2}}, "station", say=None)
+    cfg.setdefault("station", {})["allow"] = ["192.0.2.10"]
+    config.save(cfg)
+
+
+def test_status_on_a_station_says_the_button_flow_is_not_paired(monkeypatch, capsys):
+    _station_mode(monkeypatch)
+    cli.main(["status"])
+    out = capsys.readouterr().out
+    assert "not paired" in out and all(c in out for c in PAIR_STEPS)
+    _paired(["192.0.2.10"])
+    cli.main(["status"])
+    out = capsys.readouterr().out
+    assert "station paired with the kit server" in out and PAIR_STEPS[1] not in out
+
+
+def test_finish_on_an_unpaired_station_names_both_pairing_steps(monkeypatch, capsys):
+    from filament_kit import apply
+    _station_mode(monkeypatch)
+    apply.finish(config.load(), run=lambda cmd: None)
+    out = capsys.readouterr().out
+    assert "not paired" in out and all(c in out for c in PAIR_STEPS)
+    _paired(["192.0.2.10"])
+    apply.finish(config.load(), run=lambda cmd: None)
+    assert PAIR_STEPS[1] not in capsys.readouterr().out
+
+
+def test_the_idle_screen_says_not_paired_without_a_pairing():
+    from filament_kit.station import flow
+    from filament_kit.station import state as st
+    with st.lock:
+        flow.reset()
+    flow.go("idle")
+    assert flow.screen()[0] == "Not paired"
+    _paired(["192.0.2.10"])
+    assert flow.screen()[0] == "Ready"
