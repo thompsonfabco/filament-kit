@@ -22,7 +22,8 @@ access**, red **Can't reach the server** or **The server's certificate changed**
    app can't find or reach your server. If you said no, the app shows **Allow** again, and **Open app settings**
    once Android stops asking.
 3. Tap **Scan QR code**, allow the camera, and point the phone at the code in the Terminal. Done: the home screen
-   opens with a green **Connected**.
+   opens with a green **Connected**. **Keep the white border around the QR code**: scan it from the whole
+   Terminal window, and don't crop it or zoom in so far that the border is cut off.
 
 **No camera, or the code won't scan?** On **Pair with your server**:
 
