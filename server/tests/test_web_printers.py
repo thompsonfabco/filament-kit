@@ -681,3 +681,126 @@ def test_push_watcher_reads_the_map_state(env, kit):
     kit.status["gcode_state"] = "FINISH"
     w.tick()
     assert sent == ["Print finished"]
+
+
+# ---------- load / unload (queue item 4: the Android app's slot actions, through the kit API) ----------
+
+LOAD_PLAN = {"spool": {"id": 9, "name": "Acme PLA Black", "location": "Rack 1"},
+             "slot": {"label": "A2", "ams_id": 0, "tray_id": 1, "location": "H2D – AMS A2"},
+             "preset": {"name": "Acme PLA Black @H2D"}, "dry_run": True, "moved_back": [], "confirmed": False,
+             "problems": [], "nozzle_mm": 0.4, "nozzle_assumed": False}
+
+
+class SlotKit(FakeKit):
+    """FakeKit that also answers the kit's load/unload routes; `refuse` = the SlotError the kit answers with."""
+
+    def __init__(self):
+        super().__init__()
+        self.refuse = None
+
+    def post(self, path, body):
+        if "/slots/" in path:
+            self._check()
+            self.calls.append(("POST", path, body))
+            if self.refuse is not None:
+                raise self.refuse
+            if path.endswith("/load"):
+                return {**LOAD_PLAN, "dry_run": body["dry_run"], "confirmed": None if body["dry_run"] else True}
+            return {"spool": {"id": 7, "name": "Overture PLA Red"}, "slot": {"label": "A1"},
+                    "dry_run": body["dry_run"], "moved_back": [{"id": 7, "location": "Rack 1"}],
+                    "location": "Rack 1"}
+        return super().post(path, body)
+
+
+@pytest.fixture
+def slotkit():
+    return SlotKit()
+
+
+@pytest.fixture
+def slotapp(env, slotkit):
+    return make_app(env, slotkit)
+
+
+def test_load_is_a_dry_run_unless_said_otherwise(slotapp, slotkit):
+    c = signed(slotapp)
+    r = c.post(P + f"/{SERIAL}/slots/A2/load", json={"spool_id": 9}, headers=H)
+    assert r.status_code == 200 and r.json()["dry_run"] is True
+    assert ("POST", f"/api/printers/{SERIAL}/slots/A2/load", {"spool_id": 9, "dry_run": True}) in slotkit.calls
+    r = c.post(P + f"/{SERIAL}/slots/A2/load", json={"spool_id": 9, "dry_run": False}, headers=H)
+    assert r.status_code == 200 and r.json()["confirmed"] is True
+    assert ("POST", f"/api/printers/{SERIAL}/slots/A2/load", {"spool_id": 9, "dry_run": False}) in slotkit.calls
+
+
+def test_unload_goes_to_the_kit(slotapp, slotkit):
+    c = signed(slotapp)
+    r = c.post(P + f"/{SERIAL}/slots/A1/unload", json={}, headers=H)
+    assert r.status_code == 200 and r.json()["location"] == "Rack 1"
+    assert ("POST", f"/api/printers/{SERIAL}/slots/A1/unload", {"dry_run": True}) in slotkit.calls
+    c.post(P + f"/{SERIAL}/slots/A1/unload", json={"dry_run": False}, headers=H)
+    assert ("POST", f"/api/printers/{SERIAL}/slots/A1/unload", {"dry_run": False}) in slotkit.calls
+
+
+@pytest.mark.parametrize("body", [{}, {"spool_id": "9"}, {"spool_id": True}, {"spool_id": 9.5},
+                                  {"spool_id": 9, "dry_run": "no"}])
+def test_load_checks_its_body_before_the_kit(slotapp, slotkit, body):
+    c = signed(slotapp)
+    r = c.post(P + f"/{SERIAL}/slots/A2/load", json=body, headers=H)
+    assert r.status_code == 400
+    assert not [x for x in slotkit.calls if x[0] == "POST"]
+
+
+def test_bad_slot_labels_are_refused_before_the_kit(slotapp, slotkit):
+    c = signed(slotapp)
+    for bad in ("A%231", "..", "x" * 40, "A 1"):
+        r = c.post(P + f"/{SERIAL}/slots/{bad}/unload", json={}, headers=H)
+        assert r.status_code in (400, 404), bad
+    assert not [x for x in slotkit.calls if x[0] == "POST"]
+
+
+def test_load_and_unload_need_lan_and_origin(slotapp, slotkit):
+    away = TestClient(slotapp, base_url=ORIGIN, client=AWAY)
+    assert away.post(P + f"/{SERIAL}/slots/A2/load", json={"spool_id": 9}, headers=H).status_code == 403
+    home = signed(slotapp)
+    r = home.post(P + f"/{SERIAL}/slots/A2/load", json={"spool_id": 9})
+    assert r.status_code == 403 and r.json()["error"] == "bad origin"
+    r = home.post(P + f"/{SERIAL}/slots/A1/unload", json={}, headers={"Origin": "https://evil.example"})
+    assert r.status_code == 403
+    assert not [x for x in slotkit.calls if x[0] == "POST"]
+
+
+@pytest.mark.parametrize("code,status,needle", [
+    ("slot_in_use", 409, "feeds the print that is running"),
+    ("printer_offline", 409, "The printer is offline"),
+    ("no_preset", 409, "No preset for this filament on this printer yet"),
+    ("already_running", 409, "Slot mapping or a load is in progress"),
+    ("needs_developer_mode", 409, "Developer Mode"),
+    ("cert_changed", 409, "certificate changed"),
+])
+def test_load_refusals_read_as_the_android_app_says_them(slotapp, slotkit, code, status, needle):
+    slotkit.refuse = SlotError("raw kit text", code=code, http=status)
+    r = signed(slotapp).post(P + f"/{SERIAL}/slots/A2/load", json={"spool_id": 9}, headers=H)
+    assert r.status_code == status and needle in r.json()["error"] and r.json()["code"] == code
+
+
+def test_a_not_found_refusal_keeps_the_kits_own_words(slotapp, slotkit):
+    slotkit.refuse = SlotError("no slot 'Z9'", code="not_found", http=404)
+    r = signed(slotapp).post(P + f"/{SERIAL}/slots/Z9/unload", json={}, headers=H)
+    assert r.status_code == 404 and r.json()["error"] == "no slot 'Z9'"
+
+
+def test_tagged_names_the_last_tapped_spool(slotapp, monkeypatch):
+    from filament_kit.web import mcp_tools
+    monkeypatch.setattr(mcp_tools.Tools, "tag_state", lambda self: {
+        "nfc_id": "04AABBCCDD", "spool": {"id": 9, "vendor": "Acme", "name": "PLA Black", "location": "Rack 1",
+                                          "remaining_g": 800, "extra": {"x": 1}}, "near": [], "text": "t"})
+    r = signed(slotapp).get(P + "/tagged")
+    assert r.status_code == 200
+    assert r.json() == {"nfc_id": "04AABBCCDD", "spool": {"id": 9, "vendor": "Acme", "name": "PLA Black",
+                                                         "location": "Rack 1", "remaining_g": 800}}
+
+
+def test_script_has_the_load_and_unload_flows():
+    src = (STATIC / "printers.js").read_text(encoding="utf-8")
+    for needle in ("/slots/", "/load", "/unload", "dry_run: false", "window.confirm", "find?q=", "pj(\"tagged\")"):
+        assert needle in src, needle

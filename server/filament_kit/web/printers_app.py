@@ -12,6 +12,11 @@ The web process never talks to a printer. Everything goes to the kit server's ow
                                         confirm: true
     GET  printers/{id}/usage            filament usage log;  POST printers/{id}/usage/{entry}/undo
     POST printers/{id}/map              re-map the printer's slots;  GET printers/{id}/map  its progress
+    POST printers/{id}/slots/{label}/load    {spool_id[, dry_run]}: put a spool in a slot (dry run unless
+                                        dry_run: false), as the Android app does
+    POST printers/{id}/slots/{label}/unload  {[dry_run]}: the slot's spool goes back to where it was (Spoolman
+                                        only)
+    GET  printers/tagged                the last tapped tag and its spool (the load picker's "last tap")
     GET  printers/{id}/camera.mjpeg     the kit camera hub's MJPEG, relayed (img tag; LAN only like the rest)
     GET  printers/{id}/camera/{name}    the hub's HLS playlist / segments, relayed
     push/key, push/subscribe, push/unsubscribe, push/test   only with config `web.push` true (see push.py)
@@ -33,7 +38,7 @@ from starlette.responses import JSONResponse, Response, StreamingResponse
 from starlette.routing import Route
 
 from .errors import Problem
-from .slots import SlotError
+from .slots import LABEL, SlotError
 
 log = logging.getLogger(__name__)
 
@@ -50,6 +55,24 @@ HLS_TYPES = {"m3u8": "application/vnd.apple.mpegurl", "ts": "video/mp2t"}
 MAX_SEGMENT = 16 * 1024 * 1024
 STATIC = Path(__file__).parent / "static"
 LIST_FIELDS = ("id", "name", "model", "state", "camera", "summary")
+TAGGED_FIELDS = ("id", "vendor", "name", "location", "remaining_g")
+# The kit's refusals in the Android app's words (PrinterHelp.message); a not_found keeps the kit's own text, which
+# names what is missing (printer, slot or spool).
+REFUSALS = {
+    "printer_offline": "The printer is offline. Check that it is turned on and on the network.",
+    "no_reply": "The printer did not answer in time. Try again.",
+    "printer_busy": "The printer is printing. Try again when it's idle.",
+    "slot_in_use": "This slot feeds the print that is running. Set it when the print is done, or pick another slot.",
+    "cert_changed": ("The printer's certificate changed. If you reset the printer or its mainboard was replaced, add "
+                     "it again with its Access Code. If not, something else may be answering at the printer's "
+                     "address: check the printer's IP before re-adding."),
+    "needs_developer_mode": ("The printer refuses remote control. On the printer open Settings > Network/LAN, turn "
+                             "on LAN Only mode and then Developer Mode, then try again."),
+    "no_preset": ("No preset for this filament on this printer yet. It is made at the next preset build; see the "
+                  "Presets tab."),
+    "write_refused": "The printer refused the change",
+    "already_running": "Slot mapping or a load is in progress on this printer. Try again in a moment.",
+}
 
 
 def _printer(p: dict) -> dict:
@@ -92,6 +115,9 @@ class PrintersApp:
             ("/{id}/usage/{entry}/undo", g(self.undo), ["POST"]),
             ("/{id}/map", g(self.map_start), ["POST"]),
             ("/{id}/map", g(self.map_get), ["GET"]),
+            ("/{id}/slots/{label}/load", g(self.slot_load), ["POST"]),
+            ("/{id}/slots/{label}/unload", g(self.slot_unload), ["POST"]),
+            ("/tagged", g(self.tagged), ["GET"]),
             ("/{id}/camera.mjpeg", g(self.mjpeg), ["GET"]),
             ("/{id}/camera/{name}", g(self.hls), ["GET"])]
         if self.push_on:
@@ -110,8 +136,10 @@ class PrintersApp:
                 return await fn(request)
             except SlotError as e:
                 st = e.http
-                return JSONResponse({"error": str(e)}, st if isinstance(st, int) and 400 <= st < 600 and st != 401
-                                    else 502)
+                body = {"error": REFUSALS.get(e.code or "", str(e))}
+                if e.code:
+                    body["code"] = e.code
+                return JSONResponse(body, st if isinstance(st, int) and 400 <= st < 600 and st != 401 else 502)
         return self.intake.api(inner)
 
     @staticmethod
@@ -175,6 +203,47 @@ class PrintersApp:
                 raise Problem("that usage entry is not this printer's")
             return self.kit.post(f"/api/usage/{entry}/undo", {})
         return await self._kit_call(run)
+
+    @staticmethod
+    def _label(request: Request) -> str:
+        label = request.path_params["label"]
+        if not LABEL.fullmatch(label):
+            raise Problem("no such slot")
+        return label
+
+    @staticmethod
+    def _dry(b: dict) -> bool:
+        dry = b.get("dry_run", True)
+        if not isinstance(dry, bool):
+            raise Problem("dry_run must be true or false")
+        return dry
+
+    async def slot_load(self, request: Request):
+        """The kit's load (preset, slot setting, Spoolman location), a dry run unless `dry_run: false`; the phone
+        shows the dry run's plan and sends the real load only after the user confirms it."""
+        serial, label = self._serial(request), self._label(request)
+        b = await self._body(request)
+        spool = b.get("spool_id")
+        if not isinstance(spool, int) or isinstance(spool, bool) or spool < 1:
+            raise Problem("spool_id must be a spool id")
+        dry = self._dry(b)
+        if not dry:
+            log.info("printers tab: load spool %s into %s %s", spool, serial, label)
+        return await self._kit_call(self.kit.post, f"/api/printers/{serial}/slots/{label}/load",
+                                    {"spool_id": spool, "dry_run": dry})
+
+    async def slot_unload(self, request: Request):
+        serial, label = self._serial(request), self._label(request)
+        dry = self._dry(await self._body(request))
+        if not dry:
+            log.info("printers tab: unload %s %s", serial, label)
+        return await self._kit_call(self.kit.post, f"/api/printers/{serial}/slots/{label}/unload", {"dry_run": dry})
+
+    async def tagged(self, request: Request):
+        """The newest tap on any reader and the spool linked to it (only the fields the picker shows)."""
+        t = await anyio.to_thread.run_sync(self.intake.tools.tag_state)
+        sp = t.get("spool")
+        return {"nfc_id": t.get("nfc_id"), "spool": {k: sp.get(k) for k in TAGGED_FIELDS} if sp else None}
 
     async def map_start(self, request: Request):
         return await self._kit_call(self.kit.post, f"/api/printers/{self._serial(request)}/map", {})
