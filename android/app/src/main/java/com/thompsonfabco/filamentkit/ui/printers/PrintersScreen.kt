@@ -83,7 +83,7 @@ private fun PrinterRow(p: Printer, onClick: () -> Unit) {
             Spacer(Modifier.size(14.dp).clip(CircleShape).background(stateColor(p.state)))
             Column(Modifier.weight(1f)) {
                 Text(p.name, style = MaterialTheme.typography.titleMedium)
-                Text(listOfNotNull(p.model, PrinterHelp.stateLabel(p.state)).joinToString(" · "),
+                Text(listOfNotNull(p.shownModel, PrinterHelp.stateLabel(p.state)).joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall)
                 PrinterHelp.jobLine(p.summary)?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                 if (!p.configured) Text("Tap to add this printer", color = MaterialTheme.colorScheme.primary)

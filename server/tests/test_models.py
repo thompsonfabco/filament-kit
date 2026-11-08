@@ -32,3 +32,11 @@ def test_camera_kind(model, kind):
 def test_model_record():
     assert models.model("O1D").name == "H2D" and models.model("O1D").known
     assert models.model("zz").known is False
+
+
+@pytest.mark.parametrize("model,name", [
+    ("O1D", "H2D"), ("C12", "P1S"), ("BL-P001", "X1 Carbon"), ("3DPrinter-X1-Carbon", "X1 Carbon"),
+    ("o1e", "H2D Pro"), ("N1", "A1 mini"), ("ZZ9", "ZZ9"), (" ZZ9 ", "ZZ9"), ("", ""), (None, ""),
+])
+def test_model_name_from_the_hardware_data_or_the_code(model, name):
+    assert models.model_name(model) == name

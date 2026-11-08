@@ -23,7 +23,7 @@ from .intake import CapReached, PhotoError, ReadCap, ReadError
 from .bridge import camera, hardware, loading, mapping, registry, usage
 from .bridge.connection import ACTIONS, DEVELOPER_MODE_REASON, Manager, NoReply, PrinterOffline, UnknownPrinter
 from .bridge.slottest import NoStatus, PrinterBusy
-from .bridge.models import camera_kind
+from .bridge.models import camera_kind, model_name
 from .inventory import AddFailed, TagConflict
 from .profiles.errors import ProfileError
 from .spoolman import Spoolman, SpoolmanError
@@ -204,6 +204,7 @@ def _printer_view(p: registry.Printer, printers) -> dict:
         summary = None
     return {"id": p.serial, "name": registry.display_name(p), "model": p.model, "serial": p.serial, "ip": p.ip,
             "configured": p.configured, "state": state, "camera": {"kind": camera_kind(p.model)},
+            "model_name": model_name(p.model),
             "summary": summary}
 
 

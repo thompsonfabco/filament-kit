@@ -98,11 +98,24 @@ def test_list_merges_detected_and_configured(client, mgr):
     by = {p["id"]: p for p in r.json()["printers"]}
     a = by[SERIAL]
     assert a == {"id": SERIAL, "name": "Shop P1S", "model": "C12", "serial": SERIAL, "ip": "10.0.0.5",
-                 "configured": True, "state": "connected", "camera": {"kind": "mjpeg"},
+                 "configured": True, "state": "connected", "camera": {"kind": "mjpeg"}, "model_name": "P1S",
                  "summary": {"gcode_state": "RUNNING", "percent": 42, "remaining_min": 30, "job": "bracket"}}
     b = by["00M00B222222222"]
     assert b["configured"] is False and b["state"] == "not_configured" and b["camera"] == {"kind": "hls"}
+    assert b["model"] == "BL-P001" and b["model_name"] == "X1 Carbon"   # a detected printer: the name too
     assert b["summary"]["percent"] == 0
+
+
+def test_model_name_keeps_the_code_and_falls_back_to_it(client, mgr):
+    add_configured(mgr, model="O1D", name="Shop H2D")
+    registry.detected("00M00B333333333", "10.0.0.10", "ZZ9", "Future printer")
+    registry.detected("00M00B444444444", "10.0.0.11", "", "")
+    by = {p["id"]: p for p in client.get("/api/printers").json()["printers"]}
+    assert (by[SERIAL]["model"], by[SERIAL]["model_name"]) == ("O1D", "H2D")
+    assert (by["00M00B333333333"]["model"], by["00M00B333333333"]["model_name"]) == ("ZZ9", "ZZ9")
+    assert (by["00M00B444444444"]["model"], by["00M00B444444444"]["model_name"]) == ("", "")
+    one = client.get(f"/api/printers/{SERIAL}").json()
+    assert one["printer"]["model"] == "O1D" and one["printer"]["model_name"] == "H2D"   # the detail route too
 
 
 def test_list_configured_unknown_to_manager_is_offline(client, mgr):
