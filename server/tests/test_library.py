@@ -285,10 +285,11 @@ def _raising_opener(code):
 
 
 @pytest.mark.parametrize("code", [401, 403, 404])
-def test_update_404_says_private(code):
+def test_update_says_what_a_refused_or_missing_library_means(code):
     r = library.update("https://example.invalid/lib/", opener=_raising_opener(code))
     assert str(code) in r.error
-    assert "the library repository may be private; using version " + str(_bundled_version()) in r.error
+    said = "not found: check the library address and version" if code == 404 else "refused access"
+    assert f"{said}; using version {_bundled_version()}" in r.error
     assert "example.invalid" not in r.error
     assert library.status()["last_check"]["ok"] is False
 

@@ -51,8 +51,10 @@ _COMPANION = {
     "filament-kit-library.timer": "filament-kit-library.service",
     "filament-kit-backup.timer": "filament-kit-backup.service",
     "filament-kit-update.timer": "filament-kit-update.service",
-    # the setup page's root helper: one instance per request, and the page's background apply
-    "filament-kit-setup.socket": ("filament-kit-setup@.service", "filament-kit-setup-apply.service"),
+    # the setup page's root helper: one instance per request, the page's background jobs, and the name those jobs'
+    # unit had up to 0.4.0 (kept for one release)
+    "filament-kit-setup.socket": ("filament-kit-setup@.service", "filament-kit-setup-job.service",
+                                  "filament-kit-setup-apply.service"),
 }
 
 

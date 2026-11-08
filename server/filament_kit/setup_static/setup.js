@@ -1,4 +1,5 @@
-// The kit server's setup page: keys, codes, printers, pairings and modules without the command line.
+// The kit server's setup console: everything after the install, by tab, without the command line. This file is the
+// shell and the tabs that were the setup page's; setup_tabs.js has the console's own.
 // Talks only to /setup/api/* on the same origin. Every change sends the setup code typed at the top; secret fields
 // are write-only (the server says "set" / "not set", never a value) and are cleared once sent.
 // Everything from the server goes in through textContent / element properties, never innerHTML.
@@ -24,7 +25,7 @@ async function api(path, body) {
   const r = await fetch("/setup/api/" + path, init);
   let data;
   try { data = await r.json(); } catch { data = { error: `HTTP ${r.status}` }; }
-  if (!r.ok || data.error) { const e = new Error(data.error || `HTTP ${r.status}`); e.data = data; throw e; }
+  if (!r.ok || data.error) { const e = new Error(data.error || `HTTP ${r.status}`); e.data = data; e.status = r.status; throw e; }
   return data;
 }
 
@@ -55,10 +56,27 @@ const boxes = {};
 const boxFor = (key) => boxes[key] || (boxes[key] = h("div"));
 const sections = h("div");
 
+// ----- the tabs: the page's own anchors (/setup#printers) -----
+const TABS = {
+  overview: ["Overview", () => overviewTab()],
+  modules: ["Modules", () => [modesCard(), modulesCard(), applyCard()]],
+  printers: ["Printers", () => [printersCard()]],
+  devices: ["Devices", () => [pairCard(), readersCard()]],
+  settings: ["Settings", () => [keyCard(), passphraseCard(), tokenCard(), addressCard()]],
+  updates: ["Updates", () => updatesTab()],
+};
+const tabNow = () => { const t = location.hash.slice(1); return t in TABS ? t : "overview"; };
+const nav = h("nav", { class: "tabs", ariaLabel: "Console sections" });
+
+function render() {
+  const now = tabNow();
+  nav.replaceChildren(...Object.entries(TABS).map(([k, [title]]) => h("a", { href: "#" + k, textContent: title, "aria-current": k === now ? "page" : undefined })));
+  sections.replaceChildren(...TABS[now][1]().filter(Boolean));
+}
+
 async function refresh() {
   try { S = await api("state"); } catch (e) { sections.replaceChildren(h("p", { class: "err", textContent: e.message })); return; }
-  sections.replaceChildren(keyCard(), printersCard(), passphraseCard(), tokenCard(), readersCard(), pairCard(),
-    modulesCard(), addressCard(), applyCard());
+  render();
   if (S.apply.running) followApply();
 }
 
@@ -66,7 +84,7 @@ async function refresh() {
 function keyCard() {
   const a = S.anthropic, box = boxFor("key"), inp = secret("sk-ant-…");
   return card(["Anthropic API key ", pill(a.set, "set", "not set")],
-    h("p", { class: "muted", textContent: a.ai_intake ? "Used for AI label reading (ai_intake)." : "Only for AI label reading: the ai_intake module is off (Modules below)." }),
+    h("p", { class: "muted", textContent: a.ai_intake ? "Used for AI label reading (ai_intake)." : "Only for AI label reading: the ai_intake module is off (see Modules)." }),
     h("div", { class: "row" }, inp,
       h("button", { textContent: a.set ? "Replace" : "Set", on: { click: () => change(box, "key", { key: inp.value }, null, [inp]) } }),
       a.set ? h("button", { class: "secondary", textContent: "Remove", on: { click: () => { if (window.confirm("Remove the Anthropic key?")) change(box, "key/remove", {}); } } }) : null,
@@ -80,7 +98,7 @@ function keyCard() {
 // ----- printers -----
 function printersCard() {
   const P = S.printers;
-  if (!P.on) return card("Printers", h("p", { class: "muted", textContent: "The printers and klipper modules are off on this server (Modules below)." }));
+  if (!P.on) return card("Printers", h("p", { class: "muted", textContent: "The printers and klipper modules are off on this server (see Modules)." }));
   const rows = P.list.map((p) => {
     if (p.family === "klipper") return klipperRow(p);
     const box = boxFor("printer:" + p.serial), code = secret("new Access Code");
@@ -103,12 +121,12 @@ function printersCard() {
   const box = boxFor("printer-add");
   return card("Printers",
     ...(rows.length ? rows : [h("p", { class: "muted", textContent: "No printer yet. Printers on the network appear here once they announce themselves." })]),
-    P.klipper ? h("p", { class: "muted", textContent: "Klipper printers: add one at the server with sudo filament-kit klipper add <name> <host> (or klipper scan), or in the app." }) : null,
+    P.klipper ? h("p", { class: "muted", textContent: "Klipper printers: add one at the server with sudo filament-kit klipper add <name> <host> (or klipper scan)." }) : null,
     ...(P.bambu ? [h("h2", { textContent: "Add a Bambu printer by IP" }),
       h("div", { class: "row" }, ip, ac), h("div", { class: "row" }, name, serial,
         h("button", { textContent: "Add", on: { click: () => change(box, "printers", { ip: ip.value, access_code: ac.value, name: name.value, serial: serial.value },
           (r) => say(box, `Added ${r.serial}.`, true), [ac]) } })),
-      box] : [h("p", { class: "muted", textContent: "Bambu printers: the printers module is off (Modules below)." })]));
+      box] : [h("p", { class: "muted", textContent: "Bambu printers: the printers module is off (see Modules)." })]));
 }
 
 // A Klipper printer (Moonraker): no Access Code and no TLS; Test asks Moonraker, Forget removes the entry.
@@ -233,40 +251,22 @@ function addressCard() {
     box);
 }
 
-// ----- the background `modules apply` (polls its output; the server restarts during it, so errors are retried) -----
-const applyOut = h("pre", { class: "hidden" });
-const applyState = h("p", { class: "muted" });
-let applyFrom = 0, applyTimer = null;
+// ----- applying again (the job's own panel is in setup_tabs.js) -----
 function applyCard() {
   const box = boxFor("apply");
   return card("Apply", h("p", { class: "muted", textContent: "Module and address changes are applied in the background (sudo filament-kit modules apply)." }),
-    applyState, applyOut,
     h("div", { class: "row" }, h("button", { class: "secondary", textContent: "Apply again", on: { click: async () => {
       const r = await change(box, "apply", {}, () => say(box, "Applying…", true));
       if (r) followApply(true);
     } } })), box);
 }
-function followApply(fresh) {
-  if (fresh) applyFrom = 0;
-  if (applyTimer) return;
-  if (applyFrom === 0) applyOut.textContent = "";
-  applyOut.classList.remove("hidden");
-  const tick = async () => {
-    applyTimer = null;
-    let r;
-    try { r = await api(`apply?from=${applyFrom}`); } catch { applyState.textContent = "Waiting for the server (it restarts during an apply)…"; applyTimer = setTimeout(tick, 2000); return; }
-    if (r.next < applyFrom) { applyFrom = 0; applyOut.textContent = ""; }      // a new apply started over
-    applyOut.textContent += r.text; applyFrom = r.next;
-    applyOut.scrollTop = applyOut.scrollHeight;
-    applyState.textContent = r.running ? "Applying…" : r.exit === 0 ? "Applied." : r.exit == null ? "" : `The apply failed (exit ${r.exit}): see the lines above.`;
-    if (r.running || r.text) applyTimer = setTimeout(tick, 1000);
-  };
-  tick();
-}
 
-app.append(
-  h("h1", { textContent: "filament-kit setup" }),
-  h("p", { class: "muted", textContent: "Enter keys and codes here instead of on the command line. Viewing needs nothing; every change needs the setup code the installer showed (at the server: sudo filament-kit setup-code)." }),
-  h("div", { class: "card code" }, h("label", {}, "Setup code", codeIn)),
-  sections);
-refresh();
+window.addEventListener("hashchange", () => { if (S) render(); });
+document.addEventListener("DOMContentLoaded", () => {
+  app.append(
+    h("h1", { textContent: "filament-kit" }),
+    h("p", { class: "muted", textContent: "Everything after the install is here; the command line is the fallback. Viewing needs nothing; every change needs the setup code the installer showed (at the server: sudo filament-kit setup-code)." }),
+    h("div", { class: "sticky" }, h("div", { class: "card code" }, h("label", {}, "Setup code", codeIn)), nav),
+    jobPanel, sections);
+  refresh();
+});

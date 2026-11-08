@@ -72,6 +72,17 @@ class Spoolman:
     def ping(self) -> str:
         return self.get("info")["version"]
 
+    def missing_fields(self) -> list[str]:
+        """The kit's extra fields Spoolman does not have yet (`ensure_fields` makes them)."""
+        existing: dict[str, set[str]] = {}
+        out = []
+        for entity, key, _ftype in EXTRA_FIELDS:
+            if entity not in existing:
+                existing[entity] = {f["key"] for f in self.get(f"field/{entity}")}
+            if key not in existing[entity]:
+                out.append(key)
+        return out
+
     def ensure_fields(self) -> list[str]:
         created: list[str] = []
         existing: dict[str, set[str]] = {}

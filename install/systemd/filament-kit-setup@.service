@@ -10,12 +10,14 @@ StandardInput=socket
 StandardOutput=socket
 StandardError=journal
 RuntimeMaxSec=120
-# root, but it may only write the kit's settings folder (and start the apply unit over systemd's bus): chown and
+# root, but it may only write the kit's settings folder and the jobs' folder in /run (and start the job unit over systemd's bus): chown and
 # mode changes of the files it writes there, nothing else
 CapabilityBoundingSet=CAP_CHOWN CAP_FOWNER CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH
 NoNewPrivileges=yes
 ProtectSystem=strict
 ReadWritePaths=/etc/filament-kit
+# the request a job reads (job.json) and the job lock
+ReadWritePaths=-/run/filament-kit-setup
 ProtectHome=yes
 PrivateTmp=yes
 PrivateDevices=yes

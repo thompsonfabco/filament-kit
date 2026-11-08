@@ -736,7 +736,7 @@ def test_an_apply_counts_as_running_while_its_oneshot_is_activating(monkeypatch,
         return subprocess.CompletedProcess(cmd, 0, stdout=state + "\n", stderr="")
     monkeypatch.setattr(setup_helper.subprocess, "run", run)
     assert setup_helper._applying() is running
-    assert seen == [["systemctl", "show", "--property=ActiveState", "--value", setup_helper.APPLY_UNIT]]
+    assert ["systemctl", "show", "--property=ActiveState", "--value", setup_helper.JOB_UNIT] in seen
 
 
 # ---------- the helper's ops, the page's guards and the apply log ----------
