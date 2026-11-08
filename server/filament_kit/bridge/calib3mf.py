@@ -1,9 +1,15 @@
 """Calibration job: learn how a printer numbers its AMS slots, with a gcode-only job that never heats or moves.
 
-`build(labels)` makes a minimal Bambu project 3MF with one PLA filament per slot label and a plate gcode that is
-only comments and `M400`. `run(manager, serial, slotmap)` uploads it over FTPS to `/cache/fk-calib-<serial>.gcode.3mf`,
+`build(labels, project)` makes a Bambu project 3MF with one PLA filament per slot label and a plate gcode that is
+only comments and `M400`. With a `Project` (`project_for`: the model's `<slicer-project>` in the hardware file, the
+nozzles and AMS-to-extruder links the report gives) it carries the printer fields Bambu Studio writes
+(printer_model_id, printer and nozzle settings, filament_maps, the X-BBL-Client-Version header). Only a model marked
+job-file="project" gets that file: the X2D and P2S, which refuse the minimal 3MF ("invalid 3mf"); whether they accept
+this one is not known until a mapping has run on each. Every other model keeps the minimal 3MF, the file the H2D is
+known to accept; none of them has run the project file, so the attribute is set only after a model has.
+`run(manager, serial, slotmap)` uploads it over FTPS to `/cache/fk-calib-<serial>.gcode.3mf`,
 starts it with `ams_mapping` = filament i -> the slot's legacy number (unit*4+tray, an HT unit its id: the command
-Bambu Studio sends and the scanner verified on the owner's H2D; an external holder as its own id) plus
+Bambu Studio sends and the scanner verified on the owner's H2D) plus
 `ams_mapping2` (`[{ams_id, slot_id}]`) when the model lists it, waits (at most `JOB_TIMEOUT` s) for the job to
 start and end, records the `mapping` and `ams.tray_now` the printer reports, and decodes the reported mapping
 against every candidate scheme: the first (model order) that round-trips every loaded slot is `CalibResult.scheme`
@@ -53,7 +59,10 @@ The print command, modelled on what Bambu Studio sends in LAN mode (to be confir
 `sequence_id` is left to `Manager.publish`. `ams_mapping2` is added for models that list it (see above). Not sent:
 `md5` of the file.
 
-Only loaded slots take part (an empty slot is listed in `skipped`). Refusals before anything is sent are reported
+Only loaded AMS slots take part (an empty slot is listed in `skipped`). External holders never do (`external`): they
+are always numbered as their own id, and they have no sensor (an empty holder still reports a filament type and the
+printer maps no slot for it). When the loaded slots number alike under several schemes (one AMS unit: shift8 and
+legacy agree), the model's first is taken and `notes` says so. Refusals before anything is sent are reported
 as codes in `problems`: `printer_offline`, `printer_busy`, `not_configured`, `cert_changed` (FTPS leaf not the pinned
 one: nothing uploaded, no Access Code sent). Everything else is a sentence."""
 from __future__ import annotations
@@ -82,6 +91,8 @@ STOP_TIMEOUT = 20.0
 BUSY = ('RUNNING', 'PAUSE', 'PREPARE', 'SLICING')
 ENDED = ('FINISH', 'FAILED')
 REFUSED = "printer refused the calibration job"
+NO_AMS_LOADED = ("no loaded AMS slot to calibrate (external holders need none): load a spool into an AMS slot and "
+                 "map again")
 GCODE = "Metadata/plate_1.gcode"
 _ZIP_TIME = (2026, 1, 1, 0, 0, 0)
 
@@ -109,6 +120,9 @@ class CalibResult:
     mapping: list | None = None                               # the raw `mapping` the printer reported
     tray_now: list[str] = field(default_factory=list)         # each `ams.tray_now` seen during the job
     skipped: list[str] = field(default_factory=list)          # empty slots, not part of the job
+    external: list[str] = field(default_factory=list)         # external holders: never part of the job (own id)
+    notes: list[str] = field(default_factory=list)            # not problems: what the result does not settle yet
+    scheme_unsettled: bool = False                            # several schemes fit; the model's first was taken
     cert_changed: bool = False
     restored: bool = True     # we left nothing changed (false: a filament left loaded in the toolhead)
     job: str = ""             # this run's subtask_name (`run_name`)
@@ -132,25 +146,120 @@ def _colors(n: int) -> list[str]:
     return out
 
 
-def gcode(labels: list[str]) -> str:
-    """Comments and M400 only: no heating, homing, moves or tool changes."""
-    lines = ["; HEADER_BLOCK_START",
-             "; filament-kit slot calibration: no heating, no homing, no motion",
-             "; total layer number: 0",
-             "; total filament length [mm] : 0.00",
-             "; total filament weight [g] : 0.00",
-             f"; total filament count: {len(labels)}",
-             "; HEADER_BLOCK_END"]
+def gcode(labels: list[str], project: "Project | None" = None) -> str:
+    """Comments and M400 only: no heating, homing, moves or tool changes. With a `project`, the header and config
+    blocks also name the printer model and nozzles, as Bambu Studio's do (still comments only)."""
+    lines = ["; HEADER_BLOCK_START"]
+    if project is not None:
+        lines.append(f"; BambuStudio {project.slicer.client_version}")
+    lines += ["; filament-kit slot calibration: no heating, no homing, no motion",
+              "; total layer number: 0",
+              "; total filament length [mm] : 0.00",
+              "; total filament weight [g] : 0.00",
+              f"; total filament count: {len(labels)}",
+              "; HEADER_BLOCK_END"]
+    if project is not None:
+        sp = project.slicer
+        lines += ["", "; CONFIG_BLOCK_START",
+                  f"; printer_model = {sp.printer_model}",
+                  f"; printer_settings_id = {project.printer_settings_id}",
+                  f"; nozzle_diameter = {','.join(project.nozzles)}",
+                  f"; filament_map = {','.join(str(x) for x in project.maps)}",
+                  "; CONFIG_BLOCK_END", ""]
     lines += [f"; filament {i}: slot {label}" for i, label in enumerate(labels, 1)]
     lines += ["M400", "; end of calibration job", ""]
     return "\n".join(lines)
 
 
-def build(slots: list[str]) -> bytes:
-    """A minimal Bambu project 3MF with one PLA filament per slot label (filament ids 1..N in label order)."""
+EXTRUDER_TYPE = {"Direct Drive": 0, "Bowden": 1}               # slice_info's extruder_type codes
+VOLUME_TYPE = {"Standard": 0, "High Flow": 1, "Hybrid": 2}     # slice_info's nozzle_volume_type codes
+
+
+@dataclass
+class Project:
+    """The printer fields a calibration 3MF carries (`build`): the model's `hardware.SlicerProject`, the nozzle
+    diameter of each of its extruders (Bambu Studio's order, as text: "0.4") and each filament's extruder (1-based,
+    Bambu Studio's `filament_maps`)."""
+    slicer: hardware.SlicerProject
+    nozzles: list[str]
+    maps: list[int]
+
+    @property
+    def printer_settings_id(self) -> str:
+        return f"{self.slicer.printer_model} {self.nozzles[self.slicer.master_extruder - 1]} nozzle"
+
+    @property
+    def filament_preset(self) -> str:
+        return self.slicer.filament_preset.replace("{nozzle}", self.nozzles[self.slicer.master_extruder - 1])
+
+
+def _report_extruder(report: dict, ams_id: int) -> int | None:
+    """The printer's own extruder id an AMS unit feeds: bits 8-11 of the unit's hex `info` (H2D/X2D; as
+    loading._extruder). None when the report does not say."""
+    for u in _l(_d(_d(report).get('ams')).get('ams')):
+        if _int(u.get('id')) == ams_id:
+            info = u.get('info')
+            if isinstance(info, str) and info.strip():
+                try:
+                    return (int(info, 16) >> 8) & 0xF
+                except ValueError:
+                    return None
+            return None
+    return None
+
+
+def _mm(v) -> float | None:
+    try:
+        n = float(v)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return n if 0.1 <= n <= 2.0 else None
+
+
+def project_for(mi: hardware.ModelInfo, report: dict, addrs: list[tuple[int, int]]) -> Project | None:
+    """The 3MF's printer fields for the loaded slots `addrs`, from the model's slicer project and the report: each
+    extruder's nozzle from `device.nozzle.info[]` (by the printer's own extruder id), else the top-level
+    `nozzle_diameter`, else the model's default; each filament on the extruder its AMS unit feeds (`info` bits),
+    else on the model's master extruder. None (the minimal 3MF) unless the model is marked job-file="project"."""
+    sp = mi.slicer
+    if sp is None or mi.job_file != "project":
+        return None
+    p = _d(report)
+    top = _mm(p.get('nozzle_diameter'))
+    by_id = {}
+    for e in _l(_d(_d(p.get('device')).get('nozzle')).get('info')):
+        i, n = _int(e.get('id')), _mm(e.get('diameter'))
+        if i is not None and n is not None:
+            by_id[i] = n
+    nozzles = [sp.nozzle_text(by_id.get(x.physical) or top) for x in sp.extruders]
+    logical = {x.physical: i for i, x in enumerate(sp.extruders, 1)}
+    maps = []
+    for a, _t in addrs:
+        e = None if _external(a, mi) else _report_extruder(report, a)
+        maps.append(logical.get(e, sp.master_extruder) if e is not None else sp.master_extruder)
+    return Project(sp, nozzles, maps)
+
+
+def _zip(files: dict) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for name, data in files.items():
+            info = zipfile.ZipInfo(name, _ZIP_TIME)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.create_system = 0      # the same bytes on Windows and Linux
+            z.writestr(info, data)
+    return buf.getvalue()
+
+
+def build(slots: list[str], project: Project | None = None) -> bytes:
+    """A Bambu project 3MF with one PLA filament per slot label (filament ids 1..N in label order): with a
+    `project` (`project_for`), the printer fields Bambu Studio writes (`_build_project`); without, the minimal
+    3MF (every model not marked job-file="project")."""
     labels = list(slots)
     if not labels:
         raise ValueError("no slots to calibrate")
+    if project is not None:
+        return _build_project(labels, project)
     colors = _colors(len(labels))
     code = gcode(labels).encode()
     fils = "\n".join(f'    <filament id="{i}" tray_info_idx="" type="PLA" color="{c}" used_m="0" used_g="0"/>'
@@ -210,14 +319,123 @@ def build(slots: list[str]) -> bytes:
                         "filament_type": ["PLA"] * len(labels), "filament_colour": colors,
                         "filament_settings_id": [""] * len(labels)}, indent=4) + "\n",
     }
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-        for name, data in files.items():
-            info = zipfile.ZipInfo(name, _ZIP_TIME)
-            info.compress_type = zipfile.ZIP_DEFLATED
-            info.create_system = 0      # the same bytes on Windows and Linux
-            z.writestr(info, data)
-    return buf.getvalue()
+    return _zip(files)
+
+
+def _build_project(labels: list[str], pr: Project) -> bytes:
+    """The calibration 3MF with the printer fields of an unsliced Bambu Studio project of the model (the X2D and
+    P2S refuse a job file without them, "invalid 3mf"): `slice_info.config`'s client header (X-BBL-Client-Version)
+    and the plate's printer_model_id, extruder and nozzle fields; `project_settings.config`'s printer_model,
+    printer_settings_id, nozzle_diameter, extruder_type, physical_extruder_map, master_extruder_id, printable_area
+    and filament_map; the plate's gcode relationship. The gcode is still comments and M400 only."""
+    sp, n = pr.slicer, len(labels)
+    colors = _colors(n)
+    code = gcode(labels, pr).encode()
+    master = pr.nozzles[sp.master_extruder - 1]
+    preset = pr.filament_preset
+    fils = "\n".join(
+        f'    <filament id="{i}" tray_info_idx="GFA00" type="PLA" color="{c}" used_m="0" used_g="0" '
+        f'group_id="{m - 1}" nozzle_diameter="{float(pr.nozzles[m - 1]):.2f}" '
+        f'volume_type="{sp.extruders[m - 1].volume}" used_for_object="true" used_for_support="false"/>'
+        for i, (c, m) in enumerate(zip(colors, pr.maps), 1))
+    nozz = "\n".join(f'    <nozzle id="{m - 1}" extruder_id="{m}" nozzle_diameter="{pr.nozzles[m - 1]}" '
+                     f'volume_type="{sp.extruders[m - 1].volume}"/>' for m in sorted(set(pr.maps)))
+    maps = " ".join(str(m) for m in pr.maps)
+    ext_types = " ".join(str(EXTRUDER_TYPE.get(x.type, 0)) for x in sp.extruders)
+    vol_types = " ".join(str(VOLUME_TYPE.get(x.volume, 0)) for x in sp.extruders)
+    area = ["0x0", f"{sp.printable_width}x0", f"{sp.printable_width}x{sp.printable_depth}",
+            f"0x{sp.printable_depth}"]
+    settings = {
+        "name": "project_settings", "from": "project", "version": sp.client_version,
+        "printer_model": sp.printer_model, "printer_settings_id": pr.printer_settings_id,
+        "printer_variant": master, "nozzle_diameter": list(pr.nozzles),
+        "extruder_type": [x.type for x in sp.extruders],
+        "physical_extruder_map": [str(x.physical) for x in sp.extruders],
+        "master_extruder_id": str(sp.master_extruder),
+        "nozzle_volume_type": [x.volume for x in sp.extruders],
+        "printable_area": area, "printable_height": str(sp.printable_height),
+        "filament_type": ["PLA"] * n, "filament_colour": colors, "filament_settings_id": [preset] * n,
+        "filament_map": [str(m) for m in pr.maps], "filament_map_mode": "Manual",
+        "curr_bed_type": "Textured PEI Plate"}
+    files = {
+        "[Content_Types].xml":
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">\n'
+            ' <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>\n'
+            ' <Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/>\n'
+            ' <Default Extension="gcode" ContentType="text/x.gcode"/>\n'
+            '</Types>\n',
+        "_rels/.rels":
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\n'
+            ' <Relationship Target="/3D/3dmodel.model" Id="rel-1" '
+            'Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>\n'
+            '</Relationships>\n',
+        "3D/3dmodel.model":
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<model unit="millimeter" xml:lang="en-US" '
+            'xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" '
+            'xmlns:BambuStudio="http://schemas.bambulab.com/package/2021">\n'
+            ' <metadata name="Application">filament-kit</metadata>\n'
+            ' <metadata name="BambuStudio:3mfVersion">1</metadata>\n'
+            ' <metadata name="Title">slot calibration</metadata>\n'
+            ' <resources/>\n'
+            ' <build/>\n'
+            '</model>\n',
+        GCODE: code,
+        GCODE + ".md5": hashlib.md5(code).hexdigest().upper(),
+        "Metadata/_rels/model_settings.config.rels":
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\n'
+            f' <Relationship Target="/{GCODE}" Id="rel-1" Type="http://schemas.bambulab.com/package/2021/gcode"/>\n'
+            '</Relationships>\n',
+        "Metadata/slice_info.config":
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<config>\n'
+            '  <header>\n'
+            '    <header_item key="X-BBL-Client-Type" value="slicer"/>\n'
+            f'    <header_item key="X-BBL-Client-Version" value="{sp.client_version}"/>\n'
+            '  </header>\n'
+            '  <plate>\n'
+            '    <metadata key="index" value="1"/>\n'
+            f'    <metadata key="extruder_type" value="{ext_types}"/>\n'
+            f'    <metadata key="nozzle_volume_type" value="{vol_types}"/>\n'
+            f'    <metadata key="printer_model_id" value={quoteattr(sp.model_id)}/>\n'
+            f'    <metadata key="nozzle_diameters" value="{",".join(pr.nozzles)}"/>\n'
+            '    <metadata key="timelapse_type" value="0"/>\n'
+            '    <metadata key="prediction" value="1"/>\n'
+            '    <metadata key="weight" value="0.00"/>\n'
+            '    <metadata key="pause_count" value="0"/>\n'
+            '    <metadata key="outside" value="false"/>\n'
+            '    <metadata key="support_used" value="false"/>\n'
+            '    <metadata key="label_object_enabled" value="false"/>\n'
+            f'    <metadata key="filament_maps" value="{maps}"/>\n'
+            '    <metadata key="limit_filament_maps" value="0"/>\n'
+            f'{fils}\n'
+            f'{nozz}\n'
+            '  </plate>\n'
+            '</config>\n',
+        "Metadata/model_settings.config":
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<config>\n'
+            '  <plate>\n'
+            '    <metadata key="plater_id" value="1"/>\n'
+            f'    <metadata key="plater_name" value={quoteattr("slot calibration")}/>\n'
+            '    <metadata key="locked" value="false"/>\n'
+            '    <metadata key="filament_map_mode" value="Manual"/>\n'
+            f'    <metadata key="filament_maps" value="{maps}"/>\n'
+            f'    <metadata key="gcode_file" value="{GCODE}"/>\n'
+            '    <metadata key="pattern_bbox_file" value="Metadata/plate_1.json"/>\n'
+            '  </plate>\n'
+            '</config>\n',
+        "Metadata/plate_1.json":
+            json.dumps({"bbox_all": [], "bbox_objects": [], "bed_type": "textured_plate",
+                        "filament_colors": colors, "filament_ids": list(range(n)),
+                        "first_extruder": pr.maps[0] - 1, "is_seq_print": False,
+                        "nozzle_diameter": float(master), "version": 2}),
+        "Metadata/project_settings.config": json.dumps(settings, indent=4) + "\n",
+    }
+    return _zip(files)
 
 
 def payload(serial: str, ams_mapping: list[int], name: str | None = None,
@@ -372,18 +590,32 @@ def _attempt(manager, serial: str, slotmap: SlotMap, printer, should_stop, hw: h
         res.problems.append('printer_busy')
         return res
 
-    trays0 = _trays(snap)
+    # a slot the sensor says is empty stays out even if it still names a filament, as in the slot test
+    lay = layout.build(snap, printer.model if printer is not None else None, hw)
+    ams_units = [u for u in lay.units if u.kind != layout.EXT_KIND]
+    absent = {(u.ams_id, s.tray_id) for u in ams_units for s in u.slots if s.present is False}
+    trays0 = {k: t for k, t in _trays(snap).items() if k not in absent}
     labels: list[str] = []
     addrs: list[tuple[int, int]] = []
     for label, slot in slotmap.slots.items():
         k = _key(slot)
+        if k is not None and _external(k[0], mi):
+            # an external holder is always numbered as its own id (no scheme to prove), and it has no sensor:
+            # an empty one still reports a filament type, and the printer maps no slot for it
+            res.external.append(label)
+            continue
         if k is None or not _loaded(trays0.get(k)):
             res.skipped.append(label)
             continue
         labels.append(label)
         addrs.append(k)
     if not labels:
-        res.problems.append("no loaded slots to calibrate")
+        if not ams_units and not res.skipped:
+            # no AMS at all: only holders, which keep their own ids, so there is nothing to prove and no job to
+            # send. Adding a unit changes the layout, and that makes the map again.
+            res.consistent = True
+        else:
+            res.problems.append(NO_AMS_LOADED)
         return res
     try:
         sent = [number(hw, mi, key, a, t) for a, t in addrs]
@@ -409,7 +641,7 @@ def _attempt(manager, serial: str, slotmap: SlotMap, printer, should_stop, hw: h
     path = remote_path(serial)
     try:
         with ftps.Client(printer) as c:
-            c.upload(path, build(labels))
+            c.upload(path, build(labels, project_for(mi, snap, addrs)))
     except tlspin.CertChanged:
         res.cert_changed = True
         res.problems.append('cert_changed')
@@ -561,6 +793,13 @@ def _no_error(v) -> bool:
     return isinstance(v, str) and v.strip() in ("", "0")
 
 
+def _error_text(v) -> str:
+    """A `print_error` for a problem line: an int in hex as the printer's HMS codes are written (0x0500C011)."""
+    if isinstance(v, int) and not isinstance(v, bool):
+        return f"0x{v & 0xFFFFFFFF:08X}"
+    return str(v)[:32]
+
+
 def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[int], snap: dict,
          should_stop=None, *, numbering) -> None:
     """Send and watch one job. `numbering` = (hardware, model, candidate scheme keys, (ams_id, tray_id) per label,
@@ -650,7 +889,9 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
                  mi.name)
         st['final'], res.failed_as_finish = 'FINISH', True
     if st['final'] != 'FINISH':
-        res.problems.append(f"the calibration job ended as {st['final']} on the printer")
+        err = st['error']
+        code = "" if _no_error(err) else f" (print_error {_error_text(err)})"
+        res.problems.append(f"the calibration job ended as {st['final']} on the printer{code}")
 
     if res.mapping is None:
         # a printer that reports no mapping will not for other numbers either: no second job, observe mode
@@ -676,8 +917,11 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
         res.problems.append(f"the reported slot numbers {list(res.mapping)} fit no numbering scheme of this "
                             f"printer model ({', '.join(candidates)})")
     elif len(proved) > 1:
+        res.scheme_unsettled = True
         log.info("printer %s: the loaded slots number alike under %s; taking %s (the model's first)", serial,
                  ", ".join(proved), res.scheme)
+        res.notes.append(f"the loaded slots are numbered alike under {', '.join(proved)}: the numbering of further "
+                         f"AMS units is not settled yet, so map again after loading a second unit")
     res.consistent = st['final'] == 'FINISH' and res.scheme is not None
     # another job only after a clean end that proved nothing (never after a real failure or a stop)
     res.retry = st['final'] == 'FINISH' and res.scheme is None

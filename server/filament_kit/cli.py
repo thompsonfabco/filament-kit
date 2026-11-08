@@ -782,6 +782,8 @@ def cmd_printer_map(serial: str, manager_factory) -> int:
         print(f"  {s['label']}: AMS {s['ams_id']} tray {s['tray_id']} -> printer slot {s['global']}")
     for prob in v["problems"]:
         print(f"  problem: {prob}")
+    for note in v["notes"]:
+        print(f"  note: {note}")
     if stopped:
         print("Mapping stopped. Any slot listed above as not restored may still hold a test colour; the next "
               "mapping run restores it first.")

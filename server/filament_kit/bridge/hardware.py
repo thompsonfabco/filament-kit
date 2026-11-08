@@ -38,6 +38,10 @@ Unknown → the generic record.
                                ams_id, slot_id 0; verified on the H2D) or "legacy" (ams_id = holder id, tray_id 0,
                                no slot_id: the kit's earlier command); generic: "legacy"
     numbering     tuple[str]   candidate numbering scheme keys, first guess first (generic: ("legacy",))
+    slicer        SlicerProject | None   the Bambu Studio project fields a calibration job's 3MF can carry
+                               (`<slicer-project>`, from an unsliced Bambu Studio project of that model)
+    job_file      str          which 3MF the calibration job sends: "project" (`slicer`'s fields, for models that
+                               refuse the minimal file; needs a `slicer`) or "minimal" (generic and everything else)
     ftp_dirs      tuple[str]   FTPS directories where print jobs land
     known         bool         False for the generic record (calibration required, nothing assumed)
 
@@ -112,6 +116,35 @@ class HardwareError(xmlfile.XmlError):
 # --- records ------------------------------------------------------------------------------------------------------
 
 @dataclass(frozen=True)
+class Extruder:
+    """One extruder of a model's slicer project, in Bambu Studio's (logical) order: `type` ("Direct Drive",
+    "Bowden"), `physical` = the printer's own extruder id (`physical_extruder_map`), `volume` ("Standard" ...)."""
+    type: str
+    physical: int
+    volume: str = "Standard"
+
+
+@dataclass(frozen=True)
+class SlicerProject:
+    """What Bambu Studio writes about the printer into a project (`<slicer-project>`): the printer checks a job
+    file against these (the X2D and P2S refuse a 3MF without them). `filament_preset` may hold `{nozzle}`."""
+    model_id: str
+    printer_model: str
+    nozzle: float
+    printable_width: int
+    printable_depth: int
+    printable_height: int
+    master_extruder: int
+    filament_preset: str
+    client_version: str
+    extruders: tuple[Extruder, ...]
+
+    def nozzle_text(self, mm: float | None = None) -> str:
+        """A nozzle diameter as Bambu Studio writes it ("0.4"); None = the model's default."""
+        return f"{(mm if mm else self.nozzle):g}"
+
+
+@dataclass(frozen=True)
 class External:
     id: int
     label: str
@@ -138,6 +171,8 @@ class ModelInfo:
     numbering: tuple[str, ...] = ("legacy",)
     ftp_dirs: tuple[str, ...] = ("/", "/cache")
     known: bool = True
+    slicer: SlicerProject | None = None
+    job_file: str = "minimal"
 
 
 def generic_model(code: str | None) -> ModelInfo:
@@ -344,6 +379,42 @@ _int, _pos, _nonneg, _bool, _text, _enum = (xmlfile.integer, xmlfile.pos, xmlfil
                                          xmlfile.text, xmlfile.enum)
 
 
+def _nozzle(v: str) -> str:
+    try:
+        n = float(v)
+    except ValueError:
+        raise ValueError("is not a nozzle diameter in mm") from None
+    if not 0.1 <= n <= 2.0:
+        raise ValueError("is not a nozzle diameter in mm (0.1-2.0)")
+    return v
+
+
+def _version(v: str) -> str:
+    if not re.fullmatch(r"[0-9]{2}\.[0-9]{2}\.[0-9]{2}\.[0-9]{2}", v):
+        raise ValueError("is not a Bambu Studio version (02.09.01.70)")
+    return v
+
+
+def _slicer(el, tag: str, errors: list[str]) -> SlicerProject | None:
+    """A model's `<slicer-project>` (None without one; a bad one is an error of the file)."""
+    sp = el.find("slicer-project")
+    if sp is None:
+        return None
+    exts = tuple(Extruder(x.get("type").strip(), int(x.get("physical")), (x.get("volume") or "Standard").strip())
+                 for x in sp.findall("extruder"))
+    master = int(sp.get("master-extruder"))
+    if not exts:
+        errors.append(f"{tag}: slicer-project lists no extruder")
+        return None
+    if master > len(exts) or len({x.physical for x in exts}) != len(exts):
+        errors.append(f"{tag}: slicer-project master-extruder or the extruders' physical ids do not fit")
+        return None
+    return SlicerProject(sp.get("model-id").strip(), sp.get("printer-model").strip(), float(sp.get("nozzle")),
+                         int(sp.get("printable-width")), int(sp.get("printable-depth")),
+                         int(sp.get("printable-height")), master, sp.get("filament-preset").strip(),
+                         sp.get("client-version"), exts)
+
+
 def _expr(v: str) -> str:
     parse_expr(v)
     return v
@@ -360,12 +431,21 @@ _SCHEMA = _E(
             attrs={"code": _text, "name": _text, "preset-name": _text, "say": _text, "nozzles": _pos,
                    "camera": _enum("hls", "mjpeg", "none"), "chamber-max": _pos, "presence": _text,
                    "gcode-only-failed-is-finish": _bool, "ams-mapping2": _bool,
-                   "external-addressing": _enum("tray-is-ams", "legacy")},
+                   "external-addressing": _enum("tray-is-ams", "legacy"), "job-file": _enum("minimal", "project")},
             required=("code", "name"),
             children={"alias": _TEXT, "light-node": _TEXT, "ftp-dir": _TEXT,
                       "external": _E(attrs={"id": _nonneg, "label": _text, "say": _text, "alias": _text},
                                      required=("id", "label")),
-                      "numbering": _E(attrs={"ref": _text}, required=("ref",))})}),
+                      "numbering": _E(attrs={"ref": _text}, required=("ref",)),
+                      "slicer-project": _E(
+                          attrs={"model-id": _text, "printer-model": _text, "nozzle": _nozzle,
+                                 "printable-width": _pos, "printable-depth": _pos, "printable-height": _pos,
+                                 "master-extruder": _pos, "filament-preset": _text, "client-version": _version},
+                          required=("model-id", "printer-model", "nozzle", "printable-width", "printable-depth",
+                                    "printable-height", "master-extruder", "filament-preset", "client-version"),
+                          children={"extruder": _E(attrs={"type": _text, "physical": _nonneg, "volume": _text},
+                                                   required=("type", "physical"))})},
+            once=("slicer-project",))}),
         "ams-types": _E(children={"ams-type": _E(
             attrs={"key": _text, "name": _text, "slots": _pos, "label": _text, "prefix": str, "say": _text,
                    "verified": _bool},
@@ -524,6 +604,10 @@ def _build(sections: dict[str, dict], where: str) -> "Hardware":
                               f"(an alias names an older label only)")
         camera = el.get("camera", "none")
         cmax = el.get("chamber-max")
+        slicer = _slicer(el, tag, errors)
+        job_file = el.get("job-file", "minimal")
+        if job_file == "project" and slicer is None:
+            errors.append(f'{tag}: job-file="project" needs a slicer-project')
         models.append(ModelInfo(
             code=code, name=name, preset_name=(el.get("preset-name") or f"Bambu Lab {name}").strip(),
             say=(el.get("say") or name).strip(),
@@ -535,7 +619,8 @@ def _build(sections: dict[str, dict], where: str) -> "Hardware":
             external_addressing=el.get("external-addressing", "legacy"),
             light_nodes=tuple(n.text.strip() for n in el.findall("light-node")) or ("chamber_light",),
             externals=tuple(externals), numbering=numbering,
-            ftp_dirs=tuple(d.text.strip() for d in el.findall("ftp-dir")) or ("/", "/cache")))
+            ftp_dirs=tuple(d.text.strip() for d in el.findall("ftp-dir")) or ("/", "/cache"),
+            slicer=slicer, job_file=job_file))
 
     words = tuple((el.get("text").strip(), el.get("say").strip()) for el in sections["speech"].values())
 

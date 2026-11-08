@@ -117,7 +117,9 @@ fun PrinterScreen(
 
         Controls(state, viewModel)
 
-        SlotMapping(toolsState, tools, canStart = printer.state == "connected" && !state.printing)
+        // a Developer Mode refusal never blocks mapping: the slot test finds out for itself and says so
+        SlotMapping(toolsState, tools,
+            canStart = printer.state in setOf("connected", "needs_developer_mode") && !state.printing)
         FilamentUsed(toolsState, tools)
     }
 
@@ -276,7 +278,16 @@ private fun SlotMapping(s: ToolsUiState, tools: PrinterToolsViewModel, canStart:
                 color = MaterialTheme.colorScheme.error)
             else -> Unit
         }
-        m?.problems?.forEach { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+        val old = m?.problemsOld == true && m.problems.isNotEmpty()
+        if (old) {
+            Text("From an earlier mapping, it may be fixed by now. Map the slots again to check:",
+                style = MaterialTheme.typography.bodySmall)
+        }
+        m?.problems?.forEach {
+            Text(it, color = if (old) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall)
+        }
+        m?.notes?.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
         s.mapMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         OutlinedButton(onClick = tools::askMap, enabled = canStart && !s.mapRunning && !s.mapBusy) {
             Text(if (m?.state == "done" || m?.state == "failed") "Map slots again" else "Map slots")

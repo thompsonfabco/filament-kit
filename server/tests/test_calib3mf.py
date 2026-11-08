@@ -242,11 +242,11 @@ def test_echoing_printer_is_consistent(fake_ftp, printer, tmp_path):
     assert r.problems == []
     # A3 is empty: not part of the job
     # ruling BL: legacy numbers are sent; a printer echoing them back proves legacy (shift8 cannot place 128)
-    assert r.decoding == {"A1": 0, "A2": 1, "A4": 3, "HT-A": 128, "Ext": 254}
+    assert r.decoding == {"A1": 0, "A2": 1, "A4": 3, "HT-A": 128}
     assert r.scheme == "legacy" and r.tried == ["legacy"] and r.attempts == []
-    assert r.skipped == ["A3"]
+    assert r.skipped == ["A3"] and r.external == ["Ext"]     # an external holder is never part of the job
     pr = m.published[0]["print"]
-    assert pr["ams_mapping"] == [0, 1, 3, 128, 254]
+    assert pr["ams_mapping"] == [0, 1, 3, 128]
     assert zipfile.ZipFile(io.BytesIO(m.file_at_start)).namelist()             # uploaded before the job
     assert not (fake_ftp.root / "cache" / FILE).exists()                       # deleted afterwards
     assert r.tray_now == ["255"]
@@ -285,7 +285,7 @@ def test_printer_reports_other_ids(fake_ftp, printer):
     r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
     assert r.consistent is False
     # two jobs (legacy, then shift8 numbers), neither fits: the last job's report
-    assert r.decoding == {"A1": 0, "A2": 1, "A4": 3, "HT-A": 0x8000 + 32768, "Ext": 0x8000 + 254}
+    assert r.decoding == {"A1": 0, "A2": 1, "A4": 3, "HT-A": 0x8000 + 32768}
     assert r.tried == ["legacy", "shift8"]
     assert any("HT-A" in p for p in r.problems)
 
@@ -806,19 +806,19 @@ def big_report():
 
 
 def test_16_units_8_ht_and_two_externals_proved_by_one_job(fake_ftp, printer):
-    """Review focus 1: 74 loaded slots (16 AMS x 4, 8 HT, Ext-L, Ext-R) on a shift8 printer: one legacy job,
-    every slot decoded, shift8 proved."""
+    """Review focus 1: 72 loaded slots (16 AMS x 4, 8 HT; Ext-L, Ext-R stay out) on a shift8 printer: one legacy
+    job, every slot decoded, shift8 proved."""
     rep = big_report()
     m = FakeManager(fake_ftp.root, "native", report=rep)
     smap = ams.SlotMap(slots={s.label: {"ams_id": u.ams_id, "tray_id": s.tray_id, "global_id": s.global_id}
                               for u in ams.units(rep, "O1D") for s in u.slots})
     r = calib3mf.run(m, SERIAL, smap)
     assert r.consistent is True and r.scheme == "shift8" and len(jobs(m)) == 1, r.problems
-    assert len(r.decoding) == 74 and len(set(r.decoding.values())) == 74
+    assert len(r.decoding) == 72 and len(set(r.decoding.values())) == 72
     assert r.decoding["P4"] == (15 << 8) | 3 and r.decoding["HT-H"] == 135 << 8
-    assert r.decoding["Ext-L"] == 254 and r.decoding["Ext-R"] == 255
+    assert r.external == ["Ext-L", "Ext-R"]
     (pr,) = jobs(m)
-    assert pr["ams_mapping"][:5] == [0, 1, 2, 3, 4] and len(pr["ams_mapping2"]) == 74
+    assert pr["ams_mapping"][:5] == [0, 1, 2, 3, 4] and len(pr["ams_mapping2"]) == 72
 
 
 @pytest.mark.parametrize("model,error,finished", [
