@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
-# filament-kit one-command install for Ubuntu 24.04 or newer:
+# filament-kit one-command install for Ubuntu 24.04 or newer, piped or downloaded first (both work the same):
 #
 #   curl -fsSL https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh | sudo bash
 #
-# Options go after `bash -s --`, e.g. `... | sudo bash -s -- --mode server`:
+#   curl -fsSLO https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh
+#   sudo bash get.sh
+#
+# Options go after `bash -s --` when piped (`... | sudo bash -s -- --mode server`), else after the file name
+# (`sudo bash get.sh --mode server`):
 #   --version X.Y.Z    install that release instead of the latest
 #   --mode M, --modules a,b, --server NAME-OR-IP, --set KEY=VALUE (repeatable, with --modules)
 #                      passed to install.sh (no questions asked when given); --set gives a chosen module a setting
@@ -21,6 +25,9 @@
 # installs nothing. Then it unpacks into a temporary folder, keeps a copy of the verified release in
 # /opt/filament-kit/releases/ (for `filament-kit update --rollback`), runs install.sh with the terminal (so its
 # questions work through the pipe; without a terminal install.sh asks nothing) and removes the temporary folder.
+# Piped, sudo (use_pty, sudo-rs's default on Ubuntu 25.10+) starts bash as a background job of its terminal, where
+# the first command to touch the terminal (install.sh's questions, apt) stops for good; so before install.sh runs
+# this script makes itself the terminal's foreground job (fk_take_tty), and gives the terminal back afterwards.
 # On an existing install it first holds every printer's mapping lock, as the updater does: it stops when a printer
 # is mapping slots or loading a spool.
 #
@@ -31,7 +38,54 @@ fk_die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 fk_usage() {
     echo "usage: curl -fsSL <get.sh url> | sudo bash -s -- [--version X.Y.Z] [--mode M] [--modules a,b]" >&2
     echo "       [--server NAME-OR-IP] [--set KEY=VALUE]... [--token-file FILE] [--repo OWNER/NAME] [--api URL]" >&2
+    echo "   or: sudo bash get.sh [the same options]" >&2
     exit 2
+}
+
+# Make this script's process group the foreground job of the terminal on stdin (/dev/tty) when it is not, and
+# print the group that had it (nothing when there was nothing to do). SIGTTOU is ignored for the switch: a
+# background job may then take the terminal (tcsetpgrp(3)). Any failure leaves things as they are.
+fk_take_tty() {
+    python3 -I -c '
+import os, signal
+signal.signal(signal.SIGTTOU, signal.SIG_IGN)
+try:
+    fg, me = os.tcgetpgrp(0), os.getpgrp()
+    if fg != me:
+        os.tcsetpgrp(0, me)
+        print(fg)
+except OSError:
+    pass
+' 2>/dev/null || true
+}
+
+# Give the terminal back to process group $1 (what fk_take_tty printed).
+fk_give_tty() {
+    [ -n "$1" ] || return 0
+    python3 -I -c '
+import os, signal, sys
+signal.signal(signal.SIGTTOU, signal.SIG_IGN)
+try:
+    os.tcsetpgrp(0, int(sys.argv[1]))
+except (OSError, ValueError):
+    pass
+' "$1" 2>/dev/null || true
+}
+
+# The person's own terminal when sudo runs us on a pseudo-terminal of its own (use_pty): the terminal of the first
+# ancestor on another terminal than ours (sudo itself). Nothing when there is none.
+fk_outer_tty() {
+    local mine pid t
+    mine=$(ps -o tty= -p $$ 2>/dev/null | tr -d ' ')
+    pid=$PPID
+    while [ "${pid:-0}" -gt 1 ] 2>/dev/null; do
+        t=$(ps -o tty= -p "$pid" 2>/dev/null | tr -d ' ')
+        if [ -n "$t" ] && [ "$t" != "?" ] && [ "$t" != "$mine" ]; then
+            [ ! -c "/dev/$t" ] || echo "/dev/$t"
+            return 0
+        fi
+        pid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
+    done
 }
 
 # An existing install: refuse while a printer is mapping slots or loading a spool, as `filament-kit update` does
@@ -575,9 +629,24 @@ FK_RELEASE_PY
     [ -f "$root/install.sh" ] || fk_die "nothing was installed (no install.sh)"
     fk_hold_printers
 
-    local rc=0
+    local rc=0 owner outer="" saved=""
     if (exec </dev/tty) 2>/dev/null; then
+        owner=$(fk_take_tty </dev/tty)
+        if [ -n "$owner" ]; then
+            # Piped, sudo leaves the person's terminal as it was (echoing, line by line) and passes on whole
+            # lines: a secret would show as typed and the module menu would get no key before Enter. Set it to
+            # pass each key on, as sudo does when it runs at a terminal (this pty then echoes and edits), and put
+            # it back afterwards, also when this script is stopped.
+            outer=$(fk_outer_tty)
+            if [ -n "$outer" ] && saved=$(stty -g -F "$outer" 2>/dev/null); then
+                # shellcheck disable=SC2064  # expand now
+                trap "rm -rf '$tmp'; stty -F '$outer' '$saved' 2>/dev/null || true" EXIT
+                stty -F "$outer" -echo -icanon -isig -iexten -ixon -icrnl min 1 time 0 2>/dev/null || true
+            fi
+        fi
         bash "$root/install.sh" "${pass[@]}" </dev/tty || rc=$?
+        [ -z "$saved" ] || stty -F "$outer" "$saved" 2>/dev/null || true
+        fk_give_tty "$owner" </dev/tty
     else
         echo "no terminal: installing without questions" >&2
         bash "$root/install.sh" "${pass[@]}" </dev/null || rc=$?

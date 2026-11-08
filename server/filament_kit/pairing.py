@@ -59,6 +59,10 @@ class PairingError(Exception):
     pass
 
 
+class CertUnreadable(PairingError):
+    """The certificate exists but this user may not read it (the CLI run without sudo)."""
+
+
 @dataclass
 class Pairing:
     token: str
@@ -226,9 +230,13 @@ def _load_devices() -> list:
 
 def issue(device_hint: str = "") -> Pairing:
     cert = config.paths().etc / "cert.pem"
-    if not cert.exists():
-        raise PairingError(f"no server certificate at {cert}; create it first")
-    fp = fingerprint(cert.read_bytes())
+    try:
+        cert_pem = cert.read_bytes()
+    except FileNotFoundError:
+        raise PairingError(f"no server certificate at {cert}; create it first") from None
+    except PermissionError:
+        raise CertUnreadable(f"cannot read the server certificate {cert}: permission denied") from None
+    fp = fingerprint(cert_pem)
     port = config.load()["port"]
     with _locked():
         now = time.time()

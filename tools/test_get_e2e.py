@@ -37,8 +37,16 @@ KEEP = Path("/opt/filament-kit/releases")
 
 
 def tarball(version: str, record: Path) -> bytes:
+    # fg=yes: install.sh is the terminal's foreground job; `stty` (as apt does) would stop a background job for good
     stub = ("#!/usr/bin/env bash\n"
-            f"{{ echo \"args=$*\"; if [ -t 0 ]; then echo tty=yes; else echo tty=no; fi; id -u; }} > {record}\n")
+            f"{{ echo \"args=$*\"; if [ -t 0 ]; then echo tty=yes; else echo tty=no; fi\n"
+            "  read -r pg tp < <(ps -o pgid=,tpgid= -p $$)\n"
+            "  if [ \"$pg\" = \"$tp\" ]; then echo fg=yes; else echo fg=no; fi\n"
+            "  if [ -t 0 ]; then stty \"$(stty -g)\" && echo stty=ok; fi\n"
+            # --set keys=1 (run_get_keys): three keys without Enter must arrive, and the terminal must not echo them
+            "  case \"$*\" in *keys=1*) echo STUB-READY >/dev/tty; IFS= read -r -s -n3 -t 20 k; echo \"keys=$k\" ;; "
+            "esac\n"
+            f"  id -u; }} > {record}\n")
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tf:
         ti = tarfile.TarInfo(f"filament-kit-{version}/install.sh")
@@ -109,17 +117,65 @@ def leftover_tmp() -> list[str]:
     return sorted(str(p) for p in Path("/tmp").glob("filament-kit-get.*"))
 
 
-def run_get(get_sh: Path, args: list[str], *, tty: bool, env_extra: dict | None = None):
-    """`cat get.sh | sudo bash -s -- args`; without tty in a new session (no controlling terminal), with tty
-    inside `script` (a pseudo-terminal)."""
+def run_get(get_sh: Path, args: list[str], *, tty: bool, env_extra: dict | None = None, piped: bool = True,
+            timeout: float = 300):
+    """`cat get.sh | sudo bash -s -- args` (or `sudo bash get.sh args` with piped=False); without tty in a new
+    session (no controlling terminal), with tty inside `script` (a pseudo-terminal). A job stopped on the terminal
+    never ends: the timeout turns that into a failed run (returncode None)."""
     quoted = " ".join(f"'{a}'" for a in args)
-    line = f"cat '{get_sh}' | sudo -n {' '.join(f'{k}={v}' for k, v in (env_extra or {}).items())} " \
-           f"bash -s -- {quoted}"
+    env = " ".join(f"{k}={v}" for k, v in (env_extra or {}).items())
+    line = (f"cat '{get_sh}' | sudo -n {env} bash -s -- {quoted}" if piped
+            else f"sudo -n {env} bash '{get_sh}' {quoted}")
     if tty:
         cmd = ["script", "-qec", line, "/dev/null"]
     else:
         cmd = ["setsid", "-w", "bash", "-c", line]
-    return subprocess.run(cmd, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=300)
+    try:
+        return subprocess.run(cmd, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired as e:
+        subprocess.run(["sudo", "-n", "pkill", "-KILL", "-f", "filament-kit-get[.]"], capture_output=True)
+        out = e.stdout.decode(errors="replace") if isinstance(e.stdout, bytes) else (e.stdout or "")
+        return subprocess.CompletedProcess(cmd, None, out, "timed out (stopped on the terminal?)")
+
+
+def run_get_keys(get_sh: Path, args: list[str], *, piped: bool) -> tuple[int | None, bytes, bool]:
+    """get.sh in a pty of our own (the person's terminal); once install.sh is ready, type three keys and no Enter.
+    Returns (exit code, everything the terminal showed, the terminal echoes and edits lines again afterwards)."""
+    import pty
+    import select
+    import time
+    quoted = " ".join(f"'{a}'" for a in [*args, "--modules", "server", "--set", "keys=1"])
+    line = (f"cat '{get_sh}' | sudo -n bash -s -- {quoted}" if piped else f"sudo -n bash '{get_sh}' {quoted}")
+    pid, fd = pty.fork()
+    if pid == 0:
+        os.execvp("bash", ["bash", "-c", line])
+    screen, typed, end = b"", False, time.time() + 90
+    while time.time() < end:
+        if select.select([fd], [], [], 0.3)[0]:
+            try:
+                chunk = os.read(fd, 65536)
+            except OSError:
+                break
+            if not chunk:
+                break
+            screen += chunk
+        if not typed and b"STUB-READY" in screen:
+            typed = True
+            time.sleep(0.3)
+            for b in b"xyz":
+                os.write(fd, bytes([b]))
+                time.sleep(0.1)
+    else:
+        os.kill(pid, 9)
+    _, status = os.waitpid(pid, 0)
+    import termios
+    try:
+        lflag = termios.tcgetattr(fd)[3]            # the pty's settings, read on the master side
+        restored = bool(lflag & termios.ECHO) and bool(lflag & termios.ICANON)
+    except termios.error:
+        restored = False
+    os.close(fd)
+    return (os.waitstatus_to_exitcode(status) if time.time() < end else None), screen, restored
 
 
 def main() -> int:
@@ -173,12 +229,27 @@ def main() -> int:
             check("verified release kept for rollback", sorted(listing) == sorted(
                 ["SHA256SUMS", "SHA256SUMS.sig", "filament-kit-7.7.2.tar.gz"]), str(listing))
 
-            # 2. with a terminal (script's pty): install.sh can ask its questions
-            record.unlink(missing_ok=True)
-            r = run_get(get_sh, ["--api", srv.api, "--repo", "o/r"], tty=True)
-            rec = record.read_text() if record.exists() else ""
-            check("with a terminal: install.sh gets the tty", r.returncode == 0 and "tty=yes" in rec,
-                  f"rc={r.returncode} rec={rec!r} out={r.stdout[-600:]}")
+            # 2. with a terminal (script's pty): install.sh can ask its questions, piped and downloaded first. Piped,
+            # sudo (use_pty) runs bash as a background job; get.sh must make install.sh the foreground job, or its
+            # first touch of the terminal (a question, apt) stops it for good.
+            for piped, form in ((True, "curl | sudo bash"), (False, "sudo bash get.sh")):
+                record.unlink(missing_ok=True)
+                r = run_get(get_sh, ["--api", srv.api, "--repo", "o/r"], tty=True, piped=piped, timeout=90)
+                rec = record.read_text() if record.exists() else ""
+                check(f"with a terminal ({form}): install.sh gets the tty", r.returncode == 0 and "tty=yes" in rec,
+                      f"rc={r.returncode} rec={rec!r} out={r.stdout[-600:]} err={r.stderr[-300:]}")
+                check(f"with a terminal ({form}): install.sh is the foreground job and can use the terminal",
+                      "fg=yes" in rec and "stty=ok" in rec, rec)
+                # keys reach install.sh one by one (the module menu, a masked secret), and the person's terminal
+                # neither echoes them nor stays changed afterwards
+                record.unlink(missing_ok=True)
+                code, screen, restored = run_get_keys(get_sh, ["--api", srv.api, "--repo", "o/r"], piped=piped)
+                rec = record.read_text() if record.exists() else ""
+                shown = screen.split(b"STUB-READY", 1)[-1]
+                check(f"with a terminal ({form}): keys arrive without Enter", code == 0 and "keys=xyz" in rec,
+                      f"rc={code} rec={rec!r} screen={screen[-400:]!r}")
+                check(f"with a terminal ({form}): typed keys are not echoed", b"xyz" not in shown, repr(shown[-300:]))
+                check(f"with a terminal ({form}): the terminal is put back", restored)
 
             # 3. --version
             record.unlink(missing_ok=True)

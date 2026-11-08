@@ -51,7 +51,7 @@ VENV_PY = OPT / "venv" / "bin" / "python"
 KIT = "https://127.0.0.1:8710"
 WEB = "http://127.0.0.1:8101"
 SPOOLMAN = "http://127.0.0.1:7912/api/v1"
-TREE_PARTS = ("get.sh", "install", "tools", "server", "station/panel/firmware")
+TREE_PARTS = ("get.sh", "install", "tools", "server", "station/panel/firmware", "LICENSE", "THIRD-PARTY.md")
 IGNORE = shutil.ignore_patterns(".venv", "__pycache__", "*.egg-info", "build", "dist", ".pytest_cache", "*.pyc")
 
 

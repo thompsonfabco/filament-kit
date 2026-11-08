@@ -7,7 +7,7 @@ import stat
 import pytest
 
 from conftest import free_port
-from filament_kit import cli, config, modules
+from filament_kit import cli, config, modules, secret_input
 
 pytest.importorskip("mcp")
 
@@ -44,7 +44,7 @@ def _prompts(monkeypatch, *answers):
     def getpass(prompt=""):
         asked.append(prompt)
         return next(it)
-    monkeypatch.setattr(cli.getpass, "getpass", getpass)
+    monkeypatch.setattr(secret_input, "ask", getpass)
     return asked
 
 
@@ -64,7 +64,7 @@ def test_web_passphrase_writes_640_root_group(monkeypatch, chown, capsys):
     assert cli.main(["web", "passphrase"]) == 0
     f = config.paths().etc / "web_passphrase"
     assert auth.check_passphrase(PASS, f) is True
-    assert len(asked) == 2 and all("hidden" in a for a in asked)
+    assert len(asked) == 2 and "passphrase" in asked[0]           # typed through the masked prompt (stars)
     assert modes == [0o640] and chown == [("root", "filament-kit")]
     if os.name != "nt":
         assert stat.S_IMODE(f.stat().st_mode) == 0o640

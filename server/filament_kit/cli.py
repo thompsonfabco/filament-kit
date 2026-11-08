@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import copy
-import getpass
 import http.client
 import json
 import os
@@ -18,7 +17,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-from . import apply, config, inventory, library, menu_ui, modules, pairing
+from . import apply, config, inventory, library, menu_ui, modules, pairing, secret_input
 from .bridge import registry
 from .profiles import builds, lines as lines_mod
 from .profiles.errors import ProfileError
@@ -273,11 +272,11 @@ def _station_server(cfg: dict) -> str:
     return next((str(a).strip() for a in allow if str(a).strip() not in ("127.0.0.1", "localhost", "::1")), "")
 
 
-def cmd_pair(pc: bool = False) -> int:
-    cfg = config.load()
+def cmd_pair(pc: bool = False, text: bool = False) -> int:
+    cmd = "sudo filament-kit pair" + (" --pc" if pc else "")
+    cfg = config.load()                 # unreadable: main() says to run it with sudo
     if "server" not in modules.enabled(cfg):
         # a station (or another machine without the server): no certificate here, and none is needed
-        cmd = "sudo filament-kit pair" + (" --pc" if pc else "")
         addr = _station_server(cfg)
         where = (f"the kit server ({addr}, from station.allow)" if addr
                  else "the kit server (its address is not set here: station.allow names none)")
@@ -287,7 +286,9 @@ def cmd_pair(pc: bool = False) -> int:
     try:
         pr = pairing.issue(device_hint="pc") if pc else pairing.issue()
     except pairing.PairingError as e:
-        print(f"error: {e}", file=sys.stderr)
+        # /etc/filament-kit is root's: as a user the certificate cannot be read (or even seen)
+        unreadable = isinstance(e, pairing.CertUnreadable) or not _is_root()
+        print(f"error: {e}" + (f"\nfix: run it with sudo: {cmd}" if unreadable else ""), file=sys.stderr)
         return 1
     if pc:
         # the PC has no QR scanner: the link is pasted into filament-kit-sync (printed by design, never logged)
@@ -295,6 +296,11 @@ def cmd_pair(pc: bool = False) -> int:
         print(pr.qr)
         fp = pairing.fingerprint((config.paths().etc / "cert.pem").read_bytes())
         print("Certificate fingerprint (check it matches the one the PC shows):")
+    elif text:
+        # no terminal (an install log): the link as text, for a phone that gets it some other way
+        print(f"Pairing link: {pr.qr}")
+        fp = pairing.fingerprint((config.paths().etc / "cert.pem").read_bytes())
+        print("Certificate fingerprint (check it matches the phone):")
     else:
         print(_qr_text(pr.qr))
         fp = pairing.fingerprint((config.paths().etc / "cert.pem").read_bytes())
@@ -445,7 +451,7 @@ def _printers_action(choice: str, printers: list) -> None:
             return
         # a printer added by hand may never announce its model, and the model decides which camera it has
         model = (_ask("Model (e.g. H2D, X1C, P1S; Enter to skip): ") or "").strip()
-        code = getpass.getpass("Access Code (hidden): ").strip()
+        code = secret_input.ask("Access Code: ").strip()
         if not code:
             print("No Access Code entered; nothing added.")
             return
@@ -522,7 +528,7 @@ def cmd_config() -> int:
             if n is not None:
                 cfg["reads_per_day"] = n
         elif choice == "4":
-            key = getpass.getpass("Anthropic API key (hidden): ").strip()
+            key = secret_input.ask("Anthropic API key: ").strip()
             if key:
                 write_key(key)
                 print("Key saved.")
@@ -1331,8 +1337,8 @@ def cmd_web_passphrase() -> int:
     if not _is_root():
         print("error: run as root: sudo filament-kit web passphrase", file=sys.stderr)
         return 1
-    first = getpass.getpass(f"New web passphrase, at least {auth.MIN_PASSPHRASE} characters (hidden): ")
-    second = getpass.getpass("Again (hidden): ")
+    first = secret_input.ask(f"New web passphrase, at least {auth.MIN_PASSPHRASE} characters: ")
+    second = secret_input.ask("Again: ")
     if first != second:
         print("error: the two passphrases do not match; nothing was changed", file=sys.stderr)
         return 1
@@ -1497,6 +1503,7 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     sub.add_parser("status", help="check services, Spoolman, key, certificate")
     pp = sub.add_parser("pair", help="show a QR code and code to pair a phone (--pc: a link for the PC sync)")
     pp.add_argument("--pc", action="store_true", help="pair the Windows PC sync: print the link, no QR code")
+    pp.add_argument("--text", action="store_true", help="print the pairing link as text instead of a QR code")
     up = sub.add_parser("unpair", help="list or remove paired phones")
     up.add_argument("device_id", nargs="?")
     sub.add_parser("config", help="interactive settings menu")
@@ -1591,7 +1598,7 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     if args.cmd == "status":
         return cmd_status(client_factory or _default_client)
     if args.cmd == "pair":
-        return cmd_pair(pc=args.pc)
+        return cmd_pair(pc=args.pc, text=args.text)
     if args.cmd == "unpair":
         return cmd_unpair(args.device_id)
     if args.cmd == "config":

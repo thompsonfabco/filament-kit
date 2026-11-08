@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from filament_kit import apply, cli, config, modules
+from filament_kit import apply, cli, config, modules, secret_input
 from filament_kit.apply import Action
 
 INSTALL = Path(__file__).resolve().parents[2] / "install"
@@ -237,7 +237,7 @@ def test_server_setup_first_run_questions_on_tty(tmp_path, monkeypatch):
     answers = iter(["Workshop\n", "y\n"])
     monkeypatch.setattr(apply.sys, "stdin", type("S", (), {"readline": lambda self: next(answers)})())
     keys = []
-    monkeypatch.setattr(apply.getpass, "getpass", lambda prompt: keys.append(prompt) or "")
+    monkeypatch.setattr(secret_input, "ask", lambda prompt: keys.append(prompt) or "")
     apply.execute([Action("server_setup", "")], run=Recorder(), resources=_res(tmp_path), root=tmp_path / "r")
     raw = json.loads((config.paths().etc / "config.json").read_text(encoding="utf-8"))
     assert raw["server_name"] == "Workshop"
@@ -249,12 +249,12 @@ def test_server_setup_key_question_only_when_missing(tmp_path, monkeypatch):
     monkeypatch.setattr(apply, "_tty", lambda: True)
     config.paths().etc.mkdir(parents=True)
     (config.paths().etc / "config.json").write_text(json.dumps({"server_name": "x"}), encoding="utf-8")
-    monkeypatch.setattr(apply.getpass, "getpass", lambda prompt: "sk-test")
+    monkeypatch.setattr(secret_input, "ask", lambda prompt: "sk-test")
     res = _res(tmp_path)
     apply.execute([Action("server_setup", "key")], run=Recorder(), resources=res, root=tmp_path / "r")
     assert (config.paths().etc / "anthropic_key").read_text(encoding="utf-8").strip() == "sk-test"
     asked = []
-    monkeypatch.setattr(apply.getpass, "getpass", lambda prompt: asked.append(1) or "other")
+    monkeypatch.setattr(secret_input, "ask", lambda prompt: asked.append(1) or "other")
     apply.execute([Action("server_setup", "key")], run=Recorder(), resources=res, root=tmp_path / "r")
     assert asked == []
 

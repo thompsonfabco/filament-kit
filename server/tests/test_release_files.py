@@ -646,7 +646,7 @@ def test_wrapper_reader_revoke_as_root_and_list_as_user(tmp_path):
 
 # The shell scripts with multi-line `python -c '...'` blocks (test_no_other_script_has_python_c_blocks keeps the list
 # complete): each must keep at least one block, so the check below never passes on nothing.
-PYTHON_C_SCRIPTS = ["install/install.sh"]
+PYTHON_C_SCRIPTS = ["get.sh", "install/install.sh"]
 
 
 def test_no_other_script_has_python_c_blocks():
