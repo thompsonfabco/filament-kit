@@ -18,7 +18,7 @@ Two kinds of entry:
 | # | Item | Why | What to do |
 |---|---|---|---|
 | 1 | **Piper voice `en_US-lessac-medium`** (planned default for the station's speech in v0.3.0: about 63 MB, downloaded at install time from Hugging Face, not bundled) | Its model card points at the Lessac Blizzard 2013 dataset licence: research use only, no commercial use, no redistribution without written consent. Downloading it for the user is the kit handing out a research-only dataset's model. | Change the default before it is ported: `en_US-ljspeech-medium` (public domain) or `en_US-libritts_r-medium` (CC BY 4.0, keep the credit); `en_GB-alba-medium` is CC BY 4.0 too. Pin the new voice's SHA-256 as planned. Avoid `ryan` and `hfc_female` (CC BY-NC-SA). The lessac voice may stay only as something the user asks for by name, with a note that it is research-only. |
-| 2 | ~~**Google ML Kit barcode scanning** in the Android app (`com.google.mlkit:barcode-scanning`)~~ | Proprietary, closed source, under Google's ML Kit terms. The APK bundled it, which sat badly with GPL-3.0 §6, and F-Droid refuses it. | **Done**: the QR scanner uses ZXing core (Apache-2.0); ML Kit is gone from the APK. |
+| 2 | ~~**Google ML Kit barcode scanning** in the Android app (`com.google.mlkit:barcode-scanning`)~~ | Proprietary, closed source, under Google's ML Kit terms. The APK bundled it, which sat badly with GPL-3.0 §6, and F-Droid refuses it. | **Done**: the QR scanner uses zxing-cpp (Apache-2.0); ML Kit is gone from the APK. |
 | 3 | **Licence metadata of our own packages** | `server/pyproject.toml` and `pc-sync/pyproject.toml` declare no `license`; `pip-licenses` shows filament-kit as UNKNOWN. | Add `license = "GPL-3.0-or-later"` to both (and the LICENSE file to the wheel), so installs and tools see it. |
 | 4 | **Notices in the release files** | The APK and the PC sync setup carry third-party code (AndroidX, OkHttp, PyInstaller's bootloader, ...), whose BSD/MIT/Apache terms want their notices kept. | Ship this file in the server tarball and the PC sync setup, and show it (or the Gradle-generated OSS notices) in the app's Settings. **App part done**: the APK carries this file and LICENSE, shown under Settings > Licences. |
 
@@ -97,8 +97,8 @@ Built by the release workflow and shipped as `filament-kit.apk`. Everything belo
 | Kotlin standard library, kotlinx-coroutines, kotlinx-serialization | Apache-2.0 | |
 | AndroidX: core, activity, compose (BOM 2026.09), material3, lifecycle, navigation, datastore, camera (CameraX), exifinterface, media3 (ExoPlayer, HLS, OkHttp datasource, UI) | Apache-2.0 | |
 | OkHttp, okhttp-tls | Apache-2.0 | |
-| ZXing core 3.5.4 | Apache-2.0 | the QR pairing scanner |
-| Test-only (not in the APK): JUnit 4 (EPL-1.0), Robolectric (MIT), AndroidX test, Espresso (Apache-2.0), MockWebServer (Apache-2.0); Google ML Kit barcode scanning (proprietary) and zxing-cpp (Apache-2.0), only in the scanner comparison test | | |
+| [zxing-cpp](https://github.com/zxing-cpp/zxing-cpp) Android library 3.1.1 (`io.github.zxing-cpp:android`) | Apache-2.0 | the QR pairing scanner. A native library (`libzxingcpp_android.so`, one per CPU type) with a small Kotlin wrapper. Its source also carries libzueci (BSD-3-Clause, from upstream's headers; not re-checked for 3.1.1). |
+| Test-only (not in the APK): JUnit 4 (EPL-1.0), Robolectric (MIT), AndroidX test, Espresso (Apache-2.0), MockWebServer (Apache-2.0); Google ML Kit barcode scanning (proprietary) and ZXing core (Apache-2.0), only in the scanner comparison test | | |
 
 ## The Windows PC sync (`filament-kit-sync-setup-<version>.exe`)
 
