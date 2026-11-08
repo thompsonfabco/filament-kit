@@ -49,8 +49,8 @@ def _no_command(out):
     assert "curl" not in out and "sha256sum" not in out and "fk-printer-pack.sh" not in out
 
 
-def _check_command(out, sha):
-    url = f"https://github.com/{release.REPO}/releases/download/v1.0.0/{PACK}"
+def _check_command(out, sha, repo=release.REPO):
+    url = f"https://github.com/{repo}/releases/download/v1.0.0/{PACK}"
     assert "Run this on the printer (as its normal user, not root):" in out
     assert "signed" in out
     assert f"curl -fsSLo {PACK} {url}" in out
@@ -147,3 +147,22 @@ def test_cli_entry_uses_the_updaters_fetcher(env, srv, key, capsys, monkeypatch)
 def test_no_latest_url_in_the_module():
     src = Path(klipper_cli.__file__).read_text(encoding="utf-8")
     assert not re.search(r"latest", src)
+
+
+def test_the_docs_show_the_pinned_checked_command():
+    """docs/klipper.md shows the command's shape, never a fixed `latest` line to copy (review B2 follow-up)."""
+    doc = (Path(__file__).resolve().parents[2] / "docs" / "klipper.md").read_text(encoding="utf-8")
+    assert not re.search(r"releases/latest/download/" + re.escape(PACK), doc)
+    assert not re.search(re.escape(PACK) + r"\s*\|\s*tar", doc)
+    assert "releases/download/v<version>/" + PACK in doc
+    assert f'echo "<sha256>  {PACK}" | sha256sum -c - && tar xzf {PACK}' in doc
+    assert "sudo filament-kit klipper pack" in doc
+
+
+def test_a_repo_override_names_the_same_repo_in_the_url(env, srv, key, capsys):
+    """The hash and the URL come from one repo setting (updates.repo), so they always name the same release."""
+    srv.add("1.0.0", extra={PACK: PACK_BYTES})
+    rc = klipper_cli.pack(_cfg(env, updates={"repo": "example/filament-kit-fork"}), fetcher=srv.fetcher())
+    out, err = capsys.readouterr()
+    assert rc == 0, err
+    _check_command(out, PACK_SHA, repo="example/filament-kit-fork")

@@ -80,10 +80,18 @@ The kit talks to Moonraker without installing anything on the printer. The print
   from;
 - Moonraker settings: report usage to the kit's Spoolman, announce Moonraker on the network.
 
-`sudo filament-kit klipper pack` prints the command to run on the printer (as its normal user):
+`sudo filament-kit klipper pack` prints the commands to run on the printer (as its normal user, not root). They
+fetch the pack of the same version as your kit server, and check it before anything runs:
 
-    curl -fsSL https://github.com/thompsonfabco/filament-kit/releases/latest/download/fk-printer-pack.tar.gz | tar xz
-    sh fk-printer-pack/fk-printer-pack.sh install
+    curl -fsSLo fk-printer-pack.tar.gz https://github.com/thompsonfabco/filament-kit/releases/download/v<version>/fk-printer-pack.tar.gz
+    echo "<sha256>  fk-printer-pack.tar.gz" | sha256sum -c - && tar xzf fk-printer-pack.tar.gz && sh fk-printer-pack/fk-printer-pack.sh install
+
+The checksum comes from the release's signed checksum list, which the kit server verifies first. That's the same check
+the installer and `filament-kit update` use. If `sha256sum` says `FAILED`, nothing is unpacked or run. Don't copy the
+commands from this page: run `klipper pack` to get them with your version's checksum.
+
+If the server can't check the release, it prints no commands and says why. That happens when it's offline and doesn't
+keep that release, or when it's a build that was never released. Run it again when the server is online.
 
 It asks about each part and before every change, never overwrites a file it did not write, and makes a backup before
 its only edits to your own files: one `[include filament-kit/*.cfg]` line in `printer.cfg` and the `moonraker.conf`

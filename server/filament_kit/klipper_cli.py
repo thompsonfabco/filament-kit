@@ -27,9 +27,10 @@ from .release import ReleaseError
 PACK = "fk-printer-pack.tar.gz"
 
 
-def pack_url(version: str) -> str:
-    """The printer pack of release v<version> (the running kit's own version, never a moving tag)."""
-    return f"https://github.com/{release.REPO}/releases/download/v{version}/{PACK}"
+def pack_url(version: str, repo: str = release.REPO) -> str:
+    """The printer pack of release v<version> (the running kit's own version, never a moving tag) in `repo`,
+    the same repo `_signed_table` takes the hash from."""
+    return f"https://github.com/{repo}/releases/download/v{version}/{PACK}"
 
 
 def _signed_table(version: str, cfg: dict, fetcher: release.Fetcher | None) -> dict[str, str]:
@@ -43,6 +44,8 @@ def _signed_table(version: str, cfg: dict, fetcher: release.Fetcher | None) -> d
             return release.verify_sums(sums.read_bytes(), sig.read_bytes())
         except ReleaseError as e:
             raise ReleaseError(f"the kept release in {kept}: {e}") from None
+    # `updates.api` (a test server, docs/testing-e2e.md) changes only where the hash is fetched; the printed URL
+    # always points at GitHub, so with a test server the printer's check fails and nothing runs.
     f = fetcher or updates.default_fetcher(cfg)
     rel = f.release(updates.settings(cfg)["repo"], version=version)
     for need in (release.SUMS, release.SIG):
@@ -58,7 +61,9 @@ def pack(cfg: dict | None = None, *, fetcher: release.Fetcher | None = None) -> 
     version = updates.current_version()
     try:
         release.parse_version(version)
-        table = _signed_table(version, cfg if cfg is not None else config.load(), fetcher)
+        cfg = cfg if cfg is not None else config.load()
+        repo = updates.settings(cfg)["repo"]        # one repo for the hash and the URL
+        table = _signed_table(version, cfg, fetcher)
         want = table.get(PACK)
         if want is None:
             raise ReleaseError(f"the signed {release.SUMS} does not list {PACK}")
@@ -69,7 +74,7 @@ def pack(cfg: dict | None = None, *, fetcher: release.Fetcher | None = None) -> 
               "development build has none); nothing to run", file=sys.stderr)
         return 1
     print("Run this on the printer (as its normal user, not root):")
-    print(f"  curl -fsSLo {PACK} {pack_url(version)}")
+    print(f"  curl -fsSLo {PACK} {pack_url(version, repo)}")
     print(f'  echo "{want}  {PACK}" | sha256sum -c - && tar xzf {PACK} '
           f"&& sh fk-printer-pack/fk-printer-pack.sh install")
     print(f"The hash is the one in the signed {release.SUMS} of release v{version} (checked here against the "
