@@ -37,7 +37,7 @@
   </filament-systems>
 
   <models>
-    <!-- read from the owner's printer 2026-11-03 (Demon Klipper Essentials, single extruder) -->
+    <!-- example values from an SV08 MAX running Demon Klipper Essentials, single extruder -->
     <model key="SOVOL-SV08-MAX" name="Sovol SV08 MAX" say="s v zero eight max" system="single" verified="true">
       <detect>
         <object>gcode_macro DEMON_START</object>
