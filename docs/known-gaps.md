@@ -36,7 +36,10 @@ fixed.
 9. ~~`web status` showed `FAIL` without a passphrase.~~ Fixed in v0.3.0: it shows `--   sign-in passphrase not set`
    (exit 0); the passphrase is only for the Claude connector.
 10. **Home networks in 172.16.0.0/12 are not "home" by default** (it's left out because of Docker). Those users
-    must edit `web.lan` in `config.json` by hand; there is no menu or prompt for it.
+    must edit `web.lan` in `config.json` by hand; there is no menu or prompt for it. From v0.4.1 a `web.lan` edit also
+    widens Spoolman's own allow-list, unless `spoolman.allow` is set, which overrides it. A home network on
+    172.16.x.x, and Tailscale or Docker clients, must add their range (to `web.lan` or `spoolman.allow`) or Spoolman
+    stops answering them after the update.
 
 ## Server install
 

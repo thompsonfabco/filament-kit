@@ -393,6 +393,10 @@ slots. **Map slots** in the app (or `sudo filament-kit printer map <serial>` on 
 - External holders (a spool holder outside the AMS, numbered as its own id) stay out of the calibration job and keep
   their own ids, and so do empty AMS slots. A printer with no AMS unit needs no job: its holders keep their own ids
   and it maps without one.
+- A printer can end up mapped with no named numbering scheme. Slots that are empty today show as "no number yet"
+  until a spool is loaded in them and the printer is mapped again.
+- On a printer whose numbers fit no known scheme, mapping may run one short job per scheme, so it takes longer than
+  a single job.
 - The printer must be **idle** (not printing, paused or preparing) and online, or mapping is refused.
 
 Until mapping succeeds, filament use is **only logged** (you can see it in the app's usage list) and nothing is
@@ -897,6 +901,10 @@ filament-kit-sync apply-updates --folder BambuStudioBeta-1234567890 --all
 Use `--dry-run` first to see what would be written. New presets still arrive in that folder by themselves.
 
 By hand: download the newer `filament-kit-<version>.tar.gz`, unpack it and run `sudo ./install.sh` again.
+
+**Going back from v0.4.1 to v0.4.0.** `sudo filament-kit update --rollback` goes back to the release it replaced. The
+Spoolman allow-list (`/etc/systemd/system/spoolman.service.d/kit.conf`) stays in place after the rollback, and v0.4.0
+cannot change it: edit it by hand if a range needs adding, then restart Spoolman.
 
 **Going back from v0.4.0 to v0.3.0.** `sudo filament-kit update --rollback` goes back to the release it replaced.
 
