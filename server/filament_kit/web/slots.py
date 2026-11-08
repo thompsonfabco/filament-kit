@@ -150,7 +150,8 @@ def service_set_slot(svc: dict, spool_id: int, slot: str, dry_run: bool) -> dict
     try:
         token = Path(svc["token_file"]).read_text(encoding="utf-8").strip()
     except (OSError, KeyError, TypeError):
-        raise SlotError("the slot service token file (slot_service.token_file) cannot be read") from None
+        raise SlotError("the slot service token file (slot_service.token_file) cannot be read; if it is there, let "
+                        "the web unit read it: sudo filament-kit modules apply") from None
     body = json.dumps({"spool_id": int(spool_id), "ams_id": ams_id, "tray_id": tray_id,
                        "dry_run": bool(dry_run)}).encode()
     req = urllib.request.Request(str(svc["set_url"]), data=body, method="POST",

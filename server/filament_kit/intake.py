@@ -148,15 +148,16 @@ class ReadCap:
             return []
 
     def _save(self, stamps: list[float]) -> None:
-        """Rewritten in place (under the lock), not replaced: the web unit's own user may write this one file of the
-        kit's state (an ACL from apply's web_state), not the folder it is in."""
+        """A temp file and a rename, so a crash never resets the cap. The kit's own file: the web unit takes its
+        reads through the kit API (/api/intake/cap/take)."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        fd = os.open(self.path, os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o644)
-        with os.fdopen(fd, "r+", encoding="utf-8") as fh:
-            fh.truncate()
+        tmp = self.path.with_name(self.path.name + ".tmp")
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o644)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.write(json.dumps(stamps))
             fh.flush()
             os.fsync(fh.fileno())
+        os.replace(tmp, self.path)
 
     def take(self) -> None:
         with self._lock:
@@ -192,14 +193,17 @@ def load_orders(cfg: dict) -> list[dict] | None:
     return [o for o in items if isinstance(o, dict)] if isinstance(items, list) else []
 
 
-def read_context(cfg: dict, sm: Spoolman, station=None, *, app_tag: bool = False) -> dict:
+def read_context(cfg: dict, sm: Spoolman, station=None, *, app_tag: bool = False, orders_from=None) -> dict:
     """The reader context of one label read, for `read_labels(**read_context(...))`; the kit server's
     /api/intake/read and the web app's read both use it. `orders`: the order history, only when the `orders`
     module is on and `orders.file` exists (else None: no orders block). `station_state`: the station's GET /state
     through `station` (a StationClient, None without a station); a dead station gives None. `fresh_tag`: the
     newest reader tap when fresh and on no spool; skipped when the app sent its own tag (`app_tag`), which wins."""
-    path = (cfg.get("orders") or {}).get("file")
-    orders = load_orders(cfg) if path and Path(path).is_file() else None
+    if orders_from is not None:      # the web unit: the kit's order history through its API (Ruling CG)
+        orders = orders_from()
+    else:
+        path = (cfg.get("orders") or {}).get("file")
+        orders = load_orders(cfg) if path and Path(path).is_file() else None
     station_state = None
     if station is not None and getattr(station, "url", None):
         from .station_client import StationUnreachable
@@ -230,7 +234,15 @@ def _orders_text(orders: list[dict]) -> str:
 # ---------- failed reads kept for retry ----------
 
 def _failed_dir() -> Path:
-    return config.paths().state / "failed"
+    """The kit's own (state/failed), or the web unit's (FK_FAILED_DIR, in its own folder: Ruling CG)."""
+    return Path(os.environ["FK_FAILED_DIR"]) if os.environ.get("FK_FAILED_DIR") else config.paths().state / "failed"
+
+
+def _write_new(path: Path, data: bytes) -> None:
+    """Write a file, never through a link someone planted at `path`."""
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    with os.fdopen(fd, "wb") as fh:
+        fh.write(data)
 
 
 def _sweep_failed() -> None:
@@ -250,8 +262,8 @@ def _keep(read_id: str, images: list[bytes], hint: str, tag_uid: str | None) -> 
     d = _failed_dir() / read_id
     d.mkdir(parents=True, exist_ok=True)
     for i, data in enumerate(images):
-        (d / f"photo{i}.jpg").write_bytes(data)
-    (d / "meta.json").write_text(json.dumps({"hint": hint, "tag_uid": tag_uid}), encoding="utf-8")
+        _write_new(d / f"photo{i}.jpg", data)
+    _write_new(d / "meta.json", json.dumps({"hint": hint, "tag_uid": tag_uid}).encode("utf-8"))
 
 
 def _forget(read_id: str) -> None:

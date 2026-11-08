@@ -98,9 +98,37 @@ def fake():
     return FakeClaude(READ)
 
 
+class CapKit:
+    """The kit API's label-read cap and order routes (Ruling CG), served from the kit's own ReadCap as api.py does."""
+
+    def _cap(self):
+        from filament_kit import intake
+        return intake.ReadCap(config.paths().state / "reads.json", config.load()["reads_per_day"])
+
+    def post(self, path, body):
+        from filament_kit import intake
+        from filament_kit.web.slots import SlotError
+        if path == "/api/intake/cap/take":
+            try:
+                self._cap().take()
+            except intake.CapReached as e:
+                raise SlotError(str(e), code="daily_cap", http=429) from None
+            return {"ok": True}
+        if path == "/api/intake/cap/refund":
+            self._cap().refund()
+            return {"ok": True}
+        raise SlotError("the kit server answered 404", http=404)
+
+    def get(self, path):
+        from filament_kit.web.slots import SlotError
+        if path == "/api/intake/orders":
+            return {"orders": None}
+        raise SlotError("the kit server answered 404", http=404)
+
+
 @pytest.fixture
 def app(sm, store, lockout, fake):
-    return web_app.build_app(sm=sm, store=store, lockout=lockout, claude=fake)
+    return web_app.build_app(sm=sm, store=store, lockout=lockout, claude=fake, kit_api=CapKit())
 
 
 def _token(store) -> str:

@@ -66,7 +66,7 @@ def build_app(cfg: dict | None = None, *, sm: Spoolman | None = None, claude=Non
     sm = sm if sm is not None else Spoolman(cfg["spoolman_url"])
     store = store if store is not None else auth.Store(oauth_file())
     lockout = lockout if lockout is not None else auth.Lockout()
-    tools = tools if tools is not None else mcp_tools.Tools(sm, kit_api=kit_api)
+    tools = tools if tools is not None else mcp_tools.Tools(sm, kit_api=kit_api, kit_writes=True)
 
     mcp = MCPServer("filament-kit", title="Filament inventory", instructions=mcp_tools.instructions(cfg),
                     version=__version__, auth_server_provider=auth.Provider(store, public),

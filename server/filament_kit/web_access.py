@@ -6,18 +6,22 @@ the setup page's root helper socket (0660 root:filament-kit, SO_PEERCRED) and th
 its reach. It gets exactly what it uses, as POSIX ACLs (acl.py) on named files and folders:
 
   its own folder  /var/lib/filament-kit-web (750, its owner): the OAuth store (oauth.json), the kit API token
-                  (kit_token), the Web Push keys and subscriptions; moved here from /var/lib/filament-kit/web/
-  settings        /etc/filament-kit: pass (x); config.json, web_passphrase, anthropic_key: read (r); every root
-                  writer of these keeps the grant (config.save, cli.write_passphrase, cli.write_key)
-  kit state       /var/lib/filament-kit: pass (x); web/ (reader_tokens, now 644): read; reads.json, reads.lock,
-                  inventory.lock: read and write in place (the shared label-read cap and Spoolman write lock);
-                  profiles/ and failed/: read and write, also what is made there later (default ACLs for both
-                  users: preset lines, build requests, failed reads kept for retry); library/, library-local/,
-                  reader-fw/: read; the orders file (config orders.file): read
-  the kit API     its pairing token, made here as root when missing (the web user cannot write the pairings)
+                  (kit_token), the Web Push keys and subscriptions, its failed label reads kept for retry
+                  (failed/, FK_FAILED_DIR in its unit); moved here from /var/lib/filament-kit/web/
+  settings        /etc/filament-kit: pass (x); config.json, web_passphrase, anthropic_key and the owner's H2D slot
+                  token (slot_service.token_file): read (r); every root writer of these keeps the grant
+                  (config.save, cli.write_passphrase, cli.write_key)
+  kit state       /var/lib/filament-kit: pass (x); web/ (reader_tokens, 644): read; profiles/, library/,
+                  library-local/, reader-fw/: read, also what is made there later (default ACLs);
+                  the locks both units take (inventory.lock, profiles/*.lock): read; a lock is taken on a
+                  read-only fd (pairing.open_lock), so the web user writes nothing of the kit's
+  the kit API     everything it would otherwise write in the kit's state (Ruling CG): preset lines and build
+                  requests (/api/profiles/web/*), the shared label-read cap (/api/intake/cap/*) and the order
+                  history (/api/intake/orders); its pairing token is made here as root when missing
 
-Everything else in the state folder (printers.json with Access Codes, devices.json, pending.json ...) is 600 and
-out of its reach; nothing in /etc beyond the three files above."""
+No folder of the kit is writable by it, so it cannot plant a link that the kit or root would follow. Everything
+else in the state folder (printers.json with Access Codes, devices.json, pending.json ...) is 600 and out of its
+reach; nothing in /etc beyond the files above."""
 from __future__ import annotations
 
 import os
@@ -27,9 +31,11 @@ from pathlib import Path
 from . import acl, config
 
 KEEP_IN_STATE = ("reader_tokens",)          # stays in state/web/: the CLI and the setup page write it
-SHARED_FILES = ("reads.json", "reads.lock", "inventory.lock")
-RW_TREES = ("profiles", "failed")
-RO_TREES = ("library", "library-local", "reader-fw")
+# the locks both units take (flock works on a read-only fd: pairing.open_lock); made here, read by the web user
+LOCK_FILES = ("inventory.lock", "profiles/lines.lock", "profiles/live.lock", "profiles/state.lock",
+              "profiles/build.lock")
+RW_TREES = ()                              # no folder of the kit is writable by the web user
+RO_TREES = ("profiles", "library", "library-local", "reader-fw")
 ETC_FILES = ("config.json", "web_passphrase", "anthropic_key")
 
 
@@ -68,17 +74,16 @@ def shared_files(kit_uid: int, kit_gid: int, chown=None) -> None:
     chown = chown or os.chown
     state = config.paths().state
     state.mkdir(parents=True, exist_ok=True)
-    for name in SHARED_FILES:
+    for name in LOCK_FILES:
         f = state / name
+        if not f.parent.exists():
+            f.parent.mkdir(parents=True)
+            chown(f.parent, kit_uid, kit_gid)
         if not f.exists():
-            f.write_text("[]" if name.endswith(".json") else "", encoding="utf-8")
+            f.write_text("", encoding="utf-8")
             chown(f, kit_uid, kit_gid)
-        os.chmod(f, 0o644)
-    for name in RW_TREES:
-        d = state / name
-        if not d.exists():
-            d.mkdir(parents=True)
-            chown(d, kit_uid, kit_gid)
+        if not f.is_symlink():
+            os.chmod(f, 0o644)
 
 
 def pair(web_uid: int, web_gid: int, chown=None) -> bool:
@@ -110,13 +115,15 @@ def grant(web_uid: int, kit_uid: int, cfg: dict | None = None) -> list[str]:
         one(p.etc / name, R)
     one(p.state, X)
     one(p.state / "web", R | X)
-    for name in SHARED_FILES:
-        one(p.state / name, R | W)
+    for name in LOCK_FILES:
+        one(p.state / name, R)
     for name in RW_TREES:
         one(p.state / name, R | W | X, {web_uid: R | W | X, kit_uid: R | W | X}, tree=True)
     for name in RO_TREES:
         one(p.state / name, R | X, {web_uid: R | X}, tree=True)
-    orders = ((cfg or config.load()).get("orders") or {}).get("file")
-    if orders:
-        one(Path(orders), R)
+    cfg = cfg if cfg is not None else config.load()
+    svc = cfg.get("slot_service")
+    token = svc.get("token_file") if isinstance(svc, dict) else None
+    if token:                                  # the owner's H2D slot token (printer_set_slot), re-granted on save
+        one(Path(token), R)
     return done

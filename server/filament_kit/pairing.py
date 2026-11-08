@@ -82,7 +82,7 @@ def give_to_state_owner(path) -> None:
     if getattr(os, "geteuid", lambda: -1)() != 0:
         return
     st = os.stat(config.paths().state)
-    os.chown(path, st.st_uid, st.st_gid)
+    os.chown(path, st.st_uid, st.st_gid, follow_symlinks=False)      # never through a planted link
 
 
 def make_state_dir(path) -> None:
@@ -104,7 +104,12 @@ def make_state_dir(path) -> None:
 
 def open_lock(path: Path):
     """Open (creating if needed) a lock file in the state directory, owned like the state directory."""
-    fh = open(path, "a")
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fh = os.fdopen(os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | nofollow, 0o644), "a")
+    except PermissionError:
+        # a lock this process may only read (the web unit's user on the kit's locks): flock works on it all the same
+        fh = os.fdopen(os.open(path, os.O_RDONLY | nofollow), "r")
     try:
         give_to_state_owner(path)
     except BaseException:
@@ -122,9 +127,14 @@ def _write_atomic(path: Path, data: bytes, mode: int, state_owned: bool = False)
             fh.write(data)
             fh.flush()
             os.fsync(fh.fileno())
-        os.chmod(tmp, mode)
-        if state_owned:
-            give_to_state_owner(tmp)
+            # mode and owner on the open file, not by name: a link swapped in at `tmp` is never followed
+            if hasattr(os, "fchmod"):
+                os.fchmod(fh.fileno(), mode)
+            else:
+                os.chmod(tmp, mode)
+            if state_owned and getattr(os, "geteuid", lambda: -1)() == 0:
+                st = os.stat(config.paths().state)
+                os.fchown(fh.fileno(), st.st_uid, st.st_gid)
         os.replace(tmp, path)
     except BaseException:
         if os.path.exists(tmp):

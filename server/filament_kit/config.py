@@ -60,8 +60,11 @@ def grant_web_read(path) -> None:
     if uid is not None:
         try:
             acl.grant(path, {uid: acl.R})
-        except OSError:
-            pass
+        except OSError as e:
+            import logging
+            logging.getLogger(__name__).warning(
+                "cannot let %s read %s (%s); the web unit will fail to read it: check that the file system "
+                "supports ACLs, then run: sudo filament-kit modules apply", WEB_USER, path, e)
 
 
 DEFAULTS: dict = {
@@ -135,6 +138,9 @@ def save(cfg: dict) -> None:
         os.chmod(tmp, 0o640)
         grant_web_read(tmp)
         os.replace(tmp, f)
+        token = (cfg.get("slot_service") or {}).get("token_file") if isinstance(cfg.get("slot_service"), dict) else None
+        if token and Path(token).is_file() and not Path(token).is_symlink():
+            grant_web_read(token)       # the owner's H2D slot token: the web unit's printer_set_slot reads it
     except BaseException:
         if tmp.exists():
             tmp.unlink()

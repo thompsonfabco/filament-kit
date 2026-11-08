@@ -555,6 +555,26 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
                 raise
         return JSONResponse(await run_in_threadpool(run))
 
+    # ---------- the web unit's label reads (Ruling CG): the kit's cap and order history, never its files ----------
+    @_authed
+    async def cap_take(request: Request):
+        await run_in_threadpool(cap.take)
+        return JSONResponse({"ok": True})
+
+    @_authed
+    async def cap_refund(request: Request):
+        await run_in_threadpool(cap.refund)
+        return JSONResponse({"ok": True})
+
+    @_authed
+    async def intake_orders(request: Request):
+        """The order history for a label read's prompt (None: the orders module is off or no file is set)."""
+        def build():
+            cfg = config.load()
+            path = (cfg.get("orders") or {}).get("file")
+            return intake.load_orders(cfg) if path else None
+        return JSONResponse({"orders": await run_in_threadpool(build)})
+
     @_authed
     async def intake_add(request: Request):
         body = await _json(request)
@@ -677,6 +697,9 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             *_gated([
                 Route("/api/intake/read", intake_read, methods=["POST"]),
                 Route("/api/intake/retry/{read_id}", intake_retry, methods=["POST"]),
+                Route("/api/intake/cap/take", cap_take, methods=["POST"]),
+                Route("/api/intake/cap/refund", cap_refund, methods=["POST"]),
+                Route("/api/intake/orders", intake_orders),
             ], "ai_intake", on),
             Route("/api/intake/add", intake_add, methods=["POST"]),  # adding by hand needs no AI (spec R 2.4)
             Route("/api/tags/{uid}", tag_lookup),

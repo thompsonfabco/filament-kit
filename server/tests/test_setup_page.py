@@ -782,10 +782,7 @@ def test_r2b_web_unit_runs_as_its_own_user_with_only_its_paths():
     web = (SYSTEMD / "filament-kit-web.service").read_text(encoding="utf-8")
     for line in ("User=filament-kit-web", "Group=filament-kit-web", "WorkingDirectory=/var/lib/filament-kit-web",
                  "PrivatePIDs=yes", "InaccessiblePaths=-/run/filament-kit-setup", "NoNewPrivileges=yes",
-                 "ReadWritePaths=/var/lib/filament-kit-web -/var/lib/filament-kit/profiles "
-                 "-/var/lib/filament-kit/failed",
-                 "ReadWritePaths=-/var/lib/filament-kit/reads.json -/var/lib/filament-kit/reads.lock "
-                 "-/var/lib/filament-kit/inventory.lock"):
+                 "ReadWritePaths=/var/lib/filament-kit-web"):
         assert line + "\n" in web, line
     assert "User=filament-kit\n" not in web and "Group=filament-kit\n" not in web
     assert "SupplementaryGroups" not in web and "ReadWritePaths=/var/lib/filament-kit\n" not in web
@@ -871,17 +868,12 @@ def test_r2b_web_without_a_token_and_without_pairing_rights_says_how(env, monkey
     assert "sudo filament-kit modules apply" in str(e.value)
 
 
-def test_r2b_shared_files_exist_for_in_place_writes(env):
-    from filament_kit import intake, web_access
+def test_r2b_shared_lock_files_exist(env):
+    from filament_kit import web_access
     web_access.shared_files(1000, 1000, chown=lambda *a: None)
     st = config.paths().state
-    for name in ("reads.json", "reads.lock", "inventory.lock"):
-        assert (st / name).is_file()
-    assert (st / "profiles").is_dir() and (st / "failed").is_dir()
-    f = st / "reads.json"
-    ino = f.stat().st_ino
-    intake.ReadCap(f, 5).take()
-    assert f.stat().st_ino == ino                 # written in place: the web user's ACL on the file stays
+    for name in web_access.LOCK_FILES:
+        assert (st / name).is_file(), name
 
 
 def _acls_or_skip(path):
@@ -900,7 +892,7 @@ def test_r2b_grants_give_the_web_user_exactly_its_paths(env, tmp_path):
     from filament_kit import acl, web_access
     _acls_or_skip(tmp_path)
     st, etc = config.paths().state, config.paths().etc
-    for d in ("web", "profiles", "failed", "library", "library-local"):
+    for d in ("web", "profiles", "library", "library-local"):
         (st / d).mkdir(parents=True, exist_ok=True)
     (st / "profiles" / "lines.lock").write_text("", encoding="utf-8")
     (st / "printers.json").write_text("{}", encoding="utf-8")
@@ -914,13 +906,14 @@ def test_r2b_grants_give_the_web_user_exactly_its_paths(env, tmp_path):
     assert acl.users_of(etc / "config.json") == {WEB: R} and acl.users_of(etc / "anthropic_key") == {WEB: R}
     assert acl.users_of(etc / "key.pem") == {} and acl.users_of(st / "printers.json") == {}
     assert acl.users_of(etc / "setup_code") == {} and acl.users_of(etc / "setup_code.plain") == {}
-    assert acl.users_of(st / "reads.json") == {WEB: R | W} and acl.users_of(st / "inventory.lock") == {WEB: R | W}
-    assert acl.users_of(st / "profiles" / "lines.lock") == {WEB: R | W}
-    assert acl.users_of(st / "profiles", acl.DEFAULT) == {WEB: R | W | X, KIT: R | W | X}
+    assert acl.users_of(st / "inventory.lock") == {WEB: R}
+    assert acl.users_of(st / "profiles" / "lines.lock") == {WEB: R}
+    assert acl.users_of(st / "profiles", acl.DEFAULT) == {WEB: R | X}
+    assert acl.users_of(st / "profiles") == {WEB: R | X}
     assert acl.users_of(st / "library") == {WEB: R | X} and acl.users_of(st / "web") == {WEB: R | X}
-    new = st / "profiles" / "made-later.lock"
-    open(new, "a").close()                               # what a unit makes later inherits the grant
-    assert acl.users_of(new)[WEB] & (R | W) == R | W
+    new = st / "profiles" / "made-later.json"
+    new.write_text("{}", encoding="utf-8")               # what the kit makes later is readable by the web user
+    assert acl.users_of(new)[WEB] & (R | W) == R
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX ACLs")

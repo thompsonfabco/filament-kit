@@ -28,8 +28,8 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Route
 
-from .. import config, intake, inventory, modules, tagsources
-from ..intake import CapReached, ReadCap, ReadError
+from .. import intake, inventory, modules, tagsources
+from ..intake import CapReached, ReadError
 from ..spoolman import SpoolmanError
 from ..station_client import StationClient
 from . import auth, mcp_tools, printers_app
@@ -104,6 +104,26 @@ def _text(b: dict, key: str, *, required: bool = True) -> str:
     return v.strip()
 
 
+class KitCap:
+    """The kit server's daily label-read cap, taken and refunded through its API: the web unit may not write the
+    kit's reads.json (Ruling CG). A 429 from the kit is the cap reached."""
+
+    def __init__(self, kit):
+        self.kit = kit
+
+    def take(self) -> None:
+        from .slots import SlotError
+        try:
+            self.kit.post("/api/intake/cap/take", {})
+        except SlotError as e:
+            if e.code == "daily_cap" or e.http == 429:
+                raise CapReached(str(e)) from None
+            raise
+
+    def refund(self) -> None:
+        self.kit.post("/api/intake/cap/refund", {})
+
+
 class IntakeApp:
     def __init__(self, tools: Tools, *, public_url: str, lan_cidrs, claude=None, kit_api=None):
         self.tools, self.claude = tools, claude
@@ -115,9 +135,17 @@ class IntakeApp:
         self.tag_cache: dict = {}
         self.station: list = [None, None]  # [url, StationClient]
         cfg = tools.cfg()
+        self._kit = kit_api         # the kit server's API (slots.KitApi), made when first needed
         self.printers = None        # the Printers tab: only with the printers module on
         if "printers" in modules.enabled(cfg):
             self.printers = printers_app.PrintersApp(self, kit_api, push_on=(cfg.get("web") or {}).get("push") is True)
+
+    @property
+    def kit(self):
+        if self._kit is None:
+            from .slots import KitApi
+            self._kit = KitApi()
+        return self._kit
 
     def routes(self) -> list[Route]:
         return [Route(p, fn, methods=m) for p, fn, m in (
@@ -250,10 +278,11 @@ class IntakeApp:
 
         def run() -> dict:
             cfg = self.tools.cfg()
-            cap = ReadCap(config.paths().state / "reads.json", cfg["reads_per_day"])
+            cap = KitCap(self.kit)                  # the kit's cap, through its API (Ruling CG)
             cap.take()
             try:
-                ctx = intake.read_context(cfg, self.tools.sm, self._station())
+                ctx = intake.read_context(cfg, self.tools.sm, self._station(),
+                                          orders_from=lambda: self.kit.get("/api/intake/orders").get("orders"))
                 return intake.read_labels(self.tools.sm, images, hint, None, self.claude, **ctx)
             except SpoolmanError:  # as api.py: the catalog fetch failed before Claude was called
                 cap.refund()

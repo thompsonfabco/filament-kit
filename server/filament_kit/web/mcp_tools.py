@@ -76,9 +76,12 @@ def item_dict(it: SpoolItem) -> dict:
 
 
 class Tools:
-    def __init__(self, sm: Spoolman, *, kit_api=None, load_config: Callable[[], dict] = config.load):
+    def __init__(self, sm: Spoolman, *, kit_api=None, load_config: Callable[[], dict] = config.load,
+                 kit_writes: bool = False):
         self.sm = sm
         self._kit = kit_api
+        # the web unit (build_app): preset/line writes go to the kit API, which owns profiles/ (Ruling CG)
+        self.kit_writes = kit_writes
         self._load = load_config
 
     def cfg(self) -> dict:
@@ -219,16 +222,29 @@ class Tools:
         self._need("presets")
         return presets.find_parents(text)
 
+    def kit(self):
+        if self._kit is None:
+            self._kit = slots.KitApi()
+        return self._kit
+
     def add_filaments_to_line(self, line: str, filament_ids: list[int]) -> dict:
         self._need("presets")
+        if self.kit_writes:
+            return self.kit().post("/api/profiles/web/line_add", {"line": line, "ids": filament_ids})
         return presets.add_ids(self.sm, line, filament_ids)
 
     def add_line(self, name: str, vendor: str, filament_ids: list[int], orca_parent: str, bs_template: str) -> dict:
         self._need("presets")
+        if self.kit_writes:
+            return self.kit().post("/api/profiles/web/line_new", {
+                "name": name, "vendor": vendor, "ids": filament_ids, "orca_parent": orca_parent,
+                "bs_template": bs_template})
         return presets.add_line(self.sm, name, vendor, filament_ids, orca_parent, bs_template)
 
     def generate(self) -> dict:
         self._need("presets")
+        if self.kit_writes:
+            return self.kit().post("/api/profiles/web/generate", {})
         return presets.generate()
 
     # ---------- printer slots ----------

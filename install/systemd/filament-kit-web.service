@@ -14,8 +14,11 @@ ExecStart=/opt/filament-kit/venv/bin/python -I -m filament_kit.web
 Restart=on-failure
 RestartSec=5
 ProtectSystem=strict
-ReadWritePaths=/var/lib/filament-kit-web -/var/lib/filament-kit/profiles -/var/lib/filament-kit/failed
-ReadWritePaths=-/var/lib/filament-kit/reads.json -/var/lib/filament-kit/reads.lock -/var/lib/filament-kit/inventory.lock
+# nothing of the kit's is writable by it (Ruling CG): its own folder only; its writes in the kit's state go
+# through the kit API, and the shared locks are taken on read-only files
+ReadWritePaths=/var/lib/filament-kit-web
+# its failed label reads, kept for retry, in its own folder
+Environment=FK_FAILED_DIR=/var/lib/filament-kit-web/failed
 ProtectHome=yes
 NoNewPrivileges=yes
 # the setup page's root helper socket (and its apply log) are the kit server's only, never this internet-facing

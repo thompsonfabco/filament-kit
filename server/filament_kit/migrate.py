@@ -237,9 +237,37 @@ def _chown(path: Path, user: str | None, group: str) -> None:
     if not _is_root():
         return
     try:
-        shutil.chown(path, user=user, group=group)
-    except (LookupError, OSError):
+        import grp
+        import pwd
+        uid = pwd.getpwnam(user).pw_uid if user else -1
+        os.chown(path, uid, grp.getgrnam(group).gr_gid, follow_symlinks=False)   # never through a planted link
+    except (ImportError, KeyError, OSError):
         pass
+
+
+WEB_UNIT = "filament-kit-web.service"
+
+
+@contextmanager
+def _nothing():
+    yield
+
+
+@contextmanager
+def _web_paused():
+    """Stop the web unit for the whole run when it is running (root, with systemd), start it again afterwards: the
+    run writes into its folder and the profiles as root, and nothing may swap a path meanwhile."""
+    stopped = False
+    if _is_root() and not _no_systemd():
+        r = subprocess.run(["systemctl", "is-active", WEB_UNIT], capture_output=True, text=True, check=False)
+        if r.stdout.strip() == "active":
+            subprocess.run(["systemctl", "stop", WEB_UNIT], check=False)
+            stopped = True
+    try:
+        yield
+    finally:
+        if stopped:
+            subprocess.run(["systemctl", "start", WEB_UNIT], check=False)
 
 
 def _nil(v) -> bool:
@@ -829,7 +857,7 @@ def run(bundle, *, apply: bool = False, library=None, out: Callable[[str], None]
     sm = sm if sm is not None else Spoolman(config.load().get("spoolman_url") or "http://127.0.0.1:7912", timeout=10)
     ctx = _Ctx(apply, out, lib, replace_spoolman, sm, allow_unknown_spoolman)
     try:
-        with open_bundle(bundle) as b:
+        with (_web_paused() if apply else _nothing()), open_bundle(bundle) as b:
             out(f"filament-ops bundle {b.id} ({'with' if b.manifest.get('secrets') else 'without'} secrets)")
             for name, fn in (("spoolman", step_spoolman), ("lines", step_lines), ("presets", step_presets),
                              ("web", step_web), ("config", step_config)):

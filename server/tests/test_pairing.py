@@ -259,10 +259,11 @@ def test_root_state_write_gives_file_to_state_dir_owner(tmp_path, monkeypatch):
     st = _os.stat(tmp_path / "st")
     calls = []
     monkeypatch.setattr(_os, "geteuid", lambda: 0, raising=False)
-    monkeypatch.setattr(_os, "chown", lambda p, u, g: calls.append((_os.fspath(p), u, g)), raising=False)
+    monkeypatch.setattr(_os, "chown", lambda p, u, g, **kw: calls.append((_os.fspath(p), u, g)), raising=False)
+    fchowns = []
+    monkeypatch.setattr(_os, "fchown", lambda fd, u, g: fchowns.append((u, g)), raising=False)
     pairing._write("devices.json", [])
-    assert any(_os.path.basename(c[0]).startswith("devices.json.") and c[1:] == (st.st_uid, st.st_gid)
-               for c in calls), calls
+    assert fchowns == [(st.st_uid, st.st_gid)]          # on the open temp file, never by name
     if _os.name != "nt":
         calls.clear()
         pairing.devices()
