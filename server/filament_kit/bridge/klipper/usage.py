@@ -21,6 +21,7 @@ import xml.etree.ElementTree as ET
 from ... import config
 from .. import xmlfile
 from ..family import KLIPPER_ENTRY
+from .moonraker import _host_part
 
 log = logging.getLogger(__name__)
 FILE = "usage.xml"
@@ -116,18 +117,40 @@ def entries(pid: str, days: float) -> list[dict]:
 
 # --- which Spoolman does Moonraker report to ----------------------------------------------------------------------
 
-def _host_port(url: str) -> tuple[str, int] | None:
+def _parse_host_port(url: str) -> tuple[str, int] | None:
     try:
-        u = urllib.parse.urlsplit(url.strip())
-        return (u.hostname or "").lower(), u.port or (443 if u.scheme == "https" else 80)
-    except (AttributeError, ValueError):
+        u = urllib.parse.urlsplit(url)
+        host = (u.hostname or "").lower()
+        return (host, u.port or (443 if u.scheme == "https" else 80)) if host else None
+    except ValueError:
         return None
+
+
+def _host_port(url: str) -> tuple[str, int] | None:
+    """(host, port) of a URL, None when it has no readable host. An unencoded /, # or ? in a password would make
+    urlsplit take part of the credentials for the host, so what comes before the last @ is dropped first. An @ after
+    one of those characters is ambiguous when the part before them reads as host[:port] too: `user:123/x@host` and
+    `host:7912/x@y` have the same shape, and guessing shows either a password or a wrong host. Those are unreadable."""
+    try:
+        scheme, sep, rest = url.strip().partition("://")
+    except AttributeError:
+        return None
+    end = next((i for i, c in enumerate(rest) if c in "/?#"), len(rest))
+    if "@" in rest[end:] and _parse_host_port(f"{scheme}{sep}{rest[:end].rpartition('@')[2]}"):
+        return None
+    return _parse_host_port(f"{scheme}{sep}{rest.rpartition('@')[2]}")
+
+
+def spoolman_address(url: str) -> str | None:
+    """A Spoolman URL as host:port, safe to show (it never holds the URL's credentials); None when unreadable."""
+    hp = _host_port(url)
+    return f"{_host_part(hp[0])}:{hp[1]}" if hp else None
 
 
 def _addrs(host: str) -> set[str]:
     try:
         out = {a[4][0] for a in socket.getaddrinfo(host, None)}
-    except OSError:
+    except (OSError, UnicodeError):     # UnicodeError: a label idna can't encode (empty, or over 63 characters)
         return {host}
     if any(ipaddress.ip_address(a.split("%")[0]).is_loopback for a in out):
         out |= _local_addrs()
@@ -153,10 +176,13 @@ def same_spoolman(a: str, b: str) -> bool:
 def spoolman_warning(server_config: dict | None, kit_url: str | None) -> str | None:
     if server_config is None or not kit_url:
         return None
-    server = ((server_config or {}).get("spoolman") or {}).get("server")
+    section = server_config.get("spoolman")
+    server = section.get("server") if isinstance(section, dict) else None
     if not server:
         return "Moonraker does not report usage to Spoolman (no [spoolman] section)"
     if same_spoolman(server, kit_url):
         return None
-    hp = _host_port(server)
-    return f"usage goes to another Spoolman: {hp[0]}:{hp[1]}" if hp else f"usage goes to another Spoolman: {server}"
+    address = spoolman_address(server)
+    if address is None:     # a fixed sentence: the unreadable URL itself may hold a password
+        return "Moonraker's [spoolman] server address cannot be read; usage may not reach this Spoolman"
+    return f"usage goes to another Spoolman: {address}"
