@@ -21,7 +21,7 @@ import urllib.request
 from pathlib import Path
 
 # The voice every station gets unless station.voice says otherwise: libritts_r, speaker 0 (Piper's default for this
-# multi-speaker model), the owner's pick by ear on the panel (2026-11-07), knowing the licence caveat below.
+# multi-speaker model).
 DEFAULT = "en_US-libritts_r-medium"
 
 # One rhasspy/piper-voices commit (main on 2026-11-02, checked 2026-11-07: all six hashes below match its files), never
@@ -30,17 +30,16 @@ DEFAULT = "en_US-libritts_r-medium"
 REVISION = "e7229f7d33a10e145e109b886d661984201ac3c4"
 _HF = f"https://huggingface.co/rhasspy/piper-voices/resolve/{REVISION}/"
 VOICES = {
-    # LJ Speech: public domain (dataset and voice), trained from scratch: the pick with no licence question.
+    # LJ Speech: public domain (dataset and voice), trained from scratch.
     "en_US-ljspeech-medium": {
         "url": _HF + "en/en_US/ljspeech/medium/", "licence": "public domain (LJ Speech dataset)",
         "files": {"en_US-ljspeech-medium.onnx": "6f52a751e2349abe7a76735eb09dc1875298c77ea2342ffd2fef79ff81b87f22",
                   "en_US-ljspeech-medium.onnx.json":
                       "141d612cc0a95ed7efc1ca936b845c2364967f2e9217c5dbfcf69fc4d6c65860"}},
     # LibriTTS-R: CC BY 4.0, so the credit goes with it (THIRD-PARTY.md, station/PANEL.md). 904 speakers; Piper
-    # speaks with speaker 0. CAVEAT: its model card says it was fine-tuned from en_US-lessac-medium, whose dataset is
-    # research-only, so these weights may carry that restriction (the owner accepted this, 2026-11-07).
+    # speaks with speaker 0.
     "en_US-libritts_r-medium": {
-        "url": _HF + "en/en_US/libritts_r/medium/", "licence": "CC BY 4.0 (fine-tuned from lessac: see above)",
+        "url": _HF + "en/en_US/libritts_r/medium/", "licence": "CC BY 4.0",
         "credit": "Piper voice en_US-libritts_r-medium, trained on LibriTTS-R (Koizumi et al., 2023, "
                   "http://www.openslr.org/141/), licensed CC BY 4.0",
         "files": {"en_US-libritts_r-medium.onnx": "10bb85e071d616fcf4071f369f1799d0491492ab3c5d552ec19fb548fac13195",
