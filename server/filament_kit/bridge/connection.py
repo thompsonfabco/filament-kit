@@ -122,6 +122,17 @@ def modules_from_version(info) -> dict[str, str]:
     return out
 
 
+def firmware_from_version(info) -> list[dict]:
+    """[{"name", "version"}] from a `get_version` reply, for the printer report: name and sw_ver only (`sn` is a serial)."""
+    if not isinstance(info, dict) or info.get('command') != 'get_version':
+        return []
+    out = []
+    for m in info.get('module') if isinstance(info.get('module'), list) else []:
+        if isinstance(m, dict) and isinstance(m.get('name'), str) and isinstance(m.get('sw_ver'), str):
+            out.append({'name': m['name'], 'version': m['sw_ver']})
+    return out
+
+
 class PrinterConnection:
     def __init__(self, printer: registry.Printer, client_factory: Callable, port: int = PORT,
                  listeners: list[Callable] | None = None):
@@ -276,6 +287,9 @@ class PrinterConnection:
         mods = modules_from_version(payload.get('info'))
         if mods:      # merged like a report delta (a dict: later replies add to it)
             pr = {**pr, layout.MODULES: mods} if isinstance(pr, dict) else {layout.MODULES: mods}
+        firmware = firmware_from_version(payload.get('info'))
+        if firmware:
+            pr = {**pr, layout.FIRMWARE: firmware} if isinstance(pr, dict) else {layout.FIRMWARE: firmware}
         ask = False
         if isinstance(pr, dict):
             with self._changed:

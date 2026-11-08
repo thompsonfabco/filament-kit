@@ -475,6 +475,18 @@ def _bridge_routes(printers, mapper: mapping.Mapper, sm) -> list[Route]:
         return JSONResponse(await run_in_threadpool(build))
 
     @_authed
+    async def map_report(request: Request):
+        """The printer report (bridge/printer_report.py): an XML file with no owner data, for its owner to share."""
+        serial = request.path_params["id"]
+
+        def build() -> dict:
+            known(serial)
+            bambu_only(serial)
+            r = mapper.report(serial)
+            return {"name": r["name"], "xml": r["xml"]}
+        return JSONResponse(await run_in_threadpool(build))
+
+    @_authed
     async def slot_load(request: Request):
         serial, label = request.path_params["id"], label_of(request)
         body = await _json(request)
@@ -553,6 +565,7 @@ def _bridge_routes(printers, mapper: mapping.Mapper, sm) -> list[Route]:
     return [
         Route("/api/printers/{id}/map", map_start, methods=["POST"]),
         Route("/api/printers/{id}/map", map_get),
+        Route("/api/printers/{id}/report", map_report, methods=["POST"]),
         Route("/api/printers/{id}/slots/{label}/load", slot_load, methods=["POST"]),
         Route("/api/printers/{id}/slots/{label}/unload", slot_unload, methods=["POST"]),
         Route("/api/printers/{id}/usage", usage_list),

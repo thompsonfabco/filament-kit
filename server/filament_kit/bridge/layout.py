@@ -32,6 +32,7 @@ from . import hardware
 from .fields import _d, _int, _l, _s
 from .hardware import AmsType, ModelInfo
 
+FIRMWARE = 'fk_firmware'        # report key: [{"name", "version"}] from get_version, never a module's serial
 MODULES = 'fk_modules'          # report key: {"<ams_id>": "<module code>"} from the printer's get_version reply
 EXT_DEFAULT = {254: 'Ext-L', 255: 'Ext-R'}   # Bambu: 254 = deputy (left) nozzle, 255 = main (right)
 EXT_KIND = 'ext'
