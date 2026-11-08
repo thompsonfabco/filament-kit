@@ -105,4 +105,4 @@ filament-kit install apps: allow it, go back and tap **Tap to install** again.
 - **To remove a phone from the server**: `sudo filament-kit unpair` lists paired phones;
   `sudo filament-kit unpair <id>` removes one.
 
-More on what the app does (adding spools, loading printer slots, presets): [user guide](user-guide.md).
+Next: [Using the Android app](android-app.md) (set up a printer, map its slots, add spools). More on everything else: [user guide](user-guide.md).

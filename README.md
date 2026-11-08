@@ -36,6 +36,8 @@ Then, on your phone:
 
 - **Android:** [Install the Android app](docs/install-android-app.md) and pair it with the server, then see [Using the Android app](docs/android-app.md) for printers and adding spools.
 - **iPhone** (or any phone browser): [Use the web app on an iPhone](docs/install-iphone-web-app.md).
+- **Then, in the app:** set up your printer, map its slots and load a spool:
+  [Set up a printer](docs/android-app.md#2-set-up-a-printer).
 
 Optional afterwards: the PC sync for Bambu Studio presets ([Pair your PC](#pair-your-pc)), an intake station with
 a scale and an NFC reader ([Intake station](docs/user-guide.md#intake-station)), and the bench
@@ -54,8 +56,9 @@ access) is in the **[user guide](docs/user-guide.md)**.
   Reading the label from a photo is **optional AI** (your own Anthropic API key); everything else works without it.
 - **Load a spool into a printer slot** from the app, or tap its NFC tag on the bench reader: the printer gets the
   right filament setting and Spoolman the spool's new location. Filament used in a print comes off the right
-  spools.
-- **Build slicer presets**: a Bambu Studio (and, if you like, Orca Slicer) preset for every filament line you own;
+  spools, after a one-time slot mapping.
+- **Build slicer presets**: a Bambu Studio (and, if you like, Orca Slicer) preset for every filament line you own
+  (a line is a brand's product, without the colour);
   the PC sync installs them on your Windows PC.
 - **Weigh a spool and read its tag** at an intake station (USB scale and NFC reader), **back up** every night, and
   **update** from signed releases (by hand, or daily with the `updates` module).
@@ -109,7 +112,8 @@ wiring, building and its API are in [reader/README.md](reader/README.md).
 Every Bambu Lab printer the hardware data file describes: H2D, H2D Pro, H2S, H2C, X2D, P2S, X1 Carbon, X1, X1E,
 P1P, P1S, A1 mini, A1 and A2L, with any number of AMS, AMS 2 Pro, AMS HT and AMS Lite units and the external
 spool holders. Slots are labelled by unit and position: A1 ... Z4, then AA1 ..., HT-A ... for AMS HT units, and
-Ext (or Ext-L / Ext-R) for the external holders. Klipper printers that run Moonraker work too (v0.4.0): [Klipper printers](docs/klipper.md). Prusa printers are planned.
+Ext (or Ext-L / Ext-R) for the external holders. Slot mapping has been checked on an H2D; on the other models it is
+not yet confirmed on a printer. Klipper printers that run Moonraker work too (v0.4.0): [Klipper printers](docs/klipper.md). Prusa printers are planned.
 
 The facts about each model and unit live in a data file (`bambu_hardware.xml`), not in the program, and updates
 bring new versions of it. To correct or add something yourself, see
