@@ -50,6 +50,11 @@ lists paired phones and `sudo filament-kit unpair <id>` removes one; that phone 
 app shows **The server's certificate changed**, compare the two fingerprints it shows: if you reinstalled the
 server it's expected, so tap **Pair again**; if not, don't continue.
 
+**Licences and third-party software**, at the bottom of **Settings**, shows the app's licence (GPL-3.0-or-later) and the
+third-party software list, and the full GPL text. It works offline.
+
+<img src="images/android-settings.png" width="240" alt="Settings: server, fingerprint, Pair again, Forget server, Licences and third-party software">
+
 ## 2. Set up a printer
 
 You need a Bambu Lab printer on the same network as the server, switched on.
