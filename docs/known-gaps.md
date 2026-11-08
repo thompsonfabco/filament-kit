@@ -26,8 +26,9 @@ fixed.
 
 6. **An https address and nginx are needed even at home.** The web service listens on 127.0.0.1 only, and
    `web.public_url` must be `https://`. A home-only user has to tick `web` and `remote` and accept nginx's
-   self-signed placeholder certificate in Safari. Not tried on a real iPhone: whether a home-screen web app keeps
-   working with an accepted self-signed certificate is unconfirmed.
+   self-signed placeholder certificate in Safari. The placeholder lasts 825 days and is made again by an apply within
+   30 days of its end, after which Safari asks again. Not tried on a real iPhone: whether Safari accepts it and a
+   home-screen web app keeps working with an accepted self-signed certificate is unconfirmed.
 7. **A public name needs split DNS or NAT loopback** so the phone reaches the server directly at home; otherwise
    the phone looks like it is away from home and is refused.
 8. ~~`modules enable web` doesn't ask for the address.~~ Fixed in v0.3.0: at a terminal it asks for
