@@ -20,10 +20,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from cryptography import x509
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.x509.oid import NameOID
+# cryptography is imported where a certificate is read or made, so the file helpers below (_write_atomic,
+# open_lock ...) import without it: the release job's library build uses them with a plain Python.
 
 from . import config
 
@@ -72,6 +70,8 @@ class Pairing:
 
 
 def fingerprint(cert_pem: bytes) -> str:
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes
     cert = x509.load_pem_x509_certificate(cert_pem)
     return cert.fingerprint(hashes.SHA256()).hex()
 
@@ -166,6 +166,10 @@ def short_hostname() -> str:
 
 
 def make_cert(hostname: str, ips: list[str], dest: Path, extra_dns: list[str] = ()) -> str:
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.x509.oid import NameOID
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
     key = ec.generate_private_key(ec.SECP256R1())

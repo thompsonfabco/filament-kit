@@ -1,5 +1,7 @@
 """Release and packaging files: checked as text (CI files are written and linted here, run on GitHub)."""
 import re
+import subprocess
+import sys
 
 import pytest
 from pathlib import Path
@@ -816,3 +818,17 @@ def test_releases_ship_license_and_third_party_notices():
     iss = _read("pc-sync/installer/filament-kit-sync.iss")
     assert r'Source: "..\..\LICENSE"; DestDir: "{app}"' in iss
     assert r'Source: "..\..\THIRD-PARTY.md"; DestDir: "{app}"' in iss
+
+
+def test_the_library_builder_imports_without_the_kits_dependencies():
+    """release.yml builds library.tar.gz with the runner's plain Python (tools/build_library_asset.py imports
+    filament_kit.library): it must not need cryptography or any other kit dependency (v0.3.0's first release run
+    failed with ModuleNotFoundError: cryptography)."""
+    code = ("import sys\n"
+            "for m in ('cryptography', 'starlette', 'uvicorn', 'httpx', 'anthropic', 'mcp', 'defusedxml'):\n"
+            "    sys.modules[m] = None\n"
+            f"sys.path.insert(0, {str(ROOT / 'tools')!r}); sys.path.insert(0, {str(ROOT / 'server')!r})\n"
+            "import sync_library_snapshot\n"
+            "print('ok')\n")
+    r = subprocess.run([sys.executable, "-I", "-c", code], capture_output=True, text=True)
+    assert r.returncode == 0 and r.stdout.strip() == "ok", r.stderr
