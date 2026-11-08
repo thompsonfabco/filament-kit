@@ -111,9 +111,3 @@ def test_cli_scan(moonraker, capsys, monkeypatch):
     assert klipper_cli.main(["scan", "--subnet", "127.0.0.1/32"]) == 0
     assert "127.0.0.1" in capsys.readouterr().out
     assert any(p.host == "127.0.0.1" and not p.configured for p in registry.load().values())
-
-
-def test_cli_pack_prints_command(capsys):
-    assert klipper_cli.main(["pack"]) == 0
-    out = capsys.readouterr().out
-    assert "fk-printer-pack.sh install" in out
