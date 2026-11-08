@@ -465,11 +465,9 @@ hand: `sudo systemctl unmask sleep.target suspend.target hibernate.target hybrid
   when the station is installed (60 to 80 MB, checked against a pinned hash). If the download fails or the file
   does not match, the install carries on with a warning and espeak-ng speaks. To use espeak-ng on purpose (no
   download), choose **7) Station voice** in `sudo filament-kit config`. The voice is licensed **CC BY 4.0**
-  (LibriTTS-R; credit in [THIRD-PARTY.md](../THIRD-PARTY.md#speech-voice)),
-  and its model card says it was **fine-tuned from the research-only `en_US-lessac-medium` voice**, so it may
-  inherit that restriction. If that matters to you (for example you use the kit commercially), choose the
-  public-domain `en_US-ljspeech-medium` voice instead: set `station.voice` to it in `/etc/filament-kit/config.json`
-  and run `sudo filament-kit modules apply`.
+  (LibriTTS-R; credit in [THIRD-PARTY.md](../THIRD-PARTY.md#speech-voice)). To use the public-domain
+  `en_US-ljspeech-medium` voice instead, set `station.voice` to it in `/etc/filament-kit/config.json` and run
+  `sudo filament-kit modules apply`.
 - With the panel, Hold and Discard also speak (`"speech"`), and Hold takes a picture with the webcam
   (`"camera"`). `curl http://127.0.0.1:5003/state` then shows `"air"` (the BME280 reading) and `"photo"`, and the
   picture itself is at `/photo`. The station only answers GET requests, and only the addresses it allows.
