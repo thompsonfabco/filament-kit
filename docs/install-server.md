@@ -75,14 +75,14 @@ somewhere only root can read, for example `/etc/filament-kit/github_token`, and 
 
 This does the same as the one command, by hand:
 
-1. Open the project's GitHub **Releases** page and download `filament-kit-<version>.tar.gz`, for example
-   `filament-kit-0.3.0.tar.gz`, into your **Downloads** folder.
-2. In Terminal, unpack it and go into the folder. Use the version number you downloaded:
+1. Open the project's GitHub **Releases** page and download `filament-kit-<version>.tar.gz` (the newest
+   version number on the page) into your **Downloads** folder.
+2. In Terminal, unpack it and go into the folder. Replace `<version>` with the version number you downloaded:
 
    ```bash
    cd ~/Downloads
-   tar xzf filament-kit-0.3.0.tar.gz
-   cd filament-kit-0.3.0
+   tar xzf filament-kit-<version>.tar.gz
+   cd filament-kit-<version>
    ```
 
 3. Start the installer:
