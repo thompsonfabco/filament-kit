@@ -107,7 +107,7 @@ def test_web_status_effective_port_and_unreadable_oauth(monkeypatch, capsys):
     cli.main(["web", "status"])
     out = capsys.readouterr().out
     assert "127.0.0.1:8101" in out and "None" not in out
-    f = config.paths().state / "web" / "oauth.json"
+    f = config.paths().web / "oauth.json"
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text("{}", encoding="utf-8")
     real = cli.Path.read_text

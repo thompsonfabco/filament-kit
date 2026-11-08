@@ -33,7 +33,7 @@ else
 fi
 
 paths=()
-for p in etc/filament-kit var/lib/filament-kit; do
+for p in etc/filament-kit var/lib/filament-kit var/lib/filament-kit-web; do
     if [ -e "/$p" ]; then
         paths+=("$p")
     fi

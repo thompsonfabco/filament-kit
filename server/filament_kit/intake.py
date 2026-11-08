@@ -148,10 +148,15 @@ class ReadCap:
             return []
 
     def _save(self, stamps: list[float]) -> None:
+        """Rewritten in place (under the lock), not replaced: the web unit's own user may write this one file of the
+        kit's state (an ACL from apply's web_state), not the folder it is in."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_name(self.path.name + ".tmp")
-        tmp.write_text(json.dumps(stamps), encoding="utf-8")
-        os.replace(tmp, self.path)
+        fd = os.open(self.path, os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o644)
+        with os.fdopen(fd, "r+", encoding="utf-8") as fh:
+            fh.truncate()
+            fh.write(json.dumps(stamps))
+            fh.flush()
+            os.fsync(fh.fileno())
 
     def take(self) -> None:
         with self._lock:

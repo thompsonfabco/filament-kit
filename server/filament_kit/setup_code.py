@@ -10,7 +10,8 @@
   - `Lockout` (`/etc/filament-kit/setup_lockout`, root only, flock): at most LOCK_MAX wrong codes per LOCK_WINDOW
     seconds per client address, counted before the (slow) check like the passphrase's (A-M1); and over all addresses
     at most GLOBAL_MAX per window, after which every check waits a backoff that doubles each time the ceiling is hit
-    again (LOCK_WINDOW, 2x, 4x ... at most MAX_BACKOFF), until a right code resets it.
+    again (LOCK_WINDOW, 2x, 4x ... at most MAX_BACKOFF); a right code resets it, and every quiet hour (DECAY)
+    after a backoff ends takes it one level down, so one later burst does not start at the top.
 
 Nothing here logs or prints a code."""
 from __future__ import annotations
@@ -40,6 +41,7 @@ SCRYPT = {"n": 2 ** 15, "r": 8, "p": 1, "maxmem": 2 ** 26}   # as the web passph
 LOCK_MAX, LOCK_WINDOW = 5, 600
 GLOBAL_MAX = 30
 MAX_BACKOFF = 24 * 3600
+DECAY = 3600            # each quiet hour after a backoff takes the next one a level down
 DIGITS = 8
 GROUP = "filament-kit"
 
@@ -167,9 +169,17 @@ class Lockout:
             d = {}
         fails = [f for f in d.get("fails") or [] if isinstance(f, list) and len(f) == 3
                  and isinstance(f[0], (int, float))]
-        until = d.get("until") if isinstance(d.get("until"), (int, float)) else 0
-        level = d.get("level") if isinstance(d.get("level"), int) else 0
-        return {"fails": fails, "until": until, "level": level}
+        num = lambda k: d.get(k) if isinstance(d.get(k), (int, float)) and not isinstance(d.get(k), bool) else 0  # noqa: E731
+        level = d.get("level") if isinstance(d.get("level"), int) and not isinstance(d.get("level"), bool) else 0
+        return {"fails": fails, "until": num("until"), "level": max(0, level), "since": num("since")}
+
+    @staticmethod
+    def _decay(st: dict, now: float) -> None:
+        base = max(st["until"], st["since"])
+        if st["level"] and now - base >= DECAY:
+            steps = int((now - base) // DECAY)
+            st["level"] = max(0, st["level"] - steps)
+            st["since"] = base + steps * DECAY
 
     def _update(self, fn):
         """Run fn(state, now) -> result on the pruned state, under the lock and the file's flock."""
@@ -183,6 +193,7 @@ class Lockout:
                 now = time.time()
                 st = self._load(fh)
                 st["fails"] = [f for f in st["fails"] if f[0] > now - self.window]
+                self._decay(st, now)
                 out = fn(st, now)
                 fh.seek(0)
                 fh.truncate()
@@ -203,6 +214,7 @@ class Lockout:
             if len(st["fails"]) >= self.global_max:     # the ceiling: everyone waits, longer each time
                 st["until"] = now + min(self.window * 2 ** st["level"], MAX_BACKOFF)
                 st["level"] += 1
+                st["since"] = now
                 st["fails"] = []
             return ticket
         return self._update(take)

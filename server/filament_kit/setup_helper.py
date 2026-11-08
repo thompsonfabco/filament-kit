@@ -53,7 +53,8 @@ WRAPPER = "/usr/local/bin/filament-kit"
 FINISHED = "==> finished (exit"
 SETTINGS = ("web.public_url", "station.url")
 WRONG = "wrong setup code"
-LOCKED = "too many wrong setup codes: wait 10 minutes (longer after many from everywhere)"
+LOCKED = ("too many wrong setup codes: wait 10 minutes (longer after many from everywhere), or make a new code "
+          "at the server, which also lifts the lock: sudo filament-kit setup-code --new")
 NO_CODE = "no setup code is set on this server yet; make one at the server: sudo filament-kit setup-code"
 APPLYING = "the last change is still being applied; wait until it has finished"
 # the checklist's setting prompts, back to their keys (cli._apply_selection asks by prompt)

@@ -5,19 +5,24 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=filament-kit
-Group=filament-kit
-WorkingDirectory=/var/lib/filament-kit
+# its own user, never in the filament-kit group: the setup page's root helper refuses it (socket 660
+# root:filament-kit + SO_PEERCRED), and it reaches only the kit files it needs (ACLs, filament_kit/web_access.py)
+User=filament-kit-web
+Group=filament-kit-web
+WorkingDirectory=/var/lib/filament-kit-web
 ExecStart=/opt/filament-kit/venv/bin/python -I -m filament_kit.web
 Restart=on-failure
 RestartSec=5
 ProtectSystem=strict
-ReadWritePaths=/var/lib/filament-kit
+ReadWritePaths=/var/lib/filament-kit-web -/var/lib/filament-kit/profiles -/var/lib/filament-kit/failed
+ReadWritePaths=-/var/lib/filament-kit/reads.json -/var/lib/filament-kit/reads.lock -/var/lib/filament-kit/inventory.lock
 ProtectHome=yes
 NoNewPrivileges=yes
 # the setup page's root helper socket (and its apply log) are the kit server's only, never this internet-facing
 # unit's: the whole folder is hidden, so a socket made again later stays hidden too
 InaccessiblePaths=-/run/filament-kit-setup
+# its own PID namespace (systemd 257+; older ones warn and go on): no /proc/<server pid>/root way round the above
+PrivatePIDs=yes
 PrivateTmp=yes
 CapabilityBoundingSet=
 AmbientCapabilities=

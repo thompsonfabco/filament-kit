@@ -436,7 +436,7 @@ def test_push_subscribe_allow_list(pushapp):
 def test_push_store_unsubscribe_and_file_mode(pushapp, env):
     c = signed(pushapp)
     c.post(P + "/push/subscribe", json=good_sub(), headers=H)
-    f = env / "state" / "web" / "push.json"
+    f = config.paths().web / "push.json"
     assert f.exists() and "fcm.googleapis.com" in f.read_text()
     if sys.platform != "win32":
         assert (f.stat().st_mode & 0o777) == 0o600
@@ -459,7 +459,7 @@ def test_push_transitions():
 
 def test_push_send_drops_dead_subscriptions(env):
     from filament_kit.web import push
-    sent, store = [], push.Store(env / "state" / "web" / "push.json")
+    sent, store = [], push.Store(config.paths().web / "push.json")
     store.add({"endpoint": "https://fcm.googleapis.com/a", "keys": {"p256dh": "k", "auth": "a"}})
     store.add({"endpoint": "https://fcm.googleapis.com/dead", "keys": {"p256dh": "k", "auth": "a"}})
 
@@ -659,7 +659,7 @@ def test_push_mapping_jobs_do_not_alert_and_print_error_does():
 
 def test_push_watcher_reads_the_map_state(env, kit):
     from filament_kit.web import push
-    store = push.Store(env / "state" / "web" / "push.json")
+    store = push.Store(config.paths().web / "push.json")
     store.add({"endpoint": "https://fcm.googleapis.com/a", "keys": {"p256dh": "k", "auth": "a"}})
     sent = []
     mapstate = {"v": "running"}

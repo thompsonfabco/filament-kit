@@ -298,7 +298,7 @@ def test_start_pairs_for_the_bridge_and_skips_it_with_a_slot_service(env, monkey
     kit = web_main.kit_api_at_start(cfg)
     assert isinstance(kit, slots.KitApi)
     assert [d["name"] for d in pairing.devices()] == ["web (MCP)"]
-    assert (config.paths().state / "web" / "kit_token").is_file()
+    assert (config.paths().web / "kit_token").is_file()
     cfg["slot_service"] = {"state_url": "http://x/api/state", "set_url": "http://x/set", "token_file": "/x"}
     assert web_main.kit_api_at_start(cfg) is None
     cfg["slot_service"] = None

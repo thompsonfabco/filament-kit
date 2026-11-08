@@ -365,7 +365,7 @@ def test_web_secrets_imported_with_modes(env, lib):
     b = make_bundle(env / "bundle")
     code, text = run(b, lib, apply=True)
     assert code == 0, text
-    oauth = env / "state" / "web" / "oauth.json"
+    oauth = config.paths().web / "oauth.json"
     assert json.loads(oauth.read_text())["clients"] == {"c1": {"client_id": "c1"}}
     assert (env / "etc" / "web_passphrase").read_text() == (b / "secrets" / "web_passphrase").read_text()
     assert (env / "etc" / "anthropic_key").read_text().strip() == "sk-test-not-real"
@@ -379,13 +379,13 @@ def test_web_step_skipped_for_a_no_secrets_bundle(env, lib):
     b = make_bundle(env / "bundle", secrets=False)
     code, text = run(b, lib, apply=True)
     assert code == 0, text
-    assert not (env / "state" / "web" / "oauth.json").exists()
+    assert not (config.paths().web / "oauth.json").exists()
     assert "no secrets" in text
 
 
 def test_web_secrets_never_overwrite_newer_kit_state(env, lib):
     b = make_bundle(env / "bundle")
-    oauth = env / "state" / "web" / "oauth.json"
+    oauth = config.paths().web / "oauth.json"
     oauth.parent.mkdir(parents=True)
     oauth.write_text('{"clients": {"newer": {}}}')
     code, text = run(b, lib, apply=True)
@@ -398,7 +398,7 @@ def test_ops_oauth_json_loads_in_the_web_store(env, lib):
     auth = pytest.importorskip("filament_kit.web.auth")
     b = make_bundle(env / "bundle")
     assert run(b, lib, apply=True)[0] == 0
-    store = auth.Store(env / "state" / "web" / "oauth.json")
+    store = auth.Store(config.paths().web / "oauth.json")
     assert "c1" in store.d["clients"]
 
 
@@ -588,7 +588,7 @@ def test_one_failing_step_does_not_stop_the_others(env, lib):
     assert code == 1 and "[spoolman] ERROR" in text
     assert len(lines_mod.load()) == 4                       # lines, presets, web and config still ran
     assert (env / "state" / "profiles" / "owner-edits.json").exists()
-    assert (env / "state" / "web" / "oauth.json").exists()
+    assert (config.paths().web / "oauth.json").exists()
     assert config.load()["presets_orca"] is True
     assert "step(s) failed" in text
 

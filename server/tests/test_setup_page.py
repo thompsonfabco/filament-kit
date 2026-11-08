@@ -767,3 +767,228 @@ def test_m_helper_read_times_out(env, monkeypatch):
     with a, b:
         a.sendall(b'{"op": "check"')               # no newline, never finished
         assert setup_helper._read_request(b.fileno()) is None
+
+
+# ---------- fix round 2: the web unit as its own user ----------
+
+def _web_cfg():
+    cfg = modules.set_mode(config._merge(config.DEFAULTS, {}), "server", say=None)
+    cfg["modules"]["web"] = True
+    cfg["web"]["public_url"] = "https://mcp.example.com/filament"
+    return cfg
+
+
+def test_r2b_web_unit_runs_as_its_own_user_with_only_its_paths():
+    web = (SYSTEMD / "filament-kit-web.service").read_text(encoding="utf-8")
+    for line in ("User=filament-kit-web", "Group=filament-kit-web", "WorkingDirectory=/var/lib/filament-kit-web",
+                 "PrivatePIDs=yes", "InaccessiblePaths=-/run/filament-kit-setup", "NoNewPrivileges=yes",
+                 "ReadWritePaths=/var/lib/filament-kit-web -/var/lib/filament-kit/profiles "
+                 "-/var/lib/filament-kit/failed",
+                 "ReadWritePaths=-/var/lib/filament-kit/reads.json -/var/lib/filament-kit/reads.lock "
+                 "-/var/lib/filament-kit/inventory.lock"):
+        assert line + "\n" in web, line
+    assert "User=filament-kit\n" not in web and "Group=filament-kit\n" not in web
+    assert "SupplementaryGroups" not in web and "ReadWritePaths=/var/lib/filament-kit\n" not in web
+
+
+def test_r2b_apply_makes_the_web_user_without_the_kit_group_before_its_state():
+    kinds = [(a.kind, a.arg) for a in apply.plan(_web_cfg())]
+    assert ("user", "filament-kit-web") in kinds          # a plain str: no extra groups (apply._user)
+    i_user, i_state = kinds.index(("user", "filament-kit-web")), kinds.index(("web_state", ""))
+    i_setup = [k for k, _ in kinds].index("server_setup")
+    assert i_setup < i_user < i_state < kinds.index(("enable", "filament-kit-web.service"))
+
+
+def test_r2b_tmpfiles_makes_the_run_folder_from_boot():
+    acts = apply.plan(_web_cfg())
+    files = [a.arg for a in acts if a.kind == "install_file"]
+    assert ("/etc/tmpfiles.d/filament-kit-setup.conf", "d /run/filament-kit-setup 0750 root filament-kit -\n",
+            "0644", "root:root") in files
+    assert ("tmpfiles", "/etc/tmpfiles.d/filament-kit-setup.conf") in [(a.kind, a.arg) for a in acts]
+
+
+def test_r2b_web_state_lives_in_its_own_folder(env):
+    from filament_kit.web import app as web_app, push, slots
+    w = config.paths().web
+    assert w != config.paths().state and w.name.endswith("-web")
+    assert web_app.oauth_file() == w / "oauth.json"
+    assert push.state_dir() == w and slots.KitApi._token_file() == w / "kit_token"
+
+
+def test_r2b_migration_moves_the_web_files_and_keeps_reader_tokens(env):
+    from filament_kit import web_access
+    old = config.paths().state / "web"
+    old.mkdir(parents=True, exist_ok=True)
+    (old / "oauth.json").write_text('{"clients": {"c1": {}}}', encoding="utf-8")
+    (old / "kit_token").write_text("tok-EXAMPLE\n", encoding="utf-8")
+    (old / "vapid.pem").write_text("pem", encoding="utf-8")
+    (old / "reader_tokens").write_text("<reader-tokens/>", encoding="utf-8")
+    chowned = []
+    moved = web_access.migrate(5001, 5001, chown=lambda p, u, g: chowned.append((Path(p).name, u, g)))
+    w = config.paths().web
+    assert moved == ["kit_token", "oauth.json", "vapid.pem"]
+    assert (w / "oauth.json").read_text(encoding="utf-8") == '{"clients": {"c1": {}}}'   # the connector stays
+    assert (w / "kit_token").read_text(encoding="utf-8") == "tok-EXAMPLE\n"               # the kit pairing too
+    assert (old / "reader_tokens").exists() and not (old / "oauth.json").exists()
+    assert (w.name, 5001, 5001) in chowned and ("oauth.json", 5001, 5001) in chowned
+    (old / "oauth.json").write_text("stale", encoding="utf-8")
+    assert web_access.migrate(5001, 5001, chown=lambda *a: None) == []                      # never over a moved one
+    assert (w / "oauth.json").read_text(encoding="utf-8") != "stale"
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="file modes")
+def test_r2b_migration_modes(env):
+    import os
+    from filament_kit import web_access
+    old = config.paths().state / "web"
+    old.mkdir(parents=True, exist_ok=True)
+    (old / "reader_tokens").write_text("<reader-tokens/>", encoding="utf-8")
+    os.chmod(old / "reader_tokens", 0o600)
+    web_access.migrate(os.getuid(), os.getgid())
+    assert os.stat(config.paths().web).st_mode & 0o777 == 0o750
+    assert os.stat(old / "reader_tokens").st_mode & 0o777 == 0o644
+
+
+def test_r2b_web_pairs_once_as_root_and_keeps_an_existing_token(env):
+    from filament_kit import web_access
+    pairing.make_cert("kit", ["192.0.2.5"], config.paths().etc)
+    config.paths().web.mkdir(parents=True, exist_ok=True)
+    assert web_access.pair(5001, 5001, chown=lambda *a: None) is True
+    tok = (config.paths().web / "kit_token").read_text(encoding="utf-8").strip()
+    assert pairing.check(tok) is not None
+    web_access.pair(5001, 5001, chown=lambda *a: pytest.fail("not paired again"))
+    assert (config.paths().web / "kit_token").read_text(encoding="utf-8").strip() == tok
+
+
+def test_r2b_web_without_a_token_and_without_pairing_rights_says_how(env, monkeypatch):
+    from filament_kit.web import slots
+
+    def denied(*a, **k):
+        raise PermissionError("devices.json")
+    monkeypatch.setattr(slots.pairing, "issue", denied)
+    with pytest.raises(slots.SlotError) as e:
+        slots.KitApi("https://127.0.0.1:1")._token()
+    assert "sudo filament-kit modules apply" in str(e.value)
+
+
+def test_r2b_shared_files_exist_for_in_place_writes(env):
+    from filament_kit import intake, web_access
+    web_access.shared_files(1000, 1000, chown=lambda *a: None)
+    st = config.paths().state
+    for name in ("reads.json", "reads.lock", "inventory.lock"):
+        assert (st / name).is_file()
+    assert (st / "profiles").is_dir() and (st / "failed").is_dir()
+    f = st / "reads.json"
+    ino = f.stat().st_ino
+    intake.ReadCap(f, 5).take()
+    assert f.stat().st_ino == ino                 # written in place: the web user's ACL on the file stays
+
+
+def _acls_or_skip(path):
+    from filament_kit import acl
+    if not acl.supported():
+        pytest.skip("no xattrs here")
+    try:
+        acl.grant(path, {54321: acl.R})
+    except OSError:
+        pytest.skip("no ACLs on this file system")
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX ACLs")
+def test_r2b_grants_give_the_web_user_exactly_its_paths(env, tmp_path):
+    import os
+    from filament_kit import acl, web_access
+    _acls_or_skip(tmp_path)
+    st, etc = config.paths().state, config.paths().etc
+    for d in ("web", "profiles", "failed", "library", "library-local"):
+        (st / d).mkdir(parents=True, exist_ok=True)
+    (st / "profiles" / "lines.lock").write_text("", encoding="utf-8")
+    (st / "printers.json").write_text("{}", encoding="utf-8")
+    (etc / "anthropic_key").write_text("sk-ant-EXAMPLE\n", encoding="utf-8")
+    (etc / "key.pem").write_text("k", encoding="utf-8")
+    web_access.shared_files(os.getuid(), os.getgid(), chown=lambda *a: None)
+    WEB, KIT = 54321, os.getuid()
+    web_access.grant(WEB, KIT, {"orders": {"file": None}})
+    R, W, X = acl.R, acl.W, acl.X
+    assert acl.users_of(etc) == {WEB: X} and acl.users_of(st) == {WEB: X}
+    assert acl.users_of(etc / "config.json") == {WEB: R} and acl.users_of(etc / "anthropic_key") == {WEB: R}
+    assert acl.users_of(etc / "key.pem") == {} and acl.users_of(st / "printers.json") == {}
+    assert acl.users_of(etc / "setup_code") == {} and acl.users_of(etc / "setup_code.plain") == {}
+    assert acl.users_of(st / "reads.json") == {WEB: R | W} and acl.users_of(st / "inventory.lock") == {WEB: R | W}
+    assert acl.users_of(st / "profiles" / "lines.lock") == {WEB: R | W}
+    assert acl.users_of(st / "profiles", acl.DEFAULT) == {WEB: R | W | X, KIT: R | W | X}
+    assert acl.users_of(st / "library") == {WEB: R | X} and acl.users_of(st / "web") == {WEB: R | X}
+    new = st / "profiles" / "made-later.lock"
+    open(new, "a").close()                               # what a unit makes later inherits the grant
+    assert acl.users_of(new)[WEB] & (R | W) == R | W
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX ACLs")
+def test_r2b_acl_round_trip_keeps_the_mode_and_other_entries(tmp_path):
+    import os
+    from filament_kit import acl
+    f = tmp_path / "f"
+    f.write_text("x", encoding="utf-8")
+    os.chmod(f, 0o640)
+    _acls_or_skip(f)
+    acl.grant(f, {54322: acl.R | acl.W})
+    assert acl.users_of(f) == {54321: acl.R, 54322: acl.R | acl.W}
+    assert os.stat(f).st_mode & 0o707 == 0o600            # owner and other bits stay; group shows the mask
+
+
+def test_r2b_acl_encoding():
+    from filament_kit import acl
+    data = acl.encode([(acl.OTHER, 0, acl.UNDEFINED), (acl.USER, 4, 1001), (acl.USER_OBJ, 6, acl.UNDEFINED)])
+    assert acl.decode(data) == [(acl.USER_OBJ, 6, acl.UNDEFINED), (acl.USER, 4, 1001), (acl.OTHER, 0, acl.UNDEFINED)]
+    with pytest.raises(ValueError):
+        acl.decode(b"\x01\x00\x00\x00")
+
+
+def test_r2b_root_writers_keep_the_web_users_read(env, monkeypatch):
+    seen = []
+    monkeypatch.setattr(config, "grant_web_read", lambda path: seen.append(Path(path).name))
+    config.save(config.load())
+    cli.write_key(KEY)
+    cli.write_passphrase(PASS)
+    assert any(n.startswith("config.json") for n in seen) and any(n.startswith("anthropic_key") for n in seen)
+    assert any(n.startswith("web_passphrase") for n in seen)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="unix sockets")
+def test_r2b_the_web_users_uid_is_refused_by_the_helper(env, monkeypatch):
+    """The web unit's uid is neither root nor filament-kit: SO_PEERCRED refuses it."""
+    import os
+    import socket
+    monkeypatch.setattr(setup_helper, "_allowed_uids", lambda: {0, os.getuid() + 1})   # filament-kit is someone else
+    a, b = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
+    with a, b:
+        assert setup_helper._peer_ok(b.fileno()) is False
+
+
+def test_r2b_allowed_uids_are_root_and_the_kit_never_the_web_user(monkeypatch):
+    import types
+    users = {"filament-kit": 990, "filament-kit-web": 991}
+    fake = types.SimpleNamespace(getpwnam=lambda n: types.SimpleNamespace(pw_uid=users[n]))
+    monkeypatch.setitem(sys.modules, "pwd", fake)
+    assert setup_helper._allowed_uids() == {0, 990}
+
+
+def test_r2b_locked_message_names_the_recovery_command():
+    assert "sudo filament-kit setup-code --new" in setup_helper.LOCKED
+
+
+def test_r2b_global_backoff_decays_after_quiet_hours(tmp_path, monkeypatch):
+    now = [1000.0]
+    monkeypatch.setattr(setup_code.time, "time", lambda: now[0])
+    lock = setup_code.Lockout(tmp_path / "lock")
+
+    def burst():
+        for i in range(setup_code.GLOBAL_MAX):
+            lock.attempt(f"192.0.2.{i}")
+    burst()                                                          # level 1: 10 min
+    now[0] += setup_code.LOCK_WINDOW + 1
+    burst()                                                          # level 2: 20 min
+    now[0] += 2 * setup_code.LOCK_WINDOW + 1 + 2 * setup_code.DECAY  # two quiet hours: two levels down
+    burst()                                                          # level 1 again: 10 min, not 40
+    now[0] += setup_code.LOCK_WINDOW + 1
+    assert lock.attempt("192.0.2.250") is not None

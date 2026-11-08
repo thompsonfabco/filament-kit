@@ -31,6 +31,9 @@ from .modules import MODULES, ModuleError
 SPOOLMAN_INFO = "http://127.0.0.1:7912/api/v1/info"
 STATION_UNIT = "filament-kit-station.service"
 WEB_UNIT = "filament-kit-web.service"
+# the setup page's run folder exists from boot (the helper socket and the apply log live there), 750 root:filament-kit
+SETUP_TMPFILES = "/etc/tmpfiles.d/filament-kit-setup.conf"
+SETUP_TMPFILES_TEXT = "d /run/filament-kit-setup 0750 root filament-kit -\n"
 DROPIN = "/etc/systemd/system/filament-kit-station.service.d/kit.conf"
 # udev applies rules in file-name order and the last GROUP= wins: the name sorts after the ops station's
 # 99-intake-station.rules (C-I1). OLD_UDEV_RULE is the kit's name before that; apply removes it.
@@ -190,12 +193,15 @@ def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) ->
     if "server" in on:
         acts += [A("install_unit", u) for unit in MODULES["server"].units for u in _unit_files(unit)]
         acts.append(A("server_setup", "key" if "ai_intake" in on else ""))
+        acts += [A("install_file", (SETUP_TMPFILES, SETUP_TMPFILES_TEXT, "0644", "root:root")),
+                 A("tmpfiles", SETUP_TMPFILES)]
     for name in ("presets", "library", "backup", "updates"):
         if name in on:
             for unit in MODULES[name].units:
                 acts += [A("install_unit", u) for u in _unit_files(unit)]
     if "web" in on:
-        acts.append(A("install_unit", WEB_UNIT))
+        # its own user (never in the filament-kit group) and exactly the files it needs (web_access.py)
+        acts += [A("user", config.WEB_USER), A("install_unit", WEB_UNIT), A("web_state")]
     rs = remote.settings(cfg) if "remote" in on else None
     if rs:
         acts.append(A("remote_install", rs["hostname"]))
@@ -504,6 +510,29 @@ def _server_setup(ex: _Exec, arg: str) -> None:
         ex.cmd(["systemctl", "restart", "avahi-daemon"])
 
 
+def _web_state(ex: _Exec) -> None:
+    """The web unit as its own user: stop it, move its files to its folder, the shared files, its kit token, its
+    ACLs (web_access.py). Before the unit is (re)started with the new user."""
+    from . import web_access
+    print("\n==> The web unit's own user and files")
+    if ex.dry:
+        print(f"would move the web unit's files to {config.paths().web} and grant {config.WEB_USER} its files")
+        return
+    import pwd
+    web, kit = pwd.getpwnam(config.WEB_USER), os.stat(config.paths().state)
+    ex.ok(["systemctl", "stop", WEB_UNIT])          # it must not write the old place while its files move
+    moved = web_access.migrate(web.pw_uid, web.pw_gid)
+    if moved:
+        print(f"moved to {config.paths().web}: {', '.join(moved)}")
+    web_access.shared_files(kit.st_uid, kit.st_gid)
+    try:
+        web_access.pair(web.pw_uid, web.pw_gid)
+    except Exception as e:  # noqa: BLE001 - the web unit says how to pair later; the rest of the apply goes on
+        print(f"the web unit could not be paired with the kit server now ({type(e).__name__}); "
+              "the next `sudo filament-kit modules apply` tries again")
+    web_access.grant(web.pw_uid, kit.st_uid)
+
+
 def _remote_install(ex: _Exec, host: str) -> None:
     """Router files, certbot hooks and a placeholder certificate so nginx starts before certbot has run. When
     `nginx -t` fails, the router conf and proxy conf go back to what they were (or away), so a bad conf never
@@ -670,6 +699,10 @@ def _step(ex: _Exec, a: Action) -> None:
             f.unlink()
     elif k == "server_setup":
         _server_setup(ex, arg)
+    elif k == "tmpfiles":
+        ex.cmd(["systemd-tmpfiles", "--create", arg])
+    elif k == "web_state":
+        _web_state(ex)
     elif k == "udev_reload":
         ex.cmd(["udevadm", "control", "--reload"])
         ex.cmd(["udevadm", "trigger", "--subsystem-match=hidraw"])

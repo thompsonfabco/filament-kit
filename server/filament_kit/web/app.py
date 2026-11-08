@@ -48,7 +48,8 @@ def passphrase_file() -> Path:
 
 
 def oauth_file() -> Path:
-    return config.paths().state / "web" / "oauth.json"
+    """In the web unit's own state folder (/var/lib/filament-kit-web; apply's web_state moved it there)."""
+    return config.paths().web / "oauth.json"
 
 
 def transport_security(public: str) -> TransportSecuritySettings:

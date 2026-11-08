@@ -157,7 +157,7 @@ class TokenStore:
 
     def _write(self, tokens: list[dict], next_id: int) -> None:
         pairing.make_state_dir(self.path.parent)
-        pairing._write_atomic(self.path, render_tokens(tokens, next_id), 0o600, state_owned=True)
+        pairing._write_atomic(self.path, render_tokens(tokens, next_id), 0o644, state_owned=True)
 
     def issue(self, name: str | None = None) -> tuple[str, str]:
         """A new token: (id, token). The token is returned once and only its sha256 is written."""

@@ -447,6 +447,7 @@ def write_key(key: str) -> Path:
                     shutil.chown(tmp, group="filament-kit")
                 except (LookupError, OSError):
                     pass
+        config.grant_web_read(tmp)        # the web unit reads labels with it as its own user
         os.replace(tmp, dest)
     except BaseException:
         if tmp.exists():
@@ -1469,6 +1470,7 @@ def write_passphrase(text: str) -> Path:
         except (LookupError, OSError) as e:
             tmp.unlink(missing_ok=True)
             raise GroupMissing(f"cannot give {dest} to the filament-kit group ({e})") from None
+        config.grant_web_read(tmp)        # the web unit checks it as its own user
         os.replace(tmp, dest)
     except BaseException:
         tmp.unlink(missing_ok=True)
@@ -1596,7 +1598,7 @@ def cmd_web_status() -> int:
     ok &= _line(up, f"web unit answers on 127.0.0.1:{port}" + ("" if up else f" ({why})"),
                 "sudo systemctl restart filament-kit-web; journalctl -u filament-kit-web")
     try:
-        d = json.loads((config.paths().state / "web" / "oauth.json").read_text(encoding="utf-8"))
+        d = json.loads((config.paths().web / "oauth.json").read_text(encoding="utf-8"))
         now = time.time()
         live = sum(1 for v in (d.get("refresh") or {}).values() if (v.get("expires_at") or 0) > now)
         print(f"     connectors: {len(d.get('clients') or {})} registered, {live} signed in")
