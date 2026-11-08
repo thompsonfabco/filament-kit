@@ -13,6 +13,7 @@
 set -euo pipefail
 
 BIN=/opt/filament-kit/venv/bin/filament-kit
+STATION_DIR=/etc/filament-kit-station
 
 case "${1:-}" in
     config | cert | modules | remote | migrate-ops | migrate-scanner | update | uninstall | station | setup-code)
@@ -38,6 +39,12 @@ if [ "$(id -u)" -eq 0 ]; then
             exit 1
         fi
         exec runuser -u filament-kit -- "$BIN" library add - < "$3"
+    fi
+    # `status`: the station's pairing folder is closed to the service user, so root looks and status gets the answer
+    # (one line, never the token). With no folder there is no pairing to find, and status says so itself.
+    if [ "${1:-}" = status ] && [ -d "$STATION_DIR" ]; then
+        state="$("$BIN" station pairing-state 2>/dev/null)" || state=failed
+        exec runuser -u filament-kit -- "$BIN" "$@" "--station-pairing=$state"
     fi
     exec runuser -u filament-kit -- "$BIN" "$@"
 fi

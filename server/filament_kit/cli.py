@@ -118,7 +118,9 @@ def _hardware_lines() -> bool:
     return good
 
 
-def cmd_status(client_factory) -> int:
+def cmd_status(client_factory, station_pairing: str | None = None) -> int:
+    """`station_pairing`: the wrapper's answer from root (server_api.pairing_state), for a status run as the service
+    user, which can't read the station's pairing."""
     cfg = config.load()
     p = config.paths()
     on = modules.enabled(cfg)
@@ -169,7 +171,7 @@ def cmd_status(client_factory) -> int:
         good &= _station_lines(station_url)
     if "station" in on:
         from .station import server_api
-        print("\n".join(server_api.pairing_lines()))
+        print("\n".join(server_api.pairing_lines(station_pairing)))
 
     if "server" in on:
         print(f"--   display name: {cfg['server_name']}")
@@ -319,58 +321,41 @@ def cmd_station_pair(ask=input) -> int:
     if hasattr(os, "geteuid") and os.geteuid() != 0:
         print("error: run as root: sudo filament-kit station pair", file=sys.stderr)
         return 1
+    no_terminal = ("error: `sudo filament-kit station pair` needs a terminal: it asks for the link and for you to "
+                   "compare the fingerprint. Nothing was saved.")
     try:
-        link = server_api.parse_link(ask("Paste the link from 'sudo filament-kit pair --station' on the server: "))
+        text = ask("Paste the link from 'sudo filament-kit pair --station' on the server: ")
+    except (EOFError, RuntimeError, OSError):  # `< /dev/null`; `<&-` is no stdin (RuntimeError) or a dead one (OSError)
+        print(no_terminal, file=sys.stderr)
+        return 1
+    try:
+        link = server_api.parse_link(text)
     except ValueError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
-    cfg = config.load()
-    on = modules.enabled(cfg)
-    if "server" in on:  # the server is on this machine: talk to it over loopback first (the link lists LAN IPs)
-        link.ips = ["127.0.0.1"] + [i for i in link.ips or [link.host] if i != "127.0.0.1"]
-    seen = first = None
-    for ip in link.ips or [link.host]:
+
+    def owner_compares(seen: str) -> bool:
+        print("The server's certificate fingerprint:")
+        print("  " + " ".join(seen[i:i + 4] for i in range(0, len(seen), 4)))
         try:
-            seen, first = server_api.peer_fingerprint(ip, link.port, timeout=server_api.CONNECT_TIMEOUT), ip
-            break
-        except OSError:
-            continue
-    if seen is None:
-        print(f"error: the server is not reachable at {', '.join(link.ips or [link.host])} port {link.port}",
-              file=sys.stderr)
-        return 1
-    if seen != link.fp:
-        print("error: the server presents a different certificate than the link names; pair again", file=sys.stderr)
-        return 1
-    print("The server's certificate fingerprint:")
-    print("  " + " ".join(seen[i:i + 4] for i in range(0, len(seen), 4)))
-    if ask("Does it match the one 'sudo filament-kit pair --station' showed? [y/N] ").strip().lower() not in ("y", "yes"):
-        print("Not paired.")
-        return 1
-    # one authenticated call claims the token now (unclaimed, it lapses TOKEN_TTL after `pair --station`); it runs
-    # before anything is saved, so a failed re-pair leaves the station's working pairing as it was
-    status, body = server_api.ServerApi.from_link(link, first=first, timeout=15).hello()
-    if status != 200:
-        again = "run `sudo filament-kit pair --station` on the server again, then `sudo filament-kit station pair`"
-        if status == 401:
-            why = f"the link has expired (it works for {pairing.TOKEN_TTL // 60} minutes) or was used already"
-        elif status == 0:
-            why = f"the server did not answer ({body.get('message') or body.get('error')})"
-        else:
-            why = f"the server answered {status} ({body.get('message') or body.get('error')})"
-        print(f"error: not paired: {why}.\nfix: {again} within {pairing.TOKEN_TTL // 60} minutes", file=sys.stderr)
-        return 1
-    server_api.save_pairing(link, first=first)
-    if "station" not in on:
-        print("Paired. Switch the station module on to use it: sudo filament-kit modules enable station")
-        return 0
-    try:  # the station's unit lets only listed addresses through: add the server's, then restart it
-        apply.refresh_station(cfg)
-    except (apply.ApplyError, modules.ModuleError) as e:
-        print(f"Paired, but the station could not be updated ({e}). Run: sudo filament-kit modules apply",
-              file=sys.stderr)
-        return 0
-    print("Paired. The station was restarted and uses the server now.")
+            answer = ask("Does it match the one 'sudo filament-kit pair --station' showed? [y/N] ")
+        except (EOFError, RuntimeError, OSError):  # no answer is a no
+            print(no_terminal, file=sys.stderr)
+            return False
+        return answer.strip().lower() in ("y", "yes")
+
+    result = server_api.pair_with_link(link, confirm=owner_compares)
+    if result.status == "failed":
+        print(f"error: {result.message}", file=sys.stderr)
+    else:
+        print(result.message, file=sys.stderr if result.status == "paired_not_restarted" else sys.stdout)
+    return 1 if result.status in ("failed", "declined") else 0
+
+
+def cmd_station_pairing_state() -> int:
+    """One line for the wrapper, run as root: see server_api.pairing_state."""
+    from .station import server_api
+    print(server_api.pairing_state())
     return 0
 
 
@@ -1697,7 +1682,8 @@ def main(argv: list[str] | None = None, *, client_factory=None, manager_factory=
 def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory=None, sm_factory=None) -> int:
     ap = argparse.ArgumentParser(prog="filament-kit")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("status", help="check services, Spoolman, key, certificate")
+    stat = sub.add_parser("status", help="check services, Spoolman, key, certificate")
+    stat.add_argument("--station-pairing", help=argparse.SUPPRESS)  # passed by the wrapper, from its check as root
     pp = sub.add_parser("pair", help="show a QR code and code to pair a phone (--pc: a link for the PC sync)")
     pkind = pp.add_mutually_exclusive_group()
     pkind.add_argument("--pc", action="store_true", help="pair the Windows PC sync: print the link, no QR code")
@@ -1705,6 +1691,7 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     stp = sub.add_parser("station", help="intake station commands (run on the station PC)")
     stp_sub = stp.add_subparsers(dest="station_cmd", required=True)
     stp_sub.add_parser("pair", help="pair the station's button flow with the server (link from 'pair --station')")
+    stp_sub.add_parser("pairing-state", help="print whether the button flow is paired, as one line")
     pkind.add_argument("--text", action="store_true", help="print the pairing link as text instead of a QR code")
     up = sub.add_parser("unpair", help="list or remove paired phones")
     up.add_argument("device_id", nargs="?")
@@ -1811,11 +1798,11 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     if args.cmd == "klipper":
         return klipper_cli.run(args)
     if args.cmd == "status":
-        return cmd_status(client_factory or _default_client)
+        return cmd_status(client_factory or _default_client, station_pairing=args.station_pairing)
     if args.cmd == "pair":
         return cmd_pair(pc=args.pc, station=args.station, text=args.text)
     if args.cmd == "station":
-        return cmd_station_pair()
+        return cmd_station_pairing_state() if args.station_cmd == "pairing-state" else cmd_station_pair()
     if args.cmd == "unpair":
         return cmd_unpair(args.device_id)
     if args.cmd == "config":
