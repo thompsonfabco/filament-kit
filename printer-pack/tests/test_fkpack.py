@@ -650,3 +650,57 @@ def test_lasttag_allow_refuses_a_name(data, moon, name):
     with pytest.raises(fkpack.PackError, match="IP address"):
         p.install(["lasttag"], allow=[name])
     assert not (data / "config" / "filament-kit" / "lasttag" / "allow").exists()
+
+
+def test_the_readers_gcode_records_the_spool_against_the_active_tool():
+    """Only SET_ACTIVE_SPOOL would be undone by the next _FK_TOOL_CHANGED, which reads the tool table."""
+    out = fkpack.nfc_config(UPSTREAM, "tty:USB0:pn532", "", "http://localhost:7125", False)
+    assert "_FK_TAG_SPOOL ID={spool}" in out and "_FK_SCAN_OK ID={spool}" in out
+    assert "\nSET_ACTIVE_SPOOL" not in out
+
+
+def test_the_tag_macro_is_in_the_spool_part(data, moon):
+    pack(data, moon).install(["spool"])
+    cfg = (data / "config" / "filament-kit" / "fk_spool.cfg").read_text()
+    assert "[gcode_macro _FK_TAG_SPOOL]" in cfg
+
+
+LOOKUP_LINE = "_FK_ON_SPOOL_SET"
+
+
+def _own_macro(moon, gcode):
+    moon.objects = [*moon.objects, "gcode_macro SET_ACTIVE_SPOOL", "configfile"]
+    moon.status["configfile"] = {"settings": {"gcode_macro set_active_spool": {"gcode": gcode}}}
+
+
+def test_load_temp_says_when_the_printers_own_macro_will_not_trigger_it(data, moon):
+    shell_command(data)
+    _own_macro(moon, "SAVE_VARIABLE VARIABLE=spool VALUE={params.ID}")
+    p = pack(data, moon)
+    p.install(["spool", "loadtemp"])
+    line = [s for s in p.said if LOOKUP_LINE in s]
+    assert len(line) == 1 and "SET_ACTIVE_SPOOL" in line[0]
+    assert "gcode_macro" not in (data / "config" / "printer.cfg").read_text()      # its macro is the owner's
+
+
+def test_load_temp_says_nothing_when_the_owner_added_the_hook(data, moon):
+    shell_command(data)
+    _own_macro(moon, "_FK_ON_SPOOL_SET ID={params.ID}")
+    p = pack(data, moon)
+    p.install(["spool", "loadtemp"])
+    assert not any(LOOKUP_LINE in s for s in p.said)
+
+
+def test_load_temp_says_nothing_with_the_packs_own_macro(data, moon):
+    shell_command(data)
+    moon.objects = ["print_stats", "toolhead"]
+    p = pack(data, moon)
+    p.install(["spool", "loadtemp"])
+    assert not any(LOOKUP_LINE in s for s in p.said)
+
+
+def test_load_temp_alone_says_it_needs_the_spool_part(data, moon):
+    shell_command(data)
+    p = pack(data, moon)
+    p.install(["loadtemp"])
+    assert any("spool part" in s for s in p.said)

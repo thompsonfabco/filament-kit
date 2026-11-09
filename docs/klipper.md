@@ -67,7 +67,7 @@ kit (correct the spool in Spoolman instead). The printer status warns when Moonr
 Spoolman, or to none.
 
 On a multi-tool printer Moonraker charges only one spool at a time, so the active spool must follow the tool: the
-printer pack's `_FK_TOOL_CHANGED T=<n>` does that; add it to the end of your tool-change macro. AFC and Happy Hare do
+printer pack's `_FK_TOOL_CHANGED T=<n>` does that; add it to the end of your tool-change macro. A tag read by the reader the pack installs goes in the active tool. AFC and Happy Hare do
 this themselves.
 
 ## Slicer presets

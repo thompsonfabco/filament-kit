@@ -219,6 +219,7 @@ for variant in single toolchanger; do
     mkdir -p "$RUN/state-$variant" "$RUN/etc-$variant"
     FK_STATE=$RUN/state-$variant FK_ETC=$RUN/etc-$variant FK_E2E_MOONRAKER_PORT=$MR_PORT FK_E2E_SPOOLMAN_PORT=$SM_PORT \
         PYTHONPATH=$REPO/server "$WORK/kit-env/bin/python" "$REPO/tools/e2e/klipper_e2e.py" "$variant" "$DATA"
+        "$WORK/klippy-env/bin/python" "$REPO/tools/e2e/render_tag_macro.py" "$DATA/config/filament-kit/fk_spool.cfg"
     log "variant $variant: printer pack uninstall"
     pack uninstall --yes
     if grep -q "include filament-kit" "$DATA/config/printer.cfg"; then

@@ -238,8 +238,28 @@ class Pack:
             self.write(m, "scripts/fk_load_temp.sh", self._read_pack("scripts/fk_load_temp.sh"), 0o755)
             self.write(m, "fk_load_temp.cfg", self._read_pack("cfg/fk_load_temp.cfg").replace("@PACK@", self.dest))
             self.out("  load temperature written: _FK_LOAD_LOOKUP.temp holds the active spool's temperature")
+            self.say_load_temp_trigger(m)
         assert scripts
         return True
+
+    def say_load_temp_trigger(self, m):
+        """The lookup runs from _FK_ON_SPOOL_SET, which only the pack's SET_ACTIVE_SPOOL calls. A printer's own macro is
+        the owner's to change: say what it takes, unless it's there already."""
+        if "fk_active_spool.cfg" in m["files"]:
+            return
+        if "fk_spool.cfg" not in m["files"]:
+            self.out("  the lookup runs when the pack's spool part sets a spool: install that part too")
+            return
+        if "gcode_macro SET_ACTIVE_SPOOL" not in self.objects():
+            return
+        try:
+            settings = self._get("/printer/objects/query?configfile=settings")["status"]["configfile"]["settings"]
+            own = settings["gcode_macro set_active_spool"]["gcode"]
+        except Exception:       # can't read it: it's still the printer's own, and the advice still holds
+            own = ""
+        if "_FK_ON_SPOOL_SET" not in own:
+            self.out("  this printer's own SET_ACTIVE_SPOOL won't trigger the lookup; add this line to that macro:\n"
+                     "    _FK_ON_SPOOL_SET ID={params.ID}")
 
     def nfc_dir(self):
         return os.path.join(self.home, "nfc2klipper")
@@ -664,7 +684,7 @@ def nfc_config(upstream, device, spoolman, moonraker, web):
         t = _set_key(t, "spoolman", "spoolman-url", json.dumps(spoolman))
     t = _set_key(t, "moonraker", "moonraker-url", json.dumps(moonraker))
     t = _set_key(t, "moonraker", "always-send", "true")
-    t = re.sub(r'(?ms)^setting_gcode = """.*?"""', 'setting_gcode = """\nSET_ACTIVE_SPOOL ID={spool}\n'
+    t = re.sub(r'(?ms)^setting_gcode = """.*?"""', 'setting_gcode = """\n_FK_TAG_SPOOL ID={spool}\n'
                                                   '_FK_SCAN_OK ID={spool}\n"""', t, count=1)
     t = re.sub(r'(?ms)^clearing_gcode = """.*?"""', 'clearing_gcode = """\n"""', t, count=1)
     return t
