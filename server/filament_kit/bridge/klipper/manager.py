@@ -344,14 +344,13 @@ class KlipperFamily(LoadsMixin):
 
     def scan(self, subnet: str | None = None) -> list[dict]:
         """The owner's Scan: probe a /24 (this machine's by default) for Moonraker; found printers are recorded
-        unconfigured. Raises ValueError for a bad or too large subnet, one that's neither this machine's nor private
-        (discovery.check_range), and while a scan runs or within SCAN_GAP of the last: one at a time across the server."""
+        unconfigured. Raises ValueError for a bad or too large subnet, one the server can't reach (discovery.check_range),
+        and while a scan runs or within SCAN_GAP of the last: one at a time across the server."""
         import ipaddress
-        own = discovery.own_subnet()
-        net = ipaddress.ip_network(subnet, strict=False) if subnet else own
+        net = ipaddress.ip_network(subnet, strict=False) if subnet else discovery.own_subnet()
         if net is None:
             raise ValueError("cannot tell this machine's network; give a subnet")
-        discovery.check_range(net, own)
+        discovery.check_range(net)
         if not self._scan_lock.acquire(blocking=False):
             raise ValueError("a scan is already running; try again when it ends")
         try:

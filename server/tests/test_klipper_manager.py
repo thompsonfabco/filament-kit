@@ -326,7 +326,7 @@ def test_job_record_never_blocks_follow_moves(moonraker, spoolman_url, monkeypat
 
 
 # --- the Scan a client can ask for ------------------------------------------------------------------------------------
-OWN = ipaddress.ip_network("8.8.8.0/24")       # a public /24, so it's only allowed for being this machine's
+OWN = ipaddress.ip_network("10.9.8.0/24")
 
 
 @pytest.fixture
@@ -337,23 +337,39 @@ def scanning(monkeypatch):
     return calls
 
 
-@pytest.mark.parametrize("subnet", ["192.168.50.0/24", "10.1.2.0/24", "172.16.0.0/24", "100.100.100.0/24",
-                                    "100.64.0.0/24", "100.127.255.0/24", "8.8.8.0/24", "8.8.8.128/25", "192.168.50.7"])
-def test_scan_allows_private_tailscale_and_own_ranges(fam, scanning, subnet):
+@pytest.mark.parametrize("subnet", ["192.168.50.0/24", "10.1.2.0/24", "172.16.0.0/24", "172.31.255.0/24", "192.168.50.7"])
+def test_scan_allows_what_the_server_can_reach(fam, scanning, subnet):
     assert fam.scan(subnet) == []
     assert len(scanning) == 1
 
 
 def test_scan_defaults_to_this_machines_network(fam, scanning):
     fam.scan()
-    assert scanning == ["8.8.8.0/24"]
+    assert scanning == ["10.9.8.0/24"]
 
 
-@pytest.mark.parametrize("subnet", ["1.1.1.0/24", "100.63.255.0/24", "100.128.0.0/24", "8.8.9.0/24", "2606:4700::/120"])
-def test_scan_refuses_a_range_that_is_neither(fam, scanning, subnet):
+@pytest.mark.parametrize("subnet", ["1.1.1.0/24", "100.64.0.0/24", "100.100.100.0/24", "172.32.0.0/24", "2606:4700::/120",
+                                    "fd00::/120", "fe80::/120", "::1/128", "127.0.0.0/24", "169.254.169.0/24", "0.0.0.0/24",
+                                    "240.0.0.0/24", "192.0.2.0/24", "198.18.0.0/24"])
+def test_scan_refuses_what_the_server_cannot_reach(fam, scanning, subnet):
+    """The unit would block each of these, and the scan would read as "no printers"."""
     with pytest.raises(ValueError, match="private"):
         fam.scan(subnet)
     assert scanning == []
+
+
+def test_a_machine_on_a_public_network_is_told_rather_than_finding_nothing(fam, scanning, monkeypatch):
+    monkeypatch.setattr(discovery, "own_subnet", lambda: ipaddress.ip_network("8.8.8.0/24"))
+    with pytest.raises(ValueError, match="private"):
+        fam.scan()
+    assert scanning == []
+
+
+def test_the_scan_rule_is_the_units_allow_list():
+    unit = Path(__file__).parents[2] / "install" / "systemd" / "filament-kit.service"
+    allow = next(ln for ln in unit.read_text().splitlines() if ln.startswith("IPAddressAllow=")).split("=", 1)[1].split()
+    lan = {ipaddress.ip_network(n) for n in allow if n not in ("localhost", "160.79.104.0/21", "2607:6bc0::/48")}
+    assert lan == set(discovery.REACHABLE)
 
 
 def test_scan_refuses_too_many_addresses_even_when_private(fam, scanning):
@@ -472,7 +488,7 @@ def test_a_scan_shows_a_printer_added_by_name_as_that_printer(fam, monkeypatch):
     monkeypatch.setattr(discovery, "own_subnet", lambda: None)
     monkeypatch.setattr(discovery, "scan", lambda net, **kw: [("192.0.2.20", 7125), ("192.0.2.21", 7125)])
     mine = registry.add_klipper("Voron", "voron.local")
-    out = fam.scan("192.0.2.0/24")
+    out = fam.scan("10.1.2.0/24")
     assert out[0] == {"id": mine.serial, "host": "192.0.2.20", "port": 7125, "name": "Voron", "configured": True}
     assert out[1]["configured"] is False
     assert len(registry.load()) == 2
