@@ -52,6 +52,9 @@ interface ApkInstall {
 
     /** Opens the waiting install confirmation. */
     fun showConfirm()
+
+    /** Why the last install failed, in words for the user; null when it did not. */
+    val failure: Flow<String?>
 }
 
 /**
@@ -60,6 +63,8 @@ interface ApkInstall {
  */
 data class UpdateUi(
     val available: Int? = null,
+    /** The server's release, which the update comes with (`/api/info` `version`). */
+    val offeredVersion: String? = null,
     val busy: Boolean = false,
     val needsPermission: Boolean = false,
     val error: String? = null,
@@ -100,6 +105,9 @@ class Updater(
         }
         viewModelScope.launch {
             installer.confirmPending.collect { pending -> _state.update { it.copy(confirmPending = pending) } }
+        }
+        viewModelScope.launch {
+            installer.failure.collect { why -> if (why != null) _state.update { it.copy(error = why) } }
         }
     }
 
@@ -148,6 +156,7 @@ class Updater(
             _state.update {
                 it.copy(
                     available = if (isNewer(info.apkVersion, currentVersion)) offered else null,
+                    offeredVersion = info.version,
                     serverTooNew = info.api > SUPPORTED_API,
                 )
             }

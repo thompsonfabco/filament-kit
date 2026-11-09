@@ -50,6 +50,7 @@ class ApiOwnedTest {
         override suspend fun install(apk: File) = Unit
         override val confirmPending: Flow<Boolean> = flowOf(false)
         override fun showConfirm() = Unit
+        override val failure: Flow<String?> = flowOf(null)
     }
 
     private val day = 24L * 60 * 60 * 1000
