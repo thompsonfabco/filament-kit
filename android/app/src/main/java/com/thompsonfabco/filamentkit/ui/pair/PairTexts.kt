@@ -18,6 +18,8 @@ object PairTexts {
     fun confirmIntro(host: String) = "$host presented this certificate fingerprint. Compare it with the fingerprint " +
         "shown with the pairing code on the server before you continue."
 
+    const val FINGERPRINT_REJECTED = "The fingerprint didn't match, so something else may be answering at this address."
+
     const val SKIP_CHECK_LABEL = "Skip the fingerprint check for new servers"
     const val SKIP_CHECK_HELP = "When you pair by address, the app trusts the certificate the server presents; a " +
         "scanned QR code is checked either way."

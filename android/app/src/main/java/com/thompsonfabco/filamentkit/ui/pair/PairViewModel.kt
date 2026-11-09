@@ -114,7 +114,7 @@ class PairViewModel(
 
     fun rejectFingerprint() {
         confirmed = false
-        _state.update { it.copy(step = Step.Address, fingerprint = null, error = null) }
+        _state.update { it.copy(step = Step.Address, fingerprint = null, error = PairTexts.FINGERPRINT_REJECTED) }
     }
 
     fun submitCode(codeInput: String) {

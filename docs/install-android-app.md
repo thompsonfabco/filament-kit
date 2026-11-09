@@ -92,7 +92,7 @@ filament-kit install apps: allow it, go back and tap **Tap to install** again.
 
 ### Update refused
 
-If the app's own update says **Don't install this update** and you did not build the app yourself, don't uninstall
+If the app's own update says **Android refused this update** and you did not build the app yourself, don't uninstall
 the app. A release update is always signed like the app you already have, so a refusal means this file is not from
 the same maker: check who runs the server and where its app came from. (This is different from **App not installed**
 below, which happens when you install a downloaded file over an older copy signed by someone else.)

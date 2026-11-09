@@ -97,7 +97,16 @@ class PairViewModelTest {
         vm.rejectFingerprint()
         assertEquals(Step.Address, ui.step)
         assertNull(ui.fingerprint)
+        assertEquals(PairTexts.FINGERPRINT_REJECTED, ui.error)
         assertFalse(backend.calls.any { it.startsWith("pair") })
+    }
+
+    @Test fun connectingAgainAfterDecliningClearsTheSentence() {
+        vm.submitAddress("10.0.0.2", "9000")
+        vm.rejectFingerprint()
+        vm.submitAddress("10.0.0.3", "9000")
+        assertEquals(Step.Confirm, ui.step)
+        assertNull(ui.error)
     }
 
     @Test fun withTheCheckSkippedAddressGoesStraightToTheCodeAndPinsTheProbedCertificate() {
