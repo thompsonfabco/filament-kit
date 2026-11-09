@@ -579,6 +579,9 @@ the `station` module, on the server computer (`all-in-one`) or on a second compu
   Hold. All of it is in [station/PANEL.md](../station/PANEL.md). The station installs `espeak-ng` and `ffmpeg` for
   the speech and the picture, and its user joins the `video` group to read the camera.
 
+Build guides, wiring and enclosures for the station's devices live in a separate repository, filament-kit-hardware.
+This guide and the kit keep the list of supported devices and how the station finds and updates them.
+
 ### What the installer changes on the computer
 
 Turning the station on (install or **Modules**) also changes these, because each one stops a station from
