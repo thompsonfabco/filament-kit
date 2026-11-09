@@ -7,7 +7,7 @@ import pytest
 
 from filament_kit.bridge import ams, manual, mapping, registry
 
-SERIAL = "01P00A222222222"
+SERIAL = "0948ZZ0A0000001"
 
 
 def tray(tid, kind="PLA"):
