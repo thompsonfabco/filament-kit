@@ -202,8 +202,8 @@ installs espeak-ng and ffmpeg and gives the service the `video` group for the we
 
 Offline tests (Linux / WSL):
 
-- `panel/test/bme280_test.cpp`: the BME280 compensation against the datasheet example, and the AHT20 CRC and decoding
-  (`g++ -std=c++17 -I../src bme280_test.cpp -o /tmp/bme280_test && /tmp/bme280_test` in `panel/test`).
+- `panel/test/test_core/test_main.cpp`: the panel_core logic (line parser, lamp and button timing, speech conversion), the BME280
+  compensation against the datasheet example, and the AHT20 CRC and decoding (`pio test -d station/panel -e native`).
 - `server/tests/test_station_flow_panel.py` drives the flow and the panel relay against a fake
   server and a recording serial port; `test_station_flow_e2e.py` runs the flow against the real kit API (TLS, fake
   Spoolman, fake Claude); `test_station_panel.py` covers speech framing and timing, the photo and AIR; and
