@@ -16,6 +16,9 @@
     ],
     "filament_diameter": [
       "1.75"
+    ],
+    "filament_density": [
+      "1.09"
     ]
   },
   "published_ranges": {
@@ -23,12 +26,19 @@
     "_drying": "80C 4h",
     "_diameter_tolerance": "+/-0.05",
     "_enclosure": "Heated chamber recommended",
-    "_notes": "Values from MatterHackers (authorized reseller) listing; official page unreachable (HTTP 429). Higher extruder temps increase conductivity. ESD: target surface resistance 10^7-10^9 ohm. Density/Tg not found."
+    "_notes": "Density/Tg/HDT from 3DXSTAT ESD-ABS TDS Rev 3.0 (copies at in3dtec and filamentworld; also linked from official hub). Nozzle/bed not verified this run; PR #688 reports official page 220-240C / 100-110C - keep existing nozzle values if present. Earlier entry: Values from MatterHackers (authorized reseller) listing; official page unreachable (HTTP 429). Higher extruder temps increase conductivity. ESD: target surface resistance 10^7-10^9 ohm. Density/Tg not found.",
+    "_vitrification": "105 (Tg, DSC)",
+    "_hdt_0.45MPa": "97"
   },
-  "conflicts": [],
+  "conflicts": [
+    "HDT 102 (0.45MPa) (3DXSTAT ESD-ABS TDS Rev 2.1 (directindustry))"
+  ],
   "source_quality": "reseller_tds_copy",
   "sources": [
+    "https://www.in3dtec.com/wp-content/uploads/2020/09/ESD_ABS_v3.pdf",
+    "https://filamentworld.de/fact-sheets/3DXTech_3DXSTAT_ESD_ABS_Datenblatt_EN.pdf",
+    "https://www.3dxtech.com/pages/filament-drying-instructions",
     "https://www.matterhackers.com/store/l/3dxtech-3dxstat-esd-safe-abs-filament/sk/MA9K94YF"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "vendor": "Amazon Basics",
+  "product": "PETG",
+  "material": "PETG",
+  "colors": [
+    "Translucent Red",
+    "Purple",
+    "Yellow",
+    "Orange",
+    "Gray",
+    "Blue",
+    "Red",
+    "White"
+  ],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_diameter_tolerance": "+/-0.05",
+    "_notes": "The official Amazon listings (B07HHKW729, B07DVL9DTD, B07Y3Q5T54) give only diameter/tolerance, 'no heating bed needed', a 1 kg spool with a built-in remaining-filament gauge and a resealable bag. No nozzle temperature, bed temperature, density or drying is published. A third-party Patreon post ('AmazonBasics PETG 3D Printer Filament, 1.75mm, Gray') quotes 'what Amazon thinks PETG should print at' as 230-240 C nozzle and 80 C bed; it is not an Amazon page and is not used. Some colours are listed as currently unavailable."
+  },
+  "conflicts": [],
+  "source_quality": "brand_amazon_listing",
+  "sources": [
+    "https://www.amazon.com/AmazonBasics-Printer-Filament-1-75mm-Spool/dp/B07HHKW729",
+    "https://www.amazon.com/AmazonBasics-PETG-3D-Printer-Filament/dp/B07DVL9DTD",
+    "https://www.amazon.com/AmazonBasics-Printer-Filament-1-75mm-Spool/dp/B07Y3Q5T54"
+  ],
+  "updated": "2026-11-02"
+}

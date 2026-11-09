@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "PLA-Silk Rainbow",
+  "material": "PLA",
+  "colors": [
+    "Rainbow A",
+    "Rainbow B",
+    "Rainbow C"
+  ],
+  "bambu_parent": "Bambu PLA Silk",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.21"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "45-60",
+    "_hdt_0.45MPa": "55.85",
+    "_notes": "Values are from the esun3d.com product page, read from a search snippet. Fan, speed and drying were not captured. eSUN says to slow outer walls for gloss and use higher fan for overhangs. Hex codes: Rainbow A #DE946F, Rainbow B #966D57, Rainbow C #287B89."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.esun3d.com/epla-silk-rainbow-product"
+  ],
+  "updated": "2026-11-02"
+}

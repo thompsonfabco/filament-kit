@@ -43,9 +43,10 @@
     "_hdt_0.45MPa": "87",
     "_vicat": "94",
     "_annealing": "80-90C 6-12h",
-    "_notes": "TDS V1.0: Engineering Plate / High Temperature Plate / Textured PEI with glue; HDT 1.8 MPa 84 C; PC+ABS spool rated 90 C. kingroon.com handle says 'abs-carbon-fiber' but the product is plain ABS in solid colours. Verification 2026-11-01: fields and plate/chamber/fan/retraction ranges confirmed against the TDS PDF; kingroon.com / kingroon3d.com product pages returned HTTP 429, so page-derived notes and conflicts were not re-checked."
+    "_notes": "TDS (wiki.kingroon.com, V1.0, 2025/12/1): nozzles 0.2-0.8, Engineering/High Temp/Textured PEI plate, fan on, HDT 1.8MPa 84C, Tg N/A. Chamber 45-60C implies an enclosed printer. Retraction/print-speed/chamber label mapping inferred from the flattened PDF layout (value order matches the other Kingroon V1.0 TDS sheets: retraction length, retraction speed, chamber temp, overhang, bridging ... printing speed). (ABS sheet values 20-40 mm/s and <300 mm/s are unlabelled in the extraction.) Product page not re-read this run. Earlier entry: TDS V1.0: Engineering Plate / High Temperature Plate / Textured PEI with glue; HDT 1.8 MPa 84 C; PC+ABS spool rated 90 C. kingroon.com handle says 'abs-carbon-fiber' but the product is plain ABS in solid colours. Verification 2026-11-01: fields and plate/chamber/fan/retraction ranges confirmed against the TDS PDF; kingroon.com / kingroon3d.com product pages returned HTTP 429, so page-derived notes and conflicts were not re-checked."
   },
   "conflicts": [
+    "Kingroon Filament Guide datasheet 'ABS': 240-270C, bed 90-110, 1.04 g/cm3, HDT 77C, fan 0%",
     "kingroon.com legacy 'ABS 3D Printer Filament 1.75mm (FRESH)' page: nozzle 240-270, bed 80-120, print speed 50-100 mm/s"
   ],
   "source_quality": "official_tds",
@@ -53,5 +54,5 @@
     "https://wiki.kingroon.com/kingroon_abs_technical_data_sheet_v1.0.pdf",
     "https://kingroon.com/products/2kg-pack-abs-3d-printer-filament-fresh"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

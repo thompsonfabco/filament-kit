@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "Polycarbonate (PC)",
+  "material": "PC",
+  "colors": [],
+  "bambu_parent": "Bambu PC",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "280"
+    ],
+    "nozzle_temperature_range_high": [
+      "310"
+    ],
+    "filament_density": [
+      "1.2"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "110-120",
+    "_drying": "120C 4+h",
+    "_vitrification": "147 (Tg, DSC)",
+    "_hdt_0.45MPa": "135",
+    "_enclosure": "Heated chamber recommended (blog: minimum 90C chamber for low shrinkage)",
+    "_notes": "Official page '3DXMAX PC' (SABIC Lexan) + 3DXMAX PC TDS Rev 3.0. Upper nozzle bound 310C exceeds 300C limit of X1/P1/P2S."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://www.3dxtech.com/products/3dxmax-r-pc",
+    "https://cdn.shopify.com/s/files/1/0625/4185/6821/files/3DXMAX_PC_TDS_v3.pdf?v=1723942764",
+    "https://static1.squarespace.com/static/5b3b1db1da02bcaf7d7d3922/t/6664369967faa2468457ba6b/1717843609348/3DXTech+PC-TDS-v03.pdf"
+  ],
+  "updated": "2026-11-02"
+}

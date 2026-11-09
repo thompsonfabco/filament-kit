@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "PPS CF10",
+  "material": "PPS-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu PPS-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100-120",
+    "_print_speed": "30-50mm/s",
+    "_diameter_tolerance": "+/-0.03",
+    "_fiber_content": "10% carbon fiber (per product name 'CF10')",
+    "_hardened_nozzle_required": "yes (carbon-fibre filled; Eryone's PPS-CF article refers to wear-resistant nozzles)",
+    "chamber_temperatures": "50-60",
+    "_notes": "Product page spec list: 'Printing Speed: 30-50mm/s, Nozzle temperature: 250-280℃, Build plate temperature: 100-120℃'. Chamber 50-60°C is from Eryone's own PPS-CF article, not the product page. If the article's 290-320°C is correct, this exceeds stock X1/P1 hotends (300°C). 0.5kg spool. Bambu PPS-CF preset existence not confirmed; fall back to Generic PPS-CF."
+  },
+  "conflicts": [
+    "nozzle: 290-320°C nozzle, bed 100-120°C, chamber 50-60°C (https://www.eryone.com/news/introduction-to-polyphenylene-sulfide-carbon-fiber-composite-pps-cf/ (Eryone article))",
+    "nozzle/bed: 310-350°C, bed 80-90°C (https://3dstisk.com/en/product/eryone-pps-cf10-black-0-5-kg/ (reseller; values match Polymaker Fiberon PPS-CF10))"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://eryone3d.com/products/pps-cf10-filament-1-75mm-0-03mm-0-5kg",
+    "https://www.eryone.com/news/introduction-to-polyphenylene-sulfide-carbon-fiber-composite-pps-cf/"
+  ],
+  "updated": "2026-11-02"
+}

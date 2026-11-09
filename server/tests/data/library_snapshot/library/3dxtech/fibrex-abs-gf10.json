@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "FibreX ABS GF10",
+  "material": "ABS-GF",
+  "colors": [],
+  "bambu_parent": "Bambu ABS-GF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "245"
+    ],
+    "filament_density": [
+      "1.15"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "95-110",
+    "_drying": "80C 4h",
+    "_vitrification": "105 (Tg, DSC)",
+    "_hdt_0.45MPa": "98",
+    "_hardened_nozzle_required": "Yes (hardened steel, 0.4mm minimum)",
+    "_min_nozzle": "0.4",
+    "_notes": "Official page 'FibreX ABS+GF' (in-use up to 98C). Density/Tg/HDT from FibreX ABS+GF10 TDS Rev 1.0 (via search snippet)."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.3dxtech.com/products/fibrex-abs-gf-1",
+    "https://www.3dxtech.com/pages/filament-drying-instructions"
+  ],
+  "updated": "2026-11-02"
+}

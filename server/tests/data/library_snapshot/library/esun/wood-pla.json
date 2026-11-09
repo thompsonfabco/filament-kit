@@ -26,13 +26,13 @@
   "conflicts": [
     "[pass 3] Other eSUN product copy states bed 45-60C and extruder 210-235C; TDS used.",
     "[pass 3] Spool label states 190-210C.",
-    "[pass 3] Brand inferred from label format; not confirmed from listing B0D813CY1C.",
-    "[merge] density 0.7 not applied: the TDS describes eSUN's active-foaming wood PLA and the brand of this spool is unconfirmed; Spoolman keeps its existing density"
+    "[pass 3] Brand inferred from label format; not confirmed from the Amazon listing.",
+    "[merge] density 0.7 not applied: the TDS describes eSUN's active-foaming wood PLA and the brand of this line is unconfirmed"
   ],
   "source_quality": "official_tds",
   "sources": [
     "https://www.esun3d.com/uploads/eSUN_Wood-Filament_TDS_V4.0.pdf",
     "https://www.esun3d.com/news/7222"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-08"
 }

@@ -29,19 +29,21 @@
   },
   "published_ranges": {
     "bed_all_plates": "60-80",
-    "_print_speed": "50-250",
+    "_print_speed": "50-250mm/s",
     "_diameter_tolerance": "+/-0.03",
-    "_notes": "Nozzle 230-250C, bed 60-80C, speed 50-250mm/s from the sovol3d.com PETG product specification table (confirmed via search-engine extraction of the 'Sovol PETG 3D Printer Filament 6KG' / sovol-petg-3d-filaments-2kg page; sovol3d.com returned HTTP 429 to direct fetches). Tolerance and 1.75mm from Sovol's own Amazon listing title (read directly, B0FMXRV2LY: 'Dimensional Accuracy +/- 0.03 mm'). No density, drying or fan values published."
+    "_notes": "Visible spec block on sovol3d.com PETG 2kg page. Tolerance from Sovol Amazon listing. Drying: Sovol says only 'Please dry PETG filament before printing'; sister brand Comgrow states 70°C >3h (not entered). Density not published. Earlier entry: Nozzle 230-250C, bed 60-80C, speed 50-250mm/s from the sovol3d.com PETG product specification table (confirmed via search-engine extraction of the 'Sovol PETG 3D Printer Filament 6KG' / sovol-petg-3d-filaments-2kg page; sovol3d.com returned HTTP 429 to direct fetches). Tolerance and 1.75mm from Sovol's own Amazon listing title (read directly, B0FMXRV2LY: 'Dimensional Accuracy +/- 0.03 mm'). No density, drying or fan values published."
   },
   "conflicts": [
+    "nozzle/bed/speed: Nozzle 220℃, Platform 70℃, 150 mm/s (within 200 mm/s), tolerance ±0.02 mm (embedded description on the same sovol3d.com page)",
     "sovol3d.com 'Sovol PETG 3D Filaments' listing description block: Nozzle Temperature 220C, Platform Temperature 70C, speed 150 mm/s (search-engine extraction); main spec table 230-250C / 60-80C kept."
   ],
   "source_quality": "official_page",
   "sources": [
+    "https://www.sovol3d.com/products/sovol-petg-3d-filaments-2kg",
+    "https://www.amazon.com/Sovol-Precision-Toughness-Tightness-Dimensional/dp/B0FMXW4BP2",
     "https://www.sovol3d.com/products/sovol-petg-3d-filaments-gradient-blue",
     "https://www.sovol3d.com/products/sovol-petg-3d-filaments-gradient-purple",
-    "https://www.sovol3d.com/products/sovol-petg-3d-filaments-2kg",
     "https://www.amazon.com/dp/B0FMXRV2LY"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

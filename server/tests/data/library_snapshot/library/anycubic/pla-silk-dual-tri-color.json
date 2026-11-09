@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "vendor": "Anycubic",
+  "product": "PLA Silk Dual/Tri-Color",
+  "material": "PLA",
+  "colors": [
+    "Black Gold",
+    "Black Blue",
+    "Black Green",
+    "Black Purple",
+    "Pink Gold",
+    "Red Gold",
+    "Red Blue",
+    "Blue Green",
+    "Black Red",
+    "Blue Green Purple",
+    "Red Yellow Green",
+    "Red Blue Yellow"
+  ],
+  "bambu_parent": "Bambu PLA Silk+",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.22"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "12"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "55-56",
+    "_drying": "55-65C 6-8h",
+    "_print_speed": "50-250 mm/s",
+    "_vicat": "54",
+    "_hdt_0.45MPa": "53",
+    "_min_nozzle": "0.4",
+    "_enclosure": "Not required",
+    "_ams": "Official page: ACE Pro compatible (Anycubic); no Bambu AMS statement.",
+    "_notes": "Specs from anycubic.au/products/pla-silk-dual-tri-color-filament. Bed printed as '55-56' (copied as printed; likely typo). Diameter taken from the page FAQ ('compatible with all 1.75mm filament-supported printers'); no explicit diameter line or tolerance published. Dry before use. Bambu parent not confirmed (multi-colour silk; Bambu PLA Silk+ chosen as closest)."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.anycubic.au/products/pla-silk-dual-tri-color-filament"
+  ],
+  "updated": "2026-11-02"
+}

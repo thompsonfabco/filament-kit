@@ -18,18 +18,24 @@
   },
   "published_ranges": {
     "bed_all_plates": "50-60",
-    "_notes": "Values from the sovol3d.com 'Sovol Glow in dark PLA Filament 1 KG' listing (Nozzle Temperature 200-240C, Bed Temperature 50-60C), confirmed only via search-engine extraction because sovol3d.com returned HTTP 429 to direct fetches. No density, tolerance, drying or speed published. Glow powder is abrasive in general, but the Sovol hardened-nozzle advice could not be read on the blog."
+    "_notes": "Values from Sovol's own UK and EU storefronts (1kg product). Retraction: Bowden 4-6mm, direct drive 0.5-1mm. Hardened-nozzle advice NOT published on any Sovol page found. Density and drying not published. Bambu PLA Glow parent not confirmed. Earlier entry: Values from the sovol3d.com 'Sovol Glow in dark PLA Filament 1 KG' listing (Nozzle Temperature 200-240C, Bed Temperature 50-60C), confirmed only via search-engine extraction because sovol3d.com returned HTTP 429 to direct fetches. No density, tolerance, drying or speed published. Glow powder is abrasive in general, but the Sovol hardened-nozzle advice could not be read on the blog.",
+    "_print_speed": "50-300mm/s",
+    "_diameter_tolerance": "+/-0.03"
   },
   "conflicts": [
+    "nozzle/bed: Nozzle 210-230°C, bed 45-60°C (https://www.sovol3d.com/products/sovol-glow-in-dark-pla-filament-6-kg)",
     "sovol3d.com 'Sovol Glow in dark PLA Filament 6 KG' listing gives 210-230C nozzle / 45-60C bed (search-engine extraction).",
     "Sovol blog 'Expert 3D Printing Tips for the Brightest Glow' suggests about 215C nozzle / 55-60C bed (search-engine extraction)."
   ],
   "source_quality": "official_page",
   "sources": [
+    "https://sovol.uk/products/sovol-glow-in-dark-pla-filament-1-kg",
+    "https://sovol.eu/products/sovol-glow-in-dark-pla-filament-1-kg",
+    "https://www.amazon.com/Sovol-Luminous-Filament-Materials-Dimensional/dp/B0FB3MMVXK",
     "https://www.sovol3d.com/products/sovol-glow-in-dark-pla-filament-1-kg",
     "https://www.sovol3d.com/products/sovol-glow-in-dark-pla-filament-10-kg",
     "https://www.sovol3d.com/products/sovol-glow-in-dark-pla-filament-6-kg",
     "https://www.sovol3d.com/blogs/news/brightest-glow-in-the-dark-filament-tips-sovol-3d-printing"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

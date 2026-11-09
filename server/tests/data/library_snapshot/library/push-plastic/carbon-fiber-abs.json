@@ -12,7 +12,7 @@
       "230"
     ],
     "nozzle_temperature_range_high": [
-      "250"
+      "240"
     ],
     "filament_density": [
       "1.02"
@@ -22,20 +22,27 @@
     ]
   },
   "published_ranges": {
-    "bed_all_plates": "100-120",
+    "bed_all_plates": "110",
     "_drying": "60C 4h",
     "_enclosure": "Heated enclosure not required (per print-settings sheet)",
     "_print_speed": "40mm/s (preferred: 0.6mm nozzle, 0.4mm layer, 235C extruder, 110C bed)",
-    "_hardened_nozzle_required": "yes - carbon fiber is abrasive, use a hardened steel nozzle",
+    "_hardened_nozzle_required": "yes - 'We recommend using Hardened Steel Nozzles if you are printing Carbon Fiber'",
     "_hdt": "105 (ASTM D648, printed specimens; load not stated)",
-    "_notes": "Preferred parameters use a 0.6mm nozzle. Bambu Studio has no ABS-CF system preset; Bambu ABS used as nearest. CF filament may be brittle in the AMS. Colour assumed black. Fiber loading not stated in the TDS or print-settings sheet."
+    "_notes": "Layer height: 'Ideal layer height is 50-60% of nozzle diameter'. Sold in 500g and 2kg; 2.85mm 2kg SKU also on pushplastic.com. Bed 110 is a single printed value. Bambu Studio has no Bambu ABS-CF preset; Bambu ABS used as parent (not confirmed). Enclosure is normal for ABS but is not stated on the CF page. Earlier entry: Preferred parameters use a 0.6mm nozzle. Bambu Studio has no ABS-CF system preset; Bambu ABS used as nearest. CF filament may be brittle in the AMS. Colour assumed black. Fiber loading not stated in the TDS or print-settings sheet.",
+    "_fiber_content": "~10% proprietary carbon fiber",
+    "_min_nozzle": "0.4mm or larger (0.6mm recommended)"
   },
-  "conflicts": [],
-  "source_quality": "official_tds",
-  "sources": [
-    "https://cdn.shopify.com/s/files/1/0260/7421/files/CFABS_print_settings.pdf",
-    "https://cdn.shopify.com/s/files/1/0260/7421/files/Push_Plastic_CF_ABS_Technical_Data_sheet_fa9bc359-10e2-4ae5-9cdd-853a2b165d73.pdf",
-    "https://www.pushplastic.com/products/carbon-fiber-abs-filament-1-75mm-500g"
+  "conflicts": [
+    "nozzle_temperature_range_high: earlier library entry had 250 (sources: https://cdn.shopify.com/s/files/1/0260/7421/files/CFABS_print_settings.pdf, https://cdn.shopify.com/s/files/1/0260/7421/files/Push_Plastic_CF_ABS_Technical_Data_sheet_fa9bc359-10e2-4ae5-9cdd-853a2b165d73.pdf, https://www.pushplastic.com/products/carbon-fiber-abs-filament-1-75mm-500g)"
   ],
-  "updated": "2026-11-01"
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.pushplastic.com/products/carbon-fiber-abs-filament-1-75mm-500g",
+    "https://www.pushplastic.com/products/carbon-fiber-abs-filament-2-85mm-2kg",
+    "https://www.pushplastic.com/products/carbon-fiber-nylon-filament-1-75mm-2kg",
+    "https://top3dshop.com/product/push-plastic-cf-abs-filament-spool-2-kg",
+    "https://cdn.shopify.com/s/files/1/0260/7421/files/CFABS_print_settings.pdf",
+    "https://cdn.shopify.com/s/files/1/0260/7421/files/Push_Plastic_CF_ABS_Technical_Data_sheet_fa9bc359-10e2-4ae5-9cdd-853a2b165d73.pdf"
+  ],
+  "updated": "2026-11-02"
 }

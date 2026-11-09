@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "Kexcelled",
+  "product": "K8 TPU Air",
+  "material": "TPU",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu TPU 95A HF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.14"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "30-55",
+    "fan_min_speed/fan_max_speed": "50-100",
+    "_hardness": "90A solid, down to 69A at maximum foaming",
+    "_print_speed": "up to 100 mm/s solid; about 45 mm/s at maximum foaming (reseller)",
+    "_notes": "Foaming TPU. Kexcelled's K's Lab blog says density can be adjusted from 1.14 down to 0.57 g/cm3 (unfoamed value used in fields). Print values come from an-cadsolutions.fi, which reproduces Kexcelled's print-parameter block (PEI frosted board, layer height 0.2 mm); they were seen only in a search snippet. Minimum wall 0.8 mm (reseller). AMS compatibility, drying and tolerance not published. Foaming TPU: flow ratio must be calibrated by temperature."
+  },
+  "conflicts": [
+    "nozzle: 200-250 (3ddruckboss.de)",
+    "bed: 30-50 (3ddruckboss.de)",
+    "_hardness: 56A-86A (All3DP article 'Kexcelled's New PEBA, TPU Air & Matte 95A Tackle Flexible Printing's Biggest Challenges' ('as low as 56A from its original 86A range'; third party))"
+  ],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://kexcelled3d.com/blogs/ks-lab",
+    "https://www.an-cadsolutions.fi/tuote/kexcelled-k8-tpu-air/",
+    "https://3ddruckboss.de/products/kexcelled-the-k8-tpu-air-schwarz"
+  ],
+  "updated": "2026-11-02"
+}

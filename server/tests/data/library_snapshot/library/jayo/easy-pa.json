@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "vendor": "JAYO",
+  "product": "Easy PA",
+  "material": "PA",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Generic PA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "30-50",
+    "_max_print_speed": "<200 mm/s",
+    "_notes": "Source: JAYO Official Store Amazon listing B0FXW6P6DN 'JAYO PA Nylon PA6+66' (MPN XJJUS-EPA-BK-1KG, i.e. the Easy PA line), read in full: 'Recommended settings: Nozzle 250-280C | Bed 30-50C | Print speed <200 mm/s', HDT up to ~121C, 'Low Moisture Packaging', 'tight tolerance' (no number). No density, drying, or tolerance value published. Nylon is hygroscopic: dry before use / do not leave in open AMS (general guidance, not JAYO). Sibling variations PA6-CF (B0FD9Y32SN) and PA6-GF (B0FDB1KP2P) exist but were not read. No closer Bambu preset for unfilled PA6/66 than Generic PA (Bambu PA6-CF is fibre-filled); not confirmed.",
+    "_hdt_unspecified_load": "~121 (listing says 'heat deflection temperature up to ~121C'; load not stated - key used for want of an unspecified-load key)"
+  },
+  "conflicts": [],
+  "source_quality": "brand_amazon_listing",
+  "sources": [
+    "https://www.amazon.com/dp/B0FXW6P6DN"
+  ],
+  "updated": "2026-11-02"
+}

@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "JAYO",
+  "product": "High Speed PLA",
+  "material": "PLA",
+  "colors": [
+    "Pink",
+    "Black",
+    "Blue",
+    "Green",
+    "Gray",
+    "Olive Green",
+    "Orange",
+    "Red",
+    "White",
+    "Yellow"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_diameter_tolerance": "+/-0.02",
+    "_print_speed": "30-600 mm/s (jayo3d.com); 50-600 mm/s (JAYO Official Store Amazon B0DGSSGWVJ)",
+    "_max_print_speed": "600 mm/s",
+    "_notes": "Nozzle temperature, bed temperature and density are NOT published in any text source checked: jayo3d.com bundle page only says to use 'the recommended printing temperature'; JAYO Official Store Amazon listings B0DGSSGWVJ (4-pack, model JWUS-HSPLA-BK+BK+BK+BK-1100G*4) and B0DHRXQT74 (8x250 g) bullets give speed, +/-0.02 mm tolerance and 'dried for 24 hours and vacuum-sealed' only. Values may exist only in listing images (not read). 1.1 kg spools. Bambu Studio has no JAYO system preset known; parent not confirmed."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://jayo3d.com/products/jayo-high-speed-pla-1-1kg-3d-printing-filament-bundle",
+    "https://www.amazon.com/dp/B0DGSSGWVJ",
+    "https://www.amazon.com/dp/B0DHRXQT74"
+  ],
+  "updated": "2026-11-02"
+}

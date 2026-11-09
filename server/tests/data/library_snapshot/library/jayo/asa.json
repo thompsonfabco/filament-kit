@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "vendor": "JAYO",
+  "product": "ASA",
+  "material": "ASA",
+  "colors": [
+    "Black",
+    "Blue",
+    "Grey",
+    "Red",
+    "Natural White",
+    "Green"
+  ],
+  "bambu_parent": "Bambu ASA",
+  "fields": {
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "Source: JAYO Official Store Amazon listing B0GMVGBLXB (MPN ASA-BK-1KG), read in full: bullets give 1.75 mm, +/-0.02 mm tolerance, UV/weather resistance, 1 kg reusable spool; item highlight 'High Heat Resistance'. NO nozzle temp, bed temp, density or HDT appear in the bullets or technical details, so the search-snippet values (250-280C / 90-110C / ~96C) remain unverified and were not used. Tolerance question resolved: +/-0.02 (not +/-0.03). Colours = ASA variations on the listing. Enclosure recommended for ASA generally (not stated by JAYO). Bambu parent not confirmed."
+  },
+  "conflicts": [],
+  "source_quality": "brand_amazon_listing",
+  "sources": [
+    "https://www.amazon.com/dp/B0GMVGBLXB"
+  ],
+  "updated": "2026-11-02"
+}

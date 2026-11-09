@@ -181,3 +181,40 @@ def test_readme_sections_a_user_needs():
         assert h in text, h
     for path in re.findall(r"\]\(((?:docs|reader)/[^)#]+)", text):
         assert (ROOT / path).exists(), path      # a file, or a folder
+
+
+# What someone bought, and when: the same patterns as filament-library's tools/scan_owner_data.py. A bare listing id is a
+# real source; an id or a date next to purchase wording, or wording that attributes something to a person, is not.
+_ATTRIBUTION = re.compile(r"\b(?!(?:the\s+)?user(?:['\u2019]s)?\s+(?:manual|guide)\b)(?:the\s+user|user['\u2019]s)\b"
+                          r"|\buser\s+(?:asin|spool|note|record|order|upc)s?\b", re.I)
+_PURCHASE = re.compile(r"\b(?:ordered|purchased|bought|order\s*(?:date|number|no\b|#)|(?:my|our)\s+(?:order|spool)|owner'?s?)\b", re.I)
+_IDENTIFIER = re.compile(r"\bB0[A-Z0-9]{8}\b|\b(?:UPC|EAN|GTIN)\D{0,5}\d{8,14}\b|\b20\d\d-\d\d-\d\d\b|\b\d{1,2}/\d{1,2}/20\d\d\b|"
+                         r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2},?\s+20\d\d\b", re.I)
+
+
+def _purchase_record(line: str) -> str | None:
+    if m := _ATTRIBUTION.search(line):
+        return m[0]
+    for m in _IDENTIFIER.finditer(line):
+        if word := _PURCHASE.search(line[max(0, m.start() - 80):m.end() + 80]):
+            return f"{m[0]} next to {word[0]}"
+    return None
+
+
+@pytest.mark.parametrize("line", ["The user's ASIN B0AAAAAAAA now redirects", "Amazon B0AAAAAAAA (user ASIN, search snippet)",
+                                  "User's single-spool UPC 012345678905 was not found", "ordered 2026-01-02 from the listing",
+                                  "order date: Mar 3, 2026", "B0AAAAAAAA bought in a pack", "UPC 012345678905, purchased 1/2/2026"])
+def test_a_purchase_record_is_caught(line):
+    assert _purchase_record(line)
+
+
+@pytest.mark.parametrize("line", ["Listing B0AAAAAAAA states 220 C", "UPC 012345678905 on the listing", "updated 2026-01-02",
+                                  "see the user manual", "the user's guide says 220 C", "a forum user reports 220 C"])
+def test_a_listing_id_or_a_manual_is_a_source(line):
+    assert _purchase_record(line) is None
+
+
+def test_the_library_snapshot_holds_no_purchase_record():
+    found = [f"{p.relative_to(ROOT).as_posix()}: {why}" for p in sorted((ROOT / "server/tests/data/library_snapshot").rglob("*.json"))
+             for line in p.read_text(encoding="utf-8").splitlines() if (why := _purchase_record(line))]
+    assert not found, found

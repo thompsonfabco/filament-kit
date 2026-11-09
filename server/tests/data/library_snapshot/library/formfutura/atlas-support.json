@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "Atlas Support",
+  "material": "PVA",
+  "colors": [
+    "Natural"
+  ],
+  "bambu_parent": "Bambu PVA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "180"
+    ],
+    "nozzle_temperature_range_high": [
+      "210"
+    ],
+    "filament_density": [
+      "1.23"
+    ],
+    "filament_soluble": [
+      "1"
+    ],
+    "filament_is_support": [
+      "1"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "0-60",
+    "fan_min_speed/fan_max_speed": "0-30",
+    "_notes": "Water-soluble PVA designed to pair with PETG. Maximum thermal stability 225 C (tested to 256 s with no flow); lower the standby temperature to avoid degradation in the nozzle. Bed and density were recorded by the earlier run from the same official page and not re-read in R5. Keep very dry; Formfutura gives no drying figures."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://formfutura.com/product/atlas-support/"
+  ],
+  "updated": "2026-11-02"
+}

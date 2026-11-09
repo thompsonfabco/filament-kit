@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "eTPU-LW",
+  "material": "TPU",
+  "colors": [],
+  "bambu_parent": "Bambu TPU 95A HF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.15"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "40-60",
+    "fan_max_speed": "100%",
+    "_drying": "55C >4h",
+    "_print_speed": "<100mm/s",
+    "_hardness": "77A-93A (adjustable via foaming ratio)",
+    "_ams": "Not recommended: eSUN specifies a close-range extruder",
+    "_notes": "Foaming TPU: the printed density is lower than the filament density. eSUN says to turn off retraction ('pullback') and not to print several models together. HDT printed as '/'. Values gathered by a research sub-agent; the hardness range is from eSUN's TPU wiki."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.esun3d.com/etpu-lw-product",
+    "https://www.esun3d.com/wiki/tpu-material"
+  ],
+  "updated": "2026-11-02"
+}

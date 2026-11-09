@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "vendor": "Kingroon",
+  "product": "PLA+",
+  "material": "PLA",
+  "colors": [
+    "Blue",
+    "White",
+    "Black",
+    "Grey",
+    "Red",
+    "Yellow",
+    "Orange",
+    "Green",
+    "Purple",
+    "Skin",
+    "Transparent",
+    "Silver"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "235"
+    ],
+    "filament_density": [
+      "1.20"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "55-65",
+    "_drying": "55C 8h",
+    "_max_print_speed": "<300 mm/s",
+    "_hdt_0.45MPa": "58.4",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "Fields from kingroon.com page (Nozzle 210-235C, Heated Bed 55-65C, <300 mm/s, density 1.20, Thermal Distortion 58.4C(0.45MPa), Rockwell 88, glass/fiberglass platform, 0.2mm layer). Page tip: 'reduce the Max volumetric speed from 21 mm3/s to 15 mm3/s' (advice, not a published max - field left unset). Diameter/tolerance from kingroon3d.com ('1.75mm PLA Plus, +/-0.03mm accuracy'). Bambu parent not confirmed."
+  },
+  "conflicts": [
+    "kingroon3d.com PLA+ page: 200-220C, bed 50-70, fan 100%, density 1.2, HDT 53C(0.45MPa), drying 50C 8h",
+    "Kingroon Filament Guide datasheet 'PLA+': 200-220C, bed 50-70, 1.2 g/cm3, HDT 53C"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://kingroon.com/products/kingroon-pla-pluspla",
+    "https://kingroon3d.com/products/kingroon3d-pla-plus-pla-pro-pla-filament",
+    "https://cdn.shopify.com/s/files/1/0612/4784/8666/files/Filaments-Datasheet.pdf?v=1741943123"
+  ],
+  "updated": "2026-11-02"
+}

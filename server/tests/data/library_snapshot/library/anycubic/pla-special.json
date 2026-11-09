@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "vendor": "Anycubic",
+  "product": "PLA Special",
+  "material": "PLA",
+  "colors": [
+    "Peach Pink",
+    "Interstellar Violet",
+    "Tropical Turquoise",
+    "Spring Leaf"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.24"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "12"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "55-56",
+    "_drying": "45-50C 6-8h",
+    "_print_speed": "50-200 mm/s",
+    "_vicat": "55",
+    "_hdt_0.45MPa": "54",
+    "_vitrification": "168 (melting point, not Tg)",
+    "_diameter_tolerance": "+/-0.02",
+    "_min_nozzle": "0.2",
+    "_enclosure": "Not required",
+    "_ams": "Official page: ACE Pro compatible (Anycubic); no Bambu AMS statement.",
+    "_notes": "Specs from anycubic.au/products/pla-special (handle pla-basic-special-color-filament failed there). Bed temperature printed as '55-56' on the official page (copied as printed; likely a typo). Page states '+0.02mm precision'; Amazon Official Store listing B0CZ98JFNV (Peach Pink) states 1.75mm, +/-0.02. Cooling time 8 s; all nozzle types. Bambu parent not confirmed."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.anycubic.au/products/pla-special",
+    "https://www.amazon.com/dp/B0CZ98JFNV"
+  ],
+  "updated": "2026-11-02"
+}

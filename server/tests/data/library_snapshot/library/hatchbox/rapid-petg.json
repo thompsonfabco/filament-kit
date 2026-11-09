@@ -32,13 +32,14 @@
   },
   "published_ranges": {
     "_max_print_speed": "400 mm/s",
-    "_notes": "Product pages: 'Print Temperature - 225C - 275C', 'Printing Speeds Up To 400mm/s'. No bed temperature published. Verified 2026-11-01 against the product pages' Shopify JSON/HTML."
+    "_notes": "Page: 'Printing Speeds Up To 400mm/s', 'Same PETG Formula, Just Faster!'. No diameter tolerance stated on this page, so left out. No bed temp printed. Hatchbox FAQ: no technical data (TDS) is available for their filaments, so density, drying, bed temperature and HDT are not published. Read from the Shopify product .js endpoint (description text). Bambu parent not confirmed (no Hatchbox system preset known in Bambu Studio). Earlier entry: Product pages: 'Print Temperature - 225C - 275C', 'Printing Speeds Up To 400mm/s'. No bed temperature published. Verified 2026-11-01 against the product pages' Shopify JSON/HTML."
   },
   "conflicts": [],
   "source_quality": "official_page",
   "sources": [
+    "https://hatchbox3d.com/products/3d-rpd-petg1kg-grn",
     "https://www.hatchbox3d.com/products/3d-rpd-petg1kg-wht",
     "https://www.hatchbox3d.com/products/3d-rpd-petg1kg-blu"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

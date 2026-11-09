@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "vendor": "Kingroon",
+  "product": "PETG Basic",
+  "material": "PETG",
+  "colors": [
+    "Black",
+    "White",
+    "Gray",
+    "Red",
+    "Blue",
+    "Yellow",
+    "Sky blue",
+    "Green",
+    "Orange",
+    "Silver",
+    "Pink",
+    "Skin",
+    "Transparent",
+    "Grass green",
+    "Mint green",
+    "Light apricot",
+    "Cyan",
+    "Light Pink",
+    "Dark Green",
+    "Purple",
+    "Brown",
+    "Porcelain Blue",
+    "Peony Pink",
+    "Transparent Pink",
+    "Ocean Blue",
+    "Lemon Yellow",
+    "Wood Color",
+    "Carrot Orange",
+    "Bamboo Green",
+    "Olive Green",
+    "Navy Blue",
+    "Beige",
+    "Khaki",
+    "Metallic Copper",
+    "Metallic Silver"
+  ],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.26"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-90",
+    "fan_max_speed": "100%",
+    "_drying": "50C 8h",
+    "_hdt_0.45MPa": "62",
+    "_notes": "kingroon.com PETG Basic page table: Nozzle 230-250, Bed 70-90, Fan 100%, Length (1.75mm) 330-340m, Density 1.26, Distortion 62C(0.45MPa); matches Filament Guide datasheet row 'PETG'. Drying 'Dry at 50C for 8 hours in a drying oven'; page also refers to AMS 2 Pro/AMS HT/X1 heatbed settings. No tolerance or volumetric speed published. Bambu parent not confirmed."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://kingroon.com/products/kingroon-petg-basic",
+    "https://cdn.shopify.com/s/files/1/0612/4784/8666/files/Filaments-Datasheet.pdf?v=1741943123"
+  ],
+  "updated": "2026-11-02"
+}
