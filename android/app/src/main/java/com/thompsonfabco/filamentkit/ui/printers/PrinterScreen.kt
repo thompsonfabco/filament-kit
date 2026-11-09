@@ -1,7 +1,6 @@
 package com.thompsonfabco.filamentkit.ui.printers
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,6 +39,7 @@ import com.thompsonfabco.filamentkit.net.AmsUnit
 import com.thompsonfabco.filamentkit.net.Printer
 import com.thompsonfabco.filamentkit.net.PrinterStatus
 import com.thompsonfabco.filamentkit.net.Temp
+import com.thompsonfabco.filamentkit.ui.ColorSwatch
 import okhttp3.OkHttpClient
 import java.time.OffsetDateTime
 import java.time.ZoneId
@@ -226,11 +226,12 @@ private fun AmsBlock(u: AmsUnit, busy: String?, onUnload: (AmsSlot) -> Unit) {
         Text(PrinterHelp.unitTitle(u), style = MaterialTheme.typography.titleSmall)
         u.slots.forEach { slot ->
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Spacer(Modifier.size(16.dp).clip(CircleShape).background(hexColor(slot.colorHex)).border(1.dp, MaterialTheme.colorScheme.outline, CircleShape))
+                val empty = PrinterHelp.slotEmpty(slot)
+                ColorSwatch(slot.colorHex, 16.dp, empty = empty)
                 val spool = slot.spool
                 Text(listOfNotNull(
                     slot.label,
-                    slot.type.ifBlank { "empty" },
+                    if (empty) "empty" else slot.type.ifBlank { null },
                     spool?.name?.ifBlank { null },
                     spool?.remainingWeight?.let { "${it.toInt()} g left" },
                     if (slot.active) "in use" else null,
@@ -340,6 +341,3 @@ private fun formatEta(iso: String): String? = try {
 } catch (_: Exception) {
     null
 }
-
-private fun hexColor(hex: String): Color =
-    hex.take(6).toLongOrNull(16)?.takeIf { hex.length >= 6 }?.let { Color(0xFF000000 or it) } ?: Color.LightGray

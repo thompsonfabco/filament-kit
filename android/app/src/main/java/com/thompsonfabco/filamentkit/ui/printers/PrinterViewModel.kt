@@ -55,6 +55,9 @@ object PrinterHelp {
 
     const val ACCESS_CODE_HELP = "On the printer: Settings → Network/LAN → Access Code"
 
+    /** The printer says nothing is there, or it holds no setting and the inventory places no spool there. */
+    fun slotEmpty(slot: AmsSlot): Boolean = slot.present == false || (slot.type.isBlank() && slot.spool == null)
+
     fun stateLabel(state: String): String = when (state) {
         "connected" -> "Connected"
         "offline" -> "Offline"

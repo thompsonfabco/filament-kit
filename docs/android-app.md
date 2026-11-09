@@ -77,7 +77,8 @@ You need a Bambu Lab printer on the same network as the server, switched on.
    serial. Optionally give it a **Name**, type its **Access Code**, and tap **Add**. The code is on the printer:
    **Settings → Network/LAN → Access Code**.
 3. The state turns to **Connected**, and tapping the printer opens its screen with live status, camera, the filament
-   in each slot, pause/resume/stop and the chamber light.
+   in each slot, pause/resume/stop and the chamber light. A loaded slot's colour sits inside a black ring, so white
+   filament still shows; an empty slot is a dashed ring.
 
 **If the state says something else:**
 

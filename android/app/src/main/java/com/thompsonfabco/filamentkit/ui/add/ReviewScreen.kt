@@ -1,7 +1,5 @@
 package com.thompsonfabco.filamentkit.ui.add
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,10 +8,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -36,7 +32,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -44,6 +39,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.thompsonfabco.filamentkit.net.ParentList
 import com.thompsonfabco.filamentkit.net.VendorChoice
+import com.thompsonfabco.filamentkit.ui.ColorSwatch
 import com.thompsonfabco.filamentkit.ui.TARE_PROBLEM
 import com.thompsonfabco.filamentkit.ui.parseWeight
 import com.thompsonfabco.filamentkit.ui.tareProblem
@@ -407,12 +403,8 @@ private fun VendorField(
 
 @Composable
 private fun Swatch(hex: String?) {
-    val color = hex?.takeIf { HEX.matches(it) }?.let { Color(0xFF000000 or it.toLong(16)) }
-    Box(
-        Modifier.size(28.dp).border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
-            .background(color ?: Color.Transparent, CircleShape)
-            .semantics { contentDescription = if (color != null) "Colour #$hex" else "No colour" },
-    )
+    val known = hex?.takeIf { HEX.matches(it) }
+    ColorSwatch(known, 28.dp, Modifier.semantics { contentDescription = if (known != null) "Colour #$hex" else "No colour" })
 }
 
 @Composable
