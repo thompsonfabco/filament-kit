@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "library_version": 4,
+  "library_version": 5,
   "generated": "2026-11-08",
   "count": 1115,
   "entries": [
@@ -521,7 +521,7 @@
       "product": "PLA Glow",
       "material": "PLA",
       "path": "library/amolen/pla-glow.json",
-      "sha256": "b76ca25d50d463f94330931b1059e1fb85d1c50152c9ba0809706c866fdab707",
+      "sha256": "365c5f4f69bf9252d782352bdd436f6fe1e1dc3bcbd77d86a5dd2fa3667b8a19",
       "updated": "2026-11-01"
     },
     {
@@ -8897,7 +8897,7 @@
       "product": "ABS",
       "material": "ABS",
       "path": "library/yxpolyer/abs.json",
-      "sha256": "6e788ba8c5835964d4e82acf89fa2774072ae037c2e74ccfa81f60b30e9640db",
+      "sha256": "3c99e5c1610745b2247d4fa3ab16b28f204f29d6be890fcfbb32d7175f869f9d",
       "updated": "2026-11-01"
     },
     {
@@ -8905,7 +8905,7 @@
       "product": "Easy PA",
       "material": "PA",
       "path": "library/yxpolyer/easy-pa.json",
-      "sha256": "0ff07ab2617d48497c8043c98faa5c62b2e0c795ccd04e510131c1f899b1a264",
+      "sha256": "99473ee298e9d13559c30ddc03f5820b084d3fa13f672f5001229720af15cf6c",
       "updated": "2026-11-01"
     },
     {
@@ -8921,7 +8921,7 @@
       "product": "PVA",
       "material": "PVA",
       "path": "library/yxpolyer/pva.json",
-      "sha256": "4db76f60d6373ae676632692b0e4bfe12ca6bb4d9270fb83a2a3335ed564a834",
+      "sha256": "9f989ed13c1f2bcdca735d04098f4cf4d23321ebc42c1955e866c0f996629ab9",
       "updated": "2026-11-01"
     }
   ]
