@@ -9,6 +9,12 @@
 # modules that are on, the same code path `sudo filament-kit config` uses later.
 set -euo pipefail
 
+# A nightly tarball says so before anything else.
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/NIGHTLY" ]; then
+    NIGHTLY=$(cat "$(dirname "${BASH_SOURCE[0]}")/NIGHTLY")
+    echo "nightly build ${NIGHTLY##*.}: filament-kit $NIGHTLY, untested; it may be broken"
+fi
+
 ETC=/etc/filament-kit
 STATE=/var/lib/filament-kit
 OPT=/opt/filament-kit
@@ -201,6 +207,10 @@ if [ -d "$OPT/resources" ]; then
 fi
 install -d -m 755 "$OPT/resources"
 cp -R "$RES/systemd" "$RES/avahi" "$RES/remote" "$OPT/resources/"
+# Only a nightly has it, and every install empties resources/ first, so a later release of any version clears it.
+if [ -f "$HERE/NIGHTLY" ]; then
+    install -m 644 "$HERE/NIGHTLY" "$OPT/resources/NIGHTLY"
+fi
 install -m 755 "$RES/spoolman.sh" "$OPT/resources/spoolman.sh"
 # The button panel's firmware (a binary and its VERSION): the station reflashes a panel on another version.
 # In a release tarball it is install/panel/, in a source checkout station/panel/firmware/.

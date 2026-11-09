@@ -1,0 +1,197 @@
+name: nightly
+# Every night at 23:00 New York time: merge main into the `nightly` branch, build it and publish a GitHub PRERELEASE
+# nightly-YYYYMMDD. No tests, no gate, no lint: the branch is expected to be buggy, or not to run. A conflict or a failed
+# build fails the job and publishes nothing. A prerelease is never what `releases/latest` answers, so installed kits and
+# the library URL do not see it. docs/maintainer.md, "Nightly builds".
+#
+# This file must be on main: GitHub runs scheduled workflows only from the default branch.
+# The release key is only in `publish`, which runs main's reviewed code; nightly's own code builds in `build`, which holds
+# no secret and cannot write.
+on:
+  schedule:
+    # 23:00 in New York is 03:00 UTC in summer and 04:00 UTC in winter; the first step keeps the one that is 23:00
+    - cron: '0 3 * * *'
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+jobs:
+  merge:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      go: ${{ steps.when.outputs.go }}
+      date: ${{ steps.when.outputs.date }}
+      sha: ${{ steps.merged.outputs.sha }}
+    steps:
+      - name: Only at 23:00 in New York
+        id: when
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          go=true
+          if [ "$EVENT" = schedule ] && [ "$(TZ=America/New_York date +%H)" != 23 ]; then
+            go=false
+            echo "not 23:00 in New York; the other cron line is tonight's"
+          fi
+          echo "go=$go" >> "$GITHUB_OUTPUT"
+          echo "date=$(TZ=America/New_York date +%Y%m%d)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+        if: steps.when.outputs.go == 'true'
+        with:
+          ref: nightly
+          fetch-depth: 0
+
+      - name: Merge main into nightly
+        id: merged
+        if: steps.when.outputs.go == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git merge --no-edit origin/main; then
+            git merge --abort || true
+            echo "::error::main does not merge into nightly; nothing is published tonight. Resolve it on the nightly branch."
+            exit 1
+          fi
+          if ! git push origin HEAD:nightly; then
+            echo "::error::could not push nightly. github.token may not push a change to .github/workflows: when main changed a workflow, merge main into nightly by hand and push once (docs/maintainer.md)."
+            exit 1
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: What changed since the last nightly
+        if: steps.when.outputs.go == 'true'
+        env:
+          TODAY: nightly-${{ steps.when.outputs.date }}
+        run: |
+          previous=$(git tag --list 'nightly-[0-9]*' --sort=-version:refname | grep -vx "$TODAY" | head -n 1 || true)
+          {
+            echo "Untested nightly build from the nightly branch; may be broken. Not offered to installed kits."
+            echo
+            if [ -n "$previous" ]; then
+              echo "Changes since $previous:"
+              echo
+              echo '```'
+              git log --oneline "$previous..HEAD" | head -n 500
+              echo '```'
+            else
+              echo "The first nightly."
+            fi
+          } > nightly-notes.md
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        if: steps.when.outputs.go == 'true'
+        with:
+          name: nightly-notes
+          path: nightly-notes.md
+          if-no-files-found: error
+
+  build:
+    needs: merge
+    if: needs.merge.outputs.go == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+        with:
+          ref: ${{ needs.merge.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: "3.12"
+
+      - name: Install the wheel builder
+        run: |
+          pip install --require-hashes --only-binary :all: -r tools/release-build-requirements.txt
+
+      - uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00  # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407  # v3.2.2
+        with:
+          packages: 'platform-tools'
+          log-accepted-android-sdk-licenses: false
+
+      # The same debug key every night, or each night's app would not install over the last one. Not a secret.
+      - uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684  # v4.2.3
+        with:
+          path: ~/.android/debug.keystore
+          key: nightly-debug-keystore-v1
+
+      - name: Build
+        env:
+          FK_NIGHTLY: "1"
+          FK_NIGHTLY_DATE: ${{ needs.merge.outputs.date }}
+        run: bash tools/make_release.sh
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: nightly-build
+          path: |
+            dist/filament-kit-*-nightly.*.tar.gz
+            dist/filament-kit-nightly.apk
+          if-no-files-found: error
+
+  publish:
+    needs: [merge, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: nightly-${{ needs.merge.outputs.date }}
+      DATE: ${{ needs.merge.outputs.date }}
+      SHA: ${{ needs.merge.outputs.sha }}
+    steps:
+      # main's code, not nightly's: this job holds the release key
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: "3.12"
+
+      - name: Install the signer
+        run: |
+          pip install --require-hashes --only-binary :all: -r tools/release-signing-requirements.txt
+
+      - name: SHA256SUMS and its signature
+        env:
+          FK_RELEASE_KEY: ${{ secrets.FK_RELEASE_KEY }}
+        run: |
+          if [ -z "$FK_RELEASE_KEY" ]; then
+            echo "::error::the secret FK_RELEASE_KEY is required; no unsigned build is published"
+            exit 1
+          fi
+          (cd dist && sha256sum filament-kit-*-nightly.*.tar.gz filament-kit-nightly.apk > SHA256SUMS)
+          python tools/sign_release.py sign dist/SHA256SUMS
+
+      - name: Publish the prerelease
+        run: |
+          # a second run on one date replaces that date's nightly
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release delete "$TAG" --cleanup-tag --yes
+          fi
+          gh release create "$TAG" --target "$SHA" --prerelease --latest=false --title "Nightly $DATE" \
+            --notes-file dist/nightly-notes.md \
+            dist/filament-kit-*-nightly.*.tar.gz dist/filament-kit-nightly.apk dist/SHA256SUMS dist/SHA256SUMS.sig
+
+      - name: Keep the newest 7
+        run: |
+          # only names that are exactly nightly-YYYYMMDD: a v* release is never touched
+          gh release list --limit 200 --json tagName --jq '.[].tagName' > "$RUNNER_TEMP/releases.txt"
+          { grep -E '^nightly-[0-9]{8}$' "$RUNNER_TEMP/releases.txt" || true; } | sort -r | tail -n +8 | while read -r old; do
+            echo "removing $old"
+            gh release delete "$old" --cleanup-tag --yes
+          done

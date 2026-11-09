@@ -1,8 +1,10 @@
 name: pc-sync
 on:
   push:
+    branches-ignore: [nightly]     # no tests on the nightly branch: docs/maintainer.md, Nightly builds
     paths: ['pc-sync/**', '.github/workflows/pc-sync.yml']
   pull_request:
+    branches-ignore: [nightly]     # no tests on the nightly branch: docs/maintainer.md, Nightly builds
     paths: ['pc-sync/**', '.github/workflows/pc-sync.yml']
 permissions:
   contents: read

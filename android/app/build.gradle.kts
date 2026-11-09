@@ -12,12 +12,19 @@ val kitVersionCode = kitVersion.groupValues.let { (_, major, minor, patch) ->
     major.toInt() * 10000 + minor.toInt() * 100 + patch.toInt()
 }
 
+// tools/make_release.sh FK_NIGHTLY=1: its own package and label beside the stable app, signed with the debug key.
+val nightlyDate: String? = System.getenv("FK_NIGHTLY")?.takeIf { it == "1" }?.let {
+    System.getenv("FK_NIGHTLY_DATE")?.takeIf { d -> Regex("""20\d{6}""").matches(d) }
+        ?: error("FK_NIGHTLY=1 needs FK_NIGHTLY_DATE as YYYYMMDD")
+}
+
 android {
     namespace = "com.thompsonfabco.filamentkit"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.thompsonfabco.filamentkit"
+        applicationId = "com.thompsonfabco.filamentkit" + if (nightlyDate != null) ".nightly" else ""
+        manifestPlaceholders["appLabel"] = if (nightlyDate != null) "Filament Kit Nightly" else "filament-kit"
         minSdk = 29
         targetSdk = 37
         // The update check compares this with the server's app/version.txt; tools/make_release.sh passes the same
@@ -25,7 +32,7 @@ android {
         versionCode = System.getenv("FK_VERSION_CODE")?.takeIf { it.isNotBlank() }?.let {
             it.trim().toIntOrNull()?.takeIf { v -> v > 0 } ?: error("FK_VERSION_CODE must be a whole number above 0, got '$it'")
         } ?: kitVersionCode
-        versionName = kitVersion.groupValues.drop(1).joinToString(".")
+        versionName = kitVersion.groupValues.drop(1).joinToString(".") + (nightlyDate?.let { "-nightly.$it" } ?: "")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -46,7 +53,11 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfigs.findByName("release")?.let { signingConfig = it }
+            if (nightlyDate != null) {
+                signingConfig = signingConfigs.getByName("debug")
+            } else {
+                signingConfigs.findByName("release")?.let { signingConfig = it }
+            }
         }
     }
     compileOptions {

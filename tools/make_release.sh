@@ -5,6 +5,10 @@
 # the filament_kit wheel, and app/filament-kit.apk + app/version.txt (signed Android release build).
 # FK_DIST: the output folder (default dist, relative to the checkout). FK_NO_APP=1: no Android build and no
 # app/ (the tarball test in server/tests; nothing under android/ is touched).
+# FK_NIGHTLY=1 (.github/workflows/nightly.yml): dist/filament-kit-<version>-nightly.<date>.tar.gz with a NIGHTLY file and
+# no app/ (a nightly app must not be offered to the phones of whoever installs it), and dist/filament-kit-nightly.apk on
+# its own, debug-signed, in its own package. No release keystore and no library asset. FK_NIGHTLY_DATE: YYYYMMDD
+# (default: today in New York).
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -16,6 +20,17 @@ version=$(sed -n 's/^__version__ = "\(.*\)"\r\{0,1\}$/\1/p' server/filament_kit/
 [ -n "$version" ] || { echo "error: no __version__ in server/filament_kit/__init__.py" >&2; exit 1; }
 
 name="filament-kit-$version"
+nightly=0
+if [ "${FK_NIGHTLY:-}" = 1 ]; then
+    nightly=1
+    FK_NIGHTLY_DATE=${FK_NIGHTLY_DATE:-$(TZ=America/New_York date +%Y%m%d)}
+    [[ "$FK_NIGHTLY_DATE" =~ ^20[0-9]{6}$ ]] || { echo "error: FK_NIGHTLY_DATE must be YYYYMMDD (got '$FK_NIGHTLY_DATE')" >&2; exit 1; }
+    export FK_NIGHTLY FK_NIGHTLY_DATE
+    name="filament-kit-$version-nightly.$FK_NIGHTLY_DATE"
+    FK_VERSION_CODE=$FK_NIGHTLY_DATE    # by date, so each night's app updates the last; its own package blocks no stable app
+    FK_KEYSTORE=""                      # never the release key: nobody tested this build
+    FK_KEYSTORE_PASSWORD=""
+fi
 stage_root="$dist/stage"
 stage="$stage_root/$name"
 rm -rf "$stage_root"
@@ -47,6 +62,9 @@ done
 # ---------- scripts and units ----------
 cp install/install.sh install/uninstall.sh "$stage/"
 cp LICENSE THIRD-PARTY.md "$stage/"    # the GPL text and the third-party notices travel with every release
+if [ "$nightly" = 1 ]; then
+    printf '%s\n' "$version-nightly.$FK_NIGHTLY_DATE" > "$stage/NIGHTLY"     # install.sh says so; the setup page shows it
+fi
 cp install/backup.sh install/filament-kit-cli.sh install/spoolman.sh "$stage/install/"
 cp tools/export_ops.sh "$stage/install/"    # runs on a filament-ops VM (docs/migrate-from-filament-ops.md)
 cp install/systemd/*.service install/systemd/*.timer install/systemd/*.path install/systemd/*.socket "$stage/install/systemd/"
@@ -81,7 +99,7 @@ export FK_VERSION_CODE
 if [ "${FK_NO_APP:-}" = 1 ]; then
     FK_KEYSTORE=""
 fi
-if [ -z "${FK_KEYSTORE:-}" ] && [ "${FK_NO_APP:-}" != 1 ] && command -v powershell >/dev/null 2>&1 \
+if [ "$nightly" != 1 ] && [ -z "${FK_KEYSTORE:-}" ] && [ "${FK_NO_APP:-}" != 1 ] && command -v powershell >/dev/null 2>&1 \
         && command -v cygpath >/dev/null 2>&1; then
     # shellcheck disable=SC2016  # $env:LOCALAPPDATA is PowerShell's, expanded by PowerShell
     localapp=$(powershell -NoProfile -Command 'Write-Output $env:LOCALAPPDATA' | tr -d '\r')
@@ -94,7 +112,15 @@ if [ -z "${FK_KEYSTORE:-}" ] && [ "${FK_NO_APP:-}" != 1 ] && command -v powershe
     fi
 fi
 apk_dir="android/app/build/outputs/apk/release"
-if [ -n "${FK_KEYSTORE:-}" ]; then
+if [ "$nightly" = 1 ] && [ "${FK_NO_APP:-}" != 1 ]; then
+    rm -f "$apk_dir"/*.apk
+    (cd android && ./gradlew --no-daemon assembleRelease) \
+        || { echo "error: assembleRelease failed; no nightly published" >&2; exit 1; }
+    cp "$apk_dir/app-release.apk" "$dist/filament-kit-nightly.apk"
+    echo "built $dist/filament-kit-nightly.apk (versionCode $FK_VERSION_CODE, debug-signed)"
+elif [ "$nightly" = 1 ]; then
+    echo "FK_NO_APP=1: no Android build"
+elif [ -n "${FK_KEYSTORE:-}" ]; then
     [ -n "${FK_KEYSTORE_PASSWORD:-}" ] || { echo "error: FK_KEYSTORE set without FK_KEYSTORE_PASSWORD" >&2; exit 1; }
     if [ -z "${JAVA_HOME:-}" ] && [ -d /g/Android/jdk-21.0.13+9 ]; then
         export JAVA_HOME=/g/Android/jdk-21.0.13+9
@@ -113,7 +139,9 @@ apk=""
 if [ "${FK_NO_APP:-}" != 1 ] && [ -f "$apk_dir/app-release.apk" ]; then
     apk="$apk_dir/app-release.apk"
 fi
-if [ -n "$apk" ]; then
+if [ "$nightly" = 1 ]; then
+    echo "nightly: the tarball has no app/"
+elif [ -n "$apk" ]; then
     version_code=$FK_VERSION_CODE   # the value the APK above was just built with
     mkdir -p "$stage/app"
     cp "$apk" "$stage/app/filament-kit.apk"
@@ -153,7 +181,9 @@ echo "built $dist/fk-printer-pack.tar.gz"
 # filament-library checkout (FK_LIBRARY_SRC, default /c/CODING/filament-library) after the same validation the
 # program applies on download; skipped when there is no checkout. Nothing is uploaded here.
 lib_src=${FK_LIBRARY_SRC:-/c/CODING/filament-library}
-if [ -f "$lib_src/index.json" ]; then
+if [ "$nightly" = 1 ]; then
+    echo "nightly: no library asset (installed kits take the library from the stable release)"
+elif [ -f "$lib_src/index.json" ]; then
     py=python3
     command -v "$py" >/dev/null 2>&1 || py=python
     lib_out="$dist/library-$(date +%Y-%m-%d).tar.gz"
