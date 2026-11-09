@@ -103,7 +103,7 @@ jobs:
           repository: thompsonfabco/filament-library
           # the data this signed release carries, by commit: raising it is a choice made for a release, not whatever is
           # on that repository's main at tag time
-          ref: 7e82e23f2588f86dbd8f56c714118482a28460d4
+          ref: e9aba03ff1e61d46e3a7b7d123a93de679dd14c4
           token: ${{ secrets.FK_LIBRARY_TOKEN || github.token }}
           path: filament-library
           persist-credentials: false
