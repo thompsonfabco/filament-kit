@@ -209,3 +209,13 @@ def test_forget_found_at_only_takes_unconfigured_klipper_entries():
     mine = registry.add_klipper("Mine", "192.0.2.23")
     assert registry.forget_found_at({("192.0.2.20", 7125), ("192.0.2.21", 7125), ("192.0.2.23", 7125)}) == 1
     assert set(registry.load()) == {keyed.serial, other.serial, mine.serial} and twin.serial not in registry.load()
+
+
+def test_rename_keeps_display_names_apart():
+    """Spoolman slot locations join on the display name, so a rename must not make two printers share spools."""
+    registry.add_klipper("Voron", "192.0.2.20")
+    other = registry.add_klipper("Other", "192.0.2.21")
+    assert registry.rename(other.serial, "voron")
+    assert registry.display_name(registry.load()[other.serial]) == "voron 2"
+    assert registry.rename(other.serial, "voron 2")                # its own name is free to it
+    assert registry.display_name(registry.load()[other.serial]) == "voron 2"

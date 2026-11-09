@@ -282,7 +282,7 @@ def rename(serial: str, name: str) -> bool:
         printers = _read()
         if serial not in printers:
             return False
-        printers[serial].name = name
+        printers[serial].name = _free_name(name, printers, serial)
         _write(printers)
         return True
 

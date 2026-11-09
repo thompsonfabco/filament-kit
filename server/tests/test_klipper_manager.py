@@ -1,6 +1,7 @@
 """bridge.klipper.manager.KlipperFamily: connections, states, status shape and commands (against FakeMoonraker)."""
 import ipaddress
 import json
+import socket
 import threading
 import time
 from pathlib import Path
@@ -494,6 +495,35 @@ def test_a_scan_shows_a_printer_added_by_name_as_that_printer(fam, monkeypatch):
     assert len(registry.load()) == 2
 
 
-def test_discovery_addresses_answers_empty_for_a_name_it_cannot_resolve():
-    assert discovery.addresses("no such host", 7125) == set()
+def test_discovery_addresses_answers_empty_for_a_name_it_cannot_resolve(monkeypatch):
+    def nope(*a, **kw):
+        raise socket.gaierror("no such host")
+    monkeypatch.setattr(socket, "getaddrinfo", nope)
+    assert discovery.addresses("voron.local", 7125) == set()
+
+
+def test_discovery_addresses_of_an_address_is_that_address():
     assert discovery.addresses("127.0.0.1", 7125) == {"127.0.0.1"}
+
+
+def test_the_same_entries_are_not_looked_up_every_round(fam, monkeypatch):
+    """A name that won't resolve can hold the sync thread for seconds, and an unadded printer on the LAN is normal."""
+    asked = []
+    monkeypatch.setattr(discovery, "addresses", lambda host, port: asked.append(host) or set())
+    registry.add_klipper("Voron", "voron.local")
+    registry.detected_klipper("192.0.2.21", 7125)
+    fam._forget_twins()
+    fam._forget_twins()
+    assert asked == ["voron.local"]
+
+
+def test_a_new_entry_or_a_moved_printer_is_looked_up_again(fam, monkeypatch):
+    table = {"voron.local": {"192.0.2.20"}}
+    _resolves(monkeypatch, table)
+    mine = registry.add_klipper("Voron", "voron.local")
+    registry.detected_klipper("192.0.2.21", 7125)
+    fam._forget_twins()
+    table["voron.local"] = {"192.0.2.22"}                 # it moved: discovery finds it at a new address, a new entry
+    twin = registry.detected_klipper("192.0.2.22", 7125)
+    fam._forget_twins()
+    assert twin.serial not in registry.load() and mine.serial in registry.load()

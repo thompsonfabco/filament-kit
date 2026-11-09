@@ -115,6 +115,55 @@ def test_cli_scan(moonraker, capsys, monkeypatch):
     assert any(p.host == "127.0.0.1" and not p.configured for p in registry.load().values())
 
 
+def _voron_by_name(monkeypatch):
+    table = {"voron.local": {"192.0.2.20"}, "192.0.2.20": {"192.0.2.20"}, "192.0.2.21": {"192.0.2.21"}}
+    monkeypatch.setattr(discovery, "addresses", lambda host, port: table.get(host, set()))
+    monkeypatch.setattr(discovery, "scan", lambda net, **kw: [("192.0.2.20", 7125), ("192.0.2.21", 7125)])
+    return registry.add_klipper("Voron", "voron.local")
+
+
+def test_cli_scan_shows_a_printer_added_by_name_as_that_printer(capsys, monkeypatch):
+    mine = _voron_by_name(monkeypatch)
+    assert klipper_cli.main(["scan", "--subnet", "10.1.2.0/24"]) == 0
+    out = capsys.readouterr().out
+    assert "192.0.2.20:7125  (added already as Voron)" in out
+    assert "add NAME 192.0.2.20" not in out and "add NAME 192.0.2.21" in out
+    assert {p.host for p in registry.load().values()} == {mine.host, "192.0.2.21"}
+
+
+def test_cli_add_refuses_the_address_of_a_printer_added_by_name(capsys, monkeypatch):
+    _voron_by_name(monkeypatch)
+    assert klipper_cli.main(["add", "Again", "192.0.2.20"]) == 1
+    assert "already added as Voron" in capsys.readouterr().err
+    assert len(registry.load()) == 1
+
+
+def test_add_refuses_a_name_for_a_printer_added_by_address(monkeypatch):
+    table = {"voron.local": {"192.0.2.20"}, "192.0.2.20": {"192.0.2.20"}}
+    monkeypatch.setattr(discovery, "addresses", lambda host, port: table.get(host, set()))
+    registry.add_klipper("Voron", "192.0.2.20")
+    with pytest.raises(registry.DuplicatePrinter, match="already added as Voron"):
+        discovery.add("Again", "voron.local", 7125)
+
+
+def test_add_takes_another_port_of_one_machine(monkeypatch):
+    """Two Moonraker instances on one machine are two printers."""
+    monkeypatch.setattr(discovery, "addresses", lambda host, port: {"192.0.2.20"})
+    registry.add_klipper("Voron", "voron.local", 7125)
+    assert discovery.add("Other", "192.0.2.20", 7126).configured
+
+
+def test_add_looks_nothing_up_with_no_printer_to_compare(monkeypatch):
+    monkeypatch.setattr(discovery, "addresses", lambda host, port: pytest.fail("a lookup with nothing to compare"))
+    assert discovery.add("Voron", "voron.local", 7125).host == "voron.local"
+
+
+def test_add_takes_a_name_it_cannot_resolve_as_typed(monkeypatch):
+    monkeypatch.setattr(discovery, "addresses", lambda host, port: set())
+    registry.add_klipper("Voron", "voron.local")
+    assert discovery.add("Other", "other.local", 7125).host == "other.local"
+
+
 # ---------- detect(p) (the web console's data; console-printers stage) and the CLI's output, pinned ----------
 
 def _detect_cli(moonraker, capsys, *argv):
