@@ -55,7 +55,8 @@ class TlsPrinter:
         self.srv.listen(8)
         self.port = self.srv.getsockname()[1]
         self.received: list[bytes] = []
-        self.handshakes = 0
+        self.handshakes = 0             # handshakes this side completed; see `connections` for attempts
+        self.connections = 0            # connections accepted: what a client tried, whether or not the handshake completed here
         self.reply, self.hold = reply, hold
         threading.Thread(target=self._serve, daemon=True).start()
 
@@ -65,6 +66,7 @@ class TlsPrinter:
                 conn, _ = self.srv.accept()
             except OSError:
                 return
+            self.connections += 1
             threading.Thread(target=self._one, args=(conn,), daemon=True).start()
 
     def _one(self, conn):
@@ -367,7 +369,11 @@ def test_mjpeg_source_sends_no_auth_packet_to_a_changed_leaf(tmp_path, caplog):
     finally:
         srv.close()
     assert src.cert_changed
-    assert all(d == b"" for d in srv.received) and srv.handshakes == 1
+    # One attempt, nothing sent on it. Counted as connections, not handshakes: the client reads the leaf and closes as
+    # soon as its own handshake is done, and under load that close (a reset, with the server's session tickets still
+    # unread) can reach this side before its wrap_socket has read the client's last message, so the handshake fails
+    # here although the client checked the pin on it (FLAKY once, not reproduced in 25 rounds).
+    assert all(d == b"" for d in srv.received) and srv.connections == 1 and srv.handshakes <= 1
     assert CODE not in caplog.text
 
 

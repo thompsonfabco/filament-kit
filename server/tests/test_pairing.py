@@ -229,7 +229,8 @@ def test_revoke_races_check(monkeypatch):
         json.loads(f.read_text())
 
 
-def _mp_worker(n: int) -> None:
+def _mp_worker(n: int, env: dict[str, str]) -> None:
+    os.environ.update(env)                      # a spawned child: the parent's FK_* paths, set by the fixture
     for i in range(n):
         keep, drop = pairing.issue("keep"), pairing.issue("drop")
         pairing.check(keep.token)
@@ -238,14 +239,23 @@ def _mp_worker(n: int) -> None:
 
 @pytest.mark.skipif(os.name == "nt", reason="cross-process flock is POSIX only")
 def test_two_processes_do_not_lose_updates():
+    """Three processes issue, check and revoke at once; the file lock loses nothing. Spawned, not forked: a fork of a
+    pytest-xdist worker copies one thread of a many-threaded process, and a lock another thread held at that moment
+    (logging's, a queue's) stays locked in the child for good (FLAKY once: `pr.join(60)` ran out)."""
     import multiprocessing
-    ctx = multiprocessing.get_context("fork")
-    procs = [ctx.Process(target=_mp_worker, args=(15,)) for _ in range(3)]
+    ctx = multiprocessing.get_context("spawn")
+    env = {k: v for k, v in os.environ.items() if k.startswith("FK_")}
+    procs = [ctx.Process(target=_mp_worker, args=(15, env)) for _ in range(3)]
     for pr in procs:
         pr.start()
-    for pr in procs:
-        pr.join(60)
-        assert pr.exitcode == 0
+    try:
+        for pr in procs:
+            pr.join(120)
+            assert pr.exitcode == 0, pr.exitcode
+    finally:
+        for pr in procs:
+            if pr.is_alive():
+                pr.kill()
     devs = pairing.devices()
     assert len(devs) == 45 and {d["name"] for d in devs} == {"keep"}
 

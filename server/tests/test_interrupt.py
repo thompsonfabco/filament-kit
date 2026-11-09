@@ -296,6 +296,11 @@ def test_service_start_restores_a_pending_snapshot(rig):
     assert m.wait_report(SERIAL, lambda r: r["ams"]["ams"][0]["tray"][1]["tray_color"] == "FA0200FF", 2)
     mp = mapping.Mapper(m)
     mp.recover_pending(wait=5)
+    # the restore runs on its own thread and waits for the printer to show each colour: wait for it to finish, not for
+    # shutdown's bounded join (FLAKY once in a crowd of three suites: the join ran out before the last write showed)
+    end = time.monotonic() + 30
+    while snapshot.pending(SERIAL) and time.monotonic() < end:
+        time.sleep(0.05)
     mp.shutdown(10)
     assert no_test_colour_left(printer)
     assert not snapshot.pending(SERIAL)
