@@ -7,7 +7,8 @@ anything but the standard mDNS query.
 `scan(subnet, port=7125, workers=64, timeout=0.3)` probes TCP `port` on every address of `subnet` (at most a /24)
 and keeps the ones whose `/server/info` answers like Moonraker. It runs only when the owner asks (CLI
 `filament-kit klipper scan`, the app's Scan button), never in the background. `own_subnet()` is the /24 of this
-machine's default-route address (found without sending a packet).
+machine's default-route address (found without sending a packet). `check_range(net, own)` is what a client of the server
+may ask for (`KlipperFamily.scan`); the CLI's `--subnet` is explicit and already root, so it isn't held to it.
 """
 from __future__ import annotations
 
@@ -23,6 +24,7 @@ log = logging.getLogger(__name__)
 SERVICE = "_moonraker._tcp.local."
 DEFAULT_PORT = 7125
 MAX_HOSTS = 256
+CGNAT = ipaddress.ip_network("100.64.0.0/10")       # Tailscale's addresses; is_private is false for these
 
 
 def own_subnet() -> ipaddress.IPv4Network | None:
@@ -35,6 +37,18 @@ def own_subnet() -> ipaddress.IPv4Network | None:
     finally:
         s.close()
     return ipaddress.ip_network(f"{ip}/24", strict=False)
+
+
+def check_range(net, own=None) -> None:
+    """A network the server may be asked to scan: at most a /24, inside its own /24, a private range or CGNAT. ValueError
+    otherwise."""
+    if net.num_addresses > MAX_HOSTS:
+        raise ValueError("scan at most a /24 (256 addresses)")
+
+    def inside(wider):
+        return wider is not None and net.version == wider.version and net.subnet_of(wider)
+    if not (net.is_private or inside(CGNAT) or inside(own)):
+        raise ValueError("scan this machine's own network or a private range")
 
 
 def _open(host: str, port: int, timeout: float) -> bool:

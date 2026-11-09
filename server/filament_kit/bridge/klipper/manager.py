@@ -18,6 +18,7 @@ Loads, unloads, follow mode and the usage log are in `loads.py` and `usage.py` (
 from __future__ import annotations
 
 import logging
+import math
 import threading
 import time
 import urllib.parse
@@ -41,7 +42,17 @@ SPOOL_CACHE = 30.0
 OFFLINE_AFTER = 10.0    # seconds a websocket may be down before the printer reads as offline
 SYNC_EVERY = 15.0       # seconds between registry re-reads (the CLI edits it in another process)
 HISTORY_WAIT = 10.0     # seconds to wait for Moonraker to close a finished job's history entry
+SCAN_GAP = 30.0         # seconds from the end of one scan to the start of the next
 ONLINE = ("connected", "unknown_model")
+SYSTEM_WORDS = {"single": "a single-extruder printer", "tool-macros": "a toolchanger", "afc": "an AFC printer",
+                "happy-hare": "a Happy Hare printer", "lane-data": "a printer with lane_data"}
+
+
+def generic_note(system_key: str) -> str:
+    """The status note for a printer no model entry matched: generic is `verified`, so only this says so."""
+    return (f"No model entry matched this printer, so the kit uses its generic rules for "
+            f"{SYSTEM_WORDS.get(system_key, f'a {system_key} printer')}. It works; the Klipper guide says how to add an "
+            f"entry.")
 
 
 def printer_dir(pid: str) -> Path:
@@ -255,6 +266,8 @@ class KlipperFamily(LoadsMixin):
         self._listeners: list = []
         self._spools: tuple[float, list] = (0.0, [])
         self._started = False
+        self._scan_lock = threading.Lock()
+        self._scan_ended = float("-inf")
         self._browser_factory = browser_factory      # discovery.Browser in the server; None in tests
         self._browser = None
         self._loads_init()
@@ -319,13 +332,28 @@ class KlipperFamily(LoadsMixin):
 
     def scan(self, subnet: str | None = None) -> list[dict]:
         """The owner's Scan: probe a /24 (this machine's by default) for Moonraker; found printers are recorded
-        unconfigured. Raises ValueError for a bad or too large subnet."""
+        unconfigured. Raises ValueError for a bad or too large subnet, one that's neither this machine's nor private
+        (discovery.check_range), and while a scan runs or within SCAN_GAP of the last: one at a time across the server."""
         import ipaddress
-        net = ipaddress.ip_network(subnet, strict=False) if subnet else discovery.own_subnet()
+        own = discovery.own_subnet()
+        net = ipaddress.ip_network(subnet, strict=False) if subnet else own
         if net is None:
             raise ValueError("cannot tell this machine's network; give a subnet")
+        discovery.check_range(net, own)
+        if not self._scan_lock.acquire(blocking=False):
+            raise ValueError("a scan is already running; try again when it ends")
+        try:
+            wait = self._scan_ended + SCAN_GAP - time.monotonic()
+            if wait > 0:
+                raise ValueError(f"a scan just ended; try again in {math.ceil(wait)} s")
+            try:
+                found = discovery.scan(net)
+            finally:
+                self._scan_ended = time.monotonic()
+        finally:
+            self._scan_lock.release()
         out = []
-        for host, port in discovery.scan(net):
+        for host, port in found:
             p = registry.detected_klipper(host, port)
             out.append({"id": p.serial, "host": host, "port": port, "name": registry.display_name(p),
                         "configured": p.configured})
@@ -440,7 +468,9 @@ class KlipperFamily(LoadsMixin):
         info = ps.get("info") or {}
         notes = [message] if state == "klippy_not_ready" and message else []
         if state == "unknown_model":
-            notes.append("no klipper_hardware.xml entry matched this printer: the generic Klipper entry is in use")
+            with c.lock:
+                detected = c.detected
+            notes.append(generic_note(detected.system_key if detected else "Klipper"))
         out = {
             "gcode_state": GCODE_STATE.get(ps.get("state"), "UNKNOWN") if state in ONLINE else "UNKNOWN",
             "stage": "", "job": ps.get("filename") or "", "percent": _percent(st),
