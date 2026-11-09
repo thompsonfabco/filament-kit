@@ -150,6 +150,28 @@ function startJob(box, name, question) {
   change(box, "job", { name }, () => { box.replaceChildren(); followApply(true); });
 }
 
+// ----- the filament library (Settings) -----
+function libraryCard() {
+  const body = h("div"), box = boxFor("library");
+  const entry = h("textarea", { rows: 4, ariaLabel: "Library entry JSON", placeholder: "One library entry, as JSON" });
+  const el = card("Filament library", body,
+    h("div", { class: "row" },
+      h("button", { textContent: "Update now", on: { click: () => startJob(box, "library_update") } }),
+      h("button", { class: "secondary", textContent: "Go back to the version before", on: { click: () => startJob(box, "library_rollback", "Go back to the library version before the last update?") } })),
+    h("p", { class: "muted", textContent: "Add your own entry. It is checked as `filament-kit library add` checks it, and a preset build follows." }),
+    entry,
+    h("div", { class: "row" }, h("button", { class: "secondary", textContent: "Add entry", on: { click: () => change(box, "library/add", { entry: entry.value }, (r) => { say(box, `Added ${r.vendor} ${r.product}.`, true); entry.value = ""; }) } })),
+    box);
+  api("library").then((v) => {
+    const c = v.last_check;
+    fill(body,
+      h("p", { textContent: v.source === "none" ? "The library is not downloaded yet." : `Library version ${v.version} (${v.source}), ${v.local} local addition${v.local === 1 ? "" : "s"}.` }),
+      h("p", { class: "muted", textContent: c ? `Last check ${c.at}: ${c.ok ? "ok" : c.error}` : "Last check: never." }),
+      v.skipped ? h("p", { class: "muted", textContent: v.skipped }) : null);
+  }).catch((e) => say(body, e.message, false));
+  return el;
+}
+
 function updatesTab() {
   const out = h("div", {}, h("p", { class: "muted", textContent: "Reading…" }));
   const box = boxFor("updates");

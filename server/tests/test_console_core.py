@@ -79,7 +79,9 @@ def write_log(text: str) -> None:
 
 @pytest.mark.parametrize("name,args", [("apply", ["modules", "apply", "--no-pair"]), ("update", ["update"]),
                                        ("rollback", ["update", "--rollback"]), ("check", ["update", "--check"]),
-                                       ("station_pair", ["station", "pair", "--local"])])
+                                       ("station_pair", ["station", "pair", "--local"]),
+                                       ("library_update", ["library", "update"]),
+                                       ("library_rollback", ["library", "rollback"])])
 def test_each_job_runs_the_clis_own_command_with_no_terminal(env, monkeypatch, name, args):  # noqa: F811
     seen = {}
 
@@ -928,6 +930,7 @@ def test_helper_ops_are_the_closed_list():
                                      "library_token_remove", "module", "setting", "apply", "mode", "job", "station_pairing",
                                      "trust_status", "trust_add", "trust_list", "trust_rename", "trust_revoke",
                                      "trust_revoke_all", "trust_enabled"}
-    assert set(setup_helper.JOBS) == {"apply", "update", "rollback", "check", "station_pair"}
+    assert set(setup_helper.JOBS) == {"apply", "update", "rollback", "check", "station_pair", "library_update",
+                                      "library_rollback"}
     assert set(setup_helper.BUSY) == set(setup_helper.JOBS)
     assert HOME and H     # the shared fixtures' constants are the ones in use
