@@ -50,6 +50,8 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.thompsonfabco.filamentkit.net.ProfileStatus
 import com.thompsonfabco.filamentkit.net.ServerInfo
+import com.thompsonfabco.filamentkit.ui.home.VersionLine
+import com.thompsonfabco.filamentkit.ui.home.versionLine
 import com.thompsonfabco.filamentkit.session.AppViewModel
 import com.thompsonfabco.filamentkit.session.Connection
 import com.thompsonfabco.filamentkit.session.PairNotice
@@ -163,6 +165,7 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
         }
     }
     val labelPhotos = showLabelPhotos(info)
+    val version = versionLine(BuildConfig.VERSION_NAME, config.isPaired(), info?.version)
 
     // Global 401 / certificate change: go to Pair (once per request, also across rotation).
     val pairRequests by app.router.requests.collectAsStateWithLifecycle()
@@ -211,7 +214,7 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
                 }
                 if (!localNetwork.granted) {
                     // No NSD browse, probe, verify or pair until the permission is granted.
-                    Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column(Modifier.weight(1f).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         Text("Pair with your server", style = MaterialTheme.typography.headlineSmall)
                         LocalNetworkPanel(localNetwork)
                     }
@@ -230,6 +233,7 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
                         onTrust = { m -> app.trustCertificate(m.expected, m.actual) { nav.navigateClearing(Routes.HOME) } },
                     )
                 }
+                VersionLine(version)
             }
         }
 
@@ -253,6 +257,7 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
                 connection = connection,
                 drafts = drafts,
                 update = update,
+                version = version,
                 onAddSpools = { nav.navigate(Routes.add()) },
                 onAddByHand = { nav.navigate(Routes.add(manual = true)) },
                 labelPhotos = labelPhotos,

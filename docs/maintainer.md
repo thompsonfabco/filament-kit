@@ -33,7 +33,8 @@ A tag `v<x.y.z>` pushed to GitHub builds and publishes one release, with:
 
 The Android app's `versionCode` comes from the tag: `MAJOR*10000 + MINOR*100 + PATCH` (so `v0.2.0` is 200).
 Phones only offer an update when the server's `app/version.txt` is above the installed app's code, so every
-release that carries the app must have a higher version than the one before.
+release that carries the app must have a higher version than the one before. A build without `FK_VERSION_CODE` uses
+the same formula on `server/filament_kit/__init__.py`, and the app's `versionName` is always that version.
 
 ## Secrets the workflow needs
 

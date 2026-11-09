@@ -45,6 +45,8 @@ fun HomeScreen(
     connection: Connection,
     drafts: List<Draft>,
     update: UpdateUi,
+    /** The small line at the bottom ([versionLine]). */
+    version: String,
     onAddSpools: () -> Unit,
     onAddByHand: () -> Unit,
     onAddProfile: () -> Unit,
@@ -66,8 +68,9 @@ fun HomeScreen(
     localNetworkPanel: @Composable () -> Unit = {},
     extra: @Composable () -> Unit = {},
 ) {
+    Column(modifier.fillMaxSize()) {
     Column(
-        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+        Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("filament-kit", style = MaterialTheme.typography.headlineSmall)
@@ -90,6 +93,8 @@ fun HomeScreen(
             drafts.forEach { d -> DraftRow(d) { onResumeDraft(d.id) } }
         }
         extra()
+    }
+    VersionLine(version)
     }
 }
 
