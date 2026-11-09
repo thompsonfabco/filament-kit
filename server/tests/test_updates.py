@@ -150,6 +150,30 @@ def test_release_workflow_signs_sums_with_the_secret():
 
 # ---------------------------------------------------------------- check
 
+def test_half_install_says_nothing_on_a_whole_install(env):
+    (env / "opt" / "venv").mkdir()
+    (env / "opt" / ".fk-installed").write_text("x\n")
+    assert updates.half_install() is None
+
+
+def test_half_install_says_nothing_with_no_program_here(env):
+    assert updates.half_install() is None        # a checkout or a test
+
+
+def test_half_install_names_the_line_and_the_version_to_go_back_to(env):
+    (env / "opt" / "venv").mkdir()
+    assert updates.half_install() == config.GET_COMMAND
+    updates._write_state(previous="1.2.3")
+    assert updates.half_install() == config.GET_COMMAND + " --version 1.2.3"
+    updates._write_state(previous="1.2.3; rm -rf /")
+    assert updates.half_install() == config.GET_COMMAND
+
+
+def test_summary_carries_the_half_install_line(env):
+    (env / "opt" / "venv").mkdir()
+    assert updates.summary()["half_install"] == config.GET_COMMAND
+
+
 def test_check_says_newer(env, srv, key, capsys):
     srv.add("1.1.0")
     assert updates.check(_cfg(env), fetcher=srv.fetcher()) == 0

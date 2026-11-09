@@ -680,6 +680,68 @@ def test_wrapper_reader_revoke_as_root_and_list_as_user(tmp_path):
     assert _wrapper_run(tmp_path / "b", "reader", "tokens") == "as-user ./stubs/prog reader tokens"
 
 
+def _wrapper_half(tmp_path, *, marker=False, state=None, program=True, installing=False):
+    """Run the wrapper over a kit folder with stand-ins; (exit code, stdout, stderr)."""
+    import os
+    import subprocess
+    stubs = tmp_path / "stubs"
+    stubs.mkdir()
+    bodies = {"id": "echo 1000", "pgrep": "exit 1", "systemctl": f"exit {0 if installing else 3}"}
+    if program:
+        bodies["prog"] = 'echo "ran $*"'
+    for name, body in bodies.items():
+        f = stubs / name
+        f.write_text(f"#!/usr/bin/env bash\n{body}\n", encoding="utf-8", newline="\n")
+        f.chmod(0o755)
+    kit = tmp_path / "kit"
+    (kit / "releases").mkdir(parents=True)
+    if marker:
+        (kit / ".fk-installed").write_text("x\n")
+    if state:
+        (kit / "releases" / "state.json").write_text(state, encoding="utf-8")
+    text = _read("install/filament-kit-cli.sh")
+    for old, new in (("BIN=/opt/filament-kit/venv/bin/filament-kit", "BIN=./stubs/prog"),
+                     ("KIT_OPT=/opt/filament-kit", "KIT_OPT=./kit")):
+        assert old in text
+        text = text.replace(old, new)
+    (tmp_path / "w.sh").write_text(text, encoding="utf-8", newline="\n")
+    env = dict(os.environ, PATH="./stubs" + os.pathsep + os.environ.get("PATH", ""))
+    if os.name == "nt":
+        env["PATH"] = "./stubs:" + os.environ.get("PATH", "")
+    r = subprocess.run([_bash(), "w.sh", "status"], cwd=tmp_path, env=env, capture_output=True, text=True, timeout=30)
+    return r.returncode, r.stdout, r.stderr
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_wrapper_says_nothing_on_a_whole_install(tmp_path):
+    assert _wrapper_half(tmp_path, marker=True) == (0, "ran status\n", "")
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_wrapper_takes_a_running_install_for_no_half_install(tmp_path):
+    assert _wrapper_half(tmp_path, installing=True) == (0, "ran status\n", "")
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_wrapper_prints_the_repair_and_still_runs_the_program(tmp_path):
+    from filament_kit import config
+    rc, out, err = _wrapper_half(tmp_path, state='{"previous": "1.2.3", "held": null}')
+    assert rc == 0 and out == "ran status\n"
+    assert "stopped halfway" in err and f"  {config.GET_COMMAND} --version 1.2.3\n" in err
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_wrapper_with_no_program_prints_the_repair_and_exits_1(tmp_path):
+    from filament_kit import config
+    rc, out, err = _wrapper_half(tmp_path, program=False)
+    assert rc == 1 and out == ""
+    assert err.endswith(f"  {config.GET_COMMAND}\n")       # no state: the plain line
+
+
+def test_the_page_shows_the_repair_line_unless_a_job_is_running():
+    assert "u.half_install && !r.job.running" in _read("server/filament_kit/setup_static/setup_tabs.js")
+
+
 def _wrapper_status(tmp_path, *, uid="0", folder=True, prog='echo "paired 192.0.2.10:8710"') -> list[str]:
     """Run `status` through the wrapper with stand-ins. The program answers `station pairing-state` with `prog`,
     and every run is logged; runuser logs `as-user ...`. Returns the log."""

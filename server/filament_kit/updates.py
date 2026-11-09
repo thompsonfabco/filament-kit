@@ -374,8 +374,19 @@ def check(cfg: dict, *, fetcher: release.Fetcher | None = None) -> int:
     return 0
 
 
+def half_install() -> str | None:
+    """The one command that repairs an install stopped halfway (the same line the `filament-kit` wrapper prints), or
+    None. install.sh removes the marker before it replaces the program and writes it once that is done."""
+    opt = config.paths().opt
+    if (opt / ".fk-installed").exists() or not (opt / "venv").is_dir():
+        return None
+    earlier = _read_state().get("previous")
+    ok = isinstance(earlier, str) and release.VERSION_RE.fullmatch(earlier)
+    return config.GET_COMMAND + (f" --version {earlier}" if ok else "")
+
+
 def summary() -> dict:
-    """{installed, latest, newer, checked_at} from what the last check saved (no network)."""
+    """{installed, latest, newer, checked_at, half_install} from what the last check saved (no network)."""
     st = _read_state()
     cur = current_version()
     seen = st.get("latest") if isinstance(st.get("latest"), dict) else {}
@@ -384,7 +395,8 @@ def summary() -> dict:
         newer = bool(latest) and _newer(latest, cur)
     except ReleaseError:
         latest, newer = None, False
-    return {"installed": cur, "latest": latest, "newer": newer, "checked_at": seen.get("at")}
+    return {"installed": cur, "latest": latest, "newer": newer, "checked_at": seen.get("at"),
+            "half_install": half_install()}
 
 
 def view(cfg: dict) -> dict:

@@ -14,6 +14,27 @@ set -euo pipefail
 
 BIN=/opt/filament-kit/venv/bin/filament-kit
 STATION_DIR=/etc/filament-kit-station
+KIT_OPT=/opt/filament-kit
+
+# install.sh removes this marker before it replaces the program and writes it once that is done, so no marker means
+# an install stopped halfway, unless one is running now. This only says what to do: repairing is a root action, and
+# reading `status` must not start one. The program may still work (`update --rollback` needs it), so it runs on if it can.
+kit_installing() {
+    systemctl is-active -q filament-kit-update.service filament-kit-setup-job@update.service \
+        filament-kit-setup-job@rollback.service filament-kit-setup-job@apply.service 2>/dev/null && return 0
+    pgrep -f '(^|/)install\.sh' >/dev/null 2>&1
+}
+if [ -d "$KIT_OPT" ] && [ ! -f "$KIT_OPT/.fk-installed" ] && ! kit_installing; then
+    repair='curl -fsSLO https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh && sudo bash get.sh'
+    earlier=$(sed -n 's/.*"previous": *"\([0-9][0-9.]*\)".*/\1/p' "$KIT_OPT/releases/state.json" 2>/dev/null) || earlier=""
+    if [ -n "$earlier" ]; then
+        repair="$repair --version $earlier"
+    fi
+    printf 'error: the last install or update stopped halfway. To repair it, run:\n  %s\n' "$repair" >&2
+    if [ ! -x "$BIN" ]; then
+        exit 1
+    fi
+fi
 
 case "${1:-}" in
     config | cert | modules | remote | migrate-ops | migrate-scanner | update | uninstall | station | setup-code)
