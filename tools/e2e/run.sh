@@ -99,6 +99,7 @@ cleanup() {
         cp "$WORK/results.json" "$RESULTS" && echo "results: $RESULTS"
     fi
     if [ -x /opt/filament-kit/venv/bin/filament-kit ] || [ -e /etc/filament-kit ]; then
+        # shellcheck disable=SC2012
         uninstall=$(ls "$WORK"/tree-*/install/uninstall.sh 2>/dev/null | head -n 1)
         [ -n "$uninstall" ] || uninstall="$SRC/install/uninstall.sh"
         printf 'purge\n' | bash "$uninstall" --purge > "$WORK/uninstall-final.log" 2>&1 \

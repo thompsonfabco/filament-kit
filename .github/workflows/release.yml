@@ -101,6 +101,9 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
         with:
           repository: thompsonfabco/filament-library
+          # the data this signed release carries, by commit: raising it is a choice made for a release, not whatever is
+          # on that repository's main at tag time
+          ref: e9aba03ff1e61d46e3a7b7d123a93de679dd14c4
           token: ${{ secrets.FK_LIBRARY_TOKEN || github.token }}
           path: filament-library
           persist-credentials: false
@@ -269,11 +272,7 @@ jobs:
             exit 1
           fi
           cp get.sh dist/get.sh
-          assets="filament-kit-$VERSION.tar.gz filament-kit.apk filament-kit-sync-setup-$VERSION.exe filament-kit-sync-linux-x86_64-$VERSION.tar.gz get.sh bambu_hardware.xml klipper_hardware.xml fk-printer-pack.tar.gz"
-          # library.tar.gz from the server job (kept conditional so a release still builds without it)
-          if [ -f dist/library.tar.gz ]; then
-            assets="$assets library.tar.gz"
-          fi
+          assets="filament-kit-$VERSION.tar.gz filament-kit.apk filament-kit-sync-setup-$VERSION.exe filament-kit-sync-linux-x86_64-$VERSION.tar.gz get.sh bambu_hardware.xml klipper_hardware.xml fk-printer-pack.tar.gz library.tar.gz"
           (cd dist && sha256sum $assets > SHA256SUMS)
           # refuses (and writes no signature) when the key does not match PUBKEY in release.py
           python tools/sign_release.py sign dist/SHA256SUMS
