@@ -864,6 +864,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             *_gated(profiles_api.routes(_authed, sm), "presets", on),
             *setup_page.routes(printers if on & {"printers", "klipper"} else None,
                                families={f for m, f in (("printers", "bambu"), ("klipper", "klipper")) if m in on},
+                               mapper=mapper if "printers" in on else None,
                                **(setup or {})),
         ],
         exception_handlers={HTTPException: http_error},

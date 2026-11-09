@@ -19,6 +19,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Callable
 
 from .. import registry
+from ... import hostaddr
 from .moonraker import Moonraker, MoonrakerError
 
 log = logging.getLogger(__name__)
@@ -27,7 +28,7 @@ DEFAULT_PORT = 7125
 MAX_HOSTS = 256
 # What the server's unit lets it reach (IPAddressAllow in install/systemd/filament-kit.service; a test keeps the two equal).
 # A probe of anything else times out, and would read as "nothing there".
-REACHABLE = tuple(ipaddress.ip_network(n) for n in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"))
+REACHABLE = hostaddr.SERVICE_REACH
 
 
 def own_subnet() -> ipaddress.IPv4Network | None:
@@ -47,8 +48,9 @@ def check_range(net) -> None:
     rather than a scan that finds nothing."""
     if net.num_addresses > MAX_HOSTS:
         raise ValueError("scan at most a /24 (256 addresses)")
-    if not any(net.version == r.version and net.subnet_of(r) for r in REACHABLE):
-        raise ValueError(f"the server can only reach private networks ({', '.join(str(r) for r in REACHABLE)}), so a scan "
+    lan = [r for r in REACHABLE if r.version == 4]          # a scan walks addresses: IPv4 only (IPv6 printers announce, or are typed)
+    if net.version != 4 or not any(net.subnet_of(r) for r in lan):
+        raise ValueError(f"the server can only reach private networks ({', '.join(str(r) for r in lan)}), so a scan "
                          f"of {net} would find nothing")
 
 

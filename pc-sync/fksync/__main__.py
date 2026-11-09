@@ -10,6 +10,7 @@ command line, and is never printed or logged.
 """
 import argparse
 import contextlib
+import ipaddress
 import json
 import os
 import re
@@ -43,13 +44,23 @@ def _parse_address(text: str) -> tuple[str, int]:
     host, port = text.strip(), client.DEFAULT_PORT
     if host.lower().startswith("https://"):
         host = host[8:].rstrip("/")
-    if host.count(":") == 1:
+    p = None
+    bracketed = re.fullmatch(r"\[([^\]]*)\](?::(.*))?", host)
+    if bracketed:
+        host, p = bracketed.groups()
+    elif host.count(":") == 1:
         host, _, p = host.partition(":")
+    if p is not None:
         if not p.isdigit() or not 1 <= int(p) <= 65535:
             raise ValueError(f"{p!r} is not a port number")
         port = int(p)
-    if not _HOST.match(host):
-        raise ValueError(f"{host!r} is not a server name or IPv4 address")
+    if ":" in host or bracketed:
+        try:
+            ipaddress.IPv6Address(host)
+        except ValueError:
+            raise ValueError(f"{host!r} is not a server name or IP address") from None
+    elif not _HOST.match(host):
+        raise ValueError(f"{host!r} is not a server name or IP address")
     return host, port
 
 

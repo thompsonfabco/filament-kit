@@ -25,6 +25,7 @@ Ubuntu packages, from Ubuntu's archive (`apt`):
 |---|---|
 | python3-venv, curl, unzip | PSF-2.0; curl licence (MIT-style); Info-ZIP |
 | avahi-daemon | LGPL-2.1-or-later |
+| libnss-mdns | LGPL-2.1-or-later |
 | qrencode | LGPL-2.1-or-later |
 | ffmpeg | GPL-2.0-or-later (Ubuntu's build) |
 | alsa-utils (`aplay`) | GPL-2.0-or-later |

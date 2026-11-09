@@ -861,7 +861,7 @@ def test_the_helper_sandbox_is_not_widened():
 def test_the_server_unit_was_not_widened():
     """Check now is a job because the server may not reach GitHub: this must not change to make it easier."""
     svc = (SYSTEMD / "filament-kit.service").read_text(encoding="utf-8")
-    assert "IPAddressAllow=localhost 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 160.79.104.0/21 2607:6bc0::/48" in svc
+    assert "IPAddressAllow=localhost 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 fe80::/10 fc00::/7 160.79.104.0/21 2607:6bc0::/48" in svc
 
 
 def test_the_page_loads_both_scripts_under_its_csp(app):
@@ -898,11 +898,11 @@ def test_the_scripts_never_hand_a_null_to_replacechildren():
 
 def test_every_tab_the_shell_lists_has_its_view():
     src = (STATIC / "setup.js").read_text(encoding="utf-8")
-    tabs = (STATIC / "setup_tabs.js").read_text(encoding="utf-8")
+    every = "".join(p.read_text(encoding="utf-8") for p in STATIC.glob("*.js"))
     block = src[src.index("const TABS = {"):src.index("const tabNow")]
     assert re.findall(r"^  (\w+): \[", block, re.M) == ["overview", "modules", "printers", "devices", "settings", "updates"]
     for fn in re.findall(r"(\w+(?:Card|Tab))\(\)", block):
-        assert f"function {fn}(" in src + tabs, fn
+        assert f"function {fn}(" in every, fn
 
 
 def test_the_klipper_hint_no_longer_promises_an_app_screen():

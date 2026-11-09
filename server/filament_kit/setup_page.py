@@ -23,17 +23,18 @@ addresses) and the background `modules apply` go to the root helper (setup_helpe
 setup code, which the helper checks again.
 
 Routes (JSON under /setup/api; every POST body is a JSON object, `code` = the setup code):
-    GET  /setup  /setup/setup.js  /setup/setup_tabs.js  /setup/setup.css
+    GET  /setup  /setup/setup.js  /setup/setup_tabs.js  /setup/setup_printers.js  /setup/setup.css
     GET  state                          everything the page shows
     GET  modules/preview?name=N         what switching N would do (the checklist's notes and needed settings)
     GET  apply?from=N                   the job `apply`'s old name: as GET job
     (the console's own routes, by tab: setup_console/)
     POST key {code, key}  key/remove {code}  key/check {}      the Anthropic key (check: like `status`)
-    POST printers {code, ip, access_code[, name, serial, model]}  printers/{serial}/code {code, access_code}
+    POST printers {code, address, access_code[, name, serial, model]}  printers/{serial}/code {code, access_code}
     POST printers/{serial}/test {}  printers/{serial}/forget {code}
         Printers are listed (and tested, forgotten) when their family's module is on: Bambu with `printers`, Klipper
-        with `klipper` (either alone is enough). Adding by IP and the Access Code are Bambu's (a Klipper printer:
-        400); Test is a TLS handshake for Bambu, Moonraker's /printer/info for Klipper (its API key never shown).
+        with `klipper` (either alone is enough). This route and the Access Code are Bambu's (a Klipper printer: 400,
+        and setup_console/printers_tab.py adds one); Test is a TLS handshake for Bambu, Moonraker's /printer/info for
+        Klipper (its API key never shown). An address is an IP or a name, kept as typed (hostaddr).
     POST passphrase {code, passphrase}  library_token {code, token}  library_token/remove {code}
     POST readers {code[, name]} (the token, shown once)  readers/{id}/revoke {code}
     POST pair {code, kind: phone|pc|station}  devices/{id}/revoke {code}
@@ -60,7 +61,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Route
 
-from . import __version__, config, lan, modules, pairing, reader_tokens, setup_code
+from . import __version__, config, hostaddr, lan, modules, pairing, reader_tokens, setup_code
 from .bridge import registry
 from .bridge.klipper.moonraker import Moonraker, MoonrakerError, NotFound, Offline, Unauthorized
 
@@ -161,10 +162,11 @@ def _host_of(host_header: str) -> str:
 
 
 class SetupPage:
-    def __init__(self, printers=None, *, families=None, helper=None, client_factory=None, hosts=None):
+    def __init__(self, printers=None, *, families=None, helper=None, client_factory=None, hosts=None, mapper=None):
         # the connection manager: the Bambu Manager or family.Printers (None: no printer module is on); `families`
         # = the printer families whose module is on ("bambu" = the printers module, "klipper" = the klipper module)
         self.printers = printers
+        self.mapper = mapper                        # Bambu slot mapping: the server's own (None: the printers module is off)
         self.families = frozenset(families if families is not None else ({"bambu"} if printers is not None else ()))
         if printers is None:
             self.families = frozenset()
@@ -172,7 +174,7 @@ class SetupPage:
         self.client_factory = client_factory
         self.hosts = hosts or allowed_hosts         # a function: the names the page answers to
         self.last_check = 0.0
-        self.static = {n: (STATIC / n).read_bytes() for n in ("setup.js", "setup_tabs.js", "setup.css")}
+        self.static = {n: (STATIC / n).read_bytes() for n in ("setup.js", "setup_tabs.js", "setup_printers.js", "setup.css")}
 
     # ---------- routes ----------
     def routes(self) -> list[Route]:
@@ -198,6 +200,7 @@ class SetupPage:
         return ([Route("/setup", self.page, methods=["GET"]),
                  Route("/setup/setup.js", self.asset, methods=["GET"]),
                  Route("/setup/setup_tabs.js", self.asset, methods=["GET"]),
+                 Route("/setup/setup_printers.js", self.asset, methods=["GET"]),
                  Route("/setup/setup.css", self.asset, methods=["GET"])]
                 + [Route("/setup/api" + p, fn, methods=[m]) for p, fn, m in table])
 
@@ -310,7 +313,8 @@ class SetupPage:
             "<meta name=viewport content='width=device-width,initial-scale=1'>"
             f"<title>filament-kit setup: {name}</title><link rel=stylesheet href='/setup/setup.css'>"
             "<body><main id=app></main><script src='/setup/setup.js'></script>"
-            "<script src='/setup/setup_tabs.js'></script></body></html>", headers=HEADERS)
+            "<script src='/setup/setup_tabs.js'></script><script src='/setup/setup_printers.js'></script></body></html>",
+            headers=HEADERS)
 
     async def asset(self, request: Request):
         if not self._lan(request):
@@ -330,8 +334,12 @@ class SetupPage:
                 state = self.printers.state(p.serial)
             row = {"serial": p.serial, "name": registry.display_name(p), "model": p.model, "ip": p.ip,
                    "configured": p.configured, "state": state, "pinned": bool(p.cert_fp), "family": p.family}
+            if p.family == "bambu":
+                # a slot mapping this server runs: the page follows it again after a reload (a test's mapper is a bare object)
+                running = getattr(self.mapper, "running", None)
+                row["mapping"] = bool(p.configured and running is not None and running(p.serial))
             if p.family == "klipper":
-                row.update(host=p.host, port=p.port)   # never the API key
+                row.update(host=p.host, port=p.port, api_key=bool(p.api_key), lane_data=p.lane_data)   # never the key itself
             out.append(row)
         return out
 
@@ -454,24 +462,27 @@ class SetupPage:
         return v.strip()
 
     async def printer_add(self, request: Request, body: dict):
-        """Add a printer by IP: its serial from its TLS certificate (CN), else the typed one (upper-cased)."""
+        """Add a printer by its address, kept as typed: its serial from its TLS certificate (CN), else the typed one
+        (upper-cased)."""
         manager = self._manager()
-        ip = body.get("ip")
-        try:
-            ip = str(ipaddress.ip_address(ip.strip() if isinstance(ip, str) else ""))
-        except ValueError:
-            raise Refused(400, "ip must be the printer's IP address (on the printer: Settings > Network)") from None
+        ip = hostaddr.clean(body.get("address", body.get("ip")))
+        problem = hostaddr.form_error(ip)
+        if problem:
+            raise Refused(400, f"{problem} (on the printer: Settings > Network)")
         access = self._access_code(body)
         name, model = self._opt_text(body, "name"), self._opt_text(body, "model", 32)
         typed = self._opt_text(body, "serial").upper()
 
         def run() -> dict:
+            _, problem, note = hostaddr.inspect(ip)
+            if problem:
+                raise Refused(400, problem)
             try:
                 seen, why = setup_serial(ip), ""
             except OSError as e:
                 seen, why = None, f"the printer at {ip} did not answer ({type(e).__name__})"
             if seen and typed and seen != typed:
-                raise Refused(400, f"the printer at {ip} names itself {seen}, not {typed}: check the IP address")
+                raise Refused(400, f"the printer at {ip} names itself {seen}, not {typed}: check the address")
             serial = seen or typed
             if not serial:
                 raise Refused(400, (why or f"the printer at {ip} did not name its serial") +
@@ -484,10 +495,10 @@ class SetupPage:
             registry.upsert(registry.Printer(serial, name or (old.name if old else "") or serial,
                                              model or (old.model if old else ""), ip, access, True))
             manager.sync()
-            return {"serial": serial, "replaced": old is not None and old.configured}
+            return {"serial": serial, "replaced": old is not None and old.configured, "note": note}
         r = await anyio.to_thread.run_sync(run)
         self.audit(request, f"printer {r['serial']} {'replaced' if r['replaced'] else 'added'}")
-        return {"ok": True, "serial": r["serial"]}
+        return {"ok": True, "serial": r["serial"], **({"note": r["note"]} if r["note"] else {})}
 
     async def printer_code(self, request: Request, body: dict):
         serial, access = self._serial(request), self._access_code(body)
@@ -495,8 +506,7 @@ class SetupPage:
         def run() -> None:
             p = registry.load().get(serial)
             if p is not None and p.family == "klipper":
-                raise Refused(400, "a Klipper printer has no Access Code (a Moonraker API key, when it wants one: "
-                                   "sudo filament-kit klipper api-key " + serial + ")")
+                raise Refused(400, "a Klipper printer has no Access Code (a Moonraker API key instead, when it wants one)")
             manager = self._manager()
             if p is None:
                 raise Refused(404, "no such printer")
@@ -538,8 +548,7 @@ class SetupPage:
             info = Moonraker(p.host, p.port, p.api_key, timeout=5.0).info()
         except Unauthorized:
             return {"reachable": True, "state": state,
-                    "text": f"Moonraker at {where} answers but wants an API key: "
-                            f"sudo filament-kit klipper api-key {p.serial}"}
+                    "text": f"Moonraker at {where} answers but wants an API key: set it on this printer's row"}
         except Offline:
             return {"reachable": False, "state": state,
                     "text": f"no answer from Moonraker at {where}: check that the printer is on and the address"}
@@ -659,7 +668,7 @@ class SetupPage:
         return {"ok": True}
 
 
-def setup_serial(ip: str, timeout: float = 5) -> str | None:
+def setup_serial(ip: str, timeout: float = 5) -> str | None:   # `ip`: an address or a name
     """The serial a printer names in its TLS leaf (`CN=<serial>`, a handshake only: nothing is sent, nothing is
     pinned), for adding it by IP; None when the leaf has no usable CN. Raises OSError when nothing answers."""
     from .bridge import tlspin

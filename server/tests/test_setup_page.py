@@ -332,7 +332,7 @@ def test_printer_typed_serial_is_upper_cased_and_checked_against_the_certificate
     monkeypatch.setattr(setup_page, "setup_serial", lambda ip: "03W00X123456789")
     r = post(c, "printers", {**body, "serial": SERIAL})
     assert r.status_code == 400 and "names itself 03W00X123456789" in r.json()["error"]
-    assert post(c, "printers", {**body, "ip": "not-an-ip"}).status_code == 400
+    assert post(c, "printers", {**body, "ip": "not an address"}).status_code == 400
     assert post(c, "printers", {**body, "access_code": "no spaces!"}).status_code == 400
 
 
@@ -435,7 +435,7 @@ def test_klipper_test_asks_moonraker_not_a_tls_handshake(env, helper, manager, m
     assert j["text"] == "printer.example.com:7126 answers, but not as Moonraker (HTTP 404)"
     moonraker.answer = mr.Unauthorized("Moonraker at printer.example.com wants an API key (401)")
     j = c.post(f"/setup/api/printers/{k.serial}/test", json={}, headers=H).json()
-    assert j["reachable"] is True and "api-key" in j["text"]
+    assert j["reachable"] is True and "API key" in j["text"]
 
 
 def test_forget_a_klipper_printer_with_only_the_klipper_module(env, helper, manager):
@@ -453,13 +453,12 @@ def test_a_bambu_printer_is_not_reachable_through_the_klipper_module(env, helper
 
 
 def test_setup_script_gives_klipper_rows_no_access_code_button():
-    src = (STATIC / "setup.js").read_text(encoding="utf-8")
-    body = src[src.index("function printersCard"):src.index("// ----- web passphrase")]
+    body = (STATIC / "setup_printers.js").read_text(encoding="utf-8")
     assert 'p.family === "klipper"' in body and "klipperRow" in body
     kr = body[body.index("function klipperRow"):]
     kr = kr[:kr.index("\n}")]
-    assert "/code" not in kr and "Access Code" not in kr and "/test" in kr and "/forget" in kr
-    assert "if (!P.bambu)" in body or "P.bambu &&" in body or "P.bambu ?" in body   # no add-by-IP without it
+    assert '"code"' not in kr and "Access Code" not in kr and "testButton" in kr and "forgetButton" in kr
+    assert "P.bambu ?" in body   # no Bambu add without it
 
 
 # ---------- modules, addresses, the apply ----------

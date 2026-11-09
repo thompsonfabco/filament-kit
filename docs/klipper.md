@@ -34,10 +34,14 @@ has one; an address works too.
   again.
 - The kit keeps its printer list in `printers.xml`. It also writes the old-format `printers.json` beside it on every
   change, so that `sudo filament-kit update --rollback` to an earlier release keeps your Bambu printers. Keep both files.
-- From v0.4.1 the setup page lists your Klipper printers whenever the klipper module is on. Each row says "Klipper"
-  with the Moonraker address (host:port) and has **Test** (asks Moonraker if it answers and says Klipper's state, or
-  that it wants an API key) and **Forget**. A Klipper printer has no Access Code; a Moonraker API key is set with
-  `klipper api-key` above. The setup page can't add a Klipper printer: use `klipper add` above.
+- The setup page's **Printers** tab lists your Klipper printers whenever the klipper module is on, and from v0.4.3 adds
+  them too: **Add a printer** with type Klipper takes the Moonraker address (an IP address or a name such as
+  `voron.local`, kept as you type it), the port and an optional API key; **Find Klipper printers** scans your network
+  and lists what answers, for you to pick. Each row says "Klipper" with the Moonraker address and has **Test** (asks
+  Moonraker if it answers and says Klipper's state, or that it wants an API key), **Set key** / **Clear key** (the key is
+  never shown again), **Detect**, **Rename**, **Change address** and **Forget**. A Klipper printer has no Access Code and
+  is never asked for one. An address outside your home network is saved with a note: the server's service only reaches
+  the home ranges until you allow another (the note says how).
 - The server's API can add one too (`POST /api/printers` with `family: "klipper"` and `host`); the Android app has
   no Add screen for Klipper printers yet, but shows them once added.
 
