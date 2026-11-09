@@ -231,7 +231,7 @@ log (for example `setup: anthropic key replaced from 192.0.2.20`) without the va
 ### The tabs (v0.4.3)
 
 From v0.4.3 the page has tabs: **Overview**, **Modules**, **Printers**, **Devices**, **Settings** and **Updates**
-(`https://<computer name>.local:8710/setup#updates` opens one directly). The table above says what is on **Printers**,
+(`https://<computer name>.local:8710/setup#updates` opens one directly). v0.4.4 adds **Presets**. The table above says what is on **Printers**,
 **Devices** and **Settings**. This section was written from the code, not from a screen: it has not been checked on a
 running install.
 
@@ -246,6 +246,11 @@ running install.
   asks for, then **Apply**. Station mode has no server and so no setup page: its button is greyed, and you set it at the
   station with `sudo filament-kit modules set station --server <address>`. Below the modes, modules are switched on or off
   one by one, as before. The changes are applied in a background job with a live log (see below).
+- **Presets.** The last preset build and any problems with it, **Build now**, and **Restore deleted presets**. Each
+  product line can have its Bambu Studio and Orca Slicer parents set, picked from what the PC sync reported. **Show what
+  would be accepted** lists the pending updates, and **Accept these** accepts exactly that list: if a newer build has
+  come since, it asks you to look again. The PC sync writes accepted updates at its next run, after its backup. Nothing
+  else here replaces a preset in your slicers. Each of these needs the setup code.
 - **Updates.** Shows the installed and the latest release, when it was last checked, and the release notes of the
   latest. **Check now** asks GitHub for the latest release and needs the setup code; the page itself cannot reach GitHub, so
   a background job does it. **Update to <version>** asks you to confirm: the kit stops while it installs and starts
