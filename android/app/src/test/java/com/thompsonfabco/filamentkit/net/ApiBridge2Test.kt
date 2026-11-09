@@ -99,6 +99,25 @@ class ApiBridge2Test {
         assertTrue(m.stale && m.suspect && m.schemeUnsettled == true)
     }
 
+    @Test fun mapStatusDecodesTheOutcomeAndItsSentences() = runBlocking {
+        json("""{"state":"failed","outcome":"failed","reason":"offline","outcome_text":"The last mapping failed.",
+            "next_step":"Map again when the printer is on and online."}""")
+        val m = api.mapStatus("0948AB")
+        assertEquals("failed", m.outcome)
+        assertEquals("offline", m.reason)
+        assertEquals("The last mapping failed.", m.outcomeText)
+        assertEquals("Map again when the printer is on and online.", m.nextStep)
+    }
+
+    @Test fun mapStatusFromAnOlderServerHasNoOutcome() = runBlocking {
+        json("""{"state":"done"}""")
+        val m = api.mapStatus("0948AB")
+        assertNull(m.outcome)
+        assertNull(m.reason)
+        assertNull(m.outcomeText)
+        assertNull(m.nextStep)
+    }
+
     @Test fun mapStatusNoneHasDefaults() = runBlocking {
         json("""{"state":"none"}""")
         val m = api.mapStatus("0948AB")

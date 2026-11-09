@@ -272,7 +272,7 @@ private fun SlotMapping(s: ToolsUiState, tools: PrinterToolsViewModel, printerSt
             if (v.headlineIsError) Text(it, color = MaterialTheme.colorScheme.error) else Text(it)
         }
         v.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-        s.observeNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        if (!v.saysObserve) s.observeNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         v.problemsHeading?.let { heading ->
             Text(heading, style = MaterialTheme.typography.labelLarge)
             val color = if (v.problemsAreError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
@@ -283,8 +283,12 @@ private fun SlotMapping(s: ToolsUiState, tools: PrinterToolsViewModel, printerSt
             v.notes.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
         }
         s.mapMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        OutlinedButton(onClick = tools::askMap, enabled = s.mapEnabled(SlotMapHelp.canStart(printerState, printing))) {
-            Text(SlotMapHelp.buttonLabel(s.map))
+        val enabled = s.mapEnabled(SlotMapHelp.canStart(printerState, printing))
+        // the step the server's reason calls for is the filled button
+        if (v.action == MapAction.RETRY) {
+            Button(onClick = tools::askMap, enabled = enabled) { Text(SlotMapHelp.buttonLabel(s.map)) }
+        } else {
+            OutlinedButton(onClick = tools::askMap, enabled = enabled) { Text(SlotMapHelp.buttonLabel(s.map)) }
         }
         SlotMapHelp.blockedReason(printerState, printing)?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
     }

@@ -266,6 +266,8 @@ data class MapSlot(
  * server run finished (at [finished], epoch seconds), so they say what happened then, not what is wrong now.
  * [stale]: the printer's layout changed since the map was made. [suspect]: two prints in a row disagreed with the map.
  * [schemeUnsettled]: the loaded slots fit more than one numbering scheme (null: a server that does not say).
+ * [outcome] and [reason] (v0.5.0 servers): the server's one reading of the flags and why a job stopped short of a
+ * confirmed map; [outcomeText] and [nextStep] are its sentences for them. Null on an older server.
  */
 @Serializable
 data class MapStatus(
@@ -281,6 +283,10 @@ data class MapStatus(
     val stale: Boolean = false,
     val suspect: Boolean = false,
     @SerialName("scheme_unsettled") val schemeUnsettled: Boolean? = null,
+    val outcome: String? = null,
+    val reason: String? = null,
+    @SerialName("outcome_text") val outcomeText: String? = null,
+    @SerialName("next_step") val nextStep: String? = null,
 )
 
 @Serializable
