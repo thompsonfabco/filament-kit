@@ -208,10 +208,40 @@ def test_firmware_never_starts_the_radio():
         assert used not in src
 
 
+def _body(src: str, head: str) -> str:
+    """The brace-matched body of the function whose signature starts with `head` ("" if absent)."""
+    m = re.search(re.escape(head) + r"[^{;]*\{", src)
+    if not m:
+        return ""
+    depth, i = 1, m.end()
+    while i < len(src) and depth:
+        depth += {"{": 1, "}": -1}.get(src[i], 0)
+        i += 1
+    return src[m.end():i - 1]
+
+
+def buzzer_problems(path: Path) -> list[str]:
+    """Ways the buzzer could be left LOW (on) when silent. The buzzer module is low-level trigger: pin LOW is on, so duty 0
+    / tone 0 would hold it on with DC in the coil. Silence is buzzerIdle() (LEDC detached, pin HIGH); LEDC use is confined
+    to buzzerTone()."""
+    src = re.sub(r"//[^\n]*|/\*.*?\*/", "", path.read_text(encoding="utf-8"), flags=re.S)
+    idle, tone = _body(src, "static void buzzerIdle("), _body(src, "static void buzzerTone(")
+    if not idle or not tone:
+        return ["buzzerIdle()/buzzerTone() missing"]
+    out = []
+    ledc = r"\bledc(?:Write\w*|Attach\w*)\(\s*PIN_BUZZER\b"
+    if len(re.findall(ledc, src)) != len(re.findall(ledc, tone)):
+        out.append("LEDC on PIN_BUZZER outside buzzerTone()")
+    writes = re.findall(r"\bdigitalWrite\(\s*PIN_BUZZER\b[^;]*;", src)
+    if len(writes) != 1 or writes[0] not in idle or not re.fullmatch(r"digitalWrite\(\s*PIN_BUZZER\s*,\s*HIGH\s*\);", writes[0]):
+        out.append("digitalWrite(PIN_BUZZER) must appear once, as HIGH, inside buzzerIdle()")
+    if "buzzerIdle()" not in _body(src, "void setup("):
+        out.append("setup() does not call buzzerIdle()")
+    end = re.search(r"if\s*\(\s*beeping\b[^{]*\{([^}]*)\}", src)
+    if not end or "buzzerIdle()" not in end.group(1) or "beeping = false" not in end.group(1):
+        out.append("end of beep does not call buzzerIdle()")
+    return out
+
+
 def test_firmware_never_idles_the_active_low_buzzer_low():
-    """The buzzer module is low-level trigger: pin LOW is on, so duty 0 / tone 0 would hold it on with DC in the coil."""
-    src = (PANEL_DIR / "src" / "main.cpp").read_text(encoding="utf-8")
-    assert not re.search(r"ledcWrite\(\s*PIN_BUZZER\s*,\s*0\s*\)", src)
-    assert not re.search(r"ledcWriteTone\(\s*PIN_BUZZER\s*,\s*0\s*\)", src)
-    assert not re.search(r"digitalWrite\(\s*PIN_BUZZER\s*,\s*LOW\s*\)", src)
-    assert re.search(r"digitalWrite\(\s*PIN_BUZZER\s*,\s*HIGH\s*\)", src)
+    assert buzzer_problems(PANEL_DIR / "src" / "main.cpp") == []
