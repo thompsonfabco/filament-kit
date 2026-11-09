@@ -254,7 +254,11 @@ running install.
   would be accepted** lists the pending updates, and **Accept these** accepts exactly that list: if a newer build has
   come since, it asks you to look again. The PC sync writes accepted updates at its next run, after its backup. Nothing
   else here replaces a preset in your slicers. Each of these needs the setup code.
-- **Settings** (v0.4.4). **Filament library** shows its version and last check, with **Update now**, a button to go back
+- **Settings** (v0.4.4). **General** changes the display name, storage locations, the Claude model, the reads per day and
+  the station's voice, each with the setup code. Changing the model or the reads per day restarts the server. With an
+  external Spoolman it changes that address too, once the new one has answered. **Remote access**, with the remote module
+  on, shows the firewall rules and gets the certificate.
+  **Filament library** shows its version and last check, with **Update now**, a button to go back
   to the version before, and a box to add your own entry. Each takes the setup code, and the first two run as
   background jobs.
 - **Updates.** Shows the installed and the latest release, when it was last checked, and the release notes of the

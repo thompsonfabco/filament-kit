@@ -16,6 +16,9 @@ What it accepts is a closed list (`OPS`), never a command, a path or a file name
     module {name, on[, settings]}              one module on/off with the checklist's rules (modules.toggle,
                                                cli._apply_selection, cli._plan_error), saved, then an apply
     setting {key, value}                       web.public_url or station.url, checked, saved, then an apply
+    general {key, value}                       one key of GENERAL, the only other list of what the page may write into
+                                               config.json, each with its own check
+    spoolman_url {url}                         an external Spoolman's address (the server has reached it), saved, then an apply
     mode {mode[, settings]}                    a mode preset (modules.set_mode, as `modules set`), saved, then an apply;
                                                never a mode without the server, which this page is part of
     apply                                      start the job `apply`
@@ -78,7 +81,8 @@ ACTIVE = ("activating", "active", "deactivating", "reloading")      # a oneshot 
 # The closed list of jobs: the `filament-kit` arguments each one runs.
 JOBS = {"apply": ("modules", "apply", "--no-pair"), "update": ("update",), "rollback": ("update", "--rollback"),
         "check": ("update", "--check"), "station_pair": ("station", "pair", "--local"),
-        "library_update": ("library", "update"), "library_rollback": ("library", "rollback")}
+        "library_update": ("library", "update"), "library_rollback": ("library", "rollback"),
+        "remote_issue": ("remote", "issue")}
 WRAPPER = "/usr/local/bin/filament-kit"
 FINISHED = "==> finished (exit"
 SETTINGS = ("web.public_url", "station.url")
@@ -96,7 +100,8 @@ BUSY = {"apply": APPLYING, "update": "an update is running; wait until it has fi
         "check": "the check for updates is running; try again in a moment",
         "station_pair": "the station is being paired; wait until it has finished",
         "library_update": "the library is being updated; wait until it has finished",
-        "library_rollback": "the library is going back; wait until it has finished"}
+        "library_rollback": "the library is going back; wait until it has finished",
+        "remote_issue": "the certificate is being issued; wait until it has finished"}
 # the checklist's setting prompts, back to their keys (cli._apply_selection asks by prompt)
 _PROMPT_KEYS = {v: k for k, v in modules._SETTING_PROMPTS.items()}
 
@@ -437,6 +442,123 @@ def _setting(req: dict) -> dict:
     return {}
 
 
+def _one_line(value, limit: int, *, keep_spaces: bool = False):
+    if not isinstance(value, str):
+        raise ValueError("must be text")
+    text = value if keep_spaces else value.strip()
+    if not text.strip() or len(text) > limit or not text.isprintable():
+        raise ValueError(f"must be one line of at most {limit} characters")
+    return text
+
+
+def _whole(value, low: int, high: int) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or not low <= value <= high:
+        raise ValueError(f"must be a whole number from {low} to {high}")
+    return value
+
+
+def _model(value) -> str:
+    text = _one_line(value, 100)
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]*", text):
+        raise ValueError("must be a model name, with no spaces")
+    return text
+
+
+def _locations(value) -> list[str]:
+    if not isinstance(value, list) or not 1 <= len(value) <= 50:
+        raise ValueError("must be a list of 1 to 50 places")
+    return [_one_line(v, 100) for v in value]
+
+
+def _tts(value) -> str:
+    if value not in ("auto", "espeak"):
+        raise ValueError("must be auto or espeak")
+    return value
+
+
+# What the page may write into config.json besides the two addresses in SETTINGS: key -> (check, then). Never in here:
+# port, station.allow, modules, or anything with a path. "restart": the server reads it once, when it starts.
+# "apply": `modules apply` acts on it.
+GENERAL = {
+    "server_name": (lambda v: _one_line(v, 100), None),
+    "model": (_model, "restart"),
+    "reads_per_day": (lambda v: _whole(v, 1, 100000), "restart"),
+    "locations": (_locations, None),
+    "placement.pla_location": (lambda v: _one_line(v, 100), None),
+    "placement.box_prefix": (lambda v: _one_line(v, 100, keep_spaces=True), None),
+    "placement.box_count": (lambda v: _whole(v, 0, 999), None),
+    "placement.overflow": (lambda v: _one_line(v, 100), None),
+    "station.tts": (_tts, "apply"),
+}
+
+
+def general_value(cfg: dict, key: str):
+    cur = cfg
+    for part in key.split("."):
+        cur = cur.get(part) if isinstance(cur, dict) else None
+    return cur
+
+
+def _restart_kit() -> None:
+    """--no-block: this helper answers first; the page comes back when the server has restarted."""
+    if not _no_systemd():
+        subprocess.run(["systemctl", "restart", "--no-block", "filament-kit.service"], stdin=subprocess.DEVNULL,
+                       capture_output=True, timeout=30, check=False)
+
+
+def _general(req: dict) -> dict:
+    key = req.get("key")
+    if not isinstance(key, str) or key not in GENERAL:
+        raise Refused(400, "key must be one of: " + ", ".join(GENERAL))
+    check, then = GENERAL[key]
+    try:
+        value = check(req.get("value"))
+    except ValueError as e:
+        raise Refused(400, f"{key} {e}") from None
+    _not_applying()
+    cfg = config.load()
+    parts = key.split(".")
+    cur = cfg
+    for part in parts[:-1]:
+        if not isinstance(cur.get(part), dict):
+            cur[part] = {}
+        cur = cur[part]
+    cur[parts[-1]] = value
+    if then == "apply":
+        err = _plan_error(cfg)
+        if err:
+            raise Refused(400, err)
+    config.save(cfg)
+    if then == "apply":
+        _start_apply()
+    elif then == "restart":
+        _restart_kit()
+    return {"key": key, "restarts": then == "restart", "applies": then == "apply"}
+
+
+def _spoolman_url(req: dict) -> dict:
+    url = _text(req, "url", 300, word=True).rstrip("/")
+    cfg = config.load()
+    on = modules.enabled(cfg)
+    if "server" not in on or "spoolman" in on:
+        raise Refused(409, "this machine runs its own Spoolman: turn the spoolman module off first")
+    err = modules.check_setting("spoolman_url", url)
+    if err:
+        raise Refused(400, err)
+    _not_applying()
+    cfg["spoolman_url"] = url
+    try:
+        modules.validate(cfg)
+    except modules.ModuleError as e:
+        raise Refused(400, str(e)) from None
+    err = _plan_error(cfg)
+    if err:
+        raise Refused(400, err)
+    config.save(cfg)
+    _start_apply()
+    return {}
+
+
 def _mode(req: dict) -> dict:
     """A mode preset, as `modules set` does it (a module switched on by hand stays on, see modules.set_mode)."""
     mode = req.get("mode")
@@ -593,14 +715,14 @@ def _apply(req: dict) -> dict:
 
 OPS = {"check": _check, "key_set": _key_set, "key_remove": _key_remove, "passphrase_set": _passphrase_set,
        "library_token_set": _library_token_set, "library_token_remove": _library_token_remove,
-       "module": _module, "setting": _setting, "apply": _apply, "mode": _mode, "job": _job,
+       "module": _module, "setting": _setting, "general": _general, "spoolman_url": _spoolman_url, "apply": _apply, "mode": _mode, "job": _job,
        "journal": _journal, "station_pairing": _station_pairing, "trust_status": _trust_status, "trust_add": _trust_add,
        "trust_list": _trust_list, "trust_rename": _trust_rename, "trust_revoke": _trust_revoke,
        "trust_revoke_all": _trust_revoke_all, "trust_enabled": _trust_enabled}
 
 
 # what may save a setting and start a job: these run under _job_lock, whole
-LOCKED_OPS = ("module", "setting", "mode", "apply", "job")
+LOCKED_OPS = ("module", "setting", "general", "spoolman_url", "mode", "apply", "job")
 NO_CODE_OPS = ("trust_status",)     # it answers only about the token it was given
 
 

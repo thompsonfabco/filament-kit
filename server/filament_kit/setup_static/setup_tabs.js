@@ -172,6 +172,61 @@ function libraryCard() {
   return el;
 }
 
+// ----- general settings (Settings) -----
+function generalCard() {
+  const body = h("div"), box = boxFor("general");
+  const save = (key, value) => change(box, "settings/general", { key, value }, (r) => {
+    if (r.applies) { box.replaceChildren(); followApply(true); return; }
+    say(box, r.restarts ? "Saved. The server restarts now; this page comes back by itself." : "Saved.", true);
+  });
+  const text = (label, key, v) => {
+    const inp = h("input", { value: v == null ? "" : String(v), ariaLabel: label });
+    return h("div", { class: "row" }, h("label", {}, `${label}: `, inp), h("button", { class: "secondary", textContent: "Save", on: { click: () => save(key, inp.value) } }));
+  };
+  const count = (label, key, v) => {
+    const inp = h("input", { type: "number", value: String(v), ariaLabel: label });
+    return h("div", { class: "row" }, h("label", {}, `${label}: `, inp), h("button", { class: "secondary", textContent: "Save", on: { click: () => save(key, Number(inp.value)) } }));
+  };
+  const el = card("General", body, box);
+  api("settings/general").then((g) => {
+    const v = g.values;
+    const places = h("input", { value: (v.locations || []).join(", "), ariaLabel: "Locations" });
+    const url = h("input", { placeholder: "http://spoolman.example:7912", ariaLabel: "Spoolman address" });
+    fill(body,
+      text("Display name", "server_name", v.server_name),
+      h("div", { class: "row" }, h("label", {}, "Locations, comma separated: ", places), h("button", { class: "secondary", textContent: "Save", on: { click: () => save("locations", places.value.split(",").map((s) => s.trim()).filter(Boolean)) } })),
+      text("PLA rack", "placement.pla_location", v["placement.pla_location"]),
+      text("Box location prefix", "placement.box_prefix", v["placement.box_prefix"]),
+      count("Number of storage boxes", "placement.box_count", v["placement.box_count"]),
+      text("Overflow location", "placement.overflow", v["placement.overflow"]),
+      text("Claude model", "model", v.model),
+      count("Label reads per day", "reads_per_day", v.reads_per_day),
+      h("p", { class: "muted", textContent: "Changing the model or the reads per day restarts the server." }),
+      g.station_on ? h("div", { class: "row" }, "Station voice: ",
+        h("button", { class: "secondary", textContent: "Piper (natural; a 60-80 MB download)", on: { click: () => save("station.tts", "auto") } }),
+        h("button", { class: "secondary", textContent: "espeak-ng (robotic; no download)", on: { click: () => save("station.tts", "espeak") } })) : null,
+      g.spoolman_external ? h("div", {},
+        h("p", { class: "muted", textContent: `Spoolman in use: ${g.spoolman_url}. A new address must answer as Spoolman before it is saved, and the kit then uses that database for everything.` }),
+        h("div", { class: "row" }, url, h("button", { class: "secondary", textContent: "Change", on: { click: () => change(box, "settings/spoolman", { url: url.value }, () => { box.replaceChildren(); followApply(true); }) } }))) : null);
+  }).catch((e) => say(body, e.message, false));
+  return el;
+}
+
+// ----- the remote module's certificate (Settings) -----
+function remoteCard() {
+  const body = h("div"), box = boxFor("remote");
+  const el = card("Remote access", body, box);
+  api("settings/general").then((g) => {
+    if (!g.remote_on) { fill(body, h("p", { class: "muted", textContent: "Turn on the remote module in Modules to use a public name." })); return; }
+    fill(body,
+      h("p", { class: "muted", textContent: "The kit never changes your firewall or router. Getting the certificate needs port 80 to reach this computer while certbot runs." }),
+      h("div", { class: "row" },
+        h("button", { class: "secondary", textContent: "Show the firewall rules", on: { click: () => change(box, "remote/firewall", {}, (r) => say(box, r.text, true)) } }),
+        h("button", { textContent: "Get the certificate", on: { click: () => startJob(box, "remote_issue", "Get the certificate now? Port 80 must reach this computer.") } })));
+  }).catch((e) => say(body, e.message, false));
+  return el;
+}
+
 function updatesTab() {
   const out = h("div", {}, h("p", { class: "muted", textContent: "Reading…" }));
   const box = boxFor("updates");
