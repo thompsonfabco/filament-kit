@@ -242,6 +242,7 @@ def test_no_relay_thread_outlives_its_sockets(tmp_path, how):
     srv, ctx = tls_listener(tmp_path)
     port = srv.getsockname()[1]
     done = threading.Event()
+    challenged = threading.Event()
 
     def printer():
         conn, _ = srv.accept()
@@ -250,6 +251,7 @@ def test_no_relay_thread_outlives_its_sockets(tmp_path, how):
             _read_msg(f)
             s.sendall(b'RTSP/1.0 401 Unauthorized\r\nCSeq: 0\r\n'
                       b'WWW-Authenticate: Digest realm="R", nonce="n"\r\n\r\n')
+            challenged.set()
             done.wait(10)                                       # stays silent and open, as a camera can
     threading.Thread(target=printer, daemon=True).start()
     before = set(_relay_threads())
@@ -257,18 +259,82 @@ def test_no_relay_thread_outlives_its_sockets(tmp_path, how):
     local = relay.start()
     c = socket.create_connection(("127.0.0.1", local), timeout=5)
     try:
-        assert wait_until(lambda: any(t.name == "cam-relay-down" for t in _relay_threads()), 5)
+        assert challenged.wait(5)
+        time.sleep(0.2)                                         # into the pump
         if how == "stop":
             relay.stop()
         else:
             c.close()
-        ends = {"cam-relay-conn", "cam-relay-down"} | ({"cam-relay"} if how == "stop" else set())   # the listener serves on
+        ends = {"cam-relay-conn"} | ({"cam-relay"} if how == "stop" else set())   # the listener serves on
         assert wait_until(lambda: not {t.name for t in set(_relay_threads()) - before} & ends, 3), _relay_threads()
     finally:
         done.set()
         relay.stop()
         c.close()
         srv.close()
+
+
+def test_relay_carries_both_ways_at_once_on_one_thread(tmp_path):
+    """Video down and RTCP up at the same time, more than the relay will queue, and a text message cut in two: every byte
+    arrives in order. An SSLSocket must not be read and written from two threads at once, so no second thread appears."""
+    srv, ctx = tls_listener(tmp_path)
+    port = srv.getsockname()[1]
+    video = bytes(range(256)) * 12000                           # about 3 MB, three times the queue
+    rtcp = b"".join(b"$\x01" + struct.pack(">H", 1000) + bytes([i % 256]) * 1000 for i in range(2000))    # 2 MB
+    seen = {}
+
+    def printer():
+        conn, _ = srv.accept()
+        with ctx.wrap_socket(conn, server_side=True) as s:
+            f = s.makefile("rb")
+            _read_msg(f)
+            s.sendall(b'RTSP/1.0 401 Unauthorized\r\nCSeq: 0\r\n'
+                      b'WWW-Authenticate: Digest realm="R", nonce="n"\r\n\r\n')
+            seen["text"] = _read_msg(f)
+            s.sendall(video)    # then reads: this end is one thread on one TLS session too, while the relay carries both
+            got = bytearray()
+            while len(got) < len(rtcp):
+                d = f.read1(65536)
+                if not d:
+                    break
+                got += d
+            seen["rtcp"] = bytes(got)
+    t = threading.Thread(target=printer, daemon=True)
+    t.start()
+    relay = camera.RtspRelay(Printer("P1", "x", "O1D", "127.0.0.1", CODE, True), port)
+    local = relay.start()
+    try:
+        with socket.create_connection(("127.0.0.1", local), timeout=15) as c:
+            text = f"OPTIONS rtsp://127.0.0.1:{local}/streaming/live/1 RTSP/1.0\r\nCSeq: 1\r\n\r\n".encode()
+            c.sendall(text[:20])
+            time.sleep(0.1)
+            c.sendall(text[20:])
+            threading.Thread(target=c.sendall, args=(rtcp,), daemon=True).start()
+            got = bytearray()
+            while len(got) < len(video):
+                d = c.recv(65536)
+                assert d, f"ended after {len(got)} bytes"
+                if not got:             # mid-stream: the printer cannot have finished before this first read
+                    names = [th.name for th in _relay_threads()]
+                got += d
+            assert bytes(got) == video
+            assert names.count("cam-relay-conn") == 1 and "cam-relay-down" not in names
+            t.join(15)
+    finally:
+        relay.stop()
+        srv.close()
+    assert seen["text"][0].startswith("OPTIONS rtsps://") and seen["rtcp"] == rtcp
+
+
+def test_for_printer_holds_a_part_message_back():
+    frame = b"$\x01\x00\x02ab"
+    plain = b"X y RTSP/1.0\r\nContent-Length: 2\r\n\r\nhi"
+    sign = lambda m: b"<" + m + b">"    # noqa: E731
+    assert camera._for_printer(frame + plain, sign) == (frame + b"<" + plain + b">", b"")
+    assert camera._for_printer(frame[:3], sign) == (b"", frame[:3])
+    assert camera._for_printer(frame[:5], sign) == (b"", frame[:5])
+    assert camera._for_printer(plain[:-1], sign) == (b"", plain[:-1])
+    assert camera._for_printer(frame + plain[:5], sign) == (frame, plain[:5])
 
 
 def test_relay_answers_digest_challenge_with_rewritten_uri(tmp_path):
