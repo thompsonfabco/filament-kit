@@ -20,6 +20,8 @@ What it accepts is a closed list (`OPS`), never a command, a path or a file name
                                                never a mode without the server, which this page is part of
     apply                                      start the job `apply`
     job {name}                                 start one of the closed list of jobs (JOBS), one at a time
+    journal {unit, lines}                      the last lines (at most 200) of a service of a module that is on, by an
+                                               argument list; read only, at most JOURNAL_MAX bytes back
     station_pairing                            server_api.pairing_state(): the station's pairing folder is closed to the
                                                service user, so a whole Overview asks here
     trust_status {token}                       is this cookie's computer trusted (no code: it says nothing else)
@@ -79,6 +81,8 @@ JOBS = {"apply": ("modules", "apply", "--no-pair"), "update": ("update",), "roll
 WRAPPER = "/usr/local/bin/filament-kit"
 FINISHED = "==> finished (exit"
 SETTINGS = ("web.public_url", "station.url")
+JOURNAL_MAX = 64 * 1024
+JOURNAL_LINES = 200
 WRONG = "wrong setup code"
 TRUST_GONE = "this computer is no longer trusted: type the setup code"
 TRUST_OFF = "trusted computers are turned off (Devices)"
@@ -463,6 +467,35 @@ def _mode(req: dict) -> dict:
     return {"changed": True, "notes": notes, "modules": sorted(modules.enabled(out))}
 
 
+def journal_units(cfg: dict) -> list[str]:
+    """The services of the modules that are on: the only units `journal` reads."""
+    from . import apply
+    on = modules.enabled(cfg)
+    units = [f for n, m in modules.MODULES.items() if n in on for u in m.units for f in apply._unit_files(u)]
+    return sorted({u for u in units if u.endswith(".service") and "@" not in u})
+
+
+def _journal(req: dict) -> dict:
+    unit, lines = req.get("unit"), req.get("lines", 100)
+    if not isinstance(unit, str) or unit not in journal_units(config.load()):
+        raise Refused(400, "unit must be a service of a module that is on")
+    if not isinstance(lines, int) or isinstance(lines, bool) or not 1 <= lines <= JOURNAL_LINES:
+        raise Refused(400, f"lines must be a whole number from 1 to {JOURNAL_LINES}")
+    if _no_systemd():
+        return {"unit": unit, "text": "", "truncated": False}
+    r = subprocess.run(["journalctl", "-u", unit, "-n", str(lines), "-o", "short-iso", "--no-pager"],
+                       stdin=subprocess.DEVNULL, capture_output=True, timeout=30, check=False)
+    if r.returncode != 0:
+        log.error("setup helper: journalctl for %s exited %s", unit, r.returncode)
+        raise Refused(500, f"could not read the log; at the server: sudo journalctl -u {unit}")
+    out = r.stdout
+    cut = len(out) > JOURNAL_MAX
+    if cut:
+        out = out[-JOURNAL_MAX:]
+        out = out[out.find(b"\n") + 1:]        # from a whole line
+    return {"unit": unit, "text": out.decode("utf-8", "replace"), "truncated": cut}
+
+
 def _job(req: dict) -> dict:
     name = req.get("name")
     if not isinstance(name, str) or name not in JOBS:
@@ -558,7 +591,7 @@ def _apply(req: dict) -> dict:
 OPS = {"check": _check, "key_set": _key_set, "key_remove": _key_remove, "passphrase_set": _passphrase_set,
        "library_token_set": _library_token_set, "library_token_remove": _library_token_remove,
        "module": _module, "setting": _setting, "apply": _apply, "mode": _mode, "job": _job,
-       "station_pairing": _station_pairing, "trust_status": _trust_status, "trust_add": _trust_add,
+       "journal": _journal, "station_pairing": _station_pairing, "trust_status": _trust_status, "trust_add": _trust_add,
        "trust_list": _trust_list, "trust_rename": _trust_rename, "trust_revoke": _trust_revoke,
        "trust_revoke_all": _trust_revoke_all, "trust_enabled": _trust_enabled}
 

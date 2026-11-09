@@ -70,6 +70,7 @@ const TABS = {
   presets: ["Presets", () => presetsTab()],
   settings: ["Settings", () => [keyCard(), passphraseCard(), tokenCard(), addressCard()]],
   updates: ["Updates", () => updatesTab()],
+  logs: ["Logs", () => logsTab()],
 };
 const tabNow = () => { const t = location.hash.slice(1); return t in TABS ? t : "overview"; };
 const nav = h("nav", { class: "tabs", ariaLabel: "Console sections" });

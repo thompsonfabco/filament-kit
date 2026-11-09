@@ -231,7 +231,7 @@ log (for example `setup: anthropic key replaced from 192.0.2.20`) without the va
 ### The tabs (v0.4.3)
 
 From v0.4.3 the page has tabs: **Overview**, **Modules**, **Printers**, **Devices**, **Settings** and **Updates**
-(`https://<computer name>.local:8710/setup#updates` opens one directly). v0.4.4 adds **Presets**. The table above says what is on **Printers**,
+(`https://<computer name>.local:8710/setup#updates` opens one directly). v0.4.4 adds **Presets** and **Logs**. The table above says what is on **Printers**,
 **Devices** and **Settings**. This section was written from the code, not from a screen: it has not been checked on a
 running install.
 
@@ -259,6 +259,8 @@ running install.
   a background job does it. **Update to <version>** asks you to confirm: the kit stops while it installs and starts
   again by itself. **Roll back to <version>** goes back to the release the current one replaced and keeps your
   settings and data. Either is greyed, with the reason shown, while a printer is mapping or loading.
+- **Logs** (v0.4.4). The last lines of one service of a module that is on, with the setup code, because logs hold
+  addresses and serial numbers.
 - **Background jobs.** Applying modules, updating, rolling back and checking run as a separate service, so they carry on
   when the kit server restarts. The **Background job** panel shows the log, says "The server is restarting; waiting
   for it to come back…" while it is down, and after an update the page reloads itself into the new version. The log hides
