@@ -100,7 +100,9 @@ function overviewTab() {
     head.replaceChildren(h("p", {}, `filament-kit ${r.version} · mode ${S.mode} `,
       u.newer ? h("span", { class: "pill no", textContent: `${u.latest} is available` }) : null,
       " ", link("updates", u.newer ? "Update" : "Updates")));
-    fill(rowsBox, ...r.rows.map(rowEl),
+    fill(rowsBox,
+      u.half_install && !r.job.running ? h("p", { textContent: `The last install or update stopped halfway. To repair it, run on the server: ${u.half_install}` }) : null,
+      ...r.rows.map(rowEl),
       r.redacted ? h("p", { class: "muted", textContent: "Addresses and serials are hidden until the setup code is given." }) : null);
   };
   const box = h("div");
