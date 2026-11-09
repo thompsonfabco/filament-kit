@@ -62,9 +62,12 @@ def station_rows(url: str) -> Iterator[Row]:
 
 
 def hardware_rows() -> Iterator[Row]:
-    """The printer hardware data (`bambu_hardware.xml`, bundled + optional override): a failure per error (a refused
-    override: the last good data stays in use), a note per warning (ignored unknown parts)."""
+    """The printer hardware data (`bambu_hardware.xml`, `klipper_hardware.xml`; bundled + optional override): a failure
+    per error (a refused override: the last good data stays in use), a note per warning (ignored unknown parts). The
+    Klipper file only speaks when it has something to say."""
     from .bridge import hardware
+    from .bridge.klipper import hardware as klipper_hardware
+    yield from _klipper_hardware_rows(klipper_hardware)
     try:
         hw = hardware.load()
     except Exception as e:  # noqa: BLE001 - status reports, it does not crash
@@ -78,6 +81,19 @@ def hardware_rows() -> Iterator[Row]:
         yield Row(OK, "printer hardware data loaded")
     for w in hw.warnings:
         yield Row(INFO, f"printer hardware data: {w}")
+
+
+def _klipper_hardware_rows(module) -> Iterator[Row]:
+    try:
+        hw = module.load()
+    except Exception as e:  # noqa: BLE001 - status reports, it does not crash
+        yield Row(FAIL, f"Klipper hardware data could not be loaded ({type(e).__name__}: {e})")
+        return
+    for e in hw.errors:
+        yield Row(FAIL, f"Klipper hardware data: {e}",
+                  f"fix or remove {module.override_path()} (the last good data is in use)")
+    for w in hw.warnings:
+        yield Row(INFO, f"Klipper hardware data: {w}")
 
 
 def library_rows() -> Iterator[Row]:

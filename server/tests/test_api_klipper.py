@@ -194,3 +194,17 @@ def test_scan_route_refuses_a_public_range_on_the_real_family():
     kf = KlipperFamily(None)
     r = _client(kf).post("/api/printers/scan", json={"subnet": "1.1.1.0/24"})
     assert r.status_code == 400 and "private" in r.text
+
+
+def test_printer_get_reports_a_refused_klipper_override(tmp_path):
+    from filament_kit.bridge.klipper import hardware as kh
+    kh._reset_cache()
+    try:
+        c = _client()
+        pid = c.post("/api/printers", json={"family": "klipper", "host": "voron.home.arpa"}).json()["printer"]["id"]
+        assert not c.get(f"/api/printers/{pid}").json()["hardware"]["errors"]
+        (tmp_path / "etc" / "klipper_hardware.xml").write_text("<klipper-hardware version='9'><nope", "utf-8")
+        errors = c.get(f"/api/printers/{pid}").json()["hardware"]["errors"]
+        assert errors and "klipper_hardware.xml" in " ".join(errors)
+    finally:
+        kh._reset_cache()

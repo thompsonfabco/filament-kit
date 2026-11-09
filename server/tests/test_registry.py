@@ -140,3 +140,33 @@ def test_root_lock_file_given_to_state_dir_owner(env, monkeypatch):
 def test_display_name_is_the_name_or_the_serial():
     assert registry.display_name(Printer("S1", "Office H2D")) == "Office H2D"
     assert registry.display_name(Printer("S1", "")) == "S1"
+
+
+def test_peek_reads_the_old_file_and_writes_nothing(env):
+    """A dry run looks: it must not migrate printers.json, or touch the state folder at all."""
+    (env / "state").mkdir(exist_ok=True)
+    (env / "state" / "printers.json").write_text(json.dumps({"S1": {"name": "One", "configured": True}}))
+    before = sorted(x.name for x in (env / "state").iterdir())
+    assert registry.peek()["S1"].name == "One"
+    assert sorted(x.name for x in (env / "state").iterdir()) == before
+
+
+def test_peek_leaves_a_changed_old_file_for_the_next_real_read(env):
+    registry.upsert(Printer(serial="S1", name="One"))
+    xml = (env / "state" / "printers.xml").read_bytes()
+    (env / "state" / "printers.json").write_text(json.dumps({"S2": {"name": "Two"}}))
+    assert "S2" in registry.peek()
+    assert (env / "state" / "printers.xml").read_bytes() == xml
+    assert "S2" in registry.load()
+
+
+def test_the_migrate_dry_run_only_peeks(env):
+    from types import SimpleNamespace
+
+    from filament_kit import migrate
+    (env / "state").mkdir(exist_ok=True)
+    (env / "state" / "printers.json").write_text(json.dumps({"S1": {"name": "One"}}))
+    before = sorted(x.name for x in (env / "state").iterdir())
+    ctx = SimpleNamespace(apply=False, say=lambda *a: None, verb=lambda dry, done: dry)
+    migrate._h2d_entry(ctx, "printers")
+    assert sorted(x.name for x in (env / "state").iterdir()) == before

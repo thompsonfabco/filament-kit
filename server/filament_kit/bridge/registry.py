@@ -182,9 +182,9 @@ def _from_json(raw: bytes) -> dict[str, Printer]:
     return {s: Printer(serial=s, **{k: v for k, v in d.items() if k in _FIELDS}) for s, d in data.items()}
 
 
-def _read() -> dict[str, Printer]:
+def _read(write: bool = True) -> dict[str, Printer]:
     """Read the registry (printers.json: see the module docstring). Raises RegistryError when the file in use exists
-    but cannot be understood; caller holds _locked()."""
+    but cannot be understood; caller holds _locked(), and `write=False` (peek) is what needs no lock."""
     state = config.paths().state
     f, old = state / FILE, state / OLD_FILE
     if not f.exists():
@@ -196,6 +196,8 @@ def _read() -> dict[str, Printer]:
             printers = _from_json(raw)
         except (OSError, ValueError, TypeError, AttributeError) as e:
             raise RegistryError(f"{old} is unreadable ({e}); fix or remove it, nothing was changed") from e
+        if not write:
+            return printers
         try:
             _write(printers)
             log.info("printer registry: %s written from %s (%s is kept for a rollback)", FILE, OLD_FILE, OLD_FILE)
@@ -228,6 +230,8 @@ def _read() -> dict[str, Printer]:
     merged.update({s: p for s, p in bambu.items() if s not in merged})
     log.warning("printer registry: %s was changed by another program (an older filament-kit after a rollback?); "
                 "its Bambu printers replace those in %s", OLD_FILE, FILE)
+    if not write:
+        return merged
     try:
         _write(merged)
     except OSError as e:
@@ -243,6 +247,11 @@ def _write(printers: dict[str, Printer]) -> None:
     js = _to_json(printers)
     _write_atomic(state / OLD_FILE, js, 0o600, state_owned=True)
     _write_atomic(state / FILE, _to_xml(printers, _sha(js)), 0o600, state_owned=True)
+
+
+def peek() -> dict[str, Printer]:
+    """The registry as load() would see it, for a dry run: no lock file, no migration, nothing written."""
+    return _read(write=False)
 
 
 def load() -> dict[str, Printer]:

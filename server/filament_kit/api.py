@@ -245,14 +245,21 @@ def _klipper_model_name(p: registry.Printer, kf) -> str:
 
 
 def _hardware_view() -> dict:
-    """The printer hardware data file's state (`bambu_hardware.xml`): errors = a refused override (the last good
-    data stays in use), warnings = unknown elements/attributes that were ignored."""
-    try:
-        hw = hardware.load()
-    except Exception as e:  # noqa: BLE001 - the status must still answer
-        log.exception("hardware data cannot be loaded")
-        return {"errors": [f"{type(e).__name__}: {e}"], "warnings": []}
-    return {"errors": list(hw.errors), "warnings": list(hw.warnings)}
+    """The printer hardware data files' state (`bambu_hardware.xml`, `klipper_hardware.xml`): errors = a refused
+    override (the last good data stays in use), warnings = unknown elements/attributes that were ignored. Each entry
+    names its file."""
+    from .bridge.klipper import hardware as klipper_hardware
+    out = {"errors": [], "warnings": []}
+    for module in (hardware, klipper_hardware):
+        try:
+            hw = module.load()
+        except Exception as e:  # noqa: BLE001 - the status must still answer
+            log.exception("hardware data cannot be loaded")
+            out["errors"].append(f"{type(e).__name__}: {e}")
+            continue
+        out["errors"] += hw.errors
+        out["warnings"] += hw.warnings
+    return out
 
 
 NOT_SEEN = "That printer hasn't been seen on the network yet"
