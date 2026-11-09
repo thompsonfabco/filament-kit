@@ -1,10 +1,12 @@
 """The kit-side half of tools/e2e/klipper.sh: drive the Klipper bridge against a real Klipper + Moonraker.
 
 usage: klipper_e2e.py single|toolchanger PRINTER_DATA   (FK_STATE / FK_ETC point at scratch folders; Moonraker on
-127.0.0.1:7125 and a fake Spoolman on 127.0.0.1:7912 are running). Exits non-zero on the first failed check.
+127.0.0.1:$FK_E2E_MOONRAKER_PORT and a fake Spoolman on 127.0.0.1:$FK_E2E_SPOOLMAN_PORT are running, by default 7125
+and 7912). Exits non-zero on the first failed check.
 """
 import json
 import logging
+import os
 import sys
 import time
 import urllib.request
@@ -14,7 +16,9 @@ from filament_kit.bridge import registry
 from filament_kit.bridge.klipper.manager import KlipperFamily
 from filament_kit.spoolman import Spoolman
 
-MR = "http://127.0.0.1:7125"
+MR_PORT = int(os.environ.get("FK_E2E_MOONRAKER_PORT") or 7125)
+SM_PORT = int(os.environ.get("FK_E2E_SPOOLMAN_PORT") or 7912)
+MR = f"http://127.0.0.1:{MR_PORT}"
 
 
 def ok(msg):
@@ -86,13 +90,13 @@ def spool_check(sm, data, pid, fam):
 
 def main(variant, data):
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
-    sm = Spoolman("http://127.0.0.1:7912")
+    sm = Spoolman(f"http://127.0.0.1:{SM_PORT}")
     sm.ensure_fields()
     v = sm.post("vendor", {"name": "SUNLU"})
     f = sm.post("filament", {"name": "PLA+ Grey", "vendor_id": v["id"], "material": "PLA", "color_hex": "8a8c8e"})
     a = sm.post("spool", {"filament_id": f["id"], "location": "Shelf A"})
     b = sm.post("spool", {"filament_id": f["id"], "location": "Shelf B"})
-    pid = registry.add_klipper("E2E", "127.0.0.1", 7125).serial
+    pid = registry.add_klipper("E2E", "127.0.0.1", MR_PORT).serial
     fam = KlipperFamily(sm, backoff=(0.5, 4.0))
     fam.start()
     try:
@@ -102,6 +106,12 @@ def main(variant, data):
         ok(f"connected to real Moonraker, state {state}, verified={fam.verified(pid)}")
         st = fam.status(pid)
         assert st["gcode_state"] == "IDLE", st["gcode_state"]
+        # real Moonraker's own answer, and the kit agrees where it points: the printer here is on the kit's machine
+        connected = mr("/server/spoolman/status")["spoolman_connected"]
+        assert isinstance(connected, bool), connected
+        want_warning = "Moonraker cannot reach its Spoolman: usage is not getting there" if not connected else None
+        assert st["spoolman_warning"] == want_warning, st["spoolman_warning"]
+        ok(f"Moonraker's Spoolman is the kit's; Moonraker says connected={connected}")
         if variant == "single":
             r = fam.load(sm, pid, "T0", a["id"], False, sealed_location="Sealed stock")
             assert r["confirmed"] is True, r["problems"]

@@ -16,6 +16,9 @@
     ],
     "filament_density": [
       "1.24"
+    ],
+    "filament_diameter": [
+      "1.75"
     ]
   },
   "published_ranges": {
@@ -24,12 +27,14 @@
     "_enclosure": "not required",
     "_hdt_0.45MPa": "55 (ASTM E2092)",
     "_vitrification": "55-60 (Tg, DSC)",
-    "_notes": "100% recycled PLA; shade may vary. Bed surfaces: smooth PEI, textured PEI, glass. Page lists '75-100%' under printing parameters (labelled humidity)."
+    "_notes": "'Humidity: 75-100%' on page interpreted as fan/airflow (see FiberSilk note). 100% recycled; shade may vary and may contain trace glitter. Refill spool 0.85kg. Earlier entry: 100% recycled PLA; shade may vary. Bed surfaces: smooth PEI, textured PEI, glass. Page lists '75-100%' under printing parameters (labelled humidity).",
+    "fan_min_speed/fan_max_speed": "75-100"
   },
   "conflicts": [],
   "source_quality": "official_page",
   "sources": [
+    "https://fiberlogy.com/en/product/rpla-filament-s2/",
     "https://fiberlogy.com/en/filaments/pla-en/rpla-en/"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

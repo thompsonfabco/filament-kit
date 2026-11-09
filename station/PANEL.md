@@ -1,7 +1,3 @@
-> In filament-kit the station is installed as the `station` module (`filament-kit modules`), runs as
-> `filament-kit-station.service` from `filament_kit.station`, and this firmware lives in `station/panel/` of the
-> filament-kit repo. Paths and service names below are from filament-ops.
-
 # Intake station button panel
 
 Front panel for the intake station: a Wemos D1 mini (ESP-12F) on the station PC's USB, with:
@@ -13,7 +9,8 @@ Front panel for the intake station: a Wemos D1 mini (ESP-12F) on the station PC'
 
 The D1 mini is a thin I/O board. The station service (`filament_kit.station`) owns all the logic: it sends the screen
 text and makes the speech, so behaviour changes never need a reflash. A USB webcam on the station PC photographs new
-spools for recognition.
+spools for recognition. The station is installed as the `station` module (`filament-kit modules`) and runs as
+`filament-kit-station.service`.
 
 ![wiring](panel/wiring.png)
 
@@ -91,7 +88,7 @@ Red cancels at any step. Yellow advances: a short press does the step's job, and
 - The camera picture is at `/photo` (listed in `/state` as `photo`). `STATION_CAMERA` is a `/dev/video*` path,
   `auto` (the first USB camera) or `off`.
 - The display's bottom line is the panel's own: room air, always shown, even with the station offline.
-- The station calls the kit server it was paired with (`sudo filament-kit station pair`, then restart the station):
+- The station calls the kit server it was paired with (`sudo filament-kit station pair`, which restarts the station itself when it needs to):
   by IP, over TLS with the server's certificate pinned, with the pairing token. Every answer can carry `display`, a
   list of OLED lines (a 16-character title and two 21-character lines; rows 3-4 are the station's own).
 
@@ -173,37 +170,41 @@ swap between boots. The service finds the panel by its HELLO and gives nfcpy the
 
 ## Build, flash and test
 
+Paths here are relative to `station/` in this repo.
+
 The station keeps the panel's firmware current itself. `panel/firmware/intake-panel.bin` and `panel/firmware/VERSION`
-ship with the service, installed to `/opt/intake-station/panel/`. When the panel's HELLO reports a different version,
-the service flashes the bundled build over USB with esptool, then finds the panel again. It tries once per bundled
-version per run; if the flash doesn't take, it logs that and uses the panel as it is. `STATION_PANEL_FLASH=0` turns
-this off. `/state` shows the running version as `panel_version`.
+ship in each release and are installed to `/opt/filament-kit/resources/panel/`. When the panel's HELLO reports a
+different version, the service flashes the bundled build over USB with esptool, then finds the panel again. That
+includes going back to an older version after a rollback. It tries once per bundled version per run; if the flash
+doesn't take, it logs that and uses the panel as it is. `station.panel_flash` set to false (`STATION_PANEL_FLASH=0`)
+turns this off. `/state` shows the running version as `panel_version`.
 
 To ship a firmware change:
 
 1. Edit `panel/src/`, and bump `VERSION` in `main.cpp`.
-2. Run `sh panel/build.sh`. It builds with PlatformIO (`py -3 -m platformio`) and refreshes `panel/firmware/`.
-3. Deploy with `sh install_station.sh intake-station`. The service restarts and reflashes the panel within seconds.
-   The journal shows `flashing button panel on /dev/ttyUSBn with firmware N`, then
-   `button panel on /dev/ttyUSBn (firmware N)`.
+2. Run `sh panel/build.sh`. It builds with PlatformIO (`py -3 -m platformio`, or the command in `$PIO`) and refreshes
+   `panel/firmware/`.
+3. Commit the source and the refreshed `panel/firmware/` together; a release carries them. After
+   `sudo filament-kit update` on the station, the service restarts and reflashes the panel within seconds. The journal
+   shows `flashing button panel on /dev/ttyUSBn with firmware N`, then `button panel on /dev/ttyUSBn (firmware N)`.
 
-The first flash of a new board, or a board whose firmware won't answer, is done on the desktop. Plug it in and run
+The first flash of a new board, or a board whose firmware won't answer, is done on a desktop. Plug it in and run
 `py -3 -m platformio run -t upload` in `panel/` (add `--upload-port COMn` if there are several ports). Even a board
 that won't boot can be reflashed this way, because the CH340 resets it into the ESP8266's ROM bootloader.
-In filament-kit, `modules apply` (run by `install.sh`, and by `filament-kit modules enable station` when the station
-module is switched on later) installs piper-tts (the `[station-tts]` extra) and the Piper voice wherever the station
-module is on: into `/opt/filament-kit/resources/voice` (60-80 MB), from one pinned piper-voices commit and checked
-against the pinned hashes, skipped when offline (run `sudo filament-kit modules apply` again later). A file that
-doesn't match is a warning, never a failed install: espeak-ng speaks. Nothing is downloaded with `station.speech`
-off, with `station.tts` set to `espeak` (`sudo filament-kit config`, then **7) Station voice**), or with
-`FK_STATION_TTS=espeak`. It also installs espeak-ng and ffmpeg and gives the service the `video` group for the
-webcam.
+
+`modules apply` (run by `install.sh`, and by `filament-kit modules enable station` when the station module is switched
+on later) installs piper-tts (the `[station-tts]` extra) and the Piper voice wherever the station module is on: into
+`/opt/filament-kit/resources/voice` (60-80 MB), from one pinned piper-voices commit and checked against the pinned
+hashes, skipped when offline (run `sudo filament-kit modules apply` again later). A file that doesn't match is a
+warning, never a failed install: espeak-ng speaks. Nothing is downloaded with `station.speech` off, with `station.tts`
+set to `espeak` (`sudo filament-kit config`, then **7) Station voice**), or with `FK_STATION_TTS=espeak`. It also
+installs espeak-ng and ffmpeg and gives the service the `video` group for the webcam.
 
 Offline tests (Linux / WSL):
 
 - `panel/test/bme280_test.cpp`: the BME280 compensation against the datasheet example, and the AHT20 CRC and decoding
   (`g++ -std=c++17 -I../src bme280_test.cpp -o /tmp/bme280_test && /tmp/bme280_test` in `panel/test`).
-- In filament-kit, `server/tests/test_station_flow_panel.py` drives the flow and the panel relay against a fake
+- `server/tests/test_station_flow_panel.py` drives the flow and the panel relay against a fake
   server and a recording serial port; `test_station_flow_e2e.py` runs the flow against the real kit API (TLS, fake
   Spoolman, fake Claude); `test_station_panel.py` covers speech framing and timing, the photo and AIR; and
   `test_station_voice.py` the Piper voice and its download.

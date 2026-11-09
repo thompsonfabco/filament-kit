@@ -2,7 +2,7 @@
   "schema_version": 1,
   "vendor": "Kingroon",
   "product": "PLA-CF",
-  "material": "PLA",
+  "material": "PLA-CF",
   "colors": [
     "Black"
   ],
@@ -29,14 +29,17 @@
     "_drying": "55C 8h",
     "_max_print_speed": "<200 mm/s",
     "_min_nozzle": "0.4",
-    "_hardened_nozzle_required": "kingroon3d.com page: 'Use a hardened steel nozzle for best results'",
+    "_hardened_nozzle_required": "'Use a hardened steel nozzle for best results' (kingroon3d.com page, Pro Setup)",
     "_hdt_0.45MPa": "55",
     "_vicat": "69",
     "_vitrification": "63 (Tg, DSC)",
     "_annealing": "55-60C 6-12h",
-    "_notes": "TDS V1.0: carbon-fibre reinforced tough PLA; nozzle sizes 0.4/0.6/0.8; Cool Plate / High Temperature Plate / Textured PEI with glue; HDT 1.8 MPa 54 C; melting 165 C; ABS spool rated 70 C. Sold as 'PLA Carbon Fiber Basic'. Verification 2026-11-01: fields and plate/chamber/fan/retraction ranges confirmed against the TDS PDF; kingroon.com / kingroon3d.com product pages returned HTTP 429, so page-derived notes and conflicts were not re-checked."
+    "_notes": "TDS (wiki.kingroon.com, V1.0, 2025/12/1): nozzles 0.4/0.6/0.8, HDT 1.8MPa 54C, melt 165C, composition 'Polylactic acid, carbon fiber' (fibre % not stated); TDS itself has no hardened-nozzle note. Retraction/print-speed/chamber label mapping inferred from the flattened PDF layout (value order matches the other Kingroon V1.0 TDS sheets: retraction length, retraction speed, chamber temp, overhang, bridging ... printing speed). Page quote and +/-0.03mm confirmed on kingroon3d.com 2026-11-02. Earlier entry: TDS V1.0: carbon-fibre reinforced tough PLA; nozzle sizes 0.4/0.6/0.8; Cool Plate / High Temperature Plate / Textured PEI with glue; HDT 1.8 MPa 54 C; melting 165 C; ABS spool rated 70 C. Sold as 'PLA Carbon Fiber Basic'. Verification 2026-11-01: fields and plate/chamber/fan/retraction ranges confirmed against the TDS PDF; kingroon.com / kingroon3d.com product pages returned HTTP 429, so page-derived notes and conflicts were not re-checked.",
+    "_diameter_tolerance": "+/-0.03"
   },
   "conflicts": [
+    "kingroon3d.com PLA Carbon Fiber Basic page: 190-220C, bed 50-70, fan 100%",
+    "Kingroon Filament Guide datasheet 'PLA-CF': 190-220C, bed 50-70, 1.21 g/cm3",
     "kingroon3d.com PLA Carbon Fiber Basic page: nozzle 190-220, bed 50-70, fan 100%"
   ],
   "source_quality": "official_tds",
@@ -44,5 +47,5 @@
     "https://wiki.kingroon.com/kingroon_pla-cf_technical_data_sheet_v1.0.pdf",
     "https://kingroon3d.com/products/kingroon-pla-carbon-fiber-basic-3d-printer-filament"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

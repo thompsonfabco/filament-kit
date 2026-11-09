@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "ThermaX PPE/PS",
+  "material": "PPE/PS",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Generic PC",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "290"
+    ],
+    "nozzle_temperature_range_high": [
+      "320"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-110",
+    "chamber_temperatures": "50-80",
+    "_drying": "80C 4h",
+    "_min_nozzle": "0.4",
+    "_notes": "Official page: UL94 V0 flame-retardant base resin; 750g black. Upper nozzle bound exceeds 300C on X1/P1/P2S. Density/Tg/HDT not retrieved."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://3dxtech.com/products/ppe-ps",
+    "https://www.3dxtech.com/pages/filament-drying-instructions"
+  ],
+  "updated": "2026-11-02"
+}

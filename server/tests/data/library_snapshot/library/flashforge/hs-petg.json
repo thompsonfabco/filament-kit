@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "vendor": "Flashforge",
+  "product": "HS PETG",
+  "material": "PETG",
+  "colors": [],
+  "bambu_parent": "Bambu PETG HF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "RT-60",
+    "fan_min_speed/fan_max_speed": "50-100",
+    "filament_retraction_length": "1-2",
+    "filament_retraction_speed": "30-50",
+    "_drying": "70C 5h",
+    "_print_speed": "100-350mm/s",
+    "_hdt_0.45MPa": "68 (ISO 75, TDS)",
+    "_notes": "Separate formulation: TDS says 'produced using a modified PETG... highly suitable for use in high-speed FFF 3D printers'. TDS density 1.27~1.28 g/cm³ (range only, not entered). Continuous service temp 65°C. Build surfaces: tempered glass, PEI, carbon fibre plate. Page lists 1.75/2.85 mm but FAQ states 1.75 mm."
+  },
+  "conflicts": [
+    "nozzle_temperature_range_high: 260 (TDS: 220~260℃) (https://after-support.flashforge.jp/uploads/datasheet/tds/PETG_HS_TDS_EN.pdf)"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.flashforge.com/products/hs-petg",
+    "https://au.flashforge.com/products/hs-petg",
+    "https://after-support.flashforge.jp/uploads/datasheet/tds/PETG_HS_TDS_EN.pdf"
+  ],
+  "updated": "2026-11-02"
+}

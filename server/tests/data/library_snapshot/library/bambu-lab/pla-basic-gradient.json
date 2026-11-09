@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "vendor": "Bambu Lab",
+  "product": "PLA Basic Gradient",
+  "material": "PLA",
+  "colors": [
+    "Arctic Whisper",
+    "Solar Breeze",
+    "Ocean to Meadow",
+    "Cotton Candy Cloud",
+    "Blueberry Bubblegum",
+    "Mint Lime",
+    "Pink Citrus",
+    "Dusk Glare"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.24"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "35-45",
+    "chamber_temperatures": "25-45",
+    "fan_max_speed": "100%",
+    "filament_retraction_length": "0.6-1.0",
+    "filament_retraction_speed": "20-40",
+    "_drying": "55C 8h",
+    "_print_speed": "<300 mm/s",
+    "_vitrification": "60 (Tg, DSC)",
+    "_vicat": "57",
+    "_hdt_0.45MPa": "57",
+    "_hdt_1.8MPa": "54",
+    "_diameter_tolerance": "+/-0.03",
+    "_ams": "All AMS Series Compatible (official store page)",
+    "_notes": "The TDS at the Gradient URL is titled 'Technical Data Sheet V2.0 PLA Basic'. It notes: 'As new color options in the PLA Basic series, the gradient filament retains similar performance to PLA Basic while providing even stronger toughness and Z-layer strength' (Impact Z 23.8 kJ/m2). Bambu's store page says to use the default PLA Basic profile and to lower speed/acceleration for best quality. The gradient length is 8-10 m. The colour list comes from reseller hex tables (STEMfinity, SimplyPrint) and was not read from the Bambu store. Bed surface preparation: glue. Plates: Cool Plate, High Temperature Plate or Textured PEI."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://store.bblcdn.com/s7/default/c313aa76fa3b433a94c20b9b83e57575/Bambu_PLA_Basic_Gradient_Technical_Data_Sheet.pdf",
+    "https://us.store.bambulab.com/products/pla-basic-gradient",
+    "https://stemfinity.com/products/bambu-lab-pla-basic-gradient"
+  ],
+  "updated": "2026-11-02"
+}

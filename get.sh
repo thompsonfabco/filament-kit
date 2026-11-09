@@ -25,9 +25,10 @@
 # installs nothing. Then it unpacks into a temporary folder, keeps a copy of the verified release in
 # /opt/filament-kit/releases/ (for `filament-kit update --rollback`), runs install.sh with the terminal (so its
 # questions work through the pipe; without a terminal install.sh asks nothing) and removes the temporary folder.
-# Piped, sudo (use_pty, sudo-rs's default on Ubuntu 25.10+) starts bash as a background job of its terminal, where
-# the first command to touch the terminal (install.sh's questions, apt) stops for good; so before install.sh runs
-# this script makes itself the terminal's foreground job (fk_take_tty), and gives the terminal back afterwards.
+# Piped, sudo (use_pty) starts bash as a background job of its terminal. Under sudo-rs, Ubuntu 25.10+'s default, the
+# first command to touch the terminal (install.sh's questions, apt) stops for good; so before install.sh runs this
+# script makes itself the terminal's foreground job (fk_take_tty), and gives the terminal back afterwards. Classic sudo
+# (Ubuntu 24.04) handles that first touch itself and must be left to it: see fk_classic_sudo.
 # On an existing install it first holds every printer's mapping lock, as the updater does: it stops when a printer
 # is mapping slots or loading a spool.
 #
@@ -70,6 +71,25 @@ try:
 except (OSError, ValueError):
     pass
 ' "$1" 2>/dev/null || true
+}
+
+# True under classic sudo. Piped, it starts us as a background job on purpose: our first touch of the terminal stops
+# us, it notices, makes the job the foreground one and starts passing keys on, and it reads no keys until then. Taking
+# the terminal ourselves skips that, and no key ever arrives. sudo-rs has no such step (a stopped job stays stopped), so
+# it needs fk_take_tty. Asked of the sudo that is running, an ancestor: `sudo` on root's PATH may be another one.
+fk_classic_sudo() {
+    local pid=$PPID exe
+    while [ "${pid:-0}" -gt 1 ] 2>/dev/null; do
+        exe=$(readlink "/proc/$pid/exe" 2>/dev/null) || exe=""
+        case "${exe##*/}" in
+            sudo | sudo.ws | sudo-ws | sudo-rs)
+                case "$(LC_ALL=C LANGUAGE= "$exe" --version 2>/dev/null)" in "Sudo version"*) return 0 ;; esac
+                return 1
+                ;;
+        esac
+        pid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
+    done
+    return 1
 }
 
 # The person's own terminal when sudo runs us on a pseudo-terminal of its own (use_pty): the terminal of the first
@@ -629,11 +649,11 @@ FK_RELEASE_PY
     [ -f "$root/install.sh" ] || fk_die "nothing was installed (no install.sh)"
     fk_hold_printers
 
-    local rc=0 owner outer="" saved=""
+    local rc=0 owner="" outer="" saved=""
     if (exec </dev/tty) 2>/dev/null; then
-        owner=$(fk_take_tty </dev/tty)
+        fk_classic_sudo || owner=$(fk_take_tty </dev/tty)
         if [ -n "$owner" ]; then
-            # Piped, sudo leaves the person's terminal as it was (echoing, line by line) and passes on whole
+            # Piped, sudo-rs leaves the person's terminal as it was (echoing, line by line) and passes on whole
             # lines: a secret would show as typed and the module menu would get no key before Enter. Set it to
             # pass each key on, as sudo does when it runs at a terminal (this pty then echoes and edits), and put
             # it back afterwards, also when this script is stopped.

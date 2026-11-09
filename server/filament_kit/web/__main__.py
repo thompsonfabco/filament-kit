@@ -32,7 +32,8 @@ def _log_to_journal() -> None:
 
 def uvicorn_options(cfg: dict) -> dict:
     return {"host": "127.0.0.1", "port": int(cfg["web"]["port"]), "proxy_headers": True,
-            "forwarded_allow_ips": TRUSTED_PROXY, "server_header": False, "log_level": "info", "workers": 1}
+            "forwarded_allow_ips": TRUSTED_PROXY, "server_header": False, "log_level": "info", "workers": 1,
+            "access_log": False}    # no request lines in the journal: see the kit server's serve_options
 
 
 def kit_api_at_start(cfg: dict):

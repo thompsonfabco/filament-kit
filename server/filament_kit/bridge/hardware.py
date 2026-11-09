@@ -27,7 +27,6 @@ Unknown → the generic record.
     camera        str | None   "hls" (RTSPS, relayed as HLS), "mjpeg" (port-6000 JPEG) or None (no camera offered)
     chamber_max   int | None   highest chamber temperature in °C, None without a heated chamber
     presence      str | None   presence layout key (`Hardware.presence`), None = unknown (fall back to tray_type)
-    gcode_only_failed_is_finish  bool  a gcode-only calibration job ending FAILED with no print_error has finished
     ams_mapping2  bool         calibration also sends `ams_mapping2`
     light_nodes   tuple[str]   MQTT light nodes ("chamber_light", ...); generic: () (none assumed)
     externals     tuple[External]  external spool holders, each `External(id, label, say, alias)`: id 254/255,
@@ -163,7 +162,6 @@ class ModelInfo:
     camera: str | None = None
     chamber_max: int | None = None
     presence: str | None = None
-    gcode_only_failed_is_finish: bool = False
     ams_mapping2: bool = False
     external_addressing: str = "legacy"
     light_nodes: tuple[str, ...] = ("chamber_light",)
@@ -614,7 +612,6 @@ def _build(sections: dict[str, dict], where: str) -> "Hardware":
             aliases=tuple(a.text.strip() for a in el.findall("alias")),
             nozzles=int(el.get("nozzles", "1")), camera=None if camera == "none" else camera,
             chamber_max=int(cmax) if cmax is not None else None, presence=presence,
-            gcode_only_failed_is_finish=el.get("gcode-only-failed-is-finish") == "true",
             ams_mapping2=el.get("ams-mapping2") == "true",
             external_addressing=el.get("external-addressing", "legacy"),
             light_nodes=tuple(n.text.strip() for n in el.findall("light-node")) or ("chamber_light",),

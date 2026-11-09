@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "vendor": "Anycubic",
+  "product": "PET-CF",
+  "material": "PET-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu PET-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "260"
+    ],
+    "nozzle_temperature_range_high": [
+      "290"
+    ],
+    "filament_density": [
+      "1.3"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "8"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80-100",
+    "_drying": "80-90C 8-12h",
+    "_print_speed": "30-60 mm/s",
+    "_hdt_0.45MPa": "188",
+    "_vicat": "231 (page row 'Melting point / Vicat softening temperature')",
+    "_fiber_content": "10% carbon fiber",
+    "_hardened_nozzle_required": "Yes - 'Nozzle Material Hardened Steel Nozzles' (ca/eu pages)",
+    "_min_nozzle": "0.4",
+    "_annealing": "80-100C 6-12h (convection oven)",
+    "_enclosure": "EU page: 'must be printed in an fully enclosed chamber' / not suitable for open-frame bed slingers; FAQ contradicts ('eliminates the need for an enclosure')",
+    "_ams": "Official: NOT recommended for ACE Pro / ACE 2 Pro multicolour systems (may snap inside the unit); treat as not AMS-safe.",
+    "_notes": "Temps/bed/drying table from anycubic.au/products/pet-cf; nozzle material from ca.anycubic.com and eu.anycubic3d.com (those pages omit print temps). Alternative drying: 80C convection dryer 8-12h, or 90-100C heatbed ~12h; never exceed 100C. Diameter from Anycubic Official Store Amazon listing B0H2HQ2HBF (0.5kg). No diameter tolerance published. Bambu parent not confirmed."
+  },
+  "conflicts": [
+    "HDT: spec table 188C vs marketing copy/Amazon bullet 190C (anycubic.au, B0H2HQ2HBF)",
+    "Drying: spec table 80-90C 8-12h vs Amazon bullet/precautions 80C 8-12h"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.anycubic.au/products/pet-cf",
+    "https://ca.anycubic.com/products/pet-cf",
+    "https://eu.anycubic3d.com/products/pet-cf",
+    "https://www.amazon.com/dp/B0H2HQ2HBF"
+  ],
+  "updated": "2026-11-02"
+}

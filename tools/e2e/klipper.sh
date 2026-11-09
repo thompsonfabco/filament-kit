@@ -13,13 +13,18 @@
 #      variant -> FK_SET_TOOL_SPOOL on real
 #      Klipper -> lane_data in Moonraker's database
 # Last line on success: "klipper e2e: all checks passed". Usage: bash tools/e2e/klipper.sh  (from the repo root)
+#
+# Two runs on one machine don't meet: each has its own run folder under $WORK (kept only when the run fails), its own
+# MCU path and its own ports. FK_E2E_MOONRAKER_PORT and FK_E2E_SPOOLMAN_PORT choose the ports; by default each run
+# takes free ones. $WORK holds what they share (Klipper, Moonraker, the venvs), set up under a lock. The kit's code
+# always comes from this tree, whatever kit-env was first installed from.
 set -euo pipefail
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
 WORK=${FK_E2E_WORK:-$HOME/fk-klipper-e2e}
 KLIPPER_REF=${KLIPPER_REF:-v0.13.0}
 MOONRAKER_REF=${MOONRAKER_REF:-v0.9.3}
-DATA=$WORK/printer_data
 # Klipper's and Moonraker's pinned requirements need Python <= 3.12; uv's managed 3.12 is used when present
+# shellcheck disable=SC2012  # a glob of uv's own version folders
 PY=${PYTHON:-$(ls -d "$HOME"/.local/share/uv/python/cpython-3.12*/bin/python3.12 2>/dev/null | tail -1)}
 PY=${PY:-python3}
 log() { printf '\n== %s\n' "$*"; }
@@ -31,8 +36,24 @@ if ! dpkg -s build-essential python3-venv python3-dev libffi-dev liblmdb-dev lib
     sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq build-essential python3-venv python3-dev libffi-dev \
         liblmdb-dev libsodium-dev zlib1g-dev libjpeg-dev git curl >/dev/null
 fi
-mkdir -p "$WORK" "$DATA"/{config,logs,gcodes,comms,database}
+mkdir -p "$WORK"
+RUN=$(mktemp -d "$WORK/run.XXXXXX")
+DATA=$RUN/printer_data
+mkdir -p "$DATA"/{config,logs,gcodes,comms,database}
+# both at once, so the two can't be the same port; a run that loses one in the moment before it binds fails below
+read -r FREE_A FREE_B < <("$PY" -c '
+import socket
+a, b = socket.socket(), socket.socket()
+a.bind(("127.0.0.1", 0)); b.bind(("127.0.0.1", 0))
+print(a.getsockname()[1], b.getsockname()[1])')
+MR_PORT=${FK_E2E_MOONRAKER_PORT:-$FREE_A}
+SM_PORT=${FK_E2E_SPOOLMAN_PORT:-$FREE_B}
+MR=http://127.0.0.1:$MR_PORT
+SM=http://127.0.0.1:$SM_PORT
+log "run folder $RUN, Moonraker on :$MR_PORT, fake Spoolman on :$SM_PORT"
 
+exec 9>"$WORK/.setup.lock"   # a second run waits here: git and the venvs below aren't safe to run side by side
+flock 9
 log "Klipper $KLIPPER_REF"
 [ -d "$WORK/klipper" ] || git clone -q https://github.com/Klipper3d/klipper.git "$WORK/klipper"
 git -C "$WORK/klipper" fetch -q --tags && git -C "$WORK/klipper" checkout -q "$KLIPPER_REF"
@@ -58,15 +79,28 @@ venv "$WORK/moonraker-env" -r "$WORK/moonraker/scripts/moonraker-requirements.tx
 
 log "kit test environment"
 venv "$WORK/kit-env" -e "$REPO/server[test]"
+exec 9>&-                    # setup is done; the processes started below must not hold the lock
+# kit-env's editable install points at whichever tree created it: PYTHONPATH makes it this one, and this checks it did
+PYTHONPATH=$REPO/server "$WORK/kit-env/bin/python" -c '
+import os, sys, filament_kit
+where = os.path.realpath(filament_kit.__file__)
+sys.exit(f"FAILED: the kit code comes from {where}, not this tree" if not where.startswith(os.path.realpath(sys.argv[1]) + os.sep) else 0)
+' "$REPO/server"
 
 PIDS=()
 cleanup() { for p in "${PIDS[@]}"; do kill "$p" 2>/dev/null || true; done; wait 2>/dev/null || true; }
-trap cleanup EXIT
+on_exit() {
+    local rc=$?
+    cleanup
+    if [ "$rc" -eq 0 ]; then rm -rf "$RUN"; else echo "klipper e2e failed; logs kept in $RUN" >&2; fi
+}
+trap on_exit EXIT
+pack() { sh "$REPO/printer-pack/fk-printer-pack.sh" "$1" --data "$DATA" --moonraker "$MR" "${@:2}"; }
 
 write_config() {   # $1 = single | toolchanger
     cat > "$DATA/config/printer.cfg" <<EOF
 [mcu]
-serial: /tmp/klipper_host_mcu
+serial: $RUN/mcu
 
 [printer]
 kinematics: none
@@ -93,7 +127,7 @@ EOF
     cat > "$DATA/config/moonraker.conf" <<EOF
 [server]
 host: 127.0.0.1
-port: 7125
+port: $MR_PORT
 klippy_uds_address: $DATA/comms/klippy.sock
 
 [authorization]
@@ -108,16 +142,12 @@ EOF
     : > "$DATA/config/variables.cfg"
 }
 
-start_stack() {
-    "$WORK/klipper/out/klipper.elf" >"$DATA/logs/mcu.log" 2>&1 & PIDS+=($!)
-    sleep 1
-    "$WORK/klippy-env/bin/python" "$WORK/klipper/klippy/klippy.py" "$DATA/config/printer.cfg" \
-        -a "$DATA/comms/klippy.sock" -l "$DATA/logs/klippy.log" >/dev/null 2>&1 & PIDS+=($!)
-    "$WORK/moonraker-env/bin/python" "$WORK/moonraker/moonraker/moonraker.py" -d "$DATA" \
-        >"$DATA/logs/moonraker.out" 2>&1 & PIDS+=($!)
-    MOON_PID=$!
+wait_ready() {   # Moonraker dying (a lost port, say) ends the wait at once
     for _ in $(seq 60); do
-        if curl -fs localhost:7125/printer/info 2>/dev/null | grep -q '"state": *"ready"'; then return 0; fi
+        if ! kill -0 "$MOON_PID" 2>/dev/null; then
+            echo "Moonraker exited; logs in $DATA/logs" >&2; tail -5 "$DATA/logs/moonraker.out" >&2 || true; return 1
+        fi
+        if curl -fs "$MR/printer/info" 2>/dev/null | grep -q '"state": *"ready"'; then return 0; fi
         sleep 1
     done
     echo "Klipper/Moonraker did not become ready; logs in $DATA/logs" >&2
@@ -125,17 +155,39 @@ start_stack() {
     return 1
 }
 
+start_stack() {
+    "$WORK/klipper/out/klipper.elf" -I "$RUN/mcu" >"$DATA/logs/mcu.log" 2>&1 & PIDS+=($!)
+    sleep 1
+    "$WORK/klippy-env/bin/python" "$WORK/klipper/klippy/klippy.py" "$DATA/config/printer.cfg" \
+        -a "$DATA/comms/klippy.sock" -l "$DATA/logs/klippy.log" >/dev/null 2>&1 & PIDS+=($!)
+    "$WORK/moonraker-env/bin/python" "$WORK/moonraker/moonraker/moonraker.py" -d "$DATA" \
+        >"$DATA/logs/moonraker.out" 2>&1 & PIDS+=($!)
+    MOON_PID=$!
+    wait_ready
+}
+
 stop_stack() { cleanup; PIDS=(); sleep 1; }
 
-log "fake Spoolman on :7912"
+log "fake Spoolman on :$SM_PORT"
 SPOOLMAN_PY=$(cat <<'EOF'
 import sys, uvicorn
 sys.path.insert(0, sys.argv[1])
 from fakes import spoolman_fake
-uvicorn.run(spoolman_fake.app(spoolman_fake.new_store()), host="127.0.0.1", port=7912, log_level="warning")
+uvicorn.run(spoolman_fake.app(spoolman_fake.new_store()), host="127.0.0.1", port=int(sys.argv[2]), log_level="warning")
 EOF
 )
-"$WORK/kit-env/bin/python" -c "$SPOOLMAN_PY" "$REPO/server/tests" & PIDS+=($!)
+start_spoolman() {   # it must be ours that answers: one that lost the port has exited by the time something does
+    PYTHONPATH=$REPO/server "$WORK/kit-env/bin/python" -c "$SPOOLMAN_PY" "$REPO/server/tests" "$SM_PORT" & PIDS+=($!)
+    local pid=$!
+    for _ in $(seq 60); do
+        if ! kill -0 "$pid" 2>/dev/null; then echo "the fake Spoolman exited (port $SM_PORT taken?)" >&2; return 1; fi
+        if curl -s -o /dev/null "$SM/" 2>/dev/null; then sleep 0.5; kill -0 "$pid" 2>/dev/null && return 0; fi
+        sleep 0.5
+    done
+    echo "the fake Spoolman did not answer on $SM_PORT" >&2
+    return 1
+}
+start_spoolman
 
 for variant in single toolchanger; do
     log "variant $variant: Klipper + Moonraker"
@@ -145,45 +197,38 @@ for variant in single toolchanger; do
     start_stack
     log "variant $variant: printer pack install (twice: a reinstall)"
     for _ in 1 2; do
-        for _ in $(seq 60); do   # the first install restarts Klipper: the second waits until it is back
-            curl -fs localhost:7125/printer/info 2>/dev/null | grep -q '"state": *"ready"' && break; sleep 1
-        done
-        sh "$REPO/printer-pack/fk-printer-pack.sh" install --data "$DATA" --klipper "$WORK/klipper" \
-            --parts spool,check,moonraker --spoolman http://127.0.0.1:7912 --yes
+        wait_ready   # the first install restarts Klipper: the second waits until it is back
+        pack install --klipper "$WORK/klipper" --parts spool,check,moonraker --spoolman "$SM" --yes
     done
-    for _ in $(seq 60); do
-        curl -fs localhost:7125/printer/info 2>/dev/null | grep -q '"state": *"ready"' && break; sleep 1
-    done
+    wait_ready
     # Moonraker reads [spoolman] at start: restart it so the pack's moonraker.conf edit takes effect
     kill "$MOON_PID"; wait "$MOON_PID" 2>/dev/null || true
     "$WORK/moonraker-env/bin/python" "$WORK/moonraker/moonraker/moonraker.py" -d "$DATA" \
         >>"$DATA/logs/moonraker.out" 2>&1 & PIDS+=($!)
     MOON_PID=$!
-    for _ in $(seq 60); do
-        curl -fs localhost:7125/printer/info 2>/dev/null | grep -q '"state": *"ready"' && break; sleep 1
-    done
+    wait_ready
     for _ in $(seq 60); do   # the pack restarted Klipper: wait until its macros are loaded
-        curl -fs localhost:7125/printer/objects/list 2>/dev/null | grep -q "FK_SET_TOOL_SPOOL" && break; sleep 1
+        curl -fs "$MR/printer/objects/list" 2>/dev/null | grep -q "FK_SET_TOOL_SPOOL" && break; sleep 1
     done
-    sh "$REPO/printer-pack/fk-printer-pack.sh" status --data "$DATA" | tee "$WORK/status-$variant.txt"
-    grep -q "FK_SET_TOOL_SPOOL: present" "$WORK/status-$variant.txt"
-    grep -q "FK_SPOOL_CHECK: present" "$WORK/status-$variant.txt"
+    pack status | tee "$RUN/status-$variant.txt"
+    grep -q "FK_SET_TOOL_SPOOL: present" "$RUN/status-$variant.txt"
+    grep -q "FK_SPOOL_CHECK: present" "$RUN/status-$variant.txt"
     "$PY" -c 'import json, sys; f = json.load(open(sys.argv[1]))["files"]; sys.exit(len(f) != len(set(f)))' \
         "$DATA/config/filament-kit/.manifest"
     log "variant $variant: the kit's bridge"
-    rm -rf "$WORK/state-$variant" "$WORK/etc-$variant"; mkdir -p "$WORK/state-$variant" "$WORK/etc-$variant"
-    FK_STATE=$WORK/state-$variant FK_ETC=$WORK/etc-$variant "$WORK/kit-env/bin/python" \
-        "$REPO/tools/e2e/klipper_e2e.py" "$variant" "$DATA"
+    mkdir -p "$RUN/state-$variant" "$RUN/etc-$variant"
+    FK_STATE=$RUN/state-$variant FK_ETC=$RUN/etc-$variant FK_E2E_MOONRAKER_PORT=$MR_PORT FK_E2E_SPOOLMAN_PORT=$SM_PORT \
+        PYTHONPATH=$REPO/server "$WORK/kit-env/bin/python" "$REPO/tools/e2e/klipper_e2e.py" "$variant" "$DATA"
     log "variant $variant: printer pack uninstall"
-    sh "$REPO/printer-pack/fk-printer-pack.sh" uninstall --data "$DATA" --yes
+    pack uninstall --yes
     if grep -q "include filament-kit" "$DATA/config/printer.cfg"; then
         echo "FAILED: the include line is still in printer.cfg after uninstall" >&2; exit 1
     fi
     if [ -e "$DATA/config/filament-kit" ]; then
         echo "FAILED: config/filament-kit is still there after uninstall" >&2; exit 1
     fi
-    sh "$REPO/printer-pack/fk-printer-pack.sh" uninstall --data "$DATA" --yes   # again: nothing left, no error
+    pack uninstall --yes   # again: nothing left, no error
     stop_stack
-    "$WORK/kit-env/bin/python" -c "$SPOOLMAN_PY" "$REPO/server/tests" & PIDS+=($!)
+    start_spoolman
 done
 echo "klipper e2e: all checks passed"

@@ -9,7 +9,7 @@
     "Clear Blue",
     "Clear Rose Red"
   ],
-  "bambu_parent": "Bambu TPU 95A",
+  "bambu_parent": "Bambu TPU 95A HF",
   "fields": {
     "filament_diameter": [
       "1.75"
@@ -19,14 +19,15 @@
     "_hardness": "95A",
     "_diameter_tolerance": "+/-0.03",
     "_ams": "95A TPU: not recommended for AMS; use external spool (inferred from hardness, not stated by Sovol).",
-    "_notes": "Hardness 95A, 1.75mm and +/-0.03mm from Sovol's Amazon listing titles (read directly, B0FCS8G941 and B0FCSC58XX). Nozzle, bed and speed values could not be read: listing bullets not served to fetch and search found no Sovol source printing them. No density or drying temp published."
+    "_notes": "Nozzle, bed, density and drying are NOT published as text on any brand page found (sovol.tech specs are images). A Sovol staff forum reply suggests 220°C nozzle / 60°C bed / 30 mm/s for an SV-series printer (not a product spec; not entered). IMPORTER: merge rather than replace, as this entry has no nozzle range. Earlier entry: Hardness 95A, 1.75mm and +/-0.03mm from Sovol's Amazon listing titles (read directly, B0FCS8G941 and B0FCSC58XX). Nozzle, bed and speed values could not be read: listing bullets not served to fetch and search found no Sovol source printing them. No density or drying temp published."
   },
   "conflicts": [],
   "source_quality": "brand_amazon_listing",
   "sources": [
+    "https://www.amazon.com/Sovol-Filament-Flexible-Elasticity-Dimensional/dp/B0FCS8G941",
     "https://www.amazon.com/dp/B0FCS8G941",
     "https://us.amazon.com/Sovol-Filament-Flexible-Elasticity-Dimensional/dp/B0FCSC58XX",
     "https://www.sovol.tech/products/sovol-tpu-fIlament"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

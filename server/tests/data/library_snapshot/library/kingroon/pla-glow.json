@@ -32,17 +32,19 @@
     "_hdt_0.45MPa": "55",
     "_vicat": "56",
     "_vitrification": "55 (Tg, DSC)",
-    "_notes": "TDS V1.0: luminous-powder additive; nozzle sizes 0.4/0.6/0.8 only; Cool Plate / High Temperature Plate / Textured PEI with glue; HDT 1.8 MPa 52 C; melting 155 C; PC+ABS spool rated 90 C. Sold as 'Glow in Dark PLA'. Verification 2026-11-01: fields and plate/chamber/fan/retraction ranges confirmed against the TDS PDF; kingroon.com / kingroon3d.com product pages returned HTTP 429, so page-derived notes and conflicts were not re-checked."
+    "_notes": "TDS V1.0 (2025/12/1): nozzles 0.4/0.6/0.8 only, HDT 1.8MPa 52C, melt 155C, fan on. TDS has no hardened-nozzle note (glow pigments are commonly abrasive; consider a hardened nozzle). Retraction/print-speed/chamber label mapping inferred from the flattened PDF layout (value order matches the other Kingroon V1.0 TDS sheets: retraction length, retraction speed, chamber temp, overhang, bridging ... printing speed). Product page not re-read this run. Earlier entry: TDS V1.0: luminous-powder additive; nozzle sizes 0.4/0.6/0.8 only; Cool Plate / High Temperature Plate / Textured PEI with glue; HDT 1.8 MPa 52 C; melting 155 C; PC+ABS spool rated 90 C. Sold as 'Glow in Dark PLA'. Verification 2026-11-01: fields and plate/chamber/fan/retraction ranges confirmed against the TDS PDF; kingroon.com / kingroon3d.com product pages returned HTTP 429, so page-derived notes and conflicts were not re-checked."
   },
   "conflicts": [
+    "Kingroon Filament Guide datasheet 'Glow in the dark PLA': 200-220C, bed 50-70, 1.23 g/cm3",
     "kingroon.com Glow in Dark PLA page: nozzle 200-220, bed 50-70, density 1.23, HDT 53 C (0.45 MPa), drying 50C 8h",
     "kingroon3d.com PLA Glow-in-the-dark page: nozzle 200-220, bed 50-70, density 1.23"
   ],
   "source_quality": "official_tds",
   "sources": [
+    "https://cdn.shopify.com/s/files/1/0722/0120/8047/files/KINGROON_PLA_Glow_Technical_Data_Sheet_V1.0.pdf?v=1765295624",
     "https://wiki.kingroon.com/kingroon_pla_glow_technical_data_sheet_v1.0.pdf",
     "https://kingroon.com/products/kingroon-glow-in-dark-pla",
     "https://kingroon3d.com/products/kingroon-pla-glow-in-the-dark-3d-printer-filament"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

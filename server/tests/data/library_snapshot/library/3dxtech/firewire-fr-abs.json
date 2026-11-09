@@ -16,6 +16,9 @@
     ],
     "filament_diameter": [
       "1.75"
+    ],
+    "filament_density": [
+      "1.18"
     ]
   },
   "published_ranges": {
@@ -23,12 +26,18 @@
     "_drying": "80C 4h",
     "_diameter_tolerance": "+/-0.05",
     "_enclosure": "Heated chamber recommended",
-    "_notes": "Values from MatterHackers (authorized reseller) listing; official page unreachable (HTTP 429). Flame retardant: UL94 V-0 at 1.5mm; V-0, 5VB at 2.0/2.5/3.0mm. Thermal properties 'up to 95C' (method not stated). Bed prep Magigoo. Density/Tg not found."
+    "_notes": "Nozzle/bed from official product page (1.75/2.85mm, 750g). Density/Tg/HDT from Firewire FR-ABS TDS Rev 3.0 (rev1tech-hosted copy). UL94 V-0 base resin. Earlier entry: Values from MatterHackers (authorized reseller) listing; official page unreachable (HTTP 429). Flame retardant: UL94 V-0 at 1.5mm; V-0, 5VB at 2.0/2.5/3.0mm. Thermal properties 'up to 95C' (method not stated). Bed prep Magigoo. Density/Tg not found.",
+    "_vitrification": "105 (Tg, DSC)",
+    "_hdt_0.45MPa": "95",
+    "_min_nozzle": "0.4"
   },
   "conflicts": [],
-  "source_quality": "reseller_tds_copy",
+  "source_quality": "official_page",
   "sources": [
+    "https://www.3dxtech.com/products/firewire-r-fr-abs",
+    "https://media.rev1tech.com/media/3dxtech/3dxtech-firewire-fr-abs/3dxtech-firewire-fr-abs-tds.pdf",
+    "https://www.3dxtech.com/pages/filament-drying-instructions",
     "https://www.matterhackers.com/store/l/3dxtech-firewire-flame-retardant-abs/sk/MH501GJQ"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

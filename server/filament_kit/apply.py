@@ -8,6 +8,7 @@ ever deletes data.
 """
 from __future__ import annotations
 
+import hashlib
 import importlib.metadata
 import ipaddress
 import json
@@ -35,6 +36,7 @@ WEB_UNIT = "filament-kit-web.service"
 SETUP_TMPFILES = "/etc/tmpfiles.d/filament-kit-setup.conf"
 SETUP_TMPFILES_TEXT = "d /run/filament-kit-setup 0750 root filament-kit -\n"
 DROPIN = "/etc/systemd/system/filament-kit-station.service.d/kit.conf"
+SPOOLMAN_DROPIN = "/etc/systemd/system/spoolman.service.d/kit.conf"
 # udev applies rules in file-name order and the last GROUP= wins: the name sorts after the ops station's
 # 99-intake-station.rules (C-I1). OLD_UDEV_RULE is the kit's name before that; apply removes it.
 UDEV_RULE = "/etc/udev/rules.d/99-zz-filament-kit-station.rules"
@@ -119,6 +121,32 @@ def paired_server_ips() -> list[str]:
     return out
 
 
+def spoolman_allow(cfg: dict) -> list[str]:
+    """The networks that may reach the spoolman module's listener: `spoolman.allow` (a list of networks, for a Docker,
+    Tailscale or other range), else `web.lan`. Refuses a bad entry, and "every address": the listener has no sign-in."""
+    own = (cfg.get("spoolman") or {}).get("allow")
+    nets = own if own is not None else config._merge(config.DEFAULTS["web"], cfg.get("web") or {}).get("lan")
+    key = "spoolman.allow" if own is not None else "web.lan"
+    if not isinstance(nets, list):
+        raise modules.ModuleError(f"{key} must be a list of networks")
+    out = []
+    for n in nets:
+        try:
+            net = ipaddress.ip_network(str(n).strip(), strict=False)
+        except ValueError:
+            raise modules.ModuleError(f"{key}: {n!r} is not a network") from None
+        if net.prefixlen == 0:
+            raise modules.ModuleError(f"{key}: {n!r} is every address; the listener has no sign-in")
+        out.append(str(net))
+    return _uniq(out)
+
+
+def spoolman_dropin(cfg: dict) -> str:
+    """Spoolman's listener has no sign-in, so the unit answers only these. The same rule covers what Spoolman sends, so
+    its external filament database (not used by the kit) needs its address in `spoolman.allow`."""
+    return f"[Service]\nIPAddressDeny=any\nIPAddressAllow={' '.join(['localhost', *spoolman_allow(cfg)])}\n"
+
+
 def station_dropin(cfg: dict, addresses: list[str]) -> str:
     """Text of the station drop-in (spec section 5); `addresses` are already resolved. The unit denies every
     address but these, so the paired server's addresses (its LAN IPs in an all-in-one) are let through too: the
@@ -190,7 +218,7 @@ def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) ->
 
     # Phase 1: users, files and unit files; nothing is enabled until daemon_reload.
     if "spoolman" in on:
-        acts += [A("user", "spoolman"), A("spoolman_fetch")]
+        acts += [A("user", "spoolman"), A("spoolman_fetch"), A("spoolman_allow", spoolman_dropin(cfg))]
     if "server" in on:
         acts += [A("install_unit", u) for unit in MODULES["server"].units for u in _unit_files(unit)]
         acts.append(A("server_setup", "key" if "ai_intake" in on else ""))
@@ -283,6 +311,7 @@ _HINTS = {
     "apt_lean": f"check the network and run `sudo apt-get update`, then {_AGAIN}",
     "user": f"see the useradd message above, then {_AGAIN}",
     "spoolman_fetch": f"see the Spoolman messages above, then {_AGAIN}",
+    "spoolman_allow": f"check the disk is writable, then {_AGAIN}",
     "install_unit": "run ./install.sh again (the unit files live in /opt/filament-kit/resources)",
     "install_file": f"check the disk is writable, then {_AGAIN}",
     "station_pairing_owner": f"check the station's user exists (id filament-kit-station), then {_AGAIN}",
@@ -566,12 +595,22 @@ def _remote_install(ex: _Exec, host: str) -> None:
         os.chmod(_under(ex.root, d), mode)
     cert = _under(ex.root, f"{remote.TLS_DIR}/fullchain.pem")
     key = _under(ex.root, f"{remote.TLS_DIR}/privkey.pem")
-    if not cert.exists():  # never replaces a real certificate
-        print(f"\n==> Placeholder certificate for {host} (replaced when certbot succeeds)")
-        ex.cmd(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "30",
-                "-subj", f"/CN={host}", "-addext", f"subjectAltName=DNS:{host}",
-                "-keyout", str(key), "-out", str(cert)])
-        ex.cmd(["chmod", "600", str(key)])
+    mark = _under(ex.root, remote.PLACEHOLDER_MARK)
+    cert_was = cert.exists()
+    old_cert = cert.read_bytes() if cert_was else None
+    why = remote.placeholder_due(old_cert, mark.read_bytes().decode("utf-8", "replace") if mark.exists() else None, host)
+    if why:         # never a real certificate: see placeholder_due
+        print(f"\n==> Placeholder certificate for {host}, because {why} (replaced when certbot succeeds)")
+        if cert.exists():
+            print("A phone that accepted the old one asks you to accept this one too.")
+        cert_pem, key_pem = remote.make_placeholder(host)
+        new = hashlib.sha256(cert_pem).hexdigest()
+        # the mark names both while the certificate changes, so a crash at any point leaves it provably the kit's
+        both = [new] + ([hashlib.sha256(old_cert).hexdigest()] if old_cert is not None else [])
+        ex.write(remote.PLACEHOLDER_MARK, ("\n".join(both) + "\n").encode("ascii"), 0o644)
+        ex.write(f"{remote.TLS_DIR}/privkey.pem", key_pem, 0o600)
+        ex.write(f"{remote.TLS_DIR}/fullchain.pem", cert_pem, 0o644)
+        ex.write(remote.PLACEHOLDER_MARK, (new + "\n").encode("ascii"), 0o644)
     try:
         ex.cmd(["nginx", "-t"])
     except (subprocess.CalledProcessError, OSError):
@@ -587,6 +626,8 @@ def _remote_install(ex: _Exec, host: str) -> None:
         print("nginx -t failed: " + "; ".join(([f"put back the previous {', '.join(back)}"] if back else [])
                                                + ([f"removed {', '.join(gone)} again"] if gone else [])))
         raise
+    if why and cert_was:
+        ex.ok(["systemctl", "reload", "nginx"])  # nginx holds the old one until told; a stopped nginx needs nothing
 
 
 def _remote_route(ex: _Exec, name: str, port: int) -> None:
@@ -713,6 +754,14 @@ def _step(ex: _Exec, a: Action) -> None:
         _user(ex, arg)
     elif k == "spoolman_fetch":
         ex.cmd(["bash", str(ex.resources / "spoolman.sh")])
+    elif k == "spoolman_allow":
+        first = not _under(ex.root, SPOOLMAN_DROPIN).exists()
+        ex.write(SPOOLMAN_DROPIN, arg.encode("utf-8"), 0o644)
+        if first:
+            print("\nSpoolman now answers only this machine and these networks: "
+                  f"{arg.split('IPAddressAllow=localhost')[1].strip() or 'none'}. A client elsewhere (Tailscale, Docker, "
+                  "another subnet) needs its network in spoolman.allow in /etc/filament-kit/config.json, then: "
+                  "sudo filament-kit modules apply")
     elif k == "install_unit":
         ex.write(f"/etc/systemd/system/{arg}", (ex.resources / "systemd" / arg).read_bytes(), 0o644)
     elif k == "install_file":
@@ -791,6 +840,8 @@ def _step(ex: _Exec, a: Action) -> None:
 
 
 def _label(a: Action) -> str:
+    if a.kind == "spoolman_allow":      # its arg is the file's text
+        return f"{a.kind} {SPOOLMAN_DROPIN}"
     if isinstance(a.arg, tuple):
         return f"{a.kind} {a.arg[0]}"
     return f"{a.kind} {a.arg}".rstrip()

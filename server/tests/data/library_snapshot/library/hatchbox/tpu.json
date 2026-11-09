@@ -20,7 +20,7 @@
     "Mint Green",
     "Midnight Purple"
   ],
-  "bambu_parent": "Bambu TPU 95A",
+  "bambu_parent": "Bambu TPU 95A HF",
   "fields": {
     "nozzle_temperature_range_low": [
       "190"
@@ -33,16 +33,17 @@
     ]
   },
   "published_ranges": {
-    "_hardness": "Shore 95A",
+    "_hardness": "95A (Shore)",
     "_diameter_tolerance": "+/-0.03",
     "_ams": "95A TPU: not AMS-friendly in general; feed externally unless Bambu confirms for the specific printer.",
-    "_notes": "Product pages: 'Print Temperature - 190C - 235C', Shore 95A, dimensional accuracy +/- 0.03mm, no heated bed required. No bed, speed or retraction values published. Verified 2026-11-01 against the product pages' Shopify JSON/HTML."
+    "_notes": "Page: 'No Heating Bed Required'; no bed temperature printed. Bambu parent is the closest TPU 95A preset; Hatchbox TPU is not marketed as high-flow. Hatchbox FAQ: no technical data (TDS) is available for their filaments, so density, drying, bed temperature and HDT are not published. Read from the Shopify product .js endpoint (description text). Bambu parent not confirmed (no Hatchbox system preset known in Bambu Studio). Earlier entry: Product pages: 'Print Temperature - 190C - 235C', Shore 95A, dimensional accuracy +/- 0.03mm, no heated bed required. No bed, speed or retraction values published. Verified 2026-11-01 against the product pages' Shopify JSON/HTML."
   },
   "conflicts": [],
   "source_quality": "official_page",
   "sources": [
+    "https://hatchbox3d.com/products/3d-tpu-1kg1-75-blk",
     "https://www.hatchbox3d.com/products/3d-tpu-1kg1-75-blk",
     "https://www.hatchbox3d.com/products/3d-tpu-1kg1-75-red"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

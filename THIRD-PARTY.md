@@ -83,11 +83,14 @@ Built by the release workflow and shipped as `filament-kit.apk`. Everything belo
 |---|---|
 | filament-kit app | GPL-3.0-or-later |
 | Kotlin standard library, kotlinx-coroutines, kotlinx-serialization | Apache-2.0 |
-| AndroidX: core, activity, compose (BOM 2026.09), material3, lifecycle, navigation, datastore, camera (CameraX), exifinterface, media3 (ExoPlayer, HLS, OkHttp datasource, UI) | Apache-2.0 |
-| OkHttp, okhttp-tls | Apache-2.0 |
+| AndroidX: all groups on the release classpath, including core, activity, compose (BOM 2026.09), material3, lifecycle, navigation, datastore, camera (CameraX), exifinterface, media3 (ExoPlayer, HLS, OkHttp datasource, UI) | Apache-2.0 |
+| OkHttp, Okio | Apache-2.0 |
+| kotlinx-atomicfu, JetBrains annotations | Apache-2.0 |
+| Guava (Android flavour), failureaccess, Dagger, javax.inject, jakarta.inject, JSR-305, JSpecify, Error Prone annotations, J2ObjC annotations, AutoValue annotations | Apache-2.0 |
+| Checker Framework annotations (checker-qual) | MIT |
 | [zxing-cpp](https://github.com/zxing-cpp/zxing-cpp) Android library 3.1.1 (`io.github.zxing-cpp:android`) | Apache-2.0 |
 | libzueci (in zxing-cpp's source) | BSD-3-Clause |
-| Test-only (not in the APK): JUnit 4 (EPL-1.0), Robolectric (MIT), AndroidX test, Espresso (Apache-2.0), MockWebServer (Apache-2.0); Google ML Kit barcode scanning (proprietary) and ZXing core (Apache-2.0), only in the scanner comparison test | |
+| Test-only (not in the APK): JUnit 4 (EPL-1.0), Robolectric (MIT), AndroidX test, Espresso (Apache-2.0), MockWebServer and okhttp-tls (Apache-2.0); Google ML Kit barcode scanning (proprietary) and ZXing core (Apache-2.0), only in the scanner comparison test | |
 
 ## The Windows PC sync (`filament-kit-sync-setup-<version>.exe`)
 

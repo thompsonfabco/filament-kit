@@ -39,13 +39,14 @@
   "published_ranges": {
     "bed_all_plates": "80-100",
     "_diameter_tolerance": "+/-0.03",
-    "_notes": "Product pages: 'Print Temperature - 210C - 240C' (meta: Recommended Extrusion/Nozzle Temperature 210-240 C), dimensional accuracy +/- 0.03mm; acetone smoothing possible. ABS material page: extrusion 210-240 C, build platform 80-100 C, Kapton tape or hairspray; enclosure helps prevent layer separation. Also sold in 3.00 mm. Verified 2026-11-01 against the product page's Shopify JSON/HTML and the material page."
+    "_notes": "No bed or enclosure guidance printed. Page: acetone smoothing. Hatchbox FAQ: no technical data (TDS) is available for their filaments, so density, drying, bed temperature and HDT are not published. Read from the Shopify product .js endpoint (description text). Bambu parent not confirmed (no Hatchbox system preset known in Bambu Studio). Earlier entry: Product pages: 'Print Temperature - 210C - 240C' (meta: Recommended Extrusion/Nozzle Temperature 210-240 C), dimensional accuracy +/- 0.03mm; acetone smoothing possible. ABS material page: extrusion 210-240 C, build platform 80-100 C, Kapton tape or hairspray; enclosure helps prevent layer separation. Also sold in 3.00 mm. Verified 2026-11-01 against the product page's Shopify JSON/HTML and the material page."
   },
   "conflicts": [],
   "source_quality": "official_page",
   "sources": [
+    "https://hatchbox3d.com/products/3d-abs-1kg1-75-blk",
     "https://www.hatchbox3d.com/products/3d-abs-1kg1-75-wht",
     "https://www.hatchbox3d.com/pages/abs-material-page"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

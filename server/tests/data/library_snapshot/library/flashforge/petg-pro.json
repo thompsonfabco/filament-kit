@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "vendor": "Flashforge",
+  "product": "PETG Pro",
+  "material": "PETG",
+  "colors": [
+    "White",
+    "Black"
+  ],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-80",
+    "fan_min_speed/fan_max_speed": "0-50",
+    "filament_retraction_length": "1-2",
+    "filament_retraction_speed": "30-50",
+    "_drying": "70C 5h",
+    "_print_speed": "40-300mm/s (higher speeds require higher temperatures)",
+    "_diameter_tolerance": "+/-0.03",
+    "_min_nozzle": "0.4mm listed",
+    "_notes": "Layer 0.12-0.3mm; self-supporting; storage ≤20% RH. Colour codes White 240101, Black 240103. Page also lists 2.85mm."
+  },
+  "conflicts": [
+    "nozzle/speed: 220-240°C nozzle, 70-80°C bed, 40-60 mm/s (Flashforge Filament Guide (per earlier gap report))"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://uk.flashforge.com/products/petg-pro"
+  ],
+  "updated": "2026-11-02"
+}

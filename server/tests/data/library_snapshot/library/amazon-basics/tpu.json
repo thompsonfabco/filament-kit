@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "vendor": "Amazon Basics",
+  "product": "TPU",
+  "material": "TPU",
+  "colors": [
+    "Black",
+    "Red",
+    "Gray",
+    "Blue"
+  ],
+  "bambu_parent": "Generic TPU",
+  "fields": {
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_diameter_tolerance": "+/-0.05",
+    "_notes": "Official Amazon listings (B0HLQ7C7L5, B07HHFLZJL, B08897N45W, B088962DCK, B0D6Y4KR1J) give only diameter/tolerance, a 1 kg spool and a remaining-material gauge. Shore hardness, temperatures, density and drying are not published. Generic TPU is used because hardness is unknown. Use the external spool, not the AMS. Third-party values (eBay seller 210-230 C; 3dfilamentprofiles 210-230 C, density 1.24) are not used. A deal-forum user claims the line is being discontinued; this is unconfirmed."
+  },
+  "conflicts": [],
+  "source_quality": "brand_amazon_listing",
+  "sources": [
+    "https://www.amazon.com/Amazon-Basics-Printer-Filament-1-75mm/dp/B0HLQ7C7L5",
+    "https://us.amazon.com/AmazonBasics-Printer-Filament-1-75mm-Spool/dp/B07HHFLZJL",
+    "https://www.amazon.com/AmazonBasics-Printer-Filament-1-75mm-Spool/dp/B08897N45W"
+  ],
+  "updated": "2026-11-02"
+}

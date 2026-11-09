@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "vendor": "Inland",
+  "product": "Fiberon ASA-CF08",
+  "material": "ASA-CF",
+  "colors": [],
+  "bambu_parent": "Bambu ASA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "260"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_density": [
+      "1.09"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-100",
+    "fan_max_speed": "0",
+    "_drying": "90C 6h",
+    "_max_print_speed": "350 mm/s",
+    "_hdt_0.45MPa": "103.0",
+    "_hdt_1.80MPa": "97.3",
+    "_vitrification": "106.6 (Tg, DSC)",
+    "_vicat": "110.8 (ISO 306)",
+    "_fiber_content": "8% carbon fiber",
+    "_hardened_nozzle_required": "Yes - TDS: brass nozzle life about 9 h; use hardened steel or ruby. Wiki: all-metal hotend 260C+",
+    "_enclosure": "Enclosure recommended (wiki); no heated chamber required",
+    "_ams": "Polymaker wiki: brittle and abrasive, use caution with AMS and other multi-material systems",
+    "_notes": "Values from Polymaker's own Fiberon ASA-CF08 TDS V1.0. Identity: Fiberon is a Polymaker trademark and the Micro Center listing (0.5 kg, Light Gray) matches Polymaker's spool size, colour and printed values (260-280 / 90-100, HDT 103C @0.45MPa), so this is Polymaker Fiberon ASA-CF08 sold under Micro Center's Inland listing - inferred, not confirmed against the live microcenter.com page (403). Shop page gives density 1.094 and drying can drop to 70C in an airflow dryer. Retraction 1-3 mm at 20-40 mm/s (direct drive, shop page). Bambu parent not confirmed (a Polymaker Fiberon preset may exist in Bambu Studio). Colours not listed because the Inland colour range could not be read."
+  },
+  "conflicts": [
+    "Polymaker shop page: density 1.094, HDT 103.1 @0.45MPa / 97.5 @1.8MPa, Tg 106.58; wiki FAQ: HDT 97.3 @1.8MPa"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://cdn.shopify.com/s/files/1/0548/7299/7945/files/TDS_FIBERON_ASA-CF08_V1.0_EN.pdf?v=1755895612",
+    "https://shop.polymaker.com/products/fiberon-asa-cf08",
+    "https://wiki.polymaker.com/polymaker-products/polymaker-filaments/fiberon-tm/fiberon-tm-asa-cf08",
+    "https://www.microcenter.com/product/705077/inland-175-mm-fiberon-asa-cf08-carbon-fiber-3d-printer-filament-05-kg-(11-lbs)-spool-light-gray"
+  ],
+  "updated": "2026-11-02"
+}

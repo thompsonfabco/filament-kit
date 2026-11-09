@@ -65,6 +65,7 @@ Exceptions (each has `.code` and `.status` for the API to map):
   TooOld         409 too_old          the entry is older than 7 days
   AlreadyUndone  409 already_undone   undone before
   NothingToUndo  409 nothing_to_undo  the entry wrote nothing (observe, no spool, error)
+  SpoolChanged   409 spool_changed    that spool id is another spool now, or the spool is gone
 A Spoolman failure during undo raises `SpoolmanError` and records nothing."""
 from __future__ import annotations
 
@@ -122,6 +123,43 @@ class AlreadyUndone(UsageError):
 
 class NothingToUndo(UsageError):
     code, status = 'nothing_to_undo', 409
+
+
+class SpoolChanged(UsageError):
+    code, status = 'spool_changed', 409
+
+
+def _registered(spool) -> float | None:
+    """A spool's `registered` time from Spoolman, in epoch seconds, or None when it can't be read."""
+    text = spool.get('registered') if isinstance(spool, dict) else None
+    if not isinstance(text, str):
+        return None
+    try:
+        when = dt.datetime.fromisoformat(text.replace('Z', '+00:00'))
+    except ValueError:
+        return None
+    if when.tzinfo is None:         # Spoolman's times are UTC
+        when = when.replace(tzinfo=dt.timezone.utc)
+    return when.timestamp()
+
+
+def _same_spool(spoolman, rec: dict, at: float) -> None:
+    """Spoolman's spool ids are reused: delete the newest spool, add one, and it has the old id. An Undo then would take
+    grams off a spool that never fed that print. So the spool must have been there when the print ended. When that can't be
+    shown, nothing is written: the guard exists to stop a wrong write."""
+    entry = rec['id']
+    try:
+        spool = spoolman.get(f"spool/{int(rec['spool_id'])}")
+    except SpoolmanError as e:
+        if e.status == 404:
+            raise SpoolChanged(f"usage entry {entry}: its spool is gone from Spoolman; nothing was changed") from None
+        raise
+    registered = _registered(spool)
+    if registered is None:
+        raise SpoolChanged(f"usage entry {entry}: can't tell when its spool was added; nothing was changed")
+    if registered > at:
+        raise SpoolChanged(f"usage entry {entry}: that spool was added after this print, so the original spool is gone; "
+                           "nothing was changed")
 
 
 def _now() -> float:
@@ -236,6 +274,7 @@ def undo(entry_id: str, spoolman) -> dict:
                 raise TooOld(f"usage entry {entry_id} is older than {UNDO_DAYS} days")
             if not _written(rec):
                 raise NothingToUndo(f"usage entry {entry_id} wrote nothing to Spoolman")
+            _same_spool(spoolman, rec, at)
             spoolman.use(int(rec['spool_id']), -float(rec['grams']))
             _write_line(d.name, {'undo': entry_id, 'at': _iso(_now())})
             log.info("usage: printer %s: undid %s g on spool %s (%s)", d.name, rec['grams'], rec['spool_id'],

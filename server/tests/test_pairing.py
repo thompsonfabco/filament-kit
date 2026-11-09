@@ -162,7 +162,7 @@ def test_qr_is_urlencoded(monkeypatch):
 
 def test_qr_host_is_hostname_not_display_name(monkeypatch):
     cfg = config.load()
-    cfg["server_name"] = "Pat's Küche"
+    cfg["server_name"] = "Kit's Küche"
     config.save(cfg)
     monkeypatch.setattr(pairing.socket, "gethostname", lambda: "fkbox")
     q = _qr(pairing.issue())

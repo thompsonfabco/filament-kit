@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "vendor": "Anycubic",
+  "product": "PLA Translucent",
+  "material": "PLA",
+  "colors": [
+    "Translucent Pink",
+    "Translucent Orange",
+    "Translucent Red",
+    "Translucent Blue",
+    "Translucent Purple",
+    "Translucent Black"
+  ],
+  "bambu_parent": "Bambu PLA Translucent",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.22"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "12"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "55-70",
+    "_drying": "50-55C 6-8h",
+    "_print_speed": "50-250 mm/s",
+    "_vicat": "63",
+    "_hdt_0.45MPa": "54",
+    "_vitrification": "165 (melting point, not Tg)",
+    "_diameter_tolerance": "+/-0.02",
+    "_min_nozzle": "0.2",
+    "_enclosure": "Not required",
+    "_ams": "Official page: ACE Pro compatible (Anycubic); no Bambu AMS statement.",
+    "_notes": "Specs from anycubic.au product spec table (store.anycubic.com was 429). Diameter and +/-0.02 tolerance from Anycubic Official Store Amazon listing B0H87PW2VT (Translucent Purple). Page: cooling time 8 s, all nozzle types, dry before use, no glue needed. Bambu parent not confirmed (no Anycubic system preset assumed in Bambu Studio)."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.anycubic.au/products/pla-translucent",
+    "https://www.amazon.com/dp/B0H87PW2VT"
+  ],
+  "updated": "2026-11-02"
+}

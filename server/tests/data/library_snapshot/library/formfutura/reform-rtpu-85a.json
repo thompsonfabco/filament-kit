@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "ReForm - rTPU 85A",
+  "material": "TPU",
+  "colors": [
+    "Traffic Black",
+    "Traffic White"
+  ],
+  "bambu_parent": "Bambu TPU 85A",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.21"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-80",
+    "fan_min_speed/fan_max_speed": "30-100",
+    "_print_speed": "20-60 mm/s",
+    "_drying": "50-70C 24h",
+    "_hardness": "85A (ISO 7619-1)",
+    "_min_nozzle": "0.15",
+    "_enclosure": "not necessary",
+    "_notes": "Recycled TPU. TDS: heat resistance 74 C (DSC), melting point 165 C. Print from a dry box. Soft TPU: feed from the external spool, not the AMS. Bambu parent not confirmed."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://www.formfutura.com/web/content/281065?download=true",
+    "https://www.formfutura.com/filaments/tpu/reform-rtpu-85a"
+  ],
+  "updated": "2026-11-02"
+}

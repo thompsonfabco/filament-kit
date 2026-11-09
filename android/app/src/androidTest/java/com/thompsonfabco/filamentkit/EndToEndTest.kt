@@ -201,8 +201,8 @@ class EndToEndTest {
         field("Port").performTextInput(arg("fkPort") ?: "8710")
         click("Connect")
         waitFor("Check the server's fingerprint", timeoutMs = 30_000)
-        arg("fkFingerprint")?.let { compose.onNodeWithText(groupFingerprint(it.lowercase())).assertExists() }
-        click("It matches")
+        typeAskedGroups(need("fkFingerprint").lowercase().chunked(4))
+        click("Continue")
         field("6-digit code").performTextInput(code)
         click("Pair")
         waitFor("Search", timeoutMs = 30_000) // Home
@@ -224,6 +224,17 @@ class EndToEndTest {
     }
 
     // ---------- helpers ----------
+
+    /** The screen says which groups it wants only through the fields' descriptions. */
+    private fun typeAskedGroups(groups: List<String>) {
+        val asked = compose.onAllNodes(hasContentDescription("Missing group", substring = true)).fetchSemanticsNodes()
+            .map { it.config[SemanticsProperties.ContentDescription].first() }
+        assertEquals(2, asked.size)
+        for (d in asked) {
+            val number = d.removePrefix("Missing group ").substringBefore(" ").toInt()
+            compose.onNode(hasContentDescription(d)).performTextInput(groups[number - 1])
+        }
+    }
 
     private fun field(label: String, substring: Boolean = false) =
         compose.onNode(hasText(label, substring = substring) and hasSetTextAction())

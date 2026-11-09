@@ -26,8 +26,9 @@ fixed.
 
 6. **An https address and nginx are needed even at home.** The web service listens on 127.0.0.1 only, and
    `web.public_url` must be `https://`. A home-only user has to tick `web` and `remote` and accept nginx's
-   self-signed placeholder certificate in Safari. Not tried on a real iPhone: whether a home-screen web app keeps
-   working with an accepted self-signed certificate is unconfirmed.
+   self-signed placeholder certificate in Safari. The placeholder lasts 825 days and is made again by an apply within
+   30 days of its end, after which Safari asks again. Not tried on a real iPhone: whether Safari accepts it and a
+   home-screen web app keeps working with an accepted self-signed certificate is unconfirmed.
 7. **A public name needs split DNS or NAT loopback** so the phone reaches the server directly at home; otherwise
    the phone looks like it is away from home and is refused.
 8. ~~`modules enable web` doesn't ask for the address.~~ Fixed in v0.3.0: at a terminal it asks for
@@ -35,7 +36,10 @@ fixed.
 9. ~~`web status` showed `FAIL` without a passphrase.~~ Fixed in v0.3.0: it shows `--   sign-in passphrase not set`
    (exit 0); the passphrase is only for the Claude connector.
 10. **Home networks in 172.16.0.0/12 are not "home" by default** (it's left out because of Docker). Those users
-    must edit `web.lan` in `config.json` by hand; there is no menu or prompt for it.
+    must edit `web.lan` in `config.json` by hand; there is no menu or prompt for it. From v0.4.1 a `web.lan` edit also
+    widens Spoolman's own allow-list, unless `spoolman.allow` is set, which overrides it. A home network on
+    172.16.x.x, and Tailscale or Docker clients, must add their range (to `web.lan` or `spoolman.allow`) or Spoolman
+    stops answering them after the update.
 
 ## Server install
 
@@ -52,7 +56,7 @@ fixed.
     one either. Sovol SV08 MAX is verified; Sovol M1D is an unverified placeholder. The usage entries the kit logs for a Klipper printer can't be undone
     from the kit; correct the spool in Spoolman.
 
-## How this was checked
+## How this was first checked (v0.2.0)
 
 On WSL Ubuntu 26.04: a tarball built from main with `tools/make_release.sh` (`FK_NO_APP=1`), `sudo ./install.sh`
 in a terminal pressing Enter at every question (server mode, no AI). It ended with every status line `OK` or

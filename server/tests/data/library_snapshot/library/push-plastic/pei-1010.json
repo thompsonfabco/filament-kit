@@ -4,6 +4,7 @@
   "product": "PEI 1010",
   "material": "PEI",
   "colors": [],
+  "bambu_parent": "Generic PEI",
   "fields": {
     "nozzle_temperature_range_low": [
       "370"
@@ -18,15 +19,18 @@
   "published_ranges": {
     "bed_all_plates": "130-160",
     "_drying": "70C 8h",
-    "_enclosure": "Heated enclosure required",
-    "_print_speed": "40mm/s (preferred: 0.4mm nozzle, 0.2mm layer, 375C extruder, 150C bed)",
-    "_notes": "PEI 1010 is extremely vulnerable to moisture absorption - must be dried. No density published in cited sources. Nozzle range exceeds the max hotend temperature of every Bambu printer - not printable on Bambu. No Bambu Studio PEI preset; bambu_parent omitted."
+    "_enclosure": "required",
+    "_print_speed": "30mm/s",
+    "_notes": "Vendor single-point settings: 'Extruder: 375°C', 'Bed: 160°C + (the hotter the better)', 'Bed Prep: PC or PEI sheet'. Beyond Bambu X1/P1 hotend and bed limits; record only. Made from SABIC ULTEM 1010 resin. Values read from the shared PEI text on pushplastic.com (PEI 9085 2.85mm page) and the Ultimate 3D Printing Store reseller copy ('Tg (glass transition) ~215°C'); the PEI 1010 1.75mm page itself was not read. The HartSmart reseller copy prints 'Extruder: 375°C / Bed: 160°C' under a 'PEI 9085 2.85mm' heading, mixing the two grades, so reseller support for the 1010 values is loose. Earlier entry: PEI 1010 is extremely vulnerable to moisture absorption - must be dried. No density published in cited sources. Nozzle range exceeds the max hotend temperature of every Bambu printer - not printable on Bambu. No Bambu Studio PEI preset; bambu_parent omitted.",
+    "_vitrification": "~215 (Tg, vendor page)"
   },
   "conflicts": [],
-  "source_quality": "official_tds",
+  "source_quality": "official_page",
   "sources": [
+    "https://www.pushplastic.com/products/pei-9085-filament-2-85mm-3kg",
+    "https://ultimate3dprintingstore.com/products/push-plastics-pei?page=3",
     "https://cdn.shopify.com/s/files/1/0260/7421/files/PEI_1010_print_settings.pdf",
     "https://www.pushplastic.com/products/pei-1010-filament-1-75mm-500g"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

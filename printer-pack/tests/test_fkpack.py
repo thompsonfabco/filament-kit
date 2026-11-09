@@ -131,6 +131,16 @@ def test_scripts_need_shell_command(data, moon):
     assert (dest / "scripts" / "fk_load_temp.sh").exists()
 
 
+def test_installed_scripts_use_the_packs_moonraker(data, moon):
+    """Not always :7125: a second Moonraker on the printer, or --moonraker, must reach the scripts."""
+    shell_command(data)
+    pack(data, moon).install(["check", "loadtemp"])
+    scripts = data / "config" / "filament-kit" / "scripts"
+    for name in ("fk_spool_check.py", "fk_load_temp.py"):
+        text = (scripts / name).read_text(encoding="utf-8")
+        assert f'MOONRAKER = "{moon.url}"' in text and "7125" not in text
+
+
 def test_moonraker_edits(data, moon):
     p = pack(data, moon)
     p.install(["moonraker"], spoolman="http://kit.example.com:7912")

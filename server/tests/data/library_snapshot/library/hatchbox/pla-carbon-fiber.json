@@ -2,7 +2,7 @@
   "schema_version": 1,
   "vendor": "Hatchbox",
   "product": "PLA Carbon Fiber",
-  "material": "PLA-CF",
+  "material": "PLA",
   "colors": [
     "Black"
   ],
@@ -20,12 +20,15 @@
   },
   "published_ranges": {
     "_diameter_tolerance": "+/-0.03",
-    "_notes": "Product page: 'Print Temperature - 180C - 220C', 'No Heating Bed Required', dimensional accuracy +/- 0.03mm. Hatchbox does not state fibre content or hardened-nozzle requirement; treat as abrasive (hardened nozzle advisable) - not a published value. Verified 2026-11-01 against the product page's Shopify JSON/HTML."
+    "_notes": "Page: 'No Heating Bed Required'; no bed temperature printed. No hardened-nozzle guidance printed by Hatchbox; abrasive CF content suggests a hardened nozzle (not a Hatchbox statement). Hatchbox FAQ: no technical data (TDS) is available for their filaments, so density, drying, bed temperature and HDT are not published. Read from the Shopify product .js endpoint (description text). Bambu parent not confirmed (no Hatchbox system preset known in Bambu Studio). Earlier entry: Product page: 'Print Temperature - 180C - 220C', 'No Heating Bed Required', dimensional accuracy +/- 0.03mm. Hatchbox does not state fibre content or hardened-nozzle requirement; treat as abrasive (hardened nozzle advisable) - not a published value. Verified 2026-11-01 against the product page's Shopify JSON/HTML.",
+    "_fiber_content": "10% (FAQ: carbon fiber percentage in the Carbon PLA)"
   },
   "conflicts": [],
   "source_quality": "official_page",
   "sources": [
+    "https://hatchbox3d.com/products/3d-pla-1kg1-75-carbon",
+    "https://hatchbox3d.com/pages/faq",
     "https://www.hatchbox3d.com/products/3d-pla-1kg1-75-carbon"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

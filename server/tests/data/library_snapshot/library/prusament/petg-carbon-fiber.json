@@ -13,18 +13,28 @@
     ],
     "nozzle_temperature_range_high": [
       "275"
+    ],
+    "filament_diameter": [
+      "1.75"
     ]
   },
   "published_ranges": {
-    "bed_all_plates": "80-100",
+    "bed_all_plates": "90 +/- 10",
     "_diameter_tolerance": "+/-0.02",
-    "_hardened_nozzle_required": "yes (product page)",
-    "_notes": "Product page prints nozzle '265+/-10' and bed '90+/-10' (converted to ranges) and tolerance +/-0.02 mm. Not suitable for small parts (product page). Official TDS is only published inside a >10 MB zip that could not be read, so density/diameter/fan/HDT were left out."
+    "_hardened_nozzle_required": "yes - 'Requires a hardened nozzle' (prusament.com); 'Carbon fibers inside are highly abrasive and may damage a regular brass nozzle' (prusa3d.com)",
+    "_notes": "Official pages: nozzle '265+/-10C', bed '90+/-10C' (single printed values, kept in published_ranges, not fields), 1.75 mm with '+/- 0.02 mm' tolerance, Black only, hardened nozzle required. Drying 55C 6 h from the Prusa KB row 'PETG (all versions)' (CF not named explicitly). STILL MISSING from official sources: density, fan speed, max print speed, HDT 0.45/1.80 MPa - the official TDS exists only as TDS_Prusament-PETG-CF-Black.zip, which could not be downloaded (sandbox proxy blocks prusament.com; WebFetch size limit) and no reseller-hosted TDS copy was found. A reseller product page (filament2print.com, NOT a TDS copy) lists density 1.27 g/cm3 (ISO 1183), fan 50%, up to 200 mm/s, HDT 96C @0.45 MPa (ISO 75) - unverified, not used in fields. Earlier entry: Product page prints nozzle '265+/-10' and bed '90+/-10' (converted to ranges) and tolerance +/-0.02 mm. Not suitable for small parts (product page). Official TDS is only published inside a >10 MB zip that could not be read, so density/diameter/fan/HDT were left out.",
+    "_nozzle_temperature": "265 +/- 10 (single printed value with tolerance; not put in fields per rules)",
+    "_drying": "55C 6h"
   },
-  "conflicts": [],
+  "conflicts": [
+    "filament2print.com product page: nozzle 265, bed 90, density 1.27, fan 50%, up to 200 mm/s, HDT 0.45 MPa 96C (reseller page, unverified)",
+    "printedsolid.com: nozzle 250, bed 70-90; 3djake: 250-260 / 80-90 (resellers)"
+  ],
   "source_quality": "official_page",
   "sources": [
-    "https://prusament.com/materials/prusament-petg-carbon-fiber/"
+    "https://prusament.com/materials/prusament-petg-carbon-fiber/",
+    "https://www.prusa3d.com/product/prusament-petg-carbon-fiber-black-1kg/",
+    "https://help.prusa3d.com/article/drying-filament_332086"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

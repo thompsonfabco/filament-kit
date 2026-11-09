@@ -16,7 +16,7 @@
     "Silk Red Green",
     "Silk Yellow Green"
   ],
-  "bambu_parent": "Bambu PLA Silk",
+  "bambu_parent": "Bambu PLA Silk+",
   "fields": {
     "nozzle_temperature_range_low": [
       "210"
@@ -42,19 +42,21 @@
     "_hdt_0.45MPa": "53",
     "_vicat": "56",
     "_vitrification": "57 (Tg, DSC)",
-    "_notes": "TDS titled 'PLA Silk' and describes KINGROON PLA Silk Dual-Color. Cool Plate / High Temperature Plate / Textured PEI with glue; fan on; HDT 1.8 MPa 50 C; melting 152 C; ABS spool rated 70 C. Verification 2026-11-01: fields and plate/chamber/fan/retraction ranges confirmed against the TDS PDF; kingroon.com / kingroon3d.com product pages returned HTTP 429, so page-derived notes and conflicts were not re-checked."
+    "_notes": "TDS V1.0 (2025/12/1) titled 'KINGROON PLA Silk Dual-Color' (download-centre label says 'PLA Silk+', file KINGROON_PLA_Silk_Technical_Data_Sheet_V1.0_ef5dac60...). HDT 1.8MPa 50C; Cool/High Temp/Textured PEI with glue; fan on; overhang 55deg, bridging 30mm. Retraction/print-speed/chamber label mapping inferred from the flattened PDF layout (value order matches the other Kingroon V1.0 TDS sheets: retraction length, retraction speed, chamber temp, overhang, bridging ... printing speed). Dual-colour product page not re-read this run. Earlier entry: TDS titled 'PLA Silk' and describes KINGROON PLA Silk Dual-Color. Cool Plate / High Temperature Plate / Textured PEI with glue; fan on; HDT 1.8 MPa 50 C; melting 152 C; ABS spool rated 70 C. Verification 2026-11-01: fields and plate/chamber/fan/retraction ranges confirmed against the TDS PDF; kingroon.com / kingroon3d.com product pages returned HTTP 429, so page-derived notes and conflicts were not re-checked."
   },
   "conflicts": [
+    "Kingroon Filament Guide datasheet 'Dual-color Silk PLA': 195-230C, bed 50-70, 1.2 g/cm3",
     "kingroon.com Silk Dual-Color PLA page: nozzle 210-230, bed 35-45 (with glue), drying 55C 8h",
     "kingroon3d.com PLA Silk Dual Color page: nozzle 195-230, bed 50-70, density 1.2, HDT 53 C (0.45 MPa)",
     "kingroon.com legacy Dual Color Silk PLA Red/Golden listing: nozzle 220+/-10, bed 55-60, density 1.17-1.24, Tg 60-65, retraction 1 mm at 20 mm/s"
   ],
   "source_quality": "official_tds",
   "sources": [
+    "https://cdn.shopify.com/s/files/1/0722/0120/8047/files/KINGROON_PLA_Silk_Technical_Data_Sheet_V1.0_ef5dac60-f2d0-4aeb-ba3b-20ffa842c2a5.pdf?v=1765295624",
     "https://wiki.kingroon.com/kingroon_pla_silk_technical_data_sheet_v1.0.pdf",
     "https://kingroon.com/products/kingroon-silk-daul-color-pla",
     "https://kingroon3d.com/products/kingroon-pla-silk-dual-color-3d-printer-filament",
     "https://kingroon.com/products/dichromatic-pla-dual-color-silk-pla-filament-red-golden"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

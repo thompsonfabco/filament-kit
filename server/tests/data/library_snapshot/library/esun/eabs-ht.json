@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "eABS-HT",
+  "material": "ABS",
+  "colors": [
+    "Grey"
+  ],
+  "bambu_parent": "Bambu ABS",
+  "fields": {
+    "filament_density": [
+      "1.04"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "10"
+    ]
+  },
+  "published_ranges": {
+    "fan_max_speed": "0%",
+    "_print_speed": "0-200mm/s",
+    "_hdt_0.45MPa": "104.4",
+    "_enclosure": "Closed-box printer recommended (large shrinkage)",
+    "_notes": "TDS JUL.2024 V1.0, read from a search snippet; the PDF itself returned a client error. The TDS gives single values only, extruder 260C and build platform 100C, so no nozzle range was set in fields. Maximum volumetric flow rate is 10 mm3/s. Drying was not captured. The colour 'Gri' (Grey) comes from the Turkish esun3d.com page."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://www.esun3d.com/uploads/ABS-HT_TDS-V1-2024.07.25.pdf",
+    "https://www.esun3d.com/tr/eabs-ht-product/"
+  ],
+  "updated": "2026-11-02"
+}

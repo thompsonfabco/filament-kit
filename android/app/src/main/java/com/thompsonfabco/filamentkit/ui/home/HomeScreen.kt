@@ -23,11 +23,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import com.thompsonfabco.filamentkit.drafts.Draft
 import com.thompsonfabco.filamentkit.net.ProfileStatus
 import com.thompsonfabco.filamentkit.net.ServerInfo
 import com.thompsonfabco.filamentkit.session.Connection
+import com.thompsonfabco.filamentkit.update.UpdateTexts
 import com.thompsonfabco.filamentkit.update.UpdateUi
 import java.text.DateFormat
 import java.util.Date
@@ -128,14 +130,27 @@ private fun UpdateBanner(update: UpdateUi, onInstall: () -> Unit, onConfirm: () 
                         else "The server has no newer app to install yet: ask whoever runs the server for the latest filament-kit app.",
                 )
             } else {
-                Text("Update available", style = MaterialTheme.typography.titleMedium)
+                Text(UpdateTexts.bannerTitle(update.offeredVersion), style = MaterialTheme.typography.titleMedium)
             }
             if (update.needsPermission) Text("Allow filament-kit to install apps, then tap Install again.")
             update.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            val refused = UpdateTexts.refused(update)
+            if (refused) {
+                val links = LocalUriHandler.current
+                TextButton(onClick = {
+                    // no browser on the phone: the sentence above still says what to do
+                    runCatching { links.openUri(UpdateTexts.REFUSED_GUIDE_URL) }
+                }) { Text(UpdateTexts.REFUSED_GUIDE_LABEL) }
+            }
             if (update.confirmPending) {
                 Button(onClick = onConfirm) { Text("Tap to install") }
             } else if (update.available != null) {
-                Button(onClick = onInstall, enabled = !update.busy) { Text(if (update.busy) "Downloading…" else "Install") }
+                val label = UpdateTexts.installLabel(update)
+                if (refused) {
+                    OutlinedButton(onClick = onInstall, enabled = !update.busy) { Text(label) }
+                } else {
+                    Button(onClick = onInstall, enabled = !update.busy) { Text(label) }
+                }
             }
         }
     }

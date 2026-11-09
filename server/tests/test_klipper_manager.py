@@ -99,7 +99,7 @@ def test_shutdown_event_while_connected(moonraker, fam):
     as_sv08(moonraker)
     pid = add(moonraker)
     fam.start()
-    assert wait_for(lambda: fam.state(pid) == "connected")
+    assert fam.wait_settled(pid, 8) == "connected"   # "connected" comes before the websocket: an event needs it up
     moonraker.klippy_state = "shutdown"
     moonraker.event("notify_klippy_shutdown")
     assert wait_for(lambda: fam.state(pid) == "klippy_not_ready")

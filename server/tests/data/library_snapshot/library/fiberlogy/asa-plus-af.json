@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "vendor": "Fiberlogy",
+  "product": "ASA+AF",
+  "material": "ASA-Aramid",
+  "colors": [],
+  "bambu_parent": "Bambu ASA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "255"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "110",
+    "_drying": "80C 4h",
+    "_hdt_0.45MPa": "96 (ASTM D648); 87 at 1.8 MPa",
+    "_vicat": "96 (ASTM D1525)",
+    "_enclosure": "enclosed heated chamber recommended",
+    "_hardened_nozzle_required": "yes - 'a hardened steel nozzle resistant to abrasion caused by aramid fibers is recommended'",
+    "_notes": "Heat resistant up to 94°C (vendor). Aramid (Kevlar) fibre percentage is NOT published. Density not captured. Values come from the official legacy product page (fiberlogy.com/en_US/p/.../802) as captured by search; that URL now redirects to a category page. Thermal values are identical to plain Fiberlogy ASA, so they may be inherited from the base resin. Fan not captured (Fiberlogy ASA uses 0-25%). Sold as 1.75mm 0.75kg."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://fiberlogy.com/en_US/p/ASA-AF-Filament-1.75-mm-0.75-kg/802",
+    "https://fiberlogy.com/en/filaments/asa-en/asaaf-en/"
+  ],
+  "updated": "2026-11-02"
+}

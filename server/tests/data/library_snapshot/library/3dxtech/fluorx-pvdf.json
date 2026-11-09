@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "FluorX PVDF",
+  "material": "PVDF",
+  "colors": [
+    "Natural"
+  ],
+  "bambu_parent": "Generic ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "245"
+    ],
+    "nozzle_temperature_range_high": [
+      "265"
+    ],
+    "filament_density": [
+      "1.71"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-110",
+    "_drying": "Not required",
+    "_hdt_0.45MPa": "158",
+    "_enclosure": "Heated chamber recommended",
+    "_notes": "Nozzle/bed/chamber/drying from official page (CUT 130C, non-hygroscopic, V-0 base resin). Density 1.71 and HDT 158 from Material Data Center; Tm 170C; no Tg published. bambu_parent is a placeholder (no PVDF preset)."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.3dxtech.com/products/fluorx-pvdf-1",
+    "https://www.materialdatacenter.com/ms/en/tradenames/FluorX/3DXTECH/FluorX%E2%84%A2+PVDF/b2b4677f/7493"
+  ],
+  "updated": "2026-11-02"
+}

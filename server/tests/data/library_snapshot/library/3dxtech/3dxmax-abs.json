@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "3DXMAX ABS",
+  "material": "ABS",
+  "colors": [],
+  "bambu_parent": "Bambu ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100-110",
+    "_drying": "80C 4h",
+    "_enclosure": "Heated chamber recommended",
+    "_min_nozzle": "0.4",
+    "_notes": "Official product page '3DXTECH ABS'. Density/Tg/HDT not read from official TDS this run (secondary sources quote density 1.05, Tg 105, HDT 95 from 3DXMAX ABS TDS - unverified)."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.3dxtech.com/products/3dxtech-r-abs",
+    "https://www.3dxtech.com/pages/filament-drying-instructions"
+  ],
+  "updated": "2026-11-02"
+}
