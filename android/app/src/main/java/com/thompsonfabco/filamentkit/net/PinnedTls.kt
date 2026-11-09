@@ -19,7 +19,7 @@ import javax.net.ssl.X509ExtendedTrustManager
 
 /**
  * The server presented a certificate other than the paired one (e.g. the server was reinstalled).
- * Never auto-accepted: the UI shows both fingerprints and asks the user to re-pair.
+ * Never accepted without the user's tap: the UI shows the new fingerprint, to trust it or pair again.
  */
 class FingerprintMismatch(val expected: String, val actual: String) :
     IOException("The server's certificate changed: expected $expected, got $actual")

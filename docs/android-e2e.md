@@ -11,7 +11,7 @@ installed between runs (`leaveApksInstalledAfterRun`), otherwise the app data is
 
 | Phase | Arguments | What it checks |
 |---|---|---|
-| `main` | `fkCode`, `fkHost`, `fkPhoto`, optional `fkPort` (8710), `fkFingerprint` | Manual pairing (host, fingerprint shown and compared, code) → Printers shows the empty state → Add spools with the label photo injected instead of the camera, a new random tag and a weight → Read (one paid Claude call) → Preview shows `would link tag …` → Add → `linked tag … to spool N` → the tag tapped on Home opens the new spool's card → Update weight → Confirm → the test logs `UNPAIR_NOW` and the driver unpairs the phone on the server → the next call (a tag lookup) lands on Pair with "This phone was unpaired from the server", and the spool card is closed. |
+| `main` | `fkCode`, `fkHost`, `fkPhoto`, optional `fkPort` (8710), optional `fkFingerprint` | Manual pairing (host, fingerprint shown and compared, code) → Printers shows the empty state → Add spools with the label photo injected instead of the camera, a new random tag and a weight → Read (one paid Claude call) → Preview shows `would link tag …` → Add → `linked tag … to spool N` → the tag tapped on Home opens the new spool's card → Update weight → Confirm → the test logs `UNPAIR_NOW` and the driver unpairs the phone on the server → the next call (a tag lookup) lands on Pair with "This phone was unpaired from the server", and the spool card is closed. |
 | `unpair` | `fkTag` | Only the last step of `main`, on the phone `main` left paired. Use it to repeat that step without another paid Read. |
 | `cold` | none | Cold start after the unpair: the app opens Pair and still shows the unpaired message. |
 | `forget` | `fkCode`, `fkHost`, ... | Pair again → Settings → Forget server → Pair (no unpaired message), and still Pair after the activity is recreated. |
@@ -48,7 +48,7 @@ compatibility change, also run `$ADB shell am compat enable RESTRICT_LOCAL_NETWO
 1. Install the app fresh (or `adb shell pm clear com.thompsonfabco.filamentkit`) and open it: the system asks for
    local network access (it may be shown as "Nearby devices"). Tap **Don't allow**: Pair shows the explanation and
    **Allow**, and no QR scan button; no "Choose a device to connect" picker appears.
-2. Tap **Allow** in the app and refuse again: **Open app settings** appears and opens the app's settings page. Allow
+2. Tap **Allow** in the app and refuse again: **Open app settings** takes the place of **Allow** and opens the app's settings page. Allow
    the permission there and return: the Pair screen (QR scan, servers found on this network) appears without
    restarting the app.
 3. Pair by QR. Then revoke the permission in the system settings (Android restarts the app): Home shows "Needs local

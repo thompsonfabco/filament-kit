@@ -62,7 +62,7 @@ class SlotMapHelpTest {
             notes = listOf("some other remark"))
         val v = SlotMapHelp.view(otherNote)
         assertEquals(SlotMapOutcome.CONFIRMED, v.outcome)
-        assertEquals("the note is still shown", listOf("some other remark"), v.notes)
+        assertEquals("the note is still shown", listOf("Some other remark"), v.notes)
     }
 
     @Test fun anOlderServersNoteStillMeansPartial() {
@@ -142,11 +142,19 @@ class SlotMapHelpTest {
         }
     }
 
-    @Test fun partialKeepsTheServersNoteVerbatimUnderItsOwnHeading() {
+    @Test fun partialSaysTheSchemeOnceInPlainWords() {
         val v = SlotMapHelp.view(MapStatus(state = "done", calibrated = true, notes = listOf(note)))
-        assertEquals("Not settled yet:", v.notesHeading)
-        assertEquals(listOf(note), v.notes)
+        assertTrue(v.detail!!, "second unit" in v.detail!!)
+        assertNull("the server's note says the same", v.notesHeading)
+        assertTrue(v.notes.isEmpty())
         assertNull("a note is not a problem", v.problemsHeading)
+    }
+
+    @Test fun partialStillShowsAnyOtherNote() {
+        val v = SlotMapHelp.view(MapStatus(state = "done", calibrated = true, schemeUnsettled = true,
+            notes = listOf(note, "some other remark")))
+        assertEquals("Not settled yet:", v.notesHeading)
+        assertEquals(listOf("Some other remark"), v.notes)
     }
 
     /** The X2D report: this used to read "Slot mapping finished" with a list of failures under it. */
@@ -158,11 +166,30 @@ class SlotMapHelpTest {
         val v = SlotMapHelp.view(MapStatus(state = "done", calibrated = false, observe = true, problems = problems))
         assertEquals(SlotMapOutcome.NOT_CONFIRMED, v.outcome)
         assertEquals("Slot numbering not confirmed", v.headline)
-        assertEquals("The calibration did not prove how this printer numbers its slots.", v.detail)
+        assertEquals("The calibration did not prove how this printer numbers its slots. " +
+            "Tap Map slots again when the printer is idle.", v.detail)
         assertTrue(v.headlineIsError)
         assertEquals("Problems the server reported:", v.problemsHeading)
-        assertEquals(problems, v.problems)
+        assertEquals("the only-logged line is the notice's", listOf("The calibration job ended as FAILED on the printer"), v.problems)
         assertTrue(v.problemsAreError)
+    }
+
+    @Test fun nothingButTheOnlyLoggedLineLeavesNoProblemsHeading() {
+        val v = SlotMapHelp.view(MapStatus(state = "done", observe = true,
+            problems = listOf("slot numbering not confirmed: filament use is only logged until mapping succeeds")))
+        assertNull(v.problemsHeading)
+        assertTrue(v.problems.isEmpty())
+        assertFalse(v.problemsAreError)
+    }
+
+    @Test fun aServerCodeKeepsItsSpellingAndPlainWordsGetACapital() {
+        val v = SlotMapHelp.view(MapStatus(state = "failed", problems = listOf("printer_busy: x", "error: y", "Ext-L is empty")))
+        assertEquals(listOf("printer_busy: x", "Error: y", "Ext-L is empty"), v.problems)
+    }
+
+    @Test fun aFailedMappingSaysWhatToDoNext() {
+        assertEquals("Tap Map slots again when the printer is idle.", SlotMapHelp.view(MapStatus(state = "failed")).detail)
+        assertNull("old news needs no step", SlotMapHelp.view(MapStatus(state = "failed", problemsOld = true)).detail)
     }
 
     /** The server ends every failed job on the step "Mapping failed". */
@@ -204,7 +231,7 @@ class SlotMapHelpTest {
         assertEquals("The last slot mapping failed", v.headline)
         assertFalse(v.headlineIsError)
         assertEquals("From an earlier mapping, it may be fixed by now. Map the slots again to check:", v.problemsHeading)
-        assertEquals(listOf("x"), v.problems)
+        assertEquals(listOf("X"), v.problems)
         assertFalse(v.problemsAreError)
     }
 

@@ -5,8 +5,8 @@ import android.content.pm.PackageInstaller
 /** Texts of the update banner and of a failed install. */
 object UpdateTexts {
     /** Complete on its own: the guide is one more tap and needs the internet, and this must work on a server's LAN. */
-    const val NOT_SIGNED_LIKE_YOUR_APP = "Don't install this update: it is not signed like your app. " +
-        "Check who runs your server and where its app came from."
+    const val NOT_SIGNED_LIKE_YOUR_APP = "Android refused this update because it is not signed like your app; " +
+        "check where your server's app came from."
     const val REFUSED_GUIDE_LABEL = "What this means"
     const val REFUSED_GUIDE_URL = "https://github.com/thompsonfabco/filament-kit/blob/main/docs/install-android-app.md#update-refused"
     private const val GENERIC = "The update could not be installed."
@@ -14,10 +14,10 @@ object UpdateTexts {
     /** The banner is showing the refusal of a differently signed update. */
     fun refused(ui: UpdateUi): Boolean = ui.error == NOT_SIGNED_LIKE_YOUR_APP
 
-    /** Trying again is how a corrected server copy gets picked up, so it stays, but it must not read as "go ahead". */
+    /** Trying again is how a corrected server copy gets picked up. */
     fun installLabel(ui: UpdateUi): String = when {
         ui.busy -> "Downloading…"
-        refused(ui) -> "Try again after fixing the server"
+        refused(ui) -> "Try again"
         else -> "Install"
     }
 

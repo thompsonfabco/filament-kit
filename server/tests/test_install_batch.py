@@ -179,6 +179,26 @@ def test_real_terminal_shows_stars_never_the_secret(tmp_path):
     assert not re.search(rb"[qwZe]", after), after
 
 
+@pytest.mark.skipif(not _pty_ok(), reason="needs termios (Linux)")
+def test_the_prompt_comes_after_the_terminal_is_set_so_no_key_after_it_is_lost(monkeypatch):
+    """Setting the mode throws away what was typed so far (TCSAFLUSH): keys typed once the prompt shows must survive it."""
+    import termios
+    events = []
+
+    class Out:
+        def write(self, text):
+            events.append(("write", text))
+
+        def flush(self):
+            pass
+    monkeypatch.setattr(secret_input, "_out", lambda: Out())
+    monkeypatch.setattr(termios, "tcgetattr", lambda fd: [0, 0, 0, 0, 0, 0, [0] * 32])
+    monkeypatch.setattr(termios, "tcsetattr", lambda fd, when, attrs: events.append(("set", when)))
+    monkeypatch.setattr(secret_input.os, "read", lambda fd, n: b"\r")
+    assert secret_input._posix("Token: ", 0) == ""
+    assert events.index(("set", termios.TCSAFLUSH)) < events.index(("write", "Token: "))
+
+
 # ---------- 4: `filament-kit pair` without sudo ----------
 
 def test_pair_with_an_unreadable_certificate_says_use_sudo(monkeypatch, capsys):

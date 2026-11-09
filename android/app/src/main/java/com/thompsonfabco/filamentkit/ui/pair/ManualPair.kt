@@ -1,14 +1,9 @@
 package com.thompsonfabco.filamentkit.ui.pair
 
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -20,24 +15,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 
-/** Manual pairing: address, then type two groups of the server's fingerprint, then the 6-digit code. */
+/** Manual pairing: address, then confirm the server's fingerprint, then the 6-digit code. */
 @Composable
 fun ManualPair(
     ui: PairUi,
     onSubmitAddress: (host: String, port: String) -> Unit,
-    onConfirmFingerprint: (List<String>) -> Unit,
+    onConfirmFingerprint: () -> Unit,
     onRejectFingerprint: () -> Unit,
     onSubmitCode: (String) -> Unit,
     onBack: () -> Unit,
@@ -85,59 +73,14 @@ private fun AddressStep(ui: PairUi, onSubmit: (String, String) -> Unit, onBack: 
 }
 
 @Composable
-private fun ConfirmStep(ui: PairUi, onConfirm: (List<String>) -> Unit, onReject: () -> Unit) {
-    val asked = ui.askedGroups
-    var first by rememberSaveable(asked) { mutableStateOf("") }
-    var second by rememberSaveable(asked) { mutableStateOf("") }
-    val prompt = fingerprintPrompt(ui.fingerprint.orEmpty(), asked)
+private fun ConfirmStep(ui: PairUi, onConfirm: () -> Unit, onReject: () -> Unit) {
     Text("Check the server's fingerprint", style = MaterialTheme.typography.titleMedium)
     Text(PairTexts.confirmIntro(ui.host))
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        itemVerticalAlignment = Alignment.CenterVertically,
-        maxItemsInEachRow = 4,
-    ) {
-        prompt.forEachIndexed { i, group ->
-            when {
-                group != null -> Text(group, fontFamily = FontFamily.Monospace, modifier = Modifier.width(GROUP_WIDTH))
-                i == asked.first() -> GroupField(first, { first = it }, i, prompt.size)
-                else -> GroupField(second, { second = it }, i, prompt.size)
-            }
-        }
-    }
+    Text(groupFingerprint(ui.fingerprint.orEmpty()), fontFamily = FontFamily.Monospace)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(onClick = { onConfirm(listOf(first, second)) }, enabled = first.length == 4 && second.length == 4) {
-            Text("Continue")
-        }
+        Button(onClick = onConfirm) { Text("It matches") }
         OutlinedButton(onClick = onReject) { Text("It does not match") }
     }
-}
-
-private val GROUP_WIDTH = 64.dp
-
-/** One missing group: four hex digits, in its place among the others so it can be found by its neighbours. */
-@Composable
-private fun GroupField(value: String, onChange: (String) -> Unit, index: Int, count: Int) {
-    val colors = MaterialTheme.colorScheme
-    BasicTextField(
-        value = value,
-        onValueChange = { typed -> onChange(typed.lowercase().filter { it in "0123456789abcdef" }.take(4)) },
-        singleLine = true,
-        textStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = MaterialTheme.typography.bodyLarge.fontSize, color = colors.onSurface),
-        cursorBrush = SolidColor(colors.primary),
-        keyboardOptions = KeyboardOptions(
-            capitalization = KeyboardCapitalization.None,
-            autoCorrectEnabled = false,
-            keyboardType = KeyboardType.Ascii,
-            imeAction = ImeAction.Next,
-        ),
-        modifier = Modifier
-            .width(GROUP_WIDTH)
-            .border(1.dp, colors.primary, MaterialTheme.shapes.extraSmall)
-            .padding(horizontal = 6.dp, vertical = 8.dp)
-            .semantics { contentDescription = "Missing group ${index + 1} of $count" },
-    )
 }
 
 @Composable

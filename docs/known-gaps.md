@@ -56,6 +56,12 @@ fixed.
     one either. Sovol SV08 MAX is verified; Sovol M1D is an unverified placeholder. The usage entries the kit logs for a Klipper printer can't be undone
     from the kit; correct the spool in Spoolman.
 
+16. **The setup page's data still shows serials and addresses on the home network (v0.4.3).** The new Overview and job
+    log hide them until you give the setup code, but the page's older state (`/setup/api/state`) still lists printer
+    serial numbers and addresses to any device on the home network without it, until a later stage of the console.
+17. **Going back to v0.4.0 leaves the console's job unit (v0.4.3).** `filament-kit-setup-job@.service` stays on disk,
+    unused, after `sudo filament-kit update --rollback`; the earlier setup page does not call it.
+
 ## How this was first checked (v0.2.0)
 
 On WSL Ubuntu 26.04: a tarball built from main with `tools/make_release.sh` (`FK_NO_APP=1`), `sudo ./install.sh`

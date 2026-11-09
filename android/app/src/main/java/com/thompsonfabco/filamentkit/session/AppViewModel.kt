@@ -81,6 +81,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         updater.close()
     }
 
+    /** Settings → Skip the fingerprint check for new servers. */
+    fun setSkipFingerprintCheck(skip: Boolean) {
+        viewModelScope.launch { settings.setSkipFingerprintCheck(skip) }
+    }
+
+    /** Pair → Trust the new certificate; [then] runs only if the pin changed. */
+    fun trustCertificate(expected: String, actual: String, then: () -> Unit) {
+        viewModelScope.launch {
+            if (session.trustCertificate(expected, actual)) {
+                router.clear()
+                then()
+            }
+        }
+    }
+
     /** Settings → Forget server. */
     fun forget(then: () -> Unit) {
         viewModelScope.launch {

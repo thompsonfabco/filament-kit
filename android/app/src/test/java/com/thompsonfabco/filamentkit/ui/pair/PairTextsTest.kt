@@ -1,7 +1,11 @@
 package com.thompsonfabco.filamentkit.ui.pair
 
+import java.net.ConnectException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -11,8 +15,20 @@ class PairTextsTest {
     @Test fun aStoredPairingHasChanged() {
         val t = text(MismatchSource.STORED)
         assertEquals("The server's certificate has changed", t.title)
-        assertEquals("Paired fingerprint", t.expectedLabel)
+        assertNull("only the new fingerprint is listed", t.expectedLabel)
+        assertEquals("New fingerprint", t.actualLabel)
         assertEquals("Pair again", t.button)
+        assertEquals("Trust the new certificate", t.trustButton)
+        assertEquals(t.body, 1, t.body.count { it == '.' }) // one sentence of risk
+        assertTrue(t.body, "another device" in t.body && "this phone's access" in t.body)
+        assertTrue("pairing code on the server" in t.whereToCheck!!)
+    }
+
+    @Test fun onlyASavedPairingCanBeTrusted() {
+        assertNull(text(MismatchSource.QR).trustButton)
+        assertNull(text(MismatchSource.MANUAL).trustButton)
+        assertEquals("Start again", text(MismatchSource.QR).button)
+        assertEquals("Start again", text(MismatchSource.MANUAL).button)
     }
 
     /** Nothing is paired yet, so nothing can have "changed" and there is no "paired" fingerprint. */
@@ -27,7 +43,7 @@ class PairTextsTest {
     @Test fun theManualPathNamesTheCheckJustMade() {
         val t = text(MismatchSource.MANUAL)
         assertEquals("The server's certificate changed while pairing", t.title)
-        assertEquals("Fingerprint you checked", t.expectedLabel)
+        assertEquals("Fingerprint seen first", t.expectedLabel)
         assertTrue(t.body, "kit.local" in t.body)
         assertFalse("no code was named on this path", "code" in t.body)
     }
@@ -35,8 +51,17 @@ class PairTextsTest {
     @Test fun onlyAStoredPairingSaysPaired() {
         for (s in listOf(MismatchSource.QR, MismatchSource.MANUAL)) {
             val t = text(s)
-            assertFalse(t.toString(), t.expectedLabel.contains("Paired") || t.title.contains("has changed"))
+            assertFalse(t.toString(), t.expectedLabel.orEmpty().contains("Paired") || t.title.contains("has changed"))
         }
+    }
+
+    @Test fun anAddressThatCannotBeReachedSaysWhyWhenThePhoneCanTell() {
+        val name = PairTexts.unreachable(UnknownHostException("kit.local"), "kit.local", 8443)
+        assertTrue(name, "Could not find kit.local" in name && "IP address" in name)
+        val port = PairTexts.unreachable(ConnectException("connect failed: ECONNREFUSED (Connection refused)"), "kit.local", 8443)
+        assertTrue(port, "not on port 8443" in port && "8710" in port)
+        val rest = PairTexts.unreachable(SocketTimeoutException("timeout"), "kit.local", 8443)
+        assertEquals("Could not reach kit.local on port 8443. Check the address and that this phone is on the same network.", rest)
     }
 
     @Test fun whereACodeComesFromIsNotOnlyTheCommand() {

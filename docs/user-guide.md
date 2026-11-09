@@ -108,7 +108,8 @@ Use either way. Both install what the new mode needs, start it, and stop what it
   lacks a module they need (then they go off, and the command says so).
 - One module at a time: `sudo filament-kit modules enable <name>` or `sudo filament-kit modules disable <name>`,
   for example `sudo filament-kit modules disable printers`. `sudo filament-kit modules list` shows the names and
-  which are on.
+  which are on. At a terminal, turning one off offers to turn off what needs it too, and turning one on offers to turn
+  on what it needs and asks for any setting those need; it says what else changed. A script gets a refusal that names them.
 
 Turning a module off **never deletes its data**. Spoolman's spools, settings and paired phones stay where they
 are and come back when you turn the module on again. Only `sudo filament-kit uninstall --purge` deletes data. While a
@@ -118,9 +119,10 @@ module is off, the app gets the message that it is turned off for anything that 
 
 Step by step: [Install the Android app](install-android-app.md). In short: install `filament-kit.apk` from the
 Releases page (or from your server at `https://<computer name>.local:8710/app.apk`), run `sudo filament-kit pair`
-on the server, and scan the QR code it prints, or pick the server in the app, compare the fingerprint and type
-the 6-digit code. The code expires after about 10 minutes and works once; `sudo filament-kit pair` makes a new
-one. On Android 17 and newer the app needs **Local network** access.
+on the server, and scan the QR code it prints, or pick the server in the app, compare the fingerprint, tap
+**It matches** and type the 6-digit code. The code expires after about 10 minutes and works once;
+`sudo filament-kit pair` makes a new one. The switch **Skip the fingerprint check for new servers** on the app's
+first pairing screen and in its **Settings** is off by default. On Android 17 and newer the app needs **Local network** access.
 
 The app updates itself: after `sudo filament-kit update` to a release with a newer app, the home screen offers
 it. `sudo filament-kit unpair` lists the paired phones; `sudo filament-kit unpair <id>` removes one. Using the app (printers, adding spools by hand or from label photos): [Using the Android app](android-app.md).
@@ -926,7 +928,8 @@ cannot change it: edit it by hand if a range needs adding, then restart Spoolman
   ```bash
   systemctl disable --now filament-kit-setup.socket
   rm -f /etc/systemd/system/filament-kit-setup.socket /etc/systemd/system/filament-kit-setup@.service \
-        /etc/systemd/system/filament-kit-setup-apply.service /etc/tmpfiles.d/filament-kit-setup.conf
+        /etc/systemd/system/filament-kit-setup-apply.service /etc/systemd/system/filament-kit-setup-job@.service \
+        /etc/tmpfiles.d/filament-kit-setup.conf
   rm -rf /run/filament-kit-setup && systemctl daemon-reload
   setfacl -R -x u:filament-kit-web /etc/filament-kit /var/lib/filament-kit
   find /var/lib/filament-kit -type d -exec setfacl -d -x u:filament-kit-web {} +

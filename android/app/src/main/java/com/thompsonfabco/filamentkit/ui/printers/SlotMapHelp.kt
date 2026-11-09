@@ -4,7 +4,10 @@ import com.thompsonfabco.filamentkit.net.MapStatus
 
 enum class SlotMapOutcome { NONE, RUNNING, CONFIRMED, PARTIAL, STALE, SUSPECT, NOT_CONFIRMED, FAILED }
 
-/** What the "Slot mapping" section says about a [MapStatus]. Problems and notes are the server's text, unchanged. */
+/**
+ * What the "Slot mapping" section says about a [MapStatus]. Problems and notes are the server's words, with a capital
+ * first letter; a line that only repeats what the app already says is left out.
+ */
 data class SlotMapView(
     val outcome: SlotMapOutcome,
     val headline: String? = null,
@@ -24,6 +27,18 @@ object SlotMapHelp {
     private const val OLD_PROBLEMS = "From an earlier mapping, it may be fixed by now. Map the slots again to check:"
     private const val NOTES = "Not settled yet:"
     private const val REMAP = "A new mapping starts by itself when the printer is idle. If it does not, tap Map slots again."
+    private const val TRY_AGAIN = "Tap Map slots again when the printer is idle."
+
+    /** The server's line for what the app's "only logged" notice and the headline already say. */
+    private const val OBSERVE_LINE = "slot numbering not confirmed:"
+
+    /** The server's note for what the partial state's detail already says, in plain words. */
+    private const val SCHEME_NOTE = "numbered alike"
+
+    private val PLAIN_FIRST_WORD = Regex("^[a-z]+([ ,:]|$)")
+
+    private fun sentence(line: String) =
+        if (PLAIN_FIRST_WORD.containsMatchIn(line)) line.replaceFirstChar { it.uppercase() } else line
 
     /**
      * `done` only says the job ended and every slot was put back; `calibrated` says whether the numbering was proven.
@@ -66,28 +81,37 @@ object SlotMapHelp {
                 SlotMapOutcome.NOT_CONFIRMED,
                 headline = "Slot numbering not confirmed",
                 headlineIsError = true,
-                detail = "The calibration did not prove how this printer numbers its slots.",
+                detail = "The calibration did not prove how this printer numbers its slots. $TRY_AGAIN",
             )
             m.state == "failed" && old -> SlotMapView(SlotMapOutcome.FAILED, headline = "The last slot mapping failed")
             // not the step: a finished job's step is only the server's end word, "Mapping failed"
-            m.state == "failed" -> SlotMapView(SlotMapOutcome.FAILED, headline = "Slot mapping failed", headlineIsError = true)
+            m.state == "failed" -> SlotMapView(
+                SlotMapOutcome.FAILED,
+                headline = "Slot mapping failed",
+                headlineIsError = true,
+                detail = TRY_AGAIN,
+            )
             else -> SlotMapView(SlotMapOutcome.NONE)
         }
         if (m == null) return base
         // a calibrated map's problems did not stop it, whatever has happened to the map since
         val good = m.calibrated && base.outcome in setOf(
             SlotMapOutcome.CONFIRMED, SlotMapOutcome.PARTIAL, SlotMapOutcome.STALE, SlotMapOutcome.SUSPECT)
+        val problems = m.problems.filterNot { it.startsWith(OBSERVE_LINE, ignoreCase = true) }.map(::sentence)
+        val notes = m.notes
+            .filterNot { base.outcome == SlotMapOutcome.PARTIAL && SCHEME_NOTE in it }
+            .map(::sentence)
         return base.copy(
             problemsHeading = when {
-                m.problems.isEmpty() -> null
+                problems.isEmpty() -> null
                 old -> OLD_PROBLEMS
                 good -> LEFTOVERS
                 else -> PROBLEMS
             },
-            problems = m.problems,
-            problemsAreError = m.problems.isNotEmpty() && !old && !good,
-            notesHeading = if (m.notes.isEmpty()) null else NOTES,
-            notes = m.notes,
+            problems = problems,
+            problemsAreError = problems.isNotEmpty() && !old && !good,
+            notesHeading = if (notes.isEmpty()) null else NOTES,
+            notes = notes,
         )
     }
 

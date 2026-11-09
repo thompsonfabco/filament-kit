@@ -104,6 +104,16 @@ def main(variant, data):
         want = "connected" if variant == "toolchanger" else "unknown_model"
         assert state == want, f"state {state}, wanted {want}"
         ok(f"connected to real Moonraker, state {state}, verified={fam.verified(pid)}")
+        # a Moonraker restart: the bridge notices, and only this reconnect sets up again
+        conn = fam._conns[pid]
+        wait_for(lambda: conn.sub.connected, what="the websocket")
+        setups, setup = [], conn._setup
+        conn._setup = lambda: setups.append(1) or setup()
+        mr("/server/restart", {})
+        wait_for(lambda: not conn.sub.connected, 30, "the websocket to drop")
+        wait_for(lambda: conn.sub.connected and setups and fam.state(pid) == state, 60, "the bridge to come back")
+        conn._setup = setup
+        ok(f"Moonraker restarted: reconnected and set up again ({len(setups)} set-up)")
         st = fam.status(pid)
         assert st["gcode_state"] == "IDLE", st["gcode_state"]
         # real Moonraker's own answer, and the kit agrees where it points: the printer here is on the kit's machine

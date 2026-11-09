@@ -1046,28 +1046,37 @@ def _link_station(cfg: dict) -> None:
     st["url"] = "http://127.0.0.1:5003"
 
 
-def _change_module(cfg: dict, name: str, want_on: bool, *, confirm=None, ask_address=None,
-                   server: str | None = None) -> str | None:
+def _change_module(cfg: dict, name: str, want_on: bool, *, confirm=None, ask_address=None, ask_settings=None,
+                   server: str | None = None, notes: list[str] | None = None) -> str | None:
     """Turn `name` on/off in `cfg` (in place). Returns an error text, or None when changed.
 
-    `confirm(text) -> bool` is asked before dependents go off too (None: refuse).
-    `ask_address() -> str | None` supplies the server address for a station without a server."""
+    `confirm(text) -> bool` is asked before dependents go off, or needs go on, too (None: refuse).
+    `ask_address() -> str | None` supplies the server address for a station without a server.
+    `ask_settings(new_cfg, on) -> error | None` fills in what the new module set needs, once that set is known.
+    `notes` gets the sentence saying what else changed: the caller prints it when the change has really passed its checks."""
     if name not in modules.MODULES:
         return f"unknown module {name!r}"
     on = set(modules.enabled(cfg))
+    said: list[str] = []
     if want_on:
-        missing = [d for d in modules.MODULES[name].depends if d not in on]
+        missing = modules.needs_closure([name], on)
         if missing:
             listed = ", ".join(missing)
-            return f"{name} needs {listed}\nfix: enable {listed} first"
+            # without a terminal it stays a refusal: a script gets the failure the docs describe
+            if confirm is None or not confirm(f"{name} needs {listed}. Also turn on {listed}? [y/N] "):
+                return f"{name} needs {listed}\nfix: enable {listed} first"
+            on |= set(missing)
+            said = modules.change_note(name, True, missing)
         on.add(name)
     else:
-        deps = modules.dependents(name, frozenset(on))
+        deps = modules.dependents_closure(name, on)     # not only the direct ones: the rest would refuse after the yes
         if deps:
             listed = ", ".join(deps)
             if confirm is None or not confirm(f"Also turn off {listed}? [y/N] "):
-                return f"{listed} depend on {name}\nfix: disable {listed} first"
+                # the list is parents first; the fix has to go children first, or each step refuses
+                return f"{listed} depend on {name}\nfix: disable {', '.join(reversed(deps))} first"
             on -= set(deps)
+            said = modules.change_note(name, False, deps)
         on.discard(name)
     new = _with_modules(cfg, on)
     if not {"server", "station"} <= on:
@@ -1082,12 +1091,18 @@ def _change_module(cfg: dict, name: str, want_on: bool, *, confirm=None, ask_add
             if addr is None:
                 return "station needs the server's address; unchanged"
             new.setdefault("station", {})["allow"] = [addr]
+    if want_on and ask_settings is not None:
+        err = ask_settings(new, on)
+        if err:
+            return err
     try:
         modules.validate(new)
     except modules.ModuleError as e:
         return str(e)
     cfg.clear()
     cfg.update(new)
+    if notes is not None:
+        notes.extend(said)
     return None
 
 
@@ -1123,11 +1138,13 @@ def _plan_error(cfg: dict) -> str | None:
     return None
 
 
-def _save_and_apply(cfg: dict) -> int:
+def _save_and_apply(cfg: dict, notes=()) -> int:
     err = _plan_error(cfg)
     if err:
         print(f"error: {err}\nNothing was changed.", file=sys.stderr)
         return 1
+    for note in notes:
+        print(note)
     config.save(cfg)
     return _run_apply(pairing=False)
 
@@ -1167,26 +1184,21 @@ def cmd_modules_toggle(name: str, want_on: bool, server: str | None = None) -> i
         if err:
             print(f"error: {err}", file=sys.stderr)
             return 1
-    if want_on and apply._tty() and name in modules.MODULES:
-        err = _ask_module_settings(cfg, name)
-        if err:
-            print(f"error: {err}", file=sys.stderr)
-            return 1
-    err = _change_module(cfg, name, want_on, confirm=_tty_confirm, server=server)
+    notes: list[str] = []
+    err = _change_module(cfg, name, want_on, confirm=_tty_confirm, server=server, notes=notes,
+                         ask_settings=_ask_module_settings if apply._tty() else None)
     if err:
         print(f"error: {err}", file=sys.stderr)
         return 1
-    return _save_and_apply(cfg)
+    return _save_and_apply(cfg, notes)
 
 
-def _ask_module_settings(cfg: dict, name: str) -> str | None:
-    """`modules enable NAME` at a terminal: ask for the settings NAME needs (web.public_url, orders.file), with the
-    menu's prompts, into cfg (in place). Not when a dependency is off (that refusal comes first) and not for the
-    station's server address (--server and _change_module see to it). Returns an error text or None."""
-    on = modules.enabled(cfg)
-    if any(d not in on for d in modules.MODULES[name].depends):
-        return None
-    got = modules.collect_settings(on | {name}, cfg, _ask, skip=("station.allow",))
+def _ask_module_settings(cfg: dict, on) -> str | None:
+    """`modules enable NAME` at a terminal: ask for the settings the new set `on` needs (web.public_url, orders.file, a
+    remote Spoolman's address), with the menu's prompts, into cfg (in place). Not for the station's server address
+    (--server and _change_module see to it). Returns an error text or None."""
+    also = ("spoolman_url",) if modules.needs_spoolman_url(on, cfg) else ()
+    got = modules.collect_settings(on, cfg, _ask, skip=("station.allow",), also=also)
     if got is None:
         return "a setting was left blank; nothing was changed"
     for key, value in got.items():

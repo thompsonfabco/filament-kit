@@ -3,10 +3,12 @@ package com.thompsonfabco.filamentkit.data
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -28,6 +30,9 @@ data class ServerConfig(
 interface SettingsStore {
     suspend fun save(config: ServerConfig)
     suspend fun clear()
+
+    /** The user chose to skip the fingerprint check when pairing with a new server by address. */
+    suspend fun skipsFingerprintCheck(): Boolean = false
 }
 
 /**
@@ -50,8 +55,18 @@ class Settings(private val store: DataStore<Preferences>) : SettingsStore {
         store.edit { it.remove(KEY) }
     }
 
+    /** Off unless the user turned it on. It belongs to the phone, so forgetting a server leaves it as it is. */
+    val skipFingerprintCheck: Flow<Boolean> = store.data.map { it[SKIP_FINGERPRINT] ?: false }
+
+    override suspend fun skipsFingerprintCheck(): Boolean = skipFingerprintCheck.first()
+
+    suspend fun setSkipFingerprintCheck(skip: Boolean) {
+        store.edit { it[SKIP_FINGERPRINT] = skip }
+    }
+
     companion object {
         private val KEY = stringPreferencesKey("server")
+        private val SKIP_FINGERPRINT = booleanPreferencesKey("skip_fingerprint_check")
 
         private val Context.dataStore by preferencesDataStore("settings")
 

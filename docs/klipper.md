@@ -27,7 +27,7 @@ toolchanger, an AFC unit such as a Box Turtle, a Happy Hare MMU), and its slots.
 has one; an address works too.
 
 - **Not sure of the address?** `sudo filament-kit klipper scan` looks for Moonraker on the server's own network (at
-  most 256 addresses, only when you run it); `--subnet <network>` scans another range, up to 256 addresses. Printers that announce themselves (Moonraker's `[zeroconf]`) appear by
+  most 256 addresses, only when you run it); `--subnet <network>` scans another range, up to 256 addresses. A scan asked for through the server's API keeps to the private networks the server may reach (10.x, 172.16-31.x, 192.168.x), one at a time with 30 seconds between them. Printers that announce themselves (Moonraker's `[zeroconf]`) appear by
   themselves.
 - **Moonraker asks for an API key?** `sudo filament-kit klipper api-key <id>` asks for it; it is never shown again. Leaving it empty removes the saved key.
 - **Changed the printer or its firmware?** `sudo filament-kit klipper detect <id>` reads the model and filament system
@@ -96,7 +96,9 @@ The kit talks to Moonraker without installing anything on the printer. The print
   print is cancelled through Moonraker; if that fails, the reason is in `printer_data/logs/fk_spool_check.log`;
 - an NFC tag reader on the printer (nfc2klipper with a PN532) and the read-only `lasttag` service the kit reads taps
   from;
-- Moonraker settings: report usage to the kit's Spoolman, announce Moonraker on the network.
+- Moonraker settings: report usage to the kit's Spoolman, announce Moonraker on the network. It asks for your
+  Spoolman's URL as the printer reaches it, or takes it with `--spoolman`; don't use `127.0.0.1` here unless Spoolman
+  runs on the printer.
 
 `sudo filament-kit klipper pack` prints the commands to run on the printer (as its normal user, not root). They
 fetch the pack of the same version as your kit server, and check it before anything runs:
@@ -111,9 +113,10 @@ commands from this page: run `klipper pack` to get them with your version's chec
 If the server can't check the release, it prints no commands and says why. That happens when it's offline and doesn't
 keep that release, or when it's a build that was never released. Run it again when the server is online.
 
-It asks about each part and before every change, never overwrites a file it did not write, and makes a backup before
+It asks about each part and before every change, except that a reader it installs brings the spool part's macros, which
+the reader's gcode calls. It never overwrites a file it did not write, and makes a backup before
 its only edits to your own files: one `[include filament-kit/*.cfg]` line in `printer.cfg` and the `moonraker.conf`
-sections. It restarts Klipper only when the printer is idle and you say yes. `status` shows what is installed;
+sections. It restarts Klipper or Moonraker only when the printer is idle and you say yes. `status` shows what is installed;
 `uninstall` removes what the pack installed. The changes it made to `moonraker.conf` stay in place, and it tells you
 which ones. Install and uninstall can be run again at any time: a service you choose to keep at uninstall keeps
 its files and stays in the pack's list, a reinstall keeps lasttag's allow list unless you give `--allow`, and an

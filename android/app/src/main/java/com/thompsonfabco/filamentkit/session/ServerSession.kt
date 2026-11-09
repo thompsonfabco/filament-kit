@@ -12,8 +12,12 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
+
+/** How often [ServerSession.recheck] runs while the app is on screen. */
+const val CONNECTION_POLL_MS = 20_000L
 
 /** How the app currently reaches the paired server (the Home screen's connection dot). */
 sealed interface Connection {
@@ -65,6 +69,7 @@ class ServerSession(
 
     init {
         router.currentToken = ::currentToken
+        router.currentFingerprint = { _config.value?.fingerprint }
         scope.launch { configs.collect(::apply) }
         scope.launch { router.notice.collect { if (it is PairNotice.Unpaired && it.token != null) forgetToken(it.token) } }
     }
@@ -98,6 +103,28 @@ class ServerSession(
     }
 
     /**
+     * Looks again without showing "Connecting…": the dot only moves if the answer differs. It never moves to the Pair
+     * screen; a changed certificate is only noted, as in [resolve].
+     */
+    fun recheck() {
+        synchronized(lock) {
+            if (resolveJob?.isActive == true) return
+            val client = pinned ?: return
+            val eps = endpoints ?: return
+            if (!localNetworkGranted()) {
+                _connection.value = Connection.NeedsLocalNetwork
+                return
+            }
+            resolveJob = scope.launch { resolve(client, eps) }
+        }
+    }
+
+    /** A call got an answer: if the dot still says the server can't be reached, look again now. */
+    fun onServerAnswered() {
+        if (_connection.value == Connection.Offline) recheck()
+    }
+
+    /**
      * [sent] was rejected: never send it again, and if it is still the stored token keep the server (endpoints,
      * fingerprint) but store a blank token so a cold start opens Pair. A 401 for an older token changes nothing.
      */
@@ -107,6 +134,19 @@ class ServerSession(
         val cfg = _config.value ?: return
         if (cfg.token != sent) return
         save(cfg.copy(token = ""))
+    }
+
+    /**
+     * The user trusts the certificate they were shown: pin exactly [actual] in place of [expected] and keep the token
+     * and addresses. False (nothing saved) when [expected] is no longer what this pairing pins. If the server no longer
+     * knows the token, its next 401 goes to Pair as usual. Returns once the new pin is in use.
+     */
+    suspend fun trustCertificate(expected: String, actual: String): Boolean {
+        val cfg = _config.value
+        if (cfg == null || !cfg.canTrust(expected) || cfg.token == revokedToken) return false
+        save(cfg.copy(fingerprint = actual))
+        _config.first { !it?.fingerprint.equals(expected, ignoreCase = true) }
+        return true
     }
 
     private fun apply(cfg: ServerConfig?) {
@@ -127,7 +167,7 @@ class ServerSession(
                 resolveJob?.cancel()
                 val client = clientFor(cfg.fingerprint)
                 val watched = client.newBuilder()
-                    .apply { interceptors().add(0, SessionWatcher(router) { refresh() }) }
+                    .apply { interceptors().add(0, SessionWatcher(router, onAnswer = ::onServerAnswered) { refresh() }) }
                     .build()
                 fingerprint = cfg.fingerprint
                 pinned = client
@@ -176,3 +216,7 @@ class ServerSession(
 
 /** A server is stored and its token has not been revoked (a revoked token is stored blank). */
 fun ServerConfig?.isPaired(): Boolean = this != null && token.isNotBlank()
+
+/** There is a pairing to keep, and it pins [expected]: the only case "Trust the new certificate" can apply to. */
+fun ServerConfig?.canTrust(expected: String): Boolean =
+    this != null && isPaired() && fingerprint.equals(expected, ignoreCase = true)
