@@ -12,6 +12,8 @@ param(
     [string]$Workers = "auto"
 )
 $ErrorActionPreference = "Stop"
+# powershell -File hands "pc-sync,server" over as one string
+$Only = @($Only | ForEach-Object { $_ -split "," })
 $root = Split-Path -Parent $PSScriptRoot
 $cache = Join-Path $env:LOCALAPPDATA "filament-kit"
 New-Item -ItemType Directory -Force $cache | Out-Null

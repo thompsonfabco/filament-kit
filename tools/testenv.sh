@@ -8,9 +8,10 @@
 # --lint shellcheck. PYTEST-ARGS go to the server suite (for example --durations=30). Every suite runs even after a failure, and
 # the last lines are each suite's counts and wall time; the exit code is non-zero if any of them failed.
 #
-# A test that fails in the crowd of a parallel run gets one more try alone, right after. If it then passes the suite counts as
-# passed, and the summary names it as FLAKY: a timing race in a test, or a real one in the code, so it's to be read, not ignored.
-# --no-retry turns that off.
+# A test that fails in the crowd of a parallel run gets one more try alone, right after. Each one that passes alone is named as
+# FLAKY: a timing race in a test, or a real one in the code, so it's to be read, not ignored. The suite counts as passed only if
+# all of them did, and only if the first run reached every test: one that stopped early (xdist's limit on crashed workers, for
+# one) fails, with no second try. --no-retry turns the second try off.
 #
 # Linux or WSL, from a tree on a Linux file system: on /mnt/c every test's file work goes through the Windows bridge. It reuses a
 # venv in ~/.cache/filament-kit while server/pyproject.toml, pc-sync/pyproject.toml and the Python version stay the same, and the
@@ -33,7 +34,15 @@ while [ $# -gt 0 ]; do
         --klipper) WITH_KLIPPER=1; shift ;;
         --lint) WITH_LINT=1; shift ;;
         --no-retry) RETRY=0; shift ;;
-        --only) [ $# -ge 2 ] || usage; ONLY=$2; shift 2 ;;
+        --only)
+            [ $# -ge 2 ] && [ -n "$2" ] || usage
+            for suite in ${2//,/ }; do
+                case "$suite" in
+                    server|pc-sync|other|get) ;;
+                    *) echo "error: --only knows server, pc-sync, other and get, not $suite" >&2; exit 2 ;;
+                esac
+            done
+            ONLY=$2; shift 2 ;;
         --workers) [ $# -ge 2 ] || usage; WORKERS=$2; shift 2 ;;
         --) shift; EXTRA=("$@"); break ;;
         *) usage ;;
@@ -52,7 +61,7 @@ command -v python3 >/dev/null || { echo "error: python3 is missing" >&2; exit 2;
 CACHE=$HOME/.cache/filament-kit
 mkdir -p "$CACHE"
 key=$( { cat "$ROOT/server/pyproject.toml" "$ROOT/pc-sync/pyproject.toml"; python3 --version; } | sha256sum | cut -c1-16)
-VENV=$CACHE/venv-$key
+VENV=${FK_TEST_VENV:-$CACHE/venv-$key}   # FK_TEST_VENV: the recipe's own tests, which have one already
 export PIP_CACHE_DIR=$CACHE/pip
 (
     flock 9                                 # two runs at once: one builds, the other waits and reuses it
@@ -78,7 +87,7 @@ cleanup() {
     rm -rf "$RUN"
 }
 trap cleanup EXIT
-export PYTHONPATH=$ROOT/server:$ROOT/pc-sync
+export PYTHONPATH=$ROOT/server:$ROOT/pc-sync:$ROOT/tools/testenv_plugin
 export PYTHONDONTWRITEBYTECODE=1
 
 SUMMARY=()
@@ -94,7 +103,7 @@ run() {
     (cd "$dir" && timeout "$SUITE_TIMEOUT" "$@") 2>&1 | tee "$RUN/$name.log"
     rc=${PIPESTATUS[0]}
     counts=$(grep -E '[0-9]+ (passed|failed|error|errors|skipped)' "$RUN/$name.log" | tail -n 1 | sed -E 's/^=+ *//; s/ *=+$//; s/ in [0-9.]+s.*$//')
-    [ -n "$counts" ] || counts="$(grep -c '^ok ' "$RUN/$name.log") checks ok"
+    [ -n "$counts" ] || counts="$(grep -cE '^ok[: ]' "$RUN/$name.log") checks ok"
     [ "$rc" -eq 0 ] || FAILED=1
     [ "$rc" -ne 124 ] || counts="timed out after ${SUITE_TIMEOUT}s"
     LAST_RC=$rc
@@ -104,25 +113,37 @@ run() {
 PYTEST=("$VENV/bin/python" -m pytest -q -rfEs -p no:cacheprovider)
 FLAKY=()
 
-# parallel NAME DIR [PYTEST-ARGS]: run, and what failed once more alone, with its names kept for the summary
+OUTCOMES=("$VENV/bin/python" "$ROOT/tools/testenv_plugin/fk_outcomes.py")
+
+# parallel NAME DIR [PYTEST-ARGS]: run, and what failed once more alone. pytest itself says what failed and what was reached, in a
+# file (fk_outcomes), so nothing here depends on how a line of its output happens to read.
 parallel() {
-    local name=$1 dir=$2 ids
+    local name=$1 dir=$2 ids passed why kept first
+    local first_out=$RUN/$name.outcomes again_out=$RUN/$name.outcomes-again
     shift 2
-    run "$name" "$dir" "${PYTEST[@]}" -n "$WORKERS" --basetemp="$RUN/t-$name" "$@"
+    run "$name" "$dir" "${PYTEST[@]}" -p fk_outcomes --fk-outcomes="$first_out" -n "$WORKERS" --basetemp="$RUN/t-$name" "$@"
     [ "$RETRY" -eq 1 ] && [ "${LAST_RC:-0}" -eq 1 ] || return 0
-    mapfile -t ids < <(grep -E '^(FAILED|ERROR) ' "$RUN/$name.log" | sed -E 's/^(FAILED|ERROR) //; s/ - .*$//')
-    [ "${#ids[@]}" -gt 0 ] || return 0
-    local first=$FAILED_BEFORE
+    if ! why=$("${OUTCOMES[@]}" complete "$first_out"); then     # what wasn't reached can't pass by what was: no second try
+        unset 'SUMMARY[-1]'
+        SUMMARY+=("$(printf '%-5s %-10s %5ss  %s; %s, no second try' FAIL "$name" "$((SECONDS - SUITE_START))" "$LAST_COUNTS" "$why")")
+        return 0
+    fi
+    mapfile -t ids < <("${OUTCOMES[@]}" failed "$first_out")
+    [ "${#ids[@]}" -gt 0 ] && [ -n "${ids[0]}" ] || return 0
+    first=$FAILED_BEFORE
     FAILED=$first
     unset 'SUMMARY[-1]'
-    local kept=$LAST_COUNTS
-    run "$name" "$dir" "${PYTEST[@]}" --basetemp="$RUN/t-$name-again" "${ids[@]}"
+    kept=$LAST_COUNTS
+    run "$name" "$dir" "${PYTEST[@]}" -p fk_outcomes --fk-outcomes="$again_out" --basetemp="$RUN/t-$name-again" "${ids[@]}"
     unset 'SUMMARY[-1]'
-    if [ "$LAST_RC" -eq 0 ]; then
-        FLAKY+=("${ids[@]}")
+    mapfile -t passed < <("${OUTCOMES[@]}" passed "$again_out")
+    [ -n "${passed[0]:-}" ] || passed=()
+    [ "${#passed[@]}" -eq 0 ] || FLAKY+=("${passed[@]}")
+    if [ "$LAST_RC" -eq 0 ] && [ "${#passed[@]}" -eq "${#ids[@]}" ]; then
         SUMMARY+=("$(printf '%-5s %-10s %5ss  %s; %s passed only alone' ok "$name" "$((SECONDS - SUITE_START))" "$kept" "${#ids[@]}")")
     else
-        SUMMARY+=("$(printf '%-5s %-10s %5ss  %s; alone: %s' FAIL "$name" "$((SECONDS - SUITE_START))" "$kept" "$LAST_COUNTS")")
+        FAILED=1        # a test that only skips alone leaves pytest content, and it still never passed
+        SUMMARY+=("$(printf '%-5s %-10s %5ss  %s; alone: %s; %s of %s passed' FAIL "$name" "$((SECONDS - SUITE_START))" "$kept" "$LAST_COUNTS" "${#passed[@]}" "${#ids[@]}")")
     fi
 }
 

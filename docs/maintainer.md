@@ -102,7 +102,7 @@ A hand-built tarball is not signed. Users can install it with `sudo ./install.sh
 - `bash tools/testenv.sh` (Linux or WSL, from a tree on the Linux side) is the one recipe for the Python suites, the same in CI
   and at every review: `--root`, `--lint` and `--klipper` add the rest, and it prints each suite's counts and wall time. On Windows, where the PC sync's DPAPI and file lock are real:
   `powershell -ExecutionPolicy Bypass -File tools\testenv.ps1`. Both run in parallel (`-n auto`), as does every workflow.
-  A test that fails in the crowd runs once more alone, and if it passes the suite passes with `FLAKY <test>` in the summary (`--no-retry` turns this off). Every `FLAKY` line in a run becomes a queue item to fix that test, so the marker never becomes permanent cover.
+  A test that fails in the crowd runs once more alone. Each one that passes alone gets a `FLAKY <test>` line in the summary, even when another test really failed, and the suite passes only if all of them did. A run that stopped before reaching every test (xdist's crash limit, for one) gets no second try and fails. `--no-retry` turns the second try off. Every `FLAKY` line in a run becomes a queue item to fix that test, so the marker never becomes permanent cover.
 - CI runs the recipe on Linux on every push: the server tests (`server/tests`) and the PC sync tests (`pc-sync/tests`) with
   `server[test,web]` installed, so the web module's tests run, plus the printer pack, spool sync and reader tool tests, the
   tests that need root and the `get.sh` end-to-end check, and it shellchecks the scripts.
