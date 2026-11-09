@@ -19,13 +19,17 @@
     ]
   },
   "published_ranges": {
-    "_notes": "Product pages (1.75 and 3.00 mm): 'Print Temperature - 210C - 240C'. No product-specific bed temperature (ABS material page gives 80-100 C for ABS generally). Glow pigment is usually abrasive; no Hatchbox hardened-nozzle guidance found. Verified 2026-11-01 against the product pages' Shopify JSON/HTML."
+    "_notes": "Bed temperature, density and drying are not published anywhere by Hatchbox (page lists only print temp, +/-0.03, acetone smoothing; product shown as unavailable). Hatchbox FAQ: no technical data (TDS) is available for their filaments, so density, drying, bed temperature and HDT are not published. Read from the Shopify product .js endpoint (description text). Bambu parent not confirmed (no Hatchbox system preset known in Bambu Studio). Earlier entry: Product pages (1.75 and 3.00 mm): 'Print Temperature - 210C - 240C'. No product-specific bed temperature (ABS material page gives 80-100 C for ABS generally). Glow pigment is usually abrasive; no Hatchbox hardened-nozzle guidance found. Verified 2026-11-01 against the product pages' Shopify JSON/HTML.",
+    "_diameter_tolerance": "+/-0.03",
+    "_hardened_nozzle_required": "No - FAQ: Glow in the Dark filament can be printed with a regular nozzle, but replace/upgrade the nozzle often because it wears (FAQ is not ABS-specific)"
   },
   "conflicts": [],
   "source_quality": "official_page",
   "sources": [
+    "https://hatchbox3d.com/products/3d-abs-1kg1-75-glow.js",
+    "https://hatchbox3d.com/pages/faq",
     "https://www.hatchbox3d.com/products/3d-abs-1kg1-75-glow",
     "https://www.hatchbox3d.com/products/3d-abs-1kg3-00-glow"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

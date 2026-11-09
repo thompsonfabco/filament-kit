@@ -33,7 +33,8 @@
   "published_ranges": {
     "bed_all_plates": "55-85",
     "_diameter_tolerance": "+/-0.03",
-    "_notes": "Product pages spec bullet 'Print Temperature - 230C - 260C', dimensional accuracy +/- 0.03mm; PETG material page: recommended extrusion 230-260 C, build platform 55-85 C, PEI build plate recommended, pause part-cooling fan for first layers. Verified 2026-11-01 against the product pages' Shopify JSON/HTML and the material page."
+    "_notes": "Page: 'No Heating Bed Required', 'Hydrophobic (Doesn't Absorb Moisture)'; FAQ separately says PETG absorbs moisture over time. Hatchbox FAQ: no technical data (TDS) is available for their filaments, so density, drying, bed temperature and HDT are not published. Read from the Shopify product .js endpoint (description text). Bambu parent not confirmed (no Hatchbox system preset known in Bambu Studio). Earlier entry: Product pages spec bullet 'Print Temperature - 230C - 260C', dimensional accuracy +/- 0.03mm; PETG material page: recommended extrusion 230-260 C, build platform 55-85 C, PEI build plate recommended, pause part-cooling fan for first layers. Verified 2026-11-01 against the product pages' Shopify JSON/HTML and the material page.",
+    "_vitrification": "100-110 (Tg, as printed in Hatchbox FAQ; unusually high for PETG)"
   },
   "conflicts": [
     "Same Hatchbox PETG product pages, meta description: Recommended Extrusion/Nozzle Temperature 180-220 C (appears to be shared PLA template text)",
@@ -41,9 +42,12 @@
   ],
   "source_quality": "official_page",
   "sources": [
+    "https://hatchbox3d.com/products/3d-petg-1kg1-75-blu",
+    "https://hatchbox3d.com/products/3d-petg-1kg1-75-wht",
+    "https://hatchbox3d.com/pages/faq",
     "https://www.hatchbox3d.com/products/3d-petg-1kg1-75-blk",
     "https://www.hatchbox3d.com/pages/petg-material",
     "https://www.hatchbox3d.com/products/petg-transparent-white-1-75mm-1kg-spool"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

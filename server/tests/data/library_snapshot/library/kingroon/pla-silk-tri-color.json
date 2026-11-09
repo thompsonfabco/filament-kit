@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "vendor": "Kingroon",
+  "product": "PLA Silk Tri-Color",
+  "material": "PLA",
+  "colors": [
+    "Silk Red Yellow Blue",
+    "Silk Blue Yellow Green",
+    "Silk Gold Green Rose Red",
+    "Silk Gold Silver Copper",
+    "Silk Green Purple Copper",
+    "Silk Red Gold Blue",
+    "Silk Red Gold Purple",
+    "Silk Blue Green Orange",
+    "Silk Gold Purple Red Black",
+    "Silk Gold Purple Red Blue",
+    "Silk Gold Green Black",
+    "Silk Purple Red Blue Green",
+    "Silk Red Green Blue",
+    "Silk Gold Green Blue",
+    "Silk Blue Green Purple"
+  ],
+  "bambu_parent": "Bambu PLA Silk+",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.32"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "35-45",
+    "_drying": "55C 8h",
+    "_max_print_speed": "<250 mm/s",
+    "_hdt_0.45MPa": "53 (metric not stated on kingroon.com page; datasheet/kingroon3d give 53C at 0.45MPa)",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "Fields from kingroon.com product page 'Printing Settings' (Nozzle 210-230C, Bed (with Glue) 35-45C, <250 mm/s, humidity <20% RH sealed, density 1.32, HDT 53C). Diameter/tolerance from kingroon3d.com page ('consistent 1.75 mm diameter', '+/-0.03 mm'). kingroon3d.com page and the older Filament Guide datasheet ('Tri-color PLA') show a generic table 195-230C / bed 50-70 / 1.2 g/cm3 / fan 100% - kept as conflict. Bambu parent not confirmed."
+  },
+  "conflicts": [
+    "kingroon3d.com tri-color page (unlabelled generic table): 195-230C, bed 50-70, density 1.2, fan 100%, drying 50C 8h",
+    "Kingroon Filament Guide datasheet 'Tri-color PLA': 195-230C, bed 50-70, 1.2 g/cm3, HDT 53C(0.45MPa)"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://kingroon.com/products/kingroon-silk-multicolor-pla",
+    "https://kingroon3d.com/products/kingroon-pla-silk-tri-color-3d-printer-filament",
+    "https://cdn.shopify.com/s/files/1/0612/4784/8666/files/Filaments-Datasheet.pdf?v=1741943123"
+  ],
+  "updated": "2026-11-02"
+}

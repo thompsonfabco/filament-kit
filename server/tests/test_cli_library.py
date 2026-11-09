@@ -39,7 +39,7 @@ LOCAL = {"vendor": "SUNLU", "product": "PLA+ 2.0", "material": "PLA",
 def test_status_bundled(capsys):
     assert cli.main(["library", "status"]) == 0
     out = capsys.readouterr().out
-    assert "library version 2 (updated), 0 local additions" in out
+    assert f"library version {library.load().version} (updated), 0 local additions" in out
     assert library.DEFAULT_LIBRARY_URL in out
     assert "last check: never" in out
 
@@ -96,7 +96,7 @@ def test_update_error_exits_1_without_query(capsys, monkeypatch, rebuilds):
     config.save(cfg)
     assert cli.main(["library", "update"]) == 1
     err = capsys.readouterr().err
-    assert "404" in err and "may be private" in err and "using version 2" in err
+    assert "404" in err and "may be private" in err and f"using version {library.load().version}" in err
     assert rebuilds == []
 
 

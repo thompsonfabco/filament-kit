@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "vendor": "Anycubic",
+  "product": "PVA",
+  "material": "PVA",
+  "colors": [
+    "Natural"
+  ],
+  "bambu_parent": "Bambu PVA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_density": [
+      "1.25"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_soluble": [
+      "1"
+    ],
+    "filament_is_support": [
+      "1"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "35-65",
+    "_drying": "75-85C 8-12h",
+    "_print_speed": "<200 mm/s",
+    "_min_nozzle": "0.4",
+    "_ams": "Official: ACE Pro supported (Anycubic); no Bambu AMS statement.",
+    "_notes": "Specs from anycubic.au and eu.anycubic3d.com PVA pages. Max volumetric speed and HDT printed as '/' (not published). Alternative drying: 80C forced-air dryer 8-12h, or heatbed 90-100C ~12h; do not exceed 100C. Water-soluble; soak at <=50C when supporting PLA. 0.5 kg spool. Diameter from Anycubic Official Store Amazon listing B0H6M51GHG; no tolerance published. Bambu parent not confirmed."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.anycubic.au/products/pva",
+    "https://eu.anycubic3d.com/products/pva",
+    "https://www.amazon.com/dp/B0H6M51GHG"
+  ],
+  "updated": "2026-11-02"
+}

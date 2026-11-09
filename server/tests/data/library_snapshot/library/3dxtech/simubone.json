@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "SimuBone",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "23-60",
+    "_drying": "65C 4h",
+    "_notes": "Official page: PLA-based bone-modeling filament with nano-silver antibacterial additive (ISO 22196). Pairs with AquaTek X1 water-soluble support. Density/Tg/HDT not retrieved (SimuBone_TDS_v1 not read)."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.3dxtech.com/product/bone-modeling-filament/",
+    "https://www.3dxtech.com/pages/filament-drying-instructions"
+  ],
+  "updated": "2026-11-02"
+}

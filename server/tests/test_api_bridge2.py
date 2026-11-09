@@ -83,8 +83,8 @@ class FakeSM:
     def __init__(self):
         fil = {"id": 7, "name": "PLA+ Grey", "material": "PLA", "color_hex": "808080", "vendor": {"name": "SUNLU"}}
         self.spools = {
-            1: {"id": 1, "location": "Rack 1", "filament": fil, "extra": {}},
-            2: {"id": 2, "location": LOC_A1, "filament": fil, "extra": {}},
+            1: {"id": 1, "location": "Rack 1", "filament": fil, "extra": {}, "registered": "2020-01-01T00:00:00Z"},
+            2: {"id": 2, "location": LOC_A1, "filament": fil, "extra": {}, "registered": "2020-01-01T00:00:00Z"},
         }
         self.used = []
 
@@ -184,7 +184,7 @@ def test_map_none_before_any_job(client):
     r = client.get(f"/api/printers/{SERIAL}/map")
     assert r.status_code == 200
     assert r.json() == {"state": "none", "step": "", "slots": [], "calibrated": False, "observe": True,
-                        "problems": [], "notes": [], "scheme_unsettled": False, "problems_old": False, "finished": None, "stale": False,
+                        "problems": [], "notes": [], "scheme_unsettled": False, "report_wanted": None, "report_why": None, "problems_old": False, "finished": None, "stale": False,
                         "remapping": False, "scheme": None, "suspect": False}
 
 
@@ -206,7 +206,7 @@ def test_map_job_runs_and_reports(client, stubs, caplog):
     assert sorted(body["slots"], key=lambda s: s["label"]) == [
         {"label": "A1", "ams_id": 0, "tray_id": 0, "global": 0},
         {"label": "A2", "ams_id": 0, "tray_id": 1, "global": 1}]
-    assert set(body) == {"state", "step", "slots", "calibrated", "observe", "problems", "notes", "scheme_unsettled", "problems_old",
+    assert set(body) == {"state", "step", "slots", "calibrated", "observe", "problems", "notes", "scheme_unsettled", "report_wanted", "report_why", "problems_old",
                          "finished", "stale", "remapping",
                          "scheme", "suspect"}
     audit = [rec.getMessage() for rec in caplog.records if "slot mapping" in rec.getMessage()]

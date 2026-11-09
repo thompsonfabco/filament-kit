@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "PEBA-90A",
+  "material": "PEBA",
+  "colors": [],
+  "bambu_parent": "Bambu TPU 95A HF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.01"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-90",
+    "fan_min_speed/fan_max_speed": "10-50%",
+    "_drying": "70C 6h",
+    "_print_speed": "25-110mm/s",
+    "_vicat": "120 (10N); printed as 'Vicat softening temperature: 120℃, 10N (110℃)'",
+    "_hardness": "90A",
+    "_notes": "Values are from the official 'Parameters for Bambu Lab & Creality' table. No HDT is published. AMS suitability is not stated: treat 90A as a direct-feed or external-spool material until confirmed."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.esun3d.com/peba-product"
+  ],
+  "updated": "2026-11-02"
+}

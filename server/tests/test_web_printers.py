@@ -813,3 +813,10 @@ def test_script_reruns_a_dry_run_asked_for_while_another_ran():
     assert "if (slotBusy) { if (dry) dryAgain = { plan, go }; return; }" in src
     assert "if (again && loadSpool) doLoad(true, again.plan, again.go);" in src
     assert src.count("finally { slotDone(); }") == 2 and "finally { slotBusy = false; }" not in src
+
+
+def test_the_report_route_asks_the_kit_and_needs_lan_and_origin(app, kit):
+    with TestClient(app, base_url=ORIGIN, client=HOME) as c:
+        c.post(P + f"/{SERIAL}/report", headers=H)
+        assert ("POST", f"/api/printers/{SERIAL}/report", {}) in kit.calls
+        assert c.post(P + f"/{SERIAL}/report").status_code == 403       # no Origin

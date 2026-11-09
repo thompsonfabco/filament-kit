@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "Kingroon",
+  "product": "PA Nylon",
+  "material": "PA",
+  "colors": [
+    "Black",
+    "White"
+  ],
+  "bambu_parent": "Generic PA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_density": [
+      "1.12"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100-120",
+    "_print_speed": "30-50 mm/s",
+    "_diameter_tolerance": "+/-0.03",
+    "fan_max_speed": "0%",
+    "_hdt_0.45MPa": "50",
+    "_notes": "Temps/speed/diameter from kingroon.com 'Nylon Filament Technical Specification' (1.75mm, +/-0.03mm, 250-280C, bed 100-120C, 30-50mm/s). Density 1.12, fan 0% and HDT 50C(0.45MPa) only from the Filament Guide datasheet row 'PA'. No drying, enclosure or hardened-nozzle guidance published; nylon is hygroscopic - dry before use. Bambu has no plain-PA system preset; Generic PA chosen (not confirmed)."
+  },
+  "conflicts": [
+    "Kingroon Filament Guide datasheet 'PA': 250-290C, bed 90-110C"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://kingroon.com/products/copy-of-2kg-pack-pa-nylon-3d-filament",
+    "https://kingroon.com/products/kingroon-pa-nylon-basic-3d-printer-filament",
+    "https://cdn.shopify.com/s/files/1/0612/4784/8666/files/Filaments-Datasheet.pdf?v=1741943123"
+  ],
+  "updated": "2026-11-02"
+}

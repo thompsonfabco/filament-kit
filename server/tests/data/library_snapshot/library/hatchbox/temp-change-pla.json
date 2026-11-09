@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "vendor": "Hatchbox",
+  "product": "Temp Change PLA",
+  "material": "PLA",
+  "colors": [
+    "Green to Plasma Green (31C)"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "180"
+    ],
+    "nozzle_temperature_range_high": [
+      "210"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_diameter_tolerance": "+/-0.03",
+    "_notes_spool": "Spool diameter 7.88in, width 2.69in, hub hole 2.20in",
+    "_notes": "Exclusive release: green below 31C, Plasma Green above 31C (label misprinted). Page: no heated bed required. Hatchbox FAQ: no technical data (TDS) is available for their filaments, so density, drying, bed temperature and HDT are not published. Read from the Shopify product .js endpoint (description text). Bambu parent not confirmed (no Hatchbox system preset known in Bambu Studio)."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://hatchbox3d.com/products/exclusive-release-temperature-change-filament"
+  ],
+  "updated": "2026-11-02"
+}

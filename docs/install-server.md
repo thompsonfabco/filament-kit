@@ -329,6 +329,11 @@ Either way, the PC must stay on and awake for the server to answer.
   `sudo ufw allow 8710/tcp` and `sudo ufw allow 5353/udp`. For Spoolman in a browser, also `sudo ufw allow 7912/tcp`.
 - **`sudo filament-kit update` says a printer is mapping or loading**: it does nothing then. Try again when the
   mapping or loading is done.
+- **The install stops with "a Spoolman the kit did not install is in /opt/spoolman"**: the kit never replaces a Spoolman
+  it did not put there, and nothing was changed. To keep using that one, run `sudo filament-kit modules disable
+  spoolman` and set `spoolman_url` in `/etc/filament-kit/config.json` to its address. To let the kit replace the
+  Spoolman program (its database is not touched), run `sudo touch /opt/spoolman/.fk-installed` and the same command
+  again.
 - **Printers don't show up**: the computer must be on the same network as the printers, and a firewall must allow
   UDP ports 2021 and 1990. A server inside WSL or a virtual machine with NAT networking can't see printers (see
   [Running the server in WSL](#running-the-server-in-wsl)): add them by hand with `sudo filament-kit config` →

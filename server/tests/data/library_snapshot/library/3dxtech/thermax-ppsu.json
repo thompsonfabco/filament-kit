@@ -6,6 +6,7 @@
   "colors": [
     "Natural"
   ],
+  "bambu_parent": "Generic PC",
   "fields": {
     "nozzle_temperature_range_low": [
       "360"
@@ -14,7 +15,7 @@
       "390"
     ],
     "filament_density": [
-      "1.29"
+      "1.28"
     ],
     "filament_diameter": [
       "1.75"
@@ -22,15 +23,21 @@
   },
   "published_ranges": {
     "bed_all_plates": "140-160",
-    "_drying": "120C 4h",
+    "_drying": "150C 8h",
     "_diameter_tolerance": "+/-0.05",
     "_enclosure": "Print inside a heated enclosure",
-    "_notes": "Values from MatterHackers listing; official page unreachable (HTTP 429). All-metal extruder, no cooling fan; PEI tape / polyimide tape / sanded FR4 / perfboard bed. Beyond Bambu Lab printer nozzle limits."
+    "_notes": "ThermaX PPSU TDS Rev 3.0 (official CDN). TDS specimen conditions 390-410C extrusion / 130-150C bed (test conditions, not recommendations). Product-page print recommendations not captured. UL94 V-0 base resin. Beyond X1/P1/P2S. Earlier entry: Values from MatterHackers listing; official page unreachable (HTTP 429). All-metal extruder, no cooling fan; PEI tape / polyimide tape / sanded FR4 / perfboard bed. Beyond Bambu Lab printer nozzle limits.",
+    "_vitrification": "230 (Tg, DSC)",
+    "_hdt_0.45MPa": "190"
   },
-  "conflicts": [],
-  "source_quality": "reseller_tds_copy",
+  "conflicts": [
+    "filament_density: earlier library entry had 1.29 (sources: https://www.matterhackers.com/store/l/3dxtech-thermax-natural-ppsu-filament-175mm-05kg/sk/M28PMF4L)"
+  ],
+  "source_quality": "official_tds",
   "sources": [
+    "https://cdn.shopify.com/s/files/1/0625/4185/6821/files/THERMAX_PPSU_TDS_v3.pdf?v=1723942766",
+    "https://www.3dxtech.com/pages/filament-drying-instructions",
     "https://www.matterhackers.com/store/l/3dxtech-thermax-natural-ppsu-filament-175mm-05kg/sk/M28PMF4L"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

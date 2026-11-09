@@ -9,6 +9,7 @@ read from stdin (inside the pasted link, or from the server after the 6-digit co
 command line, and is never printed or logged.
 """
 import argparse
+import contextlib
 import json
 import os
 import re
@@ -18,6 +19,7 @@ from pathlib import Path
 
 from fksync import __version__, client, store, studio, sync, timer  # absolute: PyInstaller runs this file as a script
 
+BUSY_PAIR = "A sync run is in progress; try again in a minute. Nothing was changed."
 APP = "filament-kit-sync"
 _HOST = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,252})$")
 
@@ -53,37 +55,94 @@ def _parse_address(text: str) -> tuple[str, int]:
 
 # --- commands ------------------------------------------------------------------------------------
 
-def _finish_pair(dirs: store.AppDirs, cfg: dict, token: str) -> int:
+def _pairing_refused(e: Exception) -> bool:
+    """A server that answered no, as opposed to one that wasn't reached or has a fault of its own."""
+    return isinstance(e, client.CertChanged) or (isinstance(e, client.ApiError) and e.status < 500)
+
+
+def _settle_pair(dirs: store.AppDirs, cfg: dict, token: str, echo) -> tuple[dict, str | None]:
+    """A new pairing on trial: (the pairing to run with). Proven, the old one goes; refused, the old one comes back. Still
+    not reached (Offline, a 5xx): raises like any request of the run, and the next run tries again."""
+    if not store.pair_waiting(dirs):
+        return cfg, token
+    try:
+        info = (c := client.Client(cfg, token, timeout=20)).info()
+        st = c.state()
+    except (client.CertChanged, client.ApiError) as e:
+        if not _pairing_refused(e):
+            raise
+        store.restore_pair_aside(dirs)
+        _warn(dirs, echo, f"the new pairing was refused ({e}): the earlier pairing is back in place")
+        return store.load_config(dirs), store.load_token(dirs)
+    cfg["device"] = st.get("you")
+    store.save_config(dirs, cfg)
+    store.drop_pair_aside(dirs)
+    store.log(dirs, f"paired with {info.get('name', 'the server')} at {cfg['host']}:{cfg['port']} (device {cfg['device']})")
+    return cfg, token
+
+
+def _finish_pair(dirs: store.AppDirs, cfg: dict, token: str, appdata: Path | None = None,
+                 layout: studio.LinuxLayout | None = None) -> int:
+    """Save the new pairing and prove it, keeping the one in place until then: a stale or mistyped link must not break
+    a setup that works. The caller holds the lock. Refused (a 4xx, another certificate): the old one comes back. Not
+    reached, or a 5xx: the new one stays on trial, since a blip must not force a new link, and the old one stays aside
+    until the next run settles it (_settle_pair): an unclaimed link dies within minutes, and then the old one is needed."""
     old = {}
     try:
         old = store.load_config(dirs)
     except ValueError:
         pass
+    had_old = store.pair_waiting(dirs) or (bool(old.get("host")) and dirs.token.exists())
     for key in ("variant", "user_id", "orca_user_id", "orca_install", "secondaries"):  # survive re-pairing
         if key in old:
             cfg[key] = old[key]
+    store.set_pair_aside(dirs)
     store.save_config(dirs, cfg)
     store.save_token(dirs, token)
     c = client.Client(cfg, token, timeout=20)
     try:
         info = c.info()
         st = c.state()
-    except (client.Offline, client.CertChanged, client.ApiError) as e:
-        _out(f"Saved, but the server could not be checked: {e}")
-        if isinstance(e, client.ApiError) and e.status == 401:
-            _out("The link has expired or was already used: run 'sudo filament-kit pair --pc' again for a new one.")
+    except (client.CertChanged, client.ApiError, client.Offline) as e:
+        if _pairing_refused(e):
+            store.restore_pair_aside(dirs)
+            if had_old:
+                _out(f"The new link did not work ({e}); your previous pairing is unchanged.")
+            else:
+                _out(f"Not paired: {e}")
+            if isinstance(e, client.ApiError) and e.status == 401:
+                _out("The link has expired or was already used: run 'sudo filament-kit pair --pc' again for a new one.")
+            return 1
+        if had_old:
+            store.mark_pair_waiting(dirs)
+            _out(f"Saved, but not confirmed yet: {e}. It is tried again within 10 minutes; if the server refuses it, your "
+                 "previous pairing comes back.")
+        else:
+            store.drop_pair_aside(dirs)
+            _out(f"Saved, but not confirmed yet: {e}. It is tried again within 10 minutes.")
         return 1
     cfg["device"] = st.get("you")
     store.save_config(dirs, cfg)
+    store.drop_pair_aside(dirs)
     store.log(dirs, f"paired with {info.get('name', 'the server')} at {cfg['host']}:{cfg['port']} "
                     f"(device {cfg['device']})")
     _out(f"Paired with {info.get('name', 'the server')} ({cfg['host']}:{cfg['port']}). "
          "The sync runs every 10 minutes and waits while Bambu Studio (or Orca Slicer) is open "
          "('filament-kit-sync status' shows a wait).")
+    owner = st.get("owner")
+    if owner and owner != st.get("you"):
+        _out("Another pairing owns the sync for this server (another PC, or this PC's earlier pairing). On the server: "
+             f"sudo filament-kit unpair {owner}")
+    if appdata is not None or layout is not None:   # information only: the pairing is done whatever this finds
+        try:
+            folders, _why = studio.primary(appdata, cfg, sync.load_state(dirs).get("folder"), layout=layout)
+            _out(f"Bambu Studio folder: {folders.user_filament}")
+        except studio.NotFound as e:
+            _out(e.message)
     return 0
 
 
-def cmd_pair(dirs: store.AppDirs) -> int:
+def cmd_pair(dirs: store.AppDirs, appdata: Path | None = None, layout: studio.LinuxLayout | None = None) -> int:
     text = _ask("Paste the pairing link, or type the server address:")
     if not text:
         _out("Nothing entered.")
@@ -95,7 +154,13 @@ def cmd_pair(dirs: store.AppDirs) -> int:
             _out(f"That link does not work: {e}.")
             return 1
         cfg = {"host": link.host, "port": link.port, "fp": link.fp, "ips": list(link.ips)}
-        return _finish_pair(dirs, cfg, link.token)
+        try:
+            with store.single_instance(dirs):
+                store.recover_interrupted_pair(dirs)
+                return _finish_pair(dirs, cfg, link.token, appdata, layout)
+        except store.AlreadyRunning:
+            _out(BUSY_PAIR)
+            return 1
 
     try:
         host, port = _parse_address(text)
@@ -118,14 +183,20 @@ def cmd_pair(dirs: store.AppDirs) -> int:
         return 1
     cfg = {"host": host, "port": port, "fp": fp, "ips": [ip]}  # the IP connected to: fallback if the name stops resolving
     try:
-        token = client.Client(cfg, None, timeout=20).pair(code)
-    except client.ApiError as e:
-        _out(f"Not paired: {e.message or e.code}")
+        with store.single_instance(dirs):      # before the code is spent
+            store.recover_interrupted_pair(dirs)
+            try:
+                token = client.Client(cfg, None, timeout=20).pair(code)
+            except client.ApiError as e:
+                _out(f"Not paired: {e.message or e.code}")
+                return 1
+            except (client.Offline, client.CertChanged) as e:
+                _out(f"Not paired: {e}")
+                return 1
+            return _finish_pair(dirs, cfg, token, appdata, layout)
+    except store.AlreadyRunning:
+        _out(BUSY_PAIR)
         return 1
-    except (client.Offline, client.CertChanged) as e:
-        _out(f"Not paired: {e}")
-        return 1
-    return _finish_pair(dirs, cfg, token)
 
 
 def cmd_run(dirs: store.AppDirs, appdata: Path | None, quiet: bool, layout: studio.LinuxLayout | None = None) -> int:
@@ -133,9 +204,13 @@ def cmd_run(dirs: store.AppDirs, appdata: Path | None, quiet: bool, layout: stud
     dirs.ensure()
     try:
         with store.single_instance(dirs):
+            cfg, token = {}, None
             try:
+                store.recover_interrupted_pair(dirs)
                 cfg = store.load_config(dirs)
                 token = store.load_token(dirs)
+                if cfg.get("host") and cfg.get("fp") and token:
+                    cfg, token = _settle_pair(dirs, cfg, token, echo)
                 if not cfg.get("host") or not cfg.get("fp") or not token:
                     store.log(dirs, f"error: this PC is not paired; run '{APP} pair'")
                     if echo:
@@ -149,25 +224,28 @@ def cmd_run(dirs: store.AppDirs, appdata: Path | None, quiet: bool, layout: stud
                                         orca=orca, orca_running=studio.orca_running, others=others,
                                         secondaries=on, change_reason=why)
             except studio.NotFound as e:
-                return _fail(dirs, echo, e.message)
+                return _fail(dirs, echo, e.message, "no_studio", cfg, token)
             except client.ApiError as e:
                 if e.status == 401:
-                    return _fail(dirs, echo, f"the server no longer accepts this PC (unpaired?); run '{APP} pair'")
-                return _fail(dirs, echo, str(e))
+                    return _fail(dirs, echo, f"the server no longer accepts this PC (unpaired?); run '{APP} pair'",
+                                 "refused")
+                return _fail(dirs, echo, str(e), "server", cfg, token)
             except client.Offline as e:  # the PC is away from home, the server is off: try next run
                 store.log(dirs, f"warning: {e}")
+                _remember_error(dirs, "offline", str(e))
                 if echo:
                     echo(f"warning: {e}")
                 return 0
             except client.CertChanged as e:
-                return _fail(dirs, echo, str(e))
+                return _fail(dirs, echo, str(e), "certificate")
             except Exception as e:  # noqa: BLE001 - the scheduled task logs it and retries next run
-                return _fail(dirs, echo, f"{type(e).__name__}: {e}")
+                return _fail(dirs, echo, f"{type(e).__name__}: {e}", "crash", cfg, token)
     except store.AlreadyRunning:
         if echo:
             echo("Another sync run is in progress.")
         return 0
-    return 0 if outcome in sync.OUTCOMES else 1
+    # `refused` includes a stale build, which heals itself; `other_pc` needs someone to act
+    return 0 if outcome in sync.OUTCOMES and outcome != "other_pc" else 1
 
 
 def _secondaries(appdata: Path | None, cfg: dict, primary: studio.StudioFolders,
@@ -224,14 +302,31 @@ def _warn(dirs: store.AppDirs, echo, msg: str) -> None:
         echo(f"warning: {msg}")
 
 
-def _fail(dirs: store.AppDirs, echo, msg: str) -> int:
+def _remember_error(dirs: store.AppDirs, kind: str, detail: str) -> None:
+    """For `status`: what the last run hit. The next run that gets to its end clears it (sync.Run.finish)."""
+    with contextlib.suppress(OSError):      # a full disk: the reason is in the log, and it must not change the run's end
+        st = sync.load_state(dirs)
+        st["last_error"] = {"class": kind, "detail": detail, "at": time.time()}
+        sync._save_state(dirs, st)
+
+
+def _fail(dirs: store.AppDirs, echo, msg: str, kind: str, cfg: dict | None = None, token: str | None = None) -> int:
+    """Log it, keep it for `status`, and when the server can be told, tell it the class: never `msg`, which can hold a
+    path with the Bambu Studio user folder. `cfg`/`token` are left out for a failure that means it can't be told."""
     store.log(dirs, f"error: {msg}")
     if echo:
         echo(f"error: {msg}")
+    _remember_error(dirs, kind, msg)
+    outcome = sync.REPORTED_FAILURES.get(kind)
+    if outcome and cfg and cfg.get("host") and token:
+        sync.report_failure(dirs, client.Client(cfg, token, timeout=10), outcome)
     return 1
 
 
 def cmd_status(dirs: store.AppDirs, appdata: Path | None, layout: studio.LinuxLayout | None = None) -> int:
+    with contextlib.suppress(store.AlreadyRunning):
+        with store.single_instance(dirs):
+            store.recover_interrupted_pair(dirs)
     try:
         cfg = store.load_config(dirs)
     except ValueError as e:
@@ -245,6 +340,9 @@ def cmd_status(dirs: store.AppDirs, appdata: Path | None, layout: studio.LinuxLa
         _out(f"Fingerprint:     {_grouped(str(cfg.get('fp', '')))}")
         if cfg.get("device"):
             _out(f"Device id:       {cfg['device']}")
+        if store.pair_waiting(dirs):
+            _out("Pairing:         not confirmed yet; the next run tries it, and if the server refuses it the previous "
+                 "pairing comes back")
     else:
         _out(f"Server:          not paired; run '{APP} pair'")
     st = sync.load_state(dirs)
@@ -291,6 +389,19 @@ def cmd_status(dirs: store.AppDirs, appdata: Path | None, layout: studio.LinuxLa
                 _out(f"Orca Slicer:     {note}")
     except studio.NotFound as e:
         _out(f"Orca Slicer:     {e.message}")
+    failed = st.get("last_error") if isinstance(st.get("last_error"), dict) else None
+    if failed:
+        when = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(float(failed.get("at") or 0)))
+        if failed.get("class") == "offline":
+            _out(f"Last try:        could not reach the server at {when}; the next run tries again: {failed.get('detail')}")
+        else:
+            _out(f"Last run:        FAILED at {when}: {failed.get('detail')}")
+    for kind, rec in (st.get("rejected") or {}).items():
+        if isinstance(rec, dict):
+            _out(f"Upload refused:  the server refused the {kind} upload: {rec.get('error')}. It is tried again later.")
+    partial = st.get("partial") if isinstance(st.get("partial"), dict) else None
+    if partial:
+        _out(f"Install stopped: build {partial.get('stamp')} was not fully installed; the next run finishes it.")
     last = st.get("last") or {}
     if last:
         when = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(float(last.get("at") or 0)))
@@ -339,6 +450,7 @@ def cmd_unpair(dirs: store.AppDirs) -> int:
         cfg = {}
     dirs.token.unlink(missing_ok=True)
     dirs.config.unlink(missing_ok=True)
+    store.drop_pair_aside(dirs)
     store.log(dirs, "unpaired this PC (token and config removed)")
     dev = cfg.get("device")
     _out("This PC is unpaired: its token is deleted.")
@@ -414,7 +526,7 @@ def main(argv: list[str] | None = None) -> int:
         dirs = store.AppDirs(local / APP)
     if args.cmd == "pair":
         dirs.ensure()
-        return cmd_pair(dirs)
+        return cmd_pair(dirs, appdata, layout)
     if args.cmd == "run":
         return cmd_run(dirs, appdata, args.quiet, layout)
     if args.cmd == "status":

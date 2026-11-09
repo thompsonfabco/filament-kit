@@ -23,13 +23,13 @@
   },
   "published_ranges": {
     "_ams": "Refill only, no spool: needs a reusable spool before AMS use.",
-    "_notes": "Product page: 'PLA Refill Filament - (Refill Only, No Spool)', 'Print Temperature - 200C - 230C' (higher than the spooled PLA line's 180-220). Verified 2026-11-01 against the product page's Shopify JSON."
+    "_notes": "Refill (no spool). Diameter tolerance not stated in the text read, so left out. Hatchbox FAQ: no technical data (TDS) is available for their filaments, so density, drying, bed temperature and HDT are not published. Read from the Shopify product .js endpoint (description text). Bambu parent not confirmed (no Hatchbox system preset known in Bambu Studio). Earlier entry: Product page: 'PLA Refill Filament - (Refill Only, No Spool)', 'Print Temperature - 200C - 230C' (higher than the spooled PLA line's 180-220). Verified 2026-11-01 against the product page's Shopify JSON."
   },
   "conflicts": [],
   "source_quality": "official_page",
   "sources": [
-    "https://www.hatchbox3d.com/products/3d-rs-pla1kg-red",
-    "https://www.hatchbox3d.com/collections/pla-1-75mm.atom"
+    "https://www.hatchbox3d.com/collections/pla-1-75mm.atom",
+    "https://www.hatchbox3d.com/products/3d-rs-pla1kg-red"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

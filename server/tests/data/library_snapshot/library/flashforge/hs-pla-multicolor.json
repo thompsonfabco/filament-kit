@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "vendor": "Flashforge",
+  "product": "HS PLA Multicolor",
+  "material": "PLA",
+  "colors": [
+    "Burnt Titanium",
+    "Abyssal Purple",
+    "Abyssal Red",
+    "Skydiver",
+    "Rose Quartz",
+    "Nebula Purple"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "25-60",
+    "fan_min_speed/fan_max_speed": "50-100",
+    "filament_retraction_length": "1-2",
+    "filament_retraction_speed": "30-50",
+    "_drying": "50C 5h",
+    "_print_speed": "60-350mm/s (higher speeds require higher temperatures)",
+    "_min_nozzle": "0.4/0.6mm listed (0.4 recommended)",
+    "_notes": "Layer height 0.12-0.3mm; supports: self, PVA, BVOH; storage ≤20% RH. Same parameter block as HS PLA. Colour list partly from reseller copy (qiditech3dprinter.com); Abyssal Red confirmed on au.flashforge.com. Density/tolerance not on page."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.flashforge.com/products/hs-pla-multicolor",
+    "https://au.flashforge.com/products/hs-pla-multicolor",
+    "https://www.qiditech3dprinter.com/en-us/products/flashforge-colorful-hs-pla-multicolor-filament-for-3d-printing-flashforge-filament"
+  ],
+  "updated": "2026-11-02"
+}

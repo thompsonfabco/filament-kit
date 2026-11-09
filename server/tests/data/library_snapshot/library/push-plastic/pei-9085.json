@@ -4,6 +4,7 @@
   "product": "PEI 9085",
   "material": "PEI",
   "colors": [],
+  "bambu_parent": "Generic PEI",
   "fields": {
     "nozzle_temperature_range_low": [
       "350"
@@ -21,18 +22,22 @@
   "published_ranges": {
     "bed_all_plates": "130-160",
     "_drying": "70C 8h",
-    "_enclosure": "Heated enclosure required",
-    "_print_speed": "40mm/s (preferred: 0.4mm nozzle, 0.2mm layer, 365C extruder, 150C bed)",
+    "_enclosure": "required - 'very high temperature filaments that will require an enclosure and high temps on both the nozzle and bed'",
+    "_print_speed": "30mm/s",
     "_hdt_1.82MPa": "153 (SABIC ULTEM 9085 resin TDS, ASTM D648, 3.2mm, unannealed)",
     "_vicat": "173 (SABIC ULTEM 9085 resin TDS, Rate B/120, ISO 306)",
-    "_notes": "Made from SABIC ULTEM 9085 resin. Density 1.34 g/cm3 is from the SABIC resin TDS that Push Plastic hosts, not a filament test. Must be dried before printing. Nozzle range is above the 300C hotend limit of Bambu X1/P1/P2S; only its 350C lower bound is reachable on a 350C hotend - effectively not printable on Bambu printers. No Bambu Studio PEI preset; bambu_parent omitted."
+    "_notes": "Product-page settings are single points, not ranges: 'Extruder: 350°C', 'Bed: 150°C + (the hotter the better)', 'Bed Prep: PC or PEI sheet'. Not entered as nozzle range fields. 350°C nozzle and 150°C bed exceed Bambu X1/P1 hardware (Bambu X1-Carbon spec sheet: 'Max Hot End Temperature 300'; 'Max Build Plate Temperature 110 @220 V, 120 @110 V'); record only. Made from SABIC ULTEM 9085 resin. 2.85mm 3kg SKU exists on pushplastic.com. 'Generic PEI' preset existence in Bambu Studio not confirmed. Earlier entry: Made from SABIC ULTEM 9085 resin. Density 1.34 g/cm3 is from the SABIC resin TDS that Push Plastic hosts, not a filament test. Must be dried before printing. Nozzle range is above the 300C hotend limit of Bambu X1/P1/P2S; only its 350C lower bound is reachable on a 350C hotend - effectively not printable on Bambu printers. No Bambu Studio PEI preset; bambu_parent omitted.",
+    "_vitrification": "~185 (Tg, vendor page)"
   },
-  "conflicts": [],
-  "source_quality": "official_tds",
-  "sources": [
-    "https://cdn.shopify.com/s/files/1/0260/7421/files/PEI_9085_print_settings.pdf",
-    "https://cdn.shopify.com/s/files/1/0260/7421/files/ULTEM_Resin_9085_Americas_Technical_Data_Sheet.pdf",
-    "https://www.pushplastic.com/products/pei-9085-filament-1-75mm-500g"
+  "conflicts": [
+    "print_settings: 1.75mm 500g page snippet shows Tg and description but print settings appear only on the 2.85mm/shared-text pages; no numeric disagreement found (https://www.pushplastic.com/products/pei-9085-filament-1-75mm-500g)"
   ],
-  "updated": "2026-11-01"
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.pushplastic.com/products/pei-9085-filament-1-75mm-500g",
+    "https://www.pushplastic.com/products/pei-9085-filament-2-85mm-3kg",
+    "https://cdn.shopify.com/s/files/1/0260/7421/files/PEI_9085_print_settings.pdf",
+    "https://cdn.shopify.com/s/files/1/0260/7421/files/ULTEM_Resin_9085_Americas_Technical_Data_Sheet.pdf"
+  ],
+  "updated": "2026-11-02"
 }

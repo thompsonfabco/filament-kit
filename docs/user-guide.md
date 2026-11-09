@@ -161,7 +161,8 @@ first PC that syncs is the one. To move to another PC, remove the first one with
    type `y` to confirm it. Then it asks for the 6-digit code.) From then on the PC syncs every 10 minutes. While
    Bambu Studio is open it waits and tries again later (see [While Bambu Studio is open](#while-bambu-studio-is-open-v040)).
 
-The link and the code expire after about 10 minutes. If they do, run `sudo filament-kit pair --pc` again.
+The link and the code expire after about 10 minutes. If they do, run `sudo filament-kit pair --pc` again. Pairing again
+keeps the pairing that works until the new one is proven: a refused link changes nothing.
 
 ### Stable and Beta Bambu Studio (v0.4.0)
 
@@ -269,7 +270,7 @@ to update.
 (or type the server address and the 6-digit code), as on Windows.
 
 **Status.** `filament-kit-sync status` shows the server, the Bambu Studio and Orca Slicer folders it found, the last run
-and the installed build. `systemctl --user list-timers filament-kit-sync.timer` shows the next run. The log is
+(what stopped it, if it failed) and the installed build. `systemctl --user list-timers filament-kit-sync.timer` shows the next run. The log is
 `~/.local/share/filament-kit-sync/sync.log`. `filament-kit-sync run` runs one sync now.
 
 **While logged out.** The timer runs only while you are logged in. To run it while you are logged out too, run
@@ -329,6 +330,7 @@ Run these in a Terminal on the Ubuntu computer.
 | `sudo filament-kit config` | Settings menu: display name, storage locations, Claude model and daily limit, API key, printers, modules. |
 | `sudo filament-kit modules list` | Shows each module on or off and the mode. `modules set <mode>`, `modules enable <name>` and `modules disable <name>` change them (see [Change the mode later](#change-the-mode-later)); `modules apply` sets the computer up again from the saved settings. |
 | `sudo filament-kit printer map <serial>` | Maps a printer's AMS slots (see [Map slots](#map-slots)), printing each step. |
+| `sudo filament-kit printer report <serial>` | Makes a short file about a printer the kit doesn't know, or whose mapping failed, to attach to an issue. It holds no serial, address or name; read it first. |
 | `sudo filament-kit profiles status` / `build` | Shows or rebuilds the Bambu Studio and Orca Slicer presets (see [Presets](#presets-in-bambu-studio)). |
 | `sudo filament-kit profiles apply-updates --all` (or `--line <id>`; add `--dry-run` to only look) | Writes the updated presets you accept over the ones in the primary Bambu Studio folder (see [Stable and Beta Bambu Studio](#stable-and-beta-bambu-studio-v040)). |
 | `sudo filament-kit profiles lines` / `set-parent <line_id> <parent>` | Lists the filament lines; sets a line's Bambu Studio parent (`--orca`: its Orca Slicer parent). |
@@ -393,6 +395,10 @@ slots. **Map slots** in the app (or `sudo filament-kit printer map <serial>` on 
 - External holders (a spool holder outside the AMS, numbered as its own id) stay out of the calibration job and keep
   their own ids, and so do empty AMS slots. A printer with no AMS unit needs no job: its holders keep their own ids
   and it maps without one.
+- A printer can end up mapped with no named numbering scheme. Slots that are empty today show as "no number yet"
+  until a spool is loaded in them and the printer is mapped again.
+- On a printer whose numbers fit no known scheme, mapping may run one short job per scheme, so it takes longer than
+  a single job.
 - The printer must be **idle** (not printing, paused or preparing) and online, or mapping is refused.
 
 Until mapping succeeds, filament use is **only logged** (you can see it in the app's usage list) and nothing is
@@ -743,6 +749,23 @@ network. Elsewhere they say that they only work on the home network. Claude's se
 in `"web": {"lan": ["198.51.100.0/24"]}` (each entry a network; `modules apply` refuses a bad one). Five wrong passphrases
 lock the connector's sign-in for 10 minutes.
 
+### The home network ranges (web.lan)
+
+The ranges above are IPv4. A phone or computer that reaches the web address over IPv6 is refused with "This device
+reached the server over IPv6" until you add your home network's IPv6 prefix. (The setup page is IPv4 only.) To do it:
+
+1. On the server, find your prefix: `ip -6 addr show scope global`. A line such as
+   `inet6 2001:db8:1234:5678::abcd/64` has the prefix `2001:db8:1234:5678::/64`: the first four groups of the address,
+   then `::/64`. (`2001:db8` is the range reserved for examples; yours comes from your provider and can change.)
+2. Edit `/etc/filament-kit/config.json` (for example `sudo nano /etc/filament-kit/config.json`) and set the list. Your list
+   replaces the default, so keep the IPv4 ranges you want in it:
+
+   ```
+   "web": {"lan": ["192.168.0.0/16", "10.0.0.0/8", "2001:db8:1234:5678::/64"]}
+   ```
+
+3. Apply it: `sudo filament-kit modules apply`. It refuses an entry that is not a network.
+
 ## Remote access
 
 The `remote` module puts the web part on a public `https://` name, with a free certificate from Let's Encrypt.
@@ -881,6 +904,10 @@ filament-kit-sync apply-updates --folder BambuStudioBeta-1234567890 --all
 Use `--dry-run` first to see what would be written. New presets still arrive in that folder by themselves.
 
 By hand: download the newer `filament-kit-<version>.tar.gz`, unpack it and run `sudo ./install.sh` again.
+
+**Going back from v0.4.1 to v0.4.0.** `sudo filament-kit update --rollback` goes back to the release it replaced. The
+Spoolman allow-list (`/etc/systemd/system/spoolman.service.d/kit.conf`) stays in place after the rollback, and v0.4.0
+cannot change it: edit it by hand if a range needs adding, then restart Spoolman.
 
 **Going back from v0.4.0 to v0.3.0.** `sudo filament-kit update --rollback` goes back to the release it replaced.
 

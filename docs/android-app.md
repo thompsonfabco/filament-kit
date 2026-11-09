@@ -19,7 +19,8 @@ access**, red **Can't reach the server** or **The server's certificate changed**
    sudo filament-kit pair
    ```
 
-   It prints a QR code, the server's certificate fingerprint and a 6-digit code, good for about 10 minutes.
+   It prints a QR code, the server's certificate fingerprint and a 6-digit code, good for about 10 minutes. (The
+   server's setup page, `https://<computer name>.local:8710/setup`, can show a pairing code too.)
 2. Open the app. On Android 17 and newer, tap **Allow** when it asks for **local network access**. Without it the
    app can't find or reach your server. If you said no, the app shows **Allow** again, and **Open app settings**
    once Android stops asking.
@@ -27,21 +28,22 @@ access**, red **Can't reach the server** or **The server's certificate changed**
    opens with a green **Connected**. **Keep the white border around the QR code**: scan it from the whole
    Terminal window, and don't crop it or zoom in so far that the border is cut off.
 
-<img src="images/android-pair-start.png" width="240" alt="Pair with your server: Scan QR code or Enter address">
+<img src="images/android-pair-start.png" width="240" alt="Pair with your server: Scan QR code, servers found on this network, Enter address">
 
 **No camera, or the code won't scan?** On **Pair with your server**:
 
-1. Under **Servers found on this network**, tap your server. If it isn't listed, tap **Enter address** and type the
-   computer's name with `.local` (for example `my-server.local`) or its IP address; leave **Port** at 8710, and
-   tap **Connect**.
-2. **Check the server's fingerprint** appears. Compare it with the fingerprint in the Terminal. If they match,
-   tap **It matches**. If not, tap **It does not match** and stop.
+1. Under **Servers found on this network**, tap your server: it goes straight to the fingerprint check. If it isn't
+   listed, tap **Enter address** and type the computer's name with `.local` (for example `my-server.local`) or its IP
+   address; leave **Port** at 8710, and tap **Connect**.
+2. **Check the server's fingerprint** appears with two groups of the fingerprint left blank. Find the fingerprint
+   shown with the pairing code on the server (in the Terminal, or on the setup page) and type the two missing
+   groups. If they match, tap **Continue**. If they differ, tap **It does not match** and stop.
 3. Type the **6-digit code** from the Terminal.
 
 **If it fails:** the code works once and expires; run `sudo filament-kit pair` again for a new one. Other
 problems are in [Install the Android app](install-android-app.md#common-problems).
 
-<img src="images/android-pair-fingerprint.png" width="240" alt="Check the server's fingerprint: It matches or It does not match">
+<img src="images/android-pair-fingerprint.png" width="240" alt="Check the server's fingerprint: type the two blank groups, then Continue, or It does not match">
 
 **Unpair or pair again.** On the phone: **Settings** shows the server's name, address and certificate fingerprint.
 **Forget server** (it asks to confirm; the spools stay on the server) unpairs this phone, and then you pair again

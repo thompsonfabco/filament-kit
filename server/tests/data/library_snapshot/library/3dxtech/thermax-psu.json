@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "ThermaX PSU",
+  "material": "PSU",
+  "colors": [],
+  "bambu_parent": "Generic PC",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "350"
+    ],
+    "nozzle_temperature_range_high": [
+      "380"
+    ],
+    "filament_density": [
+      "1.24"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "140-160",
+    "_drying": "150C 8h",
+    "_vitrification": "187 (Tg, Material Data Center)",
+    "_hdt_0.45MPa": "172",
+    "_enclosure": "Heated chamber recommended",
+    "_min_nozzle": "0.4",
+    "_notes": "Nozzle/bed from official page. Density/Tg/HDT from Material Data Center (CAMPUS-style third-party listing of 3DXTech data); official TDS v3 not read. Beyond X1/P1/P2S."
+  },
+  "conflicts": [
+    "Tg 190 (Rev1tech (cites TDS v1))",
+    "drying 120C 4h (official product page)"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.3dxtech.com/products/thermax-psu-1",
+    "https://www.3dxtech.com/pages/filament-drying-instructions"
+  ],
+  "updated": "2026-11-02"
+}

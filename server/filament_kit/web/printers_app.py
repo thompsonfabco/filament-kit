@@ -115,6 +115,7 @@ class PrintersApp:
             ("/{id}/usage/{entry}/undo", g(self.undo), ["POST"]),
             ("/{id}/map", g(self.map_start), ["POST"]),
             ("/{id}/map", g(self.map_get), ["GET"]),
+            ("/{id}/report", g(self.map_report), ["POST"]),
             ("/{id}/slots/{label}/load", g(self.slot_load), ["POST"]),
             ("/{id}/slots/{label}/unload", g(self.slot_unload), ["POST"]),
             ("/tagged", g(self.tagged), ["GET"]),
@@ -244,6 +245,9 @@ class PrintersApp:
         t = await anyio.to_thread.run_sync(self.intake.tools.tag_state)
         sp = t.get("spool")
         return {"nfc_id": t.get("nfc_id"), "spool": {k: sp.get(k) for k in TAGGED_FIELDS} if sp else None}
+
+    async def map_report(self, request: Request):
+        return await self._kit_call(self.kit.post, f"/api/printers/{self._serial(request)}/report", {})
 
     async def map_start(self, request: Request):
         return await self._kit_call(self.kit.post, f"/api/printers/{self._serial(request)}/map", {})

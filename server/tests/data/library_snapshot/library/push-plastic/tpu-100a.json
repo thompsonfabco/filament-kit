@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "vendor": "Push Plastic",
+  "product": "TPU 100A",
+  "material": "TPU",
+  "colors": [],
+  "bambu_parent": "Bambu TPU 95A HF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-80",
+    "_hardness": "100 Shore A",
+    "_min_nozzle": "0.6mm nozzle with 0.2-0.3mm layer height recommended by vendor",
+    "_notes": "Vendor: 'Extruder: 230-250°C (Hotter to get better layer adhesion)'; 'Slow print speed down if you are having trouble with filament feeding'. Semi-flex 100A is harder than Bambu TPU 95A HF; parent is closest available, not confirmed. Vendor says it suits bowden extruders; AMS use not stated by vendor. 2.85mm version exists (sold by authorised resellers). Density not published for 100A (the 98A data sheet's 1.22 is a different grade and is not used). Colours not captured."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.pushplastic.com/products/tpu-100a-filament-1-75mm-1kg",
+    "https://shop.thevirtualfoundry.com/products/tpu-100a-filament-2-85mm-1kg"
+  ],
+  "updated": "2026-11-02"
+}

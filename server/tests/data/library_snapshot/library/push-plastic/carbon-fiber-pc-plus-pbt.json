@@ -6,7 +6,7 @@
   "colors": [
     "Black"
   ],
-  "bambu_parent": "Generic PC",
+  "bambu_parent": "Bambu PC",
   "fields": {
     "nozzle_temperature_range_low": [
       "250"
@@ -22,19 +22,23 @@
     ]
   },
   "published_ranges": {
-    "bed_all_plates": "100-120",
+    "bed_all_plates": "90-100",
     "_drying": "60C 4h",
     "_enclosure": "Heated enclosure recommended",
     "_print_speed": "40mm/s (preferred: 0.6mm nozzle, 0.4mm layer, 255C extruder, 90C bed)",
-    "_hardened_nozzle_required": "yes - carbon fiber is abrasive, use a hardened steel nozzle",
-    "_notes": "Density is the TDS 'Specific Gravity, ASTM D792' value 1.18 (the TDS header wrongly reads 'Polyethylene Terephthalate Glycol Comonomer'). TDS gives no HDT and no fiber loading. Preferred parameters list a 90C bed, below the sheet's own 100-120 bed range. Colour assumed black."
+    "_hardened_nozzle_required": "yes",
+    "_notes": "Vendor: 'Extruder: 250-260°C. (Better layer bonding at higher temperatures)'. 2.85mm 500g SKU listed by authorised reseller HartSmart (SKU CF/2.85mm/PC+PBT/500g). PC+PBT blend has no exact Bambu preset; Bambu PC is closest (not confirmed). Colour 'Black' inferred from CF line; not stated explicitly for this SKU. Earlier entry: Density is the TDS 'Specific Gravity, ASTM D792' value 1.18 (the TDS header wrongly reads 'Polyethylene Terephthalate Glycol Comonomer'). TDS gives no HDT and no fiber loading. Preferred parameters list a 90C bed, below the sheet's own 100-120 bed range. Colour assumed black.",
+    "_fiber_content": "~10% proprietary carbon fiber",
+    "_min_nozzle": "0.4mm or larger (0.6mm recommended)"
   },
   "conflicts": [],
-  "source_quality": "official_tds",
+  "source_quality": "official_page",
   "sources": [
+    "https://www.pushplastic.com/products/carbon-fiber-pc-pbt-filament-1-75mm-500g",
+    "https://www.pushplastic.com/products/carbon-fiber-nylon-filament-1-75mm-2kg",
+    "https://hartsmartproducts.com/products/push-plastic-carbon-fiber",
     "https://cdn.shopify.com/s/files/1/0260/7421/files/CFPCPBT_print_settings.pdf",
-    "https://cdn.shopify.com/s/files/1/0260/7421/files/CF_PC_PBT_TDS.pdf",
-    "https://www.pushplastic.com/products/carbon-fiber-pc-pbt-filament-1-75mm-500g"
+    "https://cdn.shopify.com/s/files/1/0260/7421/files/CF_PC_PBT_TDS.pdf"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

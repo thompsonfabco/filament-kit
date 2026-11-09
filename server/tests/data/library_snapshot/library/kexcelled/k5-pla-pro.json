@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "vendor": "Kexcelled",
+  "product": "K5 PLA Pro",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "200"
+    ],
+    "nozzle_temperature_range_high": [
+      "240"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "35-55",
+    "fan_min_speed/fan_max_speed": "50-100",
+    "_max_print_speed": "200 mm/s",
+    "_density": "1.24-1.26 (ISO 1183)",
+    "_vicat": "71 (ISO 306)",
+    "_notes": "Official product page: bed surface PEI frosted board; also sold in 2.85 mm and 1/3/5 kg. Density is printed as a range, so it is not put in fields. Drying and diameter tolerance are not published on the pages reached. Bambu parent not confirmed."
+  },
+  "conflicts": [
+    "_hdt: 51 (data table, older kexcelled3d.com page) vs '100C High Heat Deflection' (marketing feature list, current page) (kexcelled3d.com)"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://kexcelled3d.com/products/the-k5-pla-pro",
+    "https://www.kexcelled3d.com/the-k5-pla-pro"
+  ],
+  "updated": "2026-11-02"
+}

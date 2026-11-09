@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "PETG-ESD",
+  "material": "PETG",
+  "colors": [],
+  "bambu_parent": "Bambu PETG Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_density": [
+      "1.22"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70",
+    "fan_min_speed/fan_max_speed": "40-90%",
+    "_print_speed": "<250mm/s",
+    "_hdt_0.45MPa": "68",
+    "_notes": "The current product page (seen as a search snippet only) and the TDS (JUL.2024 V1.0, density 1.22, HDT 68) agree. An older cached version of the same URL shows 250-280C, bed 70-90, density 0.97 and HDT 96. Those figures look like ABS-ESD data and were rejected. Drying is not published in the current sources. eSUN says the standard PETG profile can be used."
+  },
+  "conflicts": [
+    "nozzle/bed/density/HDT: 250-280 / 70-90 / 0.97 / 96, drying 70C >8h (https://www.esun3d.com/petg-esd-product (older page version; likely ABS-ESD data))"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.esun3d.com/petg-esd-product",
+    "https://www.esun3d.com/uploads/PETG-ESD-TDS-EN.pdf"
+  ],
+  "updated": "2026-11-02"
+}

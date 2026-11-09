@@ -6,6 +6,7 @@
   "colors": [
     "Black"
   ],
+  "bambu_parent": "Generic PC",
   "fields": {
     "nozzle_temperature_range_low": [
       "355"
@@ -14,19 +15,31 @@
       "385"
     ],
     "filament_diameter": [
-      "2.85"
+      "1.75"
+    ],
+    "filament_density": [
+      "1.34"
     ]
   },
   "published_ranges": {
     "bed_all_plates": "120-140",
     "chamber_temperatures": "70-140",
     "_drying": "120C 4h",
-    "_notes": "Values from MatterHackers listing (only 2.85mm listed there); official page unreachable (HTTP 429). ESD: surface resistance 10^7-10^9 ohm. Beyond Bambu Lab printer nozzle limits."
+    "_notes": "Official page '3DXSTAT ESD-PEKK-A' (Arkema Kepstan PEKK-A; Tg 162C, HDT 150C, Tm 305C; 500g black; heated chamber 70-140C if possible). Density 1.34 from 3DXTech Knowde listing (ISO 1183). Nozzle/bed values not captured. Beyond X1/P1/P2S (PEKK needs >300C nozzle and heated chamber). Earlier entry: Values from MatterHackers listing (only 2.85mm listed there); official page unreachable (HTTP 429). ESD: surface resistance 10^7-10^9 ohm. Beyond Bambu Lab printer nozzle limits.",
+    "_vitrification": "162 (Tg)",
+    "_hdt_0.45MPa": "150",
+    "_min_nozzle": "0.4"
   },
-  "conflicts": [],
-  "source_quality": "reseller_tds_copy",
+  "conflicts": [
+    "Tg 165, HDT 185 (3DXTech Knowde listing (Knowde Enhanced TDS))",
+    "drying 120C 6-8h (PEKK-A) (official filament-drying-instructions table)",
+    "filament_diameter: earlier library entry had 2.85 (sources: https://www.matterhackers.com/store/l/3dxtech-3dxstat-black-esd-safe-pekk-filament-05kg/sk/MRMLRWAN)"
+  ],
+  "source_quality": "official_page",
   "sources": [
+    "https://www.3dxtech.com/products/3dxstat-esd-pekk-a-1",
+    "https://www.knowde.com/stores/3dxtech/products/3dxstat-esd-pekk",
     "https://www.matterhackers.com/store/l/3dxtech-3dxstat-black-esd-safe-pekk-filament-05kg/sk/MRMLRWAN"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

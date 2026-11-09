@@ -195,7 +195,7 @@ def test_ensure_fields_unreachable(capsys):
 def test_cert_uses_hostname_not_display_name(monkeypatch):
     from cryptography import x509
     cfg = config.load()
-    cfg["server_name"] = "Pat's Küche"
+    cfg["server_name"] = "Kit's Küche"
     config.save(cfg)
     monkeypatch.setattr(cli.socket, "gethostname", lambda: "fkbox")
     monkeypatch.setattr(pairing, "_candidate_ips", lambda: ["169.254.7.7", "192.168.1.20", "127.0.0.1"])

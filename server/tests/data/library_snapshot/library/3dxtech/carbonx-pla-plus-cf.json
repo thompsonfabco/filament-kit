@@ -16,21 +16,30 @@
     ],
     "filament_diameter": [
       "1.75"
+    ],
+    "filament_density": [
+      "1.29"
     ]
   },
   "published_ranges": {
     "bed_all_plates": "23-60",
     "_drying": "65C 4h",
     "_diameter_tolerance": "+/-0.05",
-    "_hardened_nozzle_required": "yes (hardened steel recommended)",
+    "_hardened_nozzle_required": "Yes (3DXTech: carbon fiber 'strongly recommended' through hardened steel)",
     "_min_nozzle": "0.4",
-    "_enclosure": "Heated chamber not required",
-    "_notes": "Values from MatterHackers (authorized reseller) listing reproducing 3DXTech print recommendations; official page (made with 100% recycled carbon fiber) unreachable, HTTP 429. Do not print layers below 0.2mm. Density/Tg/HDT not found."
+    "_enclosure": "Not required ('no enclosure required')",
+    "_notes": "Density/Tg/HDT from CarbonX CF-PLA TDS Rev 3.0 (official CDN). Bed range not captured from product page this run (page says ideal for printing without heated bed). bambu_parent not confirmed against a 3DXTech profile. Earlier entry: Values from MatterHackers (authorized reseller) listing reproducing 3DXTech print recommendations; official page (made with 100% recycled carbon fiber) unreachable, HTTP 429. Do not print layers below 0.2mm. Density/Tg/HDT not found.",
+    "_vitrification": "60 (Tg, DSC)",
+    "_hdt_0.45MPa": "91",
+    "_ams": "Official page: 'Bambu AMS compatible' (750g reel)"
   },
   "conflicts": [],
-  "source_quality": "reseller_tds_copy",
+  "source_quality": "official_tds",
   "sources": [
+    "https://www.3dxtech.com/products/carbonx-pla-cf-1",
+    "https://cdn.shopify.com/s/files/1/0625/4185/6821/files/CarbonX_CF_PLA_TDS_v3.pdf?v=1723942765",
+    "https://www.3dxtech.com/pages/filament-drying-instructions",
     "https://www.matterhackers.com/store/l/3dxtech-carbonx-placf-filament/sk/M0K1XY1W"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

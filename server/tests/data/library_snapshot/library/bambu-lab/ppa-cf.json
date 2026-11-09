@@ -3,7 +3,9 @@
   "vendor": "Bambu Lab",
   "product": "PPA-CF",
   "material": "PPA-CF",
-  "colors": [],
+  "colors": [
+    "Black"
+  ],
   "bambu_parent": "Bambu PPA-CF",
   "fields": {
     "nozzle_temperature_range_low": [
@@ -20,27 +22,30 @@
     ]
   },
   "published_ranges": {
-    "bed_all_plates": "100-120 (glue stick)",
+    "bed_all_plates": "100-120",
     "chamber_temperatures": "50-80",
     "filament_retraction_length": "0.8-1.4",
     "filament_retraction_speed": "20-40",
     "_print_speed": "<100 mm/s",
-    "_drying": "oven 100-140C 8-12h (higher is better); X1 heatbed 110-120C 12h",
-    "_min_nozzle": "TDS lists nozzle sizes 0.4, 0.6 (recommended), 0.8 mm",
+    "_drying": "100-140C 8-12h",
+    "_min_nozzle": "0.4 (0.4, 0.6 recommended, 0.8; 0.2 not compatible)",
     "_diameter_tolerance": "+/-0.05",
-    "_vitrification": "85 (Tg, DSC 10C/min)",
-    "_vicat": "232 (ISO 306)",
+    "_vitrification": "85 (Tg, DSC)",
+    "_vicat": "232",
     "_hdt_0.45MPa": "227",
     "_hdt_1.8MPa": "196",
-    "_annealing": "120-140C 6-12h",
-    "_enclosure": "Chamber 50-80C",
-    "_ams": "Cardboard spool (145C resistance), 0.75 kg",
-    "_notes": "TDS V1.0 (reseller-hosted copy at additive-x.com). Plates: Smooth or Textured PEI. Cooling fan: turn on. Support material: Support for PA/PET. Specimens printed on X1C, chamber 52C, nozzle 290C, 80 mm/s. Saturated water absorption 1.30%."
+    "_annealing": "120-140C, 6-12 h",
+    "_enclosure": "Chamber 50-80C per TDS",
+    "_ams": "All AMS Series NOT compatible",
+    "_notes": "Cooling fan is printed only as 'Turn on'; no fan % range is published. Other drying option: X1 heatbed at 110-120C for 12 h. Cardboard spool (rated 145C), 0.75 kg. Plates: Smooth or Textured PEI, with glue stick. Support: Support for PA/PET. Test specimens were printed on an X1C with chamber at 52C. The bambu_parent preset name was not confirmed in Bambu Studio. Earlier entry: TDS V1.0 (reseller-hosted copy at additive-x.com). Plates: Smooth or Textured PEI. Cooling fan: turn on. Support material: Support for PA/PET. Specimens printed on X1C, chamber 52C, nozzle 290C, 80 mm/s. Saturated water absorption 1.30%.",
+    "_hardened_nozzle_required": "yes (Hardened Steel Nozzle Mandatory)"
   },
   "conflicts": [],
-  "source_quality": "reseller_tds_copy",
+  "source_quality": "official_tds",
   "sources": [
+    "https://store.bblcdn.eu/s8/default/f592e57fe69c40289897513bdd2b61bc/Bambus_PPA-CF_Technical_Data_Sheet_2ab26420-79f5-4692-888e-090006814050.pdf",
+    "https://us.store.bambulab.com/products/ppa-cf",
     "https://www.additive-x.com/shop/mpattachments/file/viewonline/id/916/product_id/2729"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

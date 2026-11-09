@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "3DXMAX HIPS",
+  "material": "HIPS",
+  "colors": [],
+  "bambu_parent": "Generic HIPS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "235"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_is_support": [
+      "1"
+    ],
+    "filament_soluble": [
+      "1"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100-110",
+    "_drying": "Not needed",
+    "_enclosure": "Heated chamber not required",
+    "_notes": "Official product page. Break-away or d-limonene-dissolvable support for ABS/ASA (filament_soluble=1 refers to limonene, not water). Density/Tg/HDT not retrieved."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.3dxtech.com/products/3dxmax-hips",
+    "https://www.3dxtech.com/pages/filament-drying-instructions"
+  ],
+  "updated": "2026-11-02"
+}

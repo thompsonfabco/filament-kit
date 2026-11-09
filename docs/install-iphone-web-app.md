@@ -164,7 +164,12 @@ re-mapping slots and optional notifications.
   only ask for the address at a terminal. Run it in a Terminal, or use `sudo filament-kit config` → **6) Modules**
   as above.
 - **The certificate warning comes back** (way A): each time the server's certificate changes (after
-  reinstalling), Safari asks again. Accept it again.
+  reinstalling), Safari asks again. Accept it again. The placeholder certificate lasts 825 days. Running
+  `sudo filament-kit modules apply` makes a new one within 30 days of its end (`sudo filament-kit web status` warns
+  before that), and Safari asks you to accept it again.
+- **The page says "This device reached the server over IPv6"**: the web address answers only the ranges in `web.lan`,
+  and none of them is an IPv6 range by default. Add your home network's IPv6 prefix:
+  [The home network ranges](user-guide.md#the-home-network-ranges-weblan). The setup page is IPv4 only.
 - **Printer camera doesn't play**: the camera needs the `printers` module and a printer added in the app or in
   `sudo filament-kit config` → **5) Printers**.
 

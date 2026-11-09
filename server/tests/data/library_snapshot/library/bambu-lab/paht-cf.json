@@ -2,8 +2,10 @@
   "schema_version": 1,
   "vendor": "Bambu Lab",
   "product": "PAHT-CF",
-  "material": "PAHT-CF",
-  "colors": [],
+  "material": "PA-CF",
+  "colors": [
+    "Black"
+  ],
   "bambu_parent": "Bambu PAHT-CF",
   "fields": {
     "nozzle_temperature_range_low": [
@@ -20,26 +22,32 @@
     ]
   },
   "published_ranges": {
-    "bed_all_plates": "80-100 (PVP glue)",
+    "bed_all_plates": "80-100",
     "chamber_temperatures": "45-60",
     "fan_min_speed/fan_max_speed": "0-40%",
     "filament_retraction_length": "0.8-1.4",
     "filament_retraction_speed": "20-40",
-    "_print_speed": "100 mm/s",
+    "_print_speed": "<100 mm/s",
     "_drying": "80C 8-12h",
-    "_min_nozzle": "TDS lists nozzle sizes 0.4, 0.6 (recommended), 0.8 mm",
+    "_min_nozzle": "0.4 (0.6 recommended; 0.2 not compatible)",
     "_vitrification": "70 (Tg, DSC 10C/min)",
-    "_vicat": "220 (ISO 306)",
+    "_vicat": "220",
     "_hdt_0.45MPa": "194",
     "_hdt_1.8MPa": "170",
     "_annealing": "80-130C 5-12h",
-    "_enclosure": "Chamber 45-60C recommended",
-    "_notes": "TDS V2.0. Support material: Bambu Support for PA/PET. Plates: Engineering, High Temperature or Textured PEI. Max overhang ~70 deg, bridging ~40 mm. A V3.0 TDS exists (uwaterloo.ca copy) but was not read. PDF hosted on cdn.shopify.com."
+    "_enclosure": "Enclosure printer required",
+    "_notes": "The V3.0 TDS check was not completed: the wiki.bambulab.com V3.0 PDF returned a client error. Nozzle, bed, drying, speed, density, Vicat and HDT are from reseller summaries of the TDS (crea3d, 3DJake). HDT 0.45 MPa = 194C is also stated on Bambu's own store page. A reseller copy of Bambu's PAHT-CF TDS V2.0 (machines-3d.com) gives 'Heat Deflection Temperature ISO 75 1.8 MPa 170 °C', 'Cooling Fan 0 - 40%' and 'Chamber Temperature 45 - 60 °C'. This is V2.0; V3.0 is still unchecked. Bambu's store says 'PAHT-CF is an upgraded version of PA-CF (PA-CF was discontinued)'. Earlier entry: TDS V2.0. Support material: Bambu Support for PA/PET. Plates: Engineering, High Temperature or Textured PEI. Max overhang ~70 deg, bridging ~40 mm. A V3.0 TDS exists (uwaterloo.ca copy) but was not read. PDF hosted on cdn.shopify.com.",
+    "_diameter_tolerance": "+/-0.03",
+    "_hardened_nozzle_required": "Stainless steel nozzle NOT recommended (official store page)",
+    "_ams": "AMS 2 Pro, AMS HT and AMS compatible; AMS lite NOT compatible"
   },
   "conflicts": [],
-  "source_quality": "official_tds",
+  "source_quality": "official_page",
   "sources": [
+    "https://us.store.bambulab.com/products/paht-cf",
+    "https://www.crea3d.com/en/filaments/1302-bambu-paht-cf.html",
+    "https://www.3djake.com/bambu-lab/paht-cf-black",
     "https://cdn.shopify.com/s/files/1/0380/5149/files/Bambu_PAHT-CF_Technical_Data_Sheet.pdf"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

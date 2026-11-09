@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "CarbonX PC+CF",
+  "material": "PC-CF",
+  "colors": [],
+  "bambu_parent": "Bambu PC",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "280"
+    ],
+    "nozzle_temperature_range_high": [
+      "310"
+    ],
+    "filament_density": [
+      "1.36"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "110-120",
+    "_drying": "120C 4h",
+    "_vitrification": "143 (Tg, DSC)",
+    "_hdt_0.45MPa": "135",
+    "_hardened_nozzle_required": "Yes (hardened steel, 0.4mm minimum)",
+    "_min_nozzle": "0.4",
+    "_enclosure": "Heated chamber recommended",
+    "_notes": "Official page + CarbonX CF-PC TDS Rev 3.0 (JustCreate-hosted copy). Upper nozzle bound 310C exceeds 300C limit of X1/P1/P2S. A customer review reports success with Bambu 'Generic PC' at 300C/100C bed (anecdotal)."
+  },
+  "conflicts": [
+    "Tg 127, HDT 119 (3DXTech blog 'Role of Reinforcement Geometry')"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.3dxtech.com/products/carbonx-pc-cf-1",
+    "https://fra1.digitaloceanspaces.com/justcreate/media/file_upload/PC_CF-TDS-v03_668a3cea.pdf",
+    "https://www.3dxtech.com/blogs/featured/the-role-of-reinforcement-geometry-in-boosting-3d-printed-part-performance"
+  ],
+  "updated": "2026-11-02"
+}

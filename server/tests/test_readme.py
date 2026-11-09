@@ -52,13 +52,23 @@ _OWNER_SALT = b"filament-kit owner-data v1:"
 OWNER_FINGERPRINTS = frozenset({
     "d760cbea97a1228524ab", "92ce0773c1c5a2e0ca4a", "95fb2cac257df2546230", "87bf20b4038304003845",
     "17b7f0c3556139cbbfd1", "107b22d060e0f4dce62d", "dbf1988c2971e2f59646", "4cff4dd88d4eba517032",
-    "c9f6ef41de056225a7cf", "e44aa6a688481d0bf3fb"})
+    "c9f6ef41de056225a7cf", "e44aa6a688481d0bf3fb", "c65d6e88416e61346130", "e61de7055a6e495661f4"})
 _OWNER_TOKEN = re.compile(r"\d{1,3}(?:\.\d{1,3}){3}|[A-Za-z0-9][A-Za-z0-9-]*")
+# Some names are ordinary words alone, so only their host or user form is banned: a second pass, on top of the parts above.
+_OWNER_FORM = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]*(?:\.local\b|@)", re.I)
+TREE_WIDE_FINGERPRINTS = frozenset({"c65d6e88416e61346130", "e61de7055a6e495661f4"})
+
+
+def _owner_tokens(text: str) -> set[str]:
+    return set(_OWNER_TOKEN.findall(text)) | {m.lower() for m in _OWNER_FORM.findall(text)}
+
+
+def _fingerprint(token: str) -> str:
+    return hashlib.sha256(_OWNER_SALT + token.encode()).hexdigest()[:20]
 
 
 def _owner_hits(text: str) -> list[str]:
-    return sorted({t for t in _OWNER_TOKEN.findall(text)
-                   if hashlib.sha256(_OWNER_SALT + t.encode()).hexdigest()[:20] in OWNER_FINGERPRINTS})
+    return sorted(t for t in _owner_tokens(text) if _fingerprint(t) in OWNER_FINGERPRINTS)
 
 
 # Every Markdown file under docs/ and release-notes/ is public (the owner's runbooks live outside the repository).
@@ -100,6 +110,46 @@ def _public_code_files() -> list[str]:
     return [f for f in out.split("\0") if f and f not in CODE_SCAN_SKIP]
 
 
+def test_the_owners_host_name_is_nowhere_in_the_tree():
+    """Every tracked text file, the app and the workflows too, not only what the other scans cover."""
+    import subprocess
+    try:
+        names = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-z"], capture_output=True, check=True,
+                               ).stdout.decode("utf-8").split("\0")
+    except (subprocess.CalledProcessError, OSError):       # a copy with no .git: never a skip, this is the leak guard
+        names = [f.relative_to(ROOT).as_posix() for f in ROOT.rglob("*") if f.is_file()]
+    found = []
+    for rel in filter(None, names):
+        try:
+            text = (ROOT / rel).read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        if TREE_WIDE_FINGERPRINTS & {_fingerprint(t) for t in _owner_tokens(text)}:
+            found.append(rel)
+    assert not found, found
+
+
+def test_a_host_or_user_form_is_read_whole_and_its_parts_too():
+    assert _owner_tokens("open Kit.local:8710 or me@host now") == {"open", "Kit", "local", "kit.local", "8710", "or", "me",
+                                                                   "me@", "host", "now"}
+    assert not _owner_hits("kit.local")
+
+
+@pytest.mark.parametrize("text", ["secrethost9", "http://secrethost9:7912", "secrethost9.local", "http://secrethost9.local:7912",
+                                  "secrethost9.localdomain", "user@secrethost9.local"])
+def test_a_banned_bare_name_is_caught_in_every_form(monkeypatch, text):
+    monkeypatch.setitem(globals(), "OWNER_FINGERPRINTS", frozenset({_fingerprint("secrethost9")}))
+    assert _owner_hits(text) == ["secrethost9"]
+
+
+@pytest.mark.parametrize("text,token", [("secrethost9.local", "secrethost9.local"), ("SecretHost9.LOCAL:1", "secrethost9.local"),
+                                        ("ssh secrethost9@server", "secrethost9@"), ("SecretHost9@example.org", "secrethost9@")])
+def test_a_banned_form_is_caught_in_any_case_and_the_bare_word_is_not(monkeypatch, text, token):
+    monkeypatch.setitem(globals(), "OWNER_FINGERPRINTS", frozenset({_fingerprint(token)}))
+    assert _owner_hits(text) == [token]
+    assert not _owner_hits("the secrethost9 variable")
+
+
 def test_public_code_and_tests_have_no_owner_specific_data():
     files = _public_code_files()
     assert "get.sh" in files and any(f.startswith("server/tests/") for f in files)
@@ -131,3 +181,41 @@ def test_readme_sections_a_user_needs():
         assert h in text, h
     for path in re.findall(r"\]\(((?:docs|reader)/[^)#]+)", text):
         assert (ROOT / path).exists(), path      # a file, or a folder
+
+
+# What someone bought, and when: the same patterns as filament-library's tools/scan_owner_data.py. A bare listing id is a
+# real source; an id or a date next to purchase wording, or wording that attributes something to a person, is not.
+_ATTRIBUTION = re.compile(r"\b(?!(?:the\s+)?user(?:['\u2019]s)?\s+(?:manual|guide)\b)(?:the\s+user|user['\u2019]s)\b"
+                          r"|\buser\s+(?:asin|spool|note|record|order|upc)s?\b|\bthe\s+caller\b", re.I)
+_PURCHASE = re.compile(r"\b(?:ordered|purchased|bought|order\s*(?:date|number|no\b|#)|(?:my|our)\s+(?:order|spool)|owner'?s?)\b", re.I)
+_IDENTIFIER = re.compile(r"\bB0[A-Z0-9]{8}\b|\b(?:UPC|EAN|GTIN)\D{0,5}\d{8,14}\b|\b20\d\d-\d\d-\d\d\b|\b\d{1,2}/\d{1,2}/20\d\d\b|"
+                         r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2},?\s+20\d\d\b", re.I)
+
+
+def _purchase_record(line: str) -> str | None:
+    if m := _ATTRIBUTION.search(line):
+        return m[0]
+    for m in _IDENTIFIER.finditer(line):
+        if word := _PURCHASE.search(line[max(0, m.start() - 80):m.end() + 80]):
+            return f"{m[0]} next to {word[0]}"
+    return None
+
+
+@pytest.mark.parametrize("line", ["The user's ASIN B0AAAAAAAA now redirects", "Amazon B0AAAAAAAA (user ASIN, search snippet)",
+                                  "User's single-spool UPC 012345678905 was not found",
+                                  "The yellow listing the caller gave", "the user gave this listing","ordered 2026-01-02 from the listing",
+                                  "order date: Mar 3, 2026", "B0AAAAAAAA bought in a pack", "UPC 012345678905, purchased 1/2/2026"])
+def test_a_purchase_record_is_caught(line):
+    assert _purchase_record(line)
+
+
+@pytest.mark.parametrize("line", ["Listing B0AAAAAAAA states 220 C", "UPC 012345678905 on the listing", "updated 2026-01-02",
+                                  "see the user manual", "the user's guide says 220 C", "a forum user reports 220 C"])
+def test_a_listing_id_or_a_manual_is_a_source(line):
+    assert _purchase_record(line) is None
+
+
+def test_the_library_snapshot_holds_no_purchase_record():
+    found = {f"{p.relative_to(ROOT).as_posix()}: {why}" for p in sorted((ROOT / "server/tests/data/library_snapshot").rglob("*.json"))
+             for line in p.read_text(encoding="utf-8").splitlines() if (why := _purchase_record(line))}
+    assert not found, found
