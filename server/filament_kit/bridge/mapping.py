@@ -148,6 +148,19 @@ def superseded(st: dict, m) -> bool:
     return since is not None and (ended is None or since > float(ended))
 
 
+def owner_step(m, labels: list[str] | None) -> str:
+    """The next step for a map the owner made by loading filament and the printer has not proven: what is left.
+    `labels`: the printer's positions now (None when it has not reported them)."""
+    if labels is None:
+        return "Map by loading filament for any position not confirmed yet, or map the slots again."
+    left = [lab for lab in labels if lab not in (m.by_user or {})]
+    if left:
+        n = len(left)
+        return (f"{n} position{'' if n == 1 else 's'} not yet confirmed ({', '.join(left)}): map by loading "
+                "filament, or map the slots again.")
+    return "Every position is confirmed by you; map the slots once so filament use comes off the spools."
+
+
 def next_step(outcome: str, reason: str, scheme_unsettled: bool = False) -> str:
     """The one next step to show, or ""."""
     if reason in NEXT_STEP:
@@ -778,6 +791,9 @@ class Mapper:
         return {"name": path.name, "xml": data.decode("utf-8"), "path": str(path)}
 
     # ---------------------------------------------------------------- progress
+    def _position_labels(self, serial: str) -> list[str] | None:
+        return _labels_now(self._m, serial)
+
     def view(self, serial: str) -> dict:
         """`{outcome, reason, outcome_text, next_step, state, step, slots: [{label, ams_id, tray_id, global}], calibrated,
         observe, problems, notes,
@@ -830,8 +846,11 @@ class Mapper:
                          [] if over else st["problems"])
         # a stale or suspect map: mapping again is the step, whatever stopped an earlier job
         reason = "none" if over or out in ("confirmed", "running", "stale", "suspect") else st.get("reason", "none")
+        step = next_step(out, reason, st.get("scheme_unsettled", False))
+        if m.by_user and out == "not_confirmed" and reason == "none":     # the owner's map: say what is left
+            step = owner_step(m, self._position_labels(serial))
         return {"outcome": out, "reason": reason, "outcome_text": OUTCOME_TEXT[out],
-                "next_step": next_step(out, reason, st.get("scheme_unsettled", False)),
+                "next_step": step,
                 "state": st["state"], "step": st["step"], "slots": slots, "calibrated": m.calibrated,
                 "observe": m.observe, "problems": st["problems"], "notes": st.get("notes", []),
                 "scheme_unsettled": st.get("scheme_unsettled", False),
@@ -842,6 +861,18 @@ class Mapper:
 
 
 # ---------------------------------------------------------------- layout fingerprint: stale map, auto re-map
+
+def _labels_now(manager, serial: str) -> list[str] | None:
+    """The printer's positions in its current report, in layout order (None when there is none to read)."""
+    try:
+        r = manager.wait_report(serial, lambda r: True, 0)
+    except Exception:  # noqa: BLE001 - a fake or a dropped printer: not known
+        return None
+    if not isinstance(r, dict) or not isinstance(status._d(r.get('ams')).get('ams'), list):
+        return None
+    lay = layout.build(r, ams.printer_model(serial))
+    return [sl.label for u in lay.units for sl in u.slots]
+
 
 def _fingerprint_now(manager, serial: str) -> list | None:
     """The layout fingerprint of the printer's current report (None when there is none to read)."""
