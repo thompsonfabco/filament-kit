@@ -54,7 +54,7 @@ MODULES: dict[str, Module] = {m.name: m for m in (
     _m("backup", "Backup", "Nightly backup of Spoolman db, settings and state",
        units=("filament-kit-backup.timer",)),
     _m("station", "Station", "USB scale and PN532 reader, read-only HTTP",
-       units=("filament-kit-station.service",), apt=("alsa-utils", "libnss-mdns"), apt_lean=("espeak-ng", "ffmpeg")),
+       units=("filament-kit-station.service", "filament-kit-station-pair.path"), apt=("alsa-utils", "libnss-mdns"), apt_lean=("espeak-ng", "ffmpeg")),
     _m("web", "Web", "Browser UI and the MCP endpoint, on top of the server",
        units=("filament-kit-web.service",), depends=("server",)),
     _m("remote", "Remote access", "Public https name for the web UI (nginx, certbot)",

@@ -1,0 +1,11 @@
+[Unit]
+Description=filament-kit station: a pairing the station received, waiting to be saved as root
+# The station service writes pair/request.json into its own state folder after the owner tapped Pair on the setup
+# page (reverse pairing); filament-kit-station-pair.service saves it.
+
+[Path]
+PathExists=/var/lib/filament-kit-station/pair/request.json
+Unit=filament-kit-station-pair.service
+
+[Install]
+WantedBy=multi-user.target

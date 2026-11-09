@@ -52,6 +52,8 @@ _COMPANION = {
     "filament-kit-library.timer": "filament-kit-library.service",
     "filament-kit-backup.timer": "filament-kit-backup.service",
     "filament-kit-update.timer": "filament-kit-update.service",
+    # reverse pairing: the root side that saves a pairing the station received
+    "filament-kit-station-pair.path": "filament-kit-station-pair.service",
     # the setup page's root helper: one instance per request, the page's background jobs, and the name those jobs'
     # unit had up to 0.4.0 (kept for one release)
     "filament-kit-setup.socket": ("filament-kit-setup@.service", "filament-kit-setup-job@.service",
@@ -169,6 +171,9 @@ def station_dropin(cfg: dict, addresses: list[str]) -> str:
            f"STATION_PANEL_SWAP={1 if st.get('panel_swap') else 0}"]
     if st.get("beep_device"):
         env.append(f"STATION_BEEP_DEVICE={st['beep_device']}")
+    server = next((h for h in st.get("allow") or [] if h), None)
+    if server:          # the station asks this server to pair it (station/pair_request.py), as typed
+        env += [f"STATION_SERVER={server}", f"STATION_SERVER_PORT={int(cfg.get('port', 8710))}"]
     env_line = "Environment=" + " ".join(_env_assign(e) for e in env)
     ip_allow = " ".join(["localhost", *_uniq([*addresses, *paired_server_ips()])])
     return f"[Service]\n{env_line}\nIPAddressAllow={ip_allow}\n"
@@ -255,6 +260,7 @@ def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) ->
             A("alsa_unmute"),
             A("install_file", (DROPIN, station_dropin(cfg, addrs), "0644", "root:root")),
             A("install_unit", STATION_UNIT),
+            *[A("install_unit", u) for u in _unit_files("filament-kit-station-pair.path")],
         ]
         st = config._merge(config.DEFAULTS["station"], cfg.get("station") or {})
         if st.get("speech") and st.get("tts") != "espeak":  # Piper and its voice (station.voice, else the default)
@@ -289,6 +295,7 @@ def plan(cfg: dict, *, resolve: Callable[[str], list[str]] = default_resolve) ->
         acts.append(A("remote_route", (rs["route"], rs["port"])))
     if "station" in on:
         acts.append(A("enable", STATION_UNIT))
+        acts.append(A("enable", "filament-kit-station-pair.path"))
     if rs:  # last, so the rules are the final thing on screen before the closing line
         acts.append(A("remote_print", (rs["hostname"], rs["route"], rs["window"] or "", tuple(rs["lan"]))))
     if "library" in on and _library_missing():

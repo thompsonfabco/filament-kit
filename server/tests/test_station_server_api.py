@@ -7,6 +7,7 @@ import subprocess
 import sys
 import threading
 import time
+from pathlib import Path
 
 import pytest
 import uvicorn
@@ -747,3 +748,145 @@ def test_a_station_device_from_before_scopes_is_scoped(server):
     api = server_api.ServerApi(timeout=10)
     assert api.tag_lookup(UID)[0] == 200
     assert api._call("GET", "/api/spools")[0] == 403
+
+
+# ---------------------------------------------------------------- reverse pairing, the station side (protocol v2)
+
+def _approve_when_asked(approve=True, seen=None):
+    from filament_kit import station_requests
+
+    def run():
+        for _ in range(200):
+            rows = station_requests.pending()
+            if rows:
+                if seen is not None:
+                    seen.append(rows[0]["code"])
+                station_requests.decide(rows[0]["id"], approve)
+                return
+            time.sleep(0.05)
+    t = threading.Thread(target=run, daemon=True)
+    t.start()
+    return t
+
+
+def test_the_station_asks_shows_the_kits_code_and_its_pairing_is_saved_as_root(server, tmp_path, monkeypatch):
+    from filament_kit.station import pair_apply, pair_request
+    port, _ = server
+    seen, shown = [], []
+    t = _approve_when_asked(seen=seen)
+    result = pair_request.run_once("127.0.0.1", port, "Bench", on_code=shown.append, folder=tmp_path / "pair",
+                                   sleep=lambda s: time.sleep(0.05))
+    t.join(5)
+    assert result == "approved" and shown == seen and len(shown[0]) == 6     # the station's digits are the page's
+    drop = tmp_path / "pair" / pair_request.REQUEST_FILE
+    assert drop.exists() and (sys.platform == "win32" or (os.stat(drop).st_mode & 0o777) == 0o600)
+    cfg = config.load()
+    cfg["station"] = {**cfg.get("station", {}), "allow": ["127.0.0.1"]}
+    cfg["modules"] = {"station": True}
+    config.save(cfg)
+    refreshed = []
+    assert pair_apply.apply_drop(drop, refresh=refreshed.append) == "saved"
+    assert not drop.exists() and len(refreshed) == 1
+    api = server_api.ServerApi(timeout=10)
+    assert api.paired and api.ips == ["127.0.0.1"] and api.hello()[0] == 200
+
+
+def test_a_refused_station_writes_nothing(server, tmp_path):
+    from filament_kit.station import pair_request
+    port, _ = server
+    t = _approve_when_asked(approve=False)
+    assert pair_request.run_once("127.0.0.1", port, "x", folder=tmp_path / "pair",
+                                 sleep=lambda s: time.sleep(0.05)) == "refused"
+    t.join(5)
+    assert not (tmp_path / "pair" / pair_request.REQUEST_FILE).exists()
+
+
+def test_a_server_that_does_not_answer_is_failed(tmp_path):
+    from filament_kit.station import pair_request
+    assert pair_request.run_once("127.0.0.1", free_port(), "x", folder=tmp_path) == "failed"
+
+
+def _drop(tmp_path, body) -> Path:
+    d = tmp_path / "pair"
+    d.mkdir(exist_ok=True)
+    f = d / "request.json"
+    f.write_text(body if isinstance(body, str) else json.dumps(body), encoding="utf-8")
+    return f
+
+
+GOOD = {"fp": "ab" * 32, "token": "t" * 43, "port": 8710}
+
+
+@pytest.mark.parametrize("body", [{**GOOD, "fp": "zz"}, {**GOOD, "token": "x"}, {**GOOD, "port": 0},
+                                  {**GOOD, "port": "8710"}, [1], "not json", "x" * 5000])
+def test_the_root_side_refuses_a_bad_drop_and_removes_it(tmp_path, body):
+    from filament_kit.station import pair_apply
+    f = _drop(tmp_path, body)
+    with pytest.raises(pair_apply.DropError):
+        pair_apply.read_drop(f)
+    assert not f.exists()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX links")
+def test_the_root_side_never_follows_a_link_or_a_second_name(tmp_path):
+    from filament_kit.station import pair_apply
+    secret = tmp_path / "secret"
+    secret.write_text(json.dumps(GOOD))
+    d = tmp_path / "pair"
+    d.mkdir()
+    (d / "request.json").symlink_to(secret)
+    with pytest.raises(pair_apply.DropError):
+        pair_apply.read_drop(d / "request.json")
+    os.link(secret, d / "request.json")
+    with pytest.raises(pair_apply.DropError):
+        pair_apply.read_drop(d / "request.json")
+    assert secret.exists()
+
+
+def test_the_root_side_takes_the_address_from_station_allow_only(tmp_path):
+    from filament_kit.station import pair_apply
+    cfg = config.load()
+    cfg["station"] = {**cfg.get("station", {}), "allow": []}
+    config.save(cfg)
+    f = _drop(tmp_path, {**GOOD, "host": "evil.example"})
+    with pytest.raises(pair_apply.DropError, match="station.allow names no server"):
+        pair_apply.apply_drop(f, refresh=lambda cfg: None)
+
+
+def test_the_root_side_saves_nothing_when_the_token_does_not_answer(server, tmp_path):
+    from filament_kit.station import pair_apply
+    port, _ = server
+    cfg = config.load()
+    cfg["station"] = {**cfg.get("station", {}), "allow": ["127.0.0.1"]}
+    config.save(cfg)
+    fp = pairing.fingerprint((config.paths().etc / "cert.pem").read_bytes())
+    f = _drop(tmp_path, {"fp": fp, "token": "n" * 43, "port": port})
+    with pytest.raises(pair_apply.DropError, match="did not accept"):
+        pair_apply.apply_drop(f, refresh=lambda cfg: None)
+    assert not server_api.server_file().exists()
+
+
+def test_the_units_and_the_drop_in():
+    from filament_kit import apply, modules
+    root = Path(__file__).resolve().parents[2] / "install" / "systemd"
+    assert "PathExists=/var/lib/filament-kit-station/pair/request.json" in (root / "filament-kit-station-pair.path").read_text()
+    assert "-m filament_kit.station.pair_apply" in (root / "filament-kit-station-pair.service").read_text()
+    assert "StateDirectory=filament-kit-station" in (root / "filament-kit-station.service").read_text()
+    assert "filament-kit-station-pair.path" in modules.MODULES["station"].units
+    assert apply._unit_files("filament-kit-station-pair.path") == ["filament-kit-station-pair.path",
+                                                                    "filament-kit-station-pair.service"]
+    cfg = config.load()
+    cfg["station"] = {**cfg.get("station", {}), "allow": ["kit.local"]}
+    text = apply.station_dropin(cfg, ["192.0.2.5"])
+    assert "STATION_SERVER=kit.local" in text and "STATION_SERVER_PORT=" in text
+
+
+def test_the_screen_shows_the_code_and_the_idle_hint(monkeypatch):
+    from filament_kit.station import flow, pair_request
+    monkeypatch.setattr(flow, "api", lambda: type("A", (), {"paired": False})())
+    monkeypatch.setitem(pair_request.status, "code", "123456")
+    monkeypatch.setitem(flow.flow, "step", "pairing")
+    rows = flow.screen()
+    assert rows[0] == "Pair code" and rows[1] == "123 456" and "Devices" in rows[3]
+    monkeypatch.setitem(flow.flow, "step", "idle")
+    assert flow.screen()[1] == "Hold yellow to ask"

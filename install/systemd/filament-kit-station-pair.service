@@ -1,0 +1,12 @@
+[Unit]
+Description=filament-kit station: save a pairing the station received (reverse pairing)
+# Root: the station's pairing files are root's, and the station's drop-in and restart are too. It reads the drop file
+# without following links, takes the server's address from station.allow, and checks the token before saving.
+
+[Service]
+Type=oneshot
+ExecStart=/opt/filament-kit/venv/bin/python -I -m filament_kit.station.pair_apply
+TimeoutStartSec=60
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes
