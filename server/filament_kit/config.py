@@ -67,6 +67,9 @@ def grant_web_read(path) -> None:
                 "supports ACLs, then run: sudo filament-kit modules apply", WEB_USER, path, e)
 
 
+# The one install line (README). It also repairs an install: get.sh fetches the release, unlike an ./install.sh it deleted.
+GET_COMMAND = "curl -fsSLO https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh && sudo bash get.sh"
+
 DEFAULTS: dict = {
     "server_name": socket.gethostname(),
     "spoolman_url": "http://127.0.0.1:7912",

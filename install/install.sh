@@ -16,6 +16,8 @@ VENV="$OPT/venv"
 
 say() { printf '\n==> %s\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
+# get.sh deletes its unpacked folder, so telling people to rerun this script would point at nothing
+AGAIN='curl -fsSLO https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh && sudo bash get.sh'
 usage() { echo "usage: sudo ./install.sh [--mode server|station|all-in-one | --modules a,b,c [--set KEY=VALUE]...] [--server NAME-OR-IP]" >&2; exit 2; }
 # one host name or address: station.allow never takes a range
 bad_addr() { case "$1" in "" | */* | *"*"* | *" "*) return 0 ;; esac; return 1; }
@@ -116,6 +118,12 @@ major=${VERSION_ID%%.*}
 if [ "${ID:-}" != ubuntu ] || ! [ "$major" -ge 24 ] 2>/dev/null; then
     die "Ubuntu 24.04 or newer is required (found ${PRETTY_NAME:-unknown})"
 fi
+if [ "${FK_NO_SYSTEMD:-}" != 1 ] && [ ! -d /run/systemd/system ]; then
+    die "systemd is not running on this computer, and filament-kit runs as systemd services"
+fi
+if grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null; then
+    echo "note: this is WSL, which is not a supported server: a phone on your network cannot reach a server inside it."
+fi
 
 # --modules names are checked now, before any package or venv work, against the module registry inside the
 # wheel (a wheel is a zip file; the names are the _m("name", ...) entries of filament_kit/modules.py).
@@ -139,8 +147,9 @@ say "Installing system packages"
 export DEBIAN_FRONTEND=noninteractive
 # wait for the dpkg lock: on a fresh Ubuntu, unattended-upgrades often holds it for a few minutes. stdin from
 # /dev/null: apt never reads the terminal (the questions of this script do)
-apt-get -o DPkg::Lock::Timeout=300 update -q </dev/null
-apt-get -o DPkg::Lock::Timeout=300 install -y python3-venv curl </dev/null
+APT_FAILED="the package manager could not download; check the network and run the same command again"
+apt-get -o DPkg::Lock::Timeout=300 update -q </dev/null || die "$APT_FAILED"
+apt-get -o DPkg::Lock::Timeout=300 install -y python3-venv curl </dev/null || die "$APT_FAILED"
 
 # ---------- 2. user and folders (the spoolman and filament-kit-station users: created by apply) ----------
 say "Creating the service user"
@@ -235,14 +244,14 @@ if [ -z "$MODE" ] && [ "$FIRST_INSTALL" -eq 1 ] && [ -t 0 ]; then
         2 | station) MODE=station ;;
         3 | all-in-one) MODE=all-in-one ;;
         4 | custom) MODE=custom ;;
-        *) die "unknown choice '$choice'; run ./install.sh again" ;;
+        *) die "unknown choice '$choice'; run the install command again: $AGAIN" ;;
     esac
     if [ "$MODE" = custom ]; then
         # the same checklist as `filament-kit config` -> Modules (cursor keys and Space; drawn on /dev/tty, as
         # stdout is captured here; the numbered list without a usable terminal); prompts on the terminal, the
         # choice on stdout
         # First line: the modules, comma separated. Then one `set <key>=<value>` per setting the menu asked for.
-        MENU_OUT=$("$VENV/bin/filament-kit" modules menu --raw) || die "no modules chosen; run ./install.sh again"
+        MENU_OUT=$("$VENV/bin/filament-kit" modules menu --raw) || die "no modules chosen; run the install command again: $AGAIN"
         CUSTOM=",$(printf '%s
 ' "$MENU_OUT" | head -n 1)"
         SETS=$(printf '%s
@@ -355,7 +364,7 @@ if os.environ["FK_SERVER"]:
 try:
     modules.validate(cfg)
 except modules.ModuleError as e:
-    sys.exit(f"error: {e}\nfix: run ./install.sh again and choose again")
+    sys.exit(f"error: {e}\nfix: choose again by running the install command again: curl -fsSLO https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh && sudo bash get.sh")
 config.save(cfg)
 print("Install mode: " + mode)
 '

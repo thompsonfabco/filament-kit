@@ -14,6 +14,7 @@ import ipaddress
 import json
 import os
 import re
+import shutil
 import socket
 import ssl
 import subprocess
@@ -314,7 +315,7 @@ _HINTS = {
     "user": f"see the useradd message above, then {_AGAIN}",
     "spoolman_fetch": f"see the Spoolman messages above, then {_AGAIN}",
     "spoolman_allow": f"check the disk is writable, then {_AGAIN}",
-    "install_unit": "run ./install.sh again (the unit files live in /opt/filament-kit/resources)",
+    "install_unit": f"run the install command again: {config.GET_COMMAND} (the unit files live in /opt/filament-kit/resources)",
     "install_file": f"check the disk is writable, then {_AGAIN}",
     "station_pairing_owner": f"check the station's user exists (id filament-kit-station), then {_AGAIN}",
     "remove_file": "remove it by hand: sudo rm <arg>",
@@ -1007,8 +1008,36 @@ def finish(cfg: dict, *, run: Callable[[list[str]], None] = run_checked, pairing
         st = config._merge(config.DEFAULTS["station"], cfg.get("station") or {})
         parts.append(f"Station: http://{host}.local:{int(st['port'])}/state")
     print("\n" + "   ".join(parts))
+    if not ex.dry:
+        _firewall_note(cfg, set(on))
     if "server" in on and pairing:
         _setup_line(cfg)
+
+
+def _firewall_note(cfg: dict, on: set) -> None:
+    """When ufw is on and has no rule for a port the kit's modules need: the lines to open it. Printed only, like every
+    firewall text of the kit's: the owner opens ports. Nothing is said once a port has its rule."""
+    if not shutil.which("ufw"):
+        return
+    try:
+        status = subprocess.run(["ufw", "status"], stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                                timeout=10, check=False).stdout
+    except (OSError, subprocess.SubprocessError):
+        return
+    if not status.startswith("Status: active"):
+        return
+    ports = []
+    if "server" in on:
+        ports += [f"{int(cfg.get('port', 8710))}/tcp", "5353/udp"]
+    if "spoolman" in on:
+        ports.append("7912/tcp")
+    if "web" in on:
+        ports.append("443/tcp")
+    missing = [p for p in ports if p not in status]
+    if missing:
+        print("\nThe ufw firewall is on, and the kit does not change it. For other devices to reach this computer, run:")
+        for p in missing:
+            print(f"  sudo ufw allow {p}")
 
 
 def _setup_line(cfg: dict) -> None:

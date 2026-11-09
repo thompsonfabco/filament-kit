@@ -45,9 +45,9 @@ fixed.
 
 11. ~~Confusing lines in the installer output.~~ Fixed in v0.3.0: no `no such user` line or bare number; the Spoolman
     line reads `Spoolman: the kit's extra fields are in place` or `... added the kit's extra fields: ...`.
-12. **No firewall help.** The installer doesn't mention or open `ufw` ports (8710/tcp for the app, 5353/udp for
-    `.local` names, 7912/tcp for Spoolman, 443/tcp for the web app). Ubuntu ships with `ufw` off, so most users
-    won't hit this.
+12. **The installer doesn't open firewall ports.** When `ufw` is on, it prints the `sudo ufw allow` lines for the ports
+    with no rule (8710/tcp for the app, 5353/udp for `.local` names, 7912/tcp for Spoolman, 443/tcp for the web app);
+    running them is up to you. Ubuntu ships with `ufw` off, so most users won't hit this.
 13. ~~Uninstalling after a one-command install needed the kept tarball.~~ Fixed in v0.3.0:
     `sudo filament-kit uninstall [--purge]` runs the kept release's uninstaller.
 14. **Not checked here:** pairing from a real phone, and the APK install on a phone.
