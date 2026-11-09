@@ -371,8 +371,8 @@ that to work:
   Otherwise add the printers by hand: `sudo filament-kit config` → **Printers** → **add printer**, and enter the
   name, IP address, serial number and Access Code shown on the printer's screen.
 
-A printer appears in the app once it has been seen on the network (or added by hand with its IP address); you
-then enter its Access Code in the app to set it up.
+A printer appears in the app once it has been seen on the network (or added by hand with its IP address or its name,
+which is kept as you typed it and looked up each time it is used); you then enter its Access Code in the app to set it up.
 
 ### Add a printer
 

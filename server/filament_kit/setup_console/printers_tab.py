@@ -62,17 +62,26 @@ def routes(page) -> list[tuple]:
             raise Refused(400, "the port must be a number from 1 to 65535")
         return port
 
-    def address(body: dict, key: str = "address") -> str:
-        host, problem = hostaddr.checked(body.get(key))
-        if problem:
-            raise Refused(400, problem)
-        return host
+    def address(body: dict, key: str = "address") -> hostaddr.Inspected:
+        """The address as it will be kept, with the note to show beside it (the unit doesn't reach it) or None."""
+        a = hostaddr.inspect(body.get(key))
+        if a.problem:
+            raise Refused(400, a.problem)
+        return a
 
     def klipper_entry(serial: str) -> registry.Printer:
         p = page._entry(serial)
         if p.family != "klipper":
             raise Refused(400, "that is for a Klipper printer")
         return p
+
+    def found_by_name(host: str, port: int) -> registry.Printer | None:
+        """The unconfigured entry a scan left at the address a typed name resolves to, if any."""
+        if hostaddr.is_literal(host):
+            return None
+        at = hostaddr.addresses(host)
+        return next((p for p in registry.load().values()
+                     if p.family == "klipper" and not p.configured and p.port == port and p.host in at), None)
 
     def bambu_entry(serial: str) -> registry.Printer:
         p = page._entry(serial)
@@ -84,24 +93,25 @@ def routes(page) -> list[tuple]:
         page._manager("klipper")
         name, key, port = page._opt_text(body, "name"), api_key(body), port_of(body)
 
-        def run() -> str:
-            host = address(body, "host")
-            same = [p for p in registry.load().values()
-                    if p.family == "klipper" and p.host.lower() == host.lower() and p.port == port]
-            if same and same[0].configured:
-                raise Refused(409, f"{registry.display_name(same[0])} is already at {host}:{port}")
-            if same:        # a scan found it: this puts that entry into use
-                registry.configure_klipper(same[0].serial, name)
-                pid = same[0].serial
+        def run() -> tuple[str, str | None]:
+            host, _, note = address(body, "host")
+            same = registry.klipper_at(registry.load(), host, port) or found_by_name(host, port)
+            if same is not None and same.configured:
+                raise Refused(409, f"{registry.display_name(same)} is already at {host}:{port}")
+            if same is not None:        # a scan found it (by this address, or the address this name stands for): into use
+                registry.configure_klipper(same.serial, name)
+                if same.host.lower() != host.lower():
+                    registry.set_address(same.serial, host, port)       # the name, as typed, is what the owner wants kept
+                pid = same.serial
             else:
                 pid = registry.add_klipper(name or host, host, port).serial
             if key:
                 registry.set_api_key(pid, key)
             page.printers.sync()
-            return pid
-        pid = await anyio.to_thread.run_sync(run)
+            return pid, note
+        pid, note = await anyio.to_thread.run_sync(run)
         page.audit(request, f"klipper printer {pid} added")
-        return {"ok": True, "serial": pid}
+        return {"ok": True, "serial": pid, **({"note": note} if note else {})}
 
     async def scan(request, body):
         page._manager("klipper")
@@ -173,15 +183,20 @@ def routes(page) -> list[tuple]:
     async def change_address(request, body):
         serial = page._serial(request)
 
-        def run() -> None:
+        def run() -> str | None:
             p = page._entry(serial)
             port = port_of({"port": body.get("port", p.port)}) if p.family == "klipper" else None
-            host = address(body)
+            host, _, note = address(body)
+            if p.family == "klipper":
+                other = registry.klipper_at(registry.load(), host, port)
+                if other is not None and other.serial != serial:
+                    raise Refused(409, f"{registry.display_name(other)} is already at {host}:{port}")
             registry.set_address(serial, host, port)
             page.printers.sync()
-        await anyio.to_thread.run_sync(run)
+            return note
+        note = await anyio.to_thread.run_sync(run)
         page.audit(request, f"printer {serial} address changed")
-        return {"ok": True}
+        return {"ok": True, **({"note": note} if note else {})}
 
     async def unpin(request, body):
         serial = page._serial(request)

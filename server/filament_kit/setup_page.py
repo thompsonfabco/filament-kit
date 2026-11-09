@@ -334,6 +334,10 @@ class SetupPage:
                 state = self.printers.state(p.serial)
             row = {"serial": p.serial, "name": registry.display_name(p), "model": p.model, "ip": p.ip,
                    "configured": p.configured, "state": state, "pinned": bool(p.cert_fp), "family": p.family}
+            if p.family == "bambu":
+                # a slot mapping this server runs: the page follows it again after a reload (a test's mapper is a bare object)
+                running = getattr(self.mapper, "running", None)
+                row["mapping"] = bool(p.configured and running is not None and running(p.serial))
             if p.family == "klipper":
                 row.update(host=p.host, port=p.port, api_key=bool(p.api_key), lane_data=p.lane_data)   # never the key itself
             out.append(row)
@@ -470,7 +474,7 @@ class SetupPage:
         typed = self._opt_text(body, "serial").upper()
 
         def run() -> dict:
-            problem = hostaddr.resolve_error(ip)
+            _, problem, note = hostaddr.inspect(ip)
             if problem:
                 raise Refused(400, problem)
             try:
@@ -491,10 +495,10 @@ class SetupPage:
             registry.upsert(registry.Printer(serial, name or (old.name if old else "") or serial,
                                              model or (old.model if old else ""), ip, access, True))
             manager.sync()
-            return {"serial": serial, "replaced": old is not None and old.configured}
+            return {"serial": serial, "replaced": old is not None and old.configured, "note": note}
         r = await anyio.to_thread.run_sync(run)
         self.audit(request, f"printer {r['serial']} {'replaced' if r['replaced'] else 'added'}")
-        return {"ok": True, "serial": r["serial"]}
+        return {"ok": True, "serial": r["serial"], **({"note": r["note"]} if r["note"] else {})}
 
     async def printer_code(self, request: Request, body: dict):
         serial, access = self._serial(request), self._access_code(body)

@@ -447,11 +447,31 @@ def set_lane_data(pid: str, mode: str) -> bool:
         return True
 
 
+def klipper_at(printers: dict, host: str, port: int) -> Printer | None:
+    """The Klipper entry at `host:port`, by text, or the configured one whose typed name resolves to that address right
+    now: a scan and an announcement report addresses, the owner types names, and one printer is one entry."""
+    port = int(port)
+    for p in printers.values():
+        if p.family == "klipper" and p.port == port and p.host.lower() == host.lower():
+            return p
+    if not hostaddr.is_literal(host):
+        return None
+    for p in printers.values():
+        if (p.family == "klipper" and p.port == port and p.configured and not hostaddr.is_literal(p.host)
+                and host in hostaddr.addresses(p.host)):
+            return p
+    return None
+
+
 def detected_klipper(host: str, port: int, name: str = "") -> Printer:
     """Record a Klipper printer found on the LAN (mDNS or a scan): a new one is added unconfigured (the owner adds it
-    with `filament-kit klipper add` or the app); a known host:port is left as it is."""
+    with `filament-kit klipper add` or the app); a known host:port, or a configured name that resolves to it, is left
+    as it is."""
+    known = klipper_at(load(), host, port)      # the name lookups run outside the lock
     with _locked():
         printers = _read()
+        if known is not None and known.serial in printers:
+            return printers[known.serial]
         for p in printers.values():
             if p.family == "klipper" and p.host == host and p.port == int(port):
                 return p

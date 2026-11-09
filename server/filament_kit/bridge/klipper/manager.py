@@ -24,7 +24,7 @@ import time
 import urllib.parse
 from pathlib import Path
 
-from ... import config
+from ... import config, hostaddr
 from .. import registry
 from ..connection import PrinterOffline, UnknownPrinter
 from . import adapters, detect, discovery, lanes
@@ -531,10 +531,10 @@ class KlipperFamily(LoadsMixin):
         for cam in c.webcams:
             url = cam.get("stream_url") if cam.get("enabled", True) else None
             if isinstance(url, str) and url:
-                full = urllib.parse.urljoin(f"http://{c.p.host}/", url)
+                full = urllib.parse.urljoin(f"http://{hostaddr.url_host(c.p.host)}/", url)     # an IPv6 host in brackets
                 u = urllib.parse.urlsplit(full)
                 # the URL comes from the printer: only http(s) on the printer itself (never file:, another host)
-                if u.scheme in ("http", "https") and (u.hostname or "").lower() == c.p.host.lower().strip("[]"):
+                if u.scheme in ("http", "https") and (u.hostname or "").lower() == c.p.host.lower():
                     return full
                 log.warning("klipper %s: webcam %r ignored: not an http(s) stream on the printer", pid,
                             cam.get("name"))

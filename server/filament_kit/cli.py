@@ -386,10 +386,12 @@ def _printers_action(choice: str, printers: list) -> None:
         if not (name and ip and serial):
             print("Name, address and serial number are all needed.")
             return
-        problem = hostaddr.form_error(ip) or hostaddr.resolve_error(ip)
+        _, problem, note = hostaddr.inspect(ip)
         if problem:
             print(f"Not added: {problem}.")
             return
+        if note:
+            print(f"Note: {note}.")
         if not registry.SERIAL.fullmatch(serial):
             print(f"Not added: {registry.BAD_SERIAL}.")
             return
