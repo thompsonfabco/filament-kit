@@ -908,7 +908,7 @@ def test_every_tab_the_shell_lists_has_its_view():
     every = "".join(p.read_text(encoding="utf-8") for p in STATIC.glob("*.js"))
     block = src[src.index("const TABS = {"):src.index("const tabNow")]
     assert re.findall(r"^  (\w+): \[", block, re.M) == ["overview", "modules", "printers", "devices", "presets", "settings",
-                                                               "updates"]
+                                                               "updates", "logs"]
     for fn in re.findall(r"(\w+(?:Card|Tab))\(\)", block):
         assert f"function {fn}(" in every, fn
 
@@ -925,7 +925,7 @@ def test_a_rollback_target_older_than_the_job_unit_finds_what_it_needs():
 
 def test_helper_ops_are_the_closed_list():
     assert set(setup_helper.OPS) == {"check", "key_set", "key_remove", "passphrase_set", "library_token_set",
-                                     "library_token_remove", "module", "setting", "apply", "mode", "job", "station_pairing",
+                                     "library_token_remove", "module", "setting", "apply", "mode", "job", "journal", "station_pairing",
                                      "trust_status", "trust_add", "trust_list", "trust_rename", "trust_revoke",
                                      "trust_revoke_all", "trust_enabled"}
     assert set(setup_helper.JOBS) == {"apply", "update", "rollback", "check", "station_pair"}
