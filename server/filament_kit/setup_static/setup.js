@@ -66,7 +66,7 @@ const TABS = {
   overview: ["Overview", () => overviewTab()],
   modules: ["Modules", () => [modesCard(), modulesCard(), applyCard()]],
   printers: ["Printers", () => printersTab()],
-  devices: ["Devices", () => [pairCard(), webAppCard(), readersCard(), trustCard()]],
+  devices: ["Devices", () => [pairCard(), stationAsksCard(), webAppCard(), readersCard(), trustCard()]],
   presets: ["Presets", () => presetsTab()],
   settings: ["Settings", () => [generalCard(), backupCard(), keyCard(), passphraseCard(), tokenCard(), libraryCard(), addressCard(), remoteCard()]],
   updates: ["Updates", () => updatesTab()],
@@ -182,6 +182,27 @@ function pairCard() {
       h("button", { class: "secondary", textContent: "Link for the station", on: { click: () => start("station") } }),
       S.modules.some((m) => m.name === "station" && m.on) ? h("button", { class: "secondary", textContent: "Pair the station on this machine", on: { click: () => startJob(box, "station_pair") } }) : null),
     box);
+}
+
+// Stations on other computers that ask to pair: Pair only when the station's screen shows the same six digits.
+function stationAsksCard() {
+  const body = h("div"), box = boxFor("stationAsks");
+  const show = async () => {
+    try {
+      const r = await api("stations/requests", { code: codeIn.value });
+      offerTrust();
+      fill(body,
+        r.requests.length ? null : h("p", { class: "muted", textContent: "No station is asking to pair." }),
+        ...r.requests.map((q) => h("div", { class: "item" },
+          h("p", {}, `${q.name} at ${q.address} asks to pair. Its screen shows `, h("b", { textContent: `${q.code.slice(0, 3)} ${q.code.slice(3)}` }), "."),
+          h("p", { class: "muted", textContent: "Pair only if the station shows the same six digits. If not, refuse: someone else asked." }),
+          h("div", { class: "row" },
+            h("button", { textContent: "Pair", on: { click: () => change(box, `stations/requests/${q.id}/pair`, {}, () => { say(box, `Paired ${q.name}. It picks up its pairing within a few seconds.`, true); show(); }) } }),
+            h("button", { class: "secondary", textContent: "Refuse", on: { click: () => change(box, `stations/requests/${q.id}/refuse`, {}, () => { box.replaceChildren(); show(); }) } })))));
+    } catch (e) { say(body, e.message, false); }
+  };
+  return card("Stations asking to pair", h("p", { class: "muted", textContent: "An intake station on another computer asks from its own screen." }),
+    h("button", { class: "secondary", textContent: "Show requests", on: { click: show } }), body, box);
 }
 
 let webQrUrl = null;
