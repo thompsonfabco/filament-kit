@@ -22,7 +22,7 @@ import os
 import re
 import threading
 from contextlib import contextmanager
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 
 from .. import config
 from . import xmlfile
@@ -36,6 +36,7 @@ except ImportError:  # Windows dev PCs: no cross-process lock (the service only 
 log = logging.getLogger(__name__)
 FILE = "printers.xml"
 OLD_FILE = "printers.json"
+MAX_FOUND = 32          # Klipper entries discovery made and nobody has added yet
 FAMILIES = ("bambu", "klipper")
 SERIAL = re.compile(r"[A-Za-z0-9_-]{1,64}")      # also names the camera's runtime directory
 ACCESS_CODE = re.compile(r"[A-Za-z0-9]{1,32}")
@@ -97,6 +98,10 @@ def display_name(p: Printer) -> str:
 
 class RegistryError(Exception):
     pass
+
+
+class DuplicatePrinter(RegistryError):
+    """That Klipper host and port is already added: the message names the entry."""
 
 
 _FIELDS = {"name", "model", "ip", "access_code", "configured", "cert_fp", "family", "host", "port", "api_key"}
@@ -286,7 +291,7 @@ def rename(serial: str, name: str) -> bool:
         printers = _read()
         if serial not in printers:
             return False
-        printers[serial].name = name
+        printers[serial].name = _free_name(name, printers, serial)
         _write(printers)
         return True
 
@@ -383,12 +388,43 @@ def slug(name: str, taken: set[str]) -> str:
     return out
 
 
+def _host_key(host: str) -> str:
+    """A host name as DNS compares it. Only the same text matches: an address and a name for it are the manager's job."""
+    return (host or "").strip().rstrip(".").lower()
+
+
+def _at(printers: dict[str, Printer], host: str, port: int) -> Printer | None:
+    for p in printers.values():
+        if p.family == "klipper" and p.port == int(port) and _host_key(p.host) == _host_key(host):
+            return p
+    return None
+
+
+def _free_name(name: str, printers: dict[str, Printer], me: str = "") -> str:
+    """`name`, or "name 2", "name 3" ...: Spoolman slot locations join on the display name (see display_name), so two
+    printers with one name would share spools."""
+    taken = {display_name(p).lower() for s, p in printers.items() if s != me and p.configured}
+    out, n = name, 1
+    while out.lower() in taken:
+        n += 1
+        out = f"{name} {n}"
+    return out
+
+
 def add_klipper(name: str, host: str, port: int = 7125) -> Printer:
-    """Add a configured Klipper printer (host = Moonraker's host name or address)."""
+    """Add a configured Klipper printer (host = Moonraker's host name or address). The entry discovery made for the same
+    host and port becomes this one. DuplicatePrinter when that host and port is already added."""
+    host, name = host.strip(), (name or host).strip()
     with _locked():
         printers = _read()
-        p = Printer(serial=slug(name or host, set(printers)), name=(name or host).strip(), family="klipper",
-                    host=host.strip(), port=int(port), configured=True)
+        old = _at(printers, host, port)
+        if old is not None and old.configured:
+            raise DuplicatePrinter(f"{host}:{port} is already added as {display_name(old)}")
+        if old is not None:
+            p = replace(old, name=_free_name(name, printers, old.serial), host=host, configured=True)
+        else:
+            p = Printer(serial=slug(name, set(printers)), name=_free_name(name, printers), family="klipper",
+                        host=host, port=int(port), configured=True)
         printers[p.serial] = p
         _write(printers)
         return p
@@ -427,14 +463,35 @@ def set_lane_data(pid: str, mode: str) -> bool:
 
 def detected_klipper(host: str, port: int, name: str = "") -> Printer:
     """Record a Klipper printer found on the LAN (mDNS or a scan): a new one is added unconfigured (the owner adds it
-    with `filament-kit klipper add` or the app); a known host:port is left as it is."""
+    with `filament-kit klipper add` or the app); a known host:port is left as it is. Anything on the LAN can announce
+    itself, so at most MAX_FOUND such entries stay in this file, which also holds the Access Codes: the oldest goes."""
     with _locked():
         printers = _read()
-        for p in printers.values():
-            if p.family == "klipper" and p.host == host and p.port == int(port):
-                return p
+        known = _at(printers, host, port)
+        if known is not None:
+            return known
         p = Printer(serial=slug(name or host, set(printers)), name=(name or host).strip(), family="klipper",
                     host=host, port=int(port), configured=False)
         printers[p.serial] = p
+        found = [s for s, o in printers.items() if _forgettable(o) and s != p.serial]
+        for s in found[:max(0, len(found) + 1 - MAX_FOUND)]:
+            del printers[s]
         _write(printers)
         return p
+
+
+def _forgettable(p: Printer) -> bool:
+    return p.family == "klipper" and not p.configured and not p.api_key
+
+
+def forget_found_at(addrs: set[tuple[str, int]]) -> int:
+    """Remove the entries discovery made at these (host, port) pairs: printers already added under another name.
+    An entry the owner gave an API key stays. How many went."""
+    with _locked():
+        printers = _read()
+        gone = [s for s, p in printers.items() if _forgettable(p) and (p.host, p.port) in addrs]
+        for s in gone:
+            del printers[s]
+        if gone:
+            _write(printers)
+        return len(gone)

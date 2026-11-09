@@ -282,6 +282,7 @@ class KlipperFamily(LoadsMixin):
         self._started = False
         self._scan_lock = threading.Lock()
         self._scan_ended = float("-inf")
+        self._twins_seen: tuple[set, set] = (set(), set())
         self._browser_factory = browser_factory      # discovery.Browser in the server; None in tests
         self._browser = None
         self._loads_init()
@@ -302,8 +303,19 @@ class KlipperFamily(LoadsMixin):
         while not self._stop_sync.wait(self.sync_every):
             try:
                 self.sync()
+                self._forget_twins()
             except Exception:  # noqa: BLE001 - an unreadable registry: try again next round
                 log.exception("klipper: registry sync failed")
+
+    def _forget_twins(self) -> None:
+        """Discovery reports addresses, so a printer added by name gets an unconfigured twin. No lookups unless the
+        entries changed since the last look and there's an unconfigured one to compare: a name that won't resolve can
+        take seconds, and this runs every round. A printer that moves shows up as a new entry, so it's looked at again."""
+        klipper = [p for p in registry.load().values() if p.family == "klipper"]
+        now = ({p.serial for p in klipper if not p.configured}, {(p.host, p.port) for p in klipper if p.configured})
+        if now[0] and now != self._twins_seen:
+            registry.forget_found_at(set(discovery.added_at()))
+        self._twins_seen = now
 
     def stop(self) -> None:
         self._started = False
@@ -365,9 +377,10 @@ class KlipperFamily(LoadsMixin):
                 self._scan_ended = time.monotonic()
         finally:
             self._scan_lock.release()
+        added = discovery.added_at() if found else {}
         out = []
         for host, port in found:
-            p = registry.detected_klipper(host, port)
+            p = added.get((host, port)) or registry.detected_klipper(host, port)
             out.append({"id": p.serial, "host": host, "port": port, "name": registry.display_name(p),
                         "configured": p.configured})
         return out

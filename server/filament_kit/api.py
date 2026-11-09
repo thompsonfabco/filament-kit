@@ -25,6 +25,7 @@ from . import (API_VERSION, __version__, config, intake, inventory, modules, pai
                station_flow, tags)
 from .intake import CapReached, PhotoError, ReadCap, ReadError, RefundRefused
 from .bridge import camera, family, hardware, loading, mapping, registry, usage
+from .bridge.klipper import discovery
 from .bridge.connection import ACTIONS, DEVELOPER_MODE_REASON, Manager, NoReply, PrinterOffline, UnknownPrinter
 from .bridge.slottest import NoStatus, PrinterBusy
 from .bridge.models import camera_kind, model_name
@@ -287,7 +288,10 @@ def _printer_routes(printers) -> list[Route]:
             raise BadRequest("port must be between 1 and 65535")
 
         def run() -> dict:
-            p = registry.add_klipper((name or "").strip() or host.strip(), host.strip(), port)
+            try:
+                p = discovery.add((name or "").strip() or host.strip(), host.strip(), port)
+            except registry.DuplicatePrinter as e:
+                raise BadRequest(str(e)) from None
             printers.sync()
             printers.wait_settled(p.serial, FIRST_STATE_WAIT)
             return _printer_view(p, printers)

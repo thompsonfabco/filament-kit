@@ -28,7 +28,7 @@ has one; an address works too.
 
 - **Not sure of the address?** `sudo filament-kit klipper scan` looks for Moonraker on the server's own network (at
   most 256 addresses, only when you run it); `--subnet <network>` scans another range, up to 256 addresses. A scan asked for through the server's API keeps to the private networks the server may reach (10.x, 172.16-31.x, 192.168.x), one at a time with 30 seconds between them. Printers that announce themselves (Moonraker's `[zeroconf]`) appear by
-  themselves.
+  themselves; the kit keeps at most 32 it has not been told to add, oldest out. A printer can only be added once: a name or address that resolves to one already added on that port is refused, and the message says which.
 - **Moonraker asks for an API key?** `sudo filament-kit klipper api-key <id>` asks for it; it is never shown again. Leaving it empty removes the saved key.
 - **Changed the printer or its firmware?** `sudo filament-kit klipper detect <id>` reads the model and filament system
   again.

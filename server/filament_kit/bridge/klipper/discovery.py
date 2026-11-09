@@ -18,6 +18,7 @@ import socket
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable
 
+from .. import registry
 from .moonraker import Moonraker, MoonrakerError
 
 log = logging.getLogger(__name__)
@@ -49,6 +50,32 @@ def check_range(net) -> None:
     if not any(net.version == r.version and net.subnet_of(r) for r in REACHABLE):
         raise ValueError(f"the server can only reach private networks ({', '.join(str(r) for r in REACHABLE)}), so a scan "
                          f"of {net} would find nothing")
+
+
+def addresses(host: str, port: int) -> set[str]:
+    """The addresses a printer's host name stands for now; empty when it can't be resolved from here."""
+    try:
+        return {a[4][0] for a in socket.getaddrinfo(host.strip("[]"), port, type=socket.SOCK_STREAM)}
+    except (OSError, UnicodeError):
+        return set()
+
+
+def added_at() -> dict[tuple[str, int], registry.Printer]:
+    """(address, port) -> the added printer there, so that a found address can be told from the name it was added by."""
+    return {(a, p.port): p for p in registry.load().values() if p.family == "klipper" and p.configured
+            for a in addresses(p.host, p.port)}
+
+
+def add(name: str, host: str, port: int = DEFAULT_PORT) -> registry.Printer:
+    """registry.add_klipper, which compares host text, and DuplicatePrinter too when `host` resolves to an address of a
+    printer added under another name or address. A name that won't resolve from here is taken as typed. No lookups
+    unless a printer on that port is there to compare."""
+    others = [p for p in registry.load().values() if p.family == "klipper" and p.configured and p.port == int(port)]
+    mine = addresses(host, port) if others else set()
+    for p in others if mine else ():
+        if mine & addresses(p.host, p.port):
+            raise registry.DuplicatePrinter(f"{host}:{port} is already added as {registry.display_name(p)} ({p.host})")
+    return registry.add_klipper(name, host, port)
 
 
 def _open(host: str, port: int, timeout: float) -> bool:

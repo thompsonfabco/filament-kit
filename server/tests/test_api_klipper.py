@@ -5,6 +5,7 @@ from starlette.testclient import TestClient
 from filament_kit import config, pairing
 from filament_kit.api import create_app
 from filament_kit.bridge import family, registry
+from filament_kit.bridge.klipper import discovery
 from filament_kit.bridge.klipper.manager import KlipperFamily
 
 ON = frozenset({"server", "printers", "klipper"})
@@ -208,3 +209,20 @@ def test_printer_get_reports_a_refused_klipper_override(tmp_path):
         assert errors and "klipper_hardware.xml" in " ".join(errors)
     finally:
         kh._reset_cache()
+
+
+def test_add_klipper_refuses_the_address_of_a_printer_added_by_name(monkeypatch):
+    table = {"voron.local": {"192.0.2.20"}, "192.0.2.20": {"192.0.2.20"}}
+    monkeypatch.setattr(discovery, "addresses", lambda host, port: table.get(host, set()))
+    c = _client()
+    assert c.post("/api/printers", json={"family": "klipper", "host": "voron.local", "name": "Voron"}).status_code == 200
+    r = c.post("/api/printers", json={"family": "klipper", "host": "192.0.2.20"})
+    assert r.status_code == 400 and "already added as Voron" in r.text
+
+
+def test_add_klipper_twice_is_refused_and_says_which():
+    c = _client()
+    body = {"family": "klipper", "host": "voron.home.arpa", "name": "Voron"}
+    assert c.post("/api/printers", json=body).status_code == 200
+    r = c.post("/api/printers", json={**body, "name": "Again"})
+    assert r.status_code == 400 and "Voron" in r.text
