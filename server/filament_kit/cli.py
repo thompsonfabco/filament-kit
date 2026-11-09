@@ -18,6 +18,7 @@ import urllib.request
 from pathlib import Path
 
 from . import apply, config, inventory, klipper_cli, library, menu_ui, modules, pairing, secret_input
+from . import remote as remote_mod
 from .bridge import registry
 from .profiles import builds, lines as lines_mod
 from .profiles.errors import ProfileError
@@ -1630,6 +1631,14 @@ def cmd_web_status() -> int:
     up, why = _web_health(port)
     ok &= _line(up, f"web unit answers on 127.0.0.1:{port}" + ("" if up else f" ({why})"),
                 "sudo systemctl restart filament-kit-web; journalctl -u filament-kit-web")
+    if "remote" in on:
+        warn = remote_mod.certificate_warning(remote_mod.served_certificate())
+        if warn:
+            expired, text, fix = warn
+            if expired:
+                ok &= _line(False, text, fix)
+            else:
+                print(f"--   {text}\n     fix: {fix}")
     try:
         d = json.loads((config.paths().web / "oauth.json").read_text(encoding="utf-8"))
         now = time.time()

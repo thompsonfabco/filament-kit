@@ -62,7 +62,7 @@ def _origin(public_url: str) -> str:
 
 # ---------- LAN (lan.py: the kit server's /setup page uses the same checks) ----------
 
-from ..lan import Networks, is_lan, parse_lan  # noqa: E402,F401  (re-exported)
+from ..lan import IPV6_HINT, Networks, is_lan, over_ipv6, parse_lan  # noqa: E402,F401  (re-exported)
 
 
 # ---------- store ----------
@@ -306,6 +306,10 @@ PAGE_HEADERS = {
 HOME_ONLY = "<p>Sign-in is only available from the home network.</p>"
 
 
+def _home_only(client: str) -> str:
+    return HOME_ONLY + (f"<p>{IPV6_HINT}</p>" if over_ipv6(client) else "")
+
+
 def _page(body: str, status: int = 200) -> HTMLResponse:
     return HTMLResponse(
         "<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'><title>Filament MCP sign-in</title>"
@@ -329,7 +333,7 @@ def lan_only(app: Any, lan_cidrs: Iterable[str]) -> Any:
     async def wrapped(scope, receive, send):
         if scope["type"] == "http" and _lan_path(scope.get("path", "")) \
                 and not is_lan((scope.get("client") or ("",))[0], nets):
-            await _page(HOME_ONLY, 403)(scope, receive, send)
+            await _page(_home_only((scope.get("client") or ("",))[0]), 403)(scope, receive, send)
             return
         await app(scope, receive, send)
 
@@ -345,7 +349,7 @@ def login_routes(store: Store, public_url: str, passphrase_file: Path | str, *, 
 
     async def login(request: Request) -> Response:
         if not is_lan(request.client.host if request.client else "", nets):
-            return _page(HOME_ONLY, 403)
+            return _page(_home_only(request.client.host if request.client else ""), 403)
         if request.method == "POST" and request.headers.get("origin") != origin:  # another site posting via a browser
             return _page("<p>This form only works from its own page. Start again from Claude.</p>", 403)
         form = await request.form() if request.method == "POST" else {}
