@@ -806,12 +806,21 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         """An unpaired station asks to be paired (station_requests.py): no token yet, so no _authed."""
         body = await _json(request)
         try:
-            out = await run_in_threadpool(station_requests.ask, body.get("request_id"), body.get("name"),
-                                          request.client.host if request.client else "")
+            out = await run_in_threadpool(station_requests.ask, body.get("request_id"), body.get("commit"),
+                                          body.get("name"), request.client.host if request.client else "")
         except station_requests.RequestError as e:
             return _err(e.status, e.code, str(e))
         log.info("station pairing requested from %s", _safe(request.client.host if request.client else "?"))
         return JSONResponse(out, status_code=202)
+
+    @_handle
+    async def station_pair_reveal(request: Request):
+        body = await _json(request)
+        try:
+            out = await run_in_threadpool(station_requests.reveal, request.path_params["request_id"], body.get("secret"))
+        except station_requests.RequestError as e:
+            return _err(e.status, e.code, str(e))
+        return JSONResponse(out)
 
     @_handle
     async def station_pair_poll(request: Request):
@@ -918,6 +927,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             Route("/api/station/hello", station_hello),
             Route("/api/station/pair-request", station_pair_request, methods=["POST"]),
             Route("/api/station/pair-request/{request_id}", station_pair_poll),
+            Route("/api/station/pair-request/{request_id}/reveal", station_pair_reveal, methods=["POST"]),
             Route("/api/station/tag/{uid}", _flow(station_tag)),
             Route("/api/station/recognize", _flow(station_recognize), methods=["POST"]),
             Route("/api/station/save", _flow(station_save), methods=["POST"]),
