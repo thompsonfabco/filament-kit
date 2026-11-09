@@ -2,6 +2,7 @@ package com.thompsonfabco.filamentkit.session
 
 import com.thompsonfabco.filamentkit.data.ServerConfig
 import com.thompsonfabco.filamentkit.net.ApiError
+import com.thompsonfabco.filamentkit.net.FingerprintMismatch
 import com.thompsonfabco.filamentkit.net.fingerprint
 import com.thompsonfabco.filamentkit.net.httpsServer
 import com.thompsonfabco.filamentkit.net.pinnedClient
@@ -152,6 +153,84 @@ class ServerSessionTest {
 
         val state = await { s.connection.first { it is Connection.CertChanged } }
         assertEquals(Connection.CertChanged(cert.fingerprint(), other.fingerprint()), state)
+    }
+
+    @Test fun trustingTheNewCertificateKeepsThePairingAndUsesTheToken() {
+        val other = serverCert("kit.local")
+        val server = httpsServer(other, "127.0.0.3").also { servers += it }
+        val configs = MutableStateFlow<ServerConfig?>(config(listOf("127.0.0.3"), server.port, token = "keep"))
+        val s = session(configs)
+        await { s.connection.first { it is Connection.CertChanged } }
+        val before = s.api.value
+
+        assertTrue(await { s.trustCertificate(cert.fingerprint(), other.fingerprint()) })
+
+        await { s.connection.first { it == Connection.Online("127.0.0.3") } }
+        assertEquals(config(listOf("127.0.0.3"), server.port, fp = other.fingerprint(), token = "keep"), configs.value)
+        assertTrue(s.api.value !== before)
+        runBlocking { s.api.value!!.locations() }
+        var req = server.takeRequest()
+        while (req.url.encodedPath != "/api/locations") req = server.takeRequest()
+        assertEquals("Bearer keep", req.headers["Authorization"])
+    }
+
+    /** What was on screen is what gets pinned: if the certificate moved on again, the app says so again. */
+    @Test fun trustPinsTheCertificateShownNotWhateverAnswersNow() {
+        val shown = serverCert("kit.local")
+        val answering = serverCert("kit.local")
+        val server = httpsServer(answering, "127.0.0.3").also { servers += it }
+        val configs = MutableStateFlow<ServerConfig?>(config(listOf("127.0.0.3"), server.port))
+        val s = session(configs)
+        await { s.connection.first { it is Connection.CertChanged } }
+
+        assertTrue(await { s.trustCertificate(cert.fingerprint(), shown.fingerprint()) })
+
+        assertEquals(shown.fingerprint(), configs.value?.fingerprint)
+        await { s.connection.first { it == Connection.CertChanged(shown.fingerprint(), answering.fingerprint()) } }
+    }
+
+    @Test fun trustSavesNothingWhenThePairingNoLongerPinsThatCertificate() {
+        val configs = MutableStateFlow<ServerConfig?>(config(listOf("127.0.0.9"), 1))
+        val s = session(configs)
+        await { s.config.first { it != null } }
+
+        assertFalse(await { s.trustCertificate("ab".repeat(32), "cd".repeat(32)) })
+
+        assertTrue(saved.isEmpty())
+    }
+
+    @Test fun trustSavesNothingForARevokedToken() {
+        val configs = MutableStateFlow<ServerConfig?>(config(listOf("127.0.0.9"), 1, token = ""))
+        val s = session(configs)
+        await { s.config.first { it != null } }
+
+        assertFalse(await { s.trustCertificate(cert.fingerprint(), "cd".repeat(32)) })
+
+        assertTrue(saved.isEmpty())
+    }
+
+    @Test fun aLateMismatchFromBeforeTheTrustIsIgnored() {
+        val configs = MutableStateFlow<ServerConfig?>(config(listOf("127.0.0.9"), 1))
+        val s = session(configs)
+        await { s.config.first { it != null } }
+        val newFp = "cd".repeat(32)
+        assertTrue(await { s.trustCertificate(cert.fingerprint(), newFp) })
+
+        router.report(FingerprintMismatch(cert.fingerprint(), newFp))
+        router.noteMismatch(FingerprintMismatch(cert.fingerprint(), newFp))
+        router.pairAgain()
+
+        assertNull(router.notice.value)
+        // A mismatch against the pin in use still counts.
+        router.report(FingerprintMismatch(newFp, "ef".repeat(32)))
+        assertEquals(PairNotice.CertChanged(newFp, "ef".repeat(32)), router.notice.value)
+    }
+
+    @Test fun canTrustNeedsAUsablePairingOnThatCertificate() {
+        assertFalse((null as ServerConfig?).canTrust("ab"))
+        assertFalse(config(listOf("h"), 1, fp = "ab", token = "").canTrust("ab"))
+        assertFalse(config(listOf("h"), 1, fp = "ab").canTrust("cd"))
+        assertTrue(config(listOf("h"), 1, fp = "ab").canTrust("AB"))
     }
 
     @Test fun nothingReachableIsOffline() {

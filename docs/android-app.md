@@ -35,27 +35,33 @@ access**, red **Can't reach the server** or **The server's certificate changed**
 1. Under **Servers found on this network**, tap your server: it goes straight to the fingerprint check. If it isn't
    listed, tap **Enter address** and type the computer's name with `.local` (for example `my-server.local`) or its IP
    address; leave **Port** at 8710, and tap **Connect**.
-2. **Check the server's fingerprint** appears with two groups of the fingerprint left blank. Find the fingerprint
-   shown with the pairing code on the server (in the Terminal, or on the setup page) and type the two missing
-   groups. If they match, tap **Continue**. If they differ, tap **It does not match** and stop.
+2. **Check the server's fingerprint** shows the server's address and its full fingerprint. Compare it with the
+   fingerprint shown with the pairing code on the server (in the Terminal, or on the setup page). If they match, tap
+   **It matches**. If they differ, tap **It does not match** and stop.
 3. Type the **6-digit code** from the Terminal.
 
 **If it fails:** the code works once and expires; run `sudo filament-kit pair` again for a new one. Other
 problems are in [Install the Android app](install-android-app.md#common-problems).
 
-<img src="images/android-pair-fingerprint.png" width="240" alt="Check the server's fingerprint: type the two blank groups, then Continue, or It does not match">
+<img src="images/android-pair-fingerprint.png" width="240" alt="Check the server's fingerprint: the address and full fingerprint, with It matches and It does not match">
 
 **Unpair or pair again.** On the phone: **Settings** shows the server's name, address and certificate fingerprint.
 **Forget server** (it asks to confirm; the spools stay on the server) unpairs this phone, and then you pair again
 as above. **Pair again** does it in one step. On the server, `sudo filament-kit unpair`
 lists paired phones and `sudo filament-kit unpair <id>` removes one; that phone is then asked to pair again. If the
-app shows **The server's certificate changed**, compare the two fingerprints it shows: if you reinstalled the
-server it's expected, so tap **Pair again**; if not, don't continue.
+app shows **The server's certificate has changed**, it lists the new fingerprint: tap **Trust the new certificate** to
+keep this pairing, or **Pair again** to pair with a new code. If you didn't reinstall or move the server, another
+device may be answering at that address, and trusting it gives that device this phone's access. If the server no
+longer knows this phone, for example after a reinstall with `--purge`, the app asks you to pair again.
+
+**Skip the fingerprint check for new servers**, in **Settings**, is off by default. With it on, picking a server from
+the list or typing its address goes straight to the 6-digit code and the app trusts the certificate the server presents. A scanned
+QR code is checked either way, and a certificate that changes after pairing still asks you first.
 
 **Licences and third-party software**, at the bottom of **Settings**, shows the app's licence (GPL-3.0-or-later) and the
 third-party software list, and the full GPL text. It works offline.
 
-<img src="images/android-settings.png" width="240" alt="Settings: server, fingerprint, Pair again, Forget server, Licences and third-party software"> <img src="images/android-licences.png" width="240" alt="Licences: GPL-3.0-or-later, Show the GPL-3.0 text, third-party software and data">
+<img src="images/android-settings.png" width="240" alt="Settings: server, fingerprint, Pair again, Forget server, Skip the fingerprint check for new servers, Licences and third-party software"> <img src="images/android-licences.png" width="240" alt="Licences: GPL-3.0-or-later, Show the GPL-3.0 text, third-party software and data">
 
 ## 2. Set up a printer
 

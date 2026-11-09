@@ -69,9 +69,9 @@ Pairing lets the app trust your server and lets the server know your phone. You 
 1. Under **Servers found on this network**, tap your server: it goes straight to the fingerprint check. If it's not
    listed, tap **Enter address** and type the computer's name with `.local` (for example `my-server.local`) or its IP
    address. Leave **Port** at 8710.
-2. The app shows **Check the server's fingerprint** with two groups left blank. Find the fingerprint shown with the
-   pairing code (in the Terminal, or on the server's setup page) and type the two missing groups. If they are the
-   same, tap **Continue**. If they differ, tap **It does not match** and stop: something else is answering at that
+2. The app shows **Check the server's fingerprint** with the server's address and its full fingerprint. Compare it
+   with the fingerprint shown with the pairing code (in the Terminal, or on the server's setup page). If they are the
+   same, tap **It matches**. If they differ, tap **It does not match** and stop: something else is answering at that
    address.
 3. Under **Enter the pairing code**, type the 6-digit code.
 
@@ -81,7 +81,8 @@ To pair another phone, run `sudo filament-kit pair` again: each code works once.
 
 The home screen shows the buttons **Add spool**, **Add profile**, **Search**, **Printers** and **Settings**.
 **Add from label photos** only appears when AI label reading (the `ai_intake` module) is on at the server.
-**Settings** shows the server and its fingerprint and has **Pair again** and **Forget server**.
+**Settings** shows the server and its fingerprint and has **Pair again** and **Forget server**. Its switch **Skip
+the fingerprint check for new servers** (off by default) leaves out the fingerprint step when you pick a server from the list or type its address.
 
 ## Updates
 
@@ -91,7 +92,7 @@ filament-kit install apps: allow it, go back and tap **Tap to install** again.
 
 ### Update refused
 
-If the app's own update says **Don't install this update** and you did not build the app yourself, don't uninstall
+If the app's own update says **Android refused this update** and you did not build the app yourself, don't uninstall
 the app. A release update is always signed like the app you already have, so a refusal means this file is not from
 the same maker: check who runs the server and where its app came from. (This is different from **App not installed**
 below, which happens when you install a downloaded file over an older copy signed by someone else.)
@@ -109,9 +110,11 @@ below, which happens when you install a downloaded file over an older copy signe
   - If the server's firewall is on, see [Install the server, Common problems](install-server.md#common-problems).
   - Use **Enter address** with the server's IP address instead of its name.
 - **The code has expired or was already used**: run `sudo filament-kit pair` again and use the new code.
-- **The server's certificate has changed**: the app shows both fingerprints. This is expected after you
-  reinstalled the server with `--purge` or moved it to another computer: tap **Pair again** and pair as above.
-  If you did not expect it, don't continue.
+- **The server's certificate has changed**: the app shows the new fingerprint. This is expected after you
+  reinstalled the server or moved it to another computer. **Trust the new certificate** keeps this pairing;
+  **Pair again** pairs as above with a new code, and after a reinstall with `--purge` that is what you need, because
+  the server no longer knows this phone. If you did not expect the change, another device may be answering at that
+  address, and trusting it gives that device this phone's access.
 - **To remove a phone from the server**: `sudo filament-kit unpair` lists paired phones;
   `sudo filament-kit unpair <id>` removes one.
 

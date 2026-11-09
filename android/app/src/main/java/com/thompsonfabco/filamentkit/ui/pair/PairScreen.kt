@@ -2,6 +2,8 @@ package com.thompsonfabco.filamentkit.ui.pair
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -18,8 +20,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.thompsonfabco.filamentkit.net.DiscoveredServer
 
@@ -34,6 +38,9 @@ fun PairScreen(
     discovered: List<DiscoveredServer>,
     onPaired: () -> Unit,
     modifier: Modifier = Modifier,
+    /** The certificate change is about a pairing this phone still has, so it can be kept. */
+    canTrust: (Mismatch) -> Boolean = { false },
+    onTrust: (Mismatch) -> Unit = {},
     scanner: @Composable (onResult: (String) -> Unit, onClose: () -> Unit) -> Unit = { onResult, onClose ->
         QrScanner(onResult = onResult, onClose = onClose, onEnterAddress = { onClose(); viewModel.startManual() })
     },
@@ -59,7 +66,13 @@ fun PairScreen(
 
         val mismatch = ui.mismatch
         when {
-            mismatch != null -> MismatchPanel(PairTexts.mismatch(mismatch, ui.host), mismatch, viewModel::pairAgain)
+            mismatch != null -> MismatchPanel(
+                PairTexts.mismatch(mismatch, ui.host),
+                mismatch,
+                canTrust(mismatch),
+                onTrust = { onTrust(mismatch) },
+                onPairAgain = viewModel::pairAgain,
+            )
             ui.step == Step.Choose -> ChooseStep(ui, discovered, onScan = { scanning = true }, viewModel)
             else -> ManualPair(
                 ui = ui,
@@ -97,14 +110,36 @@ private fun ChooseStep(ui: PairUi, discovered: List<DiscoveredServer>, onScan: (
     }
 }
 
-/** The server's certificate is not the expected one; never trusted silently. */
+/** The server's certificate is not the expected one; never trusted without the user's tap. */
 @Composable
-private fun MismatchPanel(text: MismatchText, mismatch: Mismatch, onPairAgain: () -> Unit) {
+private fun MismatchPanel(
+    text: MismatchText,
+    mismatch: Mismatch,
+    canTrust: Boolean,
+    onTrust: () -> Unit,
+    onPairAgain: () -> Unit,
+) {
     Text(text.title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error)
     Text(text.body)
-    Text(text.expectedLabel)
-    Text(groupFingerprint(mismatch.expected), fontFamily = FontFamily.Monospace)
+    text.expectedLabel?.let {
+        Text(it)
+        Text(groupFingerprint(mismatch.expected), fontFamily = FontFamily.Monospace)
+    }
     Text(text.actualLabel)
     Text(groupFingerprint(mismatch.actual), fontFamily = FontFamily.Monospace)
-    Button(onClick = onPairAgain) { Text(text.button) }
+    val trust = text.trustButton?.takeIf { canTrust }
+    if (trust == null) {
+        Button(onClick = onPairAgain) { Text(text.button) }
+    } else {
+        // Equal widths: the longer label wraps instead of squeezing the other button.
+        val padding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Button(onClick = onTrust, contentPadding = padding, modifier = Modifier.weight(1f)) {
+                Text(trust, textAlign = TextAlign.Center)
+            }
+            OutlinedButton(onClick = onPairAgain, contentPadding = padding, modifier = Modifier.weight(1f)) {
+                Text(text.button, textAlign = TextAlign.Center)
+            }
+        }
+    }
 }

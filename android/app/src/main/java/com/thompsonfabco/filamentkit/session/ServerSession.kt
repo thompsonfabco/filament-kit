@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 
@@ -65,6 +66,7 @@ class ServerSession(
 
     init {
         router.currentToken = ::currentToken
+        router.currentFingerprint = { _config.value?.fingerprint }
         scope.launch { configs.collect(::apply) }
         scope.launch { router.notice.collect { if (it is PairNotice.Unpaired && it.token != null) forgetToken(it.token) } }
     }
@@ -107,6 +109,19 @@ class ServerSession(
         val cfg = _config.value ?: return
         if (cfg.token != sent) return
         save(cfg.copy(token = ""))
+    }
+
+    /**
+     * The user trusts the certificate they were shown: pin exactly [actual] in place of [expected] and keep the token
+     * and addresses. False (nothing saved) when [expected] is no longer what this pairing pins. If the server no longer
+     * knows the token, its next 401 goes to Pair as usual. Returns once the new pin is in use.
+     */
+    suspend fun trustCertificate(expected: String, actual: String): Boolean {
+        val cfg = _config.value
+        if (cfg == null || !cfg.canTrust(expected) || cfg.token == revokedToken) return false
+        save(cfg.copy(fingerprint = actual))
+        _config.first { !it?.fingerprint.equals(expected, ignoreCase = true) }
+        return true
     }
 
     private fun apply(cfg: ServerConfig?) {
@@ -176,3 +191,7 @@ class ServerSession(
 
 /** A server is stored and its token has not been revoked (a revoked token is stored blank). */
 fun ServerConfig?.isPaired(): Boolean = this != null && token.isNotBlank()
+
+/** There is a pairing to keep, and it pins [expected]: the only case "Trust the new certificate" can apply to. */
+fun ServerConfig?.canTrust(expected: String): Boolean =
+    this != null && isPaired() && fingerprint.equals(expected, ignoreCase = true)

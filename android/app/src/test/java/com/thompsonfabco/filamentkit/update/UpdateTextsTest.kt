@@ -19,7 +19,7 @@ class UpdateTextsTest {
 
     /** The guide can't be the only advice: it needs the internet, and its other lines are about manual installs. */
     @Test fun theRefusalSaysWhatToDoOnItsOwn() {
-        assertTrue("Check who runs your server" in UpdateTexts.NOT_SIGNED_LIKE_YOUR_APP)
+        assertTrue("check where your server's app came from" in UpdateTexts.NOT_SIGNED_LIKE_YOUR_APP)
     }
 
     /** That paragraph, unlike the page's "App not installed" line, doesn't tell the user to uninstall. */
@@ -31,7 +31,7 @@ class UpdateTextsTest {
     @Test fun afterARefusalTheButtonDoesNotSayInstall() {
         val refused = UpdateUi(available = 7, error = UpdateTexts.NOT_SIGNED_LIKE_YOUR_APP)
         assertTrue(UpdateTexts.refused(refused))
-        assertEquals("Try again after fixing the server", UpdateTexts.installLabel(refused))
+        assertEquals("Try again", UpdateTexts.installLabel(refused))
     }
 
     @Test fun anyOtherFailureKeepsThePlainButton() {
@@ -54,7 +54,7 @@ class UpdateTextsTest {
         }
     }
 
-    @Test fun aDifferentSigningKeySaysDoNotInstall() {
+    @Test fun aDifferentSigningKeySaysAndroidRefused() {
         val t = UpdateTexts.installFailure(PackageInstaller.STATUS_FAILURE_CONFLICT, signatureMessage)
         assertEquals(UpdateTexts.NOT_SIGNED_LIKE_YOUR_APP, t)
     }
