@@ -271,7 +271,7 @@ private fun SlotMapping(s: ToolsUiState, tools: PrinterToolsViewModel, printerSt
             if (v.headlineIsError) Text(it, color = MaterialTheme.colorScheme.error) else Text(it)
         }
         v.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-        s.observeNotice?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+        s.observeNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         v.problemsHeading?.let { heading ->
             Text(heading, style = MaterialTheme.typography.labelLarge)
             val color = if (v.problemsAreError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
