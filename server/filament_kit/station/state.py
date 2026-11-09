@@ -65,6 +65,7 @@ probed = threading.Event()  # set once the panel search has looked at every port
 panel_lock = threading.Lock()
 panel = {"ser": None}
 panel_dirty = threading.Event()
+panel_resend = threading.Event()  # the panel said HELLO on its own (it reset): refresh sends every row and lamp again
 
 
 def usb_ttys() -> list[str]:

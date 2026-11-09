@@ -60,6 +60,7 @@ def fw(tmp_path, monkeypatch):
     monkeypatch.setattr(panel.time, "sleep", lambda s: None)
     monkeypatch.setitem(st.ports, "panel", None)
     monkeypatch.setitem(st.ports, "panel_version", None)
+    monkeypatch.setitem(st.ports, "panel_chip", None)
     monkeypatch.setitem(st.ports, "nfc", None)
     st.flashed.clear()
     FakeSerial.VERSIONS = {"/dev/ttyACM1": "1 esp32c3"}
@@ -203,5 +204,5 @@ def test_firmware_pins_follow_the_standard():
 
 def test_firmware_never_starts_the_radio():
     src = (PANEL_DIR / "src" / "main.cpp").read_text(encoding="utf-8")
-    assert "WiFi.begin" not in src and "BLEDevice" not in src
-    assert "WiFi.mode(WIFI_OFF)" in src
+    for used in ("WiFi.h", "BLEDevice", "WiFi.begin", "esp_wifi_start"):
+        assert used not in src

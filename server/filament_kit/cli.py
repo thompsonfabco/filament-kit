@@ -224,6 +224,7 @@ def cmd_station_flash_panel(ask=input, run=subprocess.run) -> int:
         print("error: run as root: sudo filament-kit station flash-panel", file=sys.stderr)
         return 1
     service = "filament-kit-station.service"
+    was_active = run(["systemctl", "is-active", service], check=False).returncode == 0  # only restart what was running
     try:
         stopped = run(["systemctl", "stop", service], check=False)
         if stopped.returncode not in (0, 5):  # 5: the unit isn't loaded (no service to stop)
@@ -255,7 +256,8 @@ def cmd_station_flash_panel(ask=input, run=subprocess.run) -> int:
         print("Nothing was flashed.")
         return 1
     finally:
-        run(["systemctl", "start", service], check=False)
+        if was_active:
+            run(["systemctl", "start", service], check=False)
 
 
 def _flash_and_verify(panel, port: str, version: str) -> int:

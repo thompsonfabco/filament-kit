@@ -46,6 +46,7 @@ def fresh(monkeypatch):
                         held_at=None, blink_until=0, air=None, air_at=None, photo=None,
                         photo_at=None)
     monkeypatch.setitem(st.panel, "ser", None)
+    monkeypatch.setitem(st.ports, "panel_chip", None)
     monkeypatch.setitem(st.settings, "speech", True)
     monkeypatch.setitem(st.settings, "camera", "auto")
     speech.speech_ready.clear()
@@ -525,3 +526,17 @@ def test_volume_sent_once_after_c3_found(monkeypatch, chip, sent):
     with pytest.raises(Stop):
         panel.panel_loop()
     assert ser.out == sent
+
+
+def test_unsolicited_hello_from_a_c3_resends_volume_and_every_row(monkeypatch):
+    ser = st.panel["ser"] = Ser()
+    monkeypatch.setattr(panel.flow, "screen", lambda: ["a", "b", "c", "d", "e"])
+    monkeypatch.setitem(st.settings, "speaker_volume", 40)
+    seen = panel.Shown()
+    assert panel.refresh(seen, 100.0)
+    ser.out = b""
+    panel.on_line(b"HELLO intake-panel 10 esp32c3")
+    assert panel.refresh(seen, 100.1)
+    lines = ser.out.splitlines()
+    assert b"V 40" in lines and any(l.startswith(b"L ") for l in lines)
+    assert [l for l in lines if l.startswith(b"D ")] == [b"D %d %s" % (i, c) for i, c in enumerate([b"a", b"b", b"c", b"d", b"e"])]

@@ -27,10 +27,10 @@
 //
 // Pins follow the peripheral standard: I2C on 5/6 and the buzzer on 0 as on the reader; never the strapping pins
 // 2, 8, 9 or the USB pair 18, 19. GPIO 20/21 are the C3's default UART, unused here (serial is native USB); the
-// ROM's boot text on 21 is harmless, the amplifier stays silent with no I2S clock. Wi-Fi and Bluetooth stay off.
+// ROM's boot text on 21 is harmless, the amplifier stays silent with no I2S clock. Wi-Fi and Bluetooth stay off: the
+// sketch never includes or calls them, and the core starts the radio only when it is used.
 #include <Arduino.h>
 #include <ESP_I2S.h>
-#include <WiFi.h>
 #include <Wire.h>
 #include <U8g2lib.h>
 #include "aht20.h"
@@ -293,7 +293,6 @@ static void handle(const char *s) {
 }
 
 void setup() {
-  WiFi.mode(WIFI_OFF);  // USB only: the radio is never started (nor Bluetooth); this only states it
   Serial.setRxBufferSize(2048);  // audio arrives at ~8 KB/s; covers a slow I2C read
   Serial.setTxTimeoutMs(0);      // no host reading: drop output instead of stalling loop()
   Serial.begin(115200);

@@ -258,3 +258,12 @@ def test_server_installs_the_setup_helper_units_and_starts_its_socket():
     off = apply.plan(_mode("station"), resolve=lambda h: [h])
     assert "filament-kit-setup.socket" in _of(off, "disable")
     assert "filament-kit-setup.socket" not in _of(off, "install_unit")
+
+
+@pytest.mark.parametrize("value,expected", [(150, 100), (-3, 0), ("loud", 50), (True, 50), (75.0, 75), (40, 40)])
+def test_dropin_clamps_the_speaker_volume(monkeypatch, value, expected):
+    monkeypatch.setenv("FK_OPT", "/opt/filament-kit")
+    cfg = _cfg()
+    cfg["station"]["speaker_volume"] = value
+    tokens = apply.station_dropin(cfg, ["127.0.0.1"]).split()
+    assert f"STATION_SPEAKER_VOLUME={expected}" in tokens

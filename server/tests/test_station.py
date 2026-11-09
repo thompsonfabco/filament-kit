@@ -195,6 +195,7 @@ def fake_ports(monkeypatch):
     monkeypatch.setitem(sys.modules, "serial", types.SimpleNamespace(Serial=FakeSerial))
     monkeypatch.setattr(state, "usb_ttys", lambda: ["/dev/ttyUSB0", "/dev/ttyUSB1"])
     monkeypatch.setitem(state.ports, "panel", None)
+    monkeypatch.setitem(state.ports, "panel_chip", None)
     monkeypatch.setitem(state.ports, "nfc", None)
     monkeypatch.setitem(state.settings, "nfc_device", "auto")
     state.probed.clear()

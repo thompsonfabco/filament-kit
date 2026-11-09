@@ -50,7 +50,7 @@ def bench(monkeypatch):
 
 
 def services(b):
-    return [c[1] for c in b.calls if c[0] == "systemctl"]
+    return [c[1] for c in b.calls if c[0] == "systemctl" and c[1] != "is-active"]
 
 
 def test_flash_panel_needs_root(bench, monkeypatch, capsys):
@@ -174,7 +174,7 @@ def test_stop_happens_before_the_first_probe(bench, monkeypatch):
     monkeypatch.setattr(panel, "blank_c3_ports", panel.blank_c3_ports)
     cli.cmd_station_flash_panel(ask=lambda p: "n",
                                 run=lambda cmd, **kw: order.append((cmd[1],)) or type("R", (), {"returncode": 0})())
-    assert order[0] == ("stop",) and order[1][0] == "probe"
+    assert order[0] == ("is-active",) and order[1] == ("stop",) and order[2][0] == "probe"
 
 
 def test_ctrl_c_at_the_prompt_flashes_nothing_and_restarts(bench, capsys):
@@ -183,3 +183,16 @@ def test_ctrl_c_at_the_prompt_flashes_nothing_and_restarts(bench, capsys):
     assert cli.cmd_station_flash_panel(ask=ask, run=bench.run) == 1
     assert "Nothing was flashed." in capsys.readouterr().out
     assert bench.flashed == [] and services(bench) == ["stop", "start"]
+
+
+def test_service_that_was_active_is_started_again(bench):
+    assert cli.cmd_station_flash_panel(ask=lambda p: "n", run=bench.run) == 1
+    assert [c[1] for c in bench.calls] == ["is-active", "stop", "start"]
+
+
+def test_service_that_was_inactive_is_not_started(bench):
+    def run(cmd, **kw):
+        bench.calls.append(cmd)
+        return type("R", (), {"returncode": 3 if cmd[1] == "is-active" else 0})()
+    assert cli.cmd_station_flash_panel(ask=lambda p: "n", run=run) == 1
+    assert [c[1] for c in bench.calls] == ["is-active", "stop"]

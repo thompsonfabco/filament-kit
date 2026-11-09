@@ -42,6 +42,11 @@ def on_line(line: bytes):
             flow.on_red()
     elif line.startswith(b"AIR "):
         air.on_air(line)
+    elif line.startswith(b"HELLO intake-panel"):  # unasked: the panel reset without its port dropping
+        if line.split()[3:4] == [b"esp32c3"]:
+            send_volume()  # it forgot the volume
+        st.panel_resend.set()
+        st.panel_dirty.set()
 
 
 class Shown:
@@ -54,6 +59,9 @@ class Shown:
 def refresh(seen: Shown, now: float) -> bool:
     """Keep the panel current: the lamps when they change, every second (its 5 s watchdog) or when the flow moved,
     then any display row that changed. False when the panel went away."""
+    if st.panel_resend.is_set():  # a reset panel shows nothing: forget what was sent
+        st.panel_resend.clear()
+        seen.lamps, seen.rows = None, [None] * 5
     modes = flow.lamps(now)
     if modes != seen.lamps or now - seen.at >= 1 or st.panel_dirty.is_set():
         st.panel_dirty.clear()
@@ -185,7 +193,8 @@ def warn_swap_needs_fw9(version):
     except (TypeError, ValueError):
         pass
     log.warning("station.panel_swap is on but the panel runs firmware %s: yellow (on D2) can't long-press to save "
-                "until the panel has firmware 9 or later (STATION_PANEL_FLASH=1 reflashes it)", version)
+                "until it has firmware 9 or later; an ESP8266 panel has to be reflashed by hand, or replaced with "
+                "the C3 panel", version)
     return True
 
 
