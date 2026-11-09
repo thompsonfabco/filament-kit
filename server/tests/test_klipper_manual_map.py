@@ -274,3 +274,62 @@ def test_the_family_shows_and_loads_under_the_owner_s_names(m1d, sm):
     r = fam.load(sm, pid, "C1", s["id"], True, sealed_location="Sealed stock")
     assert r["command"] == {"gcode": f"FK_SET_TOOL_SPOOL TOOL=2 ID={s['id']}"}       # the printer's tool 2
     assert r["slot"]["label"] == "C1"                                                # the owner's name in Spoolman
+
+
+def _answer(mm, tc, clock, s, position, active):
+    tc.active = active
+    mm.view(PID)
+    settle(clock)
+    mm.view(PID)
+    return mm.confirm(PID, s["session"], position, {"label": active})
+
+
+def test_a_slot_confirmed_for_one_position_is_refused_for_another(tc, clock):
+    """Review RK11 finding 1: two Yes answers about one printer slot are refused, not resolved by moving the first."""
+    mm = kmanual.KlipperManualMaps(tc)
+    s = mm.start(PID)
+    _answer(mm, tc, clock, s, "L", "L")
+    tc.active = "C2"
+    mm.view(PID)
+    _answer(mm, tc, clock, s, "C1", "C3")
+    tc.active = "C2"
+    v = mm.view(PID)
+    tc.active = "C3"
+    mm.view(PID)
+    settle(clock)
+    mm.view(PID)
+    with pytest.raises(bambu_manual.ManualError) as e:
+        mm.confirm(PID, s["session"], "C2", {"label": "C3"})
+    assert e.value.code == "taken" and "C3 is already confirmed as C1" in str(e.value)
+    with pytest.raises(bambu_manual.ManualError):
+        mm.confirm(PID, s["session"], "C2", {"label": "C3"}, by_hand=True)
+    m = kmanual.load_map(PID)
+    assert m["C1"] == {"printer": "C3", "by": "user", "at": m["C1"]["at"]}           # untouched
+    assert kmanual.printer_label(m, "C1", tc.labels) == "C3"
+
+
+def test_the_hint_does_not_invite_a_second_answer_for_a_confirmed_slot(tc, clock):
+    mm = kmanual.KlipperManualMaps(tc)
+    s = mm.start(PID)
+    tc.active = "C2"
+    mm.view(PID)
+    v = _answer(mm, tc, clock, s, "L", "C3")
+    assert "which you confirmed as L" in v["step"]["say"] and "make another slot active" not in v["step"]["say"]
+
+
+def test_moving_a_confirmation_from_an_earlier_session_asks_for_it_again(tc, clock):
+    mm = kmanual.KlipperManualMaps(tc)
+    s = mm.start(PID)
+    tc.active = "C2"
+    mm.view(PID)
+    _answer(mm, tc, clock, s, "L", "C3")                  # L -> C3, C3 -> L
+    mm.stop(PID, s["session"])
+    s = mm.start(PID)                                     # a new run; C3 (the owner's) now names the printer's L
+    for p in ("L", "C1", "C2"):
+        mm.skip(PID, s["session"], p)
+    tc.active = "C2"
+    mm.view(PID)
+    v = _answer(mm, tc, clock, s, "C3", "C3")             # the owner's C3 is the printer's C3 after all: L moves
+    assert v["step"]["position"]["label"] == "L"         # asked again, not left showing an old answer
+    assert "Confirmed before, now moved by your answers: L (asked again below)." in v["summary"]
+    assert kmanual.load_map(PID).get("L", {}).get("by") is None           # no longer shown as confirmed

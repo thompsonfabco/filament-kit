@@ -115,6 +115,7 @@ class _Session:
     baseline: str | None = None           # the printer's active slot when the step began
     moved: bool = False                   # the active slot changed during this step
     seen: tuple | None = None             # (printer label, first seen at)
+    replaced: list = field(default_factory=list)     # positions whose confirmation from before this session moved
 
 
 def _now_iso() -> str:
@@ -187,9 +188,17 @@ class KlipperManualMaps:
                 raise ManualError(400, "bad_request", "That slot is not one this printer has.")
             if not by_hand and (s.seen is None or s.seen[0] != target or active != target):
                 raise ManualError(409, "stale", "The printer no longer reports that slot active: show it again.")
-            self._write(pid, labels, position, target, "user-unverified" if by_hand else "user")
+            holder = self._holder(s, target, position)
+            if holder is not None:      # two answers for one slot: a mistake or a stale reading, never resolved silently
+                raise ManualError(409, "taken", f"{target} is already confirmed as {holder} in this mapping. Skip "
+                                  f"{position}, or stop and start again to redo {holder}.")
+            moved = self._write(pid, labels, position, target, "user-unverified" if by_hand else "user")
             s.answers[position] = {"status": "by_hand" if by_hand else "confirmed", "reported_label": target,
                                    "nozzle": None, "at": _now_iso()}
+            if moved is not None:       # its slot changed: it is asked again in this session, and the summary says so
+                if s.answers.get(moved, {}).get("status") == "skipped":
+                    del s.answers[moved]
+                s.replaced.append(moved)
             self._next_step(s, active)
             return self._state(s, labels, active)
 
@@ -222,11 +231,19 @@ class KlipperManualMaps:
     def _step(self, s: _Session) -> str | None:
         return next((p for p in s.positions if p not in s.answers), None) if s.open else None
 
-    def _write(self, pid: str, labels, owner: str, target: str, by: str) -> None:
-        """owner -> target, swapping with the label that had target, so the map stays a permutation."""
+    @staticmethod
+    def _holder(s: _Session, target: str, position: str) -> str | None:
+        """The other position this session already confirmed (or entered by hand) as the printer's `target`."""
+        return next((o for o, a in s.answers.items() if o != position and a["status"] in ("confirmed", "by_hand")
+                     and a["reported_label"] == target), None)
+
+    def _write(self, pid: str, labels, owner: str, target: str, by: str) -> str | None:
+        """owner -> target, swapping with the label that had target, so the map stays a permutation. Returns that
+        label when it had been confirmed before (its confirmation is dropped: it now names another slot)."""
         entries = load_map(pid)
         cur = mapping(entries, labels)
         other = next(o for o, p in cur.items() if p == target)
+        was_confirmed = other != owner and bool(entries.get(other, {}).get("by"))
         cur[other], cur[owner] = cur[owner], target
         meta = {o: e for o, e in entries.items() if e.get("by") and o not in (owner, other)}
         out = {}
@@ -236,6 +253,7 @@ class KlipperManualMaps:
         out[owner].update(by=by, at=_now_iso())
         save_map(pid, out)
         self._f.forget_slot_map(pid)
+        return other if was_confirmed else None
 
     def _state(self, s: _Session, labels, active) -> dict:
         step = self._step(s)
@@ -277,7 +295,9 @@ class KlipperManualMaps:
                 else f"Load {step} to the toolhead")
         text = f"{what}, then wait."
         if s.baseline is not None and not s.moved:
-            text += (f" The printer has {s.baseline} active now: to confirm that one, make another slot active first, "
+            holder = self._holder(s, s.baseline, step)
+            text += (f" The printer has {s.baseline} active now, which you confirmed as {holder}." if holder else
+                     f" The printer has {s.baseline} active now: to confirm that one, make another slot active first, "
                      "then this one.")
         return text
 
@@ -292,6 +312,10 @@ class KlipperManualMaps:
         if skipped:
             parts.append(f"skipped: {', '.join(skipped)}")
         text = "; ".join(parts) + "."
+        again = [p for p in dict.fromkeys(s.replaced) if s.answers.get(p, {}).get("status") != "confirmed"]
+        if again:
+            text += (f" Confirmed before, now moved by your answers: {', '.join(again)}"
+                     + (" (asked again below)." if s.open else "."))
         if not s.open:
             left = [p for p in s.positions if p not in s.answers]
             if left:
