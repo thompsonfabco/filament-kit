@@ -928,10 +928,10 @@ def test_a_rollback_target_older_than_the_job_unit_finds_what_it_needs():
 
 def test_helper_ops_are_the_closed_list():
     assert set(setup_helper.OPS) == {"check", "key_set", "key_remove", "passphrase_set", "library_token_set",
-                                     "library_token_remove", "module", "setting", "general", "spoolman_url", "apply", "mode", "job", "journal", "station_pairing",
+                                     "library_token_remove", "module", "setting", "general", "spoolman_url", "apply", "mode", "job", "journal", "backup_keep", "station_pairing",
                                      "trust_status", "trust_add", "trust_list", "trust_rename", "trust_revoke",
                                      "trust_revoke_all", "trust_enabled"}
     assert set(setup_helper.JOBS) == {"apply", "update", "rollback", "check", "station_pair", "library_update",
-                                      "library_rollback", "remote_issue"}
+                                      "library_rollback", "remote_issue", "backup", "restore"}
     assert set(setup_helper.BUSY) == set(setup_helper.JOBS)
     assert HOME and H     # the shared fixtures' constants are the ones in use

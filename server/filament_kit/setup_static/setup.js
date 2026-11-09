@@ -68,7 +68,7 @@ const TABS = {
   printers: ["Printers", () => printersTab()],
   devices: ["Devices", () => [pairCard(), webAppCard(), readersCard(), trustCard()]],
   presets: ["Presets", () => presetsTab()],
-  settings: ["Settings", () => [generalCard(), keyCard(), passphraseCard(), tokenCard(), libraryCard(), addressCard(), remoteCard()]],
+  settings: ["Settings", () => [generalCard(), backupCard(), keyCard(), passphraseCard(), tokenCard(), libraryCard(), addressCard(), remoteCard()]],
   updates: ["Updates", () => updatesTab()],
   logs: ["Logs", () => logsTab()],
 };

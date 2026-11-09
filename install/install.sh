@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # filament-kit installer for Ubuntu 24.04 or newer.
 # Run as root: sudo ./install.sh [--mode MODE | --modules a,b,c [--set KEY=VALUE]...] [--server NAME-OR-IP]
+#                                [--restore BACKUP.zip]   (--restore: this machine takes the backup's modules and data)
 # MODE: server (default), station, all-in-one. A first install at a terminal asks for the mode
 # (and offers custom). --server gives a station the kit server's address without a terminal;
 # station mode needs it (or a terminal to ask at). Safe to run again: an existing install is upgraded and keeps its data,
@@ -24,7 +25,7 @@ say() { printf '\n==> %s\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 # get.sh deletes its unpacked folder, so telling people to rerun this script would point at nothing
 AGAIN='curl -fsSLO https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh && sudo bash get.sh'
-usage() { echo "usage: sudo ./install.sh [--mode server|station|all-in-one | --modules a,b,c [--set KEY=VALUE]...] [--server NAME-OR-IP]" >&2; exit 2; }
+usage() { echo "usage: sudo ./install.sh [--mode server|station|all-in-one | --modules a,b,c [--set KEY=VALUE]...] [--server NAME-OR-IP] [--restore BACKUP.zip]" >&2; exit 2; }
 # one host name or address: station.allow never takes a range
 bad_addr() { case "$1" in "" | */* | *"*"* | *" "*) return 0 ;; esac; return 1; }
 
@@ -42,6 +43,7 @@ MODE=""
 CUSTOM=""
 SETS=""
 SERVER_ADDR=""
+RESTORE=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --mode) [ $# -ge 2 ] || usage; MODE="$2"; shift 2 ;;
@@ -52,9 +54,15 @@ while [ $# -gt 0 ]; do
         --set=*) add_set "${1#--set=}"; shift ;;
         --server) [ $# -ge 2 ] || usage; SERVER_ADDR="$2"; shift 2 ;;
         --server=*) SERVER_ADDR="${1#--server=}"; shift ;;
+        --restore) [ $# -ge 2 ] || usage; RESTORE="$2"; shift 2 ;;
+        --restore=*) RESTORE="${1#--restore=}"; shift ;;
         *) usage ;;
     esac
 done
+if [ -n "$RESTORE" ]; then
+    [ -f "$RESTORE" ] || die "$RESTORE: no such file (give the backup zip from the setup page or filament-kit backup create)"
+    RESTORE="$(cd "$(dirname "$RESTORE")" && pwd)/$(basename "$RESTORE")"
+fi
 case "$MODE" in
     "" | server | station | all-in-one) ;;
     *) die "unknown mode '$MODE' (use server, station or all-in-one; to choose single modules use --modules a,b,c)" ;;
@@ -236,6 +244,11 @@ fi
 chown -R root:root "$OPT"
 chmod -R go-w "$OPT"
 { basename "$WHEEL"; echo "$PYVER"; } > "$FK_MARKER"
+
+# ---------- restore: the backup's modules and data instead of the questions below ----------
+if [ -n "${RESTORE:-}" ]; then
+    exec /usr/local/bin/filament-kit restore --yes "$RESTORE"
+fi
 
 # ---------- 4. install mode ----------
 # First install at a terminal: ask. --mode: set it, on any install. Upgrade without --mode: no

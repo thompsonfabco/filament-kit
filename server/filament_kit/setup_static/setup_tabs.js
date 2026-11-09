@@ -87,6 +87,7 @@ function checklist() {
   if (!S.code_set) todo.push("No setup code yet: at the server, sudo filament-kit setup-code");
   if (S.printers.on && !S.printers.list.length) todo.push(["Printers: none yet → ", link("printers", "Printers")]);
   if (!S.devices.length) todo.push(["Phone: not paired → ", link("devices", "Devices")]);
+  if (!S.devices.length && !S.printers.list.length) todo.push(["Moving from another computer? Restore its backup → ", link("settings", "Settings")]);
   if (S.anthropic.ai_intake && !S.anthropic.set) todo.push(["Anthropic key: not set → ", link("settings", "Settings")]);
   if (S.passphrase.web && !S.passphrase.set) todo.push(["Web passphrase: not set → ", link("settings", "Settings")]);
   return todo.length ? card("Still to do", h("ul", {}, ...todo.map((t) => h("li", {}, t)))) : null;

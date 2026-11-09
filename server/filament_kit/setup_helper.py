@@ -22,7 +22,9 @@ What it accepts is a closed list (`OPS`), never a command, a path or a file name
     mode {mode[, settings]}                    a mode preset (modules.set_mode, as `modules set`), saved, then an apply;
                                                never a mode without the server, which this page is part of
     apply                                      start the job `apply`
-    job {name}                                 start one of the closed list of jobs (JOBS), one at a time
+    job {name}                                 start one of the closed list of jobs (JOBS), one at a time; `restore`
+                                               also takes {confirm: "restore"} and a zip the page received
+    backup_keep {days}                         how many days of backups the nightly backup keeps (1-365)
     journal {unit, lines}                      the last lines (at most 200) of a service of a module that is on, by an
                                                argument list; read only, at most JOURNAL_MAX bytes back
     station_pairing                            server_api.pairing_state(): the station's pairing folder is closed to the
@@ -82,7 +84,8 @@ ACTIVE = ("activating", "active", "deactivating", "reloading")      # a oneshot 
 JOBS = {"apply": ("modules", "apply", "--no-pair"), "update": ("update",), "rollback": ("update", "--rollback"),
         "check": ("update", "--check"), "station_pair": ("station", "pair", "--local"),
         "library_update": ("library", "update"), "library_rollback": ("library", "rollback"),
-        "remote_issue": ("remote", "issue")}
+        "remote_issue": ("remote", "issue"),
+        "backup": ("backup", "create"), "restore": ("restore", "--uploaded", "--yes")}
 WRAPPER = "/usr/local/bin/filament-kit"
 FINISHED = "==> finished (exit"
 SETTINGS = ("web.public_url", "station.url")
@@ -101,7 +104,9 @@ BUSY = {"apply": APPLYING, "update": "an update is running; wait until it has fi
         "station_pair": "the station is being paired; wait until it has finished",
         "library_update": "the library is being updated; wait until it has finished",
         "library_rollback": "the library is going back; wait until it has finished",
-        "remote_issue": "the certificate is being issued; wait until it has finished"}
+        "remote_issue": "the certificate is being issued; wait until it has finished",
+        "backup": "a backup is being written; wait until it has finished",
+        "restore": "a restore is running; wait until it has finished"}
 # the checklist's setting prompts, back to their keys (cli._apply_selection asks by prompt)
 _PROMPT_KEYS = {v: k for k, v in modules._SETTING_PROMPTS.items()}
 
@@ -621,6 +626,16 @@ def _journal(req: dict) -> dict:
     return {"unit": unit, "text": out.decode("utf-8", "replace"), "truncated": cut}
 
 
+def _backup_keep(req: dict) -> dict:
+    days = req.get("days")
+    if not isinstance(days, int) or isinstance(days, bool) or not 1 <= days <= 365:
+        raise Refused(400, "days must be a whole number from 1 to 365")
+    cfg = config.load()
+    cfg.setdefault("backup", {})["keep_days"] = days
+    config.save(cfg)
+    return {"days": days}
+
+
 def _job(req: dict) -> dict:
     name = req.get("name")
     if not isinstance(name, str) or name not in JOBS:
@@ -631,6 +646,12 @@ def _job(req: dict) -> dict:
         why = updates.job_refusal(name)
         if why:
             raise Refused(409, why)
+    if name == "restore":
+        from . import backup
+        if req.get("confirm") != "restore":
+            raise Refused(400, "type restore to confirm: it replaces what is on this machine")
+        if not backup.uploaded().is_file():
+            raise Refused(409, "upload the backup zip first")
     if name == "apply":
         _start_apply()
     else:
@@ -716,7 +737,7 @@ def _apply(req: dict) -> dict:
 OPS = {"check": _check, "key_set": _key_set, "key_remove": _key_remove, "passphrase_set": _passphrase_set,
        "library_token_set": _library_token_set, "library_token_remove": _library_token_remove,
        "module": _module, "setting": _setting, "general": _general, "spoolman_url": _spoolman_url, "apply": _apply, "mode": _mode, "job": _job,
-       "journal": _journal, "station_pairing": _station_pairing, "trust_status": _trust_status, "trust_add": _trust_add,
+       "journal": _journal, "backup_keep": _backup_keep, "station_pairing": _station_pairing, "trust_status": _trust_status, "trust_add": _trust_add,
        "trust_list": _trust_list, "trust_rename": _trust_rename, "trust_revoke": _trust_revoke,
        "trust_revoke_all": _trust_revoke_all, "trust_enabled": _trust_enabled}
 

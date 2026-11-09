@@ -238,6 +238,50 @@ def cmd_station_pair_local() -> int:
     return 1 if result.status == "failed" else 0
 
 
+def cmd_backup(action: str, out: str | None) -> int:
+    from . import backup
+    if not _is_root():
+        print(f"error: run as root: sudo filament-kit backup {action}", file=sys.stderr)
+        return 1
+    if action == "list":
+        rows = backup.listing()
+        if not rows:
+            print(f"no backups in {backup.backups_dir()}")
+        for e in rows:
+            print(f"{time.strftime('%Y-%m-%d %H:%M', time.localtime(e.at))}  {e.kind:<11} {e.size // 1024:>8} KiB  {e.name}")
+        return 0
+    try:
+        path = backup.create(Path(out) if out else None)
+    except (OSError, backup.BackupError) as e:
+        print(f"error: the backup was not written: {e}", file=sys.stderr)
+        return 1
+    print(f"backup written: {path}")
+    return 0
+
+
+def cmd_restore(zip_path: str | None, *, uploaded: bool = False, yes: bool = False) -> int:
+    from . import backup
+    if not _is_root():
+        print("error: run as root: sudo filament-kit restore <backup.zip>", file=sys.stderr)
+        return 1
+    if uploaded:
+        try:
+            path = backup.take_upload()
+        except (OSError, backup.BackupError) as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 1
+    else:
+        path = Path(zip_path)
+        if not path.is_file():
+            print(f"error: {zip_path}: no such file", file=sys.stderr)
+            return 1
+    try:
+        return backup.restore(path, yes=yes)
+    finally:
+        if uploaded:
+            path.unlink(missing_ok=True)
+
+
 def cmd_station_pairing_state() -> int:
     """One line for the wrapper, run as root: see server_api.pairing_state."""
     from .station import server_api
@@ -1686,6 +1730,16 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     rdsub.add_parser("tokens", help="list the reader tokens (never the tokens themselves)")
     rdr = rdsub.add_parser("revoke", help="remove a reader token (root)")
     rdr.add_argument("ref", help="its id (r1 ...) or name")
+    bk = sub.add_parser("backup", help="a whole-kit backup as one zip: make one, list them (root)")
+    bksub = bk.add_subparsers(dest="backup_cmd", required=True)
+    bkc = bksub.add_parser("create", help="write a backup zip (default: into /var/backups/filament-kit)")
+    bkc.add_argument("--out", help="the folder to write it into")
+    bksub.add_parser("list", help="the backups in /var/backups/filament-kit")
+    rs = sub.add_parser("restore", help="bring this machine to the state in a backup zip (root)")
+    rs_what = rs.add_mutually_exclusive_group(required=True)
+    rs_what.add_argument("zip", nargs="?", help="the backup zip")
+    rs_what.add_argument("--uploaded", action="store_true", help="the zip the setup page received")
+    rs.add_argument("--yes", action="store_true", help="ask nothing (no terminal: the installer, the setup page)")
     rm_ = sub.add_parser("remote", help="remote access: get the certificate, show the firewall rules")
     rmsub = rm_.add_subparsers(dest="remote_cmd", required=True)
     rmsub.add_parser("issue", help="get the certificate with certbot (standalone on port 80) (root)")
@@ -1777,6 +1831,10 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
         return cmd_migrate_ops(args.bundle, args.apply, args.replace_spoolman, args.allow_unknown_spoolman)
     if args.cmd == "migrate-scanner":
         return cmd_migrate_scanner(args.calibration, args.apply, args.replace_map, args.printer)
+    if args.cmd == "backup":
+        return cmd_backup(args.backup_cmd, args.out if args.backup_cmd == "create" else None)
+    if args.cmd == "restore":
+        return cmd_restore(args.zip, uploaded=args.uploaded, yes=args.yes)
     if args.cmd == "remote":
         from . import remote
         cfg = config.load()

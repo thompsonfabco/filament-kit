@@ -177,6 +177,7 @@ class SetupPage:
         self.last_check = 0.0
         self.static = {n: (STATIC / n).read_bytes()
                        for n in ("setup.js", "setup_tabs.js", "setup_printers.js", "setup_trust.js", "setup_presets.js",
+                                 "setup_backup.js",
                                  "setup_logs.js",
                                  "setup.css")}
 
@@ -207,6 +208,7 @@ class SetupPage:
                  Route("/setup/setup_printers.js", self.asset, methods=["GET"]),
                  Route("/setup/setup_trust.js", self.asset, methods=["GET"]),
                  Route("/setup/setup_presets.js", self.asset, methods=["GET"]),
+                 Route("/setup/setup_backup.js", self.asset, methods=["GET"]),
                  Route("/setup/setup_logs.js", self.asset, methods=["GET"]),
                  Route("/setup/setup.css", self.asset, methods=["GET"])]
                 + [Route("/setup/api" + p, fn, methods=[m]) for p, fn, m in table])
@@ -291,7 +293,7 @@ class SetupPage:
     def _clear_trust(resp: Response) -> None:
         resp.delete_cookie(trusted.COOKIE, path="/setup", secure=True, httponly=True, samesite="strict")
 
-    def guard(self, fn, write: bool | str = False):
+    def guard(self, fn, write: bool | str = False, raw: bool = False):
         """`write`: True = a change the server makes itself (the helper's `check` first); "helper" = a change the
         helper makes, which checks the code in the same request. Either way a trusted computer's cookie may stand in for
         the code, and its time is renewed when it did."""
@@ -307,7 +309,8 @@ class SetupPage:
                 if request.method == "POST":
                     if not self._origin_ok(request):
                         return JSONResponse({"error": "bad origin"}, 403)
-                    body = await self._body(request)
+                    # raw: the body is a file the route reads itself; the code comes in a header
+                    body = {"code": request.headers.get("x-setup-code", "")} if raw else await self._body(request)
                     if write:
                         token = self._trusted_token(request, body)
                     if write == "helper":
@@ -316,7 +319,11 @@ class SetupPage:
                     elif write:
                         await self._code_ok(request, body)
                 res = await fn(request, body)
-                resp = JSONResponse(res, headers={"Cache-Control": "no-store"})
+                if isinstance(res, Response):           # a download
+                    res.headers["Cache-Control"] = "no-store"
+                    resp = res
+                else:
+                    resp = JSONResponse(res, headers={"Cache-Control": "no-store"})
                 if getattr(request.state, "clear_trust", False):
                     self._clear_trust(resp)
                 elif getattr(request.state, "set_trust", None) or token:
@@ -353,7 +360,7 @@ class SetupPage:
             f"<title>filament-kit setup: {name}</title><link rel=stylesheet href='/setup/setup.css'>"
             "<body><main id=app></main><script src='/setup/setup.js'></script>"
             "<script src='/setup/setup_tabs.js'></script><script src='/setup/setup_printers.js'></script>"
-            "<script src='/setup/setup_trust.js'></script><script src='/setup/setup_presets.js'></script><script src='/setup/setup_logs.js'></script></body></html>",
+            "<script src='/setup/setup_trust.js'></script><script src='/setup/setup_presets.js'></script><script src='/setup/setup_backup.js'></script><script src='/setup/setup_logs.js'></script></body></html>",
             headers=HEADERS)
 
     async def asset(self, request: Request):

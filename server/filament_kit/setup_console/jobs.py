@@ -122,7 +122,10 @@ def routes(page) -> list[tuple]:
         name = body.get("name")
         if not isinstance(name, str) or name not in setup_helper.JOBS:
             raise Refused(400, "job must be one of: " + ", ".join(setup_helper.JOBS))
-        await page._helper({"op": "job", "code": body["code"], "name": name})
+        req = {"op": "job", "code": body["code"], "name": name}
+        if name == "restore":           # the typed word, checked by the helper
+            req["confirm"] = body.get("confirm")
+        await page._helper(req)
         page.audit(request, f"job {name} started")
         return {"ok": True, "name": name}
 
