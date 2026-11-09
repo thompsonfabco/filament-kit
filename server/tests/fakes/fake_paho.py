@@ -2,19 +2,22 @@
 
 `FakeClient` records what the connection publishes; the test drives paho's callbacks (`connected`, `dropped`,
 `deliver`). A `responder` (fn(topic, body) -> payload | [payloads] | None) answers publishes; its payloads arrive
-shortly afterwards on the report topic, in order, from a timer thread (as paho's network loop would).
+shortly afterwards on the report topic, in order, from one thread (as paho's network loop does).
 
 `FakePrinter` is such a responder: it keeps a report, answers `pushall` with the full report and applies
 `ams_filament_setting` to its AMS units / external holder (reply first, then the changed report delta); a
 `project_file` job runs at once and reports the `mapping` it was sent."""
 from __future__ import annotations
 
+import collections
 import copy
 import json
 import threading
+import time
 
 from .fake_certs import FakeTlsSock, Leaf
 
+REPLY_DELAY = 0.02
 LEAF = Leaf()                       # the default printer leaf (no CN): pins for any serial
 
 
@@ -35,6 +38,9 @@ class FakeClient:
         self.on_connect = self.on_disconnect = self.on_message = self.on_connect_fail = None
         self.on_socket_open = None
         self.responder = None          # fn(topic, payload_dict) -> reply payload dict | list of them | None
+        self._outbox = collections.deque()
+        self._outbox_lock = threading.Lock()
+        self._sending = False
 
     def username_pw_set(self, username, password):
         self.username, self.password = username, password
@@ -68,11 +74,26 @@ class FakeClient:
             reply = self.responder(topic, body)
             if reply is not None:
                 replies = reply if isinstance(reply, list) else [reply]
-                threading.Timer(0.02, self._deliver_all, args=(replies,)).start()
+                self._send_later(replies)
 
-    def _deliver_all(self, payloads):
-        for p in payloads:
-            self.deliver(p)
+    def _send_later(self, replies):
+        """In the order they were asked for, as a broker's one stream is: a report from before a write never lands after it."""
+        with self._outbox_lock:
+            self._outbox.append((time.monotonic() + REPLY_DELAY, replies))
+            if not self._sending:
+                self._sending = True
+                threading.Thread(target=self._drain, daemon=True, name="fake-paho-send").start()
+
+    def _drain(self):
+        while True:
+            with self._outbox_lock:
+                if not self._outbox:
+                    self._sending = False
+                    return
+                due, payloads = self._outbox.popleft()
+            time.sleep(max(0.0, due - time.monotonic()))
+            for p in payloads:
+                self.deliver(p)
 
     # test helpers
     def socket_open(self, der=None) -> bool:
