@@ -30,7 +30,8 @@ def test_legacy_config_plans_todays_install():
         "filament-kit-library.timer", "filament-kit-backup.timer"]
     kinds = {a.kind for a in acts}
     assert not kinds & {"remove_pkg", "mask_sleep", "alsa_unmute", "udev_reload"}
-    assert _of(acts, "disable") == ["filament-kit-station.service"]
+    assert _of(acts, "disable") == ["filament-kit-station.service", "filament-kit-station-pair.path",
+                                    "filament-kit-station-pair.service"]
     assert "filament-kit-station.service" not in _of(acts, "install_unit")
 
 

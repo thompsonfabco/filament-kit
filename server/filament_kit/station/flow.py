@@ -26,7 +26,7 @@ from . import state as st
 log = logging.getLogger("intake-station")
 
 # Lamps (yellow = Hold, red = Discard), modes 0 off, 1 on, 2 blink, 3 three blinks, 4 rapid blink
-STEP_LAMPS = {"idle": (0, 0), "lookup": (4, 1), "camera": (2, 1), "recognising": (4, 1), "weigh": (2, 1),
+STEP_LAMPS = {"pairing": (2, 0), "idle": (0, 0), "lookup": (4, 1), "camera": (2, 1), "recognising": (4, 1), "weigh": (2, 1),
               "ready": (1, 1), "saving": (4, 1), "done": (3, 0), "phone": (0, 1)}
 DONE_SECONDS = 10  # done -> idle
 TITLE_WIDTH, LINE_WIDTH = 16, 21  # the OLED's title row (bold) and body rows (6x10 font)
@@ -173,6 +173,9 @@ def on_yellow(long_press):
     with st.lock:
         step, seq, nfc_id = flow["step"], flow["seq"], st.state["tag"]
     log.info("yellow %s at %s", "long" if long_press else "press", step)
+    if long_press and step == "idle" and not api().paired:
+        ask_to_pair()
+        return
     if long_press and step == "ready":
         if go("saving", seq):  # only for the attempt the press was on
             spawn(save, seq)
@@ -222,7 +225,7 @@ def flow_tick(now):
     """Timeouts: back to idle after STATION_FLOW_TIMEOUT of no progress, or DONE_SECONDS after a save."""
     with st.lock:
         step, at = flow["step"], flow["at"]
-        if step == "idle" or now - at <= (DONE_SECONDS if step == "done" else st.settings["flow_timeout"]):
+        if step in ("idle", "pairing") or now - at <= (DONE_SECONDS if step == "done" else st.settings["flow_timeout"]):
             return
         reset()
     log.info("flow timeout at %s", step)
@@ -237,6 +240,23 @@ def tick_loop():
             flow_tick(time.time())
         except Exception:  # noqa: BLE001 - one bad tick must not end the timeouts for the rest of the run
             log.exception("flow tick")
+
+
+def ask_to_pair() -> bool:
+    """Not paired: ask the server in STATION_SERVER (pair_request.py); the screen shows the code to compare."""
+    from . import pair_request
+
+    def show():
+        with st.lock:
+            on = flow["step"] in ("idle", "pairing")
+        if on:
+            go("pairing" if pair_request.status["state"] in ("asking", "code") else "idle",
+               message=pair_request.status["message"])
+    started = pair_request.ask(name="station", say=speech.say, show=show)
+    if not started:
+        beep.beep("nothing")
+        go("idle", message="No server set" if pair_request.server_address() is None else "Already asking")
+    return started
 
 
 def lamps(now):
@@ -260,9 +280,13 @@ def screen():
         " ".join(x for x in (what.get("vendor"), what.get("name")) if x), what.get("material") or ""]
     d += ["", "", ""]
     step, msg = f["step"], f["message"]
+    from . import pair_request
+    code = pair_request.status["code"]
     rows = {
+        "pairing": ["Pair code", f"{code[:3]} {code[3:]}" if code else "Asking...",
+                    "Compare it on the" if code else "", "setup page: Devices" if code else "", msg],
         "idle": ["Ready", "Scan a spool's tag", "", "", msg] if paired else
-                ["Not paired", "On the station PC:", "sudo filament-kit", "station pair", msg],
+                ["Not paired", "Hold yellow to ask", "the kit server, or", "run: station pair", msg],
         "lookup": ["Tag scanned", "Looking it up...", "", "", ""],
         "camera": ["New Tag Scanned", "Show the spool to", "the camera, then", "press yellow", msg],
         "recognising": ["Recognising...", "Please wait", "", "", "Red cancels"],

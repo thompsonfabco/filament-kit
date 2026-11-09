@@ -9,6 +9,9 @@ User=filament-kit-station
 Group=filament-kit-station
 SupplementaryGroups=dialout audio video
 ExecStart=/opt/filament-kit/venv/bin/python -I -m filament_kit.station
+# its own folder (the file system is read-only to it): a pairing it received waits there for the root side
+StateDirectory=filament-kit-station
+StateDirectoryMode=0700
 Restart=always
 RestartSec=5
 # read-only code, no home, nothing to write

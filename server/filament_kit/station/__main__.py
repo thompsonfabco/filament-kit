@@ -32,6 +32,8 @@ def main():
         signal.signal(sig, stop_service)
     for fn in (panel.panel_loop, nfc.nfc_loop, scale.scale_loop, speech.speech_loop, flow.tick_loop):
         threading.Thread(target=fn, daemon=True).start()
+    if not flow.api().paired:       # ask the kit server once; a long press of yellow asks again
+        flow.ask_to_pair()
     ThreadingHTTPServer(("0.0.0.0", s["port"]), http.make_handler(st.view, s["allow"])).serve_forever()
 
 

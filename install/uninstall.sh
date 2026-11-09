@@ -39,7 +39,7 @@ if [ -x /opt/filament-kit/venv/bin/filament-kit ]; then
     UNITS=$(/opt/filament-kit/venv/bin/filament-kit modules units 2>/dev/null) || UNITS=""
 fi
 if [ -z "$UNITS" ]; then
-    UNITS="filament-kit-setup.socket filament-kit-setup@.service filament-kit-setup-job@.service filament-kit-setup-apply.service filament-kit-web.service filament-kit-station.service filament-kit-build.path filament-kit-build.service filament-kit-library.timer filament-kit-library.service filament-kit-backup.timer filament-kit-backup.service filament-kit-update.timer filament-kit-update.service filament-kit.service spoolman.service"
+    UNITS="filament-kit-setup.socket filament-kit-setup@.service filament-kit-setup-job@.service filament-kit-setup-apply.service filament-kit-web.service filament-kit-station.service filament-kit-station-pair.path filament-kit-station-pair.service filament-kit-build.path filament-kit-build.service filament-kit-library.timer filament-kit-library.service filament-kit-backup.timer filament-kit-backup.service filament-kit-update.timer filament-kit-update.service filament-kit.service spoolman.service"
 fi
 for u in $UNITS; do
     if [ "$u" = spoolman.service ] && [ "$KIT_SPOOLMAN" -eq 0 ]; then
@@ -120,7 +120,7 @@ else
 fi
 
 if [ "$PURGE" -eq 1 ]; then
-    rm -rf /etc/filament-kit /etc/filament-kit-station /var/lib/filament-kit /var/lib/filament-kit-web /var/backups/filament-kit
+    rm -rf /etc/filament-kit /etc/filament-kit-station /var/lib/filament-kit /var/lib/filament-kit-web /var/lib/filament-kit-station /var/backups/filament-kit
     if [ "$KIT_SPOOLMAN" -eq 1 ]; then
         rm -rf /var/lib/spoolman
     fi
