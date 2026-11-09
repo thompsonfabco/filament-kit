@@ -29,5 +29,18 @@ def test_the_run_passes_previous_on_and_the_scenario_is_there():
     assert '"${PREVIOUS[@]}"' in RUN and '"f": ("f)' in E2E and "def f_cross_tag" in E2E
 
 
+def test_every_scenario_names_the_host_state_it_starts_from_and_the_run_prepares_it():
+    """f leaves the previous release installed and e a station: a scenario after them (g after f failed, 2026-11-09)
+    must not inherit that. Each scenario names its state and the loop prepares it before running it."""
+    scenarios = set(re.findall(r'^    "([a-z])": \("', E2E, re.M))
+    line = next(x for x in E2E.splitlines() if x.startswith("NEEDS = "))
+    needs = dict(re.findall(r'"([a-z])": ("clean"|"release"|"server"|"seeded"|None)', line))
+    assert scenarios == set(needs) and {"a", "f", "g"} <= scenarios
+    assert needs["g"] == '"seeded"' and needs["c"] == '"seeded"' and needs["a"] == '"clean"'
+    loop = E2E.split("for key in want:", 1)[1]
+    assert loop.index("e2e.prepare(key)") < loop.index("getattr(e2e, meth)()")
+    assert '"--version", self.v1' in E2E.split("def prepare", 1)[1].split("def _seed", 1)[0]   # b made v2 the latest
+
+
 def test_the_previous_tree_is_not_what_clean_up_takes_uninstall_from():
     assert '"$WORK"/tree-*/install/uninstall.sh' in RUN and 'f"previous-{tag}"' in E2E

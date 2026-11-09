@@ -360,11 +360,13 @@ class E2E:
         self.spool: dict | None = None         # the spool d added (with the tag c scans)
         self.printer = None
         self.installed = False                 # a) installed the kit (the later scenarios need it)
+        self.v1_published = False              # v1 is on the fake release server under OWNER_REPO
 
     # ---- a) fake release server and get.sh
     def a_install(self, sc="a") -> None:
         rel, run = self.rel, self.run
         rel.publish(self.v1)
+        self.v1_published = True
         rel.publish(self.v1, repo="e2e/tampered", tamper_tarball=True)
         rel.publish(self.v1, repo="e2e/badsig", foreign_sig=True)
         rel.serve()
@@ -398,6 +400,84 @@ class E2E:
                   sorted(os.listdir(kept)) == ["SHA256SUMS", "SHA256SUMS.sig", f"filament-kit-{self.v1}.tar.gz"]
                   if kept.is_dir() else False, str(kept))
 
+    # ---- the host state a scenario starts from
+    # Scenarios leave the host as they end: e leaves a station, f the previous release, b a held rollback. So each
+    # scenario names the state it needs (NEEDS) and prepare() brings the host there first, rebuilding only what is
+    # missing: in the order a,d,c,b,e nothing is rebuilt, after e or f the next scenario gets a fresh install.
+    def _v1_on_server(self) -> None:
+        if not self.v1_published:
+            self.rel.publish(self.v1)
+            self.v1_published = True
+        if self.rel.server is None:
+            self.rel.serve()
+
+    def _is_server_v1(self) -> bool:
+        if installed_version() != self.v1:
+            return False
+        try:
+            mods = read_cfg().get("modules") or {}
+        except (OSError, ValueError):
+            return False
+        return bool(mods.get("server")) and bool(mods.get("spoolman"))
+
+    def _token_works(self) -> bool:
+        if self.token is None or self.spool is None:
+            return False
+        code, spools = jhttp("GET", f"{KIT}/api/spools", headers={"Authorization": f"Bearer {self.token}"})
+        return code == 200 and isinstance(spools, dict) and \
+            self.spool.get("id") in [s.get("id") for s in spools.get("spools", [])]
+
+    def prepare(self, key: str) -> None:
+        need = NEEDS.get(key)
+        run, rel = self.run, self.rel
+        if need is None:
+            return
+        if need == "clean":
+            if nothing_installed():
+                print("  (known state: no kit; uninstalling what the last scenario left)", flush=True)
+                uninstall(run, rel, f"known-state-{key}-uninstall")
+            return
+        self._v1_on_server()
+        if need == "release":
+            return
+        if not self._is_server_v1():
+            print(f"  (known state: {self.v1} installed by get.sh; the host has {installed_version() or 'no kit'})",
+                  flush=True)
+            if nothing_installed():
+                uninstall(run, rel, f"known-state-{key}-uninstall")
+            r = rel.get_sh(["--repo", OWNER_REPO, "--version", self.v1, "--modules", "spoolman,server,printers,web",
+                            "--set", f"web.public_url={PUBLIC_URL}"], f"known-state-{key}-install")
+            run.check(key, f"known state: get.sh installs {self.v1} (spoolman,server,printers,web)",
+                      r.returncode == 0 and self._is_server_v1(), r.stdout[-1500:] + r.stderr[-800:])
+            if r.returncode:
+                raise Fail("could not bring the host to the known state; see the log")
+            self.installed = True
+            self.token = self.spool = None          # the pairing and the spool went with the old install
+            if self.printer is not None:            # and the printer entry: g then has none to compare
+                self.printer.close()
+                self.printer = None
+            wait_for(lambda: http("GET", f"{SPOOLMAN}/info")[0] == 200 or None, 120, 2)
+            wait_for(lambda: jhttp("GET", f"{KIT}/api/info")[0] == 200 or None, 90, 2)
+        if need == "seeded" and not self._token_works():
+            print("  (known state: pairing the e2e phone and adding its spool with the tag)", flush=True)
+            self._seed(key)
+
+    def _seed(self, sc: str) -> None:
+        """What d leaves for c and g: a paired token and one opened spool whose filament has the tag UID."""
+        r = kit_python("from filament_kit import pairing; print(pairing.issue('e2e').code)")
+        code, body = jhttp("POST", f"{KIT}/api/pair", body={"code": r.stdout.strip()})
+        if code != 200 or not isinstance(body, dict) or not body.get("token"):
+            raise Fail(f"known state: pairing refused: {code}")
+        self.token = body["token"]
+        auth = {"Authorization": f"Bearer {self.token}"}
+        code, added = jhttp("POST", f"{KIT}/api/intake/add", headers=auth,
+                            body={"items": [SEED_ITEM], "dry_run": False, "tag": UID})
+        if code != 200 or not isinstance(added, dict) or len(added.get("spool_ids") or []) != 1:
+            raise Fail(f"known state: adding the spool failed: {code} {added}")
+        code, sp = jhttp("GET", f"{SPOOLMAN}/spool/{added['spool_ids'][0]}")
+        self.spool = sp if code == 200 and isinstance(sp, dict) else None
+        self.run.check(sc, "known state: paired, one spool with the tag", self._token_works(), f"{code}")
+
     # ---- d) manual add without AI
     def d_manual_add(self, sc="d") -> None:
         run = self.run
@@ -418,9 +498,7 @@ class E2E:
                            ctype="multipart/form-data; boundary=x")
         run.check(sc, "AI label reading is off: /api/intake/read answers module_off",
                   code == 409 and isinstance(body, dict) and body.get("module") == "ai_intake", f"{code} {body}")
-        item = {"vendor": "E2E Test Co", "name": "E2E PLA Red", "material": "PLA", "color_hex": "cc0000",
-                "net": 1000, "tare": 200, "density": 1.24, "count": 1, "nozzle": 210, "bed": 60,
-                "sealed": False}               # an opened spool: only then is the tag linked
+        item = SEED_ITEM
         def spool_count() -> int:
             c, spools = jhttp("GET", f"{SPOOLMAN}/spool?allow_archived=true")
             if c != 200 or not isinstance(spools, list):
@@ -765,6 +843,15 @@ class E2E:
             run.check(sc, "after the restore: the printer is back in the kit", code_ == 200 and
                       SERIAL in [p.get("id") for p in plist.get("printers", [])], str(plist)[:400])
 
+SEED_ITEM = {"vendor": "E2E Test Co", "name": "E2E PLA Red", "material": "PLA", "color_hex": "cc0000",
+             "net": 1000, "tare": 200, "density": 1.24, "count": 1, "nozzle": 210, "bed": 60,
+             "sealed": False}          # an opened spool: only then is the tag linked
+
+# The state each scenario starts from (E2E.prepare): "clean" no kit; "release" v1 on the fake release server;
+# "server" this checkout's v1 installed by get.sh with spoolman,server,printers,web; "seeded" that plus the
+# e2e pairing and the spool with its tag (what d leaves); None: the scenario sets itself up (f).
+NEEDS = {"a": "clean", "d": "server", "c": "seeded", "b": "server", "e": "release", "f": None, "g": "seeded"}
+
 SCENARIOS = {
     "a": ("a) fake release server: get.sh install, tampered tarball, bad signature", "a_install"),
     "d": ("d) manual add without AI (server mode, no API key)", "d_manual_add"),
@@ -804,6 +891,7 @@ def main() -> int:
                 continue
             n = len(run.results)
             try:
+                e2e.prepare(key)
                 getattr(e2e, meth)()
                 bad = [r for r in run.results[n:] if not r["ok"]]
                 status[key] = "fail" if bad else "pass"
