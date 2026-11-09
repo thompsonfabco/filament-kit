@@ -1,5 +1,7 @@
 """bridge.klipper.manager.KlipperFamily: connections, states, status shape and commands (against FakeMoonraker)."""
+import ipaddress
 import json
+import threading
 import time
 from pathlib import Path
 
@@ -7,7 +9,9 @@ import pytest
 
 from filament_kit.bridge import registry, status as bambu_status
 from filament_kit.bridge.connection import PrinterOffline, UnknownPrinter
+from filament_kit.bridge.klipper import discovery
 from filament_kit.bridge.klipper import hardware as kh
+from filament_kit.bridge.klipper import manager as kmanager
 from filament_kit.bridge.klipper import usage as kusage
 from filament_kit.bridge.klipper.manager import KlipperFamily
 from filament_kit.spoolman import Spoolman
@@ -380,3 +384,131 @@ def test_a_spool_change_during_set_up_is_not_overwritten(moonraker, spoolman_url
     finally:
         fam.stop()
 
+
+# --- the Scan a client can ask for ------------------------------------------------------------------------------------
+OWN = ipaddress.ip_network("10.9.8.0/24")
+
+
+@pytest.fixture
+def scanning(monkeypatch):
+    calls = []
+    monkeypatch.setattr(discovery, "own_subnet", lambda: OWN)
+    monkeypatch.setattr(discovery, "scan", lambda net, **kw: calls.append(str(net)) or [])
+    return calls
+
+
+@pytest.mark.parametrize("subnet", ["192.168.50.0/24", "10.1.2.0/24", "172.16.0.0/24", "172.31.255.0/24", "192.168.50.7"])
+def test_scan_allows_what_the_server_can_reach(fam, scanning, subnet):
+    assert fam.scan(subnet) == []
+    assert len(scanning) == 1
+
+
+def test_scan_defaults_to_this_machines_network(fam, scanning):
+    fam.scan()
+    assert scanning == ["10.9.8.0/24"]
+
+
+@pytest.mark.parametrize("subnet", ["1.1.1.0/24", "100.64.0.0/24", "100.100.100.0/24", "172.32.0.0/24", "2606:4700::/120",
+                                    "fd00::/120", "fe80::/120", "::1/128", "127.0.0.0/24", "169.254.169.0/24", "0.0.0.0/24",
+                                    "240.0.0.0/24", "192.0.2.0/24", "198.18.0.0/24"])
+def test_scan_refuses_what_the_server_cannot_reach(fam, scanning, subnet):
+    """The unit would block each of these, and the scan would read as "no printers"."""
+    with pytest.raises(ValueError, match="private"):
+        fam.scan(subnet)
+    assert scanning == []
+
+
+def test_a_machine_on_a_public_network_is_told_rather_than_finding_nothing(fam, scanning, monkeypatch):
+    monkeypatch.setattr(discovery, "own_subnet", lambda: ipaddress.ip_network("8.8.8.0/24"))
+    with pytest.raises(ValueError, match="private"):
+        fam.scan()
+    assert scanning == []
+
+
+def test_the_scan_rule_is_the_units_allow_list():
+    unit = Path(__file__).parents[2] / "install" / "systemd" / "filament-kit.service"
+    allow = next(ln for ln in unit.read_text().splitlines() if ln.startswith("IPAddressAllow=")).split("=", 1)[1].split()
+    lan = {ipaddress.ip_network(n) for n in allow if n not in ("localhost", "160.79.104.0/21", "2607:6bc0::/48")}
+    assert lan == set(discovery.REACHABLE)
+
+
+def test_scan_refuses_too_many_addresses_even_when_private(fam, scanning):
+    with pytest.raises(ValueError, match="256"):
+        fam.scan("10.0.0.0/16")
+    assert scanning == []
+
+
+def test_scan_with_no_own_network_still_takes_a_private_range(fam, scanning, monkeypatch):
+    monkeypatch.setattr(discovery, "own_subnet", lambda: None)
+    fam.scan("10.1.2.0/24")
+    with pytest.raises(ValueError, match="private"):
+        fam.scan("8.8.8.0/24")
+    assert scanning == ["10.1.2.0/24"]
+
+
+def test_a_second_scan_waits_for_the_gap(fam, scanning, monkeypatch):
+    fam.scan("10.1.2.0/24")
+    with pytest.raises(ValueError, match=r"try again in \d+ s"):
+        fam.scan("10.1.3.0/24")
+    assert scanning == ["10.1.2.0/24"]
+    monkeypatch.setattr(kmanager, "SCAN_GAP", 0.0)
+    fam.scan("10.1.3.0/24")
+    assert scanning == ["10.1.2.0/24", "10.1.3.0/24"]
+
+
+def test_a_refused_range_does_not_use_up_the_gap(fam, scanning):
+    with pytest.raises(ValueError):
+        fam.scan("1.1.1.0/24")
+    fam.scan("10.1.2.0/24")
+    assert scanning == ["10.1.2.0/24"]
+
+
+def test_a_failed_scan_still_starts_the_gap(fam, monkeypatch):
+    monkeypatch.setattr(discovery, "own_subnet", lambda: OWN)
+
+    def boom(net, **kw):
+        raise OSError("out of sockets")
+    monkeypatch.setattr(discovery, "scan", boom)
+    with pytest.raises(OSError):
+        fam.scan("10.1.2.0/24")
+    with pytest.raises(ValueError, match="try again"):
+        fam.scan("10.1.2.0/24")
+
+
+def test_only_one_scan_runs_at_a_time(fam, monkeypatch):
+    monkeypatch.setattr(discovery, "own_subnet", lambda: OWN)
+    monkeypatch.setattr(kmanager, "SCAN_GAP", 0.0)
+    started, release = threading.Event(), threading.Event()
+
+    def slow(net, **kw):
+        started.set()
+        assert release.wait(8)
+        return []
+    monkeypatch.setattr(discovery, "scan", slow)
+    t = threading.Thread(target=fam.scan, args=("10.1.2.0/24",))
+    t.start()
+    try:
+        assert started.wait(8)
+        with pytest.raises(ValueError, match="already running"):
+            fam.scan("10.1.3.0/24")
+    finally:
+        release.set()
+        t.join(8)
+    monkeypatch.setattr(discovery, "scan", lambda net, **kw: [])
+    assert fam.scan("10.1.3.0/24") == []       # and the lock is free again
+
+
+# --- the generic entry's note -----------------------------------------------------------------------------------------
+@pytest.mark.parametrize("system,words", [("single", "a single-extruder printer"), ("tool-macros", "a toolchanger"),
+                                          ("afc", "an AFC printer"), ("happy-hare", "a Happy Hare printer"),
+                                          ("lane-data", "lane_data"), ("a-new-one", "a a-new-one printer")])
+def test_the_generic_note_names_the_system_it_found(system, words):
+    note = kmanager.generic_note(system)
+    assert words in note and "generic" in note and "Klipper guide" in note
+
+
+def test_an_unknown_printer_gets_the_note_in_its_status(moonraker, fam):
+    pid = add(moonraker, "Voron")
+    fam.start()
+    assert wait_for(lambda: fam.state(pid) == "unknown_model")
+    assert fam.status(pid)["notes"] == [kmanager.generic_note("single")]
