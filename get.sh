@@ -25,9 +25,10 @@
 # installs nothing. Then it unpacks into a temporary folder, keeps a copy of the verified release in
 # /opt/filament-kit/releases/ (for `filament-kit update --rollback`), runs install.sh with the terminal (so its
 # questions work through the pipe; without a terminal install.sh asks nothing) and removes the temporary folder.
-# Piped, sudo (use_pty, sudo-rs's default on Ubuntu 25.10+) starts bash as a background job of its terminal, where
-# the first command to touch the terminal (install.sh's questions, apt) stops for good; so before install.sh runs
-# this script makes itself the terminal's foreground job (fk_take_tty), and gives the terminal back afterwards.
+# Piped, sudo (use_pty) starts bash as a background job of its terminal. Under sudo-rs, Ubuntu 25.10+'s default, the
+# first command to touch the terminal (install.sh's questions, apt) stops for good; so before install.sh runs this
+# script makes itself the terminal's foreground job (fk_take_tty), and gives the terminal back afterwards. Classic sudo
+# (Ubuntu 24.04) handles that first touch itself and must be left to it: see fk_classic_sudo.
 # On an existing install it first holds every printer's mapping lock, as the updater does: it stops when a printer
 # is mapping slots or loading a spool.
 #
@@ -82,7 +83,7 @@ fk_classic_sudo() {
         exe=$(readlink "/proc/$pid/exe" 2>/dev/null) || exe=""
         case "${exe##*/}" in
             sudo | sudo.ws | sudo-ws | sudo-rs)
-                case "$("$exe" --version 2>/dev/null)" in "Sudo version"*) return 0 ;; esac
+                case "$(LC_ALL=C LANGUAGE= "$exe" --version 2>/dev/null)" in "Sudo version"*) return 0 ;; esac
                 return 1
                 ;;
         esac
