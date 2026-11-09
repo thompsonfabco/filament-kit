@@ -693,6 +693,11 @@ hand: `sudo systemctl unmask sleep.target suspend.target hibernate.target hybrid
   computer and paste the link; it checks the link with the server and says "expired" if you were late. On an
   all-in-one both run on the same machine. The station's pairing can reach only the station part of the server.
   `sudo filament-kit pair` on a station-only computer says that pairing runs on the kit server.
+- **Pairing from the station's own screen (v0.4.4).** An unpaired station asks the kit server named in
+  `station.allow` when it starts, and again when you hold yellow while it shows "Not paired". Its screen shows
+  "Pair code" and six digits, and it says them. On the setup page, open **Devices**, then **Stations asking to
+  pair**, and tap **Show requests**. Tap **Pair** only if the page shows the same six digits; otherwise tap
+  **Refuse**, because someone else asked. The station saves its pairing by itself within a few seconds.
 - After the panel says "Saved #N / tag not linked", holding yellow again links the tag to that spool instead of
   saving a duplicate.
 - A station on a second computer: on the **server**, put the station's address in
