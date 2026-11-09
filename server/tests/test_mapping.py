@@ -558,3 +558,44 @@ def test_a_stale_map_says_map_again_whatever_stopped_an_earlier_job(stubs):
     ams.save_map(SERIAL, saved)
     v = m.view(SERIAL)
     assert v["outcome"] == "stale" and v["reason"] == "none" and v["next_step"] == "Map the slots."
+
+
+def _failed_job(finished):
+    f = config.paths().state / "printers" / SERIAL / mapping.STATUS_FILE
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(json.dumps({"job_id": "x", "state": "failed", "step": "", "reason": "offline", "finished": finished,
+                             "problems": ["printer_offline: the printer went offline; nothing was changed"]}),
+                 encoding="utf-8")
+
+
+def _owner_map(at):
+    ams.save_map(SERIAL, ams.SlotMap(slots={"A1": {"ams_id": 0, "tray_id": 0, "global_id": 0}},
+                                     by_user={"A1": {"by": "user", "at": at}}))
+
+
+def test_a_manual_map_after_a_failed_job_is_the_current_map():
+    """S1 (app walk 2026-11-09 16:45): the owner mapped by loading filament after a failed job; the view no longer
+    says the last mapping failed, and the old failure stays readable as old problems."""
+    _failed_job(time.mktime((2026, 11, 9, 13, 0, 0, 0, 0, -1)))
+    _owner_map(time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(time.mktime((2026, 11, 9, 13, 5, 0, 0, 0, -1)))))
+    v = mapping.Mapper(FakeManager()).view(SERIAL)
+    assert v["outcome"] == "not_confirmed" and v["reason"] == "none" and v["next_step"] == "Map the slots."
+    assert v["state"] == "failed" and v["problems_old"] is True and v["problems"]       # the job's own record is kept
+    assert [s["label"] for s in v["slots"]] == ["A1"]
+
+
+def test_a_failed_job_after_the_manual_map_still_reads_failed():
+    _owner_map(time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(time.mktime((2026, 11, 9, 13, 0, 0, 0, 0, -1)))))
+    _failed_job(time.mktime((2026, 11, 9, 13, 5, 0, 0, 0, -1)))
+    v = mapping.Mapper(FakeManager()).view(SERIAL)
+    assert v["outcome"] == "failed" and v["reason"] == "offline"
+    assert v["next_step"] == "Map again when the printer is on and online."
+
+
+def test_owner_since_is_the_newest_owner_entry_and_ignores_bad_times():
+    m = ams.SlotMap(by_user={"A1": {"at": "2026-11-09T13:00:00-0500"}, "A2": {"at": "2026-11-09T14:00:00-0500"},
+                             "A3": {"at": "garbage"}, "A4": {}})
+    assert mapping.owner_since(m) == 1794250800.0                     # 19:00 UTC
+    assert mapping.owner_since(ams.SlotMap()) is None
+    assert mapping.superseded({"state": "failed", "finished": None}, m) is True
+    assert mapping.superseded({"state": "done", "finished": 0}, m) is False
