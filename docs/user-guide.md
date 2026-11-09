@@ -330,6 +330,7 @@ Run these in a Terminal on the Ubuntu computer.
 | `sudo filament-kit config` | Settings menu: display name, storage locations, Claude model and daily limit, API key, printers, modules. |
 | `sudo filament-kit modules list` | Shows each module on or off and the mode. `modules set <mode>`, `modules enable <name>` and `modules disable <name>` change them (see [Change the mode later](#change-the-mode-later)); `modules apply` sets the computer up again from the saved settings. |
 | `sudo filament-kit printer map <serial>` | Maps a printer's AMS slots (see [Map slots](#map-slots)), printing each step. |
+| `sudo filament-kit printer report <serial>` | Makes a short file about a printer the kit doesn't know, or whose mapping failed, to attach to an issue. It holds no serial, address or name; read it first. |
 | `sudo filament-kit profiles status` / `build` | Shows or rebuilds the Bambu Studio and Orca Slicer presets (see [Presets](#presets-in-bambu-studio)). |
 | `sudo filament-kit profiles apply-updates --all` (or `--line <id>`; add `--dry-run` to only look) | Writes the updated presets you accept over the ones in the primary Bambu Studio folder (see [Stable and Beta Bambu Studio](#stable-and-beta-bambu-studio-v040)). |
 | `sudo filament-kit profiles lines` / `set-parent <line_id> <parent>` | Lists the filament lines; sets a line's Bambu Studio parent (`--orca`: its Orca Slicer parent). |

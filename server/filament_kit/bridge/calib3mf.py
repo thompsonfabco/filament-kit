@@ -128,6 +128,13 @@ class CalibResult:
     external: list[str] = field(default_factory=list)         # external holders: never part of the job (own id)
     notes: list[str] = field(default_factory=list)            # not problems: what the result does not settle yet
     scheme_unsettled: bool = False                            # several schemes fit; the model's first was taken
+    report_wanted: str | None = None                          # printer_report.WANTED: why a report would help
+    trail: list[dict] = field(default_factory=list)           # what each job sent and got: numbers and codes only
+    job_file: str | None = None                               # minimal | project
+    final: str | None = None                                  # how the printer ended the job
+    print_error: str | None = None                            # hex, when there was one
+    fits: list[str] = field(default_factory=list)             # the schemes the reported numbers fit
+    repeats_last_print: bool = False                          # the numbers equal those of the print before this mapping
     cert_changed: bool = False
     restored: bool = True     # we left nothing changed (false: a filament left loaded in the toolhead)
     job: str = ""             # this run's subtask_name (`run_name`)
@@ -567,6 +574,7 @@ def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None
     res: CalibResult | None = None
     table: CalibResult | None = None    # a job whose numbers fit no scheme: still the printer's numbers
     last_print: dict = {}               # the `mapping` of the print before this mapping began (the first job's snapshot)
+    trail: list[dict] = []
     for key in sends:
         r = _attempt(manager, serial, slotmap, printer, should_stop, hw, mi, candidates, key, tried, last_print)
         if r.skip:
@@ -575,10 +583,12 @@ def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None
             attempts.append(f"numbering {res.sent_scheme}: " + ("; ".join(res.problems) or "no scheme fits"))
         res = r
         sent_keys.append(key)
+        trail.append(_trail_entry(r))
         if r.consistent and r.scheme is None:
             if table is not None and table.decoding != r.decoding:
                 # the numbers follow what was sent, so they say nothing about the slots
                 r.consistent, r.scheme_unsettled, r.notes, table = False, False, [], None
+                r.report_wanted = "no_scheme"
                 r.problems += [f"{label}: sent slot {r.sent.get(label)}, the printer reported {n}"
                                for label, n in r.decoding.items() if n != r.sent.get(label)]
                 r.problems.append(f"the reported slot numbers {list(r.mapping or [])} fit no numbering scheme of this "
@@ -592,10 +602,16 @@ def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None
         res = table                     # a later job, in other numbers, proved less than this one
     if res is None:                     # no candidate can number the loaded slots
         res = CalibResult(problems=["no numbering scheme of this printer model can number the loaded slots"])
-    res.tried, res.attempts = sent_keys, attempts
+    res.tried, res.attempts, res.trail = sent_keys, attempts, trail
     if attempts:
         log.info("printer %s: calibration sent %d jobs (%s)", serial, len(sent_keys), "; ".join(attempts))
     return res
+
+
+def _trail_entry(r: CalibResult) -> dict:
+    return {"scheme": r.sent_scheme, "job_file": r.job_file, "final": r.final, "print_error": r.print_error,
+            "sent": list(r.sent.values()), "reported": list(r.mapping or []), "fits": list(r.fits),
+            "repeats_last_print": r.repeats_last_print}
 
 
 def _attempt(manager, serial: str, slotmap: SlotMap, printer, should_stop, hw: hardware.Hardware,
@@ -669,7 +685,9 @@ def _attempt(manager, serial: str, slotmap: SlotMap, printer, should_stop, hw: h
     path = remote_path(serial)
     try:
         with ftps.Client(printer) as c:
-            c.upload(path, build(labels, project_for(mi, snap, addrs)))
+            project = project_for(mi, snap, addrs)
+            res.job_file = "minimal" if project is None else "project"
+            c.upload(path, build(labels, project))
     except tlspin.CertChanged:
         res.cert_changed = True
         res.problems.append('cert_changed')
@@ -848,6 +866,7 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
     if reply is not None and not _ok(reply):
         log.warning("printer %s: calibration job refused (%s)", serial, _s(reply.get('reason')) or reply.get('result'))
         res.problems.append(REFUSED)
+        res.report_wanted = "job_refused"
         res.retry = True        # the numbers may be what it refused: the next candidate's may do
         return
 
@@ -905,16 +924,19 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
         return
     if not st['started']:
         stopped = _stop_ours(manager, serial, name)   # best effort: ours may still start after we gave up on it
+        res.report_wanted = "job_refused"
         res.problems.append(f"the printer did not start the calibration job within {JOB_TIMEOUT:.0f} s"
                             + ("" if stopped is None else _stopped_text(stopped)))
         return
     if st['final'] is None:
+        res.report_wanted = "job_failed"
         res.problems.append(f"the calibration job did not finish within {JOB_TIMEOUT:.0f} s"
                             + _stopped_text(_stop_ours(manager, serial, name)))
         return
     err = st['error']
     code = "" if _no_error(err) else f" (print_error {_error_text(err)})"
     ended = f"the calibration job ended as {st['final']} on the printer{code}"
+    res.final, res.print_error = st['final'], _error_text(err) if code else None
     clean = st['final'] == 'FINISH' or not code     # the H2D ends a gcode-only job FAILED with no error: finished
     res.failed_as_finish = st['final'] != 'FINISH' and clean
     if st['final'] != 'FINISH':
@@ -925,6 +947,7 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
         if st['final'] != 'FINISH':
             res.problems.append(ended)
         res.problems.append("the printer reported no slot mapping")
+        res.report_wanted = "no_mapping"
         return
     vals = []
     for i, label in enumerate(labels):
@@ -941,9 +964,13 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
     own = [k for k in proved if k in mi.numbering]
     if mi.known and own:        # a scheme the model does not list is a last resort, not a rival to its own
         proved = own
-    res.scheme = proved[0] if proved else None
-    stale = (res.scheme is None and numbers_ok and isinstance(last_print, list)
-             and list(res.mapping)[:len(vals)] == last_print[:len(vals)])
+    res.scheme, res.fits = proved[0] if proved else None, list(proved)
+    # for the report: whether a real printer repeats the old mapping in its full report is not known yet
+    res.repeats_last_print = (numbers_ok and isinstance(last_print, list)
+                              and list(res.mapping)[:len(vals)] == last_print[:len(vals)])
+    stale = res.scheme is None and res.repeats_last_print
+    if res.scheme is None:
+        res.report_wanted = "no_scheme"
     if stale:
         res.problems.append("the printer's slot numbers are the same as its last print's and fit no numbering this kit "
                             "knows, so they say nothing about these slots; filament use stays logged only")
@@ -973,6 +1000,7 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
         if vals == sent or list(res.mapping) == before_mapping:
             # an echo, or the last print's numbers: nothing shows the printer read this job
             res.scheme_unsettled = True
+            res.report_wanted = "job_failed"
             log.warning("printer %s: the job failed and its numbers prove little (sent %s, reported %s)", serial, sent,
                         vals)
     res.consistent = res.scheme is not None or (numbers_ok and clean and not stale)
