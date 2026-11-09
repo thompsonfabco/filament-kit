@@ -26,7 +26,7 @@ import socket
 import sys
 from getpass import getpass
 
-from . import config, pairing, release, updates
+from . import config, hostaddr, pairing, release, updates
 from .bridge import registry
 from .bridge.klipper import detect as kdetect
 from .bridge.klipper import discovery
@@ -247,12 +247,20 @@ def _describe(p: registry.Printer) -> int:
 def run(args) -> int:
     c = args.klipper_cmd
     if c == "add":
+        host = hostaddr.clean(args.host)
+        bad = hostaddr.form_error(host)
+        if bad:
+            print(f"error: {bad}", file=sys.stderr)
+            return 1
+        seen = hostaddr.inspect(host)       # a name that won't resolve is still saved: the printer may just be off
         try:
-            p = discovery.add(args.name, args.host, args.port)
+            p = discovery.add(args.name, host, args.port)
         except registry.DuplicatePrinter as e:
             print(f"error: {e}", file=sys.stderr)
             return 1
         print(f"added {registry.display_name(p)} as {p.serial} ({p.host}:{p.port})")
+        if seen.problem or seen.note:
+            print(f"note: {seen.problem or seen.note}")
         return _describe(p)
     if c == "scan":
         try:

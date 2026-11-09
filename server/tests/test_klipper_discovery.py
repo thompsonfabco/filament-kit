@@ -92,6 +92,42 @@ def test_cli_add_offline_still_adds(capsys):
     assert "gone" in registry.load()
 
 
+def test_cli_add_says_when_the_service_cannot_reach_it(capsys, monkeypatch):
+    monkeypatch.setattr(klipper_cli, "_describe", lambda p: 0)
+    assert klipper_cli.main(["add", "Far", "203.0.113.7"]) == 0
+    assert "IPAddressAllow=203.0.113.0/24" in capsys.readouterr().out
+    assert registry.load()["far"].host == "203.0.113.7"
+
+
+def test_cli_add_says_nothing_for_a_home_address(capsys, monkeypatch):
+    monkeypatch.setattr(klipper_cli, "_describe", lambda p: 0)
+    assert klipper_cli.main(["add", "Near", "192.168.50.7"]) == 0
+    assert "note:" not in capsys.readouterr().out
+
+
+def test_cli_add_saves_a_name_that_does_not_resolve_and_says_so(capsys, monkeypatch):
+    """The printer may just be off: it's kept as typed and the server keeps trying."""
+    def nope(*a, **kw):
+        raise socket.gaierror("no such host")
+    monkeypatch.setattr(socket, "getaddrinfo", nope)
+    monkeypatch.setattr(klipper_cli, "_describe", lambda p: 0)
+    assert klipper_cli.main(["add", "Off", "off.local"]) == 0
+    assert "off.local did not answer" in capsys.readouterr().out
+    assert registry.load()["off"].host == "off.local"
+
+
+def test_cli_add_refuses_what_cannot_be_an_address(capsys):
+    assert klipper_cli.main(["add", "Bad", "192.0.2.999"]) == 1
+    assert "give an IP address or a host name" in capsys.readouterr().err
+    assert registry.load() == {}
+
+
+def test_cli_add_keeps_an_ipv6_address_without_its_brackets(monkeypatch):
+    monkeypatch.setattr(klipper_cli, "_describe", lambda p: 0)
+    assert klipper_cli.main(["add", "Six", "[fd00::7]"]) == 0
+    assert registry.load()["six"].host == "fd00::7"
+
+
 def test_cli_api_key_not_echoed(capsys, monkeypatch):
     registry.add_klipper("P", "h")
     monkeypatch.setattr(klipper_cli, "getpass", lambda prompt="": "s3cretkey")
