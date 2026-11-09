@@ -8,7 +8,9 @@ import pytest
 from filament_kit.bridge import registry, status as bambu_status
 from filament_kit.bridge.connection import PrinterOffline, UnknownPrinter
 from filament_kit.bridge.klipper import hardware as kh
+from filament_kit.bridge.klipper import usage as kusage
 from filament_kit.bridge.klipper.manager import KlipperFamily
+from filament_kit.spoolman import Spoolman
 
 DATA = Path(__file__).parent / "data" / "klipper"
 
@@ -319,3 +321,62 @@ def test_job_record_never_blocks_follow_moves(moonraker, spoolman_url, monkeypat
         assert fam.usage(pid, 36500) == []                  # still in progress after the wait: not recorded
     finally:
         fam.stop()
+
+
+def test_set_up_runs_again_on_a_reconnect_not_the_first_connect(moonraker, spoolman_url, monkeypatch):
+    """Moonraker restarted: a fix to its [spoolman] must show, so the warning can't be left from before the restart."""
+    calls = []
+    real = kusage.spoolman_warning
+    monkeypatch.setattr(kusage, "spoolman_warning", lambda *a: calls.append(1) or real(*a))
+    moonraker.server_config = {"spoolman": {"server": "http://192.0.2.30:7912"}}
+    pid = registry.add_klipper("P", moonraker.host, moonraker.port).serial
+    fam = KlipperFamily(Spoolman(spoolman_url), backoff=(0.1, 0.4))
+    fam.start()
+    try:
+        fam.wait_settled(pid, 8)
+        assert wait_for(lambda: fam._conns[pid].sub.connected)
+        time.sleep(0.5)      # time for a set-up the first connect must NOT have asked for
+        assert len(calls) == 1
+        assert "another Spoolman" in fam.status(pid)["spoolman_warning"]
+        moonraker.server_config = {"spoolman": {"server": spoolman_url}}
+        moonraker.drop()
+        assert wait_for(lambda: fam.status(pid)["spoolman_warning"] is None)
+        assert wait_for(lambda: fam._conns[pid].sub.connected)
+        time.sleep(0.5)
+        assert len(calls) == 2      # one for the reconnect, and it doesn't feed itself
+        moonraker.push({"print_stats": {"state": "printing"}})
+        assert wait_for(lambda: fam.status(pid)["gcode_state"] == "RUNNING")
+    finally:
+        fam.stop()
+
+
+@pytest.mark.parametrize("event", ["notification", "reconnect read"])
+def test_a_spool_change_during_set_up_is_not_overwritten(moonraker, spoolman_url, monkeypatch, event):
+    """Set-up reads the spool early and stores it late: a tap in between must win, or follow mode moves spools back."""
+    moonraker.server_config = {"spoolman": {"server": spoolman_url}}
+    pid = registry.add_klipper("P", moonraker.host, moonraker.port).serial
+    fam = KlipperFamily(Spoolman(spoolman_url), backoff=(0.1, 0.4))
+    fam.start()
+    try:
+        fam.wait_settled(pid, 8)
+        conn = fam._conns[pid]
+        assert wait_for(lambda: conn.sub.connected)
+        real = kusage.spoolman_warning      # called after set-up has read the spool, before it stores it
+        tapped = []
+
+        def tap_during_set_up(*a):
+            if not tapped:
+                tapped.append(1)
+                if event == "notification":
+                    conn._on_event("notify_active_spool_set", [{"spool_id": 2}])
+                else:
+                    moonraker.spool_id = 2
+                    conn._on_connect()
+            return real(*a)
+        monkeypatch.setattr(kusage, "spoolman_warning", tap_during_set_up)
+        assert conn.spool_id is None
+        conn._setup()
+        assert tapped and conn.spool_id == 2
+    finally:
+        fam.stop()
+

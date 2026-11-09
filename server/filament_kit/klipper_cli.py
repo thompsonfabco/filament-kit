@@ -12,17 +12,21 @@ hooks it in (`add_parser`, `run`).
 
 The web console calls the data-returning halves; the CLI prints from them, with the same text as before:
     detect(p) -> dict           what `klipper add` / `detect` show, plus the Spoolman Moonraker reports to
-    pack_info(version, cfg) -> {version, sha256, url, lines}   the checked command (raises ReleaseError)
+    pack_info(version, cfg, spoolman_url=, allow=) -> {version, sha256, url, lines}   the checked command (raises
+                                ReleaseError); the two values, when given, are written into its install line
+    pack_spoolman(kit_url, printer_host) -> {url, choices, allow, problem}   what to give pack_info for this printer
 """
 from __future__ import annotations
 
 import argparse
 import ipaddress
 import re
+import shlex
+import socket
 import sys
 from getpass import getpass
 
-from . import config, release, updates
+from . import config, pairing, release, updates
 from .bridge import registry
 from .bridge.klipper import detect as kdetect
 from .bridge.klipper import discovery
@@ -32,6 +36,7 @@ from .bridge.klipper.moonraker import Moonraker, MoonrakerError, Unauthorized
 from .release import ReleaseError
 
 PACK = "fk-printer-pack.tar.gz"
+PACK_URL = re.compile(r"https?://[A-Za-z0-9._\-\[\]:]+(/[A-Za-z0-9._~/\-]*)?")     # no user, no password, no shell
 REPO_NAME = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")     # as release.Fetcher.release checks it
 
 
@@ -63,11 +68,62 @@ def _signed_table(version: str, cfg: dict, fetcher: release.Fetcher | None) -> d
                                f.get(rel["assets"][release.SIG], release.LIMIT_SIG))
 
 
-def pack_info(version: str, cfg: dict | None = None, *, fetcher: release.Fetcher | None = None) -> dict:
+def pack_spoolman(kit_url: str | None, printer_host: str) -> dict:
+    """What to give pack_info for this printer: {"url": the kit's Spoolman as the printer reaches it, or None; "choices":
+    the URLs to choose from when that can't be decided; "allow": the kit's own address on the printer's network, for
+    lasttag; "problem": None | "password" | "unreadable" | "no_address"}. `spoolman_url` as written unless it's loopback,
+    which on the printer would mean the printer: then the kit's LAN address on the printer's /24. A URL holding a
+    password isn't for a line people copy, and is refused rather than stripped."""
+    out = {"url": None, "choices": [], "allow": [], "problem": None}
+    url = (kit_url or "").strip()
+    hp = kusage._host_port(url)
+    if "@" in url.partition("://")[2]:
+        return {**out, "problem": "password"}
+    if hp is None or not PACK_URL.fullmatch(url):
+        return {**out, "problem": "unreadable"}
+    ips = pairing.local_ips()
+    try:
+        printer = {a[4][0] for a in socket.getaddrinfo(printer_host.strip("[]"), None, socket.AF_INET)}
+        nets = {ipaddress.ip_network(f"{a}/24", strict=False) for a in printer}
+    except (OSError, UnicodeError):
+        nets = set()
+    near = [i for i in ips if any(ipaddress.ip_address(i) in n for n in nets)]
+    if not kusage._names_loopback(url):
+        return {**out, "url": url, "allow": near[:1]}
+    if not ips:
+        return {**out, "problem": "no_address"}
+    scheme = url.partition("://")[0]
+    if len(near) == 1:
+        return {**out, "url": f"{scheme}://{near[0]}:{hp[1]}", "allow": near}
+    return {**out, "choices": [f"{scheme}://{i}:{hp[1]}" for i in (near or ips)]}
+
+
+def _is_ip(value) -> bool:
+    if not isinstance(value, str):
+        return False
+    try:
+        ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    return "%" not in value     # a scope id isn't an address lasttag would see, and it has no place in a shell line
+
+
+def pack_info(version: str, cfg: dict | None = None, *, fetcher: release.Fetcher | None = None,
+              spoolman_url: str | None = None, allow=()) -> dict:
     """The printer-pack install command for release `version`, pinned to the pack's SHA-256 from that release's
     signed SHA256SUMS (the signature is checked here): {version, sha256, url, lines} with `lines` the commands
-    to run on the printer, one per line. Raises ReleaseError (a development build, no signed release, a bad
-    signature, the pack not listed, no network): then there is no command at all."""
+    to run on the printer, one per line. `spoolman_url` and `allow` (see pack_spoolman), when given, go into the install
+    line; it never carries --yes or --parts: the pack still asks about each part and shows each edit. Raises ReleaseError
+    (a development build, no signed release, a bad signature, the pack not listed, no network, a value that isn't a plain
+    address): then there is no command at all."""
+    if spoolman_url and not PACK_URL.fullmatch(spoolman_url):       # the value may hold a password: never in the error
+        raise ReleaseError("the Spoolman URL for the printer must be a plain http:// or https:// address, with no "
+                           "user or password")
+    if any(not _is_ip(h) for h in allow):
+        raise ReleaseError("each address lasttag allows must be an IP address: it compares them as text, so a name "
+                           "would lock the kit out")
+    options = (f" --spoolman {shlex.quote(spoolman_url)}" if spoolman_url else "") + (
+        f" --allow {shlex.quote(','.join(allow))}" if allow else "")
     try:
         release.parse_version(version)
         cfg = cfg if cfg is not None else config.load()
@@ -84,7 +140,7 @@ def pack_info(version: str, cfg: dict | None = None, *, fetcher: release.Fetcher
     url = pack_url(version, repo)
     return {"version": version, "sha256": want, "url": url, "lines": [
         f"curl -fsSLo {PACK} {url}",
-        f'echo "{want}  {PACK}" | sha256sum -c - && tar xzf {PACK} && sh fk-printer-pack/fk-printer-pack.sh install']}
+        f'echo "{want}  {PACK}" | sha256sum -c - && tar xzf {PACK} && sh fk-printer-pack/fk-printer-pack.sh install{options}']}
 
 
 def pack(cfg: dict | None = None, *, fetcher: release.Fetcher | None = None) -> int:
