@@ -493,22 +493,23 @@ def set_lane_data(pid: str, mode: str) -> bool:
 
 
 def klipper_at(printers: dict, host: str, port: int) -> Printer | None:
-    """The Klipper entry at `host:port`, by text, or the configured one that `host` and its typed name or address resolve
-    to in common right now: a scan and an announcement report addresses, the owner types names or addresses, and one
-    printer is one entry. A name that won't resolve matches nothing. No lookups unless a printer on that port is there to
-    compare; call it outside the lock, as each name can take hostaddr.LOOKUP_WAIT."""
+    """The configured Klipper printer at `host:port`, by text or because `host` and its typed name or address resolve to
+    an address in common right now; else the unconfigured entry at that text, if any: a scan and an announcement report
+    addresses, the owner types names or addresses, and one printer is one entry, so a twin must not hide what it's a twin
+    of. A name that won't resolve matches by text only. No lookups unless a printer on that port is there to compare;
+    call it outside the lock, as each name can take hostaddr.LOOKUP_WAIT."""
     port = int(port)
     here = [p for p in printers.values() if p.family == "klipper" and p.port == port]
-    for p in here:
-        if _host_key(p.host) == _host_key(host):
-            return p
+    same = next((p for p in here if _host_key(p.host) == _host_key(host)), None)
+    if same is not None and same.configured:
+        return same
     added = [p for p in here if p.configured]
     mine = hostaddr.addresses(host) if added else set()
     if mine:
         for p in added:
             if mine & hostaddr.addresses(p.host):
                 return p
-    return None
+    return same
 
 
 def detected_klipper(host: str, port: int, name: str = "", lookups: bool = True) -> Printer:

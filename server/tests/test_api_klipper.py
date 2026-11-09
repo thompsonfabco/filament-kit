@@ -220,6 +220,17 @@ def test_add_klipper_refuses_the_address_of_a_printer_added_by_name(monkeypatch)
     assert r.status_code == 400 and "already added as Voron" in r.text
 
 
+def test_add_klipper_refuses_an_address_a_found_entry_holds_for_a_printer_added_by_name(monkeypatch):
+    table = {"voron.local": {"192.0.2.20"}, "192.0.2.20": {"192.0.2.20"}}
+    monkeypatch.setattr(hostaddr, "addresses", lambda host, **kw: table.get(host, set()))
+    c = _client()
+    assert c.post("/api/printers", json={"family": "klipper", "host": "voron.local", "name": "Voron"}).status_code == 200
+    registry.detected_klipper("192.0.2.20", 7125, lookups=False)
+    r = c.post("/api/printers", json={"family": "klipper", "host": "192.0.2.20"})
+    assert r.status_code == 400 and "already added as Voron" in r.text
+    assert sum(p.configured for p in registry.load().values()) == 1
+
+
 def test_add_klipper_twice_is_refused_and_says_which():
     c = _client()
     body = {"family": "klipper", "host": "voron.home.arpa", "name": "Voron"}

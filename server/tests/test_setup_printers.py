@@ -243,6 +243,12 @@ def test_another_name_for_a_printer_added_by_name_is_refused(both, kl, names):
     assert r.status_code == 409 and len(registry.load()) == 1
 
 
+def test_an_address_a_found_entry_holds_for_a_printer_added_by_name_is_refused(both, kl, names):
+    registry.detected_klipper("192.0.2.77", 7125, lookups=False)
+    r = post(client(both), "printers/klipper", {"host": "192.0.2.77"})
+    assert r.status_code == 409 and sum(p.configured for p in registry.load().values()) == 1
+
+
 def test_changing_an_address_to_a_name_for_another_printer_is_refused(both, manager, names):
     c = client(both)
     assert post(c, "printers/klipper", {"host": "192.0.2.77", "name": "Voron"}).status_code == 200

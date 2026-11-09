@@ -138,6 +138,14 @@ def test_cli_add_refuses_the_address_of_a_printer_added_by_name(capsys, monkeypa
     assert len(registry.load()) == 1
 
 
+def test_cli_add_refuses_an_address_a_found_entry_holds_for_a_printer_added_by_name(capsys, monkeypatch):
+    _voron_by_name(monkeypatch)
+    registry.detected_klipper("192.0.2.20", 7125, lookups=False)
+    assert klipper_cli.main(["add", "Again", "192.0.2.20"]) == 1
+    assert "already added as Voron" in capsys.readouterr().err
+    assert sum(p.configured for p in registry.load().values()) == 1
+
+
 def test_add_refuses_a_name_for_a_printer_added_by_address(monkeypatch):
     table = {"voron.local": {"192.0.2.20"}, "192.0.2.20": {"192.0.2.20"}}
     monkeypatch.setattr(hostaddr, "addresses", lambda host, **kw: table.get(host, set()))

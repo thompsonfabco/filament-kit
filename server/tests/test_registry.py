@@ -274,6 +274,21 @@ def test_klipper_at_finds_a_name_for_a_printer_added_by_address(monkeypatch):
     assert registry.klipper_at(registry.load(), "voron.local", 7125).serial == by_address.serial
 
 
+def test_klipper_at_prefers_the_added_printer_to_a_found_entry_at_the_address(monkeypatch):
+    """A twin an announcement left must not hide the printer it is a twin of."""
+    _spellings(monkeypatch)
+    mine = registry.add_klipper("Voron", "voron.local")
+    registry.detected_klipper("192.0.2.20", 7125, lookups=False)
+    assert registry.klipper_at(registry.load(), "192.0.2.20", 7125).serial == mine.serial
+
+
+def test_klipper_at_still_finds_a_found_entry_with_no_added_printer_there(monkeypatch):
+    _spellings(monkeypatch)
+    registry.add_klipper("Voron", "voron.local")
+    found = registry.detected_klipper("192.0.2.21", 7125, lookups=False)
+    assert registry.klipper_at(registry.load(), "192.0.2.21", 7125).serial == found.serial
+
+
 def test_klipper_at_looks_nothing_up_with_nothing_to_compare(monkeypatch):
     monkeypatch.setattr(hostaddr, "addresses", lambda host, **kw: pytest.fail("a lookup with nothing to compare"))
     registry.add_klipper("Other port", "voron.local", 7126)
