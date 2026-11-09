@@ -135,6 +135,7 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
 
     val api by app.session.api.collectAsStateWithLifecycle()
     val config by app.session.config.collectAsStateWithLifecycle()
+    val skipFingerprintCheck by app.settings.skipFingerprintCheck.collectAsStateWithLifecycle(initialValue = false)
     val connection by app.session.connection.collectAsStateWithLifecycle()
     val fp = config?.fingerprint
 
@@ -332,6 +333,8 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
                 onPairAgain = app.router::pairAgain,
                 onForget = { app.forget { nav.navigateClearing(Routes.PAIR) } },
                 onLicences = { nav.navigate(Routes.LICENCES) },
+                skipFingerprintCheck = skipFingerprintCheck,
+                onSkipFingerprintCheck = app::setSkipFingerprintCheck,
             )
         }
 

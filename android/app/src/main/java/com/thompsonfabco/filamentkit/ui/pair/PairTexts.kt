@@ -18,6 +18,10 @@ object PairTexts {
     fun confirmIntro(host: String) = "$host presented this certificate fingerprint. Compare it with the fingerprint " +
         "shown with the pairing code on the server before you continue."
 
+    const val SKIP_CHECK_LABEL = "Skip the fingerprint check for new servers"
+    const val SKIP_CHECK_HELP = "When you pair by address, the app trusts the certificate the server presents; a " +
+        "scanned QR code is checked either way."
+
     fun mismatch(m: Mismatch, host: String): MismatchText = when (m.source) {
         MismatchSource.STORED -> MismatchText(
             title = "The server's certificate has changed",
@@ -37,7 +41,7 @@ object PairTexts {
         MismatchSource.MANUAL -> MismatchText(
             title = "The server's certificate changed while pairing",
             body = "Start again. If it happens again, something else may be answering at $host.",
-            expectedLabel = "Fingerprint you checked",
+            expectedLabel = "Fingerprint seen first",
             actualLabel = "Fingerprint now",
             button = "Start again",
         )

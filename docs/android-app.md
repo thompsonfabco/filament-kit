@@ -52,10 +52,14 @@ lists paired phones and `sudo filament-kit unpair <id>` removes one; that phone 
 app shows **The server's certificate changed**, compare the two fingerprints it shows: if you reinstalled the
 server it's expected, so tap **Pair again**; if not, don't continue.
 
+**Skip the fingerprint check for new servers**, in **Settings**, is off by default. With it on, pairing by address
+goes straight from the address to the 6-digit code and the app trusts the certificate the server presents. A scanned
+QR code is checked either way, and a certificate that changes after pairing still stops the app.
+
 **Licences and third-party software**, at the bottom of **Settings**, shows the app's licence (GPL-3.0-or-later) and the
 third-party software list, and the full GPL text. It works offline.
 
-<img src="images/android-settings.png" width="240" alt="Settings: server, fingerprint, Pair again, Forget server, Licences and third-party software"> <img src="images/android-licences.png" width="240" alt="Licences: GPL-3.0-or-later, Show the GPL-3.0 text, third-party software and data">
+<img src="images/android-settings.png" width="240" alt="Settings: server, fingerprint, Pair again, Forget server, Skip the fingerprint check for new servers, Licences and third-party software"> <img src="images/android-licences.png" width="240" alt="Licences: GPL-3.0-or-later, Show the GPL-3.0 text, third-party software and data">
 
 ## 2. Set up a printer
 

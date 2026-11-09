@@ -52,7 +52,8 @@ const val QR_EXPIRED =
 /**
  * Pairing flows: QR scan, and manual entry (address, then the server's certificate fingerprint for the user to
  * confirm, then the 6-digit code). Nothing is sent to the server except the probe handshake until the user has
- * confirmed the fingerprint. [scope] defaults to the ViewModel's own; tests pass one. [localNetworkMissing] turns
+ * confirmed the fingerprint, or has turned that check off in Settings; the certificate is pinned either way.
+ * [scope] defaults to the ViewModel's own; tests pass one. [localNetworkMissing] turns
  * "can't reach the server" into the local network permission message when that permission is the cause.
  */
 class PairViewModel(
@@ -89,7 +90,9 @@ class PairViewModel(
         scope.launch {
             try {
                 val fp = backend.probe(host, port)
-                _state.value = PairUi(step = Step.Confirm, host = host, port = port, fingerprint = fp)
+                confirmed = settings.skipsFingerprintCheck()
+                val next = if (confirmed) Step.Code else Step.Confirm
+                _state.value = PairUi(step = next, host = host, port = port, fingerprint = fp)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

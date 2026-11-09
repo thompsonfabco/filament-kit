@@ -24,6 +24,8 @@ private class FakeSettings : SettingsStore {
     var saves = 0
     override suspend fun save(config: ServerConfig) { saved = config; saves++ }
     override suspend fun clear() { saved = null }
+    var skip = false
+    override suspend fun skipsFingerprintCheck() = skip
 }
 
 private class FakeBackend : PairingBackend {
@@ -96,6 +98,40 @@ class PairViewModelTest {
         assertEquals(Step.Address, ui.step)
         assertNull(ui.fingerprint)
         assertFalse(backend.calls.any { it.startsWith("pair") })
+    }
+
+    @Test fun withTheCheckSkippedAddressGoesStraightToTheCodeAndPinsTheProbedCertificate() {
+        settings.skip = true
+        vm.submitAddress("10.0.0.2", "9000")
+        assertEquals(Step.Code, ui.step)
+        assertEquals(FP, ui.fingerprint)
+        assertFalse(backend.calls.any { it.startsWith("pair") })
+        vm.submitCode("123456")
+        assertEquals(Step.Done, ui.step)
+        assertEquals(ServerConfig(listOf("10.0.0.2"), 9000, FP, "token-1", "Workshop server"), settings.saved)
+    }
+
+    @Test fun withTheCheckSkippedAFoundServerGoesStraightToTheCode() {
+        settings.skip = true
+        vm.connectDiscovered("10.0.0.2", 8710)
+        assertEquals(Step.Code, ui.step)
+    }
+
+    @Test fun skippingTheCheckStillStopsOnACertificateChangedBeforeTheCode() {
+        settings.skip = true
+        backend.pairResult = { throw FingerprintMismatch(FP, "other") }
+        vm.submitAddress("10.0.0.2", "")
+        vm.submitCode("123456")
+        assertEquals(MismatchSource.MANUAL, ui.mismatch?.source)
+        assertNull(settings.saved)
+    }
+
+    @Test fun skippingTheCheckDoesNotCoverAScannedCode() {
+        settings.skip = true
+        backend.infoResult = { throw FingerprintMismatch(FP, "other") }
+        vm.onQrScanned(qr())
+        assertEquals(MismatchSource.QR, ui.mismatch?.source)
+        assertNull(settings.saved)
     }
 
     @Test fun wrongCodeShowsTheServersMessageAndAllowsRetry() {

@@ -81,6 +81,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         updater.close()
     }
 
+    /** Settings → Skip the fingerprint check for new servers. */
+    fun setSkipFingerprintCheck(skip: Boolean) {
+        viewModelScope.launch { settings.setSkipFingerprintCheck(skip) }
+    }
+
     /** Settings → Forget server. */
     fun forget(then: () -> Unit) {
         viewModelScope.launch {

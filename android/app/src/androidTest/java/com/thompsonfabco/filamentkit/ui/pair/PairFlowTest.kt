@@ -31,6 +31,8 @@ class PairFlowTest {
         @Volatile var saved: ServerConfig? = null
         override suspend fun save(config: ServerConfig) { saved = config }
         override suspend fun clear() { saved = null }
+        var skip = false
+        override suspend fun skipsFingerprintCheck() = skip
     }
 
     private class Backend : PairingBackend {
@@ -82,5 +84,26 @@ class PairFlowTest {
         assertEquals(FP, store.saved?.fingerprint)
         assertEquals(listOf("10.0.0.2"), store.saved?.endpoints)
         assertEquals(listOf("000000", "123456"), backend.codes)
+    }
+
+    @Test fun withTheCheckSkippedTheAddressGoesStraightToTheCode() {
+        val store = Store().apply { skip = true }
+        val backend = Backend().apply { wrongOnce = false }
+        val vm = PairViewModel(store, backend, CoroutineScope(Dispatchers.Main.immediate))
+        var paired = false
+        rule.setContent {
+            MaterialTheme { PairScreen(vm, emptyList(), onPaired = { paired = true }) }
+        }
+
+        rule.onNodeWithText("Enter address").performClick()
+        rule.onNodeWithText("Host name or IP address").performTextInput("10.0.0.2")
+        rule.onNodeWithText("Connect").performClick()
+
+        rule.waitUntil(5_000) { vm.state.value.step == Step.Code }
+        rule.onNodeWithText("It matches").assertDoesNotExist()
+        rule.onNodeWithText("6-digit code").performTextInput("123456")
+        rule.onNodeWithText("Pair").performClick()
+        rule.waitUntil(5_000) { paired }
+        assertEquals(FP, store.saved?.fingerprint)
     }
 }

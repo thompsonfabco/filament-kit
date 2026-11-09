@@ -27,7 +27,7 @@ class PairTextsTest {
     @Test fun theManualPathNamesTheCheckJustMade() {
         val t = text(MismatchSource.MANUAL)
         assertEquals("The server's certificate changed while pairing", t.title)
-        assertEquals("Fingerprint you checked", t.expectedLabel)
+        assertEquals("Fingerprint seen first", t.expectedLabel)
         assertTrue(t.body, "kit.local" in t.body)
         assertFalse("no code was named on this path", "code" in t.body)
     }
