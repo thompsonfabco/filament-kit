@@ -224,6 +224,42 @@ def test_the_automatic_job_never_replaces_the_owners_entry():
     assert len(problems) == 1 and "your entry stays" in problems[0]
 
 
+
+def _kept(owner_slot, job_slots, calibrated, scheme=None):
+    """The number a kept owner entry for A1 ends with, after a job that found `job_slots`."""
+    smap = ams.SlotMap(slots=job_slots, calibrated=calibrated, scheme=scheme)
+    ams.save_map(SERIAL, ams.SlotMap(slots={"A1": owner_slot},
+                                     by_user={"A1": {"by": "user", "at": "2026-11-09T13:00:00-0500"}}))
+    mapping._keep_owner_entries(SERIAL, smap, [])
+    assert (smap.slots["A1"]["ams_id"], smap.slots["A1"]["tray_id"]) == (owner_slot["ams_id"], owner_slot["tray_id"])
+    return smap.slots["A1"]["global_id"]
+
+
+def test_a_kept_entry_takes_the_number_the_calibrated_job_proved_for_its_slot():
+    # the job found A3 at the owner's A1 address and proved 7 for it: the owner's number (made before) is not kept
+    assert _kept({"ams_id": 0, "tray_id": 0, "global_id": 256},
+                 {"A1": {"ams_id": 0, "tray_id": 2, "global_id": 2}, "A3": {"ams_id": 0, "tray_id": 0, "global_id": 7}},
+                 calibrated=True, scheme="legacy") == 7
+
+
+def test_a_kept_entry_the_job_did_not_reach_takes_the_proven_schemes_number():
+    assert _kept({"ams_id": 1, "tray_id": 0, "global_id": 256}, {"A1": {"ams_id": 0, "tray_id": 0, "global_id": 0}},
+                 calibrated=True, scheme="legacy") == ams.scheme_global(1, 0, "legacy") == 4
+
+
+def test_a_kept_entry_has_no_number_when_the_calibrated_job_proved_no_scheme():
+    assert _kept({"ams_id": 1, "tray_id": 0, "global_id": 256}, {}, calibrated=True) is None
+
+
+def test_a_kept_external_holder_keeps_its_own_id():
+    assert _kept({"ams_id": 254, "tray_id": 0, "global_id": 1}, {}, calibrated=True) == 254
+
+
+def test_an_uncalibrated_map_keeps_the_owners_number():
+    assert _kept({"ams_id": 1, "tray_id": 0, "global_id": 256},
+                 {"A3": {"ams_id": 1, "tray_id": 0, "global_id": 4}}, calibrated=False) == 256
+
+
 def test_a_dual_nozzle_printer_says_which_nozzle_when_it_reports_one(env, clock):
     registry.upsert(registry.Printer(SERIAL, "Office H2D", "O1D", "10.0.0.5", "13572468", True))
     report = copy.deepcopy(BASE)

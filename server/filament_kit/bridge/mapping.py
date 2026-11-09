@@ -117,23 +117,41 @@ def manual_end(serial: str) -> None:
 _MAPPING_NOW: set[str] = set()     # serials whose automatic job runs in this process
 
 
-def _keep_owner_entries(serial: str, smap, problems: list[str]) -> None:
-    """The owner's entries win over what a job found: kept, and a disagreement is said, never applied."""
+def _keep_owner_entries(serial: str, smap, problems: list[str], model=None) -> None:
+    """The owner's entries win over what a job found: kept, and a disagreement is said, never applied.
+
+    The owner proves which slot a label is, not the printer's number for it. A kept entry takes the number this job
+    gave the owner's address (proven when the map is calibrated), else the proven scheme's number for it, else none
+    (as the job does for a slot it could not number). An uncalibrated map keeps the owner's entry's number."""
     old = ams.load_map(serial)
+    hw = None
     for label, meta in old.by_user.items():
         mine = old.slots.get(label)
         if not isinstance(mine, dict):
             continue
+        addr = (mine.get("ams_id"), mine.get("tray_id"))
         found = smap.slots.get(label)
-        if isinstance(found, dict) and (found.get("ams_id"), found.get("tray_id")) != (mine.get("ams_id"), mine.get("tray_id")):
+        if isinstance(found, dict) and (found.get("ams_id"), found.get("tray_id")) != addr:
             problems.append(f"{label}: the automatic mapping found another slot than you confirmed on "
                             f"{str(meta.get('at', ''))[:10]}; your entry stays (map by loading filament again to change it)")
+        at = next((s for s in smap.slots.values() if isinstance(s, dict) and (s.get("ams_id"), s.get("tray_id")) == addr), None)
+        if not smap.calibrated:
+            gid = mine.get("global_id")
+        elif at is not None:
+            gid = at.get("global_id")
+        else:
+            hw = hw or hardware.load()
+            a, t = addr
+            if calib3mf._external(a, hw.model(model)):
+                gid = int(a)
+            elif smap.scheme:
+                gid = ams.scheme_global(a, t, smap.scheme, model, hw)
+            else:
+                gid = None
         for other, s in list(smap.slots.items()):      # the owner's address belongs to the owner's label
-            if other != label and isinstance(s, dict) and (s.get("ams_id"), s.get("tray_id")) == (mine.get("ams_id"), mine.get("tray_id")):
+            if other != label and isinstance(s, dict) and (s.get("ams_id"), s.get("tray_id")) == addr:
                 del smap.slots[other]
-        smap.slots[label] = {**mine, "global_id": (found or {}).get("global_id", mine.get("global_id"))
-                             if isinstance(found, dict) and (found.get("ams_id"), found.get("tray_id")) ==
-                             (mine.get("ams_id"), mine.get("tray_id")) else mine.get("global_id")}
+        smap.slots[label] = {**mine, "global_id": gid}
         smap.by_user[label] = meta
 
 
@@ -626,7 +644,7 @@ class Mapper:
                 problems.append("the calibration job did not confirm the slot numbering")
             problems.append(OBSERVE_NOTE)
         step("Saving the slot map")
-        _keep_owner_entries(serial, smap, problems)
+        _keep_owner_entries(serial, smap, problems, model)
         smap.fingerprint, smap.stale = fp, False
         ams.save_map(serial, smap)
         job.problems = problems
