@@ -334,7 +334,8 @@ def redeem_code(code: str) -> str:
 
 def authorize(token: str) -> tuple[str, str | None] | None:
     """(device id, scope) for a live token, else None. Claims an unclaimed QR token (its first use). scope is
-    "station" for a token from `pair --station`, else None (every route)."""
+    "station" for a token from `pair --station`, "web" for the web unit's (from its role, so a pairing made before this
+    needs nothing done), else None (every route but the web unit's own)."""
     h = _hash(token)
     with _locked():
         devs = _load_devices()
@@ -350,7 +351,9 @@ def authorize(token: str) -> tuple[str, str | None] | None:
                     d["last_seen"] = now
                     _write("devices.json", devs)
                 # a device paired as "station" before scopes existed is scoped too
-                return d["id"], d.get("scope") or ("station" if d.get("name") == "station" else None)
+                if d.get("scope") or d.get("name") == "station":
+                    return d["id"], d.get("scope") or "station"
+                return d["id"], "web" if d.get("role") == WEB_ROLE else None
         return None
 
 
