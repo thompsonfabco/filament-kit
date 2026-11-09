@@ -55,13 +55,14 @@ def fw(tmp_path, monkeypatch):
     monkeypatch.setitem(st.settings, "panel_fw", str(tmp_path / "intake-panel.bin"))
     monkeypatch.setitem(st.settings, "panel_flash", True)
     monkeypatch.setitem(sys.modules, "serial", types.SimpleNamespace(Serial=FakeSerial))
-    monkeypatch.setattr(st, "usb_ttys", lambda: ["/dev/ttyUSB0", "/dev/ttyUSB1"])
+    monkeypatch.setattr(st, "usb_ttys", lambda: ["/dev/ttyUSB0"])
+    monkeypatch.setattr(st, "panel_ttys", lambda: ["/dev/ttyACM0", "/dev/ttyACM1"])
     monkeypatch.setattr(panel.time, "sleep", lambda s: None)
     monkeypatch.setitem(st.ports, "panel", None)
     monkeypatch.setitem(st.ports, "panel_version", None)
     monkeypatch.setitem(st.ports, "nfc", None)
     st.flashed.clear()
-    FakeSerial.VERSIONS = {"/dev/ttyUSB1": "1"}
+    FakeSerial.VERSIONS = {"/dev/ttyACM1": "1 esp32c3"}
     FakeSerial.opened = []
     runs = []
     monkeypatch.setattr(panel.subprocess, "run", lambda a, **kw: runs.append(a) or Done(0, b"Hard resetting"))
@@ -87,15 +88,15 @@ def test_hello_version_is_recorded(fw):
 def test_old_firmware_is_flashed_once_with_esptool(fw, tmp_path):
     ser = panel.find_panel()
     assert panel.update_firmware(ser) is True and ser.closed
-    assert fw == [[sys.executable, "-m", "esptool", "--chip", "esp8266", "--port", "/dev/ttyUSB1", "--baud", "460800",
-                   "write-flash", "0x0", str(tmp_path / "intake-panel.bin")]]
+    assert fw == [[sys.executable, "-m", "esptool", "--chip", "esp32c3", "--port", "/dev/ttyACM1", "--baud", "460800",
+                   "--before", "default-reset", "--after", "hard-reset", "write-flash", "0x0", str(tmp_path / "intake-panel.bin")]]
     # it still says 1 afterwards (the flash didn't take): used as it is, not flashed again
     ser = panel.find_panel()
     assert panel.update_firmware(ser) is False and len(fw) == 1
 
 
 def test_current_firmware_is_left_alone(fw):
-    FakeSerial.VERSIONS = {"/dev/ttyUSB1": "2"}
+    FakeSerial.VERSIONS = {"/dev/ttyACM1": "2 esp32c3"}
     assert panel.update_firmware(panel.find_panel()) is False and fw == []
 
 
@@ -113,45 +114,57 @@ def test_flash_failures_do_not_raise(fw, monkeypatch):
     monkeypatch.setattr(panel.subprocess, "run", boom)
     assert panel.update_firmware(panel.find_panel()) is True  # tried; the loop looks again and uses it as it is
     monkeypatch.setattr(panel.subprocess, "run", lambda a, **kw: (_ for _ in ()).throw(FileNotFoundError("python")))
-    panel.flash_panel("/dev/ttyUSB1", "2")
+    panel.flash_panel("/dev/ttyACM1", "2")
 
 
 def test_never_flashes_the_nfc_readers_port(fw):
-    st.ports["nfc"] = "/dev/ttyUSB1"
-    panel.flash_panel("/dev/ttyUSB1", "2")
+    st.ports["nfc"] = "/dev/ttyACM1"
+    panel.flash_panel("/dev/ttyACM1", "2")
     assert fw == []
     # and the panel search never even opens the reader's port, so it can't be picked for a flash
-    FakeSerial.VERSIONS = {"/dev/ttyUSB0": "1", "/dev/ttyUSB1": "1"}
+    FakeSerial.VERSIONS = {"/dev/ttyACM0": "1 esp32c3", "/dev/ttyACM1": "1 esp32c3"}
     ser = panel.find_panel()
-    assert ser.port == "/dev/ttyUSB0" and "/dev/ttyUSB1" not in FakeSerial.opened
+    assert ser.port == "/dev/ttyACM0" and "/dev/ttyACM1" not in FakeSerial.opened
     assert panel.update_firmware(ser) is True
-    assert [c[c.index("--port") + 1] for c in fw] == ["/dev/ttyUSB0"]
+    assert [c[c.index("--port") + 1] for c in fw] == ["/dev/ttyACM0"]
 
 
 def test_nfc_port_stays_out_of_the_panels_way_while_flashing(fw):
     """The panel's port stays claimed (ports["panel"]) through the flash, so nfcpy picks the other port."""
     ser = panel.find_panel()
     assert panel.update_firmware(ser) is True
-    assert st.ports["panel"] == "/dev/ttyUSB1"
+    assert st.ports["panel"] == "/dev/ttyACM1"
     from filament_kit.station import nfc
     assert nfc.nfc_path() == "tty:USB0:pn532"
 
 
-def test_bundled_firmware_is_version_9_and_flashes_an_older_panel(fw, monkeypatch):
+def test_bundled_firmware_is_version_10_and_flashes_an_older_c3_panel(fw, monkeypatch):
     """The repo's own bundled pair (not the fixture's) is what the self-flash logic picks up."""
     bundled = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "station", "panel", "firmware")
     bundled = os.path.normpath(bundled)   # from the test file: the package may be installed (CI), not editable
     monkeypatch.setitem(st.settings, "panel_fw", os.path.join(bundled, "intake-panel.bin"))
-    assert panel.fw_version() == "9"
-    FakeSerial.VERSIONS = {"/dev/ttyUSB1": "8"}
+    assert panel.fw_version() == "10"
+    FakeSerial.VERSIONS = {"/dev/ttyACM1": "9 esp32c3"}
     ser = panel.find_panel()
     assert panel.update_firmware(ser) is True
-    assert fw == [[sys.executable, "-m", "esptool", "--chip", "esp8266", "--port", "/dev/ttyUSB1", "--baud", "460800",
-                   "write-flash", "0x0", os.path.join(bundled, "intake-panel.bin")]]
+    assert fw == [[sys.executable, "-m", "esptool", "--chip", "esp32c3", "--port", "/dev/ttyACM1", "--baud", "460800",
+                   "--before", "default-reset", "--after", "hard-reset", "write-flash", "0x0",
+                   os.path.join(bundled, "intake-panel.bin")]]
     st.flashed.clear()
     fw.clear()
-    FakeSerial.VERSIONS = {"/dev/ttyUSB1": "9"}
+    FakeSerial.VERSIONS = {"/dev/ttyACM1": "10 esp32c3"}
     assert panel.update_firmware(panel.find_panel()) is False and fw == []
+
+
+def test_old_esp8266_panel_is_never_flashed(fw, tmp_path, caplog):
+    (tmp_path / "VERSION").write_text("10\n")
+    FakeSerial.VERSIONS = {"/dev/ttyACM1": "9"}  # no chip token: an ESP8266
+    ser = panel.find_panel()
+    assert ser is not None and ser.panel_chip is None
+    with caplog.at_level("WARNING"):
+        assert panel.update_firmware(ser) is False
+    assert fw == [] and not ser.closed  # still in use
+    assert len([r for r in caplog.records if "old firmware" in r.getMessage()]) == 1
 
 
 # ---------- the committed firmware: built from this source, by a known platform ----------

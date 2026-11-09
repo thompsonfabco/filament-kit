@@ -76,15 +76,15 @@ def fw_version():
 
 
 def flash_panel(dev, version):
-    """Write the bundled firmware to the panel on dev with esptool (the D1 mini's USB chip resets it into its ROM
-    bootloader, so a failed write can always be retried). Never touches the reader's port; keeps the panel's port
+    """Write the bundled (merged, address 0) firmware to the ESP32-C3 panel on dev with esptool (its native USB
+    resets into the ROM bootloader, so a failed write can always be retried). Never touches the reader's port; keeps the panel's port
     claimed (ports["panel"]) so nfcpy never opens it meanwhile."""
     if dev == st.ports["nfc"]:
         log.warning("not flashing %s: it is the NFC reader's port", dev)
         return
     log.info("flashing button panel on %s with firmware %s", dev, version)
-    cmd = [sys.executable, "-m", "esptool", "--chip", "esp8266", "--port", dev, "--baud", "460800",
-           "write-flash", "0x0", st.settings["panel_fw"]]
+    cmd = [sys.executable, "-m", "esptool", "--chip", "esp32c3", "--port", dev, "--baud", "460800",
+           "--before", "default-reset", "--after", "hard-reset", "write-flash", "0x0", st.settings["panel_fw"]]
     try:
         p = subprocess.run(cmd, capture_output=True, timeout=180)
         tail = (p.stdout + p.stderr).decode(errors="replace").strip().splitlines()[-3:]
@@ -95,11 +95,15 @@ def flash_panel(dev, version):
 
 
 def update_firmware(ser):
-    """Reflash the panel behind ser if it runs other firmware than the bundled one. True when it was flashed (ser is
+    """Reflash the ESP32-C3 panel behind ser if it runs other firmware than the bundled one. True when it was flashed (ser is
     closed; look for the panel again). Once per bundled version and run, so a build that won't take can't loop; then
     the panel is used as it is."""
     want = fw_version()
     if not want or ser.panel_version == want:
+        return False
+    if ser.panel_chip != "esp32c3":  # an ESP8266 panel: the C3 image would not run on it; never flash it
+        log.warning("button panel runs old firmware %s (an ESP8266, not the bundled %s); using it as it is",
+                    ser.panel_version, want)
         return False
     if st.settings["panel_flash"] and want not in st.flashed:
         st.flashed.add(want)
