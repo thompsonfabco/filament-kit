@@ -24,7 +24,8 @@ Moonraker's port is 7125; if yours differs, add `--port <number>`.
 
 It prints what the printer is: the model (from the kit's printer data file), its filament system (one extruder, a
 toolchanger, an AFC unit such as a Box Turtle, a Happy Hare MMU), and its slots. Use the printer's host name when it
-has one; an address works too.
+has one; an address works too. A name that doesn't resolve yet is still saved, with a note, and so is an address outside
+your home network (the note says how to allow it).
 
 - **Not sure of the address?** `sudo filament-kit klipper scan` looks for Moonraker on the server's own network (at
   most 256 addresses, only when you run it); `--subnet <network>` scans another range, up to 256 addresses. A scan asked for through the server's API keeps to the private networks the server may reach (10.x, 172.16-31.x, 192.168.x), one at a time with 30 seconds between them. Printers that announce themselves (Moonraker's `[zeroconf]`) appear by
