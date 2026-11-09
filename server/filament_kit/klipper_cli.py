@@ -273,7 +273,7 @@ def run(args) -> int:
             return 0
         added = discovery.added_at()
         for host, port in found:
-            p = added.get((host, port)) or registry.detected_klipper(host, port)
+            p = added.get((host, port)) or registry.detected_klipper(host, port, lookups=False)
             state = (f"added already as {registry.display_name(p)}" if p.configured
                      else f"add it: filament-kit klipper add NAME {host}")
             print(f"{host}:{port}  ({state})")

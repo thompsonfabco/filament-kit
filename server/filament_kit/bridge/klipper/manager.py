@@ -358,7 +358,7 @@ class KlipperFamily(LoadsMixin):
             c.start()
 
     def _mdns_found(self, host: str, port: int, name: str) -> None:
-        registry.detected_klipper(host, port, name)
+        registry.detected_klipper(host, port, name, lookups=False)      # the browser's thread: _forget_twins does them
 
     def scan(self, subnet: str | None = None) -> list[dict]:
         """The owner's Scan: probe a /24 (this machine's by default) for Moonraker; found printers are recorded
@@ -384,7 +384,7 @@ class KlipperFamily(LoadsMixin):
         added = discovery.added_at() if found else {}
         out = []
         for host, port in found:
-            p = added.get((host, port)) or registry.detected_klipper(host, port)
+            p = added.get((host, port)) or registry.detected_klipper(host, port, lookups=False)
             out.append({"id": p.serial, "host": host, "port": port, "name": registry.display_name(p),
                         "configured": p.configured})
         return out

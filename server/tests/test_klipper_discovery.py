@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from filament_kit import config, klipper_cli
+from filament_kit import config, hostaddr, klipper_cli
 from filament_kit.bridge import registry
 from filament_kit.bridge.klipper import discovery
 from filament_kit.bridge.klipper import hardware as kh
@@ -117,7 +117,7 @@ def test_cli_scan(moonraker, capsys, monkeypatch):
 
 def _voron_by_name(monkeypatch):
     table = {"voron.local": {"192.0.2.20"}, "192.0.2.20": {"192.0.2.20"}, "192.0.2.21": {"192.0.2.21"}}
-    monkeypatch.setattr(discovery, "addresses", lambda host, port: table.get(host, set()))
+    monkeypatch.setattr(hostaddr, "addresses", lambda host, **kw: table.get(host, set()))
     monkeypatch.setattr(discovery, "scan", lambda net, **kw: [("192.0.2.20", 7125), ("192.0.2.21", 7125)])
     return registry.add_klipper("Voron", "voron.local")
 
@@ -140,7 +140,7 @@ def test_cli_add_refuses_the_address_of_a_printer_added_by_name(capsys, monkeypa
 
 def test_add_refuses_a_name_for_a_printer_added_by_address(monkeypatch):
     table = {"voron.local": {"192.0.2.20"}, "192.0.2.20": {"192.0.2.20"}}
-    monkeypatch.setattr(discovery, "addresses", lambda host, port: table.get(host, set()))
+    monkeypatch.setattr(hostaddr, "addresses", lambda host, **kw: table.get(host, set()))
     registry.add_klipper("Voron", "192.0.2.20")
     with pytest.raises(registry.DuplicatePrinter, match="already added as Voron"):
         discovery.add("Again", "voron.local", 7125)
@@ -148,18 +148,18 @@ def test_add_refuses_a_name_for_a_printer_added_by_address(monkeypatch):
 
 def test_add_takes_another_port_of_one_machine(monkeypatch):
     """Two Moonraker instances on one machine are two printers."""
-    monkeypatch.setattr(discovery, "addresses", lambda host, port: {"192.0.2.20"})
+    monkeypatch.setattr(hostaddr, "addresses", lambda host, **kw: {"192.0.2.20"})
     registry.add_klipper("Voron", "voron.local", 7125)
     assert discovery.add("Other", "192.0.2.20", 7126).configured
 
 
 def test_add_looks_nothing_up_with_no_printer_to_compare(monkeypatch):
-    monkeypatch.setattr(discovery, "addresses", lambda host, port: pytest.fail("a lookup with nothing to compare"))
+    monkeypatch.setattr(hostaddr, "addresses", lambda host, **kw: pytest.fail("a lookup with nothing to compare"))
     assert discovery.add("Voron", "voron.local", 7125).host == "voron.local"
 
 
 def test_add_takes_a_name_it_cannot_resolve_as_typed(monkeypatch):
-    monkeypatch.setattr(discovery, "addresses", lambda host, port: set())
+    monkeypatch.setattr(hostaddr, "addresses", lambda host, **kw: set())
     registry.add_klipper("Voron", "voron.local")
     assert discovery.add("Other", "other.local", 7125).host == "other.local"
 

@@ -4,6 +4,7 @@ import stat
 
 import pytest
 
+from filament_kit import hostaddr
 from filament_kit.bridge import registry
 from filament_kit.bridge.registry import Printer
 
@@ -249,3 +250,43 @@ def test_rename_keeps_display_names_apart():
     assert registry.display_name(registry.load()[other.serial]) == "voron 2"
     assert registry.rename(other.serial, "voron 2")                # its own name is free to it
     assert registry.display_name(registry.load()[other.serial]) == "voron 2"
+
+
+def _spellings(monkeypatch):
+    table = {"voron.local": {"192.0.2.20"}, "workshop.example.com": {"192.0.2.20", "2001:db8::20"},
+             "192.0.2.20": {"192.0.2.20"}, "other.local": {"192.0.2.21"}}
+    monkeypatch.setattr(hostaddr, "addresses", lambda host, **kw: table.get(host, set()))
+
+
+def test_klipper_at_finds_a_printer_by_any_spelling_of_it(monkeypatch):
+    _spellings(monkeypatch)
+    by_name = registry.add_klipper("Voron", "voron.local")
+    printers = registry.load()
+    for spelling in ("voron.local", "VORON.local", "192.0.2.20", "workshop.example.com"):
+        assert registry.klipper_at(printers, spelling, 7125).serial == by_name.serial, spelling
+    assert registry.klipper_at(printers, "other.local", 7125) is None
+    assert registry.klipper_at(printers, "192.0.2.20", 7126) is None             # another port is another Moonraker
+
+
+def test_klipper_at_finds_a_name_for_a_printer_added_by_address(monkeypatch):
+    _spellings(monkeypatch)
+    by_address = registry.add_klipper("Voron", "192.0.2.20")
+    assert registry.klipper_at(registry.load(), "voron.local", 7125).serial == by_address.serial
+
+
+def test_klipper_at_looks_nothing_up_with_nothing_to_compare(monkeypatch):
+    monkeypatch.setattr(hostaddr, "addresses", lambda host, **kw: pytest.fail("a lookup with nothing to compare"))
+    registry.add_klipper("Other port", "voron.local", 7126)
+    assert registry.klipper_at(registry.load(), "workshop.local", 7125) is None
+
+
+def test_klipper_at_ignores_a_name_that_does_not_resolve(monkeypatch):
+    monkeypatch.setattr(hostaddr, "addresses", lambda host, **kw: set())
+    registry.add_klipper("Voron", "voron.local")
+    assert registry.klipper_at(registry.load(), "other.local", 7125) is None
+
+
+def test_detected_klipper_can_leave_the_lookups_to_its_caller(monkeypatch):
+    monkeypatch.setattr(hostaddr, "addresses", lambda host, **kw: pytest.fail("no lookups were asked for"))
+    registry.add_klipper("Voron", "voron.local")
+    assert not registry.detected_klipper("192.0.2.20", 7125, lookups=False).configured

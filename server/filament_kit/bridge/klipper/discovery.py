@@ -56,10 +56,7 @@ def check_range(net) -> None:
 
 def addresses(host: str, port: int) -> set[str]:
     """The addresses a printer's host name stands for now; empty when it can't be resolved from here."""
-    try:
-        return {a[4][0] for a in socket.getaddrinfo(host.strip("[]"), port, type=socket.SOCK_STREAM)}
-    except (OSError, UnicodeError):
-        return set()
+    return hostaddr.addresses(host)
 
 
 def added_at() -> dict[tuple[str, int], registry.Printer]:
@@ -69,14 +66,11 @@ def added_at() -> dict[tuple[str, int], registry.Printer]:
 
 
 def add(name: str, host: str, port: int = DEFAULT_PORT) -> registry.Printer:
-    """registry.add_klipper, which compares host text, and DuplicatePrinter too when `host` resolves to an address of a
-    printer added under another name or address. A name that won't resolve from here is taken as typed. No lookups
-    unless a printer on that port is there to compare."""
-    others = [p for p in registry.load().values() if p.family == "klipper" and p.configured and p.port == int(port)]
-    mine = addresses(host, port) if others else set()
-    for p in others if mine else ():
-        if mine & addresses(p.host, p.port):
-            raise registry.DuplicatePrinter(f"{host}:{port} is already added as {registry.display_name(p)} ({p.host})")
+    """registry.add_klipper, which compares host text, and DuplicatePrinter too when `host` is another name or address of
+    a printer already added (registry.klipper_at). A name that won't resolve from here is taken as typed."""
+    same = registry.klipper_at(registry.load(), host, port)
+    if same is not None and same.configured:
+        raise registry.DuplicatePrinter(f"{host}:{port} is already added as {registry.display_name(same)} ({same.host})")
     return registry.add_klipper(name, host, port)
 
 

@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from filament_kit import hostaddr
 from filament_kit.bridge import registry, status as bambu_status
 from filament_kit.bridge.connection import PrinterOffline, UnknownPrinter
 from filament_kit.bridge.klipper import discovery
@@ -524,8 +525,8 @@ def test_a_twin_found_by_address_goes_at_the_next_sync(fam, monkeypatch):
     """Discovery reports addresses, and the owner may have added the printer by name."""
     _resolves(monkeypatch, {"voron.local": {"192.0.2.20"}})
     mine = registry.add_klipper("Voron", "voron.local")
-    twin = registry.detected_klipper("192.0.2.20", 7125, "mainsailos")
-    other = registry.detected_klipper("192.0.2.21", 7125, "other")
+    twin = registry.detected_klipper("192.0.2.20", 7125, "mainsailos", lookups=False)
+    other = registry.detected_klipper("192.0.2.21", 7125, "other", lookups=False)
     fam._forget_twins()
     assert set(registry.load()) == {mine.serial, other.serial} and twin.serial not in registry.load()
 
@@ -539,7 +540,7 @@ def test_no_lookup_while_there_is_nothing_to_forget(fam, monkeypatch):
 def test_a_name_that_does_not_resolve_forgets_nothing(fam, monkeypatch):
     _resolves(monkeypatch, {})
     registry.add_klipper("Voron", "voron.local")
-    found = registry.detected_klipper("192.0.2.20", 7125)
+    found = registry.detected_klipper("192.0.2.20", 7125, lookups=False)
     fam._forget_twins()
     assert found.serial in registry.load()
 
@@ -571,7 +572,7 @@ def test_the_same_entries_are_not_looked_up_every_round(fam, monkeypatch):
     asked = []
     monkeypatch.setattr(discovery, "addresses", lambda host, port: asked.append(host) or set())
     registry.add_klipper("Voron", "voron.local")
-    registry.detected_klipper("192.0.2.21", 7125)
+    registry.detected_klipper("192.0.2.21", 7125, lookups=False)
     fam._forget_twins()
     fam._forget_twins()
     assert asked == ["voron.local"]
@@ -581,9 +582,38 @@ def test_a_new_entry_or_a_moved_printer_is_looked_up_again(fam, monkeypatch):
     table = {"voron.local": {"192.0.2.20"}}
     _resolves(monkeypatch, table)
     mine = registry.add_klipper("Voron", "voron.local")
-    registry.detected_klipper("192.0.2.21", 7125)
+    registry.detected_klipper("192.0.2.21", 7125, lookups=False)
     fam._forget_twins()
     table["voron.local"] = {"192.0.2.22"}                 # it moved: discovery finds it at a new address, a new entry
-    twin = registry.detected_klipper("192.0.2.22", 7125)
+    twin = registry.detected_klipper("192.0.2.22", 7125, lookups=False)
     fam._forget_twins()
     assert twin.serial not in registry.load() and mine.serial in registry.load()
+
+
+def test_an_announcement_looks_nothing_up(fam, monkeypatch):
+    """mDNS callbacks run on the browser's thread, and a name that won't answer can take seconds. The sync's round finds
+    a twin instead."""
+    monkeypatch.setattr(hostaddr, "addresses", lambda host, **kw: pytest.fail("a lookup on the browser's thread"))
+    mine = registry.add_klipper("Voron", "voron.local")
+    fam._mdns_found("192.0.2.20", 7125, "mainsailos")
+    assert len(registry.load()) == 2
+    monkeypatch.setattr(hostaddr, "addresses", lambda host, **kw: {"192.0.2.20"})
+    fam._forget_twins()
+    assert set(registry.load()) == {mine.serial}
+
+
+def test_a_scan_looks_each_name_up_once(fam, monkeypatch):
+    asked = []
+    monkeypatch.setattr(hostaddr, "addresses", lambda host, **kw: asked.append(host) or set())
+    monkeypatch.setattr(discovery, "scan", lambda net, **kw: [("192.0.2.20", 7125), ("192.0.2.21", 7125)])
+    registry.add_klipper("Voron", "voron.local")
+    fam.scan("10.1.2.0/24")
+    assert asked == ["voron.local"]
+
+
+def test_discovery_addresses_takes_a_name_too_long_to_encode():
+    assert discovery.addresses("a" * 70 + ".local", 7125) == set()
+
+
+def test_discovery_addresses_takes_a_stored_address_in_brackets():
+    assert discovery.addresses("[fd00::7]", 7125) == {"fd00::7"}

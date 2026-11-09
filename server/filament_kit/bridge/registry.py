@@ -493,27 +493,31 @@ def set_lane_data(pid: str, mode: str) -> bool:
 
 
 def klipper_at(printers: dict, host: str, port: int) -> Printer | None:
-    """The Klipper entry at `host:port`, by text, or the configured one whose typed name resolves to that address right
-    now: a scan and an announcement report addresses, the owner types names, and one printer is one entry."""
+    """The Klipper entry at `host:port`, by text, or the configured one that `host` and its typed name or address resolve
+    to in common right now: a scan and an announcement report addresses, the owner types names or addresses, and one
+    printer is one entry. A name that won't resolve matches nothing. No lookups unless a printer on that port is there to
+    compare; call it outside the lock, as each name can take hostaddr.LOOKUP_WAIT."""
     port = int(port)
-    for p in printers.values():
-        if p.family == "klipper" and p.port == port and p.host.lower() == host.lower():
+    here = [p for p in printers.values() if p.family == "klipper" and p.port == port]
+    for p in here:
+        if _host_key(p.host) == _host_key(host):
             return p
-    if not hostaddr.is_literal(host):
-        return None
-    for p in printers.values():
-        if (p.family == "klipper" and p.port == port and p.configured and not hostaddr.is_literal(p.host)
-                and host in hostaddr.addresses(p.host)):
-            return p
+    added = [p for p in here if p.configured]
+    mine = hostaddr.addresses(host) if added else set()
+    if mine:
+        for p in added:
+            if mine & hostaddr.addresses(p.host):
+                return p
     return None
 
 
-def detected_klipper(host: str, port: int, name: str = "") -> Printer:
+def detected_klipper(host: str, port: int, name: str = "", lookups: bool = True) -> Printer:
     """Record a Klipper printer found on the LAN (mDNS or a scan): a new one is added unconfigured (the owner adds it
     with `filament-kit klipper add` or the app); a known host:port, or a configured name that resolves to it, is left
-    as it is. Anything on the LAN can announce itself, so at most MAX_FOUND such entries stay in this file, which also
-    holds the Access Codes: the oldest goes."""
-    known = klipper_at(load(), host, port)      # the name lookups run outside the lock
+    as it is. `lookups` False compares text only, for a caller that has looked or can't wait: an unconfigured twin the
+    sync's next round removes. Anything on the LAN can announce itself, so at most MAX_FOUND such entries stay in this
+    file, which also holds the Access Codes: the oldest goes."""
+    known = klipper_at(load(), host, port) if lookups else None      # the name lookups run outside the lock
     with _locked():
         printers = _read()
         if known is not None and known.serial in printers:
