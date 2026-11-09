@@ -16,6 +16,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 
+/** How often [ServerSession.recheck] runs while the app is on screen. */
+const val CONNECTION_POLL_MS = 20_000L
+
 /** How the app currently reaches the paired server (the Home screen's connection dot). */
 sealed interface Connection {
     data object Unpaired : Connection
@@ -100,6 +103,28 @@ class ServerSession(
     }
 
     /**
+     * Looks again without showing "Connecting…": the dot only moves if the answer differs. It never moves to the Pair
+     * screen; a changed certificate is only noted, as in [resolve].
+     */
+    fun recheck() {
+        synchronized(lock) {
+            if (resolveJob?.isActive == true) return
+            val client = pinned ?: return
+            val eps = endpoints ?: return
+            if (!localNetworkGranted()) {
+                _connection.value = Connection.NeedsLocalNetwork
+                return
+            }
+            resolveJob = scope.launch { resolve(client, eps) }
+        }
+    }
+
+    /** A call got an answer: if the dot still says the server can't be reached, look again now. */
+    fun onServerAnswered() {
+        if (_connection.value == Connection.Offline) recheck()
+    }
+
+    /**
      * [sent] was rejected: never send it again, and if it is still the stored token keep the server (endpoints,
      * fingerprint) but store a blank token so a cold start opens Pair. A 401 for an older token changes nothing.
      */
@@ -142,7 +167,7 @@ class ServerSession(
                 resolveJob?.cancel()
                 val client = clientFor(cfg.fingerprint)
                 val watched = client.newBuilder()
-                    .apply { interceptors().add(0, SessionWatcher(router) { refresh() }) }
+                    .apply { interceptors().add(0, SessionWatcher(router, onAnswer = ::onServerAnswered) { refresh() }) }
                     .build()
                 fingerprint = cfg.fingerprint
                 pinned = client

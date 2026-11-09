@@ -530,6 +530,7 @@ def test_make_release_tarball_passes_extract_and_the_sums_check(tmp_path, key):
         dist = tmp_path / "dist"
         env = {**os.environ, "FK_DIST": posix(dist), "FK_NO_APP": "1",
                "FK_LIBRARY_SRC": posix(tmp_path / "no-library")}
+        env.pop("PYTHONPATH", None)     # server/ on it would make the marker's build folder hide the `build` package
         r = subprocess.run([_git_bash(), str(src / "tools" / "make_release.sh")], cwd=src, env=env,
                            stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=600)
         assert r.returncode == 0, r.stdout[-2000:] + r.stderr[-2000:]

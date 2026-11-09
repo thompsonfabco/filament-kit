@@ -23,10 +23,11 @@ addresses) and the background `modules apply` go to the root helper (setup_helpe
 setup code, which the helper checks again.
 
 Routes (JSON under /setup/api; every POST body is a JSON object, `code` = the setup code):
-    GET  /setup  /setup/setup.js  /setup/setup.css
+    GET  /setup  /setup/setup.js  /setup/setup_tabs.js  /setup/setup.css
     GET  state                          everything the page shows
     GET  modules/preview?name=N         what switching N would do (the checklist's notes and needed settings)
-    GET  apply?from=N                   the background apply's output from byte N, and whether it finished
+    GET  apply?from=N                   the job `apply`'s old name: as GET job
+    (the console's own routes, by tab: setup_console/)
     POST key {code, key}  key/remove {code}  key/check {}      the Anthropic key (check: like `status`)
     POST printers {code, ip, access_code[, name, serial, model]}  printers/{serial}/code {code, access_code}
     POST printers/{serial}/test {}  printers/{serial}/forget {code}
@@ -59,7 +60,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Route
 
-from . import config, lan, modules, pairing, reader_tokens, setup_code, setup_helper
+from . import __version__, config, lan, modules, pairing, reader_tokens, setup_code
 from .bridge import registry
 from .bridge.klipper.moonraker import Moonraker, MoonrakerError, NotFound, Offline, Unauthorized
 
@@ -75,7 +76,6 @@ HOME_ONLY = "the setup page only answers the home network"
 BAD_HOST = "open the setup page by the server's own name or address"
 NEED_CODE = "this change needs the setup code (shown when the kit was installed; at the server: sudo filament-kit setup-code)"
 MAX_BODY = 16 * 1024
-MAX_LOG = 64 * 1024
 CHECK_GAP = 3.0                 # seconds between two key checks / printer tests (they reach the network)
 KINDS = {"phone": "", "pc": "pc", "station": "station"}
 ENTRY = re.compile(r"[A-Za-z0-9_-]{1,64}")
@@ -172,10 +172,11 @@ class SetupPage:
         self.client_factory = client_factory
         self.hosts = hosts or allowed_hosts         # a function: the names the page answers to
         self.last_check = 0.0
-        self.static = {n: (STATIC / n).read_bytes() for n in ("setup.js", "setup.css")}
+        self.static = {n: (STATIC / n).read_bytes() for n in ("setup.js", "setup_tabs.js", "setup.css")}
 
     # ---------- routes ----------
     def routes(self) -> list[Route]:
+        from . import setup_console
         g = self.guard
         w = lambda fn: self.guard(fn, write=True)  # noqa: E731
         hw = lambda fn: self.guard(fn, write="helper")  # noqa: E731
@@ -193,9 +194,10 @@ class SetupPage:
             ("/readers", w(self.reader_add), "POST"), ("/readers/{id}/revoke", w(self.reader_revoke), "POST"),
             ("/pair", w(self.pair), "POST"), ("/devices/{id}/revoke", w(self.device_revoke), "POST"),
             ("/modules", hw(self.module), "POST"), ("/settings", hw(self.setting), "POST"),
-            ("/apply", hw(self.apply_start), "POST")]
+            ("/apply", hw(self.apply_start), "POST")] + setup_console.routes(self)
         return ([Route("/setup", self.page, methods=["GET"]),
                  Route("/setup/setup.js", self.asset, methods=["GET"]),
+                 Route("/setup/setup_tabs.js", self.asset, methods=["GET"]),
                  Route("/setup/setup.css", self.asset, methods=["GET"])]
                 + [Route("/setup/api" + p, fn, methods=[m]) for p, fn, m in table])
 
@@ -307,7 +309,8 @@ class SetupPage:
             "<!doctype html><html lang=en><meta charset=utf-8>"
             "<meta name=viewport content='width=device-width,initial-scale=1'>"
             f"<title>filament-kit setup: {name}</title><link rel=stylesheet href='/setup/setup.css'>"
-            "<body><main id=app></main><script src='/setup/setup.js'></script></body></html>", headers=HEADERS)
+            "<body><main id=app></main><script src='/setup/setup.js'></script>"
+            "<script src='/setup/setup_tabs.js'></script></body></html>", headers=HEADERS)
 
     async def asset(self, request: Request):
         if not self._lan(request):
@@ -340,9 +343,11 @@ class SetupPage:
             readers, readers_error = reader_tokens.TokenStore().list(), None
         except reader_tokens.TokenFileError as e:
             readers, readers_error = [], str(e)
+        from .setup_console import jobs
         return {
             "server_name": cfg["server_name"], "address": setup_code.page_url(cfg), "code_set": setup_code.is_set(),
-            "mode": modules.mode_of(on),
+            "version": __version__, "mode": modules.mode_of(on),
+            "modes": [{"name": n, "modules": sorted(m), "here": "server" in m} for n, m in modules.MODES.items()],
             "modules": [{"name": n, "title": m.title, "description": m.description, "needs": modules.needs_of(n),
                          "optional_ai": m.optional_ai, "on": n in on} for n, m in modules.MODULES.items()],
             "anthropic": {"set": _present(cli.KEY_FILE), "ai_intake": "ai_intake" in on},
@@ -355,14 +360,17 @@ class SetupPage:
                          "last_seen": _fmt_time(d["last_seen"])} for d in pairing.devices()],
             "web": {"public_url": (cfg.get("web") or {}).get("public_url")},
             "station": {"url": (cfg.get("station") or {}).get("url")},
-            "apply": self._apply_view(0, with_text=False),
+            "apply": jobs.view(0, with_text=False),
         }
 
     async def state(self, request: Request, body: dict):
         return await anyio.to_thread.run_sync(self._state)
 
     async def preview(self, request: Request, body: dict):
-        """What switching a module would do, in the checklist's words; changes nothing."""
+        """What switching a module, or a mode preset, would do, in the checklist's words; changes nothing."""
+        if "mode" in request.query_params:
+            from .setup_console import modes
+            return await anyio.to_thread.run_sync(modes.preview, request.query_params["mode"])
         name = request.query_params.get("name", "")
         if name not in modules.MODULES:
             raise Refused(400, "no such module")
@@ -378,23 +386,9 @@ class SetupPage:
         return {"name": name, "on": name in chosen, "notes": notes,
                 "after": [n for n in modules.MODULES if n in chosen], "needs": needs, "refused": None}
 
-    def _apply_view(self, start: int, with_text: bool = True) -> dict:
-        try:
-            data = setup_helper.apply_log().read_bytes()
-        except OSError:
-            return {"seen": False, "running": False, "exit": None, "text": "", "next": 0}
-        m = re.search(rb"==> finished \(exit (-?[0-9]+)\)", data)
-        start = max(0, min(start, len(data)))
-        chunk = data[start:start + MAX_LOG] if with_text else b""
-        return {"seen": True, "running": m is None, "exit": int(m.group(1)) if m else None,
-                "text": chunk.decode("utf-8", "replace"), "next": start + len(chunk)}
-
     async def apply_get(self, request: Request, body: dict):
-        try:
-            start = int(request.query_params.get("from", "0"))
-        except ValueError:
-            raise Refused(400, "from must be a number") from None
-        return await anyio.to_thread.run_sync(self._apply_view, start)
+        from .setup_console import jobs
+        return await jobs.read(self, request, body)
 
     # ---------- the Anthropic key (root helper) ----------
     async def key_set(self, request: Request, body: dict):

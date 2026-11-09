@@ -7,6 +7,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +20,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -34,7 +37,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -47,6 +53,9 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.thompsonfabco.filamentkit.net.ProfileStatus
 import com.thompsonfabco.filamentkit.net.ServerInfo
+import com.thompsonfabco.filamentkit.session.CONNECTION_POLL_MS
+import com.thompsonfabco.filamentkit.ui.home.VersionLine
+import com.thompsonfabco.filamentkit.ui.home.versionLine
 import com.thompsonfabco.filamentkit.session.AppViewModel
 import com.thompsonfabco.filamentkit.session.Connection
 import com.thompsonfabco.filamentkit.session.PairNotice
@@ -81,11 +90,12 @@ import com.thompsonfabco.filamentkit.ui.spool.closeSpoolCard
 import com.thompsonfabco.filamentkit.ui.spool.SpoolUiState
 import com.thompsonfabco.filamentkit.ui.spool.SpoolViewModel
 import com.thompsonfabco.filamentkit.update.UpdateUi
+import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        lightEdgeToEdge()
+        appEdgeToEdge()
         setContent { AppFrame { FilamentKitApp() } }
     }
 
@@ -160,6 +170,23 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
         }
     }
     val labelPhotos = showLabelPhotos(info)
+    val version = versionLine(BuildConfig.VERSION_NAME, config.isPaired(), info?.version)
+    // On screen: the dot follows the server, and is checked right away on return to the app. Not while pairing, where
+    // nothing shows it.
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val pairing = route == Routes.PAIR
+    LaunchedEffect(lifecycle, pairing) {
+        if (pairing) return@LaunchedEffect
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) {
+                app.session.recheck()
+                delay(CONNECTION_POLL_MS)
+            }
+        }
+    }
+    LaunchedEffect(lifecycle, updater) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { updater?.onResumed() }
+    }
 
     // Global 401 / certificate change: go to Pair (once per request, also across rotation).
     val pairRequests by app.router.requests.collectAsStateWithLifecycle()
@@ -208,7 +235,7 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
                 }
                 if (!localNetwork.granted) {
                     // No NSD browse, probe, verify or pair until the permission is granted.
-                    Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column(Modifier.weight(1f).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         Text("Pair with your server", style = MaterialTheme.typography.headlineSmall)
                         LocalNetworkPanel(localNetwork)
                     }
@@ -223,10 +250,13 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
                             nav.navigateClearing(Routes.HOME)
                         },
                         modifier = Modifier.weight(1f),
+                        skipCheck = skipFingerprintCheck,
+                        onSkipCheck = app::setSkipFingerprintCheck,
                         canTrust = { config.canTrust(it.expected) },
                         onTrust = { m -> app.trustCertificate(m.expected, m.actual) { nav.navigateClearing(Routes.HOME) } },
                     )
                 }
+                VersionLine(version)
             }
         }
 
@@ -250,6 +280,7 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
                 connection = connection,
                 drafts = drafts,
                 update = update,
+                version = version,
                 onAddSpools = { nav.navigate(Routes.add()) },
                 onAddByHand = { nav.navigate(Routes.add(manual = true)) },
                 labelPhotos = labelPhotos,
@@ -384,21 +415,21 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
 }
 
 /**
- * Android draws apps edge to edge (target SDK 35+). The app is always light, so the status and navigation bars get
- * dark icons over the app's own background.
+ * Android draws apps edge to edge (target SDK 35+). The status and navigation bars stay transparent over the app's own
+ * background, with icons that follow the phone's light or dark setting as the app does.
  */
-internal fun ComponentActivity.lightEdgeToEdge() = enableEdgeToEdge(
-    statusBarStyle = SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT),
-    navigationBarStyle = SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT),
+internal fun ComponentActivity.appEdgeToEdge() = enableEdgeToEdge(
+    statusBarStyle = SystemBarStyle.auto(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT),
+    navigationBarStyle = SystemBarStyle.auto(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT),
 )
 
 /**
- * The app's root: the background fills the whole window, behind the bars too, and every screen is kept clear of the
- * status bar, navigation bar, cutouts and keyboard, here once.
+ * The app's root: light or dark as the phone is set, the background fills the whole window, behind the bars too, and
+ * every screen is kept clear of the status bar, navigation bar, cutouts and keyboard, here once.
  */
 @Composable
 internal fun AppFrame(content: @Composable () -> Unit) {
-    MaterialTheme {
+    MaterialTheme(colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()) {
         Surface(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxSize().safeDrawingPadding()) { content() }
         }

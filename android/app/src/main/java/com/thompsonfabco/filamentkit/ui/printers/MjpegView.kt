@@ -20,6 +20,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
@@ -162,6 +163,7 @@ fun MjpegView(client: OkHttpClient, url: String, headers: Map<String, String>, m
             Image(it.asImageBitmap(), contentDescription = "Printer camera", modifier = Modifier.fillMaxWidth(),
                 contentScale = ContentScale.FillWidth)
         }
+        if (frame == null && error == null) Text(PrinterHelp.CAMERA_WAITING, color = Color.White)
         error?.let { msg ->
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally) {

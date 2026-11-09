@@ -7,7 +7,9 @@ the app first, see [Install the Android app](install-android-app.md); the server
 The home screen has these buttons: **Add spool**, **Add profile**, **Search**, **Printers** and **Settings**. A
 dot at the top shows the connection: green **Connected**, yellow **Connecting…** or **Needs local network
 access**, red **Can't reach the server** or **The server's certificate changed**, grey **Not paired**.
-**Add from label photos** is only there when AI label reading is turned on at the server.
+The dot follows the server while the app is open, within about 20 seconds. **Add from label photos** is only there
+when AI label reading is turned on at the server. The app is light or dark as your phone is set. The small line at
+the bottom shows the app's version and the server's.
 
 <img src="images/android-home.png" width="240" alt="The app's home screen, connected to a server">
 
@@ -21,7 +23,8 @@ access**, red **Can't reach the server** or **The server's certificate changed**
 
    It prints a QR code, the server's certificate fingerprint and a 6-digit code, good for about 10 minutes. (The
    server's setup page, `https://<computer name>.local:8710/setup`, can show a pairing code too.)
-2. Open the app. On Android 17 and newer, tap **Allow** when it asks for **local network access**. Without it the
+2. Open the app. On Android 17 and newer, tap **Allow** when it asks for **local network access** (it may call it
+   **Nearby devices**). Without it the
    app can't find or reach your server. If you said no, the app shows **Allow** again, and **Open app settings**
    once Android stops asking.
 3. Tap **Scan QR code**, allow the camera, and point the phone at the code in the Terminal. Done: the home screen
@@ -49,12 +52,12 @@ problems are in [Install the Android app](install-android-app.md#common-problems
 **Forget server** (it asks to confirm; the spools stay on the server) unpairs this phone, and then you pair again
 as above. **Pair again** does it in one step. On the server, `sudo filament-kit unpair`
 lists paired phones and `sudo filament-kit unpair <id>` removes one; that phone is then asked to pair again. If the
-app shows **The server's certificate has changed**, it lists the new fingerprint: tap **Trust the new certificate** to
-keep this pairing, or **Pair again** to pair with a new code. If you didn't reinstall or move the server, another
+app shows **The server's certificate has changed**, it lists the new fingerprint, which you can compare with the one shown with a pairing code on the server. Tap
+**Trust the new certificate** to keep this pairing, or **Pair again** to pair with a new code. If you didn't reinstall or move the server, another
 device may be answering at that address, and trusting it gives that device this phone's access. If the server no
 longer knows this phone, for example after a reinstall with `--purge`, the app asks you to pair again.
 
-**Skip the fingerprint check for new servers**, in **Settings**, is off by default. With it on, picking a server from
+**Skip the fingerprint check for new servers**, on the first pairing screen and in **Settings**, is off by default. With it on, picking a server from
 the list or typing its address goes straight to the 6-digit code and the app trusts the certificate the server presents. A scanned
 QR code is checked either way, and a certificate that changes after pairing still asks you first.
 
@@ -75,7 +78,8 @@ You need a Bambu Lab printer on the same network as the server, switched on.
    serial. Optionally give it a **Name**, type its **Access Code**, and tap **Add**. The code is on the printer:
    **Settings → Network/LAN → Access Code**.
 3. The state turns to **Connected**, and tapping the printer opens its screen with live status, camera, the filament
-   in each slot, pause/resume/stop and the chamber light.
+   in each slot, pause/resume/stop and the chamber light. A loaded slot's colour sits inside a black ring, so white
+   filament still shows; an empty slot is a dashed ring.
 
 **If the state says something else:**
 
@@ -195,7 +199,7 @@ With the app open, tap a spool's NFC tag on the back of the phone.
   weight if you like, and **Confirm link**) or **Add as new**, which opens the add screen with this tag attached: label photos if your server reads labels,
   otherwise the **Add spool** form.
   If the tag is already used by another spool, the app says so and offers to move it here.
-- **Search** on the home screen finds spools by brand, material or colour (**Sealed spools only** narrows it) and
-  opens the same card.
+- **Search** on the home screen finds spools by brand, material or colour as you type (**Sealed spools only** narrows
+  it) and opens the same card.
 - **Add profile** is for a filament line the library doesn't have: fill in the fields marked `*` (vendor, product
   line, material) and any numbers from the maker's data sheet, and tap **Save**.
