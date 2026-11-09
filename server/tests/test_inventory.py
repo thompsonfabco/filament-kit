@@ -77,6 +77,10 @@ def test_a_location_the_rules_chose_says_why(sm, spoolman_fake_store):
     assert "at Storage box 02 (the first free storage box, since no location was given)" in r.lines[-1]
     r = inventory.add_spools(sm, [item(sealed=False)], RULES, dry=True)
     assert "at Rack 1 (where opened PLA goes, since no location was given)" in r.lines[-1]
+    # the default install has no storage boxes (box_count 0): the line must not say they are all taken
+    r = inventory.add_spools(sm, [item(sealed=False, material="PETG", name="petg red")], {**RULES, "box_count": 0},
+                             dry=True)
+    assert "at Overflow (no storage boxes are set up, so opened spools go here, since no location was given)"         in r.lines[-1] and "taken" not in r.lines[-1]
     r = inventory.add_spools(sm, [item(location="Shelf")], RULES, dry=True)
     assert "at Shelf, " in r.lines[-1] and "no location was given" not in r.lines[-1]
 
