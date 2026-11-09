@@ -7,8 +7,8 @@ anything but the standard mDNS query.
 `scan(subnet, port=7125, workers=64, timeout=0.3)` probes TCP `port` on every address of `subnet` (at most a /24)
 and keeps the ones whose `/server/info` answers like Moonraker. It runs only when the owner asks (CLI
 `filament-kit klipper scan`, the app's Scan button), never in the background. `own_subnet()` is the /24 of this
-machine's default-route address (found without sending a packet). `check_range(net, own)` is what a client of the server
-may ask for (`KlipperFamily.scan`); the CLI's `--subnet` is explicit and already root, so it isn't held to it.
+machine's default-route address (found without sending a packet). `check_range(net)` is what a client of the server may
+ask for (`KlipperFamily.scan`); the CLI's `--subnet` is explicit and runs outside the service, so it isn't held to it.
 """
 from __future__ import annotations
 
@@ -24,7 +24,9 @@ log = logging.getLogger(__name__)
 SERVICE = "_moonraker._tcp.local."
 DEFAULT_PORT = 7125
 MAX_HOSTS = 256
-CGNAT = ipaddress.ip_network("100.64.0.0/10")       # Tailscale's addresses; is_private is false for these
+# What the server's unit lets it reach (IPAddressAllow in install/systemd/filament-kit.service; a test keeps the two equal).
+# A probe of anything else times out, and would read as "nothing there".
+REACHABLE = tuple(ipaddress.ip_network(n) for n in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"))
 
 
 def own_subnet() -> ipaddress.IPv4Network | None:
@@ -39,16 +41,14 @@ def own_subnet() -> ipaddress.IPv4Network | None:
     return ipaddress.ip_network(f"{ip}/24", strict=False)
 
 
-def check_range(net, own=None) -> None:
-    """A network the server may be asked to scan: at most a /24, inside its own /24, a private range or CGNAT. ValueError
-    otherwise."""
+def check_range(net) -> None:
+    """A network the server may be asked to scan: at most a /24, in a range its unit lets it reach. ValueError otherwise,
+    rather than a scan that finds nothing."""
     if net.num_addresses > MAX_HOSTS:
         raise ValueError("scan at most a /24 (256 addresses)")
-
-    def inside(wider):
-        return wider is not None and net.version == wider.version and net.subnet_of(wider)
-    if not (net.is_private or inside(CGNAT) or inside(own)):
-        raise ValueError("scan this machine's own network or a private range")
+    if not any(net.version == r.version and net.subnet_of(r) for r in REACHABLE):
+        raise ValueError(f"the server can only reach private networks ({', '.join(str(r) for r in REACHABLE)}), so a scan "
+                         f"of {net} would find nothing")
 
 
 def _open(host: str, port: int, timeout: float) -> bool:
