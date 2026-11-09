@@ -112,6 +112,29 @@ def test_shutdown_event_while_connected(moonraker, fam):
     assert wait_for(lambda: moonraker.event("notify_klippy_shutdown") or fam.state(pid) == "klippy_not_ready")
 
 
+def test_a_shutdown_before_the_subscription_shows_in_its_snapshot(moonraker, fam):
+    """The gap between set-up's read and the subscription: the event is lost, the first snapshot still tells."""
+    as_sv08(moonraker)
+    moonraker.status["webhooks"] = {"state": "shutdown", "state_message": "MCU lost"}
+    pid = add(moonraker)
+    fam.start()
+    assert wait_for(lambda: fam.state(pid) == "klippy_not_ready")
+
+
+def test_klipper_gone_before_the_subscription_is_not_connected(moonraker, fam):
+    """The same gap with Klipper's host gone: no snapshot, and "connected" must not stand until it comes back."""
+    as_sv08(moonraker)
+    moonraker.subscribe_refused = True
+    states = []
+    fam.add_listener(lambda pid, event, data: states.append(data["state"]) if event == "klippy" else None)
+    pid = add(moonraker)
+    fam.start()
+    assert wait_for(lambda: "klippy_not_ready" in states)
+    moonraker.subscribe_refused = False
+    assert wait_for(lambda: moonraker.event("notify_klippy_ready") or fam._conn(pid).sub.connected)
+    assert wait_for(lambda: fam.state(pid) == "connected")
+
+
 def test_unauthorized_state(moonraker, fam):
     moonraker.api_key = "k"
     pid = add(moonraker)

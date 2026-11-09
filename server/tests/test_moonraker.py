@@ -255,3 +255,49 @@ def test_websocket_on_its_own_socket_still_works(moonraker):
         assert wait_for(lambda: any((d.get("print_stats") or {}).get("state") == "printing" for d in got))
     finally:
         sub.stop()
+
+
+def test_a_refused_subscribe_reads_as_klipper_disconnected(moonraker):
+    """Moonraker answers 503 while Klipper's host is away, and the event saying so went before the socket came up."""
+    moonraker.subscribe_refused = True
+    got, events = [], []
+    sub = mr.Subscriber(_client(moonraker), {"print_stats": None}, got.append,
+                        lambda name, params: events.append(name), backoff=(0.05, 0.1)).start()
+    try:
+        assert wait_for(lambda: "notify_klippy_disconnected" in events)
+        assert not sub.connected and not got
+        moonraker.subscribe_refused = False
+        moonraker.event("notify_klippy_ready")
+        assert wait_for(lambda: sub.connected)
+    finally:
+        sub.stop()
+
+
+def test_another_object_sets_snapshot_is_applied_without_a_new_connect(moonraker):
+    got, connects = [], []
+    sub = mr.Subscriber(_client(moonraker), {"print_stats": None}, got.append, lambda n, p: None, backoff=(0.05, 0.1),
+                        on_connect=lambda: connects.append(1)).start()
+    try:
+        assert wait_for(lambda: sub.connected)
+        sub.set_objects({"toolhead": None})
+        assert wait_for(lambda: {"toolhead": {"extruder": "extruder"}} in got)
+        assert len(connects) == 1
+    finally:
+        sub.stop()
+
+
+def test_a_refused_later_subscribe_is_not_a_disconnect(moonraker):
+    """Only the subscribe a connect or a Klipper restart sends says so: set-up sends the other kind, and answering it
+    with another set-up would never end."""
+    events = []
+    sub = mr.Subscriber(_client(moonraker), {"print_stats": None}, lambda s: None,
+                        lambda name, params: events.append(name), backoff=(0.05, 0.1)).start()
+    try:
+        assert wait_for(lambda: sub.connected)
+        moonraker.subscribe_refused = True
+        sub.set_objects({"toolhead": None})
+        moonraker.push({"print_stats": {"state": "printing"}})
+        time.sleep(0.2)
+        assert events == [] and sub.connected
+    finally:
+        sub.stop()
