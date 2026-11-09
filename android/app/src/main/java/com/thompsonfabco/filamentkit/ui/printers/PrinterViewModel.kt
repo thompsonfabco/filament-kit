@@ -51,6 +51,8 @@ class ApiPrinterBackend(private val api: Api) : PrinterBackend, PrinterToolsBack
 
 /** Plain-English texts for printer states and errors. */
 object PrinterHelp {
+    const val CAMERA_WAITING = "Waiting for the camera picture…"
+
     const val ACCESS_CODE_HELP = "On the printer: Settings → Network/LAN → Access Code"
 
     fun stateLabel(state: String): String = when (state) {

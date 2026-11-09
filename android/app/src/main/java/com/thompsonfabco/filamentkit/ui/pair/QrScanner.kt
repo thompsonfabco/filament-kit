@@ -16,7 +16,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -68,7 +70,15 @@ fun QrScanner(
                 Text("The camera could not be started, so the pairing code can't be scanned. Enter the server's address instead.")
                 Button(onClick = onEnterAddress) { Text("Enter address instead") }
             }
-            granted -> CameraPreview(onResult, onFailed = { cameraFailed = true })
+            granted -> {
+                CameraPreview(onResult, onFailed = { cameraFailed = true })
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    modifier = Modifier.align(Alignment.TopCenter).padding(24.dp),
+                ) {
+                    Text("Point the camera at the QR code", Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                }
+            }
             denied -> Column(
                 Modifier.align(Alignment.Center).padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -78,7 +88,7 @@ fun QrScanner(
                 OutlinedButton(onClick = onEnterAddress) { Text("Enter address instead") }
             }
         }
-        OutlinedButton(onClick = onClose, modifier = Modifier.align(Alignment.BottomCenter).padding(24.dp)) {
+        Button(onClick = onClose, modifier = Modifier.align(Alignment.BottomCenter).padding(24.dp)) {
             Text("Cancel")
         }
     }

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -103,7 +104,8 @@ private fun ChooseStep(ui: PairUi, discovered: List<DiscoveredServer>, onScan: (
 
     Text("Servers found on this network", style = MaterialTheme.typography.titleMedium)
     if (discovered.isEmpty()) {
-        Text("None found yet. You can still enter an address below.")
+        LinearProgressIndicator(Modifier.fillMaxWidth())
+        Text(PairTexts.NONE_FOUND)
     } else {
         discovered.forEach { server ->
             OutlinedButton(onClick = { vm.connectDiscovered(server.host, server.port) }, enabled = !ui.busy, modifier = Modifier.fillMaxWidth()) {

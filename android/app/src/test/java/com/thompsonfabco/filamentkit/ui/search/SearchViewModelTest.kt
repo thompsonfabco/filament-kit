@@ -4,6 +4,7 @@ import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
@@ -20,7 +21,9 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SearchViewModelTest {
-    @Before fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
+    private val scheduler = TestCoroutineScheduler()
+
+    @Before fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher(scheduler))
     @After fun tearDown() = Dispatchers.resetMain()
 
     private val calls = mutableListOf<Pair<String, Boolean>>()
@@ -40,6 +43,49 @@ class SearchViewModelTest {
         assertEquals(results, vm.state.value.results)
         assertTrue(vm.state.value.searched)
         assertFalse(vm.state.value.busy)
+    }
+
+    @Test fun aPauseInTypingSearchesOnceForTheLastText() {
+        vm.setQuery("pe")
+        scheduler.advanceTimeBy(200)
+        vm.setQuery("petg")
+        scheduler.advanceTimeBy(399)
+        assertTrue(calls.isEmpty())
+        scheduler.advanceTimeBy(2)
+        assertEquals(listOf("petg" to false), calls)
+        assertEquals(results, vm.state.value.results)
+    }
+
+    @Test fun oneTypedLetterDoesNotSearch() {
+        vm.setQuery("p")
+        scheduler.advanceTimeBy(1_000)
+        assertTrue(calls.isEmpty())
+    }
+
+    @Test fun theSearchButtonDoesNotSearchTwice() {
+        vm.setQuery("petg")
+        vm.search()
+        scheduler.advanceTimeBy(1_000)
+        assertEquals(listOf("petg" to false), calls)
+    }
+
+    @Test fun clearingTheBoxClearsTheResults() {
+        vm.setQuery("petg")
+        vm.search()
+        vm.setQuery("")
+        scheduler.advanceTimeBy(1_000)
+        assertEquals(1, calls.size)
+        assertFalse(vm.state.value.searched)
+        assertTrue(vm.state.value.results.isEmpty())
+    }
+
+    @Test fun theSealedBoxSearchesAgainOnlyOnceSomethingWasSearched() {
+        vm.setSealedOnly(true)
+        assertTrue(calls.isEmpty())
+        vm.setQuery("petg")
+        vm.search()
+        vm.setSealedOnly(false)
+        assertEquals(listOf("petg" to true, "petg" to false), calls)
     }
 
     @Test fun blankQueryDoesNotCallTheServer() {

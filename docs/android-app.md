@@ -7,7 +7,8 @@ the app first, see [Install the Android app](install-android-app.md); the server
 The home screen has these buttons: **Add spool**, **Add profile**, **Search**, **Printers** and **Settings**. A
 dot at the top shows the connection: green **Connected**, yellow **Connecting…** or **Needs local network
 access**, red **Can't reach the server** or **The server's certificate changed**, grey **Not paired**.
-**Add from label photos** is only there when AI label reading is turned on at the server.
+**Add from label photos** is only there when AI label reading is turned on at the server. The app is light or dark
+as your phone is set.
 
 <img src="images/android-home.png" width="240" alt="The app's home screen, connected to a server">
 
@@ -21,7 +22,8 @@ access**, red **Can't reach the server** or **The server's certificate changed**
 
    It prints a QR code, the server's certificate fingerprint and a 6-digit code, good for about 10 minutes. (The
    server's setup page, `https://<computer name>.local:8710/setup`, can show a pairing code too.)
-2. Open the app. On Android 17 and newer, tap **Allow** when it asks for **local network access**. Without it the
+2. Open the app. On Android 17 and newer, tap **Allow** when it asks for **local network access** (it may call it
+   **Nearby devices**). Without it the
    app can't find or reach your server. If you said no, the app shows **Allow** again, and **Open app settings**
    once Android stops asking.
 3. Tap **Scan QR code**, allow the camera, and point the phone at the code in the Terminal. Done: the home screen
@@ -195,7 +197,7 @@ With the app open, tap a spool's NFC tag on the back of the phone.
   weight if you like, and **Confirm link**) or **Add as new**, which opens the add screen with this tag attached: label photos if your server reads labels,
   otherwise the **Add spool** form.
   If the tag is already used by another spool, the app says so and offers to move it here.
-- **Search** on the home screen finds spools by brand, material or colour (**Sealed spools only** narrows it) and
-  opens the same card.
+- **Search** on the home screen finds spools by brand, material or colour as you type (**Sealed spools only** narrows
+  it) and opens the same card.
 - **Add profile** is for a filament line the library doesn't have: fill in the fields marked `*` (vendor, product
   line, material) and any numbers from the maker's data sheet, and tap **Save**.
