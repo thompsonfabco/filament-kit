@@ -160,6 +160,9 @@ def printers_idle():
 
 # ---------------------------------------------------------------- install
 
+UNIT_DIR = "/etc/systemd/system"
+
+
 def _units(cfg: dict) -> tuple[list[str], list[str]]:
     """(services, timers and path units) of the modules that are on."""
     on = modules.enabled(cfg)
@@ -239,6 +242,51 @@ def _install(cfg: dict, version: str, run: Callable[[list[str]], int]) -> bool:
             print("starting the kit's services again", file=sys.stderr)
             _start_again(run, *stopped)
         shutil.rmtree(work, ignore_errors=True)
+
+
+def _shipped_units() -> set[str]:
+    """The unit files of the version in place, as install.sh left them in resources/systemd."""
+    try:
+        return {p.name for p in (config.paths().opt / "resources" / "systemd").iterdir() if p.is_file()}
+    except OSError:
+        return set()
+
+
+def _remove_units_left_behind(before: set[str], version: str, run: Callable[[list[str]], int]) -> None:
+    """After going back to `version`: remove the unit files the version it replaced shipped and this one does not. The
+    older version's own apply and uninstall do not know them, so nothing else ever would. Best effort: the version is
+    in place by now and a file left here is unused, so a failure only warns.
+
+    A template (`name@.service`) is only disabled and its file removed, never stopped: the setup page's rollback runs
+    inside filament-kit-setup-job@rollback.service, and removing the file does not end an instance that is running."""
+    after = _shipped_units()
+    if os.environ.get("FK_NO_SYSTEMD") == "1" or not after:     # no list: nothing says what `version` ships
+        return
+    removed = []
+    for unit in sorted(u for u in before - after if u.startswith("filament-kit")):
+        try:
+            run(["systemctl", "disable", unit] if unit.endswith("@.service")
+                else ["systemctl", "disable", "--now", unit])
+            (Path(UNIT_DIR) / unit).unlink(missing_ok=True)
+            removed.append(unit)
+        except OSError as e:
+            print(f"warning: could not remove {UNIT_DIR}/{unit}, which filament-kit {version} does not use: {e}",
+                  file=sys.stderr)
+    if removed:
+        try:
+            run(["systemctl", "daemon-reload"])
+        except OSError as e:
+            print(f"warning: systemctl daemon-reload: {e}", file=sys.stderr)
+        print(f"Removed {', '.join(removed)}: filament-kit {version} does not have them.")
+
+
+def _install_older(cfg: dict, version: str, run: Callable[[list[str]], int]) -> bool:
+    """`_install` going back to `version`, then the unit files only the version it replaced had are removed."""
+    before = _shipped_units()
+    ok = _install(cfg, version, run)
+    if ok:
+        _remove_units_left_behind(before, version, run)
+    return ok
 
 
 def _require_root() -> bool:
@@ -644,7 +692,7 @@ def _restore(cfg: dict, cur: str, kept: bool, old_previous, run) -> int:
         return 1
     print(f"reinstalling filament-kit {cur}", file=sys.stderr)
     try:
-        restored = _install(cfg, cur, run)
+        restored = _install_older(cfg, cur, run)
     except ReleaseError as e:
         print(f"error: {e}", file=sys.stderr)
         restored = False
@@ -714,7 +762,7 @@ def rollback(cfg: dict, *, run: Callable[[list[str]], int] = default_run) -> int
         return 1
     try:
         with printers_idle():
-            if not _install(cfg, target, run):
+            if not _install_older(cfg, target, run):
                 print("error: the rollback failed; the version before is still kept, try again", file=sys.stderr)
                 return 1
     except Busy as e:
