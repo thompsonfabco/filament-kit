@@ -140,6 +140,22 @@ def test_release_no_grep_q_after_a_pipe():
     assert not re.search(r"\|\s*grep\s+-[a-zA-Z]*q", text)
 
 
+def test_release_version_code_defaults_to_the_workflows_formula():
+    """A tarball built by hand without FK_VERSION_CODE used to carry an app with versionCode 1, which no phone updates
+    to. Unset, the script now computes MAJOR*10000 + MINOR*100 + PATCH from the tree's version, as release.yml and
+    android/app/build.gradle.kts do."""
+    text = _read("tools/make_release.sh")
+    assert "FK_VERSION_CODE=${FK_VERSION_CODE:-1}" not in text
+    assert "10#$v_major * 10000 + 10#$v_minor * 100 + 10#$v_patch" in text
+    gradle = _read("android/app/build.gradle.kts")
+    assert "major.toInt() * 10000 + minor.toInt() * 100 + patch.toInt()" in gradle
+    assert 'resolve("../server/filament_kit/__init__.py")' in gradle      # the file every Gradle build reads
+    # the release and Android workflows check the whole repository out, so that file is where Gradle looks
+    for wf in ("release.yml", "android.yml"):
+        text = _read(f".github/workflows/{wf}")
+        assert "sparse-checkout" not in text and "actions/checkout@" in text, wf
+
+
 def test_release_copies_spoolman_script():
     text = _read("tools/make_release.sh")
     assert "install/spoolman.sh" in text

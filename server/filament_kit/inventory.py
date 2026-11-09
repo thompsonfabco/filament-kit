@@ -217,12 +217,19 @@ def _write_items(sm, placed, vendors, fils, result, dry) -> None:
                 result.added.append(it)
             _read_back(sm, sid)
             ids.append(sid)
-        gross_note = f" (gross {it['gross']} - tare {tare})" if it.get("gross") is not None else ""
-        fid = f"F{f['id']} " if f.get("id") is not None else ""
-        id_note = f" {ids}" if not dry else ""
+        # a sentence a person reads (the app shows these lines as the result of Add), not a log line
+        n = it["count"]
+        gross_note = f" (weighed {it['gross']} g, the spool itself {tare} g)" if it.get("gross") is not None else ""
+        which = f"{state} F{f['id']}" if f.get("id") is not None and state == "existing filament" else state
+        if dry:
+            id_note = ""
+        elif len(ids) == 1:
+            id_note = f", spool id {ids[0]},"
+        else:
+            id_note = f", spool ids {', '.join(str(i) for i in ids)},"
         result.lines.append(
-            f"{fid}{vn} {it['name']} ({state}): {it['count']} spool(s){id_note} @ {it['location']}"
-            f"{' (opened)' if opened else ''}, {remaining} g{gross_note}")
+            f"{'Would add' if dry else 'Added'} {n} spool{'' if n == 1 else 's'} of {vn} {it['name']} ({which}){id_note} "
+            f"at {it['location']}{', opened' if opened else ''}, {remaining} g{' each' if n > 1 else ''}{gross_note}")
 
 
 def _join_line(sm: Spoolman, f: dict, it: dict, result: AddResult, dry: bool) -> None:

@@ -93,7 +93,7 @@ def test_find_spools(tools, sm):
 
 def test_add_spools_dry_then_real(tools, sm, spoolman_fake_store):
     dry = tools.add_spools([item(count=2)], dry_run=True)
-    assert dry["dry"] is True and dry["spool_ids"] == [] and "2 spool(s)" in dry["output"]
+    assert dry["dry"] is True and dry["spool_ids"] == [] and "Would add 2 spools" in dry["output"]
     assert dry["exit_code"] == 0 and "dry run" in dry["output"]
     assert spoolman_fake_store["spools"] == {}
     real = tools.add_spools([item(count=2)], dry_run=False)

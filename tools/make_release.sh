@@ -60,9 +60,17 @@ chmod 755 "$stage/install.sh" "$stage/uninstall.sh" "$stage/install/backup.sh" \
     "$stage/install/filament-kit-cli.sh" "$stage/install/spoolman.sh" "$stage/install/export_ops.sh"
 
 # ---------- Android app (optional) ----------
-# versionCode: FK_VERSION_CODE (default 1) is passed to the Gradle build AND written to app/version.txt, so the
-# update check on phones compares like with like. Bump it for every app release (see README).
-FK_VERSION_CODE=${FK_VERSION_CODE:-1}
+# versionCode: FK_VERSION_CODE is passed to the Gradle build AND written to app/version.txt, so the update check on
+# phones compares like with like. Unset, it is the release workflow's formula on this tree's version
+# (MAJOR*10000 + MINOR*100 + PATCH, as android/app/build.gradle.kts computes it), so a tarball built by hand carries
+# an app every earlier release's phones update to; a fixed default of 1 never was one.
+if [ -z "${FK_VERSION_CODE:-}" ]; then
+    IFS=. read -r v_major v_minor v_patch <<< "$version"
+    case "$v_major.$v_minor.$v_patch" in
+        *[!0-9.]*|.*|*.|*..*) echo "error: version $version is not MAJOR.MINOR.PATCH, so no versionCode follows from it" >&2; exit 1 ;;
+    esac
+    FK_VERSION_CODE=$((10#$v_major * 10000 + 10#$v_minor * 100 + 10#$v_patch))
+fi
 case "$FK_VERSION_CODE" in
     ""|*[!0-9]*|0*) echo "error: FK_VERSION_CODE must be a whole number above 0 (got '$FK_VERSION_CODE')" >&2; exit 1 ;;
 esac
