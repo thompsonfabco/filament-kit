@@ -125,6 +125,29 @@ def outcome_of(state: str, m, scheme_unsettled: bool, problems: list) -> str:
     return "confirmed"
 
 
+def owner_since(m) -> float | None:
+    """When the owner last confirmed a slot in this map (Map by loading filament), as epoch seconds; None if never."""
+    import datetime
+    newest = None
+    for meta in (m.by_user or {}).values():
+        try:
+            t = datetime.datetime.strptime(str(meta.get("at") or ""), "%Y-%m-%dT%H:%M:%S%z").timestamp()
+        except (ValueError, AttributeError):
+            continue
+        newest = t if newest is None else max(newest, t)
+    return newest
+
+
+def superseded(st: dict, m) -> bool:
+    """A failed job the owner has mapped over since (by loading filament): the map they made is the current one, so
+    the old failure no longer decides the outcome or the next step. A job whose end is unknown counts as older."""
+    if st.get("state") != "failed":
+        return False
+    since = owner_since(m)
+    ended = st.get("finished")
+    return since is not None and (ended is None or since > float(ended))
+
+
 def next_step(outcome: str, reason: str, scheme_unsettled: bool = False) -> str:
     """The one next step to show, or ""."""
     if reason in NEXT_STEP:
@@ -800,9 +823,13 @@ class Mapper:
         ended = st.get("finished")
         old = (st is not mine and bool(st["problems"]) and (ended is None or ended < _STARTED)
                and not (st["state"] == "running" and _ProcessLock.held_elsewhere(serial)))
-        out = outcome_of(st["state"], m, st.get("scheme_unsettled", False), st["problems"])
+        # a failed job the owner mapped over since: their map is the current one (the job's problems stay, as old)
+        over = superseded(st, m)
+        old = old or over
+        out = outcome_of("done" if over else st["state"], m, st.get("scheme_unsettled", False),
+                         [] if over else st["problems"])
         # a stale or suspect map: mapping again is the step, whatever stopped an earlier job
-        reason = st.get("reason", "none") if out not in ("confirmed", "running", "stale", "suspect") else "none"
+        reason = "none" if over or out in ("confirmed", "running", "stale", "suspect") else st.get("reason", "none")
         return {"outcome": out, "reason": reason, "outcome_text": OUTCOME_TEXT[out],
                 "next_step": next_step(out, reason, st.get("scheme_unsettled", False)),
                 "state": st["state"], "step": st["step"], "slots": slots, "calibrated": m.calibrated,
