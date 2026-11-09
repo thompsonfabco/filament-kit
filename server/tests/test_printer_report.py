@@ -128,6 +128,14 @@ def test_a_real_module_type_and_model_still_go_in():
     assert printer_report.file_name("BL-P001").startswith("printer-report-BL-P001-")
 
 
+@pytest.mark.parametrize("name", ["3DPrinter-X1-Carbon", "3DPrinter-X1"])
+def test_a_known_model_reported_by_a_long_name_keeps_its_code(name):
+    from filament_kit.bridge import hardware
+    code = hardware.load().model(name).code
+    assert code and f'model-code="{code}"' in printer_report.build({}, name).decode("utf-8")
+    assert printer_report.file_name(name).startswith(f"printer-report-{code}-")
+
+
 def test_someones_name_for_the_printer_is_not_a_model_code():
     assert 'model-code' not in printer_report.build({}, "kitchen-printer").decode("utf-8")
     assert "kitchen" not in printer_report.file_name("kitchen-printer")

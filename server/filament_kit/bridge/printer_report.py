@@ -71,6 +71,13 @@ def _ints(values) -> str:
     return " ".join(out)
 
 
+def _model_code(model) -> str | None:
+    """The hardware file's own code for a model it knows, whatever name the printer reported, since that can't be anyone's own;
+    otherwise what was reported, if it has a code's shape."""
+    mi = hardware.load().model(model)
+    return _plain(mi.code if mi.known else model, MODEL)
+
+
 def _firmware(root: ET.Element, report: dict) -> None:
     for m in report.get(layout.FIRMWARE) or []:
         if isinstance(m, dict) and _plain(m.get("name"), NAME) and _plain(m.get("version"), VERSION):
@@ -150,7 +157,7 @@ def build(report: dict | None, model, *, trail=None, wanted: str | None = None, 
     if wanted in WANTED:
         root.set("wanted", wanted)
     printer = ET.SubElement(root, "printer", known=str(bool(mi.known)).lower(), family="bambu")
-    _set(printer, "model-code", model, MODEL)
+    _set(printer, "model-code", _model_code(model), MODEL)
     sections = (lambda: _firmware(root, report), lambda: _layout(root, report, model), lambda: _presence(root, report),
                 lambda: _nozzles(root, report), lambda: _keys(root, report), lambda: _attempts(root, trail))
     for section in sections:
@@ -168,7 +175,7 @@ def _folder(serial: str) -> Path:
 
 def file_name(model, when: float | None = None) -> str:
     """No serial, so the name is safe to attach too."""
-    code = _plain(model, MODEL) or "unknown"
+    code = _model_code(model) or "unknown"
     return f"printer-report-{code}-{time.strftime('%Y%m%d-%H%M%S', time.gmtime(time.time() if when is None else when))}.xml"
 
 
