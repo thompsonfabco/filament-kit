@@ -13,7 +13,7 @@ import uvicorn
 from fakes.claude_fake import FakeClaude
 
 from conftest import free_port
-from filament_kit import cli, config, inventory, pairing
+from filament_kit import cli, config, inventory, modules, pairing
 from filament_kit.api import create_app
 from filament_kit.spoolman import Spoolman
 from filament_kit.station import server_api
@@ -138,6 +138,36 @@ def test_station_pair_command(server, monkeypatch):
     assert api.tag_lookup(UID)[0] == 200
     answers = iter([link, "n"])
     assert cli.cmd_station_pair(ask=lambda prompt: next(answers)) == 1
+
+
+def _local_pair(server, monkeypatch, on=("server", "station")):
+    port, _ = server
+    if hasattr(os, "geteuid"):
+        monkeypatch.setattr(os, "geteuid", lambda: 0)
+    monkeypatch.setattr(server_api, "save_pairing", lambda link, owner="x", first=None, _real=server_api.save_pairing:
+                        _real(link, owner=None, first=first))
+    cfg = config.load()
+    cfg["port"] = port
+    cfg["modules"] = {n: n in on for n in modules.MODULES}
+    config.save(cfg)
+    monkeypatch.setattr("filament_kit.apply.refresh_station", lambda cfg: "restarted")
+
+
+def test_station_pair_local_needs_no_link_and_no_answer(server, monkeypatch, capsys):
+    _local_pair(server, monkeypatch)
+    assert cli.main(["station", "pair", "--local"]) == 0
+    out = capsys.readouterr()
+    assert "Paired." in out.out
+    api = server_api.ServerApi(timeout=10)
+    assert api.paired and api.ips[0] == "127.0.0.1" and api.tag_lookup(UID)[0] == 200
+    assert api.token not in out.out + out.err           # the output goes to the page's job log
+
+
+def test_station_pair_local_refuses_with_no_server_here(server, monkeypatch, capsys):
+    _local_pair(server, monkeypatch, on=("station",))
+    assert cli.main(["station", "pair", "--local"]) == 1
+    assert "pair --station" in capsys.readouterr().err
+    assert not server_api.ServerApi(timeout=10).paired
 
 
 def test_pairing_files_live_in_the_stations_own_folder(tmp_path):

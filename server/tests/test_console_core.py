@@ -78,7 +78,8 @@ def write_log(text: str) -> None:
 # ---------- the jobs ----------
 
 @pytest.mark.parametrize("name,args", [("apply", ["modules", "apply", "--no-pair"]), ("update", ["update"]),
-                                       ("rollback", ["update", "--rollback"]), ("check", ["update", "--check"])])
+                                       ("rollback", ["update", "--rollback"]), ("check", ["update", "--check"]),
+                                       ("station_pair", ["station", "pair", "--local"])])
 def test_each_job_runs_the_clis_own_command_with_no_terminal(env, monkeypatch, name, args):  # noqa: F811
     seen = {}
 
@@ -881,6 +882,12 @@ def test_the_tab_script_never_uses_innerhtml_or_talks_elsewhere():
     assert "localStorage" not in src and "sessionStorage" not in src
 
 
+def test_the_devices_card_says_when_a_pairing_is_claimed():
+    src = (STATIC / "setup.js").read_text(encoding="utf-8")
+    assert "watchPaired(box, known, r.expires_in)" in src and "`Paired: ${fresh.name}.`" in src
+    assert 'startJob(box, "station_pair")' in src
+
+
 def test_the_scripts_never_hand_a_null_to_replacechildren():
     """It prints "null" on the page. `fill` and h() skip it."""
     for name in ("setup.js", "setup_tabs.js"):
@@ -920,5 +927,6 @@ def test_helper_ops_are_the_closed_list():
                                      "library_token_remove", "module", "setting", "apply", "mode", "job", "station_pairing",
                                      "trust_status", "trust_add", "trust_list", "trust_rename", "trust_revoke",
                                      "trust_revoke_all", "trust_enabled"}
-    assert set(setup_helper.JOBS) == {"apply", "update", "rollback", "check"}
+    assert set(setup_helper.JOBS) == {"apply", "update", "rollback", "check", "station_pair"}
+    assert set(setup_helper.BUSY) == set(setup_helper.JOBS)
     assert HOME and H     # the shared fixtures' constants are the ones in use

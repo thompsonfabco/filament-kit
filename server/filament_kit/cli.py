@@ -216,6 +216,28 @@ def cmd_station_pair(ask=input) -> int:
     return 1 if result.status in ("failed", "declined") else 0
 
 
+def cmd_station_pair_local() -> int:
+    """`station pair --local`: the station on the machine that is also the kit server (the setup page's button). Nothing
+    to compare by eye, nothing to paste: this machine makes the link, and pair_with_link checks the certificate it finds
+    on loopback against it. Prints no token: the output goes to the page's job log."""
+    from .station import server_api
+    if hasattr(os, "geteuid") and os.geteuid() != 0:
+        print("error: run as root: sudo filament-kit station pair --local", file=sys.stderr)
+        return 1
+    if "server" not in modules.enabled(config.load()):
+        print("error: --local pairs a station with the kit server on the same machine, and the server module is off "
+              "here.\nfix: run `sudo filament-kit pair --station` on the kit server, then `sudo filament-kit station "
+              "pair` here", file=sys.stderr)
+        return 1
+    try:
+        result = server_api.pair_with_link(server_api.parse_link(pairing.issue(device_hint="station").qr))
+    except (pairing.PairingError, ValueError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    print(result.message, file=sys.stderr if result.status in ("failed", "paired_not_restarted") else sys.stdout)
+    return 1 if result.status == "failed" else 0
+
+
 def cmd_station_pairing_state() -> int:
     """One line for the wrapper, run as root: see server_api.pairing_state."""
     from .station import server_api
@@ -1585,7 +1607,8 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     pkind.add_argument("--station", action="store_true", help="pair the intake station's button flow: print the link")
     stp = sub.add_parser("station", help="intake station commands (run on the station PC)")
     stp_sub = stp.add_subparsers(dest="station_cmd", required=True)
-    stp_sub.add_parser("pair", help="pair the station's button flow with the server (link from 'pair --station')")
+    stpp = stp_sub.add_parser("pair", help="pair the station's button flow with the server (link from 'pair --station')")
+    stpp.add_argument("--local", action="store_true", help="the kit server is this machine: no link, nothing to compare")
     stp_sub.add_parser("pairing-state", help="print whether the button flow is paired, as one line")
     pkind.add_argument("--text", action="store_true", help="print the pairing link as text instead of a QR code")
     up = sub.add_parser("unpair", help="list or remove paired phones")
@@ -1702,6 +1725,8 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
         return cmd_status(client_factory or _default_client, station_pairing=args.station_pairing)
     if args.cmd == "pair":
         return cmd_pair(pc=args.pc, station=args.station, text=args.text)
+    if args.cmd == "station" and args.station_cmd == "pair" and args.local:
+        return cmd_station_pair_local()
     if args.cmd == "station":
         return cmd_station_pairing_state() if args.station_cmd == "pairing-state" else cmd_station_pair()
     if args.cmd == "unpair":
