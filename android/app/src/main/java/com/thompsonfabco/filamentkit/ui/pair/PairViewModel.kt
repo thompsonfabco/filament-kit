@@ -21,8 +21,11 @@ const val DEFAULT_PORT = 8710
 
 enum class Step { Choose, Address, Confirm, Code, Done }
 
-/** The certificate the paired server used to present ([expected]) and what it presents now ([actual]). */
-data class Mismatch(val expected: String, val actual: String)
+/** Where the expected certificate came from: a saved pairing, a scanned code, or the check the user just made. */
+enum class MismatchSource { STORED, QR, MANUAL }
+
+/** The certificate that was expected ([expected]) and what the server presents ([actual]). */
+data class Mismatch(val expected: String, val actual: String, val source: MismatchSource = MismatchSource.STORED)
 
 data class PairUi(
     val step: Step = Step.Choose,
@@ -43,7 +46,8 @@ private const val UNEXPECTED = "Unexpected response from the server"
 
 /** The scanned QR's token was not accepted when the app first used it. */
 const val QR_EXPIRED =
-    "This pairing code has expired or was already used. Run \"sudo filament-kit pair\" on the server again."
+    "This pairing code has expired or was already used. Make a new one on your server's setup page, or run " +
+        "\"sudo filament-kit pair\" on the server."
 
 /**
  * Pairing flows: QR scan, and manual entry (address, then the server's certificate fingerprint for the user to
@@ -63,11 +67,14 @@ class PairViewModel(
 
     private var confirmed = false
 
-    /** Open the manual flow, optionally prefilled from a discovered server. */
+    /** Open the manual flow, optionally prefilled. */
     fun startManual(host: String = "", port: Int = DEFAULT_PORT) {
         confirmed = false
         _state.value = PairUi(step = Step.Address, host = host, port = port)
     }
+
+    /** A server found on the network: straight to its fingerprint check; if that fails, the address form says why. */
+    fun connectDiscovered(host: String, port: Int) = submitAddress(host, port.toString())
 
     fun submitAddress(hostInput: String, portInput: String) {
         if (_state.value.busy) return
@@ -132,7 +139,7 @@ class PairViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _state.value = failure(s.copy(busy = false), e)
+                _state.value = failure(s.copy(busy = false), e, MismatchSource.MANUAL)
             }
         }
     }
@@ -187,7 +194,7 @@ class PairViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _state.value = failure(PairUi(step = Step.Choose, host = host, port = payload.port), e)
+                _state.value = failure(PairUi(step = Step.Choose, host = host, port = payload.port), e, MismatchSource.QR)
             }
         }
     }
@@ -208,8 +215,8 @@ class PairViewModel(
         _state.value = PairUi(step = step, host = host, port = port, error = message)
     }
 
-    private fun failure(base: PairUi, e: Exception): PairUi =
-        if (e is FingerprintMismatch) base.copy(mismatch = Mismatch(e.expected, e.actual), error = null)
+    private fun failure(base: PairUi, e: Exception, source: MismatchSource): PairUi =
+        if (e is FingerprintMismatch) base.copy(mismatch = Mismatch(e.expected, e.actual, source), error = null)
         else base.copy(error = errorText(e))
 
     private fun errorText(e: Exception): String = when {

@@ -167,7 +167,7 @@ class PairViewModelTest {
         vm.submitAddress("10.0.0.2", "")
         vm.confirmFingerprint()
         vm.submitCode("123456")
-        assertEquals(Mismatch(FP, "f".repeat(64)), ui.mismatch)
+        assertEquals(Mismatch(FP, "f".repeat(64), MismatchSource.MANUAL), ui.mismatch)
         vm.pairAgain()
         assertNull(ui.mismatch)
         assertEquals(Step.Choose, ui.step)
@@ -251,7 +251,7 @@ class PairViewModelTest {
     @Test fun qrVerifyMismatchShowsBothFingerprints() {
         backend.infoResult = { _ -> throw FingerprintMismatch(FP, "e".repeat(64)) }
         vm.onQrScanned(qr())
-        assertEquals(Mismatch(FP, "e".repeat(64)), ui.mismatch)
+        assertEquals(Mismatch(FP, "e".repeat(64), MismatchSource.QR), ui.mismatch)
         assertNull(settings.saved)
     }
 
@@ -259,7 +259,32 @@ class PairViewModelTest {
         assertEquals("0123 4567 89ab", groupFingerprint("0123456789ab"))
     }
 
-    @Test fun discoveredServerPrefillsManualFlow() {
+    @Test fun discoveredServerGoesStraightToTheFingerprintCheck() {
+        vm.connectDiscovered("kit.local", 8443)
+        assertEquals(listOf("probe kit.local:8443"), backend.calls)
+        assertEquals(Step.Confirm, ui.step)
+        assertEquals(FP, ui.fingerprint)
+        assertNull("no code or token yet", settings.saved)
+    }
+
+    @Test fun discoveredServerStillNeedsTheCheckBeforeACode() {
+        vm.connectDiscovered("kit.local", 8443)
+        vm.submitCode("123456")
+        assertFalse(backend.calls.any { it.startsWith("pair") })
+        assertEquals(Step.Confirm, ui.step)
+    }
+
+    @Test fun discoveredServerThatDoesNotAnswerLandsOnTheFilledAddressForm() {
+        backend.probeResult = { throw IOException("refused") }
+        vm.connectDiscovered("kit.local", 8443)
+        assertEquals(Step.Address, ui.step)
+        assertEquals("kit.local", ui.host)
+        assertEquals(8443, ui.port)
+        assertEquals("Could not reach kit.local on port 8443. Check the address and that this phone is on the same network.",
+            ui.error)
+    }
+
+    @Test fun startManualCanBePrefilled() {
         vm.startManual("kit.local", 8443)
         assertEquals(Step.Address, ui.step)
         assertEquals("kit.local", ui.host)
@@ -268,7 +293,7 @@ class PairViewModelTest {
 
     @Test fun showMismatchFromElsewhereShowsBothFingerprintsAndPairAgainClearsIt() {
         vm.showMismatch("old", "new")
-        assertEquals(Mismatch("old", "new"), ui.mismatch)
+        assertEquals(Mismatch("old", "new", MismatchSource.STORED), ui.mismatch)
         assertEquals(Step.Choose, ui.step)
         vm.pairAgain()
         assertNull(ui.mismatch)
