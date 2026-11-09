@@ -286,7 +286,7 @@ def screen():
         "pairing": ["Pair code", f"{code[:3]} {code[3:]}" if code else "Asking...",
                     "Compare it on the" if code else "", "setup page: Devices" if code else "", msg],
         "idle": ["Ready", "Scan a spool's tag", "", "", msg] if paired else
-                ["Not paired", "Hold yellow to ask", "the kit server, or:", "filament-kit pair", msg],
+                ["Not paired", "Hold yellow to ask", "the kit server, or", "run: station pair", msg],
         "lookup": ["Tag scanned", "Looking it up...", "", "", ""],
         "camera": ["New Tag Scanned", "Show the spool to", "the camera, then", "press yellow", msg],
         "recognising": ["Recognising...", "Please wait", "", "", "Red cancels"],

@@ -843,6 +843,32 @@ def test_the_root_side_never_follows_a_link_or_a_second_name(tmp_path):
     assert secret.exists()
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX links")
+def test_the_root_side_never_reads_or_removes_through_a_linked_pair_folder(tmp_path):
+    from filament_kit.station import pair_apply
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "request.json").write_text(json.dumps(GOOD))
+    state = tmp_path / "station-state"
+    state.mkdir()
+    (state / "pair").symlink_to(elsewhere, target_is_directory=True)
+    with pytest.raises(pair_apply.DropError, match="link"):
+        pair_apply.read_drop(state / "pair" / "request.json")
+    assert (elsewhere / "request.json").exists()            # neither read nor removed through the link
+    assert not os.path.lexists(state / "pair")              # the link itself is gone, so the path unit stops
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX unlink of a folder")
+def test_a_folder_in_place_of_the_drop_file_is_refused_and_removed(tmp_path):
+    from filament_kit.station import pair_apply
+    d = tmp_path / "pair" / "request.json"
+    d.mkdir(parents=True)
+    (d / "inside").write_text("x")
+    with pytest.raises(pair_apply.DropError, match="plain file"):
+        pair_apply.read_drop(d)
+    assert not d.exists() and (tmp_path / "pair").is_dir()
+
+
 def test_the_root_side_takes_the_address_from_station_allow_only(tmp_path):
     from filament_kit.station import pair_apply
     cfg = config.load()
