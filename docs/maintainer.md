@@ -91,8 +91,8 @@ the release job: delete the secret rather than let it lapse.
 ## Building a release tarball by hand
 
 `bash tools/make_release.sh` builds `dist/filament-kit-<version>.tar.gz` and `dist/bambu_hardware.xml` on Linux
-or in Git Bash on Windows. With the Android keystore on the PC it also builds and signs the app; set
-`FK_VERSION_CODE=<n>` to the code that release will get (the workflow's formula above). `FK_NO_APP=1` skips the
+or in Git Bash on Windows. With the Android keystore on the PC it also builds and signs the app, with the code the
+workflow's formula above gives this tree's version (`FK_VERSION_CODE=<n>` overrides it). `FK_NO_APP=1` skips the
 app; the tarball then carries none, and a server installed from it offers no app at `/app.apk`.
 
 A hand-built tarball is not signed. Users can install it with `sudo ./install.sh` (no signature check), but

@@ -54,6 +54,20 @@ def test_add_existing_filament_joins(sm, spoolman_fake_store):
     assert len(spoolman_fake_store["spools"]) == 2
 
 
+def test_the_result_lines_read_as_sentences(sm, spoolman_fake_store):
+    """Emulator finding 7 (v0.4.2): the app shows these lines as Add's result, so they are sentences, not log lines."""
+    r = inventory.add_spools(sm, [item(count=2)], RULES, dry=True)
+    assert r.lines[-1] == "Would add 2 spools of SUNLU PLA+ Grey (new filament) at Sealed stock, 1000 g each"
+    r = inventory.add_spools(sm, [item(count=2)], RULES, dry=False)
+    a, b = r.spool_ids
+    assert r.lines[-1] == f"Added 2 spools of SUNLU PLA+ Grey (new filament), spool ids {a}, {b}, at Sealed stock, 1000 g each"
+    r = inventory.add_spools(sm, [item(sealed=False, gross=1150, location="Rack 1")], RULES, dry=False)
+    (f,) = spoolman_fake_store["filaments"].values()
+    assert r.lines[-1] == (f"Added 1 spool of SUNLU PLA+ Grey (existing filament F{f['id']}), spool id {r.spool_ids[0]}, "
+                           "at Rack 1, opened, 937 g (weighed 1150 g, the spool itself 213 g)")
+    assert "@" not in r.lines[-1] and "spool(s)" not in r.lines[-1] and "[" not in r.lines[-1]
+
+
 def test_add_dry_run_writes_nothing(sm, spoolman_fake_store):
     r = inventory.add_spools(sm, [item(count=3)], RULES, dry=True)
     assert r.dry and r.spool_ids == [] and r.lines
