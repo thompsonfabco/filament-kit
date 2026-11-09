@@ -192,14 +192,21 @@ def test_map_job_runs_and_reports(client, stubs, caplog):
     gate = threading.Event()
     stubs["gate"] = gate
     with caplog.at_level(logging.INFO, logger="filament_kit"):
-        r = client.post(f"/api/printers/{SERIAL}/map")
-        assert r.status_code == 202
-        job = r.json()["job_id"]
-        assert isinstance(job, str) and job
-        running = client.get(f"/api/printers/{SERIAL}/map").json()
-        assert running["state"] == "running" and running["step"] == "Reading the AMS slots"
-        err(client.post(f"/api/printers/{SERIAL}/map"), 409, "already_running")
-        gate.set()
+        try:
+            r = client.post(f"/api/printers/{SERIAL}/map")
+            assert r.status_code == 202
+            job = r.json()["job_id"]
+            assert isinstance(job, str) and job
+            deadline = time.monotonic() + 10      # the job's thread sets its first step
+            while time.monotonic() < deadline:
+                running = client.get(f"/api/printers/{SERIAL}/map").json()
+                if running["step"] != "Starting":
+                    break
+                time.sleep(0.01)
+            assert running["state"] == "running" and running["step"] == "Reading the AMS slots"
+            err(client.post(f"/api/printers/{SERIAL}/map"), 409, "already_running")
+        finally:
+            gate.set()      # a job left waiting here would hold the printer's lock against the tests after this one
         body = wait_state(client)
     assert body["state"] == "done" and body["calibrated"] is True and body["observe"] is False
     assert body["problems"] == []

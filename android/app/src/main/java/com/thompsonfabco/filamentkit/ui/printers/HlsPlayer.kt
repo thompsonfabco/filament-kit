@@ -17,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -46,6 +47,7 @@ import java.util.concurrent.TimeUnit
 fun HlsPlayer(client: OkHttpClient, url: String, headers: Map<String, String>, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     var error by remember(url) { mutableStateOf<String?>(null) }
+    var hasPicture by remember(url) { mutableStateOf(false) }
     val player = remember(url) {
         // the server waits for the stream to start before answering the first playlist request
         val http = client.newBuilder().readTimeout(30, TimeUnit.SECONDS).build()
@@ -62,6 +64,10 @@ fun HlsPlayer(client: OkHttpClient, url: String, headers: Map<String, String>, m
     }
     DisposableEffect(player) {
         val listener = object : Player.Listener {
+            override fun onRenderedFirstFrame() {
+                hasPicture = true
+            }
+
             override fun onPlayerError(e: PlaybackException) {
                 if (e.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
                     player.seekToDefaultPosition()
@@ -84,6 +90,7 @@ fun HlsPlayer(client: OkHttpClient, url: String, headers: Map<String, String>, m
             onRelease = { it.player = null },
             modifier = Modifier.fillMaxSize(),
         )
+        if (!hasPicture && error == null) Text(PrinterHelp.CAMERA_WAITING, color = Color.White)
         error?.let { msg ->
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally) {

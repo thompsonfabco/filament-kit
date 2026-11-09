@@ -15,6 +15,12 @@ class WeightsTest {
         }
     }
 
+    @Test fun theWeightHintSaysWhyUpdateWeightIsGreyed() {
+        assertNull(weightHint("812"))
+        assertEquals("Type the weight on the scale to update it.", weightHint(" "))
+        for (bad in listOf("abc", "0", "-1")) assertEquals("Type a weight in grams, more than 0.", weightHint(bad))
+    }
+
     @Test fun tareMustBeMoreThanZero() {
         assertEquals("Empty spool weight must be more than 0 g", tareProblem("0"))
         assertEquals(TARE_PROBLEM, tareProblem("-12"))

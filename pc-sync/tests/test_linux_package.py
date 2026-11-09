@@ -63,7 +63,7 @@ def test_release_builds_signs_and_publishes_the_tarball():
     text = _read(".github/workflows/release.yml")
     job = text[text.index("  sync-linux:"):text.index("  publish:")]
     assert "runs-on: ubuntu-24.04" in job and "bash pc-sync/linux/build.sh" in job
-    assert "pytest pc-sync/tests" in job
+    assert "pytest -n auto -rfEs pc-sync/tests" in job
     assert "secrets." not in job
     assert "needs: [version, server, sync, sync-linux]" in text
     assert re.search(r'assets="[^"]*filament-kit-sync-linux-x86_64-\$VERSION\.tar\.gz', text)

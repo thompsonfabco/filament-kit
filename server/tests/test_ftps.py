@@ -42,7 +42,9 @@ def test_upload_nlst_download_delete(fake, printer, leaf):
         c.delete("/cache/fk-calib-x.gcode.3mf")
         assert c.nlst("/cache") == []
     assert (fake.root / "cache").exists() and not (fake.root / "cache" / "fk-calib-x.gcode.3mf").exists()
-    assert fake.data_conns >= 4 and fake.refused_data == 0       # every data channel resumed the session
+    # every data channel resumed the session. Three carry data; the empty listing's can end before the server's handshake
+    # does (test_failed_data_channel_shutdown_is_not_a_failed_transfer), so it isn't always counted.
+    assert fake.data_conns >= 3 and fake.refused_data == 0
     assert "MLSD" not in fake.commands
     assert registry.load()[SERIAL].cert_fp == leaf.fp                 # pinned on first use
 
