@@ -35,7 +35,7 @@ while [ $# -gt 0 ]; do
         --lint) WITH_LINT=1; shift ;;
         --no-retry) RETRY=0; shift ;;
         --only)
-            [ $# -ge 2 ] && [ -n "$2" ] || usage
+            if [ $# -lt 2 ] || [ -z "$2" ]; then usage; fi
             IFS=, read -ra suites <<< "$2"      # on commas only, as wanted() matches: "server pc-sync" is one unknown name
             named=0
             for suite in "${suites[@]}"; do
@@ -85,7 +85,7 @@ export PIP_CACHE_DIR=$CACHE/pip
 
 # In the home folder: /tmp can be a small tmpfs shared with everything else on the machine.
 RUN=$(mktemp -d "$CACHE/run.XXXXXX")
-# shellcheck disable=SC2329  # the trap below calls it
+# shellcheck disable=SC2317,SC2329  # the trap below calls it (SC2317 is what shellcheck before 0.10 says)
 cleanup() {
     if [ "$WITH_ROOT" -eq 1 ] && [ "$(id -u)" -ne 0 ]; then sudo -n rm -rf "$RUN/t-root"; fi
     rm -rf "$RUN"
@@ -174,7 +174,8 @@ if [ "$WITH_KLIPPER" -eq 1 ]; then
     run klipper "$ROOT" bash tools/e2e/klipper.sh
 fi
 if [ "$WITH_LINT" -eq 1 ]; then
-    run shellcheck "$ROOT" bash -c 'shellcheck install/*.sh tools/*.sh printer-pack/*.sh tools/e2e/*.sh && echo "0 errors"'
+    # -S warning: the runner's shellcheck and a developer's differ in version; info notes must not turn CI red
+    run shellcheck "$ROOT" bash -c 'shellcheck -S warning install/*.sh tools/*.sh printer-pack/*.sh tools/e2e/*.sh && echo "0 errors"'
 fi
 
 echo
