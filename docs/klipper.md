@@ -96,7 +96,9 @@ The kit talks to Moonraker without installing anything on the printer. The print
   print is cancelled through Moonraker; if that fails, the reason is in `printer_data/logs/fk_spool_check.log`;
 - an NFC tag reader on the printer (nfc2klipper with a PN532) and the read-only `lasttag` service the kit reads taps
   from;
-- Moonraker settings: report usage to the kit's Spoolman, announce Moonraker on the network.
+- Moonraker settings: report usage to the kit's Spoolman, announce Moonraker on the network. It asks for your
+  Spoolman's URL as the printer reaches it, or takes it with `--spoolman`; don't use `127.0.0.1` here unless Spoolman
+  runs on the printer.
 
 `sudo filament-kit klipper pack` prints the commands to run on the printer (as its normal user, not root). They
 fetch the pack of the same version as your kit server, and check it before anything runs:

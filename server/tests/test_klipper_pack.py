@@ -220,6 +220,78 @@ def test_pack_info_returns_the_checked_command(env, srv, key):
         "&& sh fk-printer-pack/fk-printer-pack.sh install"]}
 
 
+def test_pack_info_adds_the_spoolman_and_allow_values(env, srv, key):
+    _keep(env, srv.add("1.0.0", extra={PACK: PACK_BYTES}))
+    info = klipper_cli.pack_info("1.0.0", _cfg(env), fetcher=NoNet(), spoolman_url="http://192.0.2.10:7912",
+                                 allow=["192.0.2.10", "kit.local"])
+    assert info["lines"][1].endswith("fk-printer-pack.sh install --spoolman http://192.0.2.10:7912 "
+                                     "--allow 192.0.2.10,kit.local")
+    assert "--yes" not in " ".join(info["lines"]) and "--parts" not in " ".join(info["lines"])
+
+
+@pytest.mark.parametrize("kw", [
+    {"spoolman_url": "http://user:hunter@kit.example.com:7912"}, {"spoolman_url": "http://kit.example.com;id"},
+    {"spoolman_url": "http://kit.example.com:7912 --yes"}, {"spoolman_url": "$(id)"}, {"spoolman_url": "kit.example.com"},
+    {"allow": ["192.0.2.10;id"]}, {"allow": ["--yes"]}, {"allow": ["a b"]}, {"allow": [""]},
+])
+def test_pack_info_refuses_a_bad_value_and_gives_no_command(env, srv, key, kw):
+    _keep(env, srv.add("1.0.0", extra={PACK: PACK_BYTES}))
+    with pytest.raises(release.ReleaseError) as e:
+        klipper_cli.pack_info("1.0.0", _cfg(env), fetcher=NoNet(), **kw)
+    assert "hunter" not in str(e.value)
+
+
+def _ips(monkeypatch, *ips):
+    monkeypatch.setattr(klipper_cli.pairing, "local_ips", lambda: list(ips))
+
+
+def test_pack_spoolman_a_real_address_is_used_as_written(monkeypatch):
+    _ips(monkeypatch, "192.0.2.10")
+    assert klipper_cli.pack_spoolman("http://spoolman.example.com:7912", "192.0.2.50") == {
+        "url": "http://spoolman.example.com:7912", "choices": [], "allow": ["192.0.2.10"], "problem": None}
+
+
+def test_pack_spoolman_loopback_becomes_the_address_on_the_printers_network(monkeypatch):
+    _ips(monkeypatch, "198.51.100.5", "192.0.2.10")
+    assert klipper_cli.pack_spoolman("http://127.0.0.1:7912", "192.0.2.50") == {
+        "url": "http://192.0.2.10:7912", "choices": [], "allow": ["192.0.2.10"], "problem": None}
+
+
+def test_pack_spoolman_no_address_on_its_network_gives_a_choice(monkeypatch):
+    _ips(monkeypatch, "198.51.100.5", "203.0.113.7")
+    assert klipper_cli.pack_spoolman("http://localhost:7912", "192.0.2.50") == {
+        "url": None, "choices": ["http://198.51.100.5:7912", "http://203.0.113.7:7912"], "allow": [], "problem": None}
+
+
+def test_pack_spoolman_a_printer_name_that_does_not_resolve_gives_a_choice(monkeypatch):
+    _ips(monkeypatch, "192.0.2.10")
+    r = klipper_cli.pack_spoolman("http://127.0.0.1:7912", "gone.invalid")
+    assert r["url"] is None and r["choices"] == ["http://192.0.2.10:7912"]
+
+
+def test_pack_spoolman_no_lan_address(monkeypatch):
+    _ips(monkeypatch)
+    assert klipper_cli.pack_spoolman("http://127.0.0.1:7912", "192.0.2.50") == {
+        "url": None, "choices": [], "allow": [], "problem": "no_address"}
+
+
+@pytest.mark.parametrize("url, problem", [("http://u:hunter@spoolman.example.com:7912", "password"),
+                                          ("http://u:hunter/x@spoolman.example.com:7912", "password"),
+                                          ("not a url", "unreadable"), ("", "unreadable")])
+def test_pack_spoolman_never_passes_on_a_password(monkeypatch, url, problem):
+    _ips(monkeypatch, "192.0.2.10")
+    r = klipper_cli.pack_spoolman(url, "192.0.2.50")
+    assert r == {"url": None, "choices": [], "allow": [], "problem": problem}
+
+
+def test_pack_spoolman_result_goes_into_pack_info(env, srv, key, monkeypatch):
+    _keep(env, srv.add("1.0.0", extra={PACK: PACK_BYTES}))
+    _ips(monkeypatch, "192.0.2.10")
+    r = klipper_cli.pack_spoolman("http://127.0.0.1:7912", "192.0.2.50")
+    info = klipper_cli.pack_info("1.0.0", _cfg(env), fetcher=NoNet(), spoolman_url=r["url"], allow=r["allow"])
+    assert "--spoolman http://192.0.2.10:7912 --allow 192.0.2.10" in info["lines"][1]
+
+
 @pytest.mark.parametrize("case", ["bad_sig", "unlisted", "offline", "dev"])
 def test_pack_info_raises_release_error_and_gives_no_command(env, srv, key, case):
     version = "1.0.0"

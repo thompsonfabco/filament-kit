@@ -246,6 +246,93 @@ def test_a_refused_klipper_restart_says_so_instead_of_a_traceback(data, moon, mo
     assert any("could not ask Klipper to restart" in s for s in p.said)
 
 
+def _asking(data, moon, answers):
+    """A pack whose URL question gets `answers` in turn; y/N is always yes."""
+    said, asked = [], []
+    left = list(answers)
+
+    def prompt(q):
+        asked.append(q)
+        return left.pop(0) if left else ""
+    p = fkpack.Pack(str(data), moon.url, home=str(data.parent), ask=lambda q: True, out=said.append, prompt=prompt)
+    p.said, p.asked = said, asked
+    return p
+
+
+def test_interactive_asks_for_the_spoolman_url(data, moon):
+    p = _asking(data, moon, [KIT])
+    p.install(["moonraker"])
+    assert len(p.asked) == 1 and "Spoolman" in p.asked[0]
+    assert f"server: {KIT}" in (data / "config" / "moonraker.conf").read_text()
+
+
+def test_a_given_url_is_not_asked_for(data, moon):
+    p = _asking(data, moon, [])
+    p.install(["moonraker"], spoolman=KIT)
+    assert p.asked == []
+
+
+def test_only_the_parts_that_use_it_ask(data, moon):
+    p = _asking(data, moon, [KIT])
+    p.install(["spool"])
+    assert p.asked == []
+
+
+def test_an_empty_answer_leaves_it_and_says_so(data, moon):
+    p = _asking(data, moon, [""])
+    p.install(["moonraker"])
+    conf = (data / "config" / "moonraker.conf").read_text()
+    assert "server: http://old.example.com:7912" in conf
+    assert any("[spoolman] is left as it is" in s for s in p.said)
+
+
+def test_no_url_with_yes_says_so_instead_of_skipping_silently(data, moon):
+    """--yes answers no question: the pack must not leave a printer with no usage and no word about it."""
+    p = pack(data, moon)
+    p.prompt = lambda q: ""
+    p.install(["moonraker"])
+    assert any("[spoolman] is left as it is" in s for s in p.said)
+
+
+@pytest.mark.parametrize("bad", ["not a url", "ftp://kit.example.com", "http://kit example.com:7912",
+                                 "http://kit.example.com:7912\n[evil]", "kit.example.com:7912"])
+def test_a_bad_answer_is_asked_again_then_left(data, moon, bad):
+    p = _asking(data, moon, [bad, KIT])
+    p.install(["moonraker"])
+    assert len(p.asked) == 2 and f"server: {KIT}" in (data / "config" / "moonraker.conf").read_text()
+    p = _asking(data, moon, [bad, bad, bad, bad])
+    (data / "config" / "moonraker.conf").write_text(MOONRAKER_CONF, encoding="utf-8")
+    p.install(["moonraker"])
+    assert len(p.asked) == 3 and (data / "config" / "moonraker.conf").read_text().count("old.example.com") == 1
+
+
+@pytest.mark.parametrize("bad", ["not a url", "http://a b", "http://kit.example.com\n[evil]"])
+def test_a_bad_spoolman_option_is_refused(data, moon, bad):
+    (data / "config" / "moonraker.conf").write_text(MOONRAKER_CONF, encoding="utf-8")
+    with pytest.raises(fkpack.PackError, match="Spoolman URL"):
+        pack(data, moon).install(["moonraker"], spoolman=bad)
+    assert (data / "config" / "moonraker.conf").read_text() == MOONRAKER_CONF
+
+
+def test_set_section_finds_a_header_with_a_comment():
+    """It used to add a second [spoolman] section beside `[spoolman] # mine`."""
+    text = "[spoolman] # mine\nserver: http://old:1\n\n[history]\n"
+    out = fkpack.set_section(text, "spoolman", {"server": "http://new:2"})
+    assert out.count("[spoolman]") == 1 and "server: http://new:2" in out and "http://old:1" not in out
+    assert fkpack.set_section("[spoolman]; x\nserver: a\n", "spoolman", {"server": "b"}).count("[spoolman]") == 1
+
+
+def test_a_commented_out_zeroconf_is_not_a_zeroconf(data, moon):
+    conf = data / "config" / "moonraker.conf"
+    conf.write_text("[server]\nhost: 0.0.0.0\n# [zeroconf]\n", encoding="utf-8")
+    pack(data, moon).install(["moonraker"], spoolman=KIT)
+    assert "\n[zeroconf]\n" in conf.read_text()
+    before = conf.read_text()
+    moon.actions.clear()
+    pack(data, moon).install(["moonraker"], spoolman=KIT)
+    assert conf.read_text() == before and moon.actions == []
+
+
 def test_set_section_adds_missing():
     out = fkpack.set_section("[server]\nhost: x\n", "spoolman", {"server": "http://a:1"})
     assert out.endswith("[spoolman]\nserver: http://a:1\n")
@@ -426,3 +513,39 @@ def test_nfc_folder_without_git_is_refused(data, moon, tmp_path):
                     run=lambda cmd, **kw: runs.append(cmd), units_dir=str(tmp_path / "units"))
     p.install(["nfc"])
     assert runs == []                                                  # nothing cloned over the owner's folder
+
+
+def _fake_nfc_run(home):
+    def run(cmd, **kw):
+        if cmd[:2] == ["git", "clone"]:
+            d = Path(cmd[-1])
+            d.mkdir(parents=True)
+            (d / ".git").mkdir()
+            (d / "nfc2klipper.cfg").write_text(UPSTREAM, encoding="utf-8")
+            (d / "requirements.txt").write_text("", encoding="utf-8")
+    return run
+
+
+def test_a_reader_the_pack_installs_brings_the_spool_macros_its_gcode_calls(data, moon, tmp_path, monkeypatch):
+    """nfc2klipper's setting_gcode calls _FK_SCAN_OK, and only fk_spool.cfg defines it."""
+    home = tmp_path / "home"
+    home.mkdir()
+    said = []
+    p = fkpack.Pack(str(data), moon.url, home=str(home), ask=lambda q: True, out=said.append, run=_fake_nfc_run(home),
+                    units_dir=str(tmp_path / "units"), prompt=lambda q: KIT)
+    monkeypatch.setattr(p, "install_services", lambda *a: None)
+    monkeypatch.setattr(p, "patches", lambda: [])
+    monkeypatch.setattr(p, "nfc_status", lambda: (False, []))
+    p.install(["nfc"])
+    assert (data / "config" / "filament-kit" / "fk_spool.cfg").exists()
+    assert any("uses the spool part's macros" in s for s in said)
+    assert '"' + KIT + '"' in (home / ".config" / "nfc2klipper" / "nfc2klipper.cfg").read_text()
+
+
+def test_an_adopted_reader_brings_nothing(data, moon, tmp_path, monkeypatch):
+    p = fkpack.Pack(str(data), moon.url, home=str(tmp_path), ask=lambda q: True, out=lambda s: None,
+                    prompt=lambda q: pytest.fail("asked for a URL it can't use"))
+    monkeypatch.setattr(p, "nfc_status", lambda: (True, ["adopted"]))
+    p.install(["nfc"])
+    assert not (data / "config" / "filament-kit" / "fk_spool.cfg").exists()
+

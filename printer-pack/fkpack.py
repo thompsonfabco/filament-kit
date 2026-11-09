@@ -44,6 +44,7 @@ SAVE_CONFIG = "#*# <---------------------- SAVE_CONFIG ---------------------->"
 IDLE = ("standby", "complete", "cancelled", "error")
 NFC_REPO = "https://github.com/bofh69/nfc2klipper.git"
 PY39_PINS = ["requests<2.33", "gunicorn==23.0.0"]   # nfc2klipper's pins need Python 3.10+
+SPOOLMAN_URL = re.compile(r"https?://[^\s\"'`$;&|<>()\\]+")      # one line of moonraker.conf: no spaces, no shell
 SERVICE = re.compile(r"[A-Za-z0-9_.-]{1,64}")            # a manifest service entry: a plain unit name, nothing else
 SERVICE_FILES = {"lasttag": ("lasttag/lasttag.py", "lasttag/allow")}   # files a kept service still needs
 EMPTY = {"files": [], "include": False, "services": [], "asvc": [], "moonraker": [], "nfc": None}
@@ -59,7 +60,7 @@ def stamp():
 
 class Pack:
     def __init__(self, data, moonraker="http://localhost:7125", home=None, ask=None, out=None, run=None,
-                 klipper_dir=None, units_dir="/etc/systemd/system"):
+                 klipper_dir=None, units_dir="/etc/systemd/system", prompt=None):
         self.units_dir = units_dir
         self.data = os.path.abspath(os.path.expanduser(data))
         self.cfg = os.path.join(self.data, "config")
@@ -68,6 +69,7 @@ class Pack:
         self.home = home or os.path.expanduser("~")
         self.klipper_dir = klipper_dir or os.path.join(self.home, "klipper")
         self.ask = ask or (lambda q: input(q + " [y/N] ").strip().lower() in ("y", "yes"))
+        self.prompt = prompt or _read_line
         self.out = out or print
         self.run = run or (lambda cmd, **kw: subprocess.run(cmd, check=True, **kw))
         self.manifest_path = os.path.join(self.dest, ".manifest")
@@ -284,11 +286,11 @@ class Pack:
             if missing:
                 self.out("  its service(s) {} are not installed".format(", ".join(missing)))
                 self.install_services(m, d, missing)
-            return
+            return False
         if os.path.exists(d) and not present:
             self.out("  {} exists but is not a git checkout of nfc2klipper; left alone (move it away to install)"
                      .format(d))
-            return
+            return False
         m["nfc"] = {"dir": d, "state": "started"}
         self.save_manifest(m)                 # a failure below is finished by the next install, never "adopted"
         if present:
@@ -322,6 +324,7 @@ class Pack:
             f.write(nfc_config(upstream, device, spoolman, self.moonraker, web))
         self.install_services(m, d, services)
         m["nfc"]["state"] = "done"
+        return True
 
     def _stage(self, name, text):
         """A unit file staged for `sudo install` in a private temp folder (not printer_data, which Moonraker's
@@ -426,15 +429,33 @@ class Pack:
                 self._add(m["moonraker"], "[spoolman] server: " + spoolman)
                 self.moonraker_changed = True
                 text = new
-        if "[zeroconf]" not in text:
+        else:
+            self.out("  no Spoolman URL given, so [spoolman] is left as it is; usage only reaches the kit if it already "
+                     "points there (--spoolman sets it)")
+        if not has_section(text, "zeroconf"):
             new = text.rstrip("\n") + "\n\n[zeroconf]\n"
             if self.edit(path, new, "moonraker.conf: announce Moonraker on the LAN so filament-kit finds it"):
                 self._add(m["moonraker"], "[zeroconf]")
                 self.moonraker_changed = True
 
+    def ask_spoolman(self):
+        """The kit's Spoolman URL from the person installing, "" to leave it (--yes answers nothing: also ""). A wrong
+        answer is asked again, not written into a config file."""
+        for _ in range(3):
+            url = self.prompt("The kit's Spoolman URL as this printer reaches it, e.g. "
+                              "http://filament.home.arpa:7912 (empty: leave it)").strip()
+            if not url or SPOOLMAN_URL.fullmatch(url):
+                return url
+            self.out("  that isn't an http:// or https:// URL")
+        return ""
+
     # --- the commands ----------------------------------------------------------------------------------------------
     def install(self, parts, scan_ok="", scan_unknown="", nfc_device="tty:USB0:pn532", spoolman="", web=False,
                 allow=()):
+        if spoolman and not SPOOLMAN_URL.fullmatch(spoolman):
+            raise PackError("the Spoolman URL must be one http:// or https:// address")
+        if not spoolman and ("moonraker" in parts or ("nfc" in parts and not self.nfc_status()[0])):
+            spoolman = self.ask_spoolman()
         objs = self.objects()
         if not os.path.isfile(os.path.join(self.cfg, "printer.cfg")):
             raise PackError("no printer.cfg in {}; give --data <printer_data folder>".format(self.cfg))
@@ -448,7 +469,9 @@ class Pack:
             elif part in ("check", "loadtemp"):
                 self.part_scripts(m, part)
             elif part == "nfc":
-                self.part_nfc(m, nfc_device, spoolman, web)
+                if self.part_nfc(m, nfc_device, spoolman, web) and "fk_spool.cfg" not in m["files"]:
+                    self.out("  the reader's gcode uses the spool part's macros: installing them too")
+                    self.part_spool(m, objs, scan_ok, scan_unknown)
             elif part == "lasttag":
                 self.part_lasttag(m, allow)
             elif part == "moonraker":
@@ -573,10 +596,26 @@ class Pack:
         return 0
 
 
+def _read_line(question):
+    try:
+        return input(question + ": ")
+    except (EOFError, OSError):         # no terminal: nobody to answer
+        return ""
+
+
+def _is_header(line, section):
+    """A `[section]` line, a trailing comment allowed; a commented-out one is not."""
+    return re.fullmatch(r"\s*\[{}\]\s*([#;].*)?\s*".format(re.escape(section)), line) is not None
+
+
+def has_section(text, section):
+    return any(_is_header(line, section) for line in text.splitlines())
+
+
 def set_section(text, section, values):
     """`text` (a Klipper/Moonraker config) with `values` set in `[section]` (added when missing)."""
     lines = text.splitlines(True)
-    start = next((i for i, l in enumerate(lines) if l.strip() == "[{}]".format(section)), None)
+    start = next((i for i, l in enumerate(lines) if _is_header(l, section)), None)
     if start is None:
         return text.rstrip("\n") + "\n\n[{}]\n".format(section) + "".join(
             "{}: {}\n".format(k, v) for k, v in values.items())
@@ -632,6 +671,7 @@ def main(argv=None):
         print("run this as the printer's normal user, not root (it uses sudo where it must)", file=sys.stderr)
         return 1
     pack = Pack(a.data, a.moonraker, ask=(lambda q: True) if a.yes else None,
+                prompt=(lambda q: "") if a.yes else None,
                 klipper_dir=os.path.abspath(os.path.expanduser(a.klipper)) if a.klipper else None)
     try:
         if a.command == "status":
