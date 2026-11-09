@@ -15,7 +15,7 @@ import pytest
 
 from fakes.fake_paho import FakeClient, FakePrinter
 from filament_kit import cli, config
-from filament_kit.bridge import ams, calib3mf, connection, hardware, mapping, registry, slottest
+from filament_kit.bridge import ams, calib3mf, connection, hardware, mapping, printer_report, registry, slottest
 from filament_kit.bridge.connection import Manager
 from filament_kit.bridge.registry import Printer
 from test_calib3mf import (CODE, FORBIDDEN, SERIAL, FakeManager, base_report, fake_ftp, jobs, leaf,  # noqa: F401
@@ -515,8 +515,7 @@ def test_a_job_another_process_finished_just_now_is_not_old(tmp_path, monkeypatc
     assert mapping.Mapper(_NoManager()).view(SERIAL)["problems_old"] is False
 
 
-
-# The report of 2026-11-08 23:34: "the printer reported no slot" for Ext-L and Ext-R, and [0, 1, 2, 3] fitting no scheme. Those
+# An X2D's report: "the printer reported no slot" for Ext-L and Ext-R, and [0, 1, 2, 3] fitting no scheme. Those
 # lines came from the job of 0.4.0 and before, with the holders in it. This kit can't say them, however the job ends.
 @pytest.mark.parametrize("error", [None, 7])
 def test_the_x2d_report_cannot_come_from_this_kit(fake_ftp, x2d, error):
@@ -536,9 +535,44 @@ def test_a_failed_job_blames_the_job_not_the_numbering(fake_ftp, x2d):
     m = Wrong(fake_ftp.root, "native", report=x2d_report())
     m.final, m.print_error = "FAILED", 7
     r = calib3mf.run(m, SERIAL, x2d_map(m.report))
-    assert r.consistent is False
+    assert r.consistent is False and r.report_wanted == "job_failed"
+    assert "ended as FAILED" in r.problems[0] and "0x00000007" in r.problems[0]
     assert any("the job failed on the printer" in p for p in r.problems)
     assert not any("fit no numbering" in p for p in r.problems)
+    assert "screen" in printer_report.why(r.report_wanted) and "numbers its slots" not in printer_report.why(r.report_wanted)
+
+
+def test_a_failed_job_repeating_the_last_print_names_the_failure_first(fake_ftp, x2d):
+    class Same(FakeManager):
+        def _native(self, pr):
+            return [40, 41, 42, 43]
+    rep = x2d_report()
+    rep["mapping"] = [40, 41, 42, 43]
+    m = Same(fake_ftp.root, "native", report=rep)
+    m.final, m.print_error = "FAILED", 7
+    r = calib3mf.run(m, SERIAL, x2d_map(rep))
+    assert r.consistent is False and r.report_wanted == "job_failed" and len(jobs(m)) == 1
+    assert "ended as FAILED" in r.problems[0] and any("same as its last print's" in p for p in r.problems)
+    assert not any("fit no numbering" in p for p in r.problems)
+
+
+def test_a_clean_job_repeating_the_last_print_is_still_about_the_numbers(fake_ftp, x2d):
+    class Same(FakeManager):
+        def _native(self, pr):
+            return [40, 41, 42, 43]
+    rep = x2d_report()
+    rep["mapping"] = [40, 41, 42, 43]
+    m = Same(fake_ftp.root, "native", report=rep)
+    r = calib3mf.run(m, SERIAL, x2d_map(rep))
+    assert r.consistent is False and r.report_wanted == "no_scheme"
+    assert any("fit no numbering this kit knows" in p for p in r.problems)
+
+
+def test_a_failed_job_with_no_numbers_asks_about_the_failure(fake_ftp, x2d):
+    m = FakeManager(fake_ftp.root, report=x2d_report())
+    m.final, m.report_mapping = "FAILED", False
+    r = calib3mf.run(m, SERIAL, x2d_map(m.report))
+    assert r.report_wanted == "job_failed" and "ended as FAILED" in r.problems[0]
 
 
 def test_a_short_list_says_so(fake_ftp, x2d):

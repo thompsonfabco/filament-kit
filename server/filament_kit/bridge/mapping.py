@@ -607,7 +607,7 @@ class Mapper:
         (not problems); `scheme_unsettled` = several numbering schemes fit and the model's first was taken, the reason
         to map again after loading a second unit (a client keys on this, never on a note's text); `report_wanted` =
         why a printer report would help (printer_report.WANTED), None when it wouldn't; `report_why` = that as a sentence;
-        `kit` = the kit version that ran that job (None: before 0.4.3 wrote it, or no job yet);
+        `kit` = the kit version that ran that job (None: a kit too old to say, or no job yet);
         `problems_old` = the problems are from a job an earlier server run finished, so an update or
         a fix since may have dealt with them: they say what happened then, not what is wrong now, and they never
         stop a new mapping; `finished` = when that job ended (epoch seconds, None: not known or still running)."""

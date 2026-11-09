@@ -947,7 +947,7 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
         if st['final'] != 'FINISH':
             res.problems.append(ended)
         res.problems.append("the printer reported no slot mapping")
-        res.report_wanted = "no_mapping"
+        res.report_wanted = "no_mapping" if st['final'] == 'FINISH' else "job_failed"
         return
     vals = []
     for i, label in enumerate(labels):
@@ -970,8 +970,13 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
                               and list(res.mapping)[:len(vals)] == last_print[:len(vals)])
     stale = res.scheme is None and res.repeats_last_print
     if res.scheme is None:
-        res.report_wanted = "no_scheme"
-    if stale:
+        # a job that ended FAILED may never have read our file: what to find out is why it failed, not how it numbers
+        res.report_wanted = "no_scheme" if st['final'] == 'FINISH' else "job_failed"
+    if stale and st['final'] != 'FINISH':
+        res.problems.append(ended)
+        res.problems.append("the printer's slot numbers are the same as its last print's, so they say nothing about these "
+                            "slots; filament use stays logged only")
+    elif stale:
         res.problems.append("the printer's slot numbers are the same as its last print's and fit no numbering this kit "
                             "knows, so they say nothing about these slots; filament use stays logged only")
     elif res.scheme is None and not (numbers_ok and clean):
