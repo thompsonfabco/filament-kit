@@ -208,38 +208,53 @@ def test_firmware_never_starts_the_radio():
         assert used not in src
 
 
-def _body(src: str, head: str) -> str:
-    """The brace-matched body of the function whose signature starts with `head` ("" if absent)."""
-    m = re.search(re.escape(head) + r"[^{;]*\{", src)
-    if not m:
-        return ""
-    depth, i = 1, m.end()
+def _close(src: str, i: int) -> int:
+    """Index just past the `}` closing the block whose body starts at `i`."""
+    depth = 1
     while i < len(src) and depth:
         depth += {"{": 1, "}": -1}.get(src[i], 0)
         i += 1
-    return src[m.end():i - 1]
+    return i
+
+
+def _body(src: str, name: str) -> str:
+    """The brace-matched body of the function `name` (any storage specifiers; "" if absent)."""
+    m = re.search(r"\bvoid\s+" + re.escape(name) + r"\s*\([^)]*\)\s*\{", src)
+    return src[m.end():_close(src, m.end()) - 1] if m else ""
 
 
 def buzzer_problems(path: Path) -> list[str]:
     """Ways the buzzer could be left LOW (on) when silent. The buzzer module is low-level trigger: pin LOW is on, so duty 0
-    / tone 0 would hold it on with DC in the coil. Silence is buzzerIdle() (LEDC detached, pin HIGH); LEDC use is confined
-    to buzzerTone()."""
+    / tone 0 would hold it on with DC in the coil. Silence is buzzerIdle() (LEDC detached, pin an OUTPUT driven HIGH); LEDC
+    use is confined to buzzerTone()."""
     src = re.sub(r"//[^\n]*|/\*.*?\*/", "", path.read_text(encoding="utf-8"), flags=re.S)
-    idle, tone = _body(src, "static void buzzerIdle("), _body(src, "static void buzzerTone(")
+    idle, tone = _body(src, "buzzerIdle"), _body(src, "buzzerTone")
     if not idle or not tone:
         return ["buzzerIdle()/buzzerTone() missing"]
     out = []
     ledc = r"\bledc(?:Write\w*|Attach\w*)\(\s*PIN_BUZZER\b"
     if len(re.findall(ledc, src)) != len(re.findall(ledc, tone)):
         out.append("LEDC on PIN_BUZZER outside buzzerTone()")
+    if re.search(r"\b(?:analogWrite|tone|noTone)\s*\(\s*PIN_BUZZER\b", src):
+        out.append("analogWrite/tone/noTone must not name PIN_BUZZER")
     writes = re.findall(r"\bdigitalWrite\(\s*PIN_BUZZER\b[^;]*;", src)
-    if len(writes) != 1 or writes[0] not in idle or not re.fullmatch(r"digitalWrite\(\s*PIN_BUZZER\s*,\s*HIGH\s*\);", writes[0]):
-        out.append("digitalWrite(PIN_BUZZER) must appear once, as HIGH, inside buzzerIdle()")
-    if "buzzerIdle()" not in _body(src, "void setup("):
+    if not any(w in idle for w in writes) or not all(re.fullmatch(r"digitalWrite\(\s*PIN_BUZZER\s*,\s*HIGH\s*\);", w) for w in writes):
+        out.append("every digitalWrite(PIN_BUZZER) must be HIGH, and buzzerIdle() must have one")
+    modes = re.findall(r"\bpinMode\(\s*PIN_BUZZER\b[^;]*;", src)
+    if len(modes) != 1 or modes[0] not in idle or not re.fullmatch(r"pinMode\(\s*PIN_BUZZER\s*,\s*OUTPUT\s*\);", modes[0]):
+        out.append("pinMode(PIN_BUZZER) must appear once, as OUTPUT, inside buzzerIdle()")
+    if "buzzerIdle()" not in _body(src, "setup"):
         out.append("setup() does not call buzzerIdle()")
-    end = re.search(r"if\s*\(\s*beeping\b[^{]*\{([^}]*)\}", src)
-    if not end or "buzzerIdle()" not in end.group(1) or "beeping = false" not in end.group(1):
-        out.append("end of beep does not call buzzerIdle()")
+    # Every clear of `beeping` (bar its declaration) must sit with a buzzerIdle() call: in the same braces, or the same
+    # brace-less statement.
+    clears = [m for m in re.finditer(r"\bbeeping\s*=\s*false\b", src) if not re.search(r"\bbool\s+$", src[:m.start()])]
+    for m in clears:
+        start = max(src.rfind(c, 0, m.start()) for c in "{}") + 1
+        end = _close(src, start) if src[start - 1] == "{" else src.find(";", m.end()) + 1
+        if "buzzerIdle()" not in src[start:end]:
+            out.append("a beeping clear does not call buzzerIdle()")
+    if not clears:
+        out.append("end of beep does not clear beeping")
     return out
 
 
