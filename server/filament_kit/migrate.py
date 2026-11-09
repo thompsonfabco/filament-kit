@@ -770,7 +770,7 @@ def _h2d_entry(ctx: _Ctx, step: str) -> None:
     no address, no Access Code, not configured, which the bridge never connects to."""
     from .bridge import models as models_mod, registry
     try:
-        have = registry.load() if ctx.apply else registry._read()   # _read: no lock file in a dry run
+        have = registry.load() if ctx.apply else registry.peek()
     except (OSError, ValueError, registry.RegistryError):
         have = {}
     if any(models_mod.printer_preset_name(p.model) == "Bambu Lab H2D" for p in have.values()):

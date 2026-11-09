@@ -200,3 +200,19 @@ def test_status_lines_for_hardware_data(tmp_path, monkeypatch, capsys):
         assert "FAIL" in out and "bambu_hardware.xml" in out
     finally:
         hardware._reset_cache()
+
+
+def test_status_fails_on_a_refused_klipper_override(capsys):
+    from filament_kit import cli
+    from filament_kit.bridge.klipper import hardware as kh
+    kh._reset_cache()
+    try:
+        assert cli._hardware_lines() is True
+        assert "Klipper hardware data" not in capsys.readouterr().out      # nothing to say, on a Bambu-only kit too
+        path = kh.override_path()
+        path.write_text("<klipper-hardware version='9'><nope", "utf-8")
+        assert cli._hardware_lines() is False
+        out = capsys.readouterr().out
+        assert "Klipper hardware data" in out and str(path) in out
+    finally:
+        kh._reset_cache()

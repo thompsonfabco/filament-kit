@@ -100,9 +100,10 @@ def _station_lines(url: str) -> bool:
 
 
 def _hardware_lines() -> bool:
-    """The printer hardware data (`bambu_hardware.xml`, bundled + optional override): FAIL per error (a refused
-    override: the last good data stays in use), a note per warning (ignored unknown parts)."""
+    """The printer hardware data (`bambu_hardware.xml`, `klipper_hardware.xml`; bundled + optional override): FAIL per
+    error (a refused override: the last good data stays in use), a note per warning (ignored unknown parts)."""
     from .bridge import hardware
+    from .bridge.klipper import hardware as klipper_hardware
     try:
         hw = hardware.load()
     except Exception as e:  # noqa: BLE001 - status reports, it does not crash
@@ -116,6 +117,15 @@ def _hardware_lines() -> bool:
         good &= _line(True, "printer hardware data loaded")
     for w in hw.warnings:
         print(f"--   printer hardware data: {w}")
+    try:
+        hw = klipper_hardware.load()
+    except Exception as e:  # noqa: BLE001 - status reports, it does not crash
+        return _line(False, f"Klipper hardware data could not be loaded ({type(e).__name__}: {e})") and good
+    for e in hw.errors:
+        good &= _line(False, f"Klipper hardware data: {e}",
+                      f"fix or remove {klipper_hardware.override_path()} (the last good data is in use)")
+    for w in hw.warnings:
+        print(f"--   Klipper hardware data: {w}")
     return good
 
 

@@ -178,3 +178,17 @@ def test_scan_route():
     assert r.status_code == 200 and r.json()["found"][0]["host"] == "192.0.2.10"
     assert c.post("/api/printers/scan", json={"subnet": "10.0.0.0/16"}).status_code == 400
     assert _client(klipper=None).post("/api/printers/scan", json={}).json()["error"] == "module_off"
+
+
+def test_printer_get_reports_a_refused_klipper_override(tmp_path):
+    from filament_kit.bridge.klipper import hardware as kh
+    kh._reset_cache()
+    try:
+        c = _client()
+        pid = c.post("/api/printers", json={"family": "klipper", "host": "voron.home.arpa"}).json()["printer"]["id"]
+        assert not c.get(f"/api/printers/{pid}").json()["hardware"]["errors"]
+        (tmp_path / "etc" / "klipper_hardware.xml").write_text("<klipper-hardware version='9'><nope", "utf-8")
+        errors = c.get(f"/api/printers/{pid}").json()["hardware"]["errors"]
+        assert errors and "klipper_hardware.xml" in " ".join(errors)
+    finally:
+        kh._reset_cache()
