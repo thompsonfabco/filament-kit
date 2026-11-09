@@ -208,6 +208,18 @@ class PairViewModel(
         _state.value = PairUi()
     }
 
+    /**
+     * One step back, for the system Back and the on-screen Back alike. The fingerprint check and the code go back to
+     * the address with it filled in; the address and a stopped pairing go back to the first screen.
+     */
+    fun back() {
+        val s = _state.value
+        if (s.busy) return
+        confirmed = false
+        val toAddress = s.mismatch == null && (s.step == Step.Confirm || s.step == Step.Code)
+        _state.value = if (toAddress) PairUi(step = Step.Address, host = s.host, port = s.port) else PairUi()
+    }
+
     /** Another screen hit a changed server certificate: show both fingerprints until the user chooses "Pair again". */
     fun showMismatch(expected: String, actual: String) {
         confirmed = false

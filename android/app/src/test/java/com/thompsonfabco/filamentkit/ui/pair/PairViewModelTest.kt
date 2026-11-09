@@ -336,6 +336,43 @@ class PairViewModelTest {
         assertEquals(8443, ui.port)
     }
 
+    @Test fun backFromTheFingerprintCheckKeepsTheAddress() {
+        vm.submitAddress("10.0.0.2", "8443")
+        assertEquals(Step.Confirm, ui.step)
+        vm.back()
+        assertEquals(Step.Address, ui.step)
+        assertEquals("10.0.0.2", ui.host)
+        assertEquals(8443, ui.port)
+        assertNull(ui.fingerprint)
+    }
+
+    @Test fun backFromTheCodeKeepsTheAddressAndForgetsTheCheck() {
+        vm.submitAddress("10.0.0.2", "8443")
+        vm.confirmFingerprint()
+        assertEquals(Step.Code, ui.step)
+        vm.back()
+        assertEquals(Step.Address, ui.step)
+        assertEquals("10.0.0.2", ui.host)
+        vm.submitAddress("10.0.0.2", "8443")
+        assertEquals("the check is made again", Step.Confirm, ui.step)
+    }
+
+    @Test fun backFromTheAddressGoesToTheFirstScreen() {
+        vm.startManual("kit.local", 8443)
+        vm.back()
+        assertEquals(PairUi(), ui)
+    }
+
+    @Test fun backFromAMismatchDuringPairingStartsOver() {
+        vm.submitAddress("10.0.0.2", "")
+        vm.confirmFingerprint()
+        backend.pairResult = { throw FingerprintMismatch(FP, "f".repeat(64)) }
+        vm.submitCode("123456")
+        assertEquals(MismatchSource.MANUAL, ui.mismatch?.source)
+        vm.back()
+        assertEquals(PairUi(), ui)
+    }
+
     @Test fun showMismatchFromElsewhereShowsBothFingerprintsAndPairAgainClearsIt() {
         vm.showMismatch("old", "new")
         assertEquals(Mismatch("old", "new", MismatchSource.STORED), ui.mismatch)

@@ -1,5 +1,6 @@
 package com.thompsonfabco.filamentkit.ui.pair
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -50,6 +51,12 @@ fun PairScreen(
 
     LaunchedEffect(ui.step) { if (ui.step == Step.Done) onPaired() }
 
+    // A saved pairing's certificate question and the first screen have nothing to go back to: Back leaves the app.
+    val mismatchNow = ui.mismatch
+    val hasStepBack = if (mismatchNow != null) mismatchNow.source != MismatchSource.STORED else ui.step != Step.Choose
+    BackHandler(enabled = hasStepBack && !scanning, onBack = viewModel::back)
+    BackHandler(enabled = scanning) { scanning = false }
+
     if (scanning) {
         scanner({ text ->
             scanning = false
@@ -80,7 +87,7 @@ fun PairScreen(
                 onConfirmFingerprint = viewModel::confirmFingerprint,
                 onRejectFingerprint = viewModel::rejectFingerprint,
                 onSubmitCode = viewModel::submitCode,
-                onBack = viewModel::pairAgain,
+                onBack = viewModel::back,
             )
         }
     }
