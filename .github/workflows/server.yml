@@ -19,30 +19,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      # [web]: without it the web module's tests skip themselves, and that is the module facing the internet. The same line
-      # as a builder's full run and the merge gate
-      - name: Install
-        run: pip install "./server[test,web]"
-
-      # the pc-sync suite (and the end-to-end test with the server) needs pc-sync in place
-      - name: Install pc-sync
-        run: pip install "./pc-sync[test]"
-
+      # The one recipe, the same as a builder's run, a review and the merge gate: [test,web], every suite, -rs. Without [web] the
+      # web module's tests skip themselves, and that is the module facing the internet.
       - name: Tests
-        run: pytest -rs server/tests
-
-      - name: pc-sync tests
-        run: pytest -rs pc-sync/tests
-
-      - name: Printer pack, spool sync and reader tool tests
-        run: pytest -rs printer-pack/tests integrations/orca-spool-sync/tests reader/tools
-
-      - name: Tests that need root
-        run: sudo -E env "PATH=$PATH" pytest -rs server/tests/test_root_links.py
-
-      # the real get.sh against a fake releases server: signature, hash, token
-      - name: get.sh end to end
-        run: python tools/test_get_e2e.py
-
-      - name: Shellcheck
-        run: shellcheck install/*.sh tools/*.sh printer-pack/*.sh tools/e2e/*.sh
+        run: bash tools/testenv.sh --root --lint

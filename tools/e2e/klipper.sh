@@ -3,8 +3,8 @@
 # with sudo). No printer hardware: Klipper runs with its Linux-process MCU and `kinematics: none`, Spoolman is the
 # server tests' fake Spoolman. Steps (spec §9):
 #   1. build/run Klipper (pinned tag) + Moonraker (pinned tag) under $WORK
-#   2. printer pack: install (spool + check + moonraker parts, all answers yes) twice (a reinstall), status, then
-#      later uninstall (twice). The spool check needs gcode_shell_command: tools/e2e/gcode_shell_command.py, a test
+#   2. printer pack: install (spool + check + moonraker parts, all answers yes, so it restarts Klipper and Moonraker
+#      itself) twice (a reinstall), status, then later uninstall (twice). The spool check needs gcode_shell_command: tools/e2e/gcode_shell_command.py, a test
 #      stand-in that parses PARAMS like the real extra, is copied into the scratch Klipper's klippy/extras
 #   3. the kit's Klipper bridge (tools/e2e/klipper_e2e.py, in-process): detection, a load (SET_ACTIVE_SPOOL ->
 #      confirmed -> Spoolman location), a tap (SET_ACTIVE_SPOOL sent to Moonraker -> follow mode), a short
@@ -199,13 +199,13 @@ for variant in single toolchanger; do
     for _ in 1 2; do
         wait_ready   # the first install restarts Klipper: the second waits until it is back
         pack install --klipper "$WORK/klipper" --parts spool,check,moonraker --spoolman "$SM" --yes
+        # Moonraker reads [spoolman] only at start: seeing it here proves the pack's own restart happened
+        for _ in $(seq 60); do
+            curl -fs "$MR/server/config" 2>/dev/null | grep -qF "\"$SM\"" && break; sleep 1
+        done
+        curl -fs "$MR/server/config" | grep -qF "\"$SM\"" || {
+            echo "FAILED: Moonraker did not take up [spoolman] after the pack's restart" >&2; exit 1; }
     done
-    wait_ready
-    # Moonraker reads [spoolman] at start: restart it so the pack's moonraker.conf edit takes effect
-    kill "$MOON_PID"; wait "$MOON_PID" 2>/dev/null || true
-    "$WORK/moonraker-env/bin/python" "$WORK/moonraker/moonraker/moonraker.py" -d "$DATA" \
-        >>"$DATA/logs/moonraker.out" 2>&1 & PIDS+=($!)
-    MOON_PID=$!
     wait_ready
     for _ in $(seq 60); do   # the pack restarted Klipper: wait until its macros are loaded
         curl -fs "$MR/printer/objects/list" 2>/dev/null | grep -q "FK_SET_TOOL_SPOOL" && break; sleep 1

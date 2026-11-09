@@ -183,6 +183,9 @@ def test_ffmpeg_reads_the_loopback_relay_and_never_gets_the_access_code(ffmpeg_h
 
 
 def test_shutdown_kills_ffmpeg_and_its_children(ffmpeg_hub):
+    # the fixture's 0.3 s idle stop would beat a slow pid_alive (tasklist on Windows) to it, and this test is the only
+    # one of the taskkill path: shutdown must be what kills it here
+    ffmpeg_hub.idle_stop, ffmpeg_hub.hls_window = 5, 5
     ffmpeg_hub.touch_hls("H1")
     info = _started(ffmpeg_hub, "H1")
     assert pid_alive(info["pid"]) and pid_alive(info["child"])
@@ -195,7 +198,8 @@ def test_idle_stop_kills_ffmpeg(ffmpeg_hub):
     ffmpeg_hub.touch_hls("H1")
     info = _started(ffmpeg_hub, "H1")
     assert wait_until(lambda: not pid_alive(info["pid"]) and not pid_alive(info["child"]), 10)
-    assert not ffmpeg_hub.dir_for("H1").exists(), "segments are removed with the stream"
+    # the process goes first, then the stop removes its folder
+    assert wait_until(lambda: not ffmpeg_hub.dir_for("H1").exists(), 10), "segments are removed with the stream"
 
 
 # ---------------------------------------------------------------- RTSP relay (TLS + Digest)
@@ -224,6 +228,47 @@ def _read_msg(f) -> tuple[str, dict]:
             return first, headers
         k, _, v = line.partition(":")
         headers[k.strip().lower()] = v.strip()
+
+
+def _relay_threads():
+    return [t for t in threading.enumerate() if t.name.startswith("cam-relay") and t.is_alive()]
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="on Windows shutdown() doesn't wake a blocked recv; the server runs on Linux")
+@pytest.mark.parametrize("how", ["stop", "client_gone"])
+def test_no_relay_thread_outlives_its_sockets(tmp_path, how):
+    """A thread waiting on a socket another thread closed goes on to read that file number, whichever connection has it
+    by then: a TLS reader takes its 5-byte record header out of someone else's stream. So: wake, wait for it, then close."""
+    srv, ctx = tls_listener(tmp_path)
+    port = srv.getsockname()[1]
+    done = threading.Event()
+
+    def printer():
+        conn, _ = srv.accept()
+        with ctx.wrap_socket(conn, server_side=True) as s:
+            f = s.makefile("rb")
+            _read_msg(f)
+            s.sendall(b'RTSP/1.0 401 Unauthorized\r\nCSeq: 0\r\n'
+                      b'WWW-Authenticate: Digest realm="R", nonce="n"\r\n\r\n')
+            done.wait(10)                                       # stays silent and open, as a camera can
+    threading.Thread(target=printer, daemon=True).start()
+    before = set(_relay_threads())
+    relay = camera.RtspRelay(Printer("P1", "x", "O1D", "127.0.0.1", CODE, True), port)
+    local = relay.start()
+    c = socket.create_connection(("127.0.0.1", local), timeout=5)
+    try:
+        assert wait_until(lambda: any(t.name == "cam-relay-down" for t in _relay_threads()), 5)
+        if how == "stop":
+            relay.stop()
+        else:
+            c.close()
+        ends = {"cam-relay-conn", "cam-relay-down"} | ({"cam-relay"} if how == "stop" else set())   # the listener serves on
+        assert wait_until(lambda: not {t.name for t in set(_relay_threads()) - before} & ends, 3), _relay_threads()
+    finally:
+        done.set()
+        relay.stop()
+        c.close()
+        srv.close()
 
 
 def test_relay_answers_digest_challenge_with_rewritten_uri(tmp_path):
@@ -454,7 +499,7 @@ def test_slow_stop_of_one_printer_does_not_block_another(printers, tmp_path):
         hub.acquire("H1")
         hub.release("H1")
         hub.release("P1")  # a stray release is harmless and never waits
-        assert time.monotonic() - t0 < 0.5
+        assert time.monotonic() - t0 < 1.0     # well under the source's stop; not a tight bound on a loaded machine
         # the same printer's next viewer waits for its old source to finish stopping, then gets a new one
         new = hub.acquire("P1")
         assert new is not FakeSource.instances[0] and FakeSource.instances[0].stopped == 1

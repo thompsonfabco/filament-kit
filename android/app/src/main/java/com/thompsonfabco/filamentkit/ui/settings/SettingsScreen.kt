@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -20,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.thompsonfabco.filamentkit.data.ServerConfig
+import com.thompsonfabco.filamentkit.ui.pair.SkipCheckSwitch
 import com.thompsonfabco.filamentkit.ui.pair.groupFingerprint
 
 /**
@@ -33,10 +36,12 @@ fun SettingsScreen(
     onForget: () -> Unit,
     modifier: Modifier = Modifier,
     onLicences: () -> Unit = {},
+    skipFingerprintCheck: Boolean = false,
+    onSkipFingerprintCheck: (Boolean) -> Unit = {},
 ) {
     var confirmForget by remember { mutableStateOf(false) }
     Column(
-        modifier.fillMaxSize().padding(24.dp),
+        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("Settings", style = MaterialTheme.typography.headlineSmall)
@@ -53,6 +58,7 @@ fun SettingsScreen(
         if (config != null) {
             OutlinedButton(onClick = { confirmForget = true }, modifier = Modifier.fillMaxWidth()) { Text("Forget server") }
         }
+        SkipCheckSwitch(skipFingerprintCheck, onSkipFingerprintCheck)
         TextButton(onClick = onLicences, modifier = Modifier.fillMaxWidth()) { Text("Licences and third-party software") }
     }
     if (confirmForget) {

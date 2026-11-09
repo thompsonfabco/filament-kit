@@ -732,9 +732,13 @@ class _Fetcher:
             if e.code == 404 and name in self.missing_ok:
                 return None
             msg = f"{name}: HTTP {e.code}"
-            if e.code in PRIVATE_STATUSES:
-                msg += ("; the library repository may be private; using version " + str(self.version)
-                        if self.version else "; the library may be private or not published yet")
+            if e.code == 404:
+                msg += ("; not found: check the library address and version; using version " + str(self.version)
+                        if self.version else "; not found: check the library address and version, or it is not "
+                                             "published yet")
+            elif e.code in PRIVATE_STATUSES:
+                msg += ("; the library repository refused access; using version " + str(self.version)
+                        if self.version else "; the library repository refused access")
             raise _Abort(msg, e.code) from None
         except urllib.error.URLError as e:
             if isinstance(e.reason, _Abort):

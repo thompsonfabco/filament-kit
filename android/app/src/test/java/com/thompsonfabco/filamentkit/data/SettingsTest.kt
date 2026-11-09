@@ -10,7 +10,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -46,6 +48,24 @@ class SettingsTest {
         val s = settings()
         s.save(config)
         assertEquals(config, s.server.first())
+    }
+
+    @Test fun theFingerprintCheckIsOnUntilTheUserSkipsIt() = runBlocking {
+        val s = settings()
+        assertFalse(s.skipsFingerprintCheck())
+        s.setSkipFingerprintCheck(true)
+        assertTrue(s.skipsFingerprintCheck())
+        s.setSkipFingerprintCheck(false)
+        assertFalse(s.skipsFingerprintCheck())
+    }
+
+    @Test fun forgettingAServerLeavesTheChoiceAboutTheCheck() = runBlocking {
+        val s = settings()
+        s.save(config)
+        s.setSkipFingerprintCheck(true)
+        s.clear()
+        assertNull(s.server.first())
+        assertTrue(s.skipsFingerprintCheck())
     }
 
     @Test fun saveReplacesAndClearRemoves() = runBlocking {

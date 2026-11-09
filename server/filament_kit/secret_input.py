@@ -71,12 +71,12 @@ def _posix(prompt: str, fd: int) -> str:
     # no echo, no line editing by the terminal; ISIG stays on, so Ctrl-C still interrupts
     new[3] &= ~(termios.ECHO | termios.ICANON | termios.IEXTEN)
     new[6][termios.VMIN], new[6][termios.VTIME] = 1, 0
-    out.write(prompt)
-    out.flush()
     line = Line()
     dec = codecs.getincrementaldecoder("utf-8")("replace")
     try:
-        termios.tcsetattr(fd, termios.TCSAFLUSH, new)
+        termios.tcsetattr(fd, termios.TCSAFLUSH, new)    # drops what was typed so far: before the prompt, not after it
+        out.write(prompt)
+        out.flush()
         while not line.done:
             b = os.read(fd, 1)
             if not b:                      # the terminal went away

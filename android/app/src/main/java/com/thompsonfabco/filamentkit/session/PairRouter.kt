@@ -25,7 +25,7 @@ sealed interface PairNotice {
         override fun toString() = "Unpaired" // never log the token
     }
 
-    /** The server presents a certificate other than the paired one; never auto-accepted. */
+    /** The server presents a certificate other than the paired one; never accepted without the user's tap. */
     data class CertChanged(val expected: String, val actual: String) : PairNotice
 }
 
@@ -41,6 +41,9 @@ class PairRouter {
     /** The token requests are sent with now (the session sets it); null = no check (every 401 routes). */
     @Volatile var currentToken: (() -> String?)? = null
 
+    /** The fingerprint pinned now (the session sets it); null = no check (every mismatch counts). */
+    @Volatile var currentFingerprint: (() -> String?)? = null
+
     private val _notice = MutableStateFlow<PairNotice?>(null)
     val notice: StateFlow<PairNotice?> = _notice.asStateFlow()
 
@@ -53,7 +56,7 @@ class PairRouter {
     /** Routes to Pair for `unauthorized` and a certificate change; anything else is the screen's to show. */
     fun report(e: Throwable) {
         when {
-            e is FingerprintMismatch -> route(PairNotice.CertChanged(e.expected, e.actual))
+            e is FingerprintMismatch -> if (!stale(e)) route(PairNotice.CertChanged(e.expected, e.actual))
             // Keep the token a call already reported (StateFlow conflation must not hide it from the session).
             e is ApiError && e.code == "unauthorized" && !stale(e.sentToken) ->
                 route(PairNotice.Unpaired((_notice.value as? PairNotice.Unpaired)?.token))
@@ -71,9 +74,15 @@ class PairRouter {
         return sent != null && sent != current()
     }
 
-    /** A call saw another certificate; remembered so a later [pairAgain] can show both fingerprints. */
+    /** A late answer from before the pin changed (trusting a new certificate, a re-pair) says nothing about it now. */
+    private fun stale(e: FingerprintMismatch): Boolean {
+        val pinned = currentFingerprint?.invoke() ?: return false
+        return !pinned.equals(e.expected, ignoreCase = true)
+    }
+
+    /** A call saw another certificate; remembered so a later [pairAgain] can show it. */
     fun noteMismatch(e: FingerprintMismatch) {
-        lastMismatch = e
+        if (!stale(e)) lastMismatch = e
     }
 
     /** A screen's "Pair again": explains the last certificate change if there was one. */
@@ -97,7 +106,11 @@ class PairRouter {
  * Sits outermost on the API client: a 401 on a request that carried a bearer token routes to pairing; a connection
  * failure calls [onOffline] (the session re-resolves the server's address); a certificate change is remembered.
  */
-class SessionWatcher(private val router: PairRouter, private val onOffline: () -> Unit) : Interceptor {
+class SessionWatcher(
+    private val router: PairRouter,
+    private val onAnswer: () -> Unit = {},
+    private val onOffline: () -> Unit,
+) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
         val response = try {
@@ -110,6 +123,7 @@ class SessionWatcher(private val router: PairRouter, private val onOffline: () -
             if (!chain.call().isCanceled()) onOffline()
             throw e
         }
+        onAnswer()
         val auth = request.header("Authorization")
         if (response.code == 401 && auth != null) router.unauthorized(auth.removePrefix("Bearer ").trim())
         return response

@@ -102,12 +102,12 @@ def test_enable_orders_asks_for_its_file(applied, monkeypatch):
     assert config.load()["orders"]["file"] == "/srv/orders.json"
 
 
-def test_enable_with_a_missing_dependency_asks_nothing(applied, monkeypatch, capsys):
+def test_enable_with_a_missing_dependency_refused_at_the_prompt_asks_no_address(applied, monkeypatch, capsys):
     _save({"spoolman"})
     _stdin(monkeypatch, "", tty=True)
     assert cli.main(["modules", "enable", "remote"]) == 1
     cap = capsys.readouterr()
-    assert "remote needs web" in cap.err and "public https address" not in cap.out
+    assert "remote needs server, web" in cap.err and "public https address" not in cap.out
 
 
 # ---------- B4: web status and the passphrase ----------

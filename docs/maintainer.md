@@ -33,7 +33,8 @@ A tag `v<x.y.z>` pushed to GitHub builds and publishes one release, with:
 
 The Android app's `versionCode` comes from the tag: `MAJOR*10000 + MINOR*100 + PATCH` (so `v0.2.0` is 200).
 Phones only offer an update when the server's `app/version.txt` is above the installed app's code, so every
-release that carries the app must have a higher version than the one before.
+release that carries the app must have a higher version than the one before. A build without `FK_VERSION_CODE` uses
+the same formula on `server/filament_kit/__init__.py`, and the app's `versionName` is always that version.
 
 ## Secrets the workflow needs
 
@@ -99,9 +100,13 @@ A hand-built tarball is not signed. Users can install it with `sudo ./install.sh
 
 ## Testing
 
-- CI runs the server tests (`server/tests`, `pytest`) and the PC sync tests (`pc-sync/tests`) on Linux on every push.
-  From v0.4.1 it installs `server[test,web]`, so the web module's tests run, and it also runs the printer pack, spool
-  sync and reader tool tests, the tests that need root and the `get.sh` end-to-end check, and shellchecks the scripts.
+- `bash tools/testenv.sh` (Linux or WSL, from a tree on the Linux side) is the one recipe for the Python suites, the same in CI
+  and at every review: `--root`, `--lint` and `--klipper` add the rest, and it prints each suite's counts and wall time. On Windows, where the PC sync's DPAPI and file lock are real:
+  `powershell -ExecutionPolicy Bypass -File tools\testenv.ps1`. Both run in parallel (`-n auto`), as does every workflow.
+  A test that fails in the crowd runs once more alone. Each one that passes alone gets a `FLAKY <test>` line in the summary, even when another test really failed, and the suite passes only if all of them did. A run that stopped before reaching every test (xdist's crash limit, for one) gets no second try and fails. `--no-retry` turns the second try off. Every `FLAKY` line in a run becomes a queue item to fix that test, so the marker never becomes permanent cover.
+- CI runs the recipe on Linux on every push: the server tests (`server/tests`) and the PC sync tests (`pc-sync/tests`) with
+  `server[test,web]` installed, so the web module's tests run, plus the printer pack, spool sync and reader tool tests, the
+  tests that need root and the `get.sh` end-to-end check, and it shellchecks the scripts.
   The PC sync tests on its other systems (`pc-sync.yml`), the Android unit tests (`./gradlew testDebugUnitTest`) and the
   reader's tests run only when files under `pc-sync/`, `android/` or `reader/` change.
 - CI does not run the Klipper end-to-end test. Before a merge, also run `bash tools/e2e/klipper.sh` from the repo root.

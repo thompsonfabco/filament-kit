@@ -103,11 +103,38 @@ ALLOWED_REPO_PATHS = ("github.com/thompsonfabco/filament-kit", "thompsonfabco/fi
                       "github.com/thompsonfabco/filament-library", "thompsonfabco/filament-library")
 
 
+def _walk_code_scan() -> list[str]:
+    """A copy with no .git (an archive a reviewer unpacked): every file under CODE_SCAN. This is the leak guard, so it
+    never skips; it may read a few more files than git would list, which can only make it stricter."""
+    out = []
+    for item in CODE_SCAN:
+        p = ROOT / item
+        files = [p] if p.is_file() else [f for f in p.rglob("*") if f.is_file()]
+        out += [f.relative_to(ROOT).as_posix() for f in files if "__pycache__" not in f.parts and f.suffix != ".pyc"]
+    return out
+
+
 def _public_code_files() -> list[str]:
     import subprocess
-    out = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-z", "--", *CODE_SCAN], capture_output=True,
-                         check=True).stdout.decode("utf-8")
-    return [f for f in out.split("\0") if f and f not in CODE_SCAN_SKIP]
+    try:
+        out = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-z", "--", *CODE_SCAN], capture_output=True,
+                             check=True).stdout.decode("utf-8")
+        names = out.split("\0")
+    except (subprocess.CalledProcessError, OSError):
+        names = _walk_code_scan()
+    return [f for f in names if f and f not in CODE_SCAN_SKIP]
+
+
+def test_the_leak_guard_finds_the_files_without_git(monkeypatch):
+    """Not a skip: the same files, from a walk."""
+    import subprocess
+
+    def no_git(*a, **k):
+        raise subprocess.CalledProcessError(128, "git")
+    monkeypatch.setattr(subprocess, "run", no_git)
+    files = _public_code_files()
+    assert "get.sh" in files and "server/tests/test_release_files.py" in files
+    assert "server/tests/test_readme.py" not in files and not any("__pycache__" in f for f in files)
 
 
 def test_the_owners_host_name_is_nowhere_in_the_tree():

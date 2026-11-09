@@ -24,6 +24,8 @@ private class FakeSettings : SettingsStore {
     var saves = 0
     override suspend fun save(config: ServerConfig) { saved = config; saves++ }
     override suspend fun clear() { saved = null }
+    var skip = false
+    override suspend fun skipsFingerprintCheck() = skip
 }
 
 private class FakeBackend : PairingBackend {
@@ -58,11 +60,8 @@ private class FakeBackend : PairingBackend {
 class PairViewModelTest {
     private val settings = FakeSettings()
     private val backend = FakeBackend()
-    private val vm = PairViewModel(settings, backend, CoroutineScope(UnconfinedTestDispatcher()), pickGroups = { listOf(1, 14) })
+    private val vm = PairViewModel(settings, backend, CoroutineScope(UnconfinedTestDispatcher()))
     private val ui get() = vm.state.value
-
-    /** Group 1 of FP is 4567, group 14 is 89ab. */
-    private fun confirm() = vm.confirmFingerprint(listOf("4567", "89ab"))
 
     private fun qr(vararg ips: String) =
         "fkit://pair?h=kit.local&p=8443&t=qr-token&fp=$FP" + ips.joinToString("") { "&ip=$it" }
@@ -79,7 +78,7 @@ class PairViewModelTest {
 
     @Test fun codeIsOnlySentAfterConfirmAndEntry() {
         vm.submitAddress("10.0.0.2", "")
-        confirm()
+        vm.confirmFingerprint()
         assertEquals(Step.Code, ui.step)
         assertFalse(backend.calls.any { it.startsWith("pair") })
         vm.submitCode("123456")
@@ -93,62 +92,61 @@ class PairViewModelTest {
         assertFalse(backend.calls.any { it.startsWith("pair") })
     }
 
-    @Test fun theProbeChoosesTheGroups() {
-        vm.submitAddress("10.0.0.2", "")
-        assertEquals(listOf(1, 14), ui.askedGroups)
-    }
-
-    @Test fun wrongGroupsStayOnTheCheckWithTheSameGroupsAndSendNothing() {
-        vm.submitAddress("10.0.0.2", "")
-        vm.confirmFingerprint(listOf("4567", "0000"))
-        assertEquals(Step.Confirm, ui.step)
-        assertEquals(PairTexts.FINGERPRINT_WRONG, ui.error)
-        assertEquals(listOf(1, 14), ui.askedGroups)
-        vm.submitCode("123456")
-        assertFalse(backend.calls.any { it.startsWith("pair") })
-    }
-
-    @Test fun oneRightGroupIsNotEnough() {
-        vm.submitAddress("10.0.0.2", "")
-        vm.confirmFingerprint(listOf("0000", "89ab"))
-        assertEquals(Step.Confirm, ui.step)
-        vm.confirmFingerprint(listOf("4567"))
-        assertEquals(Step.Confirm, ui.step)
-        vm.confirmFingerprint(emptyList())
-        assertEquals(Step.Confirm, ui.step)
-    }
-
-    @Test fun rightGroupsAfterAWrongTryContinueAndClearTheError() {
-        vm.submitAddress("10.0.0.2", "")
-        vm.confirmFingerprint(listOf("0000", "0000"))
-        confirm()
-        assertEquals(Step.Code, ui.step)
-        assertNull(ui.error)
-    }
-
-    @Test fun anotherProbeDrawsAgainAndForgetsTheOldGroups() {
-        var draw = 0
-        val drawing = PairViewModel(settings, backend, CoroutineScope(UnconfinedTestDispatcher()),
-            pickGroups = { if (draw++ == 0) listOf(1, 14) else listOf(2, 3) })
-        drawing.submitAddress("10.0.0.2", "")
-        drawing.rejectFingerprint()
-        assertEquals(emptyList<Int>(), drawing.state.value.askedGroups)
-        drawing.submitAddress("10.0.0.2", "")
-        assertEquals(listOf(2, 3), drawing.state.value.askedGroups)
-    }
-
     @Test fun declineReturnsToAddressWithoutSendingACode() {
         vm.submitAddress("10.0.0.2", "9000")
         vm.rejectFingerprint()
         assertEquals(Step.Address, ui.step)
         assertNull(ui.fingerprint)
+        assertEquals(PairTexts.FINGERPRINT_REJECTED, ui.error)
         assertFalse(backend.calls.any { it.startsWith("pair") })
+    }
+
+    @Test fun connectingAgainAfterDecliningClearsTheSentence() {
+        vm.submitAddress("10.0.0.2", "9000")
+        vm.rejectFingerprint()
+        vm.submitAddress("10.0.0.3", "9000")
+        assertEquals(Step.Confirm, ui.step)
+        assertNull(ui.error)
+    }
+
+    @Test fun withTheCheckSkippedAddressGoesStraightToTheCodeAndPinsTheProbedCertificate() {
+        settings.skip = true
+        vm.submitAddress("10.0.0.2", "9000")
+        assertEquals(Step.Code, ui.step)
+        assertEquals(FP, ui.fingerprint)
+        assertFalse(backend.calls.any { it.startsWith("pair") })
+        vm.submitCode("123456")
+        assertEquals(Step.Done, ui.step)
+        assertEquals(ServerConfig(listOf("10.0.0.2"), 9000, FP, "token-1", "Workshop server"), settings.saved)
+    }
+
+    @Test fun withTheCheckSkippedAFoundServerGoesStraightToTheCode() {
+        settings.skip = true
+        vm.connectDiscovered("10.0.0.2", 8710)
+        assertEquals(Step.Code, ui.step)
+    }
+
+    @Test fun skippingTheCheckStillStopsOnACertificateChangedBeforeTheCode() {
+        settings.skip = true
+        backend.pairResult = { throw FingerprintMismatch(FP, "other") }
+        vm.submitAddress("10.0.0.2", "")
+        vm.submitCode("123456")
+        assertEquals(MismatchSource.MANUAL, ui.mismatch?.source)
+        assertNull(settings.saved)
+    }
+
+    @Test fun skippingTheCheckDoesNotCoverAScannedCode() {
+        settings.skip = true
+        backend.infoResult = { throw FingerprintMismatch(FP, "other") }
+        vm.onQrScanned(qr())
+        assertEquals(MismatchSource.QR, ui.mismatch?.source)
+        assertNull(settings.saved)
     }
 
     @Test fun wrongCodeShowsTheServersMessageAndAllowsRetry() {
         backend.pairResult = { throw ApiError(401, "unauthorized", "That code is wrong or has expired") }
         vm.submitAddress("10.0.0.2", "")
-        confirm()
+        vm.confirmFingerprint()
         vm.submitCode("000000")
         assertEquals(Step.Code, ui.step)
         assertEquals("That code is wrong or has expired", ui.error)
@@ -162,7 +160,7 @@ class PairViewModelTest {
 
     @Test fun malformedCodeIsRejectedLocally() {
         vm.submitAddress("10.0.0.2", "")
-        confirm()
+        vm.confirmFingerprint()
         vm.submitCode("12ab")
         assertEquals(Step.Code, ui.step)
         assertNotNull(ui.error)
@@ -171,7 +169,7 @@ class PairViewModelTest {
 
     @Test fun successSavesConfigWithTheProbedFingerprintAndTypedHost() {
         vm.submitAddress(" 10.0.0.2 ", "9000")
-        confirm()
+        vm.confirmFingerprint()
         vm.submitCode("123456")
         assertEquals(ServerConfig(listOf("10.0.0.2"), 9000, FP, "token-1", "Workshop server"), settings.saved)
         assertEquals(Step.Done, ui.step)
@@ -180,7 +178,7 @@ class PairViewModelTest {
     @Test fun nameFallsBackToHostWhenInfoFails() {
         backend.infoResult = { _ -> throw ApiError(0, "offline", "x") }
         vm.submitAddress("10.0.0.2", "")
-        confirm()
+        vm.confirmFingerprint()
         vm.submitCode("123456")
         assertEquals("10.0.0.2", settings.saved?.name)
         assertEquals(Step.Done, ui.step)
@@ -203,7 +201,7 @@ class PairViewModelTest {
     @Test fun unexpectedExceptionDoesNotCrash() {
         backend.pairResult = { throw IllegalStateException("weird") }
         vm.submitAddress("10.0.0.2", "")
-        confirm()
+        vm.confirmFingerprint()
         vm.submitCode("123456")
         assertEquals("Unexpected response from the server", ui.error)
         assertFalse(ui.busy)
@@ -212,7 +210,7 @@ class PairViewModelTest {
     @Test fun certificateChangedDuringPairingShowsBothFingerprints() {
         backend.pairResult = { throw FingerprintMismatch(FP, "f".repeat(64)) }
         vm.submitAddress("10.0.0.2", "")
-        confirm()
+        vm.confirmFingerprint()
         vm.submitCode("123456")
         assertEquals(Mismatch(FP, "f".repeat(64), MismatchSource.MANUAL), ui.mismatch)
         vm.pairAgain()
@@ -336,6 +334,43 @@ class PairViewModelTest {
         assertEquals(Step.Address, ui.step)
         assertEquals("kit.local", ui.host)
         assertEquals(8443, ui.port)
+    }
+
+    @Test fun backFromTheFingerprintCheckKeepsTheAddress() {
+        vm.submitAddress("10.0.0.2", "8443")
+        assertEquals(Step.Confirm, ui.step)
+        vm.back()
+        assertEquals(Step.Address, ui.step)
+        assertEquals("10.0.0.2", ui.host)
+        assertEquals(8443, ui.port)
+        assertNull(ui.fingerprint)
+    }
+
+    @Test fun backFromTheCodeKeepsTheAddressAndForgetsTheCheck() {
+        vm.submitAddress("10.0.0.2", "8443")
+        vm.confirmFingerprint()
+        assertEquals(Step.Code, ui.step)
+        vm.back()
+        assertEquals(Step.Address, ui.step)
+        assertEquals("10.0.0.2", ui.host)
+        vm.submitAddress("10.0.0.2", "8443")
+        assertEquals("the check is made again", Step.Confirm, ui.step)
+    }
+
+    @Test fun backFromTheAddressGoesToTheFirstScreen() {
+        vm.startManual("kit.local", 8443)
+        vm.back()
+        assertEquals(PairUi(), ui)
+    }
+
+    @Test fun backFromAMismatchDuringPairingStartsOver() {
+        vm.submitAddress("10.0.0.2", "")
+        vm.confirmFingerprint()
+        backend.pairResult = { throw FingerprintMismatch(FP, "f".repeat(64)) }
+        vm.submitCode("123456")
+        assertEquals(MismatchSource.MANUAL, ui.mismatch?.source)
+        vm.back()
+        assertEquals(PairUi(), ui)
     }
 
     @Test fun showMismatchFromElsewhereShowsBothFingerprintsAndPairAgainClearsIt() {

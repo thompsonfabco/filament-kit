@@ -32,6 +32,7 @@ import com.thompsonfabco.filamentkit.ui.spool.SpoolSummaryRow
 import com.thompsonfabco.filamentkit.ui.spool.toSpoolSummary
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -56,14 +57,33 @@ class SearchViewModel(private val search: suspend (q: String, sealedOnly: Boolea
     private val _state = MutableStateFlow(SearchUi())
     val state: StateFlow<SearchUi> = _state.asStateFlow()
     private var job: Job? = null
+    private var typing: Job? = null
 
-    fun setQuery(q: String) = _state.update { it.copy(query = q) }
-    fun setSealedOnly(on: Boolean) = _state.update { it.copy(sealedOnly = on) }
+    /** A pause in typing searches by itself; clearing the box clears the results. */
+    fun setQuery(q: String) {
+        _state.update { it.copy(query = q) }
+        typing?.cancel()
+        if (q.isBlank()) {
+            job?.cancel()
+            _state.update { it.copy(busy = false, searched = false, results = emptyList()) }
+        } else if (q.trim().length >= MIN_TYPED) {
+            typing = viewModelScope.launch {
+                delay(TYPING_PAUSE_MS)
+                search()
+            }
+        }
+    }
+
+    fun setSealedOnly(on: Boolean) {
+        _state.update { it.copy(sealedOnly = on) }
+        if (_state.value.searched) search()
+    }
 
     fun search() {
         val s = _state.value
         val q = s.query.trim()
         if (q.isEmpty()) return
+        typing?.cancel()
         job?.cancel()
         _state.value = s.copy(busy = true, error = null, mismatch = null, unauthorized = false)
         job = viewModelScope.launch {
@@ -83,6 +103,11 @@ class SearchViewModel(private val search: suspend (q: String, sealedOnly: Boolea
                 _state.value.copy(busy = false, error = "Unexpected response from the server")
             }
         }
+    }
+
+    private companion object {
+        const val MIN_TYPED = 2
+        const val TYPING_PAUSE_MS = 400L
     }
 }
 
