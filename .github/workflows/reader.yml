@@ -22,13 +22,13 @@ jobs:
           key: pio-${{ runner.os }}-${{ hashFiles('reader/platformio.ini') }}
 
       - name: Install
-        run: pip install platformio==6.1.18 pytest cryptography
+        run: pip install platformio==6.1.18 pytest pytest-xdist cryptography
 
       - name: Native unit tests (lib/reader_core)
         run: pio test -d reader -e native
 
       - name: OTA publish tool tests
-        run: pytest -q reader/tools
+        run: pytest -q -n auto -rfEs reader/tools
 
       - name: Firmware build (placeholder secrets)
         run: |

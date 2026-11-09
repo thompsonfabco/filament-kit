@@ -861,7 +861,7 @@ def test_the_helper_sandbox_is_not_widened():
 def test_the_server_unit_was_not_widened():
     """Check now is a job because the server may not reach GitHub: this must not change to make it easier."""
     svc = (SYSTEMD / "filament-kit.service").read_text(encoding="utf-8")
-    assert "IPAddressAllow=localhost 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 160.79.104.0/21 2607:6bc0::/48" in svc
+    assert "IPAddressAllow=localhost 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 fe80::/10 fc00::/7 160.79.104.0/21 2607:6bc0::/48" in svc
 
 
 def test_the_page_loads_both_scripts_under_its_csp(app):

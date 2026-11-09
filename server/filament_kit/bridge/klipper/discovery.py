@@ -7,7 +7,8 @@ anything but the standard mDNS query.
 `scan(subnet, port=7125, workers=64, timeout=0.3)` probes TCP `port` on every address of `subnet` (at most a /24)
 and keeps the ones whose `/server/info` answers like Moonraker. It runs only when the owner asks (CLI
 `filament-kit klipper scan`, the app's Scan button), never in the background. `own_subnet()` is the /24 of this
-machine's default-route address (found without sending a packet).
+machine's default-route address (found without sending a packet). `check_range(net)` is what a client of the server may
+ask for (`KlipperFamily.scan`); the CLI's `--subnet` is explicit and runs outside the service, so it isn't held to it.
 """
 from __future__ import annotations
 
@@ -17,12 +18,16 @@ import socket
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable
 
+from ... import hostaddr
 from .moonraker import Moonraker, MoonrakerError
 
 log = logging.getLogger(__name__)
 SERVICE = "_moonraker._tcp.local."
 DEFAULT_PORT = 7125
 MAX_HOSTS = 256
+# What the server's unit lets it reach (IPAddressAllow in install/systemd/filament-kit.service; a test keeps the two equal).
+# A probe of anything else times out, and would read as "nothing there".
+REACHABLE = hostaddr.SERVICE_REACH
 
 
 def own_subnet() -> ipaddress.IPv4Network | None:
@@ -35,6 +40,17 @@ def own_subnet() -> ipaddress.IPv4Network | None:
     finally:
         s.close()
     return ipaddress.ip_network(f"{ip}/24", strict=False)
+
+
+def check_range(net) -> None:
+    """A network the server may be asked to scan: at most a /24, in a range its unit lets it reach. ValueError otherwise,
+    rather than a scan that finds nothing."""
+    if net.num_addresses > MAX_HOSTS:
+        raise ValueError("scan at most a /24 (256 addresses)")
+    lan = [r for r in REACHABLE if r.version == 4]          # a scan walks addresses: IPv4 only (IPv6 printers announce, or are typed)
+    if net.version != 4 or not any(net.subnet_of(r) for r in lan):
+        raise ValueError(f"the server can only reach private networks ({', '.join(str(r) for r in lan)}), so a scan "
+                         f"of {net} would find nothing")
 
 
 def _open(host: str, port: int, timeout: float) -> bool:

@@ -28,13 +28,14 @@ function renameButton(p, box) {
 function addressButton(p, box, now) {
   return h("button", { class: "secondary", textContent: "Change address", on: { click: () => {
     const address = window.prompt(`The address of ${p.name} (an IP address or a name; a name is kept as you type it):`, now);
-    if (address && address.trim()) change(box, printerPath(p, "address"), { address: address.trim() });
+    if (address && address.trim()) change(box, printerPath(p, "address"), { address: address.trim() }, (r) => say(box, r.note ? `Saved. ${r.note}.` : "Saved.", true));
   } } });
 }
 
 function bambuRow(p) {
   const box = boxFor("printer:" + p.serial), code = secret("Access Code (printer: Settings > Network/LAN)");
   const mapBox = boxFor("map:" + p.serial);
+  if (p.mapping) followMap(p, mapBox);      // a job already running (a reload, another browser): progress and Stop again
   return h("div", { class: "item" },
     h("p", {}, h("b", { textContent: p.name }), S.printers.klipper ? " Bambu" : "", `${dotted(p.model, p.ip || "no address yet", `serial ${p.serial}`)} `,
       pill(p.state === "connected", "connected", nice(p.state))),
@@ -53,7 +54,8 @@ const mapping = {};
 async function startMap(p, box) {
   if (!window.confirm(`Map the slots of ${p.name}? It changes their colours briefly and runs a job with no motion; the colours are put back.`)) return;
   const r = await change(box, printerPath(p, "map"), {}, () => box.replaceChildren(h("p", { class: "muted", textContent: "Starting…" })));
-  if (r) followMap(p, box);
+  if (r) { followMap(p, box); return; }
+  try { if ((await api(printerPath(p, "map"))).state === "running") followMap(p, box); } catch (e) { /* the refusal is already in the box */ }
 }
 
 function followMap(p, box) {
@@ -112,6 +114,7 @@ function klipperRow(p) {
 
 // ----- adding a printer: the form follows the family, so a Klipper printer is never asked for an Access Code -----
 let addFamily = null;       // every change redraws the tab: the form stays on the type you chose
+const added = (r) => `Added ${r.serial}.${r.note ? ` ${r.note}.` : ""}`;   // the note: the server's unit doesn't reach that address
 function addCard() {
   const P = S.printers, box = boxFor("printer-add");
   const family = h("select", { ariaLabel: "Printer type", on: { change: () => { addFamily = family.value; show(); } } },
@@ -127,13 +130,13 @@ function addCard() {
       const key = secret("Moonraker API key (optional)");
       fields.replaceChildren(h("div", { class: "row" }, address, port), h("div", { class: "row" }, name, key,
         h("button", { textContent: "Add", on: { click: () => change(box, "printers/klipper", { host: address.value, port: port.value, name: name.value, api_key: key.value },
-          (r) => say(box, `Added ${r.serial}.`, true), [key]) } })));
+          (r) => say(box, added(r), true), [key]) } })));
     } else {
       const ac = secret("Access Code (printer: Settings > Network/LAN)");
       const serial = h("input", { placeholder: "serial (optional: read from the printer)", autocapitalize: "characters" });
       fields.replaceChildren(h("div", { class: "row" }, address, ac), h("div", { class: "row" }, name, serial,
         h("button", { textContent: "Add", on: { click: () => change(box, "printers", { address: address.value, access_code: ac.value, name: name.value, serial: serial.value },
-          (r) => say(box, `Added ${r.serial}.`, true), [ac]) } })));
+          (r) => say(box, added(r), true), [ac]) } })));
     }
   }
   show();

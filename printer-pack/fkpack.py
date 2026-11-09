@@ -20,12 +20,14 @@ the next install.
 
 Rules: it never overwrites a file it did not write (config/filament-kit/.manifest lists what it wrote). Its only
 edits to your own files are one `[include filament-kit/*.cfg]` line in printer.cfg and the moonraker.conf sections
-above, each shown as a diff and asked y/N, with a timestamped backup. A restart is offered only while the printer is
-idle (print_stats standby / complete / cancelled / error) and only when you say yes.
+above, each shown as a diff and asked y/N, with a timestamped backup. A restart of Klipper (a macro changed) or of
+Moonraker (moonraker.conf changed) is offered only while the printer is idle (print_stats standby / complete /
+cancelled / error), each only when you say yes.
 """
 import argparse
 import datetime
 import difflib
+import ipaddress
 import json
 import os
 import re
@@ -43,6 +45,7 @@ SAVE_CONFIG = "#*# <---------------------- SAVE_CONFIG ---------------------->"
 IDLE = ("standby", "complete", "cancelled", "error")
 NFC_REPO = "https://github.com/bofh69/nfc2klipper.git"
 PY39_PINS = ["requests<2.33", "gunicorn==23.0.0"]   # nfc2klipper's pins need Python 3.10+
+SPOOLMAN_URL = re.compile(r"https?://[^\s\"'`$;&|<>()\\]+")      # one line of moonraker.conf: no spaces, no shell
 SERVICE = re.compile(r"[A-Za-z0-9_.-]{1,64}")            # a manifest service entry: a plain unit name, nothing else
 SERVICE_FILES = {"lasttag": ("lasttag/lasttag.py", "lasttag/allow")}   # files a kept service still needs
 EMPTY = {"files": [], "include": False, "services": [], "asvc": [], "moonraker": [], "nfc": None}
@@ -58,7 +61,7 @@ def stamp():
 
 class Pack:
     def __init__(self, data, moonraker="http://localhost:7125", home=None, ask=None, out=None, run=None,
-                 klipper_dir=None, units_dir="/etc/systemd/system"):
+                 klipper_dir=None, units_dir="/etc/systemd/system", prompt=None):
         self.units_dir = units_dir
         self.data = os.path.abspath(os.path.expanduser(data))
         self.cfg = os.path.join(self.data, "config")
@@ -67,10 +70,12 @@ class Pack:
         self.home = home or os.path.expanduser("~")
         self.klipper_dir = klipper_dir or os.path.join(self.home, "klipper")
         self.ask = ask or (lambda q: input(q + " [y/N] ").strip().lower() in ("y", "yes"))
+        self.prompt = prompt or _read_line
         self.out = out or print
         self.run = run or (lambda cmd, **kw: subprocess.run(cmd, check=True, **kw))
         self.manifest_path = os.path.join(self.dest, ".manifest")
         self.changed = False      # a Klipper config file was written or edited: a restart is needed
+        self.moonraker_changed = False      # moonraker.conf was edited: Moonraker reads it only when it starts
 
     # --- Moonraker -------------------------------------------------------------------------------------------------
     def _get(self, path):
@@ -268,6 +273,14 @@ class Pack:
                 lines.append("  {}: differs from the local changes (left as they are)".format(name))
         return True, lines
 
+    def nfc_will_install(self, m):
+        """Whether part_nfc is going to install or finish a reader, and so write its config: the same test it uses."""
+        d = self.nfc_dir()
+        nfc = m.get("nfc") or {}
+        if self.nfc_status()[0]:
+            return nfc.get("dir") == d and nfc.get("state") == "started"
+        return not os.path.exists(d)
+
     def part_nfc(self, m, device, spoolman, web):
         d = self.nfc_dir()
         services = ["nfc2klipper_backend"] + (["nfc2klipper_api"] if web else [])
@@ -318,6 +331,9 @@ class Pack:
             self.out("  {} exists; the pack's version is in {} for you to compare".format(target[:-7], target))
         with open(target, "w", encoding="utf-8") as f:
             f.write(nfc_config(upstream, device, spoolman, self.moonraker, web))
+        if not spoolman:
+            self.out("  no Spoolman URL given, so {} keeps the example's spoolman-url and tag lookups won't reach the "
+                     "kit; set it there (--spoolman sets it on an install)".format(target))
         self.install_services(m, d, services)
         m["nfc"]["state"] = "done"
 
@@ -422,20 +438,46 @@ class Pack:
             new = set_section(text, "spoolman", {"server": spoolman})
             if self.edit(path, new, "moonraker.conf: report filament usage to the kit's Spoolman"):
                 self._add(m["moonraker"], "[spoolman] server: " + spoolman)
+                self.moonraker_changed = True
                 text = new
-        if "[zeroconf]" not in text:
+        else:
+            self.out("  no Spoolman URL given, so [spoolman] is left as it is; usage only reaches the kit if it already "
+                     "points there (--spoolman sets it)")
+        if not has_section(text, "zeroconf"):
             new = text.rstrip("\n") + "\n\n[zeroconf]\n"
             if self.edit(path, new, "moonraker.conf: announce Moonraker on the LAN so filament-kit finds it"):
                 self._add(m["moonraker"], "[zeroconf]")
+                self.moonraker_changed = True
+
+    def ask_spoolman(self):
+        """The kit's Spoolman URL from the person installing, "" to leave it (--yes answers nothing: also ""). A wrong
+        answer is asked again, not written into a config file."""
+        for _ in range(3):
+            url = self.prompt("The kit's Spoolman URL as this printer reaches it, e.g. "
+                              "http://filament.home.arpa:7912 (empty: leave it)").strip()
+            if not url or SPOOLMAN_URL.fullmatch(url):
+                return url
+            self.out("  that isn't an http:// or https:// URL")
+        return ""
 
     # --- the commands ----------------------------------------------------------------------------------------------
     def install(self, parts, scan_ok="", scan_unknown="", nfc_device="tty:USB0:pn532", spoolman="", web=False,
                 allow=()):
+        if spoolman and not SPOOLMAN_URL.fullmatch(spoolman):
+            raise PackError("the Spoolman URL must be one http:// or https:// address")
+        for a in allow:
+            try:
+                ipaddress.ip_address(a)
+            except ValueError:      # lasttag compares the caller's address with the list as text: a name never matches
+                raise PackError("--allow takes IP addresses, not names: {}".format(a)) from None
         objs = self.objects()
         if not os.path.isfile(os.path.join(self.cfg, "printer.cfg")):
             raise PackError("no printer.cfg in {}; give --data <printer_data folder>".format(self.cfg))
         m = self.manifest()
+        if not spoolman and ("moonraker" in parts or ("nfc" in parts and self.nfc_will_install(m))):
+            spoolman = self.ask_spoolman()
         self.changed = False
+        self.moonraker_changed = False
         for part in parts:
             self.out("[{}]".format(part))
             if part == "spool":
@@ -444,6 +486,11 @@ class Pack:
                 self.part_scripts(m, part)
             elif part == "nfc":
                 self.part_nfc(m, nfc_device, spoolman, web)
+                nfc = m.get("nfc") or {}        # the pack's own reader, this run's or an earlier one's; never an adopted one
+                if nfc.get("dir") == self.nfc_dir() and nfc.get("state") == "done" and "fk_spool.cfg" not in m["files"]:
+                    self.save_manifest(m)       # the reader is in, whatever the spool part says about its file
+                    self.out("  the reader's gcode uses the spool part's macros: installing them too")
+                    self.part_spool(m, objs, scan_ok, scan_unknown)
             elif part == "lasttag":
                 self.part_lasttag(m, allow)
             elif part == "moonraker":
@@ -452,12 +499,39 @@ class Pack:
         if any(f.endswith(".cfg") for f in m["files"]):
             self.add_include(m)
         self.save_manifest(m)
-        if self.changed and m["include"]:
-            self.offer_restart()
+        restart_klipper = self.changed and m["include"]
+        if restart_klipper or self.moonraker_changed:
+            state = self.print_state()      # once: while Klipper restarts, the state can't be read
+            if restart_klipper:
+                self.offer_restart(state)
+            if self.moonraker_changed:      # after Klipper: Klipper's restart is asked for through Moonraker
+                self.offer_moonraker_restart(state)
         return 0
 
-    def offer_restart(self):
-        state = self.print_state()
+    def offer_moonraker_restart(self, state):
+        later = "sudo systemctl restart moonraker"
+        if state not in IDLE:
+            self.out("Moonraker must restart to use its new settings; the printer is {}, so restart it yourself later "
+                     "({})".format(state, later))
+            return
+        if not self.ask("Restart Moonraker now to use its new settings?"):
+            self.out("  restart it later ({})".format(later))
+            return
+        self._restart("/server/restart", "Moonraker", later)
+
+    def _restart(self, path, what, later):
+        req = urllib.request.Request(self.moonraker + path, data=b"{}", method="POST",
+                                     headers={"Content-Type": "application/json"})
+        try:
+            urllib.request.urlopen(req, timeout=10).read()
+        except ConnectionError:     # not wrapped in URLError: it was sent, and a server may hang up as it restarts
+            pass
+        except OSError as e:
+            self.out("  could not ask {} to restart ({}): restart it yourself ({})".format(what, e, later))
+            return
+        self.out("  {} is restarting".format(what))
+
+    def offer_restart(self, state):
         if state not in IDLE:
             self.out("Klipper must restart to load the macros; the printer is {}, so restart it yourself later "
                      "(RESTART in the console)".format(state))
@@ -465,10 +539,7 @@ class Pack:
         if not self.ask("Restart Klipper now to load the macros?"):
             self.out("  restart it later (RESTART in the console)")
             return
-        req = urllib.request.Request(self.moonraker + "/printer/restart", data=b"{}", method="POST",
-                                     headers={"Content-Type": "application/json"})
-        urllib.request.urlopen(req, timeout=10).read()
-        self.out("  Klipper is restarting")
+        self._restart("/printer/restart", "Klipper", "RESTART in the console")
 
     def status(self):
         objs = self.objects()
@@ -544,10 +615,26 @@ class Pack:
         return 0
 
 
+def _read_line(question):
+    try:
+        return input(question + ": ")
+    except (EOFError, OSError):         # no terminal: nobody to answer
+        return ""
+
+
+def _is_header(line, section):
+    """A `[section]` line, a trailing comment allowed; a commented-out one is not."""
+    return re.fullmatch(r"\s*\[{}\]\s*([#;].*)?\s*".format(re.escape(section)), line) is not None
+
+
+def has_section(text, section):
+    return any(_is_header(line, section) for line in text.splitlines())
+
+
 def set_section(text, section, values):
     """`text` (a Klipper/Moonraker config) with `values` set in `[section]` (added when missing)."""
     lines = text.splitlines(True)
-    start = next((i for i, l in enumerate(lines) if l.strip() == "[{}]".format(section)), None)
+    start = next((i for i, l in enumerate(lines) if _is_header(l, section)), None)
     if start is None:
         return text.rstrip("\n") + "\n\n[{}]\n".format(section) + "".join(
             "{}: {}\n".format(k, v) for k, v in values.items())
@@ -596,13 +683,14 @@ def main(argv=None):
     ap.add_argument("--nfc-device", default="tty:USB0:pn532", help="nfcpy device of the reader")
     ap.add_argument("--spoolman", default="", help="the kit's Spoolman URL, e.g. http://filament.home.arpa:7912")
     ap.add_argument("--web", action="store_true", help="turn on nfc2klipper's web page (port 5001, no password)")
-    ap.add_argument("--allow", default="", help="lasttag: comma list of addresses that may read it (the kit server)")
+    ap.add_argument("--allow", default="", help="lasttag: comma list of IP addresses that may read it (the kit server)")
     ap.add_argument("--yes", action="store_true", help="answer yes to every question (for scripted installs)")
     a = ap.parse_args(argv)
     if os.geteuid() == 0 if hasattr(os, "geteuid") else False:
         print("run this as the printer's normal user, not root (it uses sudo where it must)", file=sys.stderr)
         return 1
     pack = Pack(a.data, a.moonraker, ask=(lambda q: True) if a.yes else None,
+                prompt=(lambda q: "") if a.yes else None,
                 klipper_dir=os.path.abspath(os.path.expanduser(a.klipper)) if a.klipper else None)
     try:
         if a.command == "status":

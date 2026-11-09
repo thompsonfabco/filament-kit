@@ -33,10 +33,11 @@ def spoolman_fake_store():
 
 @pytest.fixture
 def spoolman_url(spoolman_fake_store):
-    port = free_port()
-    server = uvicorn.Server(uvicorn.Config(
-        spoolman_fake.app(spoolman_fake_store), host="127.0.0.1", port=port, log_level="warning"))
-    t = threading.Thread(target=server.run, daemon=True)
+    sock = socket.socket()      # bound here and handed over: with parallel workers, a port chosen first can be taken before it's used
+    sock.bind(("127.0.0.1", 0))
+    port = sock.getsockname()[1]
+    server = uvicorn.Server(uvicorn.Config(spoolman_fake.app(spoolman_fake_store), log_level="warning"))
+    t = threading.Thread(target=server.run, kwargs={"sockets": [sock]}, daemon=True)
     t.start()
     for _ in range(200):
         if server.started:
@@ -47,6 +48,7 @@ def spoolman_url(spoolman_fake_store):
     yield f"http://127.0.0.1:{port}"
     server.should_exit = True
     t.join(timeout=5)
+    sock.close()
 
 
 @pytest.fixture(autouse=True)

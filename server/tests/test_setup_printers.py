@@ -83,6 +83,42 @@ def test_a_literal_address_is_never_looked_up():
     def boom(*a, **k):
         raise AssertionError("looked up")
     assert hostaddr.resolve_error("192.0.2.40", lookup=boom) is None and hostaddr.resolve_error("2001:db8::1", lookup=boom) is None
+    assert hostaddr.inspect("[fd00::7]", lookup=boom) == ("fd00::7", None, None)
+
+
+@pytest.mark.parametrize("host, reach", [
+    ("192.168.1.40", True), ("10.0.0.7", True), ("172.31.0.9", True), ("127.0.0.1", True), ("fe80::1", True), ("fd00::7", True),
+    ("192.0.2.40", False), ("100.64.7.7", False), ("169.254.7.7", False), ("2001:db8::1", False), ("203.0.113.9", False)])
+def test_an_address_the_unit_doesnt_reach_is_kept_with_a_note(host, reach):
+    """Review R31: the server's unit allows the home networks only (a test keeps SERVICE_REACH equal to it). A printer
+    elsewhere is saved all the same (the owner's choice), with a note saying why it will show offline and what allows it."""
+    kept, problem, note = hostaddr.inspect(host)
+    assert kept == host and problem is None
+    if reach:
+        assert note is None
+    else:
+        assert host in note and "systemctl edit filament-kit" in note and "IPAddressAllow=" in note
+
+
+def test_a_name_resolving_outside_the_units_reach_gets_the_same_note():
+    far = lambda *a, **k: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("100.64.7.7", 0))]  # noqa: E731
+    near = lambda *a, **k: [(socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("fd00::7", 0, 0, 0))]  # noqa: E731
+    a = hostaddr.inspect("tailnet.example.com", lookup=far)
+    assert a.problem is None and "tailnet.example.com (100.64.7.7)" in a.note and "IPAddressAllow=100.64.7.0/24" in a.note
+    assert hostaddr.inspect("voron.local", lookup=near) == ("voron.local", None, None)
+    assert hostaddr.addresses("voron.local", lookup=near) == {"fd00::7"} and hostaddr.addresses("fd00::7") == {"fd00::7"}
+    assert hostaddr.addresses("nope.local", lookup=lambda *a, **k: (_ for _ in ()).throw(socket.gaierror(-2, "no"))) == set()
+
+
+def test_the_note_travels_with_add_and_change_address(both, names, manager):
+    c = client(both)
+    r = post(c, "printers/klipper", {"host": "100.64.7.7"})
+    assert r.status_code == 200 and "IPAddressAllow=100.64.7.0/24" in r.json()["note"]
+    r2 = post(c, "printers/klipper", {"host": "192.168.1.40", "name": "Near"})
+    assert r2.status_code == 200 and "note" not in r2.json()
+    r3 = post(c, f"printers/{r2.json()['serial']}/address", {"address": "2001:db8::9"})
+    assert r3.status_code == 200 and "2001:db8::9" in r3.json()["note"]
+    assert post(c, f"printers/{r2.json()['serial']}/address", {"address": "192.168.1.41"}).json() == {"ok": True}
 
 
 def test_a_name_that_doesnt_resolve_says_what_to_look_at():
@@ -204,6 +240,35 @@ def test_adding_what_a_scan_found_puts_that_entry_into_use(both, manager):
     assert after.configured and after.name == "Workshop" and after.api_key == KEY
 
 
+def test_a_scan_knows_a_printer_added_by_name(both, kl, manager, scanned):
+    """Review R31: `kl` is at printer.example.com, which resolves to 192.0.2.77 here; a scan finding 192.0.2.77 reports
+    that printer, and adds no second entry for it."""
+    scanned.found = [("192.0.2.77", 7125)]
+    r = post(client(both), "printers/scan", {})
+    assert r.status_code == 200 and r.json()["found"] == [{"serial": kl.serial, "host": "192.0.2.77", "port": 7125, "configured": True}]
+    assert list(registry.load()) == [kl.serial]
+    assert registry.detected_klipper("192.0.2.77", 7125).serial == kl.serial              # the mDNS path is the same call
+    assert registry.detected_klipper("192.0.2.77", 7126).serial != kl.serial              # another port is another printer
+
+
+def test_adding_by_name_what_a_scan_found_by_address_is_one_printer(both, manager):
+    found = registry.detected_klipper("192.0.2.77", 7125)
+    r = post(client(both), "printers/klipper", {"host": NAME, "name": "Workshop"})
+    assert r.status_code == 200 and r.json()["serial"] == found.serial and len(registry.load()) == 1
+    after = registry.load()[found.serial]
+    assert after.configured and after.name == "Workshop" and after.host == NAME        # the typed name is what's kept
+    assert post(client(both), "printers/klipper", {"host": "192.0.2.77"}).status_code == 409
+
+
+def test_an_address_another_printer_has_is_refused(both, kl, manager):
+    other = registry.add_klipper("Other", "192.168.1.9", 7125)
+    c = client(both)
+    r = post(c, f"printers/{other.serial}/address", {"address": "192.0.2.77"})
+    assert r.status_code == 409 and "Workshop" in r.json()["error"]
+    assert post(c, f"printers/{other.serial}/address", {"address": NAME}).status_code == 409
+    assert post(c, f"printers/{other.serial}/address", {"address": "192.0.2.77", "port": 7126}).status_code == 200
+
+
 def test_a_scanned_printer_goes_into_use_from_its_row(both, manager):
     p = registry.detected_klipper(NAME, 7125)
     c = client(both)
@@ -258,11 +323,12 @@ def test_every_change_needs_the_code(both, kl, path, body):
 # ---------- the scan ----------
 @pytest.fixture
 def scanned(monkeypatch):
-    calls = []
+    calls = type("Calls", (list,), {})()        # the subnets asked for; `.found` is what the scan answers
 
     def scan(net, port=None):
         calls.append(str(net))
-        return [("192.0.2.50", 7125)]
+        return list(calls.found)
+    calls.found = [("192.0.2.50", 7125)]
     monkeypatch.setattr(discovery, "scan", scan)
     monkeypatch.setattr(discovery, "own_subnet", lambda: __import__("ipaddress").ip_network("192.168.1.0/24"))
     return calls
@@ -373,6 +439,25 @@ def test_the_add_form_asks_a_klipper_printer_for_no_access_code():
     assert "Access Code" not in klipper and "access_code" not in klipper and "API key (optional)" in klipper
     row = text.split("function klipperRow(p)")[1].split("// -----")[0]
     assert "Access Code" not in row and "access_code" not in row
+
+
+def test_a_running_mapping_is_followed_again_after_a_reload(mapped):
+    """Review R31: the row says when this server's Mapper runs a job for the printer, and the page follows it (progress
+    and Stop) as it draws, not only from the Map slots click; a refused start also joins a job that is running."""
+    app, fake = mapped
+    fake.running_for = set()
+    fake.running = lambda serial: serial in fake.running_for
+    _bambu()
+    c = client(app)
+    rows = c.get("/setup/api/state").json()["printers"]["list"]
+    assert [r["mapping"] for r in rows if r["serial"] == SERIAL] == [False]
+    fake.running_for.add(SERIAL)
+    rows = c.get("/setup/api/state").json()["printers"]["list"]
+    assert [r["mapping"] for r in rows if r["serial"] == SERIAL] == [True]
+    text = (STATIC / "setup_printers.js").read_text(encoding="utf-8")
+    assert "if (p.mapping) followMap(p, mapBox);" in text
+    start = text.split("async function startMap(p, box)")[1].split("\n}\n")[0]
+    assert 'state === "running") followMap(p, box)' in start
 
 
 def test_a_family_with_its_module_off_is_not_rendered():

@@ -18,12 +18,13 @@ Loads, unloads, follow mode and the usage log are in `loads.py` and `usage.py` (
 from __future__ import annotations
 
 import logging
+import math
 import threading
 import time
 import urllib.parse
 from pathlib import Path
 
-from ... import config
+from ... import config, hostaddr
 from .. import registry
 from ..connection import PrinterOffline, UnknownPrinter
 from . import adapters, detect, discovery, lanes
@@ -41,7 +42,17 @@ SPOOL_CACHE = 30.0
 OFFLINE_AFTER = 10.0    # seconds a websocket may be down before the printer reads as offline
 SYNC_EVERY = 15.0       # seconds between registry re-reads (the CLI edits it in another process)
 HISTORY_WAIT = 10.0     # seconds to wait for Moonraker to close a finished job's history entry
+SCAN_GAP = 30.0         # seconds from the end of one scan to the start of the next
 ONLINE = ("connected", "unknown_model")
+SYSTEM_WORDS = {"single": "a single-extruder printer", "tool-macros": "a toolchanger", "afc": "an AFC printer",
+                "happy-hare": "a Happy Hare printer", "lane-data": "a printer with lane_data"}
+
+
+def generic_note(system_key: str) -> str:
+    """The status note for a printer no model entry matched: generic is `verified`, so only this says so."""
+    return (f"No model entry matched this printer, so the kit uses its generic rules for "
+            f"{SYSTEM_WORDS.get(system_key, f'a {system_key} printer')}. It works; the Klipper guide says how to add an "
+            f"entry.")
 
 
 def printer_dir(pid: str) -> Path:
@@ -56,6 +67,7 @@ class _Conn:
         self.state, self.message = "connecting", ""
         self.status: dict = {}
         self.spool_id: int | None = None
+        self.spool_changes = 0                 # counts spool_id updates, so set-up can tell its own read went stale
         self.lane_db: dict | None = None
         self.objects: list[str] = []
         self.detected: detect.Detected | None = None
@@ -71,6 +83,7 @@ class _Conn:
         self._stop = threading.Event()
         self._again = threading.Event()        # set up again (Klipper restarted, a key was added ...)
         self.ready = threading.Event()         # the first set-up attempt finished (any outcome)
+        self._subscribed_before = False        # the subscriber's own thread only
         self.thread = threading.Thread(target=self._run, daemon=True, name=f"klipper-{p.serial}")
 
     # --- the worker ----------------------------------------------------------------------------------------------
@@ -112,6 +125,7 @@ class _Conn:
             cams = c.webcams()
         except MoonrakerError:
             cams = []
+        changes = self.spool_changes
         spool = c.spool_id() if "spoolman" in (c.server_info().get("components") or []) else None
         model, system = hw.model(d.model_key), hw.systems.get(d.system_key)
         adapter = adapters.get(system.adapter) if system else adapters.get("single")
@@ -131,6 +145,7 @@ class _Conn:
         wanted.update({o: None for o in adapter.objects(model, system) if o in objs or o.startswith("gcode_macro")})
         wanted.update(adapter.objects_from(objs))
         with self.lock:
+            spool = self.spool_id if changes != self.spool_changes else spool   # a tap since that read wins
             self.objects, self.detected, self.webcams, self.spool_id, self.lane_db = objs, d, cams, spool, lane_db
             self.spoolman_warning, self.spoolman_connected = warn, connected
             self.nozzle = nozzle
@@ -138,7 +153,7 @@ class _Conn:
         self._set("connected" if d.model_key != "generic" else "unknown_model")
         if self.sub is None:
             self.sub = Subscriber(c, wanted, self._on_status, self._on_event, backoff=self.fam.backoff,
-                                  on_connect=self._on_connect).start()
+                                  on_connect=self._on_subscribed).start()
         else:
             self.sub.set_objects(wanted)
         # wait briefly for the first snapshot so callers see filled-in status
@@ -183,6 +198,14 @@ class _Conn:
         return state
 
     # --- subscriber callbacks ------------------------------------------------------------------------------------
+    def _on_subscribed(self) -> None:
+        """A reconnect may mean Moonraker restarted with new settings, which only set-up reads: the worker does it
+        again. Not on the first connect, which set-up itself has just started."""
+        if self._subscribed_before:
+            self._again.set()
+        self._subscribed_before = True
+        self._on_connect()
+
     def _on_connect(self) -> None:
         """Every (re)subscribe: what may have changed while the socket was down, read again over HTTP."""
         connected = kusage.spoolman_connected(self.client, self.spoolman_connected)
@@ -194,6 +217,7 @@ class _Conn:
             return
         with self.lock:
             changed, self.spool_id = spool != self.spool_id, spool
+            self.spool_changes += 1
         if changed:
             self.fam._emit(self.p.serial, "spool", {"spool_id": spool})
 
@@ -236,6 +260,7 @@ class _Conn:
             v = (params[0] or {}).get("spool_id") if params and isinstance(params[0], dict) else None
             with self.lock:
                 self.spool_id = v if isinstance(v, int) and not isinstance(v, bool) else None
+                self.spool_changes += 1
             self.fam._emit(self.p.serial, "spool", {"spool_id": self.spool_id})
         elif name == "notify_spoolman_status_changed":
             v = (params[0] or {}).get("spoolman_connected") if params and isinstance(params[0], dict) else None
@@ -255,6 +280,8 @@ class KlipperFamily(LoadsMixin):
         self._listeners: list = []
         self._spools: tuple[float, list] = (0.0, [])
         self._started = False
+        self._scan_lock = threading.Lock()
+        self._scan_ended = float("-inf")
         self._browser_factory = browser_factory      # discovery.Browser in the server; None in tests
         self._browser = None
         self._loads_init()
@@ -319,13 +346,27 @@ class KlipperFamily(LoadsMixin):
 
     def scan(self, subnet: str | None = None) -> list[dict]:
         """The owner's Scan: probe a /24 (this machine's by default) for Moonraker; found printers are recorded
-        unconfigured. Raises ValueError for a bad or too large subnet."""
+        unconfigured. Raises ValueError for a bad or too large subnet, one the server can't reach (discovery.check_range),
+        and while a scan runs or within SCAN_GAP of the last: one at a time across the server."""
         import ipaddress
         net = ipaddress.ip_network(subnet, strict=False) if subnet else discovery.own_subnet()
         if net is None:
             raise ValueError("cannot tell this machine's network; give a subnet")
+        discovery.check_range(net)
+        if not self._scan_lock.acquire(blocking=False):
+            raise ValueError("a scan is already running; try again when it ends")
+        try:
+            wait = self._scan_ended + SCAN_GAP - time.monotonic()
+            if wait > 0:
+                raise ValueError(f"a scan just ended; try again in {math.ceil(wait)} s")
+            try:
+                found = discovery.scan(net)
+            finally:
+                self._scan_ended = time.monotonic()
+        finally:
+            self._scan_lock.release()
         out = []
-        for host, port in discovery.scan(net):
+        for host, port in found:
             p = registry.detected_klipper(host, port)
             out.append({"id": p.serial, "host": host, "port": port, "name": registry.display_name(p),
                         "configured": p.configured})
@@ -440,7 +481,9 @@ class KlipperFamily(LoadsMixin):
         info = ps.get("info") or {}
         notes = [message] if state == "klippy_not_ready" and message else []
         if state == "unknown_model":
-            notes.append("no klipper_hardware.xml entry matched this printer: the generic Klipper entry is in use")
+            with c.lock:
+                detected = c.detected
+            notes.append(generic_note(detected.system_key if detected else "Klipper"))
         out = {
             "gcode_state": GCODE_STATE.get(ps.get("state"), "UNKNOWN") if state in ONLINE else "UNKNOWN",
             "stage": "", "job": ps.get("filename") or "", "percent": _percent(st),
@@ -488,10 +531,10 @@ class KlipperFamily(LoadsMixin):
         for cam in c.webcams:
             url = cam.get("stream_url") if cam.get("enabled", True) else None
             if isinstance(url, str) and url:
-                full = urllib.parse.urljoin(f"http://{c.p.host}/", url)
+                full = urllib.parse.urljoin(f"http://{hostaddr.url_host(c.p.host)}/", url)     # an IPv6 host in brackets
                 u = urllib.parse.urlsplit(full)
                 # the URL comes from the printer: only http(s) on the printer itself (never file:, another host)
-                if u.scheme in ("http", "https") and (u.hostname or "").lower() == c.p.host.lower().strip("[]"):
+                if u.scheme in ("http", "https") and (u.hostname or "").lower() == c.p.host.lower():
                     return full
                 log.warning("klipper %s: webcam %r ignored: not an http(s) stream on the printer", pid,
                             cam.get("name"))

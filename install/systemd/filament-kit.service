@@ -23,7 +23,7 @@ PrivateTmp=yes
 CapabilityBoundingSet=
 AmbientCapabilities=
 IPAddressDeny=any
-IPAddressAllow=localhost 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 160.79.104.0/21 2607:6bc0::/48
+IPAddressAllow=localhost 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 fe80::/10 fc00::/7 160.79.104.0/21 2607:6bc0::/48
 
 [Install]
 WantedBy=multi-user.target

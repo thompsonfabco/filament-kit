@@ -144,13 +144,16 @@ class RtspRelay:
         return self.local_port
 
     def stop(self) -> None:
+        """Wakes every thread of the relay; each closes what it owns. A socket closed while another thread waits on it
+        leaves that thread reading the file number, whichever connection has it by then."""
         srv, self._srv = self._srv, None
         if srv:
+            _wake(srv)
             srv.close()
         with self._lock:
             conns, self._conns = list(self._conns), set()
         for s in conns:
-            _close(s)
+            _wake(s)
 
     def _accept(self, srv: socket.socket) -> None:
         while True:
@@ -171,7 +174,7 @@ class RtspRelay:
             return True
 
     def _conn(self, cli: socket.socket) -> None:
-        up = None
+        up = reader = None
         try:
             if not self._track(cli):
                 return
@@ -208,7 +211,8 @@ class RtspRelay:
                         cli.shutdown(socket.SHUT_RDWR)
                     except OSError:
                         pass
-            threading.Thread(target=down, daemon=True, name="cam-relay-down").start()
+            reader = threading.Thread(target=down, daemon=True, name="cam-relay-down")
+            reader.start()
 
             buf = b""
             while True:
@@ -248,8 +252,20 @@ class RtspRelay:
         finally:
             with self._lock:
                 self._conns.difference_update({cli, up})
+            if reader is not None:      # it reads `up` and writes `cli`: out of the way before either closes
+                _wake(up)
+                _wake(cli)
+                reader.join(5)
             _close(cli)
             _close(up)
+
+
+def _wake(s) -> None:
+    """On Linux, where the server runs, a thread waiting on `s` returns now. Only that wakes it: close() in another thread doesn't."""
+    try:
+        s.shutdown(socket.SHUT_RDWR)
+    except OSError:
+        pass
 
 
 def _close(s) -> None:

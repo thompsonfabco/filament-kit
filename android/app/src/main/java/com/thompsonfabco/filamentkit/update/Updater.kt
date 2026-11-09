@@ -122,6 +122,11 @@ class Updater(
         if (!lastCheckOk) check()
     }
 
+    /** Back on screen: drop the "allow, then tap Install" reminder once the permission is there. */
+    fun onResumed() {
+        if (_state.value.needsPermission && installer.canInstall()) _state.update { it.copy(needsPermission = false) }
+    }
+
     /** "Tap to install": opens the waiting system confirmation. */
     fun confirmInstall() = installer.showConfirm()
 

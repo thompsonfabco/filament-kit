@@ -4,6 +4,14 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+// The app carries the kit's version, so nothing here is bumped by hand. The code is the release workflow's formula.
+val kitVersion: MatchResult = Regex("""(?m)^__version__ = "(\d+)\.(\d+)\.(\d+)"\s*$""")
+    .find(rootDir.resolve("../server/filament_kit/__init__.py").readText())
+    ?: error("server/filament_kit/__init__.py has no MAJOR.MINOR.PATCH __version__")
+val kitVersionCode = kitVersion.groupValues.let { (_, major, minor, patch) ->
+    major.toInt() * 10000 + minor.toInt() * 100 + patch.toInt()
+}
+
 android {
     namespace = "com.thompsonfabco.filamentkit"
     compileSdk = 37
@@ -13,11 +21,11 @@ android {
         minSdk = 29
         targetSdk = 37
         // The update check compares this with the server's app/version.txt; tools/make_release.sh passes the same
-        // FK_VERSION_CODE to this build and writes it to version.txt. Bump it for every app release (README).
+        // FK_VERSION_CODE to this build and writes it to version.txt.
         versionCode = System.getenv("FK_VERSION_CODE")?.takeIf { it.isNotBlank() }?.let {
             it.trim().toIntOrNull()?.takeIf { v -> v > 0 } ?: error("FK_VERSION_CODE must be a whole number above 0, got '$it'")
-        } ?: 1
-        versionName = "1.0"
+        } ?: kitVersionCode
+        versionName = kitVersion.groupValues.drop(1).joinToString(".")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

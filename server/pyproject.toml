@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "filament-kit"
-version = "0.4.1"
+version = "0.4.2"
 description = "Pair phones, read filament labels with Claude, write spools to Spoolman"
 requires-python = ">=3.12"
 license = {text = "GPL-3.0-or-later"}
@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest", "httpx", "pyftpdlib>=2.0", "pyopenssl>=24"]  # pyftpdlib + pyopenssl: the fake printer FTPS server
+test = ["pytest", "pytest-xdist>=3.6", "httpx", "pyftpdlib>=2.0", "pyopenssl>=24"]  # pyftpdlib + pyopenssl: the fake printer FTPS server
 station = ["nfcpy==1.0.4", "pyserial>=3.5", "esptool==5.6.0"]
 # the panel's Piper voice (with onnxruntime): install.sh adds it only where the station module is on; espeak-ng without
 station-tts = ["piper-tts==1.8.0"]

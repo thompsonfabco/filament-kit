@@ -5,6 +5,7 @@ from starlette.testclient import TestClient
 from filament_kit import config, pairing
 from filament_kit.api import create_app
 from filament_kit.bridge import family, registry
+from filament_kit.bridge.klipper.manager import KlipperFamily
 
 ON = frozenset({"server", "printers", "klipper"})
 
@@ -178,3 +179,18 @@ def test_scan_route():
     assert r.status_code == 200 and r.json()["found"][0]["host"] == "192.0.2.10"
     assert c.post("/api/printers/scan", json={"subnet": "10.0.0.0/16"}).status_code == 400
     assert _client(klipper=None).post("/api/printers/scan", json={}).json()["error"] == "module_off"
+
+
+@pytest.mark.parametrize("host", ["voron.local", "Voron-2.local", "printer.home.arpa", "printer", "192.0.2.20"])
+def test_add_klipper_takes_a_name_or_an_address_and_stores_it_as_typed(host):
+    """DNS and mDNS names as well as IPs: resolved when used, so a changed address doesn't strand the printer. A Klipper
+    printer never needs an Access Code."""
+    r = _client().post("/api/printers", json={"family": "klipper", "host": host})
+    assert r.status_code == 200, r.text
+    assert registry.load()[r.json()["printer"]["id"]].host == host
+
+
+def test_scan_route_refuses_a_public_range_on_the_real_family():
+    kf = KlipperFamily(None)
+    r = _client(kf).post("/api/printers/scan", json={"subnet": "1.1.1.0/24"})
+    assert r.status_code == 400 and "private" in r.text
