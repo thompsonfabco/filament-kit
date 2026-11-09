@@ -206,3 +206,12 @@ def test_firmware_never_starts_the_radio():
     src = (PANEL_DIR / "src" / "main.cpp").read_text(encoding="utf-8")
     for used in ("WiFi.h", "BLEDevice", "WiFi.begin", "esp_wifi_start"):
         assert used not in src
+
+
+def test_firmware_never_idles_the_active_low_buzzer_low():
+    """The buzzer module is low-level trigger: pin LOW is on, so duty 0 / tone 0 would hold it on with DC in the coil."""
+    src = (PANEL_DIR / "src" / "main.cpp").read_text(encoding="utf-8")
+    assert not re.search(r"ledcWrite\(\s*PIN_BUZZER\s*,\s*0\s*\)", src)
+    assert not re.search(r"ledcWriteTone\(\s*PIN_BUZZER\s*,\s*0\s*\)", src)
+    assert not re.search(r"digitalWrite\(\s*PIN_BUZZER\s*,\s*LOW\s*\)", src)
+    assert re.search(r"digitalWrite\(\s*PIN_BUZZER\s*,\s*HIGH\s*\)", src)

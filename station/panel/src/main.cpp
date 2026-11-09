@@ -6,7 +6,7 @@
 //                                         4 rapid blink (3 only restarts the blinks when the mode changes to it)
 //                 "D <row> [text]"        OLED text: row 0 the title (big), rows 1-4 the body; no text clears the
 //                                         row. The bottom line is the panel's own: room air, always shown.
-//                 "B <hz> <ms> [count]"   beep(s) on the passive buzzer, 60 ms apart
+//                 "B <hz> <ms> [count]"   beep(s) on the buzzer (an active-low module: the pin idles HIGH), 60 ms apart
 //                 "A <n>" + n raw bytes   speech for the speaker: unsigned 8-bit mono at 8 kHz (n 1-1024), each byte
 //                                         a sample, 128 = silence. The PC streams it in real time; when it stops, the
 //                                         output fades to silence over 50 ms (it never holds the last sample).
@@ -292,6 +292,18 @@ static void handle(const char *s) {
   }
 }
 
+// The buzzer module is active-low (low-level trigger, transistor-switched): pin LOW is ON, so silence is the pin held
+// HIGH (LOW would keep the transistor on with DC through the coil). A beep is a 50% square wave on the LEDC channel.
+static void buzzerIdle() {
+  ledcDetach(PIN_BUZZER);
+  pinMode(PIN_BUZZER, OUTPUT);
+  digitalWrite(PIN_BUZZER, HIGH);
+}
+static void buzzerTone(uint32_t hz) {
+  ledcAttach(PIN_BUZZER, 2000, 10);  // the buzzer's own LEDC channel; ledcWriteTone() sets the pitch
+  ledcWriteTone(PIN_BUZZER, hz);
+}
+
 void setup() {
   Serial.setRxBufferSize(2048);  // audio arrives at ~8 KB/s; covers a slow I2C read
   Serial.setTxTimeoutMs(0);      // no host reading: drop output instead of stalling loop()
@@ -301,8 +313,7 @@ void setup() {
   }
   pinMode(PIN_BTN_HOLD, INPUT_PULLUP);
   pinMode(PIN_BTN_DISCARD, INPUT_PULLUP);
-  ledcAttach(PIN_BUZZER, 2000, 10);  // the buzzer's own LEDC channel; ledcWriteTone() sets the pitch, 0 = off
-  ledcWrite(PIN_BUZZER, 0);
+  buzzerIdle();
   i2s.setPins(PIN_I2S_BCLK, PIN_I2S_LRC, PIN_I2S_DIN);
   bool speech = i2s.begin(I2S_MODE_STD, SAMPLE_RATE, I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO);
   // setup() runs in loopTask: one priority above it
@@ -332,9 +343,9 @@ void loop() {
     }
   }
   if (lastL && now - lastL > WATCHDOG_MS) { hold.set(0); discard.set(0); lastL = 0; display.setOffline(true); }
-  if (beeping && (int32_t)(now - beepEnd) >= 0) { ledcWriteTone(PIN_BUZZER, 0); beeping = false; }
+  if (beeping && (int32_t)(now - beepEnd) >= 0) { buzzerIdle(); beeping = false; }
   if (beepsLeft && (int32_t)(now - nextBeep) >= 0) {
-    ledcWriteTone(PIN_BUZZER, beepHz); beeping = true; beepEnd = now + beepMs;
+    buzzerTone(beepHz); beeping = true; beepEnd = now + beepMs;
     beepsLeft--; nextBeep = now + beepMs + 60;
   }
   btnHold.poll(now); btnDiscard.poll(now);
