@@ -98,7 +98,7 @@ def library_rows() -> Iterator[Row]:
     if lc is not None and not lc["ok"]:
         # a warning, not a failure: the last good version (or none) stays in use
         yield Row(INFO, f"library update: {lc['error']}")
-    if st["skipped"]:
+    if st.get("skipped"):          # .get: the CLI snapshot tests' fake status has no such key
         yield Row(INFO, f"library: {st['skipped']}")
 
 
