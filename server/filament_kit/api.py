@@ -646,7 +646,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         """A client leaving: only the calling token is revoked. Clients call it best effort when they forget the server."""
         device = request.state.device
         revoked = await run_in_threadpool(pairing.revoke, device)
-        audit("unpair", device, "ok" if revoked else "already gone")
+        log.info("unpair device_id=%s result=%s", device, "ok" if revoked else "already-gone")
         return JSONResponse({"revoked": True})
 
     @_authed
