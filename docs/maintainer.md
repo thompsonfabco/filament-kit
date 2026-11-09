@@ -100,16 +100,17 @@ A hand-built tarball is not signed. Users can install it with `sudo ./install.sh
 
 ## Nightly builds
 
-`.github/workflows/nightly.yml` runs every night at 23:00 New York time, and by hand from the Actions tab. It merges
+`.github/workflows/nightly.yml` runs every night at 23:00 New York time, and by hand from the Actions tab with `main`
+selected: from any other branch every job stops. The `nightly` branch must exist first, made once from `main`. It merges
 `main` into the `nightly` branch, builds it with `FK_NIGHTLY=1 bash tools/make_release.sh` and publishes a GitHub
 prerelease `nightly-YYYYMMDD`. It keeps the newest 7. No tests, gate or lint run on this branch or for this build, and
 the other workflows ignore it. A conflict or a failed build fails the job and publishes nothing.
 
 - **The branch.** Feature branches may land on `nightly` after their own suite run, without review. Nothing is ever
   merged from `nightly` into `main`.
-- **What it publishes.** `filament-kit-<version>-nightly.<date>.tar.gz`, `filament-kit-nightly.apk`, `SHA256SUMS` and
-  `SHA256SUMS.sig`. The signature says where a build came from, not that it works. The release key is only in the job
-  that signs, which runs `main`'s code. There is no library asset.
+- **What it publishes.** `filament-kit-<version>-nightly.<date>.tar.gz`, `filament-kit-nightly.apk` and `SHA256SUMS`.
+  Nightlies are unsigned: `SHA256SUMS` lists hashes and has no signature, and the workflow holds no secret. There is no
+  library asset.
 - **Installed kits.** A prerelease is never what `releases/latest` answers, so `filament-kit update` and the library URL
   do not see it. A kit installed from a nightly tarball shows the full version on its setup page and updates to the next
   stable release like any other.

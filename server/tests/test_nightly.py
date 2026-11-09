@@ -48,13 +48,20 @@ def test_release_workflow_does_not_fire_on_a_nightly_tag():
     assert "      - 'v*'\n" in (WF / "release.yml").read_text(encoding="utf-8").replace("\r\n", "\n")
 
 
-def test_the_release_key_never_meets_nightly_code():
+def test_it_holds_no_secret_and_signs_nothing():
     text = _nightly()
-    assert "secrets." not in _job(text, "build") and "secrets." not in _job(text, "merge")
+    for word in ("secrets.", "FK_RELEASE_KEY", "FK_KEYSTORE", "sign_release", "SHA256SUMS.sig"):
+        assert word not in text, word
     assert "contents: write" not in _job(text, "build")
-    assert "FK_KEYSTORE" not in text
-    publish = _job(text, "publish")
-    assert "secrets.FK_RELEASE_KEY" in publish and "ref:" not in publish    # the checkout is the workflow's own: main
+    assert "Nightlies are unsigned" in text
+
+
+@pytest.mark.parametrize("name", ["merge", "build", "publish"])
+def test_every_job_starts_by_refusing_any_ref_but_main(name):
+    steps = _job(_nightly(), name).split("    steps:\n", 1)[1]
+    first = steps.split("\n      - ", 2)[0]
+    assert "name: Only from main" in first and "REF: ${{ github.ref }}" in first
+    assert '[ "$REF" != refs/heads/main ]' in first and "exit 1" in first
 
 
 def test_every_action_is_pinned_by_commit():
@@ -67,7 +74,9 @@ def test_every_action_is_pinned_by_commit():
 
 @pytest.mark.parametrize("name", ["server", "android", "pc-sync", "reader"])
 def test_the_test_workflows_leave_the_nightly_branch_alone(name):
-    assert (WF / f"{name}.yml").read_text(encoding="utf-8").count("branches-ignore: [nightly]") == 2
+    text = (WF / f"{name}.yml").read_text(encoding="utf-8")
+    assert text.count("branches-ignore: [nightly]") == 2
+    assert text.count("tags: ['**']") == 1      # a tag push still runs them
 
 
 def test_version_text_is_the_version_on_a_stable_kit(tmp_path, monkeypatch):

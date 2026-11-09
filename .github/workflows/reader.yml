@@ -2,6 +2,7 @@ name: reader
 on:
   push:
     branches-ignore: [nightly]     # no tests on the nightly branch: docs/maintainer.md, Nightly builds
+    tags: ['**']
     paths: ['reader/**', '.github/workflows/reader.yml']
   pull_request:
     branches-ignore: [nightly]     # no tests on the nightly branch: docs/maintainer.md, Nightly builds
