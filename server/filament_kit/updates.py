@@ -32,6 +32,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -80,6 +81,17 @@ def store() -> Path:
 
 def current_version() -> str:
     return __version__
+
+
+def version_text() -> str:
+    """The version to show: `current_version()`, or its -nightly.YYYYMMDD form on a nightly build (install.sh leaves the
+    tarball's NIGHTLY file in resources/). Only for showing: the updater compares `current_version()`."""
+    cur = current_version()
+    try:
+        text = (config.paths().opt / "resources" / "NIGHTLY").read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeDecodeError):
+        return cur
+    return text if re.fullmatch(re.escape(cur) + r"-nightly\.\d{8}", text) else cur
 
 
 def _read_state() -> dict:

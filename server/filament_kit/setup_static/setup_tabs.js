@@ -97,7 +97,7 @@ function overviewTab() {
   const head = h("div");
   const show = (r) => {
     const u = r.update;
-    head.replaceChildren(h("p", {}, `filament-kit ${r.version} · mode ${S.mode} `,
+    head.replaceChildren(h("p", {}, `filament-kit ${r.version_text || r.version} · mode ${S.mode} `,
       u.newer ? h("span", { class: "pill no", textContent: `${u.latest} is available` }) : null,
       " ", link("updates", u.newer ? "Update" : "Updates")));
     fill(rowsBox,

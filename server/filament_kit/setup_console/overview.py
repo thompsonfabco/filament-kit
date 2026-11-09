@@ -25,7 +25,8 @@ def answer(page, whole: bool, station_pairing: str | None = None) -> dict:
     if not whole:
         known = redact.known_values()
         rows = [{**r, "text": redact.text(r["text"], known), "fix": redact.text(r["fix"], known)} for r in rows]
-    return {"rows": rows, "redacted": not whole, "version": __version__, "update": updates.summary(),
+    return {"rows": rows, "redacted": not whole, "version": __version__, "version_text": updates.version_text(),
+            "update": updates.summary(),
             "job": jobs.view(0, with_text=False)}
 
 

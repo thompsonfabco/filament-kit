@@ -15,7 +15,7 @@
     <application
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
-        android:label="filament-kit"
+        android:label="${appLabel}"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
         <activity
