@@ -178,9 +178,9 @@ echo "built $dist/fk-printer-pack.tar.gz"
 # ---------- library asset (optional) ----------
 # The filament-library data is a separate release asset, library-<date>.tar.gz, plus library.tar.gz under the
 # fixed name the default `library.url` points at (releases/latest/download/library.tar.gz). Built from a
-# filament-library checkout (FK_LIBRARY_SRC, default /c/CODING/filament-library) after the same validation the
+# filament-library checkout (FK_LIBRARY_SRC, default: beside this checkout) after the same validation the
 # program applies on download; skipped when there is no checkout. Nothing is uploaded here.
-lib_src=${FK_LIBRARY_SRC:-/c/CODING/filament-library}
+lib_src=${FK_LIBRARY_SRC:-$ROOT/../filament-library}
 if [ "$nightly" = 1 ]; then
     echo "nightly: no library asset (installed kits take the library from the stable release)"
 elif [ -f "$lib_src/index.json" ]; then
