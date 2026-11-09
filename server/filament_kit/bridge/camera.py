@@ -158,6 +158,23 @@ def _pump(cli: socket.socket, up, rewrite: Callable[[bytes], bytes], idle: float
     from_cli = b""
     recv_waits, send_waits = "r", "w"       # what `up` last asked its read and its write to wait for
     last_up = time.monotonic()
+
+    def cli_ended() -> None:
+        """However ffmpeg's side ended, what it sent first still reaches the printer: stopped while video flows, it has
+        unread bytes, so its close is a reset, with its TEARDOWN still waiting here to be read."""
+        nonlocal from_cli, to_up
+        try:
+            while d := cli.recv(65536):
+                out, from_cli = _for_printer(from_cli + d, rewrite)
+                to_up += out
+        except (OSError, ValueError):       # all read (a would-block or a reset), or a bad last message
+            pass
+        try:
+            up.settimeout(FLUSH_TIMEOUT)
+            up.sendall(to_up)
+        except OSError:
+            pass
+
     while True:
         room_down = len(to_cli) < MAX_QUEUED
         readable = [s for s, on in ((cli, len(to_up) < MAX_QUEUED),
@@ -176,12 +193,10 @@ def _pump(cli: socket.socket, up, rewrite: Callable[[bytes], bytes], idle: float
                 d = cli.recv(65536)
             except BlockingIOError:
                 d = None
+            except OSError:
+                d = b""
             if d == b"":
-                try:        # ffmpeg's TEARDOWN comes just before its close: it still reaches the printer
-                    up.settimeout(FLUSH_TIMEOUT)
-                    up.sendall(to_up)
-                except OSError:
-                    pass
+                cli_ended()
                 return
             if d:
                 out, from_cli = _for_printer(from_cli + d, rewrite)
@@ -219,6 +234,9 @@ def _pump(cli: socket.socket, up, rewrite: Callable[[bytes], bytes], idle: float
                 del to_cli[:cli.send(bytes(to_cli[:PUMP_CHUNK]))]
             except BlockingIOError:
                 pass
+            except OSError:
+                cli_ended()
+                return
 
 
 def _md5(s: str) -> str:

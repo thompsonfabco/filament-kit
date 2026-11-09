@@ -370,6 +370,59 @@ def test_what_ffmpeg_sends_just_before_it_closes_reaches_the_printer(tmp_path, w
         assert seen["got"] == frames
 
 
+def test_teardown_reaches_the_printer_when_ffmpeg_closes_with_unread_video(tmp_path):
+    """The ordinary stop: video is flowing, so ffmpeg's socket holds unread bytes and its close is a reset."""
+    video = b"$\x00\x40\x00" + b"v" * 0x4000
+    for round_no in range(3):
+        d = tmp_path / str(round_no)
+        d.mkdir()
+        srv, ctx = tls_listener(d)
+        seen, ready = {}, threading.Event()
+
+        def printer():
+            conn, _ = srv.accept()
+            with ctx.wrap_socket(conn, server_side=True) as s:
+                f = s.makefile("rb")
+                _read_msg(f)
+                s.sendall(b'RTSP/1.0 401 Unauthorized\r\nCSeq: 0\r\n'
+                          b'WWW-Authenticate: Digest realm="R", nonce="n"\r\n\r\n')
+                ready.set()
+                s.settimeout(0.05)
+                got, end, sent = bytearray(), time.monotonic() + 5, 0
+                while time.monotonic() < end and b"TEARDOWN" not in got:
+                    if sent < 64:
+                        try:
+                            s.sendall(video)
+                            sent += 1
+                        except OSError:
+                            pass
+                    try:
+                        data = s.recv(65536)
+                        if not data:
+                            break
+                        got += data
+                    except TimeoutError:
+                        pass
+                    except OSError:
+                        break
+                seen["after"] = bytes(got)
+        t = threading.Thread(target=printer, daemon=True)
+        t.start()
+        relay = camera.RtspRelay(Printer("P1", "x", "O1D", "127.0.0.1", CODE, True), srv.getsockname()[1])
+        local = relay.start()
+        try:
+            c = socket.create_connection(("127.0.0.1", local), timeout=5)
+            assert ready.wait(5)
+            time.sleep(0.4)                                     # video now sits unread in this socket
+            c.sendall(f"TEARDOWN rtsp://127.0.0.1:{local}/streaming/live/1 RTSP/1.0\r\nCSeq: 9\r\n\r\n".encode())
+            c.close()
+            t.join(8)
+        finally:
+            relay.stop()
+            srv.close()
+        assert b"TEARDOWN" in seen.get("after", b""), round_no
+
+
 def test_for_printer_holds_a_part_message_back():
     frame = b"$\x01\x00\x02ab"
     plain = b"X y RTSP/1.0\r\nContent-Length: 2\r\n\r\nhi"
