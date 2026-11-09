@@ -1,7 +1,7 @@
 """HTTPS JSON API for the phone app.
 
 Every route but /api/info, POST /api/pair and /app.apk needs `Authorization: Bearer <token>`; the intake station's token
-(`pair --station`) reaches only /api/station/* (403 elsewhere). Errors are `{"error": <code>, "message": <text>}`;
+(`pair --station`) reaches only /api/station/*, the web unit's only WEB_ROUTES (403 elsewhere). Errors are `{"error": <code>, "message": <text>}`;
 tracebacks are logged here and never sent.
 """
 from __future__ import annotations
@@ -151,6 +151,35 @@ def _handle(fn):
 
 
 STATION_PREFIX = "/api/station/"  # all a `pair --station` token may call (and /api/info, which needs none)
+# All the web unit's token may call: exact method and route, because /api/printers/... mixes what its pages use with
+# registry writes. A new route is refused until it is listed here. test_web_token_scope.py holds this to the app's
+# routes and to what filament_kit/web calls.
+WEB_ROUTES = (
+    ("GET", "/api/printers"),
+    ("GET", "/api/printers/{id}"),
+    ("GET", "/api/printers/{id}/usage"),
+    ("GET", "/api/printers/{id}/map"),
+    ("POST", "/api/printers/{id}/map"),
+    ("POST", "/api/printers/{id}/report"),
+    ("POST", "/api/printers/{id}/command"),
+    ("POST", "/api/printers/{id}/slots/{label}/load"),
+    ("POST", "/api/printers/{id}/slots/{label}/unload"),
+    ("GET", "/api/printers/{id}/camera.mjpeg"),
+    ("GET", "/api/printers/{id}/camera/{name:path}"),
+    ("POST", "/api/usage/{entry_id}/undo"),
+    ("POST", "/api/intake/cap/take"),
+    ("POST", "/api/intake/cap/refund"),
+    ("GET", "/api/intake/orders"),
+    ("POST", "/api/profiles/web/line_add"),
+    ("POST", "/api/profiles/web/line_new"),
+    ("POST", "/api/profiles/web/generate"),
+)
+_WEB_MATCH = {(m, re.compile(re.sub(r"\{\w+\}", "[^/]+", re.sub(r"\{\w+:path\}", ".+", r)))) for m, r in WEB_ROUTES}
+WEB_ONLY_PREFIX = "/api/profiles/web/"  # the web unit's preset writes: no phone or PC calls them
+
+
+def _web_may(method: str, path: str) -> bool:
+    return any(m == method and rx.fullmatch(path) for m, rx in _WEB_MATCH)
 
 
 def _authed(fn):
@@ -166,6 +195,12 @@ def _authed(fn):
         device, scope = got
         if scope == "station" and not request.url.path.startswith(STATION_PREFIX):
             return _err(403, "forbidden", "the intake station's token is for the station's routes only")
+        # the path the router matched, not the URL's raw text
+        path = request.scope["path"]
+        if scope == "web" and not _web_may(request.method, path):
+            return _err(403, "forbidden", "the web unit's token is for the web unit's routes only")
+        if scope != "web" and path.startswith(WEB_ONLY_PREFIX):
+            return _err(403, "forbidden", "this route is for the web unit only")
         request.state.device = device
         return await fn(request)
     return _handle(wrapper)
