@@ -21,6 +21,7 @@ class PairTextsTest {
         assertEquals("Trust the new certificate", t.trustButton)
         assertEquals(t.body, 1, t.body.count { it == '.' }) // one sentence of risk
         assertTrue(t.body, "another device" in t.body && "this phone's access" in t.body)
+        assertTrue("pairing code on the server" in t.whereToCheck!!)
     }
 
     @Test fun onlyASavedPairingCanBeTrusted() {

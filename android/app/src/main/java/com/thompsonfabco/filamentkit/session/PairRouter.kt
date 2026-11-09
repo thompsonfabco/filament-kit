@@ -106,7 +106,11 @@ class PairRouter {
  * Sits outermost on the API client: a 401 on a request that carried a bearer token routes to pairing; a connection
  * failure calls [onOffline] (the session re-resolves the server's address); a certificate change is remembered.
  */
-class SessionWatcher(private val router: PairRouter, private val onOffline: () -> Unit) : Interceptor {
+class SessionWatcher(
+    private val router: PairRouter,
+    private val onAnswer: () -> Unit = {},
+    private val onOffline: () -> Unit,
+) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
         val response = try {
@@ -119,6 +123,7 @@ class SessionWatcher(private val router: PairRouter, private val onOffline: () -
             if (!chain.call().isCanceled()) onOffline()
             throw e
         }
+        onAnswer()
         val auth = request.header("Authorization")
         if (response.code == 401 && auth != null) router.unauthorized(auth.removePrefix("Bearer ").trim())
         return response

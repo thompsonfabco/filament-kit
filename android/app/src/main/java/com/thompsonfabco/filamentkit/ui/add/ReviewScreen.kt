@@ -25,11 +25,13 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -65,7 +67,15 @@ fun ReviewScreen(
     modifier: Modifier = Modifier,
     onClose: () -> Unit = {},
 ) {
-    Column(modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    val scroll = rememberScrollState()
+    // The preview and the button that saves are at the very end: bring them into view.
+    LaunchedEffect(state.stage) {
+        if (state.stage == Stage.Preview) {
+            withFrameNanos { }
+            scroll.animateScrollTo(scroll.maxValue)
+        }
+    }
+    Column(modifier.verticalScroll(scroll).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (state.stage == Stage.Done) {
             DoneSection(state, vm, onDone)
             return@Column

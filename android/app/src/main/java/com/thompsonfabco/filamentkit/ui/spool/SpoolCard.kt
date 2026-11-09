@@ -27,6 +27,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import com.thompsonfabco.filamentkit.ui.ColorSwatch
 import com.thompsonfabco.filamentkit.ui.parseWeight
+import com.thompsonfabco.filamentkit.ui.weightHint
 
 /**
  * Everything shown after a tag tap. [onStartAdd] receives the tag when the user chooses "Add as new"
@@ -116,6 +117,7 @@ private fun SpoolCard(card: SpoolUiState.Card, vm: SpoolViewModel, onClose: () -
         value = gross,
         onValueChange = { gross = it },
         label = { Text("Gross weight (g)") },
+        supportingText = weightHint(gross)?.let { hint -> { Text(hint) } },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         singleLine = true,
         modifier = Modifier.fillMaxWidth(),

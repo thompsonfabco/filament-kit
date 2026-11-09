@@ -120,8 +120,8 @@ Step by step: [Install the Android app](install-android-app.md). In short: insta
 Releases page (or from your server at `https://<computer name>.local:8710/app.apk`), run `sudo filament-kit pair`
 on the server, and scan the QR code it prints, or pick the server in the app, compare the fingerprint, tap
 **It matches** and type the 6-digit code. The code expires after about 10 minutes and works once;
-`sudo filament-kit pair` makes a new one. The switch **Skip the fingerprint check for new servers** in the app's
-**Settings** is off by default. On Android 17 and newer the app needs **Local network** access.
+`sudo filament-kit pair` makes a new one. The switch **Skip the fingerprint check for new servers** on the app's
+first pairing screen and in its **Settings** is off by default. On Android 17 and newer the app needs **Local network** access.
 
 The app updates itself: after `sudo filament-kit update` to a release with a newer app, the home screen offers
 it. `sudo filament-kit unpair` lists the paired phones; `sudo filament-kit unpair <id>` removes one. Using the app (printers, adding spools by hand or from label photos): [Using the Android app](android-app.md).

@@ -21,7 +21,7 @@ class PairRouterTest {
     @After fun tearDown() = server.close()
 
     private fun api(router: PairRouter, token: String? = "tok", onOffline: () -> Unit = {}): Api {
-        val client = OkHttpClient.Builder().addInterceptor(SessionWatcher(router, onOffline)).build()
+        val client = OkHttpClient.Builder().addInterceptor(SessionWatcher(router, onOffline = onOffline)).build()
         return Api(client, { server.ipUrl("/").toString().trimEnd('/') }, { token })
     }
 

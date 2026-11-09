@@ -7,8 +7,9 @@ the app first, see [Install the Android app](install-android-app.md); the server
 The home screen has these buttons: **Add spool**, **Add profile**, **Search**, **Printers** and **Settings**. A
 dot at the top shows the connection: green **Connected**, yellow **Connecting…** or **Needs local network
 access**, red **Can't reach the server** or **The server's certificate changed**, grey **Not paired**.
-**Add from label photos** is only there when AI label reading is turned on at the server. The app is light or dark
-as your phone is set.
+The dot follows the server while the app is open, within about 20 seconds. **Add from label photos** is only there
+when AI label reading is turned on at the server. The app is light or dark as your phone is set. The small line at
+the bottom shows the app's version and the server's.
 
 <img src="images/android-home.png" width="240" alt="The app's home screen, connected to a server">
 
@@ -51,12 +52,12 @@ problems are in [Install the Android app](install-android-app.md#common-problems
 **Forget server** (it asks to confirm; the spools stay on the server) unpairs this phone, and then you pair again
 as above. **Pair again** does it in one step. On the server, `sudo filament-kit unpair`
 lists paired phones and `sudo filament-kit unpair <id>` removes one; that phone is then asked to pair again. If the
-app shows **The server's certificate has changed**, it lists the new fingerprint: tap **Trust the new certificate** to
-keep this pairing, or **Pair again** to pair with a new code. If you didn't reinstall or move the server, another
+app shows **The server's certificate has changed**, it lists the new fingerprint, which you can compare with the one shown with a pairing code on the server. Tap
+**Trust the new certificate** to keep this pairing, or **Pair again** to pair with a new code. If you didn't reinstall or move the server, another
 device may be answering at that address, and trusting it gives that device this phone's access. If the server no
 longer knows this phone, for example after a reinstall with `--purge`, the app asks you to pair again.
 
-**Skip the fingerprint check for new servers**, in **Settings**, is off by default. With it on, picking a server from
+**Skip the fingerprint check for new servers**, on the first pairing screen and in **Settings**, is off by default. With it on, picking a server from
 the list or typing its address goes straight to the 6-digit code and the app trusts the certificate the server presents. A scanned
 QR code is checked either way, and a certificate that changes after pairing still asks you first.
 

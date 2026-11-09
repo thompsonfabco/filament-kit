@@ -14,6 +14,8 @@ data class MismatchText(
     val button: String,
     /** The one-tap "keep this pairing" button; only a saved pairing has one. */
     val trustButton: String? = null,
+    /** Where the fingerprint above can be compared. */
+    val whereToCheck: String? = null,
 )
 
 /** Texts of the pairing screens. Where a pairing code comes from is said here, so it changes in one place. */
@@ -52,6 +54,7 @@ object PairTexts {
             actualLabel = "New fingerprint",
             button = "Pair again",
             trustButton = "Trust the new certificate",
+            whereToCheck = "To check it, compare it with the fingerprint shown with a pairing code on the server.",
         )
         MismatchSource.QR -> MismatchText(
             title = "This pairing code doesn't match the server",

@@ -37,7 +37,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -50,6 +53,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.thompsonfabco.filamentkit.net.ProfileStatus
 import com.thompsonfabco.filamentkit.net.ServerInfo
+import com.thompsonfabco.filamentkit.session.CONNECTION_POLL_MS
 import com.thompsonfabco.filamentkit.ui.home.VersionLine
 import com.thompsonfabco.filamentkit.ui.home.versionLine
 import com.thompsonfabco.filamentkit.session.AppViewModel
@@ -86,6 +90,7 @@ import com.thompsonfabco.filamentkit.ui.spool.closeSpoolCard
 import com.thompsonfabco.filamentkit.ui.spool.SpoolUiState
 import com.thompsonfabco.filamentkit.ui.spool.SpoolViewModel
 import com.thompsonfabco.filamentkit.update.UpdateUi
+import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -166,6 +171,22 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
     }
     val labelPhotos = showLabelPhotos(info)
     val version = versionLine(BuildConfig.VERSION_NAME, config.isPaired(), info?.version)
+    // On screen: the dot follows the server, and is checked right away on return to the app. Not while pairing, where
+    // nothing shows it.
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val pairing = route == Routes.PAIR
+    LaunchedEffect(lifecycle, pairing) {
+        if (pairing) return@LaunchedEffect
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) {
+                app.session.recheck()
+                delay(CONNECTION_POLL_MS)
+            }
+        }
+    }
+    LaunchedEffect(lifecycle, updater) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { updater?.onResumed() }
+    }
 
     // Global 401 / certificate change: go to Pair (once per request, also across rotation).
     val pairRequests by app.router.requests.collectAsStateWithLifecycle()
@@ -229,6 +250,8 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
                             nav.navigateClearing(Routes.HOME)
                         },
                         modifier = Modifier.weight(1f),
+                        skipCheck = skipFingerprintCheck,
+                        onSkipCheck = app::setSkipFingerprintCheck,
                         canTrust = { config.canTrust(it.expected) },
                         onTrust = { m -> app.trustCertificate(m.expected, m.actual) { nav.navigateClearing(Routes.HOME) } },
                     )
