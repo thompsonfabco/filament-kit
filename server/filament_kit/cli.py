@@ -1910,6 +1910,9 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     udx.add_argument("--feed", action="store_true", help=argparse.SUPPRESS)  # the new program, after an update
     udx.add_argument("--scheduled", action="store_true", help="the timer's run: only with the updates module on "
                                                               "and a check due")
+    udx.add_argument("--channel", choices=("stable", "nightly"),
+                     help="follow signed releases (stable, the default) or the untested, unsigned nightly "
+                          "prereleases from now on, and update on that channel now (root)")
     un = sub.add_parser("uninstall", help="remove the kit with the kept release's uninstall.sh (root); --purge "
                                           "also deletes the data, after a typed confirmation")
     un.add_argument("--purge", action="store_true", help="also delete settings, spool data, paired phones, backups")
@@ -1995,6 +1998,8 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
             return updates.rollback(cfg)
         if args.feed:
             return updates.feed_now(cfg)
+        if args.channel:
+            return updates.set_channel(cfg, args.channel)
         return updates.update(cfg, scheduled=args.scheduled)
     if args.cmd == "modules":
         if args.modules_cmd == "units":

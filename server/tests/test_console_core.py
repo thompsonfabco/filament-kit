@@ -736,7 +736,7 @@ def test_check_info_returns_what_the_cli_prints_and_saves_it_for_the_page(env, m
     monkeypatch.setattr(updates, "current_version", lambda: "0.5.0")
     info = updates.check_info(config.load(), fetcher=Fetcher(), now=100.0)
     assert info == {"installed": "0.5.0", "latest": "0.6.0", "newer": True, "held": None, "notes": "New things.",
-                    "going_back": "## Going back\nDrop the thing."}
+                    "going_back": "## Going back\nDrop the thing.", "channel": "stable"}
     v = updates.view(config.load())
     assert (v["installed"], v["latest"], v["newer"], v["checked_at"]) == ("0.5.0", "0.6.0", True, 100.0)
     assert v["notes"] == "New things." and v["going_back"].endswith("Drop the thing.")
@@ -932,6 +932,7 @@ def test_helper_ops_are_the_closed_list():
                                      "trust_status", "trust_add", "trust_list", "trust_rename", "trust_revoke",
                                      "trust_revoke_all", "trust_enabled"}
     assert set(setup_helper.JOBS) == {"apply", "update", "rollback", "check", "station_pair", "library_update",
-                                      "library_rollback", "remote_issue", "backup", "restore"}
+                                      "library_rollback", "remote_issue", "channel_nightly", "channel_stable",
+                                      "backup", "restore"}
     assert set(setup_helper.BUSY) == set(setup_helper.JOBS)
     assert HOME and H     # the shared fixtures' constants are the ones in use
