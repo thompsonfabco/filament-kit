@@ -4,6 +4,8 @@
 
 const printerPath = (p, what) => `printers/${encodeURIComponent(p.serial)}/${what}`;
 const nice = (s) => String(s).replace(/_/g, " ");
+const dotted = (...parts) => parts.filter(Boolean).map((t) => ` · ${t}`).join("");
+const hostPort = (p) => `${p.host.includes(":") ? `[${p.host}]` : p.host}:${p.port}`;
 
 function testButton(p, box) {
   return h("button", { class: "secondary", textContent: "Test", on: { click: async () => {
@@ -34,7 +36,7 @@ function bambuRow(p) {
   const box = boxFor("printer:" + p.serial), code = secret("Access Code (printer: Settings > Network/LAN)");
   const mapBox = boxFor("map:" + p.serial);
   return h("div", { class: "item" },
-    h("p", {}, h("b", { textContent: p.name }), S.printers.klipper ? " Bambu" : "", ` · ${p.model || ""} · ${p.ip || "no address yet"} · serial ${p.serial} `,
+    h("p", {}, h("b", { textContent: p.name }), S.printers.klipper ? " Bambu" : "", `${dotted(p.model, p.ip || "no address yet", `serial ${p.serial}`)} `,
       pill(p.state === "connected", "connected", nice(p.state))),
     h("div", { class: "row" }, code,
       h("button", { textContent: p.configured ? "Replace code" : "Connect", on: { click: () => change(box, printerPath(p, "code"), { access_code: code.value }, null, [code]) } })),
@@ -81,7 +83,7 @@ function followMap(p, box) {
 function klipperRow(p) {
   const box = boxFor("printer:" + p.serial), key = secret("Moonraker API key (optional)");
   if (!p.configured) return h("div", { class: "item" },
-    h("p", {}, h("b", { textContent: p.name }), ` · found at ${p.host}:${p.port}`),
+    h("p", {}, h("b", { textContent: p.name }), ` · found at ${hostPort(p)}`),
     h("div", { class: "row" }, key,
       h("button", { textContent: "Use this printer", on: { click: () => change(box, printerPath(p, "connect"), { api_key: key.value }, null, [key]) } }),
       testButton(p, box), forgetButton(p, box, "A scan may find it again.")),
@@ -89,7 +91,7 @@ function klipperRow(p) {
   const lane = h("select", { ariaLabel: "Publish slots to Moonraker's lane data", on: { change: () => change(box, printerPath(p, "lane_data"), { mode: lane.value }) } },
     ...["auto", "on", "off"].map((m) => h("option", { value: m, textContent: `Lane data: ${m}`, selected: m === p.lane_data })));
   return h("div", { class: "item" },
-    h("p", {}, h("b", { textContent: p.name }), S.printers.bambu ? " Klipper" : "", ` · ${p.model || ""} · ${p.host}:${p.port} `,
+    h("p", {}, h("b", { textContent: p.name }), S.printers.bambu ? " Klipper" : "", `${dotted(p.model, hostPort(p))} `,
       pill(p.state === "connected", "connected", nice(p.state)), " ", pill(p.api_key, "API key set", "no API key")),
     h("div", { class: "row" }, key,
       h("button", { textContent: p.api_key ? "Replace key" : "Set key", on: { click: () => change(box, printerPath(p, "api_key"), { key: key.value }, null, [key]) } }),
@@ -109,11 +111,13 @@ function klipperRow(p) {
 }
 
 // ----- adding a printer: the form follows the family, so a Klipper printer is never asked for an Access Code -----
+let addFamily = null;       // every change redraws the tab: the form stays on the type you chose
 function addCard() {
   const P = S.printers, box = boxFor("printer-add");
-  const family = h("select", { ariaLabel: "Printer type", on: { change: () => show() } },
+  const family = h("select", { ariaLabel: "Printer type", on: { change: () => { addFamily = family.value; show(); } } },
     ...(P.bambu ? [h("option", { value: "bambu", textContent: "Bambu" })] : []),
     ...(P.klipper ? [h("option", { value: "klipper", textContent: "Klipper" })] : []));
+  if (addFamily && P[addFamily]) family.value = addFamily;
   const fields = h("div");
   const name = h("input", { placeholder: "name (optional)" });
   function show() {
