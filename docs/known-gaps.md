@@ -59,8 +59,9 @@ fixed.
 16. **The setup page's data still shows serials and addresses on the home network (v0.4.3).** The new Overview and job
     log hide them until you give the setup code, but the page's older state (`/setup/api/state`) still lists printer
     serial numbers and addresses to any device on the home network without it, until a later stage of the console.
-17. **Going back to v0.4.0 leaves the console's job unit (v0.4.3).** `filament-kit-setup-job@.service` stays on disk,
-    unused, after `sudo filament-kit update --rollback`; the earlier setup page does not call it.
+17. **Going back from v0.4.3 leaves the console's job unit.** `filament-kit-setup-job@.service` stays on disk, unused,
+    after `sudo filament-kit update --rollback` from v0.4.3; the earlier setup page does not call it. From v0.4.4 a
+    rollback removes the unit files the version it leaves introduced.
 
 ## How this was first checked (v0.2.0)
 

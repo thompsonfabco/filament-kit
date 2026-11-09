@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import shutil
 from pathlib import Path
 
 import pytest
@@ -523,3 +524,137 @@ def test_update_runs_the_real_install_sh(env, srv, key, capsys):
     out = capsys.readouterr().out
     assert "installed" in out or "updated filament-kit 1.0.0 -> 1.1.0" in out
     assert not (env / "opt/releases/.work").exists()
+
+
+# ---------------------------------------------------------------- units the version being left introduced
+
+def _ship(env, *units):
+    """What install.sh leaves in resources/systemd: exactly these unit files."""
+    d = env / "opt" / "resources" / "systemd"
+    shutil.rmtree(d, ignore_errors=True)
+    d.mkdir(parents=True)
+    for u in units:
+        (d / u).write_text("[Unit]\n")
+
+
+def _ships_then(env, rc, *units):
+    def install():
+        _ship(env, *units)
+        return rc
+    return install
+
+
+NEWER_UNITS = ("filament-kit.service", "filament-kit-new.timer", "filament-kit-new.service", "filament-kit-job@.service")
+
+
+@pytest.fixture
+def unit_dir(env, monkeypatch):
+    d = env / "units"
+    d.mkdir()
+    monkeypatch.setattr(updates, "UNIT_DIR", str(d))
+    for u in NEWER_UNITS:
+        (d / u).write_text("[Unit]\n")
+    return d
+
+
+def _updated_to_1_1_0(env, srv, monkeypatch):
+    srv.add("1.0.0")
+    srv.add("1.1.0")
+    cfg = _cfg(env)
+    assert updates.update(cfg, fetcher=srv.fetcher(), run=Runner()) == 0
+    monkeypatch.setattr(updates, "current_version", lambda: "1.1.0")
+    _ship(env, *NEWER_UNITS)
+    return cfg
+
+
+def test_rollback_removes_the_units_only_the_newer_version_ships(env, srv, key, systemd, unit_dir, monkeypatch, capsys):
+    cfg = _updated_to_1_1_0(env, srv, monkeypatch)
+    (unit_dir / "someone-elses.service").write_text("[Unit]\n")
+    run = Runner({"filament-kit-1.0.0": _ships_then(env, 0, "filament-kit.service")})
+    assert updates.rollback(cfg, run=run) == 0
+    assert sorted(p.name for p in unit_dir.iterdir()) == ["filament-kit.service", "someone-elses.service"]
+    assert ["systemctl", "disable", "--now", "filament-kit-new.timer"] in run.cmds
+    assert ["systemctl", "disable", "--now", "filament-kit-new.service"] in run.cmds
+    assert run.cmds.count(["systemctl", "daemon-reload"]) == 1
+    assert "filament-kit-job@.service" in capsys.readouterr().out
+
+
+def test_rollback_never_stops_a_template_it_may_be_running_in(env, srv, key, systemd, unit_dir, monkeypatch):
+    """The setup page's rollback runs inside filament-kit-setup-job@rollback.service: its file goes, it runs on."""
+    cfg = _updated_to_1_1_0(env, srv, monkeypatch)
+    run = Runner({"filament-kit-1.0.0": _ships_then(env, 0, "filament-kit.service")})
+    assert updates.rollback(cfg, run=run) == 0
+    assert ["systemctl", "disable", "filament-kit-job@.service"] in run.cmds
+    assert ["systemctl", "disable", "--now", "filament-kit-job@.service"] not in run.cmds
+    assert not [c for c in run.cmds if c[:2] == ["systemctl", "stop"] and any("job@" in w for w in c)]
+    assert not (unit_dir / "filament-kit-job@.service").exists()
+
+
+def test_failed_rollback_removes_no_unit(env, srv, key, systemd, unit_dir, monkeypatch):
+    cfg = _updated_to_1_1_0(env, srv, monkeypatch)
+    run = Runner({"filament-kit-1.0.0": _ships_then(env, 1, "filament-kit.service")})
+    assert updates.rollback(cfg, run=run) == 1
+    assert (unit_dir / "filament-kit-new.timer").exists() and (unit_dir / "filament-kit-job@.service").exists()
+
+
+def test_rollback_with_the_same_units_reloads_nothing(env, srv, key, systemd, unit_dir, monkeypatch):
+    cfg = _updated_to_1_1_0(env, srv, monkeypatch)
+    run = Runner({"filament-kit-1.0.0": _ships_then(env, 0, *NEWER_UNITS)})
+    assert updates.rollback(cfg, run=run) == 0
+    assert ["systemctl", "daemon-reload"] not in run.cmds
+    assert (unit_dir / "filament-kit-new.timer").exists()
+
+
+def test_rollback_leaving_no_unit_list_removes_nothing(env, srv, key, systemd, unit_dir, monkeypatch):
+    """An install that succeeded but left no resources/systemd says nothing about what the older version ships."""
+    cfg = _updated_to_1_1_0(env, srv, monkeypatch)
+
+    def install():
+        shutil.rmtree(env / "opt" / "resources")
+        return 0
+    assert updates.rollback(cfg, run=Runner({"filament-kit-1.0.0": install})) == 0
+    assert (unit_dir / "filament-kit-new.timer").exists()
+
+
+def test_a_unit_that_cannot_be_removed_only_warns(env, srv, key, systemd, unit_dir, monkeypatch, capsys):
+    cfg = _updated_to_1_1_0(env, srv, monkeypatch)
+    real = Path.unlink
+
+    def unlink(self, *a, **kw):
+        if self.name == "filament-kit-new.timer":
+            raise PermissionError("read-only")
+        return real(self, *a, **kw)
+    monkeypatch.setattr(Path, "unlink", unlink)
+    run = Runner({"filament-kit-1.0.0": _ships_then(env, 0, "filament-kit.service")})
+    assert updates.rollback(cfg, run=run) == 0
+    err = capsys.readouterr().err
+    assert "filament-kit-new.timer" in err and "warning" in err
+    assert not (unit_dir / "filament-kit-new.service").exists()
+
+
+def test_failed_update_put_back_removes_what_the_failed_version_added(env, srv, key, systemd, unit_dir):
+    srv.add("1.0.0")
+    srv.add("1.1.0")
+    _ship(env, "filament-kit.service")
+    run = Runner({"filament-kit-1.1.0": _ships_then(env, 1, "filament-kit.service", "filament-kit-new.timer"),
+                  "filament-kit-1.0.0": _ships_then(env, 0, "filament-kit.service")})
+    assert updates.update(_cfg(env), fetcher=srv.fetcher(), run=run) == 1
+    assert run.installed == ["filament-kit-1.1.0", "filament-kit-1.0.0"]
+    assert not (unit_dir / "filament-kit-new.timer").exists()
+    assert (unit_dir / "filament-kit.service").exists()
+
+
+def test_an_update_removes_no_unit(env, srv, key, systemd, unit_dir):
+    srv.add("1.0.0")
+    srv.add("1.1.0")
+    _ship(env, "filament-kit.service", "filament-kit-new.timer")
+    run = Runner({"filament-kit-1.1.0": _ships_then(env, 0, "filament-kit.service")})
+    assert updates.update(_cfg(env), fetcher=srv.fetcher(), run=run) == 0
+    assert (unit_dir / "filament-kit-new.timer").exists()
+
+
+def test_no_systemd_touches_no_unit_file(env, srv, key, unit_dir, monkeypatch):
+    cfg = _updated_to_1_1_0(env, srv, monkeypatch)
+    run = Runner({"filament-kit-1.0.0": _ships_then(env, 0, "filament-kit.service")})
+    assert updates.rollback(cfg, run=run) == 0
+    assert (unit_dir / "filament-kit-new.timer").exists()
