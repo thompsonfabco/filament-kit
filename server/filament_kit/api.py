@@ -502,6 +502,34 @@ def _bridge_routes(printers, mapper: mapping.Mapper, sm) -> list[Route]:
         finally:
             audit(what, device, result, **fields)
 
+    def manual_call(what: str, fn, write: bool = True):
+        """A manual-map step (bridge/manual.py) for the app: the same answers as on the setup page."""
+        from .bridge import manual
+
+        @_authed
+        async def route(request: Request):
+            serial = request.path_params["id"]
+            await run_in_threadpool(bambu_only, serial)
+            body = await _json(request) if request.method == "POST" else {}
+            try:
+                out = await run_in_threadpool(fn, mapper.manual, serial, body)
+            except manual.ManualError as e:
+                return _err(e.status, e.code, str(e))
+            if write:
+                await run_in_threadpool(audit, f"manual map {what}", request.state.device, "ok", serial=serial)
+            return JSONResponse(out)
+        return route
+
+    manual_routes = [
+        ("start", "POST", lambda mm, s, b: mm.start(s)),
+        ("", "GET", lambda mm, s, b: mm.view(s)),
+        ("confirm", "POST", lambda mm, s, b: mm.confirm(s, b.get("session"), b.get("position"), b.get("reported"),
+                                                         b.get("nozzle"), b.get("by_hand") is True)),
+        ("skip", "POST", lambda mm, s, b: mm.skip(s, b.get("session"), b.get("position"))),
+        ("stop", "POST", lambda mm, s, b: mm.stop(s, b.get("session"))),
+        ("offer", "POST", lambda mm, s, b: mm.answer_offer(s, b.get("share") is True)),
+    ]
+
     @_authed
     async def map_start(request: Request):
         serial = request.path_params["id"]
@@ -611,6 +639,9 @@ def _bridge_routes(printers, mapper: mapping.Mapper, sm) -> list[Route]:
     return [
         Route("/api/printers/{id}/map", map_start, methods=["POST"]),
         Route("/api/printers/{id}/map", map_get),
+        *[Route("/api/printers/{id}/manual-map" + (f"/{name}" if name else ""),
+                manual_call(name or "view", fn, write=method == "POST"), methods=[method])
+          for name, method, fn in manual_routes],
         Route("/api/printers/{id}/report", map_report, methods=["POST"]),
         Route("/api/printers/{id}/slots/{label}/load", slot_load, methods=["POST"]),
         Route("/api/printers/{id}/slots/{label}/unload", slot_unload, methods=["POST"]),

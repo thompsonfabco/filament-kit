@@ -56,6 +56,8 @@ class SlotMap:
     learned: dict[str, str] = field(default_factory=dict)   # printer number (str) -> label, learned from prints
     mismatch_streak: int = 0            # prints in a row whose decoded slot held another filament than sliced
     suspect: bool = False               # two such prints: logging only (observe) until a re-map (auto when idle)
+    by_user: dict[str, dict] = field(default_factory=dict)  # label -> {by: user | user-unverified, at[, nozzle]}:
+                                                            # the owner said which slot this is (manual.py)
 
 
 def default_global(ams_id: int, tray_id: int, model=None, hw: hardware.Hardware | None = None) -> int:
@@ -161,7 +163,10 @@ def load_map(serial: str) -> SlotMap:
                    fingerprint=fp if isinstance(fp, list) else None, stale=bool(d.get('stale')),
                    scheme=scheme if isinstance(scheme, str) and scheme else None, learned=learned,
                    mismatch_streak=streak if isinstance(streak, int) and streak >= 0 else 0,
-                   suspect=bool(d.get('suspect')))
+                   suspect=bool(d.get('suspect')),
+                   by_user={k: v for k, v in (d.get('by_user') or {}).items()
+                            if isinstance(v, dict) and v.get('by') in ('user', 'user-unverified') and k in slots}
+                   if isinstance(d.get('by_user'), dict) else {})
 
 
 # Every slot-map save in this process (mapping job, layout watch, usage) runs under this lock, so a
@@ -179,7 +184,7 @@ def save_map(serial: str, m: SlotMap) -> None:
         m.updated = _last_updated = max(time.time(), _last_updated + 0.001)
         data = {'slots': m.slots, 'calibrated': m.calibrated, 'observe': m.observe, 'updated': m.updated,
                 'fingerprint': m.fingerprint, 'stale': m.stale, 'scheme': m.scheme, 'learned': m.learned,
-                'mismatch_streak': m.mismatch_streak, 'suspect': m.suspect}
+                'mismatch_streak': m.mismatch_streak, 'suspect': m.suspect, 'by_user': m.by_user}
         _write_atomic(f, json.dumps(data, indent=2).encode("utf-8"), 0o600, state_owned=True)
 
 

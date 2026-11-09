@@ -28,6 +28,17 @@ from ..bridge.connection import PrinterOffline, UnknownPrinter
 from ..bridge.klipper import discovery
 from ..bridge.slottest import NoStatus, PrinterBusy
 
+# Map by loading filament (bridge/manual.py): (route, method, call)
+MANUAL_STEPS = [
+    ("start", "POST", lambda mm, s, b: mm.start(s)),
+    ("", "GET", lambda mm, s, b: mm.view(s)),
+    ("confirm", "POST", lambda mm, s, b: mm.confirm(s, b.get("session"), b.get("position"), b.get("reported"),
+                                                     b.get("nozzle"), b.get("by_hand") is True)),
+    ("skip", "POST", lambda mm, s, b: mm.skip(s, b.get("session"), b.get("position"))),
+    ("stop", "POST", lambda mm, s, b: mm.stop(s, b.get("session"))),
+    ("offer", "POST", lambda mm, s, b: mm.answer_offer(s, b.get("share") is True)),
+]
+
 SCAN_GAP = 30.0
 API_KEY = re.compile(r"[!-~]{1,64}")
 BAD_API_KEY = "a Moonraker API key has no spaces and at most 64 characters"
@@ -281,6 +292,24 @@ def routes(page) -> list[tuple]:
         page.audit(request, f"printer {serial} slot mapping started")
         return {"ok": True, "job_id": job}
 
+    def manual(what: str, fn):
+        """A manual-map step (bridge/manual.py): the same answers as the kit API gives the app."""
+        from ..bridge import manual as manual_mod
+
+        async def route(request, body):
+            serial = page._serial(request)
+
+            def run():
+                try:
+                    return fn(mapper_of(serial).manual, serial, body)
+                except manual_mod.ManualError as e:
+                    raise Refused(e.status, str(e)) from None
+            out = await anyio.to_thread.run_sync(run)
+            if what != "view":
+                page.audit(request, f"printer {serial} manual map {what}")
+            return out
+        return route
+
     async def map_get(request, body):
         serial = page._serial(request)
         return await anyio.to_thread.run_sync(lambda: mapper_of(serial).view(serial))
@@ -300,4 +329,6 @@ def routes(page) -> list[tuple]:
             (one + "/api_key", w(set_key), "POST"), (one + "/lane_data", w(lane_data), "POST"),
             (one + "/detect", g(detect), "POST"),
             (one + "/map", w(map_start), "POST"), (one + "/map", g(map_get), "GET"),
-            (one + "/map/stop", w(map_stop), "POST")]
+            (one + "/map/stop", w(map_stop), "POST"),
+            *[(one + "/manual-map" + (f"/{name}" if name else ""), (w if method == "POST" else g)(manual(name or "view", fn)),
+               method) for name, method, fn in MANUAL_STEPS]]

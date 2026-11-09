@@ -90,6 +90,53 @@ class LoadRunning(AlreadyRunning):
     message = "a spool is being loaded into this printer; try again in a moment"
 
 
+class ManualRunning(AlreadyRunning):
+    """The owner is mapping this printer by hand (manual.py): no automatic job until that ends."""
+
+    message = "this printer is being mapped by loading filament; finish or stop that first"
+
+
+_MANUAL: set[str] = set()
+_MANUAL_GUARD = threading.Lock()
+
+
+def manual_begin(serial: str) -> bool:
+    """A manual session may open: no job runs for the printer. False when one does."""
+    with _MANUAL_GUARD:
+        if serial in _MANUAL or serial in _MAPPING_NOW or _ProcessLock.held_elsewhere(serial):
+            return False
+        _MANUAL.add(serial)
+        return True
+
+
+def manual_end(serial: str) -> None:
+    with _MANUAL_GUARD:
+        _MANUAL.discard(serial)
+
+
+_MAPPING_NOW: set[str] = set()     # serials whose automatic job runs in this process
+
+
+def _keep_owner_entries(serial: str, smap, problems: list[str]) -> None:
+    """The owner's entries win over what a job found: kept, and a disagreement is said, never applied."""
+    old = ams.load_map(serial)
+    for label, meta in old.by_user.items():
+        mine = old.slots.get(label)
+        if not isinstance(mine, dict):
+            continue
+        found = smap.slots.get(label)
+        if isinstance(found, dict) and (found.get("ams_id"), found.get("tray_id")) != (mine.get("ams_id"), mine.get("tray_id")):
+            problems.append(f"{label}: the automatic mapping found another slot than you confirmed on "
+                            f"{str(meta.get('at', ''))[:10]}; your entry stays (map by loading filament again to change it)")
+        for other, s in list(smap.slots.items()):      # the owner's address belongs to the owner's label
+            if other != label and isinstance(s, dict) and (s.get("ams_id"), s.get("tray_id")) == (mine.get("ams_id"), mine.get("tray_id")):
+                del smap.slots[other]
+        smap.slots[label] = {**mine, "global_id": (found or {}).get("global_id", mine.get("global_id"))
+                             if isinstance(found, dict) and (found.get("ams_id"), found.get("tray_id")) ==
+                             (mine.get("ams_id"), mine.get("tray_id")) else mine.get("global_id")}
+        smap.by_user[label] = meta
+
+
 class CertChanged(Exception):
     """The printer's certificate changed (state `cert_changed`): nothing is sent until it is added again."""
 
@@ -323,6 +370,8 @@ def _distrust(serial: str) -> None:
 
 class Mapper:
     def __init__(self, manager):
+        from . import manual
+        self.manual = manual.ManualMaps(manager)     # map by loading filament: the owner's fallback, one per process
         self._m = manager
         self._lock = threading.Lock()
         self._jobs: dict[str, _Job] = {}
@@ -338,11 +387,20 @@ class Mapper:
             j = self._jobs.get(serial)
             if j is not None and (j.state == "running" or not j.released.wait(5)):
                 raise AlreadyRunning(serial)    # a finished job is still giving the printer back: wait for that
-            plock = _take_for_mapping(serial)
+            with _MANUAL_GUARD:
+                if serial in _MANUAL:
+                    raise ManualRunning(serial)
+                _MAPPING_NOW.add(serial)
             try:
-                check_ready(self._m, serial)
+                plock = _take_for_mapping(serial)
+                try:
+                    check_ready(self._m, serial)
+                except BaseException:
+                    _give_back(serial, plock)
+                    raise
             except BaseException:
-                _give_back(serial, plock)
+                with _MANUAL_GUARD:
+                    _MAPPING_NOW.discard(serial)
                 raise
             job = _Job(uuid.uuid4().hex, auto=auto)
             if auto:
@@ -369,6 +427,8 @@ class Mapper:
             job.problems.append(f"error: the mapping job could not start ({type(e).__name__}: {e})")
             _save_status(serial, job)
             _give_back(serial, plock)
+            with _MANUAL_GUARD:
+                _MAPPING_NOW.discard(serial)
             job.released.set()
             raise
         with self._lock:
@@ -502,6 +562,8 @@ class Mapper:
                 try:
                     _give_back(serial, plock)
                 finally:
+                    with _MANUAL_GUARD:
+                        _MAPPING_NOW.discard(serial)
                     job.released.set()
             log.info("mapping %s: job %s %s; problems %s", serial, job.id, job.state, job.problems)
 
@@ -564,6 +626,7 @@ class Mapper:
                 problems.append("the calibration job did not confirm the slot numbering")
             problems.append(OBSERVE_NOTE)
         step("Saving the slot map")
+        _keep_owner_entries(serial, smap, problems)
         smap.fingerprint, smap.stale = fp, False
         ams.save_map(serial, smap)
         job.problems = problems
