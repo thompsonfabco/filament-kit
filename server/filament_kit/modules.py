@@ -41,7 +41,7 @@ MODULES: dict[str, Module] = {m.name: m for m in (
        units=("spoolman.service",), apt=("unzip",)),
     # Spoolman need is checked by validate(): local module or a remote spoolman_url.
     _m("server", "Server", "App server: pairing, inventory, API, avahi announcement",
-       units=("filament-kit.service", "filament-kit-setup.socket"), apt=("avahi-daemon", "qrencode"),
+       units=("filament-kit.service", "filament-kit-setup.socket"), apt=("avahi-daemon", "libnss-mdns", "qrencode"),
        needs_text="Spoolman (this machine or a remote one)"),
     _m("ai_intake", "AI intake", "Claude reads spool labels from photos (needs an Anthropic API key)",
        depends=("server",), needs_text="an Anthropic API key", optional_ai=True),
@@ -54,7 +54,7 @@ MODULES: dict[str, Module] = {m.name: m for m in (
     _m("backup", "Backup", "Nightly backup of Spoolman db, settings and state",
        units=("filament-kit-backup.timer",)),
     _m("station", "Station", "USB scale and PN532 reader, read-only HTTP",
-       units=("filament-kit-station.service",), apt=("alsa-utils",), apt_lean=("espeak-ng", "ffmpeg")),
+       units=("filament-kit-station.service",), apt=("alsa-utils", "libnss-mdns"), apt_lean=("espeak-ng", "ffmpeg")),
     _m("web", "Web", "Browser UI and the MCP endpoint, on top of the server",
        units=("filament-kit-web.service",), depends=("server",)),
     _m("remote", "Remote access", "Public https name for the web UI (nginx, certbot)",

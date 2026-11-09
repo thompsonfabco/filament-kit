@@ -24,7 +24,7 @@ import threading
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 
-from .. import config
+from .. import config, hostaddr
 from . import xmlfile
 from ..pairing import _write_atomic, open_lock
 
@@ -294,11 +294,12 @@ def detected(serial: str, ip: str, model: str = "", name: str = "", keep_ip: boo
             p = Printer(serial=serial, name=name or serial, model=model, ip=ip)
         else:
             before = (p.ip, p.model, p.name)
-            if p.configured and ip != p.ip:
+            by_name = p.configured and p.ip and not hostaddr.is_literal(p.ip)   # a name the owner typed stays: it resolves at use
+            if p.configured and ip != p.ip and not by_name:
                 log.warning("printer %s announced itself at %s (registry has %s)%s", serial, ip, p.ip,
                             "; ignored while the printer is connected at the old address" if keep_ip else
                             "; following it")
-            if not (p.configured and keep_ip):
+            if not (p.configured and keep_ip) and not by_name:
                 p.ip = ip
             if not p.configured:
                 p.model = model or p.model
@@ -393,6 +394,36 @@ def set_api_key(pid: str, key: str) -> bool:
         if p is None:
             return False
         p.api_key = key.strip()
+        _write(printers)
+        return True
+
+
+def configure_klipper(pid: str, name: str = "") -> bool:
+    """A Klipper printer a scan found goes into use. False when there is no such printer."""
+    with _locked():
+        printers = _read()
+        p = printers.get(pid)
+        if p is None:
+            return False
+        p.configured = True
+        p.name = name.strip() or p.name
+        _write(printers)
+        return True
+
+
+def set_address(serial: str, host: str, port: int | None = None) -> bool:
+    """Where the printer is, as typed: Bambu's `ip`, Klipper's `host` and `port`. Its pinned certificate stays: the pin is
+    of the printer, not of its address. False when there is no such printer."""
+    with _locked():
+        printers = _read()
+        p = printers.get(serial)
+        if p is None:
+            return False
+        if p.family == "klipper":
+            p.host = host
+            p.port = int(port) if port else p.port
+        else:
+            p.ip = host
         _write(printers)
         return True
 

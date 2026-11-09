@@ -42,6 +42,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response, StreamingResponse
 from starlette.routing import Route
 
+from .. import hostaddr
 from . import models, registry, tlspin
 
 log = logging.getLogger(__name__)
@@ -181,7 +182,7 @@ class RtspRelay:
                 return
             if not self._track(up):
                 return
-            real = f"rtsps://{self.ip}:{self.port}"
+            real = f"rtsps://{hostaddr.url_host(self.ip)}:{self.port}"
             up.sendall(f"DESCRIBE {real}{CAM_PATH} RTSP/1.0\r\nCSeq: 0\r\n\r\n".encode())
             resp, _ = _read_rtsp(up, b"")
             m = re.search(rb'Digest realm="([^"]+)".*?nonce="([^"]+)"', resp)

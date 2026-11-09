@@ -17,7 +17,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-from . import apply, config, inventory, klipper_cli, library, menu_ui, modules, pairing, secret_input
+from . import hostaddr, apply, config, inventory, klipper_cli, library, menu_ui, modules, pairing, secret_input
 from . import status as status_rows
 from .bridge import registry
 from .profiles import builds, lines as lines_mod
@@ -381,10 +381,14 @@ def _printers_action(choice: str, printers: list) -> None:
         return
     if choice == "2":
         name = (_ask("Name: ") or "").strip()
-        ip = (_ask("IP address: ") or "").strip()
+        ip = hostaddr.clean(_ask("Address (IP or name): ") or "")
         serial = (_ask("Serial number: ") or "").strip()
         if not (name and ip and serial):
-            print("Name, IP address and serial number are all needed.")
+            print("Name, address and serial number are all needed.")
+            return
+        problem = hostaddr.form_error(ip) or hostaddr.resolve_error(ip)
+        if problem:
+            print(f"Not added: {problem}.")
             return
         if not registry.SERIAL.fullmatch(serial):
             print(f"Not added: {registry.BAD_SERIAL}.")

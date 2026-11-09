@@ -62,7 +62,7 @@ const sections = h("div");
 const TABS = {
   overview: ["Overview", () => overviewTab()],
   modules: ["Modules", () => [modesCard(), modulesCard(), applyCard()]],
-  printers: ["Printers", () => [printersCard()]],
+  printers: ["Printers", () => printersTab()],
   devices: ["Devices", () => [pairCard(), readersCard()]],
   settings: ["Settings", () => [keyCard(), passphraseCard(), tokenCard(), addressCard()]],
   updates: ["Updates", () => updatesTab()],
@@ -94,55 +94,6 @@ function keyCard() {
         box.replaceChildren(h("p", { class: "muted", textContent: "Checking…" }));
         try { const r = await api("key/check", {}); say(box, r.text, r.ok); } catch (e) { say(box, e.message, false); }
       } } })),
-    box);
-}
-
-// ----- printers -----
-function printersCard() {
-  const P = S.printers;
-  if (!P.on) return card("Printers", h("p", { class: "muted", textContent: "The printers and klipper modules are off on this server (see Modules)." }));
-  const rows = P.list.map((p) => {
-    if (p.family === "klipper") return klipperRow(p);
-    const box = boxFor("printer:" + p.serial), code = secret("new Access Code");
-    return h("div", { class: "item" },
-      h("p", {}, h("b", { textContent: p.name }), ` ${p.model || ""} · ${p.ip || "no IP yet"} · serial ${p.serial} `,
-        pill(p.state === "connected", "connected", p.state.replace(/_/g, " "))),
-      h("div", { class: "row" }, code,
-        h("button", { textContent: p.configured ? "Replace code" : "Set code", on: { click: () => change(box, `printers/${encodeURIComponent(p.serial)}/code`, { access_code: code.value }, null, [code]) } }),
-        h("button", { class: "secondary", textContent: "Test", on: { click: async () => {
-          box.replaceChildren(h("p", { class: "muted", textContent: "Testing…" }));
-          try { const r = await api(`printers/${encodeURIComponent(p.serial)}/test`, {}); say(box, `${r.text}\nconnection: ${r.state.replace(/_/g, " ")}`, r.reachable); } catch (e) { say(box, e.message, false); }
-        } } }),
-        h("button", { class: "secondary", textContent: "Forget", on: { click: () => { if (window.confirm(`Forget ${p.name}? Its Access Code is deleted.`)) change(box, `printers/${encodeURIComponent(p.serial)}/forget`, {}); } } })),
-      box);
-  });
-  const ip = h("input", { placeholder: "IP address, e.g. 192.0.2.40", inputMode: "decimal" });
-  const ac = secret("Access Code (printer: Settings > Network/LAN)");
-  const name = h("input", { placeholder: "name (optional)" });
-  const serial = h("input", { placeholder: "serial (optional: read from the printer)", autocapitalize: "characters" });
-  const box = boxFor("printer-add");
-  return card("Printers",
-    ...(rows.length ? rows : [h("p", { class: "muted", textContent: "No printer yet. Printers on the network appear here once they announce themselves." })]),
-    P.klipper ? h("p", { class: "muted", textContent: "Klipper printers: add one at the server with sudo filament-kit klipper add <name> <host> (or klipper scan)." }) : null,
-    ...(P.bambu ? [h("h2", { textContent: "Add a Bambu printer by IP" }),
-      h("div", { class: "row" }, ip, ac), h("div", { class: "row" }, name, serial,
-        h("button", { textContent: "Add", on: { click: () => change(box, "printers", { ip: ip.value, access_code: ac.value, name: name.value, serial: serial.value },
-          (r) => say(box, `Added ${r.serial}.`, true), [ac]) } })),
-      box] : [h("p", { class: "muted", textContent: "Bambu printers: the printers module is off (see Modules)." })]));
-}
-
-// A Klipper printer (Moonraker): no Access Code and no TLS; Test asks Moonraker, Forget removes the entry.
-function klipperRow(p) {
-  const box = boxFor("printer:" + p.serial);
-  return h("div", { class: "item" },
-    h("p", {}, h("b", { textContent: p.name }), ` Klipper · ${p.model || ""} · ${p.host}:${p.port} `,
-      pill(p.state === "connected", "connected", p.state.replace(/_/g, " "))),
-    h("div", { class: "row" },
-      h("button", { class: "secondary", textContent: "Test", on: { click: async () => {
-        box.replaceChildren(h("p", { class: "muted", textContent: "Testing…" }));
-        try { const r = await api(`printers/${encodeURIComponent(p.serial)}/test`, {}); say(box, `${r.text}\nconnection: ${r.state.replace(/_/g, " ")}`, r.reachable); } catch (e) { say(box, e.message, false); }
-      } } }),
-      h("button", { class: "secondary", textContent: "Forget", on: { click: () => { if (window.confirm(`Forget ${p.name}? Its Moonraker API key, if one is saved, is deleted.`)) change(box, `printers/${encodeURIComponent(p.serial)}/forget`, {}); } } })),
     box);
 }
 
