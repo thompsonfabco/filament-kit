@@ -6,7 +6,8 @@
 # secrets, `migrate-scanner`, which reads the old calibration from /root and
 # writes the map, `update`, which installs a new release, `uninstall`, which runs the kept release's
 # uninstall.sh, `station` (the station PC: its pairing files in /etc/filament-kit-station), and `setup-code`,
-# which shows or replaces the setup page's code in /etc/filament-kit.
+# which shows or replaces the setup page's code in /etc/filament-kit, and `backup` and `restore`, which read and write
+# everything the kit keeps.
 # Everything else touches
 # the service's state in /var/lib/filament-kit and runs as the filament-kit
 # user, so the files it writes stay readable by the service.
@@ -40,6 +41,10 @@ case "${1:-}" in
     config | cert | modules | remote | migrate-ops | migrate-scanner | update | uninstall | station | setup-code)
         exec "$BIN" "$@"
         ;;
+esac
+# `backup` and `restore` read and write everything the kit keeps, its root-owned files too.
+case "${1:-}" in
+    backup | restore) exec "$BIN" "$@" ;;
 esac
 # `web passphrase` writes the root-owned passphrase file (and refuses unless root); `web status` reads as the user.
 if [ "${1:-}" = web ] && [ "${2:-}" = passphrase ]; then

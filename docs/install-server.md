@@ -261,6 +261,9 @@ running install.
   **Filament library** shows its version and last check, with **Update now**, a button to go back
   to the version before, and a box to add your own entry. Each takes the setup code, and the first two run as
   background jobs.
+- **Backups** (v0.4.4, on **Settings**). **Back up now**, the list of backups with **Download** as a zip, how many days
+  to keep, and **Restore** from a backup zip, also onto a freshly installed machine. See the
+  [user guide, Backups and restore](user-guide.md#backups-and-restore-v044).
 - **Updates.** Shows the installed and the latest release, when it was last checked, and the release notes of the
   latest. **Check now** asks GitHub for the latest release and needs the setup code; the page itself cannot reach GitHub, so
   a background job does it. **Update to <version>** asks you to confirm: the kit stops while it installs and starts

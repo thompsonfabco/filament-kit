@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Daily filament-kit backup (run by filament-kit-backup.service as root).
 # Writes /var/backups/filament-kit/<date>.tar.gz with a consistent copy of the
-# Spoolman database, /etc/filament-kit and /var/lib/filament-kit; keeps 14 days.
+# Spoolman database, /etc/filament-kit and /var/lib/filament-kit; keeps backup.keep_days days (default 14).
+# The setup page offers each as the same zip `filament-kit backup create` writes (filament_kit/backup.py).
 set -euo pipefail
 umask 077
 
@@ -10,7 +11,10 @@ SPOOLMAN_DB=/var/lib/spoolman/spoolman.db
 PYTHON=/opt/filament-kit/venv/bin/python
 
 mkdir -p "$DEST"
+# root only: a backup holds the setup code and the TLS key; the setup page gets one through the root helper
 chmod 700 "$DEST"
+KEEP=$("$PYTHON" -I -m filament_kit.backup keep-days 2>/dev/null) || KEEP=14
+case "$KEEP" in ''|*[!0-9]*) KEEP=14 ;; esac
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -51,7 +55,8 @@ tar -czf "$tmp" --acls --xattrs \
     -C "$work" . -C / "${paths[@]}"
 mv -f "$tmp" "$out"
 
-# Keep 14 days of backups.
-find "$DEST" -maxdepth 1 -name '*.tar.gz' -type f -mtime +13 -delete
+# Keep backup.keep_days days (14 unless set on the setup page): the nightly ones, the page's and a restore's own.
+find "$DEST" -maxdepth 1 -type f \( -name '*.tar.gz' -o -name 'filament-kit-backup-*.zip' -o -name 'pre-restore-*.zip' \) \
+    -mtime +$((KEEP - 1)) -delete
 
 echo "backup written: $out"

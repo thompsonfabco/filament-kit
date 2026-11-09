@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import logging
 import re
 import sys
@@ -69,6 +70,13 @@ class Helper:
     def __call__(self, req):
         self.calls.append(req["op"])
         return json.loads(json.dumps(setup_helper.handle(json.loads(json.dumps(req)))))
+
+    def open_file(self, req):
+        """As HelperClient.open_file: the reply, and the file the op opened."""
+        self.calls.append(req["op"])
+        r = setup_helper.handle(json.loads(json.dumps(req)))
+        fd = r.pop("fd", None)
+        return json.loads(json.dumps(r)), (os.fdopen(fd, "rb") if fd is not None else None)
 
 
 @pytest.fixture

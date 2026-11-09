@@ -98,6 +98,27 @@ class HelperClient:
         self.path = path or os.environ.get("FK_SETUP_SOCKET", "/run/filament-kit-setup/setup.sock")
         self.timeout = timeout
 
+    def open_file(self, req: dict):
+        """A request whose answer carries an open file beside the reply (op backup_open): (reply, file or None)."""
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+                s.settimeout(self.timeout)
+                s.connect(self.path)
+                s.sendall(json.dumps(req).encode("utf-8") + b"\n")
+                s.shutdown(socket.SHUT_WR)
+                data, fds, _flags, _addr = socket.recv_fds(s, 65536, 1)
+                while chunk := s.recv(65536):
+                    data += chunk
+                    if len(data) > 1024 * 1024:
+                        raise ValueError("reply too long")
+            reply = json.loads(data or b"null")
+            if not isinstance(reply, dict):
+                raise ValueError("not an object")
+            return reply, (os.fdopen(fds[0], "rb") if fds else None)
+        except (OSError, ValueError, AttributeError) as e:
+            log.error("setup: the root helper did not answer (%s)", type(e).__name__)
+            return {"ok": False, "status": 503, "error": "the setup helper did not answer"}, None
+
     def __call__(self, req: dict) -> dict:
         try:
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
@@ -177,6 +198,7 @@ class SetupPage:
         self.last_check = 0.0
         self.static = {n: (STATIC / n).read_bytes()
                        for n in ("setup.js", "setup_tabs.js", "setup_printers.js", "setup_trust.js", "setup_presets.js",
+                                 "setup_backup.js",
                                  "setup_logs.js",
                                  "setup.css")}
 
@@ -207,6 +229,7 @@ class SetupPage:
                  Route("/setup/setup_printers.js", self.asset, methods=["GET"]),
                  Route("/setup/setup_trust.js", self.asset, methods=["GET"]),
                  Route("/setup/setup_presets.js", self.asset, methods=["GET"]),
+                 Route("/setup/setup_backup.js", self.asset, methods=["GET"]),
                  Route("/setup/setup_logs.js", self.asset, methods=["GET"]),
                  Route("/setup/setup.css", self.asset, methods=["GET"])]
                 + [Route("/setup/api" + p, fn, methods=[m]) for p, fn, m in table])
@@ -291,7 +314,7 @@ class SetupPage:
     def _clear_trust(resp: Response) -> None:
         resp.delete_cookie(trusted.COOKIE, path="/setup", secure=True, httponly=True, samesite="strict")
 
-    def guard(self, fn, write: bool | str = False):
+    def guard(self, fn, write: bool | str = False, raw: bool = False):
         """`write`: True = a change the server makes itself (the helper's `check` first); "helper" = a change the
         helper makes, which checks the code in the same request. Either way a trusted computer's cookie may stand in for
         the code, and its time is renewed when it did."""
@@ -307,7 +330,8 @@ class SetupPage:
                 if request.method == "POST":
                     if not self._origin_ok(request):
                         return JSONResponse({"error": "bad origin"}, 403)
-                    body = await self._body(request)
+                    # raw: the body is a file the route reads itself; the code comes in a header
+                    body = {"code": request.headers.get("x-setup-code", "")} if raw else await self._body(request)
                     if write:
                         token = self._trusted_token(request, body)
                     if write == "helper":
@@ -316,7 +340,11 @@ class SetupPage:
                     elif write:
                         await self._code_ok(request, body)
                 res = await fn(request, body)
-                resp = JSONResponse(res, headers={"Cache-Control": "no-store"})
+                if isinstance(res, Response):           # a download
+                    res.headers["Cache-Control"] = "no-store"
+                    resp = res
+                else:
+                    resp = JSONResponse(res, headers={"Cache-Control": "no-store"})
                 if getattr(request.state, "clear_trust", False):
                     self._clear_trust(resp)
                 elif getattr(request.state, "set_trust", None) or token:
@@ -331,6 +359,17 @@ class SetupPage:
                 log.exception("setup %s", request.url.path)
                 return JSONResponse({"error": "internal error (see the server log)"}, 500)
         return route
+
+    async def _helper_file(self, req: dict):
+        """(reply, file) from a helper op that hands back an open file; Refused as _helper."""
+        req.setdefault("client", _CLIENT.get())
+        r, fh = await anyio.to_thread.run_sync(self.helper.open_file, req)
+        if not r.get("ok") or fh is None:
+            if fh is not None:
+                fh.close()
+            extra = {k: r[k] for k in ("needs", "trust_gone") if k in r}
+            raise Refused(int(r.get("status") or 500), str(r.get("error") or "the setup helper refused"), **extra)
+        return r, fh
 
     async def _helper(self, req: dict) -> dict:
         req.setdefault("client", _CLIENT.get())       # the address the helper's lockout counts against
@@ -353,7 +392,7 @@ class SetupPage:
             f"<title>filament-kit setup: {name}</title><link rel=stylesheet href='/setup/setup.css'>"
             "<body><main id=app></main><script src='/setup/setup.js'></script>"
             "<script src='/setup/setup_tabs.js'></script><script src='/setup/setup_printers.js'></script>"
-            "<script src='/setup/setup_trust.js'></script><script src='/setup/setup_presets.js'></script><script src='/setup/setup_logs.js'></script></body></html>",
+            "<script src='/setup/setup_trust.js'></script><script src='/setup/setup_presets.js'></script><script src='/setup/setup_backup.js'></script><script src='/setup/setup_logs.js'></script></body></html>",
             headers=HEADERS)
 
     async def asset(self, request: Request):
