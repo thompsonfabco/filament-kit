@@ -67,6 +67,7 @@ def _usb(sysfs, name, vid, tty, product="USB JTAG/serial debug unit"):
     (d / "product").write_text(product + "\n")
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="sysfs names like 1-1:1.0 are not Windows folder names")
 def test_only_espressif_boards_with_a_tty_are_found(tmp_path):
     sysfs = tmp_path / "sys"
     _usb(sysfs, "1-1", "303a", "ttyACM0")
@@ -182,11 +183,12 @@ def test_nothing_to_do_is_an_error(capsys):
 
 def _flash_env(monkeypatch, tmp_path, rc, readers=1):
     monkeypatch.setattr(cli, "_is_root", lambda: True)
-    monkeypatch.setattr(rs, "find_pio", lambda: "/usr/bin/pio")
+    monkeypatch.setattr(rs, "find_pio", lambda who=None: "/usr/bin/pio")
+    monkeypatch.setattr(rs, "owner", lambda: None)
     monkeypatch.setattr(rs, "find_readers", lambda: [rs.Reader(f"/dev/ttyACM{i}", None, "JTAG") for i in range(readers)])
     calls = []
 
-    def flash(source, text, port, pio):
+    def flash(source, text, port, pio, who=None):
         calls.append((port, text))
         return rc
     monkeypatch.setattr(rs, "flash", flash)
@@ -216,9 +218,11 @@ def test_two_boards_need_a_port_and_none_says_check_the_cable(tmp_path, monkeypa
 
 
 def test_without_platformio_it_says_how_to_add_it(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(rs, "find_pio", lambda: None)
+    monkeypatch.setattr(rs, "find_pio", lambda who=None: None)
+    monkeypatch.setattr(rs, "owner", lambda: rs.Owner("pat", 1000, 1000, Path("/home/pat")))
     assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)))) == 1
-    assert "pip install --user platformio" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "pip install --user platformio" in err and "pat's account" in err and "not with sudo" in err
 
 
 def test_main_routes_reader_setup(monkeypatch):
@@ -226,3 +230,84 @@ def test_main_routes_reader_setup(monkeypatch):
     monkeypatch.setattr(cli, "cmd_reader_setup", lambda a: got.update(vars(a)) or 0)
     assert cli.main(["reader", "setup", "--out", "s.h", "--ssid", "Home", "--ota-pubkey", "k.pem"]) == 0
     assert got["out"] == "s.h" and got["ssid"] == "Home" and got["ota_pubkey"] == "k.pem" and got["source"] is None
+
+
+# ---------- under sudo: the owner's PlatformIO, run as the owner (R66) ----------
+
+posix = pytest.mark.skipif(sys.platform == "win32", reason="POSIX users")
+
+
+def _me(home):
+    import pwd
+    pw = pwd.getpwuid(os.getuid())
+    return pw.pw_name, rs.Owner(pw.pw_name, pw.pw_uid, pw.pw_gid, home)
+
+
+@posix
+def test_the_owner_is_the_user_behind_sudo(tmp_path):
+    name, me = _me(tmp_path)
+    got = rs.owner({"SUDO_USER": name, "SUDO_UID": str(me.uid)})
+    assert got is not None and (got.name, got.uid, got.gid) == (me.name, me.uid, me.gid)
+    assert rs.owner({}) is None and rs.owner({"SUDO_USER": "root", "SUDO_UID": "0"}) is None
+    assert rs.owner({"SUDO_USER": name, "SUDO_UID": str(me.uid + 1)}) is None           # a name and uid that disagree
+    assert rs.owner({"SUDO_USER": "no-such-user-fk", "SUDO_UID": "4242"}) is None
+
+
+@posix
+@pytest.mark.parametrize("where", [".local/bin", ".platformio/penv/bin"])
+def test_pio_is_found_in_the_owners_home_not_roots(tmp_path, where, monkeypatch):
+    _, me = _me(tmp_path / "home")
+    f = me.home / where / "pio"
+    f.parent.mkdir(parents=True)
+    f.write_text("#!/bin/sh\n")
+    f.chmod(0o755)
+    monkeypatch.setenv("PATH", str(tmp_path / "empty"))          # sudo's PATH has neither folder
+    assert rs.find_pio(me) == str(f)
+    f.chmod(0o644)                                                # not executable: not taken
+    assert rs.find_pio(rs.Owner(me.name, me.uid, me.gid, tmp_path / "nobody")) in (None, "/usr/local/bin/pio",
+                                                                                     "/usr/bin/pio", "/usr/local/bin/platformio", "/usr/bin/platformio")
+
+
+@posix
+def test_flash_as_the_owner_runs_pio_as_them_with_their_home_and_groups(tmp_path):
+    src = _source(tmp_path)
+    _, me = _me(tmp_path / "home")
+    seen = {}
+
+    def run(cmd, **kw):
+        tree = Path(cmd[cmd.index("-d") + 1])
+        st = (tree / "src" / "secrets.h").stat()
+        seen.update(kw=kw, owner=(st.st_uid, st.st_gid), mode=stat.S_IMODE(st.st_mode),
+                    work_mode=stat.S_IMODE(tree.parent.stat().st_mode), tree=tree)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    assert rs.flash(src, "SECRET", "/dev/ttyACM0", "/home/x/.local/bin/pio", run=run, who=me) == 0
+    kw = seen["kw"]
+    assert (kw["user"], kw["group"]) == (me.uid, me.gid) and me.gid in kw["extra_groups"]
+    assert kw["env"]["HOME"] == str(me.home) and kw["env"]["USER"] == me.name
+    assert kw["env"]["PATH"].split(os.pathsep)[:2] == [str(me.home / ".platformio/penv/bin"), str(me.home / ".local/bin")]
+    assert "SECRET" not in repr(kw["env"])
+    assert seen["owner"] == (me.uid, me.gid) and seen["mode"] == 0o600 and seen["work_mode"] == 0o700
+    assert not seen["tree"].exists()
+
+
+@posix
+def test_out_never_replaces_a_path_that_is_not_the_callers_file(tmp_path):
+    mine = tmp_path / "mine.h"
+    mine.write_text("old")
+    assert rs.out_ok(tmp_path / "new.h", os.getuid()) and rs.out_ok(mine, os.getuid())
+    assert not rs.out_ok(mine, os.getuid() + 1)                   # someone else's file (as root: /etc/hosts)
+    assert not rs.out_ok(tmp_path, os.getuid())                   # a folder
+    (tmp_path / "link.h").symlink_to(mine)
+    assert not rs.out_ok(tmp_path / "link.h", os.getuid())        # a link, even to a file of mine
+
+
+@posix
+def test_setup_refuses_an_out_path_it_must_not_replace(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(cli, "_is_root", lambda: True)
+    monkeypatch.setattr(rs, "owner", lambda: rs.Owner("pat", os.getuid() + 1, os.getgid(), tmp_path))
+    victim = tmp_path / "hosts"
+    victim.write_text("127.0.0.1 localhost\n")
+    assert cli.cmd_reader_setup(_args(out=str(victim)), ask_secret=_secret("p", "p")) == 1
+    assert victim.read_text() == "127.0.0.1 localhost\n" and reader_tokens.TokenStore().list() == []
+    assert "not a file of yours" in capsys.readouterr().err

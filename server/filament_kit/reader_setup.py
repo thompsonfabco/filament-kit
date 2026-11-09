@@ -14,6 +14,11 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+try:
+    import pwd
+except ImportError:         # Windows: only the tests run there
+    pwd = None
+
 ESPRESSIF_VID = "303a"          # the ESP32-C3's own USB serial/JTAG unit (and every Espressif board's)
 ENV = "esp32-c3-supermini"      # reader/platformio.ini
 SYSFS = Path("/sys/bus/usb/devices")
@@ -133,23 +138,72 @@ def write_private(path: Path, text: str) -> None:
     os.replace(tmp, path)
 
 
-def find_pio() -> str | None:
-    for name in ("pio", "platformio"):
-        hit = shutil.which(name)
-        if hit:
-            return hit
-    home = Path.home() / ".platformio" / "penv" / "bin" / "pio"
-    return str(home) if home.is_file() else None
+@dataclass
+class Owner:
+    """Who builds and flashes: under sudo the user who ran it (root never runs PlatformIO, the checkout's build
+    scripts or the toolchain's downloads), else whoever runs the command."""
+    name: str
+    uid: int
+    gid: int
+    home: Path
+
+
+def owner(environ=os.environ) -> Owner | None:
+    """The user behind sudo, or None when there is none (not sudo, sudo from root, or no such user)."""
+    name, uid = environ.get("SUDO_USER"), environ.get("SUDO_UID")
+    if pwd is None or not name or not uid or name == "root" or not uid.isdigit():
+        return None
+    try:
+        pw = pwd.getpwnam(name)
+    except KeyError:
+        return None
+    if pw.pw_uid != int(uid):
+        return None
+    return Owner(pw.pw_name, pw.pw_uid, pw.pw_gid, Path(pw.pw_dir))
+
+
+def _bin_dirs(home: Path) -> list[Path]:
+    """Where a user's PlatformIO lands: its installer's ~/.platformio/penv/bin, pip --user's ~/.local/bin."""
+    return [home / ".platformio" / "penv" / "bin", home / ".local" / "bin"]
+
+
+def find_pio(who: Owner | None = None) -> str | None:
+    """PlatformIO's command: in `who`'s home and the system's folders when given (sudo's PATH and HOME are root's),
+    else on PATH and in this user's home."""
+    if who is not None:
+        dirs = _bin_dirs(who.home) + [Path(p) for p in ("/usr/local/bin", "/usr/bin")]
+    else:
+        for name in ("pio", "platformio"):
+            hit = shutil.which(name)
+            if hit:
+                return hit
+        dirs = _bin_dirs(Path.home())
+    for d in dirs:
+        for name in ("pio", "platformio"):
+            f = d / name
+            if f.is_file() and os.access(f, os.X_OK):
+                return str(f)
+    return None
 
 
 def is_source(folder: Path) -> bool:
     return (folder / "platformio.ini").is_file() and (folder / "src" / "main.cpp").is_file()
 
 
-def flash(source: Path, secrets: str, port: str, pio: str, run=subprocess.run) -> int:
+def _give(tree: Path, who: Owner) -> None:
+    """The private copy to `who` (the folder stays 0700 and secrets.h 0600: only they and root can read it)."""
+    os.chown(tree.parent, who.uid, who.gid)
+    for dirpath, dirnames, filenames in os.walk(tree):
+        os.chown(dirpath, who.uid, who.gid, follow_symlinks=False)
+        for n in dirnames + filenames:
+            os.chown(os.path.join(dirpath, n), who.uid, who.gid, follow_symlinks=False)
+
+
+def flash(source: Path, secrets: str, port: str, pio: str, run=subprocess.run, who: Owner | None = None) -> int:
     """Build the reader from `source` with `secrets` and flash it to `port`. The sources are copied into a private
-    temporary folder (secrets.h never lands in the checkout) that is deleted afterwards. PlatformIO's own output is
-    shown; it never prints secrets.h. Returns pio's exit status."""
+    temporary folder (secrets.h never lands in the checkout) that is deleted afterwards. With `who` (sudo), the copy
+    is theirs and pio runs as them, with their groups (dialout: the serial port) and home (PlatformIO's toolchain).
+    PlatformIO's own output is shown; it never prints secrets.h. Returns pio's exit status."""
     if not is_source(source):
         raise SetupError(f"{source} is not the reader's source folder (it has no platformio.ini and src/main.cpp)")
     work = Path(tempfile.mkdtemp(prefix="fk-reader-"))     # 0700
@@ -158,6 +212,23 @@ def flash(source: Path, secrets: str, port: str, pio: str, run=subprocess.run) -
         shutil.copytree(source, tree, symlinks=True,
                         ignore=shutil.ignore_patterns(".pio", "secrets.h", "__pycache__"))
         write_private(tree / "src" / "secrets.h", secrets)
-        return run([pio, "run", "-d", str(tree), "-e", ENV, "-t", "upload", "--upload-port", port]).returncode
+        cmd = [pio, "run", "-d", str(tree), "-e", ENV, "-t", "upload", "--upload-port", port]
+        if who is None:
+            return run(cmd).returncode
+        _give(tree, who)
+        env = {"HOME": str(who.home), "USER": who.name, "LOGNAME": who.name, "LANG": os.environ.get("LANG", "C.UTF-8"),
+               "PATH": os.pathsep.join([str(d) for d in _bin_dirs(who.home)] + ["/usr/local/bin", "/usr/bin", "/bin"])}
+        groups = os.getgrouplist(who.name, who.gid)
+        return run(cmd, user=who.uid, group=who.gid, extra_groups=groups, env=env, cwd=str(work)).returncode
     finally:
         shutil.rmtree(work, ignore_errors=True)
+
+
+def out_ok(path: Path, uid: int) -> bool:
+    """--out may create a file, or replace a regular file of `uid`'s; never anything else (a typo like /etc/hosts)."""
+    try:
+        st = os.lstat(path)
+    except FileNotFoundError:
+        return True
+    import stat as _stat
+    return _stat.S_ISREG(st.st_mode) and st.st_uid == uid

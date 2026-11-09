@@ -1456,6 +1456,12 @@ def cmd_uninstall(purge: bool, run=None) -> int:
         shutil.rmtree(work, ignore_errors=True)
 
 
+def _port_hint(who) -> str:
+    name = who.name if who else "you"
+    return (f". If it could not open the serial port: {name} must be in the dialout group "
+            f"(sudo usermod -aG dialout {name if who else '$USER'}, then log in again)")
+
+
 def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
     """`reader setup`: a bench reader set up with today's firmware, which takes its Wi-Fi, server address, token and
     update key only at build time. Makes a token (root, unless --token-file), writes secrets.h (--out, 0600) and/or
@@ -1465,11 +1471,14 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
     from . import reader_tokens
     ask_secret = ask_secret or secret_input.ask
     flashing = bool(a.source)
-    pio = rs.find_pio() if flashing else None
+    who = rs.owner()            # under sudo: PlatformIO is looked for, and run, as the user who ran sudo
+    pio = rs.find_pio(who) if flashing else None
     if flashing and pio is None:
-        print("error: PlatformIO is not installed here (no pio on PATH or in ~/.platformio). Install it with: "
-              "python3 -m pip install --user platformio, then run this again. Or leave out --source, use --out, "
-              "and build on a PC that has it (reader/README.md).", file=sys.stderr)
+        whose = f"{who.name}'s" if who else "your"
+        print(f"error: PlatformIO is not installed in {whose} account (no pio in ~/.platformio/penv/bin or "
+              "~/.local/bin, nor in /usr/local/bin or /usr/bin). Install it as that user, not with sudo: "
+              "python3 -m pip install --user platformio. Or leave out --source, use --out, and build on a PC that "
+              "has it (reader/README.md).", file=sys.stderr)
         return 1
     if flashing and not rs.is_source(Path(a.source)):
         print(f"error: {a.source} is not the reader's source folder (a checkout's reader/, with platformio.ini)",
@@ -1504,9 +1513,9 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
         except OSError as e:
             print(f"error: cannot read {a.secrets} ({e.strerror or e})", file=sys.stderr)
             return 1
-        rc = rs.flash(Path(a.source), text, port, pio)
+        rc = rs.flash(Path(a.source), text, port, pio, who=who)
         if rc != 0:
-            print(f"error: the build or flash failed (PlatformIO exit {rc})", file=sys.stderr)
+            print(f"error: the build or flash failed (PlatformIO exit {rc}){_port_hint(who)}", file=sys.stderr)
             return 1
         print("Flashed.")
         return 0
@@ -1530,6 +1539,8 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
         return 1
     try:
         rs.secrets_h(ssid, password, base, token or "x" * 43, key_pem)      # every check before a token is made
+        if a.out and not rs.out_ok(Path(a.out), who.uid if who else os.getuid() if hasattr(os, "getuid") else 0):
+            raise rs.SetupError(f"{a.out} exists and is not a file of yours; choose a new name")
     except rs.SetupError as e:
         print(f"error: {e}; nothing was changed", file=sys.stderr)
         return 1
@@ -1544,6 +1555,8 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
     if a.out:
         out = Path(a.out)
         try:
+            if not rs.out_ok(out, who.uid if who else os.getuid() if hasattr(os, "getuid") else 0):
+                raise OSError(f"{out} exists and is not a file of yours; choose a new name")
             rs.write_private(out, text)
             sudo_uid, sudo_gid = os.environ.get("SUDO_UID"), os.environ.get("SUDO_GID")
             if _is_root() and sudo_uid and sudo_gid:        # the owner who ran sudo builds with it
@@ -1561,13 +1574,14 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
                   "pio run -e esp32-c3-supermini -t upload), or here with: filament-kit reader setup --secrets "
                   f"{out} --source <checkout>/reader")
     if flashing:
-        rc = rs.flash(Path(a.source), text, port, pio)
+        rc = rs.flash(Path(a.source), text, port, pio, who=who)
         if rc != 0:
             dropped = bool(tid) and not a.out
             if dropped:
                 reader_tokens.TokenStore().revoke(tid)
             print(f"error: the build or flash failed (PlatformIO exit {rc})"
-                  + ("; the new token was removed, since nothing holds it" if dropped else ""), file=sys.stderr)
+                  + ("; the new token was removed, since nothing holds it" if dropped else "") + _port_hint(who),
+                  file=sys.stderr)
             return 1
         print(f"Flashed. The reader joins {ssid} and calls {base}.")
     if tid:

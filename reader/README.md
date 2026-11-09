@@ -122,7 +122,9 @@ SHA-256 `e42240daaba9d4dfb9cec7ec702b6c84a0605d34c7f03e1ad342bbee74fc1db8` (1,47
 **Or let the kit do both steps:** on the kit server, with the reader plugged in by USB and PlatformIO installed,
 `sudo filament-kit reader setup --name bench --source <checkout>/reader --ota-pubkey <key.pem>` makes the token,
 works out `READER_BASE` from `web.public_url`, asks the Wi-Fi name and password, and builds and flashes a private copy
-of this folder (the checkout never holds `secrets.h`). With `--out secrets.h` instead of `--source`, it only writes
+of this folder (the checkout never holds `secrets.h`). Install PlatformIO as yourself, not with sudo
+(`python3 -m pip install --user platformio`): under sudo the build and flash run as you, with your PlatformIO, and
+you need to be in the `dialout` group for the serial port. With `--out secrets.h` instead of `--source`, it only writes
 the file (mode 600) for a build on another PC. On a PC that is not the server, pass `--token-file` (a token from
 `reader token`) and `--base <web.public_url>/reader`. Nothing secret is printed.
 
