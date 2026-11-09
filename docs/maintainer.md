@@ -102,6 +102,7 @@ A hand-built tarball is not signed. Users can install it with `sudo ./install.sh
 - `bash tools/testenv.sh` (Linux or WSL, from a tree on the Linux side) is the one recipe for the Python suites, the same in CI
   and at every review: `--root`, `--lint` and `--klipper` add the rest, and it prints each suite's counts and wall time. On Windows, where the PC sync's DPAPI and file lock are real:
   `powershell -ExecutionPolicy Bypass -File tools\testenv.ps1`. Both run in parallel (`-n auto`), as does every workflow.
+  A test that fails in the crowd runs once more alone, and if it passes the suite passes with `FLAKY <test>` in the summary (`--no-retry` turns this off). Every `FLAKY` line in a run becomes a queue item to fix that test, so the marker never becomes permanent cover.
 - `server/tests` (`pytest`), `pc-sync/tests`, the Android unit tests (`./gradlew testDebugUnitTest`) and the
   reader's native tests run in CI on every push.
 - [testing-e2e.md](testing-e2e.md): the end-to-end run on a disposable Ubuntu host (WSL), with real
