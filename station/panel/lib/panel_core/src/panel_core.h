@@ -15,7 +15,8 @@ namespace panel {
 //   'V'  speaker volume: a = percent 0-100
 struct Command { char kind; int a, b, c; };
 
-// True and fills out for a valid line; false for an unknown command or an argument out of range.
+// True and fills out for a valid line; false for an unknown command or an argument out of range (out is then
+// unspecified).
 bool parseLine(const char *line, Command &out);
 
 // Whether a lamp in `mode` is lit `msSinceModeSet` ms after the mode was set: 0 off, 1 on, 2 flash (250 ms),

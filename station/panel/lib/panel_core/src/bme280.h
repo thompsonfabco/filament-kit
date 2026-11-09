@@ -1,5 +1,5 @@
 // BME280 / BMP280 compensation: Bosch's integer formulas (datasheet 4.2.3 and 8.2), kept free of Arduino so
-// test/bme280_test.cpp can check them against the datasheet's worked example on the PC.
+// test/test_core/test_main.cpp can check them against the datasheet's worked example on the PC.
 #pragma once
 #include <stdint.h>
 
