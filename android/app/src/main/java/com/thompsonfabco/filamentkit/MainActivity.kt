@@ -7,6 +7,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +20,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -85,7 +88,7 @@ import com.thompsonfabco.filamentkit.update.UpdateUi
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        lightEdgeToEdge()
+        appEdgeToEdge()
         setContent { AppFrame { FilamentKitApp() } }
     }
 
@@ -384,21 +387,21 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
 }
 
 /**
- * Android draws apps edge to edge (target SDK 35+). The app is always light, so the status and navigation bars get
- * dark icons over the app's own background.
+ * Android draws apps edge to edge (target SDK 35+). The status and navigation bars stay transparent over the app's own
+ * background, with icons that follow the phone's light or dark setting as the app does.
  */
-internal fun ComponentActivity.lightEdgeToEdge() = enableEdgeToEdge(
-    statusBarStyle = SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT),
-    navigationBarStyle = SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT),
+internal fun ComponentActivity.appEdgeToEdge() = enableEdgeToEdge(
+    statusBarStyle = SystemBarStyle.auto(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT),
+    navigationBarStyle = SystemBarStyle.auto(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT),
 )
 
 /**
- * The app's root: the background fills the whole window, behind the bars too, and every screen is kept clear of the
- * status bar, navigation bar, cutouts and keyboard, here once.
+ * The app's root: light or dark as the phone is set, the background fills the whole window, behind the bars too, and
+ * every screen is kept clear of the status bar, navigation bar, cutouts and keyboard, here once.
  */
 @Composable
 internal fun AppFrame(content: @Composable () -> Unit) {
-    MaterialTheme {
+    MaterialTheme(colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()) {
         Surface(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxSize().safeDrawingPadding()) { content() }
         }

@@ -1,6 +1,7 @@
 package com.thompsonfabco.filamentkit.ui.printers
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -225,7 +226,7 @@ private fun AmsBlock(u: AmsUnit, busy: String?, onUnload: (AmsSlot) -> Unit) {
         Text(PrinterHelp.unitTitle(u), style = MaterialTheme.typography.titleSmall)
         u.slots.forEach { slot ->
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Spacer(Modifier.size(16.dp).clip(CircleShape).background(hexColor(slot.colorHex)))
+                Spacer(Modifier.size(16.dp).clip(CircleShape).background(hexColor(slot.colorHex)).border(1.dp, MaterialTheme.colorScheme.outline, CircleShape))
                 val spool = slot.spool
                 Text(listOfNotNull(
                     slot.label,

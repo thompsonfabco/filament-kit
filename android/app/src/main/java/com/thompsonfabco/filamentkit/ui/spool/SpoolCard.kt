@@ -1,6 +1,7 @@
 package com.thompsonfabco.filamentkit.ui.spool
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -96,7 +97,7 @@ fun SpoolHost(
 fun SpoolSummaryRow(spool: SpoolSummary) {
     Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Spacer(
-            Modifier.size(32.dp).clip(CircleShape).background(parseHex(spool.colorHex)),
+            Modifier.size(32.dp).clip(CircleShape).background(parseHex(spool.colorHex)).border(1.dp, MaterialTheme.colorScheme.outline, CircleShape),
         )
         Column {
             Text("${spool.brand} ${spool.name}".trim(), style = MaterialTheme.typography.titleMedium)
