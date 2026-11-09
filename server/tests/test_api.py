@@ -82,6 +82,53 @@ def test_pair_then_call(sm):
     assert r.status_code == 200 and r.json() == {"spools": []}
 
 
+def test_unpair_revokes_only_the_caller(sm, caplog):
+    c = client(sm)
+    mine, other = token(), token()
+    device = pairing.authorize(mine)[0]
+    with caplog.at_level("INFO", logger="filament_kit.api"):
+        r = c.delete("/api/pair", headers=auth(mine))
+    assert r.status_code == 200 and r.json() == {"revoked": True}
+    assert c.get("/api/spools", headers=auth(mine)).status_code == 401
+    assert c.get("/api/spools", headers=auth(other)).status_code == 200
+    line = next(m for m in caplog.messages if m.startswith("unpair"))
+    assert f"device_id={device}" in line and "result=ok" in line and mine not in line
+
+
+def test_unpair_needs_the_bearer_and_takes_nothing_else(sm):
+    c = client(sm)
+    mine = token()
+    device = pairing.authorize(mine)[0]
+    assert c.delete("/api/pair").status_code == 401
+    assert c.delete("/api/pair", headers=auth("nope")).status_code == 401
+    # a body or a query naming another device changes nothing: the token decides
+    other = token()
+    other_id = pairing.authorize(other)[0]
+    assert c.request("DELETE", f"/api/pair?device={other_id}", json={"device": other_id}, headers=auth(mine)).status_code == 200
+    assert c.get("/api/spools", headers=auth(other)).status_code == 200
+    assert pairing.authorize(mine) is None and device not in [d["id"] for d in pairing.devices()]
+
+
+def test_unpair_twice_is_a_401_the_second_time(sm):
+    c = client(sm)
+    mine = token()
+    assert c.delete("/api/pair", headers=auth(mine)).status_code == 200
+    assert c.delete("/api/pair", headers=auth(mine)).status_code == 401
+
+
+def test_a_station_token_cannot_unpair(sm):
+    c = client(sm)
+    tok = pairing.redeem_code(pairing.issue("station").code)
+    assert c.delete("/api/pair", headers=auth(tok)).status_code == 403
+    assert pairing.authorize(tok) is not None
+
+
+def test_pairing_still_answers_post_after_the_delete_route(sm):
+    c = client(sm)
+    assert c.get("/api/pair").status_code == 405
+    assert c.post("/api/pair", json={"code": "nope"}).status_code == 401
+
+
 def test_read_rejects_heic_400(sm):
     fake = FakeClaude(READ)
     c = client(sm, fake)
