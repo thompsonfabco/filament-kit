@@ -64,7 +64,7 @@ function trustCard() {
   }
   const pills = pill(T.enabled, "on", "off");
   return card(["Trusted computers ", pills],
-    h("p", { class: "muted", textContent: "After the setup code works, a browser can be trusted so it isn't asked again; it can be revoked here at any time, and it never skips a question like \"Roll back?\"." }),
+    h("p", { class: "muted", textContent: "After the setup code works, a browser can be trusted so it isn't asked again; it can be revoked here at any time, and it never skips a question like \"Roll back?\". A new setup code (sudo filament-kit setup-code --new) keeps trusted computers trusted; revoke them here, or add --revoke-trusted." }),
     T.trusted ? h("p", {}, `This computer is trusted (${T.name}).`) : null,
     h("div", { class: "row" },
       T.enabled ? h("button", { class: "secondary", textContent: "Show the list", on: { click: show } }) : null,

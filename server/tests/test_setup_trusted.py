@@ -261,6 +261,48 @@ def test_the_first_name_comes_from_the_browser(agent, name):
     assert trusted.name_from_agent(agent) == name
 
 
+def _root_at_a_terminal(monkeypatch):
+    import io
+    from filament_kit import cli
+    monkeypatch.setattr(cli, "_is_root", lambda: True)
+    s = io.StringIO("")
+    s.isatty = lambda: True
+    monkeypatch.setattr(sys, "stdin", s)
+    return cli
+
+
+def test_a_new_setup_code_keeps_trusted_computers_and_says_so(app, helper, monkeypatch, capsys):
+    """Review R32 ruling: security is the owner's choice. A new code keeps trusted computers (they stood in for the old
+    one by the owner's own choice) and says so, with where to revoke; --revoke-trusted is the other choice."""
+    cli = _root_at_a_terminal(monkeypatch)
+    c = client(app)
+    _trust(c)
+    capsys.readouterr()
+    assert cli.main(["setup-code", "--new"]) == 0
+    out = capsys.readouterr().out
+    assert "The old setup code no longer works." in out
+    assert "Trusted computers stay trusted (1): revoke them in Devices on the setup page, or with sudo filament-kit setup-code --revoke-trusted." in out
+    assert _change(c).status_code == 200 and _change(c, code=CODE).status_code == 403     # cookie yes, old code no
+    assert cli.main(["setup-code", "--new", "--revoke-trusted"]) == 0
+    out = capsys.readouterr().out
+    assert "1 trusted computer revoked: each needs the setup code again." in out and "stay trusted" not in out
+    assert _change(c).status_code == 403 and trusted.listing() == []
+    assert cli.main(["setup-code", "--new"]) == 0
+    assert "trusted" not in capsys.readouterr().out.lower()                                 # nobody trusted: no line
+    assert cli.main(["setup-code", "--revoke-trusted"]) == 0
+    assert "0 trusted computers revoked" in capsys.readouterr().out
+
+
+def test_the_page_and_the_guide_say_a_new_code_keeps_trusted_computers():
+    trust = (STATIC / "setup_trust.js").read_text(encoding="utf-8")
+    assert "keeps trusted computers trusted" in trust and "--revoke-trusted" in trust
+    setup = (STATIC / "setup.js").read_text(encoding="utf-8")
+    assert "unless this computer is trusted (Devices)" in setup
+    from pathlib import Path
+    guide = (Path(__file__).resolve().parents[2] / "docs" / "user-guide.md").read_text(encoding="utf-8")
+    assert "Trust this computer" in guide and "--revoke-trusted" in guide and "every change does." not in guide
+
+
 def test_the_page_offers_it_only_after_the_code_worked_and_keeps_the_rules():
     trust = (STATIC / "setup_trust.js").read_text(encoding="utf-8")
     assert "innerHTML" not in trust and "document.cookie" not in trust

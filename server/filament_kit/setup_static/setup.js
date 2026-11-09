@@ -221,7 +221,7 @@ window.addEventListener("hashchange", () => { if (S) render(); });
 document.addEventListener("DOMContentLoaded", () => {
   app.append(
     h("h1", { textContent: "filament-kit" }),
-    h("p", { class: "muted", textContent: "Everything after the install is here; the command line is the fallback. Viewing needs nothing; every change needs the setup code the installer showed (at the server: sudo filament-kit setup-code)." }),
+    h("p", { class: "muted", textContent: "Everything after the install is here; the command line is the fallback. Viewing needs nothing; every change needs the setup code the installer showed (at the server: sudo filament-kit setup-code), unless this computer is trusted (Devices)." }),
     h("div", { class: "sticky" }, codeCard, nav),
     jobPanel, sections);
   codeArea();

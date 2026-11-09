@@ -312,7 +312,12 @@ tokens, and switching modules on or off. How to find the code, what it asks for,
 and the full list: [Install the server, The setup page](install-server.md#the-setup-page-v040).
 
 `sudo filament-kit setup-code` shows the page's address and its 8-digit setup code (at a Terminal);
-`sudo filament-kit setup-code --new` makes a new one. Viewing needs no code; every change does.
+`sudo filament-kit setup-code --new` makes a new one. Viewing needs no code; every change does, unless the computer
+is trusted: after the code works once, the page offers **Trust this computer** (v0.4.3), and that browser then needs
+no code for 90 days after its last use (a question like "Roll back?" is still asked). **Devices** lists the trusted
+computers, with Rename, Revoke and Revoke all, and a switch that turns the feature off and forgets them all. A new
+setup code keeps trusted computers trusted; `sudo filament-kit setup-code --revoke-trusted` forgets them, alone or
+with `--new`.
 
 ## Everyday commands
 
@@ -325,7 +330,7 @@ Run these in a Terminal on the Ubuntu computer.
 | `sudo filament-kit station pair` | On the intake station computer: pairs the station's button flow with the server. Paste the link from `sudo filament-kit pair --station`; without a terminal it says so and saves nothing (v0.4.1). |
 | `sudo filament-kit station pairing-state` | Prints whether the station is paired, on one line: `paired <address>:<port>`, `unpaired`, or `unchecked` when you are not root (v0.4.1). |
 | `sudo filament-kit pair --pc` | Shows the link and code to pair the PC sync tool (Windows or Linux). `--station` does the same for the intake station; `--text` prints the link instead of a QR code. The three are exclusive. |
-| `sudo filament-kit setup-code` | Shows the setup page's address and setup code (v0.4.0). `--new` replaces the code and clears a lock-out. |
+| `sudo filament-kit setup-code` | Shows the setup page's address and setup code (v0.4.0). `--new` replaces the code and clears a lock-out; trusted computers stay trusted unless you add `--revoke-trusted` (v0.4.3). |
 | `sudo filament-kit modules apply --no-pair` | Applies module changes without the pairing screen at the end (v0.4.0). |
 | `sudo filament-kit uninstall` | Removes the kit (`--purge` also deletes your data). |
 | `sudo filament-kit unpair` | Lists paired devices: phones and the PC sync (named `pc`). `sudo filament-kit unpair <id>` removes one. |

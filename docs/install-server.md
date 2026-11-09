@@ -195,7 +195,8 @@ station, NFC reader tokens, and switching modules on or off.
    The setup code is 8 digits, shown like `1234-5678`.
 2. Open the address in a browser on a computer or phone **on your home network**. Your browser warns about the
    server's own certificate: continue, as you do for the app download.
-3. You can look at everything on the page without the code. **Every change asks for the setup code.**
+3. You can look at everything on the page without the code. **Every change asks for the setup code**, unless you
+   chose to trust that computer after the code worked (the user guide's setup page section says how, and how to revoke).
 
 **Who can reach it.** Only devices on your home network: IPv4 addresses that start with 192.168 or 10 by default
 (addresses that start with 172.16 need `web.lan` in the settings), and the server itself. Open it by the server's own name or address; another name is refused. It is not
@@ -203,7 +204,8 @@ available from the internet, even when you turned on remote access.
 
 **A wrong code.** Five wrong codes from one device in 10 minutes lock that device out for a while. If wrong codes
 come in from many devices (30 in 10 minutes), everyone waits: 10 minutes, doubling each time up to 24 hours. Make
-a new code, which also clears the lock: `sudo filament-kit setup-code --new`. The old code stops working.
+a new code, which also clears the lock: `sudo filament-kit setup-code --new`. The old code stops working; computers
+you trusted stay trusted (the command says so and how many), unless you add `--revoke-trusted`.
 
 **What the page can do.**
 

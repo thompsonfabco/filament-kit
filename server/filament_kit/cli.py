@@ -1444,11 +1444,12 @@ def cmd_web_passphrase() -> int:
     return 0
 
 
-def cmd_setup_code(new: bool) -> int:
-    """`setup-code [--new]` (root): the code the server's /setup page asks for before any change, made when there
-    is none. At a terminal it is printed with the page's address; without one (a log) only the address and how to
-    see it, as no secret may end up in a log."""
-    from . import setup_code
+def cmd_setup_code(new: bool, revoke_trusted: bool = False) -> int:
+    """`setup-code [--new] [--revoke-trusted]` (root): the code the server's /setup page asks for before any change,
+    made when there is none. At a terminal it is printed with the page's address; without one (a log) only the address
+    and how to see it, as no secret may end up in a log. A new code keeps trusted computers trusted (the owner's
+    choice, said so here); --revoke-trusted forgets them, with or without a new code."""
+    from . import setup_code, trusted
     if not _is_root():
         print("error: run as root: sudo filament-kit setup-code", file=sys.stderr)
         return 1
@@ -1458,12 +1459,20 @@ def cmd_setup_code(new: bool) -> int:
     else:
         code = setup_code.ensure()
     url = setup_code.page_url(config.load())
-    if not apply._tty():
+    if apply._tty():
+        print(f"Open {url}  (setup code: {setup_code.shown(code)})")
+    else:
         print(f"Setup page: {url}  (see its setup code at a terminal: sudo filament-kit setup-code)")
-        return 0
-    print(f"Open {url}  (setup code: {setup_code.shown(code)})")
     if new:
         print("The old setup code no longer works.")
+    if revoke_trusted:
+        n = trusted.revoke_all()
+        print(f"{n} trusted computer{'' if n == 1 else 's'} revoked: each needs the setup code again.")
+    elif new:
+        n = len(trusted.listing())
+        if n:
+            print(f"Trusted computers stay trusted ({n}): revoke them in Devices on the setup page, or with "
+                  "sudo filament-kit setup-code --revoke-trusted.")
     return 0
 
 
@@ -1671,7 +1680,10 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     un.add_argument("--purge", action="store_true", help="also delete settings, spool data, paired phones, backups")
     sc = sub.add_parser("setup-code", help="show the setup page's address and its setup code (root); --new "
                                            "replaces the code")
-    sc.add_argument("--new", action="store_true", help="make a new setup code; the old one stops working")
+    sc.add_argument("--new", action="store_true", help="make a new setup code; the old one stops working (trusted "
+                                                        "computers stay trusted)")
+    sc.add_argument("--revoke-trusted", action="store_true",
+                    help="forget every trusted computer, so each needs the setup code again (alone, or with --new)")
     klipper_cli.add_parser(sub)       # its own module (Klipper printers), see klipper_cli.py
     args = ap.parse_args(argv)
 
@@ -1755,5 +1767,5 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
                                       getattr(args, "server", None))
         return cmd_modules_apply(pair=not args.no_pair)
     if args.cmd == "setup-code":
-        return cmd_setup_code(args.new)
+        return cmd_setup_code(args.new, args.revoke_trusted)
     return cmd_ensure_fields()
