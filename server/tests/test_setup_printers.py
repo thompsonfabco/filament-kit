@@ -246,9 +246,9 @@ def test_another_name_for_a_printer_added_by_name_is_refused(both, kl, names):
 def test_changing_an_address_to_a_name_for_another_printer_is_refused(both, manager, names):
     c = client(both)
     assert post(c, "printers/klipper", {"host": "192.0.2.77", "name": "Voron"}).status_code == 200
-    other = post(c, "printers/klipper", {"host": "192.168.1.40", "name": "Other"}).json()["serial"]
+    other = post(c, "printers/klipper", {"host": "192.168.50.40", "name": "Other"}).json()["serial"]
     r = post(c, f"printers/{other}/address", {"address": NAME})
-    assert r.status_code == 409 and "Voron" in r.text and registry.load()[other].host == "192.168.1.40"
+    assert r.status_code == 409 and "Voron" in r.text and registry.load()[other].host == "192.168.50.40"
 
 
 def test_changing_a_printer_to_another_name_for_itself_is_fine(both, kl, names):
