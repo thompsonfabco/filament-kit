@@ -4,9 +4,12 @@ package com.thompsonfabco.filamentkit.ui.pair
 data class MismatchText(
     val title: String,
     val body: String,
-    val expectedLabel: String,
+    /** Null: only the certificate the server shows now is listed. */
+    val expectedLabel: String?,
     val actualLabel: String,
     val button: String,
+    /** The one-tap "keep this pairing" button; only a saved pairing has one. */
+    val trustButton: String? = null,
 )
 
 /** Texts of the pairing screens. Where a pairing code comes from is said here, so it changes in one place. */
@@ -27,10 +30,12 @@ object PairTexts {
     fun mismatch(m: Mismatch, host: String): MismatchText = when (m.source) {
         MismatchSource.STORED -> MismatchText(
             title = "The server's certificate has changed",
-            body = "This can happen if the server was reinstalled. If you did not expect that, do not continue.",
-            expectedLabel = "Paired fingerprint",
-            actualLabel = "Fingerprint now",
+            body = "If you didn't reinstall or move the server, another device may be answering at this address, and " +
+                "trusting it gives that device this phone's access.",
+            expectedLabel = null,
+            actualLabel = "New fingerprint",
             button = "Pair again",
+            trustButton = "Trust the new certificate",
         )
         MismatchSource.QR -> MismatchText(
             title = "This pairing code doesn't match the server",

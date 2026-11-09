@@ -51,6 +51,7 @@ import com.thompsonfabco.filamentkit.session.AppViewModel
 import com.thompsonfabco.filamentkit.session.Connection
 import com.thompsonfabco.filamentkit.session.PairNotice
 import com.thompsonfabco.filamentkit.session.UNPAIRED_MESSAGE
+import com.thompsonfabco.filamentkit.session.canTrust
 import com.thompsonfabco.filamentkit.session.isPaired
 import com.thompsonfabco.filamentkit.tags.TagEvents
 import com.thompsonfabco.filamentkit.tags.disableTagReader
@@ -222,6 +223,8 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
                             nav.navigateClearing(Routes.HOME)
                         },
                         modifier = Modifier.weight(1f),
+                        canTrust = { config.canTrust(it.expected) },
+                        onTrust = { m -> app.trustCertificate(m.expected, m.actual) { nav.navigateClearing(Routes.HOME) } },
                     )
                 }
             }

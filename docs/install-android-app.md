@@ -110,9 +110,11 @@ below, which happens when you install a downloaded file over an older copy signe
   - If the server's firewall is on, see [Install the server, Common problems](install-server.md#common-problems).
   - Use **Enter address** with the server's IP address instead of its name.
 - **The code has expired or was already used**: run `sudo filament-kit pair` again and use the new code.
-- **The server's certificate has changed**: the app shows both fingerprints. This is expected after you
-  reinstalled the server with `--purge` or moved it to another computer: tap **Pair again** and pair as above.
-  If you did not expect it, don't continue.
+- **The server's certificate has changed**: the app shows the new fingerprint. This is expected after you
+  reinstalled the server or moved it to another computer. **Trust the new certificate** keeps this pairing;
+  **Pair again** pairs as above with a new code, and after a reinstall with `--purge` that is what you need, because
+  the server no longer knows this phone. If you did not expect the change, another device may be answering at that
+  address, and trusting it gives that device this phone's access.
 - **To remove a phone from the server**: `sudo filament-kit unpair` lists paired phones;
   `sudo filament-kit unpair <id>` removes one.
 

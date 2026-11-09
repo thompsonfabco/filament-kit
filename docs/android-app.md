@@ -49,12 +49,14 @@ problems are in [Install the Android app](install-android-app.md#common-problems
 **Forget server** (it asks to confirm; the spools stay on the server) unpairs this phone, and then you pair again
 as above. **Pair again** does it in one step. On the server, `sudo filament-kit unpair`
 lists paired phones and `sudo filament-kit unpair <id>` removes one; that phone is then asked to pair again. If the
-app shows **The server's certificate changed**, compare the two fingerprints it shows: if you reinstalled the
-server it's expected, so tap **Pair again**; if not, don't continue.
+app shows **The server's certificate has changed**, it lists the new fingerprint: tap **Trust the new certificate** to
+keep this pairing, or **Pair again** to pair with a new code. If you didn't reinstall or move the server, another
+device may be answering at that address, and trusting it gives that device this phone's access. If the server no
+longer knows this phone, for example after a reinstall with `--purge`, the app asks you to pair again.
 
 **Skip the fingerprint check for new servers**, in **Settings**, is off by default. With it on, picking a server from
 the list or typing its address goes straight to the 6-digit code and the app trusts the certificate the server presents. A scanned
-QR code is checked either way, and a certificate that changes after pairing still stops the app.
+QR code is checked either way, and a certificate that changes after pairing still asks you first.
 
 **Licences and third-party software**, at the bottom of **Settings**, shows the app's licence (GPL-3.0-or-later) and the
 third-party software list, and the full GPL text. It works offline.

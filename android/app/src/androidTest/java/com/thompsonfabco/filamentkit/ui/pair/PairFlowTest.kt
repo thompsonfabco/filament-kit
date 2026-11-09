@@ -1,6 +1,9 @@
 package com.thompsonfabco.filamentkit.ui.pair
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -50,6 +53,30 @@ class PairFlowTest {
         override suspend fun info(host: String, port: Int, fingerprint: String, token: String?) =
             ServerInfo("Workshop server", "1", 1)
         override suspend fun claim(host: String, port: Int, fingerprint: String, token: String) = Unit
+    }
+
+    @Test fun aChangedCertificateOffersTrustBesidePairAgain() {
+        val vm = PairViewModel(Store(), Backend(), CoroutineScope(Dispatchers.Main.immediate))
+        vm.showMismatch(FP, "f".repeat(64))
+        val trusted = mutableListOf<Mismatch>()
+        var canTrust by mutableStateOf(true)
+        rule.setContent {
+            MaterialTheme {
+                PairScreen(vm, emptyList(), onPaired = {}, canTrust = { canTrust }, onTrust = { trusted += it })
+            }
+        }
+
+        rule.onNodeWithText(groupFingerprint("f".repeat(64))).assertIsDisplayed()
+        rule.onNodeWithText(groupFingerprint(FP)).assertDoesNotExist()
+        rule.onNodeWithText("Pair again").assertIsDisplayed()
+        rule.onNodeWithText("Trust the new certificate").performClick()
+        assertEquals(listOf(Mismatch(FP, "f".repeat(64))), trusted)
+
+        // Nothing paired to keep: only Pair again.
+        canTrust = false
+        rule.onNodeWithText("Trust the new certificate").assertDoesNotExist()
+        rule.onNodeWithText("Pair again").performClick()
+        assertEquals(null, vm.state.value.mismatch)
     }
 
     @Test fun manualFlowShowsFingerprintFirstThenCodeThenPairs() {
