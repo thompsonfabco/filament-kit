@@ -154,6 +154,19 @@ def main(variant, data):
             sv = (Path(data) / "config" / "variables.cfg").read_text()
             assert "fk_t1" in sv, sv
             ok("the tool spool is saved in save_variables")
+            # a tag scan. This printer has no extruder, so no tool is active: the spool just becomes the active one
+            gcode(f"_FK_TAG_SPOOL ID={b['id']}")
+            wait_for(lambda: mr("/server/spoolman/spool_id")["spool_id"] == b["id"], what="the tagged spool active")
+            ok("a tag scan with no active tool sets the active spool")
+            # what it sends when a tool is active (render_tag_macro.py, in klipper.sh), and that it lasts a tool change
+            c = sm.post("spool", {"filament_id": f["id"], "location": "Shelf C"})
+            gcode(f"FK_SET_TOOL_SPOOL TOOL=2 ID={c['id']}")
+            gcode("_FK_TOOL_CHANGED T=2")
+            wait_for(lambda: mr("/server/spoolman/spool_id")["spool_id"] == c["id"], what="tool 2's spool active")
+            gcode("_FK_TOOL_CHANGED T=2")
+            time.sleep(1)
+            assert mr("/server/spoolman/spool_id")["spool_id"] == c["id"], "a tool change lost the spool"
+            ok("a spool in the tool table lasts a tool change")
     finally:
         fam.stop()
 
