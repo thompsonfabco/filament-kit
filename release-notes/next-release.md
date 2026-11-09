@@ -1,4 +1,4 @@
-# filament-kit 0.4.2
+# filament-kit: next release
 
 ## What's new
 

@@ -52,8 +52,8 @@ lists paired phones and `sudo filament-kit unpair <id>` removes one; that phone 
 app shows **The server's certificate changed**, compare the two fingerprints it shows: if you reinstalled the
 server it's expected, so tap **Pair again**; if not, don't continue.
 
-**Skip the fingerprint check for new servers**, in **Settings**, is off by default. With it on, pairing by address
-goes straight from the address to the 6-digit code and the app trusts the certificate the server presents. A scanned
+**Skip the fingerprint check for new servers**, in **Settings**, is off by default. With it on, picking a server from
+the list or typing its address goes straight to the 6-digit code and the app trusts the certificate the server presents. A scanned
 QR code is checked either way, and a certificate that changes after pairing still stops the app.
 
 **Licences and third-party software**, at the bottom of **Settings**, shows the app's licence (GPL-3.0-or-later) and the
