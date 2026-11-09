@@ -239,9 +239,11 @@ class LoadsMixin:
 
     def _wait_shows(self, pid: str, label: str, spool_id: int) -> bool:
         end = time.monotonic() + CONFIRM_TIMEOUT
+        c = self._conn(pid)
+        drops = c.sub.drops if c is not None and c.sub else 0
         while time.monotonic() < end:
             c = self._conn(pid)
-            if c is None or not (c.sub and c.sub.connected):
+            if c is None or not (c.sub and c.sub.connected) or c.sub.drops != drops:
                 return False                      # the websocket dropped: unconfirmed, follow mode settles it
             model, system, adapter = self.model(pid)
             with c.lock:

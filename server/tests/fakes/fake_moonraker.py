@@ -284,10 +284,12 @@ class FakeMoonraker:
 
     def serve(self):
         """Run on 127.0.0.1:<free port> in a thread; returns (host, port, stop)."""
-        port = free_port()
+        sock = socket.socket()      # bound here and handed over: with parallel workers, a port chosen first can be taken before it's used
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
         server = uvicorn.Server(uvicorn.Config(self.app, host="127.0.0.1", port=port, log_level="warning",
                                                ws="websockets-sansio"))
-        t = threading.Thread(target=server.run, daemon=True)
+        t = threading.Thread(target=server.run, kwargs={"sockets": [sock]}, daemon=True)
         t.start()
         for _ in range(200):
             if server.started:
