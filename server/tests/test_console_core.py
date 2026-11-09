@@ -907,7 +907,8 @@ def test_every_tab_the_shell_lists_has_its_view():
     src = (STATIC / "setup.js").read_text(encoding="utf-8")
     every = "".join(p.read_text(encoding="utf-8") for p in STATIC.glob("*.js"))
     block = src[src.index("const TABS = {"):src.index("const tabNow")]
-    assert re.findall(r"^  (\w+): \[", block, re.M) == ["overview", "modules", "printers", "devices", "settings", "updates"]
+    assert re.findall(r"^  (\w+): \[", block, re.M) == ["overview", "modules", "printers", "devices", "presets", "settings",
+                                                               "updates"]
     for fn in re.findall(r"(\w+(?:Card|Tab))\(\)", block):
         assert f"function {fn}(" in every, fn
 

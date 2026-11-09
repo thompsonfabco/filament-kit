@@ -67,6 +67,7 @@ const TABS = {
   modules: ["Modules", () => [modesCard(), modulesCard(), applyCard()]],
   printers: ["Printers", () => printersTab()],
   devices: ["Devices", () => [pairCard(), readersCard(), trustCard()]],
+  presets: ["Presets", () => presetsTab()],
   settings: ["Settings", () => [keyCard(), passphraseCard(), tokenCard(), addressCard()]],
   updates: ["Updates", () => updatesTab()],
 };
