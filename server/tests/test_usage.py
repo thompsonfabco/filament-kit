@@ -393,6 +393,76 @@ def test_undo_restores_once(rig, sd, spoolman_fake_store, sm):
     assert used(spoolman_fake_store, A2) == 0
 
 
+def _undoable(rig, sd, sm):
+    calibrate()
+    put(sd, "/cache/bracket_v3_plate_1.gcode.3mf", build_3mf(TWO_COLOUR))
+    rig().print_job()
+    return next(e for e in usage.entries(SERIAL, 7) if e["slot"] == "A2")
+
+
+class _Reused:
+    """Spoolman with one spool's answer changed."""
+
+    def __init__(self, real, spool_id, **change):
+        self.real, self.spool_id, self.change, self.uses = real, spool_id, change, []
+
+    def get(self, path):
+        if self.change.get("gone") and path == f"spool/{self.spool_id}":
+            raise usage.SpoolmanError("not found", status=404)
+        if self.change.get("down"):
+            raise usage.SpoolmanError("spoolman_unreachable", status=None)
+        got = self.real.get(path)
+        if path == f"spool/{self.spool_id}" and "registered" in self.change:
+            got = {**got, "registered": self.change["registered"]}
+        return got
+
+    def use(self, spool_id, grams):
+        self.uses.append((spool_id, grams))
+        return self.real.use(spool_id, grams)
+
+
+LATER = "2099-01-01T00:00:00Z"
+
+
+@pytest.mark.parametrize("change,word", [({"registered": LATER}, "added after this print"), ({"gone": True}, "gone from Spoolman"),
+                                         ({"registered": None}, "can't tell"), ({"registered": "soon"}, "can't tell")])
+def test_undo_refuses_a_spool_id_that_is_another_spool_now(rig, sd, spoolman_fake_store, sm, change, word):
+    e = _undoable(rig, sd, sm)
+    fake = _Reused(sm, A2, **change)
+    with pytest.raises(usage.SpoolChanged) as ei:
+        usage.undo(e["id"], fake)
+    assert ei.value.code == "spool_changed" and ei.value.status == 409 and word in str(ei.value)
+    assert "nothing was changed" in str(ei.value) and fake.uses == []
+    assert next(x for x in usage.entries(SERIAL, 7) if x["id"] == e["id"])["undone"] is False
+
+
+def test_undo_goes_ahead_for_a_spool_that_was_there(rig, sd, spoolman_fake_store, sm):
+    e = _undoable(rig, sd, sm)
+    fake = _Reused(sm, A2, registered="2020-01-01T00:00:00+00:00")
+    assert usage.undo(e["id"], fake)["undone"] is True and fake.uses == [(A2, -21.92)]
+
+
+def test_a_spool_added_in_the_same_second_counts_as_there(rig, sd, spoolman_fake_store, sm):
+    e = _undoable(rig, sd, sm)
+    assert usage.undo(e["id"], _Reused(sm, A2, registered=e["at"]))["undone"] is True
+
+
+def test_spoolman_down_at_the_check_changes_nothing_and_says_so_as_before(rig, sd, spoolman_fake_store, sm):
+    e = _undoable(rig, sd, sm)
+    fake = _Reused(sm, A2, down=True)
+    with pytest.raises(usage.SpoolmanError):
+        usage.undo(e["id"], fake)
+    assert fake.uses == []
+
+
+@pytest.mark.parametrize("text,want", [("2026-11-08T12:00:00Z", 1793880000.0), ("2026-11-08T12:00:00", 1793880000.0),
+                                       ("2026-11-08T07:00:00-05:00", 1793880000.0), ("2026-11-08T12:00:00.5Z", 1793880000.5)])
+def test_spoolmans_time_forms_all_read_as_utc(text, want):
+    import datetime as dt
+    expected = dt.datetime(2026, 11, 8, 12, tzinfo=dt.timezone.utc).timestamp() + (want - 1793880000.0)
+    assert usage._registered({"registered": text}) == expected
+
+
 def test_undo_after_7_days_is_too_old(rig, sd, spoolman_fake_store, sm, monkeypatch):
     calibrate()
     put(sd, "/cache/bracket_v3_plate_1.gcode.3mf", build_3mf(TWO_COLOUR))

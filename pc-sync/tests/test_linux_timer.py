@@ -1,4 +1,5 @@
 """Linux: the token file, the sync's own data folder and the systemd user timer."""
+import contextlib
 import stat
 import sys
 from pathlib import Path
@@ -116,6 +117,8 @@ def test_cli_status_reads_the_linux_folders(tmp_path, monkeypatch, capsys):
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
     monkeypatch.delenv("XDG_DATA_HOME", raising=False)
     monkeypatch.setattr(cli.sys, "platform", "linux")
+    # the lock would take the Linux branch on a real Windows host too, and there's no fcntl there
+    monkeypatch.setattr(cli.store, "single_instance", lambda dirs: contextlib.nullcontext())
     assert cli.main(["status"]) == 0
     out = capsys.readouterr().out
     assert "Bambu Studio:    Flatpak BambuStudio, user 555" in out

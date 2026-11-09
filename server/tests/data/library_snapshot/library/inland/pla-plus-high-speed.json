@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "vendor": "Inland",
+  "product": "PLA+ High Speed",
+  "material": "PLA",
+  "colors": [
+    "Black",
+    "White",
+    "Dark Blue",
+    "Gray",
+    "Silver",
+    "True Red",
+    "Olive Green",
+    "Purple",
+    "Light Blue",
+    "Light Brown",
+    "Forest Green",
+    "Yellow",
+    "Brown",
+    "Blue",
+    "Orange",
+    "Beige"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "45-60",
+    "_print_speed": "30-500 mm/s",
+    "_max_print_speed": "500 mm/s",
+    "_diameter_tolerance": "+/-0.03",
+    "_ams": "Listing names AMS and CFS compatibility",
+    "_notes": "Cross-check from the Amazon listing sold by Micro Center (item: Inland Amazon listings). Match to the library's Inland high-speed PLA+ line spelling before import. Density, drying, HDT, max volumetric speed not published."
+  },
+  "conflicts": [],
+  "source_quality": "brand_amazon_listing",
+  "sources": [
+    "https://www.amazon.com/dp/B0CTR4S8MD"
+  ],
+  "updated": "2026-11-02"
+}

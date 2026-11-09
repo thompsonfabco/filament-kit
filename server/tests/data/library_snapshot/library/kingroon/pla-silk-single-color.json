@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "vendor": "Kingroon",
+  "product": "PLA Silk Single Color",
+  "material": "PLA",
+  "colors": [
+    "Black",
+    "Green",
+    "Blue",
+    "Orange",
+    "Silver",
+    "Copper",
+    "Purple",
+    "Gold",
+    "Red"
+  ],
+  "bambu_parent": "Bambu PLA Silk+",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "195"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.21"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-70",
+    "fan_max_speed": "100%",
+    "_drying": "50C 8h",
+    "_hdt_0.45MPa": "50",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "kingroon.com page table: Nozzle 195-230, Bed 50-70, Fan 100%, Length (1.75mm) 330-335m, Density 1.21, Distortion Temp 50C(0.45MPa); matches Filament Guide datasheet row 'Silk-PLA'. Tolerance '+/- 0.03mm' from kingroon3d.com page. page Printing Tips also give: AMS 2 Pro / AMS HT 55C 8h; X1 heatbed 60-70C 12h. Kingroon also publishes a newer 'PLA Silk+' TDS V1.0 (2025/12/1: 210-240C, bed 35-45, density 1.27) - a different product name, not applied here. Bambu parent not confirmed."
+  },
+  "conflicts": [
+    "kingroon3d.com single-colour page: density 1.2, HDT 53C(0.45MPa)"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://kingroon.com/products/kingroon-silk-single-color-pla",
+    "https://kingroon3d.com/products/kingroon-pla-silk-single-color-3d-printer-filament",
+    "https://cdn.shopify.com/s/files/1/0612/4784/8666/files/Filaments-Datasheet.pdf?v=1741943123"
+  ],
+  "updated": "2026-11-02"
+}

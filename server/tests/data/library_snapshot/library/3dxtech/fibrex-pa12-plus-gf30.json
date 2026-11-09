@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "FibreX PA12+GF30",
+  "material": "PA12-GF",
+  "colors": [],
+  "bambu_parent": "Bambu PAHT-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "265"
+    ],
+    "nozzle_temperature_range_high": [
+      "285"
+    ],
+    "filament_density": [
+      "1.23"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_drying": "90C 4h",
+    "_vitrification": "158 (Tg, DSC)",
+    "_hdt_0.45MPa": "150",
+    "_fiber_content": "30% glass fiber",
+    "_hardened_nozzle_required": "Yes (hardened steel, 0.4mm minimum)",
+    "_min_nozzle": "0.4",
+    "_notes": "Official page (CUT 120C, HDT 150C) + FibreX PA12+GF30 TDS Rev 1.0 (rev1tech copy). Bed range not captured. bambu_parent unconfirmed (no PA12-GF preset)."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.3dxtech.com/products/fibrex-nylon-12-gf30-1",
+    "https://media.rev1tech.com/media/3dxtech/fibrex-nylon-12-gf30/fibrex-nylon-12-gf30-tds.pdf"
+  ],
+  "updated": "2026-11-02"
+}

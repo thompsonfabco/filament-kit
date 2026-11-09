@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "MetalFil - Brass",
+  "material": "PLA",
+  "colors": [
+    "Brass"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {},
+  "published_ranges": {
+    "_nozzle_single": "190 (printed as '± 190° C', a single value, not a range)",
+    "bed_all_plates": "0-60",
+    "fan_min_speed/fan_max_speed": "50-100",
+    "_min_nozzle": "0.6",
+    "_enclosure": "not needed",
+    "_notes": "Brass-filled PLA; the official Formfutura page says 'Very high brass-filling of +/-60% (gravimetrically)', while the older Formfutura TDS (pdf.directindustry.com copy) says 'approximately 70% of gravimetric brass filling' (resellers copying that older text quote 2.78 g/cc). Density 3.5 g/cc is outside the validator range, so it is not in fields. Nozzle temp is a single value, so it is not put in the range fields. Abrasive: use a hardened nozzle. Bambu parent not confirmed."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://b2b.formfutura.com/metalfil-brass"
+  ],
+  "updated": "2026-11-02"
+}

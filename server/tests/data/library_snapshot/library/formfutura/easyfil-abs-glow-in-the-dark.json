@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "EasyFil ABS - Glow in the Dark",
+  "material": "ABS",
+  "colors": [
+    "Glow Green"
+  ],
+  "bambu_parent": "Bambu ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "255"
+    ],
+    "filament_density": [
+      "1.03"
+    ]
+  },
+  "published_ranges": {
+    "_bed_single": "100 (printed as '± 100° C')",
+    "fan_min_speed/fan_max_speed": "0-35",
+    "filament_retraction_length": "5",
+    "_vicat": "103",
+    "_notes": "Density is from the filament-length table on the official page (ρ 1.03 g/cc). Glow pigment (strontium aluminate type) is commonly abrasive; Formfutura does not state this, but a hardened nozzle is advisable. Enclosure is advisable for ABS on X1/P1S/X2D. Bambu parent not confirmed."
+  },
+  "conflicts": [
+    "nozzle/bed: 225-270 / 90-110 (3djake.com, dhm-online.com, seaflowerstore.com (older Formfutura guideline))"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://formfutura.com/product/easyfil-abs-glow-in-the-dark/",
+    "https://www.3djake.com/formfutura/easyfiltm-abs-glow-in-the-dark-green"
+  ],
+  "updated": "2026-11-02"
+}

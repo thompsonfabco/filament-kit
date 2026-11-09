@@ -32,15 +32,17 @@
     "_hdt_0.45MPa": "60",
     "_vicat": "64",
     "_vitrification": "54 (Tg, DSC)",
-    "_notes": "TDS V1.0: PLA with fine wood powder; Textured / Smooth PEI with glue; fan on; HDT 1.8 MPa 57 C; melting 156 C. Sold as 'Wood PLA'. Verification 2026-11-01: fields and plate/chamber/fan/retraction ranges confirmed against the TDS PDF; kingroon.com / kingroon3d.com product pages returned HTTP 429, so page-derived notes and conflicts were not re-checked."
+    "_notes": "TDS V1.0 (2025/12/1): nozzles 0.2-0.8, Textured/Smooth PEI with glue, HDT 1.8MPa 57C, melt 156C. Retraction/print-speed/chamber label mapping inferred from the flattened PDF layout (value order matches the other Kingroon V1.0 TDS sheets: retraction length, retraction speed, chamber temp, overhang, bridging ... printing speed). Product page not re-read this run. Earlier entry: TDS V1.0: PLA with fine wood powder; Textured / Smooth PEI with glue; fan on; HDT 1.8 MPa 57 C; melting 156 C. Sold as 'Wood PLA'. Verification 2026-11-01: fields and plate/chamber/fan/retraction ranges confirmed against the TDS PDF; kingroon.com / kingroon3d.com product pages returned HTTP 429, so page-derived notes and conflicts were not re-checked."
   },
   "conflicts": [
+    "Kingroon Filament Guide datasheet 'Wood PLA': 190-220C, bed 50-70, 1.20 g/cm3",
     "kingroon.com Wood PLA Filament page: print temp 195-210, tolerance +/-0.03 mm"
   ],
   "source_quality": "official_tds",
   "sources": [
+    "https://cdn.shopify.com/s/files/1/0722/0120/8047/files/KINGROON_PLA_Wood_Technical_Data_Sheet_V1.0.pdf?v=1765295624",
     "https://wiki.kingroon.com/kingroon_pla_wood_technical_data_sheet_v1.0.pdf",
     "https://kingroon.com/products/kingroon-wood-pla-filament"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

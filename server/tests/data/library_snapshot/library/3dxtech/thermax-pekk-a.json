@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "ThermaX PEKK-A",
+  "material": "PEKK",
+  "colors": [
+    "Natural",
+    "Black"
+  ],
+  "bambu_parent": "Generic PC",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "345"
+    ],
+    "nozzle_temperature_range_high": [
+      "375"
+    ],
+    "filament_density": [
+      "1.27"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "120-140",
+    "chamber_temperatures": "70-150",
+    "_drying": "120C 6-8h",
+    "_vitrification": "162 (Tg)",
+    "_hdt_0.45MPa": "150",
+    "_notes": "Density/Tg/HDT from Source Graphics reproduction of ThermaX PEKK-A TDS (Rev 2.1); Tm 305C. Nozzle/bed/chamber from 3DPrima copy of 3DXTech product text. Colors from official collection listing. Beyond X1/P1/P2S."
+  },
+  "conflicts": [
+    "density 1.29 (product-page-linked PEKK TDS Rev 3.1 (per PR #688, unverified))",
+    "Tm 335C (3DXTech marketing text)",
+    "drying 120C 4h (3DPrima copy of product page)"
+  ],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://sourcegraphics.com/product/3dxtech-thermax-pekk-a-filament",
+    "https://www.3dxtech.com/collections/ultra-performance",
+    "https://www.3dxtech.com/pages/filament-drying-instructions"
+  ],
+  "updated": "2026-11-02"
+}

@@ -33,6 +33,24 @@ class UpdaterTest {
     @Before fun setUp() = Dispatchers.setMain(StandardTestDispatcher(scheduler))
     @After fun tearDown() = Dispatchers.resetMain()
 
+    @Test fun aFailedInstallStaysOnTheBannerUntilTheNextTry() {
+        val installer = FakeInstaller(allowed = true)
+        val u = updater(FakeSource("7"), installer)
+        scheduler.runCurrent()
+        installer.failure.value = UpdateTexts.NOT_SIGNED_LIKE_YOUR_APP
+        scheduler.runCurrent()
+        assertEquals(UpdateTexts.NOT_SIGNED_LIKE_YOUR_APP, u.state.value.error)
+        u.install()
+        assertNull("a new try starts clean", u.state.value.error)
+        scheduler.runCurrent()
+    }
+
+    @Test fun theOfferedReleaseComesFromTheServer() {
+        val u = updater(FakeSource("7"), FakeInstaller(allowed = true))
+        scheduler.runCurrent()
+        assertEquals("1.0", u.state.value.offeredVersion)
+    }
+
     private class FakeSource(var apkVersion: String?, var api: Int = 1) : UpdateSource {
         var infoCalls = 0
         var infoError: Exception? = null
@@ -58,6 +76,7 @@ class UpdaterTest {
         var confirmsShown = 0
         override val confirmPending: Flow<Boolean> = pending
         override fun showConfirm() { confirmsShown++ }
+        override val failure = MutableStateFlow<String?>(null)
     }
 
     private fun updater(source: UpdateSource, installer: ApkInstall = FakeInstaller(true), router: PairRouter = PairRouter()) =

@@ -2,7 +2,7 @@
   "schema_version": 1,
   "vendor": "3DXTech",
   "product": "CarbonX Nylon+CF [Gen3]",
-  "material": "PA-CF",
+  "material": "PA6-CF",
   "colors": [
     "Black"
   ],
@@ -10,18 +10,34 @@
   "fields": {
     "filament_density": [
       "1.17"
+    ],
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_diameter": [
+      "1.75"
     ]
   },
   "published_ranges": {
     "_vitrification": "70 (Tg, DSC)",
     "_hdt_0.45MPa": "147",
-    "_notes": "3DXTech TDS Rev 3.0 (German-language copy hosted by Conrad, SKU NYL3010500BK0, 'CarbonX CF PA6'). TDS gives specimen print conditions only, no recommended range: 275C nozzle, 80C bed, 0.4mm nozzle. Older Gen2 TDS Rev 2.1 (semi-aromatic PA copolymer) listed 255-275 nozzle / 90-100 bed / 50-80 mm/s and HDT 147, density 1.17 - different generation, not used in fields. Surface resistance >10^9 ohm/sq. Filament diameter not printed on the cited TDS (removed in source check)."
+    "_notes": "Official product page 'CarbonX Nylon 6+CF' (Gen3; 'higher HDT ... 147C at .45MPa'). Layer height 0.25mm or higher. Density not re-read this run; keep TDS value from existing entry (CarbonX_PA6_G3_TDS_v3.0 on official hub). Earlier entry: 3DXTech TDS Rev 3.0 (German-language copy hosted by Conrad, SKU NYL3010500BK0, 'CarbonX CF PA6'). TDS gives specimen print conditions only, no recommended range: 275C nozzle, 80C bed, 0.4mm nozzle. Older Gen2 TDS Rev 2.1 (semi-aromatic PA copolymer) listed 255-275 nozzle / 90-100 bed / 50-80 mm/s and HDT 147, density 1.17 - different generation, not used in fields. Surface resistance >10^9 ohm/sq. Filament diameter not printed on the cited TDS (removed in source check).",
+    "bed_all_plates": "80-110",
+    "_drying": "90C 4h",
+    "_hardened_nozzle_required": "Yes (hardened steel, 0.4mm minimum)",
+    "_min_nozzle": "0.4",
+    "_enclosure": "Not required, but improves layer bonding"
   },
   "conflicts": [],
-  "source_quality": "reseller_tds_copy",
+  "source_quality": "official_page",
   "sources": [
+    "https://www.3dxtech.com/products/carbonx-nylon-6-cf-1",
+    "https://www.3dxtech.com/pages/filament-drying-instructions",
     "https://asset.conrad.com/media10/add/160267/c1/-/gl/002543874DS00/tehnicni-podatki-2543874-3d-xtech-nyl3010500bk0-carbonx-cf-polyamid-pa6-3d-tiskalnik-filament-pa-poliamid-odporno-na-kemikalije-175-mm-500-g-c.pdf",
     "https://cdn.shopify.com/s/files/1/0987/4280/files/Carbon_Fiber_NYLON_Filament_v2.2.pdf"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

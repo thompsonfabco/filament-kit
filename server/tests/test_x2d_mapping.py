@@ -129,14 +129,15 @@ def test_a_slot_the_sensor_says_is_empty_stays_out_even_if_it_names_a_filament(f
     assert [x["label"] for x in saved] == ["A1", "A3", "Ext-L", "Ext-R"]   # never put back: nothing to write to
 
 
-def test_a_real_failure_is_still_a_failure_and_names_the_printers_code(fake_ftp, x2d):
+def test_failed_with_an_echo_is_mapped_flagged_and_names_the_printers_code(fake_ftp, x2d):
+    """The X2D's report: FAILED, [0, 1, 2, 3]. The numbers count; an echo can't prove the printer read the job."""
     rep = x2d_report()
     m = FakeManager(fake_ftp.root, report=rep)
     m.final, m.print_error = "FAILED", 83935248
     r = calib3mf.run(m, SERIAL, x2d_map(rep))
-    assert r.consistent is False
-    assert any(p == "the calibration job ended as FAILED on the printer (print_error 0x0500C010)"
-               for p in r.problems), r.problems
+    assert r.consistent is True and r.problems == [] and r.scheme_unsettled is True, r.problems
+    assert any(n.startswith("the calibration job ended as FAILED on the printer (print_error 0x0500C010)")
+               for n in r.notes), r.notes
     assert len(jobs(m)) == 1           # never a second job after a real failure
 
 
@@ -360,6 +361,28 @@ def test_a_printer_with_no_ams_ends_up_calibrated_with_the_holders_own_ids(rig):
     assert v["state"] == "done" and v["calibrated"] is True and v["observe"] is False, v["problems"]
     assert v["problems"] == [] and printer.jobs == [] and v["scheme"] is None
     assert {s["label"]: s["global"] for s in v["slots"]} == {"Ext-L": 254}
+
+
+def test_a_slot_with_no_number_stays_without_one_when_no_scheme_fits(rig, monkeypatch):
+    monkeypatch.setattr(calib3mf, "run", lambda *a, **k: calib3mf.CalibResult(
+        consistent=True, scheme=None, scheme_unsettled=True, decoding={"A1": 9001, "A2": 9002, "A3": 9003},
+        skipped=["A4"], external=["Ext-L"], notes=["fit no numbering"]))
+    m, _printer = rig(_with_presence("7"))
+    v = mapping.Mapper(m).run(SLOT_SERIAL)
+    assert v["calibrated"] is True and v["scheme"] is None and v["scheme_unsettled"] is True
+    assert {s["label"]: s["global"] for s in v["slots"]} == {"A1": 9001, "A2": 9002, "A3": 9003, "A4": None,
+                                                             "Ext-L": 254}
+    assert ams.load_map(SLOT_SERIAL).slots["A4"]["global_id"] is None
+
+
+def test_forgetting_a_report_key_leaves_the_rest(rig):
+    m, _printer = rig(copy.deepcopy(REPORT))
+    conn = m._conns[SLOT_SERIAL]
+    conn._report = {**conn._report, "mapping": [1, 2]}
+    m.forget_report_key(SLOT_SERIAL, "mapping")
+    r = m.wait_report(SLOT_SERIAL, lambda r: True, 1)
+    assert "mapping" not in r and "gcode_state" in r
+    m.forget_report_key("NOSUCH", "mapping")
 
 
 def test_cli_map_prints_the_notes(rig, capsys, monkeypatch):

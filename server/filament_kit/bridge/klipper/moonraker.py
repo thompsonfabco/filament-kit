@@ -3,12 +3,14 @@
 `Moonraker(host, port=7125, api_key="", timeout=5.0)`: one printer's Moonraker. Every method raises `Offline`
 (connection refused, timeout, DNS), `Unauthorized` (401/403: Moonraker wants an API key) or `MoonrakerError` (any
 other error answer); `gcode` raises `GcodeError` with Klipper's own message when Klipper refuses a script. The API key
-goes in the `X-Api-Key` header and is never logged.
+goes in the `X-Api-Key` header and is never logged. Redirects are never followed, on HTTP or the websocket, to the same
+host or another: real Moonraker doesn't send them, and the key must not go wherever one points.
 
 `Subscriber(client, objects, on_status, on_event, backoff=(2, 60))`: a thread that keeps one websocket open to
 `/websocket`, subscribes to `objects` (`printer.objects.subscribe`), calls `on_status(status)` with the full snapshot
 after each (re)subscribe and with each `notify_status_update` delta, and `on_event(name, params)` for
-`notify_klippy_ready|shutdown|disconnected` and `notify_active_spool_set`. It re-subscribes after
+`notify_klippy_ready|shutdown|disconnected`, `notify_active_spool_set` and `notify_spoolman_status_changed`. It
+re-subscribes after
 `notify_klippy_ready` (Klipper restarted: subscriptions are gone) and reconnects with doubling backoff. Callbacks
 run on the subscriber's thread and must not block for long.
 """
@@ -17,6 +19,7 @@ from __future__ import annotations
 import itertools
 import json
 import logging
+import socket
 import threading
 import time
 import urllib.error
@@ -26,7 +29,8 @@ from typing import Callable
 
 log = logging.getLogger(__name__)
 ACTIONS = ("pause", "resume", "cancel")
-EVENTS = ("notify_klippy_ready", "notify_klippy_shutdown", "notify_klippy_disconnected", "notify_active_spool_set")
+EVENTS = ("notify_klippy_ready", "notify_klippy_shutdown", "notify_klippy_disconnected", "notify_active_spool_set",
+          "notify_spoolman_status_changed")
 MAX_BODY = 8_000_000
 
 
@@ -54,6 +58,14 @@ def _host_part(host: str) -> str:
     return f"[{host}]" if ":" in host and not host.startswith("[") else host
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *a, **kw):
+        return None     # the 3xx then reaches the caller as an HTTPError
+
+
+_OPENER = urllib.request.build_opener(_NoRedirect)
+
+
 class Moonraker:
     def __init__(self, host: str, port: int = 7125, api_key: str = "", timeout: float = 5.0):
         self.host, self.port, self.timeout = host, int(port), timeout
@@ -77,9 +89,12 @@ class Moonraker:
             headers["Content-Type"] = "application/json"
         req = urllib.request.Request(url, data=data, method=method, headers=headers)
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as r:
+            with _OPENER.open(req, timeout=self.timeout) as r:
                 raw = r.read(MAX_BODY + 1)
         except urllib.error.HTTPError as e:
+            if 300 <= e.code < 400:     # Location is left out: it is the far side's text
+                raise MoonrakerError(f"Moonraker at {self.host}:{self.port} answered with a redirect ({e.code}), which "
+                                     "the kit does not follow: give the printer's direct address") from None
             msg = _error_message(e)
             if e.code in (401, 403):
                 raise Unauthorized(f"Moonraker at {self.host} wants an API key ({e.code})") from None
@@ -223,8 +238,13 @@ class Subscriber:
         while not self._stop.is_set():
             try:
                 headers = {"X-Api-Key": self.client._key} if self.client._key else None
-                with connect(self.client.ws_url(), additional_headers=headers, open_timeout=self.client.timeout,
-                             close_timeout=1, max_size=MAX_BODY) as ws:
+                # Our own socket because websockets then refuses every redirect; left to itself it follows them,
+                # and on another host it would strip only its own credential headers, not X-Api-Key.
+                sock = socket.create_connection((self.client.host.strip("[]"), self.client.port),
+                                                timeout=self.client.timeout)
+                sock.settimeout(None)
+                with connect(self.client.ws_url(), sock=sock, additional_headers=headers,
+                             open_timeout=self.client.timeout, close_timeout=1, max_size=MAX_BODY) as ws:
                     self._ws = ws
                     if self._stop.is_set():
                         break

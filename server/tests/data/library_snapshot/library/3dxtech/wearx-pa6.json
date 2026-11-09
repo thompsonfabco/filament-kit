@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "WearX PA6",
+  "material": "PA",
+  "colors": [],
+  "bambu_parent": "Generic PA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "260"
+    ],
+    "nozzle_temperature_range_high": [
+      "275"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "80-95",
+    "_vitrification": "76 (Tg)",
+    "_hdt_0.45MPa": "143",
+    "_enclosure": "Heated chamber recommended",
+    "_notes": "Official page 'WEARX Nylon 6': Tm 200C, 62 MPa tensile, 3x wear resistance vs unfilled AmideX PA6; wear resistance limited to 120C. HDT load not stated on page (assumed 0.45MPa per 3DXTech convention). WearX not listed in drying table; generic Nylon 6 entry is 90C 4-6h. Density not retrieved."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://3dxtech.com/product/wear-resistant-pa6"
+  ],
+  "updated": "2026-11-02"
+}

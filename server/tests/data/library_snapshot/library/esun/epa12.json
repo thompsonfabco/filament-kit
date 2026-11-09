@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "ePA12",
+  "material": "PA",
+  "colors": [
+    "Black",
+    "White"
+  ],
+  "bambu_parent": "Generic PA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "260"
+    ],
+    "nozzle_temperature_range_high": [
+      "290"
+    ],
+    "filament_density": [
+      "1.012"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-90",
+    "fan_max_speed": "0%",
+    "_drying": "70C >12h",
+    "_print_speed": "<150mm/s",
+    "_hdt_0.45MPa": "100",
+    "_enclosure": "Enclosed-chamber printing",
+    "_notes": "Shown as 'PA12' on esun3d.com. Hex codes: Black #272729, White #E3E4D4."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.esun3d.com/epa12-product"
+  ],
+  "updated": "2026-11-02"
+}

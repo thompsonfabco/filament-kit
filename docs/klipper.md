@@ -20,14 +20,16 @@ On the kit server:
 
     sudo filament-kit klipper add "Workshop Printer" printer.home.arpa
 
+Moonraker's port is 7125; if yours differs, add `--port <number>`.
+
 It prints what the printer is: the model (from the kit's printer data file), its filament system (one extruder, a
 toolchanger, an AFC unit such as a Box Turtle, a Happy Hare MMU), and its slots. Use the printer's host name when it
 has one; an address works too.
 
 - **Not sure of the address?** `sudo filament-kit klipper scan` looks for Moonraker on the server's own network (at
-  most 256 addresses, only when you run it). Printers that announce themselves (Moonraker's `[zeroconf]`) appear by
+  most 256 addresses, only when you run it); `--subnet <network>` scans another range, up to 256 addresses. Printers that announce themselves (Moonraker's `[zeroconf]`) appear by
   themselves.
-- **Moonraker asks for an API key?** `sudo filament-kit klipper api-key <id>` asks for it; it is never shown again.
+- **Moonraker asks for an API key?** `sudo filament-kit klipper api-key <id>` asks for it; it is never shown again. Leaving it empty removes the saved key.
 - **Changed the printer or its firmware?** `sudo filament-kit klipper detect <id>` reads the model and filament system
   again.
 - The kit keeps its printer list in `printers.xml`. It also writes the old-format `printers.json` beside it on every

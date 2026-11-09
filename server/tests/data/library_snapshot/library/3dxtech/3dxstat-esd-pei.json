@@ -6,6 +6,7 @@
   "colors": [
     "Black"
   ],
+  "bambu_parent": "Generic PC",
   "fields": {
     "nozzle_temperature_range_low": [
       "360"
@@ -14,18 +15,27 @@
       "390"
     ],
     "filament_diameter": [
-      "2.85"
+      "1.75"
+    ],
+    "filament_density": [
+      "1.34"
     ]
   },
   "published_ranges": {
     "bed_all_plates": "140-160",
-    "_drying": "120C 4h",
-    "_notes": "Values from MatterHackers listing (only 2.85mm listed there); official page unreachable (HTTP 429). All-metal hotend, no cooling fan, PEI tape bed; may be annealed. ESD: surface resistivity 10^7-10^9 ohm. Ultem grade not stated on the listing (search results for Vision Miner name it ULTEM 1010; not read). Beyond Bambu Lab printer nozzle limits."
+    "_drying": "150C 4-6h",
+    "_notes": "Grade confirmed: current product is '3DXSTAT ESD-PEI 1010' (ULTEM 1010 base, surface resistivity 10^4-10^9 Ohm per 3DXTech blog); hub also lists a separate ESD Ultem 9085 TDS. Density from 3DXTech Knowde listing. Tg/HDT not found in a readable source. Print temps reported elsewhere as 360-390C nozzle / 140-160C bed (unverified) - beyond X1/P1/P2S (>300C nozzle, heated chamber). bambu_parent is a placeholder; no Bambu PEI preset. Earlier entry: Values from MatterHackers listing (only 2.85mm listed there); official page unreachable (HTTP 429). All-metal hotend, no cooling fan, PEI tape bed; may be annealed. ESD: surface resistivity 10^7-10^9 ohm. Ultem grade not stated on the listing (search results for Vision Miner name it ULTEM 1010; not read). Beyond Bambu Lab printer nozzle limits."
   },
-  "conflicts": [],
+  "conflicts": [
+    "filament_diameter: earlier library entry had 2.85 (sources: https://www.matterhackers.com/store/l/3dxtech-3dxstat-black-esd-safe-pei-filament-05kg/sk/ML47Y7F0)"
+  ],
   "source_quality": "reseller_tds_copy",
   "sources": [
+    "https://www.knowde.com/stores/3dxtech/brands/3dxstat",
+    "https://www.3dxtech.com/pages/esd-safe-filament",
+    "https://www.3dxtech.com/blogs/featured/ultem%E2%84%A2-1010-high-performance-filament-for-extreme-applications",
+    "https://www.3dxtech.com/pages/filament-drying-instructions",
     "https://www.matterhackers.com/store/l/3dxtech-3dxstat-black-esd-safe-pei-filament-05kg/sk/ML47Y7F0"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

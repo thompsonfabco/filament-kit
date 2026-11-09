@@ -124,10 +124,10 @@ def test_task_runs_every_ten_minutes():
 
 
 def test_server_and_pc_sync_versions_match():
-    assert _version("server/filament_kit/__init__.py") == _version("pc-sync/fksync/__init__.py") == "0.4.0"
+    assert _version("server/filament_kit/__init__.py") == _version("pc-sync/fksync/__init__.py") == "0.4.1"
     # the wheel takes its version from pyproject; make_release.sh looks for the __version__ wheel
     for rel in ("server/pyproject.toml", "pc-sync/pyproject.toml"):
-        assert re.search(r'^version = "0\.4\.0"\s*$', _read(rel), re.M), rel
+        assert re.search(r'^version = "0\.4\.1"\s*$', _read(rel), re.M), rel
 
 
 SPOOLMAN_SHA = "bcc961af4c20d7ad7f1740f5609cd3efd94c4556baafaeba5036122dd7e46704"
@@ -219,7 +219,7 @@ def test_uninstall_uses_modules_units_and_cleans_station():
     i_user = text.index("userdel filament-kit-station")
     assert text.index("for u in $UNITS") < i_user < text.index('if [ "$PURGE" -eq 1 ]; then\n    rm -rf')
     purge = text[text.index('if [ "$PURGE" -eq 1 ]; then\n    rm -rf'):]
-    assert "for u in filament-kit filament-kit-web spoolman; do" in purge
+    assert 'KIT_USERS="filament-kit filament-kit-web"' in purge and "for u in $KIT_USERS; do" in purge
 
 
 def test_uninstall_removes_the_kits_remote_files():

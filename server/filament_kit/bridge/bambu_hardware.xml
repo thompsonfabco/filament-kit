@@ -25,6 +25,8 @@
   (master_extruder_id), filament-preset ({nozzle} = the nozzle size), client-version (X-BBL-Client-Version); one
   <extruder> per extruder in Bambu Studio's order: type (extruder_type), physical (physical_extruder_map), volume
   (nozzle_volume_type).
+  gcode-only-failed-is-finish: read only by kits up to 0.4.1, which may still get this file through the hardware feed;
+  newer kits judge the calibration by the numbers the printer reports and ignore it.
   job-file on <model>: which job file the slot calibration sends. "project" carries the <slicer-project> fields, and
   is set only on the X2D and P2S, which refuse the minimal file; that they accept this one is UNVERIFIED until a
   mapping has run on each. Without it (or "minimal") a model gets the minimal file, the one verified on the H2D and

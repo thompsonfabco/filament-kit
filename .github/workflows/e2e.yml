@@ -1,0 +1,50 @@
+name: e2e
+
+# The installer's end-to-end run (docs/testing-e2e.md). By hand, on the commit to be tagged: after a tag the release is public.
+on:
+  workflow_dispatch:
+    inputs:
+      previous_tag:
+        description: "The release to update from and roll back to (empty: the newest tag)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Needs
+        run: sudo apt-get update -q && sudo apt-get install -y -q python3-cryptography
+
+      - name: Which release
+        id: previous
+        shell: bash
+        env:
+          GIVEN: ${{ inputs.previous_tag }}
+        run: |
+          tag="$GIVEN"
+          if [ -z "$tag" ]; then
+              tag=$(git tag --list 'v*' --sort=-v:refname | sed -n 1p)
+          fi
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "not a release tag: $tag" >&2; exit 1; }
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Run
+        env:
+          PREVIOUS: ${{ steps.previous.outputs.tag }}
+        run: sudo bash tools/e2e/run.sh --previous "$PREVIOUS" --results "$RUNNER_TEMP/e2e-results.json"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-results
+          path: ${{ runner.temp }}/e2e-results.json
+          if-no-files-found: warn

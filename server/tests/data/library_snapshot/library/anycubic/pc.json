@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "vendor": "Anycubic",
+  "product": "PC",
+  "material": "PC",
+  "colors": [
+    "Black",
+    "White",
+    "Translucent White"
+  ],
+  "bambu_parent": "Bambu PC",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "270"
+    ],
+    "nozzle_temperature_range_high": [
+      "290"
+    ],
+    "filament_density": [
+      "1.2"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "12"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100-120",
+    "_drying": "80C 8-12h",
+    "_print_speed": "40-250 mm/s",
+    "_vicat": "122",
+    "_hdt_0.45MPa": "110",
+    "_vitrification": "230 (melting point, not Tg)",
+    "_diameter_tolerance": "+/-0.03",
+    "_min_nozzle": "0.2",
+    "_hardened_nozzle_required": "No - 'works flawlessly with standard nozzles'",
+    "_ams": "Official: ACE compatible (Anycubic); no Bambu AMS statement.",
+    "_notes": "Specs from anycubic.au and ca.anycubic.com product spec tables (identical). Bed glue required per page. Enclosure not stated. Diameter and +/-0.03 from Anycubic Official Store Amazon listing B0FPQ7V6T3. Bambu parent not confirmed."
+  },
+  "conflicts": [
+    "Impact strength: marketing copy/Amazon 42 kJ/m2 vs spec table Izod 30+/-12 kJ/m2 (not a preset field)"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.anycubic.au/products/pc-filament",
+    "https://ca.anycubic.com/products/pc-filament",
+    "https://www.amazon.com/dp/B0FPQ7V6T3"
+  ],
+  "updated": "2026-11-02"
+}

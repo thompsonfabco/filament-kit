@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "TPE-83A",
+  "material": "TPE",
+  "colors": [],
+  "bambu_parent": "Bambu TPU 95A HF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.14"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "45-60",
+    "fan_max_speed": "100%",
+    "_drying": "55C >4h",
+    "_print_speed": "<50mm/s",
+    "_hardness": "83A",
+    "_ams": "Not suitable: eSUN says it 'cannot be printed by a remote extruder'; use the external spool with a direct drive",
+    "_notes": "The newer esun3d.com page text recommends drying at 60C for more than 8 h; the parameter table says 55C >4h. eSUN recommends cleaning filament after long prints."
+  },
+  "conflicts": [
+    "_drying: 60C >8h (https://www.esun3d.com/elastic-tpe-83a-product (newer page FAQ text))"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.esun3d.com/elastic-tpe-83a-product"
+  ],
+  "updated": "2026-11-02"
+}

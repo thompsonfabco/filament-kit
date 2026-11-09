@@ -5,6 +5,7 @@ so only this Windows user on this PC can read it. Off Windows (Linux, tests, CI)
 file in a 0700 folder ($XDG_DATA_HOME or ~/.local/share, then filament-kit-sync on Linux), so only
 this user (and root) can read it. The token is never logged or printed by this module.
 """
+import base64
 import contextlib
 import datetime
 import json
@@ -35,6 +36,7 @@ class AppDirs:
         self.partial = self.base / "partial"      # a build whose install stopped part-way (ruling S28)
         self.state = self.base / "state.json"
         self.lock = self.base / "sync.lock"
+        self.pair_aside = self.base / "pair-aside.json"  # the pairing in place while a new one is being proven
         # folders/<variant>-<user id>/: one AppDirs per secondary Bambu Studio folder (installed, backups, its
         # installing.json and state.json; see sync)
 
@@ -160,6 +162,82 @@ def load_config(dirs: AppDirs) -> dict:
 
 def save_config(dirs: AppDirs, cfg: dict) -> None:
     _write_atomic(dirs.config, (json.dumps(cfg, indent=2, sort_keys=True) + "\n").encode("utf-8"))
+
+
+# --- the pairing kept aside while a new one is proven ---------------------------------------------
+
+def _read_or_none(path: Path) -> bytes | None:
+    try:
+        return path.read_bytes()
+    except FileNotFoundError:
+        return None
+
+
+def set_pair_aside(dirs: AppDirs) -> None:
+    """Keep the token and config files as they are on disk. The token's bytes go through unchanged, so its protection
+    (DPAPI on Windows) is the same when they come back: nothing is decrypted or encrypted again. While an earlier new
+    pairing still waits for its proof, what's on disk is that one and the aside already holds the last proven: it stays."""
+    if pair_waiting(dirs):
+        return
+    tok, cfg = _read_or_none(dirs.token), _read_or_none(dirs.config)
+    body = {"token": base64.b64encode(tok).decode("ascii") if tok is not None else None,
+            "config": base64.b64encode(cfg).decode("ascii") if cfg is not None else None}
+    _write_atomic(dirs.pair_aside, json.dumps(body).encode("utf-8"))
+
+
+def _read_aside(dirs: AppDirs) -> dict | None:
+    raw = _read_or_none(dirs.pair_aside)
+    if raw is None:
+        return None
+    try:
+        body = json.loads(raw)
+    except ValueError:
+        return None
+    return body if isinstance(body, dict) else None
+
+
+def pair_waiting(dirs: AppDirs) -> bool:
+    """A new pairing that couldn't reach the server: it's on disk, and the next run proves it or brings the old one back."""
+    body = _read_aside(dirs)
+    return bool(body and body.get("waiting") is True)
+
+
+def mark_pair_waiting(dirs: AppDirs) -> None:
+    body = _read_aside(dirs)
+    if body is not None:
+        _write_atomic(dirs.pair_aside, json.dumps({**body, "waiting": True}).encode("utf-8"))
+
+
+def restore_pair_aside(dirs: AppDirs) -> bool:
+    """Put the kept pairing back (no pairing, if there was none) and drop the aside. False when there is no aside."""
+    raw = _read_or_none(dirs.pair_aside)
+    if raw is None:
+        return False
+    try:
+        body = json.loads(raw)
+        saved = {path: None if body[key] is None else base64.b64decode(body[key])
+                 for path, key in ((dirs.token, "token"), (dirs.config, "config"))}
+    except (ValueError, KeyError, TypeError):
+        dirs.pair_aside.unlink(missing_ok=True)      # unreadable: what is on disk stays
+        return False
+    for path, data in saved.items():
+        if data is None:
+            path.unlink(missing_ok=True)
+        else:
+            _write_atomic(path, data)
+    dirs.pair_aside.unlink(missing_ok=True)
+    return True
+
+
+def drop_pair_aside(dirs: AppDirs) -> None:
+    dirs.pair_aside.unlink(missing_ok=True)
+
+
+def recover_interrupted_pair(dirs: AppDirs) -> None:
+    """A pairing that crashed before it was proven: the one before it comes back. One that is waiting for its proof isn't
+    a crash, and stays for the next run to settle. Call while holding the lock."""
+    if dirs.pair_aside.exists() and not pair_waiting(dirs) and restore_pair_aside(dirs):
+        log(dirs, "a pairing was interrupted before it was proven: the earlier pairing is back in place")
 
 
 # --- log ---------------------------------------------------------------------------------------

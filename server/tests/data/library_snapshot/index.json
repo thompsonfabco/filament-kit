@@ -1,16 +1,32 @@
 {
   "schema_version": 1,
-  "library_version": 2,
-  "generated": "2026-11-01",
-  "count": 1023,
+  "library_version": 5,
+  "generated": "2026-11-08",
+  "count": 1115,
   "entries": [
+    {
+      "vendor": "3DXTech",
+      "product": "3DXMAX ABS",
+      "material": "ABS",
+      "path": "library/3dxtech/3dxmax-abs.json",
+      "sha256": "a52ae3a4fa0ec9f7729a117d372eca8a0a444889349c49475a0b5968a84746f4",
+      "updated": "2026-11-02"
+    },
     {
       "vendor": "3DXTech",
       "product": "3DXMAX ASA",
       "material": "ASA",
       "path": "library/3dxtech/3dxmax-asa.json",
-      "sha256": "a174d3283a014eac1c0dcd3a514fa199eeed36d45f03f97f6ab81769c96289bd",
-      "updated": "2026-11-01"
+      "sha256": "731218a20e013a4ed74b4d6db3618ce2e1a1c33b934724401a259cbee1c53b21",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "3DXTech",
+      "product": "3DXMAX HIPS",
+      "material": "HIPS",
+      "path": "library/3dxtech/3dxmax-hips.json",
+      "sha256": "2c26a55612f94c424b26a44110ab32582a5ea91539ed63c727e2bb71fa654751",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "3DXTech",
@@ -25,8 +41,8 @@
       "product": "3DXSTAT ESD-ABS",
       "material": "ABS",
       "path": "library/3dxtech/3dxstat-esd-abs.json",
-      "sha256": "4785f6e322110f28c209d166f63a06e791162dd9c135966c2c1e0227b717972f",
-      "updated": "2026-11-01"
+      "sha256": "cf82c65dbf69d01ddb689b3a3b00c12b056072c16c7518c8b990ca7dcdb7ecb0",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "3DXTech",
@@ -49,32 +65,56 @@
       "product": "3DXSTAT ESD-PEI",
       "material": "PEI",
       "path": "library/3dxtech/3dxstat-esd-pei.json",
-      "sha256": "ac43fe3f4e6baa19dcab1bf1e5acc0663a438ee377d6e441fcd37e63400bbdac",
-      "updated": "2026-11-01"
+      "sha256": "d2413ca2ba3b7eb8610b916766c124a2e76d65a06a73d458b2fc6699e8ece429",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "3DXTech",
       "product": "3DXSTAT ESD-PEKK",
       "material": "PEKK",
       "path": "library/3dxtech/3dxstat-esd-pekk.json",
-      "sha256": "9e32bcbc5a83e418374eaa76ec40b1c826089eb6cc2b13830d0e9700bdacb8ee",
-      "updated": "2026-11-01"
+      "sha256": "0666d02143f73fc8d9cdf0be72b30c53aa9904133ce9eafea2a9f08ac524c8bb",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "3DXTech",
       "product": "3DXSTAT ESD-PETG",
       "material": "PETG",
       "path": "library/3dxtech/3dxstat-esd-petg.json",
-      "sha256": "536be96590b9bf437fb9e13cc74fbbd3d96bf58d1c751e11304d0dfa2c663de7",
-      "updated": "2026-11-01"
+      "sha256": "64ed99ab56d751489e820004c561aeb0f8eae59c4e8423c90d10a598799ebb29",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "3DXTech",
       "product": "3DXSTAT ESD-PLA",
       "material": "PLA",
       "path": "library/3dxtech/3dxstat-esd-pla.json",
-      "sha256": "994c769cd28d267478fa1baa0f9dfc0651270ebed2dac63d9d09183f5fa9b257",
-      "updated": "2026-11-01"
+      "sha256": "e3a9fe58dcece3f9c3a450410b56beb5e696aa46ffb5d90c461a97837a1349a9",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "3DXTech",
+      "product": "3DXSTAT ESD-TPU",
+      "material": "TPU",
+      "path": "library/3dxtech/3dxstat-esd-tpu.json",
+      "sha256": "988211c64bc5aa3138cb06d7ea57f22f9aca4e89f6420b77c644caccb2e54e65",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "3DXTech",
+      "product": "AmideX PA6 Copolymer",
+      "material": "PA",
+      "path": "library/3dxtech/amidex-pa6-copolymer.json",
+      "sha256": "d76e57c47b54ea34b7a790ddad2ee30e42c171c5e7b4329a99ad9742caadfa74",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "3DXTech",
+      "product": "AmideX PA6-GF30",
+      "material": "PA6-GF",
+      "path": "library/3dxtech/amidex-pa6-gf30.json",
+      "sha256": "659c9a0b1d42402a18aa348f69b8fa3669b0f9805c63c9a9f06299cb8eb14865",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "3DXTech",
@@ -89,8 +129,8 @@
       "product": "CarbonX ASA+CF",
       "material": "ASA-CF",
       "path": "library/3dxtech/carbonx-asa-plus-cf.json",
-      "sha256": "e2f94f905aa44d4d85b8adc65a98bceeb818f02f714a2b80541772d7f5a33023",
-      "updated": "2026-11-01"
+      "sha256": "58b3165bad4c87892c7dfb4d77a7e315a5a0b59b0739edc4c2de85a3642e3aa0",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "3DXTech",
@@ -102,19 +142,35 @@
     },
     {
       "vendor": "3DXTech",
+      "product": "CarbonX HTN+CF (PPA)",
+      "material": "PPA-CF",
+      "path": "library/3dxtech/carbonx-htn-plus-cf-ppa.json",
+      "sha256": "84bee3fddc0e9e77a7a21d93c23ba0561bcc659602fc3c5cc5cec597fa2dff51",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "3DXTech",
       "product": "CarbonX Nylon+CF [Gen3]",
-      "material": "PA-CF",
+      "material": "PA6-CF",
       "path": "library/3dxtech/carbonx-nylon-plus-cf-gen3.json",
-      "sha256": "d020b9b376247e383a7b5adf36cb9bcbbe1bcee18421a617694b72b7c64961d2",
-      "updated": "2026-11-01"
+      "sha256": "0694d5ae932b557805c8fe41c07cda8b9418670bf170040a68ee62497a5ca028",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "3DXTech",
       "product": "CarbonX PA12+CF",
       "material": "PA12-CF",
       "path": "library/3dxtech/carbonx-pa12-plus-cf.json",
-      "sha256": "9c2054a691cc6bba8f67d386704a4e11574273479680ea9e4d41f6dd91462aaa",
-      "updated": "2026-11-01"
+      "sha256": "07742f6a57048864a0588494e4f9df792a29c44e3dec144fca7bb26a0b643f29",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "3DXTech",
+      "product": "CarbonX PC+CF",
+      "material": "PC-CF",
+      "path": "library/3dxtech/carbonx-pc-plus-cf.json",
+      "sha256": "683e50fd9160016db952cf3f18061d4fcd5a6f024239b662c5f4141b8337efe8",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "3DXTech",
@@ -153,24 +209,40 @@
       "product": "CarbonX PLA+CF",
       "material": "PLA-CF",
       "path": "library/3dxtech/carbonx-pla-plus-cf.json",
-      "sha256": "2b6984a7680a25f46a86484e49d62ecccf47962c99d3ab3221c3defdddec1172",
-      "updated": "2026-11-01"
+      "sha256": "ebc2bbcd875763fdea9d11a7aa7aaa35af0aa9e3d8e8fbf3ee88a3fb890f1ccf",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "3DXTech",
       "product": "ezPC",
       "material": "PC",
       "path": "library/3dxtech/ezpc.json",
-      "sha256": "b29288974d1527da272da0552a99fc35ca6891c086369c7139b4c38ba789c35f",
-      "updated": "2026-11-01"
+      "sha256": "95bf2b5c995963afa6cf6da08a335f284c4c6fedaff9784a8457b509ff058423",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "3DXTech",
+      "product": "FibreX ABS GF10",
+      "material": "ABS-GF",
+      "path": "library/3dxtech/fibrex-abs-gf10.json",
+      "sha256": "d0db24026f3bdde7415c8a922e38de616941927e58fef956e224cb1017945580",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "3DXTech",
+      "product": "FibreX PA12+GF30",
+      "material": "PA12-GF",
+      "path": "library/3dxtech/fibrex-pa12-plus-gf30.json",
+      "sha256": "117783d9583dfce1a957c2aa2a5a9cbd8ba22b972a1f1ba1128bce7686f83f25",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "3DXTech",
       "product": "Firewire FR-ABS",
       "material": "ABS",
       "path": "library/3dxtech/firewire-fr-abs.json",
-      "sha256": "e619656ee0508a347f43439246fe6e9efe3a2defa8e0c5b20bc1da98a52f70ed",
-      "updated": "2026-11-01"
+      "sha256": "0188dd8697d2d467c1aa7bece1a54408cb65c53dbe130f9775127ca4b3f369e5",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "3DXTech",
@@ -182,35 +254,75 @@
     },
     {
       "vendor": "3DXTech",
+      "product": "FluorX PVDF",
+      "material": "PVDF",
+      "path": "library/3dxtech/fluorx-pvdf.json",
+      "sha256": "1b5e58a730f54f7b6222f6dba60a7d0aa9fb07590fb44545046a5b887f729157",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "3DXTech",
+      "product": "MAX-G PCTG",
+      "material": "PCTG",
+      "path": "library/3dxtech/max-g-pctg.json",
+      "sha256": "e5b7dc048bdc413642d89e911d5a90fc93525f3a53602f415be52bfc48801df5",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "3DXTech",
       "product": "Obsidian PA6+CF",
       "material": "PA6-CF",
       "path": "library/3dxtech/obsidian-pa6-plus-cf.json",
-      "sha256": "2fd85b4a62ae5f2377d93ce64f4564bf4c305802ab1d7cef7e6c5d6502f7cbd9",
-      "updated": "2026-11-01"
+      "sha256": "b0f11c2e01b64927df5688e6e26be0243f5b26a3622f72ea86cb65f0c9526a20",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "3DXTech",
+      "product": "PC/ABS",
+      "material": "PC/ABS",
+      "path": "library/3dxtech/pc-abs.json",
+      "sha256": "04312a2091a857c6d0a63adebab74c20c3ab1f9c39a6d7d494b4e4d0bbcbd5c9",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "3DXTech",
+      "product": "Polycarbonate (PC)",
+      "material": "PC",
+      "path": "library/3dxtech/polycarbonate-pc.json",
+      "sha256": "1a9d937e75d7eda5a1f6345834e3e3a3a032a62467eb23f85aa4ab9d7b6362c4",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "3DXTech",
+      "product": "SimuBone",
+      "material": "PLA",
+      "path": "library/3dxtech/simubone.json",
+      "sha256": "421e8770ce5a359380b74e42e14fc5c898318b2007490f706cefde2551360dbd",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "3DXTech",
       "product": "ThermaX HTS1",
       "material": "Support",
       "path": "library/3dxtech/thermax-hts1.json",
-      "sha256": "53d555a59543aa00749d8914cda137862d1f1eb2b750d42757c2cd217cd3fe65",
-      "updated": "2026-11-01"
+      "sha256": "68d8db2fa7863dba7b07ea929827e06f6ada80604e7d345af8af98f478e537d6",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "3DXTech",
       "product": "ThermaX PEEK",
       "material": "PEEK",
       "path": "library/3dxtech/thermax-peek.json",
-      "sha256": "5eb834af695ccfe387e40130633028ee1eb4445a68dcf6e6cab1e13282d04552",
-      "updated": "2026-11-01"
+      "sha256": "a3fd289dc008b3376f8b14b816fcc6cd00edffe8f96d4113537d583816618f2a",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "3DXTech",
       "product": "ThermaX PEI 1010",
       "material": "PEI",
       "path": "library/3dxtech/thermax-pei-1010.json",
-      "sha256": "4780e3d1e822134ea88f9ae146682c9c55e6bd2b7d7dfb5cbc3d3f84d5ff216b",
-      "updated": "2026-11-01"
+      "sha256": "c575f454f63115899ef7cfbb0be2a8ec2f781d96842997e5aaf458b569cf96b8",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "3DXTech",
@@ -222,11 +334,67 @@
     },
     {
       "vendor": "3DXTech",
+      "product": "ThermaX PEI GF30",
+      "material": "PEI-GF",
+      "path": "library/3dxtech/thermax-pei-gf30.json",
+      "sha256": "f298ec1287ebdfe764954d7d69cd1119948e769ffb198c28f20604ffa9676efd",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "3DXTech",
+      "product": "ThermaX PEKK-A",
+      "material": "PEKK",
+      "path": "library/3dxtech/thermax-pekk-a.json",
+      "sha256": "9be6554c86ee69ac4db63dedf2d64f9d5da8e5c76cc78d84802651709302ec85",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "3DXTech",
+      "product": "ThermaX PPE/PS",
+      "material": "PPE/PS",
+      "path": "library/3dxtech/thermax-ppe-ps.json",
+      "sha256": "effe9055868d501b127afc941f45c34df516311f645abec23e7f39fbac46ab77",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "3DXTech",
+      "product": "ThermaX PPS",
+      "material": "PPS",
+      "path": "library/3dxtech/thermax-pps.json",
+      "sha256": "cf7aa3e01250ccdadf8ec22ce961f5123f64916afa3faf6f7051e79036e5001b",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "3DXTech",
       "product": "ThermaX PPSU",
       "material": "PPSU",
       "path": "library/3dxtech/thermax-ppsu.json",
-      "sha256": "e1514595ffe51b9cbe8ef614a02734d4bd03e2f658cb1b3910996b547f73d864",
-      "updated": "2026-11-01"
+      "sha256": "387b545a202d9fb9350672aa5095e450962234d82b5ab14123f0f05e627d0abe",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "3DXTech",
+      "product": "ThermaX PSU",
+      "material": "PSU",
+      "path": "library/3dxtech/thermax-psu.json",
+      "sha256": "4f54add4313e87568640acce5848aadbca9181a1511a526d4eb3718bea01cdf4",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "3DXTech",
+      "product": "WearX PA6",
+      "material": "PA",
+      "path": "library/3dxtech/wearx-pa6.json",
+      "sha256": "3d7d0a4fc17b27bd86e0951136077977f2323adb1a1af6b0476a62b8440f6a47",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "Amazon Basics",
+      "product": "PETG",
+      "material": "PETG",
+      "path": "library/amazon-basics/petg.json",
+      "sha256": "cf2e998eb5e15076bd8bf2ed9c58d00707332735726bc4c1da0a1f5f201474eb",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Amazon Basics",
@@ -243,6 +411,14 @@
       "path": "library/amazon-basics/silk-pla.json",
       "sha256": "abedc4291917ef516b675b12e98450c08bde9357d24d559884c55e81e70b7093",
       "updated": "2026-11-01"
+    },
+    {
+      "vendor": "Amazon Basics",
+      "product": "TPU",
+      "material": "TPU",
+      "path": "library/amazon-basics/tpu.json",
+      "sha256": "268b754fa567b6d037d5342539898ef65ab94934aa8bb16cc05047de9cdf5e08",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "AMOLEN",
@@ -345,7 +521,7 @@
       "product": "PLA Glow",
       "material": "PLA",
       "path": "library/amolen/pla-glow.json",
-      "sha256": "b76ca25d50d463f94330931b1059e1fb85d1c50152c9ba0809706c866fdab707",
+      "sha256": "365c5f4f69bf9252d782352bdd436f6fe1e1dc3bcbd77d86a5dd2fa3667b8a19",
       "updated": "2026-11-01"
     },
     {
@@ -558,11 +734,35 @@
     },
     {
       "vendor": "Anycubic",
+      "product": "PC",
+      "material": "PC",
+      "path": "library/anycubic/pc.json",
+      "sha256": "89d7caf0895ab06af07af317be06d2e3dc0e3f54e5da51729ec107aa672bd440",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "Anycubic",
+      "product": "PET-CF",
+      "material": "PET-CF",
+      "path": "library/anycubic/pet-cf.json",
+      "sha256": "7eeaf5efd47364160ea400264dc739e95ad4c431e7b3b1bef9f4dd6fbe645f72",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "Anycubic",
       "product": "PETG-CF",
       "material": "PETG-CF",
       "path": "library/anycubic/petg-cf.json",
       "sha256": "c1be8af8c3f5d32242c0d9e4ab2042481358eb869e247cb63ccbd38d3ff6fe85",
       "updated": "2026-11-01"
+    },
+    {
+      "vendor": "Anycubic",
+      "product": "PETG Translucent",
+      "material": "PETG",
+      "path": "library/anycubic/petg-translucent.json",
+      "sha256": "b8a5763285ac68ed8b4a8950096c1ad8d58d9a132e53668e225e2119468e4c84",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Anycubic",
@@ -646,11 +846,51 @@
     },
     {
       "vendor": "Anycubic",
+      "product": "PLA Silk Dual/Tri-Color",
+      "material": "PLA",
+      "path": "library/anycubic/pla-silk-dual-tri-color.json",
+      "sha256": "668b08187a3dcf4090e26e7e83de51ff23bbf7ca08a1396620c8f895a4b72646",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "Anycubic",
       "product": "PLA Silk",
       "material": "PLA",
       "path": "library/anycubic/pla-silk.json",
       "sha256": "f5a0ae08435a3615af9903736836f42adfe3e9ab482529f007f189682d8e6cda",
       "updated": "2026-11-01"
+    },
+    {
+      "vendor": "Anycubic",
+      "product": "PLA Special",
+      "material": "PLA",
+      "path": "library/anycubic/pla-special.json",
+      "sha256": "0b9df542be311595df8114463cb0f299dcc26be324ab8a7d0e015b36638c56bb",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "Anycubic",
+      "product": "PLA Translucent",
+      "material": "PLA",
+      "path": "library/anycubic/pla-translucent.json",
+      "sha256": "1eee0f256526629dc60cf5db83984fc8a92961e344ff86ec97c9509e41a9eb67",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "Anycubic",
+      "product": "PVA",
+      "material": "PVA",
+      "path": "library/anycubic/pva.json",
+      "sha256": "5f2b8834f2994db4e73fee33855e90d6ceb28ce1feb031e6e0dbcd1119e8c887",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "Anycubic",
+      "product": "TPU 68D",
+      "material": "TPU",
+      "path": "library/anycubic/tpu-68d.json",
+      "sha256": "bf91d182a39ab49ffab075acdc727bd525ae40ab298b19fe20e8fc69a86676fc",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Anycubic",
@@ -737,8 +977,8 @@
       "product": "Flame Retardant ABS FR15U",
       "material": "ABS",
       "path": "library/atomic-filament/flame-retardant-abs-fr15u.json",
-      "sha256": "6d17efe4d0c5af356146bc05f3a7060837727fab1ba633197874513e0f80925d",
-      "updated": "2026-11-01"
+      "sha256": "c3a3194afe909dc06bb96289e02247399c09efabc63c0aab69c93403b7bc6bb4",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Atomic Filament",
@@ -855,10 +1095,10 @@
     {
       "vendor": "Bambu Lab",
       "product": "PAHT-CF",
-      "material": "PAHT-CF",
+      "material": "PA-CF",
       "path": "library/bambu-lab/paht-cf.json",
-      "sha256": "57e3a9b0553844032cd9a521fca14778064aa43b3694d1000734c34455380356",
-      "updated": "2026-11-01"
+      "sha256": "66e248992a23f58ca0d6b0dc829ca235dfbf0e0161bf9193199a5aa0896c246d",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Bambu Lab",
@@ -913,16 +1153,16 @@
       "product": "PETG Matte",
       "material": "PETG",
       "path": "library/bambu-lab/petg-matte.json",
-      "sha256": "221a988391a745dc3df82525bcda3f40c678896f21c64a65c477f21c2e1bd25c",
-      "updated": "2026-11-01"
+      "sha256": "d8e696d02c64e75c69628d204ede2ae4a0821fc9e7f3393e94609f67da5ac9c8",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Bambu Lab",
       "product": "PETG Translucent",
       "material": "PETG",
       "path": "library/bambu-lab/petg-translucent.json",
-      "sha256": "2dcce63f502ba75cc6f8207a353d5469be9d905aa8b7976a2e767c076ab7221d",
-      "updated": "2026-11-01"
+      "sha256": "382cffa8cf29372de53c108a020b11e5c021e40920311cc44b3c44b8a8ff857e",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Bambu Lab",
@@ -931,6 +1171,14 @@
       "path": "library/bambu-lab/pla-aero.json",
       "sha256": "64116b98cf5aa1fa2c5df7af9bd4aea4fcd21fe3160205b2a32eca559f1b247c",
       "updated": "2026-11-01"
+    },
+    {
+      "vendor": "Bambu Lab",
+      "product": "PLA Basic Gradient",
+      "material": "PLA",
+      "path": "library/bambu-lab/pla-basic-gradient.json",
+      "sha256": "c1ba464d6673dee1ba196913f0e294df7059023030eb943dfba9ecee29d1e39c",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Bambu Lab",
@@ -1073,8 +1321,8 @@
       "product": "PPA-CF",
       "material": "PPA-CF",
       "path": "library/bambu-lab/ppa-cf.json",
-      "sha256": "def7a7b68c91a9717c91bce2dd5a35ccdb990834a98ecf130020362259703380",
-      "updated": "2026-11-01"
+      "sha256": "0dc557679da257eb86ce5c30071f1b042d18e5292925377200a10157e4e1ced5",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Bambu Lab",
@@ -1185,8 +1433,8 @@
       "product": "ABS",
       "material": "ABS",
       "path": "library/cctree/abs.json",
-      "sha256": "3eb13c40f15d749af6a4edcf36ebf0b6511f1ab5a82752164550e715d3f5fbc8",
-      "updated": "2026-11-01"
+      "sha256": "31e3928cb6ce523bf0066f3c5ddf67c39b7f65ec4978fea07eff1cac9ae06a9f",
+      "updated": "2026-11-08"
     },
     {
       "vendor": "CHCKX",
@@ -1686,11 +1934,19 @@
     },
     {
       "vendor": "Creality",
+      "product": "Hyper PETG",
+      "material": "PETG",
+      "path": "library/creality/hyper-petg.json",
+      "sha256": "35e66521579e728eaa435827b92628115603546cf02e7b216b046c0d797554a5",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "Creality",
       "product": "Hyper PLA",
       "material": "PLA",
       "path": "library/creality/hyper-pla.json",
-      "sha256": "88754e755234859e34174b127933be30bd6a16c70ced413b7c6e287bfaeb1c81",
-      "updated": "2026-11-01"
+      "sha256": "41008eed452f93f7c313f0e7a14c58c245505a92c3a40651dda042be29b18710",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Creality",
@@ -2134,6 +2390,14 @@
     },
     {
       "vendor": "Eryone",
+      "product": "PETG High-Speed Translucent",
+      "material": "PETG",
+      "path": "library/eryone/petg-high-speed-translucent.json",
+      "sha256": "f9fbce5a0056c012a4cd52279cf70de0a045efb8c15f63a9c3eece7c63ac8e66",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "Eryone",
       "product": "PETG High-Speed",
       "material": "PETG",
       "path": "library/eryone/petg-high-speed.json",
@@ -2358,6 +2622,14 @@
     },
     {
       "vendor": "Eryone",
+      "product": "PPS CF10",
+      "material": "PPS-CF",
+      "path": "library/eryone/pps-cf10.json",
+      "sha256": "fb186cc09e59b52694d9c6bde5d287998ee4f826d5e7fe6dfa11361e8d262794",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "Eryone",
       "product": "TPU 85A",
       "material": "TPU",
       "path": "library/eryone/tpu-85a.json",
@@ -2395,6 +2667,14 @@
       "path": "library/eryone/tpu.json",
       "sha256": "27d1a089307e001b6b803f9580c68c53bb39547f090fa901a5a8efc4f30858ae",
       "updated": "2026-11-01"
+    },
+    {
+      "vendor": "eSUN",
+      "product": "ABS-ESD",
+      "material": "ABS",
+      "path": "library/esun/abs-esd.json",
+      "sha256": "879f28f71fbd82d0b7be6595178e70a8cb3c9dc39d7419ecd4a4adb207363dda",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "eSUN",
@@ -2438,6 +2718,22 @@
     },
     {
       "vendor": "eSUN",
+      "product": "eABS-HT",
+      "material": "ABS",
+      "path": "library/esun/eabs-ht.json",
+      "sha256": "d1a6be4aaac3f3872f2a3e1e4258b3517a9aa8f868ca70815fff88b5bf95d570",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "eSUN",
+      "product": "eABS-Max",
+      "material": "ABS",
+      "path": "library/esun/eabs-max.json",
+      "sha256": "308469cefcb5a96600d9ccef9217a03d6c261c9e74b195546f559cafdaf30ee6",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "eSUN",
       "product": "eABS+HS",
       "material": "ABS",
       "path": "library/esun/eabs-plus-hs.json",
@@ -2470,11 +2766,27 @@
     },
     {
       "vendor": "eSUN",
+      "product": "ePA",
+      "material": "PA",
+      "path": "library/esun/epa.json",
+      "sha256": "cff138e02205b0c41ab942032b7ac2986563fb5ae2f2e72ef7e73716f7d6e806",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "eSUN",
       "product": "ePA12-CF",
       "material": "PA-CF",
       "path": "library/esun/epa12-cf.json",
       "sha256": "cabdc5de1674255bad7df55cf8617fb350527132fdf8ed9f7c33bcd9aedfa1eb",
       "updated": "2026-11-01"
+    },
+    {
+      "vendor": "eSUN",
+      "product": "ePA12",
+      "material": "PA",
+      "path": "library/esun/epa12.json",
+      "sha256": "051d4daa7dd7cf4474a5ccefed5060f775e97f2256035f92353d5964d069aa35",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "eSUN",
@@ -2558,6 +2870,14 @@
     },
     {
       "vendor": "eSUN",
+      "product": "eTPU-LW",
+      "material": "TPU",
+      "path": "library/esun/etpu-lw.json",
+      "sha256": "eb6b2b44f69402b753821c0cfd310848d603b121cdec585e2e309e15fee6d3fb",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "eSUN",
       "product": "eTwinkling",
       "material": "PLA",
       "path": "library/esun/etwinkling.json",
@@ -2582,6 +2902,30 @@
     },
     {
       "vendor": "eSUN",
+      "product": "PC-ESD",
+      "material": "PC",
+      "path": "library/esun/pc-esd.json",
+      "sha256": "ddbee9c8bdfedcc8064c26bf1723298eeb196b8991e7a998fe9cfdacabcb5822",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "eSUN",
+      "product": "PC-HT",
+      "material": "PC",
+      "path": "library/esun/pc-ht.json",
+      "sha256": "2c44911bd4daf2bdd49cd8eb3f2c67d6a67ee2b4dc590b36c5e179ef06390d9c",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "eSUN",
+      "product": "PEBA-90A",
+      "material": "PEBA",
+      "path": "library/esun/peba-90a.json",
+      "sha256": "265349adccec39fe53bdd1b094c7c96b1d4dcfd12c438a6148b18e89d330b4db",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "eSUN",
       "product": "PET-Basic",
       "material": "PET",
       "path": "library/esun/pet-basic.json",
@@ -2598,6 +2942,14 @@
     },
     {
       "vendor": "eSUN",
+      "product": "PET-FR",
+      "material": "PET",
+      "path": "library/esun/pet-fr.json",
+      "sha256": "7ae79fe14360db2de072db30eeba70f93a8affce7172ae3c0bbb019d73ba0dac",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "eSUN",
       "product": "PET-Luminous",
       "material": "PETG",
       "path": "library/esun/pet-luminous.json",
@@ -2611,6 +2963,14 @@
       "path": "library/esun/petg-basic.json",
       "sha256": "89468727442610698a152b8a82024f6f7bf8a22cd2001b76157762eed7c48dad",
       "updated": "2026-11-01"
+    },
+    {
+      "vendor": "eSUN",
+      "product": "PETG-ESD",
+      "material": "PETG",
+      "path": "library/esun/petg-esd.json",
+      "sha256": "b3814bfec09e19ea356c6fd5dcac584b3e85bafcc056e262a084d806063d8ee8",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "eSUN",
@@ -2694,6 +3054,14 @@
     },
     {
       "vendor": "eSUN",
+      "product": "PLA-Matte Rainbow",
+      "material": "PLA",
+      "path": "library/esun/pla-matte-rainbow.json",
+      "sha256": "1e464b38249e2e4f6314ff709cdbdb8e433a86405427bfd25bedd6f743fa25ed",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "eSUN",
       "product": "PLA-Matte",
       "material": "PLA",
       "path": "library/esun/pla-matte.json",
@@ -2734,11 +3102,27 @@
     },
     {
       "vendor": "eSUN",
+      "product": "PLA-Silk Candy",
+      "material": "PLA",
+      "path": "library/esun/pla-silk-candy.json",
+      "sha256": "f9a9094b7602dfa624a02d6154f568f4d4b290577e29487724d22282b7d71b96",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "eSUN",
       "product": "PLA-Silk Mystic",
       "material": "PLA",
       "path": "library/esun/pla-silk-mystic.json",
       "sha256": "f78c1697c06376da012f4a48059b35ba293a6aa31fc13bae5f4edabe303cf1d9",
       "updated": "2026-11-01"
+    },
+    {
+      "vendor": "eSUN",
+      "product": "PLA-Silk Rainbow",
+      "material": "PLA",
+      "path": "library/esun/pla-silk-rainbow.json",
+      "sha256": "50f371eba9e45479c20eddce325a04b9fbb69a3a99ba36de987d7caab1631a97",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "eSUN",
@@ -2774,6 +3158,22 @@
     },
     {
       "vendor": "eSUN",
+      "product": "TPE-83A",
+      "material": "TPE",
+      "path": "library/esun/tpe-83a.json",
+      "sha256": "f7ec00a07b03f6230b4663435a78f3245999bedd494dda113a6e584961df3c5d",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "eSUN",
+      "product": "TPU-64D",
+      "material": "TPU",
+      "path": "library/esun/tpu-64d.json",
+      "sha256": "1e2b0f0cc2951b0f991a8df94ae05b82d1cae62179c1a6628a0cf9b7dff3c32f",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "eSUN",
       "product": "TPU-HS",
       "material": "TPU",
       "path": "library/esun/tpu-hs.json",
@@ -2785,8 +3185,8 @@
       "product": "Wood PLA",
       "material": "PLA",
       "path": "library/esun/wood-pla.json",
-      "sha256": "d7a89af5615b8f030fc4e85fafca532c7e140fe686fc16332e0b30a68bd33932",
-      "updated": "2026-11-01"
+      "sha256": "4bf81269d9dfc5eea9c8985e116f09bb5198d6b44ac9ac9534272d2b00841360",
+      "updated": "2026-11-08"
     },
     {
       "vendor": "Extrudr",
@@ -3038,6 +3438,14 @@
     },
     {
       "vendor": "Fiberlogy",
+      "product": "ASA+AF",
+      "material": "ASA-Aramid",
+      "path": "library/fiberlogy/asa-plus-af.json",
+      "sha256": "80db51a4260da934fc5f82208709112c74e337f2afeb58f9d040c131eceeffe5",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "Fiberlogy",
       "product": "ASA",
       "material": "ASA",
       "path": "library/fiberlogy/asa.json",
@@ -3105,8 +3513,8 @@
       "product": "FiberFlex 40D",
       "material": "TPU",
       "path": "library/fiberlogy/fiberflex-40d.json",
-      "sha256": "6c95fe555d0357a54c82c68ad1602810a2b1cf94bd8e84645ce9b865aa47ef6e",
-      "updated": "2026-11-01"
+      "sha256": "78a6fe1de586a33e770595da1cad26c161cbb2b90b06e326eb435e6e6467f07d",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Fiberlogy",
@@ -3281,8 +3689,8 @@
       "product": "PLA FiberSilk",
       "material": "PLA",
       "path": "library/fiberlogy/pla-fibersilk.json",
-      "sha256": "73924d78675a6e555ab5420497b66f75ae9af0c85c6b9405ae379aa3f001b51f",
-      "updated": "2026-11-01"
+      "sha256": "4e6ba3dc8c6a161c15fe8270c8f1e73c6e099a235a04be3542d69c5025b73d6e",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Fiberlogy",
@@ -3342,6 +3750,14 @@
     },
     {
       "vendor": "Fiberlogy",
+      "product": "rABS",
+      "material": "ABS",
+      "path": "library/fiberlogy/rabs.json",
+      "sha256": "56e50af09e0e02cfc0cd32702641d56b7f41f890f501551e4ab6bdf0548f8406",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "Fiberlogy",
       "product": "rASA",
       "material": "ASA",
       "path": "library/fiberlogy/rasa.json",
@@ -3369,8 +3785,8 @@
       "product": "rPLA",
       "material": "PLA",
       "path": "library/fiberlogy/rpla.json",
-      "sha256": "66ba0dc8ae8471df6b4dadb80fad38701b16303f0910aee4c122ef17d4fb88ac",
-      "updated": "2026-11-01"
+      "sha256": "0ea3c29a86a6d3ab5b5fe53ee474ae6674f73e3f9084f94d1d221c5ad271307c",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Fiberlogy",
@@ -3598,11 +4014,27 @@
     },
     {
       "vendor": "Flashforge",
+      "product": "HS PETG",
+      "material": "PETG",
+      "path": "library/flashforge/hs-petg.json",
+      "sha256": "8d6e7cdcb31b8acd158c5f13f9796cab37a6b6b624fd69a94c67ab1e6f81fda5",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "Flashforge",
+      "product": "HS PLA Multicolor",
+      "material": "PLA",
+      "path": "library/flashforge/hs-pla-multicolor.json",
+      "sha256": "ab8f7d3dd822084abf2c221e1484e3894c3787d62bf0bf5df89f1854a8ed82e7",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "Flashforge",
       "product": "HS PLA",
       "material": "PLA",
       "path": "library/flashforge/hs-pla.json",
-      "sha256": "d00c2b12f70c6bd86ae9d4c8251c1e8f3dce9ee5a9fccf480c4287a170f5426b",
-      "updated": "2026-11-01"
+      "sha256": "8ee2aa20fb91b6552f6530b9e970c51c71edaecbe695597f7f519a8e3aeee9cf",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Flashforge",
@@ -3619,6 +4051,14 @@
       "path": "library/flashforge/petg-cf.json",
       "sha256": "431430ca3d18696331aef2dc48fc02402e76105d6e1b7a81e4f184a1d606979d",
       "updated": "2026-11-01"
+    },
+    {
+      "vendor": "Flashforge",
+      "product": "PETG Pro",
+      "material": "PETG",
+      "path": "library/flashforge/petg-pro.json",
+      "sha256": "64e8595cb6cf1aaf3d9359981c158fd7af51087b237e5fab897da36b600e9980",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Flashforge",
@@ -3686,6 +4126,14 @@
     },
     {
       "vendor": "Formfutura",
+      "product": "ABSpro Flame Retardant",
+      "material": "ABS",
+      "path": "library/formfutura/abspro-flame-retardant.json",
+      "sha256": "128fcce84b1112bf5b46d1aa728f47b23e8df01db7d73ff6119af51d5b720da2",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "Formfutura",
       "product": "ABSpro",
       "material": "ABS",
       "path": "library/formfutura/abspro.json",
@@ -3702,11 +4150,27 @@
     },
     {
       "vendor": "Formfutura",
+      "product": "ApolloX Flame Retardant",
+      "material": "ASA",
+      "path": "library/formfutura/apollox-flame-retardant.json",
+      "sha256": "59ab05d95f6e4b4b49eb5e2a28425383de2a5cdfe76f97744a3a4a49a886a631",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "Formfutura",
       "product": "ApolloX Foaming",
       "material": "ASA",
       "path": "library/formfutura/apollox-foaming.json",
       "sha256": "a644de19adafdea3671134fcb6ef0ae1dbde82dabae1e1500ad7a6db813af278",
       "updated": "2026-11-01"
+    },
+    {
+      "vendor": "Formfutura",
+      "product": "ApolloX Kevlar",
+      "material": "ASA",
+      "path": "library/formfutura/apollox-kevlar.json",
+      "sha256": "b486e0304c50101ce005ee119bb012b93be466352b3a3a91c51bcb14137ed6c0",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Formfutura",
@@ -3726,11 +4190,35 @@
     },
     {
       "vendor": "Formfutura",
+      "product": "AthenaX CF10",
+      "material": "PCTG-CF",
+      "path": "library/formfutura/athenax-cf10.json",
+      "sha256": "193b445778fc8a896a76a6a5af38ac5778faa55b489a3cacf041524b6ab0c2b7",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "Formfutura",
       "product": "AthenaX",
       "material": "PCTG",
       "path": "library/formfutura/athenax.json",
       "sha256": "10658e839516e731e7f41fab3970f59a87e05da67bddaa28f97aa6d031fe1240",
       "updated": "2026-11-01"
+    },
+    {
+      "vendor": "Formfutura",
+      "product": "Atlas Support",
+      "material": "PVA",
+      "path": "library/formfutura/atlas-support.json",
+      "sha256": "2df0575f2004bafbfe20cabc63bd8ccd5105da84de0f2ffa9ac4e80dce1361c5",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "Formfutura",
+      "product": "BioFil - Wood",
+      "material": "PCL",
+      "path": "library/formfutura/biofil-wood.json",
+      "sha256": "b39bee245d3dec16bea90d986c89549cf64ca87bf8da58760ddca9c68d41b32b",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Formfutura",
@@ -3782,6 +4270,14 @@
     },
     {
       "vendor": "Formfutura",
+      "product": "EasyFil ABS - Glow in the Dark",
+      "material": "ABS",
+      "path": "library/formfutura/easyfil-abs-glow-in-the-dark.json",
+      "sha256": "6ab8c2fc7907ecea7b6ed74acc5cb8e177b27f3c92b0bfbb9ed852acd432810d",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "Formfutura",
       "product": "EasyFil ABS",
       "material": "ABS",
       "path": "library/formfutura/easyfil-abs.json",
@@ -3827,6 +4323,14 @@
       "path": "library/formfutura/easywood.json",
       "sha256": "0d488d7a13b6c0ead584a53a7cb5e51556982543dd28f9b761b630e7b7bcafff",
       "updated": "2026-11-01"
+    },
+    {
+      "vendor": "Formfutura",
+      "product": "FlexiFil TPC 30D",
+      "material": "TPC",
+      "path": "library/formfutura/flexifil-tpc-30d.json",
+      "sha256": "873c9dbe6112fd5173c9c6c8848662c429832cc2eb05d91af28a3dab746cb875",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Formfutura",
@@ -3883,6 +4387,22 @@
       "path": "library/formfutura/matt-pla.json",
       "sha256": "9c6c6575ac86f4d2d33efd2f661cbe3d08683d4e1633faf44ef16e940bae6dc6",
       "updated": "2026-11-01"
+    },
+    {
+      "vendor": "Formfutura",
+      "product": "MetalFil - Ancient Bronze",
+      "material": "PLA",
+      "path": "library/formfutura/metalfil-ancient-bronze.json",
+      "sha256": "7b67ccf2f1af19810bf3c7185e580c2ab12f3463555ee6a571d3fdfa4973656f",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "Formfutura",
+      "product": "MetalFil - Brass",
+      "material": "PLA",
+      "path": "library/formfutura/metalfil-brass.json",
+      "sha256": "f5a18f960f97176786dc3aa9ae2213dbb58097404d2b038909d53de90e478d26",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Formfutura",
@@ -3974,6 +4494,14 @@
     },
     {
       "vendor": "Formfutura",
+      "product": "ReForm - rApollo",
+      "material": "ASA",
+      "path": "library/formfutura/reform-rapollo.json",
+      "sha256": "7ef0cf6e06fc365eb994605c1aa05671b4f011d706afbeb3388cee0b5f827469",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "Formfutura",
       "product": "ReForm - rPET",
       "material": "PETG",
       "path": "library/formfutura/reform-rpet.json",
@@ -3998,6 +4526,22 @@
     },
     {
       "vendor": "Formfutura",
+      "product": "ReForm - rTPU 85A",
+      "material": "TPU",
+      "path": "library/formfutura/reform-rtpu-85a.json",
+      "sha256": "c20180c0b4406a30aafa356b1b673c90e4e9f7f58cafdfb4ea33dccd29fda07c",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "Formfutura",
+      "product": "ReForm - rTPU 90A",
+      "material": "TPU",
+      "path": "library/formfutura/reform-rtpu-90a.json",
+      "sha256": "eaf32a6a23c91ceb936cf34261b2edc5db4a4f1a48083585a41fff5cfa29851a",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "Formfutura",
       "product": "ReForm - rTPU 95A",
       "material": "TPU",
       "path": "library/formfutura/reform-rtpu-95a.json",
@@ -4019,6 +4563,14 @@
       "path": "library/formfutura/styx-pa6-cf15.json",
       "sha256": "2c6aeaec5fa6582d301803d5a33888d95c92db464ab5baff6d5bbcad96b1bed1",
       "updated": "2026-11-01"
+    },
+    {
+      "vendor": "Formfutura",
+      "product": "STYX PA6-GF30",
+      "material": "PA6-GF",
+      "path": "library/formfutura/styx-pa6-gf30.json",
+      "sha256": "266919087b6a6602d2bbb879085425abba68865d99ea9ae8c60b2fa92626573c",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Formfutura",
@@ -4086,6 +4638,14 @@
     },
     {
       "vendor": "GEEETECH",
+      "product": "HS-PLA",
+      "material": "PLA",
+      "path": "library/geeetech/hs-pla.json",
+      "sha256": "3f442208b44a64b07c9c274e468cc1a9f33bc076d03c52d290635272519e32cc",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "GEEETECH",
       "product": "Luminous PLA",
       "material": "PLA",
       "path": "library/geeetech/luminous-pla.json",
@@ -4150,6 +4710,14 @@
     },
     {
       "vendor": "GEEETECH",
+      "product": "Sparkly PLA",
+      "material": "PLA",
+      "path": "library/geeetech/sparkly-pla.json",
+      "sha256": "b2613047df309970bbc2155c886a05b5f3fa75c25ff431c28ce729255d5d2218",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "GEEETECH",
       "product": "TPU",
       "material": "TPU",
       "path": "library/geeetech/tpu.json",
@@ -4169,8 +4737,8 @@
       "product": "HIPS",
       "material": "HIPS",
       "path": "library/gizmo-dorks/hips.json",
-      "sha256": "e084f89c8f5869ef04cfad6de8bfd9633bb250c252a2c6b9f067e7698ca4f6d1",
-      "updated": "2026-11-01"
+      "sha256": "305fa605274cd32a1b943e7b4f06330faaa64c603f909f4fcdf191f86de84065",
+      "updated": "2026-11-08"
     },
     {
       "vendor": "Gizmo Dorks",
@@ -4185,16 +4753,16 @@
       "product": "ABS Glow in the Dark",
       "material": "ABS",
       "path": "library/hatchbox/abs-glow-in-the-dark.json",
-      "sha256": "f9902f08357473bf6e28be27d024d9930ef562441b24f47cb0dbee2178112cbb",
-      "updated": "2026-11-01"
+      "sha256": "ec25e04674dcd1bbfc2e09c51d3c676df3bf7eb7e7df99c3d3ba4376692ab837",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Hatchbox",
       "product": "ABS",
       "material": "ABS",
       "path": "library/hatchbox/abs.json",
-      "sha256": "830a3c2844e9aeee1754fd2d69e5c082d3846d7ceaa0f2a05055b6a5fce8f804",
-      "updated": "2026-11-01"
+      "sha256": "16ccb35d0154c033547b5ed404bf43ec7f94a84c3aa3030c1aa8ce295db0d8d6",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Hatchbox",
@@ -4209,40 +4777,40 @@
       "product": "Performance PLA",
       "material": "PLA",
       "path": "library/hatchbox/performance-pla.json",
-      "sha256": "8f6d8a8be863daacb3743b2171b02c03762407e980205e23fd7be1eda434edb5",
-      "updated": "2026-11-01"
+      "sha256": "712e3385a8857e6278a2bf8e283ca1a97ad695eb1cc409e4dac149d345bb9c64",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Hatchbox",
       "product": "PETG",
       "material": "PETG",
       "path": "library/hatchbox/petg.json",
-      "sha256": "26cf33d41341eda201c55440e79594aa3418ca23a219500362b472eeb8de2ef1",
-      "updated": "2026-11-01"
+      "sha256": "e68a1d75dfe9581b46fa1e73f5f212452801b8634af3ed5231faced4e6f811d3",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Hatchbox",
       "product": "PLA Carbon Fiber",
-      "material": "PLA-CF",
+      "material": "PLA",
       "path": "library/hatchbox/pla-carbon-fiber.json",
-      "sha256": "78e550dd8098630f307b4da6491c796489193cf5ea7039d3cf50948ded87791c",
-      "updated": "2026-11-01"
+      "sha256": "28ec8d6ce6d7a65d8529ed67e9d0b9d77c0f98048e04aea25b55e32aeef49a79",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Hatchbox",
       "product": "PLA Glow in the Dark",
       "material": "PLA",
       "path": "library/hatchbox/pla-glow-in-the-dark.json",
-      "sha256": "2e7708e236bb57c498c0ce02d15edfff9b6fc58658fea07d526e7a41de46acb7",
-      "updated": "2026-11-01"
+      "sha256": "3dce8c76766995ae46048f0f9693f334caa0ee3ecd3aeffc2fe20d5eb9cccd0c",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Hatchbox",
       "product": "PLA Max V2",
       "material": "PLA",
       "path": "library/hatchbox/pla-max-v2.json",
-      "sha256": "3b1c703a9b031ef3531030ee5ace56eee5c033cebd917bb4321fc03ea6099b36",
-      "updated": "2026-11-01"
+      "sha256": "58e4ed2b7b3d1215332d119bf59234c7ba05946713187a4c553d2632955d9bd8",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Hatchbox",
@@ -4257,8 +4825,8 @@
       "product": "PLA Refill",
       "material": "PLA",
       "path": "library/hatchbox/pla-refill.json",
-      "sha256": "e756a1580927b5d4a0a43996df66537f9e6fcbf0534c8e0af8ab858adee3e9b3",
-      "updated": "2026-11-01"
+      "sha256": "d1c86896696cfb0d7d787cf2ea456df90d3b9140679c722b22fdb399269e0993",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Hatchbox",
@@ -4273,24 +4841,24 @@
       "product": "PLA UV Color Changing",
       "material": "PLA",
       "path": "library/hatchbox/pla-uv-color-changing.json",
-      "sha256": "ac7b1f81b3d2107c783436001ca7cffec49820d50615a845c3f9de587fd652e3",
-      "updated": "2026-11-01"
+      "sha256": "e6937ebb428733883a7725ea876d4b047b2fed5c4163acd83d91b1c246d632e5",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Hatchbox",
       "product": "PLA",
       "material": "PLA",
       "path": "library/hatchbox/pla.json",
-      "sha256": "f3450411159d3a04420b3cb221e23d0d74fc620441edd83f65b6c07a63a97300",
-      "updated": "2026-11-01"
+      "sha256": "dda4bf7106898029a11f8a9c73d34ec4ebd5ba51c8e56780747ef7661959db58",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Hatchbox",
       "product": "Rapid PETG",
       "material": "PETG",
       "path": "library/hatchbox/rapid-petg.json",
-      "sha256": "5bb6fbff477a59665a7a053c4ab52d58605359a61c2de53df59cb25b4871fb76",
-      "updated": "2026-11-01"
+      "sha256": "ae7ffb0dcef85968a618fbbeded1c3b8988034f74c498591f583c1583a9eb4ae",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Hatchbox",
@@ -4305,16 +4873,24 @@
       "product": "Silk PLA",
       "material": "PLA",
       "path": "library/hatchbox/silk-pla.json",
-      "sha256": "a952b71055ac165cca5c05d4b5a08d745a5211f3a305173c8e555bb0cb2b9c54",
-      "updated": "2026-11-01"
+      "sha256": "cf8f5918a0ccc2d36c37077118422c30a01b9d7864cd259b1d0d2455c8ce546c",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "Hatchbox",
+      "product": "Temp Change PLA",
+      "material": "PLA",
+      "path": "library/hatchbox/temp-change-pla.json",
+      "sha256": "5562a4bfe37ea5883f9b5d2da58f9aa9d0d26fda96c9ee7ad20f676a60df5158",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Hatchbox",
       "product": "TPU",
       "material": "TPU",
       "path": "library/hatchbox/tpu.json",
-      "sha256": "e4cc973a955e269e4fa3ab71751ee6f7dd5060ec553fcaf04057eff5252bb323",
-      "updated": "2026-11-01"
+      "sha256": "b9ddf64be266c8c5fc33780b017027c15db88ee5536615409c8f80d50107347c",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Hatchbox",
@@ -4329,8 +4905,8 @@
       "product": "PC-CF",
       "material": "PC-CF",
       "path": "library/iemai/pc-cf.json",
-      "sha256": "b8b59690f5e80635b4d61f6f6c23d02624fb2280246c86ed22495f00c766b220",
-      "updated": "2026-11-01"
+      "sha256": "faf6563ce4cf8cc39798a494c17e02d5f715119ca896c492514096e86bbe5592",
+      "updated": "2026-11-08"
     },
     {
       "vendor": "Inland",
@@ -4371,6 +4947,14 @@
       "path": "library/inland/asa.json",
       "sha256": "e5ce71c09c8dbac36a21ee084c2a1ac7f7d63db5eff8c00d5e7d5ad52b49666f",
       "updated": "2026-11-01"
+    },
+    {
+      "vendor": "Inland",
+      "product": "Fiberon ASA-CF08",
+      "material": "ASA-CF",
+      "path": "library/inland/fiberon-asa-cf08.json",
+      "sha256": "62774826f973375e0ffbb91f3511dede35c81bbcebdbf77f54dba2783c8cae5f",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Inland",
@@ -4446,19 +5030,27 @@
     },
     {
       "vendor": "Inland",
+      "product": "PLA+ High Speed",
+      "material": "PLA",
+      "path": "library/inland/pla-plus-high-speed.json",
+      "sha256": "d73ff826237adc83ee95d8b6eafb8617e85db930af6893056dd6645408401bdb",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "Inland",
       "product": "PLA+",
       "material": "PLA",
       "path": "library/inland/pla-plus.json",
-      "sha256": "9d49459f1c2d498f7a13a5fe361f9775dc8fae64657f2dd74619152f1261d316",
-      "updated": "2026-11-01"
+      "sha256": "bfc481edc46d72619393eb9aa2b099125bed0207b6462e069c189e46ff6f7591",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Inland",
       "product": "PLA",
       "material": "PLA",
       "path": "library/inland/pla.json",
-      "sha256": "8a9194af8a71f8df508e47dfb1a7c36a40d0351e1c1d59fe8dcb14a422cfae62",
-      "updated": "2026-11-01"
+      "sha256": "d142a6f5801dd7c3ac286f5a7d34e8f958fb2302e2730b547871e18262e98d32",
+      "updated": "2026-11-08"
     },
     {
       "vendor": "Inland",
@@ -4518,11 +5110,27 @@
     },
     {
       "vendor": "JAYO",
+      "product": "ASA",
+      "material": "ASA",
+      "path": "library/jayo/asa.json",
+      "sha256": "18f6cee8c9d50beb095de0f6200dceb088891897446f489bd1c5e68a462ce427",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "JAYO",
       "product": "Dual-Color Matte PLA",
       "material": "PLA",
       "path": "library/jayo/dual-color-matte-pla.json",
       "sha256": "88339691a6f779d3c51a906aa76299a2646a2f81bed190644a5cfad2f354ff70",
       "updated": "2026-11-01"
+    },
+    {
+      "vendor": "JAYO",
+      "product": "Easy PA",
+      "material": "PA",
+      "path": "library/jayo/easy-pa.json",
+      "sha256": "d75dede7fbdeeb04161860bb97565c53b432cbb5fc0b1e5212e27d8863650175",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "JAYO",
@@ -4555,6 +5163,14 @@
       "path": "library/jayo/high-speed-pla-plus.json",
       "sha256": "ddfa05d124214bd75ffe04507326654144a4b96e46b89588462e61437b04bbd6",
       "updated": "2026-11-01"
+    },
+    {
+      "vendor": "JAYO",
+      "product": "High Speed PLA",
+      "material": "PLA",
+      "path": "library/jayo/high-speed-pla.json",
+      "sha256": "bf03cc43d50042f6417f6fe0b165a15fb40a5c04dffc65827e6cfb56a10b6e5c",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "JAYO",
@@ -4665,8 +5281,8 @@
       "product": "PLA",
       "material": "PLA",
       "path": "library/jayo/pla.json",
-      "sha256": "8acff0295ebbe808b50e51935229b5e61521630f9dc74dd1fd4e084af5b15fc8",
-      "updated": "2026-11-01"
+      "sha256": "74a07e10367d7d41c5ce2d0e2ac47aedbc12c8f0dcdd32024a1ed8d70372ab03",
+      "updated": "2026-11-08"
     },
     {
       "vendor": "JAYO",
@@ -4715,6 +5331,14 @@
       "path": "library/kexcelled/k10-pc.json",
       "sha256": "4c644ba8f298e2ae94a87786a75fbad5f22810ce03e13b4c25d9d34f9839125c",
       "updated": "2026-11-01"
+    },
+    {
+      "vendor": "Kexcelled",
+      "product": "K10 PPS CF10",
+      "material": "PPS-CF",
+      "path": "library/kexcelled/k10-pps-cf10.json",
+      "sha256": "de5511cdd59b5f454a25fcdb7cccc77fdc6da437e26a7867dc18f02596a5ef0a",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Kexcelled",
@@ -4827,6 +5451,14 @@
       "path": "library/kexcelled/k5-pla-matte.json",
       "sha256": "df9ba34d25ea14df3679d5929ed857bc485d9ba96ec579e47b026e9a7919fa7a",
       "updated": "2026-11-01"
+    },
+    {
+      "vendor": "Kexcelled",
+      "product": "K5 PLA Pro",
+      "material": "PLA",
+      "path": "library/kexcelled/k5-pla-pro.json",
+      "sha256": "e3fbe906f8778acb4cdf8656502a63b22f85f5907fedafb208ddd925354c2b99",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Kexcelled",
@@ -5006,6 +5638,14 @@
     },
     {
       "vendor": "Kexcelled",
+      "product": "K8 TPU Air",
+      "material": "TPU",
+      "path": "library/kexcelled/k8-tpu-air.json",
+      "sha256": "cae34ba9d05cf0501da641453d1167936632548369df44777e9f5163a998394c",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "Kexcelled",
       "product": "K9 PC FR",
       "material": "PC",
       "path": "library/kexcelled/k9-pc-fr.json",
@@ -5013,20 +5653,60 @@
       "updated": "2026-11-01"
     },
     {
+      "vendor": "Kexcelled",
+      "product": "K9 PPA CF15",
+      "material": "PPA-CF",
+      "path": "library/kexcelled/k9-ppa-cf15.json",
+      "sha256": "4a48b556182a68f0d9a163b3b7a93d8648cb6057d472434a029ba753d1baca24",
+      "updated": "2026-11-02"
+    },
+    {
       "vendor": "Kingroon",
       "product": "ABS",
       "material": "ABS",
       "path": "library/kingroon/abs.json",
-      "sha256": "dbb5a5ade18648375992a25c0d3bfb91a1402da2fc0516f96a2d5d5f607469bf",
-      "updated": "2026-11-01"
+      "sha256": "253123cc34925539072a7624cf0225c72da2297fd1fa98d4ca72cc8f21574267",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "Kingroon",
+      "product": "HS-PLA",
+      "material": "PLA",
+      "path": "library/kingroon/hs-pla.json",
+      "sha256": "15cb8a49299bee68a471c684f0cebb3d5b1df4063daac436f81223fc1fabd414",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "Kingroon",
+      "product": "PA-CF",
+      "material": "PA-CF",
+      "path": "library/kingroon/pa-cf.json",
+      "sha256": "b8cb18987862a52456eed486b6d1eb0ed8e478c0a1075bd47f629e86315263e1",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "Kingroon",
+      "product": "PA Nylon",
+      "material": "PA",
+      "path": "library/kingroon/pa-nylon.json",
+      "sha256": "c4ae032bff3640d4645eb34799e0146b932e87ac6ae051f5ce0023848a9cf671",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "Kingroon",
+      "product": "PETG Basic",
+      "material": "PETG",
+      "path": "library/kingroon/petg-basic.json",
+      "sha256": "7d08f3a153d2d5e2a42650f6364598ce112d2487299b6e4db76a361782a643d1",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Kingroon",
       "product": "PETG-CF",
-      "material": "PETG",
+      "material": "PETG-CF",
       "path": "library/kingroon/petg-cf.json",
-      "sha256": "155939873d2635c985ecce8e576bdae66cb89a8d045e3fba6cf107e0395bff58",
-      "updated": "2026-11-01"
+      "sha256": "e3d2fb639dca89cdd39a498e0cffe21be1338da7d6e7c03bc2d93084522f377a",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Kingroon",
@@ -5049,40 +5729,80 @@
       "product": "PLA Basic",
       "material": "PLA",
       "path": "library/kingroon/pla-basic.json",
-      "sha256": "8331cf5a8d3f4487c80c41288fce6644afd93c039cd6e558fbb1b0397c3f3963",
-      "updated": "2026-11-01"
+      "sha256": "22024de42b0df1f19939f681829ec39d2c163dc62f24b7c989f502c4dbcf9bc2",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Kingroon",
       "product": "PLA-CF",
-      "material": "PLA",
+      "material": "PLA-CF",
       "path": "library/kingroon/pla-cf.json",
-      "sha256": "38f3d8b3ed00f9e921c86547dc94aa3a32a41f3dbdf31566a255c56c30a3260c",
-      "updated": "2026-11-01"
+      "sha256": "b686ab43126a38798fef9a650df3952d75741a8571caec4032393e631a79da0e",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "Kingroon",
+      "product": "PLA Chameleon",
+      "material": "PLA",
+      "path": "library/kingroon/pla-chameleon.json",
+      "sha256": "9199e9302bcd426f2429b9849b18845e4f910e181d8577b9d289a42fe43e1556",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Kingroon",
       "product": "PLA Glow",
       "material": "PLA",
       "path": "library/kingroon/pla-glow.json",
-      "sha256": "a2f8440df2da3476b5ff103e44c9e35596f95c4b67c9ac45acd174b08fbbf78f",
-      "updated": "2026-11-01"
+      "sha256": "10dc11fa32045c8fe233a08d65d5d69937cecff0b6cfcf1cf77c64b977181468",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Kingroon",
       "product": "PLA Matte",
       "material": "PLA",
       "path": "library/kingroon/pla-matte.json",
-      "sha256": "72a9d349ebb59cd345b5fa3ad477a672e9b0abb3d0e9bc72436420f117f14b60",
-      "updated": "2026-11-01"
+      "sha256": "546ca3ad85993025ea2a70c76f38f96ce8b1f85721d3f9c108a043261b4e30ac",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "Kingroon",
+      "product": "PLA+",
+      "material": "PLA",
+      "path": "library/kingroon/pla-plus.json",
+      "sha256": "b1cef7b86c2060b9cfb00de7c657f25aa789f88ec0bcc82450a46971af089c16",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Kingroon",
       "product": "PLA Silk Dual-Color",
       "material": "PLA",
       "path": "library/kingroon/pla-silk-dual-color.json",
-      "sha256": "5c85eb5ef48906e17760a3c356c5da9aaa0e7a4a7336ad24351a0adc6d892d76",
-      "updated": "2026-11-01"
+      "sha256": "e73c68a6817fc8463b96165a62a4cc439b51cda1ae654083d495836f9b16a13b",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "Kingroon",
+      "product": "PLA Silk Rainbow",
+      "material": "PLA",
+      "path": "library/kingroon/pla-silk-rainbow.json",
+      "sha256": "4acec645ecf984b783acdafe58c2dd92482b9ceb2806da44de9e92cb4e7a162c",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "Kingroon",
+      "product": "PLA Silk Single Color",
+      "material": "PLA",
+      "path": "library/kingroon/pla-silk-single-color.json",
+      "sha256": "48f87e225c4345c3430b0413b24b7fcc6abc206ab64747ef324e132a7b64f785",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "Kingroon",
+      "product": "PLA Silk Tri-Color",
+      "material": "PLA",
+      "path": "library/kingroon/pla-silk-tri-color.json",
+      "sha256": "27aebb76159bc22dda3a8964f990e4e99c8608a262965981b45fcd4b8999f62d",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Kingroon",
@@ -5097,16 +5817,16 @@
       "product": "PLA Wood",
       "material": "PLA",
       "path": "library/kingroon/pla-wood.json",
-      "sha256": "0d477d209ebeb89983aebf31b649816caac3c6df40f03f1824344863c529ce51",
-      "updated": "2026-11-01"
+      "sha256": "ff3f9802f760fc9c8d6260966424f873c9270f764218e4e08e2f73aa168f5a57",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Kingroon",
       "product": "TPU 95A",
       "material": "TPU",
       "path": "library/kingroon/tpu-95a.json",
-      "sha256": "0cb82691bd2d8d268a05d19d25ee27256407dbc9eddebfb4a57d7b00a1645b01",
-      "updated": "2026-11-01"
+      "sha256": "7f229e4ef41bf75532eed2e6323c769f8d10bac8ad3b4a98d0ceb737482e4ad9",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "LADUALFILA",
@@ -5265,8 +5985,8 @@
       "product": "Turbo PLA",
       "material": "PLA",
       "path": "library/overture/turbo-pla.json",
-      "sha256": "e4242163dd61fc72521132e143416c9d531fb75e0b86d417a1b832b6def504bb",
-      "updated": "2026-11-01"
+      "sha256": "bee0b546ac31b1553e134aaf0b83d3b52165d8e2a1778d0651f9f710787e9353",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Phrozen",
@@ -5313,8 +6033,8 @@
       "product": "Fiberon ASA-CF08",
       "material": "ASA-CF",
       "path": "library/polymaker/fiberon-asa-cf08.json",
-      "sha256": "fc6eb0fe909a9dbcc3be34a6479a8ad25adf967f884953a07b3344119d43fb1a",
-      "updated": "2026-11-01"
+      "sha256": "1ce92842abc0955f2ab7b87318d91edcfb538e93203f213c223c1f3547028382",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Polymaker",
@@ -5369,8 +6089,8 @@
       "product": "Fiberon PET-GF15",
       "material": "PET-GF",
       "path": "library/polymaker/fiberon-pet-gf15.json",
-      "sha256": "56dcd6681fb7521c01d106958e2abcd9c48038e501c2a4cec147b1634b5f54e6",
-      "updated": "2026-11-01"
+      "sha256": "e3c4c4604dd1f59a02ec7e8ee0f75ee40be4a7314fd24bd5b0677d7ee3244ca5",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Polymaker",
@@ -6105,8 +6825,8 @@
       "product": "PETG Carbon Fiber",
       "material": "PETG-CF",
       "path": "library/prusament/petg-carbon-fiber.json",
-      "sha256": "fcd1ee361d6a7d2496798c05cbcc040ec22657a38a748d28ba259cae67d4f018",
-      "updated": "2026-11-01"
+      "sha256": "47888a2c5ae61257ac9a488e625b81b4940742161eea9ee6adba38bcceea5b97",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Prusament",
@@ -6161,8 +6881,8 @@
       "product": "PLA Blend",
       "material": "PLA",
       "path": "library/prusament/pla-blend.json",
-      "sha256": "4a895613e4be08ea31c4237d45810a3bd04187afe1e375ed830685b692145781",
-      "updated": "2026-11-01"
+      "sha256": "6bf33a0bbc412ec55aabdb2861f7b648b38a342a3598b42685608f4c6cafc7f0",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Prusament",
@@ -6185,8 +6905,8 @@
       "product": "PLA",
       "material": "PLA",
       "path": "library/prusament/pla.json",
-      "sha256": "d16a5682794b9e4f66b6e5640a48ac746fd462f947a04f0b5aecff76465edff7",
-      "updated": "2026-11-01"
+      "sha256": "ca3deb0f8ce45d4dc7e8f2cc5f5cbcddc220b79df3df335742d5b87a5ee7ac7b",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Prusament",
@@ -6257,32 +6977,32 @@
       "product": "Carbon Fiber ABS",
       "material": "ABS-CF",
       "path": "library/push-plastic/carbon-fiber-abs.json",
-      "sha256": "1e3293963057ca30b38d6715d093715a7c01e18924521bf35b7979901f114cdf",
-      "updated": "2026-11-01"
+      "sha256": "63a77bd0bf709e367677d14ea0f477723e4089a48e91dc74b1e0c6b365684038",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Push Plastic",
       "product": "Carbon Fiber Nylon",
       "material": "PA-CF",
       "path": "library/push-plastic/carbon-fiber-nylon.json",
-      "sha256": "7bad05a7afb88ed8a2ab8d307cdfd89ee69c57497053d91a1a901a02cddf6f09",
-      "updated": "2026-11-01"
+      "sha256": "aee0bd0b446dad83a5e5f62624336f72e52de4e9c419421ee8a32e681a820ec7",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Push Plastic",
       "product": "Carbon Fiber PC+PBT",
       "material": "PC-CF",
       "path": "library/push-plastic/carbon-fiber-pc-plus-pbt.json",
-      "sha256": "a4300166e44358c5f37fd1f9dc8ffbb57c6a0ee3221b48f1ff6be729762e6753",
-      "updated": "2026-11-01"
+      "sha256": "3cb39bc56dfb9d74b23c2b23f3bbc69fc5d3835a65cebba79611b5f5f567e08b",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Push Plastic",
       "product": "Carbon Fiber PETG",
       "material": "PETG-CF",
       "path": "library/push-plastic/carbon-fiber-petg.json",
-      "sha256": "1a6f3493bed55b1ceba0990d709c4f1656c72f3b09f4674a71fff5855893e0b2",
-      "updated": "2026-11-01"
+      "sha256": "93410fd36c8e699b2b69d389427444e7b609c154059dbeff7f0bb4b9c093bfc0",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Push Plastic",
@@ -6305,8 +7025,8 @@
       "product": "Nylon",
       "material": "PA",
       "path": "library/push-plastic/nylon.json",
-      "sha256": "3b5071d6290f6b2063d43e2acb8c8a0a59c016b6866fbbf6875830e082d3a751",
-      "updated": "2026-11-01"
+      "sha256": "984899dcb295fb9792e5011e31be374e684f984ead3c1a236a1a4d05d55ba449",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Push Plastic",
@@ -6329,32 +7049,32 @@
       "product": "PEI 1010",
       "material": "PEI",
       "path": "library/push-plastic/pei-1010.json",
-      "sha256": "5c1171f7061873ab4d0cc039607dc4ff0557fd10994002532935c1d309ab057d",
-      "updated": "2026-11-01"
+      "sha256": "0e2b554bf47cd557b01da49410ec3d3b756eff70d1c011bc714ae2b9f578b3b1",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Push Plastic",
       "product": "PEI 9085",
       "material": "PEI",
       "path": "library/push-plastic/pei-9085.json",
-      "sha256": "6162c9aa1fe0de8aa11b5ef16ed676bdcbf0265cd56a69fefa426a65f1749abe",
-      "updated": "2026-11-01"
+      "sha256": "5518e2ecf5b4079dc67f018965a5d7de2f0cd832e434dd3903e1640ad43a721e",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Push Plastic",
       "product": "PETG",
       "material": "PETG",
       "path": "library/push-plastic/petg.json",
-      "sha256": "efd67d4af2fb265ab0a4b7823de9dca6623b14eab963618a4b03c6d4a6e9b6bf",
-      "updated": "2026-11-01"
+      "sha256": "9279a1df7ac69d61cd94f9c9ac1c333e04fd7c2b8964c6b62a1f60cf7026d4c6",
+      "updated": "2026-11-08"
     },
     {
       "vendor": "Push Plastic",
       "product": "PLA",
       "material": "PLA",
       "path": "library/push-plastic/pla.json",
-      "sha256": "4afd58478e4646b436aede0048849d1cdababf6a26418d97bc82cc3f0af33de4",
-      "updated": "2026-11-01"
+      "sha256": "f83867743bde8124336a18993eff77797a31f61842574479a620300b6b3f06f8",
+      "updated": "2026-11-08"
     },
     {
       "vendor": "Push Plastic",
@@ -6363,6 +7083,14 @@
       "path": "library/push-plastic/pmma.json",
       "sha256": "4af275678cb4e10597cc9fd838acb5f9aeee4834429622e3116db5c1a5bda8b2",
       "updated": "2026-11-01"
+    },
+    {
+      "vendor": "Push Plastic",
+      "product": "TPU 100A",
+      "material": "TPU",
+      "path": "library/push-plastic/tpu-100a.json",
+      "sha256": "e6df947b21302496dfdcad35b4b1128e06874aaee82f60cb0ed2aa5bf7a52630",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "QIDI Tech",
@@ -6857,8 +7585,8 @@
       "product": "PETG",
       "material": "PETG",
       "path": "library/sovol/petg.json",
-      "sha256": "7595e7559175b1c68c1d6645447975102abf05a84e43ef34b9660afa54c1c5ed",
-      "updated": "2026-11-01"
+      "sha256": "8bcd72a09ca06ca9b7ca7abcfd741c7cd7dce14c0d66f269fa5b41e79173a654",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "SOVOL",
@@ -6873,8 +7601,16 @@
       "product": "PLA Glow in Dark",
       "material": "PLA",
       "path": "library/sovol/pla-glow-in-dark.json",
-      "sha256": "a224cc94acc50ca6e25659f8f6abb3a3e430fc4331be11c64bb367ad39d956d6",
-      "updated": "2026-11-01"
+      "sha256": "d8f9ee754fea8b7412a6af717b6fb5ecf485797a85fef16bfbb2345c9a9a9621",
+      "updated": "2026-11-02"
+    },
+    {
+      "vendor": "SOVOL",
+      "product": "PLA Matte Multi-Colors Rainbow",
+      "material": "PLA",
+      "path": "library/sovol/pla-matte-multi-colors-rainbow.json",
+      "sha256": "34dbab5f76b25e622e78021df3eb052a9f3e16e17d234b23001bc11f818e873f",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "SOVOL",
@@ -6897,8 +7633,8 @@
       "product": "TPU",
       "material": "TPU",
       "path": "library/sovol/tpu.json",
-      "sha256": "e2a6215a1723772babf39225dd3ffa9fc80c8a5496d8b39f640a5c8e5f85f224",
-      "updated": "2026-11-01"
+      "sha256": "3fb922e315b9e226efd497537b938d49ef3c6c2744ff8d0e12f70d3025c4ac00",
+      "updated": "2026-11-02"
     },
     {
       "vendor": "Spectrum",
@@ -8121,16 +8857,16 @@
       "product": "TPU",
       "material": "TPU",
       "path": "library/teqstone/tpu.json",
-      "sha256": "c19dedc57b02e131d157d7c413824c99aa866030322925ce3dde88b5f3686319",
-      "updated": "2026-11-01"
+      "sha256": "8a180b3142e7912966dc4c3061fa8218c854621f6f2c1eaa07eaa54683bb7eb8",
+      "updated": "2026-11-08"
     },
     {
       "vendor": "UJOYBIO",
       "product": "Metal PLA",
       "material": "PLA",
       "path": "library/ujoybio/metal-pla.json",
-      "sha256": "cc3f8da79d2a5fb5468d8b5547ab5619811f0fae67ec9224e7007b4f5653695f",
-      "updated": "2026-11-01"
+      "sha256": "ac8452a3fa4c737ae50557e23537d86cd1e509f8c496296a232d0b981c664c88",
+      "updated": "2026-11-08"
     },
     {
       "vendor": "XZN",
@@ -8145,23 +8881,23 @@
       "product": "Silk PLA",
       "material": "PLA",
       "path": "library/xzn/silk-pla.json",
-      "sha256": "8b1477536ab7eca9370ec31a2bdb0ba29117ea9a1b50e0b9520d0c7598350b5f",
-      "updated": "2026-11-01"
+      "sha256": "994f8640611b52d632e6c452e2a22e8ede5a0bcf5b5a76ccb78cfb8b4f695389",
+      "updated": "2026-11-08"
     },
     {
       "vendor": "XZN",
       "product": "TPU",
       "material": "TPU",
       "path": "library/xzn/tpu.json",
-      "sha256": "acb991048ef17745e1e4dd2dd27270f3ed362f72bfeedb579f65d46c80f7e152",
-      "updated": "2026-11-01"
+      "sha256": "be8c40a423cb54f22918e35402ad62354434c92b221bf6cbda7d7d0fb3063456",
+      "updated": "2026-11-08"
     },
     {
       "vendor": "yxpolyer",
       "product": "ABS",
       "material": "ABS",
       "path": "library/yxpolyer/abs.json",
-      "sha256": "6e788ba8c5835964d4e82acf89fa2774072ae037c2e74ccfa81f60b30e9640db",
+      "sha256": "3c99e5c1610745b2247d4fa3ab16b28f204f29d6be890fcfbb32d7175f869f9d",
       "updated": "2026-11-01"
     },
     {
@@ -8169,7 +8905,7 @@
       "product": "Easy PA",
       "material": "PA",
       "path": "library/yxpolyer/easy-pa.json",
-      "sha256": "0ff07ab2617d48497c8043c98faa5c62b2e0c795ccd04e510131c1f899b1a264",
+      "sha256": "99473ee298e9d13559c30ddc03f5820b084d3fa13f672f5001229720af15cf6c",
       "updated": "2026-11-01"
     },
     {
@@ -8185,7 +8921,7 @@
       "product": "PVA",
       "material": "PVA",
       "path": "library/yxpolyer/pva.json",
-      "sha256": "4db76f60d6373ae676632692b0e4bfe12ca6bb4d9270fb83a2a3335ed564a834",
+      "sha256": "9f989ed13c1f2bcdca735d04098f4cf4d23321ebc42c1955e866c0f996629ab9",
       "updated": "2026-11-01"
     }
   ]

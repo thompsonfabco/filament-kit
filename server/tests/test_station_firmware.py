@@ -5,9 +5,11 @@ from __future__ import annotations
 
 import subprocess
 import os
+import re
 import sys
 import time
 import types
+from pathlib import Path
 
 import pytest
 
@@ -150,3 +152,23 @@ def test_bundled_firmware_is_version_9_and_flashes_an_older_panel(fw, monkeypatc
     fw.clear()
     FakeSerial.VERSIONS = {"/dev/ttyUSB1": "9"}
     assert panel.update_firmware(panel.find_panel()) is False and fw == []
+
+
+# ---------- the committed firmware: built from this source, by a known platform ----------
+
+PANEL_DIR = Path(__file__).resolve().parents[2] / "station" / "panel"
+
+
+def test_the_bundled_version_is_the_sources():
+    """A VERSION bump in main.cpp with no rebuild would ship the old bin: the station flashes it, reads the old HELLO
+    back, and reports "flashing it didn't take" on every start. build.sh writes both, so they only differ if it wasn't run."""
+    src = re.search(r'^static const char \*VERSION = "([^"]*)";', (PANEL_DIR / "src" / "main.cpp").read_text(encoding="utf-8"),
+                    re.M)
+    assert src, "no VERSION in main.cpp"
+    assert (PANEL_DIR / "firmware" / "VERSION").read_text(encoding="utf-8").strip() == src.group(1)
+
+
+def test_the_build_platform_is_pinned():
+    """An unpinned platform builds different firmware from the same source as soon as PlatformIO updates it."""
+    ini = (PANEL_DIR / "platformio.ini").read_text(encoding="utf-8")
+    assert re.search(r"^platform = espressif8266@\d+\.\d+\.\d+\s*$", ini, re.M)

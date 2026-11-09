@@ -2,6 +2,8 @@ package com.thompsonfabco.filamentkit.ui.pair
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -53,7 +55,7 @@ class PairFlowTest {
     @Test fun manualFlowShowsFingerprintFirstThenCodeThenPairs() {
         val store = Store()
         val backend = Backend()
-        val vm = PairViewModel(store, backend, CoroutineScope(Dispatchers.Main.immediate))
+        val vm = PairViewModel(store, backend, CoroutineScope(Dispatchers.Main.immediate), pickGroups = { listOf(2, 9) })
         var paired = false
         rule.setContent {
             MaterialTheme { PairScreen(vm, emptyList(), onPaired = { paired = true }) }
@@ -63,12 +65,20 @@ class PairFlowTest {
         rule.onNodeWithText("Host name or IP address").performTextInput("10.0.0.2")
         rule.onNodeWithText("Connect").performClick()
 
-        // Fingerprint is on screen, in 4-character groups, and no code has been sent.
+        // Two groups are blank and must be typed from the server; no code has been sent.
         rule.waitUntil(5_000) { vm.state.value.step == Step.Confirm }
-        rule.onNodeWithText(groupFingerprint(FP)).assertIsDisplayed()
         assertTrue(backend.codes.isEmpty())
+        val groups = FP.chunked(4)
+        rule.onNodeWithText("Continue").assertIsNotEnabled()
+        rule.onNode(hasContentDescription("Missing group 3 of 16")).performTextInput(groups[2])
+        rule.onNode(hasContentDescription("Missing group 10 of 16")).performTextInput("0000")
+        rule.onNodeWithText("Continue").performClick()
+        rule.onNodeWithText(PairTexts.FINGERPRINT_WRONG).assertIsDisplayed()
+        assertEquals(Step.Confirm, vm.state.value.step)
 
-        rule.onNodeWithText("It matches").performClick()
+        rule.onNode(hasContentDescription("Missing group 10 of 16")).performTextClearance()
+        rule.onNode(hasContentDescription("Missing group 10 of 16")).performTextInput(groups[9].uppercase())
+        rule.onNodeWithText("Continue").performClick()
         rule.onNodeWithText("6-digit code").performTextInput("000000")
         rule.onNodeWithText("Pair").performClick()
         rule.waitUntil(5_000) { vm.state.value.error != null }

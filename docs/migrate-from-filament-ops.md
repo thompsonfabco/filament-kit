@@ -49,6 +49,10 @@ sudo systemctl disable Spoolman.service filament-mcp.service filament-regen.path
 cd filament-kit-<version> && sudo ./install.sh --mode server
 ```
 
+If the old Spoolman program is in `/opt/spoolman`, the kit's install stops and says a Spoolman the kit did not
+install is there; nothing is changed. Copy that folder aside first (it is your rollback), then run the `sudo touch`
+command the message names, and run the install again.
+
 The kit's own Spoolman starts on port 7912 with an empty database in `/var/lib/spoolman`; the old database is
 left where it was, as the rollback. Skip the Anthropic key question: the migration brings the key.
 

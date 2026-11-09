@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """The end-to-end scenarios of tools/e2e/run.sh (docs/testing-e2e.md). Run by run.sh as root; not on its own.
 
-  python3 -I tools/e2e/e2e.py --work DIR [--only a,d,c,b,e]
+  python3 -I tools/e2e/e2e.py --work DIR [--only a,d,c,b,e,f] [--previous vX.Y.Z]
 
 Builds two signed releases of this checkout with a throwaway ed25519 key, serves them from a fake GitHub releases
 API (`python3 -m http.server` on 127.0.0.1) and drives the real install, the reader API, the manual add and the
-updater against them. Everything listens on 127.0.0.1. Results go to DIR/results.json and stdout; logs of every
+updater against them. With --previous, scenario f builds that tag from its own files too: a real update from it and a
+real rollback to it. Everything listens on 127.0.0.1. Results go to DIR/results.json and stdout; logs of every
 command to DIR/log/. Exit 0 when no scenario failed (a skip says why). Cleaning the host is run.sh's job.
 
 Never prints a key or a token: the throwaway private key stays in DIR (0600), tokens only in this process.
@@ -51,7 +52,7 @@ VENV_PY = OPT / "venv" / "bin" / "python"
 KIT = "https://127.0.0.1:8710"
 WEB = "http://127.0.0.1:8101"
 SPOOLMAN = "http://127.0.0.1:7912/api/v1"
-TREE_PARTS = ("get.sh", "install", "tools", "server", "station/panel/firmware", "LICENSE", "THIRD-PARTY.md")
+TREE_PARTS = ("get.sh", "install", "tools", "server", "station/panel/firmware", "printer-pack", "LICENSE", "THIRD-PARTY.md")
 IGNORE = shutil.ignore_patterns(".venv", "__pycache__", "*.egg-info", "build", "dist", ".pytest_cache", "*.pyc")
 
 
@@ -255,11 +256,30 @@ class Releases:
         if r.returncode:
             raise Fail(f"sign_release.py sign failed: {r.stderr[-400:]}")
 
+    def build_previous(self, tag: str) -> tuple[Path, str, Path]:
+        """(tree, version, dist) of `tag` as it was released, by its own make_release.sh, with the throwaway key. The tree
+        isn't named tree-*: run.sh's clean-up takes the current uninstall.sh from one of those."""
+        tree = self.work / f"previous-{tag}"
+        tree.mkdir()
+        r = self.run.sh(["bash", "-c", 'set -o pipefail; git -c safe.directory="*" -C "$1" archive --format=tar "refs/tags/$2" '
+                         '| tar -x -C "$3"', "archive", str(SRC), tag, str(tree)], name=f"archive-{tag}")
+        if r.returncode:
+            raise Fail(f"cannot read tag {tag} from {SRC} (a clone with its tags, not a worktree of another OS): {r.stderr[-400:]}")
+        sign_release.set_pubkey(tree, self.pub)
+        m = re.search(r'^__version__ = "([^"]+)"', (tree / "server/filament_kit/__init__.py").read_text(encoding="utf-8"), re.M)
+        dist = self.work / f"dist-{tag}"
+        env = dict(self.build_env(), FK_DIST=str(dist), FK_NO_APP="1", FK_LIBRARY_SRC=str(self.work / "no-library"))
+        r = self.run.sh(["bash", str(tree / "tools" / "make_release.sh")], name=f"make-release-{tag}", env=env, cwd=tree)
+        if r.returncode or not (dist / f"filament-kit-{m[1]}.tar.gz").is_file():
+            raise Fail(f"make_release.sh of {tag} failed: {r.stderr[-800:]}")
+        return tree, m[1], dist
+
     def publish(self, version: str, *, repo: str = OWNER_REPO, hardware: bytes | None = None,
-                tamper_tarball: bool = False, foreign_sig: bool = False, latest: bool = True) -> None:
+                tamper_tarball: bool = False, foreign_sig: bool = False, latest: bool = True,
+                dist: Path | None = None) -> None:
         """Put release `version` on the fake API under `repo` (replacing it): the tarball and bambu_hardware.xml
         (or `hardware` instead), SHA256SUMS of both, signed with the throwaway key."""
-        dist = self.built[version]
+        dist = dist or self.built[version]
         out = self.www / "dl" / repo / version
         shutil.rmtree(out, ignore_errors=True)
         out.mkdir(parents=True)
@@ -317,9 +337,14 @@ def uninstall(run: Run, rel: Releases, name: str) -> None:
            timeout=600)
 
 
+def version_tuple(version: str) -> tuple[int, ...]:
+    return tuple(int(x) for x in version.split("."))
+
+
 class E2E:
-    def __init__(self, run: Run, rel: Releases):
+    def __init__(self, run: Run, rel: Releases, previous: str | None = None):
         self.run, self.rel = run, rel
+        self.previous = previous
         self.v1 = rel.base_version()
         major, minor, patch = (int(x) for x in self.v1.split("."))
         self.v2 = f"{major}.{minor}.{patch + 1}"
@@ -355,7 +380,8 @@ class E2E:
                   code == 200 and isinstance(info, dict) and info.get("version") == self.v1, str(info))
         code, _ = http("GET", f"{SPOOLMAN}/info")
         run.check(sc, "Spoolman answers (real Spoolman 0.27, downloaded by the spoolman module)", code == 200)
-        code, body = http("GET", f"{WEB}/health")
+        # active isn't listening yet: the web unit takes a moment to bind its port
+        code, body = wait_for(lambda: (lambda c: c if c[0] == 200 else None)(http("GET", f"{WEB}/health")), 60, 1) or (0, b"")
         run.check(sc, "web unit answers /health", code == 200 and body.strip() == b"ok", body[:200].decode())
         st = run.sh(["/usr/local/bin/filament-kit", "status"], name="status-after-install")
         run.check(sc, "filament-kit status exits 0", st.returncode == 0, st.stdout[-1500:])
@@ -584,6 +610,69 @@ class E2E:
         text = "".join(p.read_text() for p in drop.glob("*.conf")) if drop.is_dir() else ""
         run.check(sc, "the station unit's allow list still names the server", STATION_SERVER in text, text[-600:])
 
+    # ---- f) a real update from the last released tag, and a real rollback to it
+    def _still_works(self, sc: str, when: str, auth: dict, spool_id: int, version: str) -> None:
+        run = self.run
+        act = wait_for(lambda: (lambda a: a if set(a.values()) == {"active"} else None)(
+            units_active("spoolman.service", "filament-kit.service", "filament-kit-web.service")), 90, 2)
+        run.check(sc, f"{when}: services active", bool(act))
+        code, info = wait_for(lambda: (lambda c: c if c[0] == 200 else None)(jhttp("GET", f"{KIT}/api/info")), 90, 2) or (0, {})
+        run.check(sc, f"{when}: kit API answers {version}", code == 200 and info.get("version") == version, str(info))
+        code, body = jhttp("GET", f"{KIT}/api/printers", headers=auth)
+        run.check(sc, f"{when}: the paired phone's token still works", code == 200, f"{code} {body}")
+        code = wait_for(lambda: http("GET", f"{SPOOLMAN}/spool/{spool_id}")[0] == 200, 60, 2)
+        run.check(sc, f"{when}: the spool is still in Spoolman", bool(code))
+
+    def f_cross_tag(self, sc="f") -> None:
+        run, rel = self.run, self.rel
+        if not self.previous:
+            raise Skip("no --previous tag given")
+        if nothing_installed():
+            uninstall(run, rel, "uninstall-before-cross-tag")
+        left = nothing_installed()
+        run.check(sc, "starts from a host with no kit on it", not left, ", ".join(left))
+        tree, old, dist = rel.build_previous(self.previous)
+        if version_tuple(old) >= version_tuple(self.v2):
+            raise Fail(f"{self.previous} is {old}, not older than this checkout's {self.v2}")
+        repo = "e2e/cross-tag"
+        rel.publish(old, repo=repo, dist=dist)
+        if rel.server is None:
+            rel.serve()
+        r = run.sh(["bash", str(tree / "get.sh"), "--api", rel.api, "--repo", repo, "--modules", "spoolman,server,printers,web",
+                    "--set", f"web.public_url={PUBLIC_URL}"], name="get-previous", timeout=3600)
+        run.check(sc, f"{self.previous}'s own get.sh installs {old}", r.returncode == 0 and installed_version() == old,
+                  r.stdout[-1500:] + r.stderr[-800:])
+        if r.returncode:
+            raise Fail("install of the previous release failed; see the log")
+        r = kit_python("from filament_kit import pairing; print(pairing.issue('e2e').code)")
+        code, body = jhttp("POST", f"{KIT}/api/pair", body={"code": r.stdout.strip()})
+        if code != 200 or not isinstance(body, dict) or not body.get("token"):
+            raise Fail(f"pairing on {old} refused: {code}")
+        auth = {"Authorization": f"Bearer {body['token']}"}
+        wait_for(lambda: http("GET", f"{SPOOLMAN}/info")[0] == 200, 60, 2)
+        code, fil = jhttp("POST", f"{SPOOLMAN}/filament", body={"name": "E2E cross-tag PLA", "density": 1.24, "diameter": 1.75})
+        code2, spool = jhttp("POST", f"{SPOOLMAN}/spool", body={"filament_id": fil.get("id") if isinstance(fil, dict) else None})
+        if code != 200 or code2 != 200 or not isinstance(spool, dict):
+            raise Fail(f"cannot add a spool on {old}: {code} {code2}")
+        cfg = read_cfg()
+        cfg["updates"] = {"api": rel.api, "repo": repo}
+        write_cfg(cfg)
+        modules_before = cfg.get("modules")
+        rel.publish(self.v2, repo=repo)
+        fk = "/usr/local/bin/filament-kit"
+        r = run.sh([fk, "update"], name="cross-tag-update", timeout=3600)
+        run.check(sc, f"{old}'s own updater installs {self.v2}", r.returncode == 0 and installed_version() == self.v2,
+                  r.stdout[-1500:] + r.stderr[-800:])
+        self._still_works(sc, f"after the update to {self.v2}", auth, spool["id"], self.v2)
+        run.check(sc, "after the update: the same modules are on", read_cfg().get("modules") == modules_before,
+                  str(read_cfg().get("modules")))
+        r = run.sh([fk, "update", "--rollback"], name="cross-tag-rollback", timeout=3600)
+        run.check(sc, f"this checkout's rollback restores {old}", r.returncode == 0 and installed_version() == old,
+                  r.stdout[-1500:] + r.stderr[-800:])
+        self._still_works(sc, f"after the rollback to {old}", auth, spool["id"], old)
+        r = run.sh([fk, "update", "--check"], name="cross-tag-check")
+        run.check(sc, f"{old} still runs its own commands after the rollback", r.returncode == 0, r.stdout + r.stderr)
+
 
 SCENARIOS = {
     "a": ("a) fake release server: get.sh install, tampered tarball, bad signature", "a_install"),
@@ -591,6 +680,7 @@ SCENARIOS = {
     "c": ("c) fake 16-unit printer through the reader API", "c_printer"),
     "b": ("b) updater: check, update, hardware feed, rollback", "b_updater"),
     "e": ("e) station upgraded by the updater keeps its server address", "e_station"),
+    "f": ("f) the last released tag: real update from it, real rollback to it", "f_cross_tag"),
 }
 
 
@@ -598,11 +688,16 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--work", required=True)
     ap.add_argument("--only", default="a,d,c,b,e")
+    ap.add_argument("--previous", help="a tag of this repo, vX.Y.Z: adds scenario f")
     args = ap.parse_args()
+    if args.previous and not re.fullmatch(r"v\d+\.\d+\.\d+", args.previous):
+        ap.error("--previous takes a tag like v0.4.0")
     run = Run(Path(args.work))
     rel = Releases(run)
-    e2e = E2E(run, rel)
+    e2e = E2E(run, rel, args.previous)
     want = [s for s in args.only.split(",") if s]
+    if args.previous and "f" not in want:
+        want.append("f")
     status: dict[str, str] = {}
     try:
         print(f"==> building releases {e2e.v1} and {e2e.v2} (throwaway key)", flush=True)
@@ -611,7 +706,7 @@ def main() -> int:
         for key in want:
             title, meth = SCENARIOS[key]
             print(f"\n==> {title}", flush=True)
-            if key != "a" and "a" in want and not e2e.installed:
+            if key not in ("a", "f") and "a" in want and not e2e.installed:     # f installs its own
                 status[key] = "skip: the install (a) failed"
                 print(f"  SKIP {status[key]}")
                 continue

@@ -59,7 +59,7 @@ fun PairScreen(
 
         val mismatch = ui.mismatch
         when {
-            mismatch != null -> MismatchPanel(mismatch, viewModel::pairAgain)
+            mismatch != null -> MismatchPanel(PairTexts.mismatch(mismatch, ui.host), mismatch, viewModel::pairAgain)
             ui.step == Step.Choose -> ChooseStep(ui, discovered, onScan = { scanning = true }, viewModel)
             else -> ManualPair(
                 ui = ui,
@@ -75,7 +75,7 @@ fun PairScreen(
 
 @Composable
 private fun ChooseStep(ui: PairUi, discovered: List<DiscoveredServer>, onScan: () -> Unit, vm: PairViewModel) {
-    Text("On the server, run \"sudo filament-kit pair\", then scan the QR code it prints in the terminal with this phone.")
+    Text(PairTexts.SCAN_INTRO)
     Button(onClick = onScan, enabled = !ui.busy, modifier = Modifier.fillMaxWidth()) {
         Text(if (ui.busy) "Connecting..." else "Scan QR code")
     }
@@ -86,7 +86,7 @@ private fun ChooseStep(ui: PairUi, discovered: List<DiscoveredServer>, onScan: (
         Text("None found yet. You can still enter an address below.")
     } else {
         discovered.forEach { server ->
-            OutlinedButton(onClick = { vm.startManual(server.host, server.port) }, enabled = !ui.busy, modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(onClick = { vm.connectDiscovered(server.host, server.port) }, enabled = !ui.busy, modifier = Modifier.fillMaxWidth()) {
                 Text("${server.name} (${server.host})")
             }
         }
@@ -97,14 +97,14 @@ private fun ChooseStep(ui: PairUi, discovered: List<DiscoveredServer>, onScan: (
     }
 }
 
-/** The server's certificate is not the one that was paired; never trusted silently. */
+/** The server's certificate is not the expected one; never trusted silently. */
 @Composable
-private fun MismatchPanel(mismatch: Mismatch, onPairAgain: () -> Unit) {
-    Text("The server's certificate has changed", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error)
-    Text("This can happen if the server was reinstalled. If you did not expect that, do not continue.")
-    Text("Paired fingerprint")
+private fun MismatchPanel(text: MismatchText, mismatch: Mismatch, onPairAgain: () -> Unit) {
+    Text(text.title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error)
+    Text(text.body)
+    Text(text.expectedLabel)
     Text(groupFingerprint(mismatch.expected), fontFamily = FontFamily.Monospace)
-    Text("Fingerprint now")
+    Text(text.actualLabel)
     Text(groupFingerprint(mismatch.actual), fontFamily = FontFamily.Monospace)
-    Button(onClick = onPairAgain) { Text("Pair again") }
+    Button(onClick = onPairAgain) { Text(text.button) }
 }

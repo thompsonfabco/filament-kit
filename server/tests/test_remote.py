@@ -119,7 +119,7 @@ def test_execute_installs_router_files(tmp_path):
         assert (root / "usr/local/sbin/mcp-route").stat().st_mode & 0o100
     assert (root / "usr/local/sbin/filament-kit-acme-hook").exists()
     texts = run.texts()
-    assert any(t.startswith("openssl req -x509") and "fk.example.org" in t for t in texts)  # placeholder cert
+    assert not any(t.startswith("openssl") for t in texts)      # the placeholder is made in process, tested below
     assert "/usr/local/sbin/mcp-route add filament 8101" in texts
     assert "nginx -t" in texts
 

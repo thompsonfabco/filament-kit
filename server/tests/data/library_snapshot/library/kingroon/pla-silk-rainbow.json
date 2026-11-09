@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "Kingroon",
+  "product": "PLA Silk Rainbow",
+  "material": "PLA",
+  "colors": [
+    "Silk Rainbow Candy",
+    "Silk Rainbow Macaroon",
+    "Silk Rainbow Forest",
+    "Silk Rainbow Universe"
+  ],
+  "bambu_parent": "Bambu PLA Silk+",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "195"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.21"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-70",
+    "fan_max_speed": "100%",
+    "_drying": "50C 8h",
+    "_hdt_0.45MPa": "50",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "kingroon3d.com page table (Nozzle 195-230, Bed 50-70, Fan 100%, Density 1.21, Distortion Temp 50C(0.45MPa), +/-0.03mm); identical to Filament Guide datasheet row 'Silk Rainbow PLA'. kingroon.com page publishes no settings. page Printing Tips also give: AMS 2 Pro / AMS HT 55C 8h; X1 heatbed 60-70C 12h. kingroon3d listing showed Sold Out. Bambu parent not confirmed."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://kingroon3d.com/products/kingroon3d-silk-rainbow-pla",
+    "https://kingroon.com/products/kingroon-silk-rainbow-pla0123",
+    "https://cdn.shopify.com/s/files/1/0612/4784/8666/files/Filaments-Datasheet.pdf?v=1741943123"
+  ],
+  "updated": "2026-11-02"
+}

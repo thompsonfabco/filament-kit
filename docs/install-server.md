@@ -15,6 +15,9 @@ printers. The Android app, the iPhone web app and the PC sync all connect to it,
 - **About 15 minutes.**
 - Optional: an **Anthropic API key** (it starts with `sk-ant-`), only if you want spool labels read from photos.
   Without one you type spools in yourself, and you can add the key later.
+- Good to know: some Bambu printers accept the kit's commands only in **LAN Only** mode with **Developer Mode** on,
+  which turns off Bambu Cloud for that printer. The kit cannot tell in advance which printers need it; the app tells
+  you if yours does.
 
 The computer must be on the **same network as your printers and phone**: the same router and Wi-Fi, not a
 guest network.
@@ -86,8 +89,7 @@ time. For a first install, pressing **Enter** at every question is fine.
    Anthropic API key.
 
    The installer now installs packages and Spoolman. Several screens of text scroll past. Some lines look like
-   errors but are not, for example `id: 'spoolman': no such user` on a first install. Look at the status list
-   at the end instead.
+   errors but are not. Look at the status list at the end instead.
 
 3. **Display name**
 
@@ -106,8 +108,8 @@ time. For a first install, pressing **Enter** at every question is fine.
    Press Enter for yes. The defaults are **Sealed stock**, **Rack 1**, **Storage box** and **Overflow**. You can
    rename them later in `sudo filament-kit config` → **2) storage**.
 
-5. **Anthropic API key**: only if you answered `y` to question 2. Paste the key and press Enter. Nothing shows
-   while you paste. That is on purpose.
+5. **Anthropic API key**: only if you answered `y` to question 2. Paste the key and press Enter. Each character
+   shows as a `*`.
 
 ### Answers on the command line
 
@@ -158,17 +160,18 @@ Certificate fingerprint (check it matches the phone):
 Pairing code: 123456
 Expires at 10:07:30 (in 9 min)
 
-Setup page: https://my-server.local:8710/setup  (v0.4.0 and newer; its setup code, at a terminal: sudo filament-kit setup-code)
-
 Done.   Spoolman: http://my-server.local:7912   Pair another phone: sudo filament-kit pair
+
+Open https://my-server.local:8710/setup  (setup code: 1234-5678)
 ```
 
 - **No line should start with `FAIL`.** Lines starting with `--` are information. On a new install, "library not
   downloaded", "no build yet" and "PC sync: not set up" are expected.
-- The **first QR code** downloads the Android app to the phone (it only appears when this server has the app).
-  The installer then waits. Press **Enter** when the app is installed to see the **pairing QR code and pairing
-  code**, or type **s** to skip pairing. They expire after about 10 minutes. If you are not ready, skip, and run
-  `sudo filament-kit pair` later to get new ones. Without a terminal (a script) the app link is printed as text and
+- The **first QR code** downloads the Android app to the phone (it only appears when this server has the app). Scan
+  it with the phone's camera. The installer then waits. Press **Enter** when the app is installed to see the
+  **pairing QR code and pairing code**: scan that one **inside the app**, not with the camera. Or type **s** to skip
+  pairing. They expire after about 10 minutes. If you are not ready, type **s**; you can pair later from the setup page
+  or with `sudo filament-kit pair`, which gives new ones. Without a terminal (a script) the app link is printed as text and
   nothing waits; pair later with `sudo filament-kit pair`.
 - Typing a secret (the Access Code, the Anthropic key, the web passphrase) shows a `*` for each character.
 - **Spoolman**, where your spool list lives, opens in any web browser at home at the address on the `Done` line
@@ -194,8 +197,8 @@ station, NFC reader tokens, and switching modules on or off.
    server's own certificate: continue, as you do for the app download.
 3. You can look at everything on the page without the code. **Every change asks for the setup code.**
 
-**Who can reach it.** Only devices on your home network (the private address ranges, `web.lan` in the settings;
-the server itself always). Open it by the server's own name or address; another name is refused. It is not
+**Who can reach it.** Only devices on your home network: IPv4 addresses that start with 192.168 or 10 by default
+(addresses that start with 172.16 need `web.lan` in the settings), and the server itself. Open it by the server's own name or address; another name is refused. It is not
 available from the internet, even when you turned on remote access.
 
 **A wrong code.** Five wrong codes from one device in 10 minutes lock that device out for a while. If wrong codes
@@ -221,14 +224,18 @@ Everything the page does can still be done from the Terminal, as the other secti
 `sudo filament-kit modules apply --no-pair` applies module changes without the pairing screen at the end (the page
 uses it).
 
-## Next steps
+## After the install
 
-- **Android phone:** [Install the Android app](install-android-app.md) and pair it.
-- **iPhone (or any phone browser):** [Use the web app on an iPhone](install-iphone-web-app.md). It needs extra setup.
-- **Printers:** the server finds Bambu Lab printers on your network. Open **Printers** in the app and type each
-  printer's Access Code (shown on the printer's screen). To add one by hand: `sudo filament-kit config`, then
-  **5) Printers**. Details: [user guide, Bambu Lab printers](user-guide.md#bambu-lab-printers).
-- **Bambu Studio presets:** install the PC sync on your Windows PC: [user guide, Pair your PC](user-guide.md#pair-your-pc).
+1. **Phone:** [Install the Android app](install-android-app.md) and pair it, or
+   [use the web app on an iPhone](install-iphone-web-app.md) (any phone browser; it needs extra setup).
+2. **Printer:** the server finds Bambu Lab printers on your network. Open **Printers** in the app and type each
+   printer's Access Code (shown on the printer's screen). Steps:
+   [Set up a printer](android-app.md#2-set-up-a-printer). To add one by hand: `sudo filament-kit config`, then
+   **5) Printers**. More: [user guide, Bambu Lab printers](user-guide.md#bambu-lab-printers).
+3. **Slots:** [map the printer's slots](android-app.md#map-slots-needed-before-filament-use-is-taken-off-spools), so that
+   filament used in a print is taken off the right spools, then
+   [load a spool](android-app.md#load-and-unload-a-spool).
+4. **Bambu Studio presets:** install the PC sync on your Windows PC: [user guide, Pair your PC](user-guide.md#pair-your-pc).
 
 ## Change what is installed
 
@@ -316,9 +323,17 @@ Either way, the PC must stay on and awake for the server to answer.
   IP address, as in [The setup page](#the-setup-page-v040).
 - **Locked out of the setup page after wrong codes**: `sudo filament-kit setup-code --new` makes a new code and
   clears the lock.
-- **The phone can't find the server**: the phone and the computer must be on the same Wi-Fi network. If you
+- **The phone can't find the server**: the phone and the computer must be on the same Wi-Fi network. Type
+  `hostname -I` on the computer to see its address. If you
   turned on Ubuntu's firewall (`ufw`), allow the app's port and name lookups:
   `sudo ufw allow 8710/tcp` and `sudo ufw allow 5353/udp`. For Spoolman in a browser, also `sudo ufw allow 7912/tcp`.
+- **`sudo filament-kit update` says a printer is mapping or loading**: it does nothing then. Try again when the
+  mapping or loading is done.
+- **The install stops with "a Spoolman the kit did not install is in /opt/spoolman"**: the kit never replaces a Spoolman
+  it did not put there, and nothing was changed. To keep using that one, run `sudo filament-kit modules disable
+  spoolman` and set `spoolman_url` in `/etc/filament-kit/config.json` to its address. To let the kit replace the
+  Spoolman program (its database is not touched), run `sudo touch /opt/spoolman/.fk-installed` and the same command
+  again.
 - **Printers don't show up**: the computer must be on the same network as the printers, and a firewall must allow
   UDP ports 2021 and 1990. A server inside WSL or a virtual machine with NAT networking can't see printers (see
   [Running the server in WSL](#running-the-server-in-wsl)): add them by hand with `sudo filament-kit config` →

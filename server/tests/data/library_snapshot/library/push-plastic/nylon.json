@@ -14,24 +14,30 @@
       "250"
     ],
     "nozzle_temperature_range_high": [
-      "270"
+      "275"
     ],
     "filament_diameter": [
       "1.75"
     ]
   },
   "published_ranges": {
-    "bed_all_plates": "90-120",
+    "bed_all_plates": "90-110",
     "_drying": "60C 6h",
-    "_enclosure": "Heated enclosure recommended",
+    "_enclosure": "Vendor text: 'High heat resistance- with no need for heated chamber!' (see conflicts)",
     "_print_speed": "40mm/s (preferred: 0.4mm nozzle, 0.2mm layer, 255C extruder, 90C bed)",
-    "_notes": "Absorbs moisture rapidly - dry before printing. Slower speeds and extra bed adhesive for large parts. No unfilled-Nylon TDS cited, so density and HDT are not given."
+    "_notes": "Values from reseller copies of the Push Plastic product description (official page returned 429). Colours from HartSmart listing of the 3kg SKU. Drying temperature/time not published by vendor. Generic PA used because nylon grade not stated. Earlier entry: Absorbs moisture rapidly - dry before printing. Slower speeds and extra bed adhesive for large parts. No unfilled-Nylon TDS cited, so density and HDT are not given."
   },
-  "conflicts": [],
-  "source_quality": "official_tds",
+  "conflicts": [
+    "enclosure: Enclosure: Strongly recommended (with Nozzle 240-260°C, Bed 70-90°C, dry 8-12h at 70°C) (https://www.consum3d.com/products/nylon-filament-1-75mm-1kg (reseller, own text))",
+    "enclosure: Enclosure: Helpful, but not required (https://pwncnc.com/products/nylon-filament (Push Plastic retail partner))",
+    "nozzle_temperature_range_high: earlier library entry had 270 (sources: https://cdn.shopify.com/s/files/1/0260/7421/files/Nylon_print_settings.pdf, https://www.pushplastic.com/products/nylon-filament-1-75mm-1kg)"
+  ],
+  "source_quality": "reseller_tds_copy",
   "sources": [
+    "https://www.3dprintiverse.com/products/nylon-filament-1-75mm-1kg",
+    "https://hartsmartproducts.com/products/nylon-filament-1-75mm-3kg",
     "https://cdn.shopify.com/s/files/1/0260/7421/files/Nylon_print_settings.pdf",
     "https://www.pushplastic.com/products/nylon-filament-1-75mm-1kg"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }
