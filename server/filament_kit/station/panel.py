@@ -141,6 +141,22 @@ def open_panel(dev):
     return None
 
 
+def blank_c3_ports():
+    """The ttyACM ports of an Espressif USB device (303a) that give no HELLO within 3 s: candidates for a first flash.
+    Never a ttyUSB port (the PN532 or an old panel). A bench reader plugged in for power looks the same as a blank
+    board, so these are only candidates; the owner confirms each one."""
+    blank = []
+    for dev in st.panel_ttys():
+        if not os.path.basename(dev).startswith("ttyACM") or st.usb_vendor(dev) != st.PANEL_VENDOR:
+            continue
+        ser = open_panel(dev)
+        if ser:
+            ser.close()
+        else:
+            blank.append(dev)
+    return blank
+
+
 def find_panel():
     """One pass over the USB serial ports (skipping the reader's): the panel's port, or None. Records the result in
     ports["panel"] and sets `probed`, so the reader loop then takes another port."""
