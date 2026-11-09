@@ -99,7 +99,9 @@ class HelperClient:
         self.timeout = timeout
 
     def open_file(self, req: dict):
-        """A request whose answer carries an open file beside the reply (op backup_open): (reply, file or None)."""
+        """A request whose answer carries an open file beside the reply (op backup_open): (reply, file or None). A file
+        that came with a broken reply is closed, never left open (audit v0.5.0, finding 2)."""
+        fds: list[int] = []
         try:
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
                 s.settimeout(self.timeout)
@@ -114,10 +116,15 @@ class HelperClient:
             reply = json.loads(data or b"null")
             if not isinstance(reply, dict):
                 raise ValueError("not an object")
-            return reply, (os.fdopen(fds[0], "rb") if fds else None)
+            fh = os.fdopen(fds[0], "rb") if fds else None
+            fds = fds[1:]
+            return reply, fh
         except (OSError, ValueError, AttributeError) as e:
             log.error("setup: the root helper did not answer (%s)", type(e).__name__)
             return {"ok": False, "status": 503, "error": "the setup helper did not answer"}, None
+        finally:
+            for fd in fds:
+                os.close(fd)
 
     def __call__(self, req: dict) -> dict:
         try:

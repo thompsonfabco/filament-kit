@@ -471,7 +471,7 @@ def _one_byte_apart(a: str, b: str) -> bool:
 
 def tag_neighbours(sm: Spoolman, nfc_id: str) -> list[int]:
     """Spools whose tag differs from `nfc_id` in exactly one byte: tags cut from one roll have UIDs like that
-    (4:77:8f:... vs 4:77:90:...), so a tap may have picked up the wrong one of a batch."""
+    (a:b:b:... vs a:b:c:...), so a tap may have picked up the wrong one of a batch."""
     uid = tags.normalize_uid(nfc_id)
     out = []
     for s in _all_spools(sm):

@@ -19,7 +19,7 @@ from filament_kit.api import create_app
 from filament_kit.spoolman import Spoolman
 from filament_kit.station import server_api
 
-UID = "4:77:90:e:9:22:89"
+UID = "a:b:c:d:e:f:1"
 FP = "ab" * 32
 ITEM = {"photos": [0], "existing_filament_id": None, "vendor": "OVERTURE", "name": "PETG Black",
         "material": "PETG", "color_hex": "111111", "net": 1000, "tare": 155, "density": 1.27, "count": 1,

@@ -11,7 +11,7 @@ from filament_kit.spoolman import Spoolman
 
 JPEG = b"\xff\xd8\xff\xe0" + b"x" * 100
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 50
-UID = "4:77:90:e:9:22:89"
+UID = "a:b:c:d:e:f:1"
 
 READ = {"questions": [], "items": [{
     "photos": [0], "existing_filament_id": None, "vendor": "OVERTURE", "name": "PETG Black", "material": "PETG",
@@ -150,7 +150,7 @@ def test_read_then_add_then_tag_lookup(sm):
     fake = FakeClaude(READ)
     c = client(sm, fake)
     tok = token()
-    r = read(c, tok, [("a.jpg", JPEG), ("b.jpg", JPEG)], hint="x" * 5000, tag="04:77:90:0E:09:22:89")
+    r = read(c, tok, [("a.jpg", JPEG), ("b.jpg", JPEG)], hint="x" * 5000, tag="0A:0B:0C:0D:0E:0F:01")
     assert r.status_code == 200, r.text
     out = r.json()
     assert out["read_id"] and out["tag"] == {"nfc_id": UID}

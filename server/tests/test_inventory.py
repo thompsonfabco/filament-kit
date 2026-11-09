@@ -26,8 +26,8 @@ def item(**kw):
     return base
 
 
-UID = "4:77:90:e:9:22:89"
-UID2 = "4:77:8f:e:9:22:89"
+UID = "a:b:c:d:e:f:1"
+UID2 = "a:b:b:d:e:f:1"
 
 
 def test_add_new_vendor_and_filament(sm, spoolman_fake_store):
@@ -178,7 +178,7 @@ def _spool(sm, **kw):
 
 def test_link_same_spool_twice_is_noop(sm):
     s = _spool(sm)
-    r1 = inventory.link_tag(sm, s["id"], "04:77:90:0E:09:22:89", force=False, dry=False)
+    r1 = inventory.link_tag(sm, s["id"], "0A:0B:0C:0D:0E:0F:01", force=False, dry=False)
     assert not r1.noop
     after = sm.get(f"spool/{s['id']}")
     assert tags.stored(after) == UID and after["first_used"] and after["comment"] in (None, "")
@@ -296,9 +296,9 @@ def test_update_gross_location_empty(sm):
 def test_find_by_tag(sm):
     a, b = _spool(sm), _spool(sm, vendor="Other", name="Red")
     inventory.link_tag(sm, b["id"], UID, force=False, dry=False)
-    assert inventory.by_tag(sm, "04:77:90:0e:09:22:89")["id"] == b["id"]
+    assert inventory.by_tag(sm, "0a:0b:0c:0d:0e:0f:01")["id"] == b["id"]
     assert inventory.by_tag(sm, UID2) is None
-    assert [s["id"] for s in inventory.find(sm, "4:77:90", sealed_only=False)] == [b["id"]]
+    assert [s["id"] for s in inventory.find(sm, "a:b:c", sealed_only=False)] == [b["id"]]
     assert {s["id"] for s in inventory.find(sm, "SUNLU grey", sealed_only=False)} == {a["id"]}
     assert [s["id"] for s in inventory.find(sm, "sealed stock", sealed_only=True)] == [a["id"]]
 
@@ -774,15 +774,15 @@ def test_pick_sealed_lowest_id_sealed_spool(sm):
     assert inventory.pick_sealed(sm, fid) == b
     assert inventory.pick_sealed(sm, 9999) is None
     inventory.open_spool(sm, b, UID2, RULES, dry=False)
-    inventory.open_spool(sm, c, "4:77:91:e:9:22:89", RULES, dry=False)
+    inventory.open_spool(sm, c, "a:b:d:d:e:f:1", RULES, dry=False)
     assert inventory.pick_sealed(sm, fid) is None
 
 
 def test_tag_neighbours_one_byte_apart(sm):
     a, b, c = (_spool(sm, name=n) for n in ("N1", "N2", "N3"))
-    inventory.link_tag(sm, a["id"], UID, force=False, dry=False)               # 4:77:90:e:9:22:89
-    inventory.link_tag(sm, b["id"], "4:77:90:e:9:22:8a", force=False, dry=False)  # last byte differs
-    inventory.link_tag(sm, c["id"], "4:78:91:e:9:22:89", force=False, dry=False)  # two bytes differ
-    assert inventory.tag_neighbours(sm, UID2) == [a["id"]]                     # 4:77:8f:... vs 4:77:90:...
-    assert sorted(inventory.tag_neighbours(sm, "04:77:90:0E:09:22:8B")) == [a["id"], b["id"]]
+    inventory.link_tag(sm, a["id"], UID, force=False, dry=False)               # a:b:c:d:e:f:1
+    inventory.link_tag(sm, b["id"], "a:b:c:d:e:f:2", force=False, dry=False)  # last byte differs
+    inventory.link_tag(sm, c["id"], "a:c:d:d:e:f:1", force=False, dry=False)  # two bytes differ
+    assert inventory.tag_neighbours(sm, UID2) == [a["id"]]                     # a:b:b:... vs a:b:c:...
+    assert sorted(inventory.tag_neighbours(sm, "0A:0B:0C:0D:0E:0F:03")) == [a["id"], b["id"]]
     assert inventory.tag_neighbours(sm, UID) == [b["id"]]                      # its own spool is not a neighbour

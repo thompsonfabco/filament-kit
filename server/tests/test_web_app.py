@@ -28,7 +28,7 @@ BASE = "/filament/intake"
 HOME = ("192.168.1.20", 50000)
 AWAY = ("203.0.113.9", 50000)
 PASS = "correct horse battery"
-UID = "4:77:90:e:9:22:89"
+UID = "a:b:c:d:e:f:1"
 JPEG = b"\xff\xd8\xff\xe0" + b"x" * 100
 TOOLS = {"find_spools", "add_spools", "tag_state", "open_spool", "preset_status", "list_lines", "find_parents",
          "add_filaments_to_line", "add_line", "generate", "printer_slots", "printer_set_slot", "h2d_slots",

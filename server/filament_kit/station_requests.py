@@ -34,6 +34,9 @@ import time
 from . import config, pairing
 
 TTL = 600
+# A security limit, not a tidiness one: commit-then-reveal stops a man in the middle only because unrevealed requests
+# are few (3) and short-lived (TTL). Raising either gives such an attacker more tries at the six-digit code
+# (audit v0.5.0, finding 4; R61).
 MAX_PENDING = 3
 FILE = "station-requests.json"
 HEX64 = re.compile(r"[0-9a-f]{64}")
