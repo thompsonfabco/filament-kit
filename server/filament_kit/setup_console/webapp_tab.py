@@ -15,7 +15,8 @@ def _view() -> dict:
         return {"on": False}
     from ..setup_page import qr_svg
     public = str((cfg.get("web") or {}).get("public_url") or "").strip()
-    url = public or f"https://{pairing.short_hostname()}.local/filament"       # Way A of docs/install-iphone-web-app.md
+    base = public or f"https://{pairing.short_hostname()}.local/filament"      # Way A of docs/install-iphone-web-app.md
+    url = base.rstrip("/") + "/intake"      # the phone web app; the module's base address has no page of its own
     return {"on": True, "url": url, "set_address": bool(public), "qr_svg": qr_svg(url)}
 
 
