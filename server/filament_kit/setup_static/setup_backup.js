@@ -64,7 +64,7 @@ function backupCard() {
         h("button", { class: "secondary", textContent: "Cancel", on: { click: () => change(rbox, "restore/forget", {}, () => rbox.replaceChildren()) } })));
   };
   fill(body,
-    h("p", { class: "muted", textContent: "One zip with everything the kit keeps: spools, settings, printers, pairings and the certificate. Keep it somewhere safe: it holds every secret of the kit." }),
+    h("p", { class: "muted", textContent: "One zip with everything the kit keeps: spools, settings, printers, pairings and the certificate. The zip is not encrypted and holds the setup secrets (the keys, Access Codes and certificate): store it somewhere safe." }),
     h("div", { class: "row" },
       h("button", { textContent: "Back up now", on: { click: () => startJob(box, "backup") } }),
       h("button", { class: "secondary", textContent: "Show the backups", on: { click: show } })),

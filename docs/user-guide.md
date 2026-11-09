@@ -465,7 +465,7 @@ Not in it: the program itself, the downloaded releases, the logs, the Bambu syst
 earlier library versions. Those come back by themselves.
 
 **Keep the zip somewhere safe.** It holds every secret of the kit: the Anthropic key, the printers' Access Codes and
-the certificate's private key. There is no passphrase on it yet.
+the certificate's private key. The zip is not encrypted.
 
 **Make one.** On the setup page, open **Settings**, then **Backups**, and tap **Back up now**. **Show the backups**
 lists them (the nightly ones too, the newest first) and **Download** saves one as
