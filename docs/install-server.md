@@ -155,7 +155,7 @@ Press Enter when the app is installed and you're ready to pair (or s to skip)
 ==> Pair a phone: open the filament-kit app and scan this code
 (a large QR code)
 
-Certificate fingerprint (check it matches the phone):
+Certificate fingerprint (the phone asks for two groups of it):
   7616 34e9 ...
 Pairing code: 123456
 Expires at 10:07:30 (in 9 min)

@@ -18,7 +18,7 @@ import urllib.request
 from pathlib import Path
 
 from . import apply, config, inventory, klipper_cli, library, menu_ui, modules, pairing, secret_input
-from . import remote as remote_mod
+from . import status as status_rows
 from .bridge import registry
 from .profiles import builds, lines as lines_mod
 from .profiles.errors import ProfileError
@@ -84,128 +84,22 @@ def _api_answers(port: int) -> tuple[bool, str]:
 
 
 def _station_lines(url: str) -> bool:
-    try:
-        state = StationClient(url, backoff=0).state()
-    except StationUnreachable:
-        return _line(False, f"station not answering at {url}",
-                     f"check the station machine: sudo systemctl status filament-kit-station  (url {url})")
-    good = _line(True, f"station answering at {url}")
-    # a fresh station has seen neither the reader nor the scale: informational, not a failure.
-    # "tag" is always an object; its nfc_id stays null until the reader has read a tag.
-    if not (state.get("tag") or {}).get("nfc_id"):
-        print("--   station reader not seen")
-    if not state.get("scale") and not state.get("last_weight"):
-        print("--   station scale not seen")
-    return good
+    return status_rows.print_rows(status_rows.station_rows(url))
 
 
 def _hardware_lines() -> bool:
-    """The printer hardware data (`bambu_hardware.xml`, bundled + optional override): FAIL per error (a refused
-    override: the last good data stays in use), a note per warning (ignored unknown parts)."""
-    from .bridge import hardware
-    try:
-        hw = hardware.load()
-    except Exception as e:  # noqa: BLE001 - status reports, it does not crash
-        return _line(False, f"printer hardware data could not be loaded ({type(e).__name__}: {e})")
-    good = True
-    if hw.errors:
-        for e in hw.errors:
-            good &= _line(False, f"printer hardware data: {e}",
-                          f"fix or remove {hardware.override_path()} (the last good data is in use)")
-    else:
-        good &= _line(True, "printer hardware data loaded")
-    for w in hw.warnings:
-        print(f"--   printer hardware data: {w}")
-    return good
+    return status_rows.print_rows(status_rows.hardware_rows())
 
 
 def cmd_status(client_factory, station_pairing: str | None = None) -> int:
     """`station_pairing`: the wrapper's answer from root (server_api.pairing_state), for a status run as the service
     user, which can't read the station's pairing."""
-    cfg = config.load()
-    p = config.paths()
-    on = modules.enabled(cfg)
-    good = True
-
-    if _no_systemd():
-        print("--   service checks skipped (FK_NO_SYSTEMD=1)")
-    else:
-        for svc in services_for(on):
-            try:
-                r = subprocess.run(["systemctl", "is-active", svc], capture_output=True, text=True, timeout=15)
-                active = r.stdout.strip() == "active"
-            except (OSError, subprocess.SubprocessError):
-                active = False
-            good &= _line(active, f"service {svc} active", f"sudo systemctl start {svc}")
-        if "server" in on:
-            ok, url = _api_answers(cfg["port"])
-            good &= _line(ok, f"filament-kit API {'answering' if ok else 'not answering'} at {url}",
-                          "sudo journalctl -u filament-kit -n 50")
-
-    if "server" in on or "spoolman" in on:
-        try:
-            version = Spoolman(cfg["spoolman_url"]).ping()
-            good &= _line(True, f"Spoolman reachable at {cfg['spoolman_url']} (v{version})")
-        except SpoolmanError as e:
-            good &= _line(False, f"Spoolman not reachable at {cfg['spoolman_url']}: {e}",
-                          "sudo systemctl start spoolman" if "spoolman" in on
-                          else "check that the remote Spoolman is running and spoolman_url is right")
-
-    if "ai_intake" in on:
-        ok, text = check_key(client_factory)
-        if ok:
-            good &= _line(True, text)
-        elif text.startswith("Anthropic key missing"):
-            good &= _line(False, text, "run: sudo filament-kit config  (option 4)")
-        else:
-            good &= _line(False, text, "run: sudo filament-kit config  (option 4) or check internet access")
-
-    if "server" in on:
-        cert = p.etc / "cert.pem"
-        if cert.exists():
-            good &= _line(True, f"certificate present, fingerprint {pairing.fingerprint(cert.read_bytes())}")
-        else:
-            good &= _line(False, f"certificate missing ({cert})", "run: sudo filament-kit cert")
-
-    station_url = (cfg.get("station") or {}).get("url")
-    if station_url:
-        good &= _station_lines(station_url)
-    if "station" in on:
-        from .station import server_api
-        print("\n".join(server_api.pairing_lines(station_pairing)))
-
-    if "server" in on:
-        print(f"--   display name: {cfg['server_name']}")
-        print(f"--   paired devices: {len(pairing.devices())}")
-        print(f"--   reads used today: {_reads_today()} of {cfg['reads_per_day']}")
-    if "printers" in on:
-        good &= _hardware_lines()
-    if "presets" in on:
-        good &= _profile_status_lines()
-    elif "library" in on:
-        try:
-            _library_status_lines()
-        except Exception as e:  # noqa: BLE001 - status reports, it does not crash
-            print(f"--   library: could not be read ({e.__class__.__name__}: {e})")
-    return 0 if good else 1
+    rows = status_rows.rows(client_factory=client_factory, station_pairing=station_pairing)
+    return 0 if status_rows.print_rows(rows) else 1
 
 
 def _library_status_lines() -> None:
-    st = library.status()
-    source = st["source"]
-    if source == "updated":
-        at = (library._pointer("current.json") or {}).get("at")
-        if isinstance(at, (int, float)) and not isinstance(at, bool):
-            source = f"updated {time.strftime('%Y-%m-%d', time.localtime(at))}"
-    n = st["local"]
-    if source == "none":
-        print(f"--   library not downloaded (filament-kit library update), {n} local addition{'' if n == 1 else 's'}")
-    else:
-        print(f"--   library version {st['version']} ({source}), {n} local addition{'' if n == 1 else 's'}")
-    lc = st["last_check"]
-    if lc is not None and not lc["ok"]:
-        # a warning, not a failure: the last good version (or none) stays in use
-        print(f"--   library update: {lc['error']}")
+    status_rows.print_rows(status_rows.library_rows())
 
 
 def _attempt_failed(st: dict) -> str | None:
@@ -217,40 +111,7 @@ def _attempt_failed(st: dict) -> str | None:
 
 
 def _profile_status_lines() -> bool:
-    good = True
-    try:
-        _library_status_lines()
-    except Exception as e:  # noqa: BLE001 - status reports, it does not crash
-        print(f"--   library: could not be read ({e.__class__.__name__}: {e})")
-    try:
-        st = builds.status()
-    except Exception as e:  # noqa: BLE001
-        return _line(False, f"profiles: status could not be read ({e.__class__.__name__}: {e})",
-                     "sudo journalctl -u filament-kit-build -n 50")
-    b = st.get("build")
-    error = _attempt_failed(st)
-    if error is not None:
-        good &= _line(False, f"profiles: last build failed: {error}; "
-                             + (f"using build {b['stamp']}" if b else "no good build yet"),
-                      "sudo journalctl -u filament-kit-build -n 50")
-    elif b:
-        good &= _line(True, f"profiles: build {b['stamp']}, {st.get('presets', 0)} presets for "
-                            f"{st.get('lines', 0)} lines ({b.get('problems', 0)} problems)")
-    else:
-        print("--   profiles: no build yet (waiting for the PC sync)")
-    pc = st.get("pc")
-    if pc:
-        inst = st.get("installed")
-        print(f"--   PC sync: last upload {_fmt_time(pc.get('last_upload'))}, "
-              + (f"installed build {inst['stamp']}" if inst else "no build installed yet"))
-        wait = builds.pc_waiting_text(pc)
-        if wait:
-            print(f"--   {wait}")
-        if pc.get("failure"):
-            print(f"--   PC sync at {_fmt_time(pc['failure']['at'])}: {pc['failure']['text']}")
-    else:
-        print("--   PC sync: not set up (see README: Pair your PC)")
-    return good
+    return status_rows.print_rows(status_rows.profile_rows())
 
 
 # ---------- pair / unpair ----------
@@ -302,11 +163,11 @@ def cmd_pair(pc: bool = False, station: bool = False, text: bool = False) -> int
         # no terminal (an install log): the link as text, for a phone that gets it some other way
         print(f"Pairing link: {pr.qr}")
         fp = pairing.fingerprint((config.paths().etc / "cert.pem").read_bytes())
-        print("Certificate fingerprint (check it matches the phone):")
+        print("Certificate fingerprint (the phone asks for two groups of it):")
     else:
         print(_qr_text(pr.qr))
         fp = pairing.fingerprint((config.paths().etc / "cert.pem").read_bytes())
-        print("Certificate fingerprint (check it matches the phone):")
+        print("Certificate fingerprint (the phone asks for two groups of it):")
     print("  " + " ".join(fp[i:i + 4] for i in range(0, len(fp), 4)))
     print(f"Pairing code: {pr.code}")
     print(f"Expires at {time.strftime('%H:%M:%S', time.localtime(pr.expires))} "
@@ -1639,49 +1500,7 @@ def _web_health(port: int) -> tuple[bool, str]:
 
 
 def cmd_web_status() -> int:
-    cfg = config.load()
-    web = cfg.get("web") or {}
-    on = modules.enabled(cfg)
-    ok = _line("web" in on, "web module is on", "sudo filament-kit modules enable web")
-    public = str(web.get("public_url") or "").rstrip("/")
-    ok &= _line(public.startswith("https://"), f"public URL {public or '(not set)'}",
-                "set web.public_url in config.json (e.g. https://mcp.example.com/filament)")
-    if public:
-        print(f"     connector: {public}/mcp   phone app: {public}/intake")
-    if (config.paths().etc / WEB_PASSPHRASE).is_file():
-        _line(True, "sign-in passphrase is set")
-    else:   # only Claude's connector signs in with it: not a failure for someone using the phone web app alone
-        print("--   sign-in passphrase not set: the Claude connector cannot sign in until "
-              "`sudo filament-kit web passphrase`")
-    port = int(web.get("port") or config.DEFAULTS["web"]["port"])
-    up, why = _web_health(port)
-    ok &= _line(up, f"web unit answers on 127.0.0.1:{port}" + ("" if up else f" ({why})"),
-                "sudo systemctl restart filament-kit-web; journalctl -u filament-kit-web")
-    if "remote" in on:
-        warn = remote_mod.certificate_warning(remote_mod.served_certificate())
-        if warn:
-            expired, text, fix = warn
-            if expired:
-                ok &= _line(False, text, fix)
-            else:
-                print(f"--   {text}\n     fix: {fix}")
-    try:
-        d = json.loads((config.paths().web / "oauth.json").read_text(encoding="utf-8"))
-        now = time.time()
-        live = sum(1 for v in (d.get("refresh") or {}).values() if (v.get("expires_at") or 0) > now)
-        print(f"     connectors: {len(d.get('clients') or {})} registered, {live} signed in")
-    except FileNotFoundError:
-        print("     connectors: none signed in yet")
-    except PermissionError:
-        print("     connectors: cannot read (run as root)")
-    except (OSError, ValueError, AttributeError) as e:
-        print(f"     connectors: cannot read the OAuth state ({type(e).__name__})")
-    svc = cfg.get("slot_service")
-    slots = ("slot_service" if isinstance(svc, dict) and svc.get("state_url") else
-             "the kit's printer bridge" if "printers" in on else "none")
-    print(f"     printer slots: {slots}; tag readers: {len(cfg.get('tag_sources') or [])} "
-          f"+ {'station' if (cfg.get('station') or {}).get('url') else 'no station'}")
-    return 0 if ok else 1
+    return 0 if status_rows.print_rows(status_rows.web_rows()) else 1
 
 
 # ---------- migrate-ops (from filament-ops, sub-project 4) ----------
