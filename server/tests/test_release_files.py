@@ -679,6 +679,12 @@ def test_wrapper_runs_reader_token_and_revoke_as_root(tmp_path):
 
 
 @pytest.mark.skipif(not _bash(), reason="needs bash")
+def test_wrapper_runs_reader_setup_as_root(tmp_path):
+    """`reader setup` makes a token (root) and writes secrets.h where the caller said: never the service user."""
+    assert _wrapper_run(tmp_path, "reader", "setup", "--out", "s.h") == "as-root reader setup --out s.h"
+
+
+@pytest.mark.skipif(not _bash(), reason="needs bash")
 def test_wrapper_reader_revoke_as_root_and_list_as_user(tmp_path):
     (tmp_path / "a").mkdir()
     (tmp_path / "b").mkdir()

@@ -1452,6 +1452,142 @@ def cmd_uninstall(purge: bool, run=None) -> int:
         shutil.rmtree(work, ignore_errors=True)
 
 
+def _port_hint(who) -> str:
+    name = who.name if who else "you"
+    return (f". If it could not open the serial port: {name} must be in the dialout group "
+            f"(sudo usermod -aG dialout {name if who else '$USER'}, then log in again)")
+
+
+def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
+    """`reader setup`: a bench reader set up with today's firmware, which takes its Wi-Fi, server address, token and
+    update key only at build time. Makes a token (root, unless --token-file), writes secrets.h (--out, 0600) and/or
+    builds and flashes it over USB (--source, a checkout's reader/ folder, with PlatformIO). --secrets flashes a
+    secrets.h made earlier. Nothing secret is printed."""
+    from . import reader_setup as rs
+    from . import reader_tokens
+    ask_secret = ask_secret or secret_input.ask
+    flashing = bool(a.source)
+    who = rs.owner()            # under sudo: PlatformIO is looked for, and run, as the user who ran sudo
+    pio = rs.find_pio(who) if flashing else None
+    if flashing and pio is None:
+        whose = f"{who.name}'s" if who else "your"
+        print(f"error: PlatformIO is not installed in {whose} account (no pio in ~/.platformio/penv/bin or "
+              "~/.local/bin, nor in /usr/local/bin or /usr/bin). Install it as that user, not with sudo: "
+              "python3 -m pip install --user platformio. Or leave out --source, use --out, and build on a PC that "
+              "has it (reader/README.md).", file=sys.stderr)
+        return 1
+    if flashing and not rs.is_source(Path(a.source)):
+        print(f"error: {a.source} is not the reader's source folder (a checkout's reader/, with platformio.ini)",
+              file=sys.stderr)
+        return 1
+    if not flashing and not a.out:
+        print("error: say what to do: --source <checkout>/reader to build and flash a reader on USB here, and/or "
+              "--out FILE to write its secrets.h", file=sys.stderr)
+        return 1
+    if a.secrets and not flashing:
+        print("error: --secrets flashes a secrets.h made earlier, so it needs --source", file=sys.stderr)
+        return 1
+    port = None
+    if flashing:
+        found = rs.find_readers()
+        if a.port:
+            port = a.port
+        elif len(found) == 1:
+            port = found[0].port
+            print(f"Reader on USB: {found[0].by_id or found[0].port} ({found[0].product})")
+        elif not found:
+            print("error: no ESP32 board on USB here. Plug the reader in with a data cable (a charge-only cable "
+                  "shows nothing), or name the port with --port.", file=sys.stderr)
+            return 1
+        else:
+            print("error: more than one ESP32 board on USB; name the reader's with --port: "
+                  + ", ".join(r.by_id or r.port for r in found), file=sys.stderr)
+            return 1
+    if a.secrets:
+        try:
+            text = Path(a.secrets).read_text(encoding="utf-8")
+        except OSError as e:
+            print(f"error: cannot read {a.secrets} ({e.strerror or e})", file=sys.stderr)
+            return 1
+        rc = rs.flash(Path(a.source), text, port, pio, who=who)
+        if rc != 0:
+            print(f"error: the build or flash failed (PlatformIO exit {rc}){_port_hint(who)}", file=sys.stderr)
+            return 1
+        print("Flashed.")
+        return 0
+    try:
+        base = a.base.rstrip("/") if a.base else rs.reader_base(config.load())
+        if not base.startswith("https://"):
+            raise rs.SetupError("--base must be the kit's public https address plus /reader")
+        key_pem, real_key = rs.pubkey(Path(a.ota_pubkey).read_text(encoding="utf-8") if a.ota_pubkey else None)
+        token = Path(a.token_file).read_text(encoding="utf-8").strip() if a.token_file else None
+    except (rs.SetupError, OSError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    if token is None and not _is_root():
+        print("error: run as root to make the reader's token: sudo filament-kit reader setup ... "
+              "(or pass --token-file with one made by: sudo filament-kit reader token)", file=sys.stderr)
+        return 1
+    ssid = a.ssid or ask("Wi-Fi name the reader joins: ").strip()
+    password = ask_secret("Its Wi-Fi password: ")
+    if ask_secret("The password again: ") != password:
+        print("error: the two passwords differ; nothing was changed", file=sys.stderr)
+        return 1
+    try:
+        rs.secrets_h(ssid, password, base, token or "x" * 43, key_pem)      # every check before a token is made
+        if a.out and not rs.out_ok(Path(a.out), who.uid if who else os.getuid() if hasattr(os, "getuid") else 0):
+            raise rs.SetupError(f"{a.out} exists and is not a file of yours; choose a new name")
+    except rs.SetupError as e:
+        print(f"error: {e}; nothing was changed", file=sys.stderr)
+        return 1
+    tid = None
+    if token is None:
+        try:
+            tid, token = reader_tokens.TokenStore().issue(a.name or "reader")
+        except reader_tokens.TokenFileError as e:
+            print(f"error: {e}; nothing was changed", file=sys.stderr)
+            return 1
+    text = rs.secrets_h(ssid, password, base, token, key_pem)
+    if a.out:
+        out = Path(a.out)
+        try:
+            if not rs.out_ok(out, who.uid if who else os.getuid() if hasattr(os, "getuid") else 0):
+                raise OSError(f"{out} exists and is not a file of yours; choose a new name")
+            rs.write_private(out, text)
+            sudo_uid, sudo_gid = os.environ.get("SUDO_UID"), os.environ.get("SUDO_GID")
+            if _is_root() and sudo_uid and sudo_gid:        # the owner who ran sudo builds with it
+                os.chown(out, int(sudo_uid), int(sudo_gid))
+        except OSError as e:
+            if tid:
+                reader_tokens.TokenStore().revoke(tid)
+            print(f"error: cannot write {out} ({e.strerror or e})" + ("; the new token was removed" if tid else ""),
+                  file=sys.stderr)
+            return 1
+        print(f"Wrote {out} (mode 600). It holds the token and the Wi-Fi password: delete it once the reader is "
+              "flashed.")
+        if not flashing:
+            print("Build and flash with it as reader/README.md says (copy it to reader/src/secrets.h, then "
+                  "pio run -e esp32-c3-supermini -t upload), or here with: filament-kit reader setup --secrets "
+                  f"{out} --source <checkout>/reader")
+    if flashing:
+        rc = rs.flash(Path(a.source), text, port, pio, who=who)
+        if rc != 0:
+            dropped = bool(tid) and not a.out
+            if dropped:
+                reader_tokens.TokenStore().revoke(tid)
+            print(f"error: the build or flash failed (PlatformIO exit {rc})"
+                  + ("; the new token was removed, since nothing holds it" if dropped else "") + _port_hint(who),
+                  file=sys.stderr)
+            return 1
+        print(f"Flashed. The reader joins {ssid} and calls {base}.")
+    if tid:
+        print(f"Reader token {tid} ({a.name or 'reader'}). Remove it later with: sudo filament-kit reader revoke {tid}")
+    if not real_key:
+        print("Note: without --ota-pubkey this reader refuses every update over Wi-Fi until it is flashed again with "
+              "the key (py tools/ota_publish.py --init-key prints it).")
+    return 0
+
+
 # ---------- web (the MCP endpoint and phone web app) ----------
 
 WEB_PASSPHRASE = "web_passphrase"
@@ -1726,6 +1862,17 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     rdsub.add_parser("tokens", help="list the reader tokens (never the tokens themselves)")
     rdr = rdsub.add_parser("revoke", help="remove a reader token (root)")
     rdr.add_argument("ref", help="its id (r1 ...) or name")
+    rds = rdsub.add_parser("setup", help="set up a reader with today's firmware: a token, its secrets.h, and a build "
+                                         "and USB flash with PlatformIO (root to make the token)")
+    rds.add_argument("--name", help="what its token is for, e.g. bench")
+    rds.add_argument("--ssid", help="the Wi-Fi network it joins (asked if left out); the password is always asked")
+    rds.add_argument("--source", help="the reader's source folder (a checkout's reader/): build and flash it here")
+    rds.add_argument("--port", help="its USB serial port (found by itself when one ESP32 board is plugged in)")
+    rds.add_argument("--out", help="write its secrets.h here (0600) to build elsewhere")
+    rds.add_argument("--ota-pubkey", help="the PEM public key OTA images are signed with (ota_publish.py --init-key)")
+    rds.add_argument("--token-file", help="a token made on the server (reader token) instead of a new one")
+    rds.add_argument("--base", help="READER_BASE when this machine is not the server: <web.public_url>/reader")
+    rds.add_argument("--secrets", help="flash a secrets.h written earlier with --out (needs --source)")
     bk = sub.add_parser("backup", help="a whole-kit backup as one zip: make one, list them (root)")
     bksub = bk.add_subparsers(dest="backup_cmd", required=True)
     bkc = bksub.add_parser("create", help="write a backup zip (default: into /var/backups/filament-kit)")
@@ -1821,6 +1968,8 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
         return cmd_profiles_restore_deleted()
     if args.cmd == "web":
         return cmd_web_passphrase() if args.web_cmd == "passphrase" else cmd_web_status()
+    if args.cmd == "reader" and args.reader_cmd == "setup":
+        return cmd_reader_setup(args)
     if args.cmd == "reader":
         return cmd_reader(args.reader_cmd, getattr(args, "name", None), getattr(args, "ref", None))
     if args.cmd == "migrate-ops":
