@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "filament-kit-sync"
-version = "0.4.1"
+version = "0.4.2"
 description = "filament-kit PC sync: uploads Bambu Studio filament presets to a filament-kit server and installs generated presets"
 requires-python = ">=3.12"
 license = {text = "GPL-3.0-or-later"}
