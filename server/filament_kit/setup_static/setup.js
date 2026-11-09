@@ -68,7 +68,7 @@ const TABS = {
   printers: ["Printers", () => printersTab()],
   devices: ["Devices", () => [pairCard(), webAppCard(), readersCard(), trustCard()]],
   presets: ["Presets", () => presetsTab()],
-  settings: ["Settings", () => [keyCard(), passphraseCard(), tokenCard(), addressCard()]],
+  settings: ["Settings", () => [generalCard(), keyCard(), passphraseCard(), tokenCard(), addressCard(), remoteCard()]],
   updates: ["Updates", () => updatesTab()],
 };
 const tabNow = () => { const t = location.hash.slice(1); return t in TABS ? t : "overview"; };

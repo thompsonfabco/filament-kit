@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import time
 
-from . import jobs, modes, overview, presets_tab, printers_tab, trust_tab, updates_tab, webapp_tab
+from . import general_tab, jobs, modes, overview, presets_tab, printers_tab, trust_tab, updates_tab, webapp_tab
 
 
 class Cached:
@@ -31,4 +31,4 @@ class Cached:
 def routes(page) -> list[tuple]:
     page.overview_cache, page.updates_cache = Cached(), Cached()
     return (jobs.routes(page) + modes.routes(page) + overview.routes(page) + updates_tab.routes(page)
-            + printers_tab.routes(page) + trust_tab.routes(page) + presets_tab.routes(page) + webapp_tab.routes(page))
+            + printers_tab.routes(page) + trust_tab.routes(page) + presets_tab.routes(page) + webapp_tab.routes(page) + general_tab.routes(page))
