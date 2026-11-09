@@ -439,6 +439,24 @@ Spools in a printer's slots have the location "<printer name> – AMS <slot>" in
 number when it has no name). If you rename a printer, the spools already in its slots keep the old location
 text: load them again (or fix their location in Spoolman) so filament use finds them.
 
+#### When mapping fails: map by loading filament (v0.4.4)
+
+If **Map slots** keeps failing, map the printer by hand. On the setup page, open **Printers** and tap **Map by loading
+filament** next to the printer (it is also offered under a failed mapping). The page names one slot at a time:
+
+1. It says, for example, "Load A2 to the nozzle, then wait." Load that slot on the printer's screen.
+2. When the printer reports the load, the page asks "The printer now reports A2 loaded. Is that the A2 you loaded?"
+   Tap **Yes**. If you loaded another slot, pick it after **No, I loaded** and tap **Save that**.
+3. **Skip** leaves a slot unmapped; **Stop** ends the mapping and keeps what you confirmed.
+
+On a printer with two nozzles the page also asks which nozzle, unless the printer says so itself. A printer that does
+not report what is loaded gets a list instead: pick the slot, and the page records it as entered by hand.
+
+Afterwards, loading spools into those slots works. Filament use comes off the spools only once **Map slots** has
+proven the printer's slot numbering; until then it is only logged, and the page says so. A later **Map slots** never
+changes a slot you confirmed: if it finds something else, it says so instead. The page asks you once whether to
+share the map in a printer report for other owners of the same model; nothing is sent unless you choose to.
+
 If a printer's certificate changed, the server stops talking to it. If you reset the printer or its mainboard was
 replaced, add the printer again with its Access Code (or run `sudo filament-kit printer unpin <serial>`). If not,
 something else may be answering at the printer's address: check the printer's IP before re-adding it.

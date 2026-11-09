@@ -547,3 +547,28 @@ def test_map_refused_while_a_load_writes(client, mgr, monkeypatch):
 def test_cert_changed_message_says_what_to_do():
     from filament_kit import api
     assert "reset the printer" in api.CERT_CHANGED and "IP" in api.CERT_CHANGED
+
+
+# ---------------------------------------------------------------- map by loading filament (bridge/manual.py)
+
+def test_manual_map_through_the_kit_api(client, mgr):
+    from filament_kit.bridge import manual
+    mgr.report.setdefault("ams", {})["tray_now"] = "255"
+    r = client.post(f"/api/printers/{SERIAL}/manual-map/start", json={})
+    assert r.status_code == 200, r.text
+    s = r.json()
+    assert s["open"] and SERIAL not in r.text            # the state names no serial
+    assert client.post(f"/api/printers/{SERIAL}/map").status_code == 409     # the automatic job waits
+    pos = s["step"]["position"]["id"]
+    r = client.post(f"/api/printers/{SERIAL}/manual-map/skip", json={"session": s["session"], "position": pos})
+    assert r.status_code == 200 and r.json()["positions"][0]["status"] == "skipped"
+    assert client.post(f"/api/printers/{SERIAL}/manual-map/skip", json={"session": "old", "position": pos}).json()["error"] == "stale"
+    r = client.post(f"/api/printers/{SERIAL}/manual-map/stop", json={"session": s["session"]})
+    assert r.status_code == 200 and r.json()["open"] is False
+    assert client.get(f"/api/printers/{SERIAL}/manual-map").json()["open"] is False
+    assert manual.ManualMaps is not None
+
+
+def test_manual_map_needs_the_pairing(mgr, sm, mapper):
+    c = TestClient(create_app(sm, printers=mgr, mapper=mapper))
+    assert c.post(f"/api/printers/{SERIAL}/manual-map/start", json={}).status_code == 401
