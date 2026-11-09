@@ -62,7 +62,7 @@ def test_disable_with_dependents_noninteractive_fails(applied, capsys, monkeypat
     _stdin(monkeypatch, "")
     assert cli.main(["modules", "disable", "server"]) == 1
     err = capsys.readouterr().err
-    assert "fix: disable ai_intake, printers, presets first" in err
+    assert "fix: disable presets, printers, ai_intake first" in err
     assert applied == []
     assert "modules" not in config.load()
 
@@ -79,8 +79,8 @@ def test_disable_with_dependents_tty_asks(applied, monkeypatch):
     assert mods["spoolman"] is True and set(mods) == set(modules.MODULES) - set(modules.NEWER)
 
 
-def _deep(cfg=None):
-    """ server, with what hangs off it two and three levels down."""
+def _deep():
+    """Server, with what hangs off it two and three levels down."""
     cfg = config.load()
     cfg["spoolman_url"] = "http://spoolman.example:7912"
     for n in ("ai_intake", "orders", "web", "remote"):
@@ -120,6 +120,75 @@ def test_enable_at_a_terminal_offers_what_it_needs_all_the_way_down(applied, mon
     monkeypatch.setattr(cli, "_tty_confirm", lambda q: asked.append(q) or True)
     assert cli.main(["modules", "enable", "printers"]) == 0
     assert "server" in asked[0] and config.load()["modules"]["server"] is True
+
+
+def _terminal(monkeypatch, *answers):
+    """A terminal that says yes to the offer and gives these answers to the settings; returns what was asked."""
+    asked, left = [], list(answers)
+    monkeypatch.setattr(cli.apply, "_tty", lambda: True)
+    monkeypatch.setattr(cli, "_tty_confirm", lambda q: True)
+    monkeypatch.setattr(cli, "_ask", lambda q: asked.append(q) or (left.pop(0) if left else None))
+    return asked
+
+
+def test_the_offer_goes_on_to_ask_for_what_the_new_set_needs(applied, capsys, monkeypatch):
+    cfg = config.load()
+    cfg.setdefault("web", {}).pop("public_url", None)
+    config.save(cfg)
+    asked = _terminal(monkeypatch, "https://printer.example.com/filament")
+    assert cli.main(["modules", "enable", "remote"]) == 0, capsys.readouterr().err
+    after = config.load()
+    assert after["modules"]["remote"] is True and after["modules"]["web"] is True
+    assert after["web"]["public_url"] == "https://printer.example.com/filament" and "public" in asked[0]
+    assert "now on too" in capsys.readouterr().out
+
+
+def test_the_offer_asks_for_the_order_file_too(applied, capsys, monkeypatch):
+    asked = _terminal(monkeypatch, "/data/orders.csv")
+    assert cli.main(["modules", "enable", "orders"]) == 0, capsys.readouterr().err
+    after = config.load()
+    assert after["modules"]["orders"] is True and after["modules"]["ai_intake"] is True
+    assert after["orders"]["file"] == "/data/orders.csv" and "order" in asked[0]
+
+
+def test_the_offer_on_a_station_asks_for_the_spoolman_to_use(applied, capsys, monkeypatch):
+    cfg = modules.set_mode(config.load(), "station")
+    cfg["station"]["allow"] = ["printer.example.com"]
+    cfg.pop("spoolman_url", None)
+    config.save(cfg)
+    asked = _terminal(monkeypatch, "not an address", "http://spoolman.example:7912")
+    assert cli.main(["modules", "enable", "printers"]) == 0, capsys.readouterr().err
+    after = config.load()
+    assert after["modules"]["printers"] is True and after["modules"]["server"] is True
+    assert after["spoolman_url"] == "http://spoolman.example:7912" and "Spoolman" in asked[0] and len(asked) == 2
+
+
+def test_a_blank_answer_changes_nothing_and_says_nothing_was_turned_on(applied, capsys, monkeypatch):
+    before = config.load()
+    _terminal(monkeypatch)
+    assert cli.main(["modules", "enable", "orders"]) == 1
+    out = capsys.readouterr()
+    assert "Turned on" not in out.out and "nothing was changed" in out.err
+    assert config.load() == before and applied == []
+
+
+def test_a_change_the_plan_refuses_never_says_it_happened(applied, capsys, monkeypatch):
+    _deep()
+    before = config.load()
+    monkeypatch.setattr(cli, "_tty_confirm", lambda q: True)
+    monkeypatch.setattr(cli, "_plan_error", lambda cfg: "name does not resolve")
+    assert cli.main(["modules", "disable", "server"]) == 1
+    out = capsys.readouterr()
+    assert "Turned off" not in out.out and "Nothing was changed" in out.err
+    assert config.load() == before and applied == []
+
+
+def test_the_fix_line_can_be_followed_in_the_order_it_gives(applied, capsys, monkeypatch):
+    _deep()
+    _stdin(monkeypatch, "")
+    assert cli.main(["modules", "disable", "server"]) == 1
+    listed = capsys.readouterr().err.split("fix: disable ")[1].split(" first")[0].split(", ")
+    assert listed.index("orders") < listed.index("ai_intake") and listed.index("remote") < listed.index("web")
 
 
 def test_enable_at_a_terminal_refused_changes_nothing(applied, capsys, monkeypatch):
