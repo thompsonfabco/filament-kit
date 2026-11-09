@@ -1140,16 +1140,23 @@ def updates_view() -> dict:
     return {"stamp": stamp, **updates_mod.summary(items), "new": new, "updates": items, "yours": mine}
 
 
+class UpdatesChanged(Exception):
+    """A new build came after the list the owner was shown: what they would accept is not what they saw."""
+
+
 def apply_updates(*, line_id: str | None = None, all_: bool = False, dry_run: bool = False,
-                  only: set[str] | None = None) -> dict:
+                  only: set[str] | None = None, expect_stamp: str | None = None) -> dict:
     """Accept the pending updates of one line (`line_id`) or all of them (`only`: just these preset names): the next
     PC sync writes them over the existing presets. Each acceptance holds the hash of the values accepted (see
     _prune_accepted). {stamp, chosen: [update rows], dry_run}; with dry_run nothing is saved. ValueError when
-    neither or both of line_id / all_ are given."""
+    neither or both of line_id / all_ are given; UpdatesChanged when `expect_stamp` is not the current build, checked
+    under the lock that saves."""
     if bool(line_id) == bool(all_):
         raise ValueError("give --line <id> or --all")
     with _locked("state.lock"):
         stamp, items, _new = _update_items()
+        if expect_stamp is not None and stamp != expect_stamp:
+            raise UpdatesChanged(stamp)
         chosen = [u for u in items if (all_ or u["line_id"] == line_id) and (only is None or u["name"] in only)]
         if chosen and not dry_run:
             acc = updates_mod.accepted(_dir())

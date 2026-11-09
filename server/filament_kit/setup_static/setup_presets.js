@@ -10,13 +10,12 @@ function updatesList(box, r) {
   fill(box,
     h("p", { textContent: r.chosen.length ? `${r.chosen.length} update${r.chosen.length === 1 ? "" : "s"} ${r.dry_run ? "would be accepted; nothing was changed." : "accepted; the PC sync writes them at its next run, after its backup."}` : "No updates to accept." }),
     r.chosen.length ? h("ul", {}, ...what) : null,
-    r.dry_run && r.chosen.length ? h("button", { textContent: "Accept these", on: { click: () => accept(box, r.chosen) } }) : null);
+    r.dry_run && r.chosen.length ? h("button", { textContent: "Accept these", on: { click: () => accept(box, r) } }) : null);
 }
 
-async function accept(box, chosen) {
-  const lines = [...new Set(chosen.map((u) => u.line_id))];
-  const all = lines.length > 1;
-  const r = await change(box, "presets/updates", { dry_run: false, ...(all ? { all: true } : { line: lines[0] }) }, () => {});
+// Accepts what the list showed, by name and build: the server refuses once a newer build has changed it.
+async function accept(box, shown) {
+  const r = await change(box, "presets/updates", { all: true, dry_run: false, stamp: shown.stamp, names: shown.chosen.map((u) => u.name) }, () => {});
   if (r) { updatesList(box, r); loadPresets(); }
 }
 
@@ -40,7 +39,7 @@ function parentButton(line, target, box) {
 }
 
 function lineRow(line, canOrca) {
-  const box = h("div");
+  const box = boxFor(`line:${line.line_id}`);       // a message here outlives the redraw a change brings
   const parent = line.bambu_parent ? `${line.bambu_parent} (${line.parent_source})` : "none";
   const orca = line.orca_parent ? `${line.orca_parent} (${line.orca_parent_source})` : "none";
   return h("div", { class: "item" },
@@ -70,7 +69,7 @@ function drawPresets(v) {
       box),
     card("Updates",
       h("p", { textContent: up.count ? `${up.count} update${up.count === 1 ? "" : "s"} available on ${up.lines} line${up.lines === 1 ? "" : "s"}${up.accepted ? `, ${up.accepted} accepted (the PC sync writes them next)` : ""}. Presets already in your slicers are never replaced unless you accept here.` : "No updates. Presets already in your slicers are never replaced on their own." }),
-      up.yours ? h("p", { class: "muted", textContent: `${up.yours} generated preset${up.yours === 1 ? "" : "s"} differ from your own preset of the same name in Bambu Studio. Yours stay: rename or delete yours to get ours.` }) : null,
+      up.yours ? h("p", { class: "muted", textContent: `${up.yours} generated preset${up.yours === 1 ? "" : "s"} ${up.yours === 1 ? "differs" : "differ"} from your own preset of the same name in Bambu Studio. Yours stay: rename or delete yours to get ours.` }) : null,
       up.count ? h("button", { class: "secondary", textContent: "Show what would be accepted", on: { click: () => change(upBox, "presets/updates", { all: true, dry_run: true }, (r) => updatesList(upBox, r)) } }) : null,
       upBox),
     card("Product lines",

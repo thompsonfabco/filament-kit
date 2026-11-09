@@ -60,6 +60,19 @@ def test_the_view_needs_no_code_and_shows_no_device_id_or_file_names(app, monkey
     assert set(body["updates"]) == {"count", "lines", "accepted", "yours"}
 
 
+def test_the_view_redacts_a_failed_builds_error(app, monkeypatch):
+    real = builds.status
+    raw = "FileNotFoundError: '/var/lib/filament-kit/profiles/user/1234567890/live.zip' from 192.0.2.77"
+
+    def status():
+        return {**real(), "last_attempt": {"at": 1000.0, "ok": False, "error": raw}}
+    monkeypatch.setattr(builds, "status", status)
+    r = client(app).get("/setup/api/presets")
+    assert r.status_code == 200
+    assert "1234567890" not in r.text and "192.0.2.77" not in r.text
+    assert r.json()["last_attempt"]["error"].startswith("FileNotFoundError")
+
+
 @pytest.mark.parametrize("path,body", [("presets/build", {}), ("presets/restore_deleted", {}),
                                        (f"presets/lines/{LINE}/parent", {"parent": "x"}),
                                        ("presets/updates", {"all": True})])
@@ -95,13 +108,45 @@ def test_a_dry_run_changes_nothing_and_lists_the_files(app, monkeypatch):
     assert r["dry_run"] is True and r["chosen"][0]["file"] == CHOSEN[0]["file"] and r["chosen"][1]["file"] is None
 
 
-@pytest.mark.parametrize("body,kw", [({"all": True, "dry_run": False}, {"line_id": None, "all_": True, "dry_run": False}),
-                                     ({"line": "l1", "dry_run": False}, {"line_id": "l1", "all_": False, "dry_run": False})])
-def test_accept_takes_a_plain_false(app, monkeypatch, body, kw):
+def test_accept_takes_a_plain_false_and_exactly_what_was_shown(app, monkeypatch):
     calls = []
     monkeypatch.setattr(builds, "apply_updates", lambda **k: calls.append(k) or {"stamp": "s", "chosen": CHOSEN[:1]})
-    assert post(client(app), "presets/updates", body).json()["dry_run"] is False
-    assert calls == [kw]
+    r = post(client(app), "presets/updates", {"all": True, "dry_run": False, "stamp": "s", "names": ["P @BBL"]})
+    assert r.json()["dry_run"] is False
+    assert calls == [{"line_id": None, "all_": True, "dry_run": False, "only": {"P @BBL"}, "expect_stamp": "s"}]
+
+
+@pytest.mark.parametrize("extra", [{}, {"stamp": "s"}, {"names": ["a"]}, {"stamp": "s", "names": []},
+                                   {"stamp": 5, "names": ["a"]}, {"stamp": "s", "names": [5]}, {"stamp": "s", "names": "a"}])
+def test_accept_with_no_named_list_is_refused(app, monkeypatch, extra):
+    monkeypatch.setattr(builds, "apply_updates", lambda **k: pytest.fail("must not run"))
+    assert post(client(app), "presets/updates", {"all": True, "dry_run": False, **extra}).status_code == 400
+
+
+def _pending(monkeypatch, tmp_path, stamp, names):
+    """The real apply_updates over a build with these updates pending."""
+    (tmp_path / "accepted").mkdir(exist_ok=True)
+    items = [{"name": n, "line_id": "l1", "target": "bambu", "keys": ["a"], "accepted": False} for n in names]
+    monkeypatch.setattr(builds, "_update_items", lambda: (stamp, items, []))
+    saved = []
+    monkeypatch.setattr(builds.updates_mod, "accepted", lambda d: {})
+    monkeypatch.setattr(builds.updates_mod, "preset_hash", lambda p: "hash-of-" + p.stem)
+    monkeypatch.setattr(builds.updates_mod, "save_accepted", lambda d, acc, w: saved.append(acc))
+    return saved
+
+
+def test_a_build_after_the_list_accepts_nothing(app, monkeypatch, tmp_path):
+    saved = _pending(monkeypatch, tmp_path, "newer", ["A", "B", "UNSEEN"])
+    r = post(client(app), "presets/updates", {"all": True, "dry_run": False, "stamp": "older", "names": ["A", "B"]})
+    assert r.status_code == 409 and "show them again" in r.json()["error"]
+    assert saved == []
+
+
+def test_an_update_nobody_was_shown_is_not_accepted(app, monkeypatch, tmp_path):
+    saved = _pending(monkeypatch, tmp_path, "same", ["A", "UNSEEN"])
+    r = post(client(app), "presets/updates", {"all": True, "dry_run": False, "stamp": "same", "names": ["A"]})
+    assert [u["name"] for u in r.json()["chosen"]] == ["A"]
+    assert len(saved) == 1 and "UNSEEN" not in str(saved[0]) and "A" in str(saved[0])
 
 
 @pytest.mark.parametrize("body", [{}, {"line": "l1", "all": True}, {"line": 5}, {"line": "../x"}, {"all": "yes"}])

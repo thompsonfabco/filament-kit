@@ -6,7 +6,9 @@ an accept the owner asked for, and the PC sync writes that after its backup, exa
     POST presets/build {code}                  ask for a build
     POST presets/restore_deleted {code}        the next build brings back presets deleted in Bambu Studio
     POST presets/lines/{id}/parent {code, parent, target}
-    POST presets/updates {code, line | all, dry_run}   list (dry_run) or accept; the list names files, so it takes the code
+    POST presets/updates {code, line | all, dry_run}   the list; it names files, so it takes the code
+    POST presets/updates {code, all, dry_run: false, stamp, names}   accept exactly what that list showed: 409 once a newer
+                                               build has come, so nothing unseen ever replaces a preset
 """
 from __future__ import annotations
 
@@ -37,10 +39,14 @@ def _view() -> dict:
     except lines_mod.LineStoreError as e:
         rows, lines_error = [], e.message
     up = st.get("updates") or {}
+    attempt = st.get("last_attempt")
+    if isinstance(attempt, dict) and attempt.get("error"):      # holds whatever the exception held, a path usually
+        attempt = {**attempt, "error": redact.text(str(attempt["error"]), known)}
     return {"on": True, "lines": rows, "lines_error": lines_error, "build": st.get("build"),
             "presets": st.get("presets"), "orca_presets": st.get("orca_presets"),
-            "last_attempt": st.get("last_attempt"), "installed": st.get("installed"), "pc": pc,
-            "waiting_text": builds.pc_waiting_text(st.get("pc")) if st.get("pc") else None,
+            "last_attempt": attempt, "installed": st.get("installed"), "pc": pc,
+            # from the status's own times, which it words in local time; _status_view has made them ISO text
+            "waiting_text": builds.pc_waiting_text(builds.status().get("pc")) if st.get("pc") else None,
             "updates": {k: up.get(k, 0) for k in ("count", "lines", "accepted", "yours")},
             "stale": st.get("stale") or [], "orca_stale": st.get("orca_stale") or [],
             "problems": [redact.text(str(p), known) for p in st.get("problems") or []]}
@@ -123,10 +129,18 @@ def routes(page) -> list[tuple]:
         if line is not None and (not isinstance(line, str) or not LINE_ID.fullmatch(line)):
             raise Refused(400, "no such line")
         dry = body.get("dry_run") is not False      # accepting takes a plain false
+        stamp, names = body.get("stamp"), body.get("names")
+        if not dry and not (isinstance(stamp, str) and isinstance(names, list) and names
+                            and all(isinstance(n, str) for n in names)):
+            raise Refused(400, "accepting names what the list showed: stamp and names")
 
         def run() -> dict:
             try:
-                return builds.apply_updates(line_id=line, all_=all_, dry_run=dry)
+                if dry:
+                    return builds.apply_updates(line_id=line, all_=all_, dry_run=True)
+                return builds.apply_updates(line_id=line, all_=all_, dry_run=False, only=set(names), expect_stamp=stamp)
+            except builds.UpdatesChanged:
+                raise Refused(409, "the updates changed since this list: show them again") from None
             except ValueError as e:
                 raise Refused(400, str(e)) from None
         r = await anyio.to_thread.run_sync(run)
