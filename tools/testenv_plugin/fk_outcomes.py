@@ -9,6 +9,8 @@ it also sees the workers' reports. As a program, it answers from that file:
 """
 import sys
 
+import pytest
+
 
 def pytest_addoption(parser):
     parser.addoption("--fk-outcomes", default=None, help="write this run's outcomes to this file (tools/testenv.sh)")
@@ -44,12 +46,9 @@ class _Writer:
     def pytest_collection_finish(self, session):
         self._line("collected", str(len(session.items)))
 
+    @pytest.hookimpl(optionalhook=True)     # xdist is optional for the plugin: a run with -n 0 has none
     def pytest_xdist_node_collection_finished(self, node, ids):
         self._line("collected", str(len(ids)))
-
-
-# xdist is optional for the plugin (a run with -n 0 has none), so its hook mustn't be a required one.
-_Writer.pytest_xdist_node_collection_finished.optionalhook = True
 
 
 def _read(path):
@@ -75,7 +74,7 @@ def main(argv):
     try:
         failed, passed, reached, collected, collect_errors = _read(path)
     except OSError:
-        print("no outcomes were written")
+        print("no outcomes were written", file=sys.stdout if command == "complete" else sys.stderr)
         return 1
     if command == "complete":
         if collect_errors:

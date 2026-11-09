@@ -36,12 +36,16 @@ while [ $# -gt 0 ]; do
         --no-retry) RETRY=0; shift ;;
         --only)
             [ $# -ge 2 ] && [ -n "$2" ] || usage
-            for suite in ${2//,/ }; do
+            IFS=, read -ra suites <<< "$2"      # on commas only, as wanted() matches: "server pc-sync" is one unknown name
+            named=0
+            for suite in "${suites[@]}"; do
                 case "$suite" in
-                    server|pc-sync|other|get) ;;
-                    *) echo "error: --only knows server, pc-sync, other and get, not $suite" >&2; exit 2 ;;
+                    server|pc-sync|other|get) named=1 ;;
+                    "") ;;                      # "server," is still the server
+                    *) echo "error: --only knows server, pc-sync, other and get, separated by commas, not '$suite'" >&2; exit 2 ;;
                 esac
             done
+            [ "$named" -eq 1 ] || usage
             ONLY=$2; shift 2 ;;
         --workers) [ $# -ge 2 ] || usage; WORKERS=$2; shift 2 ;;
         --) shift; EXTRA=("$@"); break ;;
@@ -122,12 +126,14 @@ parallel() {
     local first_out=$RUN/$name.outcomes again_out=$RUN/$name.outcomes-again
     shift 2
     run "$name" "$dir" "${PYTEST[@]}" -p fk_outcomes --fk-outcomes="$first_out" -n "$WORKERS" --basetemp="$RUN/t-$name" "$@"
-    [ "$RETRY" -eq 1 ] && [ "${LAST_RC:-0}" -eq 1 ] || return 0
+    case "${LAST_RC:-0}:$RETRY" in 0:*|1:1) ;; *) return 0 ;; esac    # exit 0 must have reached every test as well
     if ! why=$("${OUTCOMES[@]}" complete "$first_out"); then     # what wasn't reached can't pass by what was: no second try
+        FAILED=1
         unset 'SUMMARY[-1]'
         SUMMARY+=("$(printf '%-5s %-10s %5ss  %s; %s, no second try' FAIL "$name" "$((SECONDS - SUITE_START))" "$LAST_COUNTS" "$why")")
         return 0
     fi
+    [ "${LAST_RC:-0}" -eq 1 ] || return 0
     mapfile -t ids < <("${OUTCOMES[@]}" failed "$first_out")
     [ "${#ids[@]}" -gt 0 ] && [ -n "${ids[0]}" ] || return 0
     first=$FAILED_BEFORE

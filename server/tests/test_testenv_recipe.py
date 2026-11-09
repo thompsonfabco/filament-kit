@@ -133,7 +133,23 @@ def test_a_collection_error_gets_no_second_try(recipe):
     assert _flaky(r) == []
 
 
-@pytest.mark.parametrize("only", ["servr", "server,pcsync", ""])
+def test_a_run_that_ended_early_with_a_zero_exit_did_not_pass(recipe):
+    early = """
+import pytest
+def test_early():
+    pytest.exit("enough", returncode=0)
+"""
+    r = recipe({"test_a.py": early, "test_z.py": REAL}, "--workers", "0")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "stopped early" in r.stdout
+
+
+def test_the_plugin_sets_off_no_warning(recipe):
+    r = recipe({"test_a.py": GOOD})
+    assert r.returncode == 0 and "old-style" not in r.stdout + r.stderr
+
+
+@pytest.mark.parametrize("only", ["servr", "server,pcsync", "", "server pc-sync", ",", ",,", " ", "SERVER"])
 def test_a_suite_name_it_does_not_know_is_refused(only, tmp_path):
     r = subprocess.run(["bash", str(REPO / "tools/testenv.sh"), "--only", only], capture_output=True, text=True,
                        env={**os.environ, "HOME": str(tmp_path)}, timeout=30)
