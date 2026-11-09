@@ -25,6 +25,9 @@ What it accepts is a closed list (`OPS`), never a command, a path or a file name
     job {name}                                 start one of the closed list of jobs (JOBS), one at a time; `restore`
                                                also takes {confirm: "restore"} and a zip the page received
     backup_keep {days}                         how many days of backups the nightly backup keeps (1-365)
+    backup_list                                the backups in the root-only folder: names, sizes, dates
+    backup_open {name}                         one of them, handed to the server as an open file (SCM_RIGHTS) beside the
+                                               reply, for one download: the folder and the files stay root only
     journal {unit, lines}                      the last lines (at most 200) of a service of a module that is on, by an
                                                argument list; read only, at most JOURNAL_MAX bytes back
     station_pairing                            server_api.pairing_state(): the station's pairing folder is closed to the
@@ -60,7 +63,9 @@ import socket
 import struct
 import subprocess
 import sys
+import tarfile
 import time
+import zlib
 from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import urlparse
@@ -636,6 +641,27 @@ def _backup_keep(req: dict) -> dict:
     return {"days": days}
 
 
+def _backup_list(req: dict) -> dict:
+    from . import backup
+    rows = [{"name": e.name, "download": e.download, "size": e.size, "kind": e.kind,
+             "at": time.strftime("%Y-%m-%d %H:%M", time.localtime(e.at))} for e in backup.listing()]
+    return {"backups": rows, "keep_days": backup.keep_days(config.load()), "folder": str(backup.backups_dir())}
+
+
+def _backup_open(req: dict) -> dict:
+    from . import backup
+    name = req.get("name")
+    if not isinstance(name, str):
+        raise Refused(404, "no such backup")
+    try:
+        fd, download = backup.open_for_download(name)
+    except backup.BackupError as e:
+        raise Refused(404, str(e)) from None
+    except (OSError, tarfile.TarError, zlib.error, EOFError) as e:
+        raise Refused(500, f"the backup cannot be read ({type(e).__name__})") from None
+    return {"download": download, "size": os.fstat(fd).st_size, "fd": fd}
+
+
 def _job(req: dict) -> dict:
     name = req.get("name")
     if not isinstance(name, str) or name not in JOBS:
@@ -737,7 +763,7 @@ def _apply(req: dict) -> dict:
 OPS = {"check": _check, "key_set": _key_set, "key_remove": _key_remove, "passphrase_set": _passphrase_set,
        "library_token_set": _library_token_set, "library_token_remove": _library_token_remove,
        "module": _module, "setting": _setting, "general": _general, "spoolman_url": _spoolman_url, "apply": _apply, "mode": _mode, "job": _job,
-       "journal": _journal, "backup_keep": _backup_keep, "station_pairing": _station_pairing, "trust_status": _trust_status, "trust_add": _trust_add,
+       "journal": _journal, "backup_keep": _backup_keep, "backup_list": _backup_list, "backup_open": _backup_open, "station_pairing": _station_pairing, "trust_status": _trust_status, "trust_add": _trust_add,
        "trust_list": _trust_list, "trust_rename": _trust_rename, "trust_revoke": _trust_revoke,
        "trust_revoke_all": _trust_revoke_all, "trust_enabled": _trust_enabled}
 
@@ -922,7 +948,18 @@ def main(argv: list[str] | None = None) -> int:
             except ValueError:
                 req = None
             reply = handle(req)
-    reply_to.write(json.dumps(reply).encode("utf-8") + b"\n")
+    fd_out = reply.pop("fd", None) if isinstance(reply, dict) else None
+    data = json.dumps(reply).encode("utf-8") + b"\n"
+    if fd_out is not None:
+        try:
+            if _is_socket(reply_to.fileno()):
+                with socket.socket(fileno=os.dup(reply_to.fileno())) as s:
+                    socket.send_fds(s, [data], [fd_out])
+                return 0
+            data = json.dumps({"ok": False, "status": 500, "error": "a file can only go back over the socket"}).encode() + b"\n"
+        finally:
+            os.close(fd_out)
+    reply_to.write(data)
     reply_to.flush()
     return 0
 

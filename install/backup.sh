@@ -11,9 +11,8 @@ SPOOLMAN_DB=/var/lib/spoolman/spoolman.db
 PYTHON=/opt/filament-kit/venv/bin/python
 
 mkdir -p "$DEST"
-# root:filament-kit 750: the setup page lists the backups and offers each as a zip download
-chmod 750 "$DEST"
-chgrp filament-kit "$DEST" 2>/dev/null || chmod 700 "$DEST"
+# root only: a backup holds the setup code and the TLS key; the setup page gets one through the root helper
+chmod 700 "$DEST"
 KEEP=$("$PYTHON" -I -m filament_kit.backup keep-days 2>/dev/null) || KEEP=14
 case "$KEEP" in ''|*[!0-9]*) KEEP=14 ;; esac
 
@@ -54,7 +53,6 @@ tar -czf "$tmp" --acls --xattrs \
     --exclude='var/lib/filament-kit/library/versions' \
     --exclude='var/lib/filament-kit/profiles/builds/*.tmp' \
     -C "$work" . -C / "${paths[@]}"
-chgrp filament-kit "$tmp" 2>/dev/null && chmod 640 "$tmp"
 mv -f "$tmp" "$out"
 
 # Keep backup.keep_days days (14 unless set on the setup page): the nightly ones, the page's and a restore's own.

@@ -1,7 +1,11 @@
 """The setup console's Backups card: every route takes the code or a trusted computer, nothing is sent without one."""
 from __future__ import annotations
 
+import os
+import shutil
+import socket
 import sqlite3
+import sys
 import zipfile
 from pathlib import Path
 
@@ -143,3 +147,40 @@ def test_the_settings_tab_has_the_card_and_the_page_its_script(app):
     assert "The zip is not encrypted and holds the setup secrets" in src
     assert "/setup/setup_backup.js" in client(app).get("/setup").text
     assert BASE and HOME
+
+
+@pytest.mark.skipif(sys.platform == "win32" or not hasattr(socket, "send_fds"), reason="unix sockets")
+def test_the_helper_hands_the_backup_over_its_socket_as_an_open_file(app, monkeypatch, tmp_path):
+    """Both real ends: the helper's main on an accepted unix socket, HelperClient.open_file on the other side."""
+    import tempfile
+    import threading
+
+    from filament_kit import setup_helper, setup_page
+    z = backup.create()
+    where = Path(tempfile.mkdtemp(prefix="fk-sock-", dir="/tmp"))
+    path = str(where / "s.sock")
+    srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    srv.bind(path)
+    srv.listen(1)
+    monkeypatch.setattr(setup_helper, "_allowed_uids", lambda: {os.getuid()})
+
+    def helper_side():
+        conn, _ = srv.accept()
+        with conn:
+            out = os.fdopen(os.dup(conn.fileno()), "wb")
+            monkeypatch.setattr(setup_helper, "_stdin_fd", lambda: conn.fileno())
+            monkeypatch.setattr(sys, "stdout", type("O", (), {"buffer": out})())
+            setup_helper.main([])
+            out.close()
+    t = threading.Thread(target=helper_side, daemon=True)
+    t.start()
+    try:
+        reply, fh = setup_page.HelperClient(path, timeout=20).open_file(
+            {"op": "backup_open", "code": CODE, "name": z.name, "client": "test"})
+        t.join(20)
+        assert reply["ok"] is True and reply["download"] == z.name and "fd" not in reply
+        with fh:
+            assert fh.read() == z.read_bytes()
+    finally:
+        srv.close()
+        shutil.rmtree(where, ignore_errors=True)

@@ -103,6 +103,44 @@ def test_the_zip_is_named_and_holds_what_a_restore_needs(kit):
     assert m.spoolman is not None and m.summary()["files"] == len(m.files)
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX modes")
+def test_stored_backups_are_root_only(kit):
+    """A backup holds the setup code and the TLS key, which the kit server's user must never read."""
+    z = backup.create()
+    assert (os.stat(z).st_mode & 0o777) == 0o600 and (os.stat(z.parent).st_mode & 0o777) == 0o700
+
+
+def test_damaged_compressed_data_is_a_plain_refusal(kit, tmp_path):
+    z = backup.create()
+    data = bytearray(z.read_bytes())
+    with zipfile.ZipFile(z) as zf:
+        info = zf.getinfo("spoolman/spoolman.db")
+    start = info.header_offset + 30 + len(info.filename.encode()) + len(info.extra)
+    for i in range(start + 2, start + 40):
+        data[i] ^= 0xFF
+    bad = tmp_path / "bad.zip"
+    bad.write_bytes(bytes(data))
+    with pytest.raises(backup.BackupError, match="damaged or changed"):
+        backup.verify(bad)
+
+
+def test_open_for_download_gives_the_zip_or_the_nightly_as_one(kit, tmp_path):
+    z = backup.create()
+    fd, name = backup.open_for_download(z.name)
+    with os.fdopen(fd, "rb") as fh:
+        assert fh.read() == z.read_bytes() and name == z.name
+    tgz = kit / "backups" / "2026-11-08.tar.gz"
+    with tarfile.open(tgz, "w:gz") as tf:
+        tf.add(kit / "etc", arcname="etc/filament-kit")
+    fd, name = backup.open_for_download(tgz.name)
+    out = tmp_path / "got.zip"
+    with os.fdopen(fd, "rb") as fh:
+        out.write_bytes(fh.read())
+    assert name.endswith(".zip") and backup.verify(out).source == "daily 2026-11-08.tar.gz"
+    with pytest.raises(backup.BackupError):
+        backup.open_for_download("../etc/passwd")
+
+
 def test_a_second_backup_in_the_same_minute_gets_its_own_name(kit):
     assert backup.create(now=1762700000.0) != backup.create(now=1762700000.0)
 
@@ -267,10 +305,10 @@ def test_a_failure_halfway_puts_everything_back(kit, monkeypatch, capsys):
     monkeypatch.setattr(backup, "_extract", extract)
     assert backup.restore(z, yes=True, run=Runner()) == 1
     assert (kit / "state" / "devices.json").read_text() == "[]\n"                  # swapped back
+    assert "running again" in capsys.readouterr().out                               # and the kit started again
     assert json.loads((kit / "etc" / "config.json").read_text())["modules"] == {"server": True, "spoolman": True}
     assert _spools(kit) == []
     assert not list(kit.glob("*" + backup.OLD))
-    assert "what was here is back in place" in capsys.readouterr().out
 
 
 def test_a_failed_apply_keeps_the_data_and_says_how_to_finish(kit, capsys):
@@ -366,7 +404,8 @@ def test_backup_keep_op(kit, days, ok):
 
 def test_scripts():
     text = (ROOT / "install" / "backup.sh").read_text(encoding="utf-8")
-    assert 'chmod 750 "$DEST"' in text and "filament_kit.backup keep-days" in text and "-mtime +$((KEEP - 1))" in text
+    assert 'chmod 700 "$DEST"' in text and "chgrp" not in text and "chmod 640" not in text
+    assert "filament_kit.backup keep-days" in text and "-mtime +$((KEEP - 1))" in text
     inst = (ROOT / "install" / "install.sh").read_text(encoding="utf-8")
     assert '--restore) [ $# -ge 2 ] || usage; RESTORE="$2"' in inst
     assert 'exec /usr/local/bin/filament-kit restore --yes "$RESTORE"' in inst

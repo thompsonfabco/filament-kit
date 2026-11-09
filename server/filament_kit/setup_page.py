@@ -98,6 +98,27 @@ class HelperClient:
         self.path = path or os.environ.get("FK_SETUP_SOCKET", "/run/filament-kit-setup/setup.sock")
         self.timeout = timeout
 
+    def open_file(self, req: dict):
+        """A request whose answer carries an open file beside the reply (op backup_open): (reply, file or None)."""
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+                s.settimeout(self.timeout)
+                s.connect(self.path)
+                s.sendall(json.dumps(req).encode("utf-8") + b"\n")
+                s.shutdown(socket.SHUT_WR)
+                data, fds, _flags, _addr = socket.recv_fds(s, 65536, 1)
+                while chunk := s.recv(65536):
+                    data += chunk
+                    if len(data) > 1024 * 1024:
+                        raise ValueError("reply too long")
+            reply = json.loads(data or b"null")
+            if not isinstance(reply, dict):
+                raise ValueError("not an object")
+            return reply, (os.fdopen(fds[0], "rb") if fds else None)
+        except (OSError, ValueError, AttributeError) as e:
+            log.error("setup: the root helper did not answer (%s)", type(e).__name__)
+            return {"ok": False, "status": 503, "error": "the setup helper did not answer"}, None
+
     def __call__(self, req: dict) -> dict:
         try:
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
@@ -338,6 +359,17 @@ class SetupPage:
                 log.exception("setup %s", request.url.path)
                 return JSONResponse({"error": "internal error (see the server log)"}, 500)
         return route
+
+    async def _helper_file(self, req: dict):
+        """(reply, file) from a helper op that hands back an open file; Refused as _helper."""
+        req.setdefault("client", _CLIENT.get())
+        r, fh = await anyio.to_thread.run_sync(self.helper.open_file, req)
+        if not r.get("ok") or fh is None:
+            if fh is not None:
+                fh.close()
+            extra = {k: r[k] for k in ("needs", "trust_gone") if k in r}
+            raise Refused(int(r.get("status") or 500), str(r.get("error") or "the setup helper refused"), **extra)
+        return r, fh
 
     async def _helper(self, req: dict) -> dict:
         req.setdefault("client", _CLIENT.get())       # the address the helper's lockout counts against

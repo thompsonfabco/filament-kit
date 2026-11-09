@@ -28,6 +28,7 @@ import tempfile
 import time
 import xml.etree.ElementTree as ET
 import zipfile
+import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterable
@@ -38,7 +39,6 @@ from . import API_VERSION, __version__, config, modules, release
 
 FORMAT = "1"
 WRAPPER = "/usr/local/bin/filament-kit"
-KIT_GROUP = "filament-kit"
 PREFIX = "filament-kit-backup"
 PRE_RESTORE = "pre-restore"
 NEW, OLD = ".fk-restore-new", ".fk-restore-old"
@@ -120,15 +120,6 @@ def _ids(owner: str, group: str) -> tuple[int, int] | None:
         return pwd.getpwnam(owner).pw_uid, grp.getgrnam(group).gr_gid
     except KeyError:
         return None
-
-
-def _share(path: Path, mode: int) -> None:
-    """root:filament-kit `mode`: the kit server lists and serves the backups on the setup page."""
-    os.chmod(path, mode)
-    if _is_root():
-        ids = _ids("root", KIT_GROUP)
-        if ids:
-            os.chown(path, *ids)
 
 
 # ---------------------------------------------------------------- writing
@@ -280,9 +271,9 @@ def zip_name(prefix: str = PREFIX, now: float | None = None) -> str:
 def create(dest: Path | None = None, *, prefix: str = PREFIX, now: float | None = None) -> Path:
     """Write a backup zip into `dest` (default the backups folder); its path. Root, on an install."""
     dest = Path(dest) if dest is not None else backups_dir()
-    dest.mkdir(parents=True, exist_ok=True)
+    dest.mkdir(mode=0o700, parents=True, exist_ok=True)
     if dest == backups_dir():
-        _share(dest, 0o750)
+        os.chmod(dest, 0o700)       # root only: a backup holds the setup code and the TLS key; the page gets one via the helper
     name = zip_name(prefix, now)
     out, n = dest / name, 1
     while out.exists():
@@ -299,8 +290,6 @@ def create(dest: Path | None = None, *, prefix: str = PREFIX, now: float | None 
                 _walk(w)
                 w.finish(kit=__version__, created=time.time() if now is None else now, mods=mods,
                          units=_units(mods), source="made")
-            if dest == backups_dir():
-                _share(part, 0o640)
             os.replace(part, out)
         except BaseException:
             part.unlink(missing_ok=True)
@@ -353,6 +342,27 @@ class Entry:
     size: int
     at: float
     kind: str           # made | pre-restore | daily
+
+
+def open_for_download(name: str) -> tuple[int, str]:
+    """(an open file descriptor of the zip, the name to save it as) for the backup `name` in the listing: a stored zip
+    as it is, a nightly tar.gz turned into the zip in an anonymous temporary file. Root: the folder is root only.
+    BackupError when there is no such backup."""
+    found = next((e for e in listing() if e.name == name), None)
+    if found is None:
+        raise BackupError("no such backup")
+    path = backups_dir() / found.name
+    if found.kind != "daily":
+        return os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)), found.download
+    tmp = tempfile.TemporaryFile()
+    try:
+        from_daily(path, tmp)
+        tmp.flush()
+        fd = os.dup(tmp.fileno())
+    finally:
+        tmp.close()
+    os.lseek(fd, 0, os.SEEK_SET)
+    return fd, found.download
 
 
 def listing(folder: Path | None = None) -> list[Entry]:
@@ -506,12 +516,15 @@ def verify(path: Path) -> Manifest:
         for it in m.files + ([m.spoolman] if m.spoolman else []):
             name = "spoolman/spoolman.db" if it is m.spoolman else f"files/{it.root}/{it.path}"
             h, n = hashlib.sha256(), 0
-            with zf.open(name) as src:
-                while chunk := src.read(CHUNK):
-                    n += len(chunk)
-                    if n > it.size:
-                        break
-                    h.update(chunk)
+            try:
+                with zf.open(name) as src:
+                    while chunk := src.read(CHUNK):
+                        n += len(chunk)
+                        if n > it.size:
+                            break
+                        h.update(chunk)
+            except (zipfile.BadZipFile, zlib.error, EOFError, NotImplementedError):
+                n = -1                      # damaged compressed data: the same answer as a changed file
             if n != it.size or h.hexdigest() != it.sha256:
                 raise BackupError(f"a file in the backup is damaged or changed ({it.root or 'spoolman'}/{it.path})")
     return m
@@ -638,8 +651,12 @@ def restore(zip_path: Path, *, yes: bool = False, ask: Callable[[str], str] = in
                 os.replace(old, target)
         if db_old is not None:
             os.replace(db_old, db_target)
-        out(f"error: the restore stopped ({type(e).__name__}: {e.strerror if isinstance(e, OSError) else e}); "
-            "what was here is back in place. Start the kit again with: sudo filament-kit modules apply")
+        why = f"{type(e).__name__}: {e.strerror if isinstance(e, OSError) else e}"
+        if _has_data() and run([WRAPPER, "modules", "apply", "--no-pair"]) == 0:      # it was stopped above
+            out(f"error: the restore stopped ({why}); what was here is back in place and running again.")
+        else:
+            out(f"error: the restore stopped ({why}); what was here is back in place. Start the kit again with: "
+                "sudo filament-kit modules apply")
         return 1
     if other_host:
         for n in ("cert.pem", "key.pem"):

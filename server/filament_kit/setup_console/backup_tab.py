@@ -2,8 +2,10 @@
 A backup holds every secret of the kit, so each of these takes the setup code; a trusted computer's cookie stands in for
 it, as for every other change (the user's choice, 2026-11-09).
 
-    POST backups/list {code}                     the backups in /var/backups/filament-kit, newest first
-    POST backups/download {code, name}           one of them, as the standard zip (a nightly tar.gz is turned into one)
+    POST backups/list {code}                     the backups in /var/backups/filament-kit, newest first (the helper: the
+                                                 folder is root only, since a backup holds the setup code and TLS key)
+    POST backups/download {code, name}           one of them, as the standard zip (a nightly tar.gz is turned into one):
+                                                 the helper hands it over as an open file, nothing is written for it
     POST backups/keep {code, days}               how many days the nightly backup keeps (the helper's op backup_keep)
     POST restore/upload  (the zip as the body; X-Setup-Code)   kept in the state folder and checked: its summary
     POST restore/forget {code}                   drop an uploaded zip
@@ -13,20 +15,13 @@ from __future__ import annotations
 
 import os
 import shutil
-import tempfile
-import time
 
 import anyio
-from starlette.responses import FileResponse, StreamingResponse
+from starlette.responses import StreamingResponse
 
 from .. import backup, config
 
 MAX_UPLOAD = 2 * 2**30
-
-
-def _entry(e: backup.Entry) -> dict:
-    return {"name": e.name, "download": e.download, "size": e.size, "kind": e.kind,
-            "at": time.strftime("%Y-%m-%d %H:%M", time.localtime(e.at))}
 
 
 def routes(page) -> list[tuple]:
@@ -35,39 +30,23 @@ def routes(page) -> list[tuple]:
     w = lambda fn: page.guard(fn, write=True)  # noqa: E731
 
     async def listing(request, body):
-        def run() -> dict:
-            return {"backups": [_entry(e) for e in backup.listing()], "keep_days": backup.keep_days(config.load()),
-                    "folder": str(backup.backups_dir())}
-        return await anyio.to_thread.run_sync(run)
+        r = await page._helper({"op": "backup_list", "code": body["code"]})
+        return {"backups": r["backups"], "keep_days": r["keep_days"], "folder": r["folder"]}
 
     async def download(request, body):
         name = body.get("name")
-        found = next((e for e in await anyio.to_thread.run_sync(backup.listing) if e.name == name), None)
-        if found is None:
+        if not isinstance(name, str) or not name:
             raise Refused(404, "no such backup")
-        page.audit(request, f"backup {found.name} downloaded")
-        path = backup.backups_dir() / found.name
-        headers = {"Content-Disposition": f'attachment; filename="{found.download}"'}
-        if found.kind != "daily":
-            return FileResponse(path, media_type="application/zip", headers=headers)
-
-        def convert():
-            tmp = tempfile.TemporaryFile()
-            try:
-                backup.from_daily(path, tmp)
-            except Exception:
-                tmp.close()
-                raise
-            tmp.seek(0)
-            return tmp
-        tmp = await anyio.to_thread.run_sync(convert)
+        r, fh = await page._helper_file({"op": "backup_open", "code": body["code"], "name": name})
+        page.audit(request, f"backup {name} downloaded")
+        headers = {"Content-Disposition": f'attachment; filename="{r["download"]}"', "Content-Length": str(r["size"])}
 
         def chunks():
             try:
-                while data := tmp.read(2**20):
+                while data := fh.read(2**20):
                     yield data
             finally:
-                tmp.close()
+                fh.close()
         return StreamingResponse(chunks(), media_type="application/zip", headers=headers)
 
     async def keep(request, body):
@@ -117,7 +96,8 @@ def routes(page) -> list[tuple]:
         await anyio.to_thread.run_sync(lambda: shutil.rmtree(backup.uploaded().parent, ignore_errors=True))
         return {"ok": True}
 
-    return [("/backups/list", w(listing), "POST"), ("/backups/download", w(download), "POST"),
+    return [("/backups/list", page.guard(listing, write="helper"), "POST"),
+            ("/backups/download", page.guard(download, write="helper"), "POST"),
             ("/backups/keep", page.guard(keep, write="helper"), "POST"),
             ("/restore/upload", page.guard(upload_zip, write=True, raw=True), "POST"),
             ("/restore/forget", w(forget), "POST")]
