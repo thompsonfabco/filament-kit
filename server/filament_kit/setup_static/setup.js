@@ -25,6 +25,7 @@ async function api(path, body) {
   const r = await fetch("/setup/api/" + path, init);
   let data;
   try { data = await r.json(); } catch { data = { error: `HTTP ${r.status}` }; }
+  if (data.trust_gone) trustGone();
   if (!r.ok || data.error) { const e = new Error(data.error || `HTTP ${r.status}`); e.data = data; e.status = r.status; throw e; }
   return data;
 }
@@ -32,6 +33,7 @@ async function api(path, body) {
 // ----- the setup code (sent with every change) -----
 const codeIn = h("input", { type: "password", inputMode: "numeric", autocomplete: "off", placeholder: "1234-5678",
                             ariaLabel: "Setup code" });
+const codeCard = h("div", { class: "card code" });
 const say = (box, text, ok) => box.replaceChildren(h("pre", { class: ok ? "ok" : "err", textContent: text }));
 function secret(placeholder) {
   return h("input", { type: "password", autocomplete: "new-password", placeholder });
@@ -43,6 +45,7 @@ async function change(box, path, body, done, clear) {
     const r = await api(path, { ...body, code: codeIn.value });
     for (const inp of clear || []) inp.value = "";
     if (done) done(r); else say(box, "Saved.", true);
+    offerTrust();
     refresh();
     return r;
   } catch (e) { say(box, e.message, false); return null; }
@@ -63,7 +66,7 @@ const TABS = {
   overview: ["Overview", () => overviewTab()],
   modules: ["Modules", () => [modesCard(), modulesCard(), applyCard()]],
   printers: ["Printers", () => printersTab()],
-  devices: ["Devices", () => [pairCard(), readersCard()]],
+  devices: ["Devices", () => [pairCard(), readersCard(), trustCard()]],
   settings: ["Settings", () => [keyCard(), passphraseCard(), tokenCard(), addressCard()]],
   updates: ["Updates", () => updatesTab()],
 };
@@ -219,7 +222,8 @@ document.addEventListener("DOMContentLoaded", () => {
   app.append(
     h("h1", { textContent: "filament-kit" }),
     h("p", { class: "muted", textContent: "Everything after the install is here; the command line is the fallback. Viewing needs nothing; every change needs the setup code the installer showed (at the server: sudo filament-kit setup-code)." }),
-    h("div", { class: "sticky" }, h("div", { class: "card code" }, h("label", {}, "Setup code", codeIn)), nav),
+    h("div", { class: "sticky" }, codeCard, nav),
     jobPanel, sections);
-  refresh();
+  codeArea();
+  loadTrust().then(refresh);
 });

@@ -10,7 +10,8 @@ Access (a page on the home network that can change secrets, so each change needs
   - viewing needs nothing more; every change of a secret, a pairing, a printer or a module needs the setup code
     (setup_code.py). The server never checks a code: it hands it, with the client's address, to the root helper
     (op `check`, or the write itself), the only reader of the root-only hash, which keeps the lockout (5 wrong per
-    10 minutes per address, a global ceiling with a doubling backoff);
+    10 minutes per address, a global ceiling with a doubling backoff). A computer trusted after the code was typed once
+    sends a cookie instead (trusted.py), which the helper checks in the code's place, and which can be turned off;
   - the page's CSP allows only its own script and style (no external assets); the script never uses innerHTML.
 
 Secret fields are write-only: the state says "set" / "not set", never a value; values never appear in logs, URLs or
@@ -23,7 +24,7 @@ addresses) and the background `modules apply` go to the root helper (setup_helpe
 setup code, which the helper checks again.
 
 Routes (JSON under /setup/api; every POST body is a JSON object, `code` = the setup code):
-    GET  /setup  /setup/setup.js  /setup/setup_tabs.js  /setup/setup_printers.js  /setup/setup.css
+    GET  /setup  /setup/setup.js  /setup/setup_tabs.js  /setup/setup_printers.js  /setup/setup_trust.js  /setup/setup.css
     GET  state                          everything the page shows
     GET  modules/preview?name=N         what switching N would do (the checklist's notes and needed settings)
     GET  apply?from=N                   the job `apply`'s old name: as GET job
@@ -61,7 +62,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Route
 
-from . import __version__, config, hostaddr, lan, modules, pairing, reader_tokens, setup_code
+from . import __version__, config, hostaddr, lan, modules, pairing, reader_tokens, setup_code, trusted
 from .bridge import registry
 from .bridge.klipper.moonraker import Moonraker, MoonrakerError, NotFound, Offline, Unauthorized
 
@@ -174,7 +175,8 @@ class SetupPage:
         self.client_factory = client_factory
         self.hosts = hosts or allowed_hosts         # a function: the names the page answers to
         self.last_check = 0.0
-        self.static = {n: (STATIC / n).read_bytes() for n in ("setup.js", "setup_tabs.js", "setup_printers.js", "setup.css")}
+        self.static = {n: (STATIC / n).read_bytes()
+                       for n in ("setup.js", "setup_tabs.js", "setup_printers.js", "setup_trust.js", "setup.css")}
 
     # ---------- routes ----------
     def routes(self) -> list[Route]:
@@ -201,6 +203,7 @@ class SetupPage:
                  Route("/setup/setup.js", self.asset, methods=["GET"]),
                  Route("/setup/setup_tabs.js", self.asset, methods=["GET"]),
                  Route("/setup/setup_printers.js", self.asset, methods=["GET"]),
+                 Route("/setup/setup_trust.js", self.asset, methods=["GET"]),
                  Route("/setup/setup.css", self.asset, methods=["GET"])]
                 + [Route("/setup/api" + p, fn, methods=[m]) for p, fn, m in table])
 
@@ -264,9 +267,30 @@ class SetupPage:
             raise Refused(403, NEED_CODE)
         await self._helper({"op": "check", "code": code, "client": self._client_key(request)})
 
+    @staticmethod
+    def _trusted_token(request: Request, body: dict) -> str | None:
+        """No code typed, and a trusted computer's cookie: the token, put in the code's place for the helper to check.
+        A typed code always wins, so the path without a cookie is the same as ever."""
+        code = body.get("code")
+        token = request.cookies.get(trusted.COOKIE)
+        if (isinstance(code, str) and code.strip()) or not token or not trusted.TOKEN.fullmatch(token):
+            return None
+        body["code"] = trusted.PREFIX + token
+        return token
+
+    @staticmethod
+    def _set_trust(resp: Response, token: str) -> None:
+        resp.set_cookie(trusted.COOKIE, token, max_age=trusted.LIFETIME, path="/setup", secure=True, httponly=True,
+                        samesite="strict")
+
+    @staticmethod
+    def _clear_trust(resp: Response) -> None:
+        resp.delete_cookie(trusted.COOKIE, path="/setup", secure=True, httponly=True, samesite="strict")
+
     def guard(self, fn, write: bool | str = False):
         """`write`: True = a change the server makes itself (the helper's `check` first); "helper" = a change the
-        helper makes, which checks the code in the same request."""
+        helper makes, which checks the code in the same request. Either way a trusted computer's cookie may stand in for
+        the code, and its time is renewed when it did."""
         async def route(request: Request):
             _CLIENT.set(self._client_key(request))
             if not self._lan(request):
@@ -275,19 +299,30 @@ class SetupPage:
                 return JSONResponse({"error": BAD_HOST}, 403)
             try:
                 body = {}
+                token = None
                 if request.method == "POST":
                     if not self._origin_ok(request):
                         return JSONResponse({"error": "bad origin"}, 403)
                     body = await self._body(request)
+                    if write:
+                        token = self._trusted_token(request, body)
                     if write == "helper":
                         if not isinstance(body.get("code"), str) or not body["code"].strip():
                             raise Refused(403, NEED_CODE)
                     elif write:
                         await self._code_ok(request, body)
                 res = await fn(request, body)
-                return JSONResponse(res, headers={"Cache-Control": "no-store"})
+                resp = JSONResponse(res, headers={"Cache-Control": "no-store"})
+                if getattr(request.state, "clear_trust", False):
+                    self._clear_trust(resp)
+                elif getattr(request.state, "set_trust", None) or token:
+                    self._set_trust(resp, getattr(request.state, "set_trust", None) or token)
+                return resp
             except Refused as e:
-                return JSONResponse({"error": e.message, **e.extra}, e.status)
+                resp = JSONResponse({"error": e.message, **e.extra}, e.status)
+                if e.extra.get("trust_gone"):
+                    self._clear_trust(resp)
+                return resp
             except Exception:  # noqa: BLE001 - a crash is logged (no values in it), the page gets a plain line
                 log.exception("setup %s", request.url.path)
                 return JSONResponse({"error": "internal error (see the server log)"}, 500)
@@ -297,7 +332,7 @@ class SetupPage:
         req.setdefault("client", _CLIENT.get())       # the address the helper's lockout counts against
         r = await anyio.to_thread.run_sync(self.helper, req)
         if not r.get("ok"):
-            extra = {k: r[k] for k in ("needs",) if k in r}
+            extra = {k: r[k] for k in ("needs", "trust_gone") if k in r}
             raise Refused(int(r.get("status") or 500), str(r.get("error") or "the setup helper refused"), **extra)
         return r
 
@@ -313,7 +348,8 @@ class SetupPage:
             "<meta name=viewport content='width=device-width,initial-scale=1'>"
             f"<title>filament-kit setup: {name}</title><link rel=stylesheet href='/setup/setup.css'>"
             "<body><main id=app></main><script src='/setup/setup.js'></script>"
-            "<script src='/setup/setup_tabs.js'></script><script src='/setup/setup_printers.js'></script></body></html>",
+            "<script src='/setup/setup_tabs.js'></script><script src='/setup/setup_printers.js'></script>"
+            "<script src='/setup/setup_trust.js'></script></body></html>",
             headers=HEADERS)
 
     async def asset(self, request: Request):

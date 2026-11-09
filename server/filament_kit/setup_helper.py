@@ -22,11 +22,15 @@ What it accepts is a closed list (`OPS`), never a command, a path or a file name
     job {name}                                 start one of the closed list of jobs (JOBS), one at a time
     station_pairing                            server_api.pairing_state(): the station's pairing folder is closed to the
                                                service user, so a whole Overview asks here
+    trust_status {token}                       is this cookie's computer trusted (no code: it says nothing else)
+    trust_add {name}                           trust a computer, only with the typed code; the one reply holding a secret,
+                                               which goes to the browser's cookie and nowhere else
+    trust_list  trust_rename {id, name}  trust_revoke {id}  trust_revoke_all  trust_enabled {enabled}
 
 Every request carries the setup code and the page's client address, and this process is the only place a code is
 checked (setup_code.check on the root-only hash, against the per-client and global lockout in
 /etc/filament-kit/setup_lockout), before it reads anything else: a local process that reaches the socket without
-the code can change nothing. Only root and the filament-kit user may connect (SO_PEERCRED; the socket is 660 and
+the code can change nothing. A trusted computer's token stands in for the code here and nowhere else (trusted.py). Only root and the filament-kit user may connect (SO_PEERCRED; the socket is 660 and
 the web unit cannot see it). The request must arrive within READ_TIMEOUT seconds. Values are never logged, never echoed in a reply, never put in a
 command line. What the CLI functions print goes to the journal (stderr), not into the reply.
 
@@ -59,7 +63,7 @@ try:
 except ImportError:  # Windows dev PCs: tests only
     fcntl = None
 
-from . import config, modules, setup_code
+from . import config, modules, setup_code, trusted
 
 log = logging.getLogger(__name__)
 
@@ -76,6 +80,8 @@ WRAPPER = "/usr/local/bin/filament-kit"
 FINISHED = "==> finished (exit"
 SETTINGS = ("web.public_url", "station.url")
 WRONG = "wrong setup code"
+TRUST_GONE = "this computer is no longer trusted: type the setup code"
+TRUST_OFF = "trusted computers are turned off (Devices)"
 LOCKED = ("too many wrong setup codes: wait 10 minutes (longer after many from everywhere), or make a new code "
           "at the server, which also lifts the lock: sudo filament-kit setup-code --new")
 NO_CODE = "no setup code is set on this server yet; make one at the server: sudo filament-kit setup-code"
@@ -482,6 +488,66 @@ def _check(req: dict) -> dict:
     return {}
 
 
+def _access(req: dict) -> None:
+    """The code, or a trusted computer's token in its place. A token that doesn't work counts against no lockout: 256 random
+    bits are out of a guesser's reach, and a revoked browser's owner shouldn't be locked out for it."""
+    code = req.get("code")
+    if isinstance(code, str) and code.startswith(trusted.PREFIX):
+        d = trusted.use(code[len(trusted.PREFIX):], req["client"] if isinstance(req.get("client"), str) else "?")
+        if d is None:
+            raise Refused(403, TRUST_GONE, trust_gone=True)
+        req["device"] = d["id"]
+        return
+    _check_code(code, req.get("client"))
+
+
+def _trust_status(req: dict) -> dict:
+    return trusted.status(req.get("token"))
+
+
+def _trust_add(req: dict) -> dict:
+    if str(req.get("code")).startswith(trusted.PREFIX):
+        raise Refused(403, "type the setup code to trust another browser")
+    got = trusted.add(_text(req, "name", trusted.MAX_NAME * 4), req["client"] if isinstance(req.get("client"), str) else "?")
+    if got is None:
+        raise Refused(409, TRUST_OFF)
+    return {"id": got[0], "token": got[1]}
+
+
+def _trust_list(req: dict) -> dict:
+    return {"enabled": trusted.enabled(), "devices": trusted.listing(), "this": req.get("device")}
+
+
+def _trust_id(req: dict) -> str:
+    did = req.get("id")
+    if not isinstance(did, str) or not trusted.ID.fullmatch(did):
+        raise Refused(404, "no such trusted computer")
+    return did
+
+
+def _trust_rename(req: dict) -> dict:
+    if not trusted.rename(_trust_id(req), _text(req, "name", trusted.MAX_NAME * 4)):
+        raise Refused(404, "no such trusted computer")
+    return {}
+
+
+def _trust_revoke(req: dict) -> dict:
+    did = _trust_id(req)
+    if not trusted.revoke(did):
+        raise Refused(404, "no such trusted computer")
+    return {"self": did == req.get("device")}
+
+
+def _trust_revoke_all(req: dict) -> dict:
+    return {"count": trusted.revoke_all()}
+
+
+def _trust_enabled(req: dict) -> dict:
+    if not isinstance(req.get("enabled"), bool):
+        raise Refused(400, "enabled must be true or false")
+    return {"forgotten": trusted.set_enabled(req["enabled"])}
+
+
 def _apply(req: dict) -> dict:
     _not_applying()
     _start_apply()
@@ -491,19 +557,24 @@ def _apply(req: dict) -> dict:
 OPS = {"check": _check, "key_set": _key_set, "key_remove": _key_remove, "passphrase_set": _passphrase_set,
        "library_token_set": _library_token_set, "library_token_remove": _library_token_remove,
        "module": _module, "setting": _setting, "apply": _apply, "mode": _mode, "job": _job,
-       "station_pairing": _station_pairing}
+       "station_pairing": _station_pairing, "trust_status": _trust_status, "trust_add": _trust_add,
+       "trust_list": _trust_list, "trust_rename": _trust_rename, "trust_revoke": _trust_revoke,
+       "trust_revoke_all": _trust_revoke_all, "trust_enabled": _trust_enabled}
 
 
 # what may save a setting and start a job: these run under _job_lock, whole
 LOCKED_OPS = ("module", "setting", "mode", "apply", "job")
+NO_CODE_OPS = ("trust_status",)     # it answers only about the token it was given
 
 
 def handle(req) -> dict:
-    """One request -> one reply {ok, status[, error][, ...]}. Never raises; the reply never holds a value."""
+    """One request -> one reply {ok, status[, error][, ...]}. Never raises; the reply never holds a value, except
+    trust_add's new token."""
     try:
         if not isinstance(req, dict) or req.get("op") not in OPS:
             raise Refused(400, "unknown request")
-        _check_code(req.get("code"), req.get("client"))
+        if req["op"] not in NO_CODE_OPS:
+            _access(req)
         if req["op"] in LOCKED_OPS:
             with _job_lock():
                 return {"ok": True, "status": 200, **OPS[req["op"]](req)}
