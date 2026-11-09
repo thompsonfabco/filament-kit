@@ -194,3 +194,11 @@ def test_scan_route_refuses_a_public_range_on_the_real_family():
     kf = KlipperFamily(None)
     r = _client(kf).post("/api/printers/scan", json={"subnet": "1.1.1.0/24"})
     assert r.status_code == 400 and "private" in r.text
+
+
+def test_add_klipper_twice_is_refused_and_says_which():
+    c = _client()
+    body = {"family": "klipper", "host": "voron.home.arpa", "name": "Voron"}
+    assert c.post("/api/printers", json=body).status_code == 200
+    r = c.post("/api/printers", json={**body, "name": "Again"})
+    assert r.status_code == 400 and "Voron" in r.text

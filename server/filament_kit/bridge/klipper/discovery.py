@@ -51,6 +51,14 @@ def check_range(net, own=None) -> None:
         raise ValueError("scan this machine's own network or a private range")
 
 
+def addresses(host: str, port: int) -> set[str]:
+    """The addresses a printer's host name stands for now; empty when it can't be resolved from here."""
+    try:
+        return {a[4][0] for a in socket.getaddrinfo(host.strip("[]"), port, type=socket.SOCK_STREAM)}
+    except (OSError, UnicodeError):
+        return set()
+
+
 def _open(host: str, port: int, timeout: float) -> bool:
     try:
         with socket.create_connection((host, port), timeout=timeout):

@@ -436,3 +436,48 @@ def test_an_unknown_printer_gets_the_note_in_its_status(moonraker, fam):
     fam.start()
     assert wait_for(lambda: fam.state(pid) == "unknown_model")
     assert fam.status(pid)["notes"] == [kmanager.generic_note("single")]
+
+
+# --- one printer, one entry ---------------------------------------------------------------------------------------
+def _resolves(monkeypatch, table):
+    monkeypatch.setattr(discovery, "addresses", lambda host, port: table.get(host, set()))
+
+
+def test_a_twin_found_by_address_goes_at_the_next_sync(fam, monkeypatch):
+    """Discovery reports addresses, and the owner may have added the printer by name."""
+    _resolves(monkeypatch, {"voron.local": {"192.0.2.20"}})
+    mine = registry.add_klipper("Voron", "voron.local")
+    twin = registry.detected_klipper("192.0.2.20", 7125, "mainsailos")
+    other = registry.detected_klipper("192.0.2.21", 7125, "other")
+    fam._forget_twins()
+    assert set(registry.load()) == {mine.serial, other.serial} and twin.serial not in registry.load()
+
+
+def test_no_lookup_while_there_is_nothing_to_forget(fam, monkeypatch):
+    monkeypatch.setattr(discovery, "addresses", lambda host, port: pytest.fail("a lookup with nothing to compare"))
+    registry.add_klipper("Voron", "voron.local")
+    fam._forget_twins()
+
+
+def test_a_name_that_does_not_resolve_forgets_nothing(fam, monkeypatch):
+    _resolves(monkeypatch, {})
+    registry.add_klipper("Voron", "voron.local")
+    found = registry.detected_klipper("192.0.2.20", 7125)
+    fam._forget_twins()
+    assert found.serial in registry.load()
+
+
+def test_a_scan_shows_a_printer_added_by_name_as_that_printer(fam, monkeypatch):
+    _resolves(monkeypatch, {"voron.local": {"192.0.2.20"}})
+    monkeypatch.setattr(discovery, "own_subnet", lambda: None)
+    monkeypatch.setattr(discovery, "scan", lambda net, **kw: [("192.0.2.20", 7125), ("192.0.2.21", 7125)])
+    mine = registry.add_klipper("Voron", "voron.local")
+    out = fam.scan("192.0.2.0/24")
+    assert out[0] == {"id": mine.serial, "host": "192.0.2.20", "port": 7125, "name": "Voron", "configured": True}
+    assert out[1]["configured"] is False
+    assert len(registry.load()) == 2
+
+
+def test_discovery_addresses_answers_empty_for_a_name_it_cannot_resolve():
+    assert discovery.addresses("no such host", 7125) == set()
+    assert discovery.addresses("127.0.0.1", 7125) == {"127.0.0.1"}

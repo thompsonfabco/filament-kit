@@ -288,8 +288,20 @@ class KlipperFamily(LoadsMixin):
         while not self._stop_sync.wait(self.sync_every):
             try:
                 self.sync()
+                self._forget_twins()
             except Exception:  # noqa: BLE001 - an unreadable registry: try again next round
                 log.exception("klipper: registry sync failed")
+
+    def _added_at(self) -> dict[tuple[str, int], registry.Printer]:
+        """(address, port) -> the added printer there, so that discovery's addresses can be told from its names."""
+        return {(a, p.port): p for p in registry.load().values() if p.family == "klipper" and p.configured
+                for a in discovery.addresses(p.host, p.port)}
+
+    def _forget_twins(self) -> None:
+        """Discovery reports addresses, so a printer added by name gets an unconfigured twin. No lookups unless there's
+        an unconfigured entry to compare: a name that won't resolve can take seconds."""
+        if any(not p.configured and p.family == "klipper" for p in registry.load().values()):
+            registry.forget_found_at(set(self._added_at()))
 
     def stop(self) -> None:
         self._started = False
@@ -352,9 +364,10 @@ class KlipperFamily(LoadsMixin):
                 self._scan_ended = time.monotonic()
         finally:
             self._scan_lock.release()
+        added = self._added_at() if found else {}
         out = []
         for host, port in found:
-            p = registry.detected_klipper(host, port)
+            p = added.get((host, port)) or registry.detected_klipper(host, port)
             out.append({"id": p.serial, "host": host, "port": port, "name": registry.display_name(p),
                         "configured": p.configured})
         return out

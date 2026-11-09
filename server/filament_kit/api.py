@@ -280,7 +280,10 @@ def _printer_routes(printers) -> list[Route]:
             raise BadRequest("port must be between 1 and 65535")
 
         def run() -> dict:
-            p = registry.add_klipper((name or "").strip() or host.strip(), host.strip(), port)
+            try:
+                p = registry.add_klipper((name or "").strip() or host.strip(), host.strip(), port)
+            except registry.DuplicatePrinter as e:
+                raise BadRequest(str(e)) from None
             printers.sync()
             printers.wait_settled(p.serial, FIRST_STATE_WAIT)
             return _printer_view(p, printers)

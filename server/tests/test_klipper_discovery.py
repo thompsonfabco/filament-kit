@@ -291,3 +291,10 @@ def test_detect_problems(moonraker):
     d = klipper_cli.detect(gone)
     assert (d["ok"], d["problem"]) == (False, "offline") and "not answering" in d["message"]
     assert d["model_key"] is None and d["spoolman"] is None
+
+
+def test_klipper_add_cli_says_it_is_already_added(capsys):
+    registry.add_klipper("Voron", "voron.home.arpa")
+    args = type("A", (), {"klipper_cmd": "add", "name": "Again", "host": "voron.home.arpa", "port": 7125})
+    assert klipper_cli.run(args) == 1
+    assert "Voron" in capsys.readouterr().err

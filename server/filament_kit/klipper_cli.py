@@ -191,7 +191,11 @@ def _describe(p: registry.Printer) -> int:
 def run(args) -> int:
     c = args.klipper_cmd
     if c == "add":
-        p = registry.add_klipper(args.name, args.host, args.port)
+        try:
+            p = registry.add_klipper(args.name, args.host, args.port)
+        except registry.DuplicatePrinter as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 1
         print(f"added {registry.display_name(p)} as {p.serial} ({p.host}:{p.port})")
         return _describe(p)
     if c == "scan":

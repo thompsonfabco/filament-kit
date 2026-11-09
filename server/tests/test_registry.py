@@ -140,3 +140,72 @@ def test_root_lock_file_given_to_state_dir_owner(env, monkeypatch):
 def test_display_name_is_the_name_or_the_serial():
     assert registry.display_name(Printer("S1", "Office H2D")) == "Office H2D"
     assert registry.display_name(Printer("S1", "")) == "S1"
+
+
+# --- one printer, one entry ---------------------------------------------------------------------------------------
+@pytest.mark.parametrize("again", ["voron.home.arpa", "VORON.home.arpa", "voron.home.arpa.", " voron.home.arpa "])
+def test_add_klipper_refuses_a_host_and_port_already_added(again):
+    first = registry.add_klipper("Voron", "voron.home.arpa")
+    with pytest.raises(registry.DuplicatePrinter, match="Voron"):
+        registry.add_klipper("Other", again)
+    assert list(registry.load()) == [first.serial]
+
+
+def test_add_klipper_same_host_on_another_port_is_another_printer():
+    registry.add_klipper("One", "host.home.arpa", 7125)
+    assert registry.add_klipper("Two", "host.home.arpa", 7126).port == 7126
+
+
+def test_add_klipper_takes_over_the_entry_discovery_made():
+    found = registry.detected_klipper("192.0.2.20", 7125, "mainsailos")
+    p = registry.add_klipper("Voron", "192.0.2.20")
+    assert p.serial == found.serial and p.configured and p.name == "Voron"
+    assert len(registry.load()) == 1
+
+
+def test_add_klipper_keeps_display_names_apart():
+    """Spoolman slot locations are joined on the display name: two printers with one name would share spools."""
+    assert registry.add_klipper("Voron", "a.home.arpa").name == "Voron"
+    assert registry.add_klipper("voron", "b.home.arpa").name == "voron 2"
+    assert registry.add_klipper("Voron", "c.home.arpa").name == "Voron 3"
+
+
+def test_detected_klipper_matches_a_name_whatever_its_case():
+    first = registry.add_klipper("Voron", "Voron.home.arpa")
+    assert registry.detected_klipper("voron.home.arpa", 7125).serial == first.serial
+    assert len(registry.load()) == 1
+
+
+def test_unconfigured_entries_are_capped_and_the_oldest_goes():
+    configured = registry.add_klipper("Mine", "mine.home.arpa")
+    for i in range(registry.MAX_FOUND + 5):
+        registry.detected_klipper(f"10.0.{i // 250}.{i % 250 + 1}", 7125)
+    printers = registry.load()
+    assert configured.serial in printers
+    hosts = [p.host for p in printers.values() if not p.configured]
+    assert len(hosts) == registry.MAX_FOUND and "10.0.0.1" not in hosts and "10.0.0.37" in hosts
+
+
+def test_the_cap_keeps_an_entry_that_holds_an_api_key():
+    kept = registry.detected_klipper("10.0.0.200", 7125)
+    registry.set_api_key(kept.serial, "abc")
+    for i in range(registry.MAX_FOUND + 5):
+        registry.detected_klipper(f"10.0.1.{i + 1}", 7125)
+    assert kept.serial in registry.load()
+
+
+def test_a_discovered_entry_never_replaces_bambu():
+    registry.upsert(Printer(serial="S1", name="Bambu"))
+    for i in range(registry.MAX_FOUND + 5):
+        registry.detected_klipper(f"10.0.1.{i + 1}", 7125)
+    assert "S1" in registry.load()
+
+
+def test_forget_found_at_only_takes_unconfigured_klipper_entries():
+    twin = registry.detected_klipper("192.0.2.20", 7125, "twin")
+    keyed = registry.detected_klipper("192.0.2.21", 7125, "keyed")
+    registry.set_api_key(keyed.serial, "abc")
+    other = registry.detected_klipper("192.0.2.22", 7125, "other")
+    mine = registry.add_klipper("Mine", "192.0.2.23")
+    assert registry.forget_found_at({("192.0.2.20", 7125), ("192.0.2.21", 7125), ("192.0.2.23", 7125)}) == 1
+    assert set(registry.load()) == {keyed.serial, other.serial, mine.serial} and twin.serial not in registry.load()
