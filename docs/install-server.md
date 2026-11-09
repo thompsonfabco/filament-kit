@@ -254,6 +254,9 @@ running install.
   would be accepted** lists the pending updates, and **Accept these** accepts exactly that list: if a newer build has
   come since, it asks you to look again. The PC sync writes accepted updates at its next run, after its backup. Nothing
   else here replaces a preset in your slicers. Each of these needs the setup code.
+- **Settings** (v0.4.4). **Filament library** shows its version and last check, with **Update now**, a button to go back
+  to the version before, and a box to add your own entry. Each takes the setup code, and the first two run as
+  background jobs.
 - **Updates.** Shows the installed and the latest release, when it was last checked, and the release notes of the
   latest. **Check now** asks GitHub for the latest release and needs the setup code; the page itself cannot reach GitHub, so
   a background job does it. **Update to <version>** asks you to confirm: the kit stops while it installs and starts
