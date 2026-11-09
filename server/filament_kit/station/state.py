@@ -50,7 +50,7 @@ state = {"tag": None, "tag_at": None, "scale": None, "scale_at": None, "last": N
 # lines for the step and the station's own message
 flow = {"step": "idle", "seq": 0, "spool": None, "filament": None, "display": [], "message": "", "at": 0.0}
 # serial ports: the panel's (found by its HELLO) and the one nfcpy uses; neither probes the other's
-ports = {"panel": None, "panel_version": None, "nfc": None}
+ports = {"panel": None, "panel_version": None, "panel_chip": None, "nfc": None}
 flashed: set[str] = set()  # bundled firmware versions already written this run
 probed = threading.Event()  # set once the panel search has looked at every port, so nfcpy picks the right one
 panel_lock = threading.Lock()
@@ -59,7 +59,32 @@ panel_dirty = threading.Event()
 
 
 def usb_ttys() -> list[str]:
-    return sorted(glob.glob("/dev/ttyUSB*"), key=lambda p: int(re.sub(r"\D", "", p) or 0))
+    return _by_number(glob.glob("/dev/ttyUSB*"))
+
+
+SYSFS_TTY = "/sys/class/tty"
+PANEL_VENDOR = "303a"  # Espressif: the ESP32-C3's own USB serial
+
+
+def _by_number(paths) -> list[str]:
+    return sorted(paths, key=lambda p: int(re.sub(r"\D", "", p) or 0))
+
+
+def usb_vendor(dev: str) -> str | None:
+    """The USB vendor ID (lowercase hex) of the device behind a tty, or None when sysfs doesn't say."""
+    try:
+        iface = os.path.realpath(os.path.join(SYSFS_TTY, os.path.basename(dev), "device"))  # the USB interface
+        with open(os.path.join(os.path.dirname(iface), "idVendor")) as f:  # its parent is the USB device
+            return f.read().strip().lower() or None
+    except OSError:
+        return None
+
+
+def panel_ttys() -> list[str]:
+    """The ports that may hold the button panel: ttyACM ports of an Espressif USB device (other ttyACM boards are
+    never opened), then the ttyUSB ports."""
+    acm = [d for d in glob.glob("/dev/ttyACM*") if usb_vendor(d) == PANEL_VENDOR]
+    return _by_number(acm) + usb_ttys()
 
 
 def view() -> dict:

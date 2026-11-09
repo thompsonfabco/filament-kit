@@ -117,6 +117,7 @@ def open_panel(dev):
     import serial  # the [station] extra; only the panel loop needs it
     ser = serial.Serial()
     ser.port, ser.baudrate, ser.timeout = dev, 115200, 0.3
+    ser.write_timeout = 1  # a stalled port must not hold panel_lock for long
     ser.dtr = ser.rts = False  # don't hold the D1 mini in reset / flash mode
     try:
         ser.open()
@@ -125,6 +126,7 @@ def open_panel(dev):
             hello = ser.readline().split()
             if hello[:2] == [b"HELLO", b"intake-panel"]:
                 ser.panel_version = hello[2].decode(errors="replace") if len(hello) > 2 else "?"
+                ser.panel_chip = hello[3].decode(errors="replace") if len(hello) > 3 else None  # none: ESP8266
                 return ser
             if not asked and time.time() > end - 1.5:
                 ser.write(b"?\n")  # it didn't reset on open: ask
@@ -139,11 +141,12 @@ def find_panel():
     """One pass over the USB serial ports (skipping the reader's): the panel's port, or None. Records the result in
     ports["panel"] and sets `probed`, so the reader loop then takes another port."""
     ser = None
-    for dev in st.usb_ttys():
+    for dev in st.panel_ttys():
         if dev != st.ports["nfc"] and (ser := open_panel(dev)):
             break
     st.ports["panel"] = ser.port if ser else None
     st.ports["panel_version"] = ser.panel_version if ser else None
+    st.ports["panel_chip"] = ser.panel_chip if ser else None
     st.probed.set()  # after ports["panel"], so a waiting reader never sees the panel's port as free
     return ser
 
@@ -187,6 +190,6 @@ def panel_loop():
         with st.panel_lock:
             st.panel["ser"] = None
         ser.close()
-        st.ports["panel"] = st.ports["panel_version"] = None
+        st.ports["panel"] = st.ports["panel_version"] = st.ports["panel_chip"] = None
         log.info("button panel gone")
         time.sleep(2)
