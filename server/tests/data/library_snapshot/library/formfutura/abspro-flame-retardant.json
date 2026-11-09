@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "ABSpro Flame Retardant",
+  "material": "ABS",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "265"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100-120",
+    "fan_min_speed/fan_max_speed": "0-30",
+    "filament_retraction_length": "5",
+    "_min_nozzle": "0.15",
+    "_vicat": "110 (ISO 306, older TDS)",
+    "_notes": "Halogen-free PC/ABS blend designed to meet UL94 V-0. Ranges are printed as '±' on the official page; experience level 'Expert'. Prone to warping because of the high PC content; a heated/controlled enclosure is recommended (reseller dhm-online). Parent is Bambu ABS because of the low print temperature for a PC blend; not confirmed."
+  },
+  "conflicts": [
+    "nozzle: 240-260 (older Formfutura TDS (directindustry copy) and 3dprint.me)",
+    "nozzle/bed: 240-270 / 100-110 (Amazon listing B01A94RMSE and older product descriptions)"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://formfutura.com/product/abspro-flame-retardant/?category=457",
+    "https://pdf.directindustry.com/pdf/formfutura/abspro-flame-retardant/196782-747111.html",
+    "https://www.amazon.com/FormFutura-ABSpro-Flame-Retardant-Black/dp/B01A94RMSE"
+  ],
+  "updated": "2026-11-02"
+}

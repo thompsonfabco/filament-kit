@@ -10,7 +10,8 @@ found it.
 wsl -d Ubuntu -- sudo bash /mnt/c/<checkout>/tools/e2e/run.sh
 ```
 
-Options: `--only a,d,c,b,e` runs some scenarios (the later ones need a), `--results FILE` copies the results
+Options: `--only a,d,c,b,e` runs some scenarios (the later ones need a), `--previous vX.Y.Z` adds scenario f
+(from a clone with its tags), `--results FILE` copies the results
 (JSON, every check with its outcome) to FILE, and `--keep-work` keeps the work folder in `/tmp/fk-e2e.*` for
 debugging (it holds the throwaway release key and the command logs; delete it afterwards). A full run takes about
 15 minutes, most of it pip and apt.
@@ -54,6 +55,11 @@ debugging (it holds the throwaway release key and the command logs; delete it af
 | c | Fake 16-unit printer through the reader API | `tools/e2e/fake_printer.py` is an MQTT 3.1.1 broker over TLS on 127.0.0.1:8883 around the unit tests' `FakePrinter`: 16 AMS units, 8 AMS HT units and both external holders, a self-signed leaf with CN = serial, user `bblp` and a throwaway Access Code. It is added as `filament-kit config` > Printers > add printer does (`registry.upsert`). `sudo filament-kit reader token` makes the reader token; `GET reader/printers` lists it, `GET reader/printers/<id>/slots` gives 74 unique labels (also ignoring case, at most 40 bytes), and `POST reader/scan` of the spool from d into P3 answers `set`. The printer received exactly one `ams_filament_setting`, for AMS 15 tray 2 with the preset's filament id, and Spoolman shows the spool in that slot. The preset comes from a one-preset build written into `/var/lib/filament-kit/profiles`, as the PC sync and `profiles build` leave it (the reader loads only with the user's exact preset). |
 | b | Updater | `update --check` says up to date, then sees the second release once it is published; `update` installs it (services active again, the API answers the new version) and the hardware feed installs the release's newer `bambu_hardware.xml` (version 1.1) as `/etc/filament-kit/bambu_hardware.xml`. A newer valid file (1.2) swaps in with the old one kept as `.previous`; a signed but invalid one (1.3 with an empty model name) is refused (exit 1) and the installed file stays. `update --rollback` restores the first release, and `update --check` then says the rolled-back version is held from the timer. |
 | e | Station upgraded by the updater | After a purge: `get.sh --version <first> --mode station --server 192.0.2.10` (a documentation address), then `filament-kit update` to the second release. Still station mode, `station.allow` still the server address, and the station unit's drop-in still allows it. |
+| f | The last released tag (`--previous`) | After a purge, the tag's own files build its release and its own `get.sh` installs it; a phone is paired and a spool added. The tag's own updater installs this checkout (one patch higher) and this checkout's `update --rollback` goes back: each time the services run, the API answers the right version, the token works and the spool is there. |
+
+## On a runner, before a tag
+
+The `e2e` workflow is started by hand (Actions, Run workflow) on the commit to be tagged, and runs all of the above with `--previous` set to the newest tag, or the tag you give it. A runner is not a minimal Ubuntu, so its apt path proves less than a clean VM would.
 
 ## Results and logs
 

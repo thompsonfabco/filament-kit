@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "ReForm - rApollo",
+  "material": "ASA",
+  "colors": [],
+  "bambu_parent": "Bambu ASA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-80",
+    "chamber_temperatures": "25-30",
+    "fan_min_speed/fan_max_speed": "0-50",
+    "_min_nozzle": "0.15",
+    "_enclosure": "yes, 25-30 C",
+    "_notes": "Recycled ASA based on the ApolloX formulation, on a cardboard spool (ReForm range): wrap the spool edges before AMS use. Density not published on the page reached. Bambu parent not confirmed."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://formfutura.com/product/reform-rapollo/"
+  ],
+  "updated": "2026-11-02"
+}

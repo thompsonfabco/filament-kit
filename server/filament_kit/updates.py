@@ -341,7 +341,7 @@ def update(cfg: dict, *, scheduled: bool = False, fetcher: release.Fetcher | Non
     _write_state(last_ok_at=now, previous=cur if _kept(cur) else None, held=None, failed=None)
     _prune({latest, cur})
     print(f"updated filament-kit {cur} -> {latest}" + ("" if _kept(cur) else " (no rollback copy)"))
-    return _feed(fetcher, rel)
+    return _feed_after_install(cfg, fetcher, rel, run)
 
 
 # ---------------------------------------------------------------- hardware data feed
@@ -364,6 +364,30 @@ def _feed(fetcher: release.Fetcher, rel: dict) -> int:
             print(f"error: hardware data: cannot install {name}: {e}", file=sys.stderr)
             rc = 1
     return rc
+
+
+def feed_now(cfg: dict, *, fetcher: release.Fetcher | None = None) -> int:
+    """`update --feed` (internal): the hardware data for the latest release, in this process."""
+    try:
+        s = settings(cfg)
+        fetcher = fetcher or default_fetcher(cfg)
+        return _feed(fetcher, fetcher.release(s["repo"]))
+    except ReleaseError as e:
+        print(f"error: hardware data: {e}", file=sys.stderr)
+        return 1
+
+
+def _feed_after_install(cfg: dict, fetcher: release.Fetcher, rel: dict, run: Callable[[list[str]], int]) -> int:
+    """After an install this process is the old program over the new one's files: the feed imports the hardware modules
+    lazily, so a changed name or a new Python version would end a good update in a traceback. The new program does it."""
+    exe = config.paths().opt / "venv" / "bin" / "filament-kit"
+    if not exe.is_file():       # a checkout or a test: there is no new program
+        return _feed(fetcher, rel)
+    try:
+        return 0 if run([str(exe), "update", "--feed"]) == 0 else 1
+    except OSError as e:
+        print(f"error: hardware data: cannot run the new program: {e}", file=sys.stderr)
+        return 1
 
 
 def _fsync_dir(d: Path) -> None:

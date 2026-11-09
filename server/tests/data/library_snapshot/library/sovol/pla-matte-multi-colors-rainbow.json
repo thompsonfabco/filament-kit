@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "vendor": "SOVOL",
+  "product": "PLA Matte Multi-Colors Rainbow",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Matte",
+  "fields": {
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "Colour changes 'Around each 26-33 feet' (Sovol Amazon). Nozzle/bed/speed/density/drying not published as text by Sovol; reseller robu.in values conflict (190-210 vs 200-220°C) and are not used. Do not generate a preset from this entry alone."
+  },
+  "conflicts": [],
+  "source_quality": "brand_amazon_listing",
+  "sources": [
+    "https://www.amazon.com/Sovol-Multicolored-Printing-Materials-Dimensional/dp/B0GGH23FP7"
+  ],
+  "updated": "2026-11-02"
+}

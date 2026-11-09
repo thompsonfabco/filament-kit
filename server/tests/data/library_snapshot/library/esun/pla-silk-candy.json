@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "PLA-Silk Candy",
+  "material": "PLA",
+  "colors": [
+    "Red Gold Blue",
+    "Blue Green",
+    "Silver Blue",
+    "Silver Black",
+    "Red Gold",
+    "Gold Blue Green"
+  ],
+  "bambu_parent": "Bambu PLA Silk",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.21"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "45-60",
+    "fan_max_speed": "100%",
+    "_print_speed": "<200mm/s",
+    "_hdt_0.45MPa": "52.15",
+    "_notes": "Values are from the esun3d.com product page, read from a search snippet because the table did not render on fetch. Drying is not published. The colours come from eSUN's launch article."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.esun3d.com/epla-silk-candy-product",
+    "https://www.esun3d.com/news/8155/"
+  ],
+  "updated": "2026-11-02"
+}

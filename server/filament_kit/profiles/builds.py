@@ -1226,6 +1226,22 @@ def _pc_waiting(device_id: str | None, meta: dict) -> dict | None:
             "app": hb.get("app") if hb.get("app") in HEARTBEAT_APPS else "Bambu Studio", "at": at}
 
 
+# The heartbeat outcome a failed run sends, and the words for it: the PC sends a class only, because its detail can hold a
+# path with the Bambu Studio user folder.
+PC_FAILURES = {"error_no_studio": "the PC sync can't find a Bambu Studio folder: open Bambu Studio once on that PC",
+               "error_server": "the PC sync's last run was refused by this server: see its log on the PC",
+               "error_crash": "the PC sync's last run stopped on an error: see its log on the PC"}
+
+
+def _pc_failure(device_id: str | None) -> dict | None:
+    hb = _read_obj(_dir() / HEARTBEAT)
+    text = PC_FAILURES.get(hb.get("outcome"))
+    at = hb.get("at")
+    if text is None or hb.get("device_id") != device_id or not isinstance(at, (int, float)) or isinstance(at, bool):
+        return None
+    return {"class": hb["outcome"], "text": text, "at": at}
+
+
 def pc_waiting_text(pc: dict | None) -> str | None:
     """"PC sync waiting for Bambu Studio to close since <local date>" from status() `pc`, else None (one text for
     `filament-kit status`, `profiles status` and the phone / MCP preset status)."""
@@ -1247,6 +1263,9 @@ def _pc_view(o: str | None, meta: dict, ups: list) -> dict | None:
     wait = _pc_waiting(o, meta)
     if wait is not None:
         out["waiting"] = wait
+    failure = _pc_failure(o)
+    if failure is not None:
+        out["failure"] = failure
     return out
 
 

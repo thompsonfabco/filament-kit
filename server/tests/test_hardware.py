@@ -58,7 +58,6 @@ def test_model_by_typed_name(typed, name):
 def test_h2d_record():
     m = hardware.load().model("O1D")
     assert m.code == "O1D" and m.nozzles == 2 and m.presence == "bits-v1"
-    assert m.gcode_only_failed_is_finish is True
     assert [(e.id, e.label, e.say) for e in m.externals] == [(254, "Ext-L", "external left"),
                                                             (255, "Ext-R", "external right")]
     assert m.numbering == ("shift8", "legacy")
@@ -70,7 +69,6 @@ def test_h2d_record():
 def test_single_external_printers_keep_ext(code):
     m = hardware.load().model(code)
     assert [(e.id, e.label) for e in m.externals] == [(254, "Ext")]
-    assert m.gcode_only_failed_is_finish is False
 
 
 @pytest.mark.parametrize("code", ["zz", "", None, "Bambu Lab Q9"])

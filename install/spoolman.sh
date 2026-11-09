@@ -29,6 +29,21 @@ install -d -m 750 -o spoolman -g spoolman "$SPOOLMAN_DATA"
 PYVER=$(python3 --version 2>&1)
 SPOOLMAN_MARKER="$SPOOLMAN_OPT/.fk-installed"
 SPOOLMAN_STAMP="$SPOOLMAN_VERSION $PYVER"
+# BEGIN foreign-spoolman check
+# The install below replaces $SPOOLMAN_OPT and its unit. A Spoolman the kit did not put there is someone's: never replace it,
+# wherever its program is. The kit's own has the marker (from its first release), or, if an install stopped between the swap
+# and the marker, the kit's unit.
+SPOOLMAN_UNIT=${SPOOLMAN_UNIT:-/etc/systemd/system/spoolman.service}
+if [ ! -f "$SPOOLMAN_MARKER" ] && { [ -d "$SPOOLMAN_OPT" ] || [ -f "$SPOOLMAN_UNIT" ]; } \
+        && ! grep -qs '^Description=Spoolman filament inventory' "$SPOOLMAN_UNIT"; then
+    [ -d "$SPOOLMAN_OPT" ] || die "a spoolman.service the kit did not install is at $SPOOLMAN_UNIT, and installing would replace it. Your Spoolman was not changed.
+To use that one: set spoolman_url in /etc/filament-kit/config.json to its address, then: sudo filament-kit modules disable spoolman
+To let the kit install its own beside it: rename that unit, and run the same command again."
+    die "a Spoolman the kit did not install is in $SPOOLMAN_OPT, and installing would replace it. Your Spoolman was not changed.
+To use that one: set spoolman_url in /etc/filament-kit/config.json to its address, then: sudo filament-kit modules disable spoolman
+To let the kit replace its program (its database is not touched): sudo touch $SPOOLMAN_MARKER, and run the same command again."
+fi
+# END foreign-spoolman check
 if [ -f "$SPOOLMAN_MARKER" ] && [ "$(cat "$SPOOLMAN_MARKER")" = "$SPOOLMAN_STAMP" ]; then
     say "Spoolman $SPOOLMAN_VERSION already installed"
 else

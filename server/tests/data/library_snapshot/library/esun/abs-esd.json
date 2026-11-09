@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "ABS-ESD",
+  "material": "ABS",
+  "colors": [],
+  "bambu_parent": "Bambu ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_density": [
+      "0.97"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-90",
+    "fan_min_speed/fan_max_speed": "10-40%",
+    "_drying": "70C >8h",
+    "_print_speed": "<300mm/s",
+    "_hdt_0.45MPa": "96",
+    "_notes": "Values are from the official 'Parameters for Bambu Lab & Creality' table on esun3d.com. Surface resistance 'as low as 10^5 Ω'."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.esun3d.com/abs-esd-product"
+  ],
+  "updated": "2026-11-02"
+}

@@ -6,7 +6,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.provider.Settings
-import android.widget.Toast
 import androidx.core.net.toUri
 import java.io.File
 import kotlinx.coroutines.Dispatchers
@@ -34,7 +33,10 @@ class ApkInstaller(context: Context) : ApkInstall {
         context.startActivity(Intent(confirm).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
+    override val failure: Flow<String?> = PendingConfirm.failure
+
     override suspend fun install(apk: File) = withContext(Dispatchers.IO) {
+        PendingConfirm.failure.value = null
         val installer = context.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
             .apply { setAppPackageName(context.packageName) }
@@ -66,12 +68,16 @@ class ApkInstaller(context: Context) : ApkInstall {
  */
 internal object PendingConfirm {
     val intent = MutableStateFlow<Intent?>(null)
+
+    /** Why the session failed: kept for Home's update banner, because a toast is gone before it can be read. */
+    val failure = MutableStateFlow<String?>(null)
 }
 
 /** Receives the install session's status: shows the system confirmation, or tells the user why it failed. */
 class InstallResultReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        when (intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)) {
+        val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
+        when (status) {
             PackageInstaller.STATUS_PENDING_USER_ACTION -> {
                 @Suppress("DEPRECATION")
                 val confirm = intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT) ?: return
@@ -86,8 +92,8 @@ class InstallResultReceiver : BroadcastReceiver() {
             PackageInstaller.STATUS_FAILURE_ABORTED -> PendingConfirm.intent.value = null // the user cancelled
             else -> {
                 PendingConfirm.intent.value = null
-                val why = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
-                Toast.makeText(context, "The update could not be installed" + (why?.let { ": $it" } ?: ""), Toast.LENGTH_LONG).show()
+                PendingConfirm.failure.value =
+                    UpdateTexts.installFailure(status, intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE))
             }
         }
     }

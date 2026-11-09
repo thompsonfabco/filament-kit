@@ -40,18 +40,19 @@
   "published_ranges": {
     "bed_all_plates": "0-60",
     "_diameter_tolerance": "+/-0.03",
-    "_notes": "Product pages: 'Print Temperature - 180C - 220C', 'No Heating Bed Required', dimensional accuracy +/- 0.03mm. Bed 0-60 C and Blue Painters Tape adhesion from Hatchbox's PLA material page. Density 1.27 g/cm3 and melting temperature 155 C from the Hatchbox PLA SDS (section 9; supplier named as Hatchbox). Also sold in 3.00 mm. Verified 2026-11-01 against the product pages' Shopify JSON/HTML, the material page and the SDS PDF."
+    "_notes": "Page: 'No Heating Bed Required'; no bed temperature printed. Hatchbox FAQ: no technical data (TDS) is available for their filaments, so density, drying, bed temperature and HDT are not published. Read from the Shopify product .js endpoint (description text). Bambu parent not confirmed (no Hatchbox system preset known in Bambu Studio). Earlier entry: Product pages: 'Print Temperature - 180C - 220C', 'No Heating Bed Required', dimensional accuracy +/- 0.03mm. Bed 0-60 C and Blue Painters Tape adhesion from Hatchbox's PLA material page. Density 1.27 g/cm3 and melting temperature 155 C from the Hatchbox PLA SDS (section 9; supplier named as Hatchbox). Also sold in 3.00 mm. Verified 2026-11-01 against the product pages' Shopify JSON/HTML, the material page and the SDS PDF."
   },
   "conflicts": [
     "Hatchbox PLA material page (https://www.hatchbox3d.com/pages/pla-material): recommended extrusion temperature 180-210 C"
   ],
   "source_quality": "official_page",
   "sources": [
+    "https://hatchbox3d.com/products/3d-pla-1kg1-75-blk",
     "https://www.hatchbox3d.com/products/3d-pla-1kg1-75-cg6c",
     "https://www.hatchbox3d.com/products/3d-pla-1kg1-75-cgrn",
     "https://www.hatchbox3d.com/pages/pla-material",
     "https://www.hatchbox3d.com/collections/pla-1-75mm.atom",
     "https://cdn.shopify.com/s/files/1/0008/2457/4018/files/HATCHBOX_PLA_3D_Printer_Filament_SDS.pdf?1561"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

@@ -103,8 +103,12 @@ A hand-built tarball is not signed. Users can install it with `sudo ./install.sh
   and at every review: `--root`, `--lint` and `--klipper` add the rest, and it prints each suite's counts and wall time. On Windows, where the PC sync's DPAPI and file lock are real:
   `powershell -ExecutionPolicy Bypass -File tools\testenv.ps1`. Both run in parallel (`-n auto`), as does every workflow.
   A test that fails in the crowd runs once more alone, and if it passes the suite passes with `FLAKY <test>` in the summary (`--no-retry` turns this off). Every `FLAKY` line in a run becomes a queue item to fix that test, so the marker never becomes permanent cover.
-- `server/tests` (`pytest`), `pc-sync/tests`, the Android unit tests (`./gradlew testDebugUnitTest`) and the
-  reader's native tests run in CI on every push.
+- CI runs the recipe on Linux on every push: the server tests (`server/tests`) and the PC sync tests (`pc-sync/tests`) with
+  `server[test,web]` installed, so the web module's tests run, plus the printer pack, spool sync and reader tool tests, the
+  tests that need root and the `get.sh` end-to-end check, and it shellchecks the scripts.
+  The PC sync tests on its other systems (`pc-sync.yml`), the Android unit tests (`./gradlew testDebugUnitTest`) and the
+  reader's tests run only when files under `pc-sync/`, `android/` or `reader/` change.
+- CI does not run the Klipper end-to-end test. Before a merge, also run `bash tools/e2e/klipper.sh` from the repo root.
 - [testing-e2e.md](testing-e2e.md): the end-to-end run on a disposable Ubuntu host (WSL), with real
   Spoolman, a fake printer and a fake releases server.
 - [android-e2e.md](android-e2e.md): the Android end-to-end test on an emulator against a real server, and the

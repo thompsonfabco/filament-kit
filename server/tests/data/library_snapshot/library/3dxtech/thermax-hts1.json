@@ -3,7 +3,10 @@
   "vendor": "3DXTech",
   "product": "ThermaX HTS1",
   "material": "Support",
-  "colors": [],
+  "colors": [
+    "Natural"
+  ],
+  "bambu_parent": "Generic PC",
   "fields": {
     "nozzle_temperature_range_low": [
       "365"
@@ -27,12 +30,15 @@
   "published_ranges": {
     "_vitrification": "225 (Tg, DSC)",
     "_hdt_1.8MPa": "205",
-    "_notes": "Values from MatterHackers listing 'ThermaX HTS High Temp Support' (out of stock); official page unreachable (HTTP 429). Break-away support for PEEK, PEKK and Ultem. Bed temps up to 160C; heated chamber required for best results (max 225C). Beyond Bambu Lab printer nozzle limits."
+    "_notes": "Official page: break-away high-temp support for ThermaX PEKK, PEEK, PEI (ULTEM), PPSU, PSU, PPS; SKU SUP07UN200500NAT0; 500g and 1kg reels. Bed range beyond 'up to 160C' not published; hub lists no TDS for HTS1 (SDS only). Diameter tolerance not published. Beyond X1/P1/P2S. Earlier entry: Values from MatterHackers listing 'ThermaX HTS High Temp Support' (out of stock); official page unreachable (HTTP 429). Break-away support for PEEK, PEKK and Ultem. Bed temps up to 160C; heated chamber required for best results (max 225C). Beyond Bambu Lab printer nozzle limits.",
+    "_drying": "120C 4h"
   },
   "conflicts": [],
-  "source_quality": "reseller_tds_copy",
+  "source_quality": "official_page",
   "sources": [
+    "https://www.3dxtech.com/products/thermax-hts1-1",
+    "https://www.3dxtech.com/pages/filament-drying-instructions",
     "https://www.matterhackers.com/store/l/3dxtech-thermax-hts-high-temp-support-material-05kg/sk/MUR6KR2J"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "ReForm - rTPU 90A",
+  "material": "TPU",
+  "colors": [
+    "Traffic Black",
+    "Traffic White"
+  ],
+  "bambu_parent": "Bambu TPU 90A",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-80",
+    "fan_min_speed/fan_max_speed": "30-100",
+    "_drying": "50-70C 24h",
+    "_hardness": "90A (product name and 3DJake)",
+    "_min_nozzle": "0.15",
+    "_enclosure": "not necessary",
+    "_notes": "Recycled semi-flexible TPU. The TDS was not read, so density is not filled. Use the external spool, not the AMS. Bambu parent not confirmed."
+  },
+  "conflicts": [
+    "_hardness: 85A (formfutura.com product page feature list (appears to be a copy-paste error from rTPU 85A))"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.formfutura.com/filaments/tpu/reform-rtpu-90a",
+    "https://www.3djake.com/formfutura/reform-rtpu-90a-traffic-white"
+  ],
+  "updated": "2026-11-02"
+}

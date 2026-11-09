@@ -19,7 +19,8 @@ access**, red **Can't reach the server** or **The server's certificate changed**
    sudo filament-kit pair
    ```
 
-   It prints a QR code, the server's certificate fingerprint and a 6-digit code, good for about 10 minutes.
+   It prints a QR code, the server's certificate fingerprint and a 6-digit code, good for about 10 minutes. (The
+   server's setup page, `https://<computer name>.local:8710/setup`, can show a pairing code too.)
 2. Open the app. On Android 17 and newer, tap **Allow** when it asks for **local network access**. Without it the
    app can't find or reach your server. If you said no, the app shows **Allow** again, and **Open app settings**
    once Android stops asking.
@@ -27,21 +28,22 @@ access**, red **Can't reach the server** or **The server's certificate changed**
    opens with a green **Connected**. **Keep the white border around the QR code**: scan it from the whole
    Terminal window, and don't crop it or zoom in so far that the border is cut off.
 
-<img src="images/android-pair-start.png" width="240" alt="Pair with your server: Scan QR code or Enter address">
+<img src="images/android-pair-start.png" width="240" alt="Pair with your server: Scan QR code, servers found on this network, Enter address">
 
 **No camera, or the code won't scan?** On **Pair with your server**:
 
-1. Under **Servers found on this network**, tap your server. If it isn't listed, tap **Enter address** and type the
-   computer's name with `.local` (for example `my-server.local`) or its IP address; leave **Port** at 8710, and
-   tap **Connect**.
-2. **Check the server's fingerprint** appears. Compare it with the fingerprint in the Terminal. If they match,
-   tap **It matches**. If not, tap **It does not match** and stop.
+1. Under **Servers found on this network**, tap your server: it goes straight to the fingerprint check. If it isn't
+   listed, tap **Enter address** and type the computer's name with `.local` (for example `my-server.local`) or its IP
+   address; leave **Port** at 8710, and tap **Connect**.
+2. **Check the server's fingerprint** appears with two groups of the fingerprint left blank. Find the fingerprint
+   shown with the pairing code on the server (in the Terminal, or on the setup page) and type the two missing
+   groups. If they match, tap **Continue**. If they differ, tap **It does not match** and stop.
 3. Type the **6-digit code** from the Terminal.
 
 **If it fails:** the code works once and expires; run `sudo filament-kit pair` again for a new one. Other
 problems are in [Install the Android app](install-android-app.md#common-problems).
 
-<img src="images/android-pair-fingerprint.png" width="240" alt="Check the server's fingerprint: It matches or It does not match">
+<img src="images/android-pair-fingerprint.png" width="240" alt="Check the server's fingerprint: type the two blank groups, then Continue, or It does not match">
 
 **Unpair or pair again.** On the phone: **Settings** shows the server's name, address and certificate fingerprint.
 **Forget server** (it asks to confirm; the spools stay on the server) unpairs this phone, and then you pair again
@@ -84,18 +86,30 @@ You need a Bambu Lab printer on the same network as the server, switched on.
 **add printer**, with its name, IP address, serial number and Access Code. (A server in WSL or a virtual machine
 behind NAT can't see printers; see [Running the server in WSL](install-server.md#running-the-server-in-wsl).)
 
-<img src="images/android-printer-screen.png" width="240" alt="A printer's screen: slots with Unload, and Map slots">
+<img src="images/android-printer-screen.png" width="240" alt="A printer's screen: slots with Unload, Slot mapping and Map slots">
 
-### Slot mapping (only if you want filament use counted)
+### Map slots: needed before filament use is taken off spools
 
 Loading a spool into a slot works without it. Mapping teaches the server how the printer numbers its slots, so
 that after a print the filament used is taken off the right spools. Until then, use is only logged on the
 printer's screen under **Filament used (last 7 days)**.
 
+Once a printer has been mapped, the server maps it again by itself when its AMS layout changes (you add or remove a
+unit) and stays unchanged for 30 seconds, or after two prints in a row that disagreed with the map. It waits until
+the printer is idle and tries up to 3 times, 10 minutes apart. The slot colours change briefly while it runs, without
+you tapping anything. To switch this off, set `"auto_remap": false` in `/etc/filament-kit/config.json`.
+
 1. Open the printer, make sure it's idle, and tap **Map slots**.
 2. Read the box and tap **Map slots** again. The app briefly changes each slot's colour on the printer, one at a
    time, and runs a short job that doesn't heat or move anything; every slot is set back afterwards.
-3. **Slots mapped (n)** means it worked. **Slot mapping failed** says why; fix that and tap **Map slots again**.
+3. **Slots mapped (n)** means it worked. **Slots mapped: confirmed for the loaded slots** also works; map again once
+   a second unit or an HT has a spool loaded, to settle the numbering. **Slot numbering not confirmed** or
+   **Slot mapping failed** lists what the server reported; fix that and tap **Map slots again**. **Layout changed** or
+   **Recent prints disagreed with the map** means a new mapping is due; it starts by itself when the printer is
+   idle, or tap **Map slots again**. A result from an earlier server run is labelled as old: it may be fixed by now.
+
+The **Map slots** button is greyed only while the printer is not connected or is printing, or while a mapping runs.
+Until a mapping works, use is only logged, not taken off spools.
 
 ### Load and unload a spool
 

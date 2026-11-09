@@ -136,7 +136,17 @@ first PC that syncs is the one. To move to another PC, remove the first one with
 (see [Everyday commands](#everyday-commands)); the next PC that syncs then starts fresh, like a first install.
 
 1. On the PC, download `filament-kit-sync-setup-<version>.exe` from the same GitHub Releases page and run it.
-   It does not need administrator rights.
+   It does not need administrator rights. Windows may first show **Windows protected your PC** and say it
+   prevented an unrecognized app from starting. That is because the program is not code-signed. If you downloaded
+   it from the project's Releases page, click **More info**, then **Run anyway**. To check that the download is
+   intact, run this in PowerShell in the folder where you saved it, and compare the result with the line for this
+   file in the release's `SHA256SUMS`:
+
+   ```
+   Get-FileHash .\filament-kit-sync-setup-<version>.exe -Algorithm SHA256
+   ```
+
+   That check only shows the file arrived whole; it does not show who made it.
 2. On the Ubuntu computer, run:
 
    ```
@@ -151,7 +161,8 @@ first PC that syncs is the one. To move to another PC, remove the first one with
    type `y` to confirm it. Then it asks for the 6-digit code.) From then on the PC syncs every 10 minutes. While
    Bambu Studio is open it waits and tries again later (see [While Bambu Studio is open](#while-bambu-studio-is-open-v040)).
 
-The link and the code expire after a few minutes. If they do, run `sudo filament-kit pair --pc` again.
+The link and the code expire after about 10 minutes. If they do, run `sudo filament-kit pair --pc` again. Pairing again
+keeps the pairing that works until the new one is proven: a refused link changes nothing.
 
 ### Stable and Beta Bambu Studio (v0.4.0)
 
@@ -172,7 +183,7 @@ builds are made from them. The other folders receive every build too.
 - **Install only into the primary** (the old behaviour): set `"secondaries": false` in `config.json`. The default is
   on, and the setting survives pairing again.
 
-**Presets are never replaced.** In every folder only **new** presets are added.
+**Presets are never replaced unless you accept an update.** In every folder only **new** presets are added.
 
 - In the **primary**, the updates you accept with `sudo filament-kit profiles apply-updates` are written.
 - In the **other folders**, an accepted update is written only over a preset the kit itself put there and that you have
@@ -213,6 +224,29 @@ most once an hour): `sudo filament-kit status` and `sudo filament-kit profiles s
 Bambu Studio to close since <date>", and so does the preset status in the phone app and Claude's connector. It is
 shown only for the PC that is paired as the sync PC, and clears at the first sync after Studio closes.
 
+### Undo an update, unpair, or remove the PC sync
+
+**Undo an installed update.** Before the sync writes presets, it copies your Bambu Studio filament folder to
+`%LOCALAPPDATA%\filament-kit-sync\backups\<date and time>` (Orca Slicer's copy is in `backups-orca` under the same
+name; the 5 newest of each are kept; a second Bambu Studio folder has its own under `folders\<name>\backups`). On
+Linux they are under `~/.local/share/filament-kit-sync`. To go back, close Bambu Studio, copy the presets from the
+backup folder over the ones in the slicer's filament folder, and start Bambu Studio again.
+
+**Warning.** The sync runs exactly when Bambu Studio is closed, so it can run again between your closing Studio and
+your copy. Copy the files back quickly, or stop the sync first (Task Scheduler on Windows, `systemctl --user stop
+filament-kit-sync.timer` on Linux). The server still holds the newer build, so the restored presets show as
+"differing" there; they are not reverted on the server.
+
+**Unpair this PC.** `filament-kit-sync unpair` deletes the PC's token and settings and prints the PC's id. It does not
+turn off the scheduled sync, which keeps running every 10 minutes and logging that the PC is not paired. The server still
+counts this PC as the sync PC, so also run `sudo filament-kit unpair <id>` on the Ubuntu computer. Until you do, another
+PC's sync is refused with "Other PC".
+
+**Remove the program on Windows.** **Uninstall filament-kit sync** (Start menu, or Windows Settings, Apps) removes the
+scheduled sync and the program's entry on your PATH. It keeps the sync's data (pairing token, settings, backups,
+log) in `%LOCALAPPDATA%\filament-kit-sync`, so a later install is still paired. Presets already in the slicers stay. To
+leave the server for good, run `filament-kit-sync unpair` first and then `sudo filament-kit unpair <id>`, as above.
+
 ### PC sync on Linux
 
 The PC sync also runs on Linux (x86_64) with Bambu Studio and Orca Slicer, whether they are installed natively, as an
@@ -236,7 +270,7 @@ to update.
 (or type the server address and the 6-digit code), as on Windows.
 
 **Status.** `filament-kit-sync status` shows the server, the Bambu Studio and Orca Slicer folders it found, the last run
-and the installed build. `systemctl --user list-timers filament-kit-sync.timer` shows the next run. The log is
+(what stopped it, if it failed) and the installed build. `systemctl --user list-timers filament-kit-sync.timer` shows the next run. The log is
 `~/.local/share/filament-kit-sync/sync.log`. `filament-kit-sync run` runs one sync now.
 
 **While logged out.** The timer runs only while you are logged in. To run it while you are logged out too, run
@@ -257,7 +291,10 @@ them too, then run `sudo filament-kit unpair <id>` on the server. Presets alread
   [Stable and Beta Bambu Studio](#stable-and-beta-bambu-studio-v040)). To choose it, set `"variant"` in
   `~/.local/share/filament-kit-sync/config.json` to `BambuStudio`, `BambuStudioBeta`, `Flatpak BambuStudio` or
   `Flatpak BambuStudioBeta`.
-- The sync waits while Bambu Studio or Orca Slicer is open, including the Flatpak and AppImage versions.
+- The sync waits while Bambu Studio or Orca Slicer is open, including the Flatpak and AppImage versions. If it cannot
+  list the running programs (it cannot read `/proc`), it counts a slicer as running and waits. The log then says
+  Bambu Studio is open even if it is not, and closing Studio will not help. Check with `ps` that no slicer is running
+  and that `/proc` is readable by your user.
 - With the Orca AppImage, the Orca filament library is read from Orca's own copy under its data folder, because the
   AppImage's files can only be read while it runs.
 
@@ -293,7 +330,9 @@ Run these in a Terminal on the Ubuntu computer.
 | `sudo filament-kit config` | Settings menu: display name, storage locations, Claude model and daily limit, API key, printers, modules. |
 | `sudo filament-kit modules list` | Shows each module on or off and the mode. `modules set <mode>`, `modules enable <name>` and `modules disable <name>` change them (see [Change the mode later](#change-the-mode-later)); `modules apply` sets the computer up again from the saved settings. |
 | `sudo filament-kit printer map <serial>` | Maps a printer's AMS slots (see [Map slots](#map-slots)), printing each step. |
+| `sudo filament-kit printer report <serial>` | Makes a short file about a printer the kit doesn't know, or whose mapping failed, to attach to an issue. It holds no serial, address or name; read it first. |
 | `sudo filament-kit profiles status` / `build` | Shows or rebuilds the Bambu Studio and Orca Slicer presets (see [Presets](#presets-in-bambu-studio)). |
+| `sudo filament-kit profiles apply-updates --all` (or `--line <id>`; add `--dry-run` to only look) | Writes the updated presets you accept over the ones in the primary Bambu Studio folder (see [Stable and Beta Bambu Studio](#stable-and-beta-bambu-studio-v040)). |
 | `sudo filament-kit profiles lines` / `set-parent <line_id> <parent>` | Lists the filament lines; sets a line's Bambu Studio parent (`--orca`: its Orca Slicer parent). |
 | `sudo filament-kit profiles restore-deleted` | Brings back, at the next build, the generated presets you deleted in Bambu Studio. |
 | `sudo filament-kit library status` / `update` / `rollback` | The spec library (see [Spec library updates](#spec-library-updates)). |
@@ -348,10 +387,18 @@ Then run **Map slots** (next section), and load spools into the printer from the
 Before the server takes filament off your spools in Spoolman, it has to learn how the printer numbers its AMS
 slots. **Map slots** in the app (or `sudo filament-kit printer map <serial>` on the Ubuntu computer) does that:
 
-- It briefly changes each slot's colour on the printer to a test colour, checks which slot showed it, and puts
-  every slot back as it was.
+- It briefly changes the colour of each AMS slot that holds filament, and of each external holder, to a test colour,
+  checks which slot showed it, and puts every slot back as it was. An AMS slot that the printer reports as empty is
+  skipped.
 - It then runs a short calibration job that has **no heating and no motion** (only comments and a wait), so
   the printer reports which slot it used for each filament. The job file is deleted afterwards.
+- External holders (a spool holder outside the AMS, numbered as its own id) stay out of the calibration job and keep
+  their own ids, and so do empty AMS slots. A printer with no AMS unit needs no job: its holders keep their own ids
+  and it maps without one.
+- A printer can end up mapped with no named numbering scheme. Slots that are empty today show as "no number yet"
+  until a spool is loaded in them and the printer is mapped again.
+- On a printer whose numbers fit no known scheme, mapping may run one short job per scheme, so it takes longer than
+  a single job.
 - The printer must be **idle** (not printing, paused or preparing) and online, or mapping is refused.
 
 Until mapping succeeds, filament use is **only logged** (you can see it in the app's usage list) and nothing is
@@ -415,7 +462,7 @@ data stays in use), and status names it.
 
 The server builds one Bambu Studio filament preset for each filament line you own (a line is a brand's product,
 for example one brand's PLA, without the colour), for each of your printers and each nozzle size. The PC sync
-then installs them in every Bambu Studio folder on the PC ([Stable and Beta Bambu Studio](#stable-and-beta-bambu-studio-v040)); presets already there are never replaced.
+then installs them in every Bambu Studio folder on the PC ([Stable and Beta Bambu Studio](#stable-and-beta-bambu-studio-v040)); presets already there are never replaced unless you accept an update.
 
 - Names look like `<brand> <line> @Bambu Lab <printer> <nozzle> nozzle`.
 - Spoolman data for your filaments wins over the library, and the library wins over Bambu's own starting preset
@@ -519,7 +566,7 @@ the `station` module, on the server computer (`all-in-one`) or on a second compu
   build and flash it: [station/PANEL.md](../station/PANEL.md).
 - Optional: a speaker (USB or the computer's headphone socket) for the scan beep when there is no panel.
 - Optional, with the panel: a **BME280** sensor for room temperature and humidity, a small speaker on the panel
-  (it says things like "Held, 1042 grams") and a **USB webcam** that takes a picture of the spool when you press
+  (it says things like "1042 grams. Hold yellow to save.") and a **USB webcam** that takes a picture of the spool when you press
   Hold. All of it is in [station/PANEL.md](../station/PANEL.md). The station installs `espeak-ng` and `ffmpeg` for
   the speech and the picture, and its user joins the `video` group to read the camera.
 
@@ -661,7 +708,7 @@ spools does a dry run first in both, as in the Android app.
    "web": {"public_url": "https://filament.example.com/filament"}
    ```
 
-3. Set the passphrase (at least 12 characters; you type it twice and nothing shows):
+3. Set the passphrase (at least 12 characters; you type it twice and each character shows as a `*`):
 
    ```
    sudo filament-kit web passphrase
@@ -676,8 +723,9 @@ spools does a dry run first in both, as in the Android app.
 
    `web status` shows the public address, the connector and phone app addresses, whether the passphrase is set,
    whether the service answers, and how many connectors are signed in. No line should start with
-   `FAIL`. (`modules enable web` stops with an error when `web.public_url` is not set; the Modules checklist in
-   `sudo filament-kit config` asks for the address instead, so steps 2 and 4 can be done there in one go.)
+   `FAIL`. (At a terminal, `modules enable web` asks for `web.public_url` if it is not set; without a terminal it stops
+   with an error. The Modules checklist in `sudo filament-kit config` asks for it too, so steps 2 and 4 can be done
+   there in one go.)
 
 ### Add the connector in Claude
 
@@ -699,6 +747,23 @@ network. Elsewhere they say that they only work on the home network. Claude's se
 `192.168.0.0/16` and `10.0.0.0/8` by default (not `172.16.0.0/12`, where Docker's bridges live); set your own
 in `"web": {"lan": ["198.51.100.0/24"]}` (each entry a network; `modules apply` refuses a bad one). Five wrong passphrases
 lock the connector's sign-in for 10 minutes.
+
+### The home network ranges (web.lan)
+
+The ranges above are IPv4. A phone or computer that reaches the web address over IPv6 is refused with "This device
+reached the server over IPv6" until you add your home network's IPv6 prefix. (The setup page is IPv4 only.) To do it:
+
+1. On the server, find your prefix: `ip -6 addr show scope global`. A line such as
+   `inet6 2001:db8:1234:5678::abcd/64` has the prefix `2001:db8:1234:5678::/64`: the first four groups of the address,
+   then `::/64`. (`2001:db8` is the range reserved for examples; yours comes from your provider and can change.)
+2. Edit `/etc/filament-kit/config.json` (for example `sudo nano /etc/filament-kit/config.json`) and set the list. Your list
+   replaces the default, so keep the IPv4 ranges you want in it:
+
+   ```
+   "web": {"lan": ["192.168.0.0/16", "10.0.0.0/8", "2001:db8:1234:5678::/64"]}
+   ```
+
+3. Apply it: `sudo filament-kit modules apply`. It refuses an entry that is not a network.
 
 ## Remote access
 
@@ -808,6 +873,8 @@ each computer are in [Moving from filament-ops](migrate-from-filament-ops.md). I
 kit, installs it (no questions) and starts it again. It keeps your spools, settings, key and paired phones, and the
 version it replaced: `sudo filament-kit update --rollback` goes back to that one. `sudo filament-kit update --check`
 only says whether there is a newer release. It does nothing while a printer is mapping slots or loading a spool.
+If an update fails, the previous version is put back and the daily timer does not try the failed version again until
+a newer release appears; `sudo filament-kit update` by hand tries it again.
 
 Automatic updates: `sudo filament-kit modules enable updates` (off by default) checks once a day and installs a
 new release on its own; it never reinstalls a version you rolled back from. For a weekly check, set
@@ -836,6 +903,10 @@ filament-kit-sync apply-updates --folder BambuStudioBeta-1234567890 --all
 Use `--dry-run` first to see what would be written. New presets still arrive in that folder by themselves.
 
 By hand: download the newer `filament-kit-<version>.tar.gz`, unpack it and run `sudo ./install.sh` again.
+
+**Going back from v0.4.1 to v0.4.0.** `sudo filament-kit update --rollback` goes back to the release it replaced. The
+Spoolman allow-list (`/etc/systemd/system/spoolman.service.d/kit.conf`) stays in place after the rollback, and v0.4.0
+cannot change it: edit it by hand if a range needs adding, then restart Spoolman.
 
 **Going back from v0.4.0 to v0.3.0.** `sudo filament-kit update --rollback` goes back to the release it replaced.
 

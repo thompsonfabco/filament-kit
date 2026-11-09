@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "ApolloX Kevlar",
+  "material": "ASA",
+  "colors": [
+    "Black",
+    "Natural"
+  ],
+  "bambu_parent": "Bambu ASA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "255"
+    ],
+    "nozzle_temperature_range_high": [
+      "265"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "85-95",
+    "fan_max_speed": "0",
+    "_min_nozzle": "0.1",
+    "_enclosure": "not needed",
+    "_fiber_content": "10% aramid (Kevlar)",
+    "_hardened_nozzle_required": "recommended - the page warns that Kevlar-reinforced filaments contain a high concentration of extremely hard fibres",
+    "_notes": "Heat resistant up to 94 C. Sold in 1.75/2.85 mm. Density not published on the page reached. Bambu parent not confirmed."
+  },
+  "conflicts": [
+    "bed: 80-100 (3djake.com)",
+    "nozzle: 235-255 (3djake.com (Natural colour, international store))"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://formfutura.com/product/apollox-kevlar/",
+    "https://www.formfutura.com/apollox-kevlar",
+    "https://www.3djake.com/formfutura/apollox-kevlar-black"
+  ],
+  "updated": "2026-11-02"
+}

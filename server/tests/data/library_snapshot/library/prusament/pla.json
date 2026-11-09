@@ -40,18 +40,35 @@
     ],
     "nozzle_temperature_range_high": [
       "220"
+    ],
+    "filament_density": [
+      "1.24"
+    ],
+    "filament_diameter": [
+      "1.75"
     ]
   },
   "published_ranges": {
     "bed_all_plates": "40-60",
     "_fan_speed": "100",
     "_enclosure": "not required",
-    "_notes": "Product page prints nozzle '210 +/- 10' (fields = 200-220), bed 40-60, fan 100%, temperature resistance 55 C (metric not stated). Print surfaces listed: PEI, glass plate, painter's tape, glue stick. Official TDS is only published inside a >10 MB zip that could not be read, so density/diameter/HDT/tolerance were left out."
+    "_notes": "Official Prusament PLA/PLA (Blend) TDS v1.1 (16-02-2022), read from prusament.com as PDF (the >10 MB zip was not needed). Nozzle printed as '210 +/- 10' (single value, kept in published_ranges, not fields); density 1.24 ISO 1183; diameter '1.75 +/- 0.02 mm (+/- 0.03 mm for PLA Blend)'; HDT 0.45 MPa 55C and 1.80 MPa 55C (ISO 75); MFR, moisture absorption 0.13%/24h. No Vicat or drying in TDS; drying 45C 6 hours from Prusa Knowledge Base drying table ('PLA/rPLA'). prusament.com material page: temperature resistance 55C. No max volumetric speed published. Bambu Studio Prusament preset not confirmed; parent is Bambu's PLA Basic. Earlier entry: Product page prints nozzle '210 +/- 10' (fields = 200-220), bed 40-60, fan 100%, temperature resistance 55 C (metric not stated). Print surfaces listed: PEI, glass plate, painter's tape, glue stick. Official TDS is only published inside a >10 MB zip that could not be read, so density/diameter/HDT/tolerance were left out.",
+    "_nozzle_temperature": "210 +/- 10 (single printed value with tolerance; not put in fields per rules)",
+    "fan_max_speed": "100",
+    "_drying": "45C 6h",
+    "_diameter_tolerance": "+/-0.02",
+    "_max_print_speed": "up to 200 mm/s",
+    "_hdt_0.45MPa": "55 (ISO 75)",
+    "_hdt_1.80MPa": "55 (ISO 75)"
   },
-  "conflicts": [],
-  "source_quality": "official_page",
-  "sources": [
-    "https://prusament.com/materials/pla/"
+  "conflicts": [
+    "Reseller-hosted Polish TDS copy (kamami.pl, v1.0 27.07.2022, filed as PLA Blend) gives HDT 1.80 MPa 52.5C and diameter +/-0.03 - older version; v1.1 official value 55 kept"
   ],
-  "updated": "2026-11-01"
+  "source_quality": "official_tds",
+  "sources": [
+    "https://prusament.com/wp-content/uploads/2022/10/PLA_Prusament_TDS_2021_10_EN.pdf",
+    "https://prusament.com/materials/pla/",
+    "https://help.prusa3d.com/article/drying-filament_332086"
+  ],
+  "updated": "2026-11-02"
 }

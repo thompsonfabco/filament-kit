@@ -26,14 +26,17 @@
     "_hdt_0.45MPa": "55 (ASTM D648)",
     "_vitrification": "55 (Tg, DSC)",
     "_ams": "Compatible with BambuLab AMS (new spool system)",
-    "_notes": "Bed surfaces: smooth PEI + masking tape or adhesive, textured PEI + adhesive, glass + masking tape or adhesive. Page lists '75-100%' under printing parameters (labelled humidity). NatureWorks Ingeo base resin."
+    "_notes": "Page labels the 75-100% figure 'Humidity'; sibling pages (FiberWood S2, Velvet PLA) print the same field as 'Airflow: 75-100%', so it is the cooling-fan range. Build surface: Smooth PEI + masking tape or adhesive; Textured PEI + adhesive; Glass + masking tape or adhesive. Product spelling may need matching to the existing library name. Earlier entry: Bed surfaces: smooth PEI + masking tape or adhesive, textured PEI + adhesive, glass + masking tape or adhesive. Page lists '75-100%' under printing parameters (labelled humidity). NatureWorks Ingeo base resin.",
+    "fan_min_speed/fan_max_speed": "75-100"
   },
   "conflicts": [
     "bed_all_plates: 50-70 (source: official TDS https://fiberlogy.com/app/uploads/2026/07/FIBERLOGY_FIBERSILK_TDS.pdf)"
   ],
   "source_quality": "official_page",
   "sources": [
+    "https://fiberlogy.com/en/product/fibersilk-pla-filament-s2/",
+    "https://fiberlogy.com/en/product/fiberwood-filament-s2/",
     "https://fiberlogy.com/en/filaments/pla-en/pla-fibersilk-en/"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

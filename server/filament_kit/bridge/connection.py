@@ -122,6 +122,17 @@ def modules_from_version(info) -> dict[str, str]:
     return out
 
 
+def firmware_from_version(info) -> list[dict]:
+    """[{"name", "version"}] from a `get_version` reply, for the printer report: name and sw_ver only (`sn` is a serial)."""
+    if not isinstance(info, dict) or info.get('command') != 'get_version':
+        return []
+    out = []
+    for m in info.get('module') if isinstance(info.get('module'), list) else []:
+        if isinstance(m, dict) and isinstance(m.get('name'), str) and isinstance(m.get('sw_ver'), str):
+            out.append({'name': m['name'], 'version': m['sw_ver']})
+    return out
+
+
 class PrinterConnection:
     def __init__(self, printer: registry.Printer, client_factory: Callable, port: int = PORT,
                  listeners: list[Callable] | None = None):
@@ -276,6 +287,9 @@ class PrinterConnection:
         mods = modules_from_version(payload.get('info'))
         if mods:      # merged like a report delta (a dict: later replies add to it)
             pr = {**pr, layout.MODULES: mods} if isinstance(pr, dict) else {layout.MODULES: mods}
+        firmware = firmware_from_version(payload.get('info'))
+        if firmware:
+            pr = {**pr, layout.FIRMWARE: firmware} if isinstance(pr, dict) else {layout.FIRMWARE: firmware}
         ask = False
         if isinstance(pr, dict):
             with self._changed:
@@ -313,6 +327,12 @@ class PrinterConnection:
     def report(self) -> dict:
         with self._lock:
             return self._report
+
+    def forget_report_key(self, key: str) -> None:
+        """Drop `key` from the kept report, so the next value seen is one the printer has sent since."""
+        with self._changed:
+            if key in self._report:
+                self._report = {k: v for k, v in self._report.items() if k != key}
 
     def wait_report(self, predicate: Callable[[dict], bool], timeout: float) -> dict | None:
         """The merged report as soon as `predicate(report)` is true: checked on the current report, then after each
@@ -660,6 +680,11 @@ class Manager:
         `result` "success" means accepted, not applied: confirm it with `wait_report` (a later report shows it)."""
         addressing = hardware.load().model(self.model(serial)).external_addressing
         return self.publish(serial, slot_setting(ams_id, tray_id, setting, kind, addressing), timeout)
+
+    def forget_report_key(self, serial: str, key: str) -> None:
+        c = self._conns.get(serial)
+        if c is not None:
+            c.forget_report_key(key)
 
     def wait_report(self, serial: str, predicate: Callable[[dict], bool], timeout: float) -> dict | None:
         """Wait up to `timeout` s for the printer's merged report to satisfy `predicate` and return that report;

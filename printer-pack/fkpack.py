@@ -37,6 +37,7 @@ import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PARTS = ("spool", "check", "loadtemp", "nfc", "lasttag", "moonraker")
+SCRIPT_MOONRAKER = 'MOONRAKER = "http://localhost:7125"'    # the line in scripts/*.py that install replaces
 INCLUDE = "[include filament-kit/*.cfg]"
 SAVE_CONFIG = "#*# <---------------------- SAVE_CONFIG ---------------------->"
 IDLE = ("standby", "complete", "cancelled", "error")
@@ -210,6 +211,13 @@ class Pack:
     def has_shell_command(self):
         return os.path.exists(os.path.join(self.klipper_dir, "klippy", "extras", "gcode_shell_command.py"))
 
+    def _script(self, rel):
+        """A pack script as it is installed: talking to this printer's Moonraker (--moonraker), not the default."""
+        text = self._read_pack(rel)
+        if SCRIPT_MOONRAKER not in text:
+            raise PackError("{} in the pack does not name its Moonraker".format(rel))
+        return text.replace(SCRIPT_MOONRAKER, "MOONRAKER = {}".format(json.dumps(self.moonraker)))
+
     def part_scripts(self, m, which):
         if not self.has_shell_command():
             self.out("  {}: skipped, Klipper has no gcode_shell_command extra (install it with KIAUH first)".format(
@@ -217,11 +225,11 @@ class Pack:
             return False
         scripts = os.path.join(self.dest, "scripts")
         if which == "check":
-            self.write(m, "scripts/fk_spool_check.py", self._read_pack("scripts/fk_spool_check.py"), 0o755)
+            self.write(m, "scripts/fk_spool_check.py", self._script("scripts/fk_spool_check.py"), 0o755)
             self.write(m, "fk_spool_check.cfg", self._read_pack("cfg/fk_spool_check.cfg").replace("@PACK@", self.dest))
             self.out("  spool check written: call _FK_SPOOL_CHECK FILAMENT=... VENDOR=... in your print start macro")
         else:
-            self.write(m, "scripts/fk_load_temp.py", self._read_pack("scripts/fk_load_temp.py"), 0o755)
+            self.write(m, "scripts/fk_load_temp.py", self._script("scripts/fk_load_temp.py"), 0o755)
             self.write(m, "scripts/fk_load_temp.sh", self._read_pack("scripts/fk_load_temp.sh"), 0o755)
             self.write(m, "fk_load_temp.cfg", self._read_pack("cfg/fk_load_temp.cfg").replace("@PACK@", self.dest))
             self.out("  load temperature written: _FK_LOAD_LOOKUP.temp holds the active spool's temperature")

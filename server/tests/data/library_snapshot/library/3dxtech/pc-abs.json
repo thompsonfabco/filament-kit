@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "PC/ABS",
+  "material": "PC/ABS",
+  "colors": [],
+  "bambu_parent": "Bambu PC",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "280"
+    ],
+    "nozzle_temperature_range_high": [
+      "310"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "110-120",
+    "_drying": "120C 4+h",
+    "_vitrification": "147 (Tg, product page)",
+    "_enclosure": "Heated chamber not required",
+    "_notes": "Official page '3DXMAX PC/ABS' (low-gloss). Upper nozzle bound 310C exceeds 300C limit of X1/P1/P2S - print at the low end. Density not read from official TDS this run. bambu_parent unconfirmed (no Bambu PC/ABS preset)."
+  },
+  "conflicts": [
+    "Tg 137C (3DXTech Amazon listing (per subagent))",
+    "drying 110C max 4h (older official drying-instructions page)"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.3dxtech.com/products/3dxmaxa-r-pc-abs",
+    "https://www.3dxtech.com/pages/filament-drying-instructions",
+    "https://www.3dxtech.com/pages/drying-instructions"
+  ],
+  "updated": "2026-11-02"
+}

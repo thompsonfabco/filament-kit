@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "CarbonX HTN+CF (PPA)",
+  "material": "PPA-CF",
+  "colors": [],
+  "bambu_parent": "Bambu PPA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "285"
+    ],
+    "nozzle_temperature_range_high": [
+      "315"
+    ],
+    "filament_density": [
+      "1.24"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "110-120",
+    "_drying": "120C 4h",
+    "_vitrification": "125 (Tg, DSC)",
+    "_hdt_0.45MPa": "240",
+    "_hardened_nozzle_required": "Yes (carbon fiber)",
+    "_notes": "Official page + CarbonX CF HTN TDS Rev 2.0 (official CDN): Tm 265C. Upper nozzle bound 315C exceeds 300C on X1/P1/P2S."
+  },
+  "conflicts": [
+    "HDT 200C, tensile 106 MPa (official product page benefits list (description on same page says 240C / 87 MPa))"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://www.3dxtech.com/products/carbonx-htn-cf",
+    "https://cdn.shopify.com/s/files/1/0625/4185/6821/files/CarbonX_CF_HTN_TDS_v2.pdf?v=1723942768",
+    "https://www.3dxtech.com/pages/filament-drying-instructions"
+  ],
+  "updated": "2026-11-02"
+}
