@@ -49,7 +49,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Callable
 
-from .. import config
+from .. import __version__, config
 from ..pairing import _write_atomic, make_state_dir, open_lock
 from . import ams, calib3mf, hardware, layout, printer_report, registry, slottest, snapshot, status
 from .connection import PrinterOffline, UnknownPrinter
@@ -135,7 +135,7 @@ def _save_status(serial: str, job: _Job) -> None:
     try:
         d = _dir(serial)
         make_state_dir(d)
-        data = {"job_id": job.id, "state": job.state, "step": job.step, "problems": job.problems,
+        data = {"kit": __version__, "job_id": job.id, "state": job.state, "step": job.step, "problems": job.problems,
                 "notes": job.notes, "scheme_unsettled": job.scheme_unsettled,
                 "report_wanted": job.report_wanted, "trail": job.trail, "started": job.started, "finished": job.finished}
         _write_atomic(d / STATUS_FILE, json.dumps(data, indent=2).encode("utf-8"), 0o600, state_owned=True)
@@ -164,7 +164,9 @@ def _load_status(serial: str) -> dict | None:
         return None
     probs, notes = d.get("problems"), d.get("notes")
     finished = d.get("finished")
-    return {"job_id": str(d.get("job_id") or ""), "state": d["state"], "step": str(d.get("step") or ""),
+    kit = d.get("kit")
+    return {"kit": kit if isinstance(kit, str) else None,
+            "job_id": str(d.get("job_id") or ""), "state": d["state"], "step": str(d.get("step") or ""),
             "problems": [str(p) for p in probs] if isinstance(probs, list) else [],
             "notes": [str(n) for n in notes] if isinstance(notes, list) else [],
             "scheme_unsettled": d.get("scheme_unsettled") is True,
@@ -605,12 +607,13 @@ class Mapper:
         (not problems); `scheme_unsettled` = several numbering schemes fit and the model's first was taken, the reason
         to map again after loading a second unit (a client keys on this, never on a note's text); `report_wanted` =
         why a printer report would help (printer_report.WANTED), None when it wouldn't; `report_why` = that as a sentence;
+        `kit` = the kit version that ran that job (None: before 0.4.3 wrote it, or no job yet);
         `problems_old` = the problems are from a job an earlier server run finished, so an update or
         a fix since may have dealt with them: they say what happened then, not what is wrong now, and they never
         stop a new mapping; `finished` = when that job ended (epoch seconds, None: not known or still running)."""
         with self._lock:
             j = self._jobs.get(serial)
-            mine = None if j is None else {"job_id": j.id, "state": j.state, "step": j.step,
+            mine = None if j is None else {"kit": __version__, "job_id": j.id, "state": j.state, "step": j.step,
                                            "problems": list(j.problems), "notes": list(j.notes),
                                            "scheme_unsettled": j.scheme_unsettled,
                                            "report_wanted": j.report_wanted, "trail": j.trail,
@@ -641,7 +644,7 @@ class Mapper:
                 "scheme_unsettled": st.get("scheme_unsettled", False),
                 "report_wanted": st.get("report_wanted"), "report_why": printer_report.why(st.get("report_wanted")),
                 "problems_old": old,
-                "finished": st.get("finished"), "stale": m.stale, "remapping": remapping,
+                "finished": st.get("finished"), "kit": st.get("kit"), "stale": m.stale, "remapping": remapping,
                 "scheme": m.scheme, "suspect": m.suspect}
 
 

@@ -513,3 +513,47 @@ def test_a_job_another_process_finished_just_now_is_not_old(tmp_path, monkeypatc
     monkeypatch.setattr(mapping, "_STARTED", 100.0)
     _status(SERIAL, finished=200.0)
     assert mapping.Mapper(_NoManager()).view(SERIAL)["problems_old"] is False
+
+
+
+# The report of 2026-11-08 23:34: "the printer reported no slot" for Ext-L and Ext-R, and [0, 1, 2, 3] fitting no scheme. Those
+# lines came from the job of 0.4.0 and before, with the holders in it. This kit can't say them, however the job ends.
+@pytest.mark.parametrize("error", [None, 7])
+def test_the_x2d_report_cannot_come_from_this_kit(fake_ftp, x2d, error):
+    m = FakeManager(fake_ftp.root, report=x2d_report())
+    m.final, m.print_error = "FAILED", error
+    r = calib3mf.run(m, SERIAL, x2d_map(m.report))
+    assert r.consistent is True and r.scheme == "shift8" and r.external == ["Ext-L", "Ext-R"], r.problems
+    assert jobs(m)[0]["ams_mapping"] == [0, 1, 2, 3]
+    text = " ".join(r.problems)
+    assert "reported no slot" not in text and "fit no numbering" not in text
+
+
+def test_a_failed_job_blames_the_job_not_the_numbering(fake_ftp, x2d):
+    class Wrong(FakeManager):
+        def _native(self, pr):
+            return [40, 41, 42, 43]
+    m = Wrong(fake_ftp.root, "native", report=x2d_report())
+    m.final, m.print_error = "FAILED", 7
+    r = calib3mf.run(m, SERIAL, x2d_map(m.report))
+    assert r.consistent is False
+    assert any("the job failed on the printer" in p for p in r.problems)
+    assert not any("fit no numbering" in p for p in r.problems)
+
+
+def test_a_short_list_says_so(fake_ftp, x2d):
+    class Short(FakeManager):
+        def _native(self, pr):
+            return [0, 1]
+    m = Short(fake_ftp.root, "native", report=x2d_report())
+    r = calib3mf.run(m, SERIAL, x2d_map(m.report))
+    assert r.consistent is False
+    assert any("aren't one for each of the 4 filaments" in p for p in r.problems)
+    assert any("A3: the printer reported no slot" in p for p in r.problems)
+
+
+def test_the_map_view_says_which_kit_ran_the_job():
+    from filament_kit import __version__
+    assert mapping.Mapper(_NoManager()).view(SERIAL)["kit"] is None
+    mapping.record_seeded(SERIAL, "done")
+    assert mapping.Mapper(_NoManager()).view(SERIAL)["kit"] == __version__

@@ -981,8 +981,11 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
         for label, s_, v in zip(labels, sent, vals):
             if v is not None and v != s_:
                 res.problems.append(f"{label}: sent slot {s_}, the printer reported {v}")
-        res.problems.append(f"the reported slot numbers {list(res.mapping)} fit no numbering scheme of this "
-                            f"printer model ({', '.join(candidates)})")
+        # not the scheme's fault: a job that failed may never have read our file, and a short list numbers nothing
+        res.problems.append(f"the job failed on the printer, so the numbers it reported {list(res.mapping)} say nothing about "
+                            "how it numbers its slots" if not clean else
+                            f"the printer's numbers {list(res.mapping)} aren't one for each of the {len(labels)} filaments, so "
+                            "they prove no numbering")
     elif res.scheme is None:
         log.info("printer %s: the reported numbers %s fit no scheme (%s); keeping them as they are", serial, vals,
                  ", ".join(candidates))

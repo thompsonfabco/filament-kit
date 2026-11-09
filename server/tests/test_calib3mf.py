@@ -725,7 +725,7 @@ def test_second_job_only_when_a_finished_job_fits_no_candidate(fake_ftp, printer
     m.reads = "shift8"
     r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
     assert r.consistent is True and r.scheme == "shift8", r.problems
-    assert r.tried == ["legacy", "shift8"] and len(r.attempts) == 1 and "fit no numbering" in r.attempts[0]
+    assert r.tried == ["legacy", "shift8"] and len(r.attempts) == 1 and "prove no numbering" in r.attempts[0]
     assert [p["ams_mapping"] for p in jobs(m)] == [[0, 2, 128, 129], [0, 2, 32768, 33024]]
     assert r.decoding == {"A1": 0, "A3": 2, "HT-A": 32768, "HT-B": 33024}
     assert r.problems == []
