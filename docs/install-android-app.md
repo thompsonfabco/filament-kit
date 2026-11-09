@@ -98,8 +98,8 @@ below, which happens when you install a downloaded file over an older copy signe
 
 ## Common problems
 
-- **"App not installed"**: the phone has an older copy signed by someone else, for example a test build. Uninstall
-  the old app first (your spools are on the server, not the phone), then install again.
+- **"App not installed"** (when you install a downloaded file yourself, from outside the app): the phone has an older
+  copy signed by someone else, for example a test build. Uninstall the old app first (your spools are on the server, not the phone), then install again.
 - **The download from your server fails** ("no app package is installed on this server"): the server's copy
   is only there when it was installed from a release. Use the GitHub download instead.
 - **No servers found, or "Connecting..." never finishes**:
