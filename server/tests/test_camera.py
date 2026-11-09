@@ -234,6 +234,7 @@ def _relay_threads():
     return [t for t in threading.enumerate() if t.name.startswith("cam-relay") and t.is_alive()]
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="on Windows shutdown() doesn't wake a blocked recv; the server runs on Linux")
 @pytest.mark.parametrize("how", ["stop", "client_gone"])
 def test_no_relay_thread_outlives_its_sockets(tmp_path, how):
     """A thread waiting on a socket another thread closed goes on to read that file number, whichever connection has it

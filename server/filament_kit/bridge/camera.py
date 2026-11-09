@@ -260,7 +260,7 @@ class RtspRelay:
 
 
 def _wake(s) -> None:
-    """A thread waiting on `s` returns now. Only that wakes it: close() in another thread doesn't."""
+    """On Linux, where the server runs, a thread waiting on `s` returns now. Only that wakes it: close() in another thread doesn't."""
     try:
         s.shutdown(socket.SHUT_RDWR)
     except OSError:
