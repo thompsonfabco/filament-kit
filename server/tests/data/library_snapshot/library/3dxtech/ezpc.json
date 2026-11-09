@@ -17,21 +17,29 @@
     ],
     "filament_diameter": [
       "1.75"
+    ],
+    "filament_density": [
+      "1.2"
     ]
   },
   "published_ranges": {
     "bed_all_plates": "90-110",
     "_print_speed": "40-60 mm/s",
-    "_drying": "80C 4h",
+    "_drying": "80C 4+h",
     "_vitrification": "118 (Tg)",
     "_diameter_tolerance": "+/-0.05",
-    "_enclosure": "Heated chamber not required",
-    "_notes": "Values from MatterHackers (authorized reseller) listing reproducing 3DXTech print recommendations; official page unreachable (HTTP 429). Drying stated as 80C for 4+ hours. No part-cooling fan; bed prep Magigoo PC. Listing gives HDT 112C with no test load stated. Density not read from an official source."
+    "_enclosure": "Heated chamber recommended (product page block), though benefits text says 'no heated chamber needed'",
+    "_notes": "Nozzle/bed/Tg/HDT from official product page. Density 1.2 (ISO 1183) from SpoolScout's transcription of the ezPC TDS (TDS Rev 1.0 also indexed on directindustry); official PDF not read directly. Earlier entry: Values from MatterHackers (authorized reseller) listing reproducing 3DXTech print recommendations; official page unreachable (HTTP 429). Drying stated as 80C for 4+ hours. No part-cooling fan; bed prep Magigoo PC. Listing gives HDT 112C with no test load stated. Density not read from an official source.",
+    "_hdt_0.45MPa": "112",
+    "_min_nozzle": "0.4"
   },
   "conflicts": [],
-  "source_quality": "reseller_tds_copy",
+  "source_quality": "official_page",
   "sources": [
+    "https://www.3dxtech.com/product/ezpc/",
+    "https://www.spoolscout.com/data-sheets/3dxtech/pc-ezpc",
+    "https://www.3dxtech.com/pages/filament-drying-instructions",
     "https://www.matterhackers.com/store/l/3dxtech-ezpc-polycarbonate-filament-075kg/sk/M75SQX9Q"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

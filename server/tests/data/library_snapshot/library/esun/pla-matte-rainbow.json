@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "PLA-Matte Rainbow",
+  "material": "PLA",
+  "colors": [
+    "Rainbow A",
+    "Rainbow B",
+    "Rainbow C"
+  ],
+  "bambu_parent": "Bambu PLA Matte",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "230"
+    ],
+    "filament_density": [
+      "1.329"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "65",
+    "fan_max_speed": "100%",
+    "_drying": "60C >8h",
+    "_print_speed": "<300mm/s",
+    "_hdt_0.45MPa": "50.2",
+    "_notes": "TDS MAR.2025 V1.0, with tests based on a Bambu P1S with a 0.4 mm nozzle. Bed 65C is a single value. Build plate: PEI. eSUN advises keeping the enclosure open. The colour names are taken from the eSUN store variants."
+  },
+  "conflicts": [],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://www.esun3d.com/media/esun/catalog/certification/product/PLA-Matte_Rainbow/PLA-Matte_Rainbow_TDS.pdf",
+    "https://www.esun3d.com/epla-matte-rainbow-2-product"
+  ],
+  "updated": "2026-11-02"
+}

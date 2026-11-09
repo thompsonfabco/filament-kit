@@ -9,13 +9,16 @@
   "bambu_parent": "Bambu PETG Basic",
   "fields": {
     "nozzle_temperature_range_low": [
-      "230"
+      "260"
     ],
     "nozzle_temperature_range_high": [
-      "260"
+      "280"
     ],
     "filament_diameter": [
       "1.75"
+    ],
+    "filament_density": [
+      "1.28"
     ]
   },
   "published_ranges": {
@@ -23,12 +26,21 @@
     "_drying": "65C 4h",
     "_diameter_tolerance": "+/-0.05",
     "_enclosure": "Heated chamber not required",
-    "_notes": "Values from MatterHackers (authorized reseller) listing; official page unreachable (HTTP 429). Do not exceed 270C (polymer degradation); higher extruder temps give higher conductivity. ESD: target surface resistance 10^7-10^9 ohm. Density/Tg not found."
+    "_notes": "Density/Tg/HDT from official TDS Rev 3.0 (Shopify CDN). Nozzle from official product page 'Wide processing range of 260-280C' (SKU PTG02ES100750BK00; 1.75/2.85mm; 750g/2kg). Bed range not captured (TDS specimen bed 70C). Tolerance from Filament2Print reseller; it also advises >=0.5mm nozzle to avoid clogging (not official). Earlier entry: Values from MatterHackers (authorized reseller) listing; official page unreachable (HTTP 429). Do not exceed 270C (polymer degradation); higher extruder temps give higher conductivity. ESD: target surface resistance 10^7-10^9 ohm. Density/Tg not found.",
+    "_vitrification": "80 (Tg, DSC)",
+    "_hdt_0.45MPa": "75"
   },
-  "conflicts": [],
-  "source_quality": "reseller_tds_copy",
+  "conflicts": [
+    "HDT 77 (0.45MPa) (3DXSTAT ESD-PETG TDS Rev 2.1 (directindustry))",
+    "nozzle_temperature_range_low: earlier library entry had 230 (sources: https://www.matterhackers.com/store/l/3dxtech-3dxstat-esd-safe-petg-filament/sk/M92E6QT0)",
+    "nozzle_temperature_range_high: earlier library entry had 260 (sources: https://www.matterhackers.com/store/l/3dxtech-3dxstat-esd-safe-petg-filament/sk/M92E6QT0)"
+  ],
+  "source_quality": "official_tds",
   "sources": [
+    "https://cdn.shopify.com/s/files/1/0625/4185/6821/files/3DXSTAT_ESD-PETG-TDS-v03.pdf?v=1723942764",
+    "https://www.3dxtech.com/products/3dxstat-esd-petg-1",
+    "https://filament2print.com/en/pet-petg-cpe/1277-3dxstat-esd-petg.html",
     "https://www.matterhackers.com/store/l/3dxtech-3dxstat-esd-safe-petg-filament/sk/M92E6QT0"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

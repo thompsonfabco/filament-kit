@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "MAX-G PCTG",
+  "material": "PCTG",
+  "colors": [],
+  "bambu_parent": "Generic PCTG",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "250"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-90",
+    "_drying": "65C 4h",
+    "_enclosure": "Heated chamber not required",
+    "_min_nozzle": "0.4",
+    "_notes": "Official product page. Density/Tg/HDT not retrieved (TDS MAXG_PCTG_TDS_v1.0 not read). bambu_parent unconfirmed."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.3dxtech.com/products/max-g-pctg-1",
+    "https://www.3dxtech.com/pages/filament-drying-instructions"
+  ],
+  "updated": "2026-11-02"
+}

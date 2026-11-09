@@ -10,21 +10,32 @@
       "190"
     ],
     "nozzle_temperature_range_high": [
-      "220"
+      "240"
+    ],
+    "filament_diameter": [
+      "1.75"
     ]
   },
   "published_ranges": {
     "bed_all_plates": "25-60",
-    "_print_speed": "60-150 mm/s ('normally print speed', Flashforge Filament Guide)",
+    "_print_speed": "60-350mm/s (higher speeds require higher temperatures)",
     "_density": "1.25-1.26 g/cm3 (ISO 1183, HS PLA TDS); published as a range only, so filament_density left unset",
     "_hdt_0.45MPa": "53 (ISO 75, 0.455 MPa, HS PLA TDS)",
-    "_notes": "The HS PLA TDS (2024-01-16, reseller-hosted copy) has an empty 'Recommended Printing Conditions' table (labels repeated, no values), so temperatures and speed come from the official Flashforge Filament Guide. MFR 10-20 g/10min (190C/2.16kg) vs 4-8 for Flashforge PLA. Continuous service temperature 50C. TDS test specimens printed on an Adventurer 5M with a 0.4 nozzle. The product page could not be read (HTTP 429), so drying, diameter and the page's own nozzle range are unverified."
+    "_notes": "190-240°C confirmed on a flashforge.com blog ('Flashforge HS PLA lists a nozzle range of 190°C to 240°C'); full block from reseller copy of the official spec. Diameter tolerance not published. Density: TDS gives only a range (not captured here). Earlier entry: The HS PLA TDS (2024-01-16, reseller-hosted copy) has an empty 'Recommended Printing Conditions' table (labels repeated, no values), so temperatures and speed come from the official Flashforge Filament Guide. MFR 10-20 g/10min (190C/2.16kg) vs 4-8 for Flashforge PLA. Continuous service temperature 50C. TDS test specimens printed on an Adventurer 5M with a 0.4 nozzle. The product page could not be read (HTTP 429), so drying, diameter and the page's own nozzle range are unverified.",
+    "fan_min_speed/fan_max_speed": "50-100",
+    "filament_retraction_length": "1-2",
+    "filament_retraction_speed": "30-50",
+    "_drying": "50C 5h"
   },
-  "conflicts": [],
-  "source_quality": "official_page",
+  "conflicts": [
+    "nozzle_temperature_range_high: earlier library entry had 220 (sources: https://wiki.flashforge.com/resource/filament_tips/flashforge_filament_guide.pdf, https://www.123-3d.nl/pdf/Flashforge_HS_PLA_TDS_EN.pdf)"
+  ],
+  "source_quality": "reseller_tds_copy",
   "sources": [
+    "https://3dprintersdepot.com/products/flashforge-hs-pla-1-75-mm-1kg-spool-3d-printer-filament",
+    "https://www.flashforge.com/blogs/news/pla-melting-point",
     "https://wiki.flashforge.com/resource/filament_tips/flashforge_filament_guide.pdf",
     "https://www.123-3d.nl/pdf/Flashforge_HS_PLA_TDS_EN.pdf"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

@@ -6,13 +6,13 @@
   "colors": [
     "Black"
   ],
-  "bambu_parent": "Bambu PA-CF",
+  "bambu_parent": "Bambu PA6-CF",
   "fields": {
     "nozzle_temperature_range_low": [
-      "250"
+      "240"
     ],
     "nozzle_temperature_range_high": [
-      "270"
+      "260"
     ],
     "filament_density": [
       "1.10"
@@ -22,21 +22,26 @@
     ]
   },
   "published_ranges": {
-    "bed_all_plates": "90-120",
+    "bed_all_plates": "90-100",
     "_drying": "60C 6h",
     "_enclosure": "Heated enclosure recommended",
     "_print_speed": "40mm/s (preferred: 0.6mm nozzle, 0.4mm layer, 255C extruder, 90C bed)",
-    "_hardened_nozzle_required": "yes - carbon fiber is abrasive, use a hardened steel nozzle",
-    "_fiber_content": "Polyamide PA6/66 + carbon fiber (TDS); loading not stated",
+    "_hardened_nozzle_required": "yes",
+    "_fiber_content": "~10% proprietary carbon fiber",
     "_hdt": "172 (ASTM D648, printed specimens; load not stated)",
-    "_notes": "Absorbs moisture rapidly - dry before printing. Colour assumed black."
+    "_notes": "Vendor: 'Extruder: 240-260°C. (Better layer bonding at higher temperatures)'; 'Increased heat resistance'. Vendor drying note: 'Nylon will absorb more moisture than other resins when left exposed' (no temperature/time published). Nylon base type (PA6/PA12) not stated, so parent is not confirmed. Earlier entry: Absorbs moisture rapidly - dry before printing. Colour assumed black.",
+    "_min_nozzle": "0.4mm or larger (0.6mm recommended)"
   },
-  "conflicts": [],
-  "source_quality": "official_tds",
-  "sources": [
-    "https://cdn.shopify.com/s/files/1/0260/7421/files/CFNylon_print_settings.pdf",
-    "https://cdn.shopify.com/s/files/1/0260/7421/files/Push_Plastic_CF_Nylon_Technical_Data_sheet.pdf",
-    "https://www.pushplastic.com/products/carbon-fiber-nylon-filament-1-75mm-500g"
+  "conflicts": [
+    "nozzle_temperature_range_low: earlier library entry had 250 (sources: https://cdn.shopify.com/s/files/1/0260/7421/files/CFNylon_print_settings.pdf, https://cdn.shopify.com/s/files/1/0260/7421/files/Push_Plastic_CF_Nylon_Technical_Data_sheet.pdf, https://www.pushplastic.com/products/carbon-fiber-nylon-filament-1-75mm-500g)",
+    "nozzle_temperature_range_high: earlier library entry had 270 (sources: https://cdn.shopify.com/s/files/1/0260/7421/files/CFNylon_print_settings.pdf, https://cdn.shopify.com/s/files/1/0260/7421/files/Push_Plastic_CF_Nylon_Technical_Data_sheet.pdf, https://www.pushplastic.com/products/carbon-fiber-nylon-filament-1-75mm-500g)"
   ],
-  "updated": "2026-11-01"
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.pushplastic.com/products/carbon-fiber-nylon-filament-1-75mm-500g",
+    "https://www.pushplastic.com/products/carbon-fiber-nylon-filament-1-75mm-2kg",
+    "https://cdn.shopify.com/s/files/1/0260/7421/files/CFNylon_print_settings.pdf",
+    "https://cdn.shopify.com/s/files/1/0260/7421/files/Push_Plastic_CF_Nylon_Technical_Data_sheet.pdf"
+  ],
+  "updated": "2026-11-02"
 }

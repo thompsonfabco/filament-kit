@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "vendor": "GEEETECH",
+  "product": "HS-PLA",
+  "material": "PLA",
+  "colors": [],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "220"
+    ],
+    "filament_density": [
+      "1.24"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_diameter_tolerance": "+/-0.03",
+    "_max_print_speed": "0-600 mm/s (Amazon DE title)",
+    "_notes": "'The best printing temperature: 210℃ - 220℃' (GEEETECH Amazon UK/DE). Density 1.24 (range 1.20-1.30) from a GEEETECH staff answer on support.geeetech.com. Bed temperature, drying and max volumetric speed not published as text (chart is an image)."
+  },
+  "conflicts": [
+    "nozzle: 185-220°C, bed 0-60°C, 50-150 mm/s (GEEETECH AliExpress store as quoted by Slickdeals (not verified))",
+    "nozzle: 210-230°C (geekbuying.com (reseller))"
+  ],
+  "source_quality": "brand_amazon_listing",
+  "sources": [
+    "https://www.amazon.co.uk/GEEETECH-HS-PLA-Filament-Printer-Printers/dp/B0BFVDQV4W",
+    "https://www.amazon.de/-/en/GEEETECH-Filament-Speed-Printing-Printer/dp/B0DR5VDVF2",
+    "https://support.geeetech.com/hspla-blue-3d-printer-filament-175mm-1kgroll-p-1399.html"
+  ],
+  "updated": "2026-11-02"
+}

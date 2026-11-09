@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "eABS-Max",
+  "material": "ABS",
+  "colors": [],
+  "bambu_parent": "Bambu ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "270"
+    ],
+    "filament_density": [
+      "1.05"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "95-110",
+    "fan_max_speed": "0%",
+    "_drying": "65C >4h",
+    "_print_speed": "<200mm/s",
+    "_hdt_0.45MPa": "85",
+    "_enclosure": "Closed-chamber printer required (large shrinkage)",
+    "_notes": "The official eabs-max-product URL now displays the product as 'ABS-FR' (UL94 V-0 flame retardant), so the importer may need an alias. The notes section of the same page also says drying at '65℃/> 3h'; the parameter table says '65 ℃/>4h'. A 2017 eSUN launch article gives 220-260C and bed 100-110C for the original eABS Max; the current page supersedes this."
+  },
+  "conflicts": [
+    "_drying: 65C >3h (https://www.esun3d.com/eabs-max-product (notes section))",
+    "nozzle_temperature_range: 220-260 (https://www.esun3d.com/news/eabs-max-announced/ (2017 launch article))"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.esun3d.com/eabs-max-product"
+  ],
+  "updated": "2026-11-02"
+}

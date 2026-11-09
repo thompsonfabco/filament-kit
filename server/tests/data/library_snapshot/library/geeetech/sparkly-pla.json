@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "vendor": "GEEETECH",
+  "product": "Sparkly PLA",
+  "material": "PLA",
+  "colors": [
+    "Purple",
+    "Blue"
+  ],
+  "bambu_parent": "Bambu PLA Basic",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "180"
+    ],
+    "nozzle_temperature_range_high": [
+      "210"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "50-67",
+    "_diameter_tolerance": "+/-0.02",
+    "_notes": "'Suggest printing temperature: 180℃-210℃, suggest heat bed: 50-67℃' (geeetech.com and support.geeetech.com). Staff suggestion: 195°C nozzle / 60°C bed. Speed, density and drying not published. Glitter-type additives may be abrasive; no hardened-nozzle statement published."
+  },
+  "conflicts": [
+    "diameter_tolerance: +/-0.03 (geekbuying.com (reseller))"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.geeetech.com/geeetech-sparkly-purple-pla-175mm-1kgroll-p-1218.html",
+    "https://support.geeetech.com/pla-sparkly-blue-3d-printer-filament-175mm-1kgroll-p-1217.html"
+  ],
+  "updated": "2026-11-02"
+}

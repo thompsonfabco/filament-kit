@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "AmideX PA6 Copolymer",
+  "material": "PA",
+  "colors": [],
+  "bambu_parent": "Generic PA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "255"
+    ],
+    "nozzle_temperature_range_high": [
+      "275"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-70",
+    "_drying": "90C 4h",
+    "_vitrification": "85 (Tg)",
+    "_enclosure": "Heated chamber not required",
+    "_min_nozzle": "0.4",
+    "_notes": "Currently sold as 'AMIDEX Nylon 6-66' (PA6/66 copolymer); mapping to the legacy 'AmideX PA6 Copolymer' name inferred, not stated by 3DXTech. Page: Tm 200C, tensile strength 60 MPa. Density not retrieved."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.3dxtech.com/products/amidex-nylon-6-67",
+    "https://www.3dxtech.com/pages/filament-drying-instructions"
+  ],
+  "updated": "2026-11-02"
+}

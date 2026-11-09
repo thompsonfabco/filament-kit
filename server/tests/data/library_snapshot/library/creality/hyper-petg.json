@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "vendor": "Creality",
+  "product": "Hyper PETG",
+  "material": "PETG",
+  "colors": [
+    "Black",
+    "White",
+    "Grey",
+    "Transparent",
+    "Red",
+    "Yellow",
+    "Green",
+    "Blue"
+  ],
+  "bambu_parent": "Bambu PETG HF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "190"
+    ],
+    "nozzle_temperature_range_high": [
+      "260"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "45",
+    "_drying": "50C >8h",
+    "_diameter_tolerance": "+/-0.05",
+    "_max_print_speed": "300 mm/s (official store page 'up to 300 mm/s'; Amazon bullet 'printing at 300mm/s')",
+    "fan_min_speed/fan_max_speed": "40/80 (Creality K2 Plus slicer settings blog)",
+    "_notes": "Nozzle 190-260, bed 45, drying 'dry at 50C for >8 hours', tolerance +/-0.05 from the Amazon listing B0D925X4SZ titled 'Official Creality Hyper PETG', sold by 'Creality CL Store' (Creality-branded store; title claims official). store.creality.com page lists colours and 'up to 300 mm/s', tensile 40-50 MPa, no temps. Creality's K2 Plus filament-settings blog gives single slicer values for Hyper PETG: nozzle 240C, hotbed 70C, max volumetric speed 23 mm3/s, fan 40/80%, layer time 30/8 s - printer-profile values for K2 Plus, so kept out of fields. No density, HDT or TDS found (manuals.plus TDS copy not reachable). Bambu parent not confirmed."
+  },
+  "conflicts": [
+    "Amazon title says 'High Speed 600mm/s' while bullet and official page say 300 mm/s",
+    "Resellers: 220-260 nozzle, bed 70-80 / 60-80 (from gap report, unverified)",
+    "Creality K2 Plus settings blog: nozzle 240, bed 70 (slicer profile, single values) - https://store.creality.com/blogs/all/creality-k2-plus-filament-parameters-settings",
+    "spoolscout/plahunter datasheet: 1.75 +/-0.05, 190-260, bed 45, 50-300 mm/s (matches Amazon bullets)"
+  ],
+  "source_quality": "brand_amazon_listing",
+  "sources": [
+    "https://www.amazon.com/dp/B0D925X4SZ",
+    "https://store.creality.com/products/hyper-series-petg-3d-printing-filament-1kg",
+    "https://store.creality.com/blogs/all/creality-k2-plus-filament-parameters-settings"
+  ],
+  "updated": "2026-11-02"
+}

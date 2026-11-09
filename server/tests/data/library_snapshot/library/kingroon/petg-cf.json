@@ -2,7 +2,7 @@
   "schema_version": 1,
   "vendor": "Kingroon",
   "product": "PETG-CF",
-  "material": "PETG",
+  "material": "PETG-CF",
   "colors": [
     "Black"
   ],
@@ -30,19 +30,22 @@
     "_drying": "65C 8h",
     "_max_print_speed": "<220 mm/s",
     "_min_nozzle": "0.4",
-    "_hardened_nozzle_required": "yes (kingroon.com page: 'Hardened Nozzle Required')",
+    "_hardened_nozzle_required": "'Hardened Nozzle Required' / 'Needs an abrasive-resistant steel nozzle for best results' (kingroon.com page)",
     "_hdt_0.45MPa": "74",
     "_vicat": "85",
     "_vitrification": "68 (Tg, DSC)",
-    "_notes": "TDS V1.0: Engineering Plate / High Temperature Plate / Textured PEI with glue; HDT 1.8 MPa 68 C; melting 225 C. TDS annealing text ('55-60 C, 65-70 hours', naming Bambu PETG-CF) looks copied and is not recorded. Sold as 'PETG Carbon Fiber Black'. Verification 2026-11-01: fields and plate/chamber/fan/retraction ranges confirmed against the TDS PDF; kingroon.com / kingroon3d.com product pages returned HTTP 429, so page-derived notes and conflicts were not re-checked."
+    "_notes": "TDS V1.0 (2025/12/1): nozzles 0.4/0.6/0.8, Engineering/High Temp/Textured PEI plate, HDT 1.8MPa 68C, melt 225C, fibre % not stated. Retraction/print-speed/chamber label mapping inferred from the flattened PDF layout (value order matches the other Kingroon V1.0 TDS sheets: retraction length, retraction speed, chamber temp, overhang, bridging ... printing speed). Page quotes and +/-0.03mm confirmed on kingroon.com 2026-11-02. Earlier entry: TDS V1.0: Engineering Plate / High Temperature Plate / Textured PEI with glue; HDT 1.8 MPa 68 C; melting 225 C. TDS annealing text ('55-60 C, 65-70 hours', naming Bambu PETG-CF) looks copied and is not recorded. Sold as 'PETG Carbon Fiber Black'. Verification 2026-11-01: fields and plate/chamber/fan/retraction ranges confirmed against the TDS PDF; kingroon.com / kingroon3d.com product pages returned HTTP 429, so page-derived notes and conflicts were not re-checked.",
+    "_diameter_tolerance": "+/-0.03"
   },
   "conflicts": [
+    "kingroon.com PETG Carbon Fiber page table: 230-250C, bed 70-90, fan 100%, HDT 72C(0.45MPa), drying 50C 8h",
     "kingroon.com PETG Carbon Fiber page: nozzle 230-250, bed 70-90, fan 100%, HDT 72 C (0.45 MPa), drying 50C 8h"
   ],
   "source_quality": "official_tds",
   "sources": [
-    "https://wiki.kingroon.com/kingroon_petg_cf_technical_data_sheet_v1.0.pdf",
-    "https://kingroon.com/products/kingroon-petg-carbon-fiber-black-filament"
+    "https://cdn.shopify.com/s/files/1/0722/0120/8047/files/KINGROON_PETG_CF_Technical_Data_Sheet_V1.0.pdf?v=1765295624",
+    "https://kingroon.com/products/kingroon-petg-carbon-fiber-black-filament",
+    "https://wiki.kingroon.com/kingroon_petg_cf_technical_data_sheet_v1.0.pdf"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

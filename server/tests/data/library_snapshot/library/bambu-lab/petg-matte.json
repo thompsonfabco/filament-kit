@@ -3,8 +3,17 @@
   "vendor": "Bambu Lab",
   "product": "PETG Matte",
   "material": "PETG",
-  "colors": [],
-  "bambu_parent": "Bambu PETG Matte",
+  "colors": [
+    "White",
+    "Black",
+    "Gray",
+    "Lime",
+    "Avocado Green",
+    "Baby Blue",
+    "Pink",
+    "Violet"
+  ],
+  "bambu_parent": "Bambu PETG Basic",
   "fields": {
     "nozzle_temperature_range_low": [
       "230"
@@ -20,25 +29,30 @@
     ]
   },
   "published_ranges": {
-    "bed_all_plates": "65-75 (glue stick/liquid glue recommended)",
+    "bed_all_plates": "65-75",
     "chamber_temperatures": "35-50",
     "filament_retraction_length": "0.4-0.8",
     "filament_retraction_speed": "30-60",
     "_print_speed": "<250 mm/s",
-    "_drying": "oven 65C 8h; X/P/H2 heatbed 80C 12h; AMS 2 Pro/AMS HT: 60C 12h (filament inserted) or 65C 8h (not inserted)",
-    "_ams": "AMS, AMS 2 Pro, AMS HT, AMS Lite compatible (TDS)",
-    "_min_nozzle": "TDS lists nozzle sizes 0.2, 0.4, 0.6, 0.8 mm",
-    "_vitrification": "71 (Tg, DSC 10C/min)",
-    "_vicat": "75.7 (ISO 306)",
+    "_drying": "65C 8h",
+    "_ams": "AMS, AMS 2 PRO, AMS HT, AMS Lite",
+    "_min_nozzle": "0.2 (0.2, 0.4, 0.6, 0.8 mm supported)",
+    "_vitrification": "71 (Tg, DSC)",
+    "_vicat": "75.7",
     "_hdt_0.45MPa": "72.3",
     "_hdt_1.8MPa": "71.2",
-    "_notes": "TDS V1.0 (reseller-hosted copy linked from 3DJake). Plates: Textured PEI, Smooth PEI, Cool Plate SuperTack. Cooling fan: turn on. Support material: Support for PLA/PETG. Melting temp 160C (DSC) as printed. Max overhang ~70 deg, bridging ~30 mm."
+    "_notes": "Cooling fan is printed only as 'Turn on'; no fan % range is published. Other drying options: X/P/H2 printer heatbed at 80C for 12 h; AMS 2 Pro / AMS HT at 60C for 12 h (filament inserted) or 65C for 8 h (not inserted). Plates: Textured PEI, Smooth PEI or Cool Plate SuperTack, with glue recommended. Bambu says PETG Matte is not recommended as a support for PLA. Launch date 2026-09-28 per Bambu's own forum post 'PETG Matte is here! Prints like PLA, lasts like PETG' (forum.bambulab.com/t/260388), which, per its search preview, says it 'is available now in Bambu Lab Store in 8 vibrant colors'. The individual colour names come from secondary coverage (3dprintpricing.pro). A Bambu PETG Matte system preset was not confirmed, so the parent is PETG Basic. Earlier entry: TDS V1.0 (reseller-hosted copy linked from 3DJake). Plates: Textured PEI, Smooth PEI, Cool Plate SuperTack. Cooling fan: turn on. Support material: Support for PLA/PETG. Melting temp 160C (DSC) as printed. Max overhang ~70 deg, bridging ~30 mm.",
+    "_diameter_tolerance": "+/-0.03",
+    "_annealing": "60-70C, 6-12 h"
   },
   "conflicts": [],
-  "source_quality": "reseller_tds_copy",
+  "source_quality": "official_tds",
   "sources": [
+    "https://store.bblcdn.com/s7/default/cce5108890a648e8ba6674747cb00086/PETG_Matte.pdf",
+    "https://us.store.bambulab.com/products/petg-matte?id=773790146574200858",
+    "https://3dprintpricing.pro/en/blog/bambu-lab-petg-matte-new-filament",
     "https://3d.nice-cdn.com/upload/file/PETG_Matte.pdf",
     "https://www.3djake.com/bambu-lab/petg-matte-gray-1"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

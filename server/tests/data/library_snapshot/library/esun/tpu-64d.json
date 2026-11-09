@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "TPU-64D",
+  "material": "TPU",
+  "colors": [],
+  "bambu_parent": "Bambu TPU 95A HF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.21"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "0-60",
+    "fan_max_speed": "100%",
+    "_drying": "80C 4-8h",
+    "_print_speed": "0-200mm/s",
+    "_hardness": "64D",
+    "_ams": "Product page states 'Compatible with AMS'",
+    "_notes": "TDS JUL.2024 V1.0, gathered by a research sub-agent. HDT is printed as N/A. The product page instead recommends 60C >8h for spools left unused. The TDS printing tips mention 'ABS-CF', so the TDS template may be partially copied."
+  },
+  "conflicts": [
+    "_drying: 60C >8h (https://www.esun3d.com/tpu64d-product)"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://www.esun3d.com/uploads/TPU-64D-TDS.pdf",
+    "https://www.esun3d.com/tpu64d-product?language_url_market=en_US&language_url_store_code=en_US"
+  ],
+  "updated": "2026-11-02"
+}

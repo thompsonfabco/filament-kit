@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "vendor": "3DXTech",
+  "product": "AmideX PA6-GF30",
+  "material": "PA6-GF",
+  "colors": [
+    "Black",
+    "Flat Dark Earth",
+    "Dark Grey",
+    "Metallic Silver",
+    "Tactical Tan",
+    "White"
+  ],
+  "bambu_parent": "Bambu PA6-GF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "260"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "_drying": "90C 4h",
+    "_fiber_content": "30% glass fiber",
+    "_hardened_nozzle_required": "Yes (3DXTech: GF still requires hardened steel for long runs)",
+    "_notes": "Now sold as 'FibreX Nylon 6+GF30' (legacy AmideX PA6-GF30 URL redirects to nylon collection listing it). Colors from the official nylon collection listing. Bed range not captured. In-use up to 170C depending on load. Density/Tg/HDT not retrieved."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://3dxtech.com/product/fibrex-nylon-gf30/",
+    "https://www.3dxtech.com/products/fibrex-nylon-6-gf-1",
+    "https://www.3dxtech.com/pages/nylon-filament",
+    "https://www.3dxtech.com/pages/filament-drying-instructions"
+  ],
+  "updated": "2026-11-02"
+}

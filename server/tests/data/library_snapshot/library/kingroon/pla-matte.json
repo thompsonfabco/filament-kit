@@ -4,17 +4,18 @@
   "product": "PLA Matte",
   "material": "PLA",
   "colors": [
-    "Black",
     "White",
+    "Black",
     "Gray",
-    "Blue",
-    "Brown",
-    "Green",
-    "Matte Grass Green",
-    "Orange",
-    "Purple",
     "Red",
+    "Blue",
     "Yellow",
+    "Orange",
+    "Green",
+    "Grass Green",
+    "Purple",
+    "Brown",
+    "Matte Grass Green",
     "Skin",
     "Matte Rainbow"
   ],
@@ -39,22 +40,26 @@
     "filament_retraction_length": "0.6-1.0",
     "filament_retraction_speed": "20-40",
     "_drying": "50C 8h",
-    "_max_print_speed": "<300 mm/s (TDS); product page claims 50-600 mm/s",
+    "_max_print_speed": "<300 mm/s",
     "_min_nozzle": "0.2",
     "_hdt_0.45MPa": "58",
     "_vicat": "63",
     "_vitrification": "61 (Tg, DSC)",
     "_diameter_tolerance": "+/-0.02",
-    "_notes": "TDS V1.0 (2025/12/1): Cool Plate / High Temperature Plate / Textured PEI with glue; fan on; ABS spool rated 70 C; HDT 1.8 MPa 52 C; melting 163 C. Tolerance from kingroon.com Matte PLA listing. Verification 2026-11-01: fields and plate/chamber/fan/retraction ranges confirmed against the TDS PDF; kingroon.com / kingroon3d.com product pages returned HTTP 429, so page-derived notes and conflicts were not re-checked."
+    "_notes": "TDS V1.0 (2025/12/1): nozzles 0.2-0.8, fan on, HDT 1.8MPa 52C, melt 163C. Retraction/print-speed/chamber label mapping inferred from the flattened PDF layout (value order matches the other Kingroon V1.0 TDS sheets: retraction length, retraction speed, chamber temp, overhang, bridging ... printing speed). Page (kingroon3d.com, read 2026-11-02) confirms '+/- 0.02mm' tolerance and the marketing claim 'from 50mm/s to 600mm/s' (conflicts with TDS <300 mm/s). page Printing Tips also give: AMS 2 Pro / AMS HT 55C 8h; X1 heatbed 60-70C 12h. Earlier entry: TDS V1.0 (2025/12/1): Cool Plate / High Temperature Plate / Textured PEI with glue; fan on; ABS spool rated 70 C; HDT 1.8 MPa 52 C; melting 163 C. Tolerance from kingroon.com Matte PLA listing. Verification 2026-11-01: fields and plate/chamber/fan/retraction ranges confirmed against the TDS PDF; kingroon.com / kingroon3d.com product pages returned HTTP 429, so page-derived notes and conflicts were not re-checked."
   },
   "conflicts": [
+    "kingroon3d.com Matte page: 'from 50mm/s to 600mm/s' vs TDS printing speed <300 mm/s",
+    "Kingroon Filament Guide datasheet 'Matte PLA': 200-230C, bed 50-65",
     "kingroon.com Matte PLA pages (10kg-matte-pla-filament-1-75mm, PLA Gray/White Matte): nozzle 200-230, bed 50-65, density 1.31, HDT 58 C (0.45 MPa)"
   ],
   "source_quality": "official_tds",
   "sources": [
+    "https://cdn.shopify.com/s/files/1/0722/0120/8047/files/KINGROON_PLA_Matte_Technical_Data_Sheet_V1.0.pdf?v=1765295624",
+    "https://kingroon3d.com/products/kingroon-pla-matte",
     "https://wiki.kingroon.com/kingroon_pla_matte_technical_data_sheet_v1.0.pdf",
     "https://kingroon.com/products/10kg-matte-pla-filament-1-75mm",
     "https://kingroon.com/products/kingroon-pla-gray-matte-3d-printer-filament"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

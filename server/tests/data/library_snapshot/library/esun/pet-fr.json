@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "vendor": "eSUN",
+  "product": "PET-FR",
+  "material": "PET",
+  "colors": [
+    "White"
+  ],
+  "bambu_parent": "Generic PET",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "300"
+    ],
+    "nozzle_temperature_range_high": [
+      "320"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-90",
+    "fan_min_speed/fan_max_speed": "40-70%",
+    "_drying": "60C 4h",
+    "_print_speed": "<200mm/s",
+    "_hdt_0.45MPa": "74.4",
+    "_notes": "UL 94 V-0. Marketing copy claims HDT 'up to 130°C after annealing' (not tabulated). Density is not published. The 320C top of the nozzle range is above the 300C limit of Bambu's X1/P1 stock hotends. Bambu's X1 Series page lists an 'All-Metal Hotend 300℃' (seen in a search preview), and E3D's FAQ for its Bambu-licensed X1/P1 hotend says 'The maximum printing temperature is 300 °C.' Check this against your printer's limit. Values gathered by a research sub-agent."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.esun3d.com/pet-fr-product",
+    "https://esun3d.com/fr/pet-fr-product/"
+  ],
+  "updated": "2026-11-02"
+}

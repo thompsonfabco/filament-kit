@@ -22,20 +22,28 @@
     ],
     "filament_diameter": [
       "1.75"
+    ],
+    "filament_density": [
+      "1.07"
     ]
   },
   "published_ranges": {
     "bed_all_plates": "90-110",
     "_drying": "80C 4h",
-    "_vitrification": "105 (Tg)",
+    "_vitrification": "105 (Tg, DSC)",
     "_diameter_tolerance": "+/-0.05",
     "_enclosure": "Heated chamber recommended",
-    "_notes": "Values from MatterHackers (authorized reseller) listing reproducing 3DXTech print recommendations; official 3dxtech.com product page could not be read (HTTP 429). Listing notes: lower bed 10-20C after first few layers; bed prep Magigoo. Also sold in 2.85mm. Density not published in the sources read."
+    "_notes": "Density/Tg/HDT from 3DXMAX ASA TDS Rev 3.0 (official Shopify CDN; read via search snippet, not full PDF). TDS specimen print conditions 245C/110C bed are test conditions, not recommendations. Product page also states 'Tg of 105C'. Diameter tolerance not found. Earlier entry: Values from MatterHackers (authorized reseller) listing reproducing 3DXTech print recommendations; official 3dxtech.com product page could not be read (HTTP 429). Listing notes: lower bed 10-20C after first few layers; bed prep Magigoo. Also sold in 2.85mm. Density not published in the sources read.",
+    "_hdt_0.45MPa": "95",
+    "_ams": "750g reels stated by 3DXTech to fit Bambu AMS"
   },
   "conflicts": [],
-  "source_quality": "reseller_tds_copy",
+  "source_quality": "official_tds",
   "sources": [
+    "https://www.3dxtech.com/products/3dxmax-r-asa",
+    "https://cdn.shopify.com/s/files/1/0625/4185/6821/files/3DXMAX_ASA_TDS_v3.pdf?v=1723942764",
+    "https://www.3dxtech.com/pages/filament-drying-instructions",
     "https://www.matterhackers.com/store/l/3dxtech-3dxmax-asa-filament-1kg/sk/MWC5RKCP"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }
