@@ -10,8 +10,8 @@ PN532 board can swap ttyUSB numbers, so the reader gets the other port (NFC_DEVI
 Protocol (firmware 10), 115200 baud, one line each: PC -> panel `?`, `L <yellow> <red>` (lamp modes 0-4, resent every
 second), `D <row> [text]` (OLED row 0 the title, 1-4 the body; sent when it changes), `B <hz> <ms> [count]`, `V <percent>` (speech volume, 0-100);
 `A <n>` + n raw bytes (speech, see `speech`);
-panel -> PC `HELLO intake-panel <version> [<chip>]` (firmware 10: `esp32c3`; no chip token: an ESP8266), `P H` / `P D` (the D1 / D2 button, a short press, on release),
-`L H` / `L D` (the D1 / D2 button held 0.8 s), `AIR <C> <RH|-> <hPa>` (see `air`).
+panel -> PC `HELLO intake-panel <version> [<chip>]` (firmware 10: `esp32c3`; no chip token: an ESP8266), `P H` / `P D` (the yellow / red button, a short press, on release),
+`L H` / `L D` (the yellow / red button held 0.8 s), `AIR <C> <RH|-> <hPa>` (see `air`).
 
 `H` is yellow and `D` red, as PANEL.md wires them. A panel wired the other way round (yellow's button and
 lamp on red's pins) sets station.panel_swap (STATION_PANEL_SWAP=1): the buttons' roles and the `L` lamp modes are swapped
@@ -125,7 +125,7 @@ def open_panel(dev):
     ser = serial.Serial()
     ser.port, ser.baudrate, ser.timeout = dev, 115200, 0.3
     ser.write_timeout = 1  # a stalled port must not hold panel_lock for long
-    ser.dtr = ser.rts = False  # don't hold the D1 mini in reset / flash mode
+    ser.dtr = ser.rts = False  # don't hold the board in reset or flash mode
     try:
         ser.open()
         end, asked = time.time() + 3, False

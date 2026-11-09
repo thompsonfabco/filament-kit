@@ -672,9 +672,10 @@ hand: `sudo systemctl unmask sleep.target suspend.target hibernate.target hybrid
 
 ### Reader, panel and beep
 
-- The panel and the reader both use CH340 USB adapters, which have no serial numbers. The station finds the
-  panel by asking each port who it is, and the reader gets the other port (`NFC_DEVICE=auto`). With no panel,
-  the reader gets the first USB serial port.
+- An older ESP8266 panel and the reader both use CH340 USB adapters, which have no serial numbers, so their
+  `ttyUSB` numbers can swap between boots. A C3 panel is native USB: it shows up as a `ttyACM` port with USB
+  vendor `303a`. The station finds the panel by asking each port who it is, and the reader gets a `ttyUSB` port
+  the panel isn't on (`NFC_DEVICE=auto`). With no panel, the reader gets the first USB serial port.
 - A scan beeps on the panel's buzzer, or, without a panel, through a USB speaker or the headphone socket
   (`STATION_BEEP`).
 - **The speaking voice.** The station speaks with the Piper voice `en_US-libritts_r-medium` (speaker 0), downloaded
@@ -691,8 +692,8 @@ hand: `sudo systemctl unmask sleep.target suspend.target hibernate.target hybrid
   device such as `"tty:USB0:pn532"`), `"beep"` (`true` or `false`), `"beep_device"` (empty for automatic, or
   an ALSA device such as `"plughw:1,0"`), `"speech"` (`true` or `false`) and `"camera"` (`"auto"` for the first
   USB camera, a device such as `"/dev/video0"`, or `"off"`), `"panel_flash"` (`true` or `false`, see the
-  next point) `"panel_swap"` (`true` or `false`, see the point after that) and `"speaker_volume"` (0 to 100, default 50: how loud
-  the C3 panel speaks; environment `STATION_SPEAKER_VOLUME`). After a change, run `sudo filament-kit modules apply`.
+  next point), `"panel_swap"` (`true` or `false`, see the point after that) and `"speaker_volume"` (0 to 100,
+  default 50: how loud the C3 panel speaks; environment `STATION_SPEAKER_VOLUME`). After a change, run `sudo filament-kit modules apply`.
 - **Panel firmware updates itself.** The station carries the panel's firmware. When it finds a panel running
   another version, it writes the bundled one to it over USB (once per version) and then uses it. If that does
   not work, the panel keeps running as it is. Set `"panel_flash": false` to never touch the panel's firmware.
@@ -702,11 +703,11 @@ hand: `sudo systemctl unmask sleep.target suspend.target hibernate.target hybrid
   `sudo filament-kit station flash-panel`: it stops the station, lists the C3 ports that give no answer, asks before
   flashing each one, checks the panel answers afterwards and restarts the station.
 - **Buttons and lamps the other way round (v0.4.0).** If your panel's yellow and red buttons and lamps are wired the
-  opposite way to the pin table in the panel guide (the button you press for yellow acts as red, and the lamps are
+  opposite way to the C3 pin table in the panel guide (the button you press for yellow acts as red, and the lamps are
   swapped too), set `"panel_swap": true` under `"station"` in `/etc/filament-kit/config.json`, then run
-  `sudo filament-kit modules apply`. The default is `false`. This needs the panel's firmware 9, which the station
-  installs itself unless `"panel_flash"` is `false`; with an older firmware, yellow can't do a long press, so it
-  can't save.
+  `sudo filament-kit modules apply`. The default is `false`. This needs firmware 9 or later. A C3 panel already runs
+  firmware 10. An ESP8266 panel on older firmware has to be reflashed by hand, because the station never reflashes
+  it; until then yellow can't do a long press, so it can't save.
 
 ### Is it working?
 

@@ -52,8 +52,9 @@ instead of rewiring or reflashing. The station then swaps the buttons' roles and
 or later, where both buttons report short and long presses alike.
 
 **Speaker volume.** `station.speaker_volume` in the kit config (0-100, default 50; `STATION_SPEAKER_VOLUME`) sets how
-loud the panel speaks. The station sends it to the panel once after it finds a C3 panel. If speech is too quiet,
-raise it, and mount the speaker sealed in the enclosure with its sound path open to the front.
+loud the panel speaks. The station sends it to the panel once after it finds a C3 panel. Changing the setting
+rewrites the station's drop-in, which restarts the station, so the new volume is sent then. If speech is too quiet,
+raise `station.speaker_volume`, and mount the speaker sealed in the enclosure with its sound path open to the front.
 
 ## Behaviour: the intake flow (the owner's spec, 2026-11-06)
 
@@ -112,7 +113,7 @@ Red cancels at any step. Yellow advances: a short press does the step's job, and
 | PC → panel | `L <hold> <discard>` | lamp modes: 0 off, 1 on, 2 flash, 3 three fast blinks then off, 4 rapid blink |
 | PC → panel | `D <row> [text]` | display text: row 0 the title (big, ~16 characters), rows 1-4 the body (21 characters); no text clears the row |
 | PC → panel | `B <hz> <ms> [count]` | beep(s) |
-| PC → panel | `V <percent>` | speech volume, 0-100 (firmware 10; the station sends it once after finding a C3 panel) |
+| PC → panel | `V <percent>` | speech volume, 0-100 (firmware 10; the station sends it once after finding a C3 panel, and a changed `station.speaker_volume` restarts the station, so it is sent again then) |
 | PC → panel | `A <n>` + n raw bytes | speech, unsigned 8-bit mono at 8 kHz (n ≤ 1024): each byte is one sample, 128 is silence (on firmware 9 and older it is the speaker MOSFET's duty, 0 = off) |
 | panel → PC | `HELLO intake-panel <version> [<chip>]` | at boot and after `?`; firmware 10 answers `HELLO intake-panel 10 esp32c3`, and the chip token is missing on firmware 9 and older, which are ESP8266 (2: speaker and BME280; 3: PWM speaker; 4: AHT20; 5-6: whine-free PWM, 160 MHz; 7: OLED, long press; 8: "Waiting for PC" boot title; 9: long press on both buttons; 10: ESP32-C3, I2S speech, V volume, chip token) |
 | panel → PC | `P H` / `P D` | the yellow / red button pressed: sent on release, if held under 0.8 s |
