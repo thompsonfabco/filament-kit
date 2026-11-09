@@ -136,11 +136,29 @@ function readersCard() {
 
 // ----- pairing -----
 let qrUrl = null;
+let pairWatch = 0;      // the newest pairing shown; an older watch stops
+// Says when a pairing shown in `box` is claimed: a device that `known` does not hold has appeared. Stops at `seconds`.
+function watchPaired(box, known, seconds) {
+  const me = ++pairWatch;
+  const until = Date.now() + seconds * 1000;
+  const tick = async () => {
+    if (me !== pairWatch || Date.now() > until) return;
+    let s = null;
+    try { s = await api("state"); } catch { /* the server may be restarting: the next try tells */ }
+    if (me !== pairWatch) return;
+    const fresh = s && s.devices.find((d) => !known.has(d.id));
+    if (fresh) { say(box, `Paired: ${fresh.name}.`, true); refresh(); return; }
+    setTimeout(tick, 3000);
+  };
+  setTimeout(tick, 3000);
+}
 function pairCard() {
   const box = boxFor("pair");
   async function start(kind) {
+    const known = new Set(S.devices.map((d) => d.id));
     const r = await change(box, "pair", { kind }, () => {});
     if (!r) return;
+    watchPaired(box, known, r.expires_in);
     if (qrUrl) URL.revokeObjectURL(qrUrl);
     qrUrl = r.qr_svg ? URL.createObjectURL(new Blob([r.qr_svg], { type: "image/svg+xml" })) : null;
     fill(box,
@@ -159,7 +177,8 @@ function pairCard() {
     h("div", { class: "row" },
       h("button", { textContent: "Pair a phone", on: { click: () => start("phone") } }),
       h("button", { class: "secondary", textContent: "Link for the PC sync", on: { click: () => start("pc") } }),
-      h("button", { class: "secondary", textContent: "Link for the station", on: { click: () => start("station") } })),
+      h("button", { class: "secondary", textContent: "Link for the station", on: { click: () => start("station") } }),
+      S.modules.some((m) => m.name === "station" && m.on) ? h("button", { class: "secondary", textContent: "Pair the station on this machine", on: { click: () => startJob(box, "station_pair") } }) : null),
     box);
 }
 

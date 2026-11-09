@@ -75,7 +75,7 @@ UPDATE_UNIT = "filament-kit-update.service"         # the timer's update; `sudo 
 ACTIVE = ("activating", "active", "deactivating", "reloading")      # a oneshot is "activating" while it runs
 # The closed list of jobs: the `filament-kit` arguments each one runs.
 JOBS = {"apply": ("modules", "apply", "--no-pair"), "update": ("update",), "rollback": ("update", "--rollback"),
-        "check": ("update", "--check")}
+        "check": ("update", "--check"), "station_pair": ("station", "pair", "--local")}
 WRAPPER = "/usr/local/bin/filament-kit"
 FINISHED = "==> finished (exit"
 SETTINGS = ("web.public_url", "station.url")
@@ -88,7 +88,8 @@ NO_CODE = "no setup code is set on this server yet; make one at the server: sudo
 APPLYING = "the last change is still being applied; wait until it has finished"
 BUSY = {"apply": APPLYING, "update": "an update is running; wait until it has finished",
         "rollback": "a rollback is running; wait until it has finished",
-        "check": "the check for updates is running; try again in a moment"}
+        "check": "the check for updates is running; try again in a moment",
+        "station_pair": "the station is being paired; wait until it has finished"}
 # the checklist's setting prompts, back to their keys (cli._apply_selection asks by prompt)
 _PROMPT_KEYS = {v: k for k, v in modules._SETTING_PROMPTS.items()}
 
