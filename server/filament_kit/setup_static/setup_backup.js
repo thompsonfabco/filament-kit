@@ -59,8 +59,9 @@ function backupCard() {
       s.replaces_data ? h("p", { class: "err", textContent: "This replaces the spools, settings, printers and pairings on this machine. What is here now is kept as a backup first." }) : null,
       s.other_host ? h("p", { class: "muted", textContent: "The backup is from another computer name: the server gets a new certificate, so phones and the PC sync pair again." }) : null,
       h("p", { class: "muted", textContent: "Afterwards the setup code is the one from the backup." }),
+      h("p", { class: "muted", textContent: `Checked copy: SHA-256 ${s.sha256}. Only this copy is restored.` }),
       h("div", { class: "row" }, h("label", {}, "Type restore to go on: ", word),
-        h("button", { textContent: "Restore", on: { click: () => change(rbox, "job", { name: "restore", confirm: word.value.trim() }, () => { rbox.replaceChildren(); followApply(true); }) } }),
+        h("button", { textContent: "Restore", on: { click: () => change(rbox, "job", { name: "restore", confirm: word.value.trim(), sha256: s.sha256 }, () => { rbox.replaceChildren(); followApply(true); }) } }),
         h("button", { class: "secondary", textContent: "Cancel", on: { click: () => change(rbox, "restore/forget", {}, () => rbox.replaceChildren()) } })));
   };
   fill(body,

@@ -15,12 +15,14 @@ name the certificate is made again, so phones and the PC sync pair again.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import io
 import os
 import re
 import shutil
 import socket
 import sqlite3
+import stat
 import subprocess
 import sys
 import tarfile
@@ -55,6 +57,10 @@ DAILY = re.compile(r"\d{4}-\d{2}-\d{2}\.tar\.gz")
 
 class BackupError(Exception):
     """A backup that cannot be made, read or restored; the message says why, never a value from it."""
+
+
+class Unfit(BackupError):
+    """A sound backup this kit will not restore (refusal: a newer kit made it, say)."""
 
 
 def roots() -> list[tuple[str, Path]]:
@@ -544,20 +550,63 @@ def _has_data() -> bool:
     return (config.paths().etc / "config.json").exists()
 
 
-def _own(path: Path, it: Item) -> bool:
-    """Mode, and owners when they exist here; False when an owner does not exist yet."""
-    os.chmod(path, it.mode)
-    if not _is_root() or not it.owner:
+# Who owns a restored file is never read from the zip (audit v0.5.0, finding 1: a zip written by a compromised service
+# user could give it the setup code). Under /etc the kit's own files keep the modes the kit gives them; every other
+# file there is root's alone, 600 (folders 700), and `modules apply` afterwards sets what a module needs. The state
+# folders belong to their service user, as on any install; their modes come from the zip, never above 666/777.
+SERVICE_READS = {"config.json": 0o640, "anthropic_key": 0o640, "web_passphrase": 0o640, "github_token": 0o640,
+                 "key.pem": 0o640, "h2d_token": 0o640}          # root:filament-kit, as the kit writes them
+WORLD_READS = {"cert.pem": 0o644, "bambu_hardware.xml": 0o644, "bambu_hardware.xml.previous": 0o644,
+               "klipper_hardware.xml": 0o644, "klipper_hardware.xml.previous": 0o644}     # root:root
+STATE_OWNER = {"var/lib/filament-kit": "filament-kit", "var/lib/filament-kit-web": "filament-kit-web"}
+
+
+def _policy(it: Item, folder: tuple[int, int, int] | None = None) -> tuple[str, str, int]:
+    """(owner, group, mode) a restored item gets here. `folder`: (uid, gid, mode) of the root folder the install in
+    place has, kept for the root folder itself."""
+    if it.kind == "root" and folder is not None:
+        return str(folder[0]), str(folder[1]), folder[2] & 0o2755
+    if it.root in STATE_OWNER:
+        user = STATE_OWNER[it.root]
+        return user, user, it.mode & (0o777 if it.kind != "file" else 0o666)
+    if it.kind == "root":
+        return "root", "root", 0o755
+    if it.kind == "dir":
+        return "root", "root", 0o700
+    if it.root == "etc/filament-kit" and "/" not in it.path:
+        if it.path in SERVICE_READS:
+            return "root", "filament-kit", SERVICE_READS[it.path]
+        if it.path in WORLD_READS:
+            return "root", "root", WORLD_READS[it.path]
+    return "root", "root", 0o600
+
+
+def _own(path: Path, it: Item, folder: tuple[int, int, int] | None = None) -> bool:
+    """The policy's mode, and its owners when they exist here; False when one does not exist yet."""
+    owner, group, mode = _policy(it, folder)
+    os.chmod(path, mode)
+    if not _is_root():
         return True
-    ids = _ids(it.owner, it.group)
+    if owner.isdigit() and group.isdigit():
+        ids = (int(owner), int(group))
+    else:
+        ids = _ids(owner, group) or (_ids(owner, owner) if group != owner else None)
     if ids is None:
         return False
     os.chown(path, *ids, follow_symlinks=False)
     return True
 
 
-def _extract(zf: zipfile.ZipFile, items: list[Item], target: Path) -> None:
-    """Every item of one root into the empty folder `target`."""
+def _spoolman_own(path: Path, it: Item) -> None:
+    """The Spoolman database: owned like the folder it sits in (Spoolman's), never more open than 664."""
+    os.chmod(path, it.mode & 0o664)
+    if _is_root():
+        st = os.stat(path.parent)
+        os.chown(path, st.st_uid, st.st_gid, follow_symlinks=False)
+
+
+def _extract(zf: zipfile.ZipFile, items: list[Item], target: Path, folder=None) -> None:
+    """Every item of one root into the empty folder `target`; `folder`: the install's own root folder (_policy)."""
     for it in sorted((i for i in items if i.kind != "file"), key=lambda i: i.path.count("/") if i.path else -1):
         d = target / it.path if it.path else target
         d.mkdir(parents=True, exist_ok=True)
@@ -569,7 +618,7 @@ def _extract(zf: zipfile.ZipFile, items: list[Item], target: Path) -> None:
         with os.fdopen(fd, "wb") as out, zf.open(f"files/{it.root}/{it.path}") as src:
             shutil.copyfileobj(src, out, CHUNK)
     for it in sorted(items, key=lambda i: -i.path.count("/") if i.path else 1):     # folders last, deepest first
-        _own(target / it.path if it.path else target, it)
+        _own(target / it.path if it.path else target, it, folder)
 
 
 def _stop_kit(run: Callable[[list[str]], int]) -> None:
@@ -617,6 +666,13 @@ def restore(zip_path: Path, *, yes: bool = False, ask: Callable[[str], str] = in
             return 1
     _stop_kit(run)
     here = dict(roots())
+    folders = {}            # each root folder's owner and mode on this install: the restored one keeps them
+    for name, target in here.items():
+        try:
+            st = os.stat(target)
+            folders[name] = (st.st_uid, st.st_gid, stat.S_IMODE(st.st_mode))
+        except OSError:
+            folders[name] = None
     swapped: list[tuple[Path, Path | None]] = []        # (target, its old copy or None)
     db_target, db_old = spoolman_db(), None
     try:
@@ -625,7 +681,7 @@ def restore(zip_path: Path, *, yes: bool = False, ask: Callable[[str], str] = in
                 target = here[name]
                 new = target.with_name(target.name + NEW)
                 shutil.rmtree(new, ignore_errors=True)
-                _extract(zf, [i for i in m.items if i.root == name], new)
+                _extract(zf, [i for i in m.items if i.root == name], new, folders.get(name))
                 old = target.with_name(target.name + OLD)
                 shutil.rmtree(old, ignore_errors=True)
                 if target.exists():
@@ -643,7 +699,7 @@ def restore(zip_path: Path, *, yes: bool = False, ask: Callable[[str], str] = in
                     db_old = db_target.with_name(db_target.name + OLD)
                     os.replace(db_target, db_old)
                 os.replace(tmp, db_target)
-                _own(db_target, m.spoolman)
+                _spoolman_own(db_target, m.spoolman)
     except (OSError, zipfile.BadZipFile, KeyError) as e:
         for target, old in reversed(swapped):
             shutil.rmtree(target, ignore_errors=True)
@@ -666,12 +722,9 @@ def restore(zip_path: Path, *, yes: bool = False, ask: Callable[[str], str] = in
     out("The data is back. Setting up the modules it names (this installs their packages and may take a while)...")
     rc = run([WRAPPER, "modules", "apply", "--no-pair"])
     # the apply made the users the kit's modules need: the files restored before them get their owners now
-    pending = [(here[i.root] / i.path if i.path else here[i.root], i) for i in m.items]
-    if m.spoolman:
-        pending.append((db_target, m.spoolman))
-    for p, i in pending:
+    for i in m.items:
         try:
-            _own(p, i)
+            _own(here[i.root] / i.path if i.path else here[i.root], i, folders.get(i.root))
         except OSError:
             pass
     if not _no_systemd():          # they started under the apply, perhaps before their files were theirs
@@ -695,21 +748,118 @@ def restore(zip_path: Path, *, yes: bool = False, ask: Callable[[str], str] = in
 
 
 def uploaded() -> Path:
-    """Where the setup page keeps a zip it received until the restore job takes it."""
+    """Where the setup page writes a zip it receives, until the helper pins it (pin_upload)."""
     return config.paths().state / UPLOAD / "backup.zip"
 
 
-def take_upload() -> Path:
-    """The page's upload, moved out of the state folder (which the restore replaces) into the backups folder."""
+PENDING = ".restore-pending.zip"        # in the root-only backups folder: the upload the owner saw summarised
+CONFIRMED = ".restore-pending.sha256"   # its hash, once the owner typed restore (the helper, before the job)
+
+
+def pending() -> Path:
+    return backups_dir() / PENDING
+
+
+def _sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        while chunk := fh.read(CHUNK):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _open_upload() -> int:
+    """The page's upload, opened by root without following a link anywhere in the folders the service user owns."""
     src = uploaded()
-    if not src.is_file() or src.is_symlink():
-        raise BackupError("no backup was uploaded on the setup page")
+    if not (hasattr(os, "O_DIRECTORY") and os.open in os.supports_dir_fd):
+        return os.open(src, os.O_RDONLY | getattr(os, "O_BINARY", 0))       # Windows: only the tests run there
+    nofollow = os.O_RDONLY | os.O_NOFOLLOW
+    top = os.open(src.parent.parent.parent, os.O_RDONLY | os.O_DIRECTORY)    # /var/lib: root's
+    fds = [top]
+    try:
+        for name in (src.parent.parent.name, src.parent.name):
+            fds.append(os.open(name, nofollow | os.O_DIRECTORY, dir_fd=fds[-1]))
+        return os.open(src.name, nofollow | os.O_NONBLOCK, dir_fd=fds[-1])
+    finally:
+        for fd in fds:
+            os.close(fd)
+
+
+def pin_upload() -> tuple[Manifest, str]:
+    """Root (the setup helper, when the page checks an upload): copy the page's upload at once into the root-only
+    backups folder, hash it, check it, and drop the service user's copy. What the owner then sees summarised is
+    this copy, and only this copy is restored (take_upload), so the service user cannot swap the file afterwards."""
+    try:
+        fd = _open_upload()
+    except FileNotFoundError:
+        raise BackupError("no backup was uploaded on the setup page") from None
+    except OSError as e:
+        raise BackupError(f"the uploaded backup cannot be opened safely ({type(e).__name__})") from None
     dest = backups_dir()
     dest.mkdir(parents=True, exist_ok=True)
-    out = dest / f".restore-{int(time.time())}.zip"
-    shutil.copyfile(src, out)
-    os.chmod(out, 0o600)
-    shutil.rmtree(src.parent, ignore_errors=True)
+    out, tmp = dest / PENDING, dest / (PENDING + ".tmp")
+    (dest / CONFIRMED).unlink(missing_ok=True)
+    tmp.unlink(missing_ok=True)
+    h = hashlib.sha256()
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise BackupError("the upload is not a plain file")
+        wfd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0),
+                      0o600)
+        with os.fdopen(wfd, "wb") as w:
+            while chunk := os.read(fd, CHUNK):
+                h.update(chunk)
+                w.write(chunk)
+        os.replace(tmp, out)
+    finally:
+        os.close(fd)
+        tmp.unlink(missing_ok=True)
+        shutil.rmtree(uploaded().parent, ignore_errors=True)
+    try:
+        m = verify(out)
+        why = refusal(m)
+        if why:
+            raise Unfit(why)
+    except BackupError:
+        out.unlink(missing_ok=True)
+        raise
+    return m, h.hexdigest()
+
+
+def confirm_pending(sha: str) -> None:
+    """The helper, when the owner typed restore: the pinned upload is still the one they saw (its hash), noted for
+    the root job. Nothing else is restored."""
+    p = pending()
+    if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{64}", sha):
+        raise BackupError("upload and check the backup again (the page did not say which one it showed)")
+    if not p.is_file():
+        raise BackupError("upload the backup zip first")
+    if not hmac.compare_digest(_sha256(p), sha):
+        raise BackupError("the uploaded backup is not the one that was checked; upload it again")
+    fd = os.open(backups_dir() / CONFIRMED, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    with os.fdopen(fd, "w", encoding="ascii") as fh:
+        fh.write(sha + "\n")
+
+
+def forget_pending() -> None:
+    for name in (PENDING, CONFIRMED):
+        (backups_dir() / name).unlink(missing_ok=True)
+
+
+def take_upload() -> Path:
+    """The root job: the pinned upload, if its hash is still the one the owner confirmed, moved aside for the
+    restore (which replaces the state folder)."""
+    p, c = pending(), backups_dir() / CONFIRMED
+    try:
+        want = c.read_text(encoding="ascii").strip()
+    except OSError:
+        raise BackupError("no checked and confirmed backup is waiting; upload it on the setup page again") from None
+    if not p.is_file() or not hmac.compare_digest(_sha256(p), want):
+        forget_pending()
+        raise BackupError("the uploaded backup changed since it was confirmed; nothing was restored")
+    out = backups_dir() / f".restore-{int(time.time())}.zip"
+    os.replace(p, out)
+    c.unlink(missing_ok=True)
     return out
 
 

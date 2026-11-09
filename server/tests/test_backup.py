@@ -1,10 +1,13 @@
 """The whole-kit backup zip and its restore (filament_kit/backup.py), the CLI around them and the scripts' parts."""
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import os
+import re
 import sqlite3
+import stat
 import sys
 import tarfile
 import zipfile
@@ -298,10 +301,10 @@ def test_a_failure_halfway_puts_everything_back(kit, monkeypatch, capsys):
     _wipe_and_change(kit)
     real = backup._extract
 
-    def extract(zf, items, target):
+    def extract(zf, items, target, folder=None):
         if items and items[0].root == "var/lib/filament-kit-web":
             raise OSError(28, "No space left on device")
-        return real(zf, items, target)
+        return real(zf, items, target, folder)
     monkeypatch.setattr(backup, "_extract", extract)
     assert backup.restore(z, yes=True, run=Runner()) == 1
     assert (kit / "state" / "devices.json").read_text() == "[]\n"                  # swapped back
@@ -367,14 +370,88 @@ def test_backup_create_and_restore_through_the_cli(kit, monkeypatch, capsys):
     assert cli.main(["restore", str(kit / "missing.zip")]) == 1
 
 
-def test_the_page_upload_is_taken_out_of_the_state_folder(kit, monkeypatch):
+def _uploaded(kit):
+    z = backup.create(kit / "elsewhere")
+    backup.uploaded().parent.mkdir(parents=True, exist_ok=True)
+    backup.uploaded().write_bytes(z.read_bytes())
+    return z
+
+
+def test_the_page_upload_is_pinned_confirmed_and_restored(kit, monkeypatch):
     monkeypatch.setattr(cli, "_is_root", lambda: True)
     monkeypatch.setattr(backup, "default_run", Runner())
-    z = backup.create(kit / "elsewhere")
-    backup.uploaded().parent.mkdir(parents=True)
-    backup.uploaded().write_bytes(z.read_bytes())
+    z = _uploaded(kit)
+    m, sha = backup.pin_upload()
+    assert sha == hashlib.sha256(z.read_bytes()).hexdigest() and m.files
+    assert not backup.uploaded().exists() and backup.pending().read_bytes() == z.read_bytes()   # the server's copy is gone
+    backup.confirm_pending(sha)
     assert cli.main(["restore", "--uploaded", "--yes"]) == 0
-    assert not backup.uploaded().exists() and not list((kit / "backups").glob(".restore-*"))
+    assert not backup.pending().exists() and not list((kit / "backups").glob(".restore-*"))
+
+
+def test_a_pinned_upload_swapped_after_the_owner_saw_it_is_not_restored(kit, monkeypatch):
+    """Audit v0.5.0 finding 1: what the root job restores is exactly what the owner was shown."""
+    monkeypatch.setattr(cli, "_is_root", lambda: True)
+    _uploaded(kit)
+    _, sha = backup.pin_upload()
+    other = b"PK not the zip the owner was shown"
+    backup.pending().write_bytes(other)                         # swapped (only root could, but the hash still says)
+    with pytest.raises(backup.BackupError, match="not the one that was checked"):
+        backup.confirm_pending(sha)
+    _uploaded(kit)
+    _, sha = backup.pin_upload()
+    backup.confirm_pending(sha)
+    backup.pending().write_bytes(other)                         # after the confirmation, before the job
+    assert cli.main(["restore", "--uploaded", "--yes"]) == 1 and not backup.pending().exists()
+
+
+def test_without_a_confirmation_the_job_restores_nothing(kit, monkeypatch):
+    monkeypatch.setattr(cli, "_is_root", lambda: True)
+    _uploaded(kit)
+    backup.pin_upload()
+    assert cli.main(["restore", "--uploaded", "--yes"]) == 1
+    with pytest.raises(backup.BackupError, match="upload and check"):
+        backup.confirm_pending("not a hash")
+
+
+def _item(root, path, kind="file", mode=0o644, owner="filament-kit", group="filament-kit"):
+    return backup.Item(root=root, path=path, kind=kind, mode=mode, owner=owner, group=group)
+
+
+def test_owners_and_modes_never_come_from_the_zip():
+    """Audit v0.5.0 finding 1: a zip naming the service user as owner of root's secrets gets root's fixed set."""
+    E = "etc/filament-kit"
+    assert backup._policy(_item(E, "setup_code.plain")) == ("root", "root", 0o600)
+    assert backup._policy(_item(E, "trusted.xml", mode=0o666)) == ("root", "root", 0o600)
+    assert backup._policy(_item(E, "config.json", mode=0o666)) == ("root", "filament-kit", 0o640)
+    assert backup._policy(_item(E, "web_passphrase", owner="nobody")) == ("root", "filament-kit", 0o640)
+    assert backup._policy(_item(E, "cert.pem", mode=0o600)) == ("root", "root", 0o644)
+    assert backup._policy(_item(E, "sub/config.json")) == ("root", "root", 0o600)          # only the top-level name
+    assert backup._policy(_item(E, "sub", kind="dir", mode=0o777)) == ("root", "root", 0o700)
+    assert backup._policy(_item("etc/filament-kit-station", "pairing/token")) == ("root", "root", 0o600)
+    assert backup._policy(_item(E, "", kind="root", mode=0o777), (0, 0, 0o40755)) == ("0", "0", 0o755)
+    assert backup._policy(_item("var/lib/filament-kit", "printers.xml", owner="root", mode=0o640)) == \
+        ("filament-kit", "filament-kit", 0o640)
+    assert backup._policy(_item("var/lib/filament-kit-web", "x", owner="root")) == \
+        ("filament-kit-web", "filament-kit-web", 0o644)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX modes")
+def test_a_restore_gives_root_files_their_fixed_modes_whatever_the_zip_says(kit, monkeypatch):
+    monkeypatch.setattr(backup, "default_run", Runner())
+    (config.paths().etc / "setup_code.plain").write_text("1234-5678\n")
+    z = backup.create(kit / "elsewhere")
+    with zipfile.ZipFile(z) as zf:                              # the zip claims a world-readable setup code
+        data = {n: zf.read(n) for n in zf.namelist()}
+    data["manifest.xml"], n = re.subn(rb'(path="setup_code\.plain"[^>]*?mode=")\d+"', rb'\g<1>0666"',
+                                      data["manifest.xml"])
+    assert n == 1
+    bad = kit / "bad.zip"
+    with zipfile.ZipFile(bad, "w") as zf:
+        for n, d in data.items():
+            zf.writestr(n, d)
+    assert backup.restore(bad, yes=True) == 0
+    assert stat.S_IMODE(os.stat(config.paths().etc / "setup_code.plain").st_mode) == 0o600
 
 
 def test_keep_days(kit):
@@ -388,8 +465,10 @@ def test_the_helper_knows_the_jobs_and_the_restore_needs_the_word(kit):
     assert setup_helper.JOBS["restore"] == ("restore", "--uploaded", "--yes")
     with pytest.raises(setup_helper.Refused, match="type restore"):
         setup_helper._job({"name": "restore", "confirm": "yes"})
-    with pytest.raises(setup_helper.Refused, match="upload the backup"):
+    with pytest.raises(setup_helper.Refused, match="upload and check the backup"):
         setup_helper._job({"name": "restore", "confirm": "restore"})
+    with pytest.raises(setup_helper.Refused, match="upload the backup zip first"):
+        setup_helper._job({"name": "restore", "confirm": "restore", "sha256": "a" * 64})
 
 
 @pytest.mark.parametrize("days,ok", [(1, True), (365, True), (0, False), (366, False), ("7", False), (True, False)])
