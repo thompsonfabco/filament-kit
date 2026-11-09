@@ -26,6 +26,12 @@ On the Ubuntu computer, open a Terminal, paste this line and press Enter:
 curl -fsSLO https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh && sudo bash get.sh
 ```
 
+If it says `curl` is not found, use this line instead:
+
+```bash
+wget -q https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh && sudo bash get.sh
+```
+
 It downloads the installer (`get.sh`) and runs it. The installer fetches the newest release, checks its
 signature, and asks a few questions (pressing Enter at each one is fine). At the end it shows a QR code for pairing your phone. Step by step, with every question and what you see:
 **[Install the server](docs/install-server.md)**.

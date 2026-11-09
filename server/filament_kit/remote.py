@@ -286,6 +286,6 @@ def firewall(cfg: dict) -> int:
         return 1
     except OSError as e:
         print(f"error: cannot read the remote files ({e})\n"
-              "fix: run ./install.sh again (they live in /opt/filament-kit/resources/remote)")
+              f"fix: run the install command again: {config.GET_COMMAND} (they live in /opt/filament-kit/resources/remote)")
         return 1
     return 0

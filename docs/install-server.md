@@ -31,6 +31,12 @@ guest network.
    curl -fsSLO https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh && sudo bash get.sh
    ```
 
+   If it says `curl` is not found, use this line instead:
+
+   ```bash
+   wget -q https://github.com/thompsonfabco/filament-kit/releases/latest/download/get.sh && sudo bash get.sh
+   ```
+
 3. Type your password when asked and press Enter. Nothing shows while you type. That is normal.
 4. Answer the questions (see [The questions](#the-questions) below).
 

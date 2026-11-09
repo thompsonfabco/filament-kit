@@ -272,6 +272,61 @@ def _apk():
     f.write_bytes(b"PK\x03\x04 example")
 
 
+def _ufw(monkeypatch, status):
+    """`ufw status` answers `status`; None: there is no ufw."""
+    monkeypatch.setattr(apply.shutil, "which", lambda name: None if status is None else "/usr/sbin/ufw")
+    real = subprocess.run
+
+    def run(cmd, **kw):
+        if cmd[:2] == ["ufw", "status"]:
+            return subprocess.CompletedProcess(cmd, 0, stdout=status, stderr="")
+        assert cmd[0] != "ufw", cmd          # the kit only ever asks
+        return real(cmd, **kw)
+    monkeypatch.setattr(apply.subprocess, "run", run)
+
+
+def test_finish_prints_the_ufw_lines_for_ports_with_no_rule(finish_env, monkeypatch, capsys):
+    calls, run = finish_env
+    _ufw(monkeypatch, "Status: active\n\nTo  Action  From\n5353/udp  ALLOW  Anywhere\n")
+    apply.finish(config.load(), run=run)
+    out = capsys.readouterr().out
+    assert "sudo ufw allow 8710/tcp" in out and "sudo ufw allow 5353/udp" not in out
+    assert not [c for c in calls if "ufw" in c]
+
+
+@pytest.mark.parametrize("status", [None, "Status: inactive\n", "Status: active\n8710/tcp ALLOW\n5353/udp ALLOW\n7912/tcp ALLOW\n"])
+def test_finish_says_nothing_of_ufw_when_it_is_off_or_open(finish_env, monkeypatch, capsys, status):
+    calls, run = finish_env
+    _ufw(monkeypatch, status)
+    apply.finish(config.load(), run=run)
+    assert "ufw" not in capsys.readouterr().out
+
+
+def test_finish_follows_the_configured_port(finish_env, monkeypatch, capsys):
+    calls, run = finish_env
+    _ufw(monkeypatch, "Status: active\n")
+    cfg = config.load()
+    cfg["port"] = 9000
+    apply.finish(cfg, run=run)
+    out = capsys.readouterr().out
+    assert "sudo ufw allow 9000/tcp" in out and "8710/tcp" not in out
+
+
+def test_installer_messages_name_a_command_that_exists():
+    root = Path(__file__).resolve().parents[2]
+    text = (root / "install/install.sh").read_text(encoding="utf-8")
+    assert "install.sh again" not in text
+    assert config.GET_COMMAND in text
+    assert config.GET_COMMAND in (root / "README.md").read_text(encoding="utf-8")
+    for name in ("apply.py", "remote.py"):
+        assert "install.sh again" not in (root / "server/filament_kit" / name).read_text(encoding="utf-8"), name
+    assert 'update -q </dev/null || die "$APT_FAILED"' in text
+    assert "[ ! -d /run/systemd/system ]" in text and "is-system-running" not in text
+    # WSL gets a note and is not refused: tools/e2e/run.sh installs on it
+    wsl = text[text.index("grep -qi microsoft"):].splitlines()[1]
+    assert wsl.strip().startswith("echo") and "die" not in wsl
+
+
 def test_finish_shows_the_app_qr_then_waits_then_pairs(finish_env, monkeypatch, capsys):
     calls, run = finish_env
     _apk()
@@ -348,7 +403,7 @@ def test_apply_runs_apt_with_stdin_from_dev_null(monkeypatch):
 def test_install_sh_apt_lines_read_dev_null():
     lines = [ln.strip() for ln in (ROOT / "install" / "install.sh").read_text(encoding="utf-8").splitlines()
              if ln.strip().startswith("apt-get")]
-    assert lines and all(ln.endswith("</dev/null") for ln in lines), lines
+    assert lines and all("</dev/null" in ln for ln in lines), lines
 
 
 def test_get_sh_makes_the_installer_the_foreground_job():
