@@ -13,6 +13,14 @@ import threading
 from . import voice
 
 
+def volume_from_env() -> int:
+    """STATION_SPEAKER_VOLUME clamped to 0-100; 50 when unset or not a number."""
+    try:
+        return max(0, min(100, int(os.environ.get("STATION_SPEAKER_VOLUME", "50"))))
+    except ValueError:
+        return 50
+
+
 def settings_from_env() -> dict:
     return {
         "port": int(os.environ.get("STATION_PORT", "5003")),
@@ -31,6 +39,7 @@ def settings_from_env() -> dict:
         "panel_flash": os.environ.get("STATION_PANEL_FLASH", "1") != "0",
         # the panel is wired the other way round (yellow on D2/D6, red on D1/D5): swap the buttons and lamps
         "panel_swap": os.environ.get("STATION_PANEL_SWAP", "0") == "1",
+        "speaker_volume": volume_from_env(),  # the C3 panel's speaker, percent
         # the intake flow: no progress this long and it goes back to idle; a recognition (local AI, then Claude)
         # may take this long. The server's address and token come from the pairing files (server_api).
         "flow_timeout": int(os.environ.get("STATION_FLOW_TIMEOUT", "600")),

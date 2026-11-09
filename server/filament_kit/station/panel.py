@@ -170,6 +170,12 @@ def warn_swap_needs_fw9(version):
     return True
 
 
+def send_volume():
+    """Tell the C3 panel the speaker volume (percent). A setting change rewrites the drop-in and restarts the
+    service, so one send when the panel is found covers changes."""
+    return wire.panel_send("V %d" % st.settings["speaker_volume"])
+
+
 def panel_loop():
     """Find the button panel among the USB serial ports, then relay its presses and keep its lamps current."""
     while True:
@@ -183,6 +189,8 @@ def panel_loop():
         warn_swap_needs_fw9(ser.panel_version)
         with st.panel_lock:
             st.panel["ser"] = ser
+        if ser.panel_chip == "esp32c3":
+            send_volume()
         seen = Shown()
         try:
             while st.panel["ser"] is ser:

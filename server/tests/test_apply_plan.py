@@ -182,6 +182,9 @@ def test_dropin_panel_firmware_and_flash_switch(monkeypatch):
     assert "STATION_PANEL_SWAP=0" in text
     cfg["station"]["panel_swap"] = True
     assert "STATION_PANEL_SWAP=1" in apply.station_dropin(cfg, ["127.0.0.1"])
+    assert "STATION_SPEAKER_VOLUME=50" in text
+    cfg["station"]["speaker_volume"] = 80
+    assert "STATION_SPEAKER_VOLUME=80" in apply.station_dropin(cfg, ["127.0.0.1"])
 
 
 def test_dropin_escapes_percent_and_rejects_line_breaks():

@@ -168,7 +168,8 @@ def station_dropin(cfg: dict, addresses: list[str]) -> str:
            f"STATION_CAMERA={st['camera']}",
            f"STATION_PANEL_FW={config.paths().opt.as_posix()}/resources/panel/intake-panel.bin",
            f"STATION_PANEL_FLASH={1 if st['panel_flash'] else 0}",
-           f"STATION_PANEL_SWAP={1 if st.get('panel_swap') else 0}"]
+           f"STATION_PANEL_SWAP={1 if st.get('panel_swap') else 0}",
+           f"STATION_SPEAKER_VOLUME={st.get('speaker_volume', 50)}"]
     if st.get("beep_device"):
         env.append(f"STATION_BEEP_DEVICE={st['beep_device']}")
     server = next((h for h in st.get("allow") or [] if h), None)

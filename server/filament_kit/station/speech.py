@@ -4,7 +4,8 @@ panel's speaker in 256-byte `A <n>` frames (else played on the beep output with 
 Piper's voice loads once (about 1 s), then makes a phrase in about 0.1 s; piper-tts is the `[station-tts]` extra.
 
 A newer phrase cuts off the one playing, fading it out from where it is so the speaker's coupling capacitor doesn't
-thump; each phrase is ramped up from 0 (off) before and back down after for the same reason."""
+thump; each phrase is ramped up from 0 (off) before and back down after for the same reason. The C3 panel's amplifier
+has no such capacitor: there 128 is silence, so phrases are padded with 128 and cut off toward 128."""
 from __future__ import annotations
 
 import io
@@ -23,6 +24,10 @@ log = logging.getLogger("intake-station")
 
 RATE = 8000  # panel speaker sample rate
 RAMP = RATE * 3 // 20  # 150 ms ramp of the speaker's DC level in and out, so its coupling capacitor doesn't thump
+
+FILTERS = {"esp8266": "highpass=f=450,highpass=f=450,equalizer=f=2500:t=q:w=1:g=8,lowpass=f=3600,"
+                      "acompressor=threshold=0.03:ratio=10:attack=2:release=50",
+           "esp32c3": "highpass=f=150,lowpass=f=3600,acompressor=threshold=0.1:ratio=3:attack=5:release=100"}
 
 speech = {"text": None}
 speech_ready = threading.Event()
@@ -77,14 +82,23 @@ def synth(text):
         return None
 
 
-def to_panel(wav):
+def cutoff(sample, chip):
+    """The fade-out of a phrase cut off at `sample`, over RAMP samples: toward silence, which is 128 on the C3 panel
+    (a byte is a sample) and 0 (off) on an old one."""
+    mid = 128 if chip == "esp32c3" else 0
+    return bytes(mid + round((sample - mid) * (RAMP - j) / RAMP) for j in range(RAMP))
+
+
+def to_panel(wav, chip=None):
     """WAV -> the panel's speaker samples, voiced for a small unbaffled headset driver (user's A/B pick 2026-11-02):
     nothing under 450 Hz (it can't play it), +8 dB at 2.5 kHz (consonants), hard compression, normalised so all but
     the loudest 2 % of samples fit (those clip). Then PWM duty bytes around 128 (kept within 16-240), with a ramp up
-    from 0 (off) before and back down after."""
+    from 0 (off) before and back down after. For the C3 panel (chip "esp32c3": a MAX98357 into a sealed 8 ohm speaker,
+    a byte is a sample and 128 is silence) the filter is FILTERS["esp32c3"] and there is no ramp from 0, which would be
+    a full negative sample: just 50 ms of 128 on both ends."""
+    c3 = chip == "esp32c3"
     p = subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "wav", "-i", "pipe:0",
-                        "-af", "highpass=f=450,highpass=f=450,equalizer=f=2500:t=q:w=1:g=8,lowpass=f=3600,"
-                               "acompressor=threshold=0.03:ratio=10:attack=2:release=50",
+                        "-af", FILTERS["esp32c3" if c3 else "esp8266"],
                         "-ar", str(RATE), "-ac", "1", "-f", "s16le", "pipe:1"],
                        input=wav, capture_output=True, timeout=10)
     if p.returncode:
@@ -93,6 +107,8 @@ def to_panel(wav):
     mags = sorted(map(abs, pcm))
     gain = 112 / max(1, mags[int(len(mags) * 0.98)] if mags else 1)
     body = bytes(128 + max(-112, min(112, round(s * gain))) for s in pcm)
+    if c3:
+        return bytes([128]) * (RATE // 20) + body + bytes([128]) * (RATE // 20)
     ramp = bytes(round(128 * i / RAMP) for i in range(RAMP))
     return ramp + bytes([128]) * (RATE // 20) + body + bytes([128]) * (RATE // 20) + ramp[::-1]
 
@@ -108,15 +124,16 @@ def speak(text):
         if dev:
             subprocess.run(["aplay", "-q", "-D", dev, "-"], input=wav, capture_output=True, timeout=15)
         return
+    chip = st.ports["panel_chip"]  # once per phrase
     try:
-        samples = to_panel(wav)
+        samples = to_panel(wav, chip)
     except (OSError, subprocess.TimeoutExpired) as e:
         log.warning("speech: %s", e)
         return
     start, lead = time.monotonic(), RATE // 4
     for i in range(0, len(samples), 256):
         if speech_ready.is_set():  # cut off by a newer phrase: fade out from where this one is
-            chunk = bytes(round(samples[i] * (RAMP - j) / RAMP) for j in range(RAMP))
+            chunk = cutoff(samples[i], chip)
             for k in range(0, RAMP, 256):
                 wire.panel_send(b"A %d\n" % len(chunk[k:k + 256]) + chunk[k:k + 256])
             break
