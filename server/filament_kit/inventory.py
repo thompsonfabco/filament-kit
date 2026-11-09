@@ -180,6 +180,11 @@ def add_spools(sm: Spoolman, items: list[dict], rules: dict, dry: bool, *, paren
     return result
 
 
+# why the placement rules chose a spool's location (placement.place's `placed_by`), for the result line
+PLACED_BY = {"sealed": "where sealed spools go", "pla": "where opened PLA goes",
+             "box": "the first free storage box", "overflow": "every storage box is taken"}
+
+
 def _write_items(sm, placed, vendors, fils, result, dry) -> None:
     for it in placed:
         vn = it["vendor"]
@@ -227,9 +232,11 @@ def _write_items(sm, placed, vendors, fils, result, dry) -> None:
             id_note = f", spool id {ids[0]},"
         else:
             id_note = f", spool ids {', '.join(str(i) for i in ids)},"
+        why = PLACED_BY.get(it.get("placed_by") or "")
+        where = f"{it['location']} ({why}, since no location was given)" if why else it["location"]
         result.lines.append(
             f"{'Would add' if dry else 'Added'} {n} spool{'' if n == 1 else 's'} of {vn} {it['name']} ({which}){id_note} "
-            f"at {it['location']}{', opened' if opened else ''}, {remaining} g{' each' if n > 1 else ''}{gross_note}")
+            f"at {where}{', opened' if opened else ''}, {remaining} g{' each' if n > 1 else ''}{gross_note}")
 
 
 def _join_line(sm: Spoolman, f: dict, it: dict, result: AddResult, dry: bool) -> None:
