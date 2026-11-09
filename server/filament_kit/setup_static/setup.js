@@ -66,7 +66,7 @@ const TABS = {
   overview: ["Overview", () => overviewTab()],
   modules: ["Modules", () => [modesCard(), modulesCard(), applyCard()]],
   printers: ["Printers", () => printersTab()],
-  devices: ["Devices", () => [pairCard(), readersCard(), trustCard()]],
+  devices: ["Devices", () => [pairCard(), webAppCard(), readersCard(), trustCard()]],
   settings: ["Settings", () => [keyCard(), passphraseCard(), tokenCard(), addressCard()]],
   updates: ["Updates", () => updatesTab()],
 };
@@ -161,6 +161,24 @@ function pairCard() {
       h("button", { class: "secondary", textContent: "Link for the PC sync", on: { click: () => start("pc") } }),
       h("button", { class: "secondary", textContent: "Link for the station", on: { click: () => start("station") } })),
     box);
+}
+
+let webQrUrl = null;
+// The iPhone is not paired: it opens the web module's address in Safari.
+function webAppCard() {
+  const body = h("div");
+  const el = card("iPhone: the web app", body);
+  api("webapp").then((r) => {
+    if (!r.on) { fill(body, h("p", { class: "muted", textContent: "Turn on the web module in Modules to use an iPhone." })); return; }
+    if (webQrUrl) URL.revokeObjectURL(webQrUrl);
+    webQrUrl = r.qr_svg ? URL.createObjectURL(new Blob([r.qr_svg], { type: "image/svg+xml" })) : null;
+    fill(body,
+      h("p", {}, "Open this address in Safari: ", h("b", { textContent: r.url })),
+      webQrUrl ? h("img", { class: "qr", alt: "QR code of the web app's address", src: webQrUrl }) : null,
+      h("p", { textContent: "To keep it on the iPhone: tap Share, then Add to Home Screen." }),
+      r.set_address ? null : h("p", { class: "muted", textContent: "Safari needs an https address with a web server in front: see the iPhone guide in the docs. If you use your own name, set it under Settings, Addresses." }));
+  }).catch((e) => say(body, e.message, false));
+  return el;
 }
 
 // ----- modules -----
