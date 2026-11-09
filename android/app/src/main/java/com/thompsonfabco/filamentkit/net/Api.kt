@@ -204,6 +204,39 @@ class Api(
 
     suspend fun mapStatus(id: String): MapStatus = decode(call(request("api", "printers", id, "map").get()))
 
+    // ---- map by loading filament ----
+
+    private fun manual(id: String, vararg rest: String) = request("api", "printers", id, "manual-map", *rest)
+
+    /** Opens the session, or joins the one already open (another device or the setup page). */
+    suspend fun manualStart(id: String): ManualMapState =
+        decode(call(manual(id, "start").post(buildJsonObject { }.toBody())))
+
+    /** 404 `none` when no session was started for this printer since the server started. */
+    suspend fun manualState(id: String): ManualMapState = decode(call(manual(id).get()))
+
+    /** 409 `stale` when the session moved on (another device answered, or the load no longer shows). */
+    suspend fun manualConfirm(id: String, session: String, position: String, reported: JsonObject, nozzle: String?,
+                              byHand: Boolean): ManualMapState {
+        val body = buildJsonObject {
+            put("session", session)
+            put("position", position)
+            put("reported", reported)
+            if (nozzle != null) put("nozzle", nozzle) else put("nozzle", JsonNull)
+            if (byHand) put("by_hand", true)
+        }
+        return decode(call(manual(id, "confirm").post(body.toBody())))
+    }
+
+    suspend fun manualSkip(id: String, session: String, position: String): ManualMapState = decode(call(
+        manual(id, "skip").post(buildJsonObject { put("session", session); put("position", position) }.toBody())))
+
+    suspend fun manualStop(id: String, session: String): ManualMapState =
+        decode(call(manual(id, "stop").post(buildJsonObject { put("session", session) }.toBody())))
+
+    suspend fun manualOffer(id: String, share: Boolean): ManualOfferAnswer =
+        decode(call(manual(id, "offer").post(buildJsonObject { put("share", share) }.toBody())))
+
     suspend fun load(id: String, label: String, spoolId: Int, dryRun: Boolean): LoadResult {
         val body = buildJsonObject {
             put("spool_id", spoolId)

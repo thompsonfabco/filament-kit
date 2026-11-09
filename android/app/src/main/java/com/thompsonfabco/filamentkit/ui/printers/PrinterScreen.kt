@@ -66,6 +66,7 @@ fun PrinterScreen(
     camera: CameraSource,
     onBack: () -> Unit,
     onPairAgain: () -> Unit,
+    onManualMap: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsState()
     val toolsState by tools.state.collectAsState()
@@ -118,7 +119,11 @@ fun PrinterScreen(
 
         Controls(state, viewModel)
 
-        SlotMapping(toolsState, tools, printer.state, state.printing)
+        if (printer.family == "klipper") {
+            ManualOnly(printer.state, state.printing, onManualMap)
+        } else {
+            SlotMapping(toolsState, tools, printer.state, state.printing, onManualMap)
+        }
         FilamentUsed(toolsState, tools)
     }
 
@@ -263,7 +268,8 @@ private fun Controls(state: PrinterUiState, viewModel: PrinterViewModel) {
 }
 
 @Composable
-private fun SlotMapping(s: ToolsUiState, tools: PrinterToolsViewModel, printerState: String, printing: Boolean) {
+private fun SlotMapping(s: ToolsUiState, tools: PrinterToolsViewModel, printerState: String, printing: Boolean,
+                        onManualMap: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("Slot mapping", style = MaterialTheme.typography.titleMedium)
         val v = SlotMapHelp.view(s.map)
@@ -289,6 +295,30 @@ private fun SlotMapping(s: ToolsUiState, tools: PrinterToolsViewModel, printerSt
             Button(onClick = tools::askMap, enabled = enabled) { Text(SlotMapHelp.buttonLabel(s.map)) }
         } else {
             OutlinedButton(onClick = tools::askMap, enabled = enabled) { Text(SlotMapHelp.buttonLabel(s.map)) }
+        }
+        // offered wherever a job failed or could not confirm the numbering, and always here as a way of its own
+        val manualEnabled = SlotMapHelp.canStart(printerState, printing) && !s.mapRunning
+        if (v.action == MapAction.MANUAL || v.outcome == SlotMapOutcome.FAILED) {
+            Text(ManualMapHelp.OFFER_LINE, style = MaterialTheme.typography.bodySmall)
+        }
+        if (v.action == MapAction.MANUAL) {
+            Button(onClick = onManualMap, enabled = manualEnabled) { Text(ManualMapHelp.TITLE) }
+        } else {
+            OutlinedButton(onClick = onManualMap, enabled = manualEnabled) { Text(ManualMapHelp.TITLE) }
+        }
+        SlotMapHelp.blockedReason(printerState, printing)?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+    }
+}
+
+/** A Klipper printer: no automatic mapping, so only the manual way, which relabels its tools or lanes. */
+@Composable
+private fun ManualOnly(printerState: String, printing: Boolean, onManualMap: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("Slot names", style = MaterialTheme.typography.titleMedium)
+        Text("To match the printer's tools or lanes to the names you use, load each one in turn and say which it is.",
+            style = MaterialTheme.typography.bodySmall)
+        OutlinedButton(onClick = onManualMap, enabled = SlotMapHelp.canStart(printerState, printing)) {
+            Text(ManualMapHelp.TITLE)
         }
         SlotMapHelp.blockedReason(printerState, printing)?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
     }

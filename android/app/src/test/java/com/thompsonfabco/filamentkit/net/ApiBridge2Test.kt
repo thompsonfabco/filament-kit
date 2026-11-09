@@ -235,4 +235,98 @@ class ApiBridge2Test {
         json("""{"printers":[{"id":"A","name":"A","serial":"A","configured":true,"state":"cert_changed"}]}""")
         assertEquals("cert_changed", api.printers()[0].state)
     }
+
+    // ---- map by loading filament ----
+
+    private val manualState = """{"session":"s1","open":true,"dual_nozzle":true,"reports_loads":true,
+        "step":{"position":{"id":"A2","label":"A2"},"say":"Load A2 to the nozzle, then wait.",
+          "seen":{"reported":{"ams_id":0,"tray_id":1},"reported_label":"A2","nozzle":"left","nozzle_reported":true,"settled":true},
+          "ask":"The printer now reports A2 loaded. Is that the A2 you loaded?"},
+        "positions":[{"id":"A1","label":"A1","status":"confirmed","reported_label":"A1","nozzle":null,"at":"x"},
+          {"id":"A2","label":"A2","status":"pending","reported_label":null,"nozzle":null,"at":null}],
+        "summary":"1 of 2 positions confirmed.","offer_report":false}"""
+
+    @Test fun manualStartPostsAndDecodesTheState() = runBlocking {
+        json(manualState)
+        val m = api.manualStart("0948AB")
+        val r = take()
+        assertEquals("POST", r.method)
+        assertEquals("/api/printers/0948AB/manual-map/start", r.url.encodedPath)
+        assertEquals("s1", m.session)
+        assertTrue(m.open && m.dualNozzle && m.reportsLoads)
+        val seen = m.step!!.seen!!
+        assertEquals("A2", seen.reportedLabel)
+        assertTrue(seen.settled && seen.nozzleReported)
+        assertEquals("left", seen.nozzle)
+        assertEquals(0, seen.reported["ams_id"]!!.jsonPrimitive.int)
+        assertEquals("confirmed", m.positions[0].status)
+        assertTrue(m.choices.isEmpty())
+    }
+
+    @Test fun manualStateGetsAndA404IsNone() = runBlocking {
+        json(manualState)
+        api.manualState("0948AB")
+        val r = take()
+        assertEquals("GET", r.method)
+        assertEquals("/api/printers/0948AB/manual-map", r.url.encodedPath)
+        json("""{"error":"none","message":"No manual mapping was started for this printer."}""", 404)
+        assertEquals("none", failure { api.manualState("0948AB") }.code)
+    }
+
+    @Test fun manualConfirmSendsTheReportedLoadUnchanged() = runBlocking {
+        json(manualState)
+        val reported = JsonObject(mapOf("label" to kotlinx.serialization.json.JsonPrimitive("lane2")))
+        api.manualConfirm("0948AB", "s1", "C1", reported, null, byHand = false)
+        val r = take()
+        assertEquals("/api/printers/0948AB/manual-map/confirm", r.url.encodedPath)
+        val b = r.bodyJson()
+        assertEquals("s1", b["session"]!!.jsonPrimitive.content)
+        assertEquals("C1", b["position"]!!.jsonPrimitive.content)
+        assertEquals(reported, b["reported"])
+        assertEquals(kotlinx.serialization.json.JsonNull, b["nozzle"])
+        assertFalse("by_hand" in b)
+    }
+
+    @Test fun manualConfirmByHandAndWithANozzle() = runBlocking {
+        json(manualState)
+        api.manualConfirm("0948AB", "s1", "A1", JsonObject(emptyMap()), "right", byHand = true)
+        val b = take().bodyJson()
+        assertEquals("right", b["nozzle"]!!.jsonPrimitive.content)
+        assertTrue(b["by_hand"]!!.jsonPrimitive.boolean)
+    }
+
+    @Test fun manualSkipStopAndOffer() = runBlocking {
+        json(manualState)
+        api.manualSkip("0948AB", "s1", "A2")
+        var r = take()
+        assertEquals("/api/printers/0948AB/manual-map/skip", r.url.encodedPath)
+        assertEquals("A2", r.bodyJson()["position"]!!.jsonPrimitive.content)
+        json(manualState.replace("\"open\":true", "\"open\":false"))
+        assertFalse(api.manualStop("0948AB", "s1").open)
+        r = take()
+        assertEquals("/api/printers/0948AB/manual-map/stop", r.url.encodedPath)
+        assertEquals("s1", r.bodyJson()["session"]!!.jsonPrimitive.content)
+        json("""{"share":false,"message":"Noted: this map is not shared."}""")
+        assertEquals("Noted: this map is not shared.", api.manualOffer("0948AB", false).message)
+        r = take()
+        assertEquals("/api/printers/0948AB/manual-map/offer", r.url.encodedPath)
+        assertFalse(r.bodyJson()["share"]!!.jsonPrimitive.boolean)
+    }
+
+    @Test fun manualStateWithoutLoadReportsHasChoices() = runBlocking {
+        json("""{"session":"s1","open":true,"dual_nozzle":false,"reports_loads":false,"step":{"position":{"id":"A1",
+            "label":"A1"},"say":"x","seen":null,"ask":null},"positions":[],"summary":"","offer_report":false,
+            "choices":[{"reported":{"ams_id":0,"tray_id":0},"label":"A1"}]}""")
+        val m = api.manualState("0948AB")
+        assertFalse(m.reportsLoads)
+        assertEquals("A1", m.choices.single().label)
+        assertNull(m.step!!.seen)
+    }
+
+    @Test fun printerFamilyDefaultsToBambu() {
+        val j = Json { ignoreUnknownKeys = true }
+        assertEquals("bambu", j.decodeFromString(Printer.serializer(), """{"id":"a","name":"n","serial":"s"}""").family)
+        assertEquals("klipper",
+            j.decodeFromString(Printer.serializer(), """{"id":"a","name":"n","serial":"s","family":"klipper"}""").family)
+    }
 }

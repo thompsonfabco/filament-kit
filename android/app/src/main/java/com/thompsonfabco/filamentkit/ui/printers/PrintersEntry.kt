@@ -2,7 +2,9 @@ package com.thompsonfabco.filamentkit.ui.printers
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -17,9 +19,16 @@ fun PrintersEntry(api: Api, onPairAgain: () -> Unit) {
     val apiKey = System.identityHashCode(api)
     var openId by rememberSaveable { mutableStateOf<String?>(null) }
     val id = openId
+    var manualFor by rememberSaveable { mutableStateOf<String?>(null) }
+    // each visit gets its own view model: a finished session's summary is never restarted by coming back to it
+    var manualVisit by rememberSaveable { mutableIntStateOf(0) }
     if (id == null) {
         val vm = viewModel(key = "printers-$apiKey") { PrintersViewModel(backend) }
         PrintersScreen(vm, onOpen = { openId = it }, onPairAgain = onPairAgain)
+    } else if (manualFor == id) {
+        val vm = viewModel(key = "manual-$apiKey-$id-$manualVisit") { ManualMapViewModel(ApiManualMapBackend(api), id) }
+        val name = viewModel(key = "printer-$apiKey-$id") { PrinterViewModel(backend, id) }.state.collectAsState()
+        ManualMapScreen(vm, name.value.printer?.name, onBack = { manualFor = null }, onPairAgain = onPairAgain)
     } else {
         BackHandler { openId = null }
         val vm = viewModel(key = "printer-$apiKey-$id") { PrinterViewModel(backend, id) }
@@ -27,6 +36,10 @@ fun PrintersEntry(api: Api, onPairAgain: () -> Unit) {
         val camera = remember(api, id) {
             CameraSource(api.client, api.cameraHlsUrl(id), api.cameraMjpegUrl(id), api.authHeaders())
         }
-        PrinterScreen(vm, tools, camera, onBack = { openId = null }, onPairAgain = onPairAgain)
+        PrinterScreen(vm, tools, camera, onBack = { openId = null }, onPairAgain = onPairAgain,
+            onManualMap = {
+            manualVisit++
+            manualFor = id
+        })
     }
 }

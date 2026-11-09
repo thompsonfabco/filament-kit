@@ -134,6 +134,8 @@ data class Printer(
     val summary: PrinterSummary? = null,
     /** The model's name ("H2D" for "O1D"); servers before 0.3 send only [model]. */
     @SerialName("model_name") val modelName: String? = null,
+    /** `bambu` or `klipper`; servers before 0.4 send none (Bambu only then). */
+    val family: String = "bambu",
 ) {
     /** What to show for the model: its name, else the code an older server sent, else null. */
     val shownModel: String? get() = modelName?.takeIf { it.isNotBlank() } ?: model?.takeIf { it.isNotBlank() }
@@ -517,3 +519,63 @@ internal object LenientText : KSerializer<String?> {
 }
 
 // ---- end stage 4 -----------------------------------------------------------------------------------------------
+
+// ---- map by loading filament (manual slot mapping API v2, 2026-11-09) ----------------------------------------
+
+/** A position the owner can load from; [id] is its slot label. [status]: `pending`, `confirmed`, `by_hand`, `skipped`. */
+@Serializable
+data class ManualPosition(
+    val id: String,
+    val label: String,
+    val status: String = "pending",
+    @SerialName("reported_label") val reportedLabel: String? = null,
+    val nozzle: String? = null,
+)
+
+/** What the printer now reports loaded; [reported] is opaque and goes back unchanged in a confirm. */
+@Serializable
+data class ManualSeen(
+    val reported: JsonObject = JsonObject(emptyMap()),
+    @SerialName("reported_label") val reportedLabel: String = "",
+    val nozzle: String? = null,
+    @SerialName("nozzle_reported") val nozzleReported: Boolean = false,
+    val settled: Boolean = false,
+)
+
+@Serializable
+data class ManualStepPosition(val id: String, val label: String)
+
+/** The position asked now: [say] is the instruction, [ask] the question once a load has settled (null before). */
+@Serializable
+data class ManualStep(
+    val position: ManualStepPosition,
+    val say: String = "",
+    val seen: ManualSeen? = null,
+    val ask: String? = null,
+)
+
+/** A slot the owner can pick by hand when the printer reports no loads. */
+@Serializable
+data class ManualChoice(val reported: JsonObject = JsonObject(emptyMap()), val label: String)
+
+/**
+ * `GET /api/printers/{id}/manual-map`: one session per printer, shared with the setup page. [step] is null once every
+ * position has an answer or the session is closed; [choices] comes with [reportsLoads] false; [offerReport]: the
+ * one-time question whether to share the map in a printer report, after a closed session that confirmed something.
+ */
+@Serializable
+data class ManualMapState(
+    val session: String = "",
+    val open: Boolean = false,
+    @SerialName("dual_nozzle") val dualNozzle: Boolean = false,
+    @SerialName("reports_loads") val reportsLoads: Boolean = true,
+    val step: ManualStep? = null,
+    val positions: List<ManualPosition> = emptyList(),
+    val summary: String = "",
+    @SerialName("offer_report") val offerReport: Boolean = false,
+    val choices: List<ManualChoice> = emptyList(),
+)
+
+/** `POST .../manual-map/offer`: the server's sentence for the owner's answer. */
+@Serializable
+data class ManualOfferAnswer(val share: Boolean = false, val message: String = "")
