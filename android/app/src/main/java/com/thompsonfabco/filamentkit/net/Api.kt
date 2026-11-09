@@ -146,13 +146,15 @@ class Api(
             .map { it.jsonPrimitive.content }
 
     /** Streams `/app.apk` into [to]; [to] is only replaced when the whole file arrived. */
-    suspend fun downloadApk(to: File) {
+    /** [onProgress] gets (bytes so far, total or -1 when the server sends no length) as the file is written. */
+    suspend fun downloadApk(to: File, onProgress: (Long, Long) -> Unit = { _, _ -> }) {
         val part = File(to.parentFile, to.name + ".part")
         try {
             withContext(Dispatchers.IO) {
                 execute(request("app.apk", auth = false).get().build(), DOWNLOAD_S).use { resp ->
                     if (!resp.isSuccessful) throw errorFor(resp.code, resp.body.string())
-                    resp.body.byteStream().use { src -> copyToDisk(src, part) }
+                    val total = resp.body.contentLength()
+                    resp.body.byteStream().use { src -> copyToDisk(src, part) { done -> onProgress(done, total) } }
                 }
                 to.delete()
                 if (!part.renameTo(to)) throw storageError("Could not write ${to.name}")
@@ -319,10 +321,11 @@ class Api(
         if (localNetworkMissing()) ApiError(0, "local_network", LOCAL_NETWORK_MESSAGE) else ApiError(0, "offline", message)
 
     /** Network read errors are `offline`; errors writing [part] (disk full, no folder) are `storage`. */
-    private fun copyToDisk(src: java.io.InputStream, part: File) {
+    private fun copyToDisk(src: java.io.InputStream, part: File, onWritten: (Long) -> Unit) {
         try {
             part.outputStream().use { out ->
                 val buf = ByteArray(64 * 1024)
+                var done = 0L
                 while (true) {
                     val n = try {
                         src.read(buf)
@@ -331,6 +334,8 @@ class Api(
                     }
                     if (n < 0) break
                     out.write(buf, 0, n)
+                    done += n
+                    onWritten(done)
                 }
             }
         } catch (e: IOException) {

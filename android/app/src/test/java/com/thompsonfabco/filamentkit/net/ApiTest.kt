@@ -227,8 +227,11 @@ class ApiTest {
         val bytes = ByteArray(5000) { it.toByte() }
         server.enqueue(MockResponse.Builder().code(200).body(okio.Buffer().write(bytes)).build())
         val f = tmp.newFile("a.apk")
-        api.downloadApk(f)
+        val seen = mutableListOf<Pair<Long, Long>>()
+        api.downloadApk(f) { d, t -> seen += d to t }
         assertTrue(bytes.contentEquals(f.readBytes()))
+        assertEquals(5000L to 5000L, seen.last())
+        assertTrue(seen.all { it.second == 5000L })
         val r = take()
         assertEquals("/app.apk", r.path())
         assertNull(r.bearer())

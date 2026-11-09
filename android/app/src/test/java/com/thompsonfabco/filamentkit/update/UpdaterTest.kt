@@ -60,8 +60,12 @@ class UpdaterTest {
             infoError?.let { throw it }
             return ServerInfo("kit", "1.0", api, apkVersion)
         }
-        override suspend fun downloadApk(to: File) {
+        var steps: List<Pair<Long, Long>> = emptyList()
+        val seen = mutableListOf<Int?>()
+        var watch: (() -> Int?)? = null
+        override suspend fun downloadApk(to: File, onProgress: (Long, Long) -> Unit) {
             downloads += to
+            steps.forEach { (d, t) -> onProgress(d, t); seen += watch?.invoke() }
             to.writeText("apk")
         }
     }
@@ -158,6 +162,36 @@ class UpdaterTest {
         updater(source, router = router)
         scheduler.runCurrent()
         assertEquals(PairNotice.CertChanged("aa", "bb"), router.notice.value)
+    }
+
+    @Test fun theDownloadReportsWholePercentsAndClearsWhenDone() {
+        val source = FakeSource("7")
+        source.steps = listOf(0L to 1000L, 5L to 1000L, 420L to 1000L, 1000L to 1000L)
+        val u = updater(source)
+        source.watch = { u.state.value.progress }
+        scheduler.runCurrent()
+        u.install()
+        scheduler.runCurrent()
+        assertEquals(listOf(0, 0, 42, 100), source.seen)
+        assertNull("cleared after the install starts", u.state.value.progress)
+        assertFalse(u.state.value.busy)
+    }
+
+    @Test fun noLengthMeansNoPercent() {
+        val source = FakeSource("7")
+        source.steps = listOf(500L to -1L)
+        val u = updater(source)
+        source.watch = { u.state.value.progress }
+        scheduler.runCurrent()
+        u.install()
+        scheduler.runCurrent()
+        assertEquals(listOf<Int?>(null), source.seen)
+    }
+
+    @Test fun percentIsClampedAndWhole() {
+        assertEquals(33, percent(1, 3))
+        assertEquals(100, percent(5000, 1000))
+        assertNull(percent(1, 0))
     }
 
     @Test fun installAsksForUnknownAppsPermissionFirst() {

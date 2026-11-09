@@ -41,7 +41,7 @@ class ApiOwnedTest {
             calls++
             return ServerInfo("kit", "1", 1, "1")
         }
-        override suspend fun downloadApk(to: File) = Unit
+        override suspend fun downloadApk(to: File, onProgress: (Long, Long) -> Unit) = Unit
     }
 
     private object NoInstall : ApkInstall {

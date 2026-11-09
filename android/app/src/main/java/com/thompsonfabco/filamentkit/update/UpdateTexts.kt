@@ -16,7 +16,7 @@ object UpdateTexts {
 
     /** Trying again is how a corrected server copy gets picked up. */
     fun installLabel(ui: UpdateUi): String = when {
-        ui.busy -> "Downloading…"
+        ui.busy -> ui.progress?.let { "Downloading… $it%" } ?: "Downloading…"
         refused(ui) -> "Try again"
         else -> "Install"
     }

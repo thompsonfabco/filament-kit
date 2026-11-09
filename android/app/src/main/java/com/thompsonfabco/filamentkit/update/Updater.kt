@@ -24,15 +24,20 @@ fun isNewer(apkVersion: String?, current: Int): Boolean {
     return offered > current
 }
 
+/** Whole percent of [total] done, or null when the server sent no length. */
+fun percent(done: Long, total: Long): Int? =
+    if (total <= 0) null else (done.coerceIn(0, total) * 100 / total).toInt()
+
 /** Where updates come from; [of] adapts the real [Api]. */
 interface UpdateSource {
     suspend fun info(): ServerInfo
-    suspend fun downloadApk(to: File)
+    /** [onProgress]: (bytes so far, total or -1 when unknown). */
+    suspend fun downloadApk(to: File, onProgress: (Long, Long) -> Unit)
 
     companion object {
         fun of(api: Api): UpdateSource = object : UpdateSource {
             override suspend fun info() = api.info()
-            override suspend fun downloadApk(to: File) = api.downloadApk(to)
+            override suspend fun downloadApk(to: File, onProgress: (Long, Long) -> Unit) = api.downloadApk(to, onProgress)
         }
     }
 }
@@ -66,6 +71,8 @@ data class UpdateUi(
     /** The server's release, which the update comes with (`/api/info` `version`). */
     val offeredVersion: String? = null,
     val busy: Boolean = false,
+    /** How much of the APK is downloaded, 0-100, while [busy]; null before the first bytes or with no known size. */
+    val progress: Int? = null,
     val needsPermission: Boolean = false,
     val error: String? = null,
     /** The download is done and the system confirmation is waiting: Home shows "Tap to install". */
@@ -138,18 +145,21 @@ class Updater(
             installer.requestPermission()
             return
         }
-        _state.update { it.copy(busy = true, needsPermission = false, error = null) }
+        _state.update { it.copy(busy = true, progress = null, needsPermission = false, error = null) }
         viewModelScope.launch {
             try {
                 apkFile.parentFile?.mkdirs()
-                source.downloadApk(apkFile)
+                source.downloadApk(apkFile) { done, total ->
+                    val pct = percent(done, total)
+                    if (pct != _state.value.progress) _state.update { it.copy(progress = pct) }
+                }
                 installer.install(apkFile)
-                _state.update { it.copy(busy = false) }
+                _state.update { it.copy(busy = false, progress = null) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 onProblem(e)
-                _state.update { it.copy(busy = false, error = messageFor(e)) }
+                _state.update { it.copy(busy = false, progress = null, error = messageFor(e)) }
             }
         }
     }
