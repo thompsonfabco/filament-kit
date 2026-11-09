@@ -140,7 +140,16 @@ class Rig:
     def print_job(self, final="FINISH", percent=100, job=JOB):
         self.push(job)
         self.push({"gcode_state": final, "mc_percent": percent})
-        self.tracker.flush(10)
+        self.settled()
+
+    def settled(self, timeout=60):
+        """Wait for the settles queued so far. A settle fetches the 3mf over (fake) FTPS, whose own timeout is 20 s,
+        and calls Spoolman: on a crowded machine that outlasted the 10 s this used to wait, and the test then read
+        the usage log before anything was written (KeyError 'A2', flaky list 2026-11-09 11:30)."""
+        self.tracker.flush(timeout)
+        with self.tracker._lock:
+            left = [f for f in self.tracker._futures if not f.done()]
+        assert not left, f"{len(left)} settle(s) still running after {timeout} s"
 
     def close(self):
         self.tracker.stop()
@@ -229,7 +238,7 @@ def test_restart_mid_print_then_finish_deducts_exactly_once(rig, sd, spoolman_fa
     second.push({"gcode_state": "FINISH", "mc_percent": 100})
     second.reconnect()                                    # pushall repeats FINISH
     second.push({"gcode_state": "FINISH"})
-    second.tracker.flush(10)
+    second.settled()
     assert used(spoolman_fake_store, A2) == 21.92 and used(spoolman_fake_store, HTA) == 9.6
     assert len(spoolman_fake_store["uses"]) == 2 and len(usage.entries(SERIAL, 7)) == 2
 
