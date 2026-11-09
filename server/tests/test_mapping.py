@@ -579,7 +579,8 @@ def test_a_manual_map_after_a_failed_job_is_the_current_map():
     _failed_job(time.mktime((2026, 11, 9, 13, 0, 0, 0, 0, -1)))
     _owner_map(time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(time.mktime((2026, 11, 9, 13, 5, 0, 0, 0, -1)))))
     v = mapping.Mapper(FakeManager()).view(SERIAL)
-    assert v["outcome"] == "not_confirmed" and v["reason"] == "none" and v["next_step"] == "Map the slots."
+    assert v["outcome"] == "not_confirmed" and v["reason"] == "none"
+    assert v["next_step"] == "Map by loading filament for any position not confirmed yet, or map the slots again."
     assert v["state"] == "failed" and v["problems_old"] is True and v["problems"]       # the job's own record is kept
     assert [s["label"] for s in v["slots"]] == ["A1"]
 
@@ -599,3 +600,34 @@ def test_owner_since_is_the_newest_owner_entry_and_ignores_bad_times():
     assert mapping.owner_since(ams.SlotMap()) is None
     assert mapping.superseded({"state": "failed", "finished": None}, m) is True
     assert mapping.superseded({"state": "done", "finished": 0}, m) is False
+
+
+class AmsManager(FakeManager):
+    """The printer reports one AMS with four trays (A1..A4)."""
+
+    def wait_report(self, serial, predicate, timeout):
+        return {"gcode_state": "IDLE", "ams": {"ams": [{"id": "0", "tray": [
+            {"id": str(i), "tray_type": "PLA", "tray_color": "FF0000FF"} for i in range(4)]}]}}
+
+
+def test_after_a_manual_map_the_next_step_names_what_is_left():
+    """The orchestrator's 16:53 item: not "Map the slots." but the positions the owner has not confirmed."""
+    _owner_map(time.strftime("%Y-%m-%dT%H:%M:%S%z"))
+    v = mapping.Mapper(AmsManager()).view(SERIAL)
+    assert v["outcome"] == "not_confirmed"
+    assert v["next_step"].startswith("3 positions not yet confirmed (A2, A3, A4): map by loading filament, or map "
+                                     "the slots again.")
+
+
+def test_owner_step_wording():
+    m = ams.SlotMap(by_user={"A1": {}, "A2": {}})
+    assert mapping.owner_step(m, ["A1", "A2", "A3"]) == ("1 position not yet confirmed (A3): map by loading filament, "
+                                                         "or map the slots again.")
+    assert mapping.owner_step(m, ["A1", "A2"]).startswith("Every position is confirmed by you")
+    assert mapping.owner_step(m, None).startswith("Map by loading filament for any position")
+
+
+def test_a_map_without_owner_entries_keeps_map_the_slots():
+    ams.save_map(SERIAL, ams.SlotMap(slots={"A1": {"ams_id": 0, "tray_id": 0, "global_id": 0}}))
+    v = mapping.Mapper(AmsManager()).view(SERIAL)
+    assert v["outcome"] == "not_confirmed" and v["next_step"] == "Map the slots."
