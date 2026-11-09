@@ -160,8 +160,14 @@ def ffmpeg_hub(printers, tmp_path):
 
 
 def _started(hub, serial):
+    """Wait for the fake ffmpeg's files, fetching as a viewer does meanwhile: one fetch holds the stream for only
+    hls_window + idle_stop (0.3 s here), and a loaded machine can take longer than that to start the fake."""
     d = hub.dir_for(serial)
-    assert wait_until(lambda: (d / "argv.json").exists() and (d / "index.m3u8").exists(), 15)
+
+    def up():
+        hub.touch_hls(serial)
+        return (d / "argv.json").exists() and (d / "index.m3u8").exists()
+    assert wait_until(up, 15, step=0.05)
     return json.loads((d / "argv.json").read_text())
 
 
