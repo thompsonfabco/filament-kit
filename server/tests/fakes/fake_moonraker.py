@@ -219,11 +219,13 @@ class FakeMoonraker:
 
         @guard
         async def restart(request):
+            await request.body()    # read it: replying with a body unread makes Windows reset the connection
             fake.actions.append("restart")
             return ok("ok")
 
         @guard
         async def server_restart(request):
+            await request.body()
             fake.actions.append("server_restart")
             return ok("ok")
 

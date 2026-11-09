@@ -475,14 +475,19 @@ class Pack:
         if not self.ask("Restart Moonraker now to use its new settings?"):
             self.out("  restart it later ({})".format(later))
             return
-        req = urllib.request.Request(self.moonraker + "/server/restart", data=b"{}", method="POST",
+        self._restart("/server/restart", "Moonraker", later)
+
+    def _restart(self, path, what, later):
+        req = urllib.request.Request(self.moonraker + path, data=b"{}", method="POST",
                                      headers={"Content-Type": "application/json"})
         try:
             urllib.request.urlopen(req, timeout=10).read()
+        except ConnectionError:     # not wrapped in URLError: it was sent, and a server may hang up as it restarts
+            pass
         except OSError as e:
-            self.out("  could not ask Moonraker to restart ({}): restart it yourself ({})".format(e, later))
+            self.out("  could not ask {} to restart ({}): restart it yourself ({})".format(what, e, later))
             return
-        self.out("  Moonraker is restarting")
+        self.out("  {} is restarting".format(what))
 
     def offer_restart(self, state):
         if state not in IDLE:
@@ -492,10 +497,7 @@ class Pack:
         if not self.ask("Restart Klipper now to load the macros?"):
             self.out("  restart it later (RESTART in the console)")
             return
-        req = urllib.request.Request(self.moonraker + "/printer/restart", data=b"{}", method="POST",
-                                     headers={"Content-Type": "application/json"})
-        urllib.request.urlopen(req, timeout=10).read()
-        self.out("  Klipper is restarting")
+        self._restart("/printer/restart", "Klipper", "RESTART in the console")
 
     def status(self):
         objs = self.objects()

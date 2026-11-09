@@ -4,9 +4,11 @@ Run with the server's test environment: `server/.venv/Scripts/python -m pytest p
 server tests' FakeMoonraker).
 """
 import ast
+import http.client
 import os
 import subprocess
 import sys
+import urllib.error
 from pathlib import Path
 
 import pytest
@@ -203,17 +205,45 @@ def test_no_moonraker_restart_while_printing(data, moon):
     assert any("Moonraker must restart" in s and "printing" in s for s in p.said)
 
 
-def test_a_failed_moonraker_restart_only_says_so(data, moon, monkeypatch):
-    p = pack(data, moon)
+def _restart_raises(monkeypatch, error, path="/server/restart"):
     real = fkpack.urllib.request.urlopen
 
     def fail_restart(req, *a, **kw):
-        if getattr(req, "full_url", "").endswith("/server/restart"):
-            raise OSError("connection reset")
+        if getattr(req, "full_url", "").endswith(path):
+            raise error
         return real(req, *a, **kw)
     monkeypatch.setattr(fkpack.urllib.request, "urlopen", fail_restart)
+
+
+@pytest.mark.parametrize("error", [urllib.error.URLError("connection refused"),
+                                   urllib.error.HTTPError("u", 500, "broken", None, None), TimeoutError("slow")])
+def test_a_failed_moonraker_restart_only_says_so(data, moon, monkeypatch, error):
+    """The request never arrived, or was refused: the person has to do it."""
+    _restart_raises(monkeypatch, error)
+    p = pack(data, moon)
     assert p.install(["moonraker"], spoolman=KIT) == 0
-    assert any("restart it yourself" in s and "connection reset" in s for s in p.said)
+    assert any("restart it yourself" in s for s in p.said)
+    assert not any("Moonraker is restarting" in s for s in p.said)
+
+
+@pytest.mark.parametrize("error", [ConnectionResetError("reset"), ConnectionAbortedError("aborted"),
+                                   http.client.RemoteDisconnected("closed")])
+@pytest.mark.parametrize("path, what, parts", [("/server/restart", "Moonraker", ["moonraker"]),
+                                                ("/printer/restart", "Klipper", ["spool"])])
+def test_a_connection_dropped_while_answering_means_it_is_restarting(data, moon, monkeypatch, error, path, what, parts):
+    """Sent, and then the server went away, as one about to restart may. Not a failure to tell the person about."""
+    _restart_raises(monkeypatch, error, path)
+    p = pack(data, moon)
+    assert p.install(parts, spoolman=KIT) == 0
+    assert any(f"{what} is restarting" in s for s in p.said)
+    assert not any("restart it yourself" in s for s in p.said)
+
+
+def test_a_refused_klipper_restart_says_so_instead_of_a_traceback(data, moon, monkeypatch):
+    _restart_raises(monkeypatch, urllib.error.URLError("connection refused"), "/printer/restart")
+    p = pack(data, moon)
+    assert p.install(["spool"]) == 0
+    assert any("could not ask Klipper to restart" in s for s in p.said)
 
 
 def test_set_section_adds_missing():
