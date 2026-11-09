@@ -1024,7 +1024,11 @@ def _run_apply(*, pairing: bool = True) -> int:
         apply.execute(actions)
     except apply.ApplyError:
         return 1
-    apply.finish(cfg, pairing=pairing)
+    try:
+        apply.finish(cfg, pairing=pairing)
+    except apply.ApplyError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
     return 0
 
 
