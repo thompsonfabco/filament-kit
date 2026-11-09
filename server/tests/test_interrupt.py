@@ -78,7 +78,7 @@ def test_should_stop_aborts_restores_and_says_interrupted(rig):
         if text.startswith("Testing slot A2"):
             stop.set()
     res = slottest.run(m, SERIAL, step, should_stop=stop.is_set)
-    assert res.problems[0].startswith("interrupted")
+    assert res.problems[0] == slottest.INTERRUPTED and res.reason == "interrupted"
     assert set(res.confirmed) == {"A1"}                  # stopped before A2's write
     assert res.restored is True
     assert no_test_colour_left(printer)
@@ -346,7 +346,7 @@ def test_shutdown_aborts_a_running_job_and_waits_for_its_restore(rig, monkeypatc
             time.sleep(0.01)
         time.sleep(0.2)                      # the restore takes a moment
         events.append("restored")
-        return slottest.SlotTestResult(problems=["interrupted: mapping was stopped; slot test stopped"])
+        return slottest.SlotTestResult(problems=[slottest.INTERRUPTED])
     monkeypatch.setattr(slottest, "run", st_run)
     mp = mapping.Mapper(m)
     mp.start(SERIAL)
@@ -367,7 +367,7 @@ def test_aborted_slot_test_does_not_run_the_calibration(rig, monkeypatch, stub_j
     def st_run(manager, serial, on_step, should_stop=None):
         mp.abort(SERIAL)
         return slottest.SlotTestResult(confirmed={"A1": {"ams_id": 0, "tray_id": 0}},
-                                       problems=["interrupted: mapping was stopped; slot test stopped"])
+                                       problems=[slottest.INTERRUPTED])
     monkeypatch.setattr(slottest, "run", st_run)
     v = mp.run(SERIAL)
     assert v["state"] == "failed" and stub_jobs["calib"] == 0
@@ -462,7 +462,7 @@ def test_cli_signal_aborts_restores_then_exits_non_zero(rig, monkeypatch, capsys
         handler(signal.SIGINT, None)                       # Ctrl-C mid-test
         seen["stop"] = should_stop()
         return slottest.SlotTestResult(confirmed={"A1": {"ams_id": 0, "tray_id": 0}},
-                                       problems=["interrupted: mapping was stopped; slot test stopped"])
+                                       problems=[slottest.INTERRUPTED])
     monkeypatch.setattr(slottest, "run", st_run)
     monkeypatch.setattr(m, "stop", lambda: None)
     before = signal.getsignal(signal.SIGINT)
@@ -483,7 +483,7 @@ def test_cli_signal_aborts_even_when_its_message_cannot_be_printed(rig, monkeypa
     def st_run(manager, serial, on_step, should_stop=None):
         signal.getsignal(signal.SIGINT)(signal.SIGINT, None)
         seen["stop"] = should_stop()
-        return slottest.SlotTestResult(problems=["interrupted: mapping was stopped; slot test stopped"])
+        return slottest.SlotTestResult(problems=[slottest.INTERRUPTED])
     monkeypatch.setattr(slottest, "run", st_run)
     monkeypatch.setattr(m, "stop", lambda: None)
     real = print

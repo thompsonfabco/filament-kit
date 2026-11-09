@@ -603,7 +603,7 @@ class Mapper:
             return fail([STOPPED] + list(st.problems), "interrupted")
         if not st.confirmed:
             return fail(st.problems or ["no slot was confirmed by the slot test"],
-                        "developer_mode" if st.needs_developer_mode else "none")
+                        "developer_mode" if st.needs_developer_mode else st.reason)
 
         model = ams.printer_model(serial)
         smap = ams.SlotMap(slots={lab: {"ams_id": a["ams_id"], "tray_id": a["tray_id"],
@@ -720,7 +720,8 @@ class Mapper:
         old = (st is not mine and bool(st["problems"]) and (ended is None or ended < _STARTED)
                and not (st["state"] == "running" and _ProcessLock.held_elsewhere(serial)))
         out = outcome_of(st["state"], m, st.get("scheme_unsettled", False), st["problems"])
-        reason = st.get("reason", "none") if out not in ("confirmed", "running") else "none"
+        # a stale or suspect map: mapping again is the step, whatever stopped an earlier job
+        reason = st.get("reason", "none") if out not in ("confirmed", "running", "stale", "suspect") else "none"
         return {"outcome": out, "reason": reason, "outcome_text": OUTCOME_TEXT[out],
                 "next_step": next_step(out, reason, st.get("scheme_unsettled", False)),
                 "state": st["state"], "step": st["step"], "slots": slots, "calibrated": m.calibrated,

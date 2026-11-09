@@ -47,6 +47,7 @@ class SlotTestResult:
     restored: bool = True              # every changed slot confirmed back at its snapshot, no test colour left
     problems: list[str] = field(default_factory=list)          # one line per issue, "<label>: ..." for a slot
     needs_developer_mode: bool = False
+    reason: str = "none"               # mapping.REASONS: why the test stopped before its end (busy, offline, ...)
     empty: dict[str, dict] = field(default_factory=dict)       # label -> {ams_id, tray_id}: empty, not written
 
 
@@ -128,7 +129,11 @@ def _failed(reply: dict | None) -> bool:
     return reply is not None and str(reply.get('result', '')).lower() != 'success'
 
 
-INTERRUPTED = "interrupted: mapping was stopped; slot test stopped"
+INTERRUPTED = "The mapping was stopped; the slot test stopped."
+OFFLINE = "The printer went offline; the slot test stopped."
+# what a slot left untested says, by the reason the test stopped
+NOT_TESTED = {"busy": "the printer started a job", "offline": "the printer went offline", "interrupted": "stopped",
+              "kit_error": "an error in the kit", "developer_mode": "write refused", "none": "not tested"}
 
 
 def run(manager, serial: str, on_step: Callable[[str], None],
@@ -188,6 +193,7 @@ def run(manager, serial: str, on_step: Callable[[str], None],
     reported: set[str] = set()           # slots that already have a "not confirmed" line
     colours: set[str] = set()            # test colours written (or being written) in this run
     abort = None
+    reason = "none"
     interrupted: BaseException | None = None
     current: list[_Target] = []          # the slot being written right now
 
@@ -198,19 +204,19 @@ def run(manager, serial: str, on_step: Callable[[str], None],
     try:
         for n, t in enumerate(targets, 1):
             if stopping():
-                abort = INTERRUPTED
+                abort, reason = INTERRUPTED, "interrupted"
                 break
             try:
                 check_idle(manager, serial)
             except PrinterBusy as e:
-                abort = f"printer_busy: the printer started a job ({e}); slot test stopped"
+                abort, reason = f"The printer started a job ({e}); the slot test stopped.", "busy"
                 break
             except PrinterOffline:
-                abort = "printer_offline: the printer went offline; slot test stopped"
+                abort, reason = OFFLINE, "offline"
                 break
             step(f"Testing slot {t.label} ({n}/{len(targets)})")
             if stopping():
-                abort = INTERRUPTED
+                abort, reason = INTERRUPTED, "interrupted"
                 break
             colour = plan[n - 1]
             colours.add(colour)
@@ -219,7 +225,7 @@ def run(manager, serial: str, on_step: Callable[[str], None],
                 reply = manager.set_slot(serial, t.ams_id, t.tray_id, dict(t.snap, tray_color=colour), kind=t.kind)
             except (PrinterOffline, UnknownPrinter):
                 mark(t)                  # it may have reached the printer before the drop
-                abort = "printer_offline: the printer went offline; slot test stopped"
+                abort, reason = OFFLINE, "offline"
                 break
             if _failed(reply):
                 current.clear()
@@ -236,7 +242,7 @@ def run(manager, serial: str, on_step: Callable[[str], None],
                                         f"({_reason(reply)}); turn on Developer Mode (LAN-only mode) and retry")
                     res.problems.append(f"{t.label}: not confirmed (write refused)")
                     reported.add(t.label)
-                    abort = "needs_developer_mode"
+                    abort, reason = "needs_developer_mode", "developer_mode"
                     break
                 res.problems.append(f"{t.label}: not confirmed (write refused: {_reason(reply)})")
                 reported.add(t.label)
@@ -246,7 +252,7 @@ def run(manager, serial: str, on_step: Callable[[str], None],
             r = manager.wait_report(serial, lambda r, c=colour: _busy(r) or bool(_showing(r, c, model)), CONFIRM_TIMEOUT)
             if r is None:
                 if manager.state(serial) not in ONLINE:
-                    abort = "printer_offline: the printer went offline; slot test stopped"
+                    abort, reason = OFFLINE, "offline"
                     break
                 res.problems.append(f"{t.label}: not confirmed (no report showed its test colour within "
                                     f"{CONFIRM_TIMEOUT:g} s)")
@@ -257,8 +263,8 @@ def run(manager, serial: str, on_step: Callable[[str], None],
                 if lab in by_label:
                     mark(by_label[lab])
             if _busy(r):
-                abort = (f"printer_busy: the printer started a job ({status._s(r.get('gcode_state'))}); "
-                         f"slot test stopped")
+                abort = f"The printer started a job ({status._s(r.get('gcode_state'))}); the slot test stopped."
+                reason = "busy"
                 break
             if t.label in where:
                 res.confirmed[t.label] = {'ams_id': t.ams_id, 'tray_id': t.tray_id}
@@ -267,17 +273,18 @@ def run(manager, serial: str, on_step: Callable[[str], None],
                 reported.add(t.label)
     except Exception as e:                  # never leave test colours behind because of a bug or callback
         log.exception("slot test on %s failed", serial)
-        abort = f"error: slot test failed ({type(e).__name__}: {e})"
+        abort, reason = "The slot test stopped on an error in the kit; the slots are put back.", "kit_error"
     except BaseException as e:              # Ctrl-C, SystemExit ...: restore first, re-raise afterwards
         log.warning("slot test on %s interrupted (%s); restoring the slots", serial, type(e).__name__)
-        abort = INTERRUPTED
+        abort, reason = INTERRUPTED, "interrupted"
         interrupted = e
     for t in current:                       # stopped in the middle of a write: it may have landed
         mark(t)
 
     if abort and abort != "needs_developer_mode":
         res.problems.insert(0, abort)
-    why = (abort or '').split(':')[0] or 'not tested'
+    res.reason = reason
+    why = NOT_TESTED.get(reason, "not tested")
     for t in targets:
         if t.label not in res.confirmed and t.label not in reported:
             res.problems.append(f"{t.label}: not confirmed ({why})")
@@ -313,7 +320,7 @@ def _restore(manager, serial: str, res: SlotTestResult, changed: list[_Target], 
                                     f"within {CONFIRM_TIMEOUT:g} s)")
                 res.restored = False
         except (PrinterOffline, UnknownPrinter):
-            res.problems.append(f"{t.label}: not restored (printer_offline); its test colour may still be set")
+            res.problems.append(f"{t.label}: not restored (the printer went offline); its test colour may still be set")
             res.restored = False
         except Exception as e:               # one slot's failure must not skip the others' restores
             log.exception("slot test on %s: restoring %s failed", serial, t.label)

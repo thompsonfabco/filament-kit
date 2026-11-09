@@ -537,3 +537,24 @@ def test_the_reason_survives_a_restart_and_older_files_read_none(stubs):
 def test_every_reason_has_its_next_step_and_every_outcome_its_text():
     assert set(mapping.NEXT_STEP) == set(mapping.REASONS) - {"none"}
     assert set(mapping.OUTCOME_TEXT) == set(mapping.OUTCOMES)
+
+
+@pytest.mark.parametrize("abort,reason", [(slottest.OFFLINE, "offline"),
+                                          ("The printer started a job (RUNNING); the slot test stopped.", "busy")])
+def test_a_slot_test_stopped_midway_carries_its_reason(stubs, abort, reason):
+    """R60: offline or busy during the test, not only before it."""
+    stubs["st"] = SlotTestResult(problems=[abort, "A1: not confirmed (x)"], reason=reason)
+    v = mapping.Mapper(FakeManager()).run(SERIAL)
+    assert v["outcome"] == "failed" and v["reason"] == reason and v["next_step"] == mapping.NEXT_STEP[reason]
+    assert not any(p.startswith(("printer_offline", "printer_busy")) for p in v["problems"])
+
+
+def test_a_stale_map_says_map_again_whatever_stopped_an_earlier_job(stubs):
+    stubs["calib"] = CalibResult(consistent=False, problems=["x"], report_wanted="no_mapping")
+    m = mapping.Mapper(FakeManager())
+    m.run(SERIAL)
+    saved = ams.load_map(SERIAL)
+    saved.stale = True
+    ams.save_map(SERIAL, saved)
+    v = m.view(SERIAL)
+    assert v["outcome"] == "stale" and v["reason"] == "none" and v["next_step"] == "Map the slots."
