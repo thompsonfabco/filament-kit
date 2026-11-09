@@ -119,11 +119,12 @@ def test_stop_closes_nfcpy_and_the_loop_does_not_reopen(monkeypatch):
     _fake_nfc(monkeypatch, Frontend)
     t = threading.Thread(target=station_nfc.nfc_loop, daemon=True)
     t.start()
-    for _ in range(200):
-        if not station_nfc.nfc_idle.is_set():
+    # wait for the open itself: the loop clears nfc_idle before it opens, and a stop in between rightly opens nothing
+    for _ in range(500):
+        if events:
             break
         threading.Event().wait(0.01)
-    assert not station_nfc.nfc_idle.is_set()  # nfcpy holds the reader
+    assert events == ["open"] and not station_nfc.nfc_idle.is_set()  # nfcpy holds the reader
     assert station_nfc.stop(timeout=3) is True
     t.join(3)
     assert not t.is_alive()
