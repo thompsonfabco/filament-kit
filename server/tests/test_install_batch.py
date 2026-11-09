@@ -272,6 +272,58 @@ def _apk():
     f.write_bytes(b"PK\x03\x04 example")
 
 
+def _silent_server(monkeypatch, answers_on=None):
+    """The kit's API answers on poll number `answers_on`, or never. Returns the list of polls; sleeping takes no time."""
+    polls = []
+
+    def ok(url):
+        polls.append(url)
+        return answers_on is not None and len(polls) >= answers_on
+    monkeypatch.setattr(apply, "_https_local_ok", ok)
+    monkeypatch.setattr(apply.time, "sleep", lambda s: None)
+    return polls
+
+
+def test_silent_server_with_no_terminal_fails_after_120_seconds(finish_env, monkeypatch, capsys):
+    calls, run = finish_env
+    polls = _silent_server(monkeypatch)
+    _stdin(monkeypatch, "", tty=False)
+    with pytest.raises(apply.ApplyError, match="did not answer on port 8710 within 120 s"):
+        apply.finish(config.load(), run=run)
+    assert len(polls) == 120
+    assert calls == []                          # no status, no pairing line after it
+
+
+def test_slow_server_with_no_terminal_is_waited_for(finish_env, monkeypatch, capsys):
+    calls, run = finish_env
+    polls = _silent_server(monkeypatch, answers_on=100)     # past the 30 s a terminal gets
+    _stdin(monkeypatch, "", tty=False)
+    apply.finish(config.load(), run=run)
+    assert len(polls) == 100
+    assert "Done." in capsys.readouterr().out
+
+
+def test_silent_server_at_a_terminal_only_ends_the_wait(finish_env, monkeypatch, capsys):
+    calls, run = finish_env
+    polls = _silent_server(monkeypatch)
+    _stdin(monkeypatch, "s\n", tty=True)
+    apply.finish(config.load(), run=run)
+    assert len(polls) == 30
+    assert [apply.WRAPPER, "status"] in calls   # status says what is wrong
+
+
+def test_modules_apply_exits_1_when_the_server_stays_silent(finish_env, monkeypatch, capsys):
+    """install.sh runs this under set -e: exit 1 fails the install, and the updater then puts the earlier version back."""
+    monkeypatch.setattr(cli, "_require_root", lambda: True)
+    monkeypatch.setattr(apply, "execute", lambda actions: None)
+
+    def silent(cfg, pairing=True):
+        raise apply.ApplyError("filament-kit did not answer on port 8710 within 120 s; see: journalctl -u filament-kit")
+    monkeypatch.setattr(apply, "finish", silent)
+    assert cli.cmd_modules_apply() == 1
+    assert "did not answer" in capsys.readouterr().err
+
+
 def test_finish_shows_the_app_qr_then_waits_then_pairs(finish_env, monkeypatch, capsys):
     calls, run = finish_env
     _apk()

@@ -334,6 +334,10 @@ _HINTS = {
 }
 
 
+SERVER_WAIT_TERMINAL = 30          # seconds
+SERVER_WAIT_NO_TERMINAL = 120      # a small machine just after a package install; running out fails the apply
+
+
 class ApplyError(Exception):
     """A step failed; the `FAIL` and `fix:` lines are already printed."""
 
@@ -946,9 +950,26 @@ def _show_app(cfg: dict, tty: bool) -> bool:
     return answer.strip()[:1] not in ("s", "S")
 
 
+def _wait_for_server(port: int) -> None:
+    """Wait for the kit's own API. At a terminal a person reads what `status` says next, so a silent server only ends the
+    wait. With none (the updater, the setup page's jobs, a provisioning script) nobody does: ApplyError, so an update
+    whose server does not start fails and the updater puts the earlier version back."""
+    tty = _tty()
+    print("\n==> Waiting for filament-kit to start")
+    seconds = SERVER_WAIT_TERMINAL if tty else SERVER_WAIT_NO_TERMINAL
+    for _ in range(seconds):
+        if _https_local_ok(f"https://127.0.0.1:{port}/api/info"):
+            return
+        time.sleep(1)
+    if not tty:
+        raise ApplyError(f"filament-kit did not answer on port {port} within {seconds} s; "
+                         "see: journalctl -u filament-kit")
+
+
 def finish(cfg: dict, *, run: Callable[[list[str]], None] = run_checked, pairing: bool = True) -> None:
     """install.sh step 8, for the modules that are on: status, the app's download code, the pairing code, the
-    closing line. Without a terminal both links are printed as text and nothing waits.
+    closing line. Without a terminal both links are printed as text and nothing waits but the server's start, which
+    raises ApplyError if it does not come.
 
     `pairing=False` (modules set/enable/disable, config menu) prints the status only, no QR code."""
     ex = _Exec(run, Path("."), Path("/"))
@@ -957,11 +978,7 @@ def finish(cfg: dict, *, run: Callable[[list[str]], None] = run_checked, pairing
     if "server" in on:
         port = int(cfg.get("port", 8710))
         if not ex.dry:
-            print("\n==> Waiting for filament-kit to start")
-            for _ in range(30):
-                if _https_local_ok(f"https://127.0.0.1:{port}/api/info"):
-                    break
-                time.sleep(1)
+            _wait_for_server(port)
         print("\n==> Status")
         if not ex.ok([WRAPPER, "status"]):
             print("Some checks failed; follow the 'fix:' lines above.")
