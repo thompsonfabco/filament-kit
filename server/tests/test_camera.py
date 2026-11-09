@@ -326,6 +326,50 @@ def test_relay_carries_both_ways_at_once_on_one_thread(tmp_path):
     assert seen["text"][0].startswith("OPTIONS rtsps://") and seen["rtcp"] == rtcp
 
 
+@pytest.mark.parametrize("what", ["teardown", "rtcp"])
+def test_what_ffmpeg_sends_just_before_it_closes_reaches_the_printer(tmp_path, what):
+    """ffmpeg stopped by SIGTERM sends TEARDOWN and closes its socket at once: the printer gets an orderly end of session."""
+    srv, ctx = tls_listener(tmp_path)
+    port = srv.getsockname()[1]
+    seen = {}
+    frames = b"".join(b"$\x01\x00\x04" + bytes([i]) * 4 for i in range(20))
+
+    def printer():
+        conn, _ = srv.accept()
+        with ctx.wrap_socket(conn, server_side=True) as s:
+            f = s.makefile("rb")
+            _read_msg(f)
+            s.sendall(b'RTSP/1.0 401 Unauthorized\r\nCSeq: 0\r\n'
+                      b'WWW-Authenticate: Digest realm="R", nonce="n"\r\n\r\n')
+            ready.set()
+            if what == "teardown":
+                seen["got"] = _read_msg(f)
+            else:
+                seen["got"] = f.read(len(frames))
+    ready = threading.Event()
+    t = threading.Thread(target=printer, daemon=True)
+    t.start()
+    relay = camera.RtspRelay(Printer("P1", "x", "O1D", "127.0.0.1", CODE, True), port)
+    local = relay.start()
+    try:
+        c = socket.create_connection(("127.0.0.1", local), timeout=5)
+        assert ready.wait(5)
+        time.sleep(0.2)                                         # into the pump
+        if what == "teardown":
+            c.sendall(f"TEARDOWN rtsp://127.0.0.1:{local}/streaming/live/1 RTSP/1.0\r\nCSeq: 9\r\n\r\n".encode())
+        else:
+            c.sendall(frames)
+        c.close()
+        t.join(10)
+    finally:
+        relay.stop()
+        srv.close()
+    if what == "teardown":
+        assert seen["got"][0].startswith("TEARDOWN rtsps://")
+    else:
+        assert seen["got"] == frames
+
+
 def test_for_printer_holds_a_part_message_back():
     frame = b"$\x01\x00\x02ab"
     plain = b"X y RTSP/1.0\r\nContent-Length: 2\r\n\r\nhi"

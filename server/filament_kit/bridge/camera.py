@@ -62,7 +62,7 @@ MAX_FRAME = 8 * 1024 * 1024
 MAX_QUEUED = 1024 * 1024        # the relay stops reading a side once this much waits for the other
 PUMP_CHUNK = 16384              # at most one write's worth, one TLS record
 PUMP_TICK = 1.0                 # seconds; the pump looks at the clock at least this often
-FLUSH_TIMEOUT = 5.0             # seconds ffmpeg gets to take what is queued once the printer has ended
+FLUSH_TIMEOUT = 5.0             # seconds either side gets to take what is queued once the other has ended
 BACKOFF = (1.0, 30.0)
 MAX_RTSP_HEADERS = 64 * 1024
 MAX_RTSP_BODY = 1024 * 1024
@@ -177,6 +177,11 @@ def _pump(cli: socket.socket, up, rewrite: Callable[[bytes], bytes], idle: float
             except BlockingIOError:
                 d = None
             if d == b"":
+                try:        # ffmpeg's TEARDOWN comes just before its close: it still reaches the printer
+                    up.settimeout(FLUSH_TIMEOUT)
+                    up.sendall(to_up)
+                except OSError:
+                    pass
                 return
             if d:
                 out, from_cli = _for_printer(from_cli + d, rewrite)
