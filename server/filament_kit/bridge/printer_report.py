@@ -42,7 +42,7 @@ _WHY = {"unknown_model": "The kit doesn't know this printer model yet. A report 
         "unknown_ams": "The kit doesn't know one of this printer's AMS units yet. A report helps add it.",
         "no_scheme": "The kit couldn't work out how this printer numbers its slots. A report helps fix that.",
         "job_refused": "The printer refused the mapping job. A report helps find out why.",
-        "job_failed": "The mapping job failed on the printer. A report helps find out why.",
+        "job_failed": "The mapping job failed on the printer. What its screen said, and a report, help find out why.",
         "no_mapping": "The printer didn't say how it mapped the slots. A report helps find out why."}
 
 

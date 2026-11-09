@@ -947,7 +947,7 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
         if st['final'] != 'FINISH':
             res.problems.append(ended)
         res.problems.append("the printer reported no slot mapping")
-        res.report_wanted = "no_mapping"
+        res.report_wanted = "no_mapping" if st['final'] == 'FINISH' else "job_failed"
         return
     vals = []
     for i, label in enumerate(labels):
@@ -970,8 +970,14 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
                               and list(res.mapping)[:len(vals)] == last_print[:len(vals)])
     stale = res.scheme is None and res.repeats_last_print
     if res.scheme is None:
-        res.report_wanted = "no_scheme"
-    if stale:
+        # a job that ended FAILED with an error may never have read our file: what to find out is why it failed, not how
+        # it numbers. FAILED with no error is a finished job (clean): its numbering is the unknown
+        res.report_wanted = "no_scheme" if clean else "job_failed"
+    if stale and st['final'] != 'FINISH':
+        res.problems.append(ended)
+        res.problems.append("the printer's slot numbers are the same as its last print's, so they say nothing about these "
+                            "slots; filament use stays logged only")
+    elif stale:
         res.problems.append("the printer's slot numbers are the same as its last print's and fit no numbering this kit "
                             "knows, so they say nothing about these slots; filament use stays logged only")
     elif res.scheme is None and not (numbers_ok and clean):
@@ -981,8 +987,11 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
         for label, s_, v in zip(labels, sent, vals):
             if v is not None and v != s_:
                 res.problems.append(f"{label}: sent slot {s_}, the printer reported {v}")
-        res.problems.append(f"the reported slot numbers {list(res.mapping)} fit no numbering scheme of this "
-                            f"printer model ({', '.join(candidates)})")
+        # not the scheme's fault: a job that failed may never have read our file, and a short list numbers nothing
+        res.problems.append(f"the job failed on the printer, so the numbers it reported {list(res.mapping)} say nothing about "
+                            "how it numbers its slots" if not clean else
+                            f"the printer's numbers {list(res.mapping)} aren't one for each of the {len(labels)} filaments, so "
+                            "they prove no numbering")
     elif res.scheme is None:
         log.info("printer %s: the reported numbers %s fit no scheme (%s); keeping them as they are", serial, vals,
                  ", ".join(candidates))

@@ -184,7 +184,7 @@ def test_map_none_before_any_job(client):
     r = client.get(f"/api/printers/{SERIAL}/map")
     assert r.status_code == 200
     assert r.json() == {"state": "none", "step": "", "slots": [], "calibrated": False, "observe": True,
-                        "problems": [], "notes": [], "scheme_unsettled": False, "report_wanted": None, "report_why": None, "problems_old": False, "finished": None, "stale": False,
+                        "problems": [], "notes": [], "scheme_unsettled": False, "report_wanted": None, "report_why": None, "problems_old": False, "finished": None, "kit": None, "stale": False,
                         "remapping": False, "scheme": None, "suspect": False}
 
 
@@ -214,7 +214,7 @@ def test_map_job_runs_and_reports(client, stubs, caplog):
         {"label": "A1", "ams_id": 0, "tray_id": 0, "global": 0},
         {"label": "A2", "ams_id": 0, "tray_id": 1, "global": 1}]
     assert set(body) == {"state", "step", "slots", "calibrated", "observe", "problems", "notes", "scheme_unsettled", "report_wanted", "report_why", "problems_old",
-                         "finished", "stale", "remapping",
+                         "finished", "kit", "stale", "remapping",
                          "scheme", "suspect"}
     audit = [rec.getMessage() for rec in caplog.records if "slot mapping" in rec.getMessage()]
     assert any(f"serial={SERIAL}" in a and "device_id=" in a for a in audit)

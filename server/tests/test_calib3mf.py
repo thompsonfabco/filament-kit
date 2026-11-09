@@ -725,7 +725,7 @@ def test_second_job_only_when_a_finished_job_fits_no_candidate(fake_ftp, printer
     m.reads = "shift8"
     r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
     assert r.consistent is True and r.scheme == "shift8", r.problems
-    assert r.tried == ["legacy", "shift8"] and len(r.attempts) == 1 and "fit no numbering" in r.attempts[0]
+    assert r.tried == ["legacy", "shift8"] and len(r.attempts) == 1 and "prove no numbering" in r.attempts[0]
     assert [p["ams_mapping"] for p in jobs(m)] == [[0, 2, 128, 129], [0, 2, 32768, 33024]]
     assert r.decoding == {"A1": 0, "A3": 2, "HT-A": 32768, "HT-B": 33024}
     assert r.problems == []
@@ -853,6 +853,20 @@ def test_a_failed_job_whose_numbers_fit_nothing_proves_nothing(fake_ftp, printer
     m.final, m.print_error = "FAILED", 7
     r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
     assert r.consistent is False and any("ended as FAILED" in p for p in r.problems) and len(jobs(m)) == 1
+    assert r.report_wanted == "job_failed"
+
+
+@pytest.mark.parametrize("error", [None, 0])
+def test_a_finished_job_ending_failed_with_no_error_keeps_the_numbering_reason(fake_ftp, printer, error):
+    """Re-review: FAILED with no error is a finished job (the H2D ends a gcode-only job that way). Numbers that fit
+    nothing are kept as a table, and the report reason is the unknown numbering, never a failure the kit did not see."""
+    m = FakeManager(fake_ftp.root, report=owner_h2d_report())
+    _own_numbers(m, [9001, 9002, 9003, 9004, 9005, 9006])
+    m.final, m.print_error = "FAILED", error
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert r.consistent is True and r.failed_as_finish is True and r.problems == [], r.problems
+    assert r.report_wanted == "no_scheme"
+    assert any("fit no numbering this kit knows" in n for n in r.notes) and not any("FAILED" in n for n in r.notes)
 
 
 OLD_PRINT = [9003, 9001, 9004, 9002, 9006, 9005]
