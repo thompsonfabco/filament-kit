@@ -198,7 +198,8 @@ def test_slot_test_crash_fails_with_reason(stubs, monkeypatch):
         raise RuntimeError("kaput")
     monkeypatch.setattr(slottest, "run", boom)
     v = mapping.Mapper(FakeManager()).run(SERIAL)
-    assert v["state"] == "failed" and any("kaput" in p for p in v["problems"])
+    # the exception goes to the log; the owner reads a sentence and the reason
+    assert v["state"] == "failed" and v["reason"] == "kit_error" and not any("kaput" in p for p in v["problems"])
 
 
 def test_printer_starts_job_during_slot_test(stubs, monkeypatch):
@@ -206,7 +207,7 @@ def test_printer_starts_job_during_slot_test(stubs, monkeypatch):
         raise PrinterBusy("RUNNING")
     monkeypatch.setattr(slottest, "run", busy)
     v = mapping.Mapper(FakeManager()).run(SERIAL)
-    assert v["state"] == "failed" and v["problems"][0].startswith("printer_busy")
+    assert v["state"] == "failed" and v["reason"] == "busy" and v["problems"][0].startswith("The printer started a job")
 
 
 # ---------------------------------------------------------------- refusals
@@ -450,3 +451,110 @@ def test_suspect_remap_step_says_why(stubs, monkeypatch):
     mp.start(SERIAL, auto=True)
     wait_done(mp)
     assert [step for _, step in first] == [mapping.REMAP_SUSPECT_STEP, mapping.REMAP_STEP]
+
+
+# ---------------------------------------------------------------- outcome and reason (G4)
+
+def test_a_confirmed_map_reads_confirmed_with_no_next_step(stubs):
+    v = mapping.Mapper(FakeManager()).run(SERIAL)
+    assert v["outcome"] == "confirmed" and v["reason"] == "none" and v["next_step"] == ""
+    assert v["outcome_text"] == mapping.OUTCOME_TEXT["confirmed"]
+
+
+def test_nothing_mapped_yet():
+    v = mapping.Mapper(FakeManager()).view(SERIAL)
+    assert v["outcome"] == "none" and v["next_step"] == "Map the slots."
+
+
+def test_a_busy_printer_is_a_sentence_and_a_reason(stubs, monkeypatch):
+    def busy(*a, **k):
+        raise PrinterBusy("RUNNING")
+    monkeypatch.setattr(slottest, "run", busy)
+    v = mapping.Mapper(FakeManager()).run(SERIAL)
+    assert v["outcome"] == "failed" and v["reason"] == "busy" and v["next_step"] == mapping.NEXT_STEP["busy"]
+    assert not any(p.startswith("printer_busy") for p in v["problems"])
+
+
+def test_developer_mode_is_carried_from_the_slot_test(stubs):
+    stubs["st"] = SlotTestResult(confirmed={}, needs_developer_mode=True,
+                                 problems=["needs_developer_mode: the printer refused the write to A1"])
+    v = mapping.Mapper(FakeManager()).run(SERIAL)
+    assert v["outcome"] == "failed" and v["reason"] == "developer_mode" and "Developer Mode" in v["next_step"]
+
+
+@pytest.mark.parametrize("calib,reason", [
+    (CalibResult(consistent=False, problems=["printer refused the calibration job"], report_wanted="job_refused"), "job_refused"),
+    (CalibResult(consistent=False, problems=["the printer reported no slot mapping"], report_wanted="no_mapping"), "no_mapping"),
+    (CalibResult(consistent=False, problems=["fit no numbering"], report_wanted="no_scheme"), "numbers_unfit"),
+    (CalibResult(consistent=False, problems=[calib3mf.SAY["printer_busy"]], reason="busy"), "busy"),
+    (CalibResult(consistent=True, restored=False, problems=[calib3mf.LEFT_LOADED]), "restore_failed"),
+])
+def test_an_unconfirmed_calibration_says_why(stubs, calib, reason):
+    stubs["calib"] = calib
+    v = mapping.Mapper(FakeManager()).run(SERIAL)
+    assert v["reason"] == reason and v["next_step"] == mapping.NEXT_STEP[reason]
+    assert v["outcome"] in ("not_confirmed", "failed")
+
+
+def test_an_unsettled_scheme_is_partial(stubs):
+    dec = {"A1": 0, "A2": 1, "HT-A": 128}
+    stubs["calib"] = CalibResult(decoding=dec, consistent=True, sent=dict(dec), scheme_unsettled=True)
+    v = mapping.Mapper(FakeManager()).run(SERIAL)
+    assert v["outcome"] == "partial" and v["reason"] == "none" and "second AMS unit" in v["next_step"]
+
+
+def test_stale_and_suspect_come_before_how_good_the_map_is(stubs):
+    m = mapping.Mapper(FakeManager())
+    m.run(SERIAL)
+    saved = ams.load_map(SERIAL)
+    saved.stale = True
+    ams.save_map(SERIAL, saved)
+    assert m.view(SERIAL)["outcome"] == "stale"
+    saved.suspect = True
+    ams.save_map(SERIAL, saved)
+    assert m.view(SERIAL)["outcome"] == "suspect"
+
+
+def test_a_kit_error_names_no_exception(stubs, monkeypatch):
+    def boom(*a, **k):
+        raise RuntimeError("secret detail")
+    monkeypatch.setattr(calib3mf, "run", boom)
+    v = mapping.Mapper(FakeManager()).run(SERIAL)
+    assert v["reason"] == "kit_error" and not any("secret detail" in p or "RuntimeError" in p for p in v["problems"])
+
+
+def test_the_reason_survives_a_restart_and_older_files_read_none(stubs):
+    stubs["calib"] = CalibResult(consistent=False, problems=["x"], report_wanted="job_refused")
+    mapping.Mapper(FakeManager()).run(SERIAL)
+    assert mapping.Mapper(FakeManager()).view(SERIAL)["reason"] == "job_refused"     # from the status file
+    f = mapping._dir(SERIAL) / mapping.STATUS_FILE
+    d = json.loads(f.read_text())
+    d.pop("reason")
+    f.write_text(json.dumps(d))
+    assert mapping.Mapper(FakeManager()).view(SERIAL)["reason"] == "none"
+
+
+def test_every_reason_has_its_next_step_and_every_outcome_its_text():
+    assert set(mapping.NEXT_STEP) == set(mapping.REASONS) - {"none"}
+    assert set(mapping.OUTCOME_TEXT) == set(mapping.OUTCOMES)
+
+
+@pytest.mark.parametrize("abort,reason", [(slottest.OFFLINE, "offline"),
+                                          ("The printer started a job (RUNNING); the slot test stopped.", "busy")])
+def test_a_slot_test_stopped_midway_carries_its_reason(stubs, abort, reason):
+    """R60: offline or busy during the test, not only before it."""
+    stubs["st"] = SlotTestResult(problems=[abort, "A1: not confirmed (x)"], reason=reason)
+    v = mapping.Mapper(FakeManager()).run(SERIAL)
+    assert v["outcome"] == "failed" and v["reason"] == reason and v["next_step"] == mapping.NEXT_STEP[reason]
+    assert not any(p.startswith(("printer_offline", "printer_busy")) for p in v["problems"])
+
+
+def test_a_stale_map_says_map_again_whatever_stopped_an_earlier_job(stubs):
+    stubs["calib"] = CalibResult(consistent=False, problems=["x"], report_wanted="no_mapping")
+    m = mapping.Mapper(FakeManager())
+    m.run(SERIAL)
+    saved = ams.load_map(SERIAL)
+    saved.stale = True
+    ams.save_map(SERIAL, saved)
+    v = m.view(SERIAL)
+    assert v["outcome"] == "stale" and v["reason"] == "none" and v["next_step"] == "Map the slots."

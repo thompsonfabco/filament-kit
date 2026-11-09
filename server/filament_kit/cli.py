@@ -728,14 +728,10 @@ def cmd_printer_map(serial: str, manager_factory) -> int:
         print("Mapping stopped. Any slot listed above as not restored may still hold a test colour; the next "
               "mapping run restores it first.")
         return 130 if stopped[0] == getattr(signal, "SIGINT", None) else 1
-    if v["state"] == "done" and v["calibrated"]:
-        print("Done: slots mapped; filament use is now taken off the spools in Spoolman.")
-        return 0
-    if v["state"] == "done":
-        print("Done, but the slot numbering was not confirmed: filament use is only logged (observe mode).")
-    else:
-        print("Mapping failed. Until mapping succeeds, filament use is only logged (observe mode).")
-    return 1
+    print(v["outcome_text"])
+    if v["next_step"]:
+        print(f"Next: {v['next_step']}")
+    return 0 if v["outcome"] in ("confirmed", "partial") else 1
 
 
 def cmd_printer_report(serial: str, manager_factory) -> int:

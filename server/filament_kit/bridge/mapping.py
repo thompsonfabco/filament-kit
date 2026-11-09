@@ -71,6 +71,71 @@ OBSERVE_NOTE = "slot numbering not confirmed: filament use is only logged until 
 STOPPED = "mapping was stopped (the server or command is stopping); the slots were put back first"
 SHUTDOWN_WAIT = 60.0      # seconds the service waits at shutdown for a stopped job's restore
 RECOVER_WAIT = 60.0       # seconds the service waits at start for a printer with a pending snapshot to connect
+# What the map view's `outcome` and `reason` can be. Each client keeps its own words for them; OUTCOME_TEXT and
+# NEXT_STEP are the CLI's and the web app's. A client that meets a value it does not know falls back to the flags.
+OUTCOMES = ("none", "running", "confirmed", "partial", "not_confirmed", "failed", "stale", "suspect")
+REASONS = ("developer_mode", "busy", "offline", "not_configured", "cert_changed", "job_refused", "no_mapping",
+           "job_failed", "numbers_unfit", "interrupted", "restore_failed", "kit_error", "none")
+OUTCOME_TEXT = {
+    "none": "Not mapped yet.",
+    "running": "Mapping the slots…",
+    "confirmed": "Mapped and confirmed: filament use comes off the spools.",
+    "partial": "Mapped, with something left to settle (below).",
+    "not_confirmed": "Mapped, but the slot numbering is not confirmed: filament use is only logged.",
+    "failed": "The last mapping failed.",
+    "stale": "The AMS layout changed since the map was made.",
+    "suspect": "Recent prints disagreed with the map: filament use is only logged until it is mapped again.",
+}
+NEXT_STEP = {
+    "developer_mode": "Turn on Developer Mode on the printer (in its LAN-only settings), then map again.",
+    "busy": "Map again when the printer is idle.",
+    "offline": "Map again when the printer is on and online.",
+    "not_configured": "Finish setting up this printer (its address and Access Code), then map again.",
+    "cert_changed": "If the printer was reset or repaired, forget its certificate on the Printers tab, then map again.",
+    "job_refused": "This printer did not accept the check job: please collect a printer report and send it.",
+    "no_mapping": "This printer did not report its slot numbers: please collect a printer report and send it.",
+    "job_failed": "The check job failed on the printer: map again, and if it fails again, collect a printer report.",
+    "numbers_unfit": "Map again after loading a second AMS unit or an HT; if it repeats, collect a printer report.",
+    "interrupted": "Map again.",
+    "restore_failed": "Check the slots on the printer (one may still show a test colour), then map again.",
+    "kit_error": "Map again; if it repeats, the server log says what went wrong.",
+}
+# printer_report.WANTED, as a reason
+_FROM_WANTED = {"job_refused": "job_refused", "no_mapping": "no_mapping", "job_failed": "job_failed",
+                "no_scheme": "numbers_unfit"}
+
+
+def outcome_of(state: str, m, scheme_unsettled: bool, problems: list) -> str:
+    """One precedence for every client: a running or failed job first, then what is wrong with the map, then how good
+    it is."""
+    if state == "running":
+        return "running"
+    if state == "failed":
+        return "failed"
+    if state == "none" and not m.slots:
+        return "none"
+    if m.suspect:
+        return "suspect"
+    if m.stale:
+        return "stale"
+    if not m.calibrated:
+        return "not_confirmed"
+    if scheme_unsettled or problems:
+        return "partial"
+    return "confirmed"
+
+
+def next_step(outcome: str, reason: str, scheme_unsettled: bool = False) -> str:
+    """The one next step to show, or ""."""
+    if reason in NEXT_STEP:
+        return NEXT_STEP[reason]
+    if outcome == "partial" and scheme_unsettled:
+        return "Map again after loading a second AMS unit or an HT, to settle the numbering."
+    if outcome in ("none", "failed", "not_confirmed", "stale", "suspect"):
+        return "Map the slots."
+    return ""
+
+
 REMAP_STEP = "Re-mapping: the printer's AMS layout changed"
 REMAP_SUSPECT_STEP = "Re-mapping: prints disagreed with the slot map"
 REMAP_SETTLE = 30.0       # seconds a new layout must stay unchanged before an automatic re-map
@@ -118,6 +183,7 @@ class _Job:
     notes: list[str] = field(default_factory=list)      # not problems: what a good result does not settle yet
     scheme_unsettled: bool = False                      # several numbering schemes fit; the model's first was taken
     report_wanted: str | None = None                    # printer_report.WANTED: why a report would help
+    reason: str = "none"                                # REASONS: why it ended short of a confirmed map
     trail: list = field(default_factory=list)           # calib3mf.CalibResult.trail, for a report made later
     started: float = field(default_factory=time.time)
     finished: float | None = None
@@ -137,7 +203,8 @@ def _save_status(serial: str, job: _Job) -> None:
         make_state_dir(d)
         data = {"kit": __version__, "job_id": job.id, "state": job.state, "step": job.step, "problems": job.problems,
                 "notes": job.notes, "scheme_unsettled": job.scheme_unsettled,
-                "report_wanted": job.report_wanted, "trail": job.trail, "started": job.started, "finished": job.finished}
+                "report_wanted": job.report_wanted, "reason": job.reason, "trail": job.trail, "started": job.started,
+                "finished": job.finished}
         _write_atomic(d / STATUS_FILE, json.dumps(data, indent=2).encode("utf-8"), 0o600, state_owned=True)
     except OSError:
         log.exception("mapping %s: cannot write the status file", serial)
@@ -171,6 +238,7 @@ def _load_status(serial: str) -> dict | None:
             "notes": [str(n) for n in notes] if isinstance(notes, list) else [],
             "scheme_unsettled": d.get("scheme_unsettled") is True,
             "report_wanted": d.get("report_wanted") if d.get("report_wanted") in printer_report.WANTED else None,
+            "reason": d.get("reason") if d.get("reason") in REASONS else "none",     # older files: none
             "trail": d.get("trail") if isinstance(d.get("trail"), list) else [],
             "finished": finished if isinstance(finished, (int, float)) and not isinstance(finished, bool) else None}
 
@@ -484,7 +552,8 @@ class Mapper:
         except BaseException as e:            # a bug, or Ctrl-C / SystemExit: failed, never a trusted map
             log.exception("mapping %s: job failed", serial)
             job.state = "failed"
-            job.problems.append(f"error: mapping failed ({type(e).__name__}: {e})")
+            job.reason = "kit_error"        # the exception is in the log above
+            job.problems.append("The mapping stopped on an error in the kit; nothing from it is trusted.")
             try:
                 _distrust(serial)
             except Exception:
@@ -506,33 +575,35 @@ class Mapper:
             log.info("mapping %s: job %s %s; problems %s", serial, job.id, job.state, job.problems)
 
     def _map(self, serial: str, job: _Job, step) -> None:
-        def fail(problems: list[str]) -> None:
+        def fail(problems: list[str], reason: str = "none") -> None:
             job.problems = list(problems)
             job.state = "failed"
+            job.reason = reason
             _distrust(serial)
 
         if job.abort.is_set():
-            return fail([STOPPED.split(";")[0] + "; nothing was changed"])
+            return fail([STOPPED.split(";")[0] + "; nothing was changed"], "interrupted")
         fp = _fingerprint_now(self._m, serial)
         if snapshot.pending(serial):
             _delete_leftover_job(serial)
             probs = snapshot.restore(self._m, serial, step)
             if probs:
                 return fail(["the slots an interrupted mapping changed could not all be restored, so nothing else "
-                             "was done; check the slots on the printer and run the mapping again"] + probs)
+                             "was done; check the slots on the printer and run the mapping again"] + probs, "restore_failed")
         try:
             st = slottest.run(self._m, serial, step, should_stop=job.abort.is_set)
         except PrinterBusy as e:
-            return fail([f"printer_busy: the printer started a job ({e}); nothing was changed"])
+            return fail([f"The printer started a job ({e}); nothing was changed."], "busy")
         except (PrinterOffline, UnknownPrinter):
-            return fail(["printer_offline: the printer went offline; nothing was changed"])
+            return fail(["The printer went offline; nothing was changed."], "offline")
         if not st.restored:
             step("The slot test could not put every slot back")
-            return fail(st.problems or ["the slot test could not confirm that every slot was put back"])
+            return fail(st.problems or ["the slot test could not confirm that every slot was put back"], "restore_failed")
         if job.abort.is_set():
-            return fail([STOPPED] + list(st.problems))
+            return fail([STOPPED] + list(st.problems), "interrupted")
         if not st.confirmed:
-            return fail(st.problems or ["no slot was confirmed by the slot test"])
+            return fail(st.problems or ["no slot was confirmed by the slot test"],
+                        "developer_mode" if st.needs_developer_mode else st.reason)
 
         model = ams.printer_model(serial)
         smap = ams.SlotMap(slots={lab: {"ams_id": a["ams_id"], "tray_id": a["tray_id"],
@@ -544,7 +615,7 @@ class Mapper:
         if job.abort.is_set():
             if not cr.restored:
                 problems.append("the calibration could not confirm that every slot was put back")
-            return fail([STOPPED] + problems)
+            return fail([STOPPED] + problems, "interrupted")
         if cr.consistent and cr.restored:
             for lab, s in smap.slots.items():
                 if lab in cr.decoding:
@@ -572,6 +643,11 @@ class Mapper:
         job.trail = list(cr.trail)
         report = self._m.wait_report(serial, lambda r: True, 0) or {}
         job.report_wanted = cr.report_wanted or _unrecognised(report, model)
+        if not (cr.consistent and cr.restored):
+            job.reason = (cr.reason if cr.reason != "none" else "restore_failed" if not cr.restored
+                          else _FROM_WANTED.get(cr.report_wanted or "", "none"))
+            if job.reason == "none" and st.needs_developer_mode:
+                job.reason = "developer_mode"
         if job.report_wanted in printer_report.LOUD or not cr.consistent:     # kept here; the owner decides to share it
             self._save_report(serial, report, model, job)
         job.state = "done" if cr.restored else "failed"
@@ -599,7 +675,8 @@ class Mapper:
 
     # ---------------------------------------------------------------- progress
     def view(self, serial: str) -> dict:
-        """`{state, step, slots: [{label, ams_id, tray_id, global}], calibrated, observe, problems, notes,
+        """`{outcome, reason, outcome_text, next_step, state, step, slots: [{label, ams_id, tray_id, global}], calibrated,
+        observe, problems, notes,
         problems_old, finished, stale, remapping, scheme, suspect}`: `stale` = the printer's layout changed since the
         map was made; `remapping` = this process runs a re-map that `LayoutWatch` started (layout change or suspect
         map); `scheme` = the numbering scheme calibration proved (None: none yet); `suspect` = two prints in a row
@@ -607,6 +684,9 @@ class Mapper:
         (not problems); `scheme_unsettled` = several numbering schemes fit and the model's first was taken, the reason
         to map again after loading a second unit (a client keys on this, never on a note's text); `report_wanted` =
         why a printer report would help (printer_report.WANTED), None when it wouldn't; `report_why` = that as a sentence;
+        `outcome` (OUTCOMES) = the one reading of all the flags, `reason` (REASONS) = why it stopped short ("none" for a
+        confirmed or running map), `outcome_text` and `next_step` = the kit's own sentences for them (the CLI and the
+        web app show these; the Android app keeps its own words for the codes);
         `kit` = the kit version that ran that job (None: a kit too old to say, or no job yet);
         `problems_old` = the problems are from a job an earlier server run finished, so an update or
         a fix since may have dealt with them: they say what happened then, not what is wrong now, and they never
@@ -616,7 +696,7 @@ class Mapper:
             mine = None if j is None else {"kit": __version__, "job_id": j.id, "state": j.state, "step": j.step,
                                            "problems": list(j.problems), "notes": list(j.notes),
                                            "scheme_unsettled": j.scheme_unsettled,
-                                           "report_wanted": j.report_wanted, "trail": j.trail,
+                                           "report_wanted": j.report_wanted, "reason": j.reason, "trail": j.trail,
                                            "finished": j.finished}
         saved = _load_status(serial)
         # this process's own job is the truth unless the file holds a later job (run by another process); the
@@ -626,7 +706,7 @@ class Mapper:
         else:
             st = saved
             if st is not None and st["state"] == "running" and not _ProcessLock.held_elsewhere(serial):
-                st = {**st, "state": "failed", "problems": st["problems"] + [INTERRUPTED]}
+                st = {**st, "state": "failed", "problems": st["problems"] + [INTERRUPTED], "reason": "interrupted"}
         m = ams.load_map(serial)
         slots = []
         for label, s in m.slots.items():
@@ -639,7 +719,12 @@ class Mapper:
         ended = st.get("finished")
         old = (st is not mine and bool(st["problems"]) and (ended is None or ended < _STARTED)
                and not (st["state"] == "running" and _ProcessLock.held_elsewhere(serial)))
-        return {"state": st["state"], "step": st["step"], "slots": slots, "calibrated": m.calibrated,
+        out = outcome_of(st["state"], m, st.get("scheme_unsettled", False), st["problems"])
+        # a stale or suspect map: mapping again is the step, whatever stopped an earlier job
+        reason = st.get("reason", "none") if out not in ("confirmed", "running", "stale", "suspect") else "none"
+        return {"outcome": out, "reason": reason, "outcome_text": OUTCOME_TEXT[out],
+                "next_step": next_step(out, reason, st.get("scheme_unsettled", False)),
+                "state": st["state"], "step": st["step"], "slots": slots, "calibrated": m.calibrated,
                 "observe": m.observe, "problems": st["problems"], "notes": st.get("notes", []),
                 "scheme_unsettled": st.get("scheme_unsettled", False),
                 "report_wanted": st.get("report_wanted"), "report_why": printer_report.why(st.get("report_wanted")),

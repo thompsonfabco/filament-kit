@@ -150,10 +150,10 @@ def restore(manager, serial: str, on_step: Callable[[str], None] | None = None,
                 f"of any slot showing such a colour again, on the printer or in Bambu Studio, then delete "
                 f"{path(serial)} and map again"]
     if manager.state(serial) not in ONLINE:
-        return ["printer_offline: cannot restore the slots of an interrupted mapping"]
+        return ["The printer is offline, so the slots an interrupted mapping changed cannot be put back yet."]
     report = manager.wait_report(serial, lambda r: True, 0)
     if report is None:
-        return ["printer_offline: cannot restore the slots of an interrupted mapping"]
+        return ["The printer is offline, so the slots an interrupted mapping changed cannot be put back yet."]
     if on_step is not None:
         on_step("Restoring the slots an interrupted mapping changed")
     problems: list[str] = []
@@ -173,7 +173,7 @@ def restore(manager, serial: str, on_step: Callable[[str], None] | None = None,
         try:
             reply = manager.set_slot(serial, key[0], key[1], s["setting"], kind=kinds.get(key[0]))
         except (PrinterOffline, UnknownPrinter):
-            problems.append(f"{s['label']}: not restored (printer_offline); it may still hold a test colour")
+            problems.append(f"{s['label']}: not restored (the printer went offline); it may still hold a test colour")
             continue
         if _failed(reply):
             problems.append(f"{s['label']}: restore refused ({reply.get('reason') or reply.get('result')}); "

@@ -143,7 +143,7 @@ def test_print_starting_mid_test_aborts_and_restores(rig):
     c.responder = busy_on_second_write
     res = slottest.run(m, SERIAL, lambda s: None)
     assert res.confirmed == {"A1": {"ams_id": 0, "tray_id": 0}}
-    assert any("printer_busy" in p for p in res.problems)
+    assert res.reason == "busy" and any("started a job" in p for p in res.problems)
     for label in LABELS[1:]:
         assert any(p.startswith(f"{label}:") and "not confirmed" in p for p in res.problems), label
     assert res.restored is True
@@ -194,7 +194,7 @@ def test_printer_going_offline_mid_test_reports_unrestored_slots(rig, monkeypatc
         return out
     c.responder = drop_on_third_write
     res = slottest.run(m, SERIAL, lambda s: None)
-    assert any("printer_offline" in p for p in res.problems)
+    assert res.reason == "offline" and slottest.OFFLINE in res.problems
     assert res.restored is False
     for label in ("A1", "A2", "A3"):
         assert any(p.startswith(f"{label}:") and "restore" in p for p in res.problems), label
@@ -308,7 +308,7 @@ def test_busy_abort_still_restores_a_slot_hit_by_a_misaddressed_write(rig):
         return out
     c.responder = busy_with_second_write
     res = slottest.run(m, SERIAL, lambda s: None)
-    assert any("printer_busy" in p for p in res.problems)
+    assert res.reason == "busy" and any("started a job" in p for p in res.problems)
     assert res.restored is True
     assert no_test_colour_left(printer)
     assert_back_to_original(printer)
