@@ -69,9 +69,9 @@ Pairing lets the app trust your server and lets the server know your phone. You 
 1. Under **Servers found on this network**, tap your server: it goes straight to the fingerprint check. If it's not
    listed, tap **Enter address** and type the computer's name with `.local` (for example `my-server.local`) or its IP
    address. Leave **Port** at 8710.
-2. The app shows **Check the server's fingerprint** with two groups left blank. Find the fingerprint shown with the
-   pairing code (in the Terminal, or on the server's setup page) and type the two missing groups. If they are the
-   same, tap **Continue**. If they differ, tap **It does not match** and stop: something else is answering at that
+2. The app shows **Check the server's fingerprint** with the server's address and its full fingerprint. Compare it
+   with the fingerprint shown with the pairing code (in the Terminal, or on the server's setup page). If they are the
+   same, tap **It matches**. If they differ, tap **It does not match** and stop: something else is answering at that
    address.
 3. Under **Enter the pairing code**, type the 6-digit code.
 

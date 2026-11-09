@@ -15,11 +15,8 @@ object PairTexts {
         "server. Then scan its QR code with this phone."
     const val CODE_INTRO = "Type the 6-digit code shown on the server."
 
-    const val FINGERPRINT_WRONG = "Those groups don't match the fingerprint this server presented. Check them against " +
-        "the server. If they really differ, tap It does not match: something else may be answering at this address."
-
-    fun confirmIntro(host: String) = "$host presented a certificate. Find the fingerprint shown with the pairing code " +
-        "on the server, and type the two missing groups from it."
+    fun confirmIntro(host: String) = "$host presented this certificate fingerprint. Compare it with the fingerprint " +
+        "shown with the pairing code on the server before you continue."
 
     fun mismatch(m: Mismatch, host: String): MismatchText = when (m.source) {
         MismatchSource.STORED -> MismatchText(
