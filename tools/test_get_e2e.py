@@ -37,12 +37,13 @@ KEEP = Path("/opt/filament-kit/releases")
 
 
 def tarball(version: str, record: Path) -> bytes:
-    # fg=yes: install.sh is the terminal's foreground job; `stty` (as apt does) would stop a background job for good
+    # stty, as apt does: it must not stop install.sh for good. Classic sudo starts a piped command in the background and
+    # makes it the foreground job at this first touch, so fg= is read after it: then it must be the foreground job.
     stub = ("#!/usr/bin/env bash\n"
             f"{{ echo \"args=$*\"; if [ -t 0 ]; then echo tty=yes; else echo tty=no; fi\n"
+            "  if [ -t 0 ]; then stty \"$(stty -g)\" && echo stty=ok; fi\n"
             "  read -r pg tp < <(ps -o pgid=,tpgid= -p $$)\n"
             "  if [ \"$pg\" = \"$tp\" ]; then echo fg=yes; else echo fg=no; fi\n"
-            "  if [ -t 0 ]; then stty \"$(stty -g)\" && echo stty=ok; fi\n"
             # --set keys=1 (run_get_keys): three keys without Enter must arrive, and the terminal must not echo them
             "  case \"$*\" in *keys=1*) echo STUB-READY >/dev/tty; IFS= read -r -s -n3 -t 20 k; echo \"keys=$k\" ;; "
             "esac\n"
