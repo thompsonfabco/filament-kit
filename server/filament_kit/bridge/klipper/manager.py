@@ -160,6 +160,10 @@ class _Conn:
         end = time.monotonic() + max(self.client.timeout, 2.0)
         while time.monotonic() < end and not self.sub.connected and not self._stop.is_set():
             time.sleep(0.02)
+        # The first snapshot's follow check can run before the subscriber marks itself connected (it does so after the
+        # snapshot is applied) or before self.sub is assigned: it then did nothing, and nothing would ask again until the
+        # printer's next change. The reconcile at connect (a tap while the kit was down) must not wait for that.
+        self.fam._follow_q.put(self.p.serial)
         return True
 
     def _run(self) -> None:

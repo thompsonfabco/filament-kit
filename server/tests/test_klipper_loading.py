@@ -206,6 +206,33 @@ def test_connect_reconciles_what_the_printer_shows(moonraker, sm, fil):
         fam.stop()
 
 
+def test_connect_reconciles_even_when_the_first_follow_check_came_too_early(moonraker, sm, fil, monkeypatch):
+    """The FLAKY run of the test above (v0.4.2 pre-tag): the first snapshot's follow check ran before the subscriber
+    was marked connected, did nothing, and nothing asked again until the printer's next change. Here the first check is
+    made to do nothing on purpose; set-up asks once more after the snapshot, so the reconcile still happens."""
+    checks: list[str] = []
+    real = KlipperFamily._follow_check
+
+    def first_one_too_early(self, pid):
+        checks.append(pid)
+        if len(checks) == 1:
+            return
+        real(self, pid)
+    monkeypatch.setattr(KlipperFamily, "_follow_check", first_one_too_early)
+    old = spool(sm, fil, "Voron – T0", prev="Shelf 5")
+    s = spool(sm, fil, "Shelf 1")
+    moonraker.set_spool(s["id"])
+    pid = registry.add_klipper("Voron", moonraker.host, moonraker.port).serial
+    fam = KlipperFamily(sm, backoff=(0.1, 0.4))
+    fam.start()
+    try:
+        assert fam.wait_settled(pid, 8) == "unknown_model"
+        assert wait_for(lambda: loc_of(sm, s["id"]) == "Voron – T0")
+        assert loc_of(sm, old["id"]) == "Shelf 5" and len(checks) >= 2
+    finally:
+        fam.stop()
+
+
 def test_connect_leaves_spoolman_alone_when_the_printer_shows_none(moonraker, sm, fil):
     """Moonraker forgets its active spool on a restart: an empty printer slot is no reason to unload Spoolman."""
     s = spool(sm, fil, "Voron – T0", prev="Shelf 5")
