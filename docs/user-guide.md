@@ -450,7 +450,51 @@ into a removed or empty folder, or run `sudo filament-kit modules apply` afterwa
 read access to the files it needs.
 
 A backup of your spools and settings is made every night in `/var/backups/filament-kit` (the last 14 days are
-kept).
+kept, unless you change that on the setup page).
+
+### Backups and restore (v0.4.4)
+
+A backup is **one zip file** with everything the kit keeps, so a new machine can be brought back to how this one was:
+
+- the Spoolman database (your spools and filaments);
+- the settings, the setup code, the trusted computers, the printers and their slot maps, the server's certificate;
+- the paired phones and the PC sync, the bench readers' tokens, the web unit's sign-ins, the intake station's pairing;
+- `manifest.xml`, which lists every file with its checksum, and the kit version and modules it came from.
+
+Not in it: the program itself, the downloaded releases, the logs, the Bambu system presets the PC sync uploads and
+earlier library versions. Those come back by themselves.
+
+**Keep the zip somewhere safe.** It holds every secret of the kit: the Anthropic key, the printers' Access Codes and
+the certificate's private key. There is no passphrase on it yet.
+
+**Make one.** On the setup page, open **Settings**, then **Backups**, and tap **Back up now**. **Show the backups**
+lists them (the nightly ones too, the newest first) and **Download** saves one as
+`filament-kit-backup-<computer name>-<date>-v<version>.zip`. Both take the setup code, or a trusted computer. At
+the server:
+
+```bash
+sudo filament-kit backup create
+```
+
+**Restore on a new machine.** Install the server as usual, then either:
+
+- on the setup page, under **Settings**, **Backups**, choose the zip and tap **Upload and check**. The page says what
+  is in it. Type `restore` and tap **Restore**; or
+- copy the zip to the server and run:
+
+  ```bash
+  sudo filament-kit restore filament-kit-backup-<...>.zip
+  ```
+
+The restore checks every file against the manifest first, and refuses a backup made by a newer version of the kit
+(it says which version to install first). It keeps a backup of what is on the machine now, puts everything back,
+turns on the modules the backup names (installing what they need), and shows `filament-kit status`. Afterwards the
+setup code, the trusted computers, the printers and the pairings are the ones from the backup: phones and the PC
+sync keep working without pairing again.
+
+On a machine with **another computer name**, the server makes a new certificate, and the phones and the PC sync need
+pairing again (**Devices**). With a release tarball, `sudo ./install.sh --restore <zip>` installs and restores in one
+step.
 
 ### Your own printer data (override)
 

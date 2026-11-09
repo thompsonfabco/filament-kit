@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The end-to-end scenarios of tools/e2e/run.sh (docs/testing-e2e.md). Run by run.sh as root; not on its own.
 
-  python3 -I tools/e2e/e2e.py --work DIR [--only a,d,c,b,e,f] [--previous vX.Y.Z]
+  python3 -I tools/e2e/e2e.py --work DIR [--only a,d,c,b,e,f,g] [--previous vX.Y.Z]
 
 Builds two signed releases of this checkout with a throwaway ed25519 key, serves them from a fake GitHub releases
 API (`python3 -m http.server` on 127.0.0.1) and drives the real install, the reader API, the manual add and the
@@ -17,6 +17,7 @@ import argparse
 import base64
 import hashlib
 import json
+import hashlib
 import os
 import re
 import secrets
@@ -29,6 +30,7 @@ import time
 import traceback
 import urllib.error
 import urllib.request
+import zipfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -167,6 +169,12 @@ def kit_python(code: str, env_extra: dict | None = None) -> subprocess.Completed
     return subprocess.run(["runuser", "-u", "filament-kit", "--", str(VENV_PY), "-I", "-c", code],
                           capture_output=True, text=True, timeout=120, stdin=subprocess.DEVNULL,
                           env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LANG": "C.UTF-8", **(env_extra or {})})
+
+
+def root_python(code: str) -> subprocess.CompletedProcess:
+    """Python in the kit's venv as root: what the root helper and `sudo filament-kit` do."""
+    return subprocess.run([str(VENV_PY), "-I", "-c", code], capture_output=True, text=True, timeout=120,
+                          stdin=subprocess.DEVNULL, env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LANG": "C.UTF-8"})
 
 
 def units_active(*units: str) -> dict[str, str]:
@@ -674,6 +682,89 @@ class E2E:
         run.check(sc, f"{old} still runs its own commands after the rollback", r.returncode == 0, r.stdout + r.stderr)
 
 
+    # ---- g) a backup zip brings the kit back on a wiped, freshly installed machine
+    def _kit_state(self, auth: dict) -> dict:
+        """What has to be the same after a restore, as the kit's own API, Spoolman and its files answer it."""
+        out: dict = {"modules": sorted(k for k, v in (read_cfg().get("modules") or {}).items() if v)}
+        out["cert"] = hashlib.sha256((ETC / "cert.pem").read_bytes()).hexdigest() if (ETC / "cert.pem").exists() else None
+        code, spools = jhttp("GET", f"{KIT}/api/spools", headers=auth)
+        out["paired"] = code
+        out["spools"] = sorted(s.get("id") for s in spools.get("spools", [])) if isinstance(spools, dict) else spools
+        code, tag = jhttp("GET", f"{KIT}/api/tags/{UID}", headers=auth)
+        out["tag"] = (code, (tag or {}).get("spool", {}).get("id") if isinstance(tag, dict) else None)
+        code, printers = jhttp("GET", f"{KIT}/api/printers", headers=auth)
+        out["printers"] = sorted(p.get("id") for p in printers.get("printers", [])) if isinstance(printers, dict) else code
+        return out
+
+    def g_backup_restore(self, sc="g") -> None:
+        run, rel = self.run, self.rel
+        if self.token is None or self.spool is None:
+            raise Skip("needs the pairing and the spool of scenario d")
+        auth = {"Authorization": f"Bearer {self.token}"}
+        fk = "/usr/local/bin/filament-kit"
+        version = installed_version()
+        r = root_python("from filament_kit import setup_code, trusted\n"
+                        "print(setup_code.ensure())\nprint(trusted.add('e2e browser', '192.0.2.20')[1])")
+        lines = r.stdout.split()
+        if r.returncode or len(lines) != 2:
+            raise Fail(f"cannot read the setup code or trust a computer: {r.stderr[-400:]}")
+        code, trust = lines
+        before = self._kit_state(auth)
+        run.check(sc, "before: paired, the spool and its tag answer", before["paired"] == 200 and
+                  self.spool["id"] in (before["spools"] or []) and before["tag"][0] == 200, json.dumps(before))
+        out_dir = run.work / "backup-g"
+        out_dir.mkdir(exist_ok=True)
+        r = run.sh([fk, "backup", "create", "--out", str(out_dir)], name="backup-create")
+        zips = sorted(out_dir.glob("filament-kit-backup-*.zip"))
+        run.check(sc, "sudo filament-kit backup create writes one standard zip",
+                  r.returncode == 0 and len(zips) == 1 and zipfile.is_zipfile(zips[0]), r.stdout + r.stderr[-600:])
+        if not zips:
+            raise Fail("no backup zip")
+        with zipfile.ZipFile(zips[0]) as zf:
+            names = zf.namelist()
+        run.check(sc, "the zip holds the manifest, the Spoolman database and the kit's folders",
+                  {"manifest.xml", "spoolman/spoolman.db", "files/etc/filament-kit/config.json",
+                   "files/etc/filament-kit/cert.pem", "files/var/lib/filament-kit/devices.json"} <= set(names),
+                  str(names[:40]))
+        uninstall(run, rel, "uninstall-before-restore")
+        left = nothing_installed()
+        run.check(sc, "the machine is wiped (uninstall --purge)", not left, ", ".join(left))
+        r = rel.get_sh(["--repo", OWNER_REPO, "--version", version, "--modules", "spoolman,server"],
+                       "get-fresh-for-restore")
+        run.check(sc, f"a fresh install of {version} (spoolman, server)", r.returncode == 0, r.stderr[-1500:])
+        if r.returncode:
+            raise Fail("the fresh install failed")
+        fresh = self._kit_state(auth)
+        run.check(sc, "the fresh install does not know the phone", fresh["paired"] == 401, json.dumps(fresh))
+        r = run.sh([fk, "restore", "--yes", str(zips[0])], name="restore", timeout=3600)
+        run.check(sc, "sudo filament-kit restore --yes <zip> succeeds", r.returncode == 0 and "Restored." in r.stdout,
+                  r.stdout[-2500:] + r.stderr[-1500:])
+        act = wait_for(lambda: (lambda a: a if set(a.values()) == {"active"} else None)(
+            units_active("spoolman.service", "filament-kit.service", "filament-kit-web.service")), 120, 2)
+        run.check(sc, "after the restore: spoolman, filament-kit and filament-kit-web active", bool(act),
+                  str(units_active("spoolman.service", "filament-kit.service", "filament-kit-web.service")))
+        wait_for(lambda: jhttp("GET", f"{KIT}/api/info")[0] == 200 or None, 90, 2)
+        after = wait_for(lambda: (lambda s: s if s["paired"] == 200 else None)(self._kit_state(auth)), 90, 2) \
+            or self._kit_state(auth)
+        for key, what in (("modules", "the same modules"), ("cert", "the same certificate (phones pair as before)"),
+                          ("paired", "the phone's token works without pairing again"), ("spools", "the same spools"),
+                          ("tag", "the tag finds its spool"), ("printers", "the same printers")):
+            run.check(sc, f"after the restore: {what}", after[key] == before[key],
+                      f"before {before[key]!r}, after {after[key]!r}")
+        r = root_python("import sys\nfrom filament_kit import setup_code, trusted\n"
+                        f"print(bool(setup_code.check({code!r})), trusted.status({trust!r})['trusted'])")
+        run.check(sc, "after the restore: the same setup code, and the trusted computer is still trusted",
+                  r.stdout.split() == ["True", "True"], r.stdout + r.stderr[-400:])
+        st = run.sh([fk, "status"], name="status-after-restore")
+        run.check(sc, "filament-kit status exits 0", st.returncode == 0, st.stdout[-1500:])
+        kept = sorted(Path("/var/backups/filament-kit").glob("pre-restore-*.zip"))
+        run.check(sc, "what the fresh install had is kept as a pre-restore zip", len(kept) == 1, str(kept))
+        if self.printer is not None:
+            code_, plist = wait_for(lambda: (lambda c: c if c[0] == 200 and c[1].get("printers") else None)(
+                jhttp("GET", f"{KIT}/api/printers", headers=auth)), 60, 2) or (0, {})
+            run.check(sc, "after the restore: the printer is back in the kit", code_ == 200 and
+                      SERIAL in [p.get("id") for p in plist.get("printers", [])], str(plist)[:400])
+
 SCENARIOS = {
     "a": ("a) fake release server: get.sh install, tampered tarball, bad signature", "a_install"),
     "d": ("d) manual add without AI (server mode, no API key)", "d_manual_add"),
@@ -681,6 +772,7 @@ SCENARIOS = {
     "b": ("b) updater: check, update, hardware feed, rollback", "b_updater"),
     "e": ("e) station upgraded by the updater keeps its server address", "e_station"),
     "f": ("f) the last released tag: real update from it, real rollback to it", "f_cross_tag"),
+    "g": ("g) backup zip, wipe, fresh install, restore: the same kit comes back", "g_backup_restore"),
 }
 
 

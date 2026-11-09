@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # End-to-end run of filament-kit on a disposable Ubuntu 24.04+ host, made for WSL Ubuntu (docs/testing-e2e.md):
 #
-#   wsl -d Ubuntu -- sudo bash /mnt/c/<checkout>/tools/e2e/run.sh [--only a,d,c,b,e,f] [--results FILE]
+#   wsl -d Ubuntu -- sudo bash /mnt/c/<checkout>/tools/e2e/run.sh [--only a,d,c,b,e,f,g] [--results FILE]
 #                                                                 [--keep-work] [--previous vX.Y.Z]
 #
 # It builds two signed releases of this checkout with a throwaway ed25519 key, serves them from a fake GitHub
@@ -29,7 +29,7 @@ while [ $# -gt 0 ]; do
         --results) RESULTS="$2"; shift 2 ;;
         --keep-work) KEEP_WORK=1; shift ;;
         --previous) PREVIOUS=(--previous "$2"); shift 2 ;;
-        *) echo "usage: sudo bash tools/e2e/run.sh [--only a,d,c,b,e,f] [--results FILE] [--keep-work] [--previous vX.Y.Z]" >&2; exit 2 ;;
+        *) echo "usage: sudo bash tools/e2e/run.sh [--only a,d,c,b,e,f,g] [--results FILE] [--keep-work] [--previous vX.Y.Z]" >&2; exit 2 ;;
     esac
 done
 
