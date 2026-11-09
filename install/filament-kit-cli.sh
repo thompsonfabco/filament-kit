@@ -51,8 +51,9 @@ if [ "${1:-}" = web ] && [ "${2:-}" = passphrase ]; then
     exec "$BIN" "$@"
 fi
 # `reader token` / `reader revoke` write the reader token file (handed to the service user) and refuse unless root;
+# `reader setup` makes a token the same way and writes or flashes the reader's secrets.h for the caller;
 # `reader tokens` only reads and runs as the user below.
-if [ "${1:-}" = reader ] && { [ "${2:-}" = token ] || [ "${2:-}" = revoke ]; }; then
+if [ "${1:-}" = reader ] && { [ "${2:-}" = token ] || [ "${2:-}" = revoke ] || [ "${2:-}" = setup ]; }; then
     exec "$BIN" "$@"
 fi
 
