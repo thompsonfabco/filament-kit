@@ -918,22 +918,29 @@ def cmd_profiles_lines() -> int:
     return 0
 
 
-def cmd_profiles_set_parent(line_id: str, parent: str, orca: bool = False) -> int:
+def set_parent_checked(line_id: str, parent: str, orca: bool = False):
+    """Check a parent the owner picked, save it on the line and ask for a build; the line. This command and the setup
+    page's Presets tab. Raises ValueError or ProfileError (the parent), KeyError (the line), LineStoreError."""
     parent = parent.strip()
+    if not parent:
+        raise ValueError("give the name of an Orca Slicer library preset (without ' @System')" if orca
+                         else "give the name of a Bambu Studio system preset")
+    inventory.check_line_text("set-parent", "parent", parent)
+    if orca:
+        parent = lines_mod.check_orca_parent(parent, builds.orca_store())   # the store's spelling (fix I1)
+    else:
+        lines_mod.check_parent(parent, builds.system_store())
+    line = lines_mod.set_parent_saved(line_id, parent, target="orca" if orca else "bambu")
+    _request_rebuild(f"{'Orca ' if orca else ''}parent of line {line.line_id} set")
+    return line
+
+
+def cmd_profiles_set_parent(line_id: str, parent: str, orca: bool = False) -> int:
     try:
-        if not parent:
-            raise ValueError("give the name of an Orca Slicer library preset (without ' @System')" if orca
-                             else "give the name of a Bambu Studio system preset")
-        inventory.check_line_text("set-parent", "parent", parent)
-        if orca:
-            parent = lines_mod.check_orca_parent(parent, builds.orca_store())   # the store's spelling (fix I1)
-        else:
-            lines_mod.check_parent(parent, builds.system_store())
+        line = set_parent_checked(line_id, parent, orca)
     except (ValueError, ProfileError) as e:
         _err_line(str(e))
         return 1
-    try:
-        line = lines_mod.set_parent_saved(line_id, parent, target="orca" if orca else "bambu")
     except KeyError:
         _err_line(f"no line {line_id} (see: sudo filament-kit profiles lines)")
         return 1
@@ -944,7 +951,6 @@ def cmd_profiles_set_parent(line_id: str, parent: str, orca: bool = False) -> in
         print(f"line {line.line_id}: Orca parent {line.orca_parent} (set by you)")
     else:
         print(f"line {line.line_id}: parent {line.bambu_parent} (set by you)")
-    _request_rebuild(f"{'Orca ' if orca else ''}parent of line {line.line_id} set")
     return 0
 
 
