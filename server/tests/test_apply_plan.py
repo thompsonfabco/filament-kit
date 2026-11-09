@@ -38,7 +38,7 @@ def test_all_in_one_station_localhost_only():
     cfg = set_mode(_cfg(), "all-in-one")
     acts = apply.plan(cfg, resolve=lambda h: [h])
     (dest, content, mode, owner), = [
-        a.arg for a in acts if a.kind == "install_file" and a.arg[0].endswith("kit.conf")]
+        a.arg for a in acts if a.kind == "install_file" and a.arg[0] == apply.DROPIN]
     assert dest == "/etc/systemd/system/filament-kit-station.service.d/kit.conf"
     assert "STATION_ALLOW=127.0.0.1" in content
     assert "IPAddressAllow=localhost 127.0.0.1" in content

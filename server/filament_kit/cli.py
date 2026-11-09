@@ -1798,6 +1798,7 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     udx = ud.add_mutually_exclusive_group()
     udx.add_argument("--check", action="store_true", help="say whether a newer release exists; change nothing")
     udx.add_argument("--rollback", action="store_true", help="reinstall the version the last update replaced")
+    udx.add_argument("--feed", action="store_true", help=argparse.SUPPRESS)  # the new program, after an update
     udx.add_argument("--scheduled", action="store_true", help="the timer's run: only with the updates module on "
                                                               "and a check due")
     un = sub.add_parser("uninstall", help="remove the kit with the kept release's uninstall.sh (root); --purge "
@@ -1870,6 +1871,8 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
             return updates.check(cfg)
         if args.rollback:
             return updates.rollback(cfg)
+        if args.feed:
+            return updates.feed_now(cfg)
         return updates.update(cfg, scheduled=args.scheduled)
     if args.cmd == "modules":
         if args.modules_cmd == "units":
