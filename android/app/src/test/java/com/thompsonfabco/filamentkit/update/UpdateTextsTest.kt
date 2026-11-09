@@ -40,6 +40,8 @@ class UpdateTextsTest {
         assertEquals("Install", UpdateTexts.installLabel(other))
         assertEquals("Install", UpdateTexts.installLabel(UpdateUi(available = 7)))
         assertEquals("Downloading…", UpdateTexts.installLabel(UpdateUi(available = 7, busy = true)))
+        assertEquals("Downloading… 42%", UpdateTexts.installLabel(UpdateUi(available = 7, busy = true, progress = 42)))
+        assertEquals("Downloading…", UpdateTexts.installLabel(UpdateUi(available = 7, busy = true)))
     }
 
     @Test fun aRetryUnderWaySaysDownloading() {
