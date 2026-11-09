@@ -28,6 +28,7 @@ from ... import config, hostaddr
 from .. import registry
 from ..connection import PrinterOffline, UnknownPrinter
 from . import adapters, detect, discovery, lanes
+from . import manual as kmanual
 from . import usage as kusage
 from . import hardware as kh
 from .adapters.base import UnitState
@@ -289,6 +290,8 @@ class KlipperFamily(LoadsMixin):
         self._twins_seen: tuple[set, set] = (set(), set())
         self._browser_factory = browser_factory      # discovery.Browser in the server; None in tests
         self._browser = None
+        self._maps: dict[str, tuple] = {}            # pid -> (slot-map.xml mtime, entries)
+        self.manual = kmanual.KlipperManualMaps(self)    # map by loading filament
         self._loads_init()
 
     # --- lifecycle -----------------------------------------------------------------------------------------------
@@ -437,11 +440,43 @@ class KlipperFamily(LoadsMixin):
         return model, system, adapters.get(system.adapter if system else "single")
 
     def slots(self, pid: str) -> list[UnitState]:
+        """The printer's units and slots, each slot under the owner's label (kmanual: map by loading filament)."""
+        return kmanual.relabel(self.raw_slots(pid)[0], self.slot_map(pid))
+
+    def raw_slots(self, pid: str) -> tuple[list[UnitState], str, str | None]:
+        """(units under the printer's own labels, the adapter's name, print_stats state)."""
         c = self._need(pid)
         model, system, adapter = self.model(pid)
         with c.lock:
             st, sid, db = dict(c.status), c.spool_id, c.lane_db
-        return adapter.read(st, sid, db, model, system, self.hw())
+        return adapter.read(st, sid, db, model, system, self.hw()), adapter.name, (st.get("print_stats") or {}).get("state")
+
+    def slot_map(self, pid: str) -> dict:
+        """The owner's slot map (kmanual.load_map), read again only when the file changed."""
+        try:
+            mtime = kmanual._path(pid).stat().st_mtime_ns
+        except OSError:
+            mtime = None
+        with self._lock:
+            hit = self._maps.get(pid)
+        if hit is not None and hit[0] == mtime:
+            return hit[1]
+        entries = kmanual.load_map(pid) if mtime is not None else {}
+        with self._lock:
+            self._maps[pid] = (mtime, entries)
+        return entries
+
+    def forget_slot_map(self, pid: str) -> None:
+        with self._lock:
+            self._maps.pop(pid, None)
+
+    def printer_label(self, pid: str, label: str, st, sid, db, model, system, adapter) -> str:
+        """The printer's label for the slot the owner calls `label`."""
+        entries = self.slot_map(pid)
+        if not entries:
+            return label
+        labels = [s.label for u in adapter.read(st, sid, db, model, system, self.hw()) for s in u.slots]
+        return kmanual.printer_label(entries, label, labels)
 
     def _spool_list(self) -> list[dict]:
         t, spools = self._spools

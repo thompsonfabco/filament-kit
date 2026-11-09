@@ -503,16 +503,20 @@ def _bridge_routes(printers, mapper: mapping.Mapper, sm) -> list[Route]:
             audit(what, device, result, **fields)
 
     def manual_call(what: str, fn, write: bool = True):
-        """A manual-map step (bridge/manual.py) for the app: the same answers as on the setup page."""
+        """A manual-map step for the app: the same answers as on the setup page. A Klipper printer's session is the
+        Klipper family's (bridge/klipper/manual.py), a Bambu printer's the mapper's (bridge/manual.py)."""
         from .bridge import manual
+
+        def session_of(serial: str):
+            kf = klipper_of(serial)
+            return kf.manual if kf is not None else mapper.manual
 
         @_authed
         async def route(request: Request):
             serial = request.path_params["id"]
-            await run_in_threadpool(bambu_only, serial)
             body = await _json(request) if request.method == "POST" else {}
             try:
-                out = await run_in_threadpool(fn, mapper.manual, serial, body)
+                out = await run_in_threadpool(lambda: fn(session_of(serial), serial, body))
             except manual.ManualError as e:
                 return _err(e.status, e.code, str(e))
             if write:

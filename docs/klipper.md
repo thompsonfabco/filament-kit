@@ -64,6 +64,13 @@ back to its shelf). Loading is refused while the printer prints; pause it first.
 The kit also follows the printer: when a slot's spool changes on the printer itself (a tag tapped on a reader there,
 the touchscreen, a macro, an AFC or Happy Hare lane change), Spoolman's locations are updated the same way.
 
+**The names are wrong for your printer?** (A tool the kit calls `C1` is the one you call `C3`.) On the setup page,
+open **Printers** and tap **Map by loading filament** next to the printer. It names one slot at a time; make that tool
+active (or load that lane or gate), and when the printer reports it, confirm it or say which one you loaded. Your names
+are then the ones the kit shows and loads by, and spools follow them in Spoolman. A printer that doesn't say which slot
+is active (one extruder, lane data only) gets a list to pick from instead, recorded as entered by hand. The map is kept
+in `slot-map.xml` in the printer's folder under the kit's state; delete it to go back to the printer's names.
+
 ## Filament usage
 
 Moonraker deducts the filament it uses from the active spool in Spoolman while it prints (its own `[spoolman]`

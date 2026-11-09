@@ -457,6 +457,9 @@ proven the printer's slot numbering; until then it is only logged, and the page 
 changes a slot you confirmed: if it finds something else, it says so instead. The page asks you once whether to
 share the map in a printer report for other owners of the same model; nothing is sent unless you choose to.
 
+A Klipper printer has the same button: it names its tools or lanes, and you make each one active. See the Klipper
+guide.
+
 If a printer's certificate changed, the server stops talking to it. If you reset the printer or its mainboard was
 replaced, add the printer again with its Access Code (or run `sudo filament-kit printer unpin <serial>`). If not,
 something else may be answering at the printer's address: check the printer's IP before re-adding it.

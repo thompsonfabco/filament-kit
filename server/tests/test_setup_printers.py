@@ -495,3 +495,23 @@ def test_a_family_with_its_module_off_is_not_rendered():
     text = (STATIC / "setup_printers.js").read_text(encoding="utf-8")
     assert '...(P.klipper ? [h("option"' in text and '...(P.bambu ? [h("option"' in text
     assert "P.klipper ? scanCard()" in text and "P.klipper ? packCard()" in text
+
+
+def test_map_by_loading_filament_on_a_klipper_printer(env, helper, manager, kl):
+    """The page's routes reach the Klipper family's session (bridge/klipper/manual.py), not the Bambu mapper."""
+    from filament_kit.bridge import family
+    from filament_kit.bridge.klipper import manual as kmanual
+    from test_klipper_manual_map import StubFamily
+    k = type("K", (), {"manual": kmanual.KlipperManualMaps(StubFamily(labels=("T0",))), "sync": lambda self: None})()
+    c = client(make(env, helper, family.Printers(bambu=manager, klipper=k), add=frozenset({"klipper"})))
+    r = post(c, f"printers/{kl.serial}/manual-map/start")
+    assert r.status_code == 200, r.text
+    s = r.json()
+    assert s["step"]["position"]["label"] == "T0"
+    r = post(c, f"printers/{kl.serial}/manual-map/stop", {"session": s["session"]})
+    assert r.status_code == 200 and r.json()["open"] is False
+
+
+def test_map_by_loading_filament_on_klipper_without_its_family_is_refused(both, kl):
+    r = post(client(both), f"printers/{kl.serial}/manual-map/start")
+    assert r.status_code == 409

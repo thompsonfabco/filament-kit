@@ -237,3 +237,24 @@ def test_add_klipper_twice_is_refused_and_says_which():
     assert c.post("/api/printers", json=body).status_code == 200
     r = c.post("/api/printers", json={**body, "name": "Again"})
     assert r.status_code == 400 and "Voron" in r.text
+
+
+def test_manual_map_on_klipper_is_the_klipper_session():
+    """Map by loading filament: a Klipper printer has its own session behind the same routes (was 409)."""
+    from filament_kit.bridge.klipper import manual as kmanual
+    from test_klipper_manual_map import StubFamily
+    registry.add_klipper("SV08 MAX", "h")
+    k = FakeKlipper()
+    k.manual = kmanual.KlipperManualMaps(StubFamily(labels=("T0", "T1")))
+    c = _client(k)
+    r = c.post("/api/printers/sv08-max/manual-map/start", json={})
+    assert r.status_code == 200, r.text
+    s = r.json()
+    assert s["step"]["position"]["label"] == "T0" and s["reports_loads"] is True
+    assert c.get("/api/printers/sv08-max/manual-map").json()["session"] == s["session"]
+    r = c.post("/api/printers/sv08-max/manual-map/confirm",
+               json={"session": s["session"], "position": "T0", "reported": {"label": "T1"}})
+    assert r.status_code == 409 and r.json()["error"] == "stale"          # the printer showed nothing active
+    r = c.post("/api/printers/sv08-max/manual-map/stop", json={"session": s["session"]})
+    assert r.status_code == 200 and r.json()["open"] is False
+    assert c.post("/api/printers/sv08-max/map").status_code == 409        # the automatic job stays Bambu's
