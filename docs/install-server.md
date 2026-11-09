@@ -231,7 +231,7 @@ log (for example `setup: anthropic key replaced from 192.0.2.20`) without the va
 ### The tabs (v0.4.3)
 
 From v0.4.3 the page has tabs: **Overview**, **Modules**, **Printers**, **Devices**, **Settings** and **Updates**
-(`https://<computer name>.local:8710/setup#updates` opens one directly). v0.4.4 adds **Presets** and **Logs**. The table above says what is on **Printers**,
+(`https://<computer name>.local:8710/setup#updates` opens one directly). v0.5.0 adds **Presets** and **Logs**. The table above says what is on **Printers**,
 **Devices** and **Settings**. This section was written from the code, not from a screen: it has not been checked on a
 running install.
 
@@ -242,7 +242,7 @@ running install.
   label reading is on), the web passphrase (when the web part is on), each with a link to its tab. Addresses and
   serial numbers are hidden. Type the setup code and tap **Show addresses** to see them, and the intake station's
   pairing when the station is on this computer (without the code it says "not checked").
-- **Devices.** From v0.4.4, with the web part on, it also shows the address of the phone web app (`<address>/intake`),
+- **Devices.** From v0.5.0, with the web part on, it also shows the address of the phone web app (`<address>/intake`),
   its QR code and how to add it to an iPhone's home screen. See
   [use the web app on an iPhone](install-iphone-web-app.md) for the setup Safari needs.
 - **Modules.** **Mode** buttons set a ready-made set of modules. Pick one to see what will be on afterwards and what it
@@ -254,22 +254,22 @@ running install.
   would be accepted** lists the pending updates, and **Accept these** accepts exactly that list: if a newer build has
   come since, it asks you to look again. The PC sync writes accepted updates at its next run, after its backup. Nothing
   else here replaces a preset in your slicers. Each of these needs the setup code.
-- **Settings** (v0.4.4). **General** changes the display name, storage locations, the Claude model, the reads per day and
+- **Settings** (v0.5.0). **General** changes the display name, storage locations, the Claude model, the reads per day and
   the station's voice, each with the setup code. Changing the model or the reads per day restarts the server. With an
   external Spoolman it changes that address too, once the new one has answered. **Remote access**, with the remote module
   on, shows the firewall rules and gets the certificate.
   **Filament library** shows its version and last check, with **Update now**, a button to go back
   to the version before, and a box to add your own entry. Each takes the setup code, and the first two run as
   background jobs.
-- **Backups** (v0.4.4, on **Settings**). **Back up now**, the list of backups with **Download** as a zip, how many days
+- **Backups** (v0.5.0, on **Settings**). **Back up now**, the list of backups with **Download** as a zip, how many days
   to keep, and **Restore** from a backup zip, also onto a freshly installed machine. See the
-  [user guide, Backups and restore](user-guide.md#backups-and-restore-v044).
+  [user guide, Backups and restore](user-guide.md#backups-and-restore-v050).
 - **Updates.** Shows the installed and the latest release, when it was last checked, and the release notes of the
   latest. **Check now** asks GitHub for the latest release and needs the setup code; the page itself cannot reach GitHub, so
   a background job does it. **Update to <version>** asks you to confirm: the kit stops while it installs and starts
   again by itself. **Roll back to <version>** goes back to the release the current one replaced and keeps your
   settings and data. Either is greyed, with the reason shown, while a printer is mapping or loading.
-- **Logs** (v0.4.4). The last lines of one service of a module that is on, with the setup code, because logs hold
+- **Logs** (v0.5.0). The last lines of one service of a module that is on, with the setup code, because logs hold
   addresses and serial numbers.
 - **Background jobs.** Applying modules, updating, rolling back and checking run as a separate service, so they carry on
   when the kit server restarts. The **Background job** panel shows the log, says "The server is restarting; waiting

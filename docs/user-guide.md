@@ -475,7 +475,7 @@ read access to the files it needs.
 A backup of your spools and settings is made every night in `/var/backups/filament-kit` (the last 14 days are
 kept, unless you change that on the setup page).
 
-### Backups and restore (v0.4.4)
+### Backups and restore (v0.5.0)
 
 A backup is **one zip file** with everything the kit keeps, so a new machine can be brought back to how this one was:
 
