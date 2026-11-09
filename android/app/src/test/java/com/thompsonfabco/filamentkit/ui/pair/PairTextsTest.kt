@@ -1,5 +1,8 @@
 package com.thompsonfabco.filamentkit.ui.pair
 
+import java.net.ConnectException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -18,6 +21,7 @@ class PairTextsTest {
         assertEquals("Trust the new certificate", t.trustButton)
         assertEquals(t.body, 1, t.body.count { it == '.' }) // one sentence of risk
         assertTrue(t.body, "another device" in t.body && "this phone's access" in t.body)
+        assertTrue("pairing code on the server" in t.whereToCheck!!)
     }
 
     @Test fun onlyASavedPairingCanBeTrusted() {
@@ -49,6 +53,15 @@ class PairTextsTest {
             val t = text(s)
             assertFalse(t.toString(), t.expectedLabel.orEmpty().contains("Paired") || t.title.contains("has changed"))
         }
+    }
+
+    @Test fun anAddressThatCannotBeReachedSaysWhyWhenThePhoneCanTell() {
+        val name = PairTexts.unreachable(UnknownHostException("kit.local"), "kit.local", 8443)
+        assertTrue(name, "Could not find kit.local" in name && "IP address" in name)
+        val port = PairTexts.unreachable(ConnectException("connect failed: ECONNREFUSED (Connection refused)"), "kit.local", 8443)
+        assertTrue(port, "not on port 8443" in port && "8710" in port)
+        val rest = PairTexts.unreachable(SocketTimeoutException("timeout"), "kit.local", 8443)
+        assertEquals("Could not reach kit.local on port 8443. Check the address and that this phone is on the same network.", rest)
     }
 
     @Test fun whereACodeComesFromIsNotOnlyTheCommand() {

@@ -291,8 +291,7 @@ class Fetcher:
         except urllib.error.HTTPError as e:
             host = urllib.parse.urlsplit(url).hostname
             if e.code == 404:
-                hint = "no such release" + ("" if self._token else
-                                            " (a private repo needs a token: --token-file or FK_GITHUB_TOKEN)")
+                hint = "no such release: check the version number (a mistyped --version is the usual cause)"
             elif e.code in (401, 403):
                 hint = "access refused (a bad token, or the GitHub rate limit: try again in an hour)"
             else:
@@ -319,7 +318,8 @@ class Fetcher:
                 out.write(chunk)
 
     def release(self, repo: str = REPO, version: str | None = None) -> dict:
-        """{"version", "assets": {name: download url}} of the latest release, or of tag v<version>."""
+        """{"version", "assets": {name: download url}, "notes": the release's text} of the latest release, or of
+        tag v<version>."""
         if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo):
             raise ReleaseError(f"bad repo name {repo!r} (owner/name)")
         if version is not None:
@@ -341,7 +341,8 @@ class Fetcher:
         for name, url in assets.items():
             if not isinstance(url, str) or urllib.parse.urlsplit(url).scheme not in ("https", "http"):
                 raise ReleaseError(f"asset {name!r} has a bad address")
-        return {"version": found, "assets": assets}
+        body = doc.get("body")
+        return {"version": found, "assets": assets, "notes": body if isinstance(body, str) else ""}
 
 
 def fetch(dest: Path, *, repo: str = REPO, version: str | None = None, fetcher: Fetcher,

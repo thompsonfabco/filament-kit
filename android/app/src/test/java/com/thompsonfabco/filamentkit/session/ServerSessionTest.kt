@@ -13,6 +13,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import mockwebserver3.MockWebServer
@@ -45,11 +46,16 @@ class ServerSessionTest {
 
     @Volatile private var localNetwork = true
 
-    private fun session(configs: MutableStateFlow<ServerConfig?>, discovered: List<String> = emptyList()) = ServerSession(
+    @Volatile private var found: List<String> = emptyList()
+
+    private fun session(configs: MutableStateFlow<ServerConfig?>, discovered: List<String> = emptyList()) =
+        session(configs) { discovered }
+
+    private fun session(configs: MutableStateFlow<ServerConfig?>, discover: () -> List<String>) = ServerSession(
         scope = scope,
         configs = configs,
         save = { saved += it; configs.value = it },
-        discover = { discovered },
+        discover = { discover() },
         router = router,
         clientFor = { fp: String -> built += fp; pinnedClient(fp) },
         localNetworkGranted = { localNetwork },
@@ -231,6 +237,55 @@ class ServerSessionTest {
         assertFalse(config(listOf("h"), 1, fp = "ab", token = "").canTrust("ab"))
         assertFalse(config(listOf("h"), 1, fp = "ab").canTrust("cd"))
         assertTrue(config(listOf("h"), 1, fp = "ab").canTrust("AB"))
+    }
+
+    @Test fun aRecheckNoticesTheServerGoneWithoutShowingConnecting() {
+        val good = httpsServer(cert, "127.0.0.3").also { servers += it }
+        val s = session(MutableStateFlow(config(listOf("127.0.0.3"), good.port)))
+        await { s.connection.first { it is Connection.Online } }
+        val seen = java.util.Collections.synchronizedList(mutableListOf<Connection>())
+        val watching = scope.launch { s.connection.collect { seen += it } }
+        good.close()
+        s.recheck()
+        await { s.connection.first { it == Connection.Offline } }
+        watching.cancel()
+        assertFalse(seen.toString(), Connection.Checking in seen)
+    }
+
+    @Test fun aRecheckNoticesTheServerBack() {
+        val good = httpsServer(cert, "127.0.0.3").also { servers += it }
+        found = emptyList()
+        val s = session(MutableStateFlow(config(listOf("127.0.0.9"), good.port))) { found }
+        await { s.connection.first { it == Connection.Offline } }
+        found = listOf("127.0.0.3")
+        s.recheck()
+        await { s.connection.first { it == Connection.Online("127.0.0.3") } }
+    }
+
+    @Test fun anAnswerToAnyCallEndsOfflineAndChangesNothingOtherwise() {
+        val good = httpsServer(cert, "127.0.0.3").also { servers += it }
+        found = emptyList()
+        val s = session(MutableStateFlow(config(listOf("127.0.0.9"), good.port))) { found }
+        await { s.connection.first { it == Connection.Offline } }
+        found = listOf("127.0.0.3")
+        s.onServerAnswered()
+        await { s.connection.first { it == Connection.Online("127.0.0.3") } }
+        val before = good.requestCount
+        s.onServerAnswered()
+        Thread.sleep(200)
+        assertEquals(before, good.requestCount)
+    }
+
+    @Test fun aRecheckKeepsAChangedCertificateAndDoesNotOpenPair() {
+        val other = serverCert("kit.local")
+        val answering = httpsServer(other, "127.0.0.3").also { servers += it }
+        val s = session(MutableStateFlow(config(listOf("127.0.0.3"), answering.port)))
+        await { s.connection.first { it is Connection.CertChanged } }
+        val requests = router.requests.value
+        s.recheck()
+        Thread.sleep(200)
+        assertTrue(s.connection.value is Connection.CertChanged)
+        assertEquals(requests, router.requests.value)
     }
 
     @Test fun nothingReachableIsOffline() {

@@ -181,6 +181,19 @@ class UpdaterTest {
         assertFalse(u.state.value.needsPermission)
     }
 
+    @Test fun theReminderGoesWhenThePermissionIsGivenAndOnlyThen() {
+        val installer = FakeInstaller(false)
+        val u = updater(FakeSource("7"), installer)
+        u.check()
+        scheduler.runCurrent()
+        u.install()
+        u.onResumed()
+        assertTrue(u.state.value.needsPermission)
+        installer.allowed = true
+        u.onResumed()
+        assertFalse(u.state.value.needsPermission)
+    }
+
     @Test fun startupCheckIsNotDuplicated() {
         val source = FakeSource("7")
         val u = updater(source)

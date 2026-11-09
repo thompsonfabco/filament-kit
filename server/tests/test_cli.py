@@ -385,7 +385,7 @@ def test_pair_prints_grouped_certificate_fingerprint(capsys):
     assert cli.main(["pair"]) == 0
     out = capsys.readouterr().out
     grouped = " ".join(fp[i:i + 4] for i in range(0, len(fp), 4))
-    assert "Certificate fingerprint (check it matches the phone):" in out
+    assert "Certificate fingerprint (the phone asks for two groups of it):" in out
     assert grouped in out and len(grouped.split(" ")) == 16
 
 
