@@ -13,7 +13,8 @@ from filament_kit.api import create_app
 from filament_kit.spoolman import Spoolman
 
 WEB = Path(api.__file__).parent / "web"
-PUBLIC = {("GET", "/api/info"), ("POST", "/api/pair")}
+PUBLIC = {("GET", "/api/info"), ("POST", "/api/pair"), ("POST", "/api/station/pair-request"),
+          ("GET", "/api/station/pair-request/{request_id}")}      # a station with no token yet
 
 
 @pytest.fixture(autouse=True)
