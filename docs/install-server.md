@@ -220,6 +220,34 @@ a new code, which also clears the lock: `sudo filament-kit setup-code --new`. Th
 Secrets are write-only: after you save one, the page only says it is set. Each change is written to the server's
 log (for example `setup: anthropic key replaced from 192.0.2.20`) without the value.
 
+### The tabs (v0.4.3)
+
+From v0.4.3 the page has tabs: **Overview**, **Modules**, **Printers**, **Devices**, **Settings** and **Updates**
+(`https://<computer name>.local:8710/setup#updates` opens one directly). The table above says what is on **Printers**,
+**Devices** and **Settings**. This section was written from the code, not from a screen: it has not been checked on a
+running install.
+
+- **Overview.** The installed version and mode, with a note and a link to **Updates** when a newer release exists. Under
+  it are the same checks as `sudo filament-kit status`, each marked **OK**, **needs a look** or **note**, with a
+  `Fix:` line for the ones that need a look and a **Make the fields** button where Spoolman is missing fields the
+  kit needs. **Still to do** lists what is missing: a setup code, printers, a paired phone, the Anthropic key (when AI
+  label reading is on), the web passphrase (when the web part is on), each with a link to its tab. Addresses and
+  serial numbers are hidden. Type the setup code and tap **Show addresses** to see them, and the intake station's
+  pairing when the station is on this computer (without the code it says "not checked").
+- **Modules.** **Mode** buttons set a ready-made set of modules. Pick one to see what will be on afterwards and what it
+  asks for, then **Apply**. Station mode has no server and so no setup page: its button is greyed, and you set it at the
+  station with `sudo filament-kit modules set station --server <address>`. Below the modes, modules are switched on or off
+  one by one, as before. The changes are applied in a background job with a live log (see below).
+- **Updates.** Shows the installed and the latest release, when it was last checked, and the release notes of the
+  latest. **Check now** asks GitHub for the latest release and needs the setup code; the page itself cannot reach GitHub, so
+  a background job does it. **Update to <version>** asks you to confirm: the kit stops while it installs and starts
+  again by itself. **Roll back to <version>** goes back to the release the current one replaced and keeps your
+  settings and data. Either is greyed, with the reason shown, while a printer is mapping or loading.
+- **Background jobs.** Applying modules, updating, rolling back and checking run as a separate service, so they carry on
+  when the kit server restarts. The **Background job** panel shows the log, says "The server is restarting; waiting
+  for it to come back…" while it is down, and after an update the page reloads itself into the new version. The log hides
+  addresses and serial numbers; **Show the whole log** (with the setup code) shows them.
+
 Everything the page does can still be done from the Terminal, as the other sections of this guide describe.
 `sudo filament-kit modules apply --no-pair` applies module changes without the pairing screen at the end (the page
 uses it).

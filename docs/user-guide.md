@@ -927,7 +927,8 @@ cannot change it: edit it by hand if a range needs adding, then restart Spoolman
   ```bash
   systemctl disable --now filament-kit-setup.socket
   rm -f /etc/systemd/system/filament-kit-setup.socket /etc/systemd/system/filament-kit-setup@.service \
-        /etc/systemd/system/filament-kit-setup-apply.service /etc/tmpfiles.d/filament-kit-setup.conf
+        /etc/systemd/system/filament-kit-setup-apply.service /etc/systemd/system/filament-kit-setup-job@.service \
+        /etc/tmpfiles.d/filament-kit-setup.conf
   rm -rf /run/filament-kit-setup && systemctl daemon-reload
   setfacl -R -x u:filament-kit-web /etc/filament-kit /var/lib/filament-kit
   find /var/lib/filament-kit -type d -exec setfacl -d -x u:filament-kit-web {} +
