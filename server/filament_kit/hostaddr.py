@@ -64,7 +64,7 @@ def _lookup(host: str, timeout: float, lookup) -> list | None:
     def ask() -> None:
         try:
             got.put(lookup(host, None, type=socket.SOCK_STREAM) or None)
-        except OSError:
+        except (OSError, UnicodeError):     # UnicodeError: a label too long for IDNA, which getaddrinfo raises itself
             got.put(None)
     threading.Thread(target=ask, name="address-lookup", daemon=True).start()    # getaddrinfo has no timeout of its own
     try:
@@ -106,6 +106,7 @@ def reach_note(host: str, answer=None) -> str | None:
 def addresses(host: str, *, timeout: float = LOOKUP_WAIT, lookup=None) -> set[str]:
     """The addresses `host` stands for right now: itself when it is one, else what it resolves to (empty when it doesn't).
     For telling a found address and a typed name apart; nothing keeps the answer."""
+    host = clean(host)
     if is_literal(host):
         return {str(ipaddress.ip_address(host))}
     return {str(a) for a in _literals(_lookup(host, timeout, lookup))}
