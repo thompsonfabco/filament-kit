@@ -142,7 +142,7 @@ object LoadHelp {
 
     fun slotLine(s: AmsSlot, units: List<AmsUnit> = emptyList()): String = listOfNotNull(
         PrinterHelp.slotLabel(s, units),
-        s.type.ifBlank { "empty" },
+        if (PrinterHelp.slotEmpty(s)) "empty" else s.type.ifBlank { null },
         s.spool?.name?.ifBlank { null },
     ).joinToString(" · ")
 
