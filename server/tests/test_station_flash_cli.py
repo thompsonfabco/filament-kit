@@ -14,13 +14,13 @@ SVC = ["systemctl", "{}", "filament-kit-station.service"]
 class Probe:
     """open_panel stand-in: ports in HELLO answer (and hand back a Serial to close); the rest stay silent."""
     def __init__(self, hello=()):
-        self.hello, self.opened, self.sers = set(hello), [], []
+        self.hello, self.opened, self.sers, self.version = set(hello), [], [], "10"
 
     def __call__(self, dev):
         self.opened.append(dev)
         if dev not in self.hello:
             return None
-        ser = type("S", (), {"port": dev, "closed": False, "close": lambda s: setattr(s, "closed", True)})()
+        ser = type("S", (), {"port": dev, "panel_version": self.version, "closed": False, "close": lambda s: setattr(s, "closed", True)})()
         self.sers.append(ser)
         return ser
 
@@ -33,11 +33,20 @@ def bench(monkeypatch):
     monkeypatch.setattr(panel, "fw_version", lambda: "10")
     probe = Probe()
     monkeypatch.setattr(panel, "open_panel", probe)
+    monkeypatch.setattr(cli.time, "sleep", lambda s: None)
     flashed = []
-    monkeypatch.setattr(panel, "flash_panel", lambda dev, version: flashed.append((dev, version)))
+
+    def flash(dev, version):  # a good flash: the board then says HELLO with the new version
+        flashed.append((dev, version))
+        probe.hello.add(dev)
+        return True
+    monkeypatch.setattr(panel, "flash_panel", flash)
     calls = []
-    return type("B", (), {"probe": probe, "flashed": flashed, "calls": calls,
-                          "run": staticmethod(lambda cmd, **kw: calls.append(cmd))})
+
+    def run(cmd, **kw):
+        calls.append(cmd)
+        return type("R", (), {"returncode": 0})()
+    return type("B", (), {"probe": probe, "flashed": flashed, "calls": calls, "run": staticmethod(run)})
 
 
 def services(b):
@@ -106,3 +115,71 @@ def test_blank_c3_ports_ignores_ttyusb_and_other_vendors(monkeypatch):
     monkeypatch.setattr(st, "usb_vendor", lambda dev: {"/dev/ttyACM0": "303a"}.get(dev, "303a" if "USB" in dev else "2341"))
     monkeypatch.setattr(panel, "open_panel", Probe())
     assert panel.blank_c3_ports() == ["/dev/ttyACM0"]
+
+
+def test_failed_esptool_exits_1(bench, monkeypatch, capsys):
+    monkeypatch.setattr(panel, "flash_panel", lambda dev, version: False)
+    assert cli.cmd_station_flash_panel(ask=lambda p: "y", run=bench.run) == 1
+    assert "ttyACM0" in capsys.readouterr().err
+    assert services(bench) == ["stop", "start"]
+
+
+def test_flash_without_hello_afterwards_exits_1(bench, monkeypatch, capsys):
+    monkeypatch.setattr(panel, "flash_panel", lambda dev, version: True)  # esptool ok, board stays silent
+    assert cli.cmd_station_flash_panel(ask=lambda p: "y", run=bench.run) == 1
+    assert "ttyACM0" in capsys.readouterr().err
+    assert bench.probe.opened == ["/dev/ttyACM0", "/dev/ttyACM1", "/dev/ttyACM0"]
+
+
+def test_flash_with_wrong_version_afterwards_exits_1(bench):
+    orig = panel.flash_panel
+    bench.probe.version = "9"
+
+    def flash(dev, version):
+        bench.probe.hello.add(dev)
+        return True
+    panel.flash_panel = flash
+    try:
+        assert cli.cmd_station_flash_panel(ask=lambda p: "y", run=bench.run) == 1
+    finally:
+        panel.flash_panel = orig
+
+
+def test_flash_with_matching_hello_exits_0(bench, capsys):
+    assert cli.cmd_station_flash_panel(ask=lambda p: "y", run=bench.run) == 0
+    assert "Wrote panel firmware 10" in capsys.readouterr().out
+    assert bench.probe.sers[-1].closed
+
+
+def test_failed_service_stop_aborts(bench, capsys):
+    def run(cmd, **kw):
+        bench.calls.append(cmd)
+        return type("R", (), {"returncode": 1 if cmd[1] == "stop" else 0})()
+    assert cli.cmd_station_flash_panel(ask=lambda p: "y", run=run) == 1
+    assert bench.probe.opened == [] and bench.flashed == []
+    assert services(bench) == ["stop", "start"]
+    assert "stop" in capsys.readouterr().err
+
+
+def test_unit_not_loaded_stop_is_fine(bench):
+    def run(cmd, **kw):
+        bench.calls.append(cmd)
+        return type("R", (), {"returncode": 5 if cmd[1] == "stop" else 0})()
+    assert cli.cmd_station_flash_panel(ask=lambda p: "y", run=run) == 0
+
+
+def test_stop_happens_before_the_first_probe(bench, monkeypatch):
+    order = []
+    monkeypatch.setattr(panel, "open_panel", lambda dev: order.append(("probe", dev)))
+    monkeypatch.setattr(panel, "blank_c3_ports", panel.blank_c3_ports)
+    cli.cmd_station_flash_panel(ask=lambda p: "n",
+                                run=lambda cmd, **kw: order.append((cmd[1],)) or type("R", (), {"returncode": 0})())
+    assert order[0] == ("stop",) and order[1][0] == "probe"
+
+
+def test_ctrl_c_at_the_prompt_flashes_nothing_and_restarts(bench, capsys):
+    def ask(p):
+        raise KeyboardInterrupt
+    assert cli.cmd_station_flash_panel(ask=ask, run=bench.run) == 1
+    assert "Nothing was flashed." in capsys.readouterr().out
+    assert bench.flashed == [] and services(bench) == ["stop", "start"]

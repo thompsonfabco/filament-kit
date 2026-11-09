@@ -78,20 +78,23 @@ def fw_version():
 def flash_panel(dev, version):
     """Write the bundled (merged, address 0) firmware to the ESP32-C3 panel on dev with esptool (its native USB
     resets into the ROM bootloader, so a failed write can always be retried). Never touches the reader's port; keeps the panel's port
-    claimed (ports["panel"]) so nfcpy never opens it meanwhile."""
+    claimed (ports["panel"]) so nfcpy never opens it meanwhile. True only when esptool exits 0."""
     if dev == st.ports["nfc"]:
         log.warning("not flashing %s: it is the NFC reader's port", dev)
-        return
+        return False
     log.info("flashing button panel on %s with firmware %s", dev, version)
     cmd = [sys.executable, "-m", "esptool", "--chip", "esp32c3", "--port", dev, "--baud", "460800",
            "--before", "default-reset", "--after", "hard-reset", "write-flash", "0x0", st.settings["panel_fw"]]
+    ok = False
     try:
         p = subprocess.run(cmd, capture_output=True, timeout=180)
+        ok = p.returncode == 0
         tail = (p.stdout + p.stderr).decode(errors="replace").strip().splitlines()[-3:]
         (log.info if p.returncode == 0 else log.warning)("esptool exit %d: %s", p.returncode, " | ".join(tail))
     except (OSError, subprocess.TimeoutExpired) as e:
         log.warning("esptool: %s", e)
     time.sleep(2)  # let it boot
+    return ok
 
 
 def update_firmware(ser):
