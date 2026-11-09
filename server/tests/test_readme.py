@@ -215,11 +215,7 @@ def test_a_listing_id_or_a_manual_is_a_source(line):
     assert _purchase_record(line) is None
 
 
-# Being fixed in filament-library, not yet in this snapshot: the re-sync must empty this, and the test below then says so.
-_SNAPSHOT_NOT_YET_FIXED = {"server/tests/data/library_snapshot/library/amolen/pla-glow.json: the caller"}
-
-
 def test_the_library_snapshot_holds_no_purchase_record():
     found = {f"{p.relative_to(ROOT).as_posix()}: {why}" for p in sorted((ROOT / "server/tests/data/library_snapshot").rglob("*.json"))
              for line in p.read_text(encoding="utf-8").splitlines() if (why := _purchase_record(line))}
-    assert found == _SNAPSHOT_NOT_YET_FIXED
+    assert not found, found
