@@ -474,7 +474,7 @@ def test_due_schedule():
 def test_status_shape():
     st = library.status()
     assert st == {"version": _bundled_version(), "source": "bundled", "local": 0,
-                  "url": library.DEFAULT_LIBRARY_URL, "last_check": None}
+                  "url": library.DEFAULT_LIBRARY_URL, "last_check": None, "skipped": None}
     library.update("https://example.invalid/", opener=_raising_opener(404), now=123.0)
     lc = library.status()["last_check"]
     assert set(lc) == {"at", "ok", "error"} and lc["at"] == 123.0 and lc["ok"] is False

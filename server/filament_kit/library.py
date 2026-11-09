@@ -17,6 +17,12 @@ Layout in the state directory:
   library-local/<vslug>/<pslug>.json   the owner's own additions; never touched by `update`
 
 `validate` is a port of filament-library `tools/fl.py` (schema_version 1), so no jsonschema dependency.
+
+Compatibility: the library moves faster than an installed kit. Authoring stays strict (the library's own tools and `add_local`, so
+a typo is caught where it's made), and so does anything unsigned. Installing a SIGNED library (`update`) drops what this kit can't
+validate, a field or a whole entry, and says how many in `status`: the data is signed and the slicer's parent preset is the fallback.
+It refuses instead when more than MAX_DROPPED of the entries would go, which looks like a broken release, not newer rules. A wrong
+hash, an unreadable file or an entry at the wrong path is fatal, and a different index `schema_version` refuses and says why.
 """
 from __future__ import annotations
 
@@ -26,6 +32,7 @@ import hashlib
 import hmac
 import io
 import json
+import logging
 import os
 import re
 import shutil
@@ -39,7 +46,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import config, release
+from . import __version__, config, release
 from .pairing import _write_atomic, give_to_state_owner, make_state_dir, open_lock
 
 try:
@@ -124,6 +131,11 @@ def _num(v):
         return None
 
 
+log = logging.getLogger(__name__)
+
+MAX_DROPPED = 0.25      # of a signed library's entries; more than this refuses the update
+
+
 def _first(f: dict, key: str):
     v = f.get(key)
     return v[0] if isinstance(v, list) and v else None
@@ -184,36 +196,7 @@ def validate(entry: dict, *, local: bool = False) -> list[str]:
         f = {}
     f = f if isinstance(f, dict) else {}
     for k, v in f.items():
-        if k == "temperature_vitrification":
-            errs.append("fields.temperature_vitrification is not allowed (Bambu's heat-creep threshold, not Tg); "
-                        "put Tg/Vicat/HDT in published_ranges._vitrification/_vicat/_hdt_0.45MPa")
-            continue
-        if k not in FIELD_KEYS:
-            errs.append(f"unknown fields key '{k}'")
-            continue
-        if not (isinstance(v, list) and len(v) == 1 and isinstance(v[0], str) and v[0].strip()):
-            errs.append(f"fields.{k} must be a one-element string array, got {v!r}")
-            continue
-        s = v[0]
-        x = _num(s)
-        if k.startswith("nozzle_temperature_range"):
-            if x is None or not 150 <= x <= 450:
-                errs.append(f"fields.{k} {s!r} is outside 150-450 C")
-        elif k == "filament_density":
-            if x is None or not 0.5 <= x <= 3.0:
-                errs.append(f"fields.filament_density {s!r} is outside 0.5-3.0 g/cm3")
-        elif k == "filament_diameter":
-            if x not in (1.75, 2.85):
-                errs.append(f"fields.filament_diameter {s!r} must be 1.75 or 2.85")
-        elif k in ("filament_soluble", "filament_is_support"):
-            if s not in ("0", "1"):
-                errs.append(f"fields.{k} must be \"0\" or \"1\"")
-        elif k == "filament_shrink":
-            if not re.fullmatch(r"\d+(\.\d+)?%", s) or not 90 <= float(s[:-1]) <= 110:
-                errs.append(f"fields.filament_shrink {s!r} must be a percentage like \"99.6%\"")
-        elif k == "filament_max_volumetric_speed":
-            if x is None or not 0 < x <= 100:
-                errs.append(f"fields.filament_max_volumetric_speed {s!r} must be a number in (0, 100] mm3/s")
+        errs += _field_errors(k, v)
     lo = _num(_first(f, "nozzle_temperature_range_low"))
     hi = _num(_first(f, "nozzle_temperature_range_high"))
     if lo is not None and hi is not None and lo > hi:
@@ -224,11 +207,73 @@ def validate(entry: dict, *, local: bool = False) -> list[str]:
         errs.append("published_ranges must be an object")
         pr = {}
     for k, v in (pr if isinstance(pr, dict) else {}).items():
-        if not (k.startswith("_") or k in RANGE_KEYS):
-            errs.append(f"unknown published_ranges key '{k}' (note keys must start with '_')")
-        if not (isinstance(v, str) and v.strip()):
-            errs.append(f"published_ranges.{k} must be a non-empty string, got {v!r}")
+        errs += _range_errors(k, v)
     return errs
+
+
+def _field_errors(k: str, v) -> list[str]:
+    if k == "temperature_vitrification":
+        return ["fields.temperature_vitrification is not allowed (Bambu's heat-creep threshold, not Tg); "
+                "put Tg/Vicat/HDT in published_ranges._vitrification/_vicat/_hdt_0.45MPa"]
+    if k not in FIELD_KEYS:
+        return [f"unknown fields key '{k}'"]
+    if not (isinstance(v, list) and len(v) == 1 and isinstance(v[0], str) and v[0].strip()):
+        return [f"fields.{k} must be a one-element string array, got {v!r}"]
+    s = v[0]
+    x = _num(s)
+    if k.startswith("nozzle_temperature_range"):
+        if x is None or not 150 <= x <= 450:
+            return [f"fields.{k} {s!r} is outside 150-450 C"]
+    elif k == "filament_density":
+        if x is None or not 0.5 <= x <= 3.0:
+            return [f"fields.filament_density {s!r} is outside 0.5-3.0 g/cm3"]
+    elif k == "filament_diameter":
+        if x not in (1.75, 2.85):
+            return [f"fields.filament_diameter {s!r} must be 1.75 or 2.85"]
+    elif k in ("filament_soluble", "filament_is_support"):
+        if s not in ("0", "1"):
+            return [f"fields.{k} must be \"0\" or \"1\""]
+    elif k == "filament_shrink":
+        if not re.fullmatch(r"\d+(\.\d+)?%", s) or not 90 <= float(s[:-1]) <= 110:
+            return [f"fields.filament_shrink {s!r} must be a percentage like \"99.6%\""]
+    elif k == "filament_max_volumetric_speed":
+        if x is None or not 0 < x <= 100:
+            return [f"fields.filament_max_volumetric_speed {s!r} must be a number in (0, 100] mm3/s"]
+    return []
+
+
+def _range_errors(k: str, v) -> list[str]:
+    errs = []
+    if not (k.startswith("_") or k in RANGE_KEYS):
+        errs.append(f"unknown published_ranges key '{k}' (note keys must start with '_')")
+    if not (isinstance(v, str) and v.strip()):
+        errs.append(f"published_ranges.{k} must be a non-empty string, got {v!r}")
+    return errs
+
+
+def salvage(entry) -> tuple[dict | None, int]:
+    """For a signed library's entry that doesn't validate: (what this kit can read of it, or None when that's nothing whole;
+    how many parts went). Only parts an entry can do without go: an unknown top-level key, a field, a published range. A
+    missing or unreadable required key loses the entry, since the kit would be guessing."""
+    if not isinstance(entry, dict):
+        return None, 0
+    out, gone = {k: v for k, v in entry.items() if k in TOP_KEYS}, 0
+    gone += len(entry) - len(out)
+    if isinstance(out.get("fields"), dict):
+        fields = {k: v for k, v in out["fields"].items() if not _field_errors(k, v)}
+        pair = ("nozzle_temperature_range_low", "nozzle_temperature_range_high")
+        lo, hi = _num(_first(fields, pair[0])), _num(_first(fields, pair[1]))
+        # one limit left over would pair with the parent's other limit, which it was never written to fit: neither can be trusted
+        if (lo is not None and hi is not None and lo > hi) or any(k in out["fields"] and k not in fields for k in pair):
+            for k in pair:
+                fields.pop(k, None)
+        gone += len(out["fields"]) - len(fields)
+        out["fields"] = fields
+    if isinstance(out.get("published_ranges"), dict):
+        ranges = {k: v for k, v in out["published_ranges"].items() if not _range_errors(k, v)}
+        gone += len(out["published_ranges"]) - len(ranges)
+        out["published_ranges"] = ranges
+    return (None, gone) if validate(out) else (out, gone)
 
 
 # ---------- state ----------
@@ -892,9 +937,16 @@ def update(url: str | None = None, *, opener=None, now: float | None = None) -> 
                 raw = fetch.get(base + "index.json", "index.json", INDEX_LIMIT)
             idx, rows = _parse_index(raw, cur_version)
             new_rows = {r["path"]: r["sha256"] for r in rows}
-            if idx["library_version"] == cur_version and new_rows == cur_rows:
+            # what this kit dropped from a signed library is on disk changed: compare with what was published, and this kit
+            # (a newer one may read more of it)
+            read_before = cur_idx.get("signed_rows") == new_rows and cur_idx.get("read_by") == __version__
+            if idx["library_version"] == cur_version and (new_rows == cur_rows or read_before):
                 _record_check(now, None)
                 return UpdateResult(False, cur_version, 0, None, note=note)
+            signed = archive is not None and table is not None
+            kept: list[dict] = []
+            dropped: list[str] = []
+            fields_gone = 0
             name = _new_dir_name(idx["library_version"], now)
             tmp = _dir() / "versions" / (name + ".tmp")
             make_state_dir(tmp)
@@ -919,14 +971,32 @@ def update(url: str | None = None, *, opener=None, now: float | None = None) -> 
                 except (UnicodeDecodeError, ValueError):
                     raise _Abort(f"{path}: not valid JSON") from None
                 problems = validate(entry)
-                if problems:
+                if problems and not signed:
                     raise _Abort(f"{path}: " + "; ".join(problems))
+                if problems:
+                    entry, gone = salvage(entry)
+                    if entry is None:
+                        log.warning("library: %s: this kit can't read it: %s", path, "; ".join(problems)[:300])
+                        dropped.append(path)
+                        continue
+                    fields_gone += gone
+                    log.warning("library: %s: kept without what this kit can't read: %s", path, "; ".join(problems)[:300])
+                    data = (json.dumps(entry, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+                    sha = hashlib.sha256(data).hexdigest()
                 if rel_path(entry) != path:
                     raise _Abort(f"{path}: the entry belongs at {rel_path(entry)}")
+                kept.append({**r, "sha256": sha})
                 dest = tmp / path
                 make_state_dir(dest.parent)
                 dest.write_bytes(data)
                 give_to_state_owner(dest)
+            if rows and len(dropped) > MAX_DROPPED * len(rows):
+                raise _Abort(f"this kit can't read {len(dropped)} of the library's {len(rows)} entries, which looks like a "
+                             "broken release rather than newer rules; keeping the current library (a kit update may help)")
+            skipped = {"entries": len(dropped), "parts": fields_gone} if dropped or fields_gone else None
+            if skipped:
+                raw = json.dumps({**idx, "entries": kept, "signed_rows": new_rows, "read_by": __version__,
+                                  "skipped": skipped}, indent=2).encode("utf-8")
             (tmp / "index.json").write_bytes(raw)
             give_to_state_owner(tmp / "index.json")
             final = _dir() / "versions" / name
@@ -1014,7 +1084,23 @@ def display_url(url) -> str:
     return f"{u.scheme}://{u.hostname}{f':{port}' if port else ''}{u.path}"
 
 
+def skipped() -> dict | None:
+    """What this kit left out of the library in use: kept with that library, so a failed check or a rollback can't change it."""
+    got = _current()[1].get("skipped")
+    return got if isinstance(got, dict) else None
+
+
+def skipped_text() -> str | None:
+    """That, as one sentence, or None."""
+    got = skipped()
+    if got is None:
+        return None
+    parts = [f"{n} {word if n == 1 else plural}"
+             for n, word, plural in ((got.get("entries", 0), "entry", "entries"), (got.get("parts", 0), "field", "fields")) if n]
+    return f"{' and '.join(parts)} left out, which this kit can't read; a newer kit may"
+
+
 def status() -> dict:
     lib = load()
     return {"version": lib.version, "source": lib.source, "local": lib.local_count,
-            "url": display_url(configured_url()), "last_check": last_check()}
+            "url": display_url(configured_url()), "last_check": last_check(), "skipped": skipped_text()}

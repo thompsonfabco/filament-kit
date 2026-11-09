@@ -724,6 +724,8 @@ def cmd_library_status() -> int:
         print("last check: never")
     else:
         print(f"last check: {_fmt_time(lc['at'])} {'ok' if lc['ok'] else 'failed: ' + str(lc['error'])}")
+    if st["skipped"]:
+        print(st["skipped"])
     return 0
 
 
@@ -756,6 +758,9 @@ def cmd_library_update(scheduled: bool) -> int:
         return 0
     print(f"library version {r.version} installed ({r.downloaded} entr{'y' if r.downloaded == 1 else 'ies'} "
           f"downloaded)")
+    text = library.skipped_text()
+    if text:
+        print(text)
     _request_rebuild(f"library updated to version {r.version}")
     return 0
 

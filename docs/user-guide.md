@@ -531,7 +531,8 @@ program: profiles work without it, from your Spoolman values and Bambu's or Orca
 with `sudo filament-kit library update`, or switch the **library** module on (it then also checks every day). A
 copy you downloaded earlier keeps being used when the kit is upgraded.
 
-- `sudo filament-kit library status`: shows the library version (or that none is downloaded) and the last check.
+- `sudo filament-kit library status`: shows the library version (or that none is downloaded), the last check, and any
+  entries and fields left out of it because this kit can't read them.
 - `sudo filament-kit library update`: downloads the library, or a newer version, now.
 - `sudo filament-kit library rollback`: goes back to the version before the last update. The next daily check
   installs the newer version again. To keep the rolled-back version, turn the daily check off first: in
@@ -544,7 +545,7 @@ another `.tar.gz` or to a folder that serves `index.json` and the entries). The 
 checked against the release's signed `SHA256SUMS`, like the program itself, and refused without it. Another
 `.tar.gz` is checked the same way when a signed `SHA256SUMS` sits next to it; otherwise (and for a folder URL)
 `library update` prints a note that it is not signature-checked. Every entry is checked before it is used, and a
-bad download changes nothing. The token below is only ever sent to api.github.com and objects.githubusercontent.com,
+bad download changes nothing. A signed one with some entries or fields this kit can't read yet is used without them, unless more than a quarter of its entries would go. The token below is only ever sent to api.github.com and objects.githubusercontent.com,
 as for program updates. Testing against a private repository: put a GitHub token that can read it in
 `/etc/filament-kit/github_token`; the `releases/latest/download` link does not accept a token for a private
 repository, so find the asset's id (`gh api repos/<owner>/<repo>/releases/latest --jq '.assets[] | [.name, .id]'`)
