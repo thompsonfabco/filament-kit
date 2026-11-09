@@ -1,6 +1,6 @@
 """HTTPS JSON API for the phone app.
 
-Every route but /api/info, /api/pair and /app.apk needs `Authorization: Bearer <token>`; the intake station's token
+Every route but /api/info, POST /api/pair and /app.apk needs `Authorization: Bearer <token>`; the intake station's token
 (`pair --station`) reaches only /api/station/* (403 elsewhere). Errors are `{"error": <code>, "message": <text>}`;
 tracebacks are logged here and never sent.
 """
@@ -642,6 +642,14 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         return JSONResponse({"token": token})
 
     @_authed
+    async def unpair(request: Request):
+        """A client leaving: only the calling token is revoked. Clients call it best effort when they forget the server."""
+        device = request.state.device
+        revoked = await run_in_threadpool(pairing.revoke, device)
+        log.info("unpair device_id=%s result=%s", device, "ok" if revoked else "already-gone")
+        return JSONResponse({"revoked": True})
+
+    @_authed
     async def intake_read(request: Request):
         async with request.form() as form:
             photos = []
@@ -837,6 +845,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         routes=[
             Route("/api/info", info),
             Route("/api/pair", pair, methods=["POST"]),
+            Route("/api/pair", unpair, methods=["DELETE"]),
             *_gated([
                 Route("/api/intake/read", intake_read, methods=["POST"]),
                 Route("/api/intake/retry/{read_id}", intake_retry, methods=["POST"]),
