@@ -83,8 +83,8 @@ class FakeSM:
     def __init__(self):
         fil = {"id": 7, "name": "PLA+ Grey", "material": "PLA", "color_hex": "808080", "vendor": {"name": "SUNLU"}}
         self.spools = {
-            1: {"id": 1, "location": "Rack 1", "filament": fil, "extra": {}},
-            2: {"id": 2, "location": LOC_A1, "filament": fil, "extra": {}},
+            1: {"id": 1, "location": "Rack 1", "filament": fil, "extra": {}, "registered": "2020-01-01T00:00:00Z"},
+            2: {"id": 2, "location": LOC_A1, "filament": fil, "extra": {}, "registered": "2020-01-01T00:00:00Z"},
         }
         self.used = []
 
