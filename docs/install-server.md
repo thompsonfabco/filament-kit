@@ -242,6 +242,9 @@ running install.
   label reading is on), the web passphrase (when the web part is on), each with a link to its tab. Addresses and
   serial numbers are hidden. Type the setup code and tap **Show addresses** to see them, and the intake station's
   pairing when the station is on this computer (without the code it says "not checked").
+- **Devices.** From v0.4.4, with the web part on, it also shows the address of the phone web app (`<address>/intake`),
+  its QR code and how to add it to an iPhone's home screen. See
+  [use the web app on an iPhone](install-iphone-web-app.md) for the setup Safari needs.
 - **Modules.** **Mode** buttons set a ready-made set of modules. Pick one to see what will be on afterwards and what it
   asks for, then **Apply**. Station mode has no server and so no setup page: its button is greyed, and you set it at the
   station with `sudo filament-kit modules set station --server <address>`. Below the modes, modules are switched on or off
