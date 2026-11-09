@@ -96,14 +96,29 @@ async function manualMap(p, box) {
   const send = async (what, body) => {
     try { v = await api(`${base}/${what}`, { session: v.session, code: codeIn.value, ...body }); draw(); } catch (e) { say(note, e.message, false); }
   };
+  const offer = async (share) => {      // its answer is a line, not the session: the card is redrawn from v
+    try { const r = await api(`${base}/offer`, { session: v.session, code: codeIn.value, share }); v.offer_report = false; draw(); say(note, r.message, true); }
+    catch (e) { say(note, e.message, false); }
+  };
   const note = h("div");
+  // a redraw rebuilds the selects: a choice the owner is making survives it while the same position is asked
+  let shown, picks = {};
   const draw = () => {
     const st = v.step;
+    const pos = st ? st.position.id : null;
+    const prev = pos === shown ? Object.fromEntries(Object.entries(picks).map(([k, e]) => [k, e.value])) : {};
+    shown = pos; picks = {};
+    const keep = (k, el) => {
+      if (!el) return el;
+      picks[k] = el;
+      if (prev[k] !== undefined && [...el.options].some((o) => o.value === prev[k])) el.value = prev[k];
+      return el;
+    };
     const positions = h("ul", {}, ...v.positions.map((q) => h("li", { textContent: `${q.label}: ${q.status === "confirmed" ? `confirmed (${q.reported_label}${q.nozzle ? ", " + q.nozzle + " nozzle" : ""})` : q.status === "by_hand" ? `entered by hand (${q.reported_label})` : q.status}` })));
     let ask = null;
     if (st && st.seen && st.ask) {
-      const other = h("select", { ariaLabel: "The position you loaded" }, ...v.positions.map((q) => h("option", { value: q.id, textContent: q.label, selected: q.id === st.position.id })));
-      const noz = v.dual_nozzle && !st.seen.nozzle_reported ? h("select", { ariaLabel: "Nozzle" }, h("option", { value: "right", textContent: "right nozzle" }), h("option", { value: "left", textContent: "left nozzle" })) : null;
+      const other = keep("other", h("select", { ariaLabel: "The position you loaded" }, ...v.positions.map((q) => h("option", { value: q.id, textContent: q.label, selected: q.id === st.position.id }))));
+      const noz = keep("noz", v.dual_nozzle && !st.seen.nozzle_reported ? h("select", { ariaLabel: "Nozzle" }, h("option", { value: "right", textContent: "right nozzle" }), h("option", { value: "left", textContent: "left nozzle" })) : null);
       const nozzle = () => (st.seen.nozzle_reported ? st.seen.nozzle : noz ? noz.value : null);
       ask = h("div", {},
         h("p", { textContent: st.ask }),
@@ -112,7 +127,7 @@ async function manualMap(p, box) {
           h("label", {}, "No, I loaded ", other),
           h("button", { class: "secondary", textContent: "Save that", on: { click: () => send("confirm", { position: other.value, reported: st.seen.reported, nozzle: nozzle() }) } })));
     } else if (st && !v.reports_loads) {
-      const pick = h("select", { ariaLabel: "The slot it is in" }, ...(v.choices || []).map((c, i) => h("option", { value: String(i), textContent: c.label })));
+      const pick = keep("pick", h("select", { ariaLabel: "The slot it is in" }, ...(v.choices || []).map((c, i) => h("option", { value: String(i), textContent: c.label }))));
       ask = h("div", { class: "row" }, pick, h("button", { textContent: "Save (not checked by the printer)", on: { click: () => send("confirm", { position: st.position.id, reported: v.choices[Number(pick.value)].reported, by_hand: true }) } }));
     } else if (st && st.seen && !st.seen.settled) {
       ask = h("p", { class: "muted", textContent: "The printer reports a change; waiting for it to settle…" });
@@ -127,14 +142,15 @@ async function manualMap(p, box) {
       positions,
       !v.open && v.offer_report ? h("div", { class: "row" },
         h("p", { textContent: "Share this map in a printer report, so other owners of this model benefit? Nothing is sent unless you choose to." }),
-        h("button", { class: "secondary", textContent: "Make a report to share", on: { click: () => send("offer", { share: true }) } }),
-        h("button", { class: "secondary", textContent: "No thanks", on: { click: () => send("offer", { share: false }) } })) : null,
+        h("button", { class: "secondary", textContent: "Yes, how do I share it?", on: { click: () => offer(true) } }),
+        h("button", { class: "secondary", textContent: "No thanks", on: { click: () => offer(false) } })) : null,
       note);
   };
   const tick = async () => {
     if (!v.open) { manualOn[p.serial] = false; draw(); return; }
+    const was = JSON.stringify(v);
     try { v = await api(base); } catch (e) { manualOn[p.serial] = false; say(box, e.message, false); return; }
-    draw();
+    if (JSON.stringify(v) !== was) draw();     // unchanged: an open list or a choice being made stays as it is
     setTimeout(tick, 2000);
   };
   draw();

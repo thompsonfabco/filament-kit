@@ -455,7 +455,9 @@ not report what is loaded gets a list instead: pick the slot, and the page recor
 Afterwards, loading spools into those slots works. Filament use comes off the spools only once **Map slots** has
 proven the printer's slot numbering; until then it is only logged, and the page says so. A later **Map slots** never
 changes a slot you confirmed: if it finds something else, it says so instead. The page asks you once whether to
-share the map in a printer report for other owners of the same model; nothing is sent unless you choose to.
+share the map in a printer report for other owners of the same model. The kit sends nothing itself: **Yes** says how
+to make the report (**Collect a report** in the phone web app, or `sudo filament-kit printer report <serial>`) and
+attach it to an issue.
 
 If a printer's certificate changed, the server stops talking to it. If you reset the printer or its mainboard was
 replaced, add the printer again with its Access Code (or run `sudo filament-kit printer unpin <serial>`). If not,

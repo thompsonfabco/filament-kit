@@ -93,7 +93,7 @@ def test_yes_skip_and_stop_and_the_summary(x1c, clock):
     assert v["summary"].startswith("1 of 5 positions confirmed; skipped: A2.") and "Not mapped: A3, A4, Ext." in v["summary"]
     assert "filament use stays logged only" in v["summary"]
     assert v["offer_report"] is True
-    assert mm.answer_offer(SERIAL, False) == {"share": False}
+    assert mm.answer_offer(SERIAL, False) == {"share": False, "message": "Noted: this map is not shared."}
     assert mm.view(SERIAL)["offer_report"] is False
 
 
@@ -109,7 +109,8 @@ def test_the_share_question_is_asked_once(x1c, clock):
         v = mm.stop(SERIAL, s["session"])
         if _ == 0:
             assert v["offer_report"] is True
-            mm.answer_offer(SERIAL, True)
+            r = mm.answer_offer(SERIAL, True)
+            assert r["share"] is True and f"printer report {SERIAL}" in r["message"] and "sends nothing" in r["message"]
         else:
             assert v["offer_report"] is False
         load(x1c, 255)
