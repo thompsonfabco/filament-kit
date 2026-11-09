@@ -579,8 +579,10 @@ the `station` module, on the server computer (`all-in-one`) or on a second compu
   Hold. All of it is in [station/PANEL.md](../station/PANEL.md). The station installs `espeak-ng` and `ffmpeg` for
   the speech and the picture, and its user joins the `video` group to read the camera.
 
-Build guides, wiring and enclosures for the station's devices live in a separate repository, filament-kit-hardware.
-This guide and the kit keep the list of supported devices and how the station finds and updates them.
+Build guides, wiring and enclosures for the station's devices are moving to a separate repository,
+filament-kit-hardware. Until that split lands, the panel's wiring, build and flash steps stay in
+[station/PANEL.md](../station/PANEL.md); that file will keep the serial protocol. This guide keeps the list of
+supported devices above, and the kit flashes the panel itself when it runs other firmware than the one it carries.
 
 ### What the installer changes on the computer
 
