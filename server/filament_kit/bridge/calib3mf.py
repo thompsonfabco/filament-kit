@@ -970,8 +970,9 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
                               and list(res.mapping)[:len(vals)] == last_print[:len(vals)])
     stale = res.scheme is None and res.repeats_last_print
     if res.scheme is None:
-        # a job that ended FAILED may never have read our file: what to find out is why it failed, not how it numbers
-        res.report_wanted = "no_scheme" if st['final'] == 'FINISH' else "job_failed"
+        # a job that ended FAILED with an error may never have read our file: what to find out is why it failed, not how
+        # it numbers. FAILED with no error is a finished job (clean): its numbering is the unknown
+        res.report_wanted = "no_scheme" if clean else "job_failed"
     if stale and st['final'] != 'FINISH':
         res.problems.append(ended)
         res.problems.append("the printer's slot numbers are the same as its last print's, so they say nothing about these "
