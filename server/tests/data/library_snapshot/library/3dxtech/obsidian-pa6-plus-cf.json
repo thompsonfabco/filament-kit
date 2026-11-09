@@ -16,19 +16,27 @@
     ],
     "filament_diameter": [
       "1.75"
+    ],
+    "filament_density": [
+      "1.2"
     ]
   },
   "published_ranges": {
     "bed_all_plates": "90-110",
-    "_drying": "90C 4h",
-    "_hardened_nozzle_required": "yes (hardened steel recommended)",
+    "_drying": "80C 6h",
+    "_hardened_nozzle_required": "Yes (official: strongly recommended)",
     "_enclosure": "Heated chamber recommended",
-    "_notes": "Values from MatterHackers (authorized reseller) listing (marketed as Markforged Onyx alternative; listing currently unavailable); official page unreachable (HTTP 429). Drying: 90C 4h if filament shows signs of moisture. Bed prep Magigoo. Density/Tg/HDT not found."
+    "_notes": "Current product is OBSIDIAN Nylon 6+CF V2 (reformulated Markforged Onyx alternative). Density/HDT from Obsidian CF v2 TDS Rev 1.0 (official CDN; via search snippet). Tg not published in that TDS. Diameter tolerance not published. Earlier entry: Values from MatterHackers (authorized reseller) listing (marketed as Markforged Onyx alternative; listing currently unavailable); official page unreachable (HTTP 429). Drying: 90C 4h if filament shows signs of moisture. Bed prep Magigoo. Density/Tg/HDT not found.",
+    "_hdt_0.45MPa": "147",
+    "_min_nozzle": "0.4"
   },
   "conflicts": [],
-  "source_quality": "reseller_tds_copy",
+  "source_quality": "official_tds",
   "sources": [
+    "https://www.3dxtech.com/products/obsidian-nylon-6-cf-v2",
+    "https://cdn.shopify.com/s/files/1/0625/4185/6821/files/3DXTECH_TDS_-_Obsidian_CF_v2_v1.0.pdf?v=1753452533",
+    "https://www.3dxtech.com/pages/filament-drying-instructions",
     "https://www.matterhackers.com/store/l/3dxtech-obsidian-pa6cf-markforged-onyx-alternative-filament-175mm/sk/MS881P8M"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

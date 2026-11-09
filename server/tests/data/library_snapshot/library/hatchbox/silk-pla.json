@@ -28,14 +28,15 @@
   },
   "published_ranges": {
     "_diameter_tolerance": "+/-0.03",
-    "_notes": "Product pages: 'Print Temperature - 180C - 220C', 'No Heating Bed Required', dimensional accuracy +/- 0.03mm. Verified 2026-11-01 against the product pages' Shopify JSON/HTML."
+    "_notes": "Diameter tolerance not stated in the feed text read, so left out. Feed text: 'No Heating Bed Required'. If the library line is named 'Shiny', this is the closest match (Silk Black PLA); no separate 'Shiny' product page was found. Hatchbox FAQ: no technical data (TDS) is available for their filaments, so density, drying, bed temperature and HDT are not published. Read from the Shopify product .js endpoint (description text). Bambu parent not confirmed (no Hatchbox system preset known in Bambu Studio). Earlier entry: Product pages: 'Print Temperature - 180C - 220C', 'No Heating Bed Required', dimensional accuracy +/- 0.03mm. Verified 2026-11-01 against the product pages' Shopify JSON/HTML."
   },
   "conflicts": [],
   "source_quality": "official_page",
   "sources": [
+    "https://www.hatchbox3d.com/collections/pla-1-75mm.atom",
+    "https://hatchbox3d.com/products/pla-silk-black-1-75mm-1kg-spool",
     "https://www.hatchbox3d.com/products/pla-silk-black-1-75mm-1kg-spool",
-    "https://www.hatchbox3d.com/products/3d-pla-1kg1-75-silk-brnz",
-    "https://www.hatchbox3d.com/collections/pla-1-75mm.atom"
+    "https://www.hatchbox3d.com/products/3d-pla-1kg1-75-silk-brnz"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

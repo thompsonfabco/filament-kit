@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "ApolloX Flame Retardant",
+  "material": "ASA",
+  "colors": [
+    "Traffic Black"
+  ],
+  "bambu_parent": "Bambu ASA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "90-110",
+    "fan_min_speed/fan_max_speed": "0-50",
+    "_print_speed": "25-200 mm/s",
+    "_min_nozzle": "0.15",
+    "_enclosure": "recommended",
+    "_drying": "not necessary (per page)",
+    "_hdt": "86 (load not stated)",
+    "_vicat": "94",
+    "_ams": "also sold as a 'Bambu Coil' refill",
+    "_notes": "ASA designed to meet UL94 V-0. Density not published on the page reached. Bambu parent not confirmed."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.formfutura.com/apollox-flame-retardant"
+  ],
+  "updated": "2026-11-02"
+}

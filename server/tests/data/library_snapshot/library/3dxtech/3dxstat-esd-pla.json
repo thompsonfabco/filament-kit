@@ -12,21 +12,35 @@
       "210"
     ],
     "nozzle_temperature_range_high": [
-      "220"
+      "240"
     ],
     "filament_diameter": [
       "1.75"
+    ],
+    "filament_density": [
+      "1.26"
     ]
   },
   "published_ranges": {
     "bed_all_plates": "23-60",
     "_hardened_nozzle_required": "recommended (abrasion-resistant, e.g. hardened steel)",
-    "_notes": "Values from MatterHackers (authorized reseller) listing; official page unreachable (HTTP 429). ESD: target surface resistance 10^7-10^9 ohm. Prints without heated bed or enclosure. Density/drying not found."
+    "_notes": "Density/HDT from 3DXSTAT ESD-PLA TDS Rev 3.0 (DigiKey-hosted copy); Tg 60 from 3DXTech's Knowde listing. Nozzle/bed from 3DPrima copy of 3DXTech's recommended settings; surface resistance varies with extruder temp (tune up/down); extrusion multiplier up to 1.15-1.2 may be needed. Target surface resistance 10^4-10^9 Ohm (product page). Diameter tolerance not published. Earlier entry: Values from MatterHackers (authorized reseller) listing; official page unreachable (HTTP 429). ESD: target surface resistance 10^7-10^9 ohm. Prints without heated bed or enclosure. Density/drying not found.",
+    "_drying": "65C 4h",
+    "_vitrification": "60 (Tg, DSC)",
+    "_hdt_0.45MPa": "55",
+    "_enclosure": "Heated chamber not required"
   },
-  "conflicts": [],
+  "conflicts": [
+    "nozzle 215-250, bed 40-70 (OpenFilamentCollective PR #688 quoting current official product page (not verified this run))",
+    "nozzle_temperature_range_high: earlier library entry had 220 (sources: https://www.matterhackers.com/store/l/3dxtech-3dxstat-esd-safe-pla-filament/sk/MEAJCXYC)"
+  ],
   "source_quality": "reseller_tds_copy",
   "sources": [
+    "https://media.digikey.com/pdf/Data%20Sheets/3DXTech%20PDFs/ESD_PLA.pdf",
+    "https://www.knowde.com/stores/3dxtech/products/3dxstat-esd-pla",
+    "https://www.3dprima.com/filament-resin/filaments/special/3dxstat-esd-pla_30462_13621",
+    "https://www.3dxtech.com/pages/filament-drying-instructions",
     "https://www.matterhackers.com/store/l/3dxtech-3dxstat-esd-safe-pla-filament/sk/MEAJCXYC"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

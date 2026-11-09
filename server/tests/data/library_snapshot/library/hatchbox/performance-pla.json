@@ -28,13 +28,14 @@
   },
   "published_ranges": {
     "_diameter_tolerance": "+/-0.03",
-    "_notes": "Product pages: 'Print Temperature - 180C - 220C', 'No Heating Bed Required', dimensional accuracy +/- 0.03mm. Line may be older/limited stock. Verified 2026-11-01 against the product pages' Shopify JSON/HTML."
+    "_notes": "PPLA. Page: 'No Heating Bed Required'; no bed temperature printed. Hatchbox FAQ: no technical data (TDS) is available for their filaments, so density, drying, bed temperature and HDT are not published. Read from the Shopify product .js endpoint (description text). Bambu parent not confirmed (no Hatchbox system preset known in Bambu Studio). Earlier entry: Product pages: 'Print Temperature - 180C - 220C', 'No Heating Bed Required', dimensional accuracy +/- 0.03mm. Line may be older/limited stock. Verified 2026-11-01 against the product pages' Shopify JSON/HTML."
   },
   "conflicts": [],
   "source_quality": "official_page",
   "sources": [
+    "https://hatchbox3d.com/products/3d-ppla-1kg1-75-wht",
     "https://www.hatchbox3d.com/products/3d-ppla-1kg1-75-blk",
     "https://www.hatchbox3d.com/products/3d-ppla-1kg1-75-blu"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

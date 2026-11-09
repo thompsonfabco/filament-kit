@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "vendor": "Fiberlogy",
+  "product": "rABS",
+  "material": "ABS",
+  "colors": [
+    "Anthracite"
+  ],
+  "bambu_parent": "Bambu ABS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "220"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.05"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100",
+    "fan_min_speed/fan_max_speed": "0-10",
+    "_drying": "60C 4h",
+    "_enclosure": "recommended",
+    "_hdt_0.45MPa": "100 (annealed, ISO 75)",
+    "_notes": "Build surface: Smooth PEI + adhesive; Textured PEI; Glass + adhesive. Sold as 0.75kg refill or spool (S2 spool). Current page values (220-250°C, density 1.05, HDT block) are identical to Fiberlogy's rASA page, which suggests a copy-paste; treat with caution. Values read from a search-engine capture of the official page (the fetched page confirmed product/colour/diameter but was truncated before the spec block). Diameter tolerance: only reseller copies state ±0.02 mm (oval +0.01 mm)."
+  },
+  "conflicts": [
+    "nozzle/bed/density: 250-265°C, bed 90-110°C, density 1.04, 'Closed Chamber: required', fan 0-10%, speed 35-60mm/s, tolerance ±0.02mm (https://filament2print.com/en/bio-sustainable/2263-r-abs.html and https://np3dp.com/products/new-fiberlogy-r-abs-filament-durable-100-recycled-professional-3d-printing-material-curable (reseller copies of older spec))"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://fiberlogy.com/en/R-ABS-Filament-1_75mm-0_75kg",
+    "https://fiberlogy.com/en/product/rabs-filament-s2/"
+  ],
+  "updated": "2026-11-02"
+}

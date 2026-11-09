@@ -16,21 +16,31 @@
     ],
     "filament_diameter": [
       "1.75"
+    ],
+    "filament_density": [
+      "1.11"
     ]
   },
   "published_ranges": {
     "bed_all_plates": "90-110",
     "_drying": "80C 4h",
     "_diameter_tolerance": "+/-0.05",
-    "_hardened_nozzle_required": "yes (hardened steel)",
+    "_hardened_nozzle_required": "Yes (official page: strongly recommended)",
     "_min_nozzle": "0.4",
     "_enclosure": "Heated chamber recommended",
-    "_notes": "Values from MatterHackers (authorized reseller) listing reproducing 3DXTech print recommendations; official page unreachable (HTTP 429). Do not print layers below 0.2mm. Density/Tg/HDT not found."
+    "_notes": "Density/Tg/HDT from CarbonX Carbon Fiber ASA TDS Rev 1.0 (reseller-hosted copy at rev1tech). Nozzle/bed from 3DPrima listing reproducing 3DXTech's 'Recommended Print Settings' (also restated by 3digital.tech); heated chamber recommended to reduce warp. bambu_parent unconfirmed; fall back to 'Bambu ASA' if Bambu ASA-CF preset absent. Earlier entry: Values from MatterHackers (authorized reseller) listing reproducing 3DXTech print recommendations; official page unreachable (HTTP 429). Do not print layers below 0.2mm. Density/Tg/HDT not found.",
+    "_vitrification": "105 (Tg, DSC)",
+    "_hdt_0.45MPa": "97",
+    "_fiber_content": "15% high-modulus carbon fiber"
   },
   "conflicts": [],
   "source_quality": "reseller_tds_copy",
   "sources": [
+    "https://media.rev1tech.org/media/3dxtech/carbonx-asa-cf/3dxtech-carbonx-asa-cf-tds.pdf",
+    "https://www.3dprima.com/filament-resin/filaments/asa/carbonx-asa-cf_30471_13644",
+    "https://www.3dxtech.com/products/carbonx-asa-cf-1",
+    "https://www.3dxtech.com/pages/filament-drying-instructions",
     "https://www.matterhackers.com/store/l/3dxtech-carbonx-asacf-filament/sk/MKY6LA79"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

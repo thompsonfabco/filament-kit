@@ -11,6 +11,7 @@ import sys
 import pytest
 
 from filament_kit import acl, config, pairing, web_access
+from filament_kit.bridge import printer_report
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX only: root runs this on Linux")
 ROOT = hasattr(os, "geteuid") and os.geteuid() == 0
@@ -298,6 +299,24 @@ def test_a_name_planted_in_the_web_folder_is_never_written_through(kit):
     assert not os.path.lexists(kit / "victim" / "c")
     assert sorted(os.listdir(kit / "victim")) == ["a", "b"]
     assert (old / "kit_token").read_text(encoding="utf-8") == "tok-EXAMPLE\n"
+
+
+def test_a_printer_report_never_writes_through_a_planted_name(kit, monkeypatch):
+    monkeypatch.setattr(printer_report.time, "time", lambda: 1_700_000_000.0)
+    d = config.paths().state / "printers" / "S1"
+    d.mkdir(parents=True)
+    os.symlink(kit / "victim" / "a", d / printer_report.file_name("N6"))
+    path = printer_report.save("S1", b"<report/>", "N6")
+    assert (kit / "victim" / "a").read_text(encoding="utf-8") == "root's\n"
+    assert not path.is_symlink() and path.read_bytes() == b"<report/>"
+
+
+@pytest.mark.skipif(not ROOT, reason="owners: run as root (sudo)")
+def test_as_root_a_printer_report_leaves_the_folder_and_file_the_services(kit):
+    state = config.paths().state
+    os.chown(state, _ids()[1], _ids()[1])
+    path = printer_report.save("S2", b"<report/>", "N6")
+    assert path.parent.stat().st_uid == _ids()[1] and path.stat().st_uid == _ids()[1]
 
 
 @pytest.mark.skipif(not ROOT, reason="owners: run as root (sudo)")

@@ -19,17 +19,36 @@
     ],
     "nozzle_temperature_range_high": [
       "220"
+    ],
+    "filament_density": [
+      "1.24"
+    ],
+    "filament_diameter": [
+      "1.75"
     ]
   },
   "published_ranges": {
     "bed_all_plates": "40-60",
     "_fan_speed": "100",
-    "_notes": "Sold on the Prusament PLA page as '(Blend)' colours; that page prints nozzle '210 +/- 10' (fields = 200-220), bed 40-60, fan 100% with no separate Blend values. The Blend TDS is only published inside a >10 MB zip that could not be read, so density/diameter/HDT/tolerance were left out."
+    "_notes": "Same official TDS as Prusament PLA: trade name 'Prusament PLA/PLA (Blend)', v1.1 16-02-2022; only line-specific difference printed is diameter tolerance '+/- 0.03 mm for PLA Blend'. Nozzle '210 +/- 10' kept in published_ranges, not fields. Drying 45C 6 h from Prusa KB 'PLA/rPLA' row (Blend not listed separately). Several Blend colours are marked discontinued on prusa3d.com but the line is still sold (e.g. Royal Blue 1kg NFC). Earlier entry: Sold on the Prusament PLA page as '(Blend)' colours; that page prints nozzle '210 +/- 10' (fields = 200-220), bed 40-60, fan 100% with no separate Blend values. The Blend TDS is only published inside a >10 MB zip that could not be read, so density/diameter/HDT/tolerance were left out.",
+    "_nozzle_temperature": "210 +/- 10 (single printed value with tolerance; not put in fields per rules)",
+    "fan_max_speed": "100",
+    "_drying": "45C 6h",
+    "_diameter_tolerance": "+/-0.03",
+    "_max_print_speed": "up to 200 mm/s",
+    "_hdt_0.45MPa": "55 (ISO 75)",
+    "_hdt_1.80MPa": "55 (ISO 75)"
   },
-  "conflicts": [],
-  "source_quality": "official_page",
+  "conflicts": [
+    "filament2print.com reseller page: PLA Blend tolerance 0.04 mm (official TDS says +/-0.03)",
+    "kamami.pl Polish TDS copy v1.0 (27.07.2022): HDT 1.80 MPa 52.5C, diameter +/-0.03"
+  ],
+  "source_quality": "official_tds",
   "sources": [
+    "https://prusament.com/wp-content/uploads/2022/10/PLA_Prusament_TDS_2021_10_EN.pdf",
+    "https://download.kamami.pl/p1201824-prusament-pla-blend-karta-danych-technicznych%20%281%29.pdf",
+    "https://help.prusa3d.com/article/drying-filament_332086",
     "https://prusament.com/materials/pla/"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

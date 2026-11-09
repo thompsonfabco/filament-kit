@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "vendor": "Anycubic",
+  "product": "PETG Translucent",
+  "material": "PETG",
+  "colors": [
+    "Clear",
+    "Translucent Pink",
+    "Translucent Orange",
+    "Translucent Green",
+    "Translucent Blue",
+    "Translucent Purple",
+    "Translucent Brown",
+    "Translucent Olive",
+    "Translucent Grey"
+  ],
+  "bambu_parent": "Bambu PETG Translucent",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "230"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.23"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ],
+    "filament_max_volumetric_speed": [
+      "12"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "60-70",
+    "_drying": "55-65C 6-8h",
+    "_print_speed": "50-250 mm/s",
+    "_vicat": "72",
+    "_vitrification": "210 (melting point, not Tg)",
+    "_diameter_tolerance": "+/-0.02",
+    "_min_nozzle": "0.2",
+    "_ams": "Official page: ACE compatible (Anycubic); no Bambu AMS statement.",
+    "_notes": "Line-specific spec table read from ca.anycubic.com/products/petg-translucent (store.anycubic.com and uk handle petg-filament-translucent failed). HDT not listed. Diameter and +/-0.02 from Anycubic Official Store Amazon listing B0F7LPNM8V (PETG Clear, translucent line). Bambu parent not confirmed."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://ca.anycubic.com/products/petg-translucent",
+    "https://www.amazon.com/dp/B0F7LPNM8V"
+  ],
+  "updated": "2026-11-02"
+}

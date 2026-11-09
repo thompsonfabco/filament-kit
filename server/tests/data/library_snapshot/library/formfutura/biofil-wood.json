@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "BioFil - Wood",
+  "material": "PCL",
+  "colors": [
+    "Black Washed"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "180"
+    ],
+    "nozzle_temperature_range_high": [
+      "200"
+    ],
+    "filament_density": [
+      "1.26"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "40-50",
+    "_vicat": "50",
+    "_hdt": "55 (load not stated)",
+    "_min_nozzle": "0.6 (TDS) / 0.8 (product page)",
+    "_drying": "recommended, no temperature/time published",
+    "_notes": "PCL-based, home-compostable wood filament with very high wood content. Density, Vicat and HDT come from TDS v1.0 (20-07-2023); the TDS gives no print temperatures. Nozzle and bed values were recorded by the earlier run from the official page and were not re-read in R5. EU food-contact compliant (EC 1935/2004, EU 10/2011). Store below 15% RH and print from a dry box. No Bambu PCL preset exists, so Generic PLA is a stand-in and not confirmed. Wood fill: use a 0.6 or 0.8 mm nozzle, never 0.2/0.4."
+  },
+  "conflicts": [
+    "_min_nozzle: >=0.8 mm (formfutura.com product page (TDS says >=0.6 mm))"
+  ],
+  "source_quality": "official_tds",
+  "sources": [
+    "https://www.formfutura.com/web/content/256491?download=true",
+    "https://formfutura.com/product/biofil-wood/",
+    "https://b2b.formfutura.com/filaments/food-safe/biofil-wood"
+  ],
+  "updated": "2026-11-02"
+}

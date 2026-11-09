@@ -301,9 +301,20 @@ function printersTab() {
         ...(m.problems_old && (m.problems || []).length ? [h("p", { class: "muted", textContent: "From an earlier mapping, it may be fixed by now. Re-map the slots to check:" })] : []),
         ...(m.problems || []).map((t) => h("p", { class: m.problems_old ? "muted" : "err", textContent: t })),
         ...(m.notes || []).map((t) => h("p", { class: "muted", textContent: t })),
+        ...(m.report_wanted ? [h("p", { class: "muted", textContent: m.report_why || "A printer report would help." }),
+          h("button", { class: "secondary", textContent: "Collect a report", on: { click: collectReport } })] : []),
         h("button", { class: "secondary", textContent: running ? "Mapping…" : "Re-map slots", disabled: running, on: { click: remap } }));
       if (running) mapTimer = setTimeout(loadMap, 3000);
     } catch (e) { mapBox.replaceChildren(fail(e)); }
+  }
+  // The report holds no serial, address, name or account id: the server builds it from an allow-list.
+  async function collectReport() {
+    try {
+      const r = await pj(`${encodeURIComponent(current)}/report`, {});
+      const url = URL.createObjectURL(new Blob([r.xml], { type: "application/xml" }));
+      const a = h("a", { href: url, download: r.name, textContent: `Save ${r.name}, then attach it to a "Printer report" issue on the project's GitHub` });
+      mapBox.append(h("p", {}, a));
+    } catch (e) { say(e.message, false); }
   }
   async function remap() {
     if (!window.confirm("Re-map the slots? The printer loads each slot briefly; do it when it is idle.")) return;

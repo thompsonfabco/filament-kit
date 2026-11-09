@@ -11,7 +11,7 @@
     "Blue",
     "Red"
   ],
-  "bambu_parent": "Fiberon PET-CF",
+  "bambu_parent": "Generic PET-GF",
   "fields": {
     "nozzle_temperature_range_low": [
       "280"
@@ -21,6 +21,9 @@
     ],
     "filament_density": [
       "1.43"
+    ],
+    "filament_diameter": [
+      "1.75"
     ]
   },
   "published_ranges": {
@@ -28,18 +31,29 @@
     "chamber_temperatures": "room temperature",
     "fan_max_speed": "0 (OFF)",
     "_print_speed": "up to 250",
-    "_drying": "100C 10h",
+    "_drying": "70C 8h",
     "_annealing": "120C 16h",
     "_hardened_nozzle_required": "yes",
-    "_fiber_content": "15% glass fibre (name)",
-    "_notes": "TDS text layer has the thermal table misaligned (values 231.6 / 201.4 / 422.8 / 232.6 / 87.3 C could not be matched to rows reliably), so Tg/Vicat/HDT are omitted. TDS: brass nozzle life about 9 h, keep below 20% RH; anneal only if >80C resistance is needed. bambu_parent is the brand's PET composite preset (CF, not GF)."
+    "_fiber_content": "15% glass fiber",
+    "_notes": "Tg and Vicat are from Polymaker's own shop page. HDT 0.45 MPa (133.7C) is from the official fiberon.polymaker.com product page. HDT 1.8 MPa (87.3C, annealed) is from a reseller reproduction of the TDS. The original Fiberon TDS PDF could not be fetched this run. The bed range 70-80 is from the official Fiberon product page. Density, drying and speed are from a reseller copy (setterox). Polymaker advises using parts unannealed when heat resistance above 80C is not needed. The bambu_parent was not confirmed: use 'Bambu PET-CF' if no Generic PET-GF preset exists. Earlier entry: TDS text layer has the thermal table misaligned (values 231.6 / 201.4 / 422.8 / 232.6 / 87.3 C could not be matched to rows reliably), so Tg/Vicat/HDT are omitted. TDS: brass nozzle life about 9 h, keep below 20% RH; anneal only if >80C resistance is needed. bambu_parent is the brand's PET composite preset (CF, not GF).",
+    "_max_print_speed": "Up to 250 mm/s",
+    "_vitrification": "59.5 (Tg, DSC)",
+    "_vicat": "232.6",
+    "_hdt_0.45MPa": "133.7 (annealed)",
+    "_hdt_1.8MPa": "87.3 (annealed)"
   },
-  "conflicts": [],
-  "source_quality": "official_tds",
-  "sources": [
-    "https://wiki.polymaker.com/polymaker-products/polymaker-filaments/fiberon-tm/fiberon-tm-pet-gf15",
-    "https://fiberon.polymaker.com/wp-content/uploads/TDS_FIBERON-PET-GF15_V1.0_EN.pdf",
-    "https://shop.polymaker.com/products/fiberon-pet-gf15"
+  "conflicts": [
+    "bed_all_plates: Room temp. - 60 (https://www.setterox.com/products/fiberon-pet-gf15 (reseller))",
+    "_hdt_0.45MPa/_hdt_1.8MPa: 81.6 / 71.8 (likely as-printed) (https://3dfilamentprofiles.com/filament/details/14465 (third-party database))"
   ],
-  "updated": "2026-11-01"
+  "source_quality": "official_page",
+  "sources": [
+    "https://shop.polymaker.com/products/fiberon-pet-gf15",
+    "https://fiberon.polymaker.com/product/pet-gf15/",
+    "https://risingsunfpv.com/products/fiberon-pet-gf15-1-75mm-1kg-filament",
+    "https://www.setterox.com/products/fiberon-pet-gf15",
+    "https://wiki.polymaker.com/polymaker-products/polymaker-filaments/fiberon-tm/fiberon-tm-pet-gf15",
+    "https://fiberon.polymaker.com/wp-content/uploads/TDS_FIBERON-PET-GF15_V1.0_EN.pdf"
+  ],
+  "updated": "2026-11-02"
 }

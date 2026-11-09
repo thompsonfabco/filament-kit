@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "vendor": "Kexcelled",
+  "product": "K9 PPA CF15",
+  "material": "PPA-CF",
+  "colors": [
+    "Black"
+  ],
+  "bambu_parent": "Bambu PPA-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "290"
+    ],
+    "nozzle_temperature_range_high": [
+      "310"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "70-100",
+    "_print_speed": "40-80 mm/s",
+    "_fan": "OFF (active cooling fan)",
+    "_hdt_0.45MPa": "203",
+    "_vicat": "224",
+    "_fiber_content": "15% carbon fibre",
+    "_diameter_tolerance": "+/-0.03 (reseller page quoting the datasheet)",
+    "_hardened_nozzle_required": "yes - hardened nozzle >= 0.4 mm (reseller page)",
+    "_min_nozzle": "0.4",
+    "_enclosure": "recommended (reseller page)",
+    "_drying": "required but no temperature/time published in sources reached",
+    "_notes": "Fields come from the official Kexcelled TDS Rev 01 (02/12/2024, TDS No. KT098), read from a copy hosted by a Japanese distributor. Bed surface: tape or glue. The TDS says nylon HDT and mechanical values are for the dry state. 310 C is above the 300 C limit of X1/P1-series hotends; use only on a printer rated above 300 C (check X2D). Density not found in the parts of the TDS reached. Bambu parent not confirmed against Bambu Studio presets."
+  },
+  "conflicts": [
+    "nozzle: 270-310 (3ddruckboss.de product page quoting manufacturer datasheet (probably newer TDS))",
+    "bed: 90-110 (3ddruckboss.de)",
+    "_hdt: 205 (3ddruckboss.de)",
+    "_print_speed: up to 250 mm/s; fan 0-50% (3ddruckboss.de)"
+  ],
+  "source_quality": "reseller_tds_copy",
+  "sources": [
+    "https://jp.marketplace.meviy.misumi-ec.com/info/ja/wp-content/uploads/2025/03/PPA-CF.pdf",
+    "https://ch.3ddruckboss.de/products/kexcelled-the-k9-ppa-cf15",
+    "https://www.an-cadsolutions.fi/tuote/kexcelled-k9-ppa-cf15/"
+  ],
+  "updated": "2026-11-02"
+}

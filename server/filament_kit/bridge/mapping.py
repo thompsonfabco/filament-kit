@@ -51,7 +51,7 @@ from typing import Callable
 
 from .. import config
 from ..pairing import _write_atomic, make_state_dir, open_lock
-from . import ams, calib3mf, layout, registry, slottest, snapshot, status
+from . import ams, calib3mf, hardware, layout, printer_report, registry, slottest, snapshot, status
 from .connection import PrinterOffline, UnknownPrinter
 from .slottest import PrinterBusy
 
@@ -117,6 +117,8 @@ class _Job:
     problems: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)      # not problems: what a good result does not settle yet
     scheme_unsettled: bool = False                      # several numbering schemes fit; the model's first was taken
+    report_wanted: str | None = None                    # printer_report.WANTED: why a report would help
+    trail: list = field(default_factory=list)           # calib3mf.CalibResult.trail, for a report made later
     started: float = field(default_factory=time.time)
     finished: float | None = None
     abort: _Flag = field(default_factory=_Flag)
@@ -134,7 +136,8 @@ def _save_status(serial: str, job: _Job) -> None:
         d = _dir(serial)
         make_state_dir(d)
         data = {"job_id": job.id, "state": job.state, "step": job.step, "problems": job.problems,
-                "notes": job.notes, "scheme_unsettled": job.scheme_unsettled, "started": job.started, "finished": job.finished}
+                "notes": job.notes, "scheme_unsettled": job.scheme_unsettled,
+                "report_wanted": job.report_wanted, "trail": job.trail, "started": job.started, "finished": job.finished}
         _write_atomic(d / STATUS_FILE, json.dumps(data, indent=2).encode("utf-8"), 0o600, state_owned=True)
     except OSError:
         log.exception("mapping %s: cannot write the status file", serial)
@@ -165,7 +168,20 @@ def _load_status(serial: str) -> dict | None:
             "problems": [str(p) for p in probs] if isinstance(probs, list) else [],
             "notes": [str(n) for n in notes] if isinstance(notes, list) else [],
             "scheme_unsettled": d.get("scheme_unsettled") is True,
+            "report_wanted": d.get("report_wanted") if d.get("report_wanted") in printer_report.WANTED else None,
+            "trail": d.get("trail") if isinstance(d.get("trail"), list) else [],
             "finished": finished if isinstance(finished, (int, float)) and not isinstance(finished, bool) else None}
+
+
+def _unrecognised(report: dict, model) -> str | None:
+    """What the kit has no data for, though a mapping may work without it."""
+    if not hardware.load().model(model).known:
+        return "unknown_model"
+    # a module code the file has no type for. Not `known`: that is also false for a first-gen AMS, which the file names
+    # but hasn't verified, and for any unit before the printer has said its module code
+    if any(u.kind == "generic" and u.module for u in layout.build(report, model).units):
+        return "unknown_ams"
+    return None
 
 
 # ---------------------------------------------------------------- one writer per printer
@@ -551,7 +567,33 @@ class Mapper:
         job.problems = problems
         job.notes = list(cr.notes)
         job.scheme_unsettled = cr.scheme_unsettled
+        job.trail = list(cr.trail)
+        report = self._m.wait_report(serial, lambda r: True, 0) or {}
+        job.report_wanted = cr.report_wanted or _unrecognised(report, model)
+        if job.report_wanted in printer_report.LOUD or not cr.consistent:     # kept here; the owner decides to share it
+            self._save_report(serial, report, model, job)
         job.state = "done" if cr.restored else "failed"
+
+    # ---------------------------------------------------------------- the printer report
+    def _save_report(self, serial: str, report: dict, model, job: _Job) -> None:
+        try:
+            printer_report.save(serial, printer_report.build(report, model, trail=job.trail, wanted=job.report_wanted),
+                                model)
+        except OSError:
+            log.exception("mapping %s: cannot save the printer report", serial)
+
+    def report(self, serial: str) -> dict:
+        """A report from the printer as it is now and the last mapping's attempts: {name, xml, path}. Raises
+        PrinterOffline when there is no report to read."""
+        snap = self._m.wait_report(serial, lambda r: True, 0)
+        if snap is None:
+            raise PrinterOffline(serial)
+        model = ams.printer_model(serial)
+        saved = _load_status(serial) or {}
+        wanted = saved.get("report_wanted") or _unrecognised(snap, model)
+        data = printer_report.build(snap, model, trail=saved.get("trail"), wanted=wanted)
+        path = printer_report.save(serial, data, model)
+        return {"name": path.name, "xml": data.decode("utf-8"), "path": str(path)}
 
     # ---------------------------------------------------------------- progress
     def view(self, serial: str) -> dict:
@@ -561,7 +603,9 @@ class Mapper:
         map); `scheme` = the numbering scheme calibration proved (None: none yet); `suspect` = two prints in a row
         disagreed with the map (logging only until the re-map); `notes` = what a good result does not settle yet
         (not problems); `scheme_unsettled` = several numbering schemes fit and the model's first was taken, the reason
-        to map again after loading a second unit (a client keys on this, never on a note's text); `problems_old` = the problems are from a job an earlier server run finished, so an update or
+        to map again after loading a second unit (a client keys on this, never on a note's text); `report_wanted` =
+        why a printer report would help (printer_report.WANTED), None when it wouldn't; `report_why` = that as a sentence;
+        `problems_old` = the problems are from a job an earlier server run finished, so an update or
         a fix since may have dealt with them: they say what happened then, not what is wrong now, and they never
         stop a new mapping; `finished` = when that job ended (epoch seconds, None: not known or still running)."""
         with self._lock:
@@ -569,6 +613,7 @@ class Mapper:
             mine = None if j is None else {"job_id": j.id, "state": j.state, "step": j.step,
                                            "problems": list(j.problems), "notes": list(j.notes),
                                            "scheme_unsettled": j.scheme_unsettled,
+                                           "report_wanted": j.report_wanted, "trail": j.trail,
                                            "finished": j.finished}
         saved = _load_status(serial)
         # this process's own job is the truth unless the file holds a later job (run by another process); the
@@ -593,7 +638,9 @@ class Mapper:
                and not (st["state"] == "running" and _ProcessLock.held_elsewhere(serial)))
         return {"state": st["state"], "step": st["step"], "slots": slots, "calibrated": m.calibrated,
                 "observe": m.observe, "problems": st["problems"], "notes": st.get("notes", []),
-                "scheme_unsettled": st.get("scheme_unsettled", False), "problems_old": old,
+                "scheme_unsettled": st.get("scheme_unsettled", False),
+                "report_wanted": st.get("report_wanted"), "report_why": printer_report.why(st.get("report_wanted")),
+                "problems_old": old,
                 "finished": st.get("finished"), "stale": m.stale, "remapping": remapping,
                 "scheme": m.scheme, "suspect": m.suspect}
 

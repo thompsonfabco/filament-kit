@@ -24,6 +24,11 @@ def _bundled_version() -> int:
     return json.loads((BUNDLED / "index.json").read_text(encoding="utf-8"))["library_version"]
 
 
+def _next() -> int:
+    """What the served fixture's library calls itself: one newer than the snapshot, whichever that is."""
+    return _bundled_version() + 1
+
+
 @pytest.fixture(autouse=True)
 def env(tmp_path, monkeypatch, no_library):
     # These tests exercise update/rollback against a fallback copy: the snapshot stands in as BUNDLED here.
@@ -73,6 +78,7 @@ class Served:
 def served(tmp_path):
     root = tmp_path / "served"
     shutil.copytree(FIXTURE, root)
+    reindex(root, _next())
     holder: dict = {}
 
     class Handler(http.server.SimpleHTTPRequestHandler):
@@ -175,11 +181,11 @@ def test_slug_and_line_id():
 
 def test_update_to_fixture_copies_matching_files(served):
     r = library.update(served.url)
-    assert r.error is None and r.changed is True and r.version == 3
+    assert r.error is None and r.changed is True and r.version == _next()
     assert r.downloaded == 0          # all three files match the bundled bytes
     assert served.requests == ["/index.json"]
     lib = library.load()
-    assert (lib.source, lib.version) == ("updated", 3)
+    assert (lib.source, lib.version) == ("updated", _next())
     assert lib.lookup("SUNLU", "PLA+ 2.0").library["product"] == "PLA+ 2.0"
     assert lib.lookup("3DXTech", "3DXMAX ASA").library is None    # not in the new index
     assert library.status()["last_check"]["ok"] is True
@@ -188,11 +194,11 @@ def test_update_to_fixture_copies_matching_files(served):
 def test_update_downloads_only_changed(served):
     assert library.update(served.url).error is None
     edit(served.root, "library/elegoo/petg-cf.json", lambda e: e["published_ranges"].update({"_test": "v4"}))
-    reindex(served.root, 4)
+    reindex(served.root, _next() + 1)
     served.requests.clear()
     r = library.update(served.url)
     assert r.error is None
-    assert (r.changed, r.version, r.downloaded) == (True, 4, 1)
+    assert (r.changed, r.version, r.downloaded) == (True, _next() + 1, 1)
     assert served.requests == ["/index.json", "/library/elegoo/petg-cf.json"]
     assert library.load().lookup("Elegoo", "PETG-CF").library["published_ranges"]["_test"] == "v4"
 
@@ -201,7 +207,7 @@ def test_update_unchanged_is_noop(served):
     assert library.update(served.url).changed is True
     before = sorted(p.name for p in versions_dir().iterdir())
     r = library.update(served.url)
-    assert (r.changed, r.version, r.downloaded, r.error) == (False, 3, 0, None)
+    assert (r.changed, r.version, r.downloaded, r.error) == (False, _next(), 0, None)
     assert sorted(p.name for p in versions_dir().iterdir()) == before
 
 
@@ -216,11 +222,11 @@ def _assert_kept(version: int):
 def test_update_hash_mismatch_keeps_current(served):
     assert library.update(served.url).error is None
     edit(served.root, "library/sunlu/pla-plus-2-0.json", lambda e: e["published_ranges"].update({"_t": "a"}))
-    reindex(served.root, 4)
+    reindex(served.root, _next() + 1)
     edit(served.root, "library/sunlu/pla-plus-2-0.json", lambda e: e["published_ranges"].update({"_t": "b"}))
     r = library.update(served.url)
     assert r.changed is False and "sha256" in r.error
-    _assert_kept(3)
+    _assert_kept(_next())
 
 
 def test_update_invalid_entry_aborts_everything(served):
@@ -228,7 +234,7 @@ def test_update_invalid_entry_aborts_everything(served):
     edit(served.root, "library/elegoo/petg-cf.json",
          lambda e: e["fields"].update({"temperature_vitrification": ["60"]}))
     edit(served.root, "library/bambu-lab/petg-hf.json", lambda e: e["published_ranges"].update({"_t": "c"}))
-    reindex(served.root, 3)
+    reindex(served.root, _next())
     r = library.update(served.url)
     assert r.changed is False and "temperature_vitrification" in r.error
     assert library.load().source == "bundled"
@@ -238,7 +244,7 @@ def test_update_invalid_entry_aborts_everything(served):
 
 def test_update_entry_404_aborts(served):
     edit(served.root, "library/sunlu/pla-plus-2-0.json", lambda e: e["published_ranges"].update({"_t": "a"}))
-    reindex(served.root, 3)
+    reindex(served.root, _next())
     (served.root / "library/sunlu/pla-plus-2-0.json").unlink()
     r = library.update(served.url)
     assert "404" in r.error
@@ -248,7 +254,7 @@ def test_update_entry_404_aborts(served):
 def test_update_wrong_path_for_entry_aborts(served):
     src = served.root / "library/sunlu/pla-plus-2-0.json"
     src.rename(served.root / "library/sunlu/pla-plus.json")
-    reindex(served.root, 3)
+    reindex(served.root, _next())
     r = library.update(served.url)
     assert r.error and "library/sunlu/pla-plus-2-0.json" in r.error
     _assert_kept(_bundled_version())
@@ -329,14 +335,14 @@ def test_update_index_too_large():
 
 
 def test_rollback_restores_previous(served):
-    assert library.update(served.url).version == 3
+    assert library.update(served.url).version == _next()
     edit(served.root, "library/sunlu/pla-plus-2-0.json", lambda e: e["published_ranges"].update({"_t": "v4"}))
-    reindex(served.root, 4)
-    assert library.update(served.url).version == 4
+    reindex(served.root, _next() + 1)
+    assert library.update(served.url).version == _next() + 1
     assert library.load().lookup("SUNLU", "PLA+ 2.0").library["published_ranges"]["_t"] == "v4"
-    assert library.rollback() == 3
+    assert library.rollback() == _next()
     lib = library.load()
-    assert lib.version == 3
+    assert lib.version == _next()
     assert "_t" not in lib.lookup("SUNLU", "PLA+ 2.0").library["published_ranges"]
     # only the current and previous version directories are kept
     assert len(list(versions_dir().iterdir())) == 2
@@ -345,22 +351,22 @@ def test_rollback_restores_previous(served):
 def test_rollback_to_bundled_and_nothing_to_roll_back(served):
     with pytest.raises(library.LibraryError):
         library.rollback()
-    assert library.update(served.url).version == 3
+    assert library.update(served.url).version == _next()
     assert library.rollback() == _bundled_version()
     assert library.load().source == "bundled"
 
 
 def test_rollback_after_failed_update_still_works(served):
-    assert library.update(served.url).version == 3
+    assert library.update(served.url).version == _next()
     edit(served.root, "library/sunlu/pla-plus-2-0.json", lambda e: e["published_ranges"].update({"_t": "v4"}))
-    reindex(served.root, 4)
-    assert library.update(served.url).version == 4
+    reindex(served.root, _next() + 1)
+    assert library.update(served.url).version == _next() + 1
     edit(served.root, "library/elegoo/petg-cf.json", lambda e: e["published_ranges"].update({"_t": "v5"}))
-    reindex(served.root, 5)
+    reindex(served.root, _next() + 2)
     (served.root / "library/elegoo/petg-cf.json").unlink()
     assert library.update(served.url).error
-    assert library.load().version == 4
-    assert library.rollback() == 3
+    assert library.load().version == _next() + 1
+    assert library.rollback() == _next()
 
 
 # ---------- lookup / local additions ----------
@@ -509,7 +515,7 @@ def test_redirect_to_other_http_host_refused(served):
 def test_redirect_same_local_host_followed(served):
     served.redirects["/old/"] = served.url
     r = library.update(served.url + "old/")
-    assert r.error is None and r.version == 3
+    assert r.error is None and r.version == _next()
 
 
 def test_redirect_rules():
@@ -556,7 +562,7 @@ def test_deeply_nested_index_fails_cleanly(served):
 
 def test_unexpected_error_still_cleans_up(served, monkeypatch):
     edit(served.root, "library/sunlu/pla-plus-2-0.json", lambda e: e["published_ranges"].update({"_t": "a"}))
-    reindex(served.root, 3)
+    reindex(served.root, _next())
 
     def boom(entry, **k):
         raise KeyError("surprise")
@@ -568,7 +574,7 @@ def test_unexpected_error_still_cleans_up(served, monkeypatch):
 
 def test_update_deadline(served, monkeypatch):
     edit(served.root, "library/sunlu/pla-plus-2-0.json", lambda e: e["published_ranges"].update({"_t": "a"}))
-    reindex(served.root, 3)
+    reindex(served.root, _next())
     ticks = iter(range(0, 100_000, 250))
     monkeypatch.setattr(library, "_clock", lambda: next(ticks))
     r = library.update(served.url)
@@ -579,7 +585,7 @@ def test_update_deadline(served, monkeypatch):
 def test_update_total_bytes_cap(served, monkeypatch):
     for rel in ("library/sunlu/pla-plus-2-0.json", "library/elegoo/petg-cf.json"):
         edit(served.root, rel, lambda e: e["published_ranges"].update({"_t": "a"}))
-    reindex(served.root, 3)
+    reindex(served.root, _next())
     index_size = (served.root / "index.json").stat().st_size
     one = (served.root / "library/elegoo/petg-cf.json").stat().st_size
     monkeypatch.setattr(library, "TOTAL_LIMIT", index_size + one + 10)   # room for the index and one entry

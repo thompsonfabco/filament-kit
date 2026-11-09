@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "vendor": "Kexcelled",
+  "product": "K10 PPS CF10",
+  "material": "PPS-CF",
+  "colors": [],
+  "bambu_parent": "Bambu PPS-CF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "285"
+    ],
+    "nozzle_temperature_range_high": [
+      "320"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "100-120",
+    "fan_min_speed/fan_max_speed": "0-50",
+    "_max_print_speed": "250 mm/s",
+    "_density": "1.31-1.33 (older kexcelled3d.com page)",
+    "_hdt": "257 (load not stated)",
+    "_vicat": "271.9 (older kexcelled3d.com page)",
+    "_fiber_content": "10% carbon fibre",
+    "_diameter_tolerance": "+/-0.05 (older official TDS)",
+    "_notes": "Current official page: layer height 0.2 mm; bed surface tape or glue. UL94 V-0 (Kexcelled K's Lab blog). The 320 C upper bound is above the X1/P1 limit; Bambu's own PPS-CF store page says 'For X1E/H2 Series Printing Only' and 'All AMS Series NOT Compatible' (nozzle 310-340 C, bed 100-120 C, drying 100-140 C 8-12 h). CF-filled, so treat as abrasive and use a hardened nozzle (Kexcelled does not state this). Drying not published in sources reached. The official TDS (THE_K10_PPS_CF_10_TDS.pdf) could not be opened."
+  },
+  "conflicts": [
+    "nozzle: 310-350 (older official TDS (distributor-hosted copy))",
+    "bed: 100 (older official TDS)",
+    "_vicat: 268 (older official TDS)",
+    "_density: 1.3 (older official TDS)"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://kexcelled3d.com/products/the-k10-pps-cf10",
+    "https://www.kexcelled3d.com/the-k10-pps-cf10",
+    "https://kexcelled3d.com/blogs/ks-lab",
+    "https://jp.marketplace.meviy.misumi-ec.com/info/ja/wp-content/uploads/2025/03/PPS-CF.pdf"
+  ],
+  "updated": "2026-11-02"
+}

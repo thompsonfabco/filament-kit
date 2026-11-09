@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "vendor": "Anycubic",
+  "product": "TPU 68D",
+  "material": "TPU",
+  "colors": [
+    "Grey",
+    "Black",
+    "White",
+    "Blue",
+    "Red",
+    "Yellow",
+    "Neon Green"
+  ],
+  "bambu_parent": "Bambu TPU for AMS",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "210"
+    ],
+    "nozzle_temperature_range_high": [
+      "250"
+    ],
+    "filament_density": [
+      "1.26"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "35-60",
+    "_print_speed": "40-250 mm/s",
+    "_hardness": "Shore 68D",
+    "_min_nozzle": "0.4",
+    "_ams": "Official: engineered for ACE 2 Pro (sold also as 'TPU for ACE', identical to TPU 68D); no Bambu AMS statement.",
+    "_notes": "Specs from anycubic.au/products/tpu-68d; temps/bed/speed confirmed by Anycubic Official Store Amazon listing B0GXDRD2D3 ('TPU for ACE', 1.75mm). Drying marked required but no temperature/time published; Vicat, HDT and max volumetric speed fields are blank on the page (earlier snippet HDT 183C not found, not used). No glue needed; all nozzle types. Bambu parent not confirmed (Bambu TPU for AMS is also 68D)."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.anycubic.au/products/tpu-68d",
+    "https://www.amazon.com/dp/B0GXDRD2D3"
+  ],
+  "updated": "2026-11-02"
+}

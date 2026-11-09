@@ -37,12 +37,13 @@ KEEP = Path("/opt/filament-kit/releases")
 
 
 def tarball(version: str, record: Path) -> bytes:
-    # fg=yes: install.sh is the terminal's foreground job; `stty` (as apt does) would stop a background job for good
+    # stty, as apt does: it must not stop install.sh for good. Classic sudo starts a piped command in the background and
+    # makes it the foreground job at this first touch, so fg= is read after it: then it must be the foreground job.
     stub = ("#!/usr/bin/env bash\n"
             f"{{ echo \"args=$*\"; if [ -t 0 ]; then echo tty=yes; else echo tty=no; fi\n"
+            "  if [ -t 0 ]; then stty \"$(stty -g)\" && echo stty=ok; fi\n"
             "  read -r pg tp < <(ps -o pgid=,tpgid= -p $$)\n"
             "  if [ \"$pg\" = \"$tp\" ]; then echo fg=yes; else echo fg=no; fi\n"
-            "  if [ -t 0 ]; then stty \"$(stty -g)\" && echo stty=ok; fi\n"
             # --set keys=1 (run_get_keys): three keys without Enter must arrive, and the terminal must not echo them
             "  case \"$*\" in *keys=1*) echo STUB-READY >/dev/tty; IFS= read -r -s -n3 -t 20 k; echo \"keys=$k\" ;; "
             "esac\n"
@@ -230,8 +231,9 @@ def main() -> int:
                 ["SHA256SUMS", "SHA256SUMS.sig", "filament-kit-7.7.2.tar.gz"]), str(listing))
 
             # 2. with a terminal (script's pty): install.sh can ask its questions, piped and downloaded first. Piped,
-            # sudo (use_pty) runs bash as a background job; get.sh must make install.sh the foreground job, or its
-            # first touch of the terminal (a question, apt) stops it for good.
+            # sudo (use_pty) runs bash as a background job. Under sudo-rs get.sh must make install.sh the foreground job,
+            # or its first touch of the terminal (a question, apt) stops it for good; classic sudo does that itself at
+            # that touch, and reads no keys if get.sh does it. Run this under both: `sudo` -> /usr/bin/sudo.ws on PATH.
             for piped, form in ((True, "curl | sudo bash"), (False, "sudo bash get.sh")):
                 record.unlink(missing_ok=True)
                 r = run_get(get_sh, ["--api", srv.api, "--repo", "o/r"], tty=True, piped=piped, timeout=90)
@@ -250,6 +252,20 @@ def main() -> int:
                       f"rc={code} rec={rec!r} screen={screen[-400:]!r}")
                 check(f"with a terminal ({form}): typed keys are not echoed", b"xyz" not in shown, repr(shown[-300:]))
                 check(f"with a terminal ({form}): the terminal is put back", restored)
+
+            # which sudo, in any language: `Sudo version` is translated. A fake sudo answers as a German one does.
+            fake = work / "fakes"
+            fake.mkdir()
+            for name, text in (("sudo", "Sudo version 1.9.15p5"), ("sudo-rs", "sudo-rs 0.2.13")):
+                (fake / name).write_text('#!/bin/sh\n[ "$LC_ALL" = C ] && echo "%s" || echo "%s"\n'
+                                         % (text, text.replace("Sudo version", "Sudo-Version")))
+                (fake / name).chmod(0o755)
+                got = subprocess.run(
+                    ["bash", "-c", 'eval "$(sed -n "/^fk_classic_sudo() {/,/^}/p" "$1")"; fake=$2; readlink() { echo "$fake"; }; '
+                                   'fk_classic_sudo', "-", str(get_sh), str(fake / name)],
+                    env={**os.environ, "LANG": "de_DE.UTF-8", "LC_ALL": "de_DE.UTF-8", "LANGUAGE": "de"})
+                check(f"{name} is told apart under a German locale", (got.returncode == 0) == (name == "sudo"),
+                      f"rc={got.returncode}")
 
             # 3. --version
             record.unlink(missing_ok=True)

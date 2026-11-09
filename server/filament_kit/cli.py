@@ -649,6 +649,9 @@ def cmd_printer_map(serial: str, manager_factory) -> int:
         print(f"  problem: {prob}")
     for note in v["notes"]:
         print(f"  note: {note}")
+    if v.get("report_wanted"):
+        print(f"  {v.get('report_why') or 'A printer report would help.'} To collect one: "
+              f"sudo filament-kit printer report {serial}")
     if stopped:
         print("Mapping stopped. Any slot listed above as not restored may still hold a test colour; the next "
               "mapping run restores it first.")
@@ -661,6 +664,29 @@ def cmd_printer_map(serial: str, manager_factory) -> int:
     else:
         print("Mapping failed. Until mapping succeeds, filament use is only logged (observe mode).")
     return 1
+
+
+def cmd_printer_report(serial: str, manager_factory) -> int:
+    """`printer report <serial>`: the file an owner attaches to help add a printer or an AMS the kit doesn't know."""
+    from .bridge import mapping
+    from .bridge.connection import PrinterOffline, UnknownPrinter
+    p = registry.load().get(serial)
+    if p is None or not p.configured or p.family != "bambu":
+        _err_line(f"no Bambu printer {serial} is set up here")
+        return 1
+    m = manager_factory(serial)
+    try:
+        m.sync()
+        m.wait_report(serial, lambda r: "gcode_state" in r, REPORT_WAIT)
+        r = mapping.Mapper(m).report(serial)
+    except (PrinterOffline, UnknownPrinter):
+        _err_line("the printer is offline (or its Access Code is wrong); check that it is on and on the network")
+        return 1
+    finally:
+        m.stop()
+    print(f"Printer report saved: {r['path']}")
+    print("It holds no serial, address, name or account id. Attach it to a 'Printer report' issue on the project's GitHub.")
+    return 0
 
 
 def cmd_printer_unpin(serial: str) -> int:
@@ -1535,6 +1561,8 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     psub = pr.add_subparsers(dest="printer_cmd", required=True)
     pm = psub.add_parser("map", help="map the AMS slots (changes slot colours briefly, runs a no-motion job)")
     pm.add_argument("serial")
+    prp = psub.add_parser("report", help="make a report that helps add a printer or AMS the kit doesn't know yet")
+    prp.add_argument("serial")
     pu = psub.add_parser("unpin", help="forget the printer's pinned TLS certificate")
     pu.add_argument("serial")
     lb = sub.add_parser("library", help="the filament spec library: status, update, rollback, local additions")
@@ -1646,6 +1674,8 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     if args.cmd == "printer":
         if args.printer_cmd == "map":
             return cmd_printer_map(args.serial, manager_factory or _default_manager)
+        if args.printer_cmd == "report":
+            return cmd_printer_report(args.serial, manager_factory or _default_manager)
         return cmd_printer_unpin(args.serial)
     if args.cmd == "library":
         if args.library_cmd == "status":

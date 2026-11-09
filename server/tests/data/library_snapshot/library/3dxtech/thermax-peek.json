@@ -6,6 +6,7 @@
   "colors": [
     "Natural"
   ],
+  "bambu_parent": "Generic PC",
   "fields": {
     "nozzle_temperature_range_low": [
       "375"
@@ -15,19 +16,30 @@
     ],
     "filament_diameter": [
       "1.75"
+    ],
+    "filament_density": [
+      "1.30"
     ]
   },
   "published_ranges": {
     "bed_all_plates": "130-145",
     "chamber_temperatures": "70-140",
     "_print_speed": "10-50 mm/s (0.2mm layer)",
-    "_drying": "120C 4h",
-    "_notes": "Values from MatterHackers listing; official page unreachable (HTTP 429). Enclosure: hotter is better. PEI build surface. Beyond Bambu Lab printer nozzle limits."
+    "_drying": "150C 3h",
+    "_notes": "Official page + ThermaX PEEK TDS Rev 3.0 (official CDN). UL94 V-0 base resin. 3DXTech: 'not intended for standard desktop FDM printers'; purge nozzle of PEEK after printing. Beyond X1/P1/P2S. Diameter tolerance not published. bambu_parent placeholder. Earlier entry: Values from MatterHackers listing; official page unreachable (HTTP 429). Enclosure: hotter is better. PEI build surface. Beyond Bambu Lab printer nozzle limits.",
+    "_vitrification": "143 (Tg, DSC)",
+    "_hdt_0.45MPa": "140",
+    "_min_nozzle": "0.4"
   },
-  "conflicts": [],
-  "source_quality": "reseller_tds_copy",
+  "conflicts": [
+    "drying 120C 4h (official product page Print Recommendations)"
+  ],
+  "source_quality": "official_tds",
   "sources": [
+    "https://www.3dxtech.com/products/thermax-peek-1",
+    "https://cdn.shopify.com/s/files/1/0625/4185/6821/files/Themax_PEEK_TDS_v3.pdf?v=1723942765",
+    "https://www.3dxtech.com/pages/filament-drying-instructions",
     "https://www.matterhackers.com/store/l/3dxtech-thermax-peek-05kg-175mm/sk/MQKH3YHL"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

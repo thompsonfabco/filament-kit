@@ -6,6 +6,7 @@
   "colors": [
     "Natural"
   ],
+  "bambu_parent": "Generic PC",
   "fields": {
     "nozzle_temperature_range_low": [
       "370"
@@ -15,21 +16,32 @@
     ],
     "filament_diameter": [
       "1.75"
+    ],
+    "filament_density": [
+      "1.27"
     ]
   },
   "published_ranges": {
     "bed_all_plates": "120-160",
     "_print_speed": "20-30 mm/s",
-    "_drying": "120C 4h",
-    "_vitrification": "217 (Tg)",
+    "_drying": "150C 4-6h",
+    "_vitrification": "217 (Tg, DSC)",
     "_diameter_tolerance": "+/-0.05",
     "_annealing": "hot-air oven anneal to reduce printed-in stress",
-    "_notes": "Values from MatterHackers listing 'ThermaX PEI 1010 Blend'; official page unreachable (HTTP 429). Warm to hot build environment; PEI tape bed. Beyond Bambu Lab printer nozzle limits."
+    "_notes": "Official page + ThermaX PEI [ULTEM 1010] TDS Rev 4.0 (official CDN). UL94 V-0 base resin. Beyond X1/P1/P2S. Earlier entry: Values from MatterHackers listing 'ThermaX PEI 1010 Blend'; official page unreachable (HTTP 429). Warm to hot build environment; PEI tape bed. Beyond Bambu Lab printer nozzle limits.",
+    "_hdt_0.45MPa": "208",
+    "_enclosure": "Heated chamber recommended",
+    "_min_nozzle": "0.4"
   },
-  "conflicts": [],
-  "source_quality": "reseller_tds_copy",
+  "conflicts": [
+    "drying 150C 4h (official product page)"
+  ],
+  "source_quality": "official_tds",
   "sources": [
+    "https://www.3dxtech.com/products/thermax-pei-1010",
+    "https://cdn.shopify.com/s/files/1/0625/4185/6821/files/THERMAX_PEI_1010_TDS_v4.pdf?v=1723942766",
+    "https://www.3dxtech.com/pages/filament-drying-instructions",
     "https://www.matterhackers.com/store/l/3dxtech-thermax-pei-1010-blend-3d-filament-175mm/sk/MHCFSNUC"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

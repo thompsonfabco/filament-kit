@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "vendor": "Eryone",
+  "product": "PETG High-Speed Translucent",
+  "material": "PETG",
+  "colors": [
+    "Smoky"
+  ],
+  "bambu_parent": "Bambu PETG HF",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "240"
+    ],
+    "nozzle_temperature_range_high": [
+      "280"
+    ],
+    "filament_diameter": [
+      "1.75"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "75-80",
+    "_print_speed": "30-600mm/s",
+    "_diameter_tolerance": "+/-0.03",
+    "_notes": "Vendor FAQ: 'Nozzle temperature should be 240-280℃, and build plate temperature 75-80℃'. Same values on eryone.com 'Hyper Speed Translucent PETG'. Drying, density and fan not published by Eryone (a third-party database lists 65°C 12h; not used). Full colour list not captured."
+  },
+  "conflicts": [],
+  "source_quality": "official_page",
+  "sources": [
+    "https://eryone3d.com/products/petg-high-speed-translucent-filament",
+    "https://eryone3d.com/products/moq1-petg-high-speed-translucent-filament",
+    "https://www.eryone.com/hyper-speed-translucent-petg-product/"
+  ],
+  "updated": "2026-11-02"
+}

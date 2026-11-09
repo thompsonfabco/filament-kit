@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "vendor": "Formfutura",
+  "product": "MetalFil - Ancient Bronze",
+  "material": "PLA",
+  "colors": [
+    "Ancient Bronze"
+  ],
+  "bambu_parent": "Generic PLA",
+  "fields": {
+    "nozzle_temperature_range_low": [
+      "195"
+    ],
+    "nozzle_temperature_range_high": [
+      "225"
+    ]
+  },
+  "published_ranges": {
+    "bed_all_plates": "0-60",
+    "fan_min_speed/fan_max_speed": "50-100",
+    "_enclosure": "not needed",
+    "_notes": "Values are printed as '±' ranges on the official page. Bronze-filled PLA. The page says '80% bronze filling' in the summary and '+/-60% (gravimetrically)' in the feature list. Density 3.5 g/cc is outside the validator range, so it is not in fields; set it manually. Abrasive metal powder: resellers quote 'compatible with >= 0.4mm hardened nozzles', so use a hardened nozzle. Bambu has no metal-filled PLA preset, so Generic PLA is used (not confirmed)."
+  },
+  "conflicts": [
+    "nozzle: 190-220 (older Formfutura TDS as reproduced by optimusdigital.ro / 3dprint.me)",
+    "nozzle: 215-235 (dhm-online.com and Amazon listing (older page copy))",
+    "nozzle: 205-225 (3djake.com (also density 3.4 g/cm3, tolerance +/-0.05 mm))"
+  ],
+  "source_quality": "official_page",
+  "sources": [
+    "https://www.formfutura.com/metalfil-ancient-bronze",
+    "https://www.3djake.com/formfutura/metalfiltm-ancient-bronze",
+    "https://www.optimusdigital.ro/en/metalfil/10664-formfutura-metalfil-ancient-bronze-filament-natural-285-mm-50-g.html"
+  ],
+  "updated": "2026-11-02"
+}

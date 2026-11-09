@@ -37,18 +37,22 @@
     "fan_max_speed": "100%",
     "_print_speed": "30-600 mm/s",
     "_diameter_tolerance": "+/-0.03",
-    "_notes": "Creality K1-series parameter table (2024-12-23) recommends 220C nozzle, 45C bed, 300 mm/s optimal speed, 23 mm3/s max volume flow, 100% model fan; K2 Plus table recommends 220C nozzle, 50C bed, 35C chamber, 23 mm3/s. These are printer profile values, not published ranges, so max volumetric speed is not set in fields. Hyper PLA RFID and Spool-Free Hyper PLA RFID are sold as the same Hyper PLA material (RFID tag / refill format); assumed to share this entry. Density not found on an official source (resellers quote 1.25 g/cm3)."
+    "_notes": "Seller resolved: Amazon B0CLTY4MML ('Official Creality Hyper PLA') is sold by 'Creality CL Store', ships from Amazon. Bullets: 'up to 600mm/s', 'filament diameter accuracy is 1.75+/-0.03mm' and 'size tolerance of +/- 0.03mm', while the title says '+/-0.02mm'. No nozzle/bed temps, density or drying in bullets or store.creality.com page text. Creality K2 Plus filament-settings blog gives Hyper PLA slicer values: nozzle 220C, hotbed 50C, max volumetric speed 23 mm3/s, fan 100/100%, layer time 100/4 s - K2 Plus profile values, kept out of fields. Colours from store.creality.com. Re-check that the existing library entry's temperature fields (not re-sourced here) still have their original source. Bambu parent not confirmed. Earlier entry: Creality K1-series parameter table (2024-12-23) recommends 220C nozzle, 45C bed, 300 mm/s optimal speed, 23 mm3/s max volume flow, 100% model fan; K2 Plus table recommends 220C nozzle, 50C bed, 35C chamber, 23 mm3/s. These are printer profile values, not published ranges, so max volumetric speed is not set in fields. Hyper PLA RFID and Spool-Free Hyper PLA RFID are sold as the same Hyper PLA material (RFID tag / refill format); assumed to share this entry. Density not found on an official source (resellers quote 1.25 g/cm3).",
+    "_max_print_speed": "600 mm/s",
+    "fan_min_speed/fan_max_speed": "100/100 (Creality K2 Plus slicer settings blog)"
   },
   "conflicts": [
+    "Amazon B0CLTY4MML title: 'Dimensional Accuracy +/-0.02mm' vs bullets +/-0.03mm (bullets used)",
+    "Creality K2 Plus settings blog: nozzle 220, bed 50 (slicer profile, single values)",
     "Diameter tolerance: Creality's own Amazon listing title (ASIN B0CLTY4MML, sold by Creality CL Store) says 'Dimensional Accuracy +/-0.02mm'; its bullet and Creality's PLA guide say 1.75+/-0.03mm."
   ],
-  "source_quality": "official_page",
+  "source_quality": "brand_amazon_listing",
   "sources": [
-    "https://store.creality.com/blogs/basics/pla-filament-guide-properties-settings",
-    "https://store.creality.com/blogs/all/k1-k1-max-printing-parameter-settings",
-    "https://store.creality.com/blogs/all/creality-k2-plus-filament-parameters-settings",
+    "https://www.amazon.com/dp/B0CLTY4MML",
     "https://store.creality.com/products/hyper-series-pla-3d-printing-filament-1kg",
-    "https://www.amazon.com/dp/B0CLTY4MML"
+    "https://store.creality.com/blogs/all/creality-k2-plus-filament-parameters-settings",
+    "https://store.creality.com/blogs/basics/pla-filament-guide-properties-settings",
+    "https://store.creality.com/blogs/all/k1-k1-max-printing-parameter-settings"
   ],
-  "updated": "2026-11-01"
+  "updated": "2026-11-02"
 }

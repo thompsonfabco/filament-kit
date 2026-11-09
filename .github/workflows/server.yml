@@ -7,25 +7,42 @@ on:
 jobs:
   test:
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+
+      # test_rollback_modules compares module lists with the oldest release a rollback can reach
+      - name: Fetch the v0.3.0 tag
+        run: git fetch --depth=1 origin refs/tags/v0.3.0:refs/tags/v0.3.0
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
+      # [web]: without it the web module's tests skip themselves, and that is the module facing the internet. The same line
+      # as a builder's full run and the merge gate
       - name: Install
-        run: pip install "./server[test]"
+        run: pip install "./server[test,web]"
 
       # the pc-sync suite (and the end-to-end test with the server) needs pc-sync in place
       - name: Install pc-sync
         run: pip install "./pc-sync[test]"
 
       - name: Tests
-        run: pytest server/tests
+        run: pytest -rs server/tests
 
       - name: pc-sync tests
-        run: pytest pc-sync/tests
+        run: pytest -rs pc-sync/tests
+
+      - name: Printer pack, spool sync and reader tool tests
+        run: pytest -rs printer-pack/tests integrations/orca-spool-sync/tests reader/tools
+
+      - name: Tests that need root
+        run: sudo -E env "PATH=$PATH" pytest -rs server/tests/test_root_links.py
+
+      # the real get.sh against a fake releases server: signature, hash, token
+      - name: get.sh end to end
+        run: python tools/test_get_e2e.py
 
       - name: Shellcheck
-        run: shellcheck install/*.sh tools/*.sh
+        run: shellcheck install/*.sh tools/*.sh printer-pack/*.sh tools/e2e/*.sh
