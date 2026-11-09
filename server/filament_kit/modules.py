@@ -187,13 +187,10 @@ def validate(cfg: dict) -> None:
             for dep in MODULES[n].depends:
                 if dep not in on:
                     raise ModuleError(f"{n} needs {dep}")
-    if "server" in on and "spoolman" not in on:
-        url = cfg.get("spoolman_url") or ""
-        host = urlparse(url).hostname or ""
-        if not host or host in _LOCAL_HOSTS:
-            raise ModuleError(
-                "server without the spoolman module needs spoolman_url "
-                f"pointing at a remote Spoolman (got {url!r})")
+    if needs_spoolman_url(on, cfg):
+        raise ModuleError(
+            "server without the spoolman module needs spoolman_url "
+            f"pointing at a remote Spoolman (got {cfg.get('spoolman_url') or ''!r})")
     if "web" in on or "remote" in on:  # Ruling AA: the web unit is the OAuth issuer, remote or not
         pu = urlparse(str((cfg.get("web") or {}).get("public_url") or ""))
         if pu.scheme != "https" or not pu.hostname:
@@ -261,6 +258,15 @@ def dependents_closure(name: str, on) -> list[str]:
     return [n for n in MODULES if n in gone and n != name]
 
 
+def change_note(name: str, turned_on: bool, others) -> list[str]:
+    """The sentence every way of switching a module prints, when it took others with it."""
+    if not others:
+        return []
+    listed = ", ".join(others)
+    return [f"Turned on {name}; it needs {listed}, now on too." if turned_on
+            else f"Turned off {name}; that also turns off: {listed}."]
+
+
 def toggle(on, name: str) -> tuple[frozenset[str], list[str]]:
     """Flip `name`. On: its needs go on too; off: whatever needs it goes off. Returns (new set, messages)."""
     if name not in MODULES:
@@ -268,13 +274,9 @@ def toggle(on, name: str) -> tuple[frozenset[str], list[str]]:
     on = frozenset(on)
     if name in on:
         gone = dependents_closure(name, on)
-        notes = [f"Turned off {name}; that also turns off: {', '.join(gone)}."] if gone else []
-        return on - set(gone) - {name}, notes
+        return on - set(gone) - {name}, change_note(name, False, gone)
     extra = needs_closure([name], on)
-    notes = []
-    if extra:
-        notes = [f"Turned on {name}; it needs {', '.join(extra)}, now on too."]
-    return on | {name} | set(extra), notes
+    return on | {name} | set(extra), change_note(name, True, extra)
 
 
 def preset(on, mode: str) -> tuple[frozenset[str], list[str]]:
@@ -370,6 +372,16 @@ def set_setting(cfg: dict, key: str, value: str) -> None:
     cur[parts[-1]] = [value] if key == "station.allow" else value
 
 
+def _not_a_remote_url(url: str) -> bool:
+    host = urlparse(url).hostname or ""
+    return not host or host in _LOCAL_HOSTS
+
+
+def needs_spoolman_url(on, cfg: dict) -> bool:
+    """A server with no Spoolman of its own, and no good address for one elsewhere."""
+    return "server" in on and "spoolman" not in on and _not_a_remote_url(cfg.get("spoolman_url") or "")
+
+
 def check_setting(key: str, value: str) -> str | None:
     """Error text for a bad value, or None."""
     value = value.strip()
@@ -380,6 +392,9 @@ def check_setting(key: str, value: str) -> str | None:
     elif key == "orders.file":
         if not value:
             return "Give the path of the order history file."
+    elif key == "spoolman_url":
+        if _not_a_remote_url(value):
+            return "Give the address of the Spoolman to use, on another machine, e.g. http://spoolman.example:7912"
     elif key == "station.allow":
         if _bad_allow(value):
             return "Enter a single address or host name, not a range or wildcard."
@@ -391,6 +406,7 @@ def check_setting(key: str, value: str) -> str | None:
 _SETTING_PROMPTS = {
     "web.public_url": "web needs its public https address (e.g. https://mcp.example.com/filament): ",
     "orders.file": "orders needs the path of the order history file: ",
+    "spoolman_url": "server without the spoolman module needs your Spoolman's address (e.g. http://spoolman.example:7912): ",
     "station.allow": "station without the server needs the server's address (IP or host name): ",
 }
 
@@ -410,12 +426,12 @@ def missing_settings(on, cfg: dict) -> list[str]:
 
 
 def collect_settings(on, cfg: dict, ask: Callable[[str], str | None],
-                     say: Callable[[str], None] = print, skip=()) -> dict[str, str] | None:
-    """Ask for each missing setting (not those in `skip`), validating the answer; returns {key: value}. A blank
-    answer (or EOF) gives None: the caller goes back to the checklist."""
+                     say: Callable[[str], None] = print, skip=(), also=()) -> dict[str, str] | None:
+    """Ask for each missing setting (not those in `skip`, and those in `also`), validating the answer; returns
+    {key: value}. A blank answer (or EOF) gives None: the caller goes back to the checklist."""
     got: dict[str, str] = {}
     work = copy.deepcopy(cfg)
-    for key in missing_settings(on, work):
+    for key in [*missing_settings(on, work), *also]:
         if key in skip:
             continue
         while True:
