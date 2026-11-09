@@ -1,6 +1,7 @@
 package com.thompsonfabco.filamentkit.ui.pair
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -10,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.thompsonfabco.filamentkit.data.ServerConfig
 import com.thompsonfabco.filamentkit.data.SettingsStore
@@ -53,6 +55,32 @@ class PairFlowTest {
         override suspend fun info(host: String, port: Int, fingerprint: String, token: String?) =
             ServerInfo("Workshop server", "1", 1)
         override suspend fun claim(host: String, port: Int, fingerprint: String, token: String) = Unit
+    }
+
+    /** The system Back goes one step back and stays in the app, as the on-screen Back does. */
+    @Test fun systemBackGoesOneStepBackThroughThePairingSteps() {
+        val vm = PairViewModel(Store(), Backend(), CoroutineScope(Dispatchers.Main.immediate))
+        rule.setContent {
+            MaterialTheme {
+                PairScreen(vm, emptyList(), onPaired = {}, scanner = { _, _ -> Text("Scanner open") })
+            }
+        }
+        val back = { Espresso.pressBackUnconditionally() }
+
+        rule.onNodeWithText("Scan QR code").performClick()
+        rule.onNodeWithText("Scanner open").assertIsDisplayed()
+        back()
+        rule.onNodeWithText("Scan QR code").assertIsDisplayed()
+
+        rule.onNodeWithText("Enter address").performClick()
+        rule.onNodeWithText("Host name or IP address").performTextInput("10.0.0.2")
+        rule.onNodeWithText("Connect").performClick()
+        rule.waitUntil(5_000) { vm.state.value.step == Step.Confirm }
+        back()
+        rule.onNodeWithText("10.0.0.2").assertIsDisplayed()
+        assertEquals(Step.Address, vm.state.value.step)
+        back()
+        rule.onNodeWithText("Scan QR code").assertIsDisplayed()
     }
 
     @Test fun aChangedCertificateOffersTrustBesidePairAgain() {

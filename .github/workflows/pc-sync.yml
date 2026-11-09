@@ -24,7 +24,7 @@ jobs:
         run: pip install "./pc-sync[test]"
 
       - name: Tests
-        run: pytest pc-sync/tests
+        run: pytest -n auto -rfEs pc-sync/tests
 
       - name: PyInstaller
         if: runner.os == 'Windows'

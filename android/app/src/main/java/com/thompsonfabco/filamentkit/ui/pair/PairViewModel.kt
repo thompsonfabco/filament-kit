@@ -81,7 +81,7 @@ class PairViewModel(
         if (_state.value.busy) return
         val host = hostInput.trim()
         val port = if (portInput.isBlank()) DEFAULT_PORT else portInput.trim().toIntOrNull()
-        if (host.isEmpty()) return fail(Step.Address, "Enter the server's address", host, DEFAULT_PORT)
+        if (host.isEmpty()) return fail(Step.Address, PairTexts.EMPTY_HOST, host, DEFAULT_PORT)
         if (port == null || port !in 1..65535) {
             return fail(Step.Address, "The port must be a number from 1 to 65535", host, DEFAULT_PORT)
         }
@@ -97,7 +97,7 @@ class PairViewModel(
                 throw e
             } catch (e: Exception) {
                 val text = if (e is IOException && e !is FingerprintMismatch && !localNetworkMissing()) {
-                    "Could not reach $host on port $port. Check the address and that this phone is on the same network."
+                    PairTexts.unreachable(e, host, port)
                 } else errorText(e)
                 _state.value = PairUi(step = Step.Address, host = host, port = port, error = text)
             }
@@ -206,6 +206,18 @@ class PairViewModel(
     fun pairAgain() {
         confirmed = false
         _state.value = PairUi()
+    }
+
+    /**
+     * One step back, for the system Back and the on-screen Back alike. The fingerprint check and the code go back to
+     * the address with it filled in; the address and a stopped pairing go back to the first screen.
+     */
+    fun back() {
+        val s = _state.value
+        if (s.busy) return
+        confirmed = false
+        val toAddress = s.mismatch == null && (s.step == Step.Confirm || s.step == Step.Code)
+        _state.value = if (toAddress) PairUi(step = Step.Address, host = s.host, port = s.port) else PairUi()
     }
 
     /** Another screen hit a changed server certificate: show both fingerprints until the user chooses "Pair again". */

@@ -48,7 +48,7 @@ compatibility change, also run `$ADB shell am compat enable RESTRICT_LOCAL_NETWO
 1. Install the app fresh (or `adb shell pm clear com.thompsonfabco.filamentkit`) and open it: the system asks for
    local network access (it may be shown as "Nearby devices"). Tap **Don't allow**: Pair shows the explanation and
    **Allow**, and no QR scan button; no "Choose a device to connect" picker appears.
-2. Tap **Allow** in the app and refuse again: **Open app settings** appears and opens the app's settings page. Allow
+2. Tap **Allow** in the app and refuse again: **Open app settings** takes the place of **Allow** and opens the app's settings page. Allow
    the permission there and return: the Pair screen (QR scan, servers found on this network) appears without
    restarting the app.
 3. Pair by QR. Then revoke the permission in the system settings (Android restarts the app): Home shows "Needs local

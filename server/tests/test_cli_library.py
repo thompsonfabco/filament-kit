@@ -96,7 +96,7 @@ def test_update_error_exits_1_without_query(capsys, monkeypatch, rebuilds):
     config.save(cfg)
     assert cli.main(["library", "update"]) == 1
     err = capsys.readouterr().err
-    assert "404" in err and "may be private" in err and f"using version {library.load().version}" in err
+    assert "404" in err and "not found" in err and f"using version {library.load().version}" in err
     assert rebuilds == []
 
 
@@ -151,7 +151,7 @@ def test_scheduled_404_is_a_warning(capsys, monkeypatch, rebuilds):
     _404_update(monkeypatch)
     assert cli.main(["library", "update", "--scheduled"]) == 0
     err = capsys.readouterr().err
-    assert err.startswith("warning: ") and "404" in err and "may be private" in err
+    assert err.startswith("warning: ") and "404" in err and "not found" in err
     assert rebuilds == []
 
 
@@ -169,7 +169,7 @@ def test_scheduled_500_fails(capsys, monkeypatch):
 
 def test_scheduled_404_detected_by_status_not_text(capsys, monkeypatch):
     monkeypatch.setattr(library, "update", lambda url=None, **k: library.UpdateResult(
-        False, 2, 0, "x: HTTP 404; the library repository may be private; using version 2", None))
+        False, 2, 0, "x: HTTP 404; not found: check the library address and version; using version 2", None))
     assert cli.main(["library", "update", "--scheduled"]) == 1
 
 

@@ -53,6 +53,8 @@ SCHEDULES = {"daily": 20 * 3600, "weekly": 6.5 * 86400}
 STATE = "state.json"
 MODULE = "updates"
 HW_ASSET = "bambu_hardware.xml"
+NOTES_LIMIT = 32 * 1024         # characters of a release's notes kept for the setup console
+BUSY_TEXT = "a printer is mapping or loading; try again when it is done"
 # (release asset, module with BUNDLED/override_path/validate/file_version/MAX_BYTES, state.json key). The Bambu key
 # stays "hardware" so existing installs keep recognising the file their feed installed.
 HW_ASSETS = (("bambu_hardware.xml", "filament_kit.bridge.hardware", "hardware"),
@@ -143,7 +145,7 @@ def printers_idle():
         root = config.paths().state / "printers"
         if fcntl is not None and root.is_dir():
             for lock in sorted(root.glob("*/mapping.lock")):
-                fh = open(lock, "a")
+                fh = open(lock, "rb")   # a lock needs no write access: the root helper's filesystem is read-only
                 try:
                     fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
                 except OSError:
@@ -257,23 +259,134 @@ def due(cfg: dict, now: float) -> bool:
 
 # ---------------------------------------------------------------- commands
 
+def going_back(notes: str) -> str:
+    """The "Going back ..." section of a release's notes (what a rollback from that release means), or ""."""
+    out: list[str] = []
+    for line in notes.splitlines():
+        head = line.lstrip("#* ").lower().startswith("going back")
+        if not out:
+            if head:
+                out.append(line)
+        elif line.startswith("#"):
+            break
+        else:
+            out.append(line)
+    return "\n".join(out).strip()
+
+
+def _remember(latest: str, notes: str, back: str, now: float) -> None:
+    """What the last check found, for the setup console (the server may not reach GitHub itself; the page reads this
+    file). Best effort: `update --check` works for anyone, and only root can write here."""
+    try:
+        _write_state(latest={"version": latest, "notes": notes[:NOTES_LIMIT], "going_back": back[:NOTES_LIMIT],
+                             "at": now})
+    except OSError:
+        pass
+
+
+def _note_release(fetcher: release.Fetcher, repo: str, rel: dict, now: float) -> tuple[str, str]:
+    """Save what `rel` says for the console; (its notes, what a rollback from the installed version means)."""
+    latest, cur = rel["version"], current_version()
+    notes = rel.get("notes") or ""
+    try:        # a rollback leaves the installed version: what it says about that
+        mine = notes if latest == cur else fetcher.release(repo, cur).get("notes") or ""
+    except ReleaseError:
+        mine = ""
+    back = going_back(mine)
+    _remember(latest, notes, back, now)
+    return notes, back
+
+
+def check_info(cfg: dict, *, fetcher: release.Fetcher | None = None, now: float | None = None) -> dict:
+    """{installed, latest, newer, held, notes, going_back}: the latest release, what it says, and what a rollback
+    from the installed version means. Raises ReleaseError when the latest release cannot be read."""
+    s = settings(cfg)
+    fetcher = fetcher or default_fetcher(cfg)
+    rel = fetcher.release(s["repo"])
+    latest, cur = rel["version"], current_version()
+    newer = _newer(latest, cur)
+    notes, back = _note_release(fetcher, s["repo"], rel, time.time() if now is None else now)
+    return {"installed": cur, "latest": latest, "newer": newer, "held": _read_state().get("held"), "notes": notes,
+            "going_back": back}
+
+
 def check(cfg: dict, *, fetcher: release.Fetcher | None = None) -> int:
     try:
-        s = settings(cfg)
-        latest = (fetcher or default_fetcher(cfg)).release(s["repo"])["version"]
-        cur = current_version()
-        newer = _newer(latest, cur)
+        info = check_info(cfg, fetcher=fetcher)
     except ReleaseError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
-    held = _read_state().get("held")
-    if newer:
+    cur, latest = info["installed"], info["latest"]
+    if info["newer"]:
         note = " (rolled back earlier: the timer skips it; `sudo filament-kit update` installs it)" \
-            if held == latest else ""
+            if info["held"] == latest else ""
         print(f"installed {cur}; {latest} is available{note}: sudo filament-kit update")
     else:
         print(f"installed {cur}; latest release {latest}: up to date")
     return 0
+
+
+def summary() -> dict:
+    """{installed, latest, newer, checked_at} from what the last check saved (no network)."""
+    st = _read_state()
+    cur = current_version()
+    seen = st.get("latest") if isinstance(st.get("latest"), dict) else {}
+    latest = seen.get("version") if isinstance(seen.get("version"), str) else None
+    try:
+        newer = bool(latest) and _newer(latest, cur)
+    except ReleaseError:
+        latest, newer = None, False
+    return {"installed": cur, "latest": latest, "newer": newer, "checked_at": seen.get("at")}
+
+
+def view(cfg: dict) -> dict:
+    """The setup console's Updates tab, from local files only: the installed version, what the last check found, and
+    whether an update or a rollback would be refused now (the same words the commands use). Never touches the
+    network: the kit server may not reach GitHub, so "Check now" is a job that runs `check_info` as root."""
+    st = _read_state()
+    seen = st.get("latest") if isinstance(st.get("latest"), dict) else {}
+    target = st.get("previous") if isinstance(st.get("previous"), str) else None
+    if target and not _kept(target):
+        target = None
+    try:
+        schedule = settings(cfg)["schedule"]
+    except ReleaseError:
+        schedule = None
+    return {**summary(), "notes": seen.get("notes") or "", "going_back": seen.get("going_back") or "",
+            "held": st.get("held"), "failed": st.get("failed"), "previous": target,
+            "module_on": MODULE in modules.enabled(cfg), "schedule": schedule,
+            "update_refused": job_refusal("update"), "rollback_refused": job_refusal("rollback", verified=target)}
+
+
+def idle_problem() -> str | None:
+    """Why an update may not start now, in the words of the command; names no printer (the console shows this without
+    the setup code). A look only: a lock held for an instant, as the install itself takes it."""
+    try:
+        with printers_idle():
+            return None
+    except Busy:
+        return BUSY_TEXT
+    except OSError:     # a lock this process cannot open: the job itself decides
+        return None
+
+
+def job_refusal(name: str, *, verified: str | None = None) -> str | None:
+    """Why the setup console's job `name` (update, rollback) would be refused now, or None; the job checks again, and
+    the commands' own guards are the ones that hold. `verified`: the rollback target, already checked by `_kept` (the
+    root helper has no use for the signature code, and the job checks it anyway)."""
+    problem = idle_problem()
+    if problem:
+        return problem
+    if name != "rollback":
+        return None
+    target = verified or _read_state().get("previous")
+    if not isinstance(target, str):
+        return "no verified earlier version is kept; nothing to roll back to"
+    try:
+        on = _modules_unfit(target)
+    except (OSError, ValueError, ReleaseError) as e:
+        return f"cannot check config.json's modules for the rollback: {e}"
+    return _unfit_text(target, on) if on else None
 
 
 def update(cfg: dict, *, scheduled: bool = False, fetcher: release.Fetcher | None = None,
@@ -297,6 +410,7 @@ def update(cfg: dict, *, scheduled: bool = False, fetcher: release.Fetcher | Non
         rel = fetcher.release(s["repo"])
         latest = rel["version"]
         cur = current_version()
+        _note_release(fetcher, s["repo"], rel, now)     # the console shows it, and the timer keeps it fresh
         if not _newer(latest, cur):
             _write_state(last_ok_at=now)
             print(f"filament-kit {cur} is up to date")
@@ -543,24 +657,40 @@ def _restore(cfg: dict, cur: str, kept: bool, old_previous, run) -> int:
     return 1
 
 
+def _unknown_to(target: str) -> tuple[dict, list[str]]:
+    """(config.json as it is, the modules it names that `target` does not know)."""
+    f = config.paths().etc / "config.json"
+    raw = json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}
+    old = release.parse_version(target)
+    mods = raw.get("modules") if isinstance(raw, dict) else None
+    if not isinstance(mods, dict):
+        return raw, []
+    return raw, [n for n, since in modules.NEWER.items() if old < since and n in mods]
+
+
+def _modules_unfit(target: str) -> list[str]:
+    """The modules that are on and that `target` does not have."""
+    raw, unknown = _unknown_to(target)
+    return [n for n in unknown if raw["modules"][n]]
+
+
+def _unfit_text(target: str, on: list[str]) -> str:
+    return (f"filament-kit {target} has no {', '.join(on)} module; run "
+            + " and ".join(f"`sudo filament-kit modules disable {n}`" for n in on) + " first")
+
+
 def _modules_fit(target: str) -> bool:
     """Before installing `target`: refuse when a module it does not know is on, and drop such a module's false
     entry from config.json (the newer release wrote it when it was switched off). False on refusal."""
-    f = config.paths().etc / "config.json"
     try:
-        raw = json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}
-        old = release.parse_version(target)
+        raw, unknown = _unknown_to(target)
     except (OSError, ValueError, ReleaseError) as e:
         print(f"error: cannot check config.json's modules for the rollback: {e}", file=sys.stderr)
         return False
     mods = raw.get("modules") if isinstance(raw, dict) else None
-    if not isinstance(mods, dict):
-        return True
-    unknown = [n for n, since in modules.NEWER.items() if old < since and n in mods]
     on = [n for n in unknown if mods[n]]
     if on:
-        print(f"error: filament-kit {target} has no {', '.join(on)} module; run "
-              + " and ".join(f"`sudo filament-kit modules disable {n}`" for n in on) + " first", file=sys.stderr)
+        print(f"error: {_unfit_text(target, on)}", file=sys.stderr)
         return False
     if unknown:
         for n in unknown:

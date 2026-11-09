@@ -109,6 +109,7 @@ def test_cli_set_lane_data(capsys):
 
 def test_cli_scan(moonraker, capsys, monkeypatch):
     monkeypatch.setattr(discovery, "DEFAULT_PORT", moonraker.port)
+    monkeypatch.setattr(discovery.scan, "__defaults__", (None, 64, 5.0))   # what the command does, not how fast a crowd lets it
     assert klipper_cli.main(["scan", "--subnet", "127.0.0.1/32"]) == 0
     assert "127.0.0.1" in capsys.readouterr().out
     assert any(p.host == "127.0.0.1" and not p.configured for p in registry.load().values())
