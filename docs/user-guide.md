@@ -394,6 +394,10 @@ slots. **Map slots** in the app (or `sudo filament-kit printer map <serial>` on 
 - External holders (a spool holder outside the AMS, numbered as its own id) stay out of the calibration job and keep
   their own ids, and so do empty AMS slots. A printer with no AMS unit needs no job: its holders keep their own ids
   and it maps without one.
+- A printer can end up mapped with no named numbering scheme. Slots that are empty today show as "no number yet"
+  until a spool is loaded in them and the printer is mapped again.
+- On a printer whose numbers fit no known scheme, mapping may run one short job per scheme, so it takes longer than
+  a single job.
 - The printer must be **idle** (not printing, paused or preparing) and online, or mapping is refused.
 
 Until mapping succeeds, filament use is **only logged** (you can see it in the app's usage list) and nothing is
@@ -743,6 +747,23 @@ network. Elsewhere they say that they only work on the home network. Claude's se
 in `"web": {"lan": ["198.51.100.0/24"]}` (each entry a network; `modules apply` refuses a bad one). Five wrong passphrases
 lock the connector's sign-in for 10 minutes.
 
+### The home network ranges (web.lan)
+
+The ranges above are IPv4. A phone or computer that reaches the web address over IPv6 is refused with "This device
+reached the server over IPv6" until you add your home network's IPv6 prefix. (The setup page is IPv4 only.) To do it:
+
+1. On the server, find your prefix: `ip -6 addr show scope global`. A line such as
+   `inet6 2001:db8:1234:5678::abcd/64` has the prefix `2001:db8:1234:5678::/64`: the first four groups of the address,
+   then `::/64`. (`2001:db8` is the range reserved for examples; yours comes from your provider and can change.)
+2. Edit `/etc/filament-kit/config.json` (for example `sudo nano /etc/filament-kit/config.json`) and set the list. Your list
+   replaces the default, so keep the IPv4 ranges you want in it:
+
+   ```
+   "web": {"lan": ["192.168.0.0/16", "10.0.0.0/8", "2001:db8:1234:5678::/64"]}
+   ```
+
+3. Apply it: `sudo filament-kit modules apply`. It refuses an entry that is not a network.
+
 ## Remote access
 
 The `remote` module puts the web part on a public `https://` name, with a free certificate from Let's Encrypt.
@@ -881,6 +902,10 @@ filament-kit-sync apply-updates --folder BambuStudioBeta-1234567890 --all
 Use `--dry-run` first to see what would be written. New presets still arrive in that folder by themselves.
 
 By hand: download the newer `filament-kit-<version>.tar.gz`, unpack it and run `sudo ./install.sh` again.
+
+**Going back from v0.4.1 to v0.4.0.** `sudo filament-kit update --rollback` goes back to the release it replaced. The
+Spoolman allow-list (`/etc/systemd/system/spoolman.service.d/kit.conf`) stays in place after the rollback, and v0.4.0
+cannot change it: edit it by hand if a range needs adding, then restart Spoolman.
 
 **Going back from v0.4.0 to v0.3.0.** `sudo filament-kit update --rollback` goes back to the release it replaced.
 

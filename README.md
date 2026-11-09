@@ -44,7 +44,10 @@ a scale and an NFC reader ([Intake station](docs/user-guide.md#intake-station)),
 [reader](#the-reader).
 
 Your spool list is also in any web browser at home, at `http://<computer name>.local:7912` (the installer prints
-the address). If something doesn't work, `sudo filament-kit status` on the server checks everything and says
+the address). Spoolman has no sign-in, so it answers only this computer and your home network (by default
+`localhost`, `192.168.0.0/16` and `10.0.0.0/8`): anyone on those can open and edit it. The list is `spoolman.allow` in
+`/etc/filament-kit/config.json` (a list of networks; empty means this computer only). If you use Tailscale or Docker,
+or Spoolman runs on another machine, you may need to add that network, then run `sudo filament-kit modules apply`. If something doesn't work, `sudo filament-kit status` on the server checks everything and says
 what to do about a failing line.
 
 Everything else (every command, printers and slot mapping, presets, the station, the Claude connector, remote
