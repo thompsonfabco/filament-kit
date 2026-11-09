@@ -1,20 +1,20 @@
-"""The button panel (station/panel/ firmware + PANEL.md in the repo): a D1 mini on USB serial with a buzzer, an OLED,
+"""The button panel (station/panel/ firmware + PANEL.md in the repo): an ESP32-C3 on USB serial with a buzzer, an OLED,
 a speaker and two lit buttons, yellow (Hold) and red (Discard), relayed to the intake flow (`flow`).
 
 The station keeps the panel's firmware current: a panel whose HELLO version differs from the bundled one
 (STATION_PANEL_FW, VERSION beside it) is reflashed over USB with esptool, once per version per run, then found
 again; if the flash doesn't take the panel is used as it is. STATION_PANEL_FLASH=0 turns that off.
 
-Both the panel and the PN532 board use CH340 USB serial chips (no serial numbers), so the panel is found by its HELLO
-and the reader gets the other ttyUSB port (NFC_DEVICE=auto).
-Protocol (firmware 9), 115200 baud, one line each: PC -> panel `?`, `L <yellow> <red>` (lamp modes 0-4, resent every
-second), `D <row> [text]` (OLED row 0 the title, 1-4 the body; sent when it changes), `B <hz> <ms> [count]`;
+The panel is found by its HELLO: ttyACM ports with USB vendor 303a (the C3), then ttyUSB; an old CH340 panel and the
+PN532 board can swap ttyUSB numbers, so the reader gets the other port (NFC_DEVICE=auto).
+Protocol (firmware 10), 115200 baud, one line each: PC -> panel `?`, `L <yellow> <red>` (lamp modes 0-4, resent every
+second), `D <row> [text]` (OLED row 0 the title, 1-4 the body; sent when it changes), `B <hz> <ms> [count]`, `V <percent>` (speech volume, 0-100);
 `A <n>` + n raw bytes (speech, see `speech`);
-panel -> PC `HELLO intake-panel <version>`, `P H` / `P D` (the D1 / D2 button, a short press, on release),
+panel -> PC `HELLO intake-panel <version> [<chip>]` (firmware 10: `esp32c3`; no chip token: an ESP8266), `P H` / `P D` (the D1 / D2 button, a short press, on release),
 `L H` / `L D` (the D1 / D2 button held 0.8 s), `AIR <C> <RH|-> <hPa>` (see `air`).
 
-D1 (`H`) is yellow and D2 (`D`) red, as PANEL.md wires them. A panel wired the other way round (yellow's button and
-lamp on D2/D6) sets station.panel_swap (STATION_PANEL_SWAP=1): the buttons' roles and the `L` lamp modes are swapped
+`H` is yellow and `D` red, as PANEL.md wires them. A panel wired the other way round (yellow's button and
+lamp on red's pins) sets station.panel_swap (STATION_PANEL_SWAP=1): the buttons' roles and the `L` lamp modes are swapped
 here, so the wiring never needs a reflash. Firmware 9 reports both buttons alike for that; a long press on red
 cancels like a short one.
 """

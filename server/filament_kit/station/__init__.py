@@ -18,7 +18,7 @@ owner's filament-mcp reads a kit station unchanged):
 - `state`: settings from the environment and the shared state every thread uses;
 - `scale`: a USB HID postal scale (DYMO M10/M25/S-series, vendor 0922) read from /dev/hidraw*;
 - `nfc`: a PN532 through nfcpy; tag ids via `tags.format_uid` (nfc2klipper's form, matching Spoolman's extra.nfc_id);
-- `panel`: the button panel (station/panel/ + PANEL.md in the repo), a D1 mini on USB serial with a buzzer, an OLED
+- `panel`: the button panel (station/panel/ + PANEL.md in the repo), an ESP32-C3 on USB serial with a buzzer, an OLED
   and lit yellow (Hold) / red (Discard) buttons, found by its HELLO; the reader gets the other ttyUSB port
   (NFC_DEVICE=auto). A panel on other firmware than the bundled one is reflashed with esptool (STATION_PANEL_FLASH=0
   stops that);

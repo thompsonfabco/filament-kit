@@ -639,18 +639,19 @@ the `station` module, on the server computer (`all-in-one`) or on a second compu
 - A **DYMO M10 USB scale**. Other DYMO USB postal scales that the kit detects also work. Switch it on before you start
   the station; a DYMO only shows up on USB while it is on, and it switches itself off after a few minutes.
 - A **PN532 NFC reader** on a USB serial adapter (CH340 chip).
-- Optional: the **button panel** (Hold and Discard buttons, lamps and a buzzer on a Wemos D1 mini). How to
-  build and flash it: [station/PANEL.md](../station/PANEL.md).
+- Optional: the **button panel** (Hold and Discard buttons, lamps, an OLED, a buzzer and a speaker, on an ESP32-C3 Super Mini). Its
+  behaviour, serial protocol and pin table: [station/PANEL.md](../station/PANEL.md).
 - Optional: a speaker (USB or the computer's headphone socket) for the scan beep when there is no panel.
 - Optional, with the panel: a **BME280** sensor for room temperature and humidity, a small speaker on the panel
   (it says things like "1042 grams. Hold yellow to save.") and a **USB webcam** that takes a picture of the spool when you press
   Hold. All of it is in [station/PANEL.md](../station/PANEL.md). The station installs `espeak-ng` and `ffmpeg` for
   the speech and the picture, and its user joins the `video` group to read the camera.
 
-Build guides, wiring and enclosures for the station's devices are moving to a separate repository,
-[filament-kit-hardware](https://github.com/thompsonfabco/filament-kit-hardware). Until that split lands, the panel's wiring, build and flash steps stay in
-[station/PANEL.md](../station/PANEL.md); that file will keep the serial protocol. This guide keeps the list of
-supported devices above, and the kit flashes the panel itself when it runs other firmware than the one it carries.
+Build guides, wiring diagrams and enclosures for the station's devices are kept in the
+[filament-kit-hardware](https://github.com/thompsonfabco/filament-kit-hardware) repository.
+[station/PANEL.md](../station/PANEL.md) keeps the panel's behaviour, serial protocol, speech format and
+the pin table for firmware 10. This guide keeps the list of supported devices above, and the kit flashes a C3 panel
+itself when it runs other firmware than the one it carries.
 
 ### What the installer changes on the computer
 
@@ -690,11 +691,16 @@ hand: `sudo systemctl unmask sleep.target suspend.target hibernate.target hybrid
   device such as `"tty:USB0:pn532"`), `"beep"` (`true` or `false`), `"beep_device"` (empty for automatic, or
   an ALSA device such as `"plughw:1,0"`), `"speech"` (`true` or `false`) and `"camera"` (`"auto"` for the first
   USB camera, a device such as `"/dev/video0"`, or `"off"`), `"panel_flash"` (`true` or `false`, see the
-  next point) and `"panel_swap"` (`true` or `false`, see the point after that). After a change, run `sudo filament-kit modules apply`.
+  next point) `"panel_swap"` (`true` or `false`, see the point after that) and `"speaker_volume"` (0 to 100, default 50: how loud
+  the C3 panel speaks; environment `STATION_SPEAKER_VOLUME`). After a change, run `sudo filament-kit modules apply`.
 - **Panel firmware updates itself.** The station carries the panel's firmware. When it finds a panel running
   another version, it writes the bundled one to it over USB (once per version) and then uses it. If that does
   not work, the panel keeps running as it is. Set `"panel_flash": false` to never touch the panel's firmware.
-  `curl http://127.0.0.1:5003/state` shows the panel's version as `"panel_version"`.
+  `curl http://127.0.0.1:5003/state` shows the panel's version as `"panel_version"`. A panel on older ESP8266
+  firmware (9 or earlier) is used as it is and never reflashed.
+- **A blank panel board.** A new ESP32-C3 has no firmware for the station to find. Plug it in and run
+  `sudo filament-kit station flash-panel`: it stops the station, lists the C3 ports that give no answer, asks before
+  flashing each one, checks the panel answers afterwards and restarts the station.
 - **Buttons and lamps the other way round (v0.4.0).** If your panel's yellow and red buttons and lamps are wired the
   opposite way to the pin table in the panel guide (the button you press for yellow acts as red, and the lamps are
   swapped too), set `"panel_swap": true` under `"station"` in `/etc/filament-kit/config.json`, then run
