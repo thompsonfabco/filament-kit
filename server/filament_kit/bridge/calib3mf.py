@@ -96,6 +96,11 @@ STOP_TIMEOUT = 20.0
 BUSY = ('RUNNING', 'PAUSE', 'PREPARE', 'SLICING')
 ENDED = ('FINISH', 'FAILED')
 REFUSED = "printer refused the calibration job"
+# The codes an attempt stops on, as the sentences the owner reads (the code itself goes in CalibResult.reason)
+SAY = {"printer_offline": "The printer is offline; nothing was changed.",
+       "printer_busy": "The printer is busy; nothing was changed.",
+       "not_configured": "Finish setting up this printer first (its address and Access Code); nothing was changed.",
+       "cert_changed": "The printer's certificate changed, so the kit stopped talking to it; nothing was changed."}
 NO_AMS_LOADED = ("no loaded AMS slot to calibrate (external holders need none): load a spool into an AMS slot and "
                  "map again")
 GCODE = "Metadata/plate_1.gcode"
@@ -136,6 +141,7 @@ class CalibResult:
     fits: list[str] = field(default_factory=list)             # the schemes the reported numbers fit
     repeats_last_print: bool = False                          # the numbers equal those of the print before this mapping
     cert_changed: bool = False
+    reason: str = "none"      # mapping.REASONS: why it stopped short, when the attempt ended on one of SAY's codes
     restored: bool = True     # we left nothing changed (false: a filament left loaded in the toolhead)
     job: str = ""             # this run's subtask_name (`run_name`)
     other_job: bool = False   # another print started while we watched: abandoned, never stopped
@@ -620,18 +626,21 @@ def _attempt(manager, serial: str, slotmap: SlotMap, printer, should_stop, hw: h
     """One calibration job sending `key`'s numbers (see `run`)."""
     res = CalibResult(sent_scheme=key)
     if manager.state(serial) != 'connected':
-        res.problems.append('printer_offline')
+        res.problems.append(SAY["printer_offline"])
+        res.reason = "offline"
         return res
     snap = manager.wait_report(serial, lambda r: True, SNAPSHOT_TIMEOUT)
     if snap is None:
-        res.problems.append('printer_offline')
+        res.problems.append(SAY["printer_offline"])
+        res.reason = "offline"
         return res
     snap = copy.deepcopy(snap)
     if "mapping" not in last_print:     # a job of ours before this one says nothing against its own numbers
         ours = _s(snap.get('subtask_name')).startswith(job_name(serial))
         last_print["mapping"] = None if ours else snap.get('mapping')
     if _s(snap.get('gcode_state')).upper() in BUSY:
-        res.problems.append('printer_busy')
+        res.problems.append(SAY["printer_busy"])
+        res.reason = "busy"
         return res
 
     # a slot the sensor says is empty stays out even if it still names a filament, as in the slot test
@@ -676,11 +685,13 @@ def _attempt(manager, serial: str, slotmap: SlotMap, printer, should_stop, hw: h
         mapping2 = [{"ams_id": a, "slot_id": 0 if _external(a, mi) else t} for a, t in addrs]
 
     if printer is None or not printer.configured or not printer.access_code:
-        res.problems.append('not_configured')
+        res.problems.append(SAY["not_configured"])
+        res.reason = "not_configured"
         return res
 
     if should_stop is not None and should_stop():
         res.problems.append("interrupted: mapping was stopped before the calibration job")
+        res.reason = "interrupted"
         return res
     path = remote_path(serial)
     try:
@@ -690,7 +701,8 @@ def _attempt(manager, serial: str, slotmap: SlotMap, printer, should_stop, hw: h
             c.upload(path, build(labels, project))
     except tlspin.CertChanged:
         res.cert_changed = True
-        res.problems.append('cert_changed')
+        res.problems.append(SAY["cert_changed"])
+        res.reason = "cert_changed"
         return res
     except ftps.FtpsError as e:
         # a STOR that died midway (or whose final reply was lost) may have left a partial or complete file
@@ -1025,7 +1037,7 @@ def delete_leftover(serial: str, printer: registry.Printer | None = None) -> lis
         if printer is None:
             printer = registry.load().get(serial)
         if printer is None or not printer.configured or not printer.access_code:
-            return ["not_configured"]
+            return [SAY["not_configured"]]
         with ftps.Client(printer) as c:
             try:
                 c.delete(path)
@@ -1059,7 +1071,7 @@ def _delete(printer: registry.Printer, path: str, res: CalibResult) -> None:
             c.delete(path)
     except tlspin.CertChanged:
         res.cert_changed = True
-        res.problems.append(f"could not delete {path}: cert_changed")
+        res.problems.append(f"could not delete {path}: the printer's certificate changed")
     except ftps.FtpsError as e:
         res.problems.append(f"could not delete {path}: {e}")
     except Exception as e:      # never let a delete failure skip the slot restore

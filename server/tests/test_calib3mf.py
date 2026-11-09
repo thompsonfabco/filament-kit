@@ -326,7 +326,7 @@ def test_busy_printer_untouched(fake_ftp, printer):
     rep["gcode_state"] = "RUNNING"
     m = FakeManager(fake_ftp.root, report=rep)
     r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
-    assert r.consistent is False and r.problems == ["printer_busy"]
+    assert r.consistent is False and r.problems == [calib3mf.SAY["printer_busy"]] and r.reason == "busy"
     assert m.published == [] and fake_ftp.commands == []
 
 
@@ -334,7 +334,7 @@ def test_offline_printer_untouched(fake_ftp, printer):
     m = FakeManager(fake_ftp.root)
     m.conn_state = "offline"
     r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
-    assert r.problems == ["printer_offline"] and m.published == [] and fake_ftp.commands == []
+    assert r.problems == [calib3mf.SAY["printer_offline"]] and r.reason == "offline" and m.published == [] and fake_ftp.commands == []
 
 
 def test_ftps_leaf_mismatch_is_cert_changed(fake_ftp, printer):
@@ -342,7 +342,7 @@ def test_ftps_leaf_mismatch_is_cert_changed(fake_ftp, printer):
     m = FakeManager(fake_ftp.root)
     r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
     assert r.cert_changed is True and r.consistent is False
-    assert r.problems == ["cert_changed"]
+    assert r.problems == [calib3mf.SAY["cert_changed"]] and r.reason == "cert_changed"
     assert m.published == []
     assert "PASS" not in fake_ftp.commands
 

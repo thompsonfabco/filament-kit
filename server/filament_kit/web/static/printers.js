@@ -297,7 +297,9 @@ function printersTab() {
       if (id !== current) return;
       const running = m.state === "running";
       mapBox.replaceChildren(
-        h("p", { class: "muted", textContent: `${m.calibrated ? "Mapped" : "Not mapped yet"} · ${m.state}${m.step ? " · " + m.step : ""}${m.stale ? " · layout changed" : ""}` }),
+        h("p", { class: "muted", textContent: m.outcome_text ? `${m.outcome_text}${running && m.step ? " " + m.step : ""}`
+          : `${m.calibrated ? "Mapped" : "Not mapped yet"} · ${m.state}${m.step ? " · " + m.step : ""}${m.stale ? " · layout changed" : ""}` }),
+        ...(m.next_step && !running ? [h("p", { textContent: m.next_step })] : []),
         ...(m.problems_old && (m.problems || []).length ? [h("p", { class: "muted", textContent: "From an earlier mapping, it may be fixed by now. Re-map the slots to check:" })] : []),
         ...(m.problems || []).map((t) => h("p", { class: m.problems_old ? "muted" : "err", textContent: t })),
         ...(m.notes || []).map((t) => h("p", { class: "muted", textContent: t })),
