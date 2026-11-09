@@ -24,9 +24,11 @@ import hashlib
 import logging
 import os
 import re
+import select
 import shutil
 import signal
 import socket
+import ssl
 import struct
 import subprocess
 import tempfile
@@ -57,6 +59,10 @@ HLS_START_WAIT = 12.0       # seconds a playlist request waits for ffmpeg's firs
 RESTART_AFTER = 5.0         # a dead ffmpeg is restarted by a fetch at most this often
 MJPEG_MIN_INTERVAL = 0.2    # ≤ 5 fps to the phone
 MAX_FRAME = 8 * 1024 * 1024
+MAX_QUEUED = 1024 * 1024        # the relay stops reading a side once this much waits for the other
+PUMP_CHUNK = 16384              # at most one write's worth, one TLS record
+PUMP_TICK = 1.0                 # seconds; the pump looks at the clock at least this often
+FLUSH_TIMEOUT = 5.0             # seconds either side gets to take what is queued once the other has ended
 BACKOFF = (1.0, 30.0)
 MAX_RTSP_HEADERS = 64 * 1024
 MAX_RTSP_BODY = 1024 * 1024
@@ -93,26 +99,144 @@ CERT_CHANGED = ("The printer's certificate changed. If you reset the printer or 
 
 # ---------------------------------------------------------------- RTSPS relay (X1 / H2 / X2 / P2S)
 
-def _read_rtsp(sock, buf: bytes) -> tuple[bytes, bytes]:
-    """Read one RTSP text message (headers + Content-Length body) -> (msg bytes, rest)."""
-    while b"\r\n\r\n" not in buf:
+def _parse_rtsp(buf: bytes) -> tuple[bytes, bytes] | None:
+    """One whole RTSP text message (headers + Content-Length body) off the front of `buf` -> (msg, rest); None: not all
+    here yet."""
+    if b"\r\n\r\n" not in buf:
         if len(buf) > MAX_RTSP_HEADERS:
             raise ConnectionError("RTSP headers too long")
-        d = sock.recv(65536)
-        if not d:
-            raise ConnectionError("closed")
-        buf += d
+        return None
     head, rest = buf.split(b"\r\n\r\n", 1)
     m = re.search(rb"(?im)^content-length:\s*(\d+)", head)
     n = int(m.group(1)) if m else 0
     if len(head) > MAX_RTSP_HEADERS or n > MAX_RTSP_BODY:
         raise ConnectionError("RTSP message too large")
-    while len(rest) < n:
+    if len(rest) < n:
+        return None
+    return head + b"\r\n\r\n" + rest[:n], rest[n:]
+
+
+def _read_rtsp(sock, buf: bytes) -> tuple[bytes, bytes]:
+    """Read one RTSP text message -> (msg bytes, rest)."""
+    while (got := _parse_rtsp(buf)) is None:
         d = sock.recv(65536)
         if not d:
             raise ConnectionError("closed")
-        rest += d
-    return head + b"\r\n\r\n" + rest[:n], rest[n:]
+        buf += d
+    return got
+
+
+def _for_printer(buf: bytes, rewrite: Callable[[bytes], bytes]) -> tuple[bytes, bytes]:
+    """What ffmpeg's bytes so far send on to the printer -> (bytes to send, what waits for the rest of its message):
+    interleaved RTCP frames as they are, text messages through `rewrite`."""
+    out = bytearray()
+    while buf:
+        if buf[:1] == b"$":             # interleaved RTCP from ffmpeg
+            if len(buf) < 4:
+                break
+            n = 4 + struct.unpack(">H", buf[2:4])[0]
+            if len(buf) < n:
+                break
+            out += buf[:n]
+            buf = buf[n:]
+            continue
+        got = _parse_rtsp(buf)
+        if got is None:
+            break
+        msg, buf = got
+        out += rewrite(msg)
+    return bytes(out), buf
+
+
+def _pump(cli: socket.socket, up, rewrite: Callable[[bytes], bytes], idle: float) -> None:
+    """Relay between ffmpeg (`cli`) and the printer's TLS socket (`up`) until either ends. One thread both ways: an
+    SSLSocket's one TLS session must not be read and written at the same time from two threads. Non-blocking, so a TLS
+    read that needs a write (or the reverse) waits on what it asked for. Printer silent for `idle` seconds: TimeoutError."""
+    cli.setblocking(False)
+    up.setblocking(False)
+    to_up, to_cli = bytearray(), bytearray()
+    from_cli = b""
+    recv_waits, send_waits = "r", "w"       # what `up` last asked its read and its write to wait for
+    last_up = time.monotonic()
+
+    def cli_ended() -> None:
+        """However ffmpeg's side ended, what it sent first still reaches the printer: stopped while video flows, it has
+        unread bytes, so its close is a reset, with its TEARDOWN still waiting here to be read."""
+        nonlocal from_cli, to_up
+        try:
+            while d := cli.recv(65536):
+                out, from_cli = _for_printer(from_cli + d, rewrite)
+                to_up += out
+        except (OSError, ValueError):       # all read (a would-block or a reset), or a bad last message
+            pass
+        try:
+            up.settimeout(FLUSH_TIMEOUT)
+            up.sendall(to_up)
+        except OSError:
+            pass
+
+    while True:
+        room_down = len(to_cli) < MAX_QUEUED
+        readable = [s for s, on in ((cli, len(to_up) < MAX_QUEUED),
+                                    (up, (room_down and recv_waits == "r") or (to_up and send_waits == "r"))) if on]
+        writable = [s for s, on in ((cli, to_cli),
+                                    (up, (room_down and recv_waits == "w") or (to_up and send_waits == "w"))) if on]
+        left = last_up + idle - time.monotonic()
+        if left <= 0:
+            raise TimeoutError("the camera went silent")
+        # up.pending(): TLS has bytes of a record it already read, and select would not say so
+        wait = 0 if room_down and up.pending() else min(left, PUMP_TICK)
+        can_read, can_write, _ = select.select(readable, writable, [], wait)
+
+        if cli in can_read:
+            try:
+                d = cli.recv(65536)
+            except BlockingIOError:
+                d = None
+            except OSError:
+                d = b""
+            if d == b"":
+                cli_ended()
+                return
+            if d:
+                out, from_cli = _for_printer(from_cli + d, rewrite)
+                to_up += out
+        up_ready = up in can_read or up in can_write
+        if room_down and (up_ready or up.pending()):
+            recv_waits = "r"
+            try:
+                d = up.recv(65536)
+                if not d:
+                    cli.settimeout(FLUSH_TIMEOUT)   # what the printer sent before it ended still reaches ffmpeg
+                    cli.sendall(to_cli)
+                    return
+                to_cli += d
+                last_up = time.monotonic()
+            except (ssl.SSLWantReadError, BlockingIOError):
+                pass
+            except ssl.SSLWantWriteError:
+                recv_waits = "w"
+            except OSError:         # the printer hung up, or stop() shut it down
+                cli.settimeout(FLUSH_TIMEOUT)
+                cli.sendall(to_cli)
+                return
+        if to_up and up_ready:
+            send_waits = "w"
+            try:
+                # a retried TLS write sends this same prefix: to_up only ever grows at its end
+                del to_up[:up.send(bytes(to_up[:PUMP_CHUNK]))]
+            except ssl.SSLWantReadError:
+                send_waits = "r"
+            except (ssl.SSLWantWriteError, BlockingIOError):
+                pass
+        if to_cli and cli in can_write:
+            try:
+                del to_cli[:cli.send(bytes(to_cli[:PUMP_CHUNK]))]
+            except BlockingIOError:
+                pass
+            except OSError:
+                cli_ended()
+                return
 
 
 def _md5(s: str) -> str:
@@ -174,7 +298,7 @@ class RtspRelay:
             return True
 
     def _conn(self, cli: socket.socket) -> None:
-        up = reader = None
+        up = None
         try:
             if not self._track(cli):
                 return
@@ -193,50 +317,9 @@ class RtspRelay:
                 raise ConnectionError("no digest challenge from the camera (is LAN mode liveview on?)")
             realm, nonce = m.group(1).decode(), m.group(2).decode()
             ha1 = _md5(f"{USER}:{realm}:{self._code}")
-            up.settimeout(UPSTREAM_TIMEOUT)
-            cli.settimeout(None)
             local = f"rtsp://127.0.0.1:{self.local_port}".encode()
 
-            def down():
-                try:
-                    while True:
-                        d = up.recv(65536)
-                        if not d:
-                            break
-                        cli.sendall(d)
-                except OSError:
-                    pass
-                finally:
-                    try:
-                        cli.shutdown(socket.SHUT_RDWR)
-                    except OSError:
-                        pass
-            reader = threading.Thread(target=down, daemon=True, name="cam-relay-down")
-            reader.start()
-
-            buf = b""
-            while True:
-                if not buf:
-                    d = cli.recv(65536)
-                    if not d:
-                        break
-                    buf += d
-                if buf[:1] == b"$":  # interleaved RTCP from ffmpeg
-                    while len(buf) < 4:
-                        d = cli.recv(65536)
-                        if not d:
-                            raise ConnectionError("closed")
-                        buf += d
-                    n = 4 + struct.unpack(">H", buf[2:4])[0]
-                    while len(buf) < n:
-                        d = cli.recv(65536)
-                        if not d:
-                            raise ConnectionError("closed")
-                        buf += d
-                    up.sendall(buf[:n])
-                    buf = buf[n:]
-                    continue
-                msg, buf = _read_rtsp(cli, buf)
+            def signed(msg: bytes) -> bytes:
                 head, body = msg.split(b"\r\n\r\n", 1)
                 lines = head.split(b"\r\n")
                 method, uri, ver = lines[0].split(b" ", 2)
@@ -246,16 +329,14 @@ class RtspRelay:
                 auth = (f'Authorization: Digest username="{USER}", realm="{realm}", nonce="{nonce}", '
                         f'uri="{u}", response="{digest}"').encode()
                 keep = [line for line in lines[1:] if not line.lower().startswith(b"authorization:")]
-                up.sendall(b"\r\n".join([b" ".join([method, uri, ver])] + keep + [auth]) + b"\r\n\r\n" + body)
+                return b"\r\n".join([b" ".join([method, uri, ver])] + keep + [auth]) + b"\r\n\r\n" + body
+
+            _pump(cli, up, signed, UPSTREAM_TIMEOUT)
         except (OSError, ValueError, ConnectionError) as e:
             log.info("camera relay to %s: %s", self.ip, type(e).__name__ if not str(e) else e)
         finally:
             with self._lock:
                 self._conns.difference_update({cli, up})
-            if reader is not None:      # it reads `up` and writes `cli`: out of the way before either closes
-                _wake(up)
-                _wake(cli)
-                reader.join(5)
             _close(cli)
             _close(up)
 
