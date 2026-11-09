@@ -10,7 +10,7 @@ found it.
 wsl -d Ubuntu -- sudo bash /mnt/c/<checkout>/tools/e2e/run.sh
 ```
 
-Options: `--only a,d,c,b,e` runs some scenarios (the later ones need a), `--previous vX.Y.Z` adds scenario f
+Options: `--only a,d,c,b,e` runs some scenarios, in the order given, `--previous vX.Y.Z` adds scenario f
 (from a clone with its tags), `--results FILE` copies the results
 (JSON, every check with its outcome) to FILE, and `--keep-work` keeps the work folder in `/tmp/fk-e2e.*` for
 debugging (it holds the throwaway release key and the command logs; delete it afterwards). A full run takes about
@@ -38,7 +38,11 @@ debugging (it holds the throwaway release key and the command logs; delete it af
    get.sh reaches it with `--api http://127.0.0.1:<port>`, the updater with `"updates": {"api", "repo"}` in
    config.json. `--api` and a set-pubkey copy of get.sh are test hooks only; the published get.sh carries the real
    key and talks to api.github.com.
-3. **Runs the scenarios**, with no terminal (as a piped install), and records every check.
+3. **Runs the scenarios**, with no terminal (as a piped install), and records every check. Each scenario starts
+   from the host state it names (`NEEDS` in `e2e.py`): no kit, this checkout's release installed by get.sh, or
+   that install with the e2e phone paired and its spool and tag. Before a scenario the run brings the host there,
+   rebuilding only what the previous scenario changed (e leaves a station, f the previous release), and logs it
+   as `known state:` checks. So any order works, and `--only g` alone installs, pairs and seeds first.
 4. **Cleans up** (also after a failure or Ctrl-C): `uninstall.sh --purge`, the station's system changes undone
    (sleep targets unmasked unless they were masked before, ALSA state restored), packages the run installed
    purged (and any it removed put back), the work folder deleted. Then it compares the host with a snapshot taken
