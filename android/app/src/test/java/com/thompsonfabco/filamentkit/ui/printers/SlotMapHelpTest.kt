@@ -289,4 +289,83 @@ class SlotMapHelpTest {
         assertEquals("Map slots again", SlotMapHelp.buttonLabel(MapStatus(state = "done")))
         assertEquals("Map slots again", SlotMapHelp.buttonLabel(MapStatus(state = "failed")))
     }
+
+    // ---- a v0.5.0 server's outcome and reason ----
+
+    private fun server(outcome: String, reason: String = "none", text: String = "T", next: String = "N", state: String = "done",
+                       calibrated: Boolean = false, problemsOld: Boolean = false, step: String = "") =
+        MapStatus(state = state, step = step, calibrated = calibrated, outcome = outcome, reason = reason,
+            outcomeText = text, nextStep = next, problemsOld = problemsOld)
+
+    @Test fun theServersSentencesAreShownAsTheyAre() {
+        val v = SlotMapHelp.view(server("failed", "offline", "The last mapping failed.",
+            "Map again when the printer is on and online.", state = "failed"))
+        assertEquals(SlotMapOutcome.FAILED, v.outcome)
+        assertEquals("The last mapping failed.", v.headline)
+        assertEquals("Map again when the printer is on and online.", v.detail)
+        assertTrue(v.headlineIsError)
+        assertEquals(MapAction.RETRY, v.action)
+    }
+
+    @Test fun aPrinterThatCannotSayItsSlotNumbersGetsTheManualWay() {
+        for (r in listOf("job_refused", "no_mapping", "numbers_unfit")) {
+            assertEquals(r, MapAction.MANUAL, SlotMapHelp.view(server("not_confirmed", r)).action)
+            assertEquals(r, MapAction.MANUAL, SlotMapHelp.view(server("failed", r, state = "failed")).action)
+        }
+    }
+
+    @Test fun anUnconfirmedMapWithNoReasonGetsTheManualWayToo() {
+        assertEquals(MapAction.MANUAL, SlotMapHelp.view(server("not_confirmed")).action)
+    }
+
+    @Test fun somethingInTheWayMeansMapAgain() {
+        for (r in listOf("developer_mode", "busy", "offline", "not_configured", "cert_changed", "job_failed",
+            "interrupted", "restore_failed", "kit_error")) {
+            assertEquals(r, MapAction.RETRY, SlotMapHelp.view(server("failed", r, state = "failed")).action)
+        }
+        assertEquals(MapAction.RETRY, SlotMapHelp.view(server("failed", "none", state = "failed")).action)
+    }
+
+    @Test fun aConfirmedMapNeedsNothing() {
+        val v = SlotMapHelp.view(server("confirmed", text = "Mapped and confirmed: filament use comes off the spools.",
+            next = "", calibrated = true))
+        assertEquals(SlotMapOutcome.CONFIRMED, v.outcome)
+        assertEquals(MapAction.NONE, v.action)
+        assertNull("no empty next step line", v.detail)
+        assertFalse(v.headlineIsError)
+    }
+
+    @Test fun anUnknownReasonActsAsItsOutcome() {
+        assertEquals(MapAction.RETRY, SlotMapHelp.view(server("failed", "something_new", state = "failed")).action)
+        assertEquals(MapAction.NONE, SlotMapHelp.view(server("partial", "something_new", calibrated = true)).action)
+    }
+
+    @Test fun anUnknownOutcomeFallsBackToTheFlags() {
+        val v = SlotMapHelp.view(server("brand_new", state = "failed"))
+        assertEquals(SlotMapOutcome.FAILED, v.outcome)
+        assertEquals("Slot mapping failed", v.headline)
+        assertEquals(MapAction.RETRY, v.action)
+    }
+
+    @Test fun anOlderServerStillGetsAnAction() {
+        assertEquals(MapAction.RETRY, SlotMapHelp.view(MapStatus(state = "failed")).action)
+        assertEquals(MapAction.NONE, SlotMapHelp.view(MapStatus(state = "done", calibrated = true)).action)
+    }
+
+    @Test fun runningShowsTheStepAndNoNextStep() {
+        val v = SlotMapHelp.view(server("running", text = "Mapping the slots…", next = "x", state = "running",
+            step = "Testing slot A2 (2/3)"))
+        assertEquals("Testing slot A2 (2/3)", v.headline)
+        assertNull(v.detail)
+        assertEquals(MapAction.NONE, v.action)
+    }
+
+    @Test fun anOldFailureIsNotRed() {
+        assertFalse(SlotMapHelp.view(server("failed", "offline", state = "failed", problemsOld = true)).headlineIsError)
+    }
+
+    @Test fun theUnconfirmedHeadlineCarriesTheLoggedOnlyNotice() {
+        assertTrue(SlotMapHelp.view(server("not_confirmed")).saysObserve)
+        assertFalse(SlotMapHelp.view(MapStatus(state = "done", observe = true)).saysObserve)
+    }
 }

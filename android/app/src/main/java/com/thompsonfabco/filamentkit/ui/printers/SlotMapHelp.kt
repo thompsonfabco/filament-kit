@@ -5,6 +5,12 @@ import com.thompsonfabco.filamentkit.net.MapStatus
 enum class SlotMapOutcome { NONE, RUNNING, CONFIRMED, PARTIAL, STALE, SUSPECT, NOT_CONFIRMED, FAILED }
 
 /**
+ * What the section asks the owner to do next: [RETRY] map again (the printer or the kit was in the way), [MANUAL] map
+ * by loading filament (the printer itself could not tell its slot numbers), [NONE] nothing.
+ */
+enum class MapAction { NONE, RETRY, MANUAL }
+
+/**
  * What the "Slot mapping" section says about a [MapStatus]. Problems and notes are the server's words, with a capital
  * first letter; a line that only repeats what the app already says is left out.
  */
@@ -18,6 +24,9 @@ data class SlotMapView(
     val problemsAreError: Boolean = false,
     val notesHeading: String? = null,
     val notes: List<String> = emptyList(),
+    val action: MapAction = MapAction.NONE,
+    /** The headline already says filament use is only logged, so the separate notice would repeat it. */
+    val saysObserve: Boolean = false,
 )
 
 /** Texts and rules for the "Slot mapping" section of the printer screen. */
@@ -49,7 +58,8 @@ object SlotMapHelp {
      */
     fun view(m: MapStatus?): SlotMapView {
         val old = m?.problemsOld == true
-        val base = when {
+        val server = fromServer(m)
+        val base = server ?: when {
             m == null -> SlotMapView(SlotMapOutcome.NONE)
             m.state == "running" -> SlotMapView(SlotMapOutcome.RUNNING, headline = m.step.ifBlank { "Mapping slots…" })
             m.state != "failed" && m.stale -> SlotMapView(
@@ -102,6 +112,10 @@ object SlotMapHelp {
             .filterNot { base.outcome == SlotMapOutcome.PARTIAL && SCHEME_NOTE in it }
             .map(::sentence)
         return base.copy(
+            action = if (server != null) base.action else when (base.outcome) {
+                SlotMapOutcome.FAILED, SlotMapOutcome.NOT_CONFIRMED -> MapAction.RETRY
+                else -> MapAction.NONE
+            },
             problemsHeading = when {
                 problems.isEmpty() -> null
                 old -> OLD_PROBLEMS
@@ -112,6 +126,48 @@ object SlotMapHelp {
             problemsAreError = problems.isNotEmpty() && !old && !good,
             notesHeading = if (notes.isEmpty()) null else NOTES,
             notes = notes,
+        )
+    }
+
+    /** The printer could not say its slot numbers: loading filament by hand is the way to a map. */
+    private val MANUAL_REASONS = setOf("job_refused", "no_mapping", "numbers_unfit")
+
+    /** Something in the way that clears by itself or by a fix elsewhere: mapping again is the step. */
+    private val RETRY_REASONS = setOf("developer_mode", "busy", "offline", "not_configured", "cert_changed",
+        "job_failed", "interrupted", "restore_failed", "kit_error")
+
+    /**
+     * The action for a server's `outcome` and `reason`. A reason the app does not know acts as its outcome does: a
+     * failed or unconfirmed map is mapped again, the rest needs nothing.
+     */
+    fun actionFor(outcome: String?, reason: String?): MapAction = when {
+        outcome in setOf("confirmed", "running", "none", "partial") -> MapAction.NONE
+        reason in MANUAL_REASONS -> MapAction.MANUAL
+        reason in RETRY_REASONS -> MapAction.RETRY
+        outcome == "not_confirmed" -> MapAction.MANUAL      // calibration ran and still proved nothing
+        outcome in setOf("failed", "stale", "suspect") -> MapAction.RETRY
+        else -> MapAction.NONE
+    }
+
+    /**
+     * A v0.5.0 server's own reading: its outcome picks the state and its sentences are shown as they are (the
+     * outcome as the headline, the next step under it). Null when the server does not say, or says an outcome this
+     * app does not know: the flags decide then, as before.
+     */
+    private fun fromServer(m: MapStatus?): SlotMapView? {
+        val code = m?.outcome ?: return null
+        val text = m.outcomeText?.takeIf { it.isNotBlank() } ?: return null
+        val outcome = SlotMapOutcome.entries.firstOrNull { it.name.equals(code, ignoreCase = true) } ?: return null
+        if (outcome == SlotMapOutcome.NONE) return SlotMapView(SlotMapOutcome.NONE)
+        val running = outcome == SlotMapOutcome.RUNNING
+        return SlotMapView(
+            outcome,
+            headline = if (running) m.step.ifBlank { text } else text,
+            headlineIsError = !m.problemsOld && outcome in setOf(
+                SlotMapOutcome.FAILED, SlotMapOutcome.SUSPECT, SlotMapOutcome.NOT_CONFIRMED),
+            detail = if (running) null else m.nextStep?.takeIf { it.isNotBlank() },
+            action = actionFor(code, m.reason),
+            saysObserve = outcome == SlotMapOutcome.NOT_CONFIRMED || outcome == SlotMapOutcome.SUSPECT,
         )
     }
 
