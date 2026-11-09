@@ -549,3 +549,104 @@ def test_an_adopted_reader_brings_nothing(data, moon, tmp_path, monkeypatch):
     p.install(["nfc"])
     assert not (data / "config" / "filament-kit" / "fk_spool.cfg").exists()
 
+
+def _reader_pack(data, moon, tmp_path, monkeypatch, answer=KIT):
+    home = tmp_path / "home"
+    home.mkdir()
+    said, asked = [], []
+
+    def prompt(q):
+        asked.append(q)
+        return answer
+    p = fkpack.Pack(str(data), moon.url, home=str(home), ask=lambda q: True, out=said.append, run=_fake_nfc_run(home),
+                    units_dir=str(tmp_path / "units"), prompt=prompt)
+    monkeypatch.setattr(p, "install_services", lambda *a: None)
+    monkeypatch.setattr(p, "patches", lambda: [])
+    p.said, p.asked, p.reader_cfg = said, asked, home / ".config" / "nfc2klipper" / "nfc2klipper.cfg"
+    return p
+
+
+def _left_at(p, state):
+    """A checkout the pack's last run left in `state`."""
+    d = Path(p.nfc_dir())
+    d.mkdir(parents=True)
+    (d / "nfc2klipper.cfg").write_text(UPSTREAM, encoding="utf-8")
+    (d / "requirements.txt").write_text("", encoding="utf-8")
+    m = p.manifest()
+    m["nfc"] = {"dir": str(d), "state": state}
+    p.save_manifest(m)
+
+
+def test_a_reader_with_no_url_says_its_config_keeps_the_example(data, moon, tmp_path, monkeypatch):
+    p = _reader_pack(data, moon, tmp_path, monkeypatch, answer="")
+    monkeypatch.setattr(p, "nfc_status", lambda: (False, []))
+    p.install(["nfc"])
+    line = [s for s in p.said if "no Spoolman URL" in s]
+    assert len(line) == 1 and str(p.reader_cfg) in line[0] and "spoolman-url" in line[0]
+
+
+def test_a_reader_with_a_url_says_nothing_about_it(data, moon, tmp_path, monkeypatch):
+    p = _reader_pack(data, moon, tmp_path, monkeypatch)
+    monkeypatch.setattr(p, "nfc_status", lambda: (False, []))
+    p.install(["nfc"])
+    assert not any("no Spoolman URL" in s for s in p.said)
+
+
+def test_finishing_a_started_install_asks_for_the_url(data, moon, tmp_path, monkeypatch):
+    """It writes the reader's config, so it needs the answer as much as a first install does."""
+    p = _reader_pack(data, moon, tmp_path, monkeypatch)
+    _left_at(p, "started")
+    monkeypatch.setattr(p, "nfc_status", lambda: (True, []))
+    p.install(["nfc"])
+    assert len(p.asked) == 1 and '"' + KIT + '"' in p.reader_cfg.read_text()
+
+
+def test_a_reader_the_pack_finished_is_not_asked_about(data, moon, tmp_path, monkeypatch):
+    p = _reader_pack(data, moon, tmp_path, monkeypatch)
+    _left_at(p, "done")
+    monkeypatch.setattr(p, "nfc_status", lambda: (True, []))
+    p.install(["nfc"])
+    assert p.asked == []
+
+
+def test_a_folder_the_pack_will_not_touch_is_not_asked_about(data, moon, tmp_path, monkeypatch):
+    p = _reader_pack(data, moon, tmp_path, monkeypatch)
+    Path(p.nfc_dir()).mkdir(parents=True)
+    p.install(["nfc"])
+    assert p.asked == []
+
+
+def test_a_reader_from_an_earlier_pack_gets_the_macros_its_gcode_calls(data, moon, tmp_path, monkeypatch):
+    p = _reader_pack(data, moon, tmp_path, monkeypatch)
+    _left_at(p, "done")
+    monkeypatch.setattr(p, "nfc_status", lambda: (True, []))
+    p.install(["nfc"])
+    assert (data / "config" / "filament-kit" / "fk_spool.cfg").exists()
+
+
+def test_a_foreign_macro_file_still_records_the_reader(data, moon, tmp_path, monkeypatch):
+    """The reader is in by then: the next run mustn't think otherwise because the spool part refused."""
+    p = _reader_pack(data, moon, tmp_path, monkeypatch)
+    monkeypatch.setattr(p, "nfc_status", lambda: (False, []))
+    (data / "config" / "filament-kit").mkdir(parents=True, exist_ok=True)
+    (data / "config" / "filament-kit" / "fk_spool.cfg").write_text("# the owner's own\n")
+    with pytest.raises(fkpack.PackError):
+        p.install(["nfc"])
+    assert p.manifest()["nfc"]["state"] == "done"
+
+
+def test_the_checks_come_before_the_question(data, moon):
+    (data / "config" / "printer.cfg").unlink()
+    p = _asking(data, moon, [KIT])
+    with pytest.raises(fkpack.PackError):
+        p.install(["moonraker"])
+    assert p.asked == []
+
+
+@pytest.mark.parametrize("name", ["kit.local", "kit.example.com"])
+def test_lasttag_allow_refuses_a_name(data, moon, name):
+    """lasttag compares the caller's address with the list as text: a name would lock the kit out, with no word."""
+    p = pack(data, moon)
+    with pytest.raises(fkpack.PackError, match="IP address"):
+        p.install(["lasttag"], allow=[name])
+    assert not (data / "config" / "filament-kit" / "lasttag" / "allow").exists()

@@ -113,7 +113,8 @@ commands from this page: run `klipper pack` to get them with your version's chec
 If the server can't check the release, it prints no commands and says why. That happens when it's offline and doesn't
 keep that release, or when it's a build that was never released. Run it again when the server is online.
 
-It asks about each part and before every change, never overwrites a file it did not write, and makes a backup before
+It asks about each part and before every change, except that a reader it installs brings the spool part's macros, which
+the reader's gcode calls. It never overwrites a file it did not write, and makes a backup before
 its only edits to your own files: one `[include filament-kit/*.cfg]` line in `printer.cfg` and the `moonraker.conf`
 sections. It restarts Klipper or Moonraker only when the printer is idle and you say yes. `status` shows what is installed;
 `uninstall` removes what the pack installed. The changes it made to `moonraker.conf` stay in place, and it tells you

@@ -223,9 +223,9 @@ def test_pack_info_returns_the_checked_command(env, srv, key):
 def test_pack_info_adds_the_spoolman_and_allow_values(env, srv, key):
     _keep(env, srv.add("1.0.0", extra={PACK: PACK_BYTES}))
     info = klipper_cli.pack_info("1.0.0", _cfg(env), fetcher=NoNet(), spoolman_url="http://192.0.2.10:7912",
-                                 allow=["192.0.2.10", "kit.local"])
+                                 allow=["192.0.2.10", "2001:db8::1"])
     assert info["lines"][1].endswith("fk-printer-pack.sh install --spoolman http://192.0.2.10:7912 "
-                                     "--allow 192.0.2.10,kit.local")
+                                     "--allow 192.0.2.10,2001:db8::1")
     assert "--yes" not in " ".join(info["lines"]) and "--parts" not in " ".join(info["lines"])
 
 
@@ -233,6 +233,7 @@ def test_pack_info_adds_the_spoolman_and_allow_values(env, srv, key):
     {"spoolman_url": "http://user:hunter@kit.example.com:7912"}, {"spoolman_url": "http://kit.example.com;id"},
     {"spoolman_url": "http://kit.example.com:7912 --yes"}, {"spoolman_url": "$(id)"}, {"spoolman_url": "kit.example.com"},
     {"allow": ["192.0.2.10;id"]}, {"allow": ["--yes"]}, {"allow": ["a b"]}, {"allow": [""]},
+    {"allow": ["kit.local"]},       # lasttag compares addresses as text: a name would lock the kit out
 ])
 def test_pack_info_refuses_a_bad_value_and_gives_no_command(env, srv, key, kw):
     _keep(env, srv.add("1.0.0", extra={PACK: PACK_BYTES}))

@@ -37,7 +37,6 @@ from .release import ReleaseError
 
 PACK = "fk-printer-pack.tar.gz"
 PACK_URL = re.compile(r"https?://[A-Za-z0-9._\-\[\]:]+(/[A-Za-z0-9._~/\-]*)?")     # no user, no password, no shell
-PACK_HOST = re.compile(r"[A-Za-z0-9.:][A-Za-z0-9.:\-]*")
 REPO_NAME = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")     # as release.Fetcher.release checks it
 
 
@@ -99,6 +98,16 @@ def pack_spoolman(kit_url: str | None, printer_host: str) -> dict:
     return {**out, "choices": [f"{scheme}://{i}:{hp[1]}" for i in (near or ips)]}
 
 
+def _is_ip(value) -> bool:
+    if not isinstance(value, str):
+        return False
+    try:
+        ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    return "%" not in value     # a scope id isn't an address lasttag would see, and it has no place in a shell line
+
+
 def pack_info(version: str, cfg: dict | None = None, *, fetcher: release.Fetcher | None = None,
               spoolman_url: str | None = None, allow=()) -> dict:
     """The printer-pack install command for release `version`, pinned to the pack's SHA-256 from that release's
@@ -110,8 +119,9 @@ def pack_info(version: str, cfg: dict | None = None, *, fetcher: release.Fetcher
     if spoolman_url and not PACK_URL.fullmatch(spoolman_url):       # the value may hold a password: never in the error
         raise ReleaseError("the Spoolman URL for the printer must be a plain http:// or https:// address, with no "
                            "user or password")
-    if any(not isinstance(h, str) or not PACK_HOST.fullmatch(h) for h in allow):
-        raise ReleaseError("each address lasttag allows must be a plain host name or address")
+    if any(not _is_ip(h) for h in allow):
+        raise ReleaseError("each address lasttag allows must be an IP address: it compares them as text, so a name "
+                           "would lock the kit out")
     options = (f" --spoolman {shlex.quote(spoolman_url)}" if spoolman_url else "") + (
         f" --allow {shlex.quote(','.join(allow))}" if allow else "")
     try:

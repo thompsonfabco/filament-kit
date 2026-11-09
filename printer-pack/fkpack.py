@@ -27,6 +27,7 @@ cancelled / error), each only when you say yes.
 import argparse
 import datetime
 import difflib
+import ipaddress
 import json
 import os
 import re
@@ -272,6 +273,14 @@ class Pack:
                 lines.append("  {}: differs from the local changes (left as they are)".format(name))
         return True, lines
 
+    def nfc_will_install(self, m):
+        """Whether part_nfc is going to install or finish a reader, and so write its config: the same test it uses."""
+        d = self.nfc_dir()
+        nfc = m.get("nfc") or {}
+        if self.nfc_status()[0]:
+            return nfc.get("dir") == d and nfc.get("state") == "started"
+        return not os.path.exists(d)
+
     def part_nfc(self, m, device, spoolman, web):
         d = self.nfc_dir()
         services = ["nfc2klipper_backend"] + (["nfc2klipper_api"] if web else [])
@@ -286,11 +295,11 @@ class Pack:
             if missing:
                 self.out("  its service(s) {} are not installed".format(", ".join(missing)))
                 self.install_services(m, d, missing)
-            return False
+            return
         if os.path.exists(d) and not present:
             self.out("  {} exists but is not a git checkout of nfc2klipper; left alone (move it away to install)"
                      .format(d))
-            return False
+            return
         m["nfc"] = {"dir": d, "state": "started"}
         self.save_manifest(m)                 # a failure below is finished by the next install, never "adopted"
         if present:
@@ -322,9 +331,11 @@ class Pack:
             self.out("  {} exists; the pack's version is in {} for you to compare".format(target[:-7], target))
         with open(target, "w", encoding="utf-8") as f:
             f.write(nfc_config(upstream, device, spoolman, self.moonraker, web))
+        if not spoolman:
+            self.out("  no Spoolman URL given, so {} keeps the example's spoolman-url and tag lookups won't reach the "
+                     "kit; set it there (--spoolman sets it on an install)".format(target))
         self.install_services(m, d, services)
         m["nfc"]["state"] = "done"
-        return True
 
     def _stage(self, name, text):
         """A unit file staged for `sudo install` in a private temp folder (not printer_data, which Moonraker's
@@ -454,12 +465,17 @@ class Pack:
                 allow=()):
         if spoolman and not SPOOLMAN_URL.fullmatch(spoolman):
             raise PackError("the Spoolman URL must be one http:// or https:// address")
-        if not spoolman and ("moonraker" in parts or ("nfc" in parts and not self.nfc_status()[0])):
-            spoolman = self.ask_spoolman()
+        for a in allow:
+            try:
+                ipaddress.ip_address(a)
+            except ValueError:      # lasttag compares the caller's address with the list as text: a name never matches
+                raise PackError("--allow takes IP addresses, not names: {}".format(a)) from None
         objs = self.objects()
         if not os.path.isfile(os.path.join(self.cfg, "printer.cfg")):
             raise PackError("no printer.cfg in {}; give --data <printer_data folder>".format(self.cfg))
         m = self.manifest()
+        if not spoolman and ("moonraker" in parts or ("nfc" in parts and self.nfc_will_install(m))):
+            spoolman = self.ask_spoolman()
         self.changed = False
         self.moonraker_changed = False
         for part in parts:
@@ -469,7 +485,10 @@ class Pack:
             elif part in ("check", "loadtemp"):
                 self.part_scripts(m, part)
             elif part == "nfc":
-                if self.part_nfc(m, nfc_device, spoolman, web) and "fk_spool.cfg" not in m["files"]:
+                self.part_nfc(m, nfc_device, spoolman, web)
+                nfc = m.get("nfc") or {}        # the pack's own reader, this run's or an earlier one's; never an adopted one
+                if nfc.get("dir") == self.nfc_dir() and nfc.get("state") == "done" and "fk_spool.cfg" not in m["files"]:
+                    self.save_manifest(m)       # the reader is in, whatever the spool part says about its file
                     self.out("  the reader's gcode uses the spool part's macros: installing them too")
                     self.part_spool(m, objs, scan_ok, scan_unknown)
             elif part == "lasttag":
@@ -664,7 +683,7 @@ def main(argv=None):
     ap.add_argument("--nfc-device", default="tty:USB0:pn532", help="nfcpy device of the reader")
     ap.add_argument("--spoolman", default="", help="the kit's Spoolman URL, e.g. http://filament.home.arpa:7912")
     ap.add_argument("--web", action="store_true", help="turn on nfc2klipper's web page (port 5001, no password)")
-    ap.add_argument("--allow", default="", help="lasttag: comma list of addresses that may read it (the kit server)")
+    ap.add_argument("--allow", default="", help="lasttag: comma list of IP addresses that may read it (the kit server)")
     ap.add_argument("--yes", action="store_true", help="answer yes to every question (for scripted installs)")
     a = ap.parse_args(argv)
     if os.geteuid() == 0 if hasattr(os, "geteuid") else False:

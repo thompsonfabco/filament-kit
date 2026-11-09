@@ -18,4 +18,4 @@ Run on the printer as its normal user:
 It never overwrites a file it did not write, and shows a diff and asks before its only edits to your own config (one
 include line in `printer.cfg`, the `moonraker.conf` sections). Install and uninstall can be run again at any time.
 Options: `--data <printer_data>`, `--klipper <klipper folder>` (default `~/klipper`), `--moonraker <url>`,
-`--parts`, `--spoolman <url>`, `--allow <addresses>` (lasttag), `--yes`.
+`--parts`, `--spoolman <url>`, `--allow <IP addresses>` (lasttag), `--yes`.
