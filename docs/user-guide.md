@@ -440,7 +440,7 @@ Spools in a printer's slots have the location "<printer name> – AMS <slot>" in
 number when it has no name). If you rename a printer, the spools already in its slots keep the old location
 text: load them again (or fix their location in Spoolman) so filament use finds them.
 
-#### When mapping fails: map by loading filament (v0.4.4)
+#### When mapping fails: map by loading filament (v0.5.0)
 
 If **Map slots** keeps failing, map the printer by hand. On the setup page, open **Printers** and tap **Map by loading
 filament** next to the printer (it is also offered under a failed mapping). The page names one slot at a time:
@@ -717,7 +717,7 @@ hand: `sudo systemctl unmask sleep.target suspend.target hibernate.target hybrid
   computer and paste the link; it checks the link with the server and says "expired" if you were late. On an
   all-in-one both run on the same machine. The station's pairing can reach only the station part of the server.
   `sudo filament-kit pair` on a station-only computer says that pairing runs on the kit server.
-- **Pairing from the station's own screen (v0.4.4).** An unpaired station asks the kit server named in
+- **Pairing from the station's own screen (v0.5.0).** An unpaired station asks the kit server named in
   `station.allow` when it starts, and again when you hold yellow while it shows "Not paired". Its screen shows
   "Pair code" and six digits, and it says them. On the setup page, open **Devices**, then **Stations asking to
   pair**, and tap **Show requests**. Tap **Pair** only if the page shows the same six digits; otherwise tap
