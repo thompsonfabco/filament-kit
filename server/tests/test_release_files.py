@@ -140,6 +140,12 @@ def test_release_no_grep_q_after_a_pipe():
     assert not re.search(r"\|\s*grep\s+-[a-zA-Z]*q", text)
 
 
+def test_release_defaults_are_beside_the_checkout():
+    text = _read("tools/make_release.sh")
+    assert "${FK_LIBRARY_SRC:-$ROOT/../filament-library}" in text and "${FK_JDK:-$ROOT/../jdk}" in text
+    assert "/c/" not in text and "/g/" not in text
+
+
 def test_release_version_code_defaults_to_the_workflows_formula():
     """A tarball built by hand without FK_VERSION_CODE used to carry an app with versionCode 1, which no phone updates
     to. Unset, the script now computes MAJOR*10000 + MINOR*100 + PATCH from the tree's version, as release.yml and

@@ -3,6 +3,7 @@
 # Works on Linux and on the Windows dev PC under Git Bash.
 # Contents: install.sh, uninstall.sh, install/ (units, avahi, helper scripts),
 # the filament_kit wheel, and app/filament-kit.apk + app/version.txt (signed Android release build).
+# FK_JDK: the JDK for the Android build when JAVA_HOME is not set (default ../jdk beside the checkout).
 # FK_DIST: the output folder (default dist, relative to the checkout). FK_NO_APP=1: no Android build and no
 # app/ (the tarball test in server/tests; nothing under android/ is touched).
 # FK_NIGHTLY=1 (.github/workflows/nightly.yml): dist/filament-kit-<version>-nightly.<date>.tar.gz with a NIGHTLY file and
@@ -122,8 +123,9 @@ elif [ "$nightly" = 1 ]; then
     echo "FK_NO_APP=1: no Android build"
 elif [ -n "${FK_KEYSTORE:-}" ]; then
     [ -n "${FK_KEYSTORE_PASSWORD:-}" ] || { echo "error: FK_KEYSTORE set without FK_KEYSTORE_PASSWORD" >&2; exit 1; }
-    if [ -z "${JAVA_HOME:-}" ] && [ -d /g/Android/jdk-21.0.13+9 ]; then
-        export JAVA_HOME=/g/Android/jdk-21.0.13+9
+    # no JAVA_HOME: FK_JDK, default a jdk folder beside this checkout; with neither, Gradle looks on PATH
+    if [ -z "${JAVA_HOME:-}" ] && [ -d "${FK_JDK:-$ROOT/../jdk}" ]; then
+        export JAVA_HOME=${FK_JDK:-$ROOT/../jdk}
     fi
     rm -f "$apk_dir"/*.apk
     (cd android && ./gradlew --no-daemon assembleRelease) \
@@ -178,9 +180,9 @@ echo "built $dist/fk-printer-pack.tar.gz"
 # ---------- library asset (optional) ----------
 # The filament-library data is a separate release asset, library-<date>.tar.gz, plus library.tar.gz under the
 # fixed name the default `library.url` points at (releases/latest/download/library.tar.gz). Built from a
-# filament-library checkout (FK_LIBRARY_SRC, default /c/CODING/filament-library) after the same validation the
+# filament-library checkout (FK_LIBRARY_SRC, default: beside this checkout) after the same validation the
 # program applies on download; skipped when there is no checkout. Nothing is uploaded here.
-lib_src=${FK_LIBRARY_SRC:-/c/CODING/filament-library}
+lib_src=${FK_LIBRARY_SRC:-$ROOT/../filament-library}
 if [ "$nightly" = 1 ]; then
     echo "nightly: no library asset (installed kits take the library from the stable release)"
 elif [ -f "$lib_src/index.json" ]; then
