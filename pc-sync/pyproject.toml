@@ -11,7 +11,7 @@ license = {text = "GPL-3.0-or-later"}
 dependencies = []
 
 [project.optional-dependencies]
-test = ["pytest==8.3.4", "cryptography>=44"]  # cryptography: the test TLS server only
+test = ["pytest==8.3.4", "pytest-xdist>=3.6", "cryptography>=44"]  # cryptography: the test TLS server only
 
 [project.scripts]
 filament-kit-sync = "fksync.__main__:main"

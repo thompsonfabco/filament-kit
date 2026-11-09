@@ -198,7 +198,8 @@ def test_idle_stop_kills_ffmpeg(ffmpeg_hub):
     ffmpeg_hub.touch_hls("H1")
     info = _started(ffmpeg_hub, "H1")
     assert wait_until(lambda: not pid_alive(info["pid"]) and not pid_alive(info["child"]), 10)
-    assert not ffmpeg_hub.dir_for("H1").exists(), "segments are removed with the stream"
+    # the process goes first, then the stop removes its folder
+    assert wait_until(lambda: not ffmpeg_hub.dir_for("H1").exists(), 10), "segments are removed with the stream"
 
 
 # ---------------------------------------------------------------- RTSP relay (TLS + Digest)

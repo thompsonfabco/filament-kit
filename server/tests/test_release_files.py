@@ -80,8 +80,7 @@ def test_pc_sync_workflow():
 
 def test_server_workflow_runs_pc_sync_tests():
     text = _read(".github/workflows/server.yml")
-    assert "./pc-sync[test]" in text
-    assert "pytest -rs pc-sync/tests" in text
+    assert "tools/testenv.sh" in text and "pc-sync" in _read("tools/testenv.sh")
 
 
 def test_installer_is_per_user():
@@ -915,9 +914,25 @@ def test_the_release_pins_the_library_commit_and_needs_its_asset():
 
 
 def test_ci_runs_the_web_tests_and_the_other_suites():
-    """The web module's tests skip themselves without the extra, so CI must install it: "green" must mean the same at each stage."""
-    text = _read(".github/workflows/server.yml")
-    assert '"./server[test,web]"' in text and "timeout-minutes:" in text and "pytest -rs server/tests" in text
-    for suite in ("printer-pack/tests", "integrations/orca-spool-sync/tests", "reader/tools", "test_root_links.py",
-                  "tools/test_get_e2e.py", "refs/tags/v0.3.0", "tools/e2e/*.sh", "printer-pack/*.sh"):
-        assert suite in text, suite
+    """The web module's tests skip themselves without the extra, so the recipe must install it: "green" must mean the same at each
+    stage, so CI runs the same script as everyone else."""
+    flow, recipe = _read(".github/workflows/server.yml"), _read("tools/testenv.sh")
+    assert "bash tools/testenv.sh --root --lint" in flow and "timeout-minutes:" in flow and "refs/tags/v0.3.0" in flow
+    assert "pytest " not in flow.split("testenv.sh")[1]
+    for suite in ('server[test,web]', 'pc-sync[test]', "-n \"$WORKERS\"", "-rfEs", "printer-pack/tests", "integrations/orca-spool-sync/tests",
+                  "reader/tools", "test_root_links.py", "tools/test_get_e2e.py", "tools/e2e/*.sh", "printer-pack/*.sh", "tools/e2e/klipper.sh"):
+        assert suite in recipe, suite
+
+
+def test_every_workflow_run_of_pytest_is_parallel():
+    for name in ("pc-sync", "release", "reader"):
+        for line in _read(f".github/workflows/{name}.yml").splitlines():
+            if line.strip().removeprefix("run: ").startswith("pytest "):
+                assert "-n auto" in line, (name, line)
+    assert "-n $Workers" in _read("tools/testenv.ps1") and "-rfEs" in _read("tools/testenv.ps1")
+
+
+def test_the_recipe_refuses_a_windows_drive_and_tests_this_tree_not_its_venv():
+    recipe = _read("tools/testenv.sh")
+    assert "/mnt/*)" in recipe and "PYTHONPATH=$ROOT/server:$ROOT/pc-sync" in recipe and "sha256sum" in recipe
+    assert "--basetemp=\"$RUN" in recipe and "/tmp" not in recipe.replace("/tmp can be", "")

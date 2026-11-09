@@ -160,7 +160,7 @@ jobs:
       - name: Tests
         run: |
           pip install "./pc-sync[test]"
-          pytest pc-sync/tests
+          pytest -n auto -rfEs pc-sync/tests
 
       - name: PyInstaller
         run: |
@@ -212,7 +212,7 @@ jobs:
       - name: Tests
         run: |
           pip install "./pc-sync[test]"
-          pytest pc-sync/tests
+          pytest -n auto -rfEs pc-sync/tests
 
       - name: PyInstaller and the Linux tarball
         run: |
