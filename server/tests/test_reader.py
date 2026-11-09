@@ -579,19 +579,21 @@ def test_queue_final_refusals_drop_the_job(kit, code):
 
 def test_scan_reply_deadline_counts_from_the_start(app, token, kit, sm, monkeypatch):
     """M1: SCAN_WAIT is a deadline from the start of the scan: slow lookups shorten the wait for the load."""
-    monkeypatch.setattr(reader, "SCAN_WAIT", 0.6)
+    monkeypatch.setattr(reader, "SCAN_WAIT", 1.5)
     monkeypatch.setattr(reader, "MIN_WAIT", 0.05)
     slow_get = sm.get
 
     def get(path):
-        time.sleep(0.5)
+        time.sleep(1.2)
         return slow_get(path)
     sm.get = get
-    kit.load_delay = 2.0
-    t0 = time.monotonic()
+    kit.load_delay = 5.0
     with client(app) as c:
+        t0 = time.monotonic()       # after the app's start, which a crowded machine makes slow
         body = scan(c, token).json()
-    assert time.monotonic() - t0 < 1.0 and body["status"] == "set" and "sent" in body["message"]
+        took = time.monotonic() - t0
+    # from the start of the scan: about 1.5 s. A wait counted from the lookups' end would be about 2.7 s
+    assert took < 2.4 and body["status"] == "set" and "sent" in body["message"]
 
 
 def test_unconfirmed_comes_first_in_the_message(app, token, kit):
