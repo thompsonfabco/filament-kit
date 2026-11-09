@@ -300,8 +300,15 @@ def routes(page) -> list[tuple]:
             serial = page._serial(request)
 
             def run():
+                if page._entry(serial).family == "klipper":
+                    kf = getattr(page.printers, "klipper", None)
+                    if kf is None:
+                        raise Refused(409, "the klipper module is off on this server")
+                    session = kf.manual
+                else:
+                    session = mapper_of(serial).manual
                 try:
-                    return fn(mapper_of(serial).manual, serial, body)
+                    return fn(session, serial, body)
                 except manual_mod.ManualError as e:
                     raise Refused(e.status, str(e)) from None
             out = await anyio.to_thread.run_sync(run)

@@ -172,6 +172,7 @@ function klipperRow(p) {
       pill(p.state === "connected", "connected", nice(p.state)), " ", pill(p.api_key, "API key set", "no API key")),
     h("div", { class: "row" }, key,
       h("button", { textContent: p.api_key ? "Replace key" : "Set key", on: { click: () => change(box, printerPath(p, "api_key"), { key: key.value }, null, [key]) } }),
+      h("button", { class: "secondary", textContent: "Map by loading filament", on: { click: () => manualMap(p, box) } }),
       p.api_key ? h("button", { class: "secondary", textContent: "Clear key", on: { click: () => change(box, printerPath(p, "api_key"), { key: "" }) } }) : null, lane),
     h("div", { class: "row" },
       testButton(p, box),

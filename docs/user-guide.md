@@ -459,6 +459,9 @@ share the map in a printer report for other owners of the same model. The kit se
 to make the report (**Collect a report** in the phone web app, or `sudo filament-kit printer report <serial>`) and
 attach it to an issue.
 
+A Klipper printer has the same button: it names its tools or lanes, and you make each one active. See the Klipper
+guide.
+
 If a printer's certificate changed, the server stops talking to it. If you reset the printer or its mainboard was
 replaced, add the printer again with its Access Code (or run `sudo filament-kit printer unpin <serial>`). If not,
 something else may be answering at the printer's address: check the printer's IP before re-adding it.

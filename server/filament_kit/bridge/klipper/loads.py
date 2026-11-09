@@ -186,24 +186,25 @@ class LoadsMixin:
         model, system, adapter = self.model(pid)
         with c.lock:
             st, sid, db = dict(c.status), c.spool_id, c.lane_db
+        plabel = self.printer_label(pid, label, st, sid, db, model, system, adapter)    # the owner's map, if any
         try:
-            adapter.spool_on(st, sid, db, label, model, system)
+            adapter.spool_on(st, sid, db, plabel, model, system)
         except UnknownSlot as e:
             raise loading.NotFound(f"{registry.display_name(registry.load()[pid])} has no slot {label}") from e
-        return c, model, system, adapter, st
+        return c, model, system, adapter, st, plabel
 
     def load(self, sm, pid: str, label: str, spool_id, dry: bool, *, sealed_location: str = loading.SEALED) -> dict:
         p = registry.load().get(pid)
         if p is None:
             raise loading.NotFound(f"no printer {pid}")
         spool = loading._spool(sm, spool_id)
-        c, model, system, adapter, st = self._target(pid, label)
+        c, model, system, adapter, st, plabel = self._target(pid, label)
         if c.state not in ("connected", "unknown_model"):
             raise PrinterOffline(pid)
         if (st.get("print_stats") or {}).get("state") == "printing":
             raise loading.SlotInUse(f"{registry.display_name(p)} is printing; load {label} when it is paused or done")
         try:
-            gcode = adapter.set_gcode(label, spool["id"], model, system, self.hw(), st)
+            gcode = adapter.set_gcode(plabel, spool["id"], model, system, self.hw(), st)
         except (UnknownSlot, NotSupported) as e:
             raise loading.NotFound(f"{label}: {e}") from e
         loc = self._location(pid, label)
@@ -218,7 +219,7 @@ class LoadsMixin:
         with self._slot_lock(pid, label):
             try:
                 c.client.gcode(gcode)
-                confirmed = self._wait_shows(pid, label, spool["id"])
+                confirmed = self._wait_shows(pid, plabel, spool["id"])
                 if not confirmed:
                     result["problems"].append(f"{label}: not confirmed (the printer did not show spool {spool['id']}"
                                               f" within {CONFIRM_TIMEOUT:g} s); Spoolman left unchanged")
@@ -238,6 +239,7 @@ class LoadsMixin:
         return {**result, "spool": final, "confirmed": confirmed, "moved_back": moved}
 
     def _wait_shows(self, pid: str, label: str, spool_id: int) -> bool:
+        """`label` is the printer's own (not the owner's map)."""
         end = time.monotonic() + CONFIRM_TIMEOUT
         c = self._conn(pid)
         drops = c.sub.drops if c is not None and c.sub else 0
@@ -265,11 +267,11 @@ class LoadsMixin:
         online = c is not None and c.state in ("connected", "unknown_model")
         gcode = None
         if online:
-            c, model, system, adapter, st = self._target(pid, label)
+            c, model, system, adapter, st, plabel = self._target(pid, label)
             if (st.get("print_stats") or {}).get("state") == "printing":
                 raise loading.SlotInUse(f"{registry.display_name(p)} is printing; unload {label} once it is done")
             try:
-                gcode = adapter.clear_gcode(label, model, system, self.hw(), st)
+                gcode = adapter.clear_gcode(plabel, model, system, self.hw(), st)
             except NotSupported:
                 gcode = None
         with self._slot_lock(pid, label):
