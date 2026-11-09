@@ -245,6 +245,8 @@ def _profile_status_lines() -> bool:
         wait = builds.pc_waiting_text(pc)
         if wait:
             print(f"--   {wait}")
+        if pc.get("failure"):
+            print(f"--   PC sync at {_fmt_time(pc['failure']['at'])}: {pc['failure']['text']}")
     else:
         print("--   PC sync: not set up (see README: Pair your PC)")
     return good

@@ -161,7 +161,8 @@ first PC that syncs is the one. To move to another PC, remove the first one with
    type `y` to confirm it. Then it asks for the 6-digit code.) From then on the PC syncs every 10 minutes. While
    Bambu Studio is open it waits and tries again later (see [While Bambu Studio is open](#while-bambu-studio-is-open-v040)).
 
-The link and the code expire after about 10 minutes. If they do, run `sudo filament-kit pair --pc` again.
+The link and the code expire after about 10 minutes. If they do, run `sudo filament-kit pair --pc` again. Pairing again
+keeps the pairing that works until the new one is proven: a refused link changes nothing.
 
 ### Stable and Beta Bambu Studio (v0.4.0)
 
@@ -269,7 +270,7 @@ to update.
 (or type the server address and the 6-digit code), as on Windows.
 
 **Status.** `filament-kit-sync status` shows the server, the Bambu Studio and Orca Slicer folders it found, the last run
-and the installed build. `systemctl --user list-timers filament-kit-sync.timer` shows the next run. The log is
+(what stopped it, if it failed) and the installed build. `systemctl --user list-timers filament-kit-sync.timer` shows the next run. The log is
 `~/.local/share/filament-kit-sync/sync.log`. `filament-kit-sync run` runs one sync now.
 
 **While logged out.** The timer runs only while you are logged in. To run it while you are logged out too, run
