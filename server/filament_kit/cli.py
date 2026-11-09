@@ -206,10 +206,8 @@ def _library_status_lines() -> None:
     if lc is not None and not lc["ok"]:
         # a warning, not a failure: the last good version (or none) stays in use
         print(f"--   library update: {lc['error']}")
-    skipped = (lc or {}).get("skipped")
-    if isinstance(skipped, dict):
-        print(f"--   library: {skipped.get('entries', 0)} entries and {skipped.get('parts', 0)} fields skipped: newer rules; "
-              "a kit update will read them")
+    if st["skipped"]:
+        print(f"--   library: {st['skipped']}")
 
 
 def _attempt_failed(st: dict) -> str | None:
@@ -867,6 +865,8 @@ def cmd_library_status() -> int:
         print("last check: never")
     else:
         print(f"last check: {_fmt_time(lc['at'])} {'ok' if lc['ok'] else 'failed: ' + str(lc['error'])}")
+    if st["skipped"]:
+        print(st["skipped"])
     return 0
 
 
@@ -899,6 +899,9 @@ def cmd_library_update(scheduled: bool) -> int:
         return 0
     print(f"library version {r.version} installed ({r.downloaded} entr{'y' if r.downloaded == 1 else 'ies'} "
           f"downloaded)")
+    text = library.skipped_text()
+    if text:
+        print(text)
     _request_rebuild(f"library updated to version {r.version}")
     return 0
 

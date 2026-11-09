@@ -261,10 +261,12 @@ def salvage(entry) -> tuple[dict | None, int]:
     gone += len(entry) - len(out)
     if isinstance(out.get("fields"), dict):
         fields = {k: v for k, v in out["fields"].items() if not _field_errors(k, v)}
-        lo, hi = _num(_first(fields, "nozzle_temperature_range_low")), _num(_first(fields, "nozzle_temperature_range_high"))
-        if lo is not None and hi is not None and lo > hi:     # neither can be trusted
-            fields.pop("nozzle_temperature_range_low")
-            fields.pop("nozzle_temperature_range_high")
+        pair = ("nozzle_temperature_range_low", "nozzle_temperature_range_high")
+        lo, hi = _num(_first(fields, pair[0])), _num(_first(fields, pair[1]))
+        # one limit left over would pair with the parent's other limit, which it was never written to fit: neither can be trusted
+        if (lo is not None and hi is not None and lo > hi) or any(k in out["fields"] and k not in fields for k in pair):
+            for k in pair:
+                fields.pop(k, None)
         gone += len(out["fields"]) - len(fields)
         out["fields"] = fields
     if isinstance(out.get("published_ranges"), dict):
@@ -867,12 +869,11 @@ def _parse_index(raw: bytes, current: int) -> tuple[dict, list[dict]]:
     return idx, rows
 
 
-def _record_check(now: float, error: str | None, skipped: dict | None = None) -> None:
+def _record_check(now: float, error: str | None) -> None:
     old = _read_json(_dir() / "last_check.json")
     last_ok = old.get("last_ok_at") if isinstance(old, dict) else None
     _write_json(_dir() / "last_check.json",
-                {"at": now, "ok": error is None, "error": error, "last_ok_at": now if error is None else last_ok,
-                 "skipped": skipped})
+                {"at": now, "ok": error is None, "error": error, "last_ok_at": now if error is None else last_ok})
 
 
 def _new_dir_name(version: int, now: float) -> str:
@@ -936,7 +937,7 @@ def update(url: str | None = None, *, opener=None, now: float | None = None) -> 
             # (a newer one may read more of it)
             read_before = cur_idx.get("signed_rows") == new_rows and cur_idx.get("read_by") == __version__
             if idx["library_version"] == cur_version and (new_rows == cur_rows or read_before):
-                _record_check(now, None, cur_idx.get("skipped"))
+                _record_check(now, None)
                 return UpdateResult(False, cur_version, 0, None, note=note)
             signed = archive is not None and table is not None
             kept: list[dict] = []
@@ -1004,7 +1005,7 @@ def update(url: str | None = None, *, opener=None, now: float | None = None) -> 
                 (_dir() / "previous.json").unlink(missing_ok=True)
             _write_json(_dir() / "current.json", {"dir": name, "version": idx["library_version"], "at": now})
             _prune({name} | ({old["dir"]} if old else set()))
-            _record_check(now, None, skipped)
+            _record_check(now, None)
             return UpdateResult(True, idx["library_version"], downloaded, None, note=note)
         except Exception as e:  # noqa: BLE001 - every failure must clean up and be recorded, never half-swap
             if tmp is not None:
@@ -1064,7 +1065,7 @@ def last_check() -> dict | None:
     lc = _read_json(_dir() / "last_check.json")
     if not isinstance(lc, dict):
         return None
-    return {"at": lc.get("at"), "ok": lc.get("ok") is True, "error": lc.get("error"), "skipped": lc.get("skipped")}
+    return {"at": lc.get("at"), "ok": lc.get("ok") is True, "error": lc.get("error")}
 
 
 def display_url(url) -> str:
@@ -1079,7 +1080,23 @@ def display_url(url) -> str:
     return f"{u.scheme}://{u.hostname}{f':{port}' if port else ''}{u.path}"
 
 
+def skipped() -> dict | None:
+    """What this kit left out of the library in use: kept with that library, so a failed check or a rollback can't change it."""
+    got = _current()[1].get("skipped")
+    return got if isinstance(got, dict) else None
+
+
+def skipped_text() -> str | None:
+    """That, as one sentence, or None."""
+    got = skipped()
+    if got is None:
+        return None
+    parts = [f"{n} {word if n == 1 else plural}"
+             for n, word, plural in ((got.get("entries", 0), "entry", "entries"), (got.get("parts", 0), "field", "fields")) if n]
+    return f"{' and '.join(parts)} left out, which this kit can't read; a newer kit may"
+
+
 def status() -> dict:
     lib = load()
     return {"version": lib.version, "source": lib.source, "local": lib.local_count,
-            "url": display_url(configured_url()), "last_check": last_check()}
+            "url": display_url(configured_url()), "last_check": last_check(), "skipped": skipped_text()}

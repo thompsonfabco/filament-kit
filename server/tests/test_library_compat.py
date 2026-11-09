@@ -45,8 +45,7 @@ def test_a_new_field_key_is_dropped_and_the_entry_stays(fresh, key):  # noqa: F8
     assert r.error is None and r.changed
     lib = library.load()
     assert lib.source == "updated" and lib.version == 90
-    lc = library.last_check()
-    assert lc["ok"] is True and lc["skipped"] == {"entries": 0, "parts": 2}
+    assert library.last_check()["ok"] is True and library.skipped() == {"entries": 0, "parts": 2}
     stored = library._current()[1]
     assert stored["read_by"] and len(stored["entries"]) == len(_paths(files))
 
@@ -68,7 +67,7 @@ def test_a_published_range_it_cant_read_goes_alone(fresh, key):  # noqa: F811
     p = _paths(files)[0]
     _change(files, p, lambda e: e["published_ranges"].update(new_range="1-2"))
     assert _install(key, files).error is None
-    assert library.last_check()["skipped"]["parts"] == 1
+    assert library.skipped()["parts"] == 1
 
 
 def test_an_entry_missing_something_required_goes_whole(fresh, key, monkeypatch):  # noqa: F811
@@ -80,7 +79,7 @@ def test_an_entry_missing_something_required_goes_whole(fresh, key, monkeypatch)
     assert r.error is None
     idx = library._current()[1]
     assert paths[0] not in [x["path"] for x in idx["entries"]]
-    assert library.last_check()["skipped"]["entries"] == 1
+    assert library.skipped()["entries"] == 1
 
 
 def test_a_new_entry_schema_version_goes_whole(fresh, key, monkeypatch):  # noqa: F811
@@ -89,7 +88,7 @@ def test_a_new_entry_schema_version_goes_whole(fresh, key, monkeypatch):  # noqa
     p = _paths(files)[0]
     _change(files, p, lambda e: e.update(schema_version=2))
     assert _install(key, files).error is None
-    assert library.last_check()["skipped"]["entries"] == 1
+    assert library.skipped()["entries"] == 1
 
 
 def test_too_many_gone_refuses_and_keeps_the_current_library(fresh, key):  # noqa: F811
@@ -161,7 +160,7 @@ def test_the_same_release_again_does_nothing_until_a_newer_kit_reads_it(fresh, k
     tar = tar_bytes(_rehash(files))
     assert library.update(URL, opener=release_web(key, tar)).changed is True
     again = library.update(URL, opener=release_web(key, tar))
-    assert again.changed is False and library.last_check()["skipped"] == {"entries": 0, "parts": 1}
+    assert again.changed is False and library.skipped() == {"entries": 0, "parts": 1}
     monkeypatch.setattr(library, "__version__", "99.0.0")
     assert library.update(URL, opener=release_web(key, tar)).changed is True
 
@@ -169,7 +168,7 @@ def test_the_same_release_again_does_nothing_until_a_newer_kit_reads_it(fresh, k
 def test_a_clean_release_keeps_its_signed_index_as_it_was_and_says_nothing(fresh, key):  # noqa: F811
     files = _rehash(fixture_files())
     assert library.update(URL, opener=release_web(key, tar_bytes(files))).error is None
-    assert library.last_check()["skipped"] is None
+    assert library.skipped() is None and library.status()["skipped"] is None
     root = library._current()[0]
     assert (root / "index.json").read_bytes() == files["index.json"]
 
@@ -181,7 +180,62 @@ def test_status_says_how_many(fresh, key, monkeypatch, capsys):  # noqa: F811
     assert _install(key, files).error is None
     capsys.readouterr()
     cli._library_status_lines()
-    assert "0 entries and 1 fields skipped: newer rules; a kit update will read them" in capsys.readouterr().out
+    assert "1 field left out, which this kit can't read; a newer kit may" in capsys.readouterr().out
+
+
+SAID = "1 field left out, which this kit can't read; a newer kit may"
+
+
+def _one_field_too_new(key):  # noqa: F811
+    files = fixture_files()
+    _change(files, _paths(files)[0], lambda e: e["fields"].update(a_new_field=["1"]))
+    assert _install(key, files).error is None
+
+
+def test_library_status_says_how_many_too(fresh, key, capsys, monkeypatch):  # noqa: F811
+    _one_field_too_new(key)
+    capsys.readouterr()
+    assert cli.main(["library", "status"]) == 0
+    assert SAID in capsys.readouterr().out
+
+
+def test_library_update_says_how_many(fresh, key, capsys, monkeypatch):  # noqa: F811
+    files = fixture_files()
+    _change(files, _paths(files)[0], lambda e: e["fields"].update(a_new_field=["1"]))
+    web = release_web(key, tar_bytes(_rehash(files)))
+    real = library.update
+    monkeypatch.setattr(library, "update", lambda url=None: real(URL, opener=web))
+    monkeypatch.setattr(cli, "_request_rebuild", lambda why: None)
+    capsys.readouterr()
+    assert cli.main(["library", "update"]) == 0
+    assert SAID in capsys.readouterr().out
+
+
+def test_a_failed_check_doesnt_lose_what_the_library_in_use_left_out(fresh, key):  # noqa: F811
+    _one_field_too_new(key)
+    r = library.update(URL, opener=release_web(key, b"not a tar"))
+    assert r.error and library.last_check()["ok"] is False
+    assert library.status()["skipped"] == SAID
+
+
+def test_the_count_follows_a_rollback_both_ways(fresh, key):  # noqa: F811
+    files = _rehash(fixture_files(), 89)
+    assert library.update(URL, opener=release_web(key, tar_bytes(files))).error is None
+    _one_field_too_new(key)
+    assert library.status()["skipped"] == SAID
+    library.rollback()
+    assert library.status()["version"] == 89 and library.status()["skipped"] is None
+    library.rollback()
+    assert library.status()["version"] == 90 and library.status()["skipped"] == SAID
+
+
+def test_one_bad_limit_takes_the_other_with_it(fresh):
+    files = fixture_files()
+    e = json.loads(files[_paths(files)[0]])
+    e["fields"].update(nozzle_temperature_range_low=["999"], nozzle_temperature_range_high=["200"])
+    out, gone = library.salvage(e)
+    assert out is not None and gone == 2
+    assert "nozzle_temperature_range_low" not in out["fields"] and "nozzle_temperature_range_high" not in out["fields"]
 
 
 def test_salvage_leaves_nothing_invalid():

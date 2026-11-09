@@ -530,7 +530,7 @@ with `sudo filament-kit library update`, or switch the **library** module on (it
 copy you downloaded earlier keeps being used when the kit is upgraded.
 
 - `sudo filament-kit library status`: shows the library version (or that none is downloaded), the last check, and any
-  entries and fields it skipped because they follow newer rules.
+  entries and fields left out of it because this kit can't read them.
 - `sudo filament-kit library update`: downloads the library, or a newer version, now.
 - `sudo filament-kit library rollback`: goes back to the version before the last update. The next daily check
   installs the newer version again. To keep the rolled-back version, turn the daily check off first: in
