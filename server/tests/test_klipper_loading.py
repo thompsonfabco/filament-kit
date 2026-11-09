@@ -138,6 +138,39 @@ def test_load_ws_drop_mid_confirm(printer, sm, fil):
     assert loc_of(sm, s["id"]) == "Shelf 2"
 
 
+def test_load_notices_a_drop_it_only_sees_the_end_of(printer, sm, fil, monkeypatch):
+    """The drop comes and the reconnect is done between two looks at `connected` (a busy machine; the reviewer's flaky
+    run of the test above): the next look ends the wait, instead of the wait running out. Counted, not timed."""
+    fam, pid, fake = printer
+    fake.ignore_gcode = True
+    s = spool(sm, fil, "Shelf 2")
+    real_wait, real_model = fam._wait_shows, fam.model
+    looks = []
+    waiter = []                 # the follow thread calls model() as well when the printer reconnects
+
+    def wait_shows(*a):
+        waiter.append(threading.current_thread())
+        try:
+            return real_wait(*a)
+        finally:
+            waiter.clear()
+
+    def model(p):
+        if threading.current_thread() in waiter:
+            looks.append(1)
+            if len(looks) == 1:
+                sub = fam._conn(pid).sub
+                before = sub.drops
+                fake.drop()
+                assert wait_for(lambda: sub.drops > before and sub.connected)
+        return real_model(p)
+    monkeypatch.setattr(fam, "_wait_shows", wait_shows)
+    monkeypatch.setattr(fam, "model", model)
+    r = fam.load(sm, pid, "T0", s["id"], False, sealed_location="Sealed stock")
+    assert len(looks) == 1 and r["confirmed"] is False
+    assert loc_of(sm, s["id"]) == "Shelf 2"
+
+
 def test_load_refused_while_printing(printer, sm, fil):
     fam, pid, fake = printer
     fake.push({"print_stats": {"state": "printing"}})
@@ -209,13 +242,18 @@ def test_connect_reconciles_what_the_printer_shows(moonraker, sm, fil):
 def test_connect_reconciles_even_when_the_first_follow_check_came_too_early(moonraker, sm, fil, monkeypatch):
     """The FLAKY run of the test above (v0.4.2 pre-tag): the first snapshot's follow check ran before the subscriber
     was marked connected, did nothing, and nothing asked again until the printer's next change. Here the first check is
-    made to do nothing on purpose; set-up asks once more after the snapshot, so the reconcile still happens."""
+    made to do nothing on purpose; set-up asks once more after the snapshot, so the reconcile still happens.
+
+    Set-up's request waits for that first check: a follow thread that wakes late would otherwise take both requests as
+    one check (`_follow_run` coalesces them), and the stub would swallow the only one."""
     checks: list[str] = []
+    first_done = threading.Event()
     real = KlipperFamily._follow_check
 
     def first_one_too_early(self, pid):
         checks.append(pid)
         if len(checks) == 1:
+            first_done.set()
             return
         real(self, pid)
     monkeypatch.setattr(KlipperFamily, "_follow_check", first_one_too_early)
@@ -224,6 +262,13 @@ def test_connect_reconciles_even_when_the_first_follow_check_came_too_early(moon
     moonraker.set_spool(s["id"])
     pid = registry.add_klipper("Voron", moonraker.host, moonraker.port).serial
     fam = KlipperFamily(sm, backoff=(0.1, 0.4))
+    put = fam._follow_q.put
+
+    def set_up_waits_for_the_first_check(item):
+        if not threading.current_thread().name.startswith("moonraker-"):     # the subscriber's own requests go at once
+            first_done.wait(8)
+        put(item)
+    monkeypatch.setattr(fam._follow_q, "put", set_up_waits_for_the_first_check)
     fam.start()
     try:
         assert fam.wait_settled(pid, 8) == "unknown_model"

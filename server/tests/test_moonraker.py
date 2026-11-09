@@ -257,6 +257,17 @@ def test_websocket_on_its_own_socket_still_works(moonraker):
         sub.stop()
 
 
+def test_the_subscriber_counts_its_drops(moonraker):
+    sub = mr.Subscriber(_client(moonraker), {"print_stats": None}, lambda s: None, lambda n, p: None,
+                        backoff=(0.05, 0.1)).start()
+    try:
+        assert wait_for(lambda: sub.connected) and sub.drops == 0
+        moonraker.drop()
+        assert wait_for(lambda: sub.drops == 1 and sub.connected)
+    finally:
+        sub.stop()
+
+
 def test_a_refused_subscribe_reads_as_klipper_disconnected(moonraker):
     """Moonraker answers 503 while Klipper's host is away, and the event saying so went before the socket came up."""
     moonraker.subscribe_refused = True

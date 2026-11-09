@@ -194,6 +194,7 @@ class Subscriber:
         self.backoff = backoff
         self.connected = False
         self.down_since = time.monotonic()     # when `connected` last went False (or the subscriber started)
+        self.drops = 0                         # times `connected` went False: a reconnect can undo it between two looks
         self._stop = threading.Event()
         self._ws = None
         self._thread: threading.Thread | None = None
@@ -293,6 +294,7 @@ class Subscriber:
                 self._later.clear()
                 if self.connected:
                     self.down_since = time.monotonic()
+                    self.drops += 1
                 self.connected = False
             if self._stop.wait(delay):
                 break
