@@ -198,6 +198,7 @@ class Subscriber:
         self._ws = None
         self._thread: threading.Thread | None = None
         self._ids = itertools.count(1)
+        self._later: set[int] = set()          # subscribes from set_objects whose snapshot is still to come
 
     def start(self) -> "Subscriber":
         self._thread = threading.Thread(target=self._run, daemon=True, name=f"moonraker-{self.client.host}")
@@ -222,12 +223,14 @@ class Subscriber:
         ws = self._ws
         if ws is not None:
             try:
-                self._subscribe(ws)
+                self._subscribe(ws, later=True)
             except Exception:  # noqa: BLE001 - the reader loop notices a dead socket
                 pass
 
-    def _subscribe(self, ws) -> int:
+    def _subscribe(self, ws, later: bool = False) -> int:
         rid = next(self._ids)
+        if later:
+            self._later.add(rid)
         ws.send(json.dumps({"jsonrpc": "2.0", "method": "printer.objects.subscribe",
                             "params": {"objects": self.objects}, "id": rid}))
         return rid
@@ -253,6 +256,16 @@ class Subscriber:
                         if self._stop.is_set():
                             break
                         msg = json.loads(raw)
+                        if msg.get("id") in self._later:     # its snapshot is news, but no new connect
+                            self._later.discard(msg["id"])
+                            if isinstance(msg.get("result"), dict):
+                                self.on_status(dict(msg["result"].get("status") or {}))
+                            continue
+                        if msg.get("id") == sub_id and (msg.get("error") or {}).get("code") == 503:
+                            # Klipper's host is away, and the event saying so may have gone before this socket came up.
+                            # Only for this subscribe: set-up answers the event with set_objects, so that one must not.
+                            self.on_event("notify_klippy_disconnected", [])
+                            continue
                         if msg.get("id") == sub_id and isinstance(msg.get("result"), dict):
                             delay = self.backoff[0]
                             self.on_status(dict(msg["result"].get("status") or {}))
@@ -277,6 +290,7 @@ class Subscriber:
                              type(e).__name__, delay)
             finally:
                 self._ws = None
+                self._later.clear()
                 if self.connected:
                     self.down_since = time.monotonic()
                 self.connected = False

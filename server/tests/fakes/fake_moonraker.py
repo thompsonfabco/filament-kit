@@ -58,6 +58,7 @@ class FakeMoonraker:
                                        "heater_bed": {"temperature": 24.0, "target": 0.0},
                                        "virtual_sdcard": {"progress": 0.0}}
         self.klippy_state, self.state_message, self.hostname = "ready", "Printer is ready", "fakeprinter"
+        self.subscribe_refused = False      # as Moonraker answers a subscribe with Klipper's host disconnected
         self.spool_id: int | None = None
         self.history: list[dict] = []
         self.db: dict = {}
@@ -244,7 +245,10 @@ class FakeMoonraker:
             try:
                 while True:
                     msg = json.loads(await ws.receive_text())
-                    if msg.get("method") == "printer.objects.subscribe":
+                    if msg.get("method") == "printer.objects.subscribe" and fake.subscribe_refused:
+                        await ws.send_text(json.dumps({"jsonrpc": "2.0", "id": msg.get("id"), "error": {
+                            "code": 503, "message": "Klippy Host not connected"}}))
+                    elif msg.get("method") == "printer.objects.subscribe":
                         wanted = (msg.get("params") or {}).get("objects", {})
                         entry[1].clear()
                         entry[1].update(wanted)
