@@ -8,12 +8,12 @@ namespace panel {
 // One parsed serial line from the PC. kind and the fields it uses:
 //   '?'  HELLO request
 //   'L'  lamps: a = yellow (Hold) mode, b = red (Discard) mode, each 0-4
-//   'D'  display row: a = row 0-4. The text is not copied: it is whatever follows "D <row> " in the line, i.e.
-//        line + 4, or empty when the line is just "D <row>" (clears the row)
+//   'D'  display row: a = row 0-4, text = what follows "D <row> " in the line (not a copy: it points into the
+//        line), or "" when the line is just "D <row>" (clears the row)
 //   'B'  beep: a = hz 100-10000, b = ms 1-2000, c = count (default 1, clamped to 1-5)
 //   'A'  speech frame: a = n raw bytes to follow, 1-1024
 //   'V'  speaker volume: a = percent 0-100
-struct Command { char kind; int a, b, c; };
+struct Command { char kind; int a, b, c; const char *text; };  // text: 'D' only, else nullptr
 
 // True and fills out for a valid line; false for an unknown command or an argument out of range (out is then
 // unspecified).

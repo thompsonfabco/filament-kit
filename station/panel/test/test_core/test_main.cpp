@@ -96,10 +96,20 @@ void test_parse_display_row() {
   TEST_ASSERT_TRUE(parseLine(line, c));
   TEST_ASSERT_EQUAL('D', c.kind);
   TEST_ASSERT_EQUAL(3, c.a);
-  TEST_ASSERT_EQUAL_STRING("hi", line + 4);
+  TEST_ASSERT_EQUAL_STRING("hi", c.text);
+  TEST_ASSERT_TRUE(c.text == line + 4);  // points into the line, not a copy
   TEST_ASSERT_TRUE(parseLine("D 0", c));  // no text: clears the row
   TEST_ASSERT_FALSE(parseLine("D 5 x", c));
   TEST_ASSERT_FALSE(parseLine("D 1x", c));
+}
+
+void test_parse_display_row_without_text() {
+  Command c;
+  TEST_ASSERT_TRUE(parseLine("D 3", c));  // the text must not be read past the line's NUL
+  TEST_ASSERT_EQUAL('D', c.kind);
+  TEST_ASSERT_EQUAL(3, c.a);
+  TEST_ASSERT_NOT_NULL(c.text);
+  TEST_ASSERT_EQUAL_STRING("", c.text);
 }
 
 void test_parse_beep_defaults_count_1() {
@@ -214,6 +224,7 @@ int main() {
   RUN_TEST(test_parse_lamps);
   RUN_TEST(test_parse_hello);
   RUN_TEST(test_parse_display_row);
+  RUN_TEST(test_parse_display_row_without_text);
   RUN_TEST(test_parse_beep_defaults_count_1);
   RUN_TEST(test_parse_beep_clamps_count_to_5);
   RUN_TEST(test_parse_audio_bounds);

@@ -171,4 +171,24 @@ def test_the_bundled_version_is_the_sources():
 def test_the_build_platform_is_pinned():
     """An unpinned platform builds different firmware from the same source as soon as PlatformIO updates it."""
     ini = (PANEL_DIR / "platformio.ini").read_text(encoding="utf-8")
-    assert re.search(r"^platform = espressif8266@\d+\.\d+\.\d+\s*$", ini, re.M)
+    assert re.search(r"^platform = https://github\.com/pioarduino/platform-espressif32/releases/download/53\.03\.13/"
+                     r"platform-espressif32\.zip\s*$", ini, re.M)
+    assert re.search(r"^board = esp32-c3-devkitm-1\b", ini, re.M)
+
+
+# The peripheral standard's pins for the panel (spec "Pins"): never a strapping pin (2, 8, 9) or the USB pair (18, 19).
+STANDARD_PINS = {"PIN_SDA": 5, "PIN_SCL": 6, "PIN_BUZZER": 0, "PIN_BTN_HOLD": 3, "PIN_BTN_DISCARD": 4,
+                 "PIN_LAMP_HOLD": 1, "PIN_LAMP_DISCARD": 7, "PIN_I2S_BCLK": 10, "PIN_I2S_LRC": 20, "PIN_I2S_DIN": 21}
+
+
+def test_firmware_pins_follow_the_standard():
+    src = (PANEL_DIR / "src" / "main.cpp").read_text(encoding="utf-8")
+    pins = {name: int(value) for name, value in re.findall(r"^static const uint8_t (PIN_\w+) = (\d+);", src, re.M)}
+    assert pins == STANDARD_PINS
+    assert not set(pins.values()) & {2, 8, 9, 18, 19}
+
+
+def test_firmware_never_starts_the_radio():
+    src = (PANEL_DIR / "src" / "main.cpp").read_text(encoding="utf-8")
+    assert "WiFi.begin" not in src and "BLEDevice" not in src
+    assert "WiFi.mode(WIFI_OFF)" in src

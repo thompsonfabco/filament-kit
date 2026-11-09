@@ -9,7 +9,7 @@ static const uint32_t BLINK3_MS = 90;  // three fast blinks: 90 ms on / 90 ms of
 static const uint32_t FADE_SAMPLES = 400;
 
 bool parseLine(const char *s, Command &out) {
-  out = Command{s[0], 0, 0, 0};
+  out = Command{s[0], 0, 0, 0, nullptr};
   switch (s[0]) {
     case '?':
       return true;
@@ -19,6 +19,7 @@ bool parseLine(const char *s, Command &out) {
     case 'D':
       if (s[1] != ' ' || s[2] < '0' || s[2] > '4' || (s[3] != ' ' && s[3] != 0)) return false;
       out.a = s[2] - '0';
+      out.text = s[3] ? s + 4 : "";  // "D 3" ends at s[3]: s + 4 would be past its NUL
       return true;
     case 'B': {
       int n = 1;

@@ -29,3 +29,6 @@ jobs:
 
       - name: Native unit tests (lib/panel_core)
         run: pio test -d station/panel -e native
+
+      - name: Firmware build (ESP32-C3)
+        run: pio run -d station/panel -e esp32-c3-supermini
