@@ -300,8 +300,7 @@ them too, then run `sudo filament-kit unpair <id>` on the server. Presets alread
 - With the Orca AppImage, the Orca filament library is read from Orca's own copy under its data folder, because the
   AppImage's files can only be read while it runs.
 
-This was written from the code and the slicers' documented folders, and has not been tried on a Linux machine with the
-slicers running.
+This has not been tried on a Linux machine with the slicers running.
 
 ## The setup page (v0.4.0)
 
