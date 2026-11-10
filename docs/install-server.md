@@ -205,7 +205,7 @@ station, NFC reader tokens, and switching modules on or off.
    chose to trust that computer after the code worked (the user guide's setup page section says how, and how to revoke).
 
 **Who can reach it.** Only devices on your home network: IPv4 addresses that start with 192.168 or 10 by default
-(addresses that start with 172.16 need `web.lan` in the settings), and the server itself. Open it by the server's own name or address; another name is refused. It is not
+(addresses that start with 172.16 need `web.lan` in the settings), and the server itself. Open it by the server's own name or address, or by a local name your own DNS gives it (one word, or one ending in .local, .lan, .home.arpa, or the network's own domain that the server's DNS settings name). Any other name is refused unless you add it on the Settings tab (General: Names for this page), since a public name pointing here is how DNS rebinding would reach the page. It is not
 available from the internet, even when you turned on remote access.
 
 **A wrong code.** Five wrong codes from one device in 10 minutes lock that device out for a while. If wrong codes
@@ -374,8 +374,10 @@ Either way, the PC must stay on and awake for the server to answer.
   `sudo filament-kit status` again.
 - **The setup page says "the setup page only answers the home network"** (v0.4.0): open it from a device on your
   home network, not from the internet or a guest network.
-- **The setup page says "open the setup page by the server's own name or address"**: use the `.local` name or the
-  IP address, as in [The setup page](#the-setup-page-v040).
+- **The setup page says "open the setup page by the server's own name or address"**: it lists the names it
+  answers to. Use one of them or the IP address, or add your name on the Settings tab (General: Names for this page).
+  A local name of your own DNS (one word, `.local`, `.lan`, `.home.arpa`, or the network's own domain) that points at the server
+  works without adding it.
 - **Locked out of the setup page after wrong codes**: `sudo filament-kit setup-code --new` makes a new code and
   clears the lock.
 - **The phone can't find the server**: the phone and the computer must be on the same Wi-Fi network. Type

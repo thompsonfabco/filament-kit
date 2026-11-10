@@ -182,6 +182,78 @@ def allowed_hosts() -> set[str]:
             | {full, short, f"{short}.local", "localhost", "127.0.0.1", "::1"})
 
 
+# A name the owner's own DNS gives this server is accepted (the user's rule: DNS names everywhere), but only a local
+# one: a single label, a private suffix, the server's own DNS domain, or a domain its DNS settings search (the home
+# network's domain the router hands out). A public name that resolves here is how DNS rebinding reaches a LAN page
+# from an attacker's site, so such a name has to be added on the Settings tab instead.
+LOCAL_SUFFIXES = frozenset(("local", "lan", "home", "home.arpa", "internal", "intranet", "corp", "localhost"))
+RESOLV_CONF = "/etc/resolv.conf"
+_RESOLVED: dict[str, tuple[float, bool]] = {}      # name -> (when, resolves here), kept RESOLVE_TTL seconds
+RESOLVE_TTL = 60.0
+
+
+def _home_domains(resolv: str | None = None) -> set[str]:
+    """The server's own DNS domain and the domains its resolver searches (`domain` and `search` in resolv.conf)."""
+    out = set()
+    fqdn = socket.getfqdn().lower().rstrip(".")
+    if "." in fqdn:
+        out.add(fqdn.split(".", 1)[1])
+    try:
+        lines = Path(resolv or RESOLV_CONF).read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        lines = []
+    for line in lines:
+        f = line.split()
+        if f and f[0] in ("domain", "search"):
+            out.update(d.lower().rstrip(".") for d in f[1:] if "." in d or d.isalpha())
+    return {d for d in out if d}
+
+
+def local_name(name: str) -> bool:
+    """A name of the home network, not of the internet: one label, the server's own domain, or a private suffix."""
+    if not name or ":" in name or name.replace(".", "").isdigit():
+        return False
+    if "." not in name:
+        return True
+    return any(name.endswith("." + s) for s in LOCAL_SUFFIXES | _home_domains())
+
+
+def resolves_here(name: str, now: float | None = None) -> bool:
+    """The name's forward lookup gives one of this server's own addresses (cached RESOLVE_TTL seconds)."""
+    now = time.monotonic() if now is None else now
+    hit = _RESOLVED.get(name)
+    if hit and now - hit[0] < RESOLVE_TTL:
+        return hit[1]
+    try:
+        found = {ai[4][0].split("%", 1)[0] for ai in socket.getaddrinfo(name, None, proto=socket.IPPROTO_TCP)}
+    except (OSError, UnicodeError):
+        found = set()
+    ok = bool(found & (set(pairing.local_ips()) | {"127.0.0.1", "::1"}))
+    if len(_RESOLVED) > 256:
+        _RESOLVED.clear()
+    _RESOLVED[name] = (now, ok)
+    return ok
+
+
+def extra_hosts() -> set[str]:
+    """The names the owner added on the Settings tab (setup.hosts in config.json)."""
+    try:
+        names = (config.load().get("setup") or {}).get("hosts") or []
+    except (OSError, ValueError):
+        return set()
+    return {n.lower() for n in names if isinstance(n, str)}
+
+
+def bad_host_text(hosts: set[str]) -> str:
+    """The refusal: the names the page answers to (never its addresses: those are hidden until the code) and how to
+    add one."""
+    names = sorted(h for h in hosts if not h.replace(".", "").isdigit() and ":" not in h and h != "localhost")
+    return (f"{BAD_HOST}: {', '.join(names) or 'its address'}, or its address. A name of your own DNS that points at "
+            "this server works too if it is a local one (one word, .local, .lan, .home.arpa, or your network's own "
+            "domain); "
+            "add any other name on the Settings tab, under General: Names for this page.")
+
+
 def _host_of(host_header: str) -> str:
     """'kit.local:8710' -> 'kit.local'; '[fe80::1]:8710' -> 'fe80::1'."""
     try:
@@ -264,7 +336,12 @@ class SetupPage:
         return lan.is_lan(self._ip(request), nets)
 
     def _host_ok(self, request: Request) -> bool:
-        return _host_of(request.headers.get("host", "")) in self.hosts()
+        name = _host_of(request.headers.get("host", ""))
+        if not name:
+            return False
+        if name in self.hosts() or name in extra_hosts():
+            return True
+        return local_name(name) and resolves_here(name)
 
     def _origin_ok(self, request: Request) -> bool:
         origin, host = request.headers.get("origin"), request.headers.get("host", "")
@@ -330,7 +407,7 @@ class SetupPage:
             if not self._lan(request):
                 return JSONResponse({"error": HOME_ONLY}, 403)
             if not self._host_ok(request):
-                return JSONResponse({"error": BAD_HOST}, 403)
+                return JSONResponse({"error": bad_host_text(self.hosts() | extra_hosts())}, 403)
             try:
                 body = {}
                 token = None
@@ -391,7 +468,8 @@ class SetupPage:
         if not self._lan(request):
             return HTMLResponse(f"<!doctype html><p>{HOME_ONLY}.</p>", 403, headers=HEADERS)
         if not self._host_ok(request):
-            return HTMLResponse(f"<!doctype html><p>{BAD_HOST}.</p>", 403, headers=HEADERS)
+            return HTMLResponse(f"<!doctype html><p>{html.escape(bad_host_text(self.hosts() | extra_hosts()))}</p>",
+                                403, headers=HEADERS)
         name = html.escape(config.load()["server_name"])
         return HTMLResponse(
             "<!doctype html><html lang=en><meta charset=utf-8>"
