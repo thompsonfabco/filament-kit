@@ -516,3 +516,35 @@ def test_a_wrong_access_code_stops_the_wait_at_once(slow, monkeypatch, capsys):
     assert cli.main(["printer", "report", SERIAL], manager_factory=lambda s: m) == 1
     assert time.monotonic() - t < 3.0
     assert "Access Code" in capsys.readouterr().err
+
+
+
+def test_a_saved_record_holding_a_serial_host_or_name_never_reaches_the_offline_report():
+    """Review R106 (LOW): the saved section takes only the kit's own labels and unit kinds, and no serial-shaped value
+    anywhere, as the live report does; whatever was seeded into the saved state."""
+    registry.upsert(registry.Printer(SERIAL, "", "N6", "192.0.2.5", "12345678", True))
+    smap = ams.SlotMap(slots={"A1": {"ams_id": 0, "tray_id": 0, "global_id": 0},
+                              "HT-A": {"ams_id": 128, "tray_id": 0, "global_id": 128},
+                              "Ext-L": {"ams_id": 254, "tray_id": 0, "global_id": 254},
+                              SERIAL: {"ams_id": 0, "tray_id": 1, "global_id": 1},
+                              "h2d.local": {"ams_id": 0, "tray_id": 2, "global_id": 2},
+                              "Bench": {"ams_id": 0, "tray_id": 3, "global_id": 3},
+                              "a1b2c3d4e5f6g7": {"ams_id": 0, "tray_id": 3, "global_id": 3}},
+                       calibrated=False, fingerprint=[[0, "ams", 4], [1, SERIAL, 4], [2, "Garage", 4], [128, "ams_ht", 1],
+                                                      [254, "ext", 1], [3, "0948zz0a0000001", 4]])
+    ams.save_map(SERIAL, smap)
+    r = mapping.Mapper(Gone()).report(SERIAL)
+    xml = r["xml"]
+    for leak in (SERIAL, SERIAL.lower(), "h2d.local", "Bench", "Garage", "a1b2c3d4e5f6g7"):
+        assert leak not in xml, leak
+    saved = ElementTree.fromstring(xml.encode()).find("saved")
+    assert [(u.get("id"), u.get("kind")) for u in saved.findall("unit")] == [
+        ("0", "ams"), ("1", None), ("2", None), ("128", "ams_ht"), ("254", "ext"), ("3", None)]
+    assert [s.get("label") for s in saved.find("map").findall("slot")] == ["A1", "HT-A", "Ext-L"]
+
+
+def test_a_serial_shaped_value_is_left_out_of_every_field():
+    assert printer_report._plain(SERIAL) is None and printer_report._plain("a1b2c3d4e5f6g7") is None
+    assert printer_report._plain("BL-P001", printer_report.MODEL) == "BL-P001"
+    assert printer_report._plain("N3F05", printer_report.NAME) == "N3F05"
+    assert printer_report._plain("PLA-CF", printer_report.NAME) == "PLA-CF"
