@@ -768,21 +768,18 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def _open_upload() -> tuple[int, int | None]:
-    """(the page's upload, its folder), opened by root without following a link anywhere in the folders the service
-    user owns. The folder (None on Windows, where only the tests run) is where the file is removed from afterwards."""
+def _open_upload() -> int:
+    """The page's upload, opened by root without following a link anywhere in the folders the service user owns."""
     src = uploaded()
     if not (hasattr(os, "O_DIRECTORY") and os.open in os.supports_dir_fd):
-        return os.open(src, os.O_RDONLY | getattr(os, "O_BINARY", 0)), None
+        return os.open(src, os.O_RDONLY | getattr(os, "O_BINARY", 0))       # Windows: only the tests run there
     nofollow = os.O_RDONLY | os.O_NOFOLLOW
     top = os.open(src.parent.parent.parent, os.O_RDONLY | os.O_DIRECTORY)    # /var/lib: root's
     fds = [top]
     try:
         for name in (src.parent.parent.name, src.parent.name):
             fds.append(os.open(name, nofollow | os.O_DIRECTORY, dir_fd=fds[-1]))
-        f = os.open(src.name, nofollow | os.O_NONBLOCK, dir_fd=fds[-1])
-        folder = fds.pop()
-        return f, folder
+        return os.open(src.name, nofollow | os.O_NONBLOCK, dir_fd=fds[-1])
     finally:
         for fd in fds:
             os.close(fd)
@@ -790,10 +787,10 @@ def _open_upload() -> tuple[int, int | None]:
 
 def pin_upload() -> tuple[Manifest, str]:
     """Root (the setup helper, when the page checks an upload): copy the page's upload at once into the root-only
-    backups folder, hash it, check it, and drop the service user's copy. What the owner then sees summarised is
+    backups folder, hash it and check it (the server removes its own copy). What the owner then sees summarised is
     this copy, and only this copy is restored (take_upload), so the service user cannot swap the file afterwards."""
     try:
-        fd, folder = _open_upload()
+        fd = _open_upload()
     except FileNotFoundError:
         raise BackupError("no backup was uploaded on the setup page") from None
     except OSError as e:
@@ -817,16 +814,6 @@ def pin_upload() -> tuple[Manifest, str]:
     finally:
         os.close(fd)
         tmp.unlink(missing_ok=True)
-        try:            # the server's copy: through the folder opened above, never a path it could have swapped
-            if folder is not None:
-                os.unlink(uploaded().name, dir_fd=folder)
-            else:
-                uploaded().unlink(missing_ok=True)
-        except OSError:
-            pass
-        finally:
-            if folder is not None:
-                os.close(folder)
     try:
         m = verify(out)
         why = refusal(m)

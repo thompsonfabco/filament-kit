@@ -859,8 +859,8 @@ def test_the_job_unit_as_shipped():
 
 def test_the_helper_sandbox_is_not_widened():
     svc = (SYSTEMD / "filament-kit-setup@.service").read_text(encoding="utf-8")
-    # the settings folder, plus (a restore, R79) root's backups folder and the page's upload folder; nothing else
-    assert re.findall(r"^ReadWritePaths=(.*)$", svc, re.M) == ["/etc/filament-kit -/var/backups/filament-kit -/var/lib/filament-kit/restore-upload"]
+    # the settings folder, plus (a restore, R79) root's backups folder; never a folder the server owns
+    assert re.findall(r"^ReadWritePaths=(.*)$", svc, re.M) == ["/etc/filament-kit -/var/backups/filament-kit"]
 
 
 def test_the_server_unit_was_not_widened():

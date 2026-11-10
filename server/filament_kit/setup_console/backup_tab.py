@@ -80,6 +80,8 @@ def routes(page) -> list[tuple]:
             r = await page._helper({"op": "restore_pin", "code": body["code"]})
             summary = {k: r[k] for k in ("kit", "host", "created", "modules", "files", "spoolman", "size", "sha256",
                                          "other_host", "replaces_data") if k in r}
+            # pinned by root: the server's own copy is of no further use, and root does not touch this folder
+            await anyio.to_thread.run_sync(lambda: shutil.rmtree(dest.parent, ignore_errors=True))
         except BaseException:
             await anyio.to_thread.run_sync(lambda: shutil.rmtree(dest.parent, ignore_errors=True))
             raise

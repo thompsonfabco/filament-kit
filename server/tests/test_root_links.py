@@ -357,7 +357,7 @@ def _unit_settings() -> dict[str, str]:
 
 def test_the_helper_unit_may_write_where_a_restore_pins_the_upload():
     paths = _unit_settings()["ReadWritePaths"].split()
-    assert paths == ["/etc/filament-kit", "-/var/backups/filament-kit", "-/var/lib/filament-kit/restore-upload"]
+    assert paths == ["/etc/filament-kit", "-/var/backups/filament-kit"]      # never a folder the server owns
     install = (Path(__file__).resolve().parents[2] / "install" / "install.sh").read_text(encoding="utf-8")
     assert "install -d -m 700 -o root -g root /var/backups/filament-kit" in install     # so the "-" path exists
 
@@ -386,8 +386,7 @@ def test_pin_upload_works_in_the_helper_units_own_sandbox(tmp_path, monkeypatch)
         z = backup.create()
         shutil.copyfile(z, S / "restore-upload" / "backup.zip")
         unit = _unit_settings()
-        mapped = {"/etc/filament-kit": str(E), "-/var/backups/filament-kit": f"-{K}",
-                  "-/var/lib/filament-kit/restore-upload": f"-{S}/restore-upload"}
+        mapped = {"/etc/filament-kit": str(E), "-/var/backups/filament-kit": f"-{K}"}
         props = []
         for key in SANDBOX_KEYS:
             if key in unit:
@@ -400,7 +399,7 @@ def test_pin_upload_works_in_the_helper_units_own_sandbox(tmp_path, monkeypatch)
         r = subprocess.run(["systemd-run", "--quiet", "--wait", "--pipe", "--collect", "-p", "ProtectHome=read-only",
                             *props, *env, sys.executable, "-c", code], capture_output=True, text=True, timeout=120)
         assert "PINNED" in r.stdout, r.stdout + r.stderr
-        assert (K / backup.PENDING).is_file() and not (S / "restore-upload" / "backup.zip").exists()
+        assert (K / backup.PENDING).is_file() and (S / "restore-upload" / "backup.zip").exists()   # the server's to remove
         assert stat.S_IMODE((K / backup.PENDING).stat().st_mode) == 0o600
     finally:
         for d in (E, S, K):

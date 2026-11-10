@@ -582,7 +582,7 @@ def test_helper_unit_files_keep_it_closed():
     assert "SocketMode=0660" in sock and "SocketGroup=filament-kit" in sock and "Accept=yes" in sock
     svc = (systemd / "filament-kit-setup@.service").read_text(encoding="utf-8")
     assert "StandardInput=socket" in svc and "ProtectSystem=strict" in svc
-    assert ("ReadWritePaths=/etc/filament-kit -/var/backups/filament-kit -/var/lib/filament-kit/restore-upload\n" in svc
+    assert ("ReadWritePaths=/etc/filament-kit -/var/backups/filament-kit\n" in svc
             and "-m filament_kit.setup_helper\n" in svc)
     run = (systemd / "filament-kit-setup-apply.service").read_text(encoding="utf-8")
     assert "setup_helper apply-run" in run
@@ -832,7 +832,7 @@ def test_r3_helper_unit_is_hardened():
                  "ProtectKernelLogs=yes", "ProtectControlGroups=yes", "PrivateDevices=yes", "RestrictNamespaces=yes",
                  "RestrictSUIDSGID=yes", "LockPersonality=yes", "MemoryDenyWriteExecute=yes", "UMask=0077",
                  "IPAddressDeny=any", "NoNewPrivileges=yes", "ProtectSystem=strict",
-                 "ReadWritePaths=/etc/filament-kit -/var/backups/filament-kit -/var/lib/filament-kit/restore-upload"):
+                 "ReadWritePaths=/etc/filament-kit -/var/backups/filament-kit"):
         assert line + "\n" in svc, line
 
 

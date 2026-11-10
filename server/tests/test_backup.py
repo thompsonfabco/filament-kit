@@ -383,7 +383,7 @@ def test_the_page_upload_is_pinned_confirmed_and_restored(kit, monkeypatch):
     z = _uploaded(kit)
     m, sha = backup.pin_upload()
     assert sha == hashlib.sha256(z.read_bytes()).hexdigest() and m.files
-    assert not backup.uploaded().exists() and backup.pending().read_bytes() == z.read_bytes()   # the server's copy is gone
+    assert backup.uploaded().exists() and backup.pending().read_bytes() == z.read_bytes()   # root leaves the server's copy
     backup.confirm_pending(sha)
     assert cli.main(["restore", "--uploaded", "--yes"]) == 0
     assert not backup.pending().exists() and not list((kit / "backups").glob(".restore-*"))
