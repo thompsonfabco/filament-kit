@@ -11,11 +11,13 @@ StandardOutput=socket
 StandardError=journal
 RuntimeMaxSec=120
 # root, but it may only write the kit's settings folder (and start the job units over systemd's bus): chown and
-# mode changes of the files it writes there, nothing else
+# mode changes of the files it writes there, nothing else. A restore adds one: the root-only backups folder, where the
+# page's upload is pinned (backup.pin_upload). Never a folder the server's user owns: a link it put there would make
+# the link's target writable for every helper (R79 re-review). The "-" skips the folder if it is not there yet.
 CapabilityBoundingSet=CAP_CHOWN CAP_FOWNER CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH
 NoNewPrivileges=yes
 ProtectSystem=strict
-ReadWritePaths=/etc/filament-kit
+ReadWritePaths=/etc/filament-kit -/var/backups/filament-kit
 ProtectHome=yes
 PrivateTmp=yes
 PrivateDevices=yes

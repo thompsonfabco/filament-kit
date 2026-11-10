@@ -859,7 +859,8 @@ def test_the_job_unit_as_shipped():
 
 def test_the_helper_sandbox_is_not_widened():
     svc = (SYSTEMD / "filament-kit-setup@.service").read_text(encoding="utf-8")
-    assert re.findall(r"^ReadWritePaths=(.*)$", svc, re.M) == ["/etc/filament-kit"]
+    # the settings folder, plus (a restore, R79) root's backups folder; never a folder the server owns
+    assert re.findall(r"^ReadWritePaths=(.*)$", svc, re.M) == ["/etc/filament-kit -/var/backups/filament-kit"]
 
 
 def test_the_server_unit_was_not_widened():
@@ -928,7 +929,7 @@ def test_a_rollback_target_older_than_the_job_unit_finds_what_it_needs():
 
 def test_helper_ops_are_the_closed_list():
     assert set(setup_helper.OPS) == {"check", "key_set", "key_remove", "passphrase_set", "library_token_set",
-                                     "library_token_remove", "module", "setting", "general", "spoolman_url", "apply", "mode", "job", "journal", "backup_keep", "backup_list", "backup_open", "station_pairing",
+                                     "library_token_remove", "module", "setting", "general", "spoolman_url", "apply", "mode", "job", "journal", "backup_keep", "backup_list", "backup_open", "restore_pin", "restore_forget", "station_pairing",
                                      "trust_status", "trust_add", "trust_list", "trust_rename", "trust_revoke",
                                      "trust_revoke_all", "trust_enabled"}
     assert set(setup_helper.JOBS) == {"apply", "update", "rollback", "check", "station_pair", "library_update",

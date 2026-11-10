@@ -23,7 +23,12 @@ What it accepts is a closed list (`OPS`), never a command, a path or a file name
                                                never a mode without the server, which this page is part of
     apply                                      start the job `apply`
     job {name}                                 start one of the closed list of jobs (JOBS), one at a time; `restore`
-                                               also takes {confirm: "restore"} and a zip the page received
+                                               also takes {confirm: "restore", sha256}: the pinned upload must still
+                                               have the hash the owner was shown (backup.confirm_pending)
+    restore_pin                                the zip the page just received, copied at once into the root-only
+                                               backups folder, hashed and checked: its summary and sha256 (the job
+                                               restores only that copy, so the server cannot swap it afterwards)
+    restore_forget                             drop the pinned upload
     backup_keep {days}                         how many days of backups the nightly backup keeps (1-365)
     backup_list                                the backups in the root-only folder: names, sizes, dates
     backup_open {name}                         one of them, handed to the server as an open file (SCM_RIGHTS) beside the
@@ -648,6 +653,26 @@ def _backup_list(req: dict) -> dict:
     return {"backups": rows, "keep_days": backup.keep_days(config.load()), "folder": str(backup.backups_dir())}
 
 
+def _restore_pin(req: dict) -> dict:
+    from . import backup
+    try:
+        m, sha = backup.pin_upload()
+    except backup.Unfit as e:
+        raise Refused(409, str(e)) from None
+    except backup.BackupError as e:
+        raise Refused(400, str(e)) from None
+    except OSError as e:
+        raise Refused(500, f"the uploaded backup cannot be kept ({type(e).__name__})") from None
+    return m.summary() | {"sha256": sha, "other_host": bool(m.host) and m.host != backup.host(),
+                          "replaces_data": (config.paths().etc / "config.json").exists()}
+
+
+def _restore_forget(req: dict) -> dict:
+    from . import backup
+    backup.forget_pending()
+    return {}
+
+
 def _backup_open(req: dict) -> dict:
     from . import backup
     name = req.get("name")
@@ -676,8 +701,10 @@ def _job(req: dict) -> dict:
         from . import backup
         if req.get("confirm") != "restore":
             raise Refused(400, "type restore to confirm: it replaces what is on this machine")
-        if not backup.uploaded().is_file():
-            raise Refused(409, "upload the backup zip first")
+        try:
+            backup.confirm_pending(req.get("sha256"))
+        except (backup.BackupError, OSError) as e:
+            raise Refused(409, str(e)) from None
     if name == "apply":
         _start_apply()
     else:
@@ -763,7 +790,8 @@ def _apply(req: dict) -> dict:
 OPS = {"check": _check, "key_set": _key_set, "key_remove": _key_remove, "passphrase_set": _passphrase_set,
        "library_token_set": _library_token_set, "library_token_remove": _library_token_remove,
        "module": _module, "setting": _setting, "general": _general, "spoolman_url": _spoolman_url, "apply": _apply, "mode": _mode, "job": _job,
-       "journal": _journal, "backup_keep": _backup_keep, "backup_list": _backup_list, "backup_open": _backup_open, "station_pairing": _station_pairing, "trust_status": _trust_status, "trust_add": _trust_add,
+       "journal": _journal, "backup_keep": _backup_keep, "backup_list": _backup_list, "backup_open": _backup_open, "restore_pin": _restore_pin,
+       "restore_forget": _restore_forget, "station_pairing": _station_pairing, "trust_status": _trust_status, "trust_add": _trust_add,
        "trust_list": _trust_list, "trust_rename": _trust_rename, "trust_revoke": _trust_revoke,
        "trust_revoke_all": _trust_revoke_all, "trust_enabled": _trust_enabled}
 

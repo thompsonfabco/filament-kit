@@ -7,9 +7,12 @@ it, as for every other change (the user's choice, 2026-11-09).
     POST backups/download {code, name}           one of them, as the standard zip (a nightly tar.gz is turned into one):
                                                  the helper hands it over as an open file, nothing is written for it
     POST backups/keep {code, days}               how many days the nightly backup keeps (the helper's op backup_keep)
-    POST restore/upload  (the zip as the body; X-Setup-Code)   kept in the state folder and checked: its summary
+    POST restore/upload  (the zip as the body; X-Setup-Code)   written to the state folder, then pinned by the
+                                                 helper (restore_pin): copied into the root-only folder, hashed and
+                                                 checked; its summary and sha256
     POST restore/forget {code}                   drop an uploaded zip
-Back up now is the job `backup`, the restore the job `restore` with {confirm: "restore"}.
+Back up now is the job `backup`, the restore the job `restore` with {confirm: "restore", sha256}: the helper restores
+only the pinned copy, and only while it has the hash the owner was shown.
 """
 from __future__ import annotations
 
@@ -74,18 +77,11 @@ def routes(page) -> list[tuple]:
                                            "sudo filament-kit restore <file>")
                     await anyio.to_thread.run_sync(fh.write, chunk)
             os.replace(part, dest)
-
-            def check() -> dict:
-                m = backup.verify(dest)
-                why = backup.refusal(m)
-                if why:
-                    raise Refused(409, why)
-                return m.summary() | {"other_host": bool(m.host) and m.host != backup.host(),
-                                      "replaces_data": (config.paths().etc / "config.json").exists()}
-            summary = await anyio.to_thread.run_sync(check)
-        except backup.BackupError as e:
+            r = await page._helper({"op": "restore_pin", "code": body["code"]})
+            summary = {k: r[k] for k in ("kit", "host", "created", "modules", "files", "spoolman", "size", "sha256",
+                                         "other_host", "replaces_data") if k in r}
+            # pinned by root: the server's own copy is of no further use, and root does not touch this folder
             await anyio.to_thread.run_sync(lambda: shutil.rmtree(dest.parent, ignore_errors=True))
-            raise Refused(400, f"{e}") from None
         except BaseException:
             await anyio.to_thread.run_sync(lambda: shutil.rmtree(dest.parent, ignore_errors=True))
             raise
@@ -94,6 +90,7 @@ def routes(page) -> list[tuple]:
 
     async def forget(request, body):
         await anyio.to_thread.run_sync(lambda: shutil.rmtree(backup.uploaded().parent, ignore_errors=True))
+        await page._helper({"op": "restore_forget", "code": body["code"]})
         return {"ok": True}
 
     return [("/backups/list", page.guard(listing, write="helper"), "POST"),

@@ -178,6 +178,8 @@ install -d -m 750 -o filament-kit -g filament-kit "$STATE/profiles" "$STATE/libr
 # setgid: files the CLI later writes here as root (config.json, key) keep the
 # filament-kit group, so the service can still read them.
 install -d -m 2750 -o root -g filament-kit "$ETC"
+# root's backups (a restore's pinned upload too): the setup page's helper may write here, so it must exist before it runs
+install -d -m 700 -o root -g root /var/backups/filament-kit
 
 # ---------- 3. filament-kit ----------
 # The marker is removed before and written after the venv work, so a failed

@@ -1,6 +1,7 @@
 """The setup console's Backups card: every route takes the code or a trusted computer, nothing is sent without one."""
 from __future__ import annotations
 
+import hashlib
 import os
 import shutil
 import socket
@@ -89,7 +90,8 @@ def test_upload_checks_the_zip_and_says_what_it_holds(app):
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["kit"] and body["files"] >= 1 and body["spoolman"] is True and body["replaces_data"] is True
-    assert backup.uploaded().read_bytes() == z.read_bytes()
+    assert body["sha256"] == hashlib.sha256(z.read_bytes()).hexdigest()
+    assert backup.pending().read_bytes() == z.read_bytes() and not backup.uploaded().exists()   # pinned by root
 
 
 def test_upload_needs_the_code_and_keeps_nothing_without_it(app):
@@ -122,16 +124,19 @@ def test_the_restore_job_takes_the_typed_word(app, monkeypatch):
     started = []
     from filament_kit import setup_helper
     monkeypatch.setattr(setup_helper, "_start_job", lambda name, why="": started.append(name))
-    _upload(app, backup.create().read_bytes())
-    assert post(client(app), "job", {"name": "restore", "confirm": "yes"}).status_code == 400
-    assert post(client(app), "job", {"name": "restore"}).status_code == 400
-    assert post(client(app), "job", {"name": "restore", "confirm": "restore"}).status_code == 200
+    sha = _upload(app, backup.create().read_bytes()).json()["sha256"]
+    assert post(client(app), "job", {"name": "restore", "confirm": "yes", "sha256": sha}).status_code == 400
+    assert post(client(app), "job", {"name": "restore", "sha256": sha}).status_code == 400
+    assert post(client(app), "job", {"name": "restore", "confirm": "restore"}).status_code == 409    # no hash shown
+    assert post(client(app), "job", {"name": "restore", "confirm": "restore", "sha256": "0" * 64}).status_code == 409
+    assert post(client(app), "job", {"name": "restore", "confirm": "restore", "sha256": sha}).status_code == 200
     assert started == ["restore"]
 
 
 def test_forget_drops_the_upload(app):
     _upload(app, backup.create().read_bytes())
     assert post(client(app), "restore/forget", {}).status_code == 200 and not backup.uploaded().exists()
+    assert not backup.pending().exists()
 
 
 def test_keep_days_goes_through_the_helper(app):
