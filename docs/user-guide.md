@@ -828,8 +828,11 @@ The kit server serves the phone web app itself, whatever modules are on: open
 and add the page to the home screen if you like. With the `web` module on, `<public address>/intake` serves the
 same app as well, with your certificate (step by step: [Use the web app on an iPhone](install-iphone-web-app.md)).
 There is no sign-in: anyone on your home network can use it (as with the Android app's pairing, the home network is
-the gate). It answers by the server's own names, as the setup page does. Print alerts to the phone come only
-through the `web` module's address.
+the gate). Since it is part of the server, it is always on: anyone on the home network who opens it can add and edit
+spools, read labels (within the daily cap, with `ai_intake`) and, with the `printers` module, use its Printers tab.
+It answers by the server's own names, as the setup page does. Print alerts to the phone come only through the `web`
+module's address. On the Devices tab it shows as the paired device "phone web app (this server)", marked built in:
+it is how the page reaches the server and pairs again whenever the server starts.
 
 ### What only works at home
 

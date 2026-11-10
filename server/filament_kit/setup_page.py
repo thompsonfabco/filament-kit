@@ -254,6 +254,9 @@ def bad_host_text(hosts: set[str]) -> str:
             "add any other name on the Settings tab, under General: Names for this page.")
 
 
+from .web.slots import INTAKE_DEVICE as BUILT_IN_DEVICE  # noqa: E402  (shown as built in, never revoked here)
+
+
 def host_ok(request, hosts=None) -> bool:
     """The Host rule of the kit server's own pages (the setup page, the phone web app at /intake): one of the server's
     names or addresses (`hosts`, default allowed_hosts), a name added on the Settings tab, or a local name of the
@@ -536,7 +539,8 @@ class SetupPage:
                          "klipper": "klipper" in self.families, "list": self._printer_rows()},
             "readers": {"list": readers, "error": readers_error},
             "devices": [{"id": d["id"], "name": d["name"], "paired": _fmt_time(d["paired"]),
-                         "last_seen": _fmt_time(d["last_seen"])} for d in pairing.devices()],
+                         "last_seen": _fmt_time(d["last_seen"]), "built_in": d["name"] == BUILT_IN_DEVICE}
+                        for d in pairing.devices()],
             "web": {"public_url": (cfg.get("web") or {}).get("public_url")},
             "station": {"url": (cfg.get("station") or {}).get("url")},
             "apply": jobs.view(0, with_text=False),
@@ -812,6 +816,9 @@ class SetupPage:
 
     async def device_revoke(self, request: Request, body: dict):
         did = request.path_params["id"]
+        if any(d["id"] == did and d["name"] == BUILT_IN_DEVICE for d in await anyio.to_thread.run_sync(pairing.devices)):
+            raise Refused(409, "this is the kit's own phone web app (/intake) reaching the server's API; it pairs "
+                               "again whenever the server starts, so there is nothing to unpair")
         if not ENTRY.fullmatch(did) or not await anyio.to_thread.run_sync(pairing.revoke, did):
             raise Refused(404, "no such paired device")
         self.audit(request, f"paired device {did} revoked")

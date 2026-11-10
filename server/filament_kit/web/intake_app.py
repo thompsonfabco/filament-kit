@@ -132,7 +132,7 @@ class KitCap:
 
 class IntakeApp:
     def __init__(self, tools: Tools, *, public_url: str | None, lan_cidrs, claude=None, kit_api=None, host_ok=None,
-                 push: bool = True):
+                 push: bool = True, host_refusal=None):
         """`public_url`: the web unit's address (its Origin is the only one a POST may carry); None in the kit server,
         where the page is opened by the server's own names and a POST carries that same page's Origin. `host_ok`
         (the kit server): the setup page's Host rule, checked with the address on every route. `push`: the Printers
@@ -143,6 +143,7 @@ class IntakeApp:
         self.origin = f"{u.scheme}://{u.netloc}" if u else None
         self.base = (u.path.rstrip("/") if u else "") + "/intake"  # as the browser sees it (nginx strips it)
         self.host_ok = host_ok
+        self.host_refusal = host_refusal    # the kit server: the setup page's refusal text (its names, the Settings fix)
         self.static = {n: (STATIC / n).read_bytes() for n in ("app.js", "app.css", "printers.js")}
         self.icon = icon_png()
         self.tag_cache: dict = {}
@@ -174,7 +175,8 @@ class IntakeApp:
             if not self._lan(request):
                 return JSONResponse({"error": "home network only"}, 403)
             if not self.host_ok(request):
-                return JSONResponse({"error": "open this page by the server's own name or address"}, 403)
+                text = self.host_refusal() if self.host_refusal else "open this page by the server's own name or address"
+                return JSONResponse({"error": text}, 403)
             return await fn(request)
         return route
 

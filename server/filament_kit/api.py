@@ -667,7 +667,7 @@ class _Refused(Exception):
 # ---- end slot mapping, loading and usage routes ----------------------------------------------------------
 
 
-INTAKE_DEVICE = "phone web app (this server)"
+from .web.slots import INTAKE_DEVICE  # noqa: E402  (the kit's own phone web app's pairing; no mcp import)
 INTAKE_TOKEN = "intake_kit_token"       # in the state folder: the kit server's own phone web app's pairing
 
 
@@ -683,8 +683,10 @@ def _intake_web_app(cfg: dict, sm: Spoolman, claude, hosts=None) -> list:
     kit = slots.KitApi(token_file=config.paths().state / INTAKE_TOKEN, device=INTAKE_DEVICE, role=web_access.WEB_ROLE)
     tools = mcp_tools.Tools(sm, kit_api=kit, kit_writes=True)
     lan_cidrs = (cfg.get("web") or {}).get("lan") or []
+    names = hosts or setup_page.allowed_hosts
     return IntakeApp(tools, public_url=None, lan_cidrs=lan_cidrs, claude=claude, kit_api=kit, push=False,
-                     host_ok=lambda request: setup_page.host_ok(request, hosts)).routes()
+                     host_ok=lambda request: setup_page.host_ok(request, hosts),
+                     host_refusal=lambda: setup_page.bad_host_text(names() | setup_page.extra_hosts())).routes()
 
 
 def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hub=None,

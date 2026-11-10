@@ -32,6 +32,7 @@ log = logging.getLogger(__name__)
 
 TIMEOUT_STATE, TIMEOUT_SET = 10, 20
 DEVICE_NAME = "web (MCP)"
+INTAKE_DEVICE = "phone web app (this server)"     # the kit server's own /intake page (api._intake_web_app)
 UNPAIRED = (f"the kit server no longer accepts this web unit (the device '{DEVICE_NAME}' was unpaired); "
             "pair it again: sudo filament-kit modules apply")
 NOT_PAIRED = "this web unit is not paired with the kit server yet; pair it: sudo filament-kit modules apply"
@@ -227,7 +228,11 @@ class KitApi:
         """The kit server refused the token: the owner unpaired 'web (MCP)'. Say so loudly, drop the token so the
         next `modules apply` pairs again, and refuse until then (re-pairing behind the owner's back would undo the unpair)."""
         with self._lock:
-            if not self._refused:
+            if not self._refused and self._file is not None:
+                log.error("the kit server refused its own phone web app's pairing token (the device %r was "
+                          "unpaired?); its Printers tab is off until the server restarts, which pairs it again",
+                          self._device)
+            elif not self._refused:
                 log.error("the kit server refused this web unit's pairing token (the device %r was unpaired?); "
                           "printer slots are off until it is paired again: sudo filament-kit modules apply",
                           DEVICE_NAME)
