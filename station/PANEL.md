@@ -13,14 +13,14 @@ spools for recognition. The station is installed as the `station` module (`filam
 `filament-kit-station.service`.
 
 Panels built on a Wemos D1 mini (ESP8266, firmware 9 and older) still work: the station uses them as they are but
-never reflashes them. Everything below describes firmware 10 on the C3.
+never reflashes them. Everything below describes firmware 11 on the C3.
 
 ## Wiring
 
 | Function | C3 GPIO | Constant |
 |---|---|---|
-| I2C SDA (OLED, air sensor) | 5 | `PIN_SDA` |
-| I2C SCL (OLED, air sensor) | 6 | `PIN_SCL` |
+| I2C SDA (OLED, air sensor, NFC reader) | 5 | `PIN_SDA` |
+| I2C SCL (OLED, air sensor, NFC reader) | 6 | `PIN_SCL` |
 | Buzzer signal | 0 | `PIN_BUZZER` |
 | Yellow (Hold) switch, other side to G | 3 | `PIN_BTN_HOLD` |
 | Red (Discard) switch, other side to G | 4 | `PIN_BTN_DISCARD` |
@@ -37,6 +37,11 @@ because the amplifier stays silent with no I2S clock.
 - **Buzzer:** + / - to 3V3 / G, signal to GPIO 0.
 - **OLED (SSD1306 128x64, I2C 0x3C) and air sensor:** on the same I2C bus, VCC / GND to 3V3 / G. The bus needs
   pull-ups: keep the sensor board's, or add 4.7 kΩ from SDA and SCL to 3V3 on a board that has none.
+- **NFC reader (optional, firmware 11):** a PN532 module (Elechouse NFC Module V3) set to I2C mode (address 0x24)
+  on the same SDA / SCL, VCC / GND to 3V3 / G. Its IRQ and RSTO pins stay unconnected: the firmware uses no pin but
+  SDA and SCL for it (GPIO 7 is a lamp and GPIO 10 the I2S clock). The panel looks for it at boot and every 5 s
+  after, so it can be plugged in later. The USB PN532 reader keeps working, alone or together with this one; the
+  same tag seen by both within 2 s is one tap.
 - **Lamps:** 5 V type with the resistor built in, switched by a BS170 N-MOSFET each because a GPIO pin gives 3.3 V at
   about 12 mA at most. Lamp + to 5 V, lamp - to the drain; source to G; gate to the pin through 220 Ω, with 100 kΩ
   from gate to G so the lamps stay dark while the board resets. BS170 legs, flat face toward you: D G S (the
@@ -115,10 +120,12 @@ Red cancels at any step. Yellow advances: a short press does the step's job, and
 | PC → panel | `B <hz> <ms> [count]` | beep(s) |
 | PC → panel | `V <percent>` | speech volume, 0-100 (firmware 10; the station sends it once after finding a C3 panel, and a changed `station.speaker_volume` restarts the station, so it is sent again then) |
 | PC → panel | `A <n>` + n raw bytes | speech, unsigned 8-bit mono at 8 kHz (n ≤ 1024): each byte is one sample, 128 is silence (on firmware 9 and older it is the speaker MOSFET's duty, 0 = off) |
-| panel → PC | `HELLO intake-panel <version> [<chip>]` | at boot and after `?`; firmware 10 answers `HELLO intake-panel 10 esp32c3`, and the chip token is missing on firmware 9 and older, which are ESP8266 (2: speaker and BME280; 3: PWM speaker; 4: AHT20; 5-6: whine-free PWM, 160 MHz; 7: OLED, long press; 8: "Waiting for PC" boot title; 9: long press on both buttons; 10: ESP32-C3, I2S speech, V volume, chip token) |
+| panel → PC | `HELLO intake-panel <version> [<chip>]` | at boot and after `?`; firmware 11 answers `HELLO intake-panel 11 esp32c3`, and the chip token is missing on firmware 9 and older, which are ESP8266 (2: speaker and BME280; 3: PWM speaker; 4: AHT20; 5-6: whine-free PWM, 160 MHz; 7: OLED, long press; 8: "Waiting for PC" boot title; 9: long press on both buttons; 10: ESP32-C3, I2S speech, V volume, chip token; 11: PN532 on I2C, TAG and NFC lines) |
 | panel → PC | `P H` / `P D` | the yellow / red button pressed: sent on release, if held under 0.8 s |
 | panel → PC | `L H` / `L D` | the yellow / red button held 0.8 s (a long press; its release sends nothing). A long press on red cancels, like a short one. With station.panel_swap (`STATION_PANEL_SWAP=1`), H is red and D is yellow, and the `L` lamp modes go out swapped. |
 | panel → PC | `AIR <°C> <RH%\|-> <hPa\|->` | room air every 10 s; `-` = that sensor isn't fitted |
+| panel → PC | `TAG <hex>` | firmware 11: a tag read by the panel's PN532, its UID in lowercase hex, sent once per presentation (again only after no tag was seen for 1 s, or for a different tag). The station formats it like the USB reader's tags. |
+| panel → PC | `NFC ok` / `NFC none` | firmware 11: whether a PN532 answers on the I2C bus; sent after every HELLO and when that changes. `curl http://127.0.0.1:5003/state` shows it as `"panel_nfc"`. |
 
 The PC resends `L` every second, and `D` rows when they change. Until the first `L` since boot the title reads
 "Waiting for PC" (firmware 8: the station may be about to reflash the panel, and an older firmware leaves the OLED as

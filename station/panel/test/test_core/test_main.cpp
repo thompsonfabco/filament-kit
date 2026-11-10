@@ -10,6 +10,7 @@
 #include "aht20.h"
 #include "bme280.h"
 #include "panel_core.h"
+#include "pn532.h"
 
 using namespace panel;
 
@@ -218,6 +219,77 @@ void test_fade_reaches_zero_at_400() {
   TEST_ASSERT_EQUAL_INT16(-500, fadeTowardSilence(-1000, 200));
 }
 
+void test_pn532_frames() {
+  uint8_t f[16];
+  const uint8_t sam[] = {0x14, 0x01, 0x00, 0x01};
+  const uint8_t want[] = {0x00, 0x00, 0xFF, 0x05, 0xFB, 0xD4, 0x14, 0x01, 0x00, 0x01, 0x16, 0x00};
+  TEST_ASSERT_EQUAL_UINT8(12, pn532Frame(f, sam, 4));
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(want, f, 12);
+  const uint8_t ack[] = {0x01, 0x00, 0x00, 0xFF, 0x00, 0xFF, 0x00};
+  TEST_ASSERT_TRUE(pn532IsAck(ack));
+  uint8_t notReady[7]; memcpy(notReady, ack, 7); notReady[0] = 0;
+  TEST_ASSERT_FALSE(pn532IsAck(notReady));
+}
+
+// An InListPassiveTarget answer carrying a 4-byte UID, as read from the chip (status byte first), padded to 32 bytes.
+static void inList(uint8_t *r, uint8_t nb, const uint8_t *uid, uint8_t l) {
+  memset(r, 0, 32);
+  uint8_t d[16], n = 0;
+  d[n++] = 0x4B; d[n++] = nb;
+  if (nb) { d[n++] = 1; d[n++] = 0x00; d[n++] = 0x04; d[n++] = 0x08; d[n++] = l; for (uint8_t i = 0; i < l; i++) d[n++] = uid[i]; }
+  uint8_t len = n + 1, sum = 0xD5;
+  r[0] = 1; r[3] = 0xFF; r[4] = len; r[5] = (uint8_t)(0x100 - len); r[6] = 0xD5;
+  for (uint8_t i = 0; i < n; i++) { r[7 + i] = d[i]; sum += d[i]; }
+  r[7 + n] = (uint8_t)(0x100 - sum); r[8 + n] = 0;
+}
+
+void test_pn532_uid_answer() {
+  uint8_t r[32], uid[10], l = 0, n = 0;
+  const uint8_t id[] = {0x04, 0xA1, 0xB2, 0xC3};
+  inList(r, 1, id, 4);
+  const uint8_t *d = pn532Answer(r, 31, 0x4B, n);
+  TEST_ASSERT_NOT_NULL(d);
+  TEST_ASSERT_TRUE(pn532Uid(d, n, uid, l));
+  TEST_ASSERT_EQUAL_UINT8(4, l);
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(id, uid, 4);
+  char hex[21];
+  pn532Hex(uid, l, hex);
+  TEST_ASSERT_EQUAL_STRING("04a1b2c3", hex);
+  inList(r, 0, id, 0);  // no target
+  d = pn532Answer(r, 31, 0x4B, n);
+  TEST_ASSERT_NOT_NULL(d);
+  TEST_ASSERT_FALSE(pn532Uid(d, n, uid, l));
+}
+
+void test_pn532_answer_rejects_bad_frames() {
+  uint8_t r[32], n = 0;
+  const uint8_t id[] = {1, 2, 3, 4};
+  inList(r, 1, id, 4);
+  TEST_ASSERT_NULL(pn532Answer(r, 31, 0x15, n));  // another command's answer
+  r[0] = 0;
+  TEST_ASSERT_NULL(pn532Answer(r, 31, 0x4B, n));  // not ready
+  inList(r, 1, id, 4);
+  r[10] ^= 1;
+  TEST_ASSERT_NULL(pn532Answer(r, 31, 0x4B, n));  // data checksum
+  inList(r, 1, id, 4);
+  r[5] ^= 1;
+  TEST_ASSERT_NULL(pn532Answer(r, 31, 0x4B, n));  // length checksum
+  inList(r, 1, id, 4);
+  TEST_ASSERT_NULL(pn532Answer(r, 12, 0x4B, n));  // truncated
+}
+
+void test_tag_gate_once_per_presentation() {
+  TagGate g;
+  const uint8_t a[] = {1, 2, 3, 4}, b[] = {9, 9, 9, 9, 9, 9, 9};
+  TEST_ASSERT_TRUE(g.report(a, 4, 1000));
+  TEST_ASSERT_FALSE(g.report(a, 4, 1100));   // still on the reader
+  TEST_ASSERT_FALSE(g.report(a, 4, 1900));   // a missed poll or two does not start a new presentation
+  TEST_ASSERT_FALSE(g.report(a, 4, 2800));
+  TEST_ASSERT_TRUE(g.report(a, 4, 3800));    // gone for 1 s, then back
+  TEST_ASSERT_TRUE(g.report(b, 7, 3900));    // another tag straight away
+  TEST_ASSERT_FALSE(g.report(b, 7, 4000));
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_bme280_and_aht20);
@@ -233,5 +305,9 @@ int main() {
   RUN_TEST(test_button_short_long_debounce);
   RUN_TEST(test_to_pcm);
   RUN_TEST(test_fade_reaches_zero_at_400);
+  RUN_TEST(test_pn532_frames);
+  RUN_TEST(test_pn532_uid_answer);
+  RUN_TEST(test_pn532_answer_rejects_bad_frames);
+  RUN_TEST(test_tag_gate_once_per_presentation);
   return UNITY_END();
 }

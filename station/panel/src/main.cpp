@@ -20,9 +20,15 @@
 //                 (STATION_PANEL_SWAP) without a reflash; it swaps the "L" lamp modes to match.
 //                 "AIR <C> <RH%|-> <hPa|->" room air every 10 s: a BME280, or a BMP280 + AHT20 board ("-": no such
 //                                         sensor, e.g. RH on a lone BMP280)
+//                 "TAG <hex>"             an NFC tag read by the PN532 on the I2C bus (since firmware 11): its UID in
+//                                         lowercase hex, once per presentation (again only after no tag was seen for
+//                                         1 s, or for a different tag)
+//                 "NFC ok" / "NFC none"   whether a PN532 answers on the bus: sent after every HELLO and whenever that
+//                                         changes (it is looked for every 5 s, so it can be plugged in later)
 // The PC resends "L" every second; with no "L" for 5 s (station service stopped) the lamps go dark and the display
 // says the station is offline ("Waiting for PC" before the first "L" since boot). The OLED (SSD1306 128x64, I2C
-// 0x3C) shares the bus with the air sensor. Line parsing, lamp and button timing and the speech sample conversion
+// 0x3C) shares the bus with the air sensor and the PN532
+// (Elechouse NFC module V3 in I2C mode, 0x24; IRQ and RSTO unconnected, so no pin but SDA/SCL is touched for it). Line parsing, lamp and button timing and the speech sample conversion
 // live in lib/panel_core (host tests in test/test_core).
 //
 // Pins follow the peripheral standard: I2C on 5/6 and the buzzer on 0 as on the reader; never the strapping pins
@@ -35,9 +41,10 @@
 #include <U8g2lib.h>
 #include "aht20.h"
 #include "bme280.h"
+#include "pn532.h"
 #include "panel_core.h"
 
-static const char *VERSION = "10";
+static const char *VERSION = "11";
 static const uint8_t PIN_SDA = 5;            // I2C SDA (air sensor, OLED)
 static const uint8_t PIN_SCL = 6;            // I2C SCL
 static const uint8_t PIN_BUZZER = 0;         // buzzer module signal
@@ -50,6 +57,8 @@ static const uint8_t PIN_I2S_LRC = 20;       // MAX98357 LRC (word select)
 static const uint8_t PIN_I2S_DIN = 21;       // MAX98357 DIN
 
 static const uint32_t WATCHDOG_MS = 5000;
+static const uint32_t NFC_POLL_MS = 100;   // between tag polls
+static const uint32_t NFC_RETRY_MS = 5000;  // between looks for an absent PN532
 static const uint32_t AIR_MS = 10000;      // a forced-mode reading every 10 s: the sensor barely warms itself
 static const uint32_t SAMPLE_RATE = 8000;
 
@@ -219,6 +228,66 @@ struct Air {
   }
 };
 
+// ---------- NFC: PN532 on the shared I2C bus, a state machine of short transactions (each well under 20 ms) ----------
+// Commands go out as frames (pn532.h), the chip ACKs, then answers when done; the answer's ready bit is polled. The
+// poll is InListPassiveTarget with no retries (RFConfiguration), so the chip answers at once, tag or not.
+struct Nfc {
+  enum Phase : uint8_t { SEND, ACK, RESP };
+  Phase phase = SEND;
+  uint8_t cmd = 0, fails = 0;  // cmd: 0 SAMConfiguration, 1 RFConfiguration, 2 InListPassiveTarget (the polling)
+  bool ok = false;             // initialised and answering
+  bool loud = false;           // announce changes (not during the boot probe: HELLO says it then)
+  uint32_t due = 0, deadline = 0, retryMs = NFC_RETRY_MS;
+  TagGate gate;
+  static constexpr uint8_t ARGS[3][6] = {{0x14, 0x01, 0x00, 0x01}, {0x32, 0x05, 0xFF, 0x01, 0x00}, {0x4A, 0x01, 0x00}};
+  static constexpr uint8_t ARGN[3] = {4, 5, 3};
+
+  void say() { Serial.println(ok ? "NFC ok" : "NFC none"); }
+  void note() { if (loud) say(); }
+  void fail(uint32_t now) {
+    static const uint8_t cancel[6] = {0x00, 0x00, 0xFF, 0x00, 0xFF, 0x00};  // an ACK frame aborts the chip's command
+    Wire.beginTransmission(PN532_ADDR); Wire.write(cancel, 6); Wire.endTransmission();
+    phase = SEND;
+    if (ok && ++fails < 3) { due = now + NFC_POLL_MS; return; }
+    if (ok) { ok = false; note(); }
+    cmd = 0; fails = 0; due = now + retryMs;
+  }
+  void poll(uint32_t now) {
+    if ((int32_t)(now - due) < 0) return;
+    uint8_t r[32];
+    if (phase == SEND) {
+      uint8_t f[16], n = pn532Frame(f, ARGS[cmd], ARGN[cmd]);
+      Wire.beginTransmission(PN532_ADDR); Wire.write(f, n);
+      if (Wire.endTransmission() != 0) { fail(now); return; }
+      phase = ACK; due = now + 3; deadline = now + 100;
+      return;
+    }
+    uint8_t want = phase == ACK ? 7 : sizeof r;
+    if (Wire.requestFrom(PN532_ADDR, want) != want) { fail(now); return; }
+    for (uint8_t i = 0; i < want; i++) r[i] = Wire.read();
+    if (phase == ACK) {
+      if (!pn532IsAck(r)) { if ((int32_t)(now - deadline) >= 0) fail(now); else due = now + 5; return; }
+      phase = RESP; due = now + 10; deadline = now + 100;
+      return;
+    }
+    if (!pn532Ready(r)) { if ((int32_t)(now - deadline) >= 0) fail(now); else due = now + 10; return; }
+    uint8_t n = 0;
+    const uint8_t *d = pn532Answer(r, sizeof r - 1, ARGS[cmd][0] + 1, n);
+    if (!d) { fail(now); return; }
+    fails = 0; phase = SEND; due = now;
+    if (cmd < 2) {
+      if (++cmd == 2) { ok = true; note(); }
+      return;
+    }
+    due = now + NFC_POLL_MS;
+    uint8_t uid[10], len;
+    if (!pn532Uid(d, n, uid, len) || !gate.report(uid, len, now)) return;
+    char hex[21];
+    pn532Hex(uid, len, hex);
+    Serial.print("TAG "); Serial.println(hex);
+  }
+};
+
 // ---------- OLED: SSD1306 128x64 on the shared I2C bus; the PC sends the text, the bottom line is room air ----------
 // U8g2 (BSD-2-Clause) with two fonts only: u8g2_font_helvB10_tf (title; Adobe/DEC X11 HELVB10.BDF, permissive, its
 // notice is in ../PANEL.md) and u8g2_font_6x10_tf (body + air line; X11 Misc-Fixed, public domain).
@@ -270,6 +339,7 @@ struct Display {
 static Lamp hold{PIN_LAMP_HOLD}, discard{PIN_LAMP_DISCARD};
 static Button btnHold{PIN_BTN_HOLD, 'H'}, btnDiscard{PIN_BTN_DISCARD, 'D'};
 static Air air;
+static Nfc nfc;
 static Display display;
 static uint32_t lastL = 0;
 static uint16_t beepHz = 0, beepMs = 0; static uint8_t beepsLeft = 0; static uint32_t nextBeep = 0;
@@ -277,7 +347,10 @@ static bool beeping = false; static uint32_t beepEnd = 0;
 static char line[64]; static uint8_t len = 0;
 static uint16_t binLeft = 0;  // raw audio bytes still to come after an "A <n>" line
 
-static void hello() { Serial.print("HELLO intake-panel "); Serial.print(VERSION); Serial.println(" esp32c3"); }
+static void hello() {
+  Serial.print("HELLO intake-panel "); Serial.print(VERSION); Serial.println(" esp32c3");
+  nfc.say();
+}
 
 static void handle(const char *s) {
   panel::Command cmd;
@@ -322,6 +395,11 @@ void setup() {
   Wire.setClock(400000);  // a full OLED update stays short
   u8g2.setBusClock(400000);
   delay(50);
+  // look for the PN532 for up to 150 ms so the first NFC line is true; then every 5 s
+  nfc.retryMs = 10;
+  for (uint32_t end = millis() + 150; !nfc.ok && (int32_t)(millis() - end) < 0; delay(2)) nfc.poll(millis());
+  nfc.retryMs = NFC_RETRY_MS;
+  nfc.loud = true;
   Serial.println();
   hello();
   if (!speech) Serial.println("I2S failed: no speech");
@@ -351,5 +429,6 @@ void loop() {
   btnHold.poll(now); btnDiscard.poll(now);
   hold.update(now); discard.update(now);
   air.poll(now);
+  nfc.poll(now);
   display.poll(now, air);
 }
