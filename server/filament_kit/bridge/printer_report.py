@@ -54,9 +54,33 @@ def why(wanted) -> str | None:
     return _WHY.get(wanted)
 
 
+# A serial's shape (letters and digits, 12 or more, both kinds): never in the file, whatever field it turns up in.
+SERIALISH = re.compile(r"(?=[0-9A-Za-z]*[0-9])(?=[0-9A-Za-z]*[A-Za-z])[0-9A-Za-z]{12,}")
+
+
 def _plain(v, shape=PLAIN) -> str | None:
     s = str(v).strip() if isinstance(v, (str, int)) and not isinstance(v, bool) else ""
-    return s if s and shape.fullmatch(s) else None
+    return s if s and shape.fullmatch(s) and not SERIALISH.search(s) else None
+
+
+def _kinds(hw) -> set[str]:
+    """The kit's own unit kinds: the AMS type keys of the hardware file, plus external holders and unknown units."""
+    return {t.key for t in hw.ams_types} | {layout.EXT_KIND, "generic"}
+
+
+def _label_shape(hw) -> re.Pattern:
+    """The kit's own slot labels: a unit prefix ("", "HT-" or a type's), 1-3 letters and a slot number (A1, AA4,
+    HT-A), or an external holder's label (Ext, Ext-L, Ext-R, or Ext-<id> for one the model doesn't know)."""
+    prefixes = sorted({"", "HT-"} | {t.label_prefix for t in hw.ams_types if t.label_prefix}, key=len, reverse=True)
+    ext = sorted({x.label for m in hw.models for x in m.externals} | set(layout.EXT_DEFAULT.values()) | {"Ext"},
+                 key=len, reverse=True)
+    units = "|".join(re.escape(p) for p in prefixes)
+    return re.compile(rf"(?:(?:{units})[A-Z]{{1,3}}[1-9]?|{'|'.join(re.escape(e) for e in ext)}|Ext-\d{{1,3}})")
+
+
+def _kind(value, hw) -> str | None:
+    k = _plain(value)
+    return k if k in _kinds(hw) else None
 
 
 def _set(el: ET.Element, key: str, value, shape=PLAIN) -> None:
@@ -93,8 +117,9 @@ def _layout(root: ET.Element, report: dict, model) -> None:
     lay = layout.build(report, model)
     el = ET.SubElement(root, "layout", presence=lay.presence if lay.presence in ("bits", "tray_type") else "")
     raw = {status._int(u.get("id")): u for u in ((report.get("ams") or {}).get("ams") or []) if isinstance(u, dict)}
+    hw = hardware.load()
     for u in lay.units:
-        kind = _plain(u.kind)
+        kind = _kind(u.kind, hw)
         unit = ET.SubElement(el, "unit", id=str(int(u.ams_id)), kind=kind or "", known=str(bool(u.known)).lower(),
                              slots=str(len(u.slots)))
         _set(unit, "module", u.module, NAME)
@@ -166,19 +191,23 @@ def _hw_file_version() -> str | None:
 def _saved(root: ET.Element, saved: dict) -> None:
     """What the kit saved about the printer (no live report): its layout fingerprint, the slot map, the last mapping."""
     el = ET.SubElement(root, "saved")
+    hw = hardware.load()
+    labels = _label_shape(hw)
     for item in (saved.get("fingerprint") or [])[:64]:
         try:
             uid, kind, n = item
             unit = ET.SubElement(el, "unit", id=str(int(uid)), slots=str(int(n)))
         except (TypeError, ValueError):
             continue
-        _set(unit, "kind", kind, PLAIN)
+        kind = _kind(kind, hw)          # the same rule as the live report: the kit's own kinds only
+        if kind is not None:
+            unit.set("kind", kind)
     m = ET.SubElement(el, "map", calibrated=str(bool(saved.get("calibrated"))).lower(),
                       slots=str(len(saved.get("slots") or {})))
     _set(m, "scheme", saved.get("scheme"), SCHEME)
     for label, s in list((saved.get("slots") or {}).items())[:128]:
-        if not isinstance(s, dict) or not PLAIN.fullmatch(str(label)):
-            continue
+        if not isinstance(s, dict) or _plain(label) is None or not labels.fullmatch(str(label)):
+            continue                    # only the kit's own labels: never a serial, a host or a name
         slot = ET.SubElement(m, "slot", label=str(label))
         for k in ("ams_id", "tray_id", "global_id"):
             if isinstance(s.get(k), int) and not isinstance(s.get(k), bool):
