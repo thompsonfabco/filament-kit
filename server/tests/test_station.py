@@ -77,7 +77,7 @@ IDLE = {"step": "idle", "message": "", "spool": None, "filament": None}
 
 
 def _raw(now, **kw):
-    s = {"tag": "4:77:90:e:9:22:89", "tag_at": now - 10, "scale": {"grams": 1000.0, "status": "stable", "unit": 2},
+    s = {"tag": "a:b:c:d:e:f:1", "tag_at": now - 10, "scale": {"grams": 1000.0, "status": "stable", "unit": 2},
          "scale_at": now - 1, "last": 1000.0, "last_at": now - 2, "held": None, "held_at": None,
          "blink_until": 0, "panel": "/dev/ttyUSB1", "panel_version": "2",
          "air": None, "air_at": None, "photo": None, "photo_at": None, "flow": IDLE}
@@ -96,7 +96,7 @@ def test_state_and_last_tag_shapes():
         assert code == 200
         assert set(st) == {"tag", "scale", "last_weight", "panel", "panel_version", "air", "photo", "flow"}
         iso = station_http.iso(now - 10)
-        tag = {"status": "ok", "nfc_id": "4:77:90:e:9:22:89", "read_at": iso, "read_at_unix": now - 10,
+        tag = {"status": "ok", "nfc_id": "a:b:c:d:e:f:1", "read_at": iso, "read_at_unix": now - 10,
                "age_seconds": 10, "held": False}
         assert st == {
             "tag": tag,
@@ -233,5 +233,5 @@ def test_no_panel_reader_gets_first_port(fake_ports, monkeypatch):
 def test_tag_ids_use_format_uid(monkeypatch):
     seen = []
     monkeypatch.setattr(station_nfc, "on_tag", seen.append)
-    station_nfc.on_identifier(bytes([4, 0x77, 0x90, 0x0E, 9, 0x22, 0x89]))
-    assert seen == ["4:77:90:e:9:22:89"]
+    station_nfc.on_identifier(bytes([0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x01]))
+    assert seen == ["a:b:c:d:e:f:1"]

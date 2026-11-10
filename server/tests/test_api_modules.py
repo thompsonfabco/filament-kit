@@ -18,7 +18,7 @@ from filament_kit.modules import MODES
 from filament_kit.spoolman import Spoolman
 from filament_kit.station_client import StationClient, StationUnreachable
 
-STATE = {"tag": {"uid": "4:77:90:e:9:22:89"}, "scale": {"name": "DYMO"}, "last_weight": {"grams": 812.0}, "held": None}
+STATE = {"tag": {"uid": "a:b:c:d:e:f:1"}, "scale": {"name": "DYMO"}, "last_weight": {"grams": 812.0}, "held": None}
 
 
 @pytest.fixture(autouse=True)

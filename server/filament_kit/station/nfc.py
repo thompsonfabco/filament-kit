@@ -1,5 +1,5 @@
 """The PN532 NFC reader through nfcpy (NFC_DEVICE, default auto: the first ttyUSB port the button panel isn't on).
-Tag ids are formatted by `tags.format_uid` like nfc2klipper's ("4:77:90:e:9:22:89"), so they match Spoolman's
+Tag ids are formatted by `tags.format_uid` like nfc2klipper's ("a:b:c:d:e:f:1"), so they match Spoolman's
 extra.nfc_id.
 
 The PN532 keeps its UART speed until it loses power. nfcpy moves it from 115200 to 921600 baud when it opens the

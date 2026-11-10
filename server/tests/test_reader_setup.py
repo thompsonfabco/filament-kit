@@ -219,10 +219,10 @@ def test_two_boards_need_a_port_and_none_says_check_the_cable(tmp_path, monkeypa
 
 def test_without_platformio_it_says_how_to_add_it(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(rs, "find_pio", lambda who=None: None)
-    monkeypatch.setattr(rs, "owner", lambda: rs.Owner("pat", 1000, 1000, Path("/home/pat")))
+    monkeypatch.setattr(rs, "owner", lambda: rs.Owner("someone", 1000, 1000, Path("/home/someone")))
     assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)))) == 1
     err = capsys.readouterr().err
-    assert "pip install --user platformio" in err and "pat's account" in err and "not with sudo" in err
+    assert "pip install --user platformio" in err and "someone's account" in err and "not with sudo" in err
 
 
 def test_main_routes_reader_setup(monkeypatch):
@@ -305,7 +305,7 @@ def test_out_never_replaces_a_path_that_is_not_the_callers_file(tmp_path):
 @posix
 def test_setup_refuses_an_out_path_it_must_not_replace(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(cli, "_is_root", lambda: True)
-    monkeypatch.setattr(rs, "owner", lambda: rs.Owner("pat", os.getuid() + 1, os.getgid(), tmp_path))
+    monkeypatch.setattr(rs, "owner", lambda: rs.Owner("someone", os.getuid() + 1, os.getgid(), tmp_path))
     victim = tmp_path / "hosts"
     victim.write_text("127.0.0.1 localhost\n")
     assert cli.cmd_reader_setup(_args(out=str(victim)), ask_secret=_secret("p", "p")) == 1

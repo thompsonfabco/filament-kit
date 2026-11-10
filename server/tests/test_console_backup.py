@@ -184,3 +184,37 @@ def test_the_helper_hands_the_backup_over_its_socket_as_an_open_file(app, monkey
     finally:
         srv.close()
         shutil.rmtree(where, ignore_errors=True)
+
+
+@pytest.mark.skipif(not hasattr(socket, "send_fds") or not os.path.isdir("/proc/self/fd"), reason="SCM_RIGHTS, Linux")
+def test_a_file_that_comes_with_a_broken_reply_is_closed(tmp_path):
+    """Audit v0.5.0 finding 2: open_file used to leave the received descriptor open when the reply was not JSON."""
+    import threading
+    from filament_kit import setup_page
+    path = str(tmp_path / "h.sock")
+    srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    srv.bind(path)
+    srv.listen(1)
+    target = tmp_path / "f"
+    target.write_bytes(b"x")
+
+    def serve():
+        c, _ = srv.accept()
+        with c:
+            c.recv(65536)
+            fd = os.open(target, os.O_RDONLY)
+            try:
+                socket.send_fds(c, [b"this is not json"], [fd])
+            finally:
+                os.close(fd)
+
+    t = threading.Thread(target=serve, daemon=True)
+    t.start()
+    before = set(os.listdir("/proc/self/fd"))
+    reply, fh = setup_page.HelperClient(path, timeout=10).open_file({"op": "backup_open"})
+    t.join(5)
+    srv.close()
+    assert fh is None and reply["ok"] is False
+    leaked = [fd for fd in set(os.listdir("/proc/self/fd")) - before
+              if os.path.realpath(f"/proc/self/fd/{fd}") == str(target)]
+    assert leaked == []

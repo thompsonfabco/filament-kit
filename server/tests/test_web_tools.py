@@ -21,8 +21,8 @@ from filament_kit.web.mcp_tools import Problem  # noqa: E402
 BBL = Path(__file__).parent / "data" / "bbl"
 RULES = {"pla_location": "Rack 1", "box_prefix": "Storage box ", "box_count": 2,
          "overflow": "Overflow", "sealed_location": "Sealed stock"}
-UID = "4:77:90:e:9:22:89"
-UID2 = "4:77:8f:e:9:22:89"
+UID = "a:b:c:d:e:f:1"
+UID2 = "a:b:b:d:e:f:1"
 
 
 def item(**kw):

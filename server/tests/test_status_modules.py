@@ -103,7 +103,7 @@ def test_status_real_fresh_station_shows_reader_and_scale_not_seen(capsys):
 
 def test_status_real_station_after_a_tap_reader_seen(capsys):
     state = json.loads(json.dumps(FRESH_STATE))
-    state["tag"]["nfc_id"] = "4:77:90:e:9:22:89"
+    state["tag"]["nfc_id"] = "a:b:c:d:e:f:1"
     srv, url = _serve_station(state)
     try:
         _cfg(url)
