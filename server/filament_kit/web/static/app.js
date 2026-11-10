@@ -75,6 +75,7 @@ function show(key) {
 }
 let first = "add";
 try { first = localStorage.getItem("tab") || "add"; } catch {}
+if (Object.hasOwn(tabs, location.hash.slice(1))) first = location.hash.slice(1);   // a link to a tab, e.g. the setup page's #printers
 show(tabs[first] ? first : "add");
 
 // ---------- Add spools ----------

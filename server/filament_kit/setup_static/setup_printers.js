@@ -266,11 +266,22 @@ function packCard() {
     } } })), box);
 }
 
+// The live printer view (slots, loading, camera, controls, usage) is the phone web app's Printers tab, which the same
+// server serves at /intake to this browser too; it has that tab only with the printers module on.
+function liveCard() {
+  const url = location.pathname.replace(/\/setup\/?$/, "") + "/intake#printers";
+  return card("Live printer view",
+    h("p", { class: "muted", textContent: "Each printer's slots and the filament in them, loading and unloading spools, the camera, " +
+      "pause, resume and stop, and the usage log with undo are in the phone web app's Printers tab. This browser opens it too, " +
+      "on the home network." }),
+    h("p", {}, h("a", { href: url, target: "_blank", rel: "noopener", textContent: "Open the live printer view" })));
+}
+
 function printersTab() {
   const P = S.printers;
   if (!P.on) return [card("Printers", h("p", { class: "muted", textContent: "The printers and klipper modules are off on this server (see Modules)." }))];
   const rows = P.list.map((p) => (p.family === "klipper" ? klipperRow(p) : bambuRow(p)));
   return [card("Printers",
     ...(rows.length ? rows : [h("p", { class: "muted", textContent: P.bambu ? "No printer yet. Printers on the network appear here once they announce themselves." : "No printer yet." })])),
-    addCard(), P.klipper ? scanCard() : null, P.klipper ? packCard() : null];
+    P.bambu ? liveCard() : null, addCard(), P.klipper ? scanCard() : null, P.klipper ? packCard() : null];
 }
