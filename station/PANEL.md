@@ -36,7 +36,7 @@ loud the panel speaks. The station sends it to the panel once after it finds a C
 rewrites the station's drop-in, which restarts the station, so the new volume is sent then. If speech is too quiet,
 raise `station.speaker_volume`, and mount the speaker sealed in the enclosure with its sound path open to the front.
 
-## Behaviour: the intake flow (the owner's spec, 2026-11-06)
+## Behaviour: the intake flow
 
 Red cancels at any step. Yellow advances: a short press does the step's job, and a long press (0.8 s) saves.
 

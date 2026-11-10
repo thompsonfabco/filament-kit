@@ -706,7 +706,7 @@ hand: `sudo systemctl unmask sleep.target suspend.target hibernate.target hybrid
   `sudo filament-kit station flash-panel`: it stops the station, lists the C3 ports that give no answer, asks before
   flashing each one, checks the panel answers afterwards and restarts the station.
 - **Buttons and lamps the other way round (v0.4.0).** If your panel's yellow and red buttons and lamps are wired the
-  opposite way to the C3 pin table in the panel guide (the button you press for yellow acts as red, and the lamps are
+  opposite way to the C3 pin table in the [intake-panel hardware guide](https://github.com/thompsonfabco/filament-kit-hardware/tree/main/devices/intake-panel) (the button you press for yellow acts as red, and the lamps are
   swapped too), set `"panel_swap": true` under `"station"` in `/etc/filament-kit/config.json`, then run
   `sudo filament-kit modules apply`. The default is `false`. This needs firmware 9 or later. A C3 panel already runs
   firmware 10 or later. An ESP8266 panel on older firmware has to be reflashed by hand, because the station never reflashes
