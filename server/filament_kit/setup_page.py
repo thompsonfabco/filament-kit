@@ -254,7 +254,9 @@ def bad_host_text(hosts: set[str]) -> str:
             "add any other name on the Settings tab, under General: Names for this page.")
 
 
-from .web.slots import INTAKE_DEVICE as BUILT_IN_DEVICE  # noqa: E402  (shown as built in, never revoked here)
+from .web.slots import CLI_DEVICE, INTAKE_DEVICE  # noqa: E402
+BUILT_IN_DEVICES = (INTAKE_DEVICE, CLI_DEVICE)     # the server's own pairings: shown as built in, never revoked here
+BUILT_IN_DEVICE = INTAKE_DEVICE
 
 
 def host_ok(request, hosts=None) -> bool:
@@ -512,6 +514,9 @@ class SetupPage:
                 # a slot mapping this server runs: the page follows it again after a reload (a test's mapper is a bare object)
                 running = getattr(self.mapper, "running", None)
                 row["mapping"] = bool(p.configured and running is not None and running(p.serial))
+                # the last mapping said a printer report would help (printer_report.WANTED): the button stands out
+                from .bridge import mapping as _mapping, printer_report as _report
+                row["report_why"] = _report.why((_mapping._load_status(p.serial) or {}).get("report_wanted"))
             if p.family == "klipper":
                 row.update(host=p.host, port=p.port, api_key=bool(p.api_key), lane_data=p.lane_data)   # never the key itself
             out.append(row)
@@ -539,7 +544,7 @@ class SetupPage:
                          "klipper": "klipper" in self.families, "list": self._printer_rows()},
             "readers": {"list": readers, "error": readers_error},
             "devices": [{"id": d["id"], "name": d["name"], "paired": _fmt_time(d["paired"]),
-                         "last_seen": _fmt_time(d["last_seen"]), "built_in": d["name"] == BUILT_IN_DEVICE}
+                         "last_seen": _fmt_time(d["last_seen"]), "built_in": d["name"] in BUILT_IN_DEVICES}
                         for d in pairing.devices()],
             "web": {"public_url": (cfg.get("web") or {}).get("public_url")},
             "station": {"url": (cfg.get("station") or {}).get("url")},
@@ -816,9 +821,9 @@ class SetupPage:
 
     async def device_revoke(self, request: Request, body: dict):
         did = request.path_params["id"]
-        if any(d["id"] == did and d["name"] == BUILT_IN_DEVICE for d in await anyio.to_thread.run_sync(pairing.devices)):
-            raise Refused(409, "this is the kit's own phone web app (/intake) reaching the server's API; it pairs "
-                               "again whenever the server starts, so there is nothing to unpair")
+        if any(d["id"] == did and d["name"] in BUILT_IN_DEVICES for d in await anyio.to_thread.run_sync(pairing.devices)):
+            raise Refused(409, "this is one of the server's own pairings (its phone web app, or its command line) reaching "
+                               "its API; it pairs again when next needed, so there is nothing to unpair")
         if not ENTRY.fullmatch(did) or not await anyio.to_thread.run_sync(pairing.revoke, did):
             raise Refused(404, "no such paired device")
         self.audit(request, f"paired device {did} revoked")

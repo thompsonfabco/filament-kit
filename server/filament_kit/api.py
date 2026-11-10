@@ -543,6 +543,15 @@ def _bridge_routes(printers, mapper: mapping.Mapper, sm) -> list[Route]:
         return JSONResponse({"job_id": job}, status_code=202)
 
     @_authed
+    async def map_stop(request: Request):
+        """Stop a running slot mapping (the slots are put back first); `filament-kit printer map` on Ctrl-C."""
+        serial = request.path_params["id"]
+        await run_in_threadpool(bambu_only, serial)
+        await run_in_threadpool(audited, "slot mapping stopped", request.state.device, lambda: mapper.abort(serial),
+                                serial=serial)
+        return JSONResponse({"ok": True})
+
+    @_authed
     async def map_get(request: Request):
         serial = request.path_params["id"]
 
@@ -560,8 +569,9 @@ def _bridge_routes(printers, mapper: mapping.Mapper, sm) -> list[Route]:
         def build() -> dict:
             known(serial)
             bambu_only(serial)
-            r = mapper.report(serial)
-            return {"name": r["name"], "xml": r["xml"]}
+            r = mapper.report(serial)        # built from saved records when the printer can't be reached
+            return {"name": r["name"], "xml": r["xml"], "live": r.get("live", True),
+                    "saved_until": r.get("saved_until")}
         return JSONResponse(await run_in_threadpool(build))
 
     @_authed
@@ -643,6 +653,7 @@ def _bridge_routes(printers, mapper: mapping.Mapper, sm) -> list[Route]:
     return [
         Route("/api/printers/{id}/map", map_start, methods=["POST"]),
         Route("/api/printers/{id}/map", map_get),
+        Route("/api/printers/{id}/map/stop", map_stop, methods=["POST"]),
         *[Route("/api/printers/{id}/manual-map" + (f"/{name}" if name else ""),
                 manual_call(name or "view", fn, write=method == "POST"), methods=[method])
           for name, method, fn in manual_routes],

@@ -574,3 +574,14 @@ def test_manual_map_through_the_kit_api(client, mgr):
 def test_manual_map_needs_the_pairing(mgr, sm, mapper):
     c = TestClient(create_app(sm, printers=mgr, mapper=mapper))
     assert c.post(f"/api/printers/{SERIAL}/manual-map/start", json={}).status_code == 401
+
+
+def test_map_stop_needs_a_token_and_stops_the_job(mgr, sm, mapper, monkeypatch):
+    """`filament-kit printer map` stops the server's job on Ctrl-C through this route."""
+    stopped = []
+    monkeypatch.setattr(mapper, "abort", lambda serial: stopped.append(serial))
+    c = TestClient(create_app(sm, printers=mgr, mapper=mapper))
+    err(c.post(f"/api/printers/{SERIAL}/map/stop"), 401, "unauthorized")
+    c.headers["Authorization"] = "Bearer " + pairing.redeem_code(pairing.issue().code)
+    r = c.post(f"/api/printers/{SERIAL}/map/stop")
+    assert r.status_code == 200 and stopped == [SERIAL]

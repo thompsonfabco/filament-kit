@@ -33,6 +33,7 @@ log = logging.getLogger(__name__)
 TIMEOUT_STATE, TIMEOUT_SET = 10, 20
 DEVICE_NAME = "web (MCP)"
 INTAKE_DEVICE = "phone web app (this server)"     # the kit server's own /intake page (api._intake_web_app)
+CLI_DEVICE = "command line (this server)"         # `filament-kit printer map|report` asking the running server
 UNPAIRED = (f"the kit server no longer accepts this web unit (the device '{DEVICE_NAME}' was unpaired); "
             "pair it again: sudo filament-kit modules apply")
 NOT_PAIRED = "this web unit is not paired with the kit server yet; pair it: sudo filament-kit modules apply"

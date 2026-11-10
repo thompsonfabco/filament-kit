@@ -70,7 +70,7 @@ def test_the_kits_own_pairing_is_built_in_and_not_revoked_from_the_page(app):
     by = {d["name"]: d for d in devs}
     assert by[api.INTAKE_DEVICE]["built_in"] is True and by["Pixel"]["built_in"] is False
     r = post(client(app), f"devices/{by[api.INTAKE_DEVICE]['id']}/revoke", {})
-    assert r.status_code == 409 and "pairs again whenever the server starts" in r.json()["error"]
+    assert r.status_code == 409 and "pairs again when next needed" in r.json()["error"]
     assert post(client(app), f"devices/{by['Pixel']['id']}/revoke", {}).status_code == 200
 
 

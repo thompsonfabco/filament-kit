@@ -303,8 +303,9 @@ function printersTab() {
         ...(m.problems_old && (m.problems || []).length ? [h("p", { class: "muted", textContent: "From an earlier mapping, it may be fixed by now. Re-map the slots to check:" })] : []),
         ...(m.problems || []).map((t) => h("p", { class: m.problems_old ? "muted" : "err", textContent: t })),
         ...(m.notes || []).map((t) => h("p", { class: "muted", textContent: t })),
-        ...(m.report_wanted ? [h("p", { class: "muted", textContent: m.report_why || "A printer report would help." }),
-          h("button", { class: "secondary", textContent: "Collect a report", on: { click: collectReport } })] : []),
+        ...(m.report_wanted ? [h("p", { class: "muted", textContent: m.report_why || "A printer report would help." })] : []),
+        // every printer (interface parity, 2026-11-10); it stands out when the kit says a report would help
+        h("button", { class: m.report_wanted ? "" : "secondary", textContent: "Collect a report", on: { click: collectReport } }),
         h("button", { class: "secondary", textContent: running ? "Mapping…" : "Re-map slots", disabled: running, on: { click: remap } }));
       if (running) mapTimer = setTimeout(loadMap, 3000);
     } catch (e) { mapBox.replaceChildren(fail(e)); }
@@ -315,6 +316,7 @@ function printersTab() {
       const r = await pj(`${encodeURIComponent(current)}/report`, {});
       const url = URL.createObjectURL(new Blob([r.xml], { type: "application/xml" }));
       const a = h("a", { href: url, download: r.name, textContent: `Save ${r.name}, then attach it to a "Printer report" issue on the project's GitHub` });
+      if (r.live === false) mapBox.append(h("p", { class: "muted", textContent: "The printer could not be reached: this report is built from what the kit saved." }));
       mapBox.append(h("p", {}, a));
     } catch (e) { say(e.message, false); }
   }

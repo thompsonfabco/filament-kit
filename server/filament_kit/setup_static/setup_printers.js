@@ -34,7 +34,7 @@ function addressButton(p, box, now) {
 
 function bambuRow(p) {
   const box = boxFor("printer:" + p.serial), code = secret("Access Code (printer: Settings > Network/LAN)");
-  const mapBox = boxFor("map:" + p.serial);
+  const mapBox = boxFor("map:" + p.serial), reportBox = boxFor("report:" + p.serial);
   if (p.mapping) followMap(p, mapBox);      // a job already running (a reload, another browser): progress and Stop again
   return h("div", { class: "item" },
     h("p", {}, h("b", { textContent: p.name }), S.printers.klipper ? " Bambu" : "", `${dotted(p.model, p.ip || "no address yet", `serial ${p.serial}`)} `,
@@ -45,9 +45,32 @@ function bambuRow(p) {
       testButton(p, box), renameButton(p, box), addressButton(p, box, p.ip || ""),
       p.configured ? h("button", { class: "secondary", textContent: "Map slots", on: { click: () => startMap(p, mapBox) } }) : null,
       p.configured ? h("button", { class: "secondary", textContent: "Map by loading filament", on: { click: () => manualMap(p, mapBox) } }) : null,
+      p.configured ? h("button", { class: p.report_why ? "" : "secondary", textContent: "Collect a report", on: { click: () => collectReport(p, reportBox) } }) : null,
+      p.configured ? h("button", { class: "secondary", textContent: "Saved reports", on: { click: () => listReports(p, reportBox) } }) : null,
       p.pinned ? h("button", { class: "secondary", textContent: "Forget certificate", on: { click: () => { if (window.confirm(`Forget the certificate pinned for ${p.name}? The next connection trusts whatever answers at its address.`)) change(box, printerPath(p, "unpin"), {}); } } }) : null,
       forgetButton(p, box, "Its Access Code is deleted.")),
-    box, mapBox);
+    p.report_why ? h("p", { class: "err", textContent: `${p.report_why} Collect a report and attach it to an issue.` }) : null,
+    box, mapBox, reportBox);
+}
+
+// ----- printer reports: one XML file, made from an allow-list, for an issue; kept on the server, the last five -----
+async function collectReport(p, box) {
+  const r = await change(box, printerPath(p, "report"), {}, () => {});
+  if (r) listReports(p, box, `Collected ${r.name}.${r.note ? " " + r.note : ""}`);
+}
+
+async function listReports(p, box, done) {
+  let v;
+  try { v = await api(printerPath(p, "reports"), { code: codeIn.value }); } catch (e) { say(box, e.message, false); return; }
+  fill(box,
+    done ? h("p", { class: "ok", textContent: done }) : null,
+    v.reports.length ? null : h("p", { class: "muted", textContent: "No report kept for this printer yet." }),
+    ...v.reports.map((r) => h("div", { class: "row item" },
+      h("span", { textContent: `${r.name} · ${Math.max(1, Math.round(r.size / 1024))} KiB` }),
+      h("button", { class: "secondary", textContent: "Download", on: { click: async () => {
+        try { await download(printerPath(p, `reports/${encodeURIComponent(r.name)}`), { code: codeIn.value }, r.name); } catch (e) { say(box, e.message, false); }
+      } } }))),
+    h("p", { class: "muted", textContent: v.never }));
 }
 
 // ----- slot mapping: the server's own connection does it, and this follows it -----

@@ -12,6 +12,10 @@
     POST printers/{serial}/detect {}                Klipper: what it is
     POST printers/{serial}/map {code}  GET printers/{serial}/map  POST printers/{serial}/map/stop {code}
         Bambu: slot mapping on the server's own connection, so the printer never sees a second LAN client
+    POST printers/{serial}/report {code}            Bambu: collect a printer report now (bridge/printer_report.py), as the app's
+                                                    "Collect a report"; kept beside the printer's other files, the last five
+    POST printers/{serial}/reports {code}           the kept reports: [{name, size, at}], newest first, and what they never hold
+    POST printers/{serial}/reports/{name} {code}    one of them, to save (the server's own files: no root needed)
 """
 from __future__ import annotations
 
@@ -292,6 +296,53 @@ def routes(page) -> list[tuple]:
         page.audit(request, f"printer {serial} slot mapping started")
         return {"ok": True, "job_id": job}
 
+    async def report_collect(request, body):
+        serial = page._serial(request)
+
+        def run() -> dict:
+            m = mapper_of(serial)
+            try:
+                r = m.report(serial)
+            except PrinterOffline:
+                raise Refused(409, "the printer cannot be reached and the kit has saved nothing about it yet") from None
+            except UnknownPrinter:
+                raise Refused(404, "no such printer") from None
+            except OSError as e:
+                raise Refused(500, f"the report could not be kept ({type(e).__name__})") from None
+            note = None if r.get("live", True) else (
+                "The printer could not be reached: this report is built from what the kit saved"
+                + (f" (newest record {time.strftime('%Y-%m-%d %H:%M', time.localtime(r['saved_until']))})"
+                   if r.get("saved_until") else "") + ".")
+            return {"ok": True, "name": r["name"], "live": r.get("live", True), "note": note}
+        res = await anyio.to_thread.run_sync(run)
+        page.audit(request, f"printer {serial} report collected")
+        return res
+
+    async def report_list(request, body):
+        serial = page._serial(request)
+
+        def run() -> dict:
+            bambu_entry(serial)
+            from ..bridge import printer_report
+            return {"reports": printer_report.saved(serial), "never": printer_report.NEVER}
+        return await anyio.to_thread.run_sync(run)
+
+    async def report_download(request, body):
+        from starlette.responses import Response
+        serial, name = page._serial(request), request.path_params["name"]
+
+        def run() -> bytes:
+            bambu_entry(serial)
+            from ..bridge import printer_report
+            try:
+                return printer_report.read_saved(serial, name)
+            except OSError:
+                raise Refused(404, "no such report") from None
+        data = await anyio.to_thread.run_sync(run)
+        page.audit(request, f"printer {serial} report downloaded")
+        return Response(data, media_type="application/xml",
+                        headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
     def manual(what: str, fn):
         """A manual-map step (bridge/manual.py): the same answers as the kit API gives the app."""
         from ..bridge import manual as manual_mod
@@ -337,5 +388,7 @@ def routes(page) -> list[tuple]:
             (one + "/detect", g(detect), "POST"),
             (one + "/map", w(map_start), "POST"), (one + "/map", g(map_get), "GET"),
             (one + "/map/stop", w(map_stop), "POST"),
+            (one + "/report", w(report_collect), "POST"), (one + "/reports", w(report_list), "POST"),
+            (one + "/reports/{name}", w(report_download), "POST"),
             *[(one + "/manual-map" + (f"/{name}" if name else ""), (w if method == "POST" else g)(manual(name or "view", fn)),
                method) for name, method, fn in MANUAL_STEPS]]

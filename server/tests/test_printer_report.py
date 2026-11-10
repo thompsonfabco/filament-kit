@@ -12,8 +12,8 @@ from defusedxml import ElementTree
 
 from fakes.fake_paho import FakeClient, FakePrinter
 from filament_kit import cli, config
-from filament_kit.bridge import calib3mf, connection, mapping, printer_report, registry
-from filament_kit.bridge.connection import Manager
+from filament_kit.bridge import ams, calib3mf, connection, mapping, printer_report, registry
+from filament_kit.bridge.connection import Manager, PrinterOffline
 from filament_kit.bridge.registry import Printer
 from test_slottest import REPORT
 
@@ -308,6 +308,136 @@ def test_the_issue_template_says_to_read_it_first():
     assert "open it and read it" in t and "printer report" in t
 
 
+# ---------------------------------------------------------------- the printer cannot be reached (a live case, 2026-11-10)
+
+class Gone:
+    """A Manager whose printer never answers."""
+
+    def state(self, s):
+        return "disconnected"
+
+    def wait_report(self, serial, predicate, timeout):
+        return None
+
+    def wait_settled(self, serial, timeout):
+        return "offline"
+
+    def sync(self):
+        pass
+
+    def stop(self):
+        pass
+
+
+def _saved_map():
+    registry.upsert(registry.Printer(SERIAL, "", "N6", "192.0.2.5", "12345678", True))
+    smap = ams.SlotMap(slots={"A1": {"ams_id": 0, "tray_id": 0, "global_id": 0},
+                              "A2": {"ams_id": 0, "tray_id": 1, "global_id": 1}}, calibrated=True, scheme="shift8",
+                       fingerprint=[[0, "ams", 4], [255, None, 1]])
+    ams.save_map(SERIAL, smap)
+    d = config.paths().state / "printers" / SERIAL
+    (d / mapping.STATUS_FILE).write_text(json.dumps({"job_id": "a", "state": "failed", "step": "", "problems": ["x"],
+                                                     "reason": "offline", "finished": 1762800000, "trail": TRAIL[:1],
+                                                     "report_wanted": "no_mapping"}), encoding="utf-8")
+
+
+def test_an_unreachable_printer_gets_a_report_from_what_the_kit_saved():
+    _saved_map()
+    r = mapping.Mapper(Gone()).report(SERIAL)
+    assert r["live"] is False and r["saved_until"] and SERIAL not in r["xml"] and "192.0.2.5" not in r["xml"]
+    root = ElementTree.fromstring(r["xml"].encode())
+    assert root.get("live") == "false" and root.get("saved-until") and root.get("wanted") == "no_mapping"
+    assert root.get("hardware-file")
+    saved = root.find("saved")
+    assert [u.get("id") for u in saved.findall("unit")] == ["0", "255"]
+    m = saved.find("map")
+    assert m.get("calibrated") == "true" and m.get("scheme") == "shift8"
+    assert [(s.get("label"), s.get("tray-id")) for s in m.findall("slot")] == [("A1", "0"), ("A2", "1")]
+    assert saved.find("last-mapping").get("reason") == "offline" and root.find("attempt") is not None
+    assert root.find("layout") is None and root.find("firmware") is None     # nothing live is made up
+    assert "x" not in [e.text for e in root.iter()]                           # no free text from a failure
+
+
+def test_a_printer_the_kit_never_saw_is_refused():
+    with pytest.raises(PrinterOffline):
+        mapping.Mapper(Gone()).report("0948ZZ0A0000009")
+
+
+def test_the_cli_says_the_report_is_from_saved_records(capsys, monkeypatch):
+    monkeypatch.setattr(cli, "CONNECT_WAIT", 0.3)        # an unreachable printer is waited for that long first
+    _saved_map()
+    assert cli.main(["printer", "report", SERIAL], manager_factory=lambda s: Gone()) == 0
+    out = capsys.readouterr().out
+    assert "could not be reached" in out and "built from what the kit saved" in out and "Printer report saved:" in out
+    assert "Not reached: the printer did not answer" in out
+
+
+# ---------------------------------------------------------------- the running server holds the printer (live bug, 2026-11-10)
+
+class ServerApi:
+    """The running kit server's API as cli._server_api gives it: it holds the printer's connection."""
+
+    def __init__(self, map_states=None):
+        self.posts, self.gets = [], []
+        self.map_states = list(map_states or [])
+
+    def post(self, path, body):
+        self.posts.append(path)
+        if path.endswith("/report"):
+            return {"name": "printer-report-N6-20261110-120000.xml", "xml": "<printer-report/>", "live": True,
+                    "saved_until": None}
+        return {"job_id": "j1"}
+
+    def get(self, path):
+        self.gets.append(path)
+        return self.map_states.pop(0)
+
+
+def test_the_cli_report_asks_the_running_server(monkeypatch, capsys):
+    registry.upsert(registry.Printer(SERIAL, "", "N6", "192.0.2.5", "12345678", True))
+    api = ServerApi()
+    monkeypatch.setattr(cli, "_server_api", lambda: api)
+    assert cli.main(["printer", "report", SERIAL], manager_factory=lambda s: pytest.fail("a second connection")) == 0
+    assert api.posts == [f"/api/printers/{SERIAL}/report"]
+    out = capsys.readouterr().out
+    assert "printer-report-N6-20261110-120000.xml" in out and "could not be reached" not in out
+
+
+def test_the_cli_map_follows_the_servers_job(monkeypatch, capsys):
+    registry.upsert(registry.Printer(SERIAL, "", "N6", "192.0.2.5", "12345678", True))
+    monkeypatch.setattr(cli.time, "sleep", lambda s: None)
+    done = {"state": "done", "step": "", "slots": [{"label": "A1", "ams_id": 0, "tray_id": 0, "global": 0}],
+            "problems": [], "notes": [], "outcome": "confirmed", "outcome_text": "Mapped and confirmed.", "next_step": ""}
+    api = ServerApi([{"state": "running", "step": "Reading the AMS slots"}, {"state": "running", "step": "Reading the AMS slots"},
+                     {"state": "running", "step": "Running the calibration job"}, done])
+    monkeypatch.setattr(cli, "_server_api", lambda: api)
+    assert cli.main(["printer", "map", SERIAL], manager_factory=lambda s: pytest.fail("a second connection")) == 0
+    out = capsys.readouterr().out
+    assert api.posts == [f"/api/printers/{SERIAL}/map"]
+    assert out.count("Reading the AMS slots") == 1 and "Running the calibration job" in out
+    assert "A1: AMS 0 tray 0 -> printer slot 0" in out and "Mapped and confirmed." in out
+
+
+def test_the_cli_says_what_the_server_refused(monkeypatch, capsys):
+    from filament_kit.web.slots import SlotError
+    registry.upsert(registry.Printer(SERIAL, "", "N6", "192.0.2.5", "12345678", True))
+
+    class Busy(ServerApi):
+        def post(self, path, body):
+            raise SlotError("slot mapping is already running for this printer", code="already_running", http=409)
+    monkeypatch.setattr(cli, "_server_api", lambda: Busy())
+    assert cli.main(["printer", "map", SERIAL], manager_factory=lambda s: pytest.fail("a second connection")) == 1
+    assert "already running" in capsys.readouterr().err
+
+
+def test_every_interface_offers_the_report():
+    """Interface parity (2026-11-10): the setup page and the phone web app offer it for every Bambu printer, not only
+    when a report would help; the command line has `printer report`; the API route is what they all call."""
+    root = Path(__file__).resolve().parents[1] / "filament_kit"
+    phone = (root / "web" / "static" / "printers.js").read_text(encoding="utf-8")
+    assert 'h("button", { class: m.report_wanted ? "" : "secondary", textContent: "Collect a report"' in phone
+    page = (root / "setup_static" / "setup_printers.js").read_text(encoding="utf-8")
+    assert 'textContent: "Collect a report", on: { click: () => collectReport(p, reportBox) }' in page
 # ---------------------------------------------------------------- a real printer takes a moment to connect (live bug)
 
 @pytest.fixture

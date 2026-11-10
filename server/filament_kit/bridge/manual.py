@@ -160,8 +160,9 @@ class ManualMaps:
                 s.offer = False
         if not share:
             return {"share": False, "message": "Noted: this map is not shared."}
-        return {"share": True, "message": "Noted. The kit sends nothing itself: make the report with Collect a report in "
-                f"the phone web app, or on the server run: sudo filament-kit printer report {serial}, then attach the "
+        return {"share": True, "message": "Noted. The kit sends nothing itself: make the report with Collect a report on "
+                f"the printer's page in any of them (the setup page, the phone web app, the Android app), or on the server "
+                f"run: sudo filament-kit printer report {serial}, then attach the "
                 "file to an issue."}
 
     # ---------------------------------------------------------------- inside

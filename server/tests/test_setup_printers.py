@@ -49,6 +49,13 @@ class FakeMapper:
     def abort(self, serial):
         self.stopped.append(serial)
 
+    def report(self, serial):
+        if self.fail:
+            raise self.fail
+        from filament_kit.bridge import printer_report
+        path = printer_report.save(serial, b"<printer-report format='1'/>", "H2D")
+        return {"name": path.name, "xml": "<printer-report/>", "path": str(path)}
+
 
 @pytest.fixture
 def both(env, helper, manager, names):
@@ -540,3 +547,64 @@ def test_the_live_view_link_resolves_beside_the_setup_page():
     js = f"console.log(JSON.stringify({json.dumps(probe)}.map((p) => {{ const location = {{ pathname: p }}; return {expr}; }})));"
     out = subprocess.run([shutil.which("node"), "-e", js], capture_output=True, text=True, timeout=30, check=True).stdout
     assert json.loads(out) == ["/intake#printers", "/intake#printers", "/kit/intake#printers"]
+
+
+# ---------- printer reports on the setup page (the user, 2026-11-10: "available on the computer setup page as well") ----------
+def test_collect_list_and_download_a_report(mapped):
+    app, fake = mapped
+    _bambu()
+    c = client(app)
+    assert post(c, f"printers/{SERIAL}/report", {}, code=None).status_code in (401, 403)       # the code, as every write
+    r = post(c, f"printers/{SERIAL}/report", {})
+    assert r.status_code == 200 and r.json()["name"].startswith("printer-report-")
+    v = post(c, f"printers/{SERIAL}/reports", {}).json()
+    assert [x["name"] for x in v["reports"]] == [r.json()["name"]] and "never holds" in v["never"]
+    d = post(c, f"printers/{SERIAL}/reports/{r.json()['name']}", {})
+    assert d.status_code == 200 and d.content == b"<printer-report format='1'/>"
+    assert f'filename="{r.json()["name"]}"' in d.headers["content-disposition"]
+
+
+@pytest.mark.parametrize("name", ["..%2Fprinters.xml", "printers.xml", "printer-report-H2D-20261110-120000.xml.bak",
+                                  "printer-report-H2D-20261110-120000.xml"])
+def test_only_a_kept_report_downloads(mapped, name):
+    app, _ = mapped
+    _bambu()
+    assert post(client(app), f"printers/{SERIAL}/reports/{name}", {}).status_code == 404
+
+
+@pytest.mark.skipif(__import__("sys").platform == "win32", reason="POSIX links")
+def test_a_planted_link_is_not_followed(mapped, tmp_path):
+    app, _ = mapped
+    _bambu()
+    from filament_kit import config
+    d = config.paths().state / "printers" / SERIAL
+    d.mkdir(parents=True, exist_ok=True)
+    secret = tmp_path / "secret"
+    secret.write_text("not a report")
+    (d / "printer-report-H2D-20261110-120000.xml").symlink_to(secret)
+    c = client(app)
+    assert post(c, f"printers/{SERIAL}/reports", {}).json()["reports"] == []
+    assert post(c, f"printers/{SERIAL}/reports/printer-report-H2D-20261110-120000.xml", {}).status_code == 404
+
+
+def test_an_offline_printer_says_so(mapped):
+    app, fake = mapped
+    _bambu()
+    fake.fail = PrinterOffline(SERIAL)
+    r = post(client(app), f"printers/{SERIAL}/report", {})
+    assert r.status_code == 409 and "saved nothing" in r.json()["error"]
+
+
+def test_the_row_says_when_a_report_would_help(mapped):
+    app, _ = mapped
+    _bambu()
+    from filament_kit import config
+    import json
+    d = config.paths().state / "printers" / SERIAL
+    d.mkdir(parents=True, exist_ok=True)
+    (d / mapping.STATUS_FILE).write_text(json.dumps({"job_id": "x", "state": "done", "step": "", "problems": [],
+                                                     "report_wanted": "no_scheme"}), encoding="utf-8")
+    row = next(p for p in client(app).get("/setup/api/state").json()["printers"]["list"] if p["serial"] == SERIAL)
+    assert row["report_why"]
+    js = (STATIC / "setup_printers.js").read_text(encoding="utf-8")
+    assert "Collect a report" in js and "Saved reports" in js and "function listReports(" in js

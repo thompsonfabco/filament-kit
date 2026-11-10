@@ -337,7 +337,7 @@ Run these in a Terminal on the Ubuntu computer.
 | `sudo filament-kit config` | Settings menu: display name, storage locations, Claude model and daily limit, API key, printers, modules. |
 | `sudo filament-kit modules list` | Shows each module on or off and the mode. `modules set <mode>`, `modules enable <name>` and `modules disable <name>` change them (see [Change the mode later](#change-the-mode-later)); `modules apply` sets the computer up again from the saved settings. |
 | `sudo filament-kit printer map <serial>` | Maps a printer's AMS slots (see [Map slots](#map-slots)), printing each step. |
-| `sudo filament-kit printer report <serial>` | Makes a short file about a printer the kit doesn't know, or whose mapping failed, to attach to an issue. It holds no serial, address or name; read it first. |
+| `sudo filament-kit printer report <serial>` | Makes a short file about a printer the kit doesn't know, or whose mapping failed, to attach to an issue. It holds no serial, address or name; read it first. The setup page's Printers tab does the same (**Collect a report**, highlighted when a report would help) and lists the kept reports (the last five) to download. When the printer can't be reached, the report is built from what the kit saved (its last known layout, the slot map and the last mapping run) and says so; only a printer the kit has never seen is refused. With the server running it, and `printer map`, ask the server, which holds the printer's connection. |
 | `sudo filament-kit profiles status` / `build` | Shows or rebuilds the Bambu Studio and Orca Slicer presets (see [Presets](#presets-in-bambu-studio)). |
 | `sudo filament-kit profiles apply-updates --all` (or `--line <id>`; add `--dry-run` to only look) | Writes the updated presets you accept over the ones in the primary Bambu Studio folder (see [Stable and Beta Bambu Studio](#stable-and-beta-bambu-studio-v040)). |
 | `sudo filament-kit profiles lines` / `set-parent <line_id> <parent>` | Lists the filament lines; sets a line's Bambu Studio parent (`--orca`: its Orca Slicer parent). |
@@ -457,8 +457,8 @@ Afterwards, loading spools into those slots works. Filament use comes off the sp
 proven the printer's slot numbering; until then it is only logged, and the page says so. A later **Map slots** never
 changes a slot you confirmed: if it finds something else, it says so instead. The page asks you once whether to
 share the map in a printer report for other owners of the same model. The kit sends nothing itself: **Yes** says how
-to make the report (**Collect a report** on the printer's screen in the Android app or in the phone web app, or
-`sudo filament-kit printer report <serial>`) and attach it to an issue.
+to make the report (**Collect a report** on the setup page's Printers tab, on the printer's screen in the Android
+app or in the phone web app, or `sudo filament-kit printer report <serial>`) and attach it to an issue.
 
 A Klipper printer has the same button: it names its tools or lanes, and you make each one active. See the Klipper
 guide.

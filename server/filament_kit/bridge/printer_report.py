@@ -9,7 +9,10 @@ holds something of another shape is left out, not copied. The shapes refuse what
 a value that fits (a short word as a filament type, a number) would still pass, which is why the owner is told to read the file.
 Field NAMES of the report are listed, to find what the kit doesn't read, but only names of a plain shape and with few digits.
 
-Made at the end of a mapping that wasn't clean (kept on the server, the last KEEP) or on request.
+Made at the end of a mapping that wasn't clean (kept on the server, the last KEEP) or on request. When the printer cannot be
+reached it is built from what the kit saved instead (`live="false"`, `saved-until` = the newest saved record): the layout the
+slot map was made for, the map itself, the last mapping's state, reason and attempts. The kit keeps no copy of the printer's
+own report, so the live sections (firmware, presence, nozzles, field names) are then absent.
 """
 from __future__ import annotations
 
@@ -147,19 +150,66 @@ def _attempts(root: ET.Element, trail) -> None:
         ET.SubElement(el, "fits").text = " ".join(x for x in (_plain(f, SCHEME) for f in t.get("fits") or []) if x)
 
 
-def build(report: dict | None, model, *, trail=None, wanted: str | None = None, when: float | None = None) -> bytes:
-    """The report, as XML. Never raises for a strange field: it is left out."""
+def _hw_file_version() -> str | None:
+    """The hardware data file in use: the newer of the bundled one and the updater's override, as major.minor."""
+    best = None
+    for path in (hardware.BUNDLED, hardware.override_path()):
+        try:
+            v = hardware.file_version(Path(path).read_bytes())
+        except (OSError, ValueError, TypeError):
+            v = None
+        if v and (best is None or tuple(v) > tuple(best)):
+            best = v
+    return f"{best[0]}.{best[1]}" if best else None
+
+
+def _saved(root: ET.Element, saved: dict) -> None:
+    """What the kit saved about the printer (no live report): its layout fingerprint, the slot map, the last mapping."""
+    el = ET.SubElement(root, "saved")
+    for item in (saved.get("fingerprint") or [])[:64]:
+        try:
+            uid, kind, n = item
+            unit = ET.SubElement(el, "unit", id=str(int(uid)), slots=str(int(n)))
+        except (TypeError, ValueError):
+            continue
+        _set(unit, "kind", kind, PLAIN)
+    m = ET.SubElement(el, "map", calibrated=str(bool(saved.get("calibrated"))).lower(),
+                      slots=str(len(saved.get("slots") or {})))
+    _set(m, "scheme", saved.get("scheme"), SCHEME)
+    for label, s in list((saved.get("slots") or {}).items())[:128]:
+        if not isinstance(s, dict) or not PLAIN.fullmatch(str(label)):
+            continue
+        slot = ET.SubElement(m, "slot", label=str(label))
+        for k in ("ams_id", "tray_id", "global_id"):
+            if isinstance(s.get(k), int) and not isinstance(s.get(k), bool):
+                slot.set(k.replace("_", "-"), str(s[k]))
+    last = ET.SubElement(el, "last-mapping")
+    _set(last, "state", saved.get("state"), SCHEME)
+    _set(last, "reason", saved.get("reason"), SCHEME)
+
+
+def build(report: dict | None, model, *, trail=None, wanted: str | None = None, when: float | None = None,
+          saved: dict | None = None, saved_until: float | None = None) -> bytes:
+    """The report, as XML. Never raises for a strange field: it is left out. `saved` (the printer could not be reached):
+    the kit's saved records (_saved) in place of a live report, `saved_until` the time of the newest of them."""
     report = report if isinstance(report, dict) else {}
     hw = hardware.load()
     mi = hw.model(model)
     root = ET.Element("printer-report", version=FORMAT, kit=__version__,
-                      when=time.strftime("%Y-%m-%d", time.gmtime(time.time() if when is None else when)))
+                      when=time.strftime("%Y-%m-%d", time.gmtime(time.time() if when is None else when)),
+                      live="false" if saved is not None else "true")
+    if saved is not None and isinstance(saved_until, (int, float)):
+        root.set("saved-until", time.strftime("%Y-%m-%dT%H:%MZ", time.gmtime(saved_until)))
     if wanted in WANTED:
         root.set("wanted", wanted)
+    hv = _hw_file_version()
+    if hv:
+        root.set("hardware-file", hv)
     printer = ET.SubElement(root, "printer", known=str(bool(mi.known)).lower(), family="bambu")
     _set(printer, "model-code", _model_code(model), MODEL)
-    sections = (lambda: _firmware(root, report), lambda: _layout(root, report, model), lambda: _presence(root, report),
-                lambda: _nozzles(root, report), lambda: _keys(root, report), lambda: _attempts(root, trail))
+    live = (lambda: _firmware(root, report), lambda: _layout(root, report, model), lambda: _presence(root, report),
+            lambda: _nozzles(root, report), lambda: _keys(root, report))
+    sections = (*(live if saved is None else (lambda: _saved(root, saved),)), lambda: _attempts(root, trail))
     for section in sections:
         try:
             section()
@@ -177,6 +227,42 @@ def file_name(model, when: float | None = None) -> str:
     """No serial, so the name is safe to attach too."""
     code = _model_code(model) or "unknown"
     return f"printer-report-{code}-{time.strftime('%Y%m%d-%H%M%S', time.gmtime(time.time() if when is None else when))}.xml"
+
+
+FILE = re.compile(r"printer-report-[A-Za-z0-9-]{1,40}-\d{8}-\d{6}\.xml")
+NEVER = ("It never holds the printer's serial, Access Code, account, addresses, name, Wi-Fi, spool tag identities, "
+         "colours, file or job names, or error text; read it before you share it.")
+
+
+def saved(serial: str) -> list[dict]:
+    """The reports kept for this printer, newest first: [{name, size, at}] (`at` = epoch seconds)."""
+    out = []
+    try:
+        entries = list(_folder(serial).iterdir())
+    except OSError:
+        return out
+    for p in entries:
+        if not FILE.fullmatch(p.name) or p.is_symlink():
+            continue
+        try:
+            st = p.stat()
+        except OSError:
+            continue
+        out.append({"name": p.name, "size": st.st_size, "at": st.st_mtime})
+    return sorted(out, key=lambda r: r["name"], reverse=True)
+
+
+def read_saved(serial: str, name: str) -> bytes:
+    """One kept report's bytes: only a report file's name, never through a link, at most 1 MiB. FileNotFoundError else."""
+    import os
+    if not FILE.fullmatch(name or ""):
+        raise FileNotFoundError(name)
+    fd = os.open(_folder(serial) / name, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0))
+    with os.fdopen(fd, "rb") as fh:
+        data = fh.read(2**20 + 1)
+    if len(data) > 2**20:
+        raise FileNotFoundError(name)
+    return data
 
 
 def save(serial: str, data: bytes, model) -> Path:

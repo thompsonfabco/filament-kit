@@ -602,6 +602,11 @@ class E2E:
         run.check(sc, f"Spoolman shows the spool in the printer's {SLOT}",
                   code == 200 and str((sp or {}).get("location") or "").endswith(f"AMS {SLOT}"),
                   str((sp or {}).get("location")))
+        # the CLI asks the running server, which holds the printer (a live bug: its own second connection got nothing)
+        r = run.sh(["/usr/local/bin/filament-kit", "printer", "report", SERIAL], name="printer-report-cli")
+        run.check(sc, "filament-kit printer report goes through the running server", r.returncode == 0
+                  and "Printer report saved:" in r.stdout and "could not be reached" not in r.stdout,
+                  r.stdout[-800:] + r.stderr[-400:])
 
     def _seed_preset(self) -> None:
         """A one-preset build for the spool's filament, as the PC sync and `profiles build` would leave it (the
