@@ -116,6 +116,7 @@ def test_unpin_and_address_together():
     assert r.status_code == 200, r.text
     p = registry.load()[SERIAL]
     assert p.cert_fp == "" and p.ip == "10.0.0.9" and p.access_code == CODE
+    assert r.json()["printer"]["pinned"] is False and "ab" * 32 not in r.text
     assert sorted(r.json()["changed"]) == ["address", "unpin"] and b.waited == [SERIAL]
 
 

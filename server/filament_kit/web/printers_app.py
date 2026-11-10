@@ -69,7 +69,7 @@ MANUAL_STEPS = {"start": "/api/printers/{serial}/manual-map/start", "confirm": "
                 "skip": "/api/printers/{serial}/manual-map/skip", "stop": "/api/printers/{serial}/manual-map/stop",
                 "offer": "/api/printers/{serial}/manual-map/offer"}
 MANUAL_KEYS = ("session", "position", "reported", "nozzle", "by_hand", "share")
-MANAGE_FIELDS = ("id", "name", "model", "model_name", "family", "ip", "host", "configured", "state")
+MANAGE_FIELDS = ("id", "name", "model", "model_name", "family", "ip", "host", "configured", "state", "pinned")
 EDIT_KEYS = ("name", "address", "port", "access_code", "api_key", "unpin")
 ADD_KEYS = ("family", "serial", "access_code", "name", "host", "port")
 TAGGED_FIELDS = ("id", "vendor", "name", "location", "remaining_g")

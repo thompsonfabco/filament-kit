@@ -411,7 +411,7 @@ function printersTab() {
   // ----- Manage printers: the kit's own printer list (what the setup page's Printers tab edits), changed here too -----
   const manageNote = h("div");
   function manageClosed() {
-    if (!manageBox.firstChild) manageBox.replaceChildren(h("button", { class: "secondary", textContent: "Add or change printers", on: { click: manage } }));
+    if (!manageBox.firstChild) manageBox.replaceChildren(h("button", { class: "secondary", textContent: "Add or change printers", on: { click: () => manage() } }));
   }
   async function manageDo(path, body, done) {
     try {
@@ -431,7 +431,7 @@ function printersTab() {
       h("button", { class: "secondary", textContent: "Rename", on: { click: () => { const n = ask(`New name for ${name}:`, name); if (n) edit({ name: n }, "Renamed."); } } }),
       h("button", { class: "secondary", textContent: "Address", on: { click: () => { const a = ask(`${name}'s IP address or host name:`, where); if (a) edit({ address: a }, "Address saved."); } } }),
       bambu ? h("button", { class: "secondary", textContent: "Access Code", on: { click: () => { const c = ask(`${name}'s Access Code (on the printer: Settings > Network/LAN):`); if (c) edit({ access_code: c }, "Access Code saved."); } } }) : null,
-      bambu ? h("button", { class: "secondary", textContent: "Forget certificate", on: { click: () => { if (window.confirm(`Forget the certificate pinned for ${name}? The next connection trusts whatever answers at its address.`)) edit({ unpin: true }, "Certificate forgotten."); } } }) : null,
+      bambu && p.pinned ? h("button", { class: "secondary", textContent: "Forget certificate", on: { click: () => { if (window.confirm(`Forget the certificate pinned for ${name}? The next connection trusts whatever answers at its address.`)) edit({ unpin: true }, "Certificate forgotten."); } } }) : null,
       bambu ? null : h("button", { class: "secondary", textContent: "API key", on: { click: () => { const k = ask(`${name}'s Moonraker API key (empty clears it):`); if (k !== null) edit({ api_key: k }, k ? "API key saved." : "API key cleared."); } } }),
       h("button", { class: "secondary", textContent: "Forget", on: { click: () => { if (window.confirm(`Forget ${name}? ${bambu ? "Its Access Code is deleted." : "Its API key is deleted."}`)) manageDo(`${id}/forget`, {}, `${name} forgotten.`); } } }),
     ] : bambu && p.ip ? [

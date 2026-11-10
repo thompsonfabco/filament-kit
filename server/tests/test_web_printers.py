@@ -862,7 +862,8 @@ class ManagingKit(FakeKit):
             self.calls.append(("GET", path))
             return {"printers": [
                 {"id": SERIAL, "name": "H2D", "model": "O1D", "model_name": "H2D", "family": "bambu", "ip": "10.0.0.1",
-                 "configured": True, "state": "connected", "access_code": "LEAK", "camera": {"kind": "hls"}},
+                 "configured": True, "state": "connected", "access_code": "LEAK", "camera": {"kind": "hls"},
+                 "pinned": True, "cert_fp": "LEAK"},
                 {"id": "sv08-max", "name": "SV08", "family": "klipper", "host": "10.0.0.3", "configured": True,
                  "state": "connected", "api_key": "LEAK"}]}
         return super().get(path)
@@ -896,7 +897,7 @@ def test_manage_lists_every_printer_without_secrets(managing):
         r = c.get(P + "/manage")
     assert r.status_code == 200 and "LEAK" not in r.text
     assert [p["id"] for p in r.json()["printers"]] == [SERIAL, "sv08-max"]
-    assert r.json()["printers"][1]["host"] == "10.0.0.3"
+    assert r.json()["printers"][1]["host"] == "10.0.0.3" and r.json()["printers"][0]["pinned"] is True
 
 
 def test_add_edit_and_forget_go_to_the_kit_with_only_their_keys(managing):

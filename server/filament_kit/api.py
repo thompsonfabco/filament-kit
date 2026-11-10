@@ -270,7 +270,7 @@ def _printer_view(p: registry.Printer, printers) -> dict:
     view = {"id": p.serial, "name": registry.display_name(p), "model": p.model, "serial": p.serial, "ip": p.ip,
             "configured": p.configured, "state": state, "camera": {"kind": camera_kind(p.model)},
             "model_name": model_name(p.model),
-            "summary": summary, "family": fam}
+            "summary": summary, "family": fam, "pinned": bool(p.cert_fp)}   # a certificate is pinned, never which
     if fam == "klipper":
         kf = getattr(printers, "klipper", None)
         view["host"] = p.host
