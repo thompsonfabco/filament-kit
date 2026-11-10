@@ -167,8 +167,19 @@ def test_no_terminal_input_stops_the_session_rather_than_waiting(env, clock):
     api = ServerApi(manual.ManualMaps(Printer(copy.deepcopy(BASE))), clock)
     q = queue.Queue()
     q.put(None)                                   # stdin closed at once
-    assert cli._manual_map_via_server(api, SERIAL, q) == 0
+    assert cli._manual_map_via_server(api, SERIAL, q) == 1     # R107 note 1: stopped, not finished
     assert api.posts == ["start", "stop"]
+
+
+def test_no_answer_to_the_share_question_is_not_a_no(env, clock, capsys, monkeypatch):
+    """R107 note 2: after q the question waits SHARE_WAIT (not 5 minutes), and silence records nothing."""
+    monkeypatch.setattr(cli, "SHARE_WAIT", 0.05)
+    printer = Printer(copy.deepcopy(BASE))
+    api = ServerApi(manual.ManualMaps(printer), clock, loads_what_it_is_told(printer))
+    lines = Owner(api, {"A1": "y", "wait:A2": "q", "A2": "q"})      # no "offer" line: nobody answers
+    assert cli._manual_map_via_server(api, SERIAL, lines) == 0
+    assert "offer" not in api.posts and "No answer; the setup page and the apps ask again." in capsys.readouterr().out
+    assert api.mm.view(SERIAL)["offer_report"] is True                 # still asked elsewhere
 
 
 def test_a_refused_start_is_said(env, clock, capsys):
