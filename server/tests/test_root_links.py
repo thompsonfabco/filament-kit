@@ -5,8 +5,11 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import stat
+import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -333,3 +336,72 @@ def test_as_root_copies_are_the_web_users_and_the_originals_stay_the_kits(kit):
         assert (c.st_uid, c.st_gid) == (54321, 54321), rel
         assert stat.S_IMODE(c.st_mode) == stat.S_IMODE(o.st_mode), rel
     assert stat.S_IMODE(os.lstat(old / "oauth.json").st_mode) == 0o600           # not widened
+
+
+# ---------------------------------------------------------------- the setup helper's sandbox (R79 review)
+
+UNIT = Path(__file__).resolve().parents[2] / "install" / "systemd" / "filament-kit-setup@.service"
+SANDBOX_KEYS = ("ProtectSystem", "ReadWritePaths", "PrivateTmp", "PrivateDevices", "PrivateNetwork", "NoNewPrivileges",
+                "UMask", "SystemCallFilter", "RestrictAddressFamilies", "CapabilityBoundingSet", "RestrictNamespaces",
+                "MemoryDenyWriteExecute", "LockPersonality")
+
+
+def _unit_settings() -> dict[str, str]:
+    out = {}
+    for line in UNIT.read_text(encoding="utf-8").splitlines():
+        if "=" in line and not line.startswith("#"):
+            k, v = line.split("=", 1)
+            out[k.strip()] = v.strip()
+    return out
+
+
+def test_the_helper_unit_may_write_where_a_restore_pins_the_upload():
+    paths = _unit_settings()["ReadWritePaths"].split()
+    assert paths == ["/etc/filament-kit", "-/var/backups/filament-kit", "-/var/lib/filament-kit/restore-upload"]
+    install = (Path(__file__).resolve().parents[2] / "install" / "install.sh").read_text(encoding="utf-8")
+    assert "install -d -m 700 -o root -g root /var/backups/filament-kit" in install     # so the "-" path exists
+
+
+@pytest.mark.skipif(not ROOT or not shutil.which("systemd-run") or not os.path.isdir("/run/systemd/system"),
+                    reason="root and a running systemd")
+def test_pin_upload_works_in_the_helper_units_own_sandbox(tmp_path, monkeypatch):
+    """R79 review, finding 1: pin_upload under the unit's sandbox (its ReadWritePaths mapped onto scratch folders of the
+    same kind; ProtectHome relaxed to read-only only so this checkout and its Python can load)."""
+    import secrets as _secrets
+    from filament_kit import backup
+    tag = _secrets.token_hex(4)
+    E, S, K = Path(f"/etc/fk-root-{tag}"), Path(f"/var/lib/fk-root-{tag}"), Path(f"/var/backups/fk-root-{tag}")
+    try:
+        for d in (E, S / "restore-upload", K):
+            d.mkdir(parents=True)
+        os.chmod(K, 0o700)
+        scratch = tmp_path / "make"
+        for name in ("etc", "state", "opt", "bk"):
+            (scratch / name).mkdir(parents=True)
+        for k, v in (("FK_ETC", "etc"), ("FK_STATE", "state"), ("FK_OPT", "opt"), ("FK_BACKUPS", "bk")):
+            monkeypatch.setenv(k, str(scratch / v))
+        monkeypatch.setenv("FK_SPOOLMAN_DB", str(scratch / "none.db"))
+        monkeypatch.setenv("FK_NO_SYSTEMD", "1")
+        config.save({})
+        z = backup.create()
+        shutil.copyfile(z, S / "restore-upload" / "backup.zip")
+        unit = _unit_settings()
+        mapped = {"/etc/filament-kit": str(E), "-/var/backups/filament-kit": f"-{K}",
+                  "-/var/lib/filament-kit/restore-upload": f"-{S}/restore-upload"}
+        props = []
+        for key in SANDBOX_KEYS:
+            if key in unit:
+                value = " ".join(mapped.get(p, p) for p in unit[key].split()) if key == "ReadWritePaths" else unit[key]
+                props += ["-p", f"{key}={value}"]
+        code = ("import sys\nfrom filament_kit import backup\nm, sha = backup.pin_upload()\n"
+                "print('PINNED', sha, len(m.files))")
+        env = [f"-E{k}={v}" for k, v in (("FK_ETC", E), ("FK_STATE", S), ("FK_BACKUPS", K), ("FK_NO_SYSTEMD", "1"),
+                                         ("PYTHONPATH", Path(__file__).resolve().parents[1]))]
+        r = subprocess.run(["systemd-run", "--quiet", "--wait", "--pipe", "--collect", "-p", "ProtectHome=read-only",
+                            *props, *env, sys.executable, "-c", code], capture_output=True, text=True, timeout=120)
+        assert "PINNED" in r.stdout, r.stdout + r.stderr
+        assert (K / backup.PENDING).is_file() and not (S / "restore-upload" / "backup.zip").exists()
+        assert stat.S_IMODE((K / backup.PENDING).stat().st_mode) == 0o600
+    finally:
+        for d in (E, S, K):
+            shutil.rmtree(d, ignore_errors=True)
