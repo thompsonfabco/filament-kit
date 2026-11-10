@@ -723,6 +723,37 @@ def _restore_signals(old: dict) -> None:
             pass
 
 
+NOT_CONNECTED = {
+    "wrong_code": "the printer refused its Access Code; enter it again (sudo filament-kit config, Printers)",
+    "cert_changed": "the printer's certificate changed; add it again with its Access Code "
+                    "(or run: sudo filament-kit printer unpin {serial})",
+}
+
+
+CONNECT_POLL = 0.1    # seconds between looks at the connection's state while it retries
+
+
+def _connect(m, serial: str) -> str | None:
+    """Start this command's own connection and wait until it is connected, then for the printer's first full
+    report. `sync` only starts the connection and `wait_report` answers None at once until it is connected, so a
+    real printer (whose TLS and MQTT take a moment) always looked offline without this wait. A refused or failed
+    attempt is not the end: paho retries, so a printer still booting or back from a Wi-Fi drop within CONNECT_WAIT
+    is waited for. Only a refused Access Code or a changed certificate, which no retry cures, stops it early.
+    None when ready, else the line to print."""
+    m.sync()
+    deadline = time.monotonic() + CONNECT_WAIT
+    state = m.wait_settled(serial, CONNECT_WAIT)
+    while state not in ("connected", *NOT_CONNECTED, "not_configured") and time.monotonic() < deadline:
+        time.sleep(min(CONNECT_POLL, max(0.0, deadline - time.monotonic())))
+        state = m.state(serial)
+    if state != "connected":
+        return NOT_CONNECTED.get(state, "the printer did not answer; check that it is on and on the network "
+                                        "({state})").format(serial=serial, state=state)
+    if m.wait_report(serial, lambda r: "gcode_state" in r, REPORT_WAIT) is None:
+        return "the printer connected but sent no report; try again in a moment"
+    return None
+
+
 def cmd_printer_map(serial: str, manager_factory) -> int:
     from .bridge import mapping
     from .bridge.connection import PrinterOffline, UnknownPrinter
@@ -736,9 +767,10 @@ def cmd_printer_map(serial: str, manager_factory) -> int:
     m = manager_factory(serial)
     stopped = []
     try:
-        m.sync()
-        m.wait_settled(serial, CONNECT_WAIT)
-        m.wait_report(serial, lambda r: "gcode_state" in r, REPORT_WAIT)
+        why = _connect(m, serial)
+        if why:
+            _err_line(why)
+            return 1
         mapper = mapping.Mapper(m)
 
         def on_signal(signum, frame):
@@ -808,8 +840,10 @@ def cmd_printer_report(serial: str, manager_factory) -> int:
         return 1
     m = manager_factory(serial)
     try:
-        m.sync()
-        m.wait_report(serial, lambda r: "gcode_state" in r, REPORT_WAIT)
+        why = _connect(m, serial)
+        if why:
+            _err_line(why)
+            return 1
         r = mapping.Mapper(m).report(serial)
     except (PrinterOffline, UnknownPrinter):
         _err_line("the printer is offline (or its Access Code is wrong); check that it is on and on the network")
