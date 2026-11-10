@@ -18,7 +18,7 @@ lives.
 - An Android phone (Android 10 or newer) for the filament-kit app, or an iPhone (or any phone) for the phone
   web app.
 - Optional: a Windows PC with Bambu Studio (and, if you like, Orca Slicer), for the presets.
-- Optional: an **intake station**: a USB scale (DYMO) and a PN532 NFC reader on the same computer or on a second
+- Optional: an **intake station**: a DYMO M10 USB scale and a PN532 NFC reader on the same computer or on a second
   one (see [Intake station](#intake-station)).
 
 ## Install the server
@@ -636,8 +636,8 @@ the `station` module, on the server computer (`all-in-one`) or on a second compu
 
 ### Hardware
 
-- A **DYMO USB postal scale** (for example the M10 or M25). Switch it on before you start the station; a DYMO
-  only shows up on USB while it is on, and it switches itself off after a few minutes.
+- A **DYMO M10 USB scale**. Other DYMO USB postal scales that the kit detects also work. Switch it on before you start
+  the station; a DYMO only shows up on USB while it is on, and it switches itself off after a few minutes.
 - A **PN532 NFC reader** on a USB serial adapter (CH340 chip).
 - Optional: the **button panel** (Hold and Discard buttons, lamps and a buzzer on a Wemos D1 mini). How to
   build and flash it: [station/PANEL.md](../station/PANEL.md).

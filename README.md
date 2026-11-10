@@ -88,7 +88,7 @@ the library and auto-update are off until you turn them on. Change them any time
 | `presets` | Bambu Studio preset builds and PC sync | `server`, a Windows PC with Bambu Studio |
 | `library` | Filament spec library: downloaded on request, then a daily update | nothing |
 | `backup` | Nightly backup of the Spoolman database, settings and state | nothing |
-| `station` | USB scale and PN532 reader, read-only HTTP | a DYMO USB scale and a PN532 NFC reader |
+| `station` | USB scale and PN532 reader, read-only HTTP | a DYMO M10 USB scale and a PN532 NFC reader |
 | `web` | Phone web app and the Claude connector (MCP), on top of the server | `server`, an https address (`web.public_url`) |
 | `remote` | nginx in front of the web part, and a public https name (certbot) | `web`; for a public name: DNS, ports 443 and 80 |
 | `orders` | Order history file for the shop tools | `ai_intake`, an order history file (`orders.file`) |
