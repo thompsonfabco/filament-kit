@@ -75,7 +75,7 @@ HEADERS = {
     "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer", "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff"}
 HOME_ONLY = "the setup page only answers the home network"
-BAD_HOST = "open the setup page by the server's own name or address"
+BAD_HOST = "Open the setup page by the server's own name or address"
 NEED_CODE = "this change needs the setup code (shown when the kit was installed; at the server: sudo filament-kit setup-code)"
 MAX_BODY = 16 * 1024
 CHECK_GAP = 3.0                 # seconds between two key checks / printer tests (they reach the network)
@@ -244,14 +244,12 @@ def extra_hosts() -> set[str]:
     return {n.lower() for n in names if isinstance(n, str)}
 
 
-def bad_host_text(hosts: set[str]) -> str:
-    """The refusal: the names the page answers to (never its addresses: those are hidden until the code) and how to
-    add one."""
-    names = sorted(h for h in hosts if not h.replace(".", "").isdigit() and ":" not in h and h != "localhost")
-    return (f"{BAD_HOST}: {', '.join(names) or 'its address'}, or its address. A name of your own DNS that points at "
-            "this server works too if it is a local one (one word, .local, .lan, .home.arpa, or your network's own "
-            "domain); "
-            "add any other name on the Settings tab, under General: Names for this page.")
+def bad_host_text() -> str:
+    """The refusal, for whoever reached the port by another name: how to get in, never the server's own names or
+    addresses (a stranger probing the port learns nothing from it; emulator finding F2, 2026-11-10)."""
+    return (f"{BAD_HOST}. A name of your own DNS that points at this server works too if it is a local one (one word, "
+            ".local, .lan, .home.arpa, or your network's own domain); add any other name on the Settings tab, under "
+            "General: Names for this page.")
 
 
 from .web.slots import CLI_DEVICE, INTAKE_DEVICE  # noqa: E402
@@ -419,7 +417,7 @@ class SetupPage:
             if not self._lan(request):
                 return JSONResponse({"error": HOME_ONLY}, 403)
             if not self._host_ok(request):
-                return JSONResponse({"error": bad_host_text(self.hosts() | extra_hosts())}, 403)
+                return JSONResponse({"error": bad_host_text()}, 403)
             try:
                 body = {}
                 token = None
@@ -480,7 +478,7 @@ class SetupPage:
         if not self._lan(request):
             return HTMLResponse(f"<!doctype html><p>{HOME_ONLY}.</p>", 403, headers=HEADERS)
         if not self._host_ok(request):
-            return HTMLResponse(f"<!doctype html><p>{html.escape(bad_host_text(self.hosts() | extra_hosts()))}</p>",
+            return HTMLResponse(f"<!doctype html><p>{html.escape(bad_host_text())}</p>",
                                 403, headers=HEADERS)
         name = html.escape(config.load()["server_name"])
         return HTMLResponse(

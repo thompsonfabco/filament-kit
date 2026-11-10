@@ -60,7 +60,8 @@ SERIALISH = re.compile(r"(?=[0-9A-Za-z]*[0-9])(?=[0-9A-Za-z]*[A-Za-z])[0-9A-Za-z
 
 def _plain(v, shape=PLAIN) -> str | None:
     s = str(v).strip() if isinstance(v, (str, int)) and not isinstance(v, bool) else ""
-    return s if s and shape.fullmatch(s) and not SERIALISH.search(s) else None
+    # hex shapes (presence bits, a unit's info) keep long values: a-f and digits can't spell a serial's other letters
+    return s if s and shape.fullmatch(s) and (shape in (HEX_OR_INT, INFO) or not SERIALISH.search(s)) else None
 
 
 def _kinds(hw) -> set[str]:

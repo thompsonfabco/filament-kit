@@ -1258,7 +1258,8 @@ def test_a_public_name_is_refused_even_when_it_resolves_here(app, monkeypatch):
     """DNS rebinding: an attacker's public name answering with this server's address must not open the page."""
     _resolve(monkeypatch, {"rebind.example.com": "192.0.2.10", "other.lan": "192.0.2.99"})
     r = client(app, base="https://rebind.example.com:8710").get("/setup")
-    assert r.status_code == 403 and "kit.local" in r.text and "Settings tab" in r.text and "192.0.2.10" not in r.text
+    assert r.status_code == 403 and "Settings tab" in r.text and "192.0.2.10" not in r.text
+    assert "kit.local" not in r.text and "<p>Open the setup page" in r.text    # F2: no own names to a stranger
     assert client(app, base="https://other.lan:8710").get("/setup").status_code == 403      # local, but not here
     j = post(client(app, base="https://rebind.example.com:8710"), "key", {"key": KEY},
              headers={"Origin": "https://rebind.example.com:8710"})
