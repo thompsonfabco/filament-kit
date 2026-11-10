@@ -769,7 +769,8 @@ The `web` module runs one more service, `filament-kit-web`, on this computer onl
   open a spool, check the presets and the printer slots for you (tools `find_spools`, `add_spools`, `tag_state`,
   `open_spool`, `preset_status`, `list_lines`, `find_parents`, `add_filaments_to_line`, `add_line`, `generate`,
   `printer_slots`, `printer_set_slot`);
-- a **phone web app** at `<public address>/intake`, in any phone browser (no install): add spools by hand (or
+- the **phone web app** at `<public address>/intake` too (the kit server always serves it at home, with no
+  module: [Use the phone web app](#use-the-phone-web-app)), in any phone browser (no install): add spools by hand (or
   from label photos, with `ai_intake`), open a tapped spool, and see the presets. With the `printers` module on it
   also has a **Printers** tab (replaces the old `/printer/` page): a printer picker, live status, the camera,
   pause / resume / stop (stop asks first), the chamber light, the filament in each AMS unit, the usage log with
@@ -821,10 +822,14 @@ type the passphrase there. Claude stays signed in after that; changing the passp
 
 ### Use the phone web app
 
-Open `<public address>/intake` on the phone while it is on the home network and add the page to the home screen
-if you like (step by step, including a home-only setup without a public name:
-[Use the web app on an iPhone](install-iphone-web-app.md)). There is no sign-in: anyone on your home network can
-use it (as with the Android app's pairing, the home network is the gate).
+The kit server serves the phone web app itself, whatever modules are on: open
+`https://<server name>.local:8710/intake` on the phone while it is on the home network (the setup page's
+**Devices** tab shows the address and a QR code), accept Safari's warning about the server's own certificate once,
+and add the page to the home screen if you like. With the `web` module on, `<public address>/intake` serves the
+same app as well, with your certificate (step by step: [Use the web app on an iPhone](install-iphone-web-app.md)).
+There is no sign-in: anyone on your home network can use it (as with the Android app's pairing, the home network is
+the gate). It answers by the server's own names, as the setup page does. Print alerts to the phone come only
+through the `web` module's address.
 
 ### What only works at home
 

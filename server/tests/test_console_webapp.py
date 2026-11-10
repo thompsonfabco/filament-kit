@@ -31,34 +31,38 @@ def _web(on=True, public=None):
     config.save(cfg)
 
 
-def test_off_says_so_and_nothing_else(app):
+def test_with_the_web_module_off_it_is_the_servers_own_address(app, monkeypatch):
+    """The user's decision 2026-11-09: the phone page is part of the main software, no module needed."""
     _web(on=False, public="https://fk.example.org/filament")
-    assert client(app).get("/setup/api/webapp").json() == {"on": False}
+    monkeypatch.setattr(pairing, "short_hostname", lambda: "kit")
+    monkeypatch.setattr(setup_page, "qr_svg", lambda url: f"<svg>{url}</svg>")
+    assert client(app).get("/setup/api/webapp").json() == {
+        "url": "https://kit.local:8710/intake", "qr_svg": "<svg>https://kit.local:8710/intake</svg>",
+        "public_url": None, "public_qr_svg": None}
 
 
-def test_the_public_address_wins(app, monkeypatch):
-    _web(public="https://fk.example.org/filament")
+def test_with_the_web_module_on_the_public_address_is_offered_too(app, monkeypatch):
+    _web(public="https://fk.example.org/filament/")
+    monkeypatch.setattr(pairing, "short_hostname", lambda: "kit")
     monkeypatch.setattr(setup_page, "qr_svg", lambda url: f"<svg>{url}</svg>")
     r = client(app).get("/setup/api/webapp").json()
-    assert r == {"on": True, "url": "https://fk.example.org/filament/intake", "set_address": True,
-                 "qr_svg": "<svg>https://fk.example.org/filament/intake</svg>"}
-    _web(public="https://fk.example.org/filament/")
-    assert client(app).get("/setup/api/webapp").json()["url"] == "https://fk.example.org/filament/intake"
+    assert r["url"] == "https://kit.local:8710/intake"
+    assert r["public_url"] == "https://fk.example.org/filament/intake"
+    assert r["public_qr_svg"] == "<svg>https://fk.example.org/filament/intake</svg>"
 
 
-def test_with_no_public_address_it_is_the_home_address(app, monkeypatch):
+def test_no_qrencode_gives_the_addresses_alone(app, monkeypatch):
     _web()
-    monkeypatch.setattr(pairing, "short_hostname", lambda: "kit")
-    monkeypatch.setattr(setup_page, "qr_svg", lambda url: None)      # no qrencode: the address alone
+    monkeypatch.setattr(setup_page, "qr_svg", lambda url: None)
     r = client(app).get("/setup/api/webapp").json()
-    assert r["url"] == "https://kit.local/filament/intake" and r["set_address"] is False and r["qr_svg"] is None
+    assert r["qr_svg"] is None and r["public_url"] is None
 
 
 def test_the_address_is_a_page_the_web_app_serves():
     """Held to the web app's own routes: its base address answers 404, so a card pointing there is a dead end."""
     from filament_kit.web import intake_app
     src = Path(intake_app.__file__).read_text(encoding="utf-8")
-    assert '("/intake", self.page, ["GET"])' in src and 'rstrip("/") + "/intake"' in src
+    assert '("/intake", self.page, ["GET"])' in src and '+ "/intake"' in src
 
 
 def test_the_devices_tab_has_the_card():

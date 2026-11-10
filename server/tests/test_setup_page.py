@@ -940,7 +940,7 @@ def test_r2b_web_state_lives_in_its_own_folder(env):
     w = config.paths().web
     assert w != config.paths().state and w.name.endswith("-web")
     assert web_app.oauth_file() == w / "oauth.json"
-    assert push.state_dir() == w and slots.KitApi._token_file() == w / "kit_token"
+    assert push.state_dir() == w and slots.KitApi()._token_file() == w / "kit_token"
 
 
 @pytest.mark.skipif(not sys.platform.startswith("linux"), reason="root runs this on Linux (descriptors, /proc)")

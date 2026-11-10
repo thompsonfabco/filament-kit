@@ -6,7 +6,10 @@ page), on the kit's own functions: label reads go through `intake.read_labels` w
 (`intake.read_context`) and the shared daily cap (`ReadCap`, the kit server's own file), writes through the
 same `Tools` as the MCP tools, so the rules (dry run first, sealed defaults, tag checks) are the same.
 
-Home network only (`auth.lan_only` wraps the whole app; every route checks again); there is no sign-in (the
+Served twice (the user's decision, 2026-11-09: the phone page is part of the main software): by the kit server
+itself at https://<server>:8710/intake on the home network, whatever modules are on, and by the web unit at
+<public_url>/intake when the web module is on. Home network only (in the web unit `auth.lan_only` wraps the whole
+app; in the kit server every route checks the address and the setup page's Host rule); there is no sign-in (the
 owner's choice: the home network is the gate, as in filament-ops). Every POST must carry the app's own Origin.
 The page's CSP allows only its own script and style; the script never puts server data into innerHTML.
 """
@@ -32,7 +35,7 @@ from .. import intake, inventory, lan, modules, tagsources
 from ..intake import CapReached, ReadError
 from ..spoolman import SpoolmanError
 from ..station_client import StationClient
-from . import auth, mcp_tools, printers_app
+from . import mcp_tools, printers_app
 from .errors import Problem
 from .mcp_tools import SpoolItem, Tools
 
@@ -128,11 +131,18 @@ class KitCap:
 
 
 class IntakeApp:
-    def __init__(self, tools: Tools, *, public_url: str, lan_cidrs, claude=None, kit_api=None):
+    def __init__(self, tools: Tools, *, public_url: str | None, lan_cidrs, claude=None, kit_api=None, host_ok=None,
+                 push: bool = True):
+        """`public_url`: the web unit's address (its Origin is the only one a POST may carry); None in the kit server,
+        where the page is opened by the server's own names and a POST carries that same page's Origin. `host_ok`
+        (the kit server): the setup page's Host rule, checked with the address on every route. `push`: the Printers
+        tab's alerts (only one process sends them: the web unit)."""
         self.tools, self.claude = tools, claude
-        self.nets = auth.parse_lan(lan_cidrs)
-        self.origin = auth._origin(public_url)
-        self.base = urlparse(public_url).path.rstrip("/") + "/intake"  # as the browser sees it (nginx strips it)
+        self.nets = lan.parse_lan(lan_cidrs)
+        u = urlparse(public_url) if public_url else None
+        self.origin = f"{u.scheme}://{u.netloc}" if u else None
+        self.base = (u.path.rstrip("/") if u else "") + "/intake"  # as the browser sees it (nginx strips it)
+        self.host_ok = host_ok
         self.static = {n: (STATIC / n).read_bytes() for n in ("app.js", "app.css", "printers.js")}
         self.icon = icon_png()
         self.tag_cache: dict = {}
@@ -141,7 +151,8 @@ class IntakeApp:
         self._kit = kit_api         # the kit server's API (slots.KitApi), made when first needed
         self.printers = None        # the Printers tab: only with the printers module on
         if "printers" in modules.enabled(cfg):
-            self.printers = printers_app.PrintersApp(self, kit_api, push_on=(cfg.get("web") or {}).get("push") is True)
+            self.printers = printers_app.PrintersApp(
+                self, kit_api, push_on=push and (cfg.get("web") or {}).get("push") is True)
 
     @property
     def kit(self):
@@ -151,6 +162,29 @@ class IntakeApp:
         return self._kit
 
     def routes(self) -> list[Route]:
+        rs = self._routes()
+        if self.host_ok is None:
+            return rs
+        return [Route(r.path, self._guarded(r.endpoint), methods=sorted(r.methods - {"HEAD"})) for r in rs]
+
+    def _guarded(self, fn):
+        """The kit server: every route (the page, its assets and its API) answers the home network only, by the
+        server's own names (setup_page.host_ok), as the web unit's outer wrapper does there."""
+        async def route(request: Request):
+            if not self._lan(request):
+                return JSONResponse({"error": "home network only"}, 403)
+            if not self.host_ok(request):
+                return JSONResponse({"error": "open this page by the server's own name or address"}, 403)
+            return await fn(request)
+        return route
+
+    def _origin_ok(self, request: Request) -> bool:
+        origin = request.headers.get("origin")
+        if self.origin:
+            return origin == self.origin
+        return bool(origin) and origin == f"https://{request.headers.get('host', '')}"
+
+    def _routes(self) -> list[Route]:
         return [Route(p, fn, methods=m) for p, fn, m in (
             ("/intake", self.page, ["GET"]), ("/intake/app.js", self.asset, ["GET"]),
             ("/intake/app.css", self.asset, ["GET"]), ("/intake/printers.js", self.asset, ["GET"]),
@@ -170,7 +204,7 @@ class IntakeApp:
 
     # ---------- home network ----------
     def _lan(self, request: Request) -> bool:
-        return auth.is_lan(request.client.host if request.client else "", self.nets)
+        return lan.is_lan(request.client.host if request.client else "", self.nets)
 
     def _html(self, body: str, status: int = 200, app: bool = False) -> HTMLResponse:
         b = html.escape(self.base, quote=True)
@@ -231,7 +265,7 @@ class IntakeApp:
         async def route(request: Request):
             if not self._lan(request):
                 return JSONResponse({"error": "home network only"}, 403)
-            if request.method == "POST" and request.headers.get("origin") != self.origin:
+            if request.method == "POST" and not self._origin_ok(request):
                 return JSONResponse({"error": "bad origin"}, 403)
             try:
                 res = await fn(request)

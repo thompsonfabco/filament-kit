@@ -37,10 +37,11 @@ UNPAIRED = (f"the kit server no longer accepts this web unit (the device '{DEVIC
 NOT_PAIRED = "this web unit is not paired with the kit server yet; pair it: sudo filament-kit modules apply"
 
 
-def pair_token(f: Path, role: str | None = None) -> str:
-    """Pair as the device 'web (MCP)' and keep the token in `f` (0600). Run by `modules apply` as root (then handed
-    to the web unit's user), or in-process where the process may write the kit's pairings (one-user installs)."""
-    tok = pairing.issue(DEVICE_NAME, role=role).token
+def pair_token(f: Path, role: str | None = None, name: str = DEVICE_NAME) -> str:
+    """Pair as the device `name` ('web (MCP)') and keep the token in `f` (0600). Run by `modules apply` as root (then
+    handed to the web unit's user), or in-process where the process may write the kit's pairings (one-user installs,
+    and the kit server's own phone web app)."""
+    tok = pairing.issue(name, role=role).token
     pairing.check(tok)                   # claims the device, like a phone's first call
     f.parent.mkdir(parents=True, exist_ok=True)
     pairing._write_atomic(f, (tok + "\n").encode("utf-8"), 0o600)
@@ -177,8 +178,12 @@ def service_set_slot(svc: dict, spool_id: int, slot: str, dry_run: bool) -> dict
 class KitApi:
     """GET/POST JSON to the kit server (`https://127.0.0.1:<port>`), its certificate pinned (etc/cert.pem)."""
 
-    def __init__(self, base_url: str | None = None, context: ssl.SSLContext | None = None):
+    def __init__(self, base_url: str | None = None, context: ssl.SSLContext | None = None, *,
+                 token_file: Path | None = None, device: str = DEVICE_NAME, role: str | None = None):
+        """`token_file`, `device`, `role`: another caller's own pairing (the kit server's phone web app keeps one in
+        its state folder); by default the web unit's."""
         cfg = config.load()
+        self._file, self._device, self._role = token_file, device, role
         self.base = (base_url or f"https://127.0.0.1:{cfg['port']}").rstrip("/")
         self._context = context
         self._lock = threading.Lock()
@@ -191,9 +196,8 @@ class KitApi:
             self._context = ctx
         return self._context
 
-    @staticmethod
-    def _token_file() -> Path:
-        return config.paths().web / "kit_token"
+    def _token_file(self) -> Path:
+        return self._file or config.paths().web / "kit_token"
 
     def ensure_paired(self) -> None:
         """Read this process's token, or pair as the device 'web (MCP)' when there is none (called at start)."""
@@ -213,7 +217,7 @@ class KitApi:
             except OSError:
                 pass
             try:
-                tok = pair_token(f)
+                tok = pair_token(f, self._role, self._device) if self._file else pair_token(f)
             except (OSError, pairing.PairingError) as e:   # the web unit's user may not write the kit's pairings
                 raise SlotError(f"{NOT_PAIRED} ({type(e).__name__})", code="unpaired") from None
             log.info("paired with the kit server as %r", DEVICE_NAME)

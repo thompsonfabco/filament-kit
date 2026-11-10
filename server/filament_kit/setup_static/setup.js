@@ -205,20 +205,28 @@ function stationAsksCard() {
     h("button", { class: "secondary", textContent: "Show requests", on: { click: show } }), body, box);
 }
 
-let webQrUrl = null;
-// The iPhone is not paired: it opens the web module's address in Safari.
+let webQrUrls = [];
+// The iPhone is not paired: it opens the phone web app in Safari, served by this server at home (and by the web
+// module at its public address, when that is on).
 function webAppCard() {
   const body = h("div");
   const el = card("iPhone: the web app", body);
   api("webapp").then((r) => {
-    if (!r.on) { fill(body, h("p", { class: "muted", textContent: "Turn on the web module in Modules to use an iPhone." })); return; }
-    if (webQrUrl) URL.revokeObjectURL(webQrUrl);
-    webQrUrl = r.qr_svg ? URL.createObjectURL(new Blob([r.qr_svg], { type: "image/svg+xml" })) : null;
+    webQrUrls.forEach((u) => URL.revokeObjectURL(u));
+    webQrUrls = [];
+    const qr = (svg, alt) => {
+      if (!svg) return null;
+      const u = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+      webQrUrls.push(u);
+      return h("img", { class: "qr", alt, src: u });
+    };
     fill(body,
-      h("p", {}, "Open this address in Safari: ", h("b", { textContent: r.url })),
-      webQrUrl ? h("img", { class: "qr", alt: "QR code of the web app's address", src: webQrUrl }) : null,
-      h("p", { textContent: "To keep it on the iPhone: tap Share, then Add to Home Screen." }),
-      r.set_address ? null : h("p", { class: "muted", textContent: "Safari needs an https address with a web server in front: see the iPhone guide in the docs. If you use your own name, set it under Settings, Addresses." }));
+      h("p", {}, "At home, open this address in Safari: ", h("b", { textContent: r.url })),
+      qr(r.qr_svg, "QR code of the web app's home address"),
+      h("p", { class: "muted", textContent: "Safari warns once about the server's own certificate: accept it to go on. It works on the home network only." }),
+      r.public_url ? h("p", {}, "Away from home too (the web module): ", h("b", { textContent: r.public_url })) : null,
+      r.public_url ? qr(r.public_qr_svg, "QR code of the web app's public address") : null,
+      h("p", { textContent: "To keep it on the iPhone: tap Share, then Add to Home Screen." }));
   }).catch((e) => say(body, e.message, false));
   return el;
 }

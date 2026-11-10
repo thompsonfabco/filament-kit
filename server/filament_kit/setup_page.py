@@ -254,6 +254,18 @@ def bad_host_text(hosts: set[str]) -> str:
             "add any other name on the Settings tab, under General: Names for this page.")
 
 
+def host_ok(request, hosts=None) -> bool:
+    """The Host rule of the kit server's own pages (the setup page, the phone web app at /intake): one of the server's
+    names or addresses (`hosts`, default allowed_hosts), a name added on the Settings tab, or a local name of the
+    owner's DNS that resolves here."""
+    name = _host_of(request.headers.get("host", ""))
+    if not name:
+        return False
+    if name in (hosts or allowed_hosts)() or name in extra_hosts():
+        return True
+    return local_name(name) and resolves_here(name)
+
+
 def _host_of(host_header: str) -> str:
     """'kit.local:8710' -> 'kit.local'; '[fe80::1]:8710' -> 'fe80::1'."""
     try:
@@ -336,12 +348,7 @@ class SetupPage:
         return lan.is_lan(self._ip(request), nets)
 
     def _host_ok(self, request: Request) -> bool:
-        name = _host_of(request.headers.get("host", ""))
-        if not name:
-            return False
-        if name in self.hosts() or name in extra_hosts():
-            return True
-        return local_name(name) and resolves_here(name)
+        return host_ok(request, self.hosts)
 
     def _origin_ok(self, request: Request) -> bool:
         origin, host = request.headers.get("origin"), request.headers.get("host", "")
