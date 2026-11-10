@@ -337,6 +337,7 @@ Run these in a Terminal on the Ubuntu computer.
 | `sudo filament-kit config` | Settings menu: display name, storage locations, Claude model and daily limit, API key, printers, modules. |
 | `sudo filament-kit modules list` | Shows each module on or off and the mode. `modules set <mode>`, `modules enable <name>` and `modules disable <name>` change them (see [Change the mode later](#change-the-mode-later)); `modules apply` sets the computer up again from the saved settings. |
 | `sudo filament-kit printer map <serial>` | Maps a printer's AMS slots (see [Map slots](#map-slots)), printing each step. |
+| `sudo filament-kit printer map --manual <serial>` | Maps by loading filament (see [When mapping fails](#when-mapping-fails-map-by-loading-filament-v050)): it names each slot, you load it, then type `y` (or the slot you loaded), `s` to skip or `q` to stop. Needs the running server; the session is the one the setup page and the apps show. |
 | `sudo filament-kit printer report <serial>` | Makes a short file about a printer the kit doesn't know, or whose mapping failed, to attach to an issue. It holds no serial, address or name; read it first. The setup page's Printers tab does the same (**Collect a report**, highlighted when a report would help) and lists the kept reports (the last five) to download. When the printer can't be reached, the report is built from what the kit saved (its last known layout, the slot map and the last mapping run) and says so; only a printer the kit has never seen is refused. With the server running it, and `printer map`, ask the server, which holds the printer's connection. |
 | `sudo filament-kit profiles status` / `build` | Shows or rebuilds the Bambu Studio and Orca Slicer presets (see [Presets](#presets-in-bambu-studio)). |
 | `sudo filament-kit profiles apply-updates --all` (or `--line <id>`; add `--dry-run` to only look) | Writes the updated presets you accept over the ones in the primary Bambu Studio folder (see [Stable and Beta Bambu Studio](#stable-and-beta-bambu-studio-v040)). |
@@ -443,7 +444,9 @@ text: load them again (or fix their location in Spoolman) so filament use finds 
 #### When mapping fails: map by loading filament (v0.5.0)
 
 If **Map slots** keeps failing, map the printer by hand. On the setup page, open **Printers** and tap **Map by loading
-filament** next to the printer (it is also offered under a failed mapping). The page names one slot at a time:
+filament** next to the printer (it is also offered under a failed mapping). The phone web app's Printers tab and the
+Android app's printer screen have the same button, and `sudo filament-kit printer map --manual <serial>` does it in a
+terminal (it needs the running server). All four share one session per printer. The page names one slot at a time:
 
 1. It says, for example, "Load A2 to the nozzle, then wait." Load that slot on the printer's screen.
 2. When the printer reports the load, the page asks "The printer now reports A2 loaded. Is that the A2 you loaded?"
