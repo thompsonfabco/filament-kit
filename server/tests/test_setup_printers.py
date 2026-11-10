@@ -515,3 +515,28 @@ def test_map_by_loading_filament_on_a_klipper_printer(env, helper, manager, kl):
 def test_map_by_loading_filament_on_klipper_without_its_family_is_refused(both, kl):
     r = post(client(both), f"printers/{kl.serial}/manual-map/start")
     assert r.status_code == 409
+
+
+def test_the_printers_tab_links_the_live_view_in_the_phone_web_app():
+    """Interface parity (gap 5 of the 2026-11-10 matrix): the live printer view (slots, load, camera, controls, usage)
+    is the phone web app's Printers tab; the setup page links it, only when the printers module gives the web app
+    that tab, at /intake beside /setup on the same server."""
+    text = (STATIC / "setup_printers.js").read_text(encoding="utf-8")
+    card = text.split("function liveCard()")[1].split("\n}\n")[0]
+    assert 'replace(/\/setup\/?$/, "") + "/intake#printers"' in card
+    assert 'rel: "noopener"' in card and "Open the live printer view" in card
+    assert "P.bambu ? liveCard() : null" in text
+
+
+@pytest.mark.skipif(not __import__("shutil").which("node"), reason="needs node")
+def test_the_live_view_link_resolves_beside_the_setup_page():
+    import json
+    import re
+    import shutil
+    import subprocess
+    text = (STATIC / "setup_printers.js").read_text(encoding="utf-8")
+    expr = re.search(r"const url = (location\.pathname\..*);$", text, re.M).group(1)
+    probe = ["/setup", "/setup/", "/kit/setup"]
+    js = f"console.log(JSON.stringify({json.dumps(probe)}.map((p) => {{ const location = {{ pathname: p }}; return {expr}; }})));"
+    out = subprocess.run([shutil.which("node"), "-e", js], capture_output=True, text=True, timeout=30, check=True).stdout
+    assert json.loads(out) == ["/intake#printers", "/intake#printers", "/kit/intake#printers"]
