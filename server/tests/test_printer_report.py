@@ -364,3 +364,61 @@ def test_the_cli_says_the_report_is_from_saved_records(capsys):
     assert cli.main(["printer", "report", SERIAL], manager_factory=lambda s: Gone()) == 0
     out = capsys.readouterr().out
     assert "could not be reached" in out and "built from what the kit saved" in out and "Printer report saved:" in out
+
+
+# ---------------------------------------------------------------- the running server holds the printer (live bug, 2026-11-10)
+
+class ServerApi:
+    """The running kit server's API as cli._server_api gives it: it holds the printer's connection."""
+
+    def __init__(self, map_states=None):
+        self.posts, self.gets = [], []
+        self.map_states = list(map_states or [])
+
+    def post(self, path, body):
+        self.posts.append(path)
+        if path.endswith("/report"):
+            return {"name": "printer-report-N6-20261110-120000.xml", "xml": "<printer-report/>", "live": True,
+                    "saved_until": None}
+        return {"job_id": "j1"}
+
+    def get(self, path):
+        self.gets.append(path)
+        return self.map_states.pop(0)
+
+
+def test_the_cli_report_asks_the_running_server(monkeypatch, capsys):
+    registry.upsert(registry.Printer(SERIAL, "", "N6", "192.0.2.5", "12345678", True))
+    api = ServerApi()
+    monkeypatch.setattr(cli, "_server_api", lambda: api)
+    assert cli.main(["printer", "report", SERIAL], manager_factory=lambda s: pytest.fail("a second connection")) == 0
+    assert api.posts == [f"/api/printers/{SERIAL}/report"]
+    out = capsys.readouterr().out
+    assert "printer-report-N6-20261110-120000.xml" in out and "could not be reached" not in out
+
+
+def test_the_cli_map_follows_the_servers_job(monkeypatch, capsys):
+    registry.upsert(registry.Printer(SERIAL, "", "N6", "192.0.2.5", "12345678", True))
+    monkeypatch.setattr(cli.time, "sleep", lambda s: None)
+    done = {"state": "done", "step": "", "slots": [{"label": "A1", "ams_id": 0, "tray_id": 0, "global": 0}],
+            "problems": [], "notes": [], "outcome": "confirmed", "outcome_text": "Mapped and confirmed.", "next_step": ""}
+    api = ServerApi([{"state": "running", "step": "Reading the AMS slots"}, {"state": "running", "step": "Reading the AMS slots"},
+                     {"state": "running", "step": "Running the calibration job"}, done])
+    monkeypatch.setattr(cli, "_server_api", lambda: api)
+    assert cli.main(["printer", "map", SERIAL], manager_factory=lambda s: pytest.fail("a second connection")) == 0
+    out = capsys.readouterr().out
+    assert api.posts == [f"/api/printers/{SERIAL}/map"]
+    assert out.count("Reading the AMS slots") == 1 and "Running the calibration job" in out
+    assert "A1: AMS 0 tray 0 -> printer slot 0" in out and "Mapped and confirmed." in out
+
+
+def test_the_cli_says_what_the_server_refused(monkeypatch, capsys):
+    from filament_kit.web.slots import SlotError
+    registry.upsert(registry.Printer(SERIAL, "", "N6", "192.0.2.5", "12345678", True))
+
+    class Busy(ServerApi):
+        def post(self, path, body):
+            raise SlotError("slot mapping is already running for this printer", code="already_running", http=409)
+    monkeypatch.setattr(cli, "_server_api", lambda: Busy())
+    assert cli.main(["printer", "map", SERIAL], manager_factory=lambda s: pytest.fail("a second connection")) == 1
+    assert "already running" in capsys.readouterr().err

@@ -174,7 +174,7 @@ function pairCard() {
   }
   return card("Phones, PC and station",
     ...S.devices.map((d) => h("div", { class: "row item" }, h("span", { textContent: `${d.name} · paired ${d.paired || "?"} · last seen ${d.last_seen || "never"}` }),
-      d.built_in ? h("span", { class: "muted", textContent: "built in: this server's own phone web app" })
+      d.built_in ? h("span", { class: "muted", textContent: "built in: this server's own pairing" })
         : h("button", { class: "secondary", textContent: "Revoke", on: { click: () => { if (window.confirm(`Unpair ${d.name}?`)) change(box, `devices/${encodeURIComponent(d.id)}/revoke`, {}); } } }))),
     S.devices.length ? null : h("p", { class: "muted", textContent: "Nothing paired yet." }),
     h("div", { class: "row" },

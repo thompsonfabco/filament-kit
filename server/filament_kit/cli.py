@@ -723,6 +723,86 @@ def _restore_signals(old: dict) -> None:
             pass
 
 
+CLI_TOKEN = "cli_kit_token"     # in the state folder: this command line's own pairing with the running server
+
+
+def _server_api():
+    """The running kit server's API, when it answers: `printer map` and `printer report` then ask it, since it already
+    holds each printer's connection (a second one of our own gets nothing while the server's is up). None: no server
+    here, and the command connects to the printer itself. It pairs once, in-process, as the built-in device
+    "command line (this server)" (the commands run as the server's own user)."""
+    try:
+        port = int(config.load().get("port", 8710))
+    except (OSError, ValueError, TypeError):
+        return None
+    if not _api_answers(port)[0]:
+        return None
+    from .web import slots
+    return slots.KitApi(f"https://127.0.0.1:{port}", token_file=config.paths().state / CLI_TOKEN,
+                        device=slots.CLI_DEVICE)
+
+
+def _print_map_view(serial: str, v: dict, stopped: list) -> int:
+    for s in v.get("slots") or []:
+        where = "no number yet" if s.get("global") is None else f"printer slot {s['global']}"
+        print(f"  {s['label']}: AMS {s['ams_id']} tray {s['tray_id']} -> {where}")
+    for prob in v.get("problems") or []:
+        print(f"  problem: {prob}")
+    for note in v.get("notes") or []:
+        print(f"  note: {note}")
+    if v.get("report_wanted"):
+        print(f"  {v.get('report_why') or 'A printer report would help.'} To collect one: "
+              f"sudo filament-kit printer report {serial}")
+    if stopped:
+        print("Mapping stopped. Any slot listed above as not restored may still hold a test colour; the next "
+              "mapping run restores it first.")
+        return 130 if stopped[0] == getattr(signal, "SIGINT", None) else 1
+    print(v["outcome_text"])
+    if v.get("next_step"):
+        print(f"Next: {v['next_step']}")
+    return 0 if v["outcome"] in ("confirmed", "partial") else 1
+
+
+def _map_via_server(api, serial: str) -> int:
+    """`printer map` through the running server: start its job, follow it, Ctrl-C stops it (slots put back first)."""
+    from .web.slots import SlotError
+    try:
+        api.post(f"/api/printers/{serial}/map", {})
+    except SlotError as e:
+        _err_line(str(e))
+        return 1
+    stopped: list = []
+
+    def on_signal(signum, frame):
+        first = not stopped
+        stopped.append(signum)
+        if first:
+            try:
+                print("\n  Stopping: putting the slots back first (this takes a few seconds) ...", flush=True)
+                api.post(f"/api/printers/{serial}/map/stop", {})
+            except (OSError, RuntimeError, SlotError):
+                pass
+    old = _on_stop_signals(on_signal)
+    seen = None
+    try:
+        while True:
+            try:
+                v = api.get(f"/api/printers/{serial}/map")
+            except SlotError as e:
+                _err_line(str(e))
+                return 1
+            if v.get("state") == "running":
+                if v.get("step") and v["step"] != seen:
+                    seen = v["step"]
+                    print(f"  {seen}", flush=True)
+                time.sleep(1.0)
+                continue
+            break
+    finally:
+        _restore_signals(old)
+    return _print_map_view(serial, v, stopped)
+
+
 def cmd_printer_map(serial: str, manager_factory) -> int:
     from .bridge import mapping
     from .bridge.connection import PrinterOffline, UnknownPrinter
@@ -733,6 +813,9 @@ def cmd_printer_map(serial: str, manager_factory) -> int:
         return 1
     print(f"Mapping the slots of {registry.display_name(p)}. Each slot's colour changes briefly and the printer runs a "
           f"job with no heating and no motion.")
+    api = _server_api()
+    if api is not None:                 # the running server holds the printer: it maps, this follows
+        return _map_via_server(api, serial)
     m = manager_factory(serial)
     stopped = []
     try:
@@ -778,24 +861,7 @@ def cmd_printer_map(serial: str, manager_factory) -> int:
             _restore_signals(old)
     finally:
         m.stop()
-    for s in v["slots"]:
-        where = "no number yet" if s["global"] is None else f"printer slot {s['global']}"
-        print(f"  {s['label']}: AMS {s['ams_id']} tray {s['tray_id']} -> {where}")
-    for prob in v["problems"]:
-        print(f"  problem: {prob}")
-    for note in v["notes"]:
-        print(f"  note: {note}")
-    if v.get("report_wanted"):
-        print(f"  {v.get('report_why') or 'A printer report would help.'} To collect one: "
-              f"sudo filament-kit printer report {serial}")
-    if stopped:
-        print("Mapping stopped. Any slot listed above as not restored may still hold a test colour; the next "
-              "mapping run restores it first.")
-        return 130 if stopped[0] == getattr(signal, "SIGINT", None) else 1
-    print(v["outcome_text"])
-    if v["next_step"]:
-        print(f"Next: {v['next_step']}")
-    return 0 if v["outcome"] in ("confirmed", "partial") else 1
+    return _print_map_view(serial, v, stopped)
 
 
 def cmd_printer_report(serial: str, manager_factory) -> int:
@@ -806,6 +872,16 @@ def cmd_printer_report(serial: str, manager_factory) -> int:
     if p is None or not p.configured or p.family != "bambu":
         _err_line(f"no Bambu printer {serial} is set up here")
         return 1
+    api = _server_api()
+    if api is not None:                 # the running server holds the printer (its own connection gets nothing)
+        from .web.slots import SlotError
+        try:
+            r = api.post(f"/api/printers/{serial}/report", {})
+        except SlotError as e:
+            _err_line(str(e))
+            return 1
+        r = {**r, "path": str(config.paths().state / "printers" / serial / r["name"])}
+        return _report_said(r)
     m = manager_factory(serial)
     try:
         m.sync()
@@ -817,6 +893,10 @@ def cmd_printer_report(serial: str, manager_factory) -> int:
         return 1
     finally:
         m.stop()
+    return _report_said(r)
+
+
+def _report_said(r: dict) -> int:
     if not r.get("live", True):
         when = time.strftime("%Y-%m-%d %H:%M", time.localtime(r["saved_until"])) if r.get("saved_until") else "unknown"
         print(f"The printer could not be reached: this report is built from what the kit saved (newest record {when}),"

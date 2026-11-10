@@ -105,3 +105,11 @@ def moonraker():
     fake.host, fake.port, stop = fake.serve()
     yield fake
     stop()
+
+
+@pytest.fixture(autouse=True)
+def _no_running_kit_server(monkeypatch):
+    """`printer map` and `printer report` ask a running kit server first (cli._server_api). A test is never served by
+    whatever kit may run on this machine: no server, unless the test sets up its own."""
+    from filament_kit import cli
+    monkeypatch.setattr(cli, "_server_api", lambda: None)
