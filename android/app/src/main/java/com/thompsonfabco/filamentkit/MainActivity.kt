@@ -84,6 +84,7 @@ import com.thompsonfabco.filamentkit.ui.search.SearchScreen
 import com.thompsonfabco.filamentkit.ui.search.SearchViewModel
 import com.thompsonfabco.filamentkit.ui.settings.LicencesScreen
 import com.thompsonfabco.filamentkit.ui.settings.SettingsScreen
+import com.thompsonfabco.filamentkit.ui.settings.SetupPageTexts
 import com.thompsonfabco.filamentkit.ui.spool.ApiSpoolBackend
 import com.thompsonfabco.filamentkit.ui.spool.SpoolHost
 import com.thompsonfabco.filamentkit.ui.spool.closeSpoolCard
@@ -372,6 +373,7 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
                 onLicences = { nav.navigate(Routes.LICENCES) },
                 skipFingerprintCheck = skipFingerprintCheck,
                 onSkipFingerprintCheck = app::setSkipFingerprintCheck,
+                setupUrl = { SetupPageTexts.url(app.session.baseUrl()) },
             )
         }
 

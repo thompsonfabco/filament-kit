@@ -81,7 +81,9 @@ To pair another phone, run `sudo filament-kit pair` again: each code works once.
 
 The home screen shows the buttons **Add spool**, **Add profile**, **Search**, **Printers** and **Settings**.
 **Add from label photos** only appears when AI label reading (the `ai_intake` module) is on at the server.
-**Settings** shows the server and its fingerprint and has **Pair again** and **Forget server**. Its switch **Skip
+**Settings** shows the server and its fingerprint and has **Open the setup page** (the server's own page in your
+browser, for what the app doesn't do: modules, keys, devices, backups; it asks for the setup code), **Pair again** and
+**Forget server**. Its switch **Skip
 the fingerprint check for new servers** (off by default) leaves out the fingerprint step when you pick a server from the list or type its address.
 
 ## Updates
