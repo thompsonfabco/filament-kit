@@ -14,13 +14,16 @@ internal fun versionLine(app: String, paired: Boolean, server: String?): String 
     else -> "App $app · Server $server"
 }
 
-/** The small line at the bottom of the first screen. */
+/**
+ * The small version line: directly under the title on the first screen ([modifier] with no padding there), at the
+ * bottom of the pairing screen (the default padding).
+ */
 @Composable
-internal fun VersionLine(text: String) {
+internal fun VersionLine(text: String, modifier: Modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
     Text(
         text,
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+        modifier = modifier,
     )
 }

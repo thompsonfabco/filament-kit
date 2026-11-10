@@ -45,7 +45,7 @@ fun HomeScreen(
     connection: Connection,
     drafts: List<Draft>,
     update: UpdateUi,
-    /** The small line at the bottom ([versionLine]). */
+    /** The small line directly under the title ([versionLine]). */
     version: String,
     onAddSpools: () -> Unit,
     onAddByHand: () -> Unit,
@@ -73,7 +73,10 @@ fun HomeScreen(
         Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("filament-kit", style = MaterialTheme.typography.headlineSmall)
+        Column {
+            Text("filament-kit", style = MaterialTheme.typography.headlineSmall)
+            VersionLine(version, Modifier)
+        }
         ConnectionRow(serverName, connection, onRetryConnection, onReviewCertificate)
         if (connection == Connection.NeedsLocalNetwork) localNetworkPanel()
         UpdateBanner(update, onInstallUpdate, onConfirmInstall)
@@ -94,7 +97,6 @@ fun HomeScreen(
         }
         extra()
     }
-    VersionLine(version)
     }
 }
 
