@@ -308,6 +308,14 @@ def _hardware_view() -> dict:
 
 
 PATCH_KEYS = frozenset({"name", "address", "port", "access_code", "api_key", "unpin"})
+# What a paired device may not do alone (review R103): make the server send a secret it holds to a host the device
+# names. A Bambu address change keeps the certificate pin, so the stored Access Code only goes to the same printer.
+NEEDS_CODE_TO_UNPIN = ("trusting a new certificate needs the printer's Access Code in the same request "
+                       "(access_code): the stored one is never sent to a certificate the kit hasn't seen")
+NEEDS_CODE_TO_MOVE = ("this printer has no certificate pinned yet: give its Access Code (access_code) with the new "
+                      "address, so the stored one is never sent to whatever answers there")
+NEEDS_KEY_TO_MOVE = ("this printer has a Moonraker API key stored: give it (api_key, or \"\" to clear it) with the "
+                     "new address or port, so the stored key is never sent to whatever answers there")
 
 
 class _ModuleOffError(Exception):
@@ -491,6 +499,8 @@ def _printer_routes(printers) -> list[Route]:
                 raise BadRequest("unpin is for a Bambu printer")
             if body["unpin"] is not True:
                 raise BadRequest("unpin must be true")
+            if "access_code" not in body:      # R103: the stored code never goes to a certificate it hasn't seen
+                raise BadRequest(NEEDS_CODE_TO_UNPIN)
             want["unpin"] = True
         if "api_key" in body:
             if not klipper:
@@ -519,6 +529,12 @@ def _printer_routes(printers) -> list[Route]:
                 other = registry.klipper_at(registry.load(), host, port)
                 if other is not None and other.serial != p.serial:
                     raise _Conflict(f"{registry.display_name(other)} is already at {host}:{port}")
+                # R103: Moonraker has no certificate pin, so a stored key would go to whatever answers there
+                if p.api_key and "api_key" not in body:
+                    raise BadRequest(NEEDS_KEY_TO_MOVE)
+            elif p.access_code and not p.cert_fp and "access_code" not in body:
+                # the pin keeps the stored code with the same printer; with none pinned yet, the next leaf would be
+                raise BadRequest(NEEDS_CODE_TO_MOVE)
             want["address"] = (host, port, note)
         return want
 
