@@ -730,13 +730,22 @@ NOT_CONNECTED = {
 }
 
 
+CONNECT_POLL = 0.1    # seconds between looks at the connection's state while it retries
+
+
 def _connect(m, serial: str) -> str | None:
-    """Start this command's own connection and wait until it has its first result, then for the printer's first
-    full report. `sync` only starts the connection and `wait_report` answers None at once until it is connected, so
-    a real printer (whose TLS and MQTT take a moment) always looked offline without this wait. None when ready,
-    else the line to print."""
+    """Start this command's own connection and wait until it is connected, then for the printer's first full
+    report. `sync` only starts the connection and `wait_report` answers None at once until it is connected, so a
+    real printer (whose TLS and MQTT take a moment) always looked offline without this wait. A refused or failed
+    attempt is not the end: paho retries, so a printer still booting or back from a Wi-Fi drop within CONNECT_WAIT
+    is waited for. Only a refused Access Code or a changed certificate, which no retry cures, stops it early.
+    None when ready, else the line to print."""
     m.sync()
+    deadline = time.monotonic() + CONNECT_WAIT
     state = m.wait_settled(serial, CONNECT_WAIT)
+    while state not in ("connected", *NOT_CONNECTED, "not_configured") and time.monotonic() < deadline:
+        time.sleep(min(CONNECT_POLL, max(0.0, deadline - time.monotonic())))
+        state = m.state(serial)
     if state != "connected":
         return NOT_CONNECTED.get(state, "the printer did not answer; check that it is on and on the network "
                                         "({state})").format(serial=serial, state=state)
