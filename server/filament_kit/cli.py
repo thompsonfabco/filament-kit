@@ -905,17 +905,16 @@ def cmd_printer_report(serial: str, manager_factory) -> int:
         return _report_said(r)
     m = manager_factory(serial)
     try:
-        why = _connect(m, serial)
-        if why:
-            _err_line(why)
-            return 1
+        why = _connect(m, serial)      # not reached: the report is built from what the kit saved instead
         r = mapping.Mapper(m).report(serial)
     except (PrinterOffline, UnknownPrinter):
-        _err_line("the printer cannot be reached and the kit has saved nothing about it yet (no slot map, no mapping "
-                  "run); check that it is on and on the network, and that its Access Code is right")
+        _err_line(f"{why or 'the printer cannot be reached'}; and the kit has saved nothing about it yet (no slot map, "
+                  "no mapping run), so there is no report to make")
         return 1
     finally:
         m.stop()
+    if why and not r.get("live", True):
+        print(f"Not reached: {why}.")
     return _report_said(r)
 
 

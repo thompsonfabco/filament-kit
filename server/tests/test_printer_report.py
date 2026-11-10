@@ -318,6 +318,9 @@ class Gone:
     def wait_report(self, serial, predicate, timeout):
         return None
 
+    def wait_settled(self, serial, timeout):
+        return "offline"
+
     def sync(self):
         pass
 
@@ -364,6 +367,7 @@ def test_the_cli_says_the_report_is_from_saved_records(capsys):
     assert cli.main(["printer", "report", SERIAL], manager_factory=lambda s: Gone()) == 0
     out = capsys.readouterr().out
     assert "could not be reached" in out and "built from what the kit saved" in out and "Printer report saved:" in out
+    assert "Not reached: the printer did not answer" in out
 
 
 # ---------------------------------------------------------------- the running server holds the printer (live bug, 2026-11-10)
