@@ -147,6 +147,8 @@ data class Printer(
     @SerialName("model_name") val modelName: String? = null,
     /** `bambu` or `klipper`; servers before 0.4 send none (Bambu only then). */
     val family: String = "bambu",
+    /** A certificate is pinned for it (never which); servers before the printer edit routes send none. */
+    val pinned: Boolean = false,
 ) {
     /** What to show for the model: its name, else the code an older server sent, else null. */
     val shownModel: String? get() = modelName?.takeIf { it.isNotBlank() } ?: model?.takeIf { it.isNotBlank() }

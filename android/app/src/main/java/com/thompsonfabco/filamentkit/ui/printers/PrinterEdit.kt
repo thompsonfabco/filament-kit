@@ -53,14 +53,19 @@ enum class EditField(val title: String, val button: String, val secret: Boolean 
     ADDRESS("Change address", "Change address"),
     ACCESS_CODE("Replace Access Code", "Replace Access Code", secret = true),
     API_KEY("Moonraker API key", "Change API key", secret = true),
+    /** Bambu, pinned only: `unpin` with the Access Code in the same request (the server asks for both). */
+    TRUST_CERT("Trust a new certificate", "Trust a new certificate", secret = true),
 }
 
 /** Texts of the printer's edit and remove section. */
 object PrinterEditTexts {
     const val HEADING = "Printer settings"
-    const val UNPIN = "Forget certificate"
-    const val UNPIN_QUESTION = "Forget the certificate pinned for this printer? The next connection trusts whatever " +
-        "answers at its address and pins that."
+    const val TRUST_HELP = "Only after you reset the printer or replaced its mainboard: the kit then trusts the " +
+        "certificate the printer has now. Type its Access Code (${PrinterHelp.ACCESS_CODE_HELP})."
+    const val CODE_FOR_ADDRESS = "This printer has never connected, so the move needs its Access Code too " +
+        "(${PrinterHelp.ACCESS_CODE_HELP})."
+    const val KEY_FOR_ADDRESS = "API key: only if the printer has one, type it again (the server asks for it when a " +
+        "printer with a key moves). Empty: not sent."
     const val REMOVE = "Remove printer"
     const val ADDRESS_HELP = "An IP address or a name; a name is kept as you type it."
     const val PORT_HELP = "Moonraker's port (empty: keep it)"
@@ -83,14 +88,19 @@ object PrinterEditTexts {
     ).joinToString(" ")
 }
 
-data class EditDialog(val field: EditField, val busy: Boolean = false, val error: String? = null)
+/** [codeToo]: a Bambu address change on a printer with no certificate pinned, which needs the Access Code. */
+data class EditDialog(
+    val field: EditField,
+    val busy: Boolean = false,
+    val error: String? = null,
+    val codeToo: Boolean = false,
+)
 
 data class PrinterEditUiState(
     val dialog: EditDialog? = null,
-    val confirmUnpin: Boolean = false,
     val confirmRemove: Boolean = false,
     val busy: Boolean = false,
-    /** The last change's result, or why an unpin or remove failed. */
+    /** The last change's result, or why a remove failed. */
     val message: String? = null,
     val messageIsError: Boolean = false,
     /** The printer was removed: the screen goes back to the list. */
@@ -100,8 +110,10 @@ data class PrinterEditUiState(
 )
 
 /**
- * Rename, address, Access Code / API key, forget certificate and remove for one printer. Secrets are only passed
- * through to the request body. [onChanged] gets the printer the server answered with (the screen shows it at once).
+ * Rename, address, Access Code / API key, trust a new certificate and remove for one printer. Secrets are only
+ * passed through to the request body; the server never sends a stored one to a new host (version 2 of the routes): a
+ * move of a printer with no pinned certificate, a new certificate, and a Klipper move with a stored key each carry the
+ * secret in the same request. [onChanged] gets the printer the server answered with (the screen shows it at once).
  */
 class PrinterEditViewModel(
     private val backend: PrinterEditBackend,
@@ -112,18 +124,22 @@ class PrinterEditViewModel(
     private val _state = MutableStateFlow(PrinterEditUiState())
     val state: StateFlow<PrinterEditUiState> = _state.asStateFlow()
 
-    /** The buttons this printer gets, in order. */
-    val fields: List<EditField> =
+    /** The buttons [p] gets, in order: a new certificate only for a Bambu printer that has one pinned. */
+    fun fields(p: Printer): List<EditField> =
         if (family == "klipper") listOf(EditField.NAME, EditField.ADDRESS, EditField.API_KEY)
-        else listOf(EditField.NAME, EditField.ADDRESS, EditField.ACCESS_CODE)
-    val canUnpin: Boolean get() = family != "klipper"
+        else listOfNotNull(EditField.NAME, EditField.ADDRESS, EditField.ACCESS_CODE, EditField.TRUST_CERT.takeIf { p.pinned })
 
-    fun open(field: EditField) = _state.update { it.copy(dialog = EditDialog(field), message = null) }
+    fun open(field: EditField, p: Printer) = _state.update {
+        it.copy(dialog = EditDialog(field, codeToo = field == EditField.ADDRESS && family != "klipper" && !p.pinned), message = null)
+    }
 
     fun close() = _state.update { if (it.dialog?.busy == true) it else it.copy(dialog = null) }
 
-    /** [value] is the dialog's text; [port] only for a Klipper address (blank: keep). */
-    fun submit(value: String, port: String = "") {
+    /**
+     * [value] is the dialog's text; [port] only for a Klipper address (blank: keep); [secret] is the second field of
+     * an address dialog: the Access Code ([EditDialog.codeToo]) or a Klipper printer's API key (blank: not sent).
+     */
+    fun submit(value: String, port: String = "", secret: String = "") {
         val d = _state.value.dialog ?: return
         if (d.busy) return
         val v = value.trim()
@@ -131,8 +147,9 @@ class PrinterEditViewModel(
             EditField.NAME -> if (v.isEmpty()) PrinterEditTexts.NEED_NAME else null
             EditField.ADDRESS -> if (v.isEmpty()) PrinterEditTexts.NEED_ADDRESS
                 else if (port.isNotBlank() && port.trim().toIntOrNull()?.takeIf { it in 1..65535 } == null) PrinterEditTexts.BAD_PORT
+                else if (d.codeToo && secret.isBlank()) PrinterEditTexts.NEED_CODE
                 else null
-            EditField.ACCESS_CODE -> if (v.isEmpty()) PrinterEditTexts.NEED_CODE else null
+            EditField.ACCESS_CODE, EditField.TRUST_CERT -> if (v.isEmpty()) PrinterEditTexts.NEED_CODE else null
             EditField.API_KEY -> null
         }
         if (problem != null) {
@@ -144,10 +161,19 @@ class PrinterEditViewModel(
                 EditField.NAME -> put("name", v)
                 EditField.ADDRESS -> {
                     put("address", v)
-                    if (family == "klipper" && port.isNotBlank()) put("port", port.trim().toInt())
+                    if (family == "klipper") {
+                        if (port.isNotBlank()) put("port", port.trim().toInt())
+                        if (secret.isNotBlank()) put("api_key", secret.trim())
+                    } else if (d.codeToo) {
+                        put("access_code", secret.trim())
+                    }
                 }
                 EditField.ACCESS_CODE -> put("access_code", v)
                 EditField.API_KEY -> put("api_key", v)
+                EditField.TRUST_CERT -> {
+                    put("unpin", true)
+                    put("access_code", v)
+                }
             }
         }
         _state.update { it.copy(dialog = d.copy(busy = true, error = null)) }
@@ -159,22 +185,6 @@ class PrinterEditViewModel(
                     it.copy(dialog = null, message = PrinterEditTexts.saved(r, d.field != EditField.NAME), messageIsError = false)
                 }
             }
-        }
-    }
-
-    fun askUnpin() = _state.update { it.copy(confirmUnpin = true, message = null) }
-    fun cancelUnpin() = _state.update { it.copy(confirmUnpin = false) }
-
-    fun confirmUnpin() {
-        if (_state.value.busy) return
-        _state.update { it.copy(confirmUnpin = false, busy = true) }
-        viewModelScope.launch {
-            guard(onError = ::fail) {
-                val r = backend.editPrinter(id, buildJsonObject { put("unpin", true) })
-                onChanged(r.printer)
-                _state.update { it.copy(message = PrinterEditTexts.saved(r, true), messageIsError = false) }
-            }
-            _state.update { it.copy(busy = false) }
         }
     }
 
@@ -222,12 +232,9 @@ internal fun PrinterEditSection(printer: Printer, edit: PrinterEditViewModel, on
     LaunchedEffect(s.removed) { if (s.removed) onRemoved() }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(PrinterEditTexts.HEADING, style = MaterialTheme.typography.titleMedium)
-        edit.fields.forEach { f ->
-            OutlinedButton(onClick = { edit.open(f) }, enabled = !s.busy, modifier = Modifier.fillMaxWidth()) { Text(f.button) }
-        }
-        if (edit.canUnpin) {
-            OutlinedButton(onClick = edit::askUnpin, enabled = !s.busy, modifier = Modifier.fillMaxWidth()) {
-                Text(PrinterEditTexts.UNPIN)
+        edit.fields(printer).forEach { f ->
+            OutlinedButton(onClick = { edit.open(f, printer) }, enabled = !s.busy, modifier = Modifier.fillMaxWidth()) {
+                Text(f.button)
             }
         }
         OutlinedButton(
@@ -238,15 +245,6 @@ internal fun PrinterEditSection(printer: Printer, edit: PrinterEditViewModel, on
     }
 
     s.dialog?.let { d -> EditFieldDialog(printer, d, edit) }
-    if (s.confirmUnpin) {
-        AlertDialog(
-            onDismissRequest = edit::cancelUnpin,
-            title = { Text("${PrinterEditTexts.UNPIN}?") },
-            text = { Text(PrinterEditTexts.UNPIN_QUESTION) },
-            confirmButton = { Button(onClick = edit::confirmUnpin) { Text(PrinterEditTexts.UNPIN) } },
-            dismissButton = { TextButton(onClick = edit::cancelUnpin) { Text("Cancel") } },
-        )
-    }
     if (s.confirmRemove) {
         AlertDialog(
             onDismissRequest = edit::cancelRemove,
@@ -274,6 +272,7 @@ private fun EditFieldDialog(printer: Printer, d: EditDialog, edit: PrinterEditVi
     var value by if (d.field.secret) remember(d.field) { mutableStateOf("") }
     else rememberSaveable(d.field) { mutableStateOf(start) }
     var port by rememberSaveable(d.field) { mutableStateOf("") }
+    var second by remember(d.field) { mutableStateOf("") }      // a secret: never in saved state
     val klipper = printer.family == "klipper"
     AlertDialog(
         onDismissRequest = edit::close,
@@ -286,7 +285,7 @@ private fun EditFieldDialog(printer: Printer, d: EditDialog, edit: PrinterEditVi
                         Text(when (d.field) {
                             EditField.NAME -> "Name"
                             EditField.ADDRESS -> "Address"
-                            EditField.ACCESS_CODE -> "Access Code"
+                            EditField.ACCESS_CODE, EditField.TRUST_CERT -> "Access Code"
                             EditField.API_KEY -> "API key"
                         })
                     },
@@ -305,16 +304,28 @@ private fun EditFieldDialog(printer: Printer, d: EditDialog, edit: PrinterEditVi
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         }
+                        if (klipper || d.codeToo) {
+                            Text(if (klipper) PrinterEditTexts.KEY_FOR_ADDRESS else PrinterEditTexts.CODE_FOR_ADDRESS,
+                                style = MaterialTheme.typography.bodySmall)
+                            OutlinedTextField(
+                                value = second, onValueChange = { second = it }, singleLine = true, enabled = !d.busy,
+                                label = { Text(if (klipper) "API key" else "Access Code") },
+                                visualTransformation = PasswordVisualTransformation(),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
                     }
                     EditField.ACCESS_CODE -> Text("${PrinterHelp.ACCESS_CODE_HELP}.", style = MaterialTheme.typography.bodySmall)
                     EditField.API_KEY -> Text(PrinterEditTexts.API_KEY_HELP, style = MaterialTheme.typography.bodySmall)
+                    EditField.TRUST_CERT -> Text(PrinterEditTexts.TRUST_HELP, style = MaterialTheme.typography.bodySmall)
                     EditField.NAME -> Unit
                 }
                 if (d.busy) Text(if (d.field == EditField.NAME) "Saving…" else "Saving and connecting…")
                 d.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         },
-        confirmButton = { Button(onClick = { edit.submit(value, port) }, enabled = !d.busy) { Text("Save") } },
+        confirmButton = { Button(onClick = { edit.submit(value, port, second) }, enabled = !d.busy) { Text("Save") } },
         dismissButton = { TextButton(onClick = edit::close, enabled = !d.busy) { Text("Cancel") } },
     )
 }

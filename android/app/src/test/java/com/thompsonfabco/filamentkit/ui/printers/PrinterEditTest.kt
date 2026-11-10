@@ -30,7 +30,8 @@ class PrinterEditTest {
     @After fun tearDown() = Dispatchers.resetMain()
 
     private val bambu = Printer(id = "0948AB", name = "Garage H2D", serial = "0948AB", ip = "10.0.0.9",
-        configured = true, state = "connected")
+        configured = true, state = "connected", pinned = true)
+    private val klipper = bambu.copy(family = "klipper", pinned = false)
 
     private class Fake(var reply: Printer) : PrinterEditBackend {
         val edits = mutableListOf<JsonObject>()
@@ -52,21 +53,21 @@ class PrinterEditTest {
     private val shown = mutableListOf<Printer>()
     private fun vm(family: String = "bambu") = PrinterEditViewModel(fake, "0948AB", family) { shown += it }
 
-    @Test fun aBambuPrinterGetsTheAccessCodeAndUnpin() {
-        val v = vm()
-        assertEquals(listOf(EditField.NAME, EditField.ADDRESS, EditField.ACCESS_CODE), v.fields)
-        assertTrue(v.canUnpin)
+    @Test fun aPinnedBambuPrinterGetsTheAccessCodeAndANewCertificate() {
+        assertEquals(listOf(EditField.NAME, EditField.ADDRESS, EditField.ACCESS_CODE, EditField.TRUST_CERT), vm().fields(bambu))
     }
 
-    @Test fun aKlipperPrinterGetsTheApiKeyAndNoUnpin() {
-        val v = vm("klipper")
-        assertEquals(listOf(EditField.NAME, EditField.ADDRESS, EditField.API_KEY), v.fields)
-        assertFalse(v.canUnpin)
+    @Test fun anUnpinnedBambuPrinterHasNoCertificateToReplace() {
+        assertEquals(listOf(EditField.NAME, EditField.ADDRESS, EditField.ACCESS_CODE), vm().fields(bambu.copy(pinned = false)))
+    }
+
+    @Test fun aKlipperPrinterGetsTheApiKey() {
+        assertEquals(listOf(EditField.NAME, EditField.ADDRESS, EditField.API_KEY), vm("klipper").fields(klipper))
     }
 
     @Test fun renameSendsOnlyTheNameAndShowsThePrinter() = runTest(dispatcher) {
         val v = vm()
-        v.open(EditField.NAME)
+        v.open(EditField.NAME, bambu)
         v.submit("  Garage  ")
         runCurrent()
         assertEquals(listOf(buildJsonObject { put("name", "Garage") }), fake.edits)
@@ -78,8 +79,8 @@ class PrinterEditTest {
     @Test fun anEmptyValueIsRefusedBeforeAnyRequest() = runTest(dispatcher) {
         val v = vm()
         for ((f, text) in listOf(EditField.NAME to PrinterEditTexts.NEED_NAME, EditField.ADDRESS to PrinterEditTexts.NEED_ADDRESS,
-            EditField.ACCESS_CODE to PrinterEditTexts.NEED_CODE)) {
-            v.open(f)
+            EditField.ACCESS_CODE to PrinterEditTexts.NEED_CODE, EditField.TRUST_CERT to PrinterEditTexts.NEED_CODE)) {
+            v.open(f, bambu)
             v.submit("   ")
             runCurrent()
             assertEquals(text, v.state.value.dialog?.error)
@@ -89,7 +90,7 @@ class PrinterEditTest {
 
     @Test fun anEmptyApiKeyClearsIt() = runTest(dispatcher) {
         val v = vm("klipper")
-        v.open(EditField.API_KEY)
+        v.open(EditField.API_KEY, klipper)
         v.submit("")
         runCurrent()
         assertEquals(listOf(buildJsonObject { put("api_key", "") }), fake.edits)
@@ -97,37 +98,61 @@ class PrinterEditTest {
 
     @Test fun aKlipperAddressCarriesThePortWhenGiven() = runTest(dispatcher) {
         val v = vm("klipper")
-        v.open(EditField.ADDRESS)
+        v.open(EditField.ADDRESS, klipper)
         v.submit("voron.lan", "7125")
         runCurrent()
         assertEquals(buildJsonObject { put("address", "voron.lan"); put("port", 7125) }, fake.edits.single())
-        v.open(EditField.ADDRESS)
+        v.open(EditField.ADDRESS, klipper)
         v.submit("voron.lan", "")
         runCurrent()
         assertEquals(buildJsonObject { put("address", "voron.lan") }, fake.edits[1])
     }
 
+    @Test fun aKlipperMoveCarriesTheKeyOnlyWhenTyped() = runTest(dispatcher) {
+        val v = vm("klipper")
+        v.open(EditField.ADDRESS, klipper)
+        assertFalse(v.state.value.dialog!!.codeToo)
+        v.submit("voron.lan", "", " k3y ")
+        runCurrent()
+        assertEquals(buildJsonObject { put("address", "voron.lan"); put("api_key", "k3y") }, fake.edits.single())
+    }
+
     @Test fun aBadPortIsRefused() = runTest(dispatcher) {
         val v = vm("klipper")
-        v.open(EditField.ADDRESS)
+        v.open(EditField.ADDRESS, klipper)
         v.submit("voron.lan", "70000")
         runCurrent()
         assertEquals(PrinterEditTexts.BAD_PORT, v.state.value.dialog?.error)
         assertTrue(fake.edits.isEmpty())
     }
 
-    @Test fun aBambuAddressNeverSendsAPort() = runTest(dispatcher) {
+    @Test fun aPinnedBambuPrinterMovesWithoutItsCode() = runTest(dispatcher) {
         val v = vm()
-        v.open(EditField.ADDRESS)
-        v.submit("10.0.0.10", "7125")
+        v.open(EditField.ADDRESS, bambu)
+        assertFalse(v.state.value.dialog!!.codeToo)
+        v.submit("10.0.0.10", "7125", "12345678")
         runCurrent()
+        // no port, and no code: the server keeps the pin, so the stored code only goes to the same printer
         assertEquals(buildJsonObject { put("address", "10.0.0.10") }, fake.edits.single())
+    }
+
+    @Test fun anUnpinnedBambuPrinterMovesOnlyWithItsCode() = runTest(dispatcher) {
+        val v = vm()
+        v.open(EditField.ADDRESS, bambu.copy(pinned = false))
+        assertTrue(v.state.value.dialog!!.codeToo)
+        v.submit("10.0.0.10", "", " ")
+        runCurrent()
+        assertEquals(PrinterEditTexts.NEED_CODE, v.state.value.dialog?.error)
+        assertTrue(fake.edits.isEmpty())
+        v.submit("10.0.0.10", "", "12345678")
+        runCurrent()
+        assertEquals(buildJsonObject { put("address", "10.0.0.10"); put("access_code", "12345678") }, fake.edits.single())
     }
 
     @Test fun aNewCodeThatFailsSaysWhatToDo() = runTest(dispatcher) {
         fake.reply = bambu.copy(state = "wrong_code")
         val v = vm()
-        v.open(EditField.ACCESS_CODE)
+        v.open(EditField.ACCESS_CODE, bambu)
         v.submit("12345678")
         runCurrent()
         assertEquals(buildJsonObject { put("access_code", "12345678") }, fake.edits.single())
@@ -137,7 +162,7 @@ class PrinterEditTest {
     @Test fun theServersNoteIsShown() = runTest(dispatcher) {
         fake.note = "this server does not reach it"
         val v = vm()
-        v.open(EditField.ADDRESS)
+        v.open(EditField.ADDRESS, bambu)
         v.submit("10.0.0.10")
         runCurrent()
         assertEquals("Saved. this server does not reach it.", v.state.value.message)
@@ -146,7 +171,7 @@ class PrinterEditTest {
     @Test fun aRefusalStaysInTheDialogInTheServersWords() = runTest(dispatcher) {
         fake.error = ApiError(400, "bad_request", "give the printer a name")
         val v = vm()
-        v.open(EditField.NAME)
+        v.open(EditField.NAME, bambu)
         v.submit("x")
         runCurrent()
         val d = v.state.value.dialog!!
@@ -155,14 +180,13 @@ class PrinterEditTest {
         assertTrue(shown.isEmpty())
     }
 
-    @Test fun unpinAsksFirstThenSendsUnpin() = runTest(dispatcher) {
+    @Test fun aNewCertificateIsTrustedOnlyWithTheAccessCode() = runTest(dispatcher) {
         val v = vm()
-        v.askUnpin()
-        assertTrue(v.state.value.confirmUnpin)
-        v.confirmUnpin()
+        v.open(EditField.TRUST_CERT, bambu)
+        v.submit(" 12345678 ")
         runCurrent()
-        assertEquals(buildJsonObject { put("unpin", JsonPrimitive(true)) }, fake.edits.single())
-        assertFalse(v.state.value.busy)
+        assertEquals(buildJsonObject { put("unpin", JsonPrimitive(true)); put("access_code", "12345678") }, fake.edits.single())
+        assertNull(v.state.value.dialog)
     }
 
     @Test fun removeAsksFirstThenGoesBack() = runTest(dispatcher) {
@@ -191,7 +215,7 @@ class PrinterEditTest {
     @Test fun anUnpairedPhoneClosesTheDialog() = runTest(dispatcher) {
         fake.error = ApiError(401, "unauthorized", "x")
         val v = vm()
-        v.open(EditField.NAME)
+        v.open(EditField.NAME, bambu)
         v.submit("Garage")
         runCurrent()
         assertTrue(v.state.value.unauthorized)

@@ -60,6 +60,13 @@ class ApiPrintersTest {
         assertEquals(changes, q.bodyJson())
     }
 
+    @Test fun pinnedIsReadAndDefaultsToFalse() = runBlocking {
+        json("""{"printer":${printerJson.replace("\"configured\":true", "\"configured\":true,\"pinned\":true")},"changed":[]}""")
+        assertTrue(api.editPrinter("0948AB", kotlinx.serialization.json.buildJsonObject { }).printer.pinned)
+        json("""{"printer":$printerJson,"changed":[]}""")
+        assertFalse(api.editPrinter("0948AB", kotlinx.serialization.json.buildJsonObject { }).printer.pinned)
+    }
+
     @Test fun editPrinterWithoutANoteHasNone() = runBlocking {
         json("""{"printer":$printerJson,"changed":["unpin"]}""")
         assertNull(api.editPrinter("0948AB", kotlinx.serialization.json.buildJsonObject { }).note)

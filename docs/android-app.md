@@ -97,10 +97,12 @@ You need a Bambu Lab printer on the same network as the server, switched on.
 behind NAT can't see printers; see [Running the server in WSL](install-server.md#running-the-server-in-wsl).)
 
 **Change or remove a printer:** at the bottom of a printer's screen, **Printer settings** has **Rename**, **Change
-address**, **Replace Access Code** (a Klipper printer: **Change API key**; empty clears it), **Forget certificate**
-(Bambu: the next connection pins the certificate it finds) and **Remove printer**. A new address, code or key
-reconnects and the screen says how that went. A removed Bambu printer still on the network comes back in the list,
-not set up.
+address**, **Replace Access Code** (a Klipper printer: **Change API key**; empty clears it), **Trust a new
+certificate** and **Remove printer**. A Bambu printer keeps its certificate when it moves, so its Access Code only
+ever goes to the same printer; one that never connected needs its Access Code with the new address. **Trust a new
+certificate** (only after you reset the printer or replaced its mainboard) asks for the Access Code. A Klipper printer
+with an API key needs the key again when it moves. A new address, code or key reconnects and the screen says how that
+went. A removed Bambu printer still on the network comes back in the list, not set up.
 
 <img src="images/android-printer-screen.png" width="240" alt="A printer's screen: slots with Unload, Slot mapping and Map slots">
 
