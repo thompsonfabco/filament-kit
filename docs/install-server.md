@@ -232,8 +232,7 @@ log (for example `setup: anthropic key replaced from 192.0.2.20`) without the va
 
 From v0.4.3 the page has tabs: **Overview**, **Modules**, **Printers**, **Devices**, **Settings** and **Updates**
 (`https://<computer name>.local:8710/setup#updates` opens one directly). v0.5.0 adds **Presets** and **Logs**. The table above says what is on **Printers**,
-**Devices** and **Settings**. This section was written from the code, not from a screen: it has not been checked on a
-running install.
+**Devices** and **Settings**.
 
 - **Overview.** The installed version and mode, with a note and a link to **Updates** when a newer release exists. Under
   it are the same checks as `sudo filament-kit status`, each marked **OK**, **needs a look** or **note**, with a
