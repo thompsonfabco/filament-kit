@@ -77,6 +77,31 @@ class ApiBridge2Test {
         assertEquals("/api/printers/0948AB/map", r.url.encodedPath)
     }
 
+    @Test fun mapStatusDecodesWhyAReportWouldHelp() = runBlocking {
+        json("""{"state":"done","report_wanted":"no_scheme","report_why":"The kit couldn't work out how."}""")
+        val m = api.mapStatus("0948AB")
+        assertEquals("no_scheme", m.reportWanted)
+        assertEquals("The kit couldn't work out how.", m.reportWhy)
+        json("""{"state":"done"}""")
+        assertNull(api.mapStatus("0948AB").reportWanted)
+    }
+
+    @Test fun printerReportPostsAndReturnsNameAndXml() = runBlocking {
+        json("""{"name":"report-N6-20261110.xml","xml":"<printer-report format=\"1\"/>"}""")
+        val r = api.printerReport("0948AB")
+        assertEquals("report-N6-20261110.xml", r.name)
+        assertEquals("<printer-report format=\"1\"/>", r.xml)
+        val q = take()
+        assertEquals("POST", q.method)
+        assertEquals("/api/printers/0948AB/report", q.url.encodedPath)
+        assertEquals("Bearer tok-123", q.headers["Authorization"])
+    }
+
+    @Test fun printerReportRefusalKeepsItsCode() {
+        json("""{"error":"printer_offline","message":"x"}""", 409)
+        assertEquals("printer_offline", failure { api.printerReport("0948AB") }.code)
+    }
+
     @Test fun mapStatusDecodesNotesAndAnOldResult() = runBlocking {
         json("""{"state":"done","problems":["Ext-L: the printer reported no slot"],"problems_old":true,
             "finished":1762600000.5,"notes":["numbered alike"]}""")
