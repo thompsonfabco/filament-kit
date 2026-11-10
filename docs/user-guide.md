@@ -352,6 +352,7 @@ Run these in a Terminal on the Ubuntu computer.
 | `sudo filament-kit reader token --name <name>` | Makes a token for the bench NFC reader, shown once ([reader/README.md](../reader/README.md)); `reader tokens` lists them, `sudo filament-kit reader revoke <id>` removes one. |
 | `sudo filament-kit reader setup --source <checkout>/reader` | Sets up a bench reader plugged in by USB: makes its token, asks the Wi-Fi name and password, and builds and flashes it with PlatformIO. `--out <file>` only writes its `secrets.h` (mode 600) for a build elsewhere ([reader/README.md](../reader/README.md)). |
 | `sudo filament-kit update` / `update --check` / `update --rollback` | Installs the newest signed release, only checks, or goes back (see [Update](#update)). |
+| `sudo filament-kit update --channel nightly` / `--channel stable` | Follows the untested, unsigned nightly builds from now on, or goes back to signed releases (see [Update](#update)). |
 | `sudo filament-kit migrate-ops <bundle>` | Moving from filament-ops: shows what it would do; `--apply` does it (see [Moving from filament-ops](#moving-from-filament-ops)). |
 
 Your spool inventory (Spoolman) is also in a web browser on any computer at home:
@@ -967,6 +968,14 @@ Automatic updates: `sudo filament-kit modules enable updates` (off by default) c
 new release on its own; it never reinstalls a version you rolled back from. For a weekly check, set
 `"updates": {"schedule": "weekly"}` in `/etc/filament-kit/config.json`. For a private repository, put a GitHub
 token in a file only root can read and set `"updates": {"token_file": "/etc/filament-kit/github_token"}`.
+
+**Nightly builds (off by default).** `sudo filament-kit update --channel nightly` (or **Follow nightly builds** on the
+setup page's Updates tab) installs the newest nightly prerelease now, and from then on each update (by hand or the
+timer) takes the newest nightly instead of the newest release. Nightly builds are untested and **unsigned**: the kit
+checks a download only against the nightly's own checksum list, which shows it arrived whole but not who built it.
+A nightly is never kept as a rollback target: `update --rollback` goes back to the signed release you had before.
+`sudo filament-kit update --channel stable` (or turning the switch off) goes back to signed releases and replaces the
+nightly with the latest release.
 
 **Updating from v0.3.0 to v0.4.0 with a PC sync (in this order).**
 1. Update the server: `sudo filament-kit update`.
