@@ -843,6 +843,8 @@ same app as well, with your certificate (step by step: [Use the web app on an iP
 There is no sign-in: anyone on your home network can use it (as with the Android app's pairing, the home network is
 the gate). Since it is part of the server, it is always on: anyone on the home network who opens it can add and edit
 spools, read labels (within the daily cap, with `ai_intake`) and, with the `printers` module, use its Printers tab.
+The setup page's Printers tab links that tab (**Open the live printer view**), for loading spools, the camera and
+the printer controls from a computer.
 Its **Manage printers** section adds a printer the kit has seen on the network (with its Access Code) or a Klipper
 printer, and renames, readdresses, re-keys, unpins or forgets one, as the setup page's Printers tab does. It asks for
 the Access Code again before trusting a new certificate (and for a new address when none is pinned yet), and for a
