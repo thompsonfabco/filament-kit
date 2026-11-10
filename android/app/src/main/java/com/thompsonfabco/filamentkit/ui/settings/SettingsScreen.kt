@@ -19,6 +19,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.thompsonfabco.filamentkit.data.ServerConfig
@@ -27,7 +28,8 @@ import com.thompsonfabco.filamentkit.ui.pair.groupFingerprint
 
 /**
  * Shows the paired server. [onPairAgain] opens pairing; [onForget] should call `Settings.clear()` and go to pairing.
- * [onLicences] opens the licences screen.
+ * [onLicences] opens the licences screen. [setupUrl] gives the server's setup page address at the moment it is opened
+ * (the host the app reaches it on now), for the admin features that live only there.
  */
 @Composable
 fun SettingsScreen(
@@ -38,8 +40,11 @@ fun SettingsScreen(
     onLicences: () -> Unit = {},
     skipFingerprintCheck: Boolean = false,
     onSkipFingerprintCheck: (Boolean) -> Unit = {},
+    setupUrl: () -> String? = { null },
 ) {
     var confirmForget by remember { mutableStateOf(false) }
+    var openProblem by remember { mutableStateOf<String?>(null) }
+    val links = LocalUriHandler.current
     Column(
         modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -53,6 +58,15 @@ fun SettingsScreen(
             Text("${config.endpoints.firstOrNull().orEmpty()}:${config.port}")
             Text("Certificate fingerprint")
             Text(groupFingerprint(config.fingerprint), fontFamily = FontFamily.Monospace)
+        }
+        if (config != null) {
+            OutlinedButton(onClick = {
+                val url = setupUrl()
+                openProblem = if (url == null) SetupPageTexts.NO_ADDRESS
+                else if (runCatching { links.openUri(url) }.isSuccess) null else SetupPageTexts.NO_BROWSER
+            }, modifier = Modifier.fillMaxWidth()) { Text(SetupPageTexts.BUTTON) }
+            Text(SetupPageTexts.HELP, style = MaterialTheme.typography.bodySmall)
+            openProblem?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         }
         Button(onClick = onPairAgain, modifier = Modifier.fillMaxWidth()) { Text("Pair again") }
         if (config != null) {
@@ -72,4 +86,18 @@ fun SettingsScreen(
             dismissButton = { TextButton(onClick = { confirmForget = false }) { Text("Cancel") } },
         )
     }
+}
+
+/** "Open the setup page": its texts and its address. */
+object SetupPageTexts {
+    const val BUTTON = "Open the setup page"
+    const val HELP = "The server's own page in your browser, on the home network, for what this app doesn't do " +
+        "(modules, keys, devices, backups). It asks for the setup code; the browser warns once about the server's own " +
+        "certificate, whose fingerprint is the one above."
+    const val NO_BROWSER = "No browser on this phone could open it"
+    const val NO_ADDRESS = "The server's address isn't known yet"
+
+    /** `https://<host>:<port>/setup` from the app's `https://<host>:<port>` (null: not paired). */
+    fun url(base: String?): String? =
+        base?.takeIf { it.startsWith("https://") && !it.startsWith("https://unpaired.invalid") }?.trimEnd('/')?.plus("/setup")
 }

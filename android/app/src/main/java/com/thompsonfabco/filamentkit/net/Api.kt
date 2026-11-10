@@ -206,6 +206,10 @@ class Api(
 
     suspend fun mapStatus(id: String): MapStatus = decode(call(request("api", "printers", id, "map").get()))
 
+    /** Builds a printer report now (Bambu printers; refused for a Klipper one); the server keeps a copy too. */
+    suspend fun printerReport(id: String): PrinterReport =
+        decode(call(request("api", "printers", id, "report").post(buildJsonObject { }.toBody())))
+
     // ---- map by loading filament ----
 
     private fun manual(id: String, vararg rest: String) = request("api", "printers", id, "manual-map", *rest)

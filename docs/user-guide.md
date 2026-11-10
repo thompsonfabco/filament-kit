@@ -457,9 +457,8 @@ Afterwards, loading spools into those slots works. Filament use comes off the sp
 proven the printer's slot numbering; until then it is only logged, and the page says so. A later **Map slots** never
 changes a slot you confirmed: if it finds something else, it says so instead. The page asks you once whether to
 share the map in a printer report for other owners of the same model. The kit sends nothing itself: **Yes** says how
-to make the report (**Collect a report** on the setup page's Printers tab or in the phone web app, or
-`sudo filament-kit printer report <serial>`) and
-attach it to an issue.
+to make the report (**Collect a report** on the setup page's Printers tab, on the printer's screen in the Android
+app or in the phone web app, or `sudo filament-kit printer report <serial>`) and attach it to an issue.
 
 A Klipper printer has the same button: it names its tools or lanes, and you make each one active. See the Klipper
 guide.

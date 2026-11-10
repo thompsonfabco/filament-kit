@@ -383,6 +383,7 @@ class LoadFlowTest {
             if (statuses.isNotEmpty()) last = statuses.removeFirst()
             return last
         }
+        override suspend fun report(id: String) = error("not used here")
         override suspend fun usage(id: String, days: Int): List<UsageEntry> {
             usageCalls++
             return usage

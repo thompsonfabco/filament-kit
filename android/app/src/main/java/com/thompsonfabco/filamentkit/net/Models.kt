@@ -270,6 +270,7 @@ data class MapSlot(
  * [schemeUnsettled]: the loaded slots fit more than one numbering scheme (null: a server that does not say).
  * [outcome] and [reason] (v0.5.0 servers): the server's one reading of the flags and why a job stopped short of a
  * confirmed map; [outcomeText] and [nextStep] are its sentences for them. Null on an older server.
+ * [reportWanted]: why a printer report would help (a code; null when it wouldn't), [reportWhy] the server's sentence.
  */
 @Serializable
 data class MapStatus(
@@ -289,7 +290,13 @@ data class MapStatus(
     val reason: String? = null,
     @SerialName("outcome_text") val outcomeText: String? = null,
     @SerialName("next_step") val nextStep: String? = null,
+    @SerialName("report_wanted") val reportWanted: String? = null,
+    @SerialName("report_why") val reportWhy: String? = null,
 )
+
+/** `POST /api/printers/{id}/report`: the printer report as XML text and the file name the server gave it. */
+@Serializable
+data class PrinterReport(val name: String, val xml: String)
 
 @Serializable
 data class LoadSlot(

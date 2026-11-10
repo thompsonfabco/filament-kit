@@ -45,6 +45,7 @@ class ApiPrinterBackend(private val api: Api) : PrinterBackend, PrinterToolsBack
     override suspend fun unload(id: String, label: String, dryRun: Boolean) = api.unload(id, label, dryRun)
     override suspend fun startMap(id: String) = api.startMap(id)
     override suspend fun mapStatus(id: String) = api.mapStatus(id)
+    override suspend fun report(id: String) = api.printerReport(id)
     override suspend fun usage(id: String, days: Int) = api.usage(id, days)
     override suspend fun undoUsage(entryId: String) = api.undoUsage(entryId)
 }
