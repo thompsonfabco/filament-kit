@@ -489,6 +489,24 @@ def _locations(value) -> list[str]:
     return [_one_line(v, 100) for v in value]
 
 
+
+
+def _hosts(value) -> list[str]:
+    """setup.hosts: more names the setup page answers to (DNS names only, never an address: those always work)."""
+    if isinstance(value, str):
+        value = [v for v in re.split(r"[\s,]+", value) if v]
+    if not isinstance(value, list) or len(value) > 20:
+        raise ValueError("must be at most 20 names")
+    out = []
+    for v in value:
+        name = v.strip().lower().rstrip(".") if isinstance(v, str) else ""
+        if not _HOSTNAME.fullmatch(name) or name.replace(".", "").isdigit():
+            raise ValueError(f"{v!r} is not a DNS name")
+        if name not in out:
+            out.append(name)
+    return out
+
+
 def _tts(value) -> str:
     if value not in ("auto", "espeak"):
         raise ValueError("must be auto or espeak")
@@ -508,6 +526,7 @@ GENERAL = {
     "placement.box_count": (lambda v: _whole(v, 0, 999), None),
     "placement.overflow": (lambda v: _one_line(v, 100), None),
     "station.tts": (_tts, "apply"),
+    "setup.hosts": (_hosts, None),          # read on every request (setup_page.extra_hosts): no restart
 }
 
 

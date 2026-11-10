@@ -192,6 +192,7 @@ function generalCard() {
   api("settings/general").then((g) => {
     const v = g.values;
     const places = h("input", { value: (v.locations || []).join(", "), ariaLabel: "Locations" });
+    const names = h("input", { value: (v["setup.hosts"] || []).join(" "), ariaLabel: "Names for this page", placeholder: "kit.example.net" });
     const url = h("input", { placeholder: "http://spoolman.example:7912", ariaLabel: "Spoolman address" });
     fill(body,
       text("Display name", "server_name", v.server_name),
@@ -200,6 +201,8 @@ function generalCard() {
       text("Box location prefix", "placement.box_prefix", v["placement.box_prefix"]),
       count("Number of storage boxes", "placement.box_count", v["placement.box_count"]),
       text("Overflow location", "placement.overflow", v["placement.overflow"]),
+      h("div", { class: "row" }, h("label", {}, "Names for this page, space separated: ", names), h("button", { class: "secondary", textContent: "Save", on: { click: () => save("setup.hosts", names.value.split(/[\s,]+/).filter(Boolean)) } })),
+      h("p", { class: "muted", textContent: "Its own names and addresses always work, and so does a local name of your DNS (one word, .local, .lan, .home.arpa, or your network's own domain) that points at this server. Add any other name here." }),
       text("Claude model", "model", v.model),
       count("Label reads per day", "reads_per_day", v.reads_per_day),
       h("p", { class: "muted", textContent: "Changing the model or the reads per day restarts the server." }),

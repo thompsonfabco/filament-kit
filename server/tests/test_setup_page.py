@@ -12,6 +12,7 @@ import json
 import os
 import logging
 import re
+import socket
 import sys
 from pathlib import Path
 
@@ -1228,3 +1229,72 @@ def test_a_broken_lockout_file_starts_clean(tmp_path):
     f = tmp_path / "setup_lockout.xml"
     f.write_text("<not-closed", encoding="utf-8")
     assert setup_code.Lockout(f).attempt("192.0.2.20") is not None
+
+
+# ---------------------------------------------------------------- names of the owner's DNS (the live bug, 2026-11-09)
+
+def _resolve(monkeypatch, table):
+    """getaddrinfo as the owner's DNS answers it: name -> address; this server's own address is 192.0.2.10."""
+    monkeypatch.setattr(pairing, "local_ips", lambda: ["192.0.2.10"])
+    monkeypatch.setattr(setup_page, "_RESOLVED", {})
+
+    def gai(name, port, *a, **kw):
+        if name not in table:
+            raise socket.gaierror("no such name")
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (table[name], 0))]
+    monkeypatch.setattr(setup_page.socket, "getaddrinfo", gai)
+
+
+def test_a_local_dns_alias_of_this_server_is_accepted(app, monkeypatch, tmp_path):
+    _resolve(monkeypatch, {"workshop.lan": "192.0.2.10", "kit": "192.0.2.10", "kit.home.example": "192.0.2.10"})
+    resolv = tmp_path / "resolv.conf"
+    resolv.write_text("nameserver 192.0.2.1\nsearch home.example\n")
+    monkeypatch.setattr(setup_page, "RESOLV_CONF", str(resolv))       # the router's domain, as DHCP hands it out
+    for base in ("https://workshop.lan:8710", "https://kit:8710", "https://kit.home.example:8710"):
+        assert client(app, base=base).get("/setup").status_code == 200, base
+
+
+def test_a_public_name_is_refused_even_when_it_resolves_here(app, monkeypatch):
+    """DNS rebinding: an attacker's public name answering with this server's address must not open the page."""
+    _resolve(monkeypatch, {"rebind.example.com": "192.0.2.10", "other.lan": "192.0.2.99"})
+    r = client(app, base="https://rebind.example.com:8710").get("/setup")
+    assert r.status_code == 403 and "kit.local" in r.text and "Settings tab" in r.text and "192.0.2.10" not in r.text
+    assert client(app, base="https://other.lan:8710").get("/setup").status_code == 403      # local, but not here
+    j = post(client(app, base="https://rebind.example.com:8710"), "key", {"key": KEY},
+             headers={"Origin": "https://rebind.example.com:8710"})
+    assert j.status_code == 403 and "Names for this page" in j.json()["error"]
+
+
+def test_a_name_added_on_the_settings_tab_is_accepted(app, monkeypatch):
+    _resolve(monkeypatch, {})
+    cfg = config.load()
+    cfg["setup"] = {"hosts": ["kit.example.net"]}
+    config.save(cfg)
+    assert client(app, base="https://kit.example.net:8710").get("/setup").status_code == 200
+
+
+def test_local_names():
+    assert all(setup_page.local_name(n) for n in ("kit", "workshop.lan", "kit.lan", "x.home.arpa", "a.local"))
+    assert not any(setup_page.local_name(n) for n in ("rebind.example.com", "192.0.2.10", "", "fe80::1", "local.com"))
+
+
+def test_a_name_under_the_resolvers_search_domain_is_local(tmp_path, monkeypatch):
+    """The home network's own domain, as the router hands it out (resolv.conf `search` or `domain`), counts as local:
+    that is how a router's default domain is reached without naming any particular one in the code."""
+    resolv = tmp_path / "resolv.conf"
+    resolv.write_text("nameserver 192.0.2.1\nsearch home.example corp.example\n")
+    monkeypatch.setattr(setup_page, "RESOLV_CONF", str(resolv))
+    assert setup_page.local_name("workshop.home.example") and setup_page.local_name("kit.corp.example")
+    assert not setup_page.local_name("workshop.other.example")
+    resolv.write_text("domain office.example\n")
+    assert setup_page.local_name("kit.office.example")
+
+
+def test_the_names_setting_takes_dns_names_only():
+    assert setup_helper._hosts("Kit.Example.net, workshop.lan kit.example.net.") == \
+        ["kit.example.net", "workshop.lan"]
+    assert setup_helper._hosts([]) == []
+    for bad in (["192.0.2.10"], ["a b"], ["-x.com"], ["x" * 64 + ".com"], [f"h{i}.lan" for i in range(21)], 5):
+        with pytest.raises(ValueError):
+            setup_helper._hosts(bad)
+    assert setup_helper.GENERAL["setup.hosts"][1] is None          # saved without a restart: read on every request
