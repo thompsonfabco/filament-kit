@@ -17,9 +17,11 @@ The web app does most of what the Android app does:
 It only works **on your home network**. Away from home it says "Spool intake only works on the home network."
 There is no sign-in: anyone on your home Wi-Fi can use it.
 
-> **This takes more setup than the Android app.** The web app is part of the `web` module, and Safari only
-> reaches it over `https://`. So the server needs an https address and a web server (nginx) in front of it.
-> There are two ways to get one, below. Neither has been tried on a real iPhone yet; see [Known gaps](known-gaps.md).
+> **At home it needs no setup.** The kit server serves the web app itself at
+> `https://<server name>.local:8710/intake` (the setup page's **Devices** tab shows the address and a QR code).
+> Safari warns once about the server's own certificate: accept it to go on. To avoid the warning, or to reach the
+> app with a name of your own, use one of the two ways below (the `web` module and a web server in front). None of
+> this has been tried on a real iPhone yet; see [Known gaps](known-gaps.md).
 
 ## What you need
 

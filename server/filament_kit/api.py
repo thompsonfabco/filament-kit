@@ -667,6 +667,26 @@ class _Refused(Exception):
 # ---- end slot mapping, loading and usage routes ----------------------------------------------------------
 
 
+INTAKE_DEVICE = "phone web app (this server)"
+INTAKE_TOKEN = "intake_kit_token"       # in the state folder: the kit server's own phone web app's pairing
+
+
+def _intake_web_app(cfg: dict, sm: Spoolman, claude, hosts=None) -> list:
+    """The phone web app at /intake, served by the kit server itself on the home network (the user's decision,
+    2026-11-09: part of the main software, no module needed). The same app as the web unit's, on the same rules:
+    home network only, the setup page's Host rule, the page's own Origin on every POST. It calls this server's API
+    over the loopback with its own pairing (device INTAKE_DEVICE, the web role), as the web unit does with its own.
+    No push alerts here: the web unit sends those when it is on."""
+    from . import web_access
+    from .web import mcp_tools, slots
+    from .web.intake_app import IntakeApp
+    kit = slots.KitApi(token_file=config.paths().state / INTAKE_TOKEN, device=INTAKE_DEVICE, role=web_access.WEB_ROLE)
+    tools = mcp_tools.Tools(sm, kit_api=kit, kit_writes=True)
+    lan_cidrs = (cfg.get("web") or {}).get("lan") or []
+    return IntakeApp(tools, public_url=None, lan_cidrs=lan_cidrs, claude=claude, kit_api=kit, push=False,
+                     host_ok=lambda request: setup_page.host_ok(request, hosts)).routes()
+
+
 def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hub=None,
                mapper: mapping.Mapper | None = None, enabled_modules: frozenset[str] | None = None,
                setup: dict | None = None) -> Starlette:
@@ -970,6 +990,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
                      *camera.routes(camera_hub, _authed)],
                     "klipper" if "klipper" in on and "printers" not in on else "printers", on),
             *_gated(profiles_api.routes(_authed, sm), "presets", on),
+            *_intake_web_app(cfg, sm, claude, (setup or {}).get("hosts")),
             *setup_page.routes(printers if on & {"printers", "klipper"} else None,
                                families={f for m, f in (("printers", "bambu"), ("klipper", "klipper")) if m in on},
                                mapper=mapper if "printers" in on else None,

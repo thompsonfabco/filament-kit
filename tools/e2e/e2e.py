@@ -393,6 +393,13 @@ class E2E:
         # active isn't listening yet: the web unit takes a moment to bind its port
         code, body = wait_for(lambda: (lambda c: c if c[0] == 200 else None)(http("GET", f"{WEB}/health")), 60, 1) or (0, b"")
         run.check(sc, "web unit answers /health", code == 200 and body.strip() == b"ok", body[:200].decode())
+        # the phone web app is the kit server's own (the user's decision, 2026-11-09): no web module needed for it
+        code, body = http("GET", f"{KIT}/intake")
+        run.check(sc, "the kit server serves the phone web app at /intake", code == 200 and b"data-base='/intake'" in body,
+                  body[:300].decode(errors="replace"))
+        code, plist = jhttp("GET", f"{KIT}/intake/api/printers")
+        run.check(sc, "its Printers tab reaches this server's API over the loopback with its own pairing",
+                  code == 200, str(plist)[:300])
         st = run.sh(["/usr/local/bin/filament-kit", "status"], name="status-after-install")
         run.check(sc, "filament-kit status exits 0", st.returncode == 0, st.stdout[-1500:])
         kept = OPT / "releases" / self.v1
