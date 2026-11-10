@@ -7,11 +7,14 @@ again; if the flash doesn't take the panel is used as it is. STATION_PANEL_FLASH
 
 The panel is found by its HELLO: ttyACM ports with USB vendor 303a (the C3), then ttyUSB; an old CH340 panel and the
 PN532 board can swap ttyUSB numbers, so the reader gets the other port (NFC_DEVICE=auto).
-Protocol (firmware 10), 115200 baud, one line each: PC -> panel `?`, `L <yellow> <red>` (lamp modes 0-4, resent every
+Protocol (firmware 11), 115200 baud, one line each: PC -> panel `?`, `L <yellow> <red>` (lamp modes 0-4, resent every
 second), `D <row> [text]` (OLED row 0 the title, 1-4 the body; sent when it changes), `B <hz> <ms> [count]`, `V <percent>` (speech volume, 0-100);
 `A <n>` + n raw bytes (speech, see `speech`);
 panel -> PC `HELLO intake-panel <version> [<chip>]` (firmware 10: `esp32c3`; no chip token: an ESP8266), `P H` / `P D` (the yellow / red button, a short press, on release),
-`L H` / `L D` (the yellow / red button held 0.8 s), `AIR <C> <RH|-> <hPa>` (see `air`).
+`L H` / `L D` (the yellow / red button held 0.8 s), `AIR <C> <RH|-> <hPa>` (see `air`);
+firmware 11 adds `TAG <uid hex>` (a tag read by the PN532 on the panel's I2C bus, handled like the USB reader's, and
+the same tag from either reader within 2 s is one tap: `nfc.on_identifier`) and `NFC ok` / `NFC none` (whether that
+PN532 answers, after each HELLO and when it changes).
 
 `H` is yellow and `D` red, as PANEL.md wires them. A panel wired the other way round (yellow's button and
 lamp on red's pins) sets station.panel_swap (STATION_PANEL_SWAP=1): the buttons' roles and the `L` lamp modes are swapped
@@ -26,7 +29,7 @@ import subprocess
 import sys
 import time
 
-from . import air, flow, wire
+from . import air, flow, nfc, wire
 from . import state as st
 
 log = logging.getLogger("intake-station")
@@ -42,6 +45,16 @@ def on_line(line: bytes):
             flow.on_red()
     elif line.startswith(b"AIR "):
         air.on_air(line)
+    elif line.startswith(b"TAG "):  # the panel's own PN532 (firmware 11): same path as the USB reader
+        try:
+            uid = bytes.fromhex(line[4:].decode("ascii").strip())
+        except (ValueError, UnicodeDecodeError):
+            return
+        if uid:
+            nfc.on_identifier(uid)
+    elif line in (b"NFC ok", b"NFC none"):
+        st.ports["panel_nfc"] = line == b"NFC ok"
+        log.info("button panel NFC reader: %s", line[4:].decode())
     elif line.startswith(b"HELLO intake-panel"):  # unasked: the panel reset without its port dropping
         if line.split()[3:4] == [b"esp32c3"]:
             send_volume()  # it forgot the volume
@@ -178,6 +191,7 @@ def find_panel():
     st.ports["panel"] = ser.port if ser else None
     st.ports["panel_version"] = ser.panel_version if ser else None
     st.ports["panel_chip"] = ser.panel_chip if ser else None
+    st.ports["panel_nfc"] = None  # until the panel says
     st.probed.set()  # after ports["panel"], so a waiting reader never sees the panel's port as free
     return ser
 
@@ -230,6 +244,6 @@ def panel_loop():
         with st.panel_lock:
             st.panel["ser"] = None
         ser.close()
-        st.ports["panel"] = st.ports["panel_version"] = st.ports["panel_chip"] = None
+        st.ports["panel"] = st.ports["panel_version"] = st.ports["panel_chip"] = st.ports["panel_nfc"] = None
         log.info("button panel gone")
         time.sleep(2)

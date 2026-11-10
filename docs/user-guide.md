@@ -638,7 +638,9 @@ the `station` module, on the server computer (`all-in-one`) or on a second compu
 
 - A **DYMO M10 USB scale**. Other DYMO USB postal scales that the kit detects also work. Switch it on before you start
   the station; a DYMO only shows up on USB while it is on, and it switches itself off after a few minutes.
-- A **PN532 NFC reader** on a USB serial adapter (CH340 chip).
+- A **PN532 NFC reader**: on a USB serial adapter (CH340 chip), on the button panel's I2C header (an Elechouse NFC
+  Module V3 in I2C mode, firmware 11), or both. With both, the same tag seen by the two within 2 seconds counts as
+  one tap.
 - Optional: the **button panel** (Hold and Discard buttons, lamps, an OLED, a buzzer and a speaker, on an ESP32-C3 Super Mini). Its
   behaviour, serial protocol and pin table: [station/PANEL.md](../station/PANEL.md).
 - Optional: a speaker (USB or the computer's headphone socket) for the scan beep when there is no panel.
@@ -650,7 +652,7 @@ the `station` module, on the server computer (`all-in-one`) or on a second compu
 Build guides, wiring diagrams and enclosures for the station's devices are kept in the
 [filament-kit-hardware](https://github.com/thompsonfabco/filament-kit-hardware) repository.
 [station/PANEL.md](../station/PANEL.md) keeps the panel's behaviour, serial protocol, speech format and
-the pin table for firmware 10. This guide keeps the list of supported devices above, and the kit flashes a C3 panel
+the pin table for firmware 11. This guide keeps the list of supported devices above, and the kit flashes a C3 panel
 itself when it runs other firmware than the one it carries.
 
 ### What the installer changes on the computer
@@ -706,7 +708,7 @@ hand: `sudo systemctl unmask sleep.target suspend.target hibernate.target hybrid
   opposite way to the C3 pin table in the panel guide (the button you press for yellow acts as red, and the lamps are
   swapped too), set `"panel_swap": true` under `"station"` in `/etc/filament-kit/config.json`, then run
   `sudo filament-kit modules apply`. The default is `false`. This needs firmware 9 or later. A C3 panel already runs
-  firmware 10. An ESP8266 panel on older firmware has to be reflashed by hand, because the station never reflashes
+  firmware 10 or later. An ESP8266 panel on older firmware has to be reflashed by hand, because the station never reflashes
   it; until then yellow can't do a long press, so it can't save.
 
 ### Is it working?

@@ -59,7 +59,7 @@ state = {"tag": None, "tag_at": None, "scale": None, "scale_at": None, "last": N
 # lines for the step and the station's own message
 flow = {"step": "idle", "seq": 0, "spool": None, "filament": None, "display": [], "message": "", "at": 0.0}
 # serial ports: the panel's (found by its HELLO) and the one nfcpy uses; neither probes the other's
-ports = {"panel": None, "panel_version": None, "panel_chip": None, "nfc": None}
+ports = {"panel": None, "panel_version": None, "panel_chip": None, "panel_nfc": None, "nfc": None}
 flashed: set[str] = set()  # bundled firmware versions already written this run
 probed = threading.Event()  # set once the panel search has looked at every port, so nfcpy picks the right one
 panel_lock = threading.Lock()
@@ -100,5 +100,5 @@ def panel_ttys() -> list[str]:
 def view() -> dict:
     """A snapshot for the HTTP handler: the state plus the panel's port and firmware version and the flow."""
     with lock:
-        return dict(state, panel=ports["panel"], panel_version=ports["panel_version"],
+        return dict(state, panel=ports["panel"], panel_version=ports["panel_version"], panel_nfc=ports["panel_nfc"],
                     flow={k: flow[k] for k in ("step", "message", "spool", "filament")})

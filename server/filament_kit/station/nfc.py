@@ -83,8 +83,23 @@ def on_tag(nfc_id):
     flow.on_tag(nfc_id)  # a tap starts the intake flow over with this tag
 
 
+_recent: dict[str, float] = {}  # formatted tag id -> when it was last accepted, from either reader
+_recent_lock = threading.Lock()  # the panel and reader loops are separate threads
+DEDUP_SECONDS = 2.0
+
+
 def on_identifier(identifier: bytes):
-    on_tag(tags.format_uid(identifier))
+    """A tag id from either reader (the USB PN532 here, or the panel's `TAG` line). The same tag within
+    DEDUP_SECONDS counts as one tap, whichever reader saw it."""
+    nfc_id = tags.format_uid(identifier)
+    now = time.monotonic()
+    with _recent_lock:
+        for k in [k for k, t in _recent.items() if now - t >= DEDUP_SECONDS]:
+            del _recent[k]
+        if nfc_id in _recent:
+            return
+        _recent[nfc_id] = now
+    on_tag(nfc_id)
 
 
 def nfc_loop():

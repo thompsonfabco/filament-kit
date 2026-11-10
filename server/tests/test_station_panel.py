@@ -310,7 +310,7 @@ def _serve(view, allow):
 
 def _raw(now, **kw):
     s = {"tag": "4:aa:bb", "tag_at": now - 5, "scale": None, "scale_at": None, "last": None, "last_at": None,
-         "held": 1098.0, "held_at": now - 3, "blink_until": 0, "panel": "/dev/ttyUSB1", "panel_version": "7",
+         "held": 1098.0, "held_at": now - 3, "blink_until": 0, "panel": "/dev/ttyUSB1", "panel_version": "7", "panel_nfc": None,
          "air": None, "air_at": None, "photo": None, "photo_at": None,
          "flow": {"step": "ready", "message": "", "spool": None, "filament": {"id": 45}}}
     s.update(kw)
@@ -334,7 +334,8 @@ def test_state_air_and_photo():
         s = json.loads(_fetch(base + "/state")[2])
         assert s["air"] == {"temp_c": 21.43, "rh": 45.2, "hpa": 1013.25, "age_seconds": 2}
         assert s["photo"] == {"url": "/photo", "taken_at": station_http.iso(now - 1), "age_seconds": 1}
-        assert set(s) == {"tag", "scale", "last_weight", "panel", "panel_version", "air", "photo", "flow"}
+        assert set(s) == {"tag", "scale", "last_weight", "panel", "panel_version", "panel_nfc", "air", "photo",
+                      "flow"}
         assert s["panel_version"] == "7"
         assert s["flow"] == {"step": "ready", "message": "", "spool": None, "filament": {"id": 45}}
         assert s["last_weight"] == {"grams": 1098.0, "age_seconds": 3, "held": True}
