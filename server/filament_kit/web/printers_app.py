@@ -20,6 +20,15 @@ The web process never talks to a printer. Everything goes to the kit server's ow
     POST printers/{id}/slots/{label}/unload  {[dry_run]}: the slot's spool goes back to where it was (Spoolman
                                         only)
     GET  printers/tagged                the last tapped tag and its spool (the load picker's "last tap")
+    GET  printers/manage                every printer the kit knows, set up or only seen on the network (no secrets)
+    POST printers/add                   {serial, access_code[, name]} a Bambu printer the kit has seen;
+                                        {family: klipper, host[, port, name]} a Klipper printer
+    POST printers/{id}/edit             {name?, address?, port?, access_code?, api_key?, unpin?}: the kit's PATCH
+    POST printers/{id}/forget           the kit's DELETE: the printer is forgotten
+                                        add/edit/forget: always when the kit server itself serves the page (at
+                                        home, :8710/intake); at the web module's public address only with
+                                        config web.printer_changes true (Settings, default off); else 403
+                                        (POSTs, so the intake app's exact-Origin check covers them)
     GET  printers/{id}/camera.mjpeg     the kit camera hub's MJPEG, relayed (img tag; LAN only like the rest)
     GET  printers/{id}/camera/{name}    the hub's HLS playlist / segments, relayed
     push/key, push/subscribe, push/unsubscribe, push/test   only with config `web.push` true (see push.py)
@@ -63,6 +72,11 @@ MANUAL_STEPS = {"start": "/api/printers/{serial}/manual-map/start", "confirm": "
                 "skip": "/api/printers/{serial}/manual-map/skip", "stop": "/api/printers/{serial}/manual-map/stop",
                 "offer": "/api/printers/{serial}/manual-map/offer"}
 MANUAL_KEYS = ("session", "position", "reported", "nozzle", "by_hand", "share")
+MANAGE_FIELDS = ("id", "name", "model", "model_name", "family", "ip", "host", "configured", "state", "pinned")
+EDIT_KEYS = ("name", "address", "port", "access_code", "api_key", "unpin")
+ADD_KEYS = ("family", "serial", "access_code", "name", "host", "port")
+PUBLIC_CHANGES_OFF = ("Printer changes from the public address are off. Open this page on the home network, or turn "
+                      "on \"Allow printer changes from the public address\" on the setup page (Settings, General).")
 TAGGED_FIELDS = ("id", "vendor", "name", "location", "remaining_g")
 # The kit's refusals in the Android app's words (PrinterHelp.message); a not_found keeps the kit's own text, which
 # names what is missing (printer, slot or spool).
@@ -129,6 +143,10 @@ class PrintersApp:
             ("/{id}/slots/{label}/load", g(self.slot_load), ["POST"]),
             ("/{id}/slots/{label}/unload", g(self.slot_unload), ["POST"]),
             ("/tagged", g(self.tagged), ["GET"]),
+            ("/manage", g(self.manage), ["GET"]),
+            ("/add", g(self.add), ["POST"]),
+            ("/{id}/edit", g(self.edit), ["POST"]),
+            ("/{id}/forget", g(self.forget), ["POST"]),
             ("/{id}/camera.mjpeg", g(self.mjpeg), ["GET"]),
             ("/{id}/camera/{name}", g(self.hls), ["GET"])]
         if self.push_on:
@@ -258,6 +276,62 @@ class PrintersApp:
 
     async def map_report(self, request: Request):
         return await self._kit_call(self.kit.post, f"/api/printers/{self._serial(request)}/report", {})
+
+    # ---------- add, edit, forget (the kit's POST / PATCH / DELETE /api/printers) ----------
+    @staticmethod
+    def _entry(request: Request) -> str:
+        """A printer id as the kit names it: a Bambu serial, or a Klipper printer's slug."""
+        s = request.path_params["id"]
+        if not ENTRY.fullmatch(s):
+            raise Problem("no such printer")
+        return s
+
+    def changes_allowed(self) -> bool:
+        """Printer changes (add, edit, forget): the page the kit server serves at home always; the web module's page
+        at its public address only when the owner turned it on (orchestrator ruling, 2026-11-10)."""
+        if self.intake.origin is None:          # served by the kit server itself: home network only
+            return True
+        from .. import config
+        return ((config.load().get("web") or {}).get("printer_changes")) is True
+
+    def _changes_or_refuse(self) -> JSONResponse | None:
+        if self.changes_allowed():
+            return None
+        return JSONResponse({"error": PUBLIC_CHANGES_OFF}, 403)
+
+    async def manage(self, request: Request):
+        d = await self._kit_call(self.kit.get, "/api/printers")
+        return {"printers": [{k: p.get(k) for k in MANAGE_FIELDS} for p in d.get("printers", [])],
+                "changes": self.changes_allowed()}
+
+    async def add(self, request: Request):
+        if (no := self._changes_or_refuse()) is not None:
+            return no
+        b = await self._body(request)
+        body = {k: b[k] for k in ADD_KEYS if k in b}
+        log.info("printers tab: add a %s printer", body.get("family", "bambu"))
+        r = await self._kit_call(self.kit.post, "/api/printers", body)
+        return {"printer": {k: (r.get("printer") or {}).get(k) for k in MANAGE_FIELDS}}
+
+    async def edit(self, request: Request):
+        if (no := self._changes_or_refuse()) is not None:
+            return no
+        serial = self._entry(request)
+        b = await self._body(request)
+        body = {k: b[k] for k in EDIT_KEYS if k in b}
+        log.info("printers tab: edit %s (%s)", serial, ",".join(sorted(body)))
+        r = await self._kit_call(self.kit.patch, f"/api/printers/{serial}", body)
+        out = {"printer": {k: (r.get("printer") or {}).get(k) for k in MANAGE_FIELDS}, "changed": r.get("changed", [])}
+        if r.get("note"):
+            out["note"] = r["note"]
+        return out
+
+    async def forget(self, request: Request):
+        if (no := self._changes_or_refuse()) is not None:
+            return no
+        serial = self._entry(request)
+        log.info("printers tab: forget %s", serial)
+        return await self._kit_call(self.kit.delete, f"/api/printers/{serial}")
 
     async def manual_get(self, request: Request):
         return await self._kit_call(self.kit.get, f"/api/printers/{self._serial(request)}/manual-map")

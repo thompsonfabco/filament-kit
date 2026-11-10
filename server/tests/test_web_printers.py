@@ -852,3 +852,119 @@ def test_the_printers_tab_offers_map_by_loading_filament():
     assert 'textContent: "Map by loading filament", disabled: running, on: { click: manualMap }' in text
     for step in ("start", "confirm", "skip", "stop", "offer"):
         assert f'"{step}"' in text
+
+
+# ---------- Manage printers (interface parity gap 3: add, edit, forget from the phone web app) ----------
+
+class ManagingKit(FakeKit):
+    def get(self, path):
+        if path == "/api/printers":
+            self.calls.append(("GET", path))
+            return {"printers": [
+                {"id": SERIAL, "name": "H2D", "model": "O1D", "model_name": "H2D", "family": "bambu", "ip": "10.0.0.1",
+                 "configured": True, "state": "connected", "access_code": "LEAK", "camera": {"kind": "hls"},
+                 "pinned": True, "cert_fp": "LEAK"},
+                {"id": "sv08-max", "name": "SV08", "family": "klipper", "host": "10.0.0.3", "configured": True,
+                 "state": "connected", "api_key": "LEAK"}]}
+        return super().get(path)
+
+    def post(self, path, body):
+        if path == "/api/printers":
+            self.calls.append(("POST", path, body))
+            return {"printer": {"id": body.get("serial", "x"), "name": body.get("name"), "configured": True,
+                                "access_code": "LEAK"}}
+        return super().post(path, body)
+
+    def patch(self, path, body):
+        self.calls.append(("PATCH", path, body))
+        return {"printer": {"id": "sv08-max", "name": body.get("name"), "api_key": "LEAK"}, "changed": sorted(body),
+                "note": "a note"}
+
+    def delete(self, path):
+        self.calls.append(("DELETE", path))
+        return {"ok": True, "id": path.rsplit("/", 1)[-1]}
+
+
+@pytest.fixture
+def managing(env):
+    """The web module's page at its public address, with "Allow printer changes from the public address" on."""
+    kit = ManagingKit()
+    return make_app(env, kit, printer_changes=True), kit
+
+
+def test_manage_lists_every_printer_without_secrets(managing):
+    app, kit = managing
+    with TestClient(app, base_url=ORIGIN, client=HOME) as c:
+        r = c.get(P + "/manage")
+    assert r.status_code == 200 and "LEAK" not in r.text
+    assert [p["id"] for p in r.json()["printers"]] == [SERIAL, "sv08-max"]
+    assert r.json()["printers"][1]["host"] == "10.0.0.3" and r.json()["printers"][0]["pinned"] is True
+
+
+def test_add_edit_and_forget_go_to_the_kit_with_only_their_keys(managing):
+    app, kit = managing
+    with TestClient(app, base_url=ORIGIN, client=HOME) as c:
+        r = c.post(P + "/add", headers=H, json={"serial": SERIAL, "access_code": "12345678", "name": "H2D",
+                                                 "configured": True})
+        assert r.status_code == 200 and "LEAK" not in r.text
+        r = c.post(P + "/sv08-max/edit", headers=H, json={"name": "Big", "api_key": "k", "family": "bambu"})
+        assert r.status_code == 200 and "LEAK" not in r.text and r.json()["note"] == "a note"
+        assert c.post(P + "/sv08-max/forget", headers=H, json={}).json() == {"ok": True, "id": "sv08-max"}
+    assert ("POST", "/api/printers", {"serial": SERIAL, "access_code": "12345678", "name": "H2D"}) in kit.calls
+    assert ("PATCH", "/api/printers/sv08-max", {"name": "Big", "api_key": "k"}) in kit.calls
+    assert ("DELETE", "/api/printers/sv08-max") in kit.calls
+
+
+def test_add_edit_and_forget_need_the_pages_origin_and_the_home_network(managing):
+    app, kit = managing
+    with TestClient(app, base_url=ORIGIN, client=HOME) as c:
+        assert c.post(P + "/add", json={"serial": SERIAL}).status_code == 403
+        assert c.post(P + f"/{SERIAL}/edit", json={"name": "x"}).status_code == 403
+        assert c.post(P + f"/{SERIAL}/forget", json={}).status_code == 403
+        assert c.post(P + "/bad%20id/forget", headers=H, json={}).status_code == 400
+    assert not [x for x in kit.calls if x[0] in ("PATCH", "DELETE") or (x[0] == "POST" and x[1] == "/api/printers")]
+
+
+def test_at_the_public_address_printer_changes_are_off_by_default(env):
+    """Orchestrator ruling 2026-11-10: read-only at the web module's public address unless the owner turns it on."""
+    kit = ManagingKit()
+    with TestClient(make_app(env, kit), base_url=ORIGIN, client=HOME) as c:
+        m = c.get(P + "/manage")
+        assert m.status_code == 200 and m.json()["changes"] is False and len(m.json()["printers"]) == 2
+        for r in (c.post(P + "/add", headers=H, json={"serial": SERIAL, "access_code": "12345678"}),
+                  c.post(P + f"/{SERIAL}/edit", headers=H, json={"name": "x"}),
+                  c.post(P + f"/{SERIAL}/forget", headers=H, json={})):
+            assert r.status_code == 403 and "Allow printer changes from the public address" in r.json()["error"]
+    assert not [x for x in kit.calls if x[0] in ("PATCH", "DELETE") or (x[0] == "POST" and x[1] == "/api/printers")]
+
+
+def test_the_page_the_kit_server_serves_at_home_may_always_change_printers(env):
+    from filament_kit.web.printers_app import PrintersApp
+
+    class Intake:
+        origin = None              # api._intake_web_app: no public URL, home network only
+    assert PrintersApp(Intake(), ManagingKit()).changes_allowed() is True
+    Intake.origin = ORIGIN         # the web module's page: the switch decides
+    assert PrintersApp(Intake(), ManagingKit()).changes_allowed() is False
+    cfg = config.load()
+    cfg["web"]["printer_changes"] = True
+    config.save(cfg)
+    assert PrintersApp(Intake(), ManagingKit()).changes_allowed() is True
+
+
+def test_forget_from_away_needs_the_session(env):
+    kit = ManagingKit()
+    with TestClient(make_app(env, kit, printer_changes=True), base_url=ORIGIN, client=AWAY) as c:
+        assert c.post(P + f"/{SERIAL}/forget", headers=H, json={}).status_code in (401, 403)
+    assert not [x for x in kit.calls if x[0] == "DELETE"]
+
+
+def test_the_printers_tab_has_manage_printers():
+    text = (STATIC / "printers.js").read_text(encoding="utf-8")
+    for words in ('"Add or change printers"', '"Rename"', '"Address"', '"Access Code"', '"Forget certificate"',
+                  '"API key"', '"Forget"', '"Add a Klipper printer"', '`${id}/edit`', '`${id}/forget`', 'manageDo("add"'):
+        assert words in text, words
+    # review R103's rules, as the kit enforces them: a new certificate comes with the code, an unpinned printer's new
+    # address with its code, a Klipper move with its key
+    assert "edit({ unpin: true, access_code: c }" in text
+    assert "edit({ address: a, access_code: c }" in text and "edit({ address: a, api_key: k }" in text

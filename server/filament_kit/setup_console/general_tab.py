@@ -18,7 +18,7 @@ def _view() -> dict:
     cfg = config.load()
     on = modules.enabled(cfg)
     values = {k: setup_helper.general_value(cfg, k) for k in setup_helper.GENERAL}
-    return {"values": values, "station_on": "station" in on, "remote_on": "remote" in on,
+    return {"values": values, "station_on": "station" in on, "remote_on": "remote" in on, "web_on": "web" in on,
             "spoolman_external": "server" in on and "spoolman" not in on,
             "spoolman_url": redact.text(str(cfg.get("spoolman_url") or ""), redact.known_values())}
 

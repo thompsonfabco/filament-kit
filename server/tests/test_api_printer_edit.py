@@ -294,6 +294,8 @@ def test_a_family_whose_module_is_off_is_409_module_off():
     assert SERIAL in registry.load()
 
 
-def test_the_web_units_token_may_not_edit_or_forget():
+def test_the_web_unit_may_add_edit_and_forget_for_the_phone_web_app():
+    """Parity gap 3: the phone web app's Manage printers calls these with its own (web) token."""
     from filament_kit.api import WEB_ROUTES
-    assert ("PATCH", "/api/printers/{id}") not in WEB_ROUTES and ("DELETE", "/api/printers/{id}") not in WEB_ROUTES
+    for route in (("POST", "/api/printers"), ("PATCH", "/api/printers/{id}"), ("DELETE", "/api/printers/{id}")):
+        assert route in WEB_ROUTES

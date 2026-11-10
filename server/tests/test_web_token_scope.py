@@ -113,8 +113,15 @@ def test_every_listed_route_is_one_the_web_unit_writes():
 
 def test_a_slash_in_a_path_cannot_reach_a_listed_route_by_another_shape():
     for method, path in (("GET", "/api/printers/1/2"), ("POST", "/api/printers/1/slots/1/2/load"),
-                         ("DELETE", "/api/printers/1"), ("POST", "/api/printers"), ("PATCH", "/api/printers/1")):
+                         ("DELETE", "/api/printers/1/2"), ("PATCH", "/api/printers/1/2"), ("POST", "/api/printers/1")):
         assert not api._web_may(method, path), (method, path)
+
+
+def test_the_web_unit_may_add_edit_and_forget_printers():
+    """Interface parity gap 3 (2026-11-10): the phone web app's Manage printers adds, edits and forgets printers, as
+    the setup page and the Android app do; before, the web token was kept off registry writes."""
+    for method, path in (("POST", "/api/printers"), ("PATCH", "/api/printers/1"), ("DELETE", "/api/printers/1")):
+        assert api._web_may(method, path), (method, path)
 
 
 def test_a_pairing_made_before_the_scope_has_it_from_its_role(app):
