@@ -243,6 +243,37 @@ def _md5(s: str) -> str:
     return hashlib.md5(s.encode()).hexdigest()
 
 
+PROC_TCP = "/proc/net/tcp"
+
+
+def peer_uid(conn: socket.socket, table: str = PROC_TCP) -> int | None:
+    """The user that owns the other end of an accepted loopback TCP connection (Linux: the client socket's row in
+    /proc/net/tcp, whose local address is our peer and whose remote address is us). None: not Linux, or not found."""
+    try:
+        here, there = conn.getsockname()[1], conn.getpeername()[1]
+        rows = Path(table).read_text(encoding="ascii").splitlines()[1:]
+    except (OSError, IndexError, ValueError):
+        return None
+    want_local, want_remote = f"0100007F:{there:04X}", f"0100007F:{here:04X}"
+    for row in rows:
+        f = row.split()
+        if len(f) > 7 and f[1].upper() == want_local and f[2].upper() == want_remote:
+            try:
+                return int(f[7])
+            except ValueError:
+                return None
+    return None
+
+
+def _same_user(conn: socket.socket) -> bool:
+    """Only this process's user may use the relay: ffmpeg runs as it. Another local user could otherwise watch the
+    printer's camera through the relay, which logs in with the Access Code (audit v0.5.0, finding 3). Where there is no
+    /proc/net/tcp (not Linux: the tests on Windows) nothing can be checked, and the loopback address is the limit."""
+    if not hasattr(os, "geteuid") or not os.path.exists(PROC_TCP):
+        return True
+    return peer_uid(conn) == os.geteuid()
+
+
 class RtspRelay:
     """Loopback RTSP server; each connection is forwarded to the printer over TLS with Digest auth added."""
 
@@ -285,7 +316,9 @@ class RtspRelay:
                 c, a = srv.accept()
             except OSError:
                 return
-            if a[0] != "127.0.0.1":
+            if a[0] != "127.0.0.1" or not _same_user(c):
+                if a[0] == "127.0.0.1":
+                    log.warning("camera relay to %s: refused a local connection from another user", self.ip)
                 c.close()
                 continue
             threading.Thread(target=self._conn, args=(c,), daemon=True, name="cam-relay-conn").start()
