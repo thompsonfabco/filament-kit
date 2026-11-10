@@ -811,3 +811,55 @@ def test_touch_hls_restarts_the_source_when_ip_or_code_changes(fake_hub, printer
     second = fake_hub.touch_hls("H1")
     assert second is not first and first.stopped == 1 and second.alive()
     assert fake_hub.running("H1")
+
+
+# ---------------------------------------------------------------- only this user may use the relay (audit v0.5.0, 3)
+
+@pytest.mark.skipif(not os.path.exists(camera.PROC_TCP), reason="/proc/net/tcp (Linux)")
+def test_peer_uid_reads_the_client_sockets_owner():
+    srv = socket.socket()
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(1)
+    with socket.create_connection(srv.getsockname(), timeout=5) as c:
+        conn, _ = srv.accept()
+        with conn:
+            assert camera.peer_uid(conn) == os.geteuid() and camera._same_user(conn) is True
+    srv.close()
+
+
+def test_peer_uid_parses_the_table(tmp_path):
+    class Conn:
+        def getsockname(self):
+            return ("127.0.0.1", 0x9C40)          # the relay's port
+
+        def getpeername(self):
+            return ("127.0.0.1", 0xD2F0)          # the client's port
+    table = tmp_path / "tcp"
+    table.write_text(
+        "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n"
+        "   0: 0100007F:9C40 00000000:0000 0A 00000000:00000000 00:00000000 00000000   998        0 1 1\n"
+        "   1: 0100007F:9C40 0100007F:D2F0 01 00000000:00000000 00:00000000 00000000   998        0 2 1\n"
+        "   2: 0100007F:D2F0 0100007F:9C40 01 00000000:00000000 00:00000000 00000000  1001        0 3 1\n")
+    assert camera.peer_uid(Conn(), str(table)) == 1001
+    assert camera.peer_uid(Conn(), str(tmp_path / "missing")) is None
+
+
+def test_the_relay_refuses_another_users_connection_before_it_logs_in(tmp_path, monkeypatch):
+    srv, ctx = tls_listener(tmp_path)
+    srv.settimeout(1.5)
+    monkeypatch.setattr(camera, "_same_user", lambda conn: False)
+    relay = camera.RtspRelay(Printer("P1", "x", "O1D", "127.0.0.1", CODE, True), srv.getsockname()[1])
+    local = relay.start()
+    try:
+        with socket.create_connection(("127.0.0.1", local), timeout=5) as c:
+            c.sendall(f"OPTIONS rtsp://127.0.0.1:{local}/streaming/live/1 RTSP/1.0\r\nCSeq: 1\r\n\r\n".encode())
+            try:
+                got = c.recv(4096)
+            except ConnectionResetError:                         # closed with the request unread
+                got = b""
+            assert got == b""                                    # nothing relayed
+        with pytest.raises(socket.timeout):
+            srv.accept()                                         # and the printer never saw a login
+    finally:
+        relay.stop()
+        srv.close()
