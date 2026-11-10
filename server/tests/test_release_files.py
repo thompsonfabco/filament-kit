@@ -272,10 +272,8 @@ def test_install_server_flag_and_usage():
 
 
 def _bash():
-    import shutil
-    found = shutil.which("bash")
-    # Windows' System32 bash.exe is WSL, which cannot take a Windows path; Git Bash can.
-    return None if found and "system32" in found.lower() else found
+    from fakes.shells import git_bash   # never WSL's launcher (System32 or WindowsApps)
+    return git_bash()
 
 
 def _install_sh(*args):
@@ -646,6 +644,15 @@ def test_with_a_terminal_the_saved_address_is_not_used(tmp_path):
     assert SAVED_NOTE in r.stderr, r.stdout + r.stderr
 
 
+def _stubs_first(script: str) -> str:
+    """The wrapper with ./stubs first on its PATH, set inside the script: a PATH handed over from Windows is
+    converted differently by Git Bash depending on what started it (PowerShell or Git Bash), so the stand-ins for
+    id and runuser were not always found there."""
+    first, _, rest = script.partition("\n")
+    assert first.startswith("#!"), first
+    return f'{first}\nPATH="./stubs:$PATH"\n{rest}'
+
+
 def _wrapper_run(tmp_path, *args) -> str:
     """Run install/filament-kit-cli.sh as root with stand-ins: the program prints `as-root ...`, runuser prints
     `as-user ...`. Returns what was printed."""
@@ -661,11 +668,9 @@ def _wrapper_run(tmp_path, *args) -> str:
     text = _read("install/filament-kit-cli.sh").replace("BIN=/opt/filament-kit/venv/bin/filament-kit",
                                                         "BIN=./stubs/prog")
     assert "BIN=./stubs/prog" in text
-    (tmp_path / "w.sh").write_text(text, encoding="utf-8", newline="\n")
-    env = dict(os.environ, PATH="./stubs" + os.pathsep + os.environ.get("PATH", ""))
-    if os.name == "nt":                 # Git Bash takes a POSIX PATH; the relative entry needs no conversion
-        env["PATH"] = "./stubs:" + os.environ.get("PATH", "")
-    r = subprocess.run([_bash(), "w.sh", *args], cwd=tmp_path, env=env, capture_output=True, text=True, timeout=30)
+    (tmp_path / "w.sh").write_text(_stubs_first(text), encoding="utf-8", newline="\n")
+    r = subprocess.run([_bash(), "w.sh", *args], cwd=tmp_path, env=dict(os.environ), capture_output=True, text=True,
+                       timeout=30)
     assert r.returncode == 0, r.stderr
     return r.stdout.strip()
 
@@ -773,9 +778,9 @@ def _wrapper_status(tmp_path, *, uid="0", folder=True, prog='echo "paired 192.0.
                      ("STATION_DIR=/etc/filament-kit-station", "STATION_DIR=./pairing")):
         assert old in text
         text = text.replace(old, new)
-    (tmp_path / "w.sh").write_text(text, encoding="utf-8", newline="\n")
-    env = dict(os.environ, PATH="./stubs" + (":" if os.name == "nt" else os.pathsep) + os.environ.get("PATH", ""))
-    r = subprocess.run([_bash(), "w.sh", "status"], cwd=tmp_path, env=env, capture_output=True, text=True, timeout=30)
+    (tmp_path / "w.sh").write_text(_stubs_first(text), encoding="utf-8", newline="\n")
+    r = subprocess.run([_bash(), "w.sh", "status"], cwd=tmp_path, env=dict(os.environ), capture_output=True, text=True,
+                       timeout=30)
     assert r.returncode == 0, r.stderr
     return (tmp_path / "log").read_text(encoding="utf-8").splitlines()
 
