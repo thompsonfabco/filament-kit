@@ -16,6 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
+from fakes.shells import git_bash
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
@@ -480,9 +481,9 @@ def test_set_pubkey_rejects_garbage(tmp_path):
     assert sign_release.main(["--root", str(root), "set-pubkey", "abc"]) == 1
 
 
-@pytest.mark.skipif(shutil.which("bash") is None, reason="needs bash")
+@pytest.mark.skipif(git_bash() is None, reason="needs bash")
 def test_get_sh_syntax_and_no_tracing():
-    subprocess.run(["bash", "-n", str(ROOT / "get.sh")], check=True)
+    subprocess.run([git_bash(), "-n", str(ROOT / "get.sh")], check=True)
     text = (ROOT / "get.sh").read_text(encoding="utf-8")
     shell = text.replace(sign_release.embedded(text), "")
     assert "set -x" not in shell and "FK_GITHUB_TOKEN" not in shell.split("set -euo pipefail", 1)[1]
@@ -493,9 +494,7 @@ def test_get_sh_syntax_and_no_tracing():
 # ---------------------------------------------------------------- the real tarball
 
 def _git_bash():
-    found = shutil.which("bash")
-    # Windows' System32 bash.exe is WSL, which cannot take a Windows path; Git Bash can.
-    return None if found and "system32" in found.lower() else found
+    return git_bash()   # never WSL's launcher (System32 or WindowsApps)
 
 
 def _wheel_builder() -> bool:
