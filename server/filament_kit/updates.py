@@ -523,8 +523,12 @@ def update(cfg: dict, *, scheduled: bool = False, fetcher: release.Fetcher | Non
         cur = current_version()
         nightly_now = on_nightly()
         _note_release(fetcher, s["repo"], rel, now)     # the console shows it, and the timer keeps it fresh
-        # back on the stable channel from a nightly: the latest release replaces it unless it is older than its base
-        if not _newer(latest, cur) and not (nightly_now and not _newer(cur, latest)):
+        # back on the stable channel from a nightly: the latest signed release always replaces it, even an older one
+        # (R77 review: keeping the unsigned build would leave the owner believing they are back on releases)
+        downgrade = nightly_now and _newer(cur, latest)
+        if downgrade and not _modules_fit(latest):
+            return 1
+        if not _newer(latest, cur) and not nightly_now:
             _write_state(last_ok_at=now)
             print(f"filament-kit {cur} is up to date")
             return _feed(fetcher, rel)
@@ -550,8 +554,10 @@ def update(cfg: dict, *, scheduled: bool = False, fetcher: release.Fetcher | Non
             # Before anything changes: a half-done install (killed, timed out, an exception) can still roll back,
             # and the timer does not retry it tomorrow. Success clears `failed`.
             _write_state(failed=latest, last_ok_at=now, **({"previous": cur} if kept else {}))
+            if downgrade:
+                print(f"going back to the signed release {latest} (older than this nightly's {cur})")
             try:
-                ok = _install(cfg, latest, run)
+                ok = (_install_older if downgrade else _install)(cfg, latest, run)
             except ReleaseError:        # re-verify or unpack refused it: nothing was stopped or changed
                 _write_state(previous=old_previous)
                 raise
@@ -580,6 +586,8 @@ def _update_nightly(cfg: dict, s: dict, scheduled: bool, fetcher: release.Fetche
     rel = nightly.latest_nightly(fetcher, s["repo"])
     latest, installed, cur = rel["version"], version_text(), current_version()
     _remember(latest, rel.get("notes") or "", "", now)
+    if not scheduled:           # once per run: here by hand, before an install from the timer
+        print(nightly.NIGHTLY_UNSIGNED)
     if nightly.nightly_key(latest) <= nightly.nightly_key(installed):
         _write_state(last_ok_at=now)
         print(f"filament-kit {installed} is up to date with the nightly channel (newest nightly {latest})")
@@ -589,7 +597,8 @@ def _update_nightly(cfg: dict, s: dict, scheduled: bool, fetcher: release.Fetche
         _write_state(last_ok_at=now)
         print(f"{latest} was rolled back or failed before; the timer leaves it (sudo filament-kit update installs it)")
         return 0
-    print(nightly.NIGHTLY_UNSIGNED)
+    if scheduled:
+        print(nightly.NIGHTLY_UNSIGNED)
     nightly_now = installed != cur
     if not nightly_now and not _kept(cur):
         try:
@@ -637,9 +646,7 @@ def set_channel(cfg: dict, channel: str) -> int:
     config.save(cfg)
     if before != channel:
         print(f"update channel: {before} -> {channel}")
-    if channel == "nightly":
-        print(nightly.NIGHTLY_UNSIGNED)
-    return update(config.load())
+    return update(config.load())       # on nightly it says, once, that the builds are unsigned
 
 
 # ---------------------------------------------------------------- hardware data feed

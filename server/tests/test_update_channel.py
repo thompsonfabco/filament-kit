@@ -185,7 +185,7 @@ def test_set_channel_saves_it_says_so_and_updates(env, srv, nights, monkeypatch,
     assert updates.set_channel(_cfg(env), "nightly") == 0
     assert config.load()["updates"]["channel"] == "nightly" and calls == ["nightly"]
     out = capsys.readouterr().out
-    assert "update channel: stable -> nightly" in out and "unsigned" in out
+    assert "update channel: stable -> nightly" in out and "unsigned" not in out      # update() says it, once
     assert updates.set_channel(config.load(), "stable") == 0 and config.load()["updates"]["channel"] == "stable"
 
 
@@ -222,3 +222,32 @@ def test_the_switch_is_two_jobs_and_says_unsigned_before_it_runs():
 def test_the_view_says_the_channel(env):
     v = updates.view(_cfg(env))
     assert v["channel"] == "stable" and v["installed_text"] == "1.0.0"
+
+
+def test_stable_replaces_a_newer_nightly_with_the_older_release(env, srv, nights, monkeypatch, capsys):
+    """R77 review: back on stable, an unsigned nightly never stays because the newest release is older."""
+    srv.add("1.0.0")
+    monkeypatch.setattr(updates, "current_version", lambda: "1.1.0")
+    monkeypatch.setattr(updates, "version_text", lambda: "1.1.0-nightly.20261110")
+    older = []
+    real = updates._install_older
+    monkeypatch.setattr(updates, "_install_older", lambda cfg, v, run: older.append(v) or real(cfg, v, run))
+    run = Runner()
+    assert updates.update(_nightly_cfg(env, "stable"), fetcher=_fetcher(srv, nights), run=run) == 0
+    assert run.installed == ["filament-kit-1.0.0"] and older == ["1.0.0"]
+    out = capsys.readouterr().out
+    assert "going back to the signed release 1.0.0 (older than this nightly's 1.1.0)" in out
+    assert "is up to date" not in out
+
+
+def test_the_unsigned_warning_is_said_once_per_run(env, srv, nights, monkeypatch, capsys):
+    srv.add("1.0.0")
+    nights.add("1.0.0", "20261110")
+    monkeypatch.setattr(updates, "_require_root", lambda: True)
+    run = Runner()
+    monkeypatch.setattr(updates, "update", lambda cfg, **kw: _real_update(cfg, fetcher=_fetcher(srv, nights), run=run))
+    assert updates.set_channel(_cfg(env), "nightly") == 0
+    assert capsys.readouterr().out.count("untested and unsigned") == 1
+
+
+_real_update = updates.update
