@@ -887,8 +887,9 @@ class ManagingKit(FakeKit):
 
 @pytest.fixture
 def managing(env):
+    """The web module's page at its public address, with "Allow printer changes from the public address" on."""
     kit = ManagingKit()
-    return make_app(env, kit), kit
+    return make_app(env, kit, printer_changes=True), kit
 
 
 def test_manage_lists_every_printer_without_secrets(managing):
@@ -924,9 +925,36 @@ def test_add_edit_and_forget_need_the_pages_origin_and_the_home_network(managing
     assert not [x for x in kit.calls if x[0] in ("PATCH", "DELETE") or (x[0] == "POST" and x[1] == "/api/printers")]
 
 
+def test_at_the_public_address_printer_changes_are_off_by_default(env):
+    """Orchestrator ruling 2026-11-10: read-only at the web module's public address unless the owner turns it on."""
+    kit = ManagingKit()
+    with TestClient(make_app(env, kit), base_url=ORIGIN, client=HOME) as c:
+        m = c.get(P + "/manage")
+        assert m.status_code == 200 and m.json()["changes"] is False and len(m.json()["printers"]) == 2
+        for r in (c.post(P + "/add", headers=H, json={"serial": SERIAL, "access_code": "12345678"}),
+                  c.post(P + f"/{SERIAL}/edit", headers=H, json={"name": "x"}),
+                  c.post(P + f"/{SERIAL}/forget", headers=H, json={})):
+            assert r.status_code == 403 and "Allow printer changes from the public address" in r.json()["error"]
+    assert not [x for x in kit.calls if x[0] in ("PATCH", "DELETE") or (x[0] == "POST" and x[1] == "/api/printers")]
+
+
+def test_the_page_the_kit_server_serves_at_home_may_always_change_printers(env):
+    from filament_kit.web.printers_app import PrintersApp
+
+    class Intake:
+        origin = None              # api._intake_web_app: no public URL, home network only
+    assert PrintersApp(Intake(), ManagingKit()).changes_allowed() is True
+    Intake.origin = ORIGIN         # the web module's page: the switch decides
+    assert PrintersApp(Intake(), ManagingKit()).changes_allowed() is False
+    cfg = config.load()
+    cfg["web"]["printer_changes"] = True
+    config.save(cfg)
+    assert PrintersApp(Intake(), ManagingKit()).changes_allowed() is True
+
+
 def test_forget_from_away_needs_the_session(env):
     kit = ManagingKit()
-    with TestClient(make_app(env, kit), base_url=ORIGIN, client=AWAY) as c:
+    with TestClient(make_app(env, kit, printer_changes=True), base_url=ORIGIN, client=AWAY) as c:
         assert c.post(P + f"/{SERIAL}/forget", headers=H, json={}).status_code in (401, 403)
     assert not [x for x in kit.calls if x[0] == "DELETE"]
 
@@ -936,3 +964,7 @@ def test_the_printers_tab_has_manage_printers():
     for words in ('"Add or change printers"', '"Rename"', '"Address"', '"Access Code"', '"Forget certificate"',
                   '"API key"', '"Forget"', '"Add a Klipper printer"', '`${id}/edit`', '`${id}/forget`', 'manageDo("add"'):
         assert words in text, words
+    # review R103's rules, as the kit enforces them: a new certificate comes with the code, an unpinned printer's new
+    # address with its code, a Klipper move with its key
+    assert "edit({ unpin: true, access_code: c }" in text
+    assert "edit({ address: a, access_code: c }" in text and "edit({ address: a, api_key: k }" in text

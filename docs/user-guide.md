@@ -844,7 +844,11 @@ There is no sign-in: anyone on your home network can use it (as with the Android
 the gate). Since it is part of the server, it is always on: anyone on the home network who opens it can add and edit
 spools, read labels (within the daily cap, with `ai_intake`) and, with the `printers` module, use its Printers tab.
 Its **Manage printers** section adds a printer the kit has seen on the network (with its Access Code) or a Klipper
-printer, and renames, readdresses, re-keys, unpins or forgets one, as the setup page's Printers tab does.
+printer, and renames, readdresses, re-keys, unpins or forgets one, as the setup page's Printers tab does. It asks for
+the Access Code again before trusting a new certificate (and for a new address when none is pinned yet), and for a
+Klipper printer's API key when it moves, so the kit never sends a stored secret to a host it can't vouch for. At the
+`web` module's public address these changes are off unless **Allow printer changes from the public address** is on
+(setup page: Settings, General); there the section only lists the printers.
 It answers by the server's own names, as the setup page does. Print alerts to the phone come only through the `web`
 module's address. On the Devices tab it shows as the paired device "phone web app (this server)", marked built in:
 it is how the page reaches the server and pairs again whenever the server starts.

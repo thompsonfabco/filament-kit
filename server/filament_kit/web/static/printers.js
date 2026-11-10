@@ -423,15 +423,24 @@ function printersTab() {
     } catch (e) { manageNote.replaceChildren(h("pre", { class: "err", textContent: e.message })); }
   }
   const ask = (q, now) => { const a = window.prompt(q, now || ""); return a === null ? null : a.trim(); };
-  function manageRow(p) {
+  function manageRow(p, changes) {
     const bambu = p.family !== "klipper", id = encodeURIComponent(p.id), name = p.name || p.id;
     const where = bambu ? p.ip : p.host;
     const edit = (body, done) => manageDo(`${id}/edit`, body, done);
-    const buttons = p.configured ? [
+    const buttons = !changes ? [] : p.configured ? [
       h("button", { class: "secondary", textContent: "Rename", on: { click: () => { const n = ask(`New name for ${name}:`, name); if (n) edit({ name: n }, "Renamed."); } } }),
-      h("button", { class: "secondary", textContent: "Address", on: { click: () => { const a = ask(`${name}'s IP address or host name:`, where); if (a) edit({ address: a }, "Address saved."); } } }),
+      h("button", { class: "secondary", textContent: "Address", on: { click: () => {
+        const a = ask(`${name}'s IP address or host name:`, where); if (!a) return;
+        // the kit never sends a stored secret to a new host it can't vouch for: it asks for it again (review R103)
+        if (bambu && !p.pinned) { const c = ask(`${name} has no certificate pinned yet: its Access Code, to send with the new address:`); if (c) edit({ address: a, access_code: c }, "Address saved."); return; }
+        if (!bambu) { const k = ask(`${name}'s Moonraker API key, if it has one. It is sent only to the new address; empty means none (a stored key is cleared):`); if (k !== null) edit({ address: a, api_key: k }, "Address saved."); return; }
+        edit({ address: a }, "Address saved.");
+      } } }),
       bambu ? h("button", { class: "secondary", textContent: "Access Code", on: { click: () => { const c = ask(`${name}'s Access Code (on the printer: Settings > Network/LAN):`); if (c) edit({ access_code: c }, "Access Code saved."); } } }) : null,
-      bambu && p.pinned ? h("button", { class: "secondary", textContent: "Forget certificate", on: { click: () => { if (window.confirm(`Forget the certificate pinned for ${name}? The next connection trusts whatever answers at its address.`)) edit({ unpin: true }, "Certificate forgotten."); } } }) : null,
+      bambu && p.pinned ? h("button", { class: "secondary", textContent: "Forget certificate", on: { click: () => {
+        const c = ask(`Forget the certificate pinned for ${name}? The next connection trusts whatever answers at its address, so give its Access Code (on the printer: Settings > Network/LAN):`);
+        if (c) edit({ unpin: true, access_code: c }, "Certificate forgotten; the Access Code is saved.");
+      } } }) : null,
       bambu ? null : h("button", { class: "secondary", textContent: "API key", on: { click: () => { const k = ask(`${name}'s Moonraker API key (empty clears it):`); if (k !== null) edit({ api_key: k }, k ? "API key saved." : "API key cleared."); } } }),
       h("button", { class: "secondary", textContent: "Forget", on: { click: () => { if (window.confirm(`Forget ${name}? ${bambu ? "Its Access Code is deleted." : "Its API key is deleted."}`)) manageDo(`${id}/forget`, {}, `${name} forgotten.`); } } }),
     ] : bambu && p.ip ? [
@@ -446,8 +455,8 @@ function printersTab() {
       h("div", { class: "row" }, ...buttons));
   }
   async function manage(note, ok) {
-    let list;
-    try { list = (await pj("manage")).printers; } catch (e) { manageBox.replaceChildren(fail(e)); return; }
+    let list, changes;
+    try { ({ printers: list, changes } = await pj("manage")); } catch (e) { manageBox.replaceChildren(fail(e)); return; }
     const klipperAdd = h("button", { class: "secondary", textContent: "Add a Klipper printer", on: { click: () => {
       const host = ask("Moonraker's IP address or host name:"); if (!host) return;
       const port = ask("Moonraker's port:", "7125"); if (port === null) return;
@@ -456,8 +465,10 @@ function printersTab() {
     } } });
     manageNote.replaceChildren(...(note ? [h("pre", { class: ok ? "ok" : "err", textContent: note })] : []));
     manageBox.replaceChildren(
-      h("p", { class: "muted", textContent: "A Bambu printer on the network shows up here by itself; add it with its Access Code. Anyone on the home network can use this page." }),
-      ...list.map(manageRow), h("div", { class: "row" }, klipperAdd), manageNote);
+      h("p", { class: "muted", textContent: changes
+        ? "A Bambu printer on the network shows up here by itself; add it with its Access Code. Anyone on the home network can use this page."
+        : "Read-only here: printer changes from the public address are off. Open this page on the home network to add, change or forget a printer, or turn them on in the setup page's Settings." }),
+      ...list.map((p) => manageRow(p, changes)), ...(changes ? [h("div", { class: "row" }, klipperAdd)] : []), manageNote);
   }
   async function remap() {
     if (!window.confirm("Re-map the slots? The printer loads each slot briefly; do it when it is idle.")) return;

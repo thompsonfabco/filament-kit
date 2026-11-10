@@ -507,6 +507,12 @@ def _hosts(value) -> list[str]:
     return out
 
 
+def _bool(value) -> bool:
+    if not isinstance(value, bool):
+        raise ValueError("must be true or false")
+    return value
+
+
 def _tts(value) -> str:
     if value not in ("auto", "espeak"):
         raise ValueError("must be auto or espeak")
@@ -527,6 +533,7 @@ GENERAL = {
     "placement.overflow": (lambda v: _one_line(v, 100), None),
     "station.tts": (_tts, "apply"),
     "setup.hosts": (_hosts, None),          # read on every request (setup_page.extra_hosts): no restart
+    "web.printer_changes": (_bool, None),   # read on every request (printers_app.changes_allowed): no restart
 }
 
 
