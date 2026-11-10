@@ -54,3 +54,35 @@ def test_it_pairs_as_its_own_device_and_sends_no_push(monkeypatch, env):  # noqa
     kit = made["kit_api"]
     assert isinstance(kit, slots.KitApi) and kit._token_file() == config.paths().state / api.INTAKE_TOKEN
     assert kit._device == api.INTAKE_DEVICE
+
+
+# ---------------------------------------------------------------- R91 review notes
+
+def test_the_kits_own_pairing_is_built_in_and_not_revoked_from_the_page(app):
+    from test_setup_page import post
+    from filament_kit import pairing
+    pairing.make_cert("kit", ["192.0.2.5"], config.paths().etc)
+    own = pairing.issue(api.INTAKE_DEVICE).token
+    pairing.check(own)
+    phone = pairing.issue("Pixel").token
+    pairing.check(phone)
+    devs = client(app).get("/setup/api/state").json()["devices"]
+    by = {d["name"]: d for d in devs}
+    assert by[api.INTAKE_DEVICE]["built_in"] is True and by["Pixel"]["built_in"] is False
+    r = post(client(app), f"devices/{by[api.INTAKE_DEVICE]['id']}/revoke", {})
+    assert r.status_code == 409 and "pairs again whenever the server starts" in r.json()["error"]
+    assert post(client(app), f"devices/{by['Pixel']['id']}/revoke", {}).status_code == 200
+
+
+def test_its_refused_token_says_a_restart_fixes_it(env, caplog):  # noqa: F811
+    from filament_kit.web import slots
+    kit = slots.KitApi(token_file=config.paths().state / api.INTAKE_TOKEN, device=api.INTAKE_DEVICE)
+    with caplog.at_level("ERROR"):
+        kit._refuse()
+    text = caplog.text
+    assert "its own phone web app" in text and "restarts" in text and "web unit" not in text
+
+
+def test_a_wrong_host_on_intake_says_how_to_add_a_name(app):
+    r = client(app, base="https://rebind.example.com:8710").get("/intake")
+    assert r.status_code == 403 and "Names for this page" in r.json()["error"] and "kit.local" in r.json()["error"]
