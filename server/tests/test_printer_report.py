@@ -363,7 +363,8 @@ def test_a_printer_the_kit_never_saw_is_refused():
         mapping.Mapper(Gone()).report("0948ZZ0A0000009")
 
 
-def test_the_cli_says_the_report_is_from_saved_records(capsys):
+def test_the_cli_says_the_report_is_from_saved_records(capsys, monkeypatch):
+    monkeypatch.setattr(cli, "CONNECT_WAIT", 0.3)        # an unreachable printer is waited for that long first
     _saved_map()
     assert cli.main(["printer", "report", SERIAL], manager_factory=lambda s: Gone()) == 0
     out = capsys.readouterr().out
