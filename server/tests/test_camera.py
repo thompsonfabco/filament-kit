@@ -855,7 +855,7 @@ def test_the_relay_refuses_another_users_connection_before_it_logs_in(tmp_path, 
             c.sendall(f"OPTIONS rtsp://127.0.0.1:{local}/streaming/live/1 RTSP/1.0\r\nCSeq: 1\r\n\r\n".encode())
             try:
                 got = c.recv(4096)
-            except ConnectionResetError:                         # closed with the request unread
+            except (ConnectionResetError, ConnectionAbortedError):   # closed with the request unread (Windows: aborted)
                 got = b""
             assert got == b""                                    # nothing relayed
         with pytest.raises(socket.timeout):
