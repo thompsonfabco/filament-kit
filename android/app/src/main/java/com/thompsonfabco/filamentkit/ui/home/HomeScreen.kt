@@ -75,7 +75,7 @@ fun HomeScreen(
     ) {
         Column {
             Text("filament-kit", style = MaterialTheme.typography.headlineSmall)
-            VersionLine(version, Modifier)
+            VersionLine(version)
         }
         ConnectionRow(serverName, connection, onRetryConnection, onReviewCertificate)
         if (connection == Connection.NeedsLocalNetwork) localNetworkPanel()

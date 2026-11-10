@@ -31,6 +31,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.thompsonfabco.filamentkit.net.DiscoveredServer
+import com.thompsonfabco.filamentkit.ui.home.VersionLine
 
 /**
  * Pairing entry point: scan the QR, pick a server found on the network, or type an address.
@@ -49,6 +50,8 @@ fun PairScreen(
     /** The certificate change is about a pairing this phone still has, so it can be kept. */
     canTrust: (Mismatch) -> Boolean = { false },
     onTrust: (Mismatch) -> Unit = {},
+    /** The version line ([com.thompsonfabco.filamentkit.ui.home.versionLine]), directly under the title; null: none. */
+    version: String? = null,
     scanner: @Composable (onResult: (String) -> Unit, onClose: () -> Unit) -> Unit = { onResult, onClose ->
         QrScanner(onResult = onResult, onClose = onClose, onEnterAddress = { onClose(); viewModel.startManual() })
     },
@@ -78,8 +81,14 @@ fun PairScreen(
     ) {
         val mismatch = ui.mismatch
         // Someone whose saved certificate changed is already paired: the panel's own title says what this is.
+        // The version line sits directly under the title; with no title (saved certificate changed) it is the top line.
         if (mismatch?.source != MismatchSource.STORED) {
-            Text("Pair with your server", style = MaterialTheme.typography.headlineSmall)
+            Column {
+                Text("Pair with your server", style = MaterialTheme.typography.headlineSmall)
+                if (version != null) VersionLine(version)
+            }
+        } else if (version != null) {
+            VersionLine(version)
         }
 
         when {
