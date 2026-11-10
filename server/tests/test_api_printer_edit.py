@@ -109,14 +109,50 @@ def test_access_code_replaces_it_clears_the_pin_and_waits():
     assert "87654321" not in r.text
 
 
-def test_unpin_and_address_together():
+def test_an_address_change_keeps_the_pin():
+    """R103: the stored Access Code only ever goes to the printer whose certificate is pinned."""
     _bambu()
     c, b, _ = _client()
-    r = c.patch(f"/api/printers/{SERIAL}", json={"unpin": True, "address": "10.0.0.9"})
+    r = c.patch(f"/api/printers/{SERIAL}", json={"address": "10.0.0.9"})
     assert r.status_code == 200, r.text
     p = registry.load()[SERIAL]
-    assert p.cert_fp == "" and p.ip == "10.0.0.9" and p.access_code == CODE
-    assert sorted(r.json()["changed"]) == ["address", "unpin"] and b.waited == [SERIAL]
+    assert p.cert_fp == "ab" * 32 and p.ip == "10.0.0.9" and p.access_code == CODE
+    assert r.json()["changed"] == ["address"] and b.waited == [SERIAL]
+
+
+@pytest.mark.parametrize("body", [{"unpin": True}, {"unpin": True, "address": "10.0.0.9"}])
+def test_unpin_needs_the_access_code_in_the_same_request(body):
+    _bambu()
+    before = registry.load()[SERIAL]
+    c, _, _ = _client()
+    r = c.patch(f"/api/printers/{SERIAL}", json=body)
+    assert r.status_code == 400 and "needs the printer's Access Code" in r.json()["message"], r.text
+    assert registry.load()[SERIAL] == before
+
+
+def test_unpin_with_a_new_code_and_address():
+    _bambu()
+    c, b, _ = _client()
+    r = c.patch(f"/api/printers/{SERIAL}", json={"unpin": True, "address": "10.0.0.9", "access_code": "87654321"})
+    assert r.status_code == 200, r.text
+    p = registry.load()[SERIAL]
+    assert p.cert_fp == "" and p.ip == "10.0.0.9" and p.access_code == "87654321"
+    assert sorted(r.json()["changed"]) == ["access_code", "address", "unpin"]
+
+
+def test_with_nothing_pinned_yet_a_new_address_needs_the_code():
+    _bambu(fp="")
+    c, _, _ = _client()
+    r = c.patch(f"/api/printers/{SERIAL}", json={"address": "10.0.0.9"})
+    assert r.status_code == 400 and "no certificate pinned yet" in r.json()["message"]
+    assert registry.load()[SERIAL].ip == "10.0.0.5"
+    assert c.patch(f"/api/printers/{SERIAL}", json={"address": "10.0.0.9", "access_code": "87654321"}).status_code == 200
+
+
+def test_a_printer_with_no_code_moves_freely():
+    registry.detected("01P00A333333333", "10.0.0.8", "C12", "Seen")
+    c, _, _ = _client()
+    assert c.patch("/api/printers/01P00A333333333", json={"address": "10.0.0.10"}).status_code == 200
 
 
 def test_an_address_outside_the_home_networks_comes_with_its_note():
@@ -134,6 +170,7 @@ def test_an_address_outside_the_home_networks_comes_with_its_note():
     ({"name": 5}, "give the printer a name"),
     ({"access_code": "12 34"}, "Access Code"),
     ({"unpin": False}, "unpin must be true"),
+    ({"unpin": True}, "needs the printer's Access Code"),
     ({"api_key": "k"}, "api_key is for a Klipper printer"),
     ({"port": 7125}, "port is for a Klipper printer"),
     ({"address": "not a host!"}, "give an IP address or a host name"),
@@ -165,6 +202,22 @@ def test_klipper_address_port_and_key():
     assert sorted(r.json()["changed"]) == ["address", "api_key", "port"] and k.waited == [pid]
     assert "abcDEF123" not in r.text
     assert c.patch(f"/api/printers/{pid}", json={"api_key": ""}).status_code == 200
+    assert registry.load()[pid].api_key == ""
+
+
+@pytest.mark.parametrize("body", [{"address": "10.0.1.22"}, {"port": 7200}])
+def test_a_klipper_printer_with_a_stored_key_moves_only_with_the_key(body):
+    """R103: Moonraker has no pin; the stored key would go to whatever answers at the new address."""
+    pid = _klipper()
+    registry.set_api_key(pid, "storedKEY1")
+    before = registry.load()[pid]
+    c, _, _ = _client()
+    r = c.patch(f"/api/printers/{pid}", json=body)
+    assert r.status_code == 400 and "API key stored" in r.json()["message"]
+    assert registry.load()[pid] == before
+    assert c.patch(f"/api/printers/{pid}", json={**body, "api_key": "newKEY2"}).status_code == 200
+    assert registry.load()[pid].api_key == "newKEY2"
+    assert c.patch(f"/api/printers/{pid}", json={"port": 7300, "api_key": ""}).status_code == 200
     assert registry.load()[pid].api_key == ""
 
 
