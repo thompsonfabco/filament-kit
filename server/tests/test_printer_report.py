@@ -4,6 +4,7 @@ from __future__ import annotations
 import copy
 import importlib.util
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -450,15 +451,20 @@ def slow(tmp_path, monkeypatch):
         clients.append(c)
         return c
 
-    def make(report, rc=0):
+    def make(report, rc=0, refused_first=False):
         registry.upsert(Printer(SERIAL, "Bench", "N6", "192.0.2.5", CODE, True))
         m = Manager(client_factory=factory)
         real_sync = m.sync
 
         def sync():
             real_sync()
-            FakePrinter(clients[0], report)
-            threading.Timer(0.4, clients[0].connected, args=(rc,)).start()
+            c = clients[0]
+            FakePrinter(c, report)
+            if refused_first:        # the first attempt fails (printer still booting); paho's retry gets through
+                threading.Timer(0.1, lambda: c.on_connect_fail(c, None)).start()
+                threading.Timer(1.0, c.connected, args=(rc,)).start()
+            else:
+                threading.Timer(0.4, c.connected, args=(rc,)).start()
         m.sync = sync
         return m
     return make
@@ -477,4 +483,35 @@ def test_the_cli_waits_for_a_printer_that_takes_a_moment_to_connect(slow, monkey
 def test_a_wrong_access_code_is_said_as_such(slow, capsys):
     m = slow(copy.deepcopy(REPORT), rc=5)        # MQTT: not authorized
     assert cli.main(["printer", "report", SERIAL], manager_factory=lambda s: m) == 1
+    assert "Access Code" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("command", ["report", "map"])
+def test_a_refused_first_attempt_does_not_end_the_wait(slow, monkeypatch, capsys, command):
+    """R102: a printer still booting refuses the first attempt (settled as offline); the CLI keeps waiting for
+    paho's retry until CONNECT_WAIT instead of saying "did not answer" at once."""
+    monkeypatch.setattr(calib3mf, "run", _result())
+    m = slow(copy.deepcopy(REPORT), refused_first=True)
+    rc = cli.main(["printer", command, SERIAL], manager_factory=lambda s: m)
+    out, err = capsys.readouterr()
+    assert "did not answer" not in err, err
+    assert rc == 0 and ("Printer report saved:" in out if command == "report" else "A1:" in out), out + err
+
+
+def test_a_printer_that_never_comes_up_is_said_after_the_wait(slow, monkeypatch, capsys):
+    monkeypatch.setattr(cli, "CONNECT_WAIT", 0.6)
+    m = slow(copy.deepcopy(REPORT))
+    m.sync = Manager.sync.__get__(m)          # the connection starts; the printer never answers
+    t = time.monotonic()
+    assert cli.main(["printer", "report", SERIAL], manager_factory=lambda s: m) == 1
+    assert time.monotonic() - t >= 0.5
+    assert "did not answer" in capsys.readouterr().err
+
+
+def test_a_wrong_access_code_stops_the_wait_at_once(slow, monkeypatch, capsys):
+    monkeypatch.setattr(cli, "CONNECT_WAIT", 10.0)
+    m = slow(copy.deepcopy(REPORT), rc=5)
+    t = time.monotonic()
+    assert cli.main(["printer", "report", SERIAL], manager_factory=lambda s: m) == 1
+    assert time.monotonic() - t < 3.0
     assert "Access Code" in capsys.readouterr().err
