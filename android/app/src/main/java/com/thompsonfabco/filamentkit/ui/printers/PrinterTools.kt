@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
 import com.thompsonfabco.filamentkit.net.MapStatus
+import com.thompsonfabco.filamentkit.net.PrinterReport
 import com.thompsonfabco.filamentkit.net.UsageEntry
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -20,8 +21,32 @@ import java.util.Locale
 interface PrinterToolsBackend {
     suspend fun startMap(id: String): String
     suspend fun mapStatus(id: String): MapStatus
+    suspend fun report(id: String): PrinterReport
     suspend fun usage(id: String, days: Int): List<UsageEntry>
     suspend fun undoUsage(entryId: String): UsageEntry
+}
+
+/** "Collect a report": texts, and the file name the report is shared under. */
+object ReportHelp {
+    const val BUTTON = "Collect a report"
+    const val BUSY = "Collecting…"
+    const val PRIVACY = "The file holds no serial number, address, name or account id."
+    const val SHARE_TITLE = "Share or save the printer report"
+    const val NO_APP = "No app on this phone can share or save the file"
+
+    /** Why the server would like a report; null when it doesn't ask for one (the button is still there). */
+    fun wanted(m: MapStatus?): String? = m?.reportWanted?.let { m.reportWhy ?: "A printer report would help." }
+
+    /**
+     * The server's name reduced to one plain file name (no folder part, only letters, digits, `.`, `_`, `-`), so it
+     * cannot point outside the app's report folder; ends in `.xml`.
+     */
+    fun fileName(server: String): String {
+        val base = server.substringAfterLast('/').substringAfterLast('\\')
+            .replace(Regex("[^A-Za-z0-9._-]"), "_").trimStart('.').take(96)
+        val name = base.ifBlank { "printer-report.xml" }
+        return if (name.endsWith(".xml", ignoreCase = true)) name else "$name.xml"
+    }
 }
 
 /** Texts for the "Filament used" list. */
@@ -77,6 +102,10 @@ data class ToolsUiState(
     val undoBusy: Boolean = false,
     val unauthorized: Boolean = false,
     val mismatch: Pair<String, String>? = null,
+    val reportBusy: Boolean = false,
+    /** A report fetched and not handed to the share sheet yet ([PrinterToolsViewModel.reportShown] clears it). */
+    val report: PrinterReport? = null,
+    val reportMessage: String? = null,
 ) {
     val mapRunning: Boolean get() = map?.state == "running"
     val observeNotice: String? get() = if (map?.observe == true) UsageHelp.OBSERVE_NOTICE else null
@@ -192,6 +221,24 @@ class PrinterToolsViewModel(
             }
         }
     }
+
+    // --- printer report ---
+
+    /** Asks the server for a report; the screen offers it through the share sheet, then calls [reportShown]. */
+    fun collectReport() {
+        if (_state.value.reportBusy) return
+        _state.update { it.copy(reportBusy = true, reportMessage = null, report = null) }
+        viewModelScope.launch {
+            guard(onError = { msg -> _state.update { it.copy(reportMessage = msg) } }) {
+                val r = backend.report(id)
+                _state.update { it.copy(report = r) }
+            }
+            _state.update { it.copy(reportBusy = false) }
+        }
+    }
+
+    /** The share sheet was opened ([problem] null) or could not be ([problem] says why). */
+    fun reportShown(problem: String? = null) = _state.update { it.copy(report = null, reportMessage = problem) }
 
     // --- filament used ---
 

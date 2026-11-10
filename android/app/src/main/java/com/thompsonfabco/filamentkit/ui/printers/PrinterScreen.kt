@@ -23,12 +23,14 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleStartEffect
@@ -307,7 +309,31 @@ private fun SlotMapping(s: ToolsUiState, tools: PrinterToolsViewModel, printerSt
             OutlinedButton(onClick = onManualMap, enabled = manualEnabled) { Text(ManualMapHelp.TITLE) }
         }
         SlotMapHelp.blockedReason(printerState, printing)?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        CollectReport(s, tools)
     }
+}
+
+/**
+ * "Collect a report" on every Bambu printer (the server builds reports for those only); the filled button, with the
+ * server's reason above it, when the server asks for one. The fetched report goes straight to the share sheet.
+ */
+@Composable
+private fun CollectReport(s: ToolsUiState, tools: PrinterToolsViewModel) {
+    val context = LocalContext.current
+    val pending = s.report
+    LaunchedEffect(pending) {
+        if (pending != null) tools.reportShown(shareReport(context, pending))
+    }
+    val why = ReportHelp.wanted(s.map)
+    why?.let { Text(it) }
+    val label = if (s.reportBusy) ReportHelp.BUSY else ReportHelp.BUTTON
+    if (why != null) {
+        Button(onClick = tools::collectReport, enabled = !s.reportBusy) { Text(label) }
+    } else {
+        OutlinedButton(onClick = tools::collectReport, enabled = !s.reportBusy) { Text(label) }
+    }
+    Text(ReportHelp.PRIVACY, style = MaterialTheme.typography.bodySmall)
+    s.reportMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
 }
 
 /** A Klipper printer: no automatic mapping, so only the manual way, which relabels its tools or lanes. */
