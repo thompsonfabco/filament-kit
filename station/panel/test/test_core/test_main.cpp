@@ -261,6 +261,35 @@ void test_pn532_uid_answer() {
   TEST_ASSERT_FALSE(pn532Uid(d, n, uid, l));
 }
 
+void test_pn532_seven_byte_uid_and_long_ats() {
+  // 7-byte UID plus a 40-byte ATS after it: the frame is longer than what is read, the UID is still found
+  const uint8_t id[] = {0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66};
+  uint8_t r[80] = {0}, uid[10], l = 0, n = 0;
+  uint8_t d[64], dn = 0, sum = 0xD5;
+  d[dn++] = 0x4B; d[dn++] = 1; d[dn++] = 1; d[dn++] = 0x00; d[dn++] = 0x44; d[dn++] = 0x20; d[dn++] = 7;
+  for (uint8_t i = 0; i < 7; i++) d[dn++] = id[i];
+  for (uint8_t i = 0; i < 40; i++) d[dn++] = 0x80 + i;
+  uint8_t len = dn + 1;
+  r[0] = 1; r[3] = 0xFF; r[4] = len; r[5] = (uint8_t)(0x100 - len); r[6] = 0xD5;
+  for (uint8_t i = 0; i < dn; i++) { r[7 + i] = d[i]; sum += d[i]; }
+  r[7 + dn] = (uint8_t)(0x100 - sum);
+  bool clipped = false;
+  const uint8_t *a = pn532Answer(r, 63, 0x4B, n, &clipped);  // all of it fits: no clipping
+  TEST_ASSERT_NOT_NULL(a);
+  TEST_ASSERT_FALSE(clipped);
+  TEST_ASSERT_TRUE(pn532Uid(a, n, uid, l));
+  TEST_ASSERT_EQUAL_UINT8(7, l);
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(id, uid, 7);
+  TEST_ASSERT_NULL(pn532Answer(r, 31, 0x4B, n));  // strict: too long
+  a = pn532Answer(r, 31, 0x4B, n, &clipped);  // only 31 bytes read
+  TEST_ASSERT_NOT_NULL(a);
+  TEST_ASSERT_TRUE(clipped);
+  TEST_ASSERT_TRUE(pn532Uid(a, n, uid, l));
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(id, uid, 7);
+  r[5] ^= 1;  // a bad length checksum is still refused when clipped
+  TEST_ASSERT_NULL(pn532Answer(r, 31, 0x4B, n, &clipped));
+}
+
 void test_pn532_answer_rejects_bad_frames() {
   uint8_t r[32], n = 0;
   const uint8_t id[] = {1, 2, 3, 4};
@@ -307,6 +336,7 @@ int main() {
   RUN_TEST(test_fade_reaches_zero_at_400);
   RUN_TEST(test_pn532_frames);
   RUN_TEST(test_pn532_uid_answer);
+  RUN_TEST(test_pn532_seven_byte_uid_and_long_ats);
   RUN_TEST(test_pn532_answer_rejects_bad_frames);
   RUN_TEST(test_tag_gate_once_per_presentation);
   return UNITY_END();

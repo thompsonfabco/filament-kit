@@ -26,12 +26,20 @@ static inline bool pn532IsAck(const uint8_t *r) {  // r: status + 6 bytes
 
 // The answer frame (after the status byte) must be 00 00 FF LEN LCS D5 <resp> ... with both checksums right, and
 // <resp> the command code + 1. Returns a pointer to the data after <resp> and sets n to its length, or nullptr.
-// `max` is the number of bytes of frame available.
-static inline const uint8_t *pn532Answer(const uint8_t *r, uint8_t max, uint8_t resp, uint8_t &n) {
+// `max` is the number of bytes of frame available. A frame longer than that (a card's long ATS) fails unless `clipped`
+// is given: then the header is still checked, the data checksum is skipped, n is what fits and *clipped is set.
+static inline const uint8_t *pn532Answer(const uint8_t *r, uint8_t max, uint8_t resp, uint8_t &n, bool *clipped = nullptr) {
   const uint8_t *f = r + 1;
   if (!pn532Ready(r) || max < 9 || f[0] != 0 || f[1] != 0 || f[2] != 0xFF) return nullptr;
   uint8_t len = f[3];
-  if ((uint8_t)(len + f[4]) != 0 || len < 2 || (uint16_t)len + 7 > max || f[5] != 0xD5 || f[6] != resp) return nullptr;
+  if (clipped) *clipped = false;
+  if ((uint8_t)(len + f[4]) != 0 || len < 2 || f[5] != 0xD5 || f[6] != resp) return nullptr;
+  if ((uint16_t)len + 7 > max) {
+    if (!clipped) return nullptr;
+    *clipped = true;
+    n = max - 7;
+    return f + 7;
+  }
   uint8_t sum = 0;
   for (uint8_t i = 0; i < len; i++) sum += f[5 + i];
   if ((uint8_t)(sum + f[5 + len]) != 0) return nullptr;

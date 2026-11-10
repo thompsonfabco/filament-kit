@@ -235,6 +235,7 @@ struct Nfc {
   enum Phase : uint8_t { SEND, ACK, RESP };
   Phase phase = SEND;
   uint8_t cmd = 0, fails = 0;  // cmd: 0 SAMConfiguration, 1 RFConfiguration, 2 InListPassiveTarget (the polling)
+  bool nacked = false;         // the chip NACKed the last write: it may need a few ms after an exchange (UM0701 6.2.4)
   bool ok = false;             // initialised and answering
   bool loud = false;           // announce changes (not during the boot probe: HELLO says it then)
   uint32_t due = 0, deadline = 0, retryMs = NFC_RETRY_MS;
@@ -247,23 +248,31 @@ struct Nfc {
   void fail(uint32_t now) {
     static const uint8_t cancel[6] = {0x00, 0x00, 0xFF, 0x00, 0xFF, 0x00};  // an ACK frame aborts the chip's command
     Wire.beginTransmission(PN532_ADDR); Wire.write(cancel, 6); Wire.endTransmission();
-    phase = SEND;
+    phase = SEND; nacked = false;
     if (ok && ++fails < 3) { due = now + NFC_POLL_MS; return; }
     if (ok) { ok = false; note(); }
     cmd = 0; fails = 0; due = now + retryMs;
   }
   void poll(uint32_t now) {
     if ((int32_t)(now - due) < 0) return;
-    uint8_t r[32];
+    uint8_t r[64];  // status + the largest InListPassiveTarget answer we read; a longer ATS is clipped, not a failure
     if (phase == SEND) {
       uint8_t f[16], n = pn532Frame(f, ARGS[cmd], ARGN[cmd]);
       Wire.beginTransmission(PN532_ADDR); Wire.write(f, n);
-      if (Wire.endTransmission() != 0) { fail(now); return; }
+      if (Wire.endTransmission() != 0) {
+        if (!nacked) { nacked = true; deadline = now + 10; }  // a few ms of grace before it counts
+        if ((int32_t)(now - deadline) >= 0) fail(now); else due = now + 2;
+        return;
+      }
+      nacked = false;
       phase = ACK; due = now + 3; deadline = now + 100;
       return;
     }
     uint8_t want = phase == ACK ? 7 : sizeof r;
-    if (Wire.requestFrom(PN532_ADDR, want) != want) { fail(now); return; }
+    if (Wire.requestFrom(PN532_ADDR, want) != want) {  // a NACK: retry until the deadline
+      if ((int32_t)(now - deadline) >= 0) fail(now); else due = now + 3;
+      return;
+    }
     for (uint8_t i = 0; i < want; i++) r[i] = Wire.read();
     if (phase == ACK) {
       if (!pn532IsAck(r)) { if ((int32_t)(now - deadline) >= 0) fail(now); else due = now + 5; return; }
@@ -272,9 +281,10 @@ struct Nfc {
     }
     if (!pn532Ready(r)) { if ((int32_t)(now - deadline) >= 0) fail(now); else due = now + 10; return; }
     uint8_t n = 0;
-    const uint8_t *d = pn532Answer(r, sizeof r - 1, ARGS[cmd][0] + 1, n);
+    bool clipped;
+    const uint8_t *d = pn532Answer(r, sizeof r - 1, ARGS[cmd][0] + 1, n, &clipped);
     if (!d) { fail(now); return; }
-    fails = 0; phase = SEND; due = now;
+    fails = 0; phase = SEND; due = now + 3;
     if (cmd < 2) {
       if (++cmd == 2) { ok = true; note(); }
       return;
