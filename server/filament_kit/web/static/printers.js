@@ -19,6 +19,7 @@ function printersTab() {
   const slotMsg = h("div");
   const usageBox = h("div");
   const mapBox = h("div");
+  const manualBox = h("div");     // Map by loading filament: outside mapBox, which loadMap redraws
   const msg = h("div");
   const conn = h("p", { class: "muted" });
   const pushBox = h("div");
@@ -26,7 +27,7 @@ function printersTab() {
     h("h1", { textContent: "Printers" }), picker, head, conn, alerts, controls, camBtn, camBox, msg,
     h("h2", { textContent: "Filament" }), units, slotMsg, loadBox,
     h("h2", { textContent: "Usage" }), usageBox,
-    h("h2", { textContent: "Slots" }), mapBox, pushBox);
+    h("h2", { textContent: "Slots" }), mapBox, manualBox, pushBox);
 
   async function pj(path, body) {
     return api(path ? "printers/" + path : "printers", body === undefined ? {} : { method: "POST", body });
@@ -49,7 +50,7 @@ function printersTab() {
     current = id; picker.value = id;
     try { localStorage.setItem("printer", id); } catch {}
     camera(false); camBtn.classList.toggle("hidden", !camKind()); closeLoad(); slotMsg.replaceChildren();
-    stream(); loadUsage(); loadMap();
+    stream(); loadUsage(); loadMap(); manualStop(); manualBox.replaceChildren();
   }
   // "mjpeg" (an <img>) or "hls" (a <video>); null: this model has no camera we can show
   function camKind() {
@@ -306,7 +307,8 @@ function printersTab() {
         ...(m.report_wanted ? [h("p", { class: "muted", textContent: m.report_why || "A printer report would help." })] : []),
         // every printer (interface parity, 2026-11-10); it stands out when the kit says a report would help
         h("button", { class: m.report_wanted ? "" : "secondary", textContent: "Collect a report", on: { click: collectReport } }),
-        h("button", { class: "secondary", textContent: running ? "Mapping…" : "Re-map slots", disabled: running, on: { click: remap } }));
+        h("button", { class: "secondary", textContent: running ? "Mapping…" : "Re-map slots", disabled: running, on: { click: remap } }),
+        h("button", { class: "secondary", textContent: "Map by loading filament", disabled: running, on: { click: manualMap } }));
       if (running) mapTimer = setTimeout(loadMap, 3000);
     } catch (e) { mapBox.replaceChildren(fail(e)); }
   }
@@ -319,6 +321,89 @@ function printersTab() {
       if (r.live === false) mapBox.append(h("p", { class: "muted", textContent: "The printer could not be reached: this report is built from what the kit saved." }));
       mapBox.append(h("p", {}, a));
     } catch (e) { say(e.message, false); }
+  }
+  // ----- Map by loading filament: the owner loads each slot, the printer says which one it sees (the kit's session,
+  // shared with the setup page and the Android app; nothing is sent to the printer) -----
+  let manual = null;      // {id, v, timer, shown, picks}
+  function manualStop() { if (manual) clearTimeout(manual.timer); manual = null; }
+  const mpath = (id, what) => `${encodeURIComponent(id)}/manual-map${what ? "/" + what : ""}`;
+  async function manualMap() {
+    const id = current;
+    let v;
+    try { v = await pj(mpath(id, "start"), {}); } catch (e) { manualBox.replaceChildren(fail(e)); return; }
+    if (id !== current) return;
+    manualStop();
+    manual = { id, v, timer: null, shown: null, picks: {} };
+    drawManual();
+    manual.timer = setTimeout(manualTick, 2000);
+  }
+  async function manualSend(what, body) {
+    const m = manual;
+    if (!m) return;
+    try {
+      const r = await pj(mpath(m.id, what), { session: m.v.session, ...body });
+      if (m !== manual) return;
+      if (what === "offer") { m.v.offer_report = false; drawManual(r.message, true); return; }
+      m.v = r; drawManual();
+    } catch (e) { if (m === manual) drawManual(e.message, false); }
+  }
+  async function manualTick() {
+    const m = manual;
+    if (!m) return;
+    if (!m.v.open) { drawManual(); return; }
+    const was = JSON.stringify(m.v);
+    try { m.v = await pj(mpath(m.id)); } catch (e) { if (m === manual) { manualBox.replaceChildren(fail(e)); manual = null; } return; }
+    if (m !== manual) return;
+    if (JSON.stringify(m.v) !== was) drawManual();   // unchanged: a choice being made stays as it is
+    m.timer = setTimeout(manualTick, 2000);
+  }
+  function drawManual(note, ok) {
+    const m = manual, v = m.v, st = v.step;
+    // a redraw rebuilds the selects: a choice the owner is making survives it while the same position is asked
+    const pos = st ? st.position.id : null;
+    const prev = pos === m.shown ? Object.fromEntries(Object.entries(m.picks).map(([k, e]) => [k, e.value])) : {};
+    m.shown = pos; m.picks = {};
+    const keep = (k, el) => {
+      if (!el) return el;
+      m.picks[k] = el;
+      if (prev[k] !== undefined && [...el.options].some((o) => o.value === prev[k])) el.value = prev[k];
+      return el;
+    };
+    const status = (q) => q.status === "confirmed" ? `confirmed (${q.reported_label}${q.nozzle ? ", " + q.nozzle + " nozzle" : ""})`
+      : q.status === "by_hand" ? `entered by hand (${q.reported_label})` : q.status;
+    let ask = null;
+    if (st && st.seen && st.ask) {
+      const other = keep("other", h("select", { ariaLabel: "The position you loaded" }, ...v.positions.map((q) => h("option", { value: q.id, textContent: q.label, selected: q.id === st.position.id }))));
+      const noz = keep("noz", v.dual_nozzle && !st.seen.nozzle_reported ? h("select", { ariaLabel: "Nozzle" }, h("option", { value: "right", textContent: "right nozzle" }), h("option", { value: "left", textContent: "left nozzle" })) : null);
+      const nozzle = () => (st.seen.nozzle_reported ? st.seen.nozzle : noz ? noz.value : null);
+      ask = h("div", {},
+        h("p", { textContent: st.ask }),
+        h("div", { class: "row" }, noz,
+          h("button", { textContent: "Yes", on: { click: () => manualSend("confirm", { position: st.position.id, reported: st.seen.reported, nozzle: nozzle() }) } })),
+        h("div", { class: "row" }, h("label", {}, "No, I loaded ", other),
+          h("button", { class: "secondary", textContent: "Save that", on: { click: () => manualSend("confirm", { position: other.value, reported: st.seen.reported, nozzle: nozzle() }) } })));
+    } else if (st && !v.reports_loads) {
+      const pick = keep("pick", h("select", { ariaLabel: "The slot it is in" }, ...(v.choices || []).map((c, i) => h("option", { value: String(i), textContent: c.label }))));
+      ask = h("div", { class: "row" }, pick, h("button", { textContent: "Save (not checked by the printer)", on: { click: () => manualSend("confirm", { position: st.position.id, reported: v.choices[Number(pick.value)].reported, by_hand: true }) } }));
+    } else if (st && st.seen && !st.seen.settled) {
+      ask = h("p", { class: "muted", textContent: "The printer reports a change; waiting for it to settle…" });
+    }
+    manualBox.replaceChildren(h("div", { class: "card" },
+      h("h3", { textContent: "Map by loading filament" }),
+      h("p", { textContent: st ? st.say : v.summary }),
+      ask,
+      st ? h("div", { class: "row" },
+        h("button", { class: "secondary", textContent: `Skip ${st.position.label}`, on: { click: () => manualSend("skip", { position: st.position.id }) } }),
+        h("button", { class: "secondary", textContent: "Stop", on: { click: () => manualSend("stop", {}) } })) : null,
+      st ? h("p", { class: "muted", textContent: v.summary }) : null,
+      h("ul", {}, ...v.positions.map((q) => h("li", { textContent: `${q.label}: ${status(q)}` }))),
+      !v.open && v.offer_report ? h("div", {},
+        h("p", { textContent: "Share this map in a printer report, so other owners of this model benefit? Nothing is sent unless you choose to." }),
+        h("div", { class: "row" },
+          h("button", { class: "secondary", textContent: "Yes, how do I share it?", on: { click: () => manualSend("offer", { share: true }) } }),
+          h("button", { class: "secondary", textContent: "No thanks", on: { click: () => manualSend("offer", { share: false }) } }))) : null,
+      note ? h("pre", { class: ok ? "ok" : "err", textContent: note }) : null));
+    if (!v.open) loadMap();
   }
   async function remap() {
     if (!window.confirm("Re-map the slots? The printer loads each slot briefly; do it when it is idle.")) return;

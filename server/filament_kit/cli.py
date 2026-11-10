@@ -13,6 +13,7 @@ import socket
 import ssl
 import subprocess
 import sys
+import threading
 import time
 import urllib.request
 from pathlib import Path
@@ -832,7 +833,168 @@ def _connect(m, serial: str) -> str | None:
     return None
 
 
-def cmd_printer_map(serial: str, manager_factory) -> int:
+MANUAL_POLL = 1.0     # seconds between looks at the manual-map session
+
+
+def _stdin_lines():
+    """Lines typed at the terminal, read on a thread so the session can be followed while the owner loads."""
+    import queue
+    q: queue.Queue = queue.Queue()
+
+    def read():
+        for line in sys.stdin:
+            q.put(line)
+        q.put(None)
+    threading.Thread(target=read, daemon=True, name="manual-map-input").start()
+    return q
+
+
+def _manual_status(q: dict) -> str:
+    if q.get("status") == "confirmed":
+        return f"confirmed ({q.get('reported_label')}{', ' + q['nozzle'] + ' nozzle' if q.get('nozzle') else ''})"
+    if q.get("status") == "by_hand":
+        return f"entered by hand ({q.get('reported_label')})"
+    return str(q.get("status"))
+
+
+def _manual_prompt(v: dict) -> str | None:
+    """What to say to the owner for the session's current step (None while nothing changed for them to answer)."""
+    st = v.get("step")
+    if not st:
+        return None
+    if st.get("seen") and st.get("ask"):
+        nozzle = v.get("dual_nozzle") and not st["seen"].get("nozzle_reported")
+        return (f"  {st['ask']}\n  Type y{' right or y left' if nozzle else ''} for yes, or the position you loaded "
+                f"(e.g. {st['position']['label']}{' left' if nozzle else ''}); s skips {st['position']['label']}, "
+                "q stops.")
+    if not v.get("reports_loads"):
+        lines = [f"  The printer reports no loads: which slot is {st['position']['label']} in? (not checked by the "
+                 "printer)"]
+        lines += [f"    {i}) {c['label']}" for i, c in enumerate(v.get("choices") or [], 1)]
+        lines.append("  Type its number; s skips, q stops.")
+        return "\n".join(lines)
+    return f"  {st['say']} (s skips, q stops)"
+
+
+def _manual_answer(v: dict, line: str) -> tuple[str, dict] | str:
+    """(step, body) for what the owner typed, or the line to print when it means nothing here."""
+    st = v.get("step")
+    words = line.strip().split()
+    if not words:
+        return ""
+    if words[0].lower() in ("q", "quit", "stop"):
+        return "stop", {}
+    if not st:
+        return "nothing is being asked now"
+    pos = st["position"]
+    if words[0].lower() in ("s", "skip"):
+        return "skip", {"position": pos["id"]}
+    seen = st.get("seen")
+    if seen and st.get("ask"):
+        nozzle = seen.get("nozzle") if seen.get("nozzle_reported") else None
+        if v.get("dual_nozzle") and not seen.get("nozzle_reported"):
+            if len(words) < 2 or words[1].lower() not in ("left", "right"):
+                return "say which nozzle too: right or left"
+            nozzle = words[1].lower()
+        if words[0].lower() in ("y", "yes"):
+            target = pos["id"]
+        else:
+            target = next((q["id"] for q in v.get("positions") or [] if q["label"].lower() == words[0].lower()), None)
+            if target is None:
+                return f"no position {words[0]} on this printer"
+        return "confirm", {"position": target, "reported": seen.get("reported"), "nozzle": nozzle}
+    if not v.get("reports_loads"):
+        choices = v.get("choices") or []
+        if words[0].isdigit() and 1 <= int(words[0]) <= len(choices):
+            return "confirm", {"position": pos["id"], "reported": choices[int(words[0]) - 1]["reported"],
+                               "by_hand": True}
+        return f"type a number from 1 to {len(choices)}, s or q"
+    return "the printer has not reported a new load yet; load it, or s skips, q stops"
+
+
+def _manual_map_via_server(api, serial: str, lines=None) -> int:
+    """`printer map --manual`: Map by loading filament in the terminal, on the running server's session (the same one
+    the setup page, the phone web app and the Android app show; one session per printer). The owner loads each
+    position; the printer reports what it sees; the owner answers here. Nothing is sent to the printer."""
+    import queue
+    from .web.slots import SlotError
+    base = f"/api/printers/{serial}/manual-map"
+    try:
+        v = api.post(base + "/start", {})
+    except SlotError as e:
+        _err_line(str(e))
+        return 1
+    print("Map by loading filament. Load each position named below to the nozzle on the printer; the kit watches what "
+          "the printer reports. Nothing is sent to the printer.", flush=True)
+    lines = lines if lines is not None else _stdin_lines()
+    said, done_input = None, False
+    stopped: list = []
+    old = _on_stop_signals(lambda signum, frame: stopped.append(signum))
+    try:
+        while v.get("open"):
+            if stopped:
+                try:
+                    v = api.post(base + "/stop", {"session": v.get("session")})
+                except SlotError:
+                    pass
+                break
+            text = _manual_prompt(v)
+            if text and text != said:
+                print(text, flush=True)
+                said = text
+            line = None
+            if not done_input:
+                try:
+                    line = lines.get(timeout=MANUAL_POLL)
+                except queue.Empty:
+                    line = ""
+                if line is None:             # the input ended (no terminal): stop rather than wait forever
+                    done_input, line = True, "q"
+            else:
+                time.sleep(MANUAL_POLL)
+            try:
+                if line:
+                    ans = _manual_answer(v, line)
+                    if isinstance(ans, str):
+                        if ans:
+                            print(f"  {ans}", flush=True)
+                        continue
+                    step, body = ans
+                    v = api.post(f"{base}/{step}", {"session": v.get("session"), **body})
+                    said = None
+                else:
+                    v = api.get(base)
+            except SlotError as e:
+                print(f"  {e}", flush=True)
+                said = None
+                try:
+                    v = api.get(base)
+                except SlotError as e2:
+                    _err_line(str(e2))
+                    return 1
+    finally:
+        _restore_signals(old)
+    print(v.get("summary") or "Manual mapping ended.")
+    for q in v.get("positions") or []:
+        print(f"  {q['label']}: {_manual_status(q)}")
+    if v.get("offer_report") and not stopped and not done_input:
+        print("Share this map in a printer report, so other owners of this model benefit? Nothing is sent unless you "
+              "choose to. [y/N]", flush=True)
+        try:
+            answer = lines.get(timeout=300)
+        except queue.Empty:
+            answer = None
+        try:
+            r = api.post(base + "/offer", {"share": bool(answer) and answer.strip().lower() in ("y", "yes")})
+            print(r.get("message", ""))
+        except SlotError as e:
+            print(f"  {e}")
+    if stopped:
+        return 130 if stopped[0] == getattr(signal, "SIGINT", None) else 1
+    return 0
+
+
+def cmd_printer_map(serial: str, manager_factory, manual: bool = False) -> int:
     from .bridge import mapping
     from .bridge.connection import PrinterOffline, UnknownPrinter
     from .bridge.slottest import PrinterBusy
@@ -840,6 +1002,12 @@ def cmd_printer_map(serial: str, manager_factory) -> int:
     if p is None or not p.configured:
         _err_line(f"no printer {serial} is set up (see: sudo filament-kit config, Printers)")
         return 1
+    if manual:
+        api = _server_api()
+        if api is None:     # the session lives in the server, shared with the other three interfaces
+            _err_line("map by loading filament needs the running kit server (sudo systemctl start filament-kit)")
+            return 1
+        return _manual_map_via_server(api, serial)
     print(f"Mapping the slots of {registry.display_name(p)}. Each slot's colour changes briefly and the printer runs a "
           f"job with no heating and no motion.")
     api = _server_api()
@@ -1983,6 +2151,9 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     psub = pr.add_subparsers(dest="printer_cmd", required=True)
     pm = psub.add_parser("map", help="map the AMS slots (changes slot colours briefly, runs a no-motion job)")
     pm.add_argument("serial")
+    pm.add_argument("--manual", action="store_true",
+                    help="map by loading filament: you load each slot, the printer says which one it sees (needs the "
+                         "running server; the same session as the setup page and the phone apps)")
     prp = psub.add_parser("report", help="make a report that helps add a printer or AMS the kit doesn't know yet")
     prp.add_argument("serial")
     pu = psub.add_parser("unpin", help="forget the printer's pinned TLS certificate")
@@ -2126,7 +2297,7 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
         return cmd_cert()
     if args.cmd == "printer":
         if args.printer_cmd == "map":
-            return cmd_printer_map(args.serial, manager_factory or _default_manager)
+            return cmd_printer_map(args.serial, manager_factory or _default_manager, manual=args.manual)
         if args.printer_cmd == "report":
             return cmd_printer_report(args.serial, manager_factory or _default_manager)
         return cmd_printer_unpin(args.serial)

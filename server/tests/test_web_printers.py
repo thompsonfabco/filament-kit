@@ -820,3 +820,35 @@ def test_the_report_route_asks_the_kit_and_needs_lan_and_origin(app, kit):
         c.post(P + f"/{SERIAL}/report", headers=H)
         assert ("POST", f"/api/printers/{SERIAL}/report", {}) in kit.calls
         assert c.post(P + f"/{SERIAL}/report").status_code == 403       # no Origin
+
+
+# ---------- Map by loading filament (interface parity, 2026-11-10: the setup page and Android had it) ----------
+
+def test_manual_map_steps_go_to_the_kit_with_only_their_keys(app, kit):
+    with TestClient(app, base_url=ORIGIN, client=HOME) as c:
+        c.post(P + f"/{SERIAL}/manual-map/start", headers=H, json={})
+        c.post(P + f"/{SERIAL}/manual-map/confirm", headers=H,
+               json={"session": "s1", "position": "A2", "reported": {"ams_id": 0, "tray_id": 1}, "nozzle": None,
+                     "by_hand": False, "path": "/api/pair"})
+        c.post(P + f"/{SERIAL}/manual-map/offer", headers=H, json={"share": True})
+        c.get(P + f"/{SERIAL}/manual-map")
+    assert ("POST", f"/api/printers/{SERIAL}/manual-map/start", {}) in kit.calls
+    assert ("POST", f"/api/printers/{SERIAL}/manual-map/confirm",
+            {"session": "s1", "position": "A2", "reported": {"ams_id": 0, "tray_id": 1}, "nozzle": None,
+             "by_hand": False}) in kit.calls
+    assert ("POST", f"/api/printers/{SERIAL}/manual-map/offer", {"share": True}) in kit.calls
+    assert ("GET", f"/api/printers/{SERIAL}/manual-map") in kit.calls
+
+
+def test_manual_map_refuses_another_step_and_a_post_without_origin(app, kit):
+    with TestClient(app, base_url=ORIGIN, client=HOME) as c:
+        assert c.post(P + f"/{SERIAL}/manual-map/pair", headers=H, json={}).status_code == 400
+        assert c.post(P + f"/{SERIAL}/manual-map/start", json={}).status_code == 403
+    assert not [x for x in kit.calls if "manual-map" in x[1]]
+
+
+def test_the_printers_tab_offers_map_by_loading_filament():
+    text = (STATIC / "printers.js").read_text(encoding="utf-8")
+    assert 'textContent: "Map by loading filament", disabled: running, on: { click: manualMap }' in text
+    for step in ("start", "confirm", "skip", "stop", "offer"):
+        assert f'"{step}"' in text

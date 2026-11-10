@@ -12,6 +12,9 @@ The web process never talks to a printer. Everything goes to the kit server's ow
                                         confirm: true
     GET  printers/{id}/usage            filament usage log;  POST printers/{id}/usage/{entry}/undo
     POST printers/{id}/map              re-map the printer's slots;  GET printers/{id}/map  its progress
+    GET  printers/{id}/manual-map       Map by loading filament: the session's state (the kit's, shared with the
+    POST printers/{id}/manual-map/{step}  setup page and the Android app); step = start | confirm | skip | stop | offer,
+                                        body keys as the kit's (session, position, reported, nozzle, by_hand, share)
     POST printers/{id}/slots/{label}/load    {spool_id[, dry_run]}: put a spool in a slot (dry run unless
                                         dry_run: false), as the Android app does
     POST printers/{id}/slots/{label}/unload  {[dry_run]}: the slot's spool goes back to where it was (Spoolman
@@ -55,6 +58,11 @@ HLS_TYPES = {"m3u8": "application/vnd.apple.mpegurl", "ts": "video/mp2t"}
 MAX_SEGMENT = 16 * 1024 * 1024
 STATIC = Path(__file__).parent / "static"
 LIST_FIELDS = ("id", "name", "model", "state", "camera", "summary")
+# the kit path of each step, written out so test_web_token_scope sees every path this unit calls
+MANUAL_STEPS = {"start": "/api/printers/{serial}/manual-map/start", "confirm": "/api/printers/{serial}/manual-map/confirm",
+                "skip": "/api/printers/{serial}/manual-map/skip", "stop": "/api/printers/{serial}/manual-map/stop",
+                "offer": "/api/printers/{serial}/manual-map/offer"}
+MANUAL_KEYS = ("session", "position", "reported", "nozzle", "by_hand", "share")
 TAGGED_FIELDS = ("id", "vendor", "name", "location", "remaining_g")
 # The kit's refusals in the Android app's words (PrinterHelp.message); a not_found keeps the kit's own text, which
 # names what is missing (printer, slot or spool).
@@ -116,6 +124,8 @@ class PrintersApp:
             ("/{id}/map", g(self.map_start), ["POST"]),
             ("/{id}/map", g(self.map_get), ["GET"]),
             ("/{id}/report", g(self.map_report), ["POST"]),
+            ("/{id}/manual-map", g(self.manual_get), ["GET"]),
+            ("/{id}/manual-map/{step}", g(self.manual_step), ["POST"]),
             ("/{id}/slots/{label}/load", g(self.slot_load), ["POST"]),
             ("/{id}/slots/{label}/unload", g(self.slot_unload), ["POST"]),
             ("/tagged", g(self.tagged), ["GET"]),
@@ -248,6 +258,18 @@ class PrintersApp:
 
     async def map_report(self, request: Request):
         return await self._kit_call(self.kit.post, f"/api/printers/{self._serial(request)}/report", {})
+
+    async def manual_get(self, request: Request):
+        return await self._kit_call(self.kit.get, f"/api/printers/{self._serial(request)}/manual-map")
+
+    async def manual_step(self, request: Request):
+        serial, step = self._serial(request), request.path_params["step"]
+        if step not in MANUAL_STEPS:
+            raise Problem("no such step")
+        b = await self._body(request)
+        body = {k: b[k] for k in MANUAL_KEYS if k in b}
+        log.info("printers tab: manual map %s %s", step, serial)
+        return await self._kit_call(self.kit.post, MANUAL_STEPS[step].format(serial=serial), body)
 
     async def map_start(self, request: Request):
         return await self._kit_call(self.kit.post, f"/api/printers/{self._serial(request)}/map", {})
