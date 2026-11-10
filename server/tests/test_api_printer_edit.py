@@ -117,6 +117,7 @@ def test_an_address_change_keeps_the_pin():
     assert r.status_code == 200, r.text
     p = registry.load()[SERIAL]
     assert p.cert_fp == "ab" * 32 and p.ip == "10.0.0.9" and p.access_code == CODE
+    assert r.json()["printer"]["pinned"] is True and "ab" * 32 not in r.text
     assert r.json()["changed"] == ["address"] and b.waited == [SERIAL]
 
 
