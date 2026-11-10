@@ -640,7 +640,7 @@ the `station` module, on the server computer (`all-in-one`) or on a second compu
   the station; a DYMO only shows up on USB while it is on, and it switches itself off after a few minutes.
 - A **PN532 NFC reader**: on a USB serial adapter (CH340 chip), on the button panel's I2C header (an Elechouse NFC
   Module V3 in I2C mode, firmware 11), or both. With both, the same tag seen by the two within 2 seconds counts as
-  one tap.
+  one tap; a quick second tap of the same tag on the same reader inside those 2 seconds is merged as well.
 - Optional: the **button panel** (Hold and Discard buttons, lamps, an OLED, a buzzer and a speaker, on an ESP32-C3 Super Mini). Its
   behaviour, serial protocol and pin table: [station/PANEL.md](../station/PANEL.md).
 - Optional: a speaker (USB or the computer's headphone socket) for the scan beep when there is no panel.

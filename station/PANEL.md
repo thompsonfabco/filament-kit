@@ -41,7 +41,8 @@ because the amplifier stays silent with no I2S clock.
   on the same SDA / SCL, VCC / GND to 3V3 / G. Its IRQ and RSTO pins stay unconnected: the firmware uses no pin but
   SDA and SCL for it (GPIO 7 is a lamp and GPIO 10 the I2S clock). The panel looks for it at boot and every 5 s
   after, so it can be plugged in later. The USB PN532 reader keeps working, alone or together with this one; the
-  same tag seen by both within 2 s is one tap.
+  same tag seen by both within 2 s is one tap, and a quick second tap of the same tag on the same reader inside
+  that 2 s is merged too.
 - **Lamps:** 5 V type with the resistor built in, switched by a BS170 N-MOSFET each because a GPIO pin gives 3.3 V at
   about 12 mA at most. Lamp + to 5 V, lamp - to the drain; source to G; gate to the pin through 220 Ω, with 100 kΩ
   from gate to G so the lamps stay dark while the board resets. BS170 legs, flat face toward you: D G S (the

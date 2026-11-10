@@ -3,7 +3,8 @@ flow on the panel, asking the paired kit server, and a read-only HTTP view.
 
 GET /state    -> {"tag": {...as /last-tag...}, "scale": {"grams", "status", "unit", "stable", "age_seconds"} | null,
                   "last_weight": {"grams", "age_seconds", "held"} | null, "panel": "/dev/ttyACMn" or "/dev/ttyUSBn" | null,
-                  "panel_version": "2" | null,
+                  "panel_version": "2" | null, "panel_nfc": true | false | null (the panel's own PN532 answers;
+                  null until the panel says),
                   "air": {"temp_c", "rh", "hpa", "age_seconds"} | null, "photo": {"url", "taken_at", "age_seconds"} | null,
                   "flow": {"step", "message", "spool", "filament"}}
                  scale = the latest report; last_weight = the latest stable reading above 20 g (the DYMO shuts itself

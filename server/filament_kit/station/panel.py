@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import subprocess
 import sys
 import time
@@ -46,12 +47,11 @@ def on_line(line: bytes):
     elif line.startswith(b"AIR "):
         air.on_air(line)
     elif line.startswith(b"TAG "):  # the panel's own PN532 (firmware 11): same path as the USB reader
-        try:
-            uid = bytes.fromhex(line[4:].decode("ascii").strip())
-        except (ValueError, UnicodeDecodeError):
+        hexid = line[4:].strip()
+        if not re.fullmatch(rb"(?:[0-9a-fA-F]{2}){4}|(?:[0-9a-fA-F]{2}){7}|(?:[0-9a-fA-F]{2}){10}", hexid):
+            log.warning("button panel: ignoring TAG line %r (not 4, 7 or 10 bytes of contiguous hex)", line[:40])
             return
-        if uid:
-            nfc.on_identifier(uid)
+        nfc.on_identifier(bytes.fromhex(hexid.decode("ascii")))
     elif line in (b"NFC ok", b"NFC none"):
         st.ports["panel_nfc"] = line == b"NFC ok"
         log.info("button panel NFC reader: %s", line[4:].decode())
