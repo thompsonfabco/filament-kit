@@ -37,7 +37,7 @@ interface PrinterBackend {
     suspend fun unload(id: String, label: String, dryRun: Boolean): UnloadResult
 }
 
-class ApiPrinterBackend(private val api: Api) : PrinterBackend, PrinterToolsBackend {
+class ApiPrinterBackend(private val api: Api) : PrinterBackend, PrinterToolsBackend, PrinterEditBackend {
     override suspend fun printers() = api.printers()
     override suspend fun addPrinter(serial: String, accessCode: String, name: String?) = api.addPrinter(serial, accessCode, name)
     override suspend fun printer(id: String) = api.printer(id)
@@ -47,6 +47,8 @@ class ApiPrinterBackend(private val api: Api) : PrinterBackend, PrinterToolsBack
     override suspend fun mapStatus(id: String) = api.mapStatus(id)
     override suspend fun usage(id: String, days: Int) = api.usage(id, days)
     override suspend fun undoUsage(entryId: String) = api.undoUsage(entryId)
+    override suspend fun editPrinter(id: String, changes: kotlinx.serialization.json.JsonObject) = api.editPrinter(id, changes)
+    override suspend fun removePrinter(id: String) = api.removePrinter(id)
 }
 
 /** Plain-English texts for printer states and errors. */
@@ -286,6 +288,9 @@ class PrinterViewModel(
         val d = backend.printer(id)
         _state.update { it.copy(printer = d.printer, status = d.status, message = null) }
     }
+
+    /** The printer as an edit's reply gave it, shown until the next poll. */
+    fun showPrinter(p: Printer) = _state.update { it.copy(printer = p) }
 
     fun pauseOrResume() = send(if (_state.value.paused) "resume" else "pause")
 

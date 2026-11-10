@@ -36,10 +36,18 @@ fun PrintersEntry(api: Api, onPairAgain: () -> Unit) {
         val camera = remember(api, id) {
             CameraSource(api.client, api.cameraHlsUrl(id), api.cameraMjpegUrl(id), api.authHeaders())
         }
+        val family = vm.state.collectAsState().value.printer?.family
+        // made once the printer's family is known (it decides the fields); kept for the visit
+        val edit = family?.let { f ->
+            viewModel(key = "printer-edit-$apiKey-$id-$f") { PrinterEditViewModel(backend, id, f, vm::showPrinter) }
+        }
         PrinterScreen(vm, tools, camera, onBack = { openId = null }, onPairAgain = onPairAgain,
             onManualMap = {
-            manualVisit++
-            manualFor = id
-        })
+                manualVisit++
+                manualFor = id
+            },
+            edit = edit,
+            onRemoved = { openId = null },
+        )
     }
 }

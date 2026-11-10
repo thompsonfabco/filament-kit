@@ -67,9 +67,13 @@ fun PrinterScreen(
     onBack: () -> Unit,
     onPairAgain: () -> Unit,
     onManualMap: () -> Unit = {},
+    /** Rename, address, code or key, certificate, remove; null: no such section (previews, tests). */
+    edit: PrinterEditViewModel? = null,
+    onRemoved: () -> Unit = onBack,
 ) {
     val state by viewModel.state.collectAsState()
     val toolsState by tools.state.collectAsState()
+    val editState = edit?.state?.collectAsState()?.value
     LifecycleStartEffect(viewModel, tools) {
         viewModel.start()
         tools.start()
@@ -87,11 +91,11 @@ fun PrinterScreen(
             TextButton(onClick = onBack) { Text("Back") }
             Text(state.printer?.name ?: "Printer", style = MaterialTheme.typography.headlineSmall)
         }
-        (state.mismatch ?: toolsState.mismatch)?.let { (expected, actual) ->
+        (state.mismatch ?: toolsState.mismatch ?: editState?.mismatch)?.let { (expected, actual) ->
             MismatchNotice(expected, actual, onPairAgain)
             return@Column
         }
-        if (state.unauthorized || toolsState.unauthorized) {
+        if (state.unauthorized || toolsState.unauthorized || editState?.unauthorized == true) {
             UnpairedNotice(onPairAgain)
             return@Column
         }
@@ -125,6 +129,7 @@ fun PrinterScreen(
             SlotMapping(toolsState, tools, printer.state, state.printing, onManualMap)
         }
         FilamentUsed(toolsState, tools)
+        edit?.let { PrinterEditSection(printer, it, onRemoved) }
     }
 
     if (toolsState.confirmMap) {

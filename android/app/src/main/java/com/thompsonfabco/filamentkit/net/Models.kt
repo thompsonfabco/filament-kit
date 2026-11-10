@@ -120,6 +120,17 @@ data class PrinterSummary(
  * certificate is not the one first seen; no Access Code is sent to it) or `not_configured`;
  * [id] is the serial. The Access Code is never part of this.
  */
+/**
+ * `PATCH /api/printers/{id}`: the printer as it is now (after a reconnect, the new connection's first state), which
+ * keys changed, and the server's one line about a new address (null: nothing to say).
+ */
+@Serializable
+data class PrinterEditResult(
+    val printer: Printer,
+    val changed: List<String> = emptyList(),
+    val note: String? = null,
+)
+
 @Serializable
 data class Printer(
     val id: String,

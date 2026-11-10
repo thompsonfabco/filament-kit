@@ -43,6 +43,49 @@ class ApiPrintersTest {
         "configured":true,"state":"connected","camera":{"kind":"hls"},
         "summary":{"gcode_state":"RUNNING","percent":42,"remaining_min":31},"future":1}"""
 
+    @Test fun editPrinterPatchesTheKeysAndReadsThePrinterBack() = runBlocking {
+        json("""{"printer":$printerJson,"changed":["name","address"],"note":"this server does not reach it"}""")
+        val changes = kotlinx.serialization.json.buildJsonObject {
+            put("name", kotlinx.serialization.json.JsonPrimitive("Garage"))
+            put("address", kotlinx.serialization.json.JsonPrimitive("10.0.0.9"))
+        }
+        val r = api.editPrinter("0948AB", changes)
+        assertEquals("Garage H2D", r.printer.name)
+        assertEquals(listOf("name", "address"), r.changed)
+        assertEquals("this server does not reach it", r.note)
+        val q = take()
+        assertEquals("PATCH", q.method)
+        assertEquals("/api/printers/0948AB", q.url.encodedPath)
+        assertEquals("Bearer tok-123", q.headers["Authorization"])
+        assertEquals(changes, q.bodyJson())
+    }
+
+    @Test fun editPrinterWithoutANoteHasNone() = runBlocking {
+        json("""{"printer":$printerJson,"changed":["unpin"]}""")
+        assertNull(api.editPrinter("0948AB", kotlinx.serialization.json.buildJsonObject { }).note)
+    }
+
+    @Test fun editPrinterRefusalsKeepTheServersSentence() {
+        json("""{"error":"bad_request","message":"a Klipper printer has no Access Code"}""", 400)
+        val e = failure { api.editPrinter("0948AB", kotlinx.serialization.json.buildJsonObject { }) }
+        assertEquals("bad_request", e.code)
+        assertEquals("a Klipper printer has no Access Code", e.message)
+    }
+
+    @Test fun removePrinterDeletes() = runBlocking {
+        json("""{"ok":true,"id":"0948AB"}""")
+        api.removePrinter("0948AB")
+        val q = take()
+        assertEquals("DELETE", q.method)
+        assertEquals("/api/printers/0948AB", q.url.encodedPath)
+        assertEquals("Bearer tok-123", q.headers["Authorization"])
+    }
+
+    @Test fun removePrinterNotFoundKeepsItsCode() {
+        json("""{"error":"not_found","message":"no such printer"}""", 404)
+        assertEquals("not_found", failure { api.removePrinter("0948AB") }.code)
+    }
+
     @Test fun listsPrintersWithBearer() = runBlocking {
         json("""{"printers":[$printerJson,
             {"id":"01P","name":"01P","model":null,"serial":"01P","ip":null,"configured":false,"state":"not_configured",

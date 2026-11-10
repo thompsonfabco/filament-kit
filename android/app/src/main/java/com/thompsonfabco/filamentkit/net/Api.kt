@@ -183,6 +183,18 @@ class Api(
 
     suspend fun printer(id: String): PrinterDetail = decode(call(request("api", "printers", id).get()))
 
+    /**
+     * Changes a printer: [changes] holds one or more of name, address, port, access_code, api_key, unpin. A secret in
+     * it goes only into this request body; it is never kept or logged.
+     */
+    suspend fun editPrinter(id: String, changes: JsonObject): PrinterEditResult =
+        decode(call(request("api", "printers", id).patch(changes.toBody())))
+
+    /** Forgets a printer (its entry and connection). */
+    suspend fun removePrinter(id: String) {
+        call(request("api", "printers", id).delete())
+    }
+
     /** [action] is `pause`, `resume`, `stop`, `light_on` or `light_off`. */
     suspend fun command(id: String, action: String): CommandResult {
         val body = buildJsonObject { put("action", action) }
