@@ -236,7 +236,10 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
                 if (!localNetwork.granted) {
                     // No NSD browse, probe, verify or pair until the permission is granted.
                     Column(Modifier.weight(1f).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Text("Pair with your server", style = MaterialTheme.typography.headlineSmall)
+                        Column {
+                            Text("Pair with your server", style = MaterialTheme.typography.headlineSmall)
+                            VersionLine(version)
+                        }
                         LocalNetworkPanel(localNetwork)
                     }
                 } else {
@@ -254,9 +257,9 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
                         onSkipCheck = app::setSkipFingerprintCheck,
                         canTrust = { config.canTrust(it.expected) },
                         onTrust = { m -> app.trustCertificate(m.expected, m.actual) { nav.navigateClearing(Routes.HOME) } },
+                        version = version,
                     )
                 }
-                VersionLine(version)
             }
         }
 
