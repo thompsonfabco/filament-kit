@@ -304,12 +304,16 @@ def routes(page) -> list[tuple]:
             try:
                 r = m.report(serial)
             except PrinterOffline:
-                raise Refused(409, OFFLINE) from None
+                raise Refused(409, "the printer cannot be reached and the kit has saved nothing about it yet") from None
             except UnknownPrinter:
                 raise Refused(404, "no such printer") from None
             except OSError as e:
                 raise Refused(500, f"the report could not be kept ({type(e).__name__})") from None
-            return {"ok": True, "name": r["name"]}
+            note = None if r.get("live", True) else (
+                "The printer could not be reached: this report is built from what the kit saved"
+                + (f" (newest record {time.strftime('%Y-%m-%d %H:%M', time.localtime(r['saved_until']))})"
+                   if r.get("saved_until") else "") + ".")
+            return {"ok": True, "name": r["name"], "live": r.get("live", True), "note": note}
         res = await anyio.to_thread.run_sync(run)
         page.audit(request, f"printer {serial} report collected")
         return res

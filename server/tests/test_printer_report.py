@@ -11,8 +11,8 @@ from defusedxml import ElementTree
 
 from fakes.fake_paho import FakeClient, FakePrinter
 from filament_kit import cli, config
-from filament_kit.bridge import calib3mf, connection, mapping, printer_report, registry
-from filament_kit.bridge.connection import Manager
+from filament_kit.bridge import ams, calib3mf, connection, mapping, printer_report, registry
+from filament_kit.bridge.connection import Manager, PrinterOffline
 from filament_kit.bridge.registry import Printer
 from test_slottest import REPORT
 
@@ -305,3 +305,62 @@ def test_the_tool_refuses_another_file():
 def test_the_issue_template_says_to_read_it_first():
     t = (ROOT / ".github/ISSUE_TEMPLATE/printer-report.md").read_text(encoding="utf-8")
     assert "open it and read it" in t and "printer report" in t
+
+
+# ---------------------------------------------------------------- the printer cannot be reached (a live case, 2026-11-10)
+
+class Gone:
+    """A Manager whose printer never answers."""
+
+    def state(self, s):
+        return "disconnected"
+
+    def wait_report(self, serial, predicate, timeout):
+        return None
+
+    def sync(self):
+        pass
+
+    def stop(self):
+        pass
+
+
+def _saved_map():
+    registry.upsert(registry.Printer(SERIAL, "", "N6", "192.0.2.5", "12345678", True))
+    smap = ams.SlotMap(slots={"A1": {"ams_id": 0, "tray_id": 0, "global_id": 0},
+                              "A2": {"ams_id": 0, "tray_id": 1, "global_id": 1}}, calibrated=True, scheme="shift8",
+                       fingerprint=[[0, "ams", 4], [255, None, 1]])
+    ams.save_map(SERIAL, smap)
+    d = config.paths().state / "printers" / SERIAL
+    (d / mapping.STATUS_FILE).write_text(json.dumps({"job_id": "a", "state": "failed", "step": "", "problems": ["x"],
+                                                     "reason": "offline", "finished": 1762800000, "trail": TRAIL[:1],
+                                                     "report_wanted": "no_mapping"}), encoding="utf-8")
+
+
+def test_an_unreachable_printer_gets_a_report_from_what_the_kit_saved():
+    _saved_map()
+    r = mapping.Mapper(Gone()).report(SERIAL)
+    assert r["live"] is False and r["saved_until"] and SERIAL not in r["xml"] and "192.0.2.5" not in r["xml"]
+    root = ElementTree.fromstring(r["xml"].encode())
+    assert root.get("live") == "false" and root.get("saved-until") and root.get("wanted") == "no_mapping"
+    assert root.get("hardware-file")
+    saved = root.find("saved")
+    assert [u.get("id") for u in saved.findall("unit")] == ["0", "255"]
+    m = saved.find("map")
+    assert m.get("calibrated") == "true" and m.get("scheme") == "shift8"
+    assert [(s.get("label"), s.get("tray-id")) for s in m.findall("slot")] == [("A1", "0"), ("A2", "1")]
+    assert saved.find("last-mapping").get("reason") == "offline" and root.find("attempt") is not None
+    assert root.find("layout") is None and root.find("firmware") is None     # nothing live is made up
+    assert "x" not in [e.text for e in root.iter()]                           # no free text from a failure
+
+
+def test_a_printer_the_kit_never_saw_is_refused():
+    with pytest.raises(PrinterOffline):
+        mapping.Mapper(Gone()).report("0948ZZ0A0000009")
+
+
+def test_the_cli_says_the_report_is_from_saved_records(capsys):
+    _saved_map()
+    assert cli.main(["printer", "report", SERIAL], manager_factory=lambda s: Gone()) == 0
+    out = capsys.readouterr().out
+    assert "could not be reached" in out and "built from what the kit saved" in out and "Printer report saved:" in out

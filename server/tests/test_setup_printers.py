@@ -567,7 +567,7 @@ def test_an_offline_printer_says_so(mapped):
     _bambu()
     fake.fail = PrinterOffline(SERIAL)
     r = post(client(app), f"printers/{SERIAL}/report", {})
-    assert r.status_code == 409 and "offline" in r.json()["error"]
+    assert r.status_code == 409 and "saved nothing" in r.json()["error"]
 
 
 def test_the_row_says_when_a_report_would_help(mapped):

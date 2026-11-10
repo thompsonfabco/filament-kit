@@ -812,10 +812,15 @@ def cmd_printer_report(serial: str, manager_factory) -> int:
         m.wait_report(serial, lambda r: "gcode_state" in r, REPORT_WAIT)
         r = mapping.Mapper(m).report(serial)
     except (PrinterOffline, UnknownPrinter):
-        _err_line("the printer is offline (or its Access Code is wrong); check that it is on and on the network")
+        _err_line("the printer cannot be reached and the kit has saved nothing about it yet (no slot map, no mapping "
+                  "run); check that it is on and on the network, and that its Access Code is right")
         return 1
     finally:
         m.stop()
+    if not r.get("live", True):
+        when = time.strftime("%Y-%m-%d %H:%M", time.localtime(r["saved_until"])) if r.get("saved_until") else "unknown"
+        print(f"The printer could not be reached: this report is built from what the kit saved (newest record {when}),"
+              " without the printer's own live state.")
     print(f"Printer report saved: {r['path']}")
     print("It holds no serial, address, name or account id. Attach it to a 'Printer report' issue on the project's GitHub.")
     return 0

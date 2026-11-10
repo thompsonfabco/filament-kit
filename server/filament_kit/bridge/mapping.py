@@ -778,17 +778,30 @@ class Mapper:
             log.exception("mapping %s: cannot save the printer report", serial)
 
     def report(self, serial: str) -> dict:
-        """A report from the printer as it is now and the last mapping's attempts: {name, xml, path}. Raises
-        PrinterOffline when there is no report to read."""
+        """A report from the printer as it is now and the last mapping's attempts: {name, xml, path, live, saved_until}.
+        When the printer cannot be reached it is built from what the kit saved (live False, saved_until = the newest
+        saved record's time); PrinterOffline only when the kit has never seen it (no slot map, no mapping record)."""
         snap = self._m.wait_report(serial, lambda r: True, 0)
-        if snap is None:
-            raise PrinterOffline(serial)
         model = ams.printer_model(serial)
         saved = _load_status(serial) or {}
-        wanted = saved.get("report_wanted") or _unrecognised(snap, model)
-        data = printer_report.build(snap, model, trail=saved.get("trail"), wanted=wanted)
+        if snap is not None:
+            wanted = saved.get("report_wanted") or _unrecognised(snap, model)
+            data = printer_report.build(snap, model, trail=saved.get("trail"), wanted=wanted)
+            path = printer_report.save(serial, data, model)
+            return {"name": path.name, "xml": data.decode("utf-8"), "path": str(path), "live": True, "saved_until": None}
+        smap = ams.load_map(serial)
+        status_file = _dir(serial) / STATUS_FILE
+        stamps = [t for t in (smap.updated, saved.get("finished"),
+                              status_file.stat().st_mtime if status_file.exists() else None) if isinstance(t, (int, float))]
+        if not smap.slots and not saved:
+            raise PrinterOffline(serial)            # never seen: nothing saved to build from
+        until = max(stamps) if stamps else None
+        record = {"fingerprint": smap.fingerprint, "slots": smap.slots, "calibrated": smap.calibrated,
+                  "scheme": smap.scheme, "state": saved.get("state"), "reason": saved.get("reason")}
+        data = printer_report.build(None, model, trail=saved.get("trail"), wanted=saved.get("report_wanted"),
+                                    saved=record, saved_until=until)
         path = printer_report.save(serial, data, model)
-        return {"name": path.name, "xml": data.decode("utf-8"), "path": str(path)}
+        return {"name": path.name, "xml": data.decode("utf-8"), "path": str(path), "live": False, "saved_until": until}
 
     # ---------------------------------------------------------------- progress
     def _position_labels(self, serial: str) -> list[str] | None:

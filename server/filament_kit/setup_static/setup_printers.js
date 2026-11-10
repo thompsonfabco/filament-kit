@@ -56,7 +56,7 @@ function bambuRow(p) {
 // ----- printer reports: one XML file, made from an allow-list, for an issue; kept on the server, the last five -----
 async function collectReport(p, box) {
   const r = await change(box, printerPath(p, "report"), {}, () => {});
-  if (r) listReports(p, box, `Collected ${r.name}.`);
+  if (r) listReports(p, box, `Collected ${r.name}.${r.note ? " " + r.note : ""}`);
 }
 
 async function listReports(p, box, done) {

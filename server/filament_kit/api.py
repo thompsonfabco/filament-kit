@@ -560,8 +560,9 @@ def _bridge_routes(printers, mapper: mapping.Mapper, sm) -> list[Route]:
         def build() -> dict:
             known(serial)
             bambu_only(serial)
-            r = mapper.report(serial)
-            return {"name": r["name"], "xml": r["xml"]}
+            r = mapper.report(serial)        # built from saved records when the printer can't be reached
+            return {"name": r["name"], "xml": r["xml"], "live": r.get("live", True),
+                    "saved_until": r.get("saved_until")}
         return JSONResponse(await run_in_threadpool(build))
 
     @_authed
