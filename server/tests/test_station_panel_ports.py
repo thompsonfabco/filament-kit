@@ -11,6 +11,9 @@ import pytest
 from filament_kit.station import panel, wire
 from filament_kit.station import state as st
 
+# the fake sysfs tree has folders like 1-1:1.0, which Windows cannot make; the station runs on Linux only
+pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="sysfs folder names with a colon (Linux only)")
+
 
 class SerialTimeoutException(Exception):
     pass
