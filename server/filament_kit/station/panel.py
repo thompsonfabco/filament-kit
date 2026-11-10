@@ -118,12 +118,30 @@ def flash_panel(dev, version):
     return ok
 
 
+def _older(have, want) -> bool:
+    """The panel's firmware is older than the bundled one. Versions are whole numbers; one the panel does not say
+    plainly (a missing or garbled HELLO field) counts as older, as before; a bundled one that is not a number never
+    makes anything older."""
+    try:
+        w = int(str(want).strip())
+    except ValueError:
+        return False
+    try:
+        return int(str(have).strip()) < w
+    except (TypeError, ValueError):
+        return True
+
+
 def update_firmware(ser):
-    """Reflash the ESP32-C3 panel behind ser if it runs other firmware than the bundled one. True when it was flashed (ser is
-    closed; look for the panel again). Once per bundled version and run, so a build that won't take can't loop; then
-    the panel is used as it is."""
+    """Reflash the ESP32-C3 panel behind ser if it runs OLDER firmware than the bundled one (a newer panel, say from a
+    later release on another station, is never flashed down). True when it was flashed (ser is closed; look for the
+    panel again). Once per bundled version and run, so a build that won't take can't loop; then the panel is used as
+    it is."""
     want = fw_version()
     if not want or ser.panel_version == want:
+        return False
+    if not _older(ser.panel_version, want):
+        log.info("button panel runs firmware %s, newer than the bundled %s; using it as it is", ser.panel_version, want)
         return False
     if ser.panel_chip != "esp32c3":  # an ESP8266 panel: the C3 image would not run on it; never flash it
         log.warning("button panel runs old firmware %s (an ESP8266, not the bundled %s); using it as it is",

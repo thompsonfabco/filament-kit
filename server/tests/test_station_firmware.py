@@ -101,6 +101,18 @@ def test_current_firmware_is_left_alone(fw):
     assert panel.update_firmware(panel.find_panel()) is False and fw == []
 
 
+def test_newer_firmware_is_never_flashed_down(fw):
+    """panel-c3 review, note 1: a panel on a later version than the bundled one (2 here) is used as it is."""
+    for newer in ("3", "12"):
+        FakeSerial.VERSIONS = {"/dev/ttyACM1": f"{newer} esp32c3"}
+        assert panel.update_firmware(panel.find_panel()) is False and fw == [], newer
+
+
+def test_older_means_older_by_number():
+    assert panel._older("10", "11") and panel._older("9", "11") and panel._older("?", "11")
+    assert not panel._older("12", "11") and not panel._older("11", "11") and not panel._older("1", "x")
+
+
 def test_flash_off_or_nothing_bundled_leaves_the_panel(fw, tmp_path):
     st.settings["panel_flash"] = False
     assert panel.update_firmware(panel.find_panel()) is False and fw == []
