@@ -46,6 +46,7 @@ def fresh(monkeypatch):
                         held_at=None, blink_until=0, air=None, air_at=None, photo=None,
                         photo_at=None)
     monkeypatch.setitem(st.panel, "ser", None)
+    monkeypatch.setitem(st.ports, "panel_chip", None)
     monkeypatch.setitem(st.settings, "speech", True)
     monkeypatch.setitem(st.settings, "camera", "auto")
     speech.speech_ready.clear()
@@ -170,7 +171,7 @@ def test_speak_streams_256_byte_frames_in_real_time(monkeypatch):
     ser = st.panel["ser"] = Ser()
     samples = bytes(range(16, 240)) * 20  # 4480 bytes = 0.56 s
     monkeypatch.setattr(speech, "synth", lambda t: b"wav")
-    monkeypatch.setattr(speech, "to_panel", lambda w: samples)
+    monkeypatch.setattr(speech, "to_panel", lambda w, chip=None: samples)
     t0 = time.monotonic()
     speech.speak("Held")
     took = time.monotonic() - t0
@@ -182,7 +183,7 @@ def test_speak_streams_256_byte_frames_in_real_time(monkeypatch):
 def test_newer_phrase_cuts_off_the_old_one_fading_to_zero(monkeypatch):
     ser = st.panel["ser"] = Ser()
     monkeypatch.setattr(speech, "synth", lambda t: b"wav")
-    monkeypatch.setattr(speech, "to_panel", lambda w: bytes([200]) * 8000)
+    monkeypatch.setattr(speech, "to_panel", lambda w, chip=None: bytes([200]) * 8000)
     speech.speech_ready.set()  # a newer phrase is already waiting
     speech.speak("old")
     data = b"".join(p for k, p in frames(ser.out))
@@ -237,7 +238,7 @@ def test_speak_survives_a_missing_synth_or_ffmpeg(monkeypatch):
     speech.speak("x")
     monkeypatch.setattr(speech, "synth", lambda t: b"wav")
 
-    def broken(w):
+    def broken(w, chip=None):
         raise OSError("no ffmpeg")
     monkeypatch.setattr(speech, "to_panel", broken)
     speech.speak("x")
@@ -309,7 +310,7 @@ def _serve(view, allow):
 
 def _raw(now, **kw):
     s = {"tag": "4:aa:bb", "tag_at": now - 5, "scale": None, "scale_at": None, "last": None, "last_at": None,
-         "held": 1098.0, "held_at": now - 3, "blink_until": 0, "panel": "/dev/ttyUSB1", "panel_version": "7",
+         "held": 1098.0, "held_at": now - 3, "blink_until": 0, "panel": "/dev/ttyUSB1", "panel_version": "7", "panel_nfc": None,
          "air": None, "air_at": None, "photo": None, "photo_at": None,
          "flow": {"step": "ready", "message": "", "spool": None, "filament": {"id": 45}}}
     s.update(kw)
@@ -333,7 +334,8 @@ def test_state_air_and_photo():
         s = json.loads(_fetch(base + "/state")[2])
         assert s["air"] == {"temp_c": 21.43, "rh": 45.2, "hpa": 1013.25, "age_seconds": 2}
         assert s["photo"] == {"url": "/photo", "taken_at": station_http.iso(now - 1), "age_seconds": 1}
-        assert set(s) == {"tag", "scale", "last_weight", "panel", "panel_version", "air", "photo", "flow"}
+        assert set(s) == {"tag", "scale", "last_weight", "panel", "panel_version", "panel_nfc", "air", "photo",
+                      "flow"}
         assert s["panel_version"] == "7"
         assert s["flow"] == {"step": "ready", "message": "", "spool": None, "filament": {"id": 45}}
         assert s["last_weight"] == {"grams": 1098.0, "age_seconds": 3, "held": True}
@@ -446,3 +448,96 @@ def test_swap_on_an_older_panel_is_logged(monkeypatch, caplog, swap, version, wa
     with caplog.at_level("WARNING", logger="intake-station"):
         assert panel.warn_swap_needs_fw9(version) is warned
     assert ("firmware 9" in caplog.text) is warned
+
+
+def c3_wav_out(monkeypatch, chip="esp32c3"):
+    seen = []
+    monkeypatch.setattr(speech.subprocess, "run", lambda a, **kw: seen.append(a) or Done(pcm(4000, 20000)))
+    return speech.to_panel(b"wav", chip), seen
+
+
+def test_c3_stream_starts_and_ends_at_silence(monkeypatch):
+    out, _ = c3_wav_out(monkeypatch)
+    pad = speech.RATE // 20
+    assert pad == 400 and out[:400] == bytes([128]) * 400 and out[-400:] == bytes([128]) * 400
+    assert len(out) == 4000 + 2 * pad
+    assert 0 not in out[:pad] and 0 not in out[-pad:]
+
+
+def test_c3_uses_the_sealed_speaker_filter(monkeypatch):
+    _, seen = c3_wav_out(monkeypatch)
+    af = seen[0][seen[0].index("-af") + 1]
+    assert "highpass=f=150" in af and af == speech.FILTERS["esp32c3"]
+
+
+def test_old_panel_speech_unchanged(monkeypatch):
+    out, seen = c3_wav_out(monkeypatch, None)
+    assert seen[0][seen[0].index("-af") + 1] == speech.FILTERS["esp8266"]
+    assert out[0] == 0 and out[-1] == 0 and len(out) == 4000 + 2 * (speech.RAMP + speech.RATE // 20)
+
+
+def test_c3_cutoff_fades_toward_128():
+    fade = speech.cutoff(240, "esp32c3")
+    assert len(fade) == speech.RAMP and fade[0] == 240 and abs(fade[-1] - 128) <= 1
+    assert list(fade) == sorted(fade, reverse=True) and min(fade) >= 128
+    low = speech.cutoff(16, "esp32c3")
+    assert low[0] == 16 and list(low) == sorted(low) and max(low) <= 128
+    assert speech.cutoff(200, None)[-1] <= 1
+
+
+def test_speak_cutoff_uses_the_chip(monkeypatch):
+    ser = st.panel["ser"] = Ser()
+    monkeypatch.setitem(st.ports, "panel_chip", "esp32c3")
+    monkeypatch.setattr(speech, "synth", lambda t: b"wav")
+    monkeypatch.setattr(speech, "to_panel", lambda w, chip=None: bytes([200]) * 8000 if chip == "esp32c3" else b"")
+    speech.speech_ready.set()
+    speech.speak("old")
+    data = b"".join(p for k, p in frames(ser.out))
+    assert data[0] == 200 and abs(data[-1] - 128) <= 1
+
+
+@pytest.mark.parametrize("env,want", [("150", 100), ("-5", 0), ("loud", 50), (None, 50), ("30", 30), ("", 50)])
+def test_volume_env_clamped(monkeypatch, env, want):
+    monkeypatch.delenv("STATION_SPEAKER_VOLUME", raising=False)
+    if env is not None:
+        monkeypatch.setenv("STATION_SPEAKER_VOLUME", env)
+    assert st.settings_from_env()["speaker_volume"] == want
+
+
+class Stop(Exception):
+    pass
+
+
+@pytest.mark.parametrize("chip,sent", [("esp32c3", b"V 50\n"), (None, b"")])
+def test_volume_sent_once_after_c3_found(monkeypatch, chip, sent):
+    class Found(Ser):
+        panel_version, panel_chip = "10", chip
+
+        def readline(self):
+            raise OSError("unplugged")
+
+        def close(self):
+            pass
+
+    ser = Found()
+    monkeypatch.setitem(st.settings, "speaker_volume", 50)
+    monkeypatch.setattr(panel, "find_panel", lambda: ser)
+    monkeypatch.setattr(panel, "update_firmware", lambda s: False)
+    monkeypatch.setattr(panel.time, "sleep", lambda s: (_ for _ in ()).throw(Stop()))
+    with pytest.raises(Stop):
+        panel.panel_loop()
+    assert ser.out == sent
+
+
+def test_unsolicited_hello_from_a_c3_resends_volume_and_every_row(monkeypatch):
+    ser = st.panel["ser"] = Ser()
+    monkeypatch.setattr(panel.flow, "screen", lambda: ["a", "b", "c", "d", "e"])
+    monkeypatch.setitem(st.settings, "speaker_volume", 40)
+    seen = panel.Shown()
+    assert panel.refresh(seen, 100.0)
+    ser.out = b""
+    panel.on_line(b"HELLO intake-panel 10 esp32c3")
+    assert panel.refresh(seen, 100.1)
+    lines = ser.out.splitlines()
+    assert b"V 40" in lines and any(l.startswith(b"L ") for l in lines)
+    assert [l for l in lines if l.startswith(b"D ")] == [b"D %d %s" % (i, c) for i, c in enumerate([b"a", b"b", b"c", b"d", b"e"])]

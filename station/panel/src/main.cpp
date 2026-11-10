@@ -1,55 +1,64 @@
-// Intake station button panel (Wemos D1 mini / ESP-12F). Thin I/O for intake_station.py over USB serial.
+// Intake station button panel (ESP32-C3 Super Mini). Thin I/O for intake_station.py over native USB serial.
 //
 // Serial 115200, one ASCII line per message:
-//   PC -> panel   "?"                     -> "HELLO intake-panel <version>"
+//   PC -> panel   "?"                     -> "HELLO intake-panel <version> esp32c3"
 //                 "L <hold> <discard>"    lamp modes: 0 off, 1 on, 2 flash, 3 three fast blinks then off,
 //                                         4 rapid blink (3 only restarts the blinks when the mode changes to it)
 //                 "D <row> [text]"        OLED text: row 0 the title (big), rows 1-4 the body; no text clears the
 //                                         row. The bottom line is the panel's own: room air, always shown.
-//                 "B <hz> <ms> [count]"   beep(s) on the passive buzzer, 60 ms apart
+//                 "B <hz> <ms> [count]"   beep(s) on the buzzer (an active-low module: the pin idles HIGH), 60 ms apart
 //                 "A <n>" + n raw bytes   speech for the speaker: unsigned 8-bit mono at 8 kHz (n 1-1024), each byte
-//                                         the speaker MOSFET's PWM duty (/256), 0 = off. The PC streams it in real time and
-//                                         ramps up from 0 and back down so the speaker doesn't click.
-//   panel -> PC   "HELLO intake-panel <version>"   at boot and in answer to "?"
-//                 "P H" / "P D"           the D1 / D2 button pressed: sent on release, if held under LONG_MS
-//                 "L H" / "L D"           the D1 / D2 button held down for LONG_MS (then its release sends nothing)
+//                                         a sample, 128 = silence. The PC streams it in real time; when it stops, the
+//                                         output fades to silence over 50 ms (it never holds the last sample).
+//                 "V <percent>"           speaker volume 0-100 (50 until the station sends one)
+//   panel -> PC   "HELLO intake-panel <version> esp32c3"   at boot and in answer to "?"
+//                 "P H" / "P D"           the Hold / Discard button pressed: sent on release, if held under 800 ms
+//                 "L H" / "L D"           the Hold / Discard button held down for 800 ms (then its release sends
+//                                         nothing)
 //                 H is the Hold (yellow) input and D the Discard (red) one as wired in PANEL.md. Both buttons report
-//                 alike (firmware 9), so the station can swap their roles for a panel wired the other way round
+//                 alike (since firmware 9), so the station can swap their roles for a panel wired the other way round
 //                 (STATION_PANEL_SWAP) without a reflash; it swaps the "L" lamp modes to match.
 //                 "AIR <C> <RH%|-> <hPa|->" room air every 10 s: a BME280, or a BMP280 + AHT20 board ("-": no such
 //                                         sensor, e.g. RH on a lone BMP280)
+//                 "TAG <hex>"             an NFC tag read by the PN532 on the I2C bus (since firmware 11): its UID in
+//                                         lowercase hex, once per presentation (again only after no tag was seen for
+//                                         1 s, or for a different tag)
+//                 "NFC ok" / "NFC none"   whether a PN532 answers on the bus: sent after every HELLO and whenever that
+//                                         changes (it is looked for every 5 s, so it can be plugged in later)
 // The PC resends "L" every second; with no "L" for 5 s (station service stopped) the lamps go dark and the display
 // says the station is offline ("Waiting for PC" before the first "L" since boot). The OLED (SSD1306 128x64, I2C
-// 0x3C) shares the bus with the air sensor.
+// 0x3C) shares the bus with the air sensor and the PN532
+// (Elechouse NFC module V3 in I2C mode, 0x24; IRQ and RSTO unconnected, so no pin but SDA/SCL is touched for it). Line parsing, lamp and button timing and the speech sample conversion
+// live in lib/panel_core (host tests in test/test_core).
 //
-// Pins avoid the USB serial pins (GPIO1 TX, GPIO3 RX). Boot straps: GPIO0/D3 and GPIO2/D4 must be high at power-on,
-// which the BME280 board's I2C pull-ups keep them; GPIO15/D8 must be low, which the speaker MOSFET's gate pull-down
-// (and the D1 mini's own 10 kΩ) keep it.
+// Pins follow the peripheral standard: I2C on 5/6 and the buzzer on 0 as on the reader; never the strapping pins
+// 2, 8, 9 or the USB pair 18, 19. GPIO 20/21 are the C3's default UART, unused here (serial is native USB); the
+// ROM's boot text on 21 is harmless, the amplifier stays silent with no I2S clock. Wi-Fi and Bluetooth stay off: the
+// sketch never includes or calls them, and the core starts the radio only when it is used.
 #include <Arduino.h>
-#include <ESP8266WiFi.h>
+#include <ESP_I2S.h>
 #include <Wire.h>
-#include <core_esp8266_waveform.h>
 #include <U8g2lib.h>
 #include "aht20.h"
 #include "bme280.h"
+#include "pn532.h"
+#include "panel_core.h"
 
-static const char *VERSION = "9";
-static const uint8_t PIN_BUZZER = D7;       // GPIO13: buzzer module signal
-static const uint8_t PIN_BTN_HOLD = D1;     // GPIO5:  Hold button to GND (internal pull-up)
-static const uint8_t PIN_BTN_DISCARD = D2;  // GPIO4:  Discard button to GND
-static const uint8_t PIN_LAMP_HOLD = D5;    // GPIO14: Hold lamp MOSFET gate (high = lit)
-static const uint8_t PIN_LAMP_DISCARD = D6; // GPIO12: Discard lamp MOSFET gate
-static const uint8_t PIN_SPEAKER = D8;      // GPIO15: speaker MOSFET gate (40 kHz PWM); its drain drives the
-                                            // push-pull pair's bases, so the speaker signal comes out inverted
-static const uint8_t PIN_SDA = D3;          // GPIO0:  I2C SDA (air sensor, OLED)
-static const uint8_t PIN_SCL = D4;          // GPIO2:  I2C SCL
+static const char *VERSION = "11";
+static const uint8_t PIN_SDA = 5;            // I2C SDA (air sensor, OLED)
+static const uint8_t PIN_SCL = 6;            // I2C SCL
+static const uint8_t PIN_BUZZER = 0;         // buzzer module signal
+static const uint8_t PIN_BTN_HOLD = 3;       // Hold (yellow) button to GND (internal pull-up)
+static const uint8_t PIN_BTN_DISCARD = 4;    // Discard (red) button to GND
+static const uint8_t PIN_LAMP_HOLD = 1;      // Hold lamp MOSFET gate (high = lit)
+static const uint8_t PIN_LAMP_DISCARD = 7;   // Discard lamp MOSFET gate
+static const uint8_t PIN_I2S_BCLK = 10;      // MAX98357 BCLK
+static const uint8_t PIN_I2S_LRC = 20;       // MAX98357 LRC (word select)
+static const uint8_t PIN_I2S_DIN = 21;       // MAX98357 DIN
 
-static const uint32_t FLASH_MS = 250;      // flash: 2 Hz
-static const uint32_t RAPID_MS = 60;       // rapid blink: about 8 Hz
-static const uint32_t BLINK3_MS = 90;      // three fast blinks: 90 ms on / 90 ms off
-static const uint32_t DEBOUNCE_MS = 30;
-static const uint32_t LONG_MS = 800;       // Hold held this long: a long press
 static const uint32_t WATCHDOG_MS = 5000;
+static const uint32_t NFC_POLL_MS = 100;   // between tag polls
+static const uint32_t NFC_RETRY_MS = 5000;  // between looks for an absent PN532
 static const uint32_t AIR_MS = 10000;      // a forced-mode reading every 10 s: the sensor barely warms itself
 static const uint32_t SAMPLE_RATE = 8000;
 
@@ -60,99 +69,50 @@ struct Lamp {
     if (m > 4) return;
     if (m != mode) { mode = m; since = millis(); }
   }
-  void update(uint32_t now) {
-    bool lit = false;
-    uint32_t t = now - since;
-    switch (mode) {
-      case 1: lit = true; break;
-      case 2: lit = (t / FLASH_MS) % 2 == 0; break;
-      case 3: lit = t < 6 * BLINK3_MS && (t / BLINK3_MS) % 2 == 0; break;
-      case 4: lit = (t / RAPID_MS) % 2 == 0; break;
-    }
-    digitalWrite(pin, lit ? HIGH : LOW);
-  }
+  void update(uint32_t now) { digitalWrite(pin, panel::lampLit(mode, now - since) ? HIGH : LOW); }
 };
 
 struct Button {
-  uint8_t pin; char code; bool longPress;  // longPress: "P" on a short press's release, "L" once held LONG_MS
-  bool down = false, fired = false; uint32_t changed = 0, pressedAt = 0;
-  void send(char kind) { Serial.print(kind); Serial.print(' '); Serial.println(code); }
+  uint8_t pin; char code;
+  panel::ButtonTimer timer;  // "P" on a short press's release, "L" once held 800 ms
   void poll(uint32_t now) {
-    bool pressed = digitalRead(pin) == LOW;
-    if (pressed != down) {
-      if (now - changed < DEBOUNCE_MS) return;
-      down = pressed; changed = now;
-      if (down) {
-        pressedAt = now; fired = false;
-        if (!longPress) send('P');
-      } else if (longPress && !fired) {
-        send('P');
-      }
-      return;
-    }
-    changed = now;
-    if (down && longPress && !fired && now - pressedAt >= LONG_MS) { fired = true; send('L'); }
+    char kind = timer.poll(digitalRead(pin) == LOW, now);
+    if (kind) { Serial.print(kind); Serial.print(' '); Serial.println(code); }
   }
 };
 
-// ---------- speaker: samples from the PC through a ring buffer, played as 40 kHz PWM by a timer1 callback ----------
-// PWM, not the ESP8266's sigma-delta: a first-order sigma-delta slow enough for the push-pull pair (1 kOhm base
-// pull-up) repeats its pattern every 256 clocks, an audible whine in the speech band. PWM has one pulse per period at
-// any duty, so the slow rising edge costs the same at every level (an offset, no distortion).
-static const uint32_t RING = 8192;  // 1 s of audio; the PC keeps about 0.25 s queued
-static uint8_t ring[RING];
-static volatile uint32_t ringHead = 0, ringTail = 0;  // head: written by loop(), tail: by the timer callback
-static const uint32_t PWM_PERIOD = F_CPU / 40000;    // 40 kHz carrier: inaudible, 5 periods per 8 kHz sample
-static const uint32_t SPIN = F_CPU / 1000000 * 8;    // edges nearer than 8 us: wait them out here (the core won't
-                                                     // schedule timer interrupts closer than 4 us)
-static const uint32_t EARLY = F_CPU / 1000000 * 3;   // ask for the interrupt 3 us before an edge and wait out the
-                                                     // rest: entry latency varies (e.g. loop() on a flash cache miss)
-static const uint32_t SPK_BIT = 1u << 15;            // PIN_SPEAKER = GPIO15
-static const uint32_t SUBS = F_CPU / PWM_PERIOD / SAMPLE_RATE;  // PWM periods per sample
-static uint32_t nextEdge = 0, periodStart = 0, idleSamples = 0;
-static uint8_t level = 0, sub = 0;
-static bool spkHigh = false, ticked = false;
+// ---------- speaker: samples from the PC through a ring buffer, played over I2S by a task above loop()'s ----------
+// The MAX98357 takes 16-bit I2S with no master clock; each sample goes to both slots, so it plays whichever channel
+// the board's SD wiring selects. The ring is single-producer (loop() moves head) single-consumer (the speech task
+// moves tail), so the volatile indices need no lock. The task blocks in i2s.write() while the DMA buffers are full,
+// which paces it at 8 kHz and leaves the rest of the time to loop().
+static const uint32_t RING = 8192;    // 1 s of audio; the PC keeps about 0.25 s queued
+static volatile uint8_t ring[RING];
+static volatile uint32_t ringHead = 0, ringTail = 0;  // head: written by loop(), tail: by the speech task
+static volatile uint8_t volume = 50;  // percent, from "V"
+static const uint32_t CHUNK = 64;     // frames per i2s.write(): 8 ms
+static I2SClass i2s;
 
-static inline __attribute__((always_inline)) void sampleTick() {
-  // Once per PWM period, after that period's edge is set: a sample lasts SUBS periods (taken at once while silent).
-  if (++sub < SUBS && level) return;
-  sub = 0;
-  if (ringTail != ringHead) {
-    level = ring[ringTail];
-    ringTail = (ringTail + 1) % RING;
-    idleSamples = 0;
-  } else if (++idleSamples > SAMPLE_RATE / 2 && level && (idleSamples & 15) == 0) {
-    level--;  // stream stopped without its ramp down: fade to off over up to 0.5 s so the coupling cap doesn't thump
-  }           // a short gap holds the last sample
-}
-
-static uint32_t IRAM_ATTR audioTick() {
-  // Called on every timer1 interrupt (tone() shares the timer), so it keeps its own time on the cycle counter.
-  // Each edge is set straight after its wait, and the sample bookkeeping runs in the longer half of the period:
-  // work done before an edge on only some periods (every 5th, at each new sample) would make an 8 kHz whine.
+static void speechTask(void *) {
+  static int16_t frames[CHUNK * 2];  // left, right
+  int16_t last = 0;                  // the last sample played from the ring, faded out when it runs empty
+  uint32_t idle = 0;                 // samples since the ring ran empty
   for (;;) {
-    int32_t wait = (int32_t)(nextEdge - ESP.getCycleCount());
-    if (wait > (int32_t)SPIN) return wait - EARLY;
-    while ((int32_t)(nextEdge - ESP.getCycleCount()) > 0) {}  // exact edge
-    if (spkHigh) {  // end of the pulse
-      GPOC = SPK_BIT; spkHigh = false;
-      if (!ticked) sampleTick();
-      nextEdge = periodStart + PWM_PERIOD;
-      continue;
+    for (uint32_t i = 0; i < CHUNK; i++) {
+      int16_t s;
+      uint32_t tail = ringTail;
+      if (tail != ringHead) {
+        s = last = panel::toPcm(ring[tail], volume);
+        ringTail = (tail + 1) % RING;
+        idle = 0;
+      } else if ((s = panel::fadeTowardSilence(last, idle)) != 0) {
+        idle++;
+      } else {
+        last = 0;  // faded out: zeros from here on, which keep the amplifier settled between phrases
+      }
+      frames[2 * i] = frames[2 * i + 1] = s;
     }
-    periodStart = nextEdge;  // start of a period
-    if ((int32_t)(ESP.getCycleCount() - periodStart) > (int32_t)PWM_PERIOD) periodStart = ESP.getCycleCount();
-    uint32_t high = level * PWM_PERIOD >> 8;
-    if (high) {
-      GPOS = SPK_BIT; spkHigh = true;
-      nextEdge = periodStart + high;
-      ticked = high >= PWM_PERIOD / 2;  // long pulse: do the bookkeeping now, else after the falling edge
-      if (ticked) sampleTick();
-      continue;
-    }
-    sampleTick();  // no pulse this period
-    // silent: look again in 1 ms instead of 40 000 interrupts a second
-    nextEdge = periodStart + (!level && ringTail == ringHead ? F_CPU / 1000 : PWM_PERIOD);
+    if (i2s.write((const uint8_t *)frames, sizeof frames) == 0) vTaskDelay(1);  // an I2S error: don't spin
   }
 }
 
@@ -268,6 +228,76 @@ struct Air {
   }
 };
 
+// ---------- NFC: PN532 on the shared I2C bus, a state machine of short transactions (each well under 20 ms) ----------
+// Commands go out as frames (pn532.h), the chip ACKs, then answers when done; the answer's ready bit is polled. The
+// poll is InListPassiveTarget with no retries (RFConfiguration), so the chip answers at once, tag or not.
+struct Nfc {
+  enum Phase : uint8_t { SEND, ACK, RESP };
+  Phase phase = SEND;
+  uint8_t cmd = 0, fails = 0;  // cmd: 0 SAMConfiguration, 1 RFConfiguration, 2 InListPassiveTarget (the polling)
+  bool nacked = false;         // the chip NACKed the last write: it may need a few ms after an exchange (UM0701 6.2.4)
+  bool ok = false;             // initialised and answering
+  bool loud = false;           // announce changes (not during the boot probe: HELLO says it then)
+  uint32_t due = 0, deadline = 0, retryMs = NFC_RETRY_MS;
+  TagGate gate;
+  static constexpr uint8_t ARGS[3][6] = {{0x14, 0x01, 0x00, 0x01}, {0x32, 0x05, 0xFF, 0x01, 0x00}, {0x4A, 0x01, 0x00}};
+  static constexpr uint8_t ARGN[3] = {4, 5, 3};
+
+  void say() { Serial.println(ok ? "NFC ok" : "NFC none"); }
+  void note() { if (loud) say(); }
+  void fail(uint32_t now) {
+    static const uint8_t cancel[6] = {0x00, 0x00, 0xFF, 0x00, 0xFF, 0x00};  // an ACK frame aborts the chip's command
+    Wire.beginTransmission(PN532_ADDR); Wire.write(cancel, 6); Wire.endTransmission();
+    phase = SEND; nacked = false;
+    if (ok && ++fails < 3) { due = now + NFC_POLL_MS; return; }
+    if (ok) { ok = false; note(); }
+    cmd = 0; fails = 0; due = now + retryMs;
+  }
+  void poll(uint32_t now) {
+    if ((int32_t)(now - due) < 0) return;
+    uint8_t r[64];  // status + the largest InListPassiveTarget answer we read; a longer ATS is clipped, not a failure
+    if (phase == SEND) {
+      uint8_t f[16], n = pn532Frame(f, ARGS[cmd], ARGN[cmd]);
+      Wire.beginTransmission(PN532_ADDR); Wire.write(f, n);
+      if (Wire.endTransmission() != 0) {
+        if (!nacked) { nacked = true; deadline = now + 10; }  // a few ms of grace before it counts
+        if ((int32_t)(now - deadline) >= 0) fail(now); else due = now + 2;
+        return;
+      }
+      nacked = false;
+      phase = ACK; due = now + 3; deadline = now + 100;
+      return;
+    }
+    uint8_t want = phase == ACK ? 7 : sizeof r;
+    if (Wire.requestFrom(PN532_ADDR, want) != want) {  // a NACK: retry until the deadline
+      if ((int32_t)(now - deadline) >= 0) fail(now); else due = now + 3;
+      return;
+    }
+    for (uint8_t i = 0; i < want; i++) r[i] = Wire.read();
+    if (phase == ACK) {
+      if (!pn532IsAck(r)) { if ((int32_t)(now - deadline) >= 0) fail(now); else due = now + 5; return; }
+      phase = RESP; due = now + 10; deadline = now + 100;
+      return;
+    }
+    if (!pn532Ready(r)) { if ((int32_t)(now - deadline) >= 0) fail(now); else due = now + 10; return; }
+    uint8_t n = 0;
+    bool clipped;
+    const uint8_t *d = pn532Answer(r, sizeof r - 1, ARGS[cmd][0] + 1, n, &clipped);
+    if (!d) { fail(now); return; }
+    fails = 0; phase = SEND; due = now + 3;
+    if (cmd < 2) {
+      if (++cmd == 2) { ok = true; note(); }
+      return;
+    }
+    due = now + NFC_POLL_MS;
+    uint8_t uid[10], len;
+    if (!pn532Uid(d, n, uid, len) || !gate.report(uid, len, now)) return;
+    char hex[21];
+    pn532Hex(uid, len, hex);
+    Serial.print("TAG "); Serial.println(hex);
+  }
+};
+
 // ---------- OLED: SSD1306 128x64 on the shared I2C bus; the PC sends the text, the bottom line is room air ----------
 // U8g2 (BSD-2-Clause) with two fonts only: u8g2_font_helvB10_tf (title; Adobe/DEC X11 HELVB10.BDF, permissive, its
 // notice is in ../PANEL.md) and u8g2_font_6x10_tf (body + air line; X11 Misc-Fixed, public domain).
@@ -317,54 +347,72 @@ struct Display {
 };
 
 static Lamp hold{PIN_LAMP_HOLD}, discard{PIN_LAMP_DISCARD};
-static Button btnHold{PIN_BTN_HOLD, 'H', true}, btnDiscard{PIN_BTN_DISCARD, 'D', true};
+static Button btnHold{PIN_BTN_HOLD, 'H'}, btnDiscard{PIN_BTN_DISCARD, 'D'};
 static Air air;
+static Nfc nfc;
 static Display display;
 static uint32_t lastL = 0;
 static uint16_t beepHz = 0, beepMs = 0; static uint8_t beepsLeft = 0; static uint32_t nextBeep = 0;
+static bool beeping = false; static uint32_t beepEnd = 0;
 static char line[64]; static uint8_t len = 0;
 static uint16_t binLeft = 0;  // raw audio bytes still to come after an "A <n>" line
 
-static void hello() { Serial.print("HELLO intake-panel "); Serial.println(VERSION); }
+static void hello() {
+  Serial.print("HELLO intake-panel "); Serial.print(VERSION); Serial.println(" esp32c3");
+  nfc.say();
+}
 
-static void handle(char *s) {
-  if (s[0] == '?') { hello(); return; }
-  if (s[0] == 'L') {
-    int h, d;
-    if (sscanf(s + 1, "%d %d", &h, &d) == 2) {
-      hold.set(h); discard.set(d); lastL = millis(); display.setOffline(false);
-    }
-  } else if (s[0] == 'D' && s[1] == ' ' && s[2] >= '0' && s[2] <= '4' && (s[3] == ' ' || s[3] == 0)) {
-    display.set(s[2] - '0', s[3] ? s + 4 : "");
-  } else if (s[0] == 'B') {
-    int hz, ms, n = 1;
-    if (sscanf(s + 1, "%d %d %d", &hz, &ms, &n) >= 2 && hz >= 100 && hz <= 10000 && ms > 0 && ms <= 2000) {
-      beepHz = hz; beepMs = ms; beepsLeft = constrain(n, 1, 5); nextBeep = millis();
-    }
-  } else if (s[0] == 'A') {
-    int n;
-    if (sscanf(s + 1, "%d", &n) == 1 && n > 0 && n <= 1024) binLeft = n;
+static void handle(const char *s) {
+  panel::Command cmd;
+  if (!panel::parseLine(s, cmd)) return;
+  switch (cmd.kind) {
+    case '?': hello(); break;
+    case 'L': hold.set(cmd.a); discard.set(cmd.b); lastL = millis(); display.setOffline(false); break;
+    case 'D': display.set(cmd.a, cmd.text); break;
+    case 'B': beepHz = cmd.a; beepMs = cmd.b; beepsLeft = cmd.c; nextBeep = millis(); break;
+    case 'A': binLeft = cmd.a; break;
+    case 'V': volume = cmd.a; break;
   }
 }
 
+// The buzzer module is active-low (low-level trigger, transistor-switched): pin LOW is ON, so silence is the pin held
+// HIGH (LOW would keep the transistor on with DC through the coil). A beep is a 50% square wave on the LEDC channel.
+static void buzzerIdle() {
+  ledcDetach(PIN_BUZZER);
+  pinMode(PIN_BUZZER, OUTPUT);
+  digitalWrite(PIN_BUZZER, HIGH);
+}
+static void buzzerTone(uint32_t hz) {
+  ledcAttach(PIN_BUZZER, 2000, 10);  // the buzzer's own LEDC channel; ledcWriteTone() sets the pitch
+  ledcWriteTone(PIN_BUZZER, hz);
+}
+
 void setup() {
-  WiFi.mode(WIFI_OFF);  // USB only; the radio would just add heat and noise
-  WiFi.forceSleepBegin();
   Serial.setRxBufferSize(2048);  // audio arrives at ~8 KB/s; covers a slow I2C read
+  Serial.setTxTimeoutMs(0);      // no host reading: drop output instead of stalling loop()
   Serial.begin(115200);
-  for (uint8_t p : {PIN_LAMP_HOLD, PIN_LAMP_DISCARD, PIN_BUZZER, PIN_SPEAKER}) {
+  for (uint8_t p : {PIN_LAMP_HOLD, PIN_LAMP_DISCARD}) {
     pinMode(p, OUTPUT); digitalWrite(p, LOW);
   }
   pinMode(PIN_BTN_HOLD, INPUT_PULLUP);
   pinMode(PIN_BTN_DISCARD, INPUT_PULLUP);
-  // The PC keeps the duty within 16-240: pulses of 1.6 us or more, about 5 time constants of the 1 kOhm pull-up
-  // charging the push-pull pair's bases.
-  nextEdge = ESP.getCycleCount() + F_CPU / 1000;
-  setTimer1Callback(audioTick);
+  buzzerIdle();
+  i2s.setPins(PIN_I2S_BCLK, PIN_I2S_LRC, PIN_I2S_DIN);
+  bool speech = i2s.begin(I2S_MODE_STD, SAMPLE_RATE, I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO);
+  // setup() runs in loopTask: one priority above it
+  if (speech) xTaskCreate(speechTask, "speech", 3072, nullptr, uxTaskPriorityGet(nullptr) + 1, nullptr);
   Wire.begin(PIN_SDA, PIN_SCL);
+  Wire.setClock(400000);  // a full OLED update stays short
+  u8g2.setBusClock(400000);
   delay(50);
+  // look for the PN532 for up to 150 ms so the first NFC line is true; then every 5 s
+  nfc.retryMs = 10;
+  for (uint32_t end = millis() + 150; !nfc.ok && (int32_t)(millis() - end) < 0; delay(2)) nfc.poll(millis());
+  nfc.retryMs = NFC_RETRY_MS;
+  nfc.loud = true;
   Serial.println();
   hello();
+  if (!speech) Serial.println("I2S failed: no speech");
 }
 
 void loop() {
@@ -383,12 +431,14 @@ void loop() {
     }
   }
   if (lastL && now - lastL > WATCHDOG_MS) { hold.set(0); discard.set(0); lastL = 0; display.setOffline(true); }
+  if (beeping && (int32_t)(now - beepEnd) >= 0) { buzzerIdle(); beeping = false; }
   if (beepsLeft && (int32_t)(now - nextBeep) >= 0) {
-    tone(PIN_BUZZER, beepHz, beepMs);
+    buzzerTone(beepHz); beeping = true; beepEnd = now + beepMs;
     beepsLeft--; nextBeep = now + beepMs + 60;
   }
   btnHold.poll(now); btnDiscard.poll(now);
   hold.update(now); discard.update(now);
   air.poll(now);
+  nfc.poll(now);
   display.poll(now, air);
 }

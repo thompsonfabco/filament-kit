@@ -216,6 +216,70 @@ def cmd_station_pair(ask=input) -> int:
     return 1 if result.status in ("failed", "declined") else 0
 
 
+def cmd_station_flash_panel(ask=input, run=subprocess.run) -> int:
+    """On the station PC: write the panel firmware to a blank ESP32-C3 board. A bench reader plugged in for power looks
+    the same as a blank panel, so each candidate port is flashed only after the owner says yes to that port."""
+    from .station import panel
+    if not _is_root():
+        print("error: run as root: sudo filament-kit station flash-panel", file=sys.stderr)
+        return 1
+    service = "filament-kit-station.service"
+    was_active = run(["systemctl", "is-active", service], check=False).returncode == 0  # only restart what was running
+    try:
+        stopped = run(["systemctl", "stop", service], check=False)
+        if stopped.returncode not in (0, 5):  # 5: the unit isn't loaded (no service to stop)
+            print(f"error: could not stop {service} (systemctl exit {stopped.returncode}); its panel port may look "
+                  "blank. Nothing was flashed.", file=sys.stderr)
+            return 1
+        version = panel.fw_version()
+        if not version:
+            print("error: this station has no panel firmware bundled; nothing was flashed.", file=sys.stderr)
+            return 1
+        ports = panel.blank_c3_ports()
+        if not ports:
+            print("No blank ESP32-C3 board found: plug the board's USB port into this PC (a board that already "
+                  "runs the panel firmware doesn't need flashing). Nothing was flashed.", file=sys.stderr)
+            return 1
+        for port in ports:
+            print(f"Found a USB serial board on {port} that does not answer as the intake panel.")
+            try:
+                answer = ask(f"Flash the intake panel firmware to {port}? [y/N] ")
+            except (EOFError, RuntimeError, OSError):  # no terminal: no answer is a no
+                print("error: `sudo filament-kit station flash-panel` needs a terminal to ask you. Nothing was "
+                      "flashed.", file=sys.stderr)
+                return 1
+            except KeyboardInterrupt:
+                print("\nNothing was flashed.")
+                return 1
+            if answer.strip().lower() in ("y", "yes"):
+                return _flash_and_verify(panel, port, version)
+        print("Nothing was flashed.")
+        return 1
+    finally:
+        if was_active:
+            run(["systemctl", "start", service], check=False)
+
+
+def _flash_and_verify(panel, port: str, version: str) -> int:
+    """Flash port, then ask the board for its HELLO: success only when it reports the bundled version."""
+    if not panel.flash_panel(port, version):
+        print(f"error: writing the firmware to {port} failed (esptool); the board may still be blank. Unplug and "
+              "replug it, then run this again.", file=sys.stderr)
+        return 1
+    time.sleep(2)
+    ser = panel.open_panel(port)
+    seen = ser.panel_version if ser else None
+    if ser:
+        ser.close()
+    if seen != version:
+        print(f"error: {port} was written but does not answer with firmware {version}"
+              + (f" (it says {seen})" if seen else "") + ". Unplug and replug it, then run this again.",
+              file=sys.stderr)
+        return 1
+    print(f"Wrote panel firmware {version} to {port}; the board answers.")
+    return 0
+
+
 def cmd_station_pair_local() -> int:
     """`station pair --local`: the station on the machine that is also the kit server (the setup page's button). Nothing
     to compare by eye, nothing to paste: this machine makes the link, and pair_with_link checks the certificate it finds
@@ -1791,6 +1855,7 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     stp_sub = stp.add_subparsers(dest="station_cmd", required=True)
     stpp = stp_sub.add_parser("pair", help="pair the station's button flow with the server (link from 'pair --station')")
     stpp.add_argument("--local", action="store_true", help="the kit server is this machine: no link, nothing to compare")
+    stp_sub.add_parser("flash-panel", help="write the panel firmware to a blank ESP32-C3 board, after you confirm the port")
     stp_sub.add_parser("pairing-state", help="print whether the button flow is paired, as one line")
     pkind.add_argument("--text", action="store_true", help="print the pairing link as text instead of a QR code")
     up = sub.add_parser("unpair", help="list or remove paired phones")
@@ -1933,6 +1998,8 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
         return cmd_pair(pc=args.pc, station=args.station, text=args.text)
     if args.cmd == "station" and args.station_cmd == "pair" and args.local:
         return cmd_station_pair_local()
+    if args.cmd == "station" and args.station_cmd == "flash-panel":
+        return cmd_station_flash_panel()
     if args.cmd == "station":
         return cmd_station_pairing_state() if args.station_cmd == "pairing-state" else cmd_station_pair()
     if args.cmd == "unpair":

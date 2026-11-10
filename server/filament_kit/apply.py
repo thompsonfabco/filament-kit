@@ -152,6 +152,16 @@ def spoolman_dropin(cfg: dict) -> str:
     return f"[Service]\nIPAddressDeny=any\nIPAddressAllow={' '.join(['localhost', *spoolman_allow(cfg)])}\n"
 
 
+def _volume(v) -> int:
+    """The speaker volume as an int clamped to 0-100: an int, or a float with an integer value; 50 for anything else
+    (a bool included)."""
+    if isinstance(v, float) and v.is_integer():
+        v = int(v)
+    if isinstance(v, bool) or not isinstance(v, int):
+        return 50
+    return max(0, min(100, v))
+
+
 def station_dropin(cfg: dict, addresses: list[str]) -> str:
     """Text of the station drop-in (spec section 5); `addresses` are already resolved. The unit denies every
     address but these, so the paired server's addresses (its LAN IPs in an all-in-one) are let through too: the
@@ -168,7 +178,8 @@ def station_dropin(cfg: dict, addresses: list[str]) -> str:
            f"STATION_CAMERA={st['camera']}",
            f"STATION_PANEL_FW={config.paths().opt.as_posix()}/resources/panel/intake-panel.bin",
            f"STATION_PANEL_FLASH={1 if st['panel_flash'] else 0}",
-           f"STATION_PANEL_SWAP={1 if st.get('panel_swap') else 0}"]
+           f"STATION_PANEL_SWAP={1 if st.get('panel_swap') else 0}",
+           f"STATION_SPEAKER_VOLUME={_volume(st.get('speaker_volume', 50))}"]
     if st.get("beep_device"):
         env.append(f"STATION_BEEP_DEVICE={st['beep_device']}")
     server = next((h for h in st.get("allow") or [] if h), None)

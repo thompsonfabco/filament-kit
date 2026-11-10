@@ -80,7 +80,7 @@ def test_install_copies_the_panel_firmware_pair_as_a_resource():
     rel = _text(INSTALL.parent / "tools" / "make_release.sh")
     assert "station/panel/firmware/intake-panel.bin" in rel
     fw = INSTALL.parent / "station" / "panel" / "firmware"
-    assert (fw / "intake-panel.bin").read_bytes()[:1] == b"\xe9"  # an ESP8266 image, untouched by line-ending rules
+    assert (fw / "intake-panel.bin").read_bytes()[:1] == b"\xe9"  # a C3 merged image, untouched by line-ending rules
     assert (fw / "VERSION").read_text().strip().isdigit()
     assert "firmware/*.bin binary" in _text(INSTALL.parent / ".gitattributes")
 

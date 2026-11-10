@@ -1,20 +1,23 @@
-"""The button panel (station/panel/ firmware + PANEL.md in the repo): a D1 mini on USB serial with a buzzer, an OLED,
+"""The button panel (station/panel/ firmware + PANEL.md in the repo): an ESP32-C3 on USB serial with a buzzer, an OLED,
 a speaker and two lit buttons, yellow (Hold) and red (Discard), relayed to the intake flow (`flow`).
 
 The station keeps the panel's firmware current: a panel whose HELLO version differs from the bundled one
 (STATION_PANEL_FW, VERSION beside it) is reflashed over USB with esptool, once per version per run, then found
 again; if the flash doesn't take the panel is used as it is. STATION_PANEL_FLASH=0 turns that off.
 
-Both the panel and the PN532 board use CH340 USB serial chips (no serial numbers), so the panel is found by its HELLO
-and the reader gets the other ttyUSB port (NFC_DEVICE=auto).
-Protocol (firmware 9), 115200 baud, one line each: PC -> panel `?`, `L <yellow> <red>` (lamp modes 0-4, resent every
-second), `D <row> [text]` (OLED row 0 the title, 1-4 the body; sent when it changes), `B <hz> <ms> [count]`;
+The panel is found by its HELLO: ttyACM ports with USB vendor 303a (the C3), then ttyUSB; an old CH340 panel and the
+PN532 board can swap ttyUSB numbers, so the reader gets the other port (NFC_DEVICE=auto).
+Protocol (firmware 11), 115200 baud, one line each: PC -> panel `?`, `L <yellow> <red>` (lamp modes 0-4, resent every
+second), `D <row> [text]` (OLED row 0 the title, 1-4 the body; sent when it changes), `B <hz> <ms> [count]`, `V <percent>` (speech volume, 0-100);
 `A <n>` + n raw bytes (speech, see `speech`);
-panel -> PC `HELLO intake-panel <version>`, `P H` / `P D` (the D1 / D2 button, a short press, on release),
-`L H` / `L D` (the D1 / D2 button held 0.8 s), `AIR <C> <RH|-> <hPa>` (see `air`).
+panel -> PC `HELLO intake-panel <version> [<chip>]` (firmware 10: `esp32c3`; no chip token: an ESP8266), `P H` / `P D` (the yellow / red button, a short press, on release),
+`L H` / `L D` (the yellow / red button held 0.8 s), `AIR <C> <RH|-> <hPa>` (see `air`);
+firmware 11 adds `TAG <uid hex>` (a tag read by the PN532 on the panel's I2C bus, handled like the USB reader's, and
+the same tag from either reader within 2 s is one tap: `nfc.on_identifier`) and `NFC ok` / `NFC none` (whether that
+PN532 answers, after each HELLO and when it changes).
 
-D1 (`H`) is yellow and D2 (`D`) red, as PANEL.md wires them. A panel wired the other way round (yellow's button and
-lamp on D2/D6) sets station.panel_swap (STATION_PANEL_SWAP=1): the buttons' roles and the `L` lamp modes are swapped
+`H` is yellow and `D` red, as PANEL.md wires them. A panel wired the other way round (yellow's button and
+lamp on red's pins) sets station.panel_swap (STATION_PANEL_SWAP=1): the buttons' roles and the `L` lamp modes are swapped
 here, so the wiring never needs a reflash. Firmware 9 reports both buttons alike for that; a long press on red
 cancels like a short one.
 """
@@ -22,11 +25,12 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import subprocess
 import sys
 import time
 
-from . import air, flow, wire
+from . import air, flow, nfc, wire
 from . import state as st
 
 log = logging.getLogger("intake-station")
@@ -42,6 +46,20 @@ def on_line(line: bytes):
             flow.on_red()
     elif line.startswith(b"AIR "):
         air.on_air(line)
+    elif line.startswith(b"TAG "):  # the panel's own PN532 (firmware 11): same path as the USB reader
+        hexid = line[4:].strip()
+        if not re.fullmatch(rb"(?:[0-9a-fA-F]{2}){4}|(?:[0-9a-fA-F]{2}){7}|(?:[0-9a-fA-F]{2}){10}", hexid):
+            log.warning("button panel: ignoring TAG line %r (not 4, 7 or 10 bytes of contiguous hex)", line[:40])
+            return
+        nfc.on_identifier(bytes.fromhex(hexid.decode("ascii")))
+    elif line in (b"NFC ok", b"NFC none"):
+        st.ports["panel_nfc"] = line == b"NFC ok"
+        log.info("button panel NFC reader: %s", line[4:].decode())
+    elif line.startswith(b"HELLO intake-panel"):  # unasked: the panel reset without its port dropping
+        if line.split()[3:4] == [b"esp32c3"]:
+            send_volume()  # it forgot the volume
+        st.panel_resend.set()
+        st.panel_dirty.set()
 
 
 class Shown:
@@ -54,6 +72,9 @@ class Shown:
 def refresh(seen: Shown, now: float) -> bool:
     """Keep the panel current: the lamps when they change, every second (its 5 s watchdog) or when the flow moved,
     then any display row that changed. False when the panel went away."""
+    if st.panel_resend.is_set():  # a reset panel shows nothing: forget what was sent
+        st.panel_resend.clear()
+        seen.lamps, seen.rows = None, [None] * 5
     modes = flow.lamps(now)
     if modes != seen.lamps or now - seen.at >= 1 or st.panel_dirty.is_set():
         st.panel_dirty.clear()
@@ -76,30 +97,37 @@ def fw_version():
 
 
 def flash_panel(dev, version):
-    """Write the bundled firmware to the panel on dev with esptool (the D1 mini's USB chip resets it into its ROM
-    bootloader, so a failed write can always be retried). Never touches the reader's port; keeps the panel's port
-    claimed (ports["panel"]) so nfcpy never opens it meanwhile."""
+    """Write the bundled (merged, address 0) firmware to the ESP32-C3 panel on dev with esptool (its native USB
+    resets into the ROM bootloader, so a failed write can always be retried). Never touches the reader's port; keeps the panel's port
+    claimed (ports["panel"]) so nfcpy never opens it meanwhile. True only when esptool exits 0."""
     if dev == st.ports["nfc"]:
         log.warning("not flashing %s: it is the NFC reader's port", dev)
-        return
+        return False
     log.info("flashing button panel on %s with firmware %s", dev, version)
-    cmd = [sys.executable, "-m", "esptool", "--chip", "esp8266", "--port", dev, "--baud", "460800",
-           "write-flash", "0x0", st.settings["panel_fw"]]
+    cmd = [sys.executable, "-m", "esptool", "--chip", "esp32c3", "--port", dev, "--baud", "460800",
+           "--before", "default-reset", "--after", "hard-reset", "write-flash", "0x0", st.settings["panel_fw"]]
+    ok = False
     try:
         p = subprocess.run(cmd, capture_output=True, timeout=180)
+        ok = p.returncode == 0
         tail = (p.stdout + p.stderr).decode(errors="replace").strip().splitlines()[-3:]
         (log.info if p.returncode == 0 else log.warning)("esptool exit %d: %s", p.returncode, " | ".join(tail))
     except (OSError, subprocess.TimeoutExpired) as e:
         log.warning("esptool: %s", e)
     time.sleep(2)  # let it boot
+    return ok
 
 
 def update_firmware(ser):
-    """Reflash the panel behind ser if it runs other firmware than the bundled one. True when it was flashed (ser is
+    """Reflash the ESP32-C3 panel behind ser if it runs other firmware than the bundled one. True when it was flashed (ser is
     closed; look for the panel again). Once per bundled version and run, so a build that won't take can't loop; then
     the panel is used as it is."""
     want = fw_version()
     if not want or ser.panel_version == want:
+        return False
+    if ser.panel_chip != "esp32c3":  # an ESP8266 panel: the C3 image would not run on it; never flash it
+        log.warning("button panel runs old firmware %s (an ESP8266, not the bundled %s); using it as it is",
+                    ser.panel_version, want)
         return False
     if st.settings["panel_flash"] and want not in st.flashed:
         st.flashed.add(want)
@@ -117,7 +145,8 @@ def open_panel(dev):
     import serial  # the [station] extra; only the panel loop needs it
     ser = serial.Serial()
     ser.port, ser.baudrate, ser.timeout = dev, 115200, 0.3
-    ser.dtr = ser.rts = False  # don't hold the D1 mini in reset / flash mode
+    ser.write_timeout = 1  # a stalled port must not hold panel_lock for long
+    ser.dtr = ser.rts = False  # don't hold the board in reset or flash mode
     try:
         ser.open()
         end, asked = time.time() + 3, False
@@ -125,6 +154,7 @@ def open_panel(dev):
             hello = ser.readline().split()
             if hello[:2] == [b"HELLO", b"intake-panel"]:
                 ser.panel_version = hello[2].decode(errors="replace") if len(hello) > 2 else "?"
+                ser.panel_chip = hello[3].decode(errors="replace") if len(hello) > 3 else None  # none: ESP8266
                 return ser
             if not asked and time.time() > end - 1.5:
                 ser.write(b"?\n")  # it didn't reset on open: ask
@@ -135,15 +165,33 @@ def open_panel(dev):
     return None
 
 
+def blank_c3_ports():
+    """The ttyACM ports of an Espressif USB device (303a) that give no HELLO within 3 s: candidates for a first flash.
+    Never a ttyUSB port (the PN532 or an old panel). A bench reader plugged in for power looks the same as a blank
+    board, so these are only candidates; the owner confirms each one."""
+    blank = []
+    for dev in st.panel_ttys():
+        if not os.path.basename(dev).startswith("ttyACM") or st.usb_vendor(dev) != st.PANEL_VENDOR:
+            continue
+        ser = open_panel(dev)
+        if ser:
+            ser.close()
+        else:
+            blank.append(dev)
+    return blank
+
+
 def find_panel():
     """One pass over the USB serial ports (skipping the reader's): the panel's port, or None. Records the result in
     ports["panel"] and sets `probed`, so the reader loop then takes another port."""
     ser = None
-    for dev in st.usb_ttys():
+    for dev in st.panel_ttys():
         if dev != st.ports["nfc"] and (ser := open_panel(dev)):
             break
     st.ports["panel"] = ser.port if ser else None
     st.ports["panel_version"] = ser.panel_version if ser else None
+    st.ports["panel_chip"] = ser.panel_chip if ser else None
+    st.ports["panel_nfc"] = None  # until the panel says
     st.probed.set()  # after ports["panel"], so a waiting reader never sees the panel's port as free
     return ser
 
@@ -159,8 +207,15 @@ def warn_swap_needs_fw9(version):
     except (TypeError, ValueError):
         pass
     log.warning("station.panel_swap is on but the panel runs firmware %s: yellow (on D2) can't long-press to save "
-                "until the panel has firmware 9 or later (STATION_PANEL_FLASH=1 reflashes it)", version)
+                "until it has firmware 9 or later; an ESP8266 panel has to be reflashed by hand, or replaced with "
+                "the C3 panel", version)
     return True
+
+
+def send_volume():
+    """Tell the C3 panel the speaker volume (percent). A setting change rewrites the drop-in and restarts the
+    service, so one send when the panel is found covers changes."""
+    return wire.panel_send("V %d" % st.settings["speaker_volume"])
 
 
 def panel_loop():
@@ -176,6 +231,8 @@ def panel_loop():
         warn_swap_needs_fw9(ser.panel_version)
         with st.panel_lock:
             st.panel["ser"] = ser
+        if ser.panel_chip == "esp32c3":
+            send_volume()
         seen = Shown()
         try:
             while st.panel["ser"] is ser:
@@ -187,6 +244,6 @@ def panel_loop():
         with st.panel_lock:
             st.panel["ser"] = None
         ser.close()
-        st.ports["panel"] = st.ports["panel_version"] = None
+        st.ports["panel"] = st.ports["panel_version"] = st.ports["panel_chip"] = st.ports["panel_nfc"] = None
         log.info("button panel gone")
         time.sleep(2)

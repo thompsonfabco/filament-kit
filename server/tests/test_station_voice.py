@@ -295,7 +295,10 @@ def test_panel_md_and_panel_py_know_the_current_firmware():
     assert '8: "Waiting for PC" boot title' in text and '"Waiting for PC"' in text.split("## Serial protocol")[1]
     assert "9: long press on both buttons" in text
     from filament_kit.station import panel
-    assert "Protocol (firmware 9)" in panel.__doc__
+    assert "10: ESP32-C3, I2S speech, V volume, chip token" in text
+    assert "`V <percent>`" in text.split("## Serial protocol")[1]
+    assert "11: PN532 on I2C, TAG and NFC lines" in text
+    assert "Protocol (firmware 11)" in panel.__doc__
     assert "station module switched on later" in text or "modules enable station" in text
 
 

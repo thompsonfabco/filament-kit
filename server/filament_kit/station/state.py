@@ -13,6 +13,14 @@ import threading
 from . import voice
 
 
+def volume_from_env() -> int:
+    """STATION_SPEAKER_VOLUME clamped to 0-100; 50 when unset or not a number."""
+    try:
+        return max(0, min(100, int(os.environ.get("STATION_SPEAKER_VOLUME", "50"))))
+    except ValueError:
+        return 50
+
+
 def settings_from_env() -> dict:
     return {
         "port": int(os.environ.get("STATION_PORT", "5003")),
@@ -31,6 +39,7 @@ def settings_from_env() -> dict:
         "panel_flash": os.environ.get("STATION_PANEL_FLASH", "1") != "0",
         # the panel is wired the other way round (yellow on D2/D6, red on D1/D5): swap the buttons and lamps
         "panel_swap": os.environ.get("STATION_PANEL_SWAP", "0") == "1",
+        "speaker_volume": volume_from_env(),  # the C3 panel's speaker, percent
         # the intake flow: no progress this long and it goes back to idle; a recognition (local AI, then Claude)
         # may take this long. The server's address and token come from the pairing files (server_api).
         "flow_timeout": int(os.environ.get("STATION_FLOW_TIMEOUT", "600")),
@@ -50,20 +59,46 @@ state = {"tag": None, "tag_at": None, "scale": None, "scale_at": None, "last": N
 # lines for the step and the station's own message
 flow = {"step": "idle", "seq": 0, "spool": None, "filament": None, "display": [], "message": "", "at": 0.0}
 # serial ports: the panel's (found by its HELLO) and the one nfcpy uses; neither probes the other's
-ports = {"panel": None, "panel_version": None, "nfc": None}
+ports = {"panel": None, "panel_version": None, "panel_chip": None, "panel_nfc": None, "nfc": None}
 flashed: set[str] = set()  # bundled firmware versions already written this run
 probed = threading.Event()  # set once the panel search has looked at every port, so nfcpy picks the right one
 panel_lock = threading.Lock()
 panel = {"ser": None}
 panel_dirty = threading.Event()
+panel_resend = threading.Event()  # the panel said HELLO on its own (it reset): refresh sends every row and lamp again
 
 
 def usb_ttys() -> list[str]:
-    return sorted(glob.glob("/dev/ttyUSB*"), key=lambda p: int(re.sub(r"\D", "", p) or 0))
+    return _by_number(glob.glob("/dev/ttyUSB*"))
+
+
+SYSFS_TTY = "/sys/class/tty"
+PANEL_VENDOR = "303a"  # Espressif: the ESP32-C3's own USB serial
+
+
+def _by_number(paths) -> list[str]:
+    return sorted(paths, key=lambda p: int(re.sub(r"\D", "", p) or 0))
+
+
+def usb_vendor(dev: str) -> str | None:
+    """The USB vendor ID (lowercase hex) of the device behind a tty, or None when sysfs doesn't say."""
+    try:
+        iface = os.path.realpath(os.path.join(SYSFS_TTY, os.path.basename(dev), "device"))  # the USB interface
+        with open(os.path.join(os.path.dirname(iface), "idVendor")) as f:  # its parent is the USB device
+            return f.read().strip().lower() or None
+    except OSError:
+        return None
+
+
+def panel_ttys() -> list[str]:
+    """The ports that may hold the button panel: ttyACM ports of an Espressif USB device (other ttyACM boards are
+    never opened), then the ttyUSB ports."""
+    acm = [d for d in glob.glob("/dev/ttyACM*") if usb_vendor(d) == PANEL_VENDOR]
+    return _by_number(acm) + usb_ttys()
 
 
 def view() -> dict:
     """A snapshot for the HTTP handler: the state plus the panel's port and firmware version and the flow."""
     with lock:
-        return dict(state, panel=ports["panel"], panel_version=ports["panel_version"],
+        return dict(state, panel=ports["panel"], panel_version=ports["panel_version"], panel_nfc=ports["panel_nfc"],
                     flow={k: flow[k] for k in ("step", "message", "spool", "filament")})

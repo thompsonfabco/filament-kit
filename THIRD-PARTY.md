@@ -14,7 +14,8 @@ This page lists the components a filament-kit release contains or the installer 
 |---|---|
 | filament-kit (the wheel, `install.sh`, `uninstall.sh`, units, `get.sh`) | GPL-3.0-or-later |
 | `bambu_hardware.xml` | GPL-3.0-or-later |
-| Button-panel firmware `install/panel/intake-panel.bin` | GPL-3.0-or-later (our source, `station/panel/src`), built with the ESP8266 Arduino core (LGPL-2.1) and Espressif's ESP8266 SDK binaries (Espressif MIT-style licence) |
+| Button-panel firmware `install/panel/intake-panel.bin` | GPL-3.0-or-later (our source, `station/panel/src`), built with the ESP32 Arduino core (LGPL-2.1) |
+| Button-panel firmware: pioarduino platform-espressif32 and ESP-IDF components | Apache-2.0 |
 | The Android app `app/filament-kit.apk` | see [The Android app](#the-android-app) |
 
 ## Installed on the server by the installer

@@ -1,5 +1,5 @@
 // AHT20 humidity / temperature sensor (I2C 0x38; often paired with a BMP280 on one board): decoding of its 7-byte
-// measurement (status, 20-bit humidity, 20-bit temperature, CRC), kept free of Arduino so test/bme280_test.cpp
+// measurement (status, 20-bit humidity, 20-bit temperature, CRC), kept free of Arduino so test/test_core/test_main.cpp
 // can check it on the PC.
 #pragma once
 #include <stdint.h>
