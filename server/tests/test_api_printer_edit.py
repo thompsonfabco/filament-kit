@@ -294,6 +294,45 @@ def test_a_family_whose_module_is_off_is_409_module_off():
     assert SERIAL in registry.load()
 
 
+def _web_client(name, changes=None):
+    """A client with a web-role token: the kit's own phone web app (INTAKE_DEVICE) or the web module's."""
+    from filament_kit import web_access
+    from filament_kit.web.slots import INTAKE_DEVICE
+    if changes is not None:
+        config.save({"web": {"printer_changes": changes}})
+    c, b, k = _client(token=False)
+    code = pairing.issue(INTAKE_DEVICE if name == "home" else name, role=web_access.WEB_ROLE).code
+    c.headers["Authorization"] = "Bearer " + pairing.redeem_code(code)
+    return c
+
+
+@pytest.mark.parametrize("changes", [None, False])
+def test_the_web_modules_token_may_not_change_printers_while_the_switch_is_off(changes):
+    """Review R111 note 1: the kit holds the switch too, so a web module that skipped its own check gets 403."""
+    _bambu()
+    c = _web_client("web unit", changes)
+    for r in (c.patch(f"/api/printers/{SERIAL}", json={"name": "x"}), c.delete(f"/api/printers/{SERIAL}"),
+              c.post("/api/printers", json={"serial": SERIAL, "access_code": CODE})):
+        assert r.status_code == 403 and r.json()["error"] == "public_printer_changes_off", r.text
+        assert r.json()["message"].startswith("Printer changes from the public address are off.")
+    assert registry.load()[SERIAL].name == "Shop P1S"
+    assert c.get("/api/printers").status_code == 200                   # reads are unchanged
+
+
+def test_the_web_modules_token_may_change_printers_with_the_switch_on():
+    _bambu()
+    c = _web_client("web unit", True)
+    assert c.patch(f"/api/printers/{SERIAL}", json={"name": "Garage"}).status_code == 200
+    assert registry.load()[SERIAL].name == "Garage"
+
+
+def test_the_kits_own_phone_web_app_may_always_change_printers():
+    _bambu()
+    c = _web_client("home", False)
+    assert c.patch(f"/api/printers/{SERIAL}", json={"name": "Garage"}).status_code == 200
+    assert c.delete(f"/api/printers/{SERIAL}").status_code == 200
+
+
 def test_the_web_unit_may_add_edit_and_forget_for_the_phone_web_app():
     """Parity gap 3: the phone web app's Manage printers calls these with its own (web) token."""
     from filament_kit.api import WEB_ROUTES

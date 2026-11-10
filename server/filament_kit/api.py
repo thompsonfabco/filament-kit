@@ -191,6 +191,27 @@ def _web_may(method: str, path: str) -> bool:
     return any(m == method and rx.fullmatch(path) for m, rx in _WEB_MATCH)
 
 
+# The printer writes a web token may make (add, edit, forget). The kit's own phone web app (the built-in pairing
+# INTAKE_DEVICE, home network only) always may; the web module's (its public address) only while the owner's switch
+# "Allow printer changes from the public address" (config web.printer_changes) is on. The web module checks the same
+# switch; this holds it even if that internet-facing process does not (review R111 note 1).
+_PRINTER_WRITE = re.compile(r"/api/printers(?:/[^/]+)?")
+PUBLIC_PRINTER_CHANGES_OFF = ("Printer changes from the public address are off. Turn on \"Allow printer changes from "
+                              "the public address\" on the setup page (Settings, General), or use the page on the home "
+                              "network.")
+
+
+def _printer_write(method: str, path: str) -> bool:
+    return ((method == "POST" and path == "/api/printers")
+            or (method in ("PATCH", "DELETE") and path != "/api/printers" and bool(_PRINTER_WRITE.fullmatch(path))))
+
+
+def _web_printer_changes_ok(device: str) -> bool:
+    if (config.load().get("web") or {}).get("printer_changes") is True:
+        return True
+    return any(d["id"] == device and d["name"] == INTAKE_DEVICE for d in pairing.devices())
+
+
 def _authed(fn):
     @functools.wraps(fn)
     async def wrapper(request: Request):
@@ -208,6 +229,9 @@ def _authed(fn):
         path = request.scope["path"]
         if scope == "web" and not _web_may(request.method, path):
             return _err(403, "forbidden", "the web unit's token is for the web unit's routes only")
+        if (scope == "web" and _printer_write(request.method, path)
+                and not await run_in_threadpool(_web_printer_changes_ok, device)):
+            return _err(403, "public_printer_changes_off", PUBLIC_PRINTER_CHANGES_OFF)
         if scope != "web" and path.startswith(WEB_ONLY_PREFIX):
             return _err(403, "forbidden", "this route is for the web unit only")
         request.state.device = device

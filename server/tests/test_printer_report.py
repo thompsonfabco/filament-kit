@@ -548,3 +548,10 @@ def test_a_serial_shaped_value_is_left_out_of_every_field():
     assert printer_report._plain("BL-P001", printer_report.MODEL) == "BL-P001"
     assert printer_report._plain("N3F05", printer_report.NAME) == "N3F05"
     assert printer_report._plain("PLA-CF", printer_report.NAME) == "PLA-CF"
+
+
+def test_long_hex_presence_bits_stay():
+    """Review R110 note 1: the serial filter leaves hex shapes alone (a-f and digits can't spell a serial)."""
+    assert printer_report._plain("1000000000000f", printer_report.HEX_OR_INT) == "1000000000000f"
+    assert printer_report._plain("ffffffffffffffff", printer_report.HEX_OR_INT) == "ffffffffffffffff"
+    assert printer_report._plain("0948ZZ0A0000001", printer_report.HEX_OR_INT) is None   # not hex: the shape refuses it
