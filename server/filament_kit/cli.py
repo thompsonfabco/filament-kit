@@ -723,6 +723,28 @@ def _restore_signals(old: dict) -> None:
             pass
 
 
+NOT_CONNECTED = {
+    "wrong_code": "the printer refused its Access Code; enter it again (sudo filament-kit config, Printers)",
+    "cert_changed": "the printer's certificate changed; add it again with its Access Code "
+                    "(or run: sudo filament-kit printer unpin {serial})",
+}
+
+
+def _connect(m, serial: str) -> str | None:
+    """Start this command's own connection and wait until it has its first result, then for the printer's first
+    full report. `sync` only starts the connection and `wait_report` answers None at once until it is connected, so
+    a real printer (whose TLS and MQTT take a moment) always looked offline without this wait. None when ready,
+    else the line to print."""
+    m.sync()
+    state = m.wait_settled(serial, CONNECT_WAIT)
+    if state != "connected":
+        return NOT_CONNECTED.get(state, "the printer did not answer; check that it is on and on the network "
+                                        "({state})").format(serial=serial, state=state)
+    if m.wait_report(serial, lambda r: "gcode_state" in r, REPORT_WAIT) is None:
+        return "the printer connected but sent no report; try again in a moment"
+    return None
+
+
 def cmd_printer_map(serial: str, manager_factory) -> int:
     from .bridge import mapping
     from .bridge.connection import PrinterOffline, UnknownPrinter
@@ -736,9 +758,10 @@ def cmd_printer_map(serial: str, manager_factory) -> int:
     m = manager_factory(serial)
     stopped = []
     try:
-        m.sync()
-        m.wait_settled(serial, CONNECT_WAIT)
-        m.wait_report(serial, lambda r: "gcode_state" in r, REPORT_WAIT)
+        why = _connect(m, serial)
+        if why:
+            _err_line(why)
+            return 1
         mapper = mapping.Mapper(m)
 
         def on_signal(signum, frame):
@@ -808,8 +831,10 @@ def cmd_printer_report(serial: str, manager_factory) -> int:
         return 1
     m = manager_factory(serial)
     try:
-        m.sync()
-        m.wait_report(serial, lambda r: "gcode_state" in r, REPORT_WAIT)
+        why = _connect(m, serial)
+        if why:
+            _err_line(why)
+            return 1
         r = mapping.Mapper(m).report(serial)
     except (PrinterOffline, UnknownPrinter):
         _err_line("the printer is offline (or its Access Code is wrong); check that it is on and on the network")
