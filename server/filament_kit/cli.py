@@ -834,6 +834,7 @@ def _connect(m, serial: str) -> str | None:
 
 
 MANUAL_POLL = 1.0     # seconds between looks at the manual-map session
+SHARE_WAIT = 60.0     # seconds the share question waits for a line after the session (then it stays open)
 
 
 def _stdin_lines():
@@ -981,16 +982,21 @@ def _manual_map_via_server(api, serial: str, lines=None) -> int:
         print("Share this map in a printer report, so other owners of this model benefit? Nothing is sent unless you "
               "choose to. [y/N]", flush=True)
         try:
-            answer = lines.get(timeout=300)
+            answer = lines.get(timeout=SHARE_WAIT)
         except queue.Empty:
             answer = None
-        try:
-            r = api.post(base + "/offer", {"share": bool(answer) and answer.strip().lower() in ("y", "yes")})
-            print(r.get("message", ""))
-        except SlotError as e:
-            print(f"  {e}")
+        if answer is None:      # no answer is not a "no": the question stays for the setup page and the apps
+            print("No answer; the setup page and the apps ask again.")
+        else:
+            try:
+                r = api.post(base + "/offer", {"share": answer.strip().lower() in ("y", "yes")})
+                print(r.get("message", ""))
+            except SlotError as e:
+                print(f"  {e}")
     if stopped:
         return 130 if stopped[0] == getattr(signal, "SIGINT", None) else 1
+    if done_input:              # the input ended (no terminal): stopped, not finished, so a script sees a failure
+        return 1
     return 0
 
 
