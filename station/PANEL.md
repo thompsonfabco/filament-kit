@@ -15,42 +15,16 @@ spools for recognition. The station is installed as the `station` module (`filam
 Panels built on a Wemos D1 mini (ESP8266, firmware 9 and older) still work: the station uses them as they are but
 never reflashes them. Everything below describes firmware 11 on the C3.
 
-## Wiring
+## Wiring and parts
 
-| Function | C3 GPIO | Constant |
-|---|---|---|
-| I2C SDA (OLED, air sensor, NFC reader) | 5 | `PIN_SDA` |
-| I2C SCL (OLED, air sensor, NFC reader) | 6 | `PIN_SCL` |
-| Buzzer signal | 0 | `PIN_BUZZER` |
-| Yellow (Hold) switch, other side to G | 3 | `PIN_BTN_HOLD` |
-| Red (Discard) switch, other side to G | 4 | `PIN_BTN_DISCARD` |
-| Yellow lamp MOSFET gate | 1 | `PIN_LAMP_HOLD` |
-| Red lamp MOSFET gate | 7 | `PIN_LAMP_DISCARD` |
-| Amplifier BCLK | 10 | `PIN_I2S_BCLK` |
-| Amplifier LRC | 20 | `PIN_I2S_LRC` |
-| Amplifier DIN | 21 | `PIN_I2S_DIN` |
+The parts list, pin table, wiring, board, enclosure and bench checks for the panel are in the
+[intake-panel guide](https://github.com/thompsonfabco/filament-kit-hardware/tree/main/devices/intake-panel) of the
+[filament-kit-hardware](https://github.com/thompsonfabco/filament-kit-hardware) repository. What the station software does with the hardware stays here:
 
-Never use GPIO 2, 8, 9, 18 or 19 (strapping pins and the USB data pins). GPIO 20 and 21 are the C3's default UART,
-which the firmware doesn't use because its serial link is native USB. The ROM's boot text on GPIO 21 is harmless,
-because the amplifier stays silent with no I2S clock.
-
-- **Buzzer:** + / - to 3V3 / G, signal to GPIO 0.
-- **OLED (SSD1306 128x64, I2C 0x3C) and air sensor:** on the same I2C bus, VCC / GND to 3V3 / G. The bus needs
-  pull-ups: keep the sensor board's, or add 4.7 kΩ from SDA and SCL to 3V3 on a board that has none.
-- **NFC reader (optional, firmware 11):** a PN532 module (Elechouse NFC Module V3) set to I2C mode (address 0x24)
-  on the same SDA / SCL, VCC / GND to 3V3 / G. Its IRQ and RSTO pins stay unconnected: the firmware uses no pin but
-  SDA and SCL for it (GPIO 7 is a lamp and GPIO 10 the I2S clock). The panel looks for it at boot and every 5 s
-  after, so it can be plugged in later. The USB PN532 reader keeps working, alone or together with this one; the
-  same tag seen by both within 2 s is one tap, and a quick second tap of the same tag on the same reader inside
-  that 2 s is merged too.
-- **Lamps:** 5 V type with the resistor built in, switched by a BS170 N-MOSFET each because a GPIO pin gives 3.3 V at
-  about 12 mA at most. Lamp + to 5 V, lamp - to the drain; source to G; gate to the pin through 220 Ω, with 100 kΩ
-  from gate to G so the lamps stay dark while the board resets. BS170 legs, flat face toward you: D G S (the
-  look-alike 2N7000 is S G D).
-- **Speaker amplifier (MAX98357 module):** VIN to 5 V, GND to G, BCLK to GPIO 10, LRC to GPIO 20, DIN to GPIO 21.
-  Leave GAIN and SD unconnected: that gives 9 dB of gain and a mix of both channels on boards with an SD pull-up.
-- **Speaker:** an 8 Ω sealed speaker on the module's screw terminal, red to + and black to -, with no capacitor. Keep
-  the leads short, because the outputs switch at high speed.
+- **NFC reader (optional, firmware 11).** A PN532 in I2C mode (address 0x24) on the panel is looked for at boot and
+  every 5 s after, so it can be plugged in later. The USB PN532 reader keeps working, alone or together with
+  this one; the same tag seen by both within 2 s is one tap, and a quick second tap of the same tag on the same
+  reader inside that 2 s is merged too.
 
 **Wired the other way round?** If yellow's button and lamp ended up on the red pins (GPIO 4 and 7) and red's on the
 yellow pins (GPIO 3 and 1), set `"panel_swap": true` under `"station"` in the kit config (`STATION_PANEL_SWAP=1`)

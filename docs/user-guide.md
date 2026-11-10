@@ -641,18 +641,19 @@ the `station` module, on the server computer (`all-in-one`) or on a second compu
 - A **PN532 NFC reader**: on a USB serial adapter (CH340 chip), on the button panel's I2C header (an Elechouse NFC
   Module V3 in I2C mode, firmware 11), or both. With both, the same tag seen by the two within 2 seconds counts as
   one tap; a quick second tap of the same tag on the same reader inside those 2 seconds is merged as well.
-- Optional: the **button panel** (Hold and Discard buttons, lamps, an OLED, a buzzer and a speaker, on an ESP32-C3 Super Mini). Its
-  behaviour, serial protocol and pin table: [station/PANEL.md](../station/PANEL.md).
+- Optional: the **button panel** (Hold and Discard buttons, lamps, an OLED, a buzzer and a speaker, on an ESP32-C3 Super Mini). How
+  to build it: the [intake-panel guide](https://github.com/thompsonfabco/filament-kit-hardware/tree/main/devices/intake-panel). What the station does with it:
+  [station/PANEL.md](../station/PANEL.md).
 - Optional: a speaker (USB or the computer's headphone socket) for the scan beep when there is no panel.
 - Optional, with the panel: a **BME280** sensor for room temperature and humidity, a small speaker on the panel
   (it says things like "1042 grams. Hold yellow to save.") and a **USB webcam** that takes a picture of the spool when you press
-  Hold. All of it is in [station/PANEL.md](../station/PANEL.md). The station installs `espeak-ng` and `ffmpeg` for
+  Hold. How to build them is in the [hardware guides](https://github.com/thompsonfabco/filament-kit-hardware/tree/main/devices); the station's side is in
+  [station/PANEL.md](../station/PANEL.md). The station installs `espeak-ng` and `ffmpeg` for
   the speech and the picture, and its user joins the `video` group to read the camera.
 
 Build guides, wiring diagrams and enclosures for the station's devices are kept in the
 [filament-kit-hardware](https://github.com/thompsonfabco/filament-kit-hardware) repository.
-[station/PANEL.md](../station/PANEL.md) keeps the panel's behaviour, serial protocol, speech format and
-the pin table for firmware 11. This guide keeps the list of supported devices above, and the kit flashes a C3 panel
+[station/PANEL.md](../station/PANEL.md) keeps the panel's behaviour, serial protocol and speech format. This guide keeps the list of supported devices above, and the kit flashes a C3 panel
 itself when it runs other firmware than the one it carries.
 
 ### What the installer changes on the computer
