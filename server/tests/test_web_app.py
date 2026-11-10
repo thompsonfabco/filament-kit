@@ -547,3 +547,10 @@ def test_slash_redirects_stay_within_the_public_prefix(app, path, target):
         r = c.get(path, follow_redirects=False)
     assert r.status_code in (301, 302, 303, 307, 308), (r.status_code, r.text[:200])
     assert r.headers["location"] in (target, ORIGIN + target), r.headers["location"]
+
+
+def test_a_link_can_open_a_tab_by_its_hash():
+    """The setup page's "Open the live printer view" links /intake#printers; only a tab the page has is taken."""
+    from pathlib import Path
+    src = (Path(web_app.__file__).parent / "static" / "app.js").read_text(encoding="utf-8")
+    assert "if (Object.hasOwn(tabs, location.hash.slice(1))) first = location.hash.slice(1);" in src
