@@ -422,3 +422,13 @@ def test_the_cli_says_what_the_server_refused(monkeypatch, capsys):
     monkeypatch.setattr(cli, "_server_api", lambda: Busy())
     assert cli.main(["printer", "map", SERIAL], manager_factory=lambda s: pytest.fail("a second connection")) == 1
     assert "already running" in capsys.readouterr().err
+
+
+def test_every_interface_offers_the_report():
+    """Interface parity (2026-11-10): the setup page and the phone web app offer it for every Bambu printer, not only
+    when a report would help; the command line has `printer report`; the API route is what they all call."""
+    root = Path(__file__).resolve().parents[1] / "filament_kit"
+    phone = (root / "web" / "static" / "printers.js").read_text(encoding="utf-8")
+    assert 'h("button", { class: m.report_wanted ? "" : "secondary", textContent: "Collect a report"' in phone
+    page = (root / "setup_static" / "setup_printers.js").read_text(encoding="utf-8")
+    assert 'textContent: "Collect a report", on: { click: () => collectReport(p, reportBox) }' in page
