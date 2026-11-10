@@ -57,6 +57,26 @@ def calls():
     return {"slottest": 0, "calib": []}
 
 
+@pytest.fixture(autouse=True)
+def no_job_outlives_its_test():
+    """A job a test started on a thread must have given the printer back before the next test begins: a hold left in
+    the process-wide table (`mapping._WRITERS`) refuses the next test's job with AlreadyRunning. (That was the
+    2026-11-10 flaky test_last_result_survives_a_restart: the test before it gave its slowed second job only 0.1 s.)
+    Waits up to 5 s, then fails HERE, in the test that leaked the hold, and clears it so the next one is unaffected."""
+    yield
+    end = time.monotonic() + 5
+    while time.monotonic() < end:
+        with mapping._WRITERS_GUARD:
+            held = sorted(k for k, w in mapping._WRITERS.items() if w["map"])
+        if not held:
+            return
+        time.sleep(0.01)
+    with mapping._WRITERS_GUARD:
+        for k in held:
+            mapping._WRITERS[k]["map"] = False
+    pytest.fail(f"a mapping job still held {held} 5 s after the test ended")
+
+
 @pytest.fixture
 def stubs(monkeypatch, calls):
     """slottest.run confirms CONFIRMED (steps reported); calib3mf.run decodes default_global unless changed."""
@@ -257,7 +277,7 @@ def test_a_start_right_after_done_waits_for_the_printer_to_be_given_back(stubs, 
     assert wait_done(m)["state"] == "done"
     assert m.start(SERIAL)
     wait_done(m)
-    time.sleep(0.4)                            # let the second job give the printer back
+    assert m._jobs[SERIAL].released.wait(5)    # the second job gives the printer back (its sleep is 0.3 s)
 
 
 def test_last_result_survives_a_restart(stubs):
