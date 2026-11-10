@@ -156,7 +156,10 @@ STATION_PREFIX = "/api/station/"  # all a `pair --station` token may call (and /
 # routes and to what filament_kit/web calls.
 WEB_ROUTES = (
     ("GET", "/api/printers"),
+    ("POST", "/api/printers"),
     ("GET", "/api/printers/{id}"),
+    ("PATCH", "/api/printers/{id}"),
+    ("DELETE", "/api/printers/{id}"),
     ("GET", "/api/printers/{id}/usage"),
     ("GET", "/api/printers/{id}/map"),
     ("POST", "/api/printers/{id}/map"),

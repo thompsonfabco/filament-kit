@@ -852,3 +852,86 @@ def test_the_printers_tab_offers_map_by_loading_filament():
     assert 'textContent: "Map by loading filament", disabled: running, on: { click: manualMap }' in text
     for step in ("start", "confirm", "skip", "stop", "offer"):
         assert f'"{step}"' in text
+
+
+# ---------- Manage printers (interface parity gap 3: add, edit, forget from the phone web app) ----------
+
+class ManagingKit(FakeKit):
+    def get(self, path):
+        if path == "/api/printers":
+            self.calls.append(("GET", path))
+            return {"printers": [
+                {"id": SERIAL, "name": "H2D", "model": "O1D", "model_name": "H2D", "family": "bambu", "ip": "10.0.0.1",
+                 "configured": True, "state": "connected", "access_code": "LEAK", "camera": {"kind": "hls"}},
+                {"id": "sv08-max", "name": "SV08", "family": "klipper", "host": "10.0.0.3", "configured": True,
+                 "state": "connected", "api_key": "LEAK"}]}
+        return super().get(path)
+
+    def post(self, path, body):
+        if path == "/api/printers":
+            self.calls.append(("POST", path, body))
+            return {"printer": {"id": body.get("serial", "x"), "name": body.get("name"), "configured": True,
+                                "access_code": "LEAK"}}
+        return super().post(path, body)
+
+    def patch(self, path, body):
+        self.calls.append(("PATCH", path, body))
+        return {"printer": {"id": "sv08-max", "name": body.get("name"), "api_key": "LEAK"}, "changed": sorted(body),
+                "note": "a note"}
+
+    def delete(self, path):
+        self.calls.append(("DELETE", path))
+        return {"ok": True, "id": path.rsplit("/", 1)[-1]}
+
+
+@pytest.fixture
+def managing(env):
+    kit = ManagingKit()
+    return make_app(env, kit), kit
+
+
+def test_manage_lists_every_printer_without_secrets(managing):
+    app, kit = managing
+    with TestClient(app, base_url=ORIGIN, client=HOME) as c:
+        r = c.get(P + "/manage")
+    assert r.status_code == 200 and "LEAK" not in r.text
+    assert [p["id"] for p in r.json()["printers"]] == [SERIAL, "sv08-max"]
+    assert r.json()["printers"][1]["host"] == "10.0.0.3"
+
+
+def test_add_edit_and_forget_go_to_the_kit_with_only_their_keys(managing):
+    app, kit = managing
+    with TestClient(app, base_url=ORIGIN, client=HOME) as c:
+        r = c.post(P + "/add", headers=H, json={"serial": SERIAL, "access_code": "12345678", "name": "H2D",
+                                                 "configured": True})
+        assert r.status_code == 200 and "LEAK" not in r.text
+        r = c.post(P + "/sv08-max/edit", headers=H, json={"name": "Big", "api_key": "k", "family": "bambu"})
+        assert r.status_code == 200 and "LEAK" not in r.text and r.json()["note"] == "a note"
+        assert c.post(P + "/sv08-max/forget", headers=H, json={}).json() == {"ok": True, "id": "sv08-max"}
+    assert ("POST", "/api/printers", {"serial": SERIAL, "access_code": "12345678", "name": "H2D"}) in kit.calls
+    assert ("PATCH", "/api/printers/sv08-max", {"name": "Big", "api_key": "k"}) in kit.calls
+    assert ("DELETE", "/api/printers/sv08-max") in kit.calls
+
+
+def test_add_edit_and_forget_need_the_pages_origin_and_the_home_network(managing):
+    app, kit = managing
+    with TestClient(app, base_url=ORIGIN, client=HOME) as c:
+        assert c.post(P + "/add", json={"serial": SERIAL}).status_code == 403
+        assert c.post(P + f"/{SERIAL}/edit", json={"name": "x"}).status_code == 403
+        assert c.post(P + f"/{SERIAL}/forget", json={}).status_code == 403
+        assert c.post(P + "/bad%20id/forget", headers=H, json={}).status_code == 400
+    assert not [x for x in kit.calls if x[0] in ("PATCH", "DELETE") or (x[0] == "POST" and x[1] == "/api/printers")]
+
+
+def test_forget_from_away_needs_the_session(env):
+    kit = ManagingKit()
+    with TestClient(make_app(env, kit), base_url=ORIGIN, client=AWAY) as c:
+        assert c.post(P + f"/{SERIAL}/forget", headers=H, json={}).status_code in (401, 403)
+    assert not [x for x in kit.calls if x[0] == "DELETE"]
+
+
+def test_the_printers_tab_has_manage_printers():
+    text = (STATIC / "printers.js").read_text(encoding="utf-8")
+    for words in ('"Add or change printers"', '"Rename"', '"Address"', '"Access Code"', '"Forget certificate"',
+                  '"API key"', '"Forget"', '"Add a Klipper printer"', '`${id}/edit`', '`${id}/forget`', 'manageDo("add"'):
+        assert words in text, words

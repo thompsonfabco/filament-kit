@@ -23,11 +23,13 @@ function printersTab() {
   const msg = h("div");
   const conn = h("p", { class: "muted" });
   const pushBox = h("div");
+  const manageBox = h("div");     // Manage printers: add, rename, address, Access Code, certificate, forget
   const el = h("section", { class: "hidden" },
     h("h1", { textContent: "Printers" }), picker, head, conn, alerts, controls, camBtn, camBox, msg,
     h("h2", { textContent: "Filament" }), units, slotMsg, loadBox,
     h("h2", { textContent: "Usage" }), usageBox,
-    h("h2", { textContent: "Slots" }), mapBox, manualBox, pushBox);
+    h("h2", { textContent: "Slots" }), mapBox, manualBox, pushBox,
+    h("h2", { textContent: "Manage printers" }), manageBox);
 
   async function pj(path, body) {
     return api(path ? "printers/" + path : "printers", body === undefined ? {} : { method: "POST", body });
@@ -40,7 +42,8 @@ function printersTab() {
     } catch (e) { head.replaceChildren(fail(e)); return; }
     picker.replaceChildren(...printers.map((p) => h("option", { value: p.id, textContent: p.name || p.id })));
     picker.classList.toggle("hidden", printers.length < 2);
-    if (!printers.length) { head.replaceChildren(h("p", { class: "muted", textContent: "No printer is set up on the server yet." })); return; }
+    manageClosed();
+    if (!printers.length) { head.replaceChildren(h("p", { class: "muted", textContent: "No printer is set up on the server yet: add one under Manage printers." })); manage(); return; }
     let want = null;
     try { want = localStorage.getItem("printer"); } catch {}
     choose(printers.some((p) => p.id === want) ? want : printers[0].id);
@@ -404,6 +407,57 @@ function printersTab() {
           h("button", { class: "secondary", textContent: "No thanks", on: { click: () => manualSend("offer", { share: false }) } }))) : null,
       note ? h("pre", { class: ok ? "ok" : "err", textContent: note }) : null));
     if (!v.open) loadMap();
+  }
+  // ----- Manage printers: the kit's own printer list (what the setup page's Printers tab edits), changed here too -----
+  const manageNote = h("div");
+  function manageClosed() {
+    if (!manageBox.firstChild) manageBox.replaceChildren(h("button", { class: "secondary", textContent: "Add or change printers", on: { click: manage } }));
+  }
+  async function manageDo(path, body, done) {
+    try {
+      const r = await pj(path, body);
+      await manage(`${done}${r.note ? " " + r.note : ""}`, true);
+      const was = current;
+      await load();
+      if (printers.some((p) => p.id === was)) choose(was);
+    } catch (e) { manageNote.replaceChildren(h("pre", { class: "err", textContent: e.message })); }
+  }
+  const ask = (q, now) => { const a = window.prompt(q, now || ""); return a === null ? null : a.trim(); };
+  function manageRow(p) {
+    const bambu = p.family !== "klipper", id = encodeURIComponent(p.id), name = p.name || p.id;
+    const where = bambu ? p.ip : p.host;
+    const edit = (body, done) => manageDo(`${id}/edit`, body, done);
+    const buttons = p.configured ? [
+      h("button", { class: "secondary", textContent: "Rename", on: { click: () => { const n = ask(`New name for ${name}:`, name); if (n) edit({ name: n }, "Renamed."); } } }),
+      h("button", { class: "secondary", textContent: "Address", on: { click: () => { const a = ask(`${name}'s IP address or host name:`, where); if (a) edit({ address: a }, "Address saved."); } } }),
+      bambu ? h("button", { class: "secondary", textContent: "Access Code", on: { click: () => { const c = ask(`${name}'s Access Code (on the printer: Settings > Network/LAN):`); if (c) edit({ access_code: c }, "Access Code saved."); } } }) : null,
+      bambu ? h("button", { class: "secondary", textContent: "Forget certificate", on: { click: () => { if (window.confirm(`Forget the certificate pinned for ${name}? The next connection trusts whatever answers at its address.`)) edit({ unpin: true }, "Certificate forgotten."); } } }) : null,
+      bambu ? null : h("button", { class: "secondary", textContent: "API key", on: { click: () => { const k = ask(`${name}'s Moonraker API key (empty clears it):`); if (k !== null) edit({ api_key: k }, k ? "API key saved." : "API key cleared."); } } }),
+      h("button", { class: "secondary", textContent: "Forget", on: { click: () => { if (window.confirm(`Forget ${name}? ${bambu ? "Its Access Code is deleted." : "Its API key is deleted."}`)) manageDo(`${id}/forget`, {}, `${name} forgotten.`); } } }),
+    ] : bambu && p.ip ? [
+      h("button", { textContent: "Add", on: { click: () => {
+        const c = ask(`${name}'s Access Code (on the printer: Settings > Network/LAN):`); if (!c) return;
+        const n = ask("A name for it (optional):", name);
+        manageDo("add", { serial: p.id, access_code: c, ...(n ? { name: n } : {}) }, `${n || name} added.`);
+      } } }),
+    ] : [];
+    return h("div", { class: "card" },
+      h("p", {}, h("b", { textContent: name }), ` · ${p.model_name || p.model || (bambu ? "Bambu" : "Klipper")} · ${where || "no address yet"} · ${p.configured ? String(p.state).replace(/_/g, " ") : "seen on the network, not added"}`),
+      h("div", { class: "row" }, ...buttons));
+  }
+  async function manage(note, ok) {
+    let list;
+    try { list = (await pj("manage")).printers; } catch (e) { manageBox.replaceChildren(fail(e)); return; }
+    const klipperAdd = h("button", { class: "secondary", textContent: "Add a Klipper printer", on: { click: () => {
+      const host = ask("Moonraker's IP address or host name:"); if (!host) return;
+      const port = ask("Moonraker's port:", "7125"); if (port === null) return;
+      const n = ask("A name for it (optional):");
+      manageDo("add", { family: "klipper", host, port: Number(port) || 7125, ...(n ? { name: n } : {}) }, "Klipper printer added.");
+    } } });
+    manageNote.replaceChildren(...(note ? [h("pre", { class: ok ? "ok" : "err", textContent: note })] : []));
+    manageBox.replaceChildren(
+      h("p", { class: "muted", textContent: "A Bambu printer on the network shows up here by itself; add it with its Access Code. Anyone on the home network can use this page." }),
+      ...list.map(manageRow), h("div", { class: "row" }, klipperAdd), manageNote);
   }
   async function remap() {
     if (!window.confirm("Re-map the slots? The printer loads each slot briefly; do it when it is idle.")) return;

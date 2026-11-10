@@ -289,6 +289,12 @@ class KitApi:
     def post(self, path: str, body: dict):
         return self._call("POST", path, body)
 
+    def patch(self, path: str, body: dict):
+        return self._call("PATCH", path, body)
+
+    def delete(self, path: str):
+        return self._call("DELETE", path)
+
 
 LABEL = re.compile(r"[A-Za-z0-9-]{1,16}")       # kit labels: A1 ... Z4, AA1 ..., HT-A ..., Ext, Ext-L / Ext-R
 
