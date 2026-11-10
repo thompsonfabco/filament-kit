@@ -512,6 +512,9 @@ class SetupPage:
                 # a slot mapping this server runs: the page follows it again after a reload (a test's mapper is a bare object)
                 running = getattr(self.mapper, "running", None)
                 row["mapping"] = bool(p.configured and running is not None and running(p.serial))
+                # the last mapping said a printer report would help (printer_report.WANTED): the button stands out
+                from .bridge import mapping as _mapping, printer_report as _report
+                row["report_why"] = _report.why((_mapping._load_status(p.serial) or {}).get("report_wanted"))
             if p.family == "klipper":
                 row.update(host=p.host, port=p.port, api_key=bool(p.api_key), lane_data=p.lane_data)   # never the key itself
             out.append(row)

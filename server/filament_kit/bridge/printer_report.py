@@ -179,6 +179,42 @@ def file_name(model, when: float | None = None) -> str:
     return f"printer-report-{code}-{time.strftime('%Y%m%d-%H%M%S', time.gmtime(time.time() if when is None else when))}.xml"
 
 
+FILE = re.compile(r"printer-report-[A-Za-z0-9-]{1,40}-\d{8}-\d{6}\.xml")
+NEVER = ("It never holds the printer's serial, Access Code, account, addresses, name, Wi-Fi, spool tag identities, "
+         "colours, file or job names, or error text; read it before you share it.")
+
+
+def saved(serial: str) -> list[dict]:
+    """The reports kept for this printer, newest first: [{name, size, at}] (`at` = epoch seconds)."""
+    out = []
+    try:
+        entries = list(_folder(serial).iterdir())
+    except OSError:
+        return out
+    for p in entries:
+        if not FILE.fullmatch(p.name) or p.is_symlink():
+            continue
+        try:
+            st = p.stat()
+        except OSError:
+            continue
+        out.append({"name": p.name, "size": st.st_size, "at": st.st_mtime})
+    return sorted(out, key=lambda r: r["name"], reverse=True)
+
+
+def read_saved(serial: str, name: str) -> bytes:
+    """One kept report's bytes: only a report file's name, never through a link, at most 1 MiB. FileNotFoundError else."""
+    import os
+    if not FILE.fullmatch(name or ""):
+        raise FileNotFoundError(name)
+    fd = os.open(_folder(serial) / name, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0))
+    with os.fdopen(fd, "rb") as fh:
+        data = fh.read(2**20 + 1)
+    if len(data) > 2**20:
+        raise FileNotFoundError(name)
+    return data
+
+
 def save(serial: str, data: bytes, model) -> Path:
     """Keep it beside the printer's other files, the last KEEP. It can run as root (`sudo filament-kit printer report`) in the
     service user's folder: never through a name planted there, and what it makes stays the service user's."""
