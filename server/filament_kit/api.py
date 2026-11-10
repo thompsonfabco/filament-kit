@@ -21,7 +21,7 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse
 from starlette.routing import Route
 
-from . import (API_VERSION, __version__, config, intake, inventory, modules, pairing, profiles_api, setup_page,
+from . import (API_VERSION, __version__, config, hostaddr, intake, inventory, modules, pairing, profiles_api, setup_page,
                station_flow, station_requests, tags)
 from .intake import CapReached, PhotoError, ReadCap, ReadError, RefundRefused
 from .bridge import camera, family, hardware, loading, mapping, registry, usage
@@ -304,6 +304,19 @@ def _hardware_view() -> dict:
     return out
 
 
+PATCH_KEYS = frozenset({"name", "address", "port", "access_code", "api_key", "unpin"})
+
+
+class _ModuleOffError(Exception):
+    def __init__(self, fam: str):
+        super().__init__(fam)
+        self.family = fam
+
+
+class _Conflict(Exception):
+    pass
+
+
 NOT_SEEN = "That printer hasn't been seen on the network yet"
 HOST = re.compile(r"[A-Za-z0-9.:\[\]-]{1,253}")   # a host name, IPv4 or bracketed IPv6
 
@@ -437,11 +450,154 @@ def _printer_routes(printers) -> list[Route]:
             raise BadRequest(str(e)) from None
         return JSONResponse({"found": found})
 
+    def family_off(fam: str) -> bool:
+        """True when `fam`'s module is off here (Printers holds None for it; a bare Manager is Bambu only)."""
+        if isinstance(printers, family.Printers):
+            return (printers.klipper if fam == "klipper" else printers.bambu) is None
+        return fam == "klipper" and getattr(printers, "klipper", None) is None
+
+    def editable(serial: str) -> registry.Printer:
+        """The entry a PATCH or DELETE acts on: 404 when there is none; module_off when its family's module is off."""
+        if not registry.SERIAL.fullmatch(serial):
+            raise HTTPException(404, "no such printer")
+        p = known(serial)
+        if family_off(p.family):
+            raise _ModuleOffError(p.family)
+        return p
+
+    def patch_checked(p: registry.Printer, body: dict) -> dict:
+        """What a PATCH body asks for, every key checked against the printer's family before anything is written."""
+        from .setup_console.printers_tab import API_KEY, BAD_API_KEY
+        klipper = p.family == "klipper"
+        want = {}
+        if "name" in body:
+            name = body["name"]
+            if not isinstance(name, str) or len(name) > 64 or not name.isprintable() or not name.strip():
+                raise BadRequest("give the printer a name (printable text, at most 64 characters)")
+            want["name"] = name.strip()
+        if "access_code" in body:
+            if klipper:
+                raise BadRequest("a Klipper printer has no Access Code (a Moonraker API key instead, when it wants one)")
+            code = body["access_code"]
+            code = code.strip() if isinstance(code, str) else ""
+            if not registry.ACCESS_CODE.fullmatch(code):
+                raise BadRequest(registry.BAD_ACCESS_CODE)
+            want["access_code"] = code
+        if "unpin" in body:
+            if klipper:
+                raise BadRequest("unpin is for a Bambu printer")
+            if body["unpin"] is not True:
+                raise BadRequest("unpin must be true")
+            want["unpin"] = True
+        if "api_key" in body:
+            if not klipper:
+                raise BadRequest("api_key is for a Klipper printer")
+            key = body["api_key"]
+            key = key.strip() if isinstance(key, str) else None
+            if key is None or (key and not API_KEY.fullmatch(key)):
+                raise BadRequest(BAD_API_KEY)
+            want["api_key"] = key
+        port = None
+        if "port" in body:
+            if not klipper:
+                raise BadRequest("port is for a Klipper printer")
+            port = body["port"]
+            if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+                raise BadRequest("the port must be a number from 1 to 65535")
+        if "address" in body or port is not None:
+            if "address" in body:
+                host, problem, note = hostaddr.inspect(body["address"])
+                if problem:
+                    raise BadRequest(problem)
+            else:
+                host, note = p.host, None
+            if klipper:
+                port = port if port is not None else p.port
+                other = registry.klipper_at(registry.load(), host, port)
+                if other is not None and other.serial != p.serial:
+                    raise _Conflict(f"{registry.display_name(other)} is already at {host}:{port}")
+            want["address"] = (host, port, note)
+        return want
+
+    @_authed
+    async def printer_patch(request: Request):
+        """`PATCH /api/printers/{id}` {name?, address?, port?, access_code?, api_key?, unpin?}: what the setup page's
+        printer routes do (rename, address, Access Code, API key, unpin), for a paired device. Every key is checked
+        before anything is written. Reply: {printer, changed, note?}; after a connection change the reply waits up to
+        FIRST_STATE_WAIT for the new connection's first result."""
+        serial = request.path_params["id"]
+        body = await _json(request)
+        unknown = sorted(set(body) - PATCH_KEYS)
+        if unknown:
+            raise BadRequest("unknown key: " + ", ".join(unknown) + " (allowed: " + ", ".join(sorted(PATCH_KEYS)) + ")")
+        if not body:
+            raise BadRequest("nothing to change: give one or more of " + ", ".join(sorted(PATCH_KEYS)))
+        device = request.state.device
+
+        def run() -> dict:
+            want = patch_checked(editable(serial), body)
+            changed = []
+            if "name" in want:
+                registry.rename(serial, want["name"])
+                changed.append("name")
+            if "address" in want:
+                host, port, _ = want["address"]
+                registry.set_address(serial, host, port)
+                changed += (["address"] if "address" in body else []) + (["port"] if "port" in body else [])
+            if "access_code" in want:
+                registry.set_code(serial, want["access_code"], replace=True)   # clears the pin, as adding again
+                changed.append("access_code")
+            if "api_key" in want:
+                registry.set_api_key(serial, want["api_key"])
+                changed.append("api_key")
+            if "unpin" in want:
+                registry.clear_pin(serial)
+                changed.append("unpin")
+            printers.sync()
+            if set(changed) - {"name"}:
+                printers.wait_settled(serial, FIRST_STATE_WAIT)
+            out = {"printer": _printer_view(known(serial), printers), "changed": changed}
+            note = want["address"][2] if "address" in want else None
+            if note:
+                out["note"] = note
+            return out
+        try:
+            out = await run_in_threadpool(run)
+        except _ModuleOffError as e:
+            return _module_off("klipper" if e.family == "klipper" else "printers")
+        except _Conflict as e:
+            return _err(409, "exists", str(e))
+        log.info("printer edit device_id=%s serial=%s changed=%s", device, serial, ",".join(out["changed"]))
+        return JSONResponse(out)
+
+    @_authed
+    async def printer_delete(request: Request):
+        """`DELETE /api/printers/{id}`: forget the printer (its registry entry and connection), as the setup page's
+        Forget. Reply {ok, id}."""
+        serial = request.path_params["id"]
+        device = request.state.device
+
+        def run() -> bool:
+            editable(serial)
+            gone = registry.remove(serial)
+            printers.sync()
+            return gone
+        try:
+            gone = await run_in_threadpool(run)
+        except _ModuleOffError as e:
+            return _module_off("klipper" if e.family == "klipper" else "printers")
+        if not gone:
+            return _err(404, "not_found", "no such printer")
+        log.info("printer forget device_id=%s serial=%s", device, serial)
+        return JSONResponse({"ok": True, "id": serial})
+
     return [
         Route("/api/printers", printer_list),
         Route("/api/printers", printer_add, methods=["POST"]),
         Route("/api/printers/scan", printer_scan, methods=["POST"]),
         Route("/api/printers/{id}", printer_get),
+        Route("/api/printers/{id}", printer_patch, methods=["PATCH"]),
+        Route("/api/printers/{id}", printer_delete, methods=["DELETE"]),
         Route("/api/printers/{id}/command", printer_command, methods=["POST"]),
     ]
 # ---- end printer routes ----------------------------------------------------------------------------------
