@@ -120,6 +120,17 @@ data class PrinterSummary(
  * certificate is not the one first seen; no Access Code is sent to it) or `not_configured`;
  * [id] is the serial. The Access Code is never part of this.
  */
+/**
+ * `PATCH /api/printers/{id}`: the printer as it is now (after a reconnect, the new connection's first state), which
+ * keys changed, and the server's one line about a new address (null: nothing to say).
+ */
+@Serializable
+data class PrinterEditResult(
+    val printer: Printer,
+    val changed: List<String> = emptyList(),
+    val note: String? = null,
+)
+
 @Serializable
 data class Printer(
     val id: String,
@@ -136,6 +147,8 @@ data class Printer(
     @SerialName("model_name") val modelName: String? = null,
     /** `bambu` or `klipper`; servers before 0.4 send none (Bambu only then). */
     val family: String = "bambu",
+    /** A certificate is pinned for it (never which); servers before the printer edit routes send none. */
+    val pinned: Boolean = false,
 ) {
     /** What to show for the model: its name, else the code an older server sent, else null. */
     val shownModel: String? get() = modelName?.takeIf { it.isNotBlank() } ?: model?.takeIf { it.isNotBlank() }
