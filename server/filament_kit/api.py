@@ -899,10 +899,9 @@ def _intake_web_app(cfg: dict, sm: Spoolman, claude, hosts=None) -> list:
     kit = slots.KitApi(token_file=config.paths().state / INTAKE_TOKEN, device=INTAKE_DEVICE, role=web_access.WEB_ROLE)
     tools = mcp_tools.Tools(sm, kit_api=kit, kit_writes=True)
     lan_cidrs = (cfg.get("web") or {}).get("lan") or []
-    names = hosts or setup_page.allowed_hosts
     return IntakeApp(tools, public_url=None, lan_cidrs=lan_cidrs, claude=claude, kit_api=kit, push=False,
                      host_ok=lambda request: setup_page.host_ok(request, hosts),
-                     host_refusal=lambda: setup_page.bad_host_text(names() | setup_page.extra_hosts())).routes()
+                     host_refusal=setup_page.bad_host_text).routes()
 
 
 def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hub=None,

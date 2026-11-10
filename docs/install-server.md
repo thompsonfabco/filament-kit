@@ -374,8 +374,9 @@ Either way, the PC must stay on and awake for the server to answer.
   `sudo filament-kit status` again.
 - **The setup page says "the setup page only answers the home network"** (v0.4.0): open it from a device on your
   home network, not from the internet or a guest network.
-- **The setup page says "open the setup page by the server's own name or address"**: it lists the names it
-  answers to. Use one of them or the IP address, or add your name on the Settings tab (General: Names for this page).
+- **The setup page says "Open the setup page by the server's own name or address"**: it does not list them (anyone
+  can see this page). `sudo filament-kit setup-code` shows its address; use the server's name or IP address, or add
+  your name on the Settings tab (General: Names for this page).
   A local name of your own DNS (one word, `.local`, `.lan`, `.home.arpa`, or the network's own domain) that points at the server
   works without adding it.
 - **Locked out of the setup page after wrong codes**: `sudo filament-kit setup-code --new` makes a new code and

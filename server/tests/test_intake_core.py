@@ -85,4 +85,5 @@ def test_its_refused_token_says_a_restart_fixes_it(env, caplog):  # noqa: F811
 
 def test_a_wrong_host_on_intake_says_how_to_add_a_name(app):
     r = client(app, base="https://rebind.example.com:8710").get("/intake")
-    assert r.status_code == 403 and "Names for this page" in r.json()["error"] and "kit.local" in r.json()["error"]
+    assert r.status_code == 403 and "Names for this page" in r.json()["error"]
+    assert r.json()["error"].startswith("Open the setup page") and "kit.local" not in r.json()["error"]   # F2
