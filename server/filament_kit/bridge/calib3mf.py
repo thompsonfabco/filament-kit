@@ -953,7 +953,8 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
 
     before = (_s(snap.get('gcode_state')).upper(), _s(snap.get('subtask_name')), _s(snap.get('task_id')))
     heaters0, tray0 = heater_targets(snap), _tray_now(snap)
-    st = {'started': False, 'final': None, 'trip': None, 'other': None, 'error': None}
+    st = {'started': False, 'final': None, 'trip': None, 'other': None, 'error': None, 'moved': False,
+          'echo': None}
 
     last_trace: list = [None]
 
@@ -983,12 +984,22 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
         if not st['started']:
             if sub != name:
                 return False
-            if gs in BUSY or (gs in ENDED and (gs, sub, _s(r.get('task_id'))) != before):
+            # The command's own reply carries our subtask_name, and the report is merged: right after it, the report
+            # names our job while gcode_state (and any `mapping` a full report brings back) is still the previous
+            # job's. The H2D on firmware 01.04 showed it on 2026-11-11 (the trace: FAILED, prepare 100, stage 1, the
+            # instant the reply came): that stale end was taken for this job's. The job has started only once the
+            # printer shows it busy, or an end state other than the one it showed before the command.
+            if gs != before[0]:
+                st['moved'] = True
+            if gs in BUSY or (gs in ENDED and st['moved']):
                 st['started'] = True
             else:
+                if st['echo'] is None:  # what the report held while it named us but the job had not started
+                    m0 = r.get('mapping')
+                    st['echo'] = list(m0) if isinstance(m0, list) else []
                 return False
         m = r.get('mapping')
-        if isinstance(m, list):
+        if isinstance(m, list) and list(m) != st['echo']:   # numbers that came with the reply are not this job's
             res.mapping = list(m)
         if tn is not None and (not res.tray_now or res.tray_now[-1] != tn):
             res.tray_now.append(tn)

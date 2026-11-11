@@ -73,6 +73,7 @@ class FakeManager:
         self.report_mapping = True
         self.refuse_unknown = False      # native: refuse a job with a number it cannot place
         self.final = "FINISH"
+        self.echo = None                 # the command's reply, merged first: our subtask_name (+ last print's mapping)
         self.print_error = None
 
     def state(self, serial):
@@ -121,6 +122,8 @@ class FakeManager:
             if self.refuse_unknown and -1 in mapping:
                 return {"command": "project_file", "result": "fail", "reason": "invalid ams mapping"}
         name = pr["subtask_name"]
+        if self.echo is not None:       # the H2D (fw 01.04): the reply names our job before the state moves
+            self.queue.append({"command": "project_file", "result": "success", "subtask_name": name, **self.echo})
         self.queue.append({"gcode_state": "PREPARE", "subtask_name": name, "task_id": "222"})
         running = {"gcode_state": "RUNNING"}
         if self.report_mapping:
@@ -1043,3 +1046,36 @@ def test_trace_keeps_only_shaped_values():
                        "fk-calib-SERIAL-1")
     assert t == {"ours": False, "gcode_state": "FAILED", "print_error": 50364437, "mapping": [0, None],
                  "mc_print_stage": 2}
+
+
+# ---------------------------------------------------------------- the job's start (H2D firmware 01.04, 2026-11-11)
+
+def _after(rep, state, mapping=None):
+    """The printer as the owner's last print left it: `state`, and the mapping that print used."""
+    rep = copy.deepcopy(rep)
+    rep["gcode_state"] = state
+    if mapping is not None:
+        rep["mapping"] = mapping
+    return rep
+
+
+@pytest.mark.parametrize("state", ["FAILED", "FINISH"])
+def test_the_previous_jobs_end_is_not_this_jobs(fake_ftp, printer, state):
+    """The server trace on the owner's H2D: the reply to the print command put our subtask_name into the merged
+    report while gcode_state was still the previous job's FAILED (or FINISH), and the kit ended the watch at once,
+    with no mapping or with the last print's [0, 32768]. Now the job counts only once the printer shows it busy (or
+    another end state), so the job's own numbers are read."""
+    m = FakeManager(fake_ftp.root, "native", report=_after(owner_h2d_report(), state, [0, 32768]))
+    m.echo = {"mapping": [0, 32768]}            # a full report after the command brings the last print's back
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert r.consistent is True and r.problems == [], r.problems
+    assert r.scheme == "shift8" and r.mapping == [0, 2, 32768, 33024] and r.tried == ["legacy"]
+
+
+def test_the_last_prints_numbers_alone_are_not_taken_for_this_jobs(fake_ftp, printer):
+    """A printer that reports no mapping for our job: the last print's numbers, echoed with the reply, are not ours."""
+    m = FakeManager(fake_ftp.root, "native", report=_after(owner_h2d_report(), "FAILED", [0, 32768]))
+    m.echo = {"mapping": [0, 32768]}
+    m.report_mapping = False
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert r.mapping is None and r.consistent is False and "the printer reported no slot mapping" in r.problems
