@@ -726,7 +726,9 @@ class Mapper:
                                         "global_id": ams.default_global(a["ams_id"], a["tray_id"], model)}
                                   for lab, a in {**st.confirmed, **st.empty}.items()})
         step("Running the calibration job (no heating, no motion)")
+        smap.job_file = ams.load_map(serial).job_file     # the file this printer answered last time starts the ladder
         cr = calib3mf.run(self._m, serial, smap, should_stop=job.abort.is_set)
+        smap.job_file = cr.answered_file or smap.job_file
         problems = list(st.problems) + list(cr.problems)
         if job.abort.is_set():
             if not cr.restored:

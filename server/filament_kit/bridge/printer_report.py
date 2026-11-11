@@ -36,6 +36,7 @@ HEX_OR_INT = re.compile(r"[0-9A-Fa-f]{1,16}")          # presence bits: 16 hex d
 INFO = re.compile(r"[0-9A-Fa-f]{1,8}")                 # a unit's `info`, 32 bits
 PLAIN = re.compile(r"[A-Za-z0-9._+/-]{1,32}")          # the kit's own word for a unit
 ERROR = re.compile(r"0x[0-9A-F]{1,16}")
+FAIL_REASON = re.compile(r"[A-Za-z0-9_-]{1,40}")       # a code or a word: no dot or colon (never an address)
 SCHEME = re.compile(r"[a-z0-9_-]{1,20}")
 _FINALS = {"FINISH", "FAILED", "IDLE"}
 _JOB_FILES = {"minimal", "project"}
@@ -169,6 +170,8 @@ def _attempts(root: ET.Element, trail) -> None:
         if t.get("final") in _FINALS:
             el.set("final", t["final"])
         _set(el, "print-error", t.get("print_error"), ERROR)
+        _set(el, "mc-error", t.get("mc_error"), ERROR)
+        _set(el, "fail-reason", t.get("fail_reason"), FAIL_REASON)
         if t.get("repeats_last_print") is True:
             el.set("repeats-last-print", "true")     # does a real printer's full report bring the old mapping back?
         ET.SubElement(el, "sent").text = _ints(t.get("sent"))
