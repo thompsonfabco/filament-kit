@@ -1095,6 +1095,6 @@ def test_mapping_again_with_the_same_numbers_as_the_last_job(fake_ftp, printer, 
 
 def test_trace_never_logs_an_address_or_a_host_name():
     """Review R117 finding 3: the reply's reason and the traced words keep plain words only."""
-    t = calib3mf._reply_trace({"result": "fail", "reason": "cannot reach 192.168.1.20 or kit.local for printer.3mf"})
+    t = calib3mf._reply_trace({"result": "fail", "reason": "cannot reach 192.0.2.20 or kit.local for printer.3mf"})
     assert t == {"result": "fail", "reason": "cannot reach or for"}
-    assert calib3mf.trace({"fail_reason": "192.168.1.20", "gcode_state": "kit.local"}, "x") == {"ours": None}
+    assert calib3mf.trace({"fail_reason": "192.0.2.20", "gcode_state": "kit.local"}, "x") == {"ours": None}
