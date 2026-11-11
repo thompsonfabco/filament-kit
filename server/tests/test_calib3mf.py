@@ -1072,10 +1072,29 @@ def test_the_previous_jobs_end_is_not_this_jobs(fake_ftp, printer, state):
     assert r.scheme == "shift8" and r.mapping == [0, 2, 32768, 33024] and r.tried == ["legacy"]
 
 
-def test_the_last_prints_numbers_alone_are_not_taken_for_this_jobs(fake_ftp, printer):
-    """A printer that reports no mapping for our job: the last print's numbers, echoed with the reply, are not ours."""
+def test_the_last_prints_numbers_alone_prove_nothing(fake_ftp, printer):
+    """A printer that reports no mapping for our job: the last print's numbers, echoed with the reply, are not one
+    per filament and prove nothing; the map is not confirmed."""
     m = FakeManager(fake_ftp.root, "native", report=_after(owner_h2d_report(), "FAILED", [0, 32768]))
     m.echo = {"mapping": [0, 32768]}
     m.report_mapping = False
     r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
-    assert r.mapping is None and r.consistent is False and "the printer reported no slot mapping" in r.problems
+    assert r.consistent is False and r.scheme is None and r.decoding.get("HT-A") is None
+
+
+@pytest.mark.parametrize("state", ["FAILED", "FINISH"])
+def test_mapping_again_with_the_same_numbers_as_the_last_job(fake_ftp, printer, state):
+    """Review R117 finding 1: a re-map right after a good one (the reply brings back the last job's numbers, and this
+    job reports the same) is confirmed, not "no slot mapping"."""
+    m = FakeManager(fake_ftp.root, "native", report=_after(owner_h2d_report(), state, [0, 2, 32768, 33024]))
+    m.echo = {"mapping": [0, 2, 32768, 33024]}
+    m.final = state
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert r.consistent is True and r.scheme == "shift8" and r.mapping == [0, 2, 32768, 33024], r.problems
+
+
+def test_trace_never_logs_an_address_or_a_host_name():
+    """Review R117 finding 3: the reply's reason and the traced words keep plain words only."""
+    t = calib3mf._reply_trace({"result": "fail", "reason": "cannot reach 192.168.1.20 or kit.local for printer.3mf"})
+    assert t == {"result": "fail", "reason": "cannot reach or for"}
+    assert calib3mf.trace({"fail_reason": "192.168.1.20", "gcode_state": "kit.local"}, "x") == {"ours": None}

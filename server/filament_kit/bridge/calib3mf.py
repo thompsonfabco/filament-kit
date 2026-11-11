@@ -813,7 +813,7 @@ _TRACE_INTS = ("print_error", "mc_print_error_code", "mc_print_stage", "mc_print
                "gcode_file_prepare_percent", "prepare_per", "print_real_action", "print_gcode_action", "err",
                "ams_status", "print_type_code")
 _TRACE_WORDS = ("gcode_state", "print_type", "fail_reason", "mc_stage")
-_TRACE_WORD = re.compile(r"[A-Za-z0-9_.:-]{1,40}")
+_TRACE_WORD = re.compile(r"[A-Za-z0-9_-]{1,40}")       # no dot or colon: never an address or a host name
 _TRACE_SERIALISH = re.compile(r"(?=[0-9A-Za-z]*[0-9])(?=[0-9A-Za-z]*[A-Za-z])[0-9A-Za-z]{12,}")
 
 
@@ -953,8 +953,7 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
 
     before = (_s(snap.get('gcode_state')).upper(), _s(snap.get('subtask_name')), _s(snap.get('task_id')))
     heaters0, tray0 = heater_targets(snap), _tray_now(snap)
-    st = {'started': False, 'final': None, 'trip': None, 'other': None, 'error': None, 'moved': False,
-          'echo': None}
+    st = {'started': False, 'final': None, 'trip': None, 'other': None, 'error': None, 'moved': False}
 
     last_trace: list = [None]
 
@@ -991,15 +990,17 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
             # printer shows it busy, or an end state other than the one it showed before the command.
             if gs != before[0]:
                 st['moved'] = True
+            # (A job that ends in the same state as before without ever showing busy is not seen to start: it times
+            # out as "did not start" rather than taking the old state for its end.)
             if gs in BUSY or (gs in ENDED and st['moved']):
                 st['started'] = True
             else:
-                if st['echo'] is None:  # what the report held while it named us but the job had not started
-                    m0 = r.get('mapping')
-                    st['echo'] = list(m0) if isinstance(m0, list) else []
                 return False
+        # `mapping` is read from the merged report, wherever it came from: numbers that decode to each of this job's
+        # slots are right whatever brought them (a re-map gets the same numbers as the job before), and the last
+        # print's numbers that do not are caught below (repeats_last_print, and "one per filament")
         m = r.get('mapping')
-        if isinstance(m, list) and list(m) != st['echo']:   # numbers that came with the reply are not this job's
+        if isinstance(m, list):
             res.mapping = list(m)
         if tn is not None and (not res.tray_now or res.tray_now[-1] != tn):
             res.tray_now.append(tn)
