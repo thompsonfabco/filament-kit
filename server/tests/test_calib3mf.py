@@ -1015,3 +1015,31 @@ def test_finish_without_mapping_sends_one_job_only(fake_ftp, printer):
     r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
     assert r.consistent is False and r.retry is False and len(jobs(m)) == 1 and r.tried == ["legacy"]
     assert "the printer reported no slot mapping" in r.problems
+
+
+# ---------------------------------------------------------------- the calibration trace (diagnostics)
+
+def test_the_job_is_traced_in_the_log_with_codes_only(fake_ftp, printer, caplog):
+    """Every change in the watched fields during the job is logged at INFO: the command's reply, the states, the
+    mapping. Never the serial, the file name or an address."""
+    import logging
+    m = FakeManager(fake_ftp.root, "native", report=owner_h2d_report())
+    m.report["fail_reason"] = SERIAL                       # a serial-shaped value in a traced field is left out
+    m.report["hms"] = [{"attr": 0x07008000, "code": 0x00020001}]
+    with caplog.at_level(logging.INFO, logger="filament_kit.bridge.calib3mf"):
+        calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    lines = [r.getMessage() for r in caplog.records if "calibration trace" in r.getMessage()]
+    assert any("sent legacy [0, 2, 128, 129], reply" in x and '"result": "success"' in x for x in lines), lines
+    assert any('"gcode_state": "RUNNING"' in x and '"mapping": [0, 2, 32768, 33024]' in x and '"ours": true' in x
+               for x in lines), lines
+    assert any('"gcode_state": "FINISH"' in x for x in lines) and any("07008000_00020001" in x for x in lines)
+    text = chr(10).join(x.split(": calibration trace", 1)[1] for x in lines)    # what the trace adds after the prefix
+    assert SERIAL not in text and FILE not in text and "fk-calib" not in text and "127.0.0.1" not in text
+
+
+def test_trace_keeps_only_shaped_values():
+    t = calib3mf.trace({"gcode_state": "FAILED", "subtask_name": "someone else's print", "print_error": "50364437",
+                        "fail_reason": "a sentence with spaces", "mapping": [0, "x"], "mc_print_stage": "2"},
+                       "fk-calib-SERIAL-1")
+    assert t == {"ours": False, "gcode_state": "FAILED", "print_error": 50364437, "mapping": [0, None],
+                 "mc_print_stage": 2}
