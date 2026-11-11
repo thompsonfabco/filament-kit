@@ -78,6 +78,7 @@ import hashlib
 import io
 import json
 import logging
+import re
 import secrets
 import time
 import zipfile
@@ -804,6 +805,71 @@ def _wait(manager, serial: str, pred, timeout: float, should_stop) -> dict | Non
             return r
 
 
+# Calibration trace (diagnostics, 2026-11-11: the H2D on firmware 01.04 once answered with a short mapping and once
+# ended the same job FAILED with none): while a job is watched, every change in these report fields is logged, at INFO,
+# so the server log shows what the printer did. Codes, states and numbers only, each value shape-checked: never a
+# name, file name, address or serial (subtask_name is logged only as whether it is this job's).
+_TRACE_INTS = ("print_error", "mc_print_error_code", "mc_print_stage", "mc_print_sub_stage", "stg_cur", "mc_percent",
+               "gcode_file_prepare_percent", "prepare_per", "print_real_action", "print_gcode_action", "err",
+               "ams_status", "print_type_code")
+_TRACE_WORDS = ("gcode_state", "print_type", "fail_reason", "mc_stage")
+_TRACE_WORD = re.compile(r"[A-Za-z0-9_-]{1,40}")       # no dot or colon: never an address or a host name
+_TRACE_SERIALISH = re.compile(r"(?=[0-9A-Za-z]*[0-9])(?=[0-9A-Za-z]*[A-Za-z])[0-9A-Za-z]{12,}")
+
+
+def _trace_word(v) -> str | None:
+    t = str(v).strip() if isinstance(v, (str, int)) and not isinstance(v, bool) else ""
+    return t if t and _TRACE_WORD.fullmatch(t) and not _TRACE_SERIALISH.search(t) else None
+
+
+def trace(report: dict, name: str) -> dict:
+    """The fields the calibration trace logs, from a (merged) report: see _TRACE_INTS / _TRACE_WORDS."""
+    out: dict = {}
+    sub = _s(report.get('subtask_name'))
+    out["ours"] = sub == name if sub else None
+    for k in _TRACE_WORDS:
+        w = _trace_word(report.get(k))
+        if w is not None:
+            out[k] = w
+    for k in _TRACE_INTS:
+        n = _int(report.get(k))
+        if n is not None:
+            out[k] = n
+    m = report.get('mapping')
+    if isinstance(m, list):
+        out["mapping"] = [_int(x) for x in m[:64]]
+    tn = _tray_now(report)
+    if tn is not None and _trace_word(tn):
+        out["tray_now"] = tn
+    hms = []
+    for e in _l(report.get('hms'))[:16]:
+        a, c = _int(_d(e).get('attr')), _int(_d(e).get('code'))
+        if a is not None and c is not None:
+            hms.append(f"{a & 0xFFFFFFFF:08X}_{c & 0xFFFFFFFF:08X}")
+    if hms:
+        out["hms"] = hms
+    return out
+
+
+def _reply_trace(reply) -> dict:
+    """The print command's reply, for the trace: its result, reason and error code only."""
+    if not isinstance(reply, dict):
+        return {"reply": None}
+    out = {}
+    for k in ("result", "reason"):
+        w = _trace_word(reply.get(k)) if not isinstance(reply.get(k), str) or len(reply.get(k)) <= 40 else None
+        if w is None and isinstance(reply.get(k), str):     # a sentence: its words, shape-checked one by one
+            words = [x for x in (_trace_word(t) for t in reply[k].split()[:12]) if x]
+            w = " ".join(words) or None
+        if w is not None:
+            out[k] = w
+    for k in ("err_code", "error_code", "code"):
+        n = _int(reply.get(k))
+        if n is not None:
+            out[k] = n
+    return out
+
+
 def _ours(report: dict | None, name: str) -> bool:
     return bool(name) and isinstance(report, dict) and _s(report.get('subtask_name')) == name
 
@@ -875,6 +941,9 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
     except Exception as e:      # offline / no reply raised by the Manager
         res.problems.append(f"cannot send the calibration job ({type(e).__name__})")
         return
+    t0 = time.monotonic()
+    log.info("printer %s: calibration trace +0.0s sent %s %s, reply %s", serial, res.sent_scheme, list(sent),
+             json.dumps(_reply_trace(reply), sort_keys=True))
     if reply is not None and not _ok(reply):
         log.warning("printer %s: calibration job refused (%s)", serial, _s(reply.get('reason')) or reply.get('result'))
         res.problems.append(REFUSED)
@@ -884,9 +953,16 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
 
     before = (_s(snap.get('gcode_state')).upper(), _s(snap.get('subtask_name')), _s(snap.get('task_id')))
     heaters0, tray0 = heater_targets(snap), _tray_now(snap)
-    st = {'started': False, 'final': None, 'trip': None, 'other': None, 'error': None}
+    st = {'started': False, 'final': None, 'trip': None, 'other': None, 'error': None, 'moved': False}
+
+    last_trace: list = [None]
 
     def watch(r: dict) -> bool:
+        t = trace(r, name)
+        if t != last_trace[0]:          # each change, once
+            last_trace[0] = t
+            log.info("printer %s: calibration trace +%.1fs %s", serial, time.monotonic() - t0,
+                     json.dumps(t, sort_keys=True))
         gs, sub = _s(r.get('gcode_state')).upper(), _s(r.get('subtask_name'))
         # another print started (not ours, not the one the printer showed before): never touch it
         if sub != name and gs in BUSY and (sub, _s(r.get('task_id'))) != before[1:]:
@@ -907,10 +983,22 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
         if not st['started']:
             if sub != name:
                 return False
-            if gs in BUSY or (gs in ENDED and (gs, sub, _s(r.get('task_id'))) != before):
+            # The command's own reply carries our subtask_name, and the report is merged: right after it, the report
+            # names our job while gcode_state (and any `mapping` a full report brings back) is still the previous
+            # job's. The H2D on firmware 01.04 showed it on 2026-11-11 (the trace: FAILED, prepare 100, stage 1, the
+            # instant the reply came): that stale end was taken for this job's. The job has started only once the
+            # printer shows it busy, or an end state other than the one it showed before the command.
+            if gs != before[0]:
+                st['moved'] = True
+            # (A job that ends in the same state as before without ever showing busy is not seen to start: it times
+            # out as "did not start" rather than taking the old state for its end.)
+            if gs in BUSY or (gs in ENDED and st['moved']):
                 st['started'] = True
             else:
                 return False
+        # `mapping` is read from the merged report, wherever it came from: numbers that decode to each of this job's
+        # slots are right whatever brought them (a re-map gets the same numbers as the job before), and the last
+        # print's numbers that do not are caught below (repeats_last_print, and "one per filament")
         m = r.get('mapping')
         if isinstance(m, list):
             res.mapping = list(m)

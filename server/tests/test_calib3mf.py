@@ -73,6 +73,7 @@ class FakeManager:
         self.report_mapping = True
         self.refuse_unknown = False      # native: refuse a job with a number it cannot place
         self.final = "FINISH"
+        self.echo = None                 # the command's reply, merged first: our subtask_name (+ last print's mapping)
         self.print_error = None
 
     def state(self, serial):
@@ -121,6 +122,8 @@ class FakeManager:
             if self.refuse_unknown and -1 in mapping:
                 return {"command": "project_file", "result": "fail", "reason": "invalid ams mapping"}
         name = pr["subtask_name"]
+        if self.echo is not None:       # the H2D (fw 01.04): the reply names our job before the state moves
+            self.queue.append({"command": "project_file", "result": "success", "subtask_name": name, **self.echo})
         self.queue.append({"gcode_state": "PREPARE", "subtask_name": name, "task_id": "222"})
         running = {"gcode_state": "RUNNING"}
         if self.report_mapping:
@@ -1015,3 +1018,83 @@ def test_finish_without_mapping_sends_one_job_only(fake_ftp, printer):
     r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
     assert r.consistent is False and r.retry is False and len(jobs(m)) == 1 and r.tried == ["legacy"]
     assert "the printer reported no slot mapping" in r.problems
+
+
+# ---------------------------------------------------------------- the calibration trace (diagnostics)
+
+def test_the_job_is_traced_in_the_log_with_codes_only(fake_ftp, printer, caplog):
+    """Every change in the watched fields during the job is logged at INFO: the command's reply, the states, the
+    mapping. Never the serial, the file name or an address."""
+    import logging
+    m = FakeManager(fake_ftp.root, "native", report=owner_h2d_report())
+    m.report["fail_reason"] = SERIAL                       # a serial-shaped value in a traced field is left out
+    m.report["hms"] = [{"attr": 0x07008000, "code": 0x00020001}]
+    with caplog.at_level(logging.INFO, logger="filament_kit.bridge.calib3mf"):
+        calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    lines = [r.getMessage() for r in caplog.records if "calibration trace" in r.getMessage()]
+    assert any("sent legacy [0, 2, 128, 129], reply" in x and '"result": "success"' in x for x in lines), lines
+    assert any('"gcode_state": "RUNNING"' in x and '"mapping": [0, 2, 32768, 33024]' in x and '"ours": true' in x
+               for x in lines), lines
+    assert any('"gcode_state": "FINISH"' in x for x in lines) and any("07008000_00020001" in x for x in lines)
+    text = chr(10).join(x.split(": calibration trace", 1)[1] for x in lines)    # what the trace adds after the prefix
+    assert SERIAL not in text and FILE not in text and "fk-calib" not in text and "127.0.0.1" not in text
+
+
+def test_trace_keeps_only_shaped_values():
+    t = calib3mf.trace({"gcode_state": "FAILED", "subtask_name": "someone else's print", "print_error": "50364437",
+                        "fail_reason": "a sentence with spaces", "mapping": [0, "x"], "mc_print_stage": "2"},
+                       "fk-calib-SERIAL-1")
+    assert t == {"ours": False, "gcode_state": "FAILED", "print_error": 50364437, "mapping": [0, None],
+                 "mc_print_stage": 2}
+
+
+# ---------------------------------------------------------------- the job's start (H2D firmware 01.04, 2026-11-11)
+
+def _after(rep, state, mapping=None):
+    """The printer as the owner's last print left it: `state`, and the mapping that print used."""
+    rep = copy.deepcopy(rep)
+    rep["gcode_state"] = state
+    if mapping is not None:
+        rep["mapping"] = mapping
+    return rep
+
+
+@pytest.mark.parametrize("state", ["FAILED", "FINISH"])
+def test_the_previous_jobs_end_is_not_this_jobs(fake_ftp, printer, state):
+    """The server trace on the owner's H2D: the reply to the print command put our subtask_name into the merged
+    report while gcode_state was still the previous job's FAILED (or FINISH), and the kit ended the watch at once,
+    with no mapping or with the last print's [0, 32768]. Now the job counts only once the printer shows it busy (or
+    another end state), so the job's own numbers are read."""
+    m = FakeManager(fake_ftp.root, "native", report=_after(owner_h2d_report(), state, [0, 32768]))
+    m.echo = {"mapping": [0, 32768]}            # a full report after the command brings the last print's back
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert r.consistent is True and r.problems == [], r.problems
+    assert r.scheme == "shift8" and r.mapping == [0, 2, 32768, 33024] and r.tried == ["legacy"]
+
+
+def test_the_last_prints_numbers_alone_prove_nothing(fake_ftp, printer):
+    """A printer that reports no mapping for our job: the last print's numbers, echoed with the reply, are not one
+    per filament and prove nothing; the map is not confirmed."""
+    m = FakeManager(fake_ftp.root, "native", report=_after(owner_h2d_report(), "FAILED", [0, 32768]))
+    m.echo = {"mapping": [0, 32768]}
+    m.report_mapping = False
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert r.consistent is False and r.scheme is None and r.decoding.get("HT-A") is None
+
+
+@pytest.mark.parametrize("state", ["FAILED", "FINISH"])
+def test_mapping_again_with_the_same_numbers_as_the_last_job(fake_ftp, printer, state):
+    """Review R117 finding 1: a re-map right after a good one (the reply brings back the last job's numbers, and this
+    job reports the same) is confirmed, not "no slot mapping"."""
+    m = FakeManager(fake_ftp.root, "native", report=_after(owner_h2d_report(), state, [0, 2, 32768, 33024]))
+    m.echo = {"mapping": [0, 2, 32768, 33024]}
+    m.final = state
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert r.consistent is True and r.scheme == "shift8" and r.mapping == [0, 2, 32768, 33024], r.problems
+
+
+def test_trace_never_logs_an_address_or_a_host_name():
+    """Review R117 finding 3: the reply's reason and the traced words keep plain words only."""
+    t = calib3mf._reply_trace({"result": "fail", "reason": "cannot reach 192.0.2.20 or kit.local for printer.3mf"})
+    assert t == {"result": "fail", "reason": "cannot reach or for"}
+    assert calib3mf.trace({"fail_reason": "192.0.2.20", "gcode_state": "kit.local"}, "x") == {"ours": None}
