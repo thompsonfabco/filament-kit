@@ -2,17 +2,10 @@
 reports which one it is, the owner confirms; the answers relabel the printer's slots."""
 from __future__ import annotations
 
-import json
-import threading
-import time
-from pathlib import Path
-
 import pytest
-from starlette.testclient import TestClient
 
-from filament_kit import config, pairing
-from filament_kit.api import create_app
-from filament_kit.bridge import family, manual as bambu_manual, registry
+from filament_kit import config
+from filament_kit.bridge import manual as bambu_manual, registry
 from filament_kit.bridge.klipper import manual as kmanual
 from filament_kit.bridge.klipper.adapters.base import SlotState, UnitState
 from filament_kit.bridge.klipper.manager import KlipperFamily
@@ -261,8 +254,7 @@ def test_the_family_shows_and_loads_under_the_owner_s_names(m1d, sm):
     fam, pid, fake = m1d
     assert fam.wait_settled(pid, 8) in ("connected", "unknown_model")
     model, system, adapter = fam.model(pid)
-    if adapter.name != "toolchanger":
-        pytest.skip("the M1D entry is not matched by this fake")            # guard: the detect rule may change
+    assert adapter.name == "toolchanger"          # the M1D entry must be matched by this fake
     labels = _labels(fam, pid)
     kmanual.save_map(pid, {"C1": {"printer": "C2", "by": "user", "at": "x"}, "C2": {"printer": "C1"}})
     after = {s.label: s.spool_id for u in fam.slots(pid) for s in u.slots}
