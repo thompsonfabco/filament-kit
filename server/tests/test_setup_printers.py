@@ -46,7 +46,7 @@ class FakeMapper:
     def view(self, serial):
         return {"state": "running", "step": "testing slot A1", "slots": [], "problems": [], "notes": []}
 
-    def abort(self, serial):
+    def abort(self, serial, pending=True):
         self.stopped.append(serial)
 
     def report(self, serial):

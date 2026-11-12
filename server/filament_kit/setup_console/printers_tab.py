@@ -375,7 +375,7 @@ def routes(page) -> list[tuple]:
     async def map_stop(request, body):
         serial = page._serial(request)
         m = await anyio.to_thread.run_sync(mapper_of, serial)
-        m.abort(serial)                 # the slots are put back first, as when the command line's run is stopped
+        m.abort(serial, pending=False)  # the slots are put back first, as when the command line's run is stopped
         page.audit(request, f"printer {serial} slot mapping stopped")
         return {"ok": True}
 

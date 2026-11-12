@@ -70,6 +70,7 @@ INTERRUPTED = ("the mapping was interrupted (the server or command stopped); the
 OBSERVE_NOTE = "slot numbering not confirmed: filament use is only logged until mapping succeeds"
 STOPPED = "mapping was stopped (the server or command is stopping); the slots were put back first"
 SHUTDOWN_WAIT = 60.0      # seconds the service waits at shutdown for a stopped job's restore
+ABORT_PENDING_TTL = 5.0   # seconds a stop that found no job stays pending for a job about to register
 RECOVER_WAIT = 60.0       # seconds the service waits at start for a printer with a pending snapshot to connect
 # What the map view's `outcome` and `reason` can be. Each client keeps its own words for them; OUTCOME_TEXT and
 # NEXT_STEP are the CLI's and the web app's. A client that meets a value it does not know falls back to the flags.
@@ -499,7 +500,7 @@ class Mapper:
         self._jobs: dict[str, _Job] = {}
         self._threads: list[threading.Thread] = []
         self._closing = threading.Event()
-        self._abort_pending: set[str] = set()
+        self._abort_pending: dict[str, float] = {}      # serial -> time.monotonic() of a stop that found no job
 
     # ---------------------------------------------------------------- start / run
     def _begin(self, serial: str, auto: bool = False) -> tuple[_Job, _ProcessLock]:
@@ -529,8 +530,8 @@ class Mapper:
                 saved = ams.load_map(serial)
                 job.step = REMAP_SUSPECT_STEP if saved.suspect and not saved.stale else REMAP_STEP
             self._jobs[serial] = job        # registered first: an abort from now on reaches it directly
-            if self._closing.is_set() or serial in self._abort_pending:
-                self._abort_pending.discard(serial)
+            asked = self._abort_pending.pop(serial, None)
+            if self._closing.is_set() or (asked is not None and time.monotonic() - asked <= ABORT_PENDING_TTL):
                 job.abort.set()
         _save_status(serial, job)
         log.info("mapping %s: job %s started", serial, job.id)
@@ -563,18 +564,21 @@ class Mapper:
         self._run(serial, job, plock, on_step)
         return self.view(serial)
 
-    def abort(self, serial: str) -> None:
+    def abort(self, serial: str, pending: bool = True) -> None:
         """Stop the printer's job as soon as it can: the slots are put back first (CLI signals, shutdown).
 
         Called from signal handlers, so it takes no lock (the main thread may hold `_lock` in `_begin` or `view`):
         only atomic set / dict operations and `_Flag.set`. The request is left pending for a job not registered
         yet (`_begin` registers the job, then takes up a pending request) and dropped once it reached a running
-        job; either order of the two ends with the job aborted."""
-        self._abort_pending.add(serial)
+        job; either order of the two ends with the job aborted. A pending request older than ABORT_PENDING_TTL is
+        stale and ignored. `pending=False` (a Stop button, not a signal racing `_begin`): with no job running it does
+        nothing, so it cannot abort a later mapping."""
         j = self._jobs.get(serial)
         if j is not None and j.state == "running":
             j.abort.set()
-            self._abort_pending.discard(serial)
+            self._abort_pending.pop(serial, None)
+        elif pending:
+            self._abort_pending[serial] = time.monotonic()
 
     def shutdown(self, timeout: float = SHUTDOWN_WAIT) -> None:
         """Service stop, BEFORE the printer connections close: stop every job (and the start-up restore) and wait
@@ -697,8 +701,10 @@ class Mapper:
             job.reason = reason
             _distrust(serial)
 
-        if job.abort.is_set():
-            return fail([STOPPED.split(";")[0] + "; nothing was changed"], "interrupted")
+        if job.abort.is_set():      # stopped before the first write: the saved map is still what it was
+            job.problems = [STOPPED.split(";")[0] + "; nothing was changed"]
+            job.state, job.reason = "failed", "interrupted"
+            return
         fp = _fingerprint_now(self._m, serial)
         if snapshot.pending(serial):
             _delete_leftover_job(serial)
