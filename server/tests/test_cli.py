@@ -222,7 +222,7 @@ def test_status_api_not_answering_fails(capsys, monkeypatch):
     cfg = config.load()
     cfg["port"] = free_port()
     config.save(cfg)
-    cli.main(["status"])
+    assert cli.main(["status"]) == 1
     out = capsys.readouterr().out
     assert f"FAIL filament-kit API not answering at https://127.0.0.1:{cfg['port']}/api/info" in out
     assert "sudo journalctl -u filament-kit -n 50" in out
