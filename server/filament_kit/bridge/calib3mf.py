@@ -4,9 +4,11 @@
 only comments and `M400`. With a `Project` (`project_for`: the model's `<slicer-project>` in the hardware file, the
 nozzles and AMS-to-extruder links the report gives) it carries the printer fields Bambu Studio writes
 (printer_model_id, printer and nozzle settings, filament_maps, the X-BBL-Client-Version header). Only a model marked
-job-file="project" gets that file: the X2D and P2S, which refuse the minimal 3MF ("invalid 3mf"); whether they accept
-this one is not known until a mapping has run on each. Every other model keeps the minimal 3MF, the file the H2D is
-known to accept; none of them has run the project file, so the attribute is set only after a model has.
+job-file="project" starts with that file (the X2D and P2S, which refused the minimal 3MF as "invalid 3mf"); every other
+model starts with the minimal 3MF, the file the H2D accepts. The job-file ladder (G3, `job_files`): when the printer
+refuses the file (not the mapping) or ends the job FAILED with no error code and no mapping, the same numbers go once in
+the other file (a model with a `<slicer-project>` has both); the file a printer answered is kept in its slot map and
+starts its next mapping. 2026-11-11: the X2D answered the project file; the P2S ended it FAILED with no mapping.
 `run(manager, serial, slotmap)` uploads it over FTPS to `/cache/fk-calib-<serial>.gcode.3mf`,
 starts it with `ams_mapping` = filament i -> the slot's legacy number (unit*4+tray, an HT unit its id: the command
 Bambu Studio sends and the scanner verified on the owner's H2D) plus
@@ -137,6 +139,11 @@ class CalibResult:
     report_wanted: str | None = None                          # printer_report.WANTED: why a report would help
     trail: list[dict] = field(default_factory=list)           # what each job sent and got: numbers and codes only
     job_file: str | None = None                               # minimal | project
+    answered_file: str | None = None                          # the job file a job of this run got a mapping for
+    fail_reason: str | None = None                            # the printer's fail_reason at the end, when not "0"
+    mc_error: str | None = None                               # its mc_print_error_code (hex), when not 0
+    tripped: bool = False                                     # the watchdog stopped the job (no further tries)
+    refused_reason: str = ""                                  # the reply's reason when the print command was refused
     final: str | None = None                                  # how the printer ended the job
     print_error: str | None = None                            # hex, when there was one
     fits: list[str] = field(default_factory=list)             # the schemes the reported numbers fit
@@ -235,13 +242,14 @@ def _mm(v) -> float | None:
     return n if 0.1 <= n <= 2.0 else None
 
 
-def project_for(mi: hardware.ModelInfo, report: dict, addrs: list[tuple[int, int]]) -> Project | None:
+def project_for(mi: hardware.ModelInfo, report: dict, addrs: list[tuple[int, int]],
+                file: str | None = None) -> Project | None:
     """The 3MF's printer fields for the loaded slots `addrs`, from the model's slicer project and the report: each
     extruder's nozzle from `device.nozzle.info[]` (by the printer's own extruder id), else the top-level
     `nozzle_diameter`, else the model's default; each filament on the extruder its AMS unit feeds (`info` bits),
     else on the model's master extruder. None (the minimal 3MF) unless the model is marked job-file="project"."""
     sp = mi.slicer
-    if sp is None or mi.job_file != "project":
+    if sp is None or (file or mi.job_file) != "project":
         return None
     p = _d(report)
     top = _mm(p.get('nozzle_diameter'))
@@ -546,6 +554,31 @@ def fits(hw: hardware.Hardware, mi: hardware.ModelInfo, scheme: str, value, ams_
         return False
 
 
+MAX_JOBS_PER_FILE = 2      # the job-file ladder: at most this many jobs per file type in one run
+
+
+def job_files(mi: hardware.ModelInfo, proven: str | None = None) -> list[str]:
+    """The job-file ladder for a model (G3): the file this printer last answered (`proven`, kept in its slot map), else
+    the model's hint (`job-file`), else minimal; then the other file. The project file only where the model has a
+    `<slicer-project>` (it is built from it)."""
+    avail = ["minimal"] + (["project"] if mi.slicer is not None else [])
+    first = proven if proven in avail else (mi.job_file if mi.job_file in avail else "minimal")
+    return [first] + [f for f in avail if f != first]
+
+
+def _file_refused(r: "CalibResult") -> bool:
+    """The job file is in doubt, not the numbers: the printer refused the command for a reason that is not the mapping
+    (the X2D's "invalid 3mf"), or ended the job FAILED with no error code and no mapping at all (the P2S, 2026-11-11).
+    Not: a refusal of the mapping (the next numbering's turn), a job that never started (another 120 s would say the
+    same), a FINISH with no mapping (the printer reports none), or a FAILED with a real print_error (it read the file
+    and failed for its own reason)."""
+    if r.mapping is not None:
+        return False
+    if REFUSED in r.problems:
+        return "mapping" not in r.refused_reason.lower()
+    return r.final == "FAILED" and r.print_error is None
+
+
 def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None = None,
         should_stop=None) -> CalibResult:
     """Run the calibration job on an idle, connected printer (see the module docstring). Never raises for
@@ -575,7 +608,11 @@ def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None
     candidates = (listed + others) if mi.known else sorted(hw.schemes, key=lambda k: k != 'shift8')
     candidates = candidates or ['legacy']
     sends = ['legacy'] + [k for k in candidates if k != 'legacy']     # what each job's ams_mapping is numbered in
-    tried: list[list[int]] = []
+    tried: list[tuple[str, list[int]]] = []
+    files = job_files(mi, getattr(slotmap, "job_file", None))
+    fi = 0                              # the rung in use: moves on only while no file has got an answer
+    answered: str | None = None
+    jobs_by_file: dict[str, int] = {}
     sent_keys: list[str] = []
     attempts: list[str] = []
     res: CalibResult | None = None
@@ -583,14 +620,34 @@ def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None
     last_print: dict = {}               # the `mapping` of the print before this mapping began (the first job's snapshot)
     trail: list[dict] = []
     for key in sends:
-        r = _attempt(manager, serial, slotmap, printer, should_stop, hw, mi, candidates, key, tried, last_print)
+        while True:
+            file = files[fi]
+            r = _attempt(manager, serial, slotmap, printer, should_stop, hw, mi, candidates, key, tried, last_print,
+                         file=file)
+            if r.skip:
+                break
+            jobs_by_file[file] = jobs_by_file.get(file, 0) + 1
+            if res is not None:         # the previous job proved no scheme (or its file got no answer): keep what it saw
+                attempts.append(f"numbering {res.sent_scheme}, {res.job_file} file: "
+                                + ("; ".join(res.problems) or "no scheme fits"))
+            res = r
+            sent_keys.append(key)
+            trail.append(_trail_entry(r))
+            if r.mapping is not None and answered is None:
+                answered = file
+            stop = should_stop is not None and should_stop()
+            # the job-file ladder (G3): the printer would not take or answer this file; the other one, same numbers,
+            # once. Never after a trip, a stop, another job, a changed certificate or an unconfirmed restore.
+            if (answered is None and fi + 1 < len(files) and _file_refused(r) and r.restored and not r.tripped
+                    and not r.other_job and not r.cert_changed and not stop
+                    and jobs_by_file.get(files[fi + 1], 0) < MAX_JOBS_PER_FILE):
+                log.info("printer %s: the %s job file got no answer (%s); trying the %s file", serial, file,
+                         r.report_wanted or "no mapping", files[fi + 1])
+                fi += 1
+                continue
+            break
         if r.skip:
             continue
-        if res is not None:             # the previous job proved no scheme: keep what it saw
-            attempts.append(f"numbering {res.sent_scheme}: " + ("; ".join(res.problems) or "no scheme fits"))
-        res = r
-        sent_keys.append(key)
-        trail.append(_trail_entry(r))
         if r.consistent and r.scheme is None:
             if table is not None and table.decoding != r.decoding:
                 # the numbers follow what was sent, so they say nothing about the slots
@@ -610,6 +667,7 @@ def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None
     if res is None:                     # no candidate can number the loaded slots
         res = CalibResult(problems=["no numbering scheme of this printer model can number the loaded slots"])
     res.tried, res.attempts, res.trail = sent_keys, attempts, trail
+    res.answered_file = answered
     if attempts:
         log.info("printer %s: calibration sent %d jobs (%s)", serial, len(sent_keys), "; ".join(attempts))
     return res
@@ -617,14 +675,15 @@ def run(manager, serial: str, slotmap: SlotMap, printer: registry.Printer | None
 
 def _trail_entry(r: CalibResult) -> dict:
     return {"scheme": r.sent_scheme, "job_file": r.job_file, "final": r.final, "print_error": r.print_error,
+            "fail_reason": r.fail_reason, "mc_error": r.mc_error,
             "sent": list(r.sent.values()), "reported": list(r.mapping or []), "fits": list(r.fits),
             "repeats_last_print": r.repeats_last_print}
 
 
 def _attempt(manager, serial: str, slotmap: SlotMap, printer, should_stop, hw: hardware.Hardware,
-             mi: hardware.ModelInfo, candidates: list[str], key: str, tried: list[list[int]],
-             last_print: dict) -> CalibResult:
-    """One calibration job sending `key`'s numbers (see `run`)."""
+             mi: hardware.ModelInfo, candidates: list[str], key: str, tried: list,
+             last_print: dict, file: str = "minimal") -> CalibResult:
+    """One calibration job sending `key`'s numbers in the job file `file` (see `run`)."""
     res = CalibResult(sent_scheme=key)
     if manager.state(serial) != 'connected':
         res.problems.append(SAY["printer_offline"])
@@ -676,10 +735,10 @@ def _attempt(manager, serial: str, slotmap: SlotMap, printer, should_stop, hw: h
     except (KeyError, ValueError):
         res.skip = True                 # this scheme cannot number a loaded slot: nothing to send
         return res
-    if sent in tried:
-        res.skip = True                 # the printer saw these numbers already
+    if (file, sent) in tried:
+        res.skip = True                 # the printer saw these numbers in this file already
         return res
-    tried.append(sent)
+    tried.append((file, sent))
     res.sent = dict(zip(labels, sent))
     mapping2 = None
     if mi.ams_mapping2:
@@ -697,7 +756,7 @@ def _attempt(manager, serial: str, slotmap: SlotMap, printer, should_stop, hw: h
     path = remote_path(serial)
     try:
         with ftps.Client(printer) as c:
-            project = project_for(mi, snap, addrs)
+            project = project_for(mi, snap, addrs, file)
             res.job_file = "minimal" if project is None else "project"
             c.upload(path, build(labels, project))
     except tlspin.CertChanged:
@@ -948,6 +1007,7 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
         log.warning("printer %s: calibration job refused (%s)", serial, _s(reply.get('reason')) or reply.get('result'))
         res.problems.append(REFUSED)
         res.report_wanted = "job_refused"
+        res.refused_reason = (_s(reply.get('reason')) or _s(reply.get('result')))[:80]
         res.retry = True        # the numbers may be what it refused: the next candidate's may do
         return
 
@@ -1007,6 +1067,7 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
         if gs in ENDED or gs == 'IDLE':
             st['final'] = gs
             st['error'] = r.get('print_error')
+            st['fail'], st['mc'] = r.get('fail_reason'), r.get('mc_print_error_code')
             return True
         return False
 
@@ -1018,6 +1079,7 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
         res.problems.append(f"{OTHER_JOB} (the printer is running {st['other']!r}; it was not stopped)")
         return
     if st['trip'] is not None:
+        res.tripped = True
         log.warning("printer %s: calibration job tripped: %s", serial, st['trip'])
         res.problems.append(st['trip'] + _stopped_text(_stop_ours(manager, serial, name)))
         res.consistent = False
@@ -1037,6 +1099,10 @@ def _job(manager, serial: str, res: CalibResult, labels: list[str], sent: list[i
     code = "" if _no_error(err) else f" (print_error {_error_text(err)})"
     ended = f"the calibration job ended as {st['final']} on the printer{code}"
     res.final, res.print_error = st['final'], _error_text(err) if code else None
+    fr = _s(st.get('fail')).strip()
+    res.fail_reason = fr if fr and fr != "0" and len(fr) <= 40 else None
+    mc = _int(st.get('mc'))
+    res.mc_error = _error_text(mc) if mc else None
     clean = st['final'] == 'FINISH' or not code     # the H2D ends a gcode-only job FAILED with no error: finished
     res.failed_as_finish = st['final'] != 'FINISH' and clean
     if st['final'] != 'FINISH':

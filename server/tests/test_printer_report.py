@@ -278,8 +278,20 @@ def test_calibration_records_what_each_job_did():
     from test_calib3mf import FakeManager  # noqa: F401 - the job paths are covered in test_calib3mf; the entry's shape here
     r = calib3mf.CalibResult(sent={"A1": 0}, mapping=[0], sent_scheme="legacy", job_file="minimal", final="FINISH", fits=["legacy"])
     assert calib3mf._trail_entry(r) == {"scheme": "legacy", "job_file": "minimal", "final": "FINISH", "print_error": None,
+                                        "fail_reason": None, "mc_error": None,
                                         "sent": [0], "reported": [0], "fits": ["legacy"],
                                         "repeats_last_print": False}
+
+
+def test_an_attempt_names_the_printers_end_codes():
+    """G3: what ended a job, for the X2D / P2S reports that had none: fail_reason and mc_print_error_code."""
+    trail = [{"scheme": "legacy", "job_file": "project", "final": "FAILED", "print_error": None,
+              "fail_reason": "50364437", "mc_error": "0x0300400C", "sent": [0], "reported": [], "fits": []},
+             {"scheme": "legacy", "job_file": "minimal", "final": "FAILED", "fail_reason": "192.0.2.1", "mc_error": "12"}]
+    root = ElementTree.fromstring(printer_report.build({}, "N7", trail=trail))
+    a, b = root.findall("attempt")
+    assert a.get("fail-reason") == "50364437" and a.get("mc-error") == "0x0300400C" and a.get("job-file") == "project"
+    assert b.get("fail-reason") is None and b.get("mc-error") is None       # an address, a bare number: left out
 
 
 # ---------- the maintainer's side ----------

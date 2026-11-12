@@ -58,6 +58,7 @@ class SlotMap:
     suspect: bool = False               # two such prints: logging only (observe) until a re-map (auto when idle)
     by_user: dict[str, dict] = field(default_factory=dict)  # label -> {by: user | user-unverified, at[, nozzle]}:
                                                             # the owner said which slot this is (manual.py)
+    job_file: str | None = None         # the calibration job file this printer answered (minimal | project): G3
 
 
 def default_global(ams_id: int, tray_id: int, model=None, hw: hardware.Hardware | None = None) -> int:
@@ -166,7 +167,8 @@ def load_map(serial: str) -> SlotMap:
                    suspect=bool(d.get('suspect')),
                    by_user={k: v for k, v in (d.get('by_user') or {}).items()
                             if isinstance(v, dict) and v.get('by') in ('user', 'user-unverified') and k in slots}
-                   if isinstance(d.get('by_user'), dict) else {})
+                   if isinstance(d.get('by_user'), dict) else {},
+                   job_file=d.get('job_file') if d.get('job_file') in ('minimal', 'project') else None)
 
 
 # Every slot-map save in this process (mapping job, layout watch, usage) runs under this lock, so a
@@ -184,7 +186,8 @@ def save_map(serial: str, m: SlotMap) -> None:
         m.updated = _last_updated = max(time.time(), _last_updated + 0.001)
         data = {'slots': m.slots, 'calibrated': m.calibrated, 'observe': m.observe, 'updated': m.updated,
                 'fingerprint': m.fingerprint, 'stale': m.stale, 'scheme': m.scheme, 'learned': m.learned,
-                'mismatch_streak': m.mismatch_streak, 'suspect': m.suspect, 'by_user': m.by_user}
+                'mismatch_streak': m.mismatch_streak, 'suspect': m.suspect, 'by_user': m.by_user,
+                'job_file': m.job_file}
         _write_atomic(f, json.dumps(data, indent=2).encode("utf-8"), 0o600, state_owned=True)
 
 

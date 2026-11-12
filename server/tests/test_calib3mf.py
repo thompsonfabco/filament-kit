@@ -73,6 +73,8 @@ class FakeManager:
         self.report_mapping = True
         self.refuse_unknown = False      # native: refuse a job with a number it cannot place
         self.final = "FINISH"
+        self.files = []                  # the job file of each job: "minimal" or "project"
+        self.file_says = {}              # file -> "failed" (FAILED, no mapping) | "refuse:<reason>"
         self.echo = None                 # the command's reply, merged first: our subtask_name (+ last print's mapping)
         self.print_error = None
 
@@ -110,6 +112,18 @@ class FakeManager:
         assert pr["command"] == "project_file"
         f = self.ftp_root / "cache" / FILE
         self.file_at_start = f.read_bytes() if f.exists() else None
+        kind = None
+        if self.file_at_start is not None:
+            kind = "project" if "Metadata/plate_1.json" in zipfile.ZipFile(io.BytesIO(self.file_at_start)).namelist() \
+                else "minimal"
+            self.files.append(kind)
+        says = self.file_says.get(kind, "")
+        if says.startswith("refuse:"):
+            return {"command": "project_file", "result": "fail", "reason": says[len("refuse:"):]}
+        if says == "failed":            # the P2S on the project file (2026-11-11): started, FAILED, no mapping
+            self.queue.append({"gcode_state": "PREPARE", "subtask_name": pr["subtask_name"], "task_id": "333"})
+            self.queue.append({"gcode_state": "FAILED", "fail_reason": "50364437", "mc_print_error_code": "0"})
+            return {"command": "project_file", "result": "success"}
         if self.behaviour == "refuse":
             return {"command": "project_file", "result": "fail", "reason": "file not supported"}
         if self.behaviour == "silent":
@@ -1098,3 +1112,103 @@ def test_trace_never_logs_an_address_or_a_host_name():
     t = calib3mf._reply_trace({"result": "fail", "reason": "cannot reach 192.0.2.20 or kit.local for printer.3mf"})
     assert t == {"result": "fail", "reason": "cannot reach or for"}
     assert calib3mf.trace({"fail_reason": "192.0.2.20", "gcode_state": "kit.local"}, "x") == {"ours": None}
+
+
+# ---------------------------------------------------------------- the job-file ladder (G3; X2D / P2S, 2026-11-11)
+
+def _model_printer(code):
+    registry.upsert(Printer(serial=SERIAL, name=code, model=code, ip="127.0.0.1", access_code=CODE, configured=True))
+
+
+def one_unit_report():
+    """The P2S report's layout: AMS 2 Pro 0 with trays 0, 1, 3 loaded."""
+    rep = base_report()
+    rep["ams"]["ams"] = [{"id": "0", "tray": [tray(0), tray(1), {"id": "2"}, tray(3)]}]
+    del rep["vt_tray"]
+    return rep
+
+
+def test_a_failed_job_file_with_no_mapping_tries_the_other_file(fake_ftp, printer):
+    """The P2S's report: the project file (its hint) started and ended FAILED, no error, no mapping. The ladder sends
+    the same numbers in the minimal file once; that one answers, and `answered_file` says so for the next map."""
+    _model_printer("N7")
+    m = FakeManager(fake_ftp.root, "native", report=one_unit_report())
+    m.file_says = {"project": "failed"}
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert m.files == ["project", "minimal"]
+    assert [p["ams_mapping"] for p in jobs(m)] == [[0, 1, 3], [0, 1, 3]]
+    assert r.consistent is True and r.answered_file == "minimal" and r.job_file == "minimal"
+    assert [t["job_file"] for t in r.trail] == ["project", "minimal"]
+    assert r.trail[0]["final"] == "FAILED" and r.trail[0]["fail_reason"] == "50364437"
+    assert len(r.attempts) == 1 and "project file" in r.attempts[0]
+
+
+def test_a_refused_job_file_tries_the_other_file(fake_ftp, printer):
+    """The X2D's first result: the minimal file refused as an invalid 3MF. The project file gets the numbers."""
+    m = FakeManager(fake_ftp.root, "native", report=owner_h2d_report())
+    m.file_says = {"minimal": "refuse:invalid 3mf"}
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert m.files == ["minimal", "project"] and r.consistent is True and r.answered_file == "project"
+
+
+def test_a_refused_mapping_is_the_next_numberings_turn_not_the_other_files(fake_ftp, printer):
+    m = FakeManager(fake_ftp.root, "native", report=owner_h2d_report())
+    m.file_says = {"minimal": "refuse:invalid ams mapping"}
+    calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert set(m.files) == {"minimal"}
+
+
+def test_the_file_a_printer_answered_starts_the_next_map(fake_ftp, printer):
+    _model_printer("N7")
+    m = FakeManager(fake_ftp.root, "native", report=one_unit_report())
+    smap = slotmap_for(m.report)
+    smap.job_file = "minimal"
+    r = calib3mf.run(m, SERIAL, smap)
+    assert m.files == ["minimal"] and r.answered_file == "minimal"
+
+
+def test_both_files_failing_ends_after_two_jobs(fake_ftp, printer):
+    _model_printer("N7")
+    m = FakeManager(fake_ftp.root, "native", report=one_unit_report())
+    m.file_says = {"project": "failed", "minimal": "failed"}
+    r = calib3mf.run(m, SERIAL, slotmap_for(m.report))
+    assert m.files == ["project", "minimal"] and r.consistent is False and r.answered_file is None
+
+
+def test_the_job_file_ladder_order():
+    from filament_kit.bridge import hardware
+    hw = hardware.load()
+    assert calib3mf.job_files(hw.model("N7")) == ["project", "minimal"]      # the model's hint first
+    assert calib3mf.job_files(hw.model("O1D")) == ["minimal", "project"]     # the H2D keeps minimal until it refuses
+    assert calib3mf.job_files(hw.model("N7"), "minimal") == ["minimal", "project"]   # what the printer answered
+    assert calib3mf.job_files(hw.model(None)) == ["minimal"]                 # no slicer project: no project file
+
+
+def test_the_slot_map_keeps_the_file_the_printer_answered(fake_ftp, printer, monkeypatch):
+    """Through the mapping job: the answered file is saved in the printer's map and starts the next run."""
+    from filament_kit.bridge import mapping, slottest
+    from filament_kit.bridge.slottest import SlotTestResult
+    _model_printer("N7")
+    m = FakeManager(fake_ftp.root, "native", report=one_unit_report())
+    m.file_says = {"project": "failed"}
+    confirmed = {"A1": {"ams_id": 0, "tray_id": 0}, "A2": {"ams_id": 0, "tray_id": 1}, "A4": {"ams_id": 0, "tray_id": 3}}
+    monkeypatch.setattr(slottest, "run", lambda manager, serial, on_step, should_stop=None:
+                        SlotTestResult(confirmed=dict(confirmed)))
+    monkeypatch.setattr(mapping, "check_ready", lambda manager, serial: None)
+    real = calib3mf.run
+    monkeypatch.setattr(calib3mf, "run", lambda manager, serial, slotmap, should_stop=None: real(m, serial, slotmap))
+
+    class Latest:
+        def __getattr__(self, name):
+            return getattr(m, name)
+
+        def wait_report(self, serial, predicate, timeout):
+            return m.report if timeout == 0 else m.wait_report(serial, predicate, timeout)
+    try:
+        mapping.Mapper(Latest()).run(SERIAL)
+        assert ams.load_map(SERIAL).job_file == "minimal"
+        m.files.clear()
+        mapping.Mapper(Latest()).run(SERIAL)
+        assert m.files == ["minimal"]
+    finally:
+        mapping.manual_end(SERIAL)
