@@ -670,6 +670,8 @@ void otaCheck() {
 }
 
 // New OTA image: keep it only if it can reach the server's reader API.
+static const uint32_t CONFIRM_WINDOW_MS = 60000;   // how long to keep trying /healthz
+static const uint32_t CONFIRM_RETRY_MS  = 2000;
 void confirmOtaImage() {
   const esp_partition_t* run = esp_ota_get_running_partition();
   esp_ota_img_states_t st;
@@ -677,12 +679,16 @@ void confirmOtaImage() {
   Serial.printf("running %s, OTA state %d\n", run->label, (int)st);
   if (st != ESP_OTA_IMG_PENDING_VERIFY) return;
   bool ok = false;
-  if (WiFi.status() == WL_CONNECTED) {
-    String resp;
-    ok = apiRequest(urlHealthz, nullptr, resp) == 200;
+  // A slow router or a server restarting right now must not roll back a healthy build:
+  // keep trying for CONFIRM_WINDOW_MS (the bootloader's rollback is the fallback after that).
+#ifndef OTA_TEST_FAIL_HEALTH  // rollback drill: PLATFORMIO_BUILD_FLAGS=-DOTA_TEST_FAIL_HEALTH
+  for (uint32_t t0 = millis(); !ok && millis() - t0 < CONFIRM_WINDOW_MS; ) {
+    if (WiFi.status() == WL_CONNECTED) {
+      String resp;
+      ok = apiRequest(urlHealthz, nullptr, resp) == 200;
+    }
+    if (!ok) delay(CONFIRM_RETRY_MS);
   }
-#ifdef OTA_TEST_FAIL_HEALTH  // rollback drill: PLATFORMIO_BUILD_FLAGS=-DOTA_TEST_FAIL_HEALTH
-  ok = false;
 #endif
   if (ok) {
     esp_ota_mark_app_valid_cancel_rollback();
