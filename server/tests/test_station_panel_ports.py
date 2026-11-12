@@ -131,3 +131,34 @@ def test_write_timeout_drops_and_refinds_panel(ports, monkeypatch):
     with pytest.raises(StopLoop):
         panel.panel_loop()
     assert len(finds) == 2 and st.panel["ser"] is None and st.ports["panel_chip"] is None
+
+
+def test_empty_passes_back_off_and_a_new_port_cuts_the_wait_short(ports, monkeypatch):
+    sleeps, passes = [], []
+    listing = ["/dev/ttyUSB0"]
+
+    def sleep(s):
+        sleeps.append(s)
+        if len(sleeps) == 6:
+            listing.append("/dev/ttyUSB1")  # a port appears in the third step of the slow wait
+
+    def find():
+        passes.append(1)
+        if len(passes) == 5:
+            raise StopLoop
+        return None
+
+    monkeypatch.setattr(panel.time, "sleep", sleep)
+    monkeypatch.setattr(st, "panel_ttys", lambda: list(listing))
+    monkeypatch.setattr(panel, "find_panel", find)
+    with pytest.raises(StopLoop):
+        panel.panel_loop()
+    assert sleeps == [5] * 6  # passes 1-3 wait 5 s; pass 4 starts the slow wait and the new port ends it after 3 steps
+
+
+def test_slow_wait_runs_the_whole_minute_when_the_ports_stay_the_same(ports, monkeypatch):
+    sleeps = []
+    monkeypatch.setattr(panel.time, "sleep", sleeps.append)
+    monkeypatch.setattr(st, "panel_ttys", lambda: ["/dev/ttyUSB0"])
+    panel.wait_for_panel(panel.EMPTY_PASSES + 1)
+    assert sum(sleeps) == panel.SLOW_SECONDS

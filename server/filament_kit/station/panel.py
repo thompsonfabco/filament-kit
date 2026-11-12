@@ -236,13 +236,32 @@ def send_volume():
     return wire.panel_send("V %d" % st.settings["speaker_volume"])
 
 
+EMPTY_PASSES, SLOW_SECONDS = 3, 60  # after this many passes without a panel, look every SLOW_SECONDS
+
+
+def wait_for_panel(misses):
+    """Wait between passes when no panel was found: 5 s at first, then up to SLOW_SECONDS, cut short when the list of
+    ports changes (a plugged-in panel is found without the station opening every port on a station that has none)."""
+    if misses <= EMPTY_PASSES:
+        time.sleep(5)
+        return
+    ports = st.panel_ttys()
+    for _ in range(SLOW_SECONDS // 5):
+        time.sleep(5)
+        if st.panel_ttys() != ports:
+            return
+
+
 def panel_loop():
     """Find the button panel among the USB serial ports, then relay its presses and keep its lamps current."""
+    misses = 0
     while True:
         ser = find_panel()
         if not ser:
-            time.sleep(5)
+            misses += 1
+            wait_for_panel(misses)
             continue
+        misses = 0
         log.info("button panel on %s (firmware %s)", ser.port, ser.panel_version)
         if update_firmware(ser):
             continue  # look for it again: it boots the new firmware and says HELLO
