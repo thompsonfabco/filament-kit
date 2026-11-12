@@ -1,5 +1,7 @@
 """registry: printers.xml, the printers.json migration, Klipper fields."""
 import json
+import stat
+import sys
 
 import pytest
 
@@ -35,6 +37,14 @@ def test_upgrade_writes_xml_and_keeps_the_json(env):
     assert (env / "state" / "printers.json").exists()
     assert not (env / "state" / "printers.json.migrated").exists()
     assert registry.load()["S1"] == p            # second load: same, from the XML
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX file modes")
+def test_the_files_holding_the_access_codes_are_owner_only(env):
+    registry.upsert(Printer("S1", access_code="12345678", configured=True))
+    for name in ("printers.xml", "printers.json"):
+        f = env / "state" / name
+        assert f.is_file() and stat.S_IMODE(f.stat().st_mode) == 0o600, name
 
 
 def test_rollback_still_finds_every_bambu_printer(env):

@@ -209,14 +209,15 @@ class FakeRelease:
     /repos/o/r/releases/assets/<n> through a 302 (as GitHub does). Records every request's headers."""
 
     def __init__(self, priv, version="1.2.3", *, tamper_sig=False, tamper_tar=False, tarball=None, extra=None,
-                 unlisted=None, tamper_extra=False):
+                 unlisted=None, tamper_extra=False, drop=(), tar_unsigned=False):
         """`extra`: more assets {name: bytes}, listed in SHA256SUMS; `unlisted`: assets left out of it;
-        `tamper_extra`: the extra assets are changed after SHA256SUMS was made."""
+        `tamper_extra`: the extra assets are changed after SHA256SUMS was made; `drop`: assets the release does not
+        carry at all; `tar_unsigned`: the (signed) SHA256SUMS does not list the tarball."""
         self.version = version
         tar = tarball if tarball is not None else make_tarball(version)
         extra = dict(extra or {})
-        sums = (f"{hashlib.sha256(tar).hexdigest()}  filament-kit-{version}.tar.gz\n"
-                f"{'0' * 64}  get.sh\n"
+        sums = (("" if tar_unsigned else f"{hashlib.sha256(tar).hexdigest()}  filament-kit-{version}.tar.gz\n")
+                + f"{'0' * 64}  get.sh\n"
                 + "".join(f"{hashlib.sha256(d).hexdigest()}  {n}\n" for n, d in extra.items())).encode()
         if tamper_extra:
             extra = {n: d + b"<!-- changed -->" for n, d in extra.items()}
@@ -227,6 +228,8 @@ class FakeRelease:
             tar = tar[:-1] + bytes([tar[-1] ^ 1])
         self.files = {f"filament-kit-{version}.tar.gz": tar, "SHA256SUMS": sums,
                       "SHA256SUMS.sig": base64.b64encode(sig) + b"\n", **extra, **(unlisted or {})}
+        for name in drop:
+            del self.files[name]
         self.requests: list[tuple[str, dict]] = []
         outer = self
 
@@ -320,6 +323,23 @@ def test_wrong_key_refused(serve, tmp_path):
     other = _pub(ed25519.Ed25519PrivateKey.generate())
     with pytest.raises(ReleaseError, match="signature"):
         release.fetch(tmp_path, repo="o/r", fetcher=release.Fetcher(fr.api), pubkey_b64=other)
+
+
+@pytest.mark.parametrize("dropped", ["SHA256SUMS", "SHA256SUMS.sig", "filament-kit-1.2.3.tar.gz"])
+def test_a_release_missing_an_asset_is_refused(serve, key, tmp_path, dropped):
+    fr = serve(drop=(dropped,))
+    with pytest.raises(ReleaseError, match=f"has no {dropped}"):
+        release.fetch(tmp_path / "dl", repo="o/r", fetcher=release.Fetcher(fr.api), pubkey_b64=_pub(key))
+    assert not any(p.startswith("/dl/filament-kit") for p, _ in fr.requests)       # no tarball was fetched
+    assert not list((tmp_path / "dl").iterdir())
+
+
+def test_a_tarball_the_signed_sums_do_not_list_is_refused(serve, key, tmp_path):
+    fr = serve(tar_unsigned=True)
+    with pytest.raises(ReleaseError, match="does not list filament-kit-1.2.3.tar.gz"):
+        release.fetch(tmp_path / "dl", repo="o/r", fetcher=release.Fetcher(fr.api), pubkey_b64=_pub(key))
+    assert not any(p.startswith("/dl/filament-kit") for p, _ in fr.requests)
+    assert not list((tmp_path / "dl").iterdir())
 
 
 def test_bad_hash_deletes_the_tarball(serve, key, tmp_path):
