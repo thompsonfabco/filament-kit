@@ -73,6 +73,7 @@ import datetime as dt
 import io
 import json
 import logging
+import math
 import os
 import re
 import threading
@@ -83,6 +84,8 @@ from concurrent.futures import Future, ThreadPoolExecutor, wait
 from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree
+
+from defusedxml import ElementTree as SafeET
 
 from .. import config
 from ..pairing import give_to_state_owner, make_state_dir
@@ -98,6 +101,7 @@ TERMINAL = {'FINISH', 'FAILED'}
 DIRS = ('/', '/cache')
 CALIB_PREFIX = 'fk-calib-'      # our calibration job (calib3mf): not a print, its file is deleted afterwards
 MAX_SLICE_INFO = 4 * 1024 * 1024
+MAX_USED_G = 5000.0        # more than this on one plate is a damaged or hostile file, not a print
 ENTRY_ID = re.compile(r"[0-9a-f]{32}")
 FIELDS = ('id', 'at', 'job', 'grams', 'spool_id', 'slot', 'observe')
 
@@ -351,7 +355,7 @@ def parse_filaments(data: bytes) -> dict[str | None, list[dict]]:
         name = next((n for n in z.namelist() if n.lower().endswith('slice_info.config')), None)
         if name is None or z.getinfo(name).file_size > MAX_SLICE_INFO:
             return {}
-        root = ElementTree.fromstring(z.read(name))
+        root = SafeET.fromstring(z.read(name))
     except (zipfile.BadZipFile, ElementTree.ParseError, OSError, KeyError, ValueError):
         return {}
     plates = root.findall('plate') or [root]
@@ -365,6 +369,8 @@ def parse_filaments(data: bytes) -> dict[str | None, list[dict]]:
                 g = float(f.get('used_g') or 0)
             except ValueError:
                 g = 0.0
+            if not math.isfinite(g) or g > MAX_USED_G:
+                g = 0.0                 # "nan", "inf" or absurd: counted as nothing used
             if fid is None:
                 continue
             fils.append({'id': fid, 'used_g': g, 'type': f.get('type'), 'color': f.get('color'),

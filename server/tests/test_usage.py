@@ -515,6 +515,26 @@ def test_parse_slice_info_plates():
     assert usage.parse_filaments(b"not a zip") == {}
 
 
+def _3mf_with(slice_info_text: str) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("Metadata/slice_info.config", slice_info_text)
+    return buf.getvalue()
+
+
+@pytest.mark.parametrize("grams", ["nan", "inf", "-inf", "1e30", "5000.5"])
+def test_parse_slice_info_drops_nonfinite_or_absurd_grams(grams):
+    plates = usage.parse_filaments(_3mf_with(
+        f'<config><plate><metadata key="index" value="1"/><filament id="1" used_g="{grams}"/></plate></config>'))
+    assert plates["1"][0]["used_g"] == 0.0
+
+
+def test_parse_slice_info_refuses_entities():
+    bomb = ('<?xml version="1.0"?><!DOCTYPE c [<!ENTITY a "x">]><config><plate>'
+            '<filament id="1" used_g="2"/></plate></config>')
+    assert usage.parse_filaments(_3mf_with(bomb)) == {}
+
+
 # ---------------------------------------------------------------- state ownership (root-run CLI first)
 
 def _as_root(monkeypatch):
