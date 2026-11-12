@@ -58,7 +58,7 @@ def env(tmp_path, monkeypatch):
     setup_code.write(CODE)
     monkeypatch.setattr(cli.shutil, "chown", lambda *a, **k: None)   # no filament-kit group on a test machine
     applied = []
-    monkeypatch.setattr(setup_helper, "_start_apply", lambda: applied.append(True))
+    monkeypatch.setattr(setup_helper, "_start_apply", lambda checked=False: applied.append(True))
     return applied
 
 

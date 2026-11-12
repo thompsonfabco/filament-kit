@@ -123,7 +123,7 @@ def test_a_newer_kits_upload_is_refused(app, monkeypatch):
 def test_the_restore_job_takes_the_typed_word(app, monkeypatch):
     started = []
     from filament_kit import setup_helper
-    monkeypatch.setattr(setup_helper, "_start_job", lambda name, why="": started.append(name))
+    monkeypatch.setattr(setup_helper, "_start_job", lambda name, why="", checked=False: started.append(name))
     sha = _upload(app, backup.create().read_bytes()).json()["sha256"]
     assert post(client(app), "job", {"name": "restore", "confirm": "yes", "sha256": sha}).status_code == 400
     assert post(client(app), "job", {"name": "restore", "sha256": sha}).status_code == 400

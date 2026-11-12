@@ -216,7 +216,7 @@ def test_a_change_holds_the_lock_from_its_check_to_its_start(env, monkeypatch): 
     monkeypatch.setattr(setup_helper, "_job_lock", Held)
     real = setup_helper.config.save
     monkeypatch.setattr(setup_helper.config, "save", lambda c: order.append("save") or real(c))
-    monkeypatch.setattr(setup_helper, "_start_apply", lambda: order.append("start"))
+    monkeypatch.setattr(setup_helper, "_start_apply", lambda checked=False: order.append("start"))
     r = setup_helper.handle({"op": "mode", "code": CODE, "mode": "all-in-one"})
     assert r["ok"] is True and order == ["lock", "save", "start", "unlock"]
 
@@ -260,7 +260,7 @@ def test_a_job_off_the_list_is_refused_before_the_helper(app, helper, name):
 
 def test_a_job_that_starts_writes_one_audit_line_without_the_code(app, monkeypatch, caplog):
     started = []
-    monkeypatch.setattr(setup_helper, "_start_job", lambda n, why="": started.append(n))
+    monkeypatch.setattr(setup_helper, "_start_job", lambda n, why="", checked=False: started.append(n))
     caplog.set_level("INFO", logger="filament_kit")
     assert post(client(app), "job", {"name": "check"}).json() == {"ok": True, "name": "check"}
     assert started == ["check"]
@@ -269,7 +269,7 @@ def test_a_job_that_starts_writes_one_audit_line_without_the_code(app, monkeypat
 
 def test_update_refused_while_a_printer_is_busy_in_the_printers_words_without_its_serial(app, monkeypatch):
     monkeypatch.setattr(updates, "printers_idle", _busy)
-    monkeypatch.setattr(setup_helper, "_start_job", lambda n, why="": pytest.fail("started"))
+    monkeypatch.setattr(setup_helper, "_start_job", lambda n, why="", checked=False: pytest.fail("started"))
     r = post(client(app), "job", {"name": "update"})
     assert r.status_code == 409 and r.json()["error"] == updates.BUSY_TEXT and SERIAL not in r.text
 
@@ -301,7 +301,7 @@ def test_the_look_at_the_locks_works_where_the_helper_may_not_write(env, monkeyp
 
 
 def test_rollback_refused_with_nothing_kept_and_with_a_module_the_target_lacks(app, monkeypatch):
-    monkeypatch.setattr(setup_helper, "_start_job", lambda n, why="": pytest.fail("started"))
+    monkeypatch.setattr(setup_helper, "_start_job", lambda n, why="", checked=False: pytest.fail("started"))
     r = post(client(app), "job", {"name": "rollback"})
     assert r.status_code == 409 and "nothing to roll back to" in r.json()["error"]
     updates._write_state(previous="0.3.0")
@@ -468,6 +468,20 @@ def test_the_answer_on_a_quiet_log_stands_for_a_moment(app, monkeypatch):
                                        ("sk-ant-api03-abc", "api03"), ("ghp_abcd1234", "abcd1234")])
 def test_redaction_hides_more_shapes(text, gone):
     assert gone not in redact.text(text, [])
+
+
+def test_a_page_change_that_starts_a_job_asks_systemd_what_runs_once(monkeypatch):
+    import subprocess
+    monkeypatch.setattr(setup_helper, "_no_systemd", lambda: False)
+    asked, started = [], []
+    monkeypatch.setattr(setup_helper, "_applying", lambda: asked.append(1) or False)
+    monkeypatch.setattr(setup_helper.subprocess, "run",
+                        lambda cmd, **kw: started.append(cmd) or subprocess.CompletedProcess(cmd, 0, "", ""))
+    setup_helper._apply({})
+    assert len(asked) == 1 and started == [["systemctl", "start", "--no-block", setup_helper.job_unit("apply")]]
+    del asked[:]
+    setup_helper._start_job("check")        # a caller that did not check itself is checked
+    assert len(asked) == 1
 
 
 def test_a_word_like_token_or_password_in_a_sentence_stays():

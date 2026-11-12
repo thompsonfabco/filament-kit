@@ -288,12 +288,14 @@ def _job_lock():
         os.close(fd)
 
 
-def _start_job(name: str, why: str = "") -> None:
+def _start_job(name: str, why: str = "", checked: bool = False) -> None:
+    """`checked`: the caller ran _not_applying() under this same lock, so it is not asked again (each ask is several systemctl runs)."""
     if name not in JOBS:
         raise Refused(400, "no such job")
     if _no_systemd():
         return
-    _not_applying()
+    if not checked:
+        _not_applying()
     unit = job_unit(name)
     r = subprocess.run(["systemctl", "start", "--no-block", unit], capture_output=True, text=True,
                        timeout=60, check=False)
@@ -302,8 +304,8 @@ def _start_job(name: str, why: str = "") -> None:
         raise Refused(500, why or f"the job did not start; at the server: sudo filament-kit {' '.join(JOBS[name])}")
 
 
-def _start_apply() -> None:
-    _start_job("apply", "saved, but the apply did not start; run at the server: sudo filament-kit modules apply")
+def _start_apply(checked: bool = False) -> None:
+    _start_job("apply", "saved, but the apply did not start; run at the server: sudo filament-kit modules apply", checked)
 
 
 def _not_applying() -> None:
@@ -411,7 +413,7 @@ def _module(req: dict) -> dict:
     if err:
         raise Refused(400, err)
     config.save(cfg)
-    _start_apply()
+    _start_apply(checked=True)
     return {"changed": True, "notes": notes, "modules": sorted(modules.enabled(cfg))}
 
 
@@ -448,7 +450,7 @@ def _setting(req: dict) -> dict:
     if err:
         raise Refused(400, err)
     config.save(cfg)
-    _start_apply()
+    _start_apply(checked=True)
     return {}
 
 
@@ -567,7 +569,7 @@ def _general(req: dict) -> dict:
             raise Refused(400, err)
     config.save(cfg)
     if then == "apply":
-        _start_apply()
+        _start_apply(checked=True)
     elif then == "restart":
         _restart_kit()
     return {"key": key, "restarts": then == "restart", "applies": then == "apply"}
@@ -592,7 +594,7 @@ def _spoolman_url(req: dict) -> dict:
     if err:
         raise Refused(400, err)
     config.save(cfg)
-    _start_apply()
+    _start_apply(checked=True)
     return {}
 
 
@@ -625,7 +627,7 @@ def _mode(req: dict) -> dict:
     if err:
         raise Refused(400, err)
     config.save(out)
-    _start_apply()
+    _start_apply(checked=True)
     return {"changed": True, "notes": notes, "modules": sorted(modules.enabled(out))}
 
 
@@ -729,9 +731,9 @@ def _job(req: dict) -> dict:
         except (backup.BackupError, OSError) as e:
             raise Refused(409, str(e)) from None
     if name == "apply":
-        _start_apply()
+        _start_apply(checked=True)
     else:
-        _start_job(name)
+        _start_job(name, checked=True)
     return {"name": name}
 
 
@@ -806,7 +808,7 @@ def _trust_enabled(req: dict) -> dict:
 
 def _apply(req: dict) -> dict:
     _not_applying()
-    _start_apply()
+    _start_apply(checked=True)
     return {}
 
 

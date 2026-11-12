@@ -36,7 +36,7 @@ def restarts(env, monkeypatch):  # noqa: F811
 @pytest.fixture
 def applies(env, monkeypatch):  # noqa: F811
     seen = []
-    monkeypatch.setattr(setup_helper, "_start_apply", lambda: seen.append(True))
+    monkeypatch.setattr(setup_helper, "_start_apply", lambda checked=False: seen.append(True))
     return seen
 
 
