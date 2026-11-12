@@ -11,7 +11,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.thompsonfabco.filamentkit.ui.printers.MismatchNotice
 import com.thompsonfabco.filamentkit.ui.printers.PrinterHelp
+import com.thompsonfabco.filamentkit.ui.printers.UnpairedNotice
 
 /** "Load into printer", shown in the spool card. [onDone] gets the flow's final state (to refresh the card). */
 @Composable
@@ -67,15 +69,7 @@ fun LoadFlow(state: LoadUiState, vm: LoadViewModel, onDone: (LoadUiState.Done) -
             }
             Button(onClick = { onDone(state) }) { Text("OK") }
         }
-        LoadUiState.Unauthorized -> {
-            Text("This phone is no longer paired with the server.", color = MaterialTheme.colorScheme.error)
-            Button(onClick = onPairAgain) { Text("Pair again") }
-        }
-        is LoadUiState.Mismatch -> {
-            Text("The server's certificate changed.", style = MaterialTheme.typography.titleMedium)
-            Text("Expected: ${state.expected}")
-            Text("Got: ${state.actual}")
-            Button(onClick = onPairAgain) { Text("Pair again") }
-        }
+        LoadUiState.Unauthorized -> UnpairedNotice(onPairAgain)
+        is LoadUiState.Mismatch -> MismatchNotice(state.expected, state.actual, onPairAgain)
     }
 }

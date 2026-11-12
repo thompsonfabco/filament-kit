@@ -28,6 +28,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
+import com.thompsonfabco.filamentkit.ui.printers.MismatchNotice
+import com.thompsonfabco.filamentkit.ui.printers.UnpairedNotice
 import com.thompsonfabco.filamentkit.ui.spool.SpoolSummaryRow
 import com.thompsonfabco.filamentkit.ui.spool.toSpoolSummary
 import kotlinx.coroutines.CancellationException
@@ -144,15 +146,9 @@ fun SearchScreen(
         }
         ui.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         ui.mismatch?.let { (expected, actual) ->
-            Text("The server's certificate changed.", style = MaterialTheme.typography.titleMedium)
-            Text("Expected: $expected")
-            Text("Got: $actual")
-            Button(onClick = onPairAgain) { Text("Pair again") }
+            MismatchNotice(expected, actual, onPairAgain)
         }
-        if (ui.unauthorized) {
-            Text("This phone is no longer paired with the server.", color = MaterialTheme.colorScheme.error)
-            Button(onClick = onPairAgain) { Text("Pair again") }
-        }
+        if (ui.unauthorized) UnpairedNotice(onPairAgain)
         if (ui.searched && ui.results.isEmpty() && ui.error == null) Text("No spools found.")
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(ui.results) { spool ->
