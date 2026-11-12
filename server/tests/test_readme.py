@@ -146,7 +146,7 @@ def test_public_docs_have_no_local_owner_bans():
 
 
 # Final review I4: the same ban over every tracked text file. `sv08` (a printer model the kit makes Orca presets for) and
-# `h2d_token` (the filament-ops token file name that `migrate-ops` reads) are product names there, not the owner's data;
+# `h2d_token` (a token file name the Bambu printer code uses) are product names there, not the owner's data;
 # the owner's scanner paths come from the local ban file instead (its fingerprints apply as well).
 CODE_OWNER_DATA = tuple(b for b in OWNER_DATA if b not in ("sv08", "h2d_token"))   # plus the local "code_plain"
 GENERIC_SCOPE = ("server/tests/", "pc-sync/", "get.sh", "install/", "reader/", "tools/")
