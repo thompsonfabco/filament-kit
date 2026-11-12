@@ -137,11 +137,86 @@ def test_a_filament_only_this_intake_uses_is_edited_in_place_and_undone(sm):
     assert rec["saved"][0]["values"]["nozzle"] == 220
 
 
-def test_apply_to_some_of_an_intakes_spools(sm):
+def test_apply_to_some_of_an_intakes_spools_splits_them_off(sm):
+    """Review R124 finding 1: the record says what each spool is, and the others can get the same change later."""
     r, hid = add(sm, count=3)
-    rec = intake_history.apply(sm, hid, item=0, values={"color_hex": "FF0000"}, spool_ids=[r.spool_ids[2]])
+    a, b, c = r.spool_ids
+    rec = intake_history.apply(sm, hid, item=0, values={"color_hex": "FF0000"}, spool_ids=[c])
     fids = [sm.get(f"spool/{s}")["filament"]["id"] for s in r.spool_ids]
-    assert fids[0] == fids[1] != fids[2] and rec["revisions"][-1]["spool_ids"] == [r.spool_ids[2]]
+    assert fids[0] == fids[1] != fids[2] and rec["revisions"][-1]["spool_ids"] == [c]
+    by_spool = {sid: s["values"]["color_hex"] for s in rec["saved"] for sid in s["spool_ids"]}
+    assert by_spool == {a: "8A8C8E", b: "8A8C8E", c: "FF0000"}
+    assert [x["spool_id"] for x in rec["spools"]] == [a, b, c]
+    rec = intake_history.apply(sm, hid, item=0, values={"color_hex": "FF0000"}, spool_ids=[a, b])
+    assert {sm.get(f"spool/{s}")["filament"]["color_hex"] for s in r.spool_ids} == {"FF0000"}
+    rec = intake_history.undo(sm, hid, None)                  # the second split goes back
+    rec = intake_history.undo(sm, hid, None)                  # the first too: one item of three again
+    assert [s["spool_ids"] for s in rec["saved"]] == [[a, b, c]]
+    assert {sm.get(f"spool/{s}")["filament"]["color_hex"] for s in r.spool_ids} == {"8A8C8E"}
+
+
+def test_undo_never_edits_a_filament_that_became_shared(sm):
+    """Review R124 finding 2: an in-place edit, then another intake joins the filament; the undo gives this record's
+    spool a copy with the earlier values and leaves the other spool's filament alone."""
+    r, hid = add(sm)
+    fid = sm.get(f"spool/{r.spool_ids[0]}")["filament"]["id"]
+    intake_history.apply(sm, hid, item=0, values={"nozzle": 230})
+    r2, _ = add(sm, it={**ITEM, "nozzle": 230})
+    assert sm.get(f"spool/{r2.spool_ids[0]}")["filament"]["id"] == fid
+    rec = intake_history.undo(sm, hid, None)
+    assert sm.get(f"filament/{fid}")["settings_extruder_temp"] == 230               # the other spool's, untouched
+    mine = sm.get(f"spool/{r.spool_ids[0]}")["filament"]
+    assert mine["id"] != fid and mine["settings_extruder_temp"] == 220
+    assert rec["saved"][0]["filament_id"] == mine["id"] and rec["revisions"][-1]["filaments"]["undo_to"] == mine["id"]
+
+
+def test_undo_leaves_a_spool_weight_the_revision_did_not_change(sm):
+    """Review R124 finding 3: a weight measured after the intake survives undoing a nozzle edit."""
+    r, hid = add(sm)
+    sid = r.spool_ids[0]
+    sm.patch(f"spool/{sid}", {"spool_weight": 250})
+    intake_history.apply(sm, hid, item=0, values={"nozzle": 230})
+    intake_history.undo(sm, hid, None)
+    assert sm.get(f"spool/{sid}")["spool_weight"] == 250
+
+
+def test_a_tare_correction_is_undone_to_the_spools_own_weight(sm):
+    r, hid = add(sm)
+    sid = r.spool_ids[0]
+    sm.patch(f"spool/{sid}", {"spool_weight": 250})
+    intake_history.apply(sm, hid, item=0, values={"tare": 180})
+    assert sm.get(f"spool/{sid}")["spool_weight"] == 180
+    intake_history.undo(sm, hid, None)
+    assert sm.get(f"spool/{sid}")["spool_weight"] == 250
+
+
+def test_an_ai_answer_that_fails_the_checks_is_not_proposed(sm):
+    """Review R124 finding 4: the proposal passes the same checks as an edit by hand."""
+    _, hid = add(sm, read_id=read(sm)["read_id"])
+    for change in ({"net": -5}, {"vendor": "x" * 150}):
+        bad = copy.deepcopy(READ)
+        bad["items"][0].update(change)
+        with pytest.raises(intake_history.HistoryError) as e:
+            intake_history.revise(sm, hid, "it is wrong", client=FakeClaude(bad))
+        assert e.value.code == "api_error" and "not usable" in str(e.value), change
+    assert intake_history.get(hid)["revisions"] == []
+
+
+def test_a_proposal_must_be_text(sm):
+    _, hid = add(sm)
+    with pytest.raises(intake_history.HistoryError) as e:
+        intake_history.apply(sm, hid, proposal=["p-1"])
+    assert e.value.status == 400
+
+
+def test_the_add_tool_says_nothing_of_the_history_to_other_callers(sm):
+    """Review R124 finding 8: the MCP tool result carries `saved` / `tag` only for the kit's own page."""
+    from filament_kit.web import mcp_tools
+    tools = mcp_tools.Tools(sm)
+    it = {k: v for k, v in ITEM.items() if k not in ("photos", "existing_filament_id", "estimates", "sealed_reason")}
+    out = tools.add_spools([it], True)
+    assert "saved" not in out and "tag" not in out
+    assert "saved" in tools.add_spools([it], True, with_saved=True)
 
 
 def test_undo_goes_back_one_revision_at_a_time(sm):
@@ -269,6 +344,16 @@ def test_cli_lists_records_with_their_photo_paths(sm, capsys, monkeypatch):
     assert "revision 1" in capsys.readouterr().out
     assert cli.main(["intake", "undo", hid]) == 0
     assert cli.main(["intake", "edit", hid, "nozzle"]) == 1
+
+
+def test_cli_edits_some_of_the_spools(sm, capsys, monkeypatch):
+    from filament_kit import cli
+    monkeypatch.setattr(cli, "Spoolman", lambda url: sm)
+    r, hid = add(sm, count=2)
+    assert cli.main(["intake", "edit", hid, "color_hex=FF0000", "--spools", str(r.spool_ids[1])]) == 0
+    assert sm.get(f"spool/{r.spool_ids[0]}")["filament"]["color_hex"] == "8A8C8E"
+    assert sm.get(f"spool/{r.spool_ids[1]}")["filament"]["color_hex"] == "FF0000"
+    assert cli.main(["intake", "edit", hid, "color_hex=00FF00", "--spools", "x"]) == 1
 
 
 def test_a_corrected_brand_joins_the_filament_that_has_it_and_takes_its_values(sm):

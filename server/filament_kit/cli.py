@@ -730,7 +730,15 @@ def cmd_intake(args) -> int:
                     _err_line(f"{kv}: write field=value")
                     return 1
                 vals[k.strip()] = _cli_value(k.strip(), v.strip())
-            return _say_revision(intake_history.apply(sm, args.id, item=args.item, values=vals, device="command line"))
+            spools = None
+            if args.spools:
+                try:
+                    spools = [int(x) for x in args.spools.split(",") if x.strip()]
+                except ValueError:
+                    _err_line("--spools takes spool ids, e.g. 41,42")
+                    return 1
+            return _say_revision(intake_history.apply(sm, args.id, item=args.item, values=vals, spool_ids=spools,
+                                                      device="command line"))
         if args.intake_cmd == "undo":
             r = intake_history.undo(sm, args.id, None)
             print(f"Undone. The record is now {r['state']}.")
@@ -2277,6 +2285,7 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     ied.add_argument("id")
     ied.add_argument("values", nargs="+", metavar="field=value")
     ied.add_argument("--item", type=int, default=None)
+    ied.add_argument("--spools", default=None, help="only these of the item's spools, e.g. 41,42 (default: all)")
     iun = isub.add_parser("undo", help="undo the record's newest revision")
     iun.add_argument("id")
     sub.add_parser("ensure-fields", help="create the Spoolman extra fields")

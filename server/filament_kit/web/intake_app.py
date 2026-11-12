@@ -268,6 +268,8 @@ class IntakeApp:
     async def history_apply(self, request: Request):
         from .. import intake_history
         b = await self._body(request)
+        if b.get("proposal") is not None and not isinstance(b.get("proposal"), str):
+            raise intake_history.HistoryError(400, "bad_request", "proposal must be the id a revision gave")
         return await anyio.to_thread.run_sync(lambda: intake_history.apply(
             self.tools.sm, request.path_params["hid"], proposal=b.get("proposal"), item=b.get("item"),
             values=b.get("values") if b.get("proposal") is None else None, spool_ids=b.get("spool_ids"),
@@ -446,7 +448,7 @@ class IntakeApp:
         read_id = body.get("read_id") if isinstance(body.get("read_id"), str) else None
 
         def run() -> dict:
-            out = self.tools.add_spools(items, dry, link)
+            out = self.tools.add_spools(items, dry, link, with_saved=True)
             saved = out.pop("saved", [])
             tag = out.pop("tag", None)
             if not out.get("dry") and self.history:     # the kit's own page: the kit's state is this process's

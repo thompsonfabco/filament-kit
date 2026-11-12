@@ -50,7 +50,15 @@ FIELDS = ("vendor", "name", "material", "color_hex", "net", "tare", "density", "
 IDENTITY = ("vendor", "name", "material", "color_hex")
 ID = re.compile(r"[0-9a-f]{12}")
 READ_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
-_LOCK = threading.RLock()
+_LOCK = threading.RLock()                   # the history folder: new records, pruning
+_RECORD_LOCKS: dict[str, threading.Lock] = {}
+
+
+def _record_lock(rid: str) -> threading.Lock:
+    """One lock per record for a change (apply, undo, a proposal): a slow Spoolman holds only that record, never the
+    list, a record's view or a photo (their files are written atomically, so a read needs no lock)."""
+    with _LOCK:
+        return _RECORD_LOCKS.setdefault(rid, threading.Lock())
 
 
 class HistoryError(Exception):
@@ -225,25 +233,34 @@ def _summary(rec: dict) -> dict:
             "spools": spools}
 
 
+def _size() -> int:
+    total = 0
+    for p in _root().glob("*/photo*.jpg") if _root().is_dir() else []:
+        try:
+            total += p.stat().st_size
+        except OSError:                 # pruned meanwhile
+            pass
+    return total
+
+
 def list_records(ai: bool) -> dict:
-    with _LOCK:
-        recs = []
-        for rid in _ids_newest_first():
-            try:
-                recs.append(_summary(_load(rid)))
-            except HistoryError:
-                continue
-        size = sum(p.stat().st_size for p in _root().glob("*/photo*.jpg")) if _root().is_dir() else 0
+    recs = []
+    for rid in _ids_newest_first():
+        try:
+            recs.append(_summary(_load(rid)))
+        except (HistoryError, OSError):
+            continue
+    size = _size()
     return {"keep": keep(), "count": len(recs), "photo_bytes": size, "ai": bool(ai), "records": recs}
 
 
 def get(rid: str) -> dict:
-    with _LOCK:
-        rec = _load(rid)
-        out = _summary(rec)
+    rec = _load(rid)
+    out = _summary(rec)
     out.update({k: rec.get(k) for k in ("read", "weight", "tag", "device")})
+    # an item whose spools all moved to a split-off item (a change to some of them) is not shown
     out["saved"] = [{"item": s["item"], "values": s["values"], "spool_ids": s["spool_ids"],
-                     "filament_id": s.get("filament_id")} for s in rec.get("saved") or []]
+                     "filament_id": s.get("filament_id")} for s in rec.get("saved") or [] if s.get("spool_ids")]
     out["revisions"] = rec.get("revisions") or []
     return out
 
@@ -363,9 +380,10 @@ def _rebuild(changed: list[str]) -> None:
 def _item(rec: dict, item) -> dict:
     saved = rec.get("saved") or []
     if item is None:
-        item = 0
-    if isinstance(item, bool) or not isinstance(item, int) or not 0 <= item < len(saved):
-        raise HistoryError(400, "bad_request", f"item must be 0..{len(saved) - 1}")
+        item = next((x["item"] for x in saved if x.get("spool_ids")), 0)
+    if isinstance(item, bool) or not isinstance(item, int) or not 0 <= item < len(saved) \
+            or not saved[item].get("spool_ids"):
+        raise HistoryError(400, "bad_request", "no such item in this record")
     return saved[item]
 
 
@@ -378,11 +396,10 @@ def revise(sm, rid: str, note: str, item=None, *, client=None, ai_on: bool = Tru
                                           "values by hand")
     if not isinstance(note, str) or not note.strip() or len(note) > 500:
         raise HistoryError(400, "bad_request", "write what is wrong (at most 500 characters)")
-    with _LOCK:
-        rec = _load(rid)
-        it = _item(rec, item)
-        images = [p.read_bytes() for p in _photos(_dir(rid))]
-        n_rev = len(rec.get("revisions") or [])
+    rec = _load(rid)
+    it = _item(rec, item)
+    images = [p.read_bytes() for p in _photos(_dir(rid))]
+    n_rev = len(rec.get("revisions") or [])
     hint = (f"Correction from the owner: {note.strip()}\nThe values saved from the first reading of this spool "
             f"were: {json.dumps(it['values'])}\nRead the photos again with the correction and give this one item "
             "with every value that follows from it corrected (temperatures, density, spool weight, line).")
@@ -390,14 +407,19 @@ def revise(sm, rid: str, note: str, item=None, *, client=None, ai_on: bool = Tru
     got = (out.get("items") or [None])[0]
     if not isinstance(got, dict):
         raise HistoryError(502, "api_error", "the AI gave no item back; try again")
-    after = {k: got.get(k) if got.get(k) not in ("",) else None for k in FIELDS}
-    for k in FIELDS:                    # a field the AI left out keeps its value
-        if after[k] is None and it["values"].get(k) is not None:
-            after[k] = it["values"][k]
     before = dict(it["values"])
+    after = dict(before)
+    for k in FIELDS:                    # a field the AI left out (or emptied) keeps its value
+        if got.get(k) not in (None, ""):
+            after[k] = got[k]
+    try:                                # the proposal passes the same checks as an edit by hand
+        diff = {k: after[k] for k in FIELDS if after.get(k) != before.get(k)}
+        after.update(_check_values(diff) if diff else {})
+    except HistoryError as e:
+        raise HistoryError(502, "api_error", f"the AI's answer was not usable ({e}); try again or edit by hand") from None
     changes = [k for k in FIELDS if after.get(k) != before.get(k)]
     pid = "p-" + secrets.token_hex(3)
-    with _LOCK:
+    with _record_lock(rid):
         rec = _load(rid)
         props = {k: v for k, v in (rec.get("proposals") or {}).items()
                  if isinstance(v, dict) and v.get("t", 0) > time.time() - PROPOSAL_TTL}
@@ -408,10 +430,17 @@ def revise(sm, rid: str, note: str, item=None, *, client=None, ai_on: bool = Tru
             "no_photo": not images}
 
 
+def _changed_fields(rev: dict) -> set:
+    return {c["field"] for c in rev.get("changes") or []}
+
+
 def apply(sm, rid: str, *, proposal: str | None = None, item=None, values: dict | None = None,
           spool_ids: list | None = None, device: str | None = None) -> dict:
-    """Write a change to the record's spools in Spoolman (see the module docstring) and add it as a revision."""
-    with _LOCK:
+    """Write a change to the record's spools in Spoolman (see the module docstring) and add it as a revision. A change
+    to some of an item's spools splits them into an item of their own, so the record says what each spool is."""
+    if proposal is not None and not isinstance(proposal, str):
+        raise HistoryError(400, "bad_request", "proposal must be the id a revision gave")
+    with _record_lock(rid):
         rec = _load(rid)
         by, note = "hand", ""
         if proposal is not None:
@@ -421,7 +450,8 @@ def apply(sm, rid: str, *, proposal: str | None = None, item=None, values: dict 
             if p.get("base") != len(rec.get("revisions") or []):
                 raise HistoryError(409, "stale", "the record changed since this proposal: revise again")
             it = _item(rec, p["item"])
-            new = {**it["values"], **{k: v for k, v in p["after"].items() if k in FIELDS}}
+            diff = {k: v for k, v in p["after"].items() if k in FIELDS and v != it["values"].get(k)}
+            new = {**it["values"], **(_check_values(diff) if diff else {})}
             by, note = "ai", p.get("note") or ""
         else:
             it = _item(rec, item)
@@ -437,7 +467,7 @@ def apply(sm, rid: str, *, proposal: str | None = None, item=None, values: dict 
             if (not isinstance(spool_ids, list) or not spool_ids
                     or any(isinstance(s, bool) or s not in targets for s in spool_ids)):
                 raise HistoryError(400, "bad_request", f"spool_ids must be some of {targets}")
-            targets = list(spool_ids)
+            targets = [s for s in it["spool_ids"] if s in spool_ids]
         spools = {s: sm.get(f"spool/{s}") for s in targets}
         fids = {((sp.get("filament") or {}).get("id")) for sp in spools.values()}
         if len(fids) != 1 or None in fids:
@@ -447,9 +477,9 @@ def apply(sm, rid: str, *, proposal: str | None = None, item=None, values: dict 
         shared = any(u not in targets for u in users)
         rev = {"n": len(rec.get("revisions") or []) + 1, "at": _now(), "by": by, "device": (device or "")[:80],
                "note": note, "item": it["item"], "spool_ids": targets, "state_before": rec.get("state"),
-               "values_before": old,
-               "changes": [{"spool_id": s, "field": k, "old": old.get(k), "new": new.get(k)}
-                           for s in targets for k in changed],
+               "values_before": old, "split_from": None,
+               "spool_weights": {str(s): sp.get("spool_weight") for s, sp in spools.items()},
+               "changes": [],
                "filaments": {"from": fid, "to": fid, "created": False, "edited": {}, "orphaned": []},
                "undone": False}
         if shared or any(k in IDENTITY for k in changed):
@@ -467,10 +497,8 @@ def apply(sm, rid: str, *, proposal: str | None = None, item=None, values: dict 
             rev["filaments"].update(to=f["id"], created=created)
             if not created:                 # the existing filament's values are the spools' values now
                 for k, fk in _FIL.items():
-                    if f.get(fk) is not None and k not in ("name",):
+                    if f.get(fk) is not None and k != "name":
                         new[k] = f[fk]
-                rev["changes"] = [{"spool_id": s, "field": k, "old": old.get(k), "new": new.get(k)}
-                                  for s in targets for k in FIELDS if new.get(k) != old.get(k)]
             if not _spools_on(sm, fid):
                 rev["filaments"]["orphaned"] = [fid]
         else:
@@ -482,21 +510,34 @@ def apply(sm, rid: str, *, proposal: str | None = None, item=None, values: dict 
             if "tare" in changed and new.get("tare"):
                 for s in targets:
                     sm.patch(f"spool/{s}", {"spool_weight": new["tare"]})
-        it["values"] = new
-        it["filament_id"] = rev["filaments"]["to"]
+        rev["changes"] = [{"spool_id": s, "field": k, "old": old.get(k), "new": new.get(k)}
+                          for s in targets for k in FIELDS if new.get(k) != old.get(k)]
+        if len(targets) < len(it["spool_ids"]):         # some of the item's spools: they become an item of their own
+            part = {"item": len(rec["saved"]), "values": new, "spool_ids": targets,
+                    "filament_id": rev["filaments"]["to"]}
+            it["spool_ids"] = [s for s in it["spool_ids"] if s not in targets]
+            rec["saved"].append(part)
+            rev["split_from"], rev["item"] = it["item"], part["item"]
+        else:
+            it["values"] = new
+            it["filament_id"] = rev["filaments"]["to"]
         rec.setdefault("revisions", []).append(rev)
         rec["state"] = "revised_ai" if by == "ai" else "edited"
         rec["proposals"] = {}
         _save(rec)
-        log.info("intake history: record %s revision %d by %s (%s; filament %s -> %s)", rid, rev["n"], by,
-                 ",".join(changed), fid, rev["filaments"]["to"])
+        log.info("intake history: record %s revision %d by %s (%s; filament %s -> %s%s)", rid, rev["n"], by,
+                 ",".join(changed), fid, rev["filaments"]["to"],
+                 f"; {len(targets)} of {len(targets) + len(it['spool_ids'])} spools" if rev["split_from"] is not None
+                 else "")
     _rebuild(changed)
     return get(rid)
 
 
 def undo(sm, rid: str, revision) -> dict:
-    """Undo the newest revision that is not undone yet."""
-    with _LOCK:
+    """Undo the newest revision that is not undone yet. A filament the revision edited in place that other spools use
+    by now is not edited back: these spools get a copy with the earlier values (the module's rule for a shared
+    filament). The spool weight is put back only when the revision changed it."""
+    with _record_lock(rid):
         rec = _load(rid)
         live = [r for r in rec.get("revisions") or [] if not r.get("undone")]
         if not live:
@@ -505,22 +546,47 @@ def undo(sm, rid: str, revision) -> dict:
         if revision is not None and revision != rev["n"]:
             raise HistoryError(409, "not_latest", f"only the newest revision ({rev['n']}) can be undone")
         fl = rev["filaments"]
-        it = _item(rec, rev["item"])
+        tare = "tare" in _changed_fields(rev)
+        weights = rev.get("spool_weights") or {}
+        targets = rev["spool_ids"]
+
+        def put_weight(patch: dict, s) -> dict:
+            if tare and weights.get(str(s)) is not None:
+                patch["spool_weight"] = weights[str(s)]
+            elif tare and rev["values_before"].get("tare"):
+                patch["spool_weight"] = rev["values_before"]["tare"]
+            return patch
         if fl["to"] != fl["from"]:
-            for s in rev["spool_ids"]:
-                patch = {"filament_id": fl["from"]}
-                if "tare" in rev["values_before"] and rev["values_before"].get("tare"):
-                    patch["spool_weight"] = rev["values_before"]["tare"]
-                sm.patch(f"spool/{s}", patch)
+            for s in targets:
+                sm.patch(f"spool/{s}", put_weight({"filament_id": fl["from"]}, s))
             if not _spools_on(sm, fl["to"]):
-                fl.setdefault("orphaned_by_undo", [fl["to"]])
+                fl["orphaned_by_undo"] = [fl["to"]]
         elif fl.get("edited"):
-            sm.patch(f"filament/{fl['from']}", fl["edited"])
-            if rev["values_before"].get("tare"):
-                for s in rev["spool_ids"]:
-                    sm.patch(f"spool/{s}", {"spool_weight": rev["values_before"]["tare"]})
-        it["values"] = dict(rev["values_before"])
-        it["filament_id"] = fl["from"]
+            others = [u for u in _spools_on(sm, fl["from"]) if u not in targets]
+            if others:                  # shared by now: a copy with the earlier values for these spools only
+                f = _new_filament(sm, rev["values_before"])
+                for s in targets:
+                    sm.patch(f"spool/{s}", put_weight({"filament_id": f["id"]}, s))
+                fl["undo_to"] = f["id"]
+            else:
+                sm.patch(f"filament/{fl['from']}", fl["edited"])
+                for s in targets:
+                    p = put_weight({}, s)
+                    if p:
+                        sm.patch(f"spool/{s}", p)
+        back_to = fl.get("undo_to") or fl["from"]
+        if rev.get("split_from") is not None:           # the split-off spools go back to the item they came from
+            src = rec["saved"][rev["split_from"]]
+            part = rec["saved"][rev["item"]]
+            if back_to == src.get("filament_id"):
+                src["spool_ids"] = src["spool_ids"] + part["spool_ids"]
+                part["spool_ids"] = []
+            else:                       # on a copy of the filament now: an item of their own, with the earlier values
+                part["values"], part["filament_id"] = dict(rev["values_before"]), back_to
+        else:
+            it = rec["saved"][rev["item"]]
+            it["values"] = dict(rev["values_before"])
+            it["filament_id"] = back_to
         rev["undone"] = True
         rec["state"] = rev.get("state_before") or "detected"
         rec["proposals"] = {}
