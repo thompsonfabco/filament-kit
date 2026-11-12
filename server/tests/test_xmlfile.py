@@ -1,4 +1,5 @@
 """bridge.xmlfile: the shared data-file loader (parse, validate, override rules)."""
+import os
 from dataclasses import dataclass, field
 
 import pytest
@@ -81,6 +82,8 @@ def test_cached_keeps_last_good_on_bad_override(tmp_path):
     ld = _loader(b, o)
     assert ld.load().items == {"a": "5"}
     o.write_bytes(b'<t version="1.1"><items><item key="a" n="0"/></items></t>')   # n must be positive
+    st = o.stat()                                      # same size, and the mtime may not have ticked: move it on
+    os.utime(o, ns=(st.st_atime_ns, st.st_mtime_ns + 1_000_000_000))
     r = ld.load()
     assert r.items == {"a": "5"}
     assert r.errors
