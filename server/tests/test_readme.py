@@ -96,9 +96,20 @@ def _fingerprint(token: str, salt: str) -> str:
     return hashlib.sha256(salt.encode() + token.encode()).hexdigest()[:20]
 
 
+def _owner_candidates(text: str) -> set[str]:
+    """Each token as written and lower-cased, and each part of it split on - and _ (a hyphen stays inside a token, so
+    `id-suffix` would never equal the banned `id`), with a leading or trailing separator trimmed."""
+    out = set()
+    for token in _owner_tokens(text):
+        for form in {token, token.lower()}:
+            out |= {form.strip("-_")} | {part for part in re.split(r"[-_]", form) if part}
+    out.discard("")
+    return out
+
+
 def _owner_hits(text: str, fingerprints, salt: str) -> list[str]:
     fingerprints = set(fingerprints)
-    return sorted(t for t in _owner_tokens(text) if _fingerprint(t, salt) in fingerprints)
+    return sorted(t for t in _owner_candidates(text) if _fingerprint(t, salt) in fingerprints)
 
 
 # Every Markdown file under docs/ and release-notes/ is public (the owner's runbooks live outside the repository).
@@ -197,7 +208,7 @@ def _code_findings(root: Path, bans: dict, names: list[str] | None = None) -> li
         # where code and tests never had a reason to name them; the local code-only bans are not for the docs
         plain = ([*CODE_OWNER_DATA] if rel.startswith(GENERIC_SCOPE) else []) + bans["plain"] + (
             [] if rel in PUBLIC_DOCS else bans["code_plain"])
-        if tree_wide & {_fingerprint(t, bans["salt"]) for t in _owner_tokens(text)}:
+        if tree_wide & {_fingerprint(t, bans["salt"]) for t in _owner_candidates(text)}:
             found.append(f"{rel}: fingerprinted host name")
         for n, line in enumerate(text.splitlines(), 1):
             found += [f"{rel}:{n}: fingerprinted ban" for _ in _owner_hits(line, bans["fingerprints"], bans["salt"])]
@@ -263,6 +274,21 @@ def test_the_scan_catches_a_planted_value_and_an_unreadable_file(tmp_path):
     assert _read_text_files(tmp_path, _walk_files(tmp_path))[1] == []
     with pytest.raises(AssertionError):
         _code_findings(tmp_path, bans, [])           # a scan that listed nothing is a failure, not a pass
+
+
+@pytest.mark.parametrize("text", ["fabricatedid7", "FabricatedID7", "FABRICATEDID7", "fabricatedid7-suffix", "prefix-fabricatedid7",
+                                  "a-fabricatedid7-b", "fabricatedid7_suffix", "prefix_fabricatedid7", "FABRICATEDID7_X-y",
+                                  "fabricatedid7-", "x = 'fabricatedid7'"])
+def test_a_fabricated_ban_is_caught_bare_joined_and_in_any_case(text, tmp_path):
+    salt = "test salt"
+    bans = {**_NO_BANS, "salt": salt, "fingerprints": [_fingerprint("fabricatedid7", salt)],
+            "tree_wide": [_fingerprint("fabricatedid7", salt)]}
+    assert _owner_hits(text, bans["fingerprints"], salt) == ["fabricatedid7"]
+    (tmp_path / "get.sh").write_text("ok\n", encoding="utf-8")
+    (tmp_path / "a.txt").write_text(text + "\n", encoding="utf-8")
+    found = _code_findings(tmp_path, bans, _walk_files(tmp_path))
+    assert found and all(f.startswith("a.txt") for f in found) and not any("fabricated" in f.lower() for f in found)
+    assert not _owner_hits("fabricatedid70 or fabricated", bans["fingerprints"], salt)
 
 
 def test_the_ban_file_is_optional_but_can_be_required(tmp_path, monkeypatch):
