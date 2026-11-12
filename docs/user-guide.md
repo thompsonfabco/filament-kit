@@ -53,7 +53,7 @@ for the mode on the first install:
 
 AI label reading (the `ai_intake` module) is in no mode: the installer asks about it on the first install, and
 `sudo filament-kit modules enable ai_intake` turns it on later. Without it, spools are added by hand in the phone
-app and the phone web app. A station-only computer needs no API key, certificate or Spoolman.
+app and the phone web app, unless you use the [local label reader](#local-label-reading) instead. A station-only computer needs no API key, certificate or Spoolman.
 
 You can also give the mode on the command line, so the installer asks no mode question. `--mode` takes
 `server`, `station` or `all-in-one`; for `custom`, answer 4 at the question, give `--modules spoolman,server,printers` (what they need is added; for web, orders or a station add the setting they need with `--set web.public_url=https://...`, `--set orders.file=PATH` or `--set station.allow=ADDRESS`), or switch modules afterwards with
@@ -932,6 +932,56 @@ the certificate and any other routes stay. While `/etc/nginx/mcp.d` still holds 
 router file stays too, because it is what serves them; the kit says so, and you remove it by hand once nothing
 needs those routes.
 
+## Local label reading
+
+The `local_intake` module is the other way to read labels: instead of sending the photos to Claude, the kit sends them
+to a label reader running on your own network, so nothing leaves your home. It is a separate service that you run
+yourself (on this computer or another one, for example one with a GPU); the kit talks to it at an address you give it.
+It needs the `server` module, and the Anthropic key is not needed for it. Turn it on with
+`sudo filament-kit modules enable local_intake`. You can have it on beside `ai_intake`, and the two work together.
+
+**What the reader gets.** The photos, and a trimmed list of your filaments (names, materials and colours, no
+comments, prices, spool data or order history). If the reader asks for a token, put it in
+`/etc/filament-kit/local_intake_token`; the kit sends it only with a read or a revision.
+
+**Which reader reads first.** The setting **Label reader** has four choices:
+
+| Choice | What happens |
+|---|---|
+| Local first, Claude when unsure (the default) | The local reader answers. If it is unsure or fails, Claude reads the photos, when the `ai_intake` module is on. |
+| Claude first, local when Claude fails | Claude reads; the local reader takes over if Claude fails. |
+| Local reader only | Only the local reader reads. If it is down, you get a plain error and the photos are kept. |
+| Claude only | The local reader is not used. |
+
+A reader whose module is off is skipped. The local reader is **unsure** when any spool comes back below 78 % sure,
+with no confidence, with the brand "Unknown", or with nothing read. When Claude is not on, or its daily limit is
+used up, an unsure local answer is still shown, with a note. Only Claude's reads count against **Label reads per
+day**; local reads are free.
+
+**Where to set it.** On the setup page, **Settings**, **General**:
+
+- **Label reader**: the order above (shown when both modules are on).
+- **Local reader address**: where the reader answers (the default is `http://127.0.0.1:7915`; any host name or address
+  on your network). **Save** keeps it; **Test** asks the reader how it is: its version, its API, which tiers are usable
+  and whether it can revise readings.
+- **Local reader tier**: **Auto** (the CPU first, then the GPU when unsure), **CPU only** or **GPU only**.
+
+At a terminal, `sudo filament-kit config`, item 9 **Label reader**, asks the same three things.
+`filament-kit local-intake status` shows whether the reader answers, its tiers, why it is degraded if it is, and the
+last read. `filament-kit local-intake test <photo> ...` sends photos to the local reader only, as a trial: nothing is
+saved and no daily read is used. `filament-kit status` and the setup page's Overview show the reader's health and the
+order.
+
+**What you see.** The phone web app's result screen says which reader answered, its tier, how sure it is, the colour
+name and family, and the fields it was least sure of. In the intake history, **Ask the AI to correct it** follows the
+same setting: the local reader revises the record for free; a reader that cannot revise gives way to Claude when Claude
+is on; a record with no photo goes to Claude only. Only a Claude revision counts toward the daily limit.
+
+**Order history.** The `orders` module works with either reader module on. The order history is used only in Claude's
+reads; the local reader never gets it.
+
+A backup holds the reader's settings and token with the rest of `/etc/filament-kit`.
+
 ## Order history
 
 The `orders` module gives label reading your shop order history, so the AI can tell the brand, the seller and
@@ -943,7 +993,7 @@ tool of yours, in this shape:
             "qty": 2, "unit_price": 19.99, "seller": "SUNLU"}]}
 ```
 
-The module needs `ai_intake`, so turn that on first. Then turn `orders` on; at a terminal it asks for the path to
+The module needs a label reader, `ai_intake` or `local_intake`, so turn one on first (the order history is used by Claude's reads only). Then turn `orders` on; at a terminal it asks for the path to
 the file (it is saved as `orders.file` in `/etc/filament-kit/config.json`):
 
 ```
