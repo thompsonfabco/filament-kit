@@ -186,6 +186,7 @@ def _flash_env(monkeypatch, tmp_path, rc, readers=1):
     monkeypatch.setattr(rs, "find_pio", lambda who=None: "/usr/bin/pio")
     monkeypatch.setattr(rs, "owner", lambda: None)
     monkeypatch.setattr(cli, "_answers_as_panel", lambda port: False)
+    monkeypatch.setenv("FK_NO_SYSTEMD", "1")                 # no systemctl here; the stop/start has its own test
     monkeypatch.setattr(rs, "find_readers", lambda: [rs.Reader(f"/dev/ttyACM{i}", None, "JTAG") for i in range(readers)])
     calls = []
 
@@ -375,3 +376,93 @@ def test_an_explicit_port_is_flashed_without_asking(tmp_path, monkeypatch):
     assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)), port="/dev/ttyACM9"), ask=boom,
                                 ask_secret=_secret("p", "p")) == 0
     assert calls[0][0] == "/dev/ttyACM9"
+
+
+class _FakeSerial:
+    """pyserial stand-in for the real HELLO probe: `line` is what the board says on open, b"" is silence."""
+    line = b""
+    fail = False
+    made: list = []
+
+    def __init__(self):
+        self.closed = False
+        self._lines = []
+        _FakeSerial.made.append(self)
+
+    def open(self):
+        if _FakeSerial.fail:
+            raise OSError("busy")
+        if _FakeSerial.line:
+            self._lines.append(_FakeSerial.line + b"\r\n")
+
+    def readline(self):
+        return self._lines.pop(0) if self._lines else b""
+
+    def write(self, data):
+        pass
+
+    def close(self):
+        self.closed = True
+
+
+@pytest.fixture
+def fake_serial(monkeypatch):
+    import types
+    from filament_kit.station import panel
+    monkeypatch.setitem(sys.modules, "serial", types.SimpleNamespace(Serial=_FakeSerial))
+    clock = iter(x * 0.5 for x in range(10000))              # the 3 s wait for a HELLO passes without waiting
+    monkeypatch.setattr(panel, "time", types.SimpleNamespace(time=lambda: next(clock)))
+    _FakeSerial.line, _FakeSerial.fail, _FakeSerial.made = b"", False, []
+    return _FakeSerial
+
+
+def test_the_real_probe_sees_a_panel_hello_and_closes_the_port(fake_serial):
+    fake_serial.line = b"HELLO intake-panel 9 esp32c3"
+    assert cli._answers_as_panel("/dev/ttyACM0") is True
+    assert fake_serial.made[0].closed
+
+
+def test_the_real_probe_says_no_to_silence_and_to_an_open_error(fake_serial):
+    assert cli._answers_as_panel("/dev/ttyACM0") is False
+    fake_serial.fail = True
+    assert cli._answers_as_panel("/dev/ttyACM0") is False
+
+
+def test_the_real_probe_says_no_without_pyserial(monkeypatch):
+    monkeypatch.setitem(sys.modules, "serial", None)         # import serial raises ImportError
+    assert cli._answers_as_panel("/dev/ttyACM0") is False
+
+
+def test_ctrl_c_at_the_prompt_flashes_nothing(tmp_path, monkeypatch, capsys):
+    def interrupt(prompt):
+        raise KeyboardInterrupt
+    assert "Nothing was flashed" in _refused(monkeypatch, tmp_path, capsys, ask=interrupt).out
+
+
+def test_the_station_is_stopped_around_the_probe_and_the_flash_and_restarted_after(tmp_path, monkeypatch):
+    log = []
+    def run(cmd, check=False):
+        log.append(cmd[1])
+        return subprocess.CompletedProcess(cmd, 0)
+    real = cli._station_stopped
+    monkeypatch.setattr(cli, "_station_stopped", lambda: real(run))
+    _flash_env(monkeypatch, tmp_path, rc=0)                  # makes _is_root true
+    monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
+    monkeypatch.setattr(cli, "_answers_as_panel", lambda port: log.append("probe") or False)
+    monkeypatch.setattr(rs, "flash", lambda *a, **k: log.append("flash") or 0)
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask=lambda p: "y",
+                                ask_secret=_secret("p", "p")) == 0
+    assert log == ["is-active", "stop", "probe", "start", "is-active", "stop", "flash", "start"]
+
+
+def test_the_station_is_started_again_when_the_block_fails(monkeypatch):
+    log = []
+    monkeypatch.setattr(cli, "_is_root", lambda: True)
+    monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
+    def run(cmd, check=False):
+        log.append(cmd[1])
+        return subprocess.CompletedProcess(cmd, 0)
+    with pytest.raises(KeyboardInterrupt):
+        with cli._station_stopped(run):
+            raise KeyboardInterrupt
+    assert log == ["is-active", "stop", "start"]
