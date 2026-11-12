@@ -82,21 +82,20 @@ def test_the_module_is_opt_in_last_and_newer():
     assert modules.MODULES["local_intake"].optional_ai
 
 
-def test_orders_works_with_either_reader():
+def test_orders_needs_the_claude_reader():
+    """Decision after review R127 note 2: the order history goes only into Claude's prompt, so orders needs ai_intake
+    even with the local reader on, and every place that refuses or adds it says why."""
     base = {"spoolman": True, "server": True, "orders": True}
-    for reader in ("ai_intake", "local_intake"):
-        modules.validate({"modules": {**base, reader: True}, "orders": {"file": "/x.json"}})
-    with pytest.raises(modules.ModuleError, match="orders needs ai_intake or local_intake"):
-        modules.validate({"modules": base, "orders": {"file": "/x.json"}})
+    modules.validate({"modules": {**base, "ai_intake": True}, "orders": {"file": "/x.json"}})
+    with pytest.raises(modules.ModuleError, match=r"orders needs ai_intake \(order matching needs the Claude reader\)"):
+        modules.validate({"modules": {**base, "local_intake": True}, "orders": {"file": "/x.json"}})
+    on, notes = modules.toggle(frozenset({"spoolman", "server", "local_intake"}), "orders")
+    assert "ai_intake" in on and "it needs ai_intake, now on too" in notes[0]
+    assert modules.needs_of("orders") == ["ai_intake", "order matching needs the Claude reader"]
     on = frozenset({"spoolman", "server", "ai_intake", "local_intake", "orders"})
-    assert "orders" in modules.toggle(on, "ai_intake")[0]                    # the local reader still reads
-    off, notes = modules.toggle(on - {"local_intake"}, "ai_intake")
-    assert "orders" not in off and "orders" in notes[0]
-    on2, _ = modules.toggle(frozenset({"spoolman", "server"}), "orders")      # neither on: ai_intake, as before
-    assert "ai_intake" in on2
-    on3, _ = modules.toggle(frozenset({"spoolman", "server", "local_intake"}), "orders")   # one reader is enough
-    assert "ai_intake" not in on3
-    assert modules.needs_of("orders")[0] == "ai_intake or local_intake"
+    assert "orders" in modules.toggle(on, "local_intake")[0]               # the local reader is not what it needs
+    assert "orders" not in modules.toggle(on, "ai_intake")[0]
+    assert any("order matching needs the Claude reader" in line for line in modules.menu_lines({}, on))
 
 
 # ---------- the reader order ----------
@@ -353,12 +352,9 @@ def test_api_with_no_reader_is_module_off(sm, dead_url):
     assert r.status_code == 409 and r.json()["module"] == "ai_intake"
 
 
-def test_a_mode_change_keeps_orders_on_the_local_reader():
-    cfg = {"modules": {"spoolman": True, "server": True, "local_intake": True, "orders": True},
-           "orders": {"file": "/x.json"}}
-    assert {"orders", "local_intake"} <= modules.enabled(modules.set_mode(cfg, "all-in-one", say=None))
-    assert modules.dependents("local_intake", frozenset(cfg["modules"])) == ["orders"]
-    assert modules.dependents("local_intake", frozenset(cfg["modules"]) | {"ai_intake"}) == []
+def test_a_mode_change_keeps_the_local_reader():
+    cfg = {"modules": {"spoolman": True, "server": True, "local_intake": True}}
+    assert "local_intake" in modules.enabled(modules.set_mode(cfg, "all-in-one", say=None))
 
 
 # ---------- status, the setup page's reader test, the CLI ----------

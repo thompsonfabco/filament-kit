@@ -116,7 +116,7 @@ def test_new_modules_registered():
     assert MODULES["web"].depends == ("server",) and MODULES["web"].apt == ()
     assert MODULES["remote"].depends == ("web",) and MODULES["remote"].units == ()
     assert MODULES["remote"].apt == ("nginx", "certbot")
-    assert MODULES["orders"].depends_any == ("ai_intake", "local_intake")
+    assert MODULES["orders"].depends == ("ai_intake",)
 
 
 def test_new_modules_off_by_default():
