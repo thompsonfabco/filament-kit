@@ -124,7 +124,7 @@ def test_a_sure_local_read_is_free_and_post_processed_like_a_cloud_read(sm, fake
     assert it["match"] == "existing filament F1" and it["tare"] == 213 and it["color_hex"] == "8A8C8E"
     assert "line" in it and "bambu_parent" in it
     assert it["confidence"] == 0.93 and it["field_confidence"]["vendor"] == 0.97        # for the result screen
-    assert "color_name" not in it and "color_family" not in it                           # the module's own extras
+    assert it["color_name"] == "Grey" and it["color_family"] == "grey"                    # shown on the result screen
     assert out["usage"]["ms"] == 240 and out["usage"]["input_tokens"] == 0
     assert not fake.calls and cap.taken == 0
     body = data["reads"][0]["body"]
@@ -214,7 +214,7 @@ def test_a_local_answer_gets_the_cloud_readers_item_shape(sm, fake_reader):
     assert set(intake.ITEM_PROPS) <= set(it) and out["confidence"] == 0.9
     assert it["tare"] == 213 and it["net"] == 1000 and it["density"] == 1.24 and it["photos"] == [0, 1]
     assert sorted(it["estimates"]) == ["density", "net", "tare"] and it["sealed_reason"] == "unsure"
-    assert it["field_confidence"] == {}
+    assert it["field_confidence"] == {} and it["color_name"] is None and it["color_family"] is None
 
 
 @pytest.mark.parametrize("errors,code", [

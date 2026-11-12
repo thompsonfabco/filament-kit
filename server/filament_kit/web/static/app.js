@@ -182,7 +182,7 @@ function addTab() {
   const photos = []; // {blob, url}
   let items = [], checked = false, tag = null; // tag: unlinked tag tapped just before the photos (server links it)
   const thumbs = h("div", { class: "thumbs" });
-  const hint = h("textarea", { placeholder: "Optional note for Claude, e.g. \"3 of the grey ones\" or \"all the PETG is white\"" });
+  const hint = h("textarea", { placeholder: "Optional note for the label reader, e.g. \"3 of the grey ones\" or \"all the PETG is white\"" });
   const picker = h("input", { type: "file", accept: "image/*", multiple: true, on: { change: addFiles } });
   const readBtn = h("button", { textContent: "Read labels", disabled: true, on: { click: read } });
   const readBox = h("div");
@@ -203,7 +203,7 @@ function addTab() {
     vendorList);
   const photoPart = AI ? [
     h("h2", { textContent: "From label photos" }),
-    h("p", { class: "muted", textContent: "Photograph each label (several photos of one spool are fine). Claude reads them; you check and edit before anything is saved." }),
+    h("p", { class: "muted", textContent: "Photograph each label (several photos of one spool are fine). The label reader (Claude or a local one) reads them; you check and edit before anything is saved." }),
     h("label", { class: "filebtn", style: "display:flex" }, h("button", { textContent: "Take or choose photos", tabIndex: -1 }), picker),
     thumbs, hint, h("p", {}, readBtn), readBox] : [];
   const el = h("section", {},
@@ -275,11 +275,32 @@ function addTab() {
       const filled = got.length === 1 && got[0].gross != null;
       return [res.tag ? h("p", { class: "muted", textContent: `New tag ${res.tag.nfc_id} was tapped on the ${res.tag.reader} reader ${res.tag.age_seconds} s before the photos, so this spool counts as opened; Add links the tag to it (one opened spool only).` }) : null,
         res.scale ? h("p", { class: "muted", textContent: `Station scale: ${res.scale.grams} g, ${res.scale.age_seconds} s ago${filled ? " (filled in as the scale weight)" : " (not used: only for one opened spool)"}.` }) : null,
-        res.questions.length ? h("div", { class: "card" }, h("h3", { textContent: "Claude asks" }),
+        res.questions.length ? h("div", { class: "card" }, h("h3", { textContent: res.reader === "local" ? "The local reader asks" : "Claude asks" }),
         ...res.questions.map((q) => h("p", { textContent: "• " + q }))) : null,
-        h("p", { class: "muted", textContent: `${got.length} product${got.length === 1 ? "" : "s"} found · ${res.usage.model}, ${res.usage.input_tokens} in (${res.usage.cached} cached) / ${res.usage.output_tokens} out tokens` })];
+        res.note ? h("p", { class: "muted", textContent: "Note: " + res.note }) : null,
+        h("p", { class: "muted", textContent: `${got.length} product${got.length === 1 ? "" : "s"} found · ${readerText(res)}` })];
     });
     readBtn.disabled = !photos.length;
+  }
+  function pct(c) { return Math.round(c * 100) + " %"; }
+  function readerText(res) { // which reader answered, and how sure it was
+    if (res.reader === "local") {
+      return `read by the local reader (${res.tier || "?"} tier${res.escalated ? ", after the CPU tier" : ""})` +
+        (res.confidence != null ? `, ${pct(res.confidence)} sure${res.unsure ? " (unsure: check the fields)" : ""}` : "") +
+        (res.usage && res.usage.ms != null ? ` · ${(res.usage.ms / 1000).toFixed(1)} s` : "");
+    }
+    return `read by Claude · ${res.usage.model}, ${res.usage.input_tokens} in (${res.usage.cached} cached) / ${res.usage.output_tokens} out tokens`;
+  }
+  function colourText(it) { // the local reader's colour name and family, and its least sure fields
+    const parts = [];
+    if (it.color_name || it.color_family) {
+      const name = it.color_name && it.color_name !== "unknown" ? it.color_name : "colour name not in the library";
+      parts.push("colour: " + name + (it.color_family ? ` (${it.color_family})` : ""));
+    }
+    if (it.confidence != null) parts.push(pct(it.confidence) + " sure");
+    const low = Object.entries(it.field_confidence || {}).filter(([, c]) => c < 0.78).map(([k]) => k);
+    if (low.length) parts.push("least sure: " + low.join(", "));
+    return parts.join(" · ");
   }
   function field(it, key, label, type = "text", extra = {}, ins = {}) {
     const inp = h("input", {
@@ -316,6 +337,7 @@ function addTab() {
         h("h3", {}, sw, h("span", { textContent: `${it.vendor} ${it.name}`.trim() || "New spool" }),
           h("span", { class: "badge " + (it.existing_filament_id ? "ok" : "new"), textContent: it.match })),
         it.photos.length ? h("p", { class: "muted", textContent: `photos ${it.photos.join(", ")}${it.estimates.length ? " · estimated: " + it.estimates.join(", ") : ""}` }) : null,
+        colourText(it) ? h("p", { class: "muted", textContent: colourText(it) }) : null,
         h("p", { class: "muted", textContent: it.price_line ? it.price_line.replace(/^Price: /, "") : "no price" }),
         h("div", { class: "grid" },
           f("vendor", "Vendor"), f("material", "Material"),

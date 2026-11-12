@@ -264,8 +264,9 @@ DENSITY = {"PLA": 1.24, "PETG": 1.27, "ABS": 1.04, "ASA": 1.07, "TPU": 1.21, "PC
 
 def _complete(it: dict, vendors: list[dict], n_photos: int) -> None:
     """Give a local item every field of the cloud reader's schema (intake.ITEM_PROPS), so the app, the station and
-    the post-processing see one shape whichever reader answered. The reader's `confidence` (0..1) and
-    `field_confidence` ({field: 0..1}) stay on the item for the result screen; anything else extra is dropped."""
+    the post-processing see one shape whichever reader answered. The reader's `confidence` (0..1),
+    `field_confidence` ({field: 0..1}), `color_name` and `color_family` stay on the item for the result screen;
+    anything else extra is dropped."""
     for k in ("vendor", "name", "material"):
         it[k] = str(it.get(k) or "").strip() or ("Unknown" if k == "vendor" else "")
     est = [str(x) for x in it.get("estimates") or [] if isinstance(x, (str, int, float))]
@@ -296,6 +297,9 @@ def _complete(it: dict, vendors: list[dict], n_photos: int) -> None:
         it["sealed"], it["sealed_reason"] = True, "unsure"
     elif not isinstance(it.get("sealed_reason"), str):
         it["sealed_reason"] = ""
+    for k in ("color_name", "color_family"):  # the library's colour name ("unknown" when it has none) and family
+        v = it.get(k)
+        it[k] = v.strip()[:60] if isinstance(v, str) and v.strip() else None
     it["confidence"] = _conf(it.get("confidence"))
     fc = it.get("field_confidence")
     it["field_confidence"] = ({str(k): c for k, v in fc.items() if (c := _conf(v)) is not None}
@@ -307,7 +311,8 @@ def _complete(it: dict, vendors: list[dict], n_photos: int) -> None:
 
 _KEEP = frozenset({"photos", "existing_filament_id", "vendor", "name", "material", "color_hex", "net", "tare",
                    "density", "count", "nozzle", "bed", "nozzle_range", "bed_range", "lot", "note", "estimates",
-                   "sealed", "sealed_reason", "line", "confidence", "field_confidence"})
+                   "sealed", "sealed_reason", "line", "confidence", "field_confidence", "color_name",
+                   "color_family"})
 
 
 def _body(cfg: dict, images: list[bytes], hint: str, fils: list[dict], vendors: list[dict], tag: dict | None) -> dict:
