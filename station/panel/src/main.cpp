@@ -44,7 +44,7 @@
 #include "pn532.h"
 #include "panel_core.h"
 
-static const char *VERSION = "11";
+static const char *VERSION = "12";
 static const uint8_t PIN_SDA = 5;            // I2C SDA (air sensor, OLED)
 static const uint8_t PIN_SCL = 6;            // I2C SCL
 static const uint8_t PIN_BUZZER = 0;         // buzzer module signal
