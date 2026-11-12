@@ -423,10 +423,9 @@ def _cloud(cfg: dict, fils: list[dict], vendors: list[dict], images: list[bytes]
 def _local(cfg: dict, fils: list[dict], vendors: list[dict], images: list[bytes], hint: str, tag: dict | None,
            orders: list[dict] | None) -> dict:
     """One read by the local reader: {items, questions, usage, confidence, unsure, tier}. Raises ReadError."""
-    fl, vl = local_reader.catalog(fils, vendors, lines._extra_line)
+    fl, vl = local_reader.catalog(fils, vendors, lines._extra_line)   # the order history is not sent (contract v1)
     try:
-        return local_reader.read(cfg, images, hint, fl, vl, tag,
-                                 None if orders is None else filter_orders(orders, fils))
+        return local_reader.read(cfg, images, hint, fl, vl, tag)
     except local_reader.LocalReaderError as e:
         raise ReadError("local_" + e.code, str(e)) from None
 
@@ -452,7 +451,6 @@ def _finish(raw: dict, fils: list[dict], vendors: list[dict], tag: dict | None, 
         it["count"] = max(1, int(it.get("count") or 1))
         if isinstance(it.get("price_per_kg"), (int, float)) and not isinstance(it["price_per_kg"], bool):
             it["price_per_kg"] = round(float(it["price_per_kg"]), 2)
-        it.pop("confidence", None)              # a local reader's per-item score; the read's own is in `confidence`
     _add_lines(items, by_id)
     age = tag.get("age_seconds") if tag else None
     if tag and len(items) == 1:  # a fresh unknown tap is the user opening this very spool
@@ -546,7 +544,7 @@ def _call(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | None, cli
 def _result(raw: dict, fils, vendors, tag, station_state, notes: list[str]) -> dict:
     out = _finish(raw, fils, vendors, tag, station_state)
     out.update(reader=raw["reader"], confidence=raw.get("confidence"), unsure=bool(raw.get("unsure")),
-               tier=raw.get("tier"))
+               tier=raw.get("tier"), escalated=bool(raw.get("escalated")))
     if notes:
         out["note"] = "; ".join(notes)
     return out

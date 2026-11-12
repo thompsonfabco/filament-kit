@@ -72,7 +72,7 @@ def _serve(asgi):
 
 
 @pytest.fixture
-def local_reader():
+def fake_reader():
     """The fake local label reader: (url, data); change `data` (local_reader_fake.new_data) to steer it."""
     from fakes import local_reader_fake
     data = local_reader_fake.new_data()

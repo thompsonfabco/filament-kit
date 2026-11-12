@@ -113,8 +113,8 @@ def test_reader_order(mods, reader, order):
 
 # ---------- reads ----------
 
-def test_a_sure_local_read_is_free_and_post_processed_like_a_cloud_read(sm, local_reader):
-    url, data = local_reader
+def test_a_sure_local_read_is_free_and_post_processed_like_a_cloud_read(sm, fake_reader):
+    url, data = fake_reader
     setup(url)
     data["read"] = lrf.reply(existing_filament_id=1, color_hex="#ff0000", tare=999)
     fake, cap = FakeClaude(CLOUD), Cap()
@@ -122,16 +122,29 @@ def test_a_sure_local_read_is_free_and_post_processed_like_a_cloud_read(sm, loca
     it = out["items"][0]
     assert out["reader"] == "local" and out["confidence"] == 0.93 and out["tier"] == "cpu" and not out["unsure"]
     assert it["match"] == "existing filament F1" and it["tare"] == 213 and it["color_hex"] == "8A8C8E"
-    assert "line" in it and "bambu_parent" in it and "confidence" not in it
+    assert "line" in it and "bambu_parent" in it
+    assert it["confidence"] == 0.93 and it["field_confidence"]["vendor"] == 0.97        # for the result screen
+    assert "color_name" not in it and "color_family" not in it                           # the module's own extras
+    assert out["usage"]["ms"] == 240 and out["usage"]["input_tokens"] == 0
     assert not fake.calls and cap.taken == 0
     body = data["reads"][0]["body"]
-    assert data["reads"][0]["query"] == "format=filament-kit" and body["hint"] == "grey one"
-    assert base64.b64decode(body["images_b64"][0]) == JPEG and body["api_version"] == 1
-    assert body["filaments"][0]["vendor"] == "SUNLU" and "comment" not in body["filaments"][0]
+    assert body["hint"] == "grey one" and body["api_version"] == "1.0" and body["tier"] == "auto"
+    assert base64.b64decode(body["images_b64"][0]) == JPEG
+    f = body["filaments"][0]
+    assert f["vendor"]["name"] == "SUNLU" and "comment" not in f and "orders" not in body
+    assert data["reads"][0]["auth"] is None                                               # no token file: none sent
 
 
-def test_an_unsure_local_read_goes_to_the_cloud_and_takes_the_cap(sm, local_reader):
-    url, data = local_reader
+def test_the_least_sure_item_decides(sm, fake_reader):
+    url, data = fake_reader
+    setup(url, {"spoolman": True, "server": True, "local_intake": True})
+    data["read"] = {**lrf.reply(), "items": [{**lrf.ITEM, "confidence": 0.95}, {**lrf.ITEM, "confidence": 0.5}]}
+    out = intake.read_labels(sm, [JPEG], "", None, None)
+    assert out["confidence"] == 0.5 and out["unsure"]
+
+
+def test_an_unsure_local_read_goes_to_the_cloud_and_takes_the_cap(sm, fake_reader):
+    url, data = fake_reader
     setup(url)
     data["read"] = lrf.reply(confidence=0.4)
     fake, cap = FakeClaude(CLOUD), Cap()
@@ -140,8 +153,16 @@ def test_an_unsure_local_read_goes_to_the_cloud_and_takes_the_cap(sm, local_read
     assert len(data["reads"]) == 1 and len(fake.calls) == 1
 
 
-def test_an_unsure_local_read_is_kept_when_the_cap_is_used_up(sm, local_reader):
-    url, data = local_reader
+def test_an_unknown_brand_is_unsure_whatever_the_score(sm, fake_reader):
+    url, data = fake_reader
+    setup(url)
+    data["read"] = lrf.reply(confidence=0.99, vendor="Unknown", note="BRAND UNKNOWN: no logo")
+    out = intake.read_labels(sm, [JPEG], "", None, FakeClaude(CLOUD), charge=Cap().charge)
+    assert out["reader"] == "cloud"
+
+
+def test_an_unsure_local_read_is_kept_when_the_cap_is_used_up(sm, fake_reader):
+    url, data = fake_reader
     setup(url)
     data["read"] = lrf.reply(confidence=0.4)
     out = intake.read_labels(sm, [JPEG], "", None, FakeClaude(CLOUD), charge=Cap(full=True).charge)
@@ -149,7 +170,7 @@ def test_an_unsure_local_read_is_kept_when_the_cap_is_used_up(sm, local_reader):
 
 
 def test_a_local_reader_that_is_down_gives_way_to_the_cloud(sm, dead_url):
-    setup(dead_url)                         # nothing listens on the discard port
+    setup(dead_url)
     out = intake.read_labels(sm, [JPEG], "", None, FakeClaude(CLOUD), charge=Cap().charge)
     assert out["reader"] == "cloud" and "local reader" in out["note"] and "does not answer" in out["note"]
 
@@ -162,8 +183,8 @@ def test_local_only_and_down_is_a_clear_error_and_keeps_the_photos(sm, dead_url)
     assert intake.is_kept(e.value.read_id)
 
 
-def test_cloud_then_local_falls_back_when_the_cloud_fails(sm, local_reader):
-    url, data = local_reader
+def test_cloud_then_local_falls_back_when_the_cloud_fails(sm, fake_reader):
+    url, data = fake_reader
     setup(url, reader="cloud-then-local")
     cap = Cap()
     out = intake.read_labels(sm, [JPEG], "", None,
@@ -184,8 +205,8 @@ def test_a_cloud_error_carries_its_refund(sm):
     assert cap.refunded == 1
 
 
-def test_a_local_answer_gets_the_cloud_readers_item_shape(sm, local_reader):
-    url, data = local_reader
+def test_a_local_answer_gets_the_cloud_readers_item_shape(sm, fake_reader):
+    url, data = fake_reader
     setup(url, {"spoolman": True, "server": True, "local_intake": True})
     data["read"] = {"items": [{"vendor": "SUNLU", "name": "PLA Matte Black", "material": "PLA", "confidence": 0.9}]}
     out = intake.read_labels(sm, [JPEG, JPEG], "", None, None)
@@ -193,36 +214,97 @@ def test_a_local_answer_gets_the_cloud_readers_item_shape(sm, local_reader):
     assert set(intake.ITEM_PROPS) <= set(it) and out["confidence"] == 0.9
     assert it["tare"] == 213 and it["net"] == 1000 and it["density"] == 1.24 and it["photos"] == [0, 1]
     assert sorted(it["estimates"]) == ["density", "net", "tare"] and it["sealed_reason"] == "unsure"
+    assert it["field_confidence"] == {}
 
 
-@pytest.mark.parametrize("answer,status,code", [
-    ({"items": "nope"}, 200, "local_bad_answer"),
-    ({"api_version": 9, "items": []}, 200, "local_version"),
-    ({"error": "photo too big"}, 413, "local_refused"),
-    ({"error": "boom"}, 500, "local_bad_answer"),
+@pytest.mark.parametrize("errors,code", [
+    ([(400, "bad_image", None)], "local_refused"),
+    ([(413, "too_large", None)], "local_refused"),
+    ([(400, "unsupported_api_version", None)], "local_version"),
+    ([(401, "unauthorized", None)], "local_unauthorized"),
+    ([(503, "tier_unavailable", None)], "local_tier_unavailable"),
+    ([(500, "read_failed", None)], "local_bad_answer"),
+    ([(503, "busy", 0), (503, "busy", 0)], "local_busy"),            # retried once, then given up
 ])
-def test_bad_local_answers(sm, local_reader, answer, status, code):
-    url, data = local_reader
+def test_local_error_answers(sm, fake_reader, errors, code):
+    url, data = fake_reader
     setup(url, {"spoolman": True, "server": True, "local_intake": True})
-    data["read"], data["read_status"] = answer, status
+    data["errors"] = list(errors)
+    with pytest.raises(intake.ReadError) as e:
+        intake.read_labels(sm, [JPEG], "", None, None)
+    assert e.value.code == code and "Traceback" not in str(e.value)
+
+
+def test_busy_is_retried_once(sm, fake_reader):
+    url, data = fake_reader
+    setup(url, {"spoolman": True, "server": True, "local_intake": True})
+    data["errors"] = [(503, "busy", 0)]
+    assert intake.read_labels(sm, [JPEG], "", None, None)["reader"] == "local" and len(data["reads"]) == 2
+
+
+@pytest.mark.parametrize("answer,code", [
+    ({"items": "nope"}, "local_bad_answer"),
+    ({"api_version": "2.0", "items": []}, "local_version"),
+    ({"api_version": 9, "items": []}, "local_version"),
+])
+def test_bad_local_answers(sm, fake_reader, answer, code):
+    url, data = fake_reader
+    setup(url, {"spoolman": True, "server": True, "local_intake": True})
+    data["read"] = answer
     with pytest.raises(intake.ReadError) as e:
         intake.read_labels(sm, [JPEG], "", None, None)
     assert e.value.code == code
 
 
-def test_health(local_reader, dead_url):
-    url, data = local_reader
+def test_the_token_goes_with_reads_only(sm, fake_reader):
+    url, data = fake_reader
+    setup(url, {"spoolman": True, "server": True, "local_intake": True})
+    (config.paths().etc / local_reader.TOKEN_FILE).write_text("tok-123\n")
+    intake.read_labels(sm, [JPEG], "", None, None)
+    assert data["reads"][0]["auth"] == "Bearer tok-123"
+
+
+def test_health(fake_reader, dead_url):
+    url, data = fake_reader
     h = local_reader_health(url)
-    assert h["ok"] and h["api_version"] == 1 and h["tiers"] == {"cpu": True, "gpu": False}
-    data["health"] = {**data["health"], "api_version": 7}
-    assert "update the one that is older" in local_reader_health(url)["error"]
-    data["health"], data["health_status"] = {"status": "loading"}, 503
+    assert h["ok"] and not h["degraded"] and h["api_version"] == "1.0" and h["version"] == "0.1.0" and h["revise"]
+    assert h["tiers"]["cpu"] == {"usable": True, "reason": None} and h["tiers"]["gpu"]["reason"] == "no CUDA device"
+    data["health"] = {**data["health"], "status": "degraded"}
+    h = local_reader_health(url)
+    assert h["ok"] and h["degraded"] and "gpu: no CUDA device" in h["error"]
+    data["health"] = {**data["health"], "status": "ok", "tiers": {"cpu": True, "gpu": False}, "api_version": 1}
+    assert local_reader_health(url)["tiers"]["gpu"] == {"usable": False, "reason": None}      # the short form
+    data["health"] = {**data["health"], "api_version": "2.1"}
+    assert "update the kit" in local_reader_health(url)["error"]
+    data["health"] = {**data["health"], "api_version": "1.4", "auth_required": True}
+    assert "needs a token" in local_reader_health(url)["error"]
+    data["health"], data["health_status"] = {"error": {"code": "starting", "message": "loading"}}, 503
     assert "HTTP 503" in local_reader_health(url)["error"]
     assert not local_reader_health(dead_url)["ok"]
 
 
 def local_reader_health(url):
     return local_reader.health({"local_intake": {"url": url}}, timeout=2)
+
+
+def test_revise(fake_reader):
+    url, data = fake_reader
+    cfg = {"local_intake": {"url": url}}
+    out = local_reader.revise(cfg, [JPEG], dict(lrf.ITEM), "brand is Polymaker", [], [])
+    assert out["items"][0]["vendor"] == "Polymaker"
+    body = data["revises"][0]["body"]
+    assert body["note"] == "brand is Polymaker" and body["previous"]["vendor"] == "SUNLU"
+    data["revise"] = {"item": {**lrf.ITEM, "vendor": "eSUN", "confidence": 0.9}}        # the single-item form
+    assert local_reader.revise(cfg, [JPEG], dict(lrf.ITEM), "eSUN", [], [])["items"][0]["vendor"] == "eSUN"
+
+
+def test_revise_on_a_reader_without_it(dead_url):
+    from fakes import readers_fake            # any server without /v1/revise answers 404
+    from conftest import _serve
+    for url in _serve(readers_fake.app(readers_fake.new_data())):
+        with pytest.raises(local_reader.LocalReaderError) as e:
+            local_reader.revise({"local_intake": {"url": url}}, [JPEG], dict(lrf.ITEM), "x", [], [])
+        assert e.value.code == "revise_unsupported"
 
 
 def test_check_url():
@@ -243,8 +325,8 @@ def _read(c, h):
     return c.post("/api/intake/read", headers=h, files=[("photo", ("a.jpg", JPEG, "image/jpeg"))])
 
 
-def test_api_reads_with_only_the_local_reader_and_uses_no_cap(sm, local_reader):
-    url, _ = local_reader
+def test_api_reads_with_only_the_local_reader_and_uses_no_cap(sm, fake_reader):
+    url, _ = fake_reader
     setup(url, {"spoolman": True, "server": True, "local_intake": True})
     c, h = _client(sm)
     r = _read(c, h)
@@ -252,8 +334,8 @@ def test_api_reads_with_only_the_local_reader_and_uses_no_cap(sm, local_reader):
     assert intake.reads_today(config.paths().state / "reads.json") == 0
 
 
-def test_api_counts_a_cloud_read(sm, local_reader):
-    url, data = local_reader
+def test_api_counts_a_cloud_read(sm, fake_reader):
+    url, data = fake_reader
     setup(url)
     data["read"] = lrf.reply(confidence=0.2)
     c, h = _client(sm, FakeClaude(CLOUD))

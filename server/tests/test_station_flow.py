@@ -127,9 +127,9 @@ def test_no_recognizer_says_use_phone(sm):
     assert r.json()["display"] == ["No AI on server", "use phone"]
 
 
-def test_local_reader_first_then_claude(sm, local_reader):
+def test_local_reader_first_then_claude(sm, fake_reader):
     from fakes import local_reader_fake
-    url, data = local_reader
+    url, data = fake_reader
     cfg = config.load()
     cfg["modules"] = {"spoolman": True, "server": True, "ai_intake": True, "local_intake": True}
     cfg["local_intake"] = {"url": url}
@@ -143,8 +143,8 @@ def test_local_reader_first_then_claude(sm, local_reader):
     assert b["source"] == "claude" and len(fake.calls) == 1
 
 
-def test_local_reader_alone(sm, local_reader):
-    url, _ = local_reader
+def test_local_reader_alone(sm, fake_reader):
+    url, _ = fake_reader
     cfg = config.load()
     cfg["modules"] = {"spoolman": True, "server": True, "local_intake": True}
     cfg["local_intake"] = {"url": url}
