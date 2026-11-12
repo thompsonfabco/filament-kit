@@ -105,6 +105,20 @@ def test_the_file_name_holds_no_serial_and_only_the_last_few_stay(monkeypatch):
     assert len(list((config.paths().state / "printers" / SERIAL).glob("printer-report-*.xml"))) == printer_report.KEEP
 
 
+def test_a_model_code_that_changes_does_not_make_the_newest_report_the_oldest(monkeypatch):
+    """FA-021: kept and listed by the time in the name, not the model code ("unknown" sorts after "O1D")."""
+    t = [1000.0]
+    monkeypatch.setattr(printer_report.time, "time", lambda: t[0])
+    for i in range(printer_report.KEEP):
+        t[0] = 1000.0 + i
+        printer_report.save(SERIAL, b"x", None)
+    t[0] = 5000.0
+    newest = printer_report.save(SERIAL, b"x", "O1D")
+    assert newest.exists()
+    names = [r["name"] for r in printer_report.saved(SERIAL)]
+    assert names[0] == newest.name and len(names) == printer_report.KEEP
+
+
 def test_firmware_from_version_takes_no_serial():
     info = {"command": "get_version", "module": [{"name": "ota", "sw_ver": "01.02", "sn": SERIAL, "hw_ver": "OTA"},
                                                  {"name": "x"}, "junk"]}

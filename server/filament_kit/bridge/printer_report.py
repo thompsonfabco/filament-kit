@@ -263,6 +263,11 @@ def file_name(model, when: float | None = None) -> str:
 
 
 FILE = re.compile(r"printer-report-[A-Za-z0-9-]{1,40}-\d{8}-\d{6}\.xml")
+
+
+def _age_key(name: str) -> tuple[str, str]:
+    """Sort key by the time in the name, not the model code before it (which changes from "unknown" to a real code)."""
+    return name[-19:-4], name
 NEVER = ("It never holds the printer's serial, Access Code, account, addresses, name, Wi-Fi, spool tag identities, "
          "colours, file or job names, or error text; read it before you share it.")
 
@@ -282,7 +287,7 @@ def saved(serial: str) -> list[dict]:
         except OSError:
             continue
         out.append({"name": p.name, "size": st.st_size, "at": st.st_mtime})
-    return sorted(out, key=lambda r: r["name"], reverse=True)
+    return sorted(out, key=lambda r: _age_key(r["name"]), reverse=True)
 
 
 def read_saved(serial: str, name: str) -> bytes:
@@ -305,6 +310,6 @@ def save(serial: str, data: bytes, model) -> Path:
     make_state_dir(d)
     path = d / file_name(model)
     _write_atomic(path, data, 0o644, state_owned=True)
-    for old in sorted(d.glob("printer-report-*.xml"), key=lambda p: p.name)[:-KEEP]:
+    for old in sorted(d.glob("printer-report-*.xml"), key=lambda p: _age_key(p.name))[:-KEEP]:
         old.unlink(missing_ok=True)
     return path
