@@ -592,6 +592,14 @@ data class BuildAttempt(
 @Serializable
 data class InstalledInfo(val stamp: String = "", @Serializable(with = LenientText::class) val at: String? = null)
 
+/** Changed presets already in the slicers ([count] on [lines] lines, [accepted] of them already accepted). */
+@Serializable
+data class UpdatesInfo(
+    @Serializable(with = LenientInt::class) val count: Int = 0,
+    @Serializable(with = LenientInt::class) val lines: Int = 0,
+    @Serializable(with = LenientInt::class) val accepted: Int = 0,
+)
+
 /** The paired PC that syncs Bambu Studio. */
 @Serializable
 data class PcInfo(
@@ -617,6 +625,7 @@ data class ProfileStatus(
     @SerialName("last_attempt") val lastAttempt: BuildAttempt? = null,
     val installed: InstalledInfo? = null,
     val pc: PcInfo? = null,
+    val updates: UpdatesInfo? = null,
     val library: LibraryInfo? = null,
     val stale: List<String> = emptyList(),
     val problems: List<String> = emptyList(),

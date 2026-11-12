@@ -28,9 +28,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -51,6 +53,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.ProfileStatus
 import com.thompsonfabco.filamentkit.net.ServerInfo
 import com.thompsonfabco.filamentkit.session.CONNECTION_POLL_MS
@@ -93,6 +96,7 @@ import com.thompsonfabco.filamentkit.ui.spool.SpoolUiState
 import com.thompsonfabco.filamentkit.ui.spool.SpoolViewModel
 import com.thompsonfabco.filamentkit.update.UpdateUi
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -271,7 +275,12 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
             val drafts by app.draftList.collectAsStateWithLifecycle()
             val update = updater?.state?.collectAsStateWithLifecycle()?.value ?: UpdateUi()
             // Read each time Home is shown while online; null (card says "not available") when it cannot be read.
-            val presets by produceState<ProfileStatus?>(null, api, online) {
+            var presetsReload by remember { mutableIntStateOf(0) }
+            var buildingPresets by remember { mutableStateOf(false) }
+            var presetsNote by remember { mutableStateOf<String?>(null) }
+            var presetsNoteIsError by remember { mutableStateOf(false) }
+            val homeScope = rememberCoroutineScope()
+            val presets by produceState<ProfileStatus?>(null, api, online, presetsReload) {
                 val a = api
                 value = if (a == null || !online) null else try {
                     a.profileStatus()
@@ -303,6 +312,31 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
                 onConfirmInstall = { updater?.confirmInstall() },
                 presets = presets,
                 showPresets = api != null,
+                onBuildPresets = {
+                    val a = api
+                    if (a != null && !buildingPresets) {
+                        buildingPresets = true
+                        presetsNote = null
+                        homeScope.launch {
+                            try {
+                                a.requestBuild()
+                                presetsNote = "A build was asked for. It finishes in a minute or two."
+                                presetsNoteIsError = false
+                                presetsReload++
+                            } catch (e: kotlinx.coroutines.CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                presetsNote = (e as? ApiError)?.message ?: "Could not ask the server for a build."
+                                presetsNoteIsError = true
+                            } finally {
+                                buildingPresets = false
+                            }
+                        }
+                    }
+                },
+                buildingPresets = buildingPresets,
+                presetsNote = presetsNote,
+                presetsNoteIsError = presetsNoteIsError,
                 localNetworkPanel = { LocalNetworkPanel(localNetwork) },
                 extra = { if (BuildConfig.DEBUG) SimulateTag() },
             )

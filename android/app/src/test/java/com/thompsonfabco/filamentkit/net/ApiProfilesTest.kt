@@ -42,6 +42,23 @@ class ApiProfilesTest {
     private fun failure(block: suspend () -> Unit): ApiError =
         assertThrows(ApiError::class.java) { runBlocking { block() } }
 
+    @Test fun requestBuildPostsAnEmptyObjectToTheSyncRebuildRoute() = runBlocking {
+        json("""{"requested":true}""", 202)
+        api.requestBuild()
+        val r = take()
+        assertEquals("POST", r.method)
+        assertEquals("/api/sync/rebuild", r.url.encodedPath)
+        assertEquals("Bearer tok-9", r.headers["Authorization"])
+        assertEquals(JsonObject(emptyMap()), r.bodyJson())
+    }
+
+    @Test fun requestBuildRefusedWhileAnotherPcSyncsCarriesTheServersWords() = runBlocking {
+        json("""{"error":"other_pc","message":"another PC is this server's sync PC"}""", 409)
+        val e = assertThrows(ApiError::class.java) { runBlocking { api.requestBuild() } }
+        assertEquals("other_pc", e.code)
+        assertEquals(409, e.status)
+    }
+
     @Test fun profileStatusReadsEveryField() = runBlocking {
         json(
             """{"lines":12,"presets":96,
@@ -49,12 +66,14 @@ class ApiProfilesTest {
             "last_attempt":{"at":"2026-11-02T01:02:03Z","ok":true,"error":null},
             "installed":{"stamp":"20261102T010203000000Z","at":1762045323.5},
             "pc":{"device_id":"pc-1","last_upload":"2026-11-02T00:59:00Z"},
+            "updates":{"count":4,"lines":2,"accepted":1,"new":0,"yours":0},
             "library":{"version":7,"source":"updated","local":3,"last_check":{"at":"2026-11-01T22:00:00Z","ok":false,"error":"HTTP 404"}},
             "stale":["Old PLA @BBL H2D 0.4 nozzle"],"problems":["SUNLU PLA Matte: no parent"],"future":1}""",
         )
         val s = api.profileStatus()
         assertEquals(12, s.lines)
         assertEquals(96, s.presets)
+        assertEquals(UpdatesInfo(count = 4, lines = 2, accepted = 1), s.updates)
         val b = s.build!!
         assertEquals("20261102T010203000000Z", b.stamp)
         assertEquals("ab12", b.liveHash)

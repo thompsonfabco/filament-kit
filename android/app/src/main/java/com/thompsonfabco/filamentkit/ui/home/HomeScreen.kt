@@ -71,6 +71,11 @@ fun HomeScreen(
     /** The Presets card; null while the status is unknown. [showPresets] false hides the card (not paired yet). */
     presets: ProfileStatus? = null,
     showPresets: Boolean = true,
+    /** The Presets card's Build now: [onBuildPresets], while [buildingPresets]; [presetsNote] is the outcome. */
+    onBuildPresets: () -> Unit = {},
+    buildingPresets: Boolean = false,
+    presetsNote: String? = null,
+    presetsNoteIsError: Boolean = false,
     /** Offer the label-photo add flow ([showLabelPhotos]). */
     labelPhotos: Boolean = false,
     /** Shown while [connection] is [Connection.NeedsLocalNetwork] (explanation, Allow, Open app settings). */
@@ -99,7 +104,7 @@ fun HomeScreen(
         OutlinedButton(onClick = onHistory, modifier = Modifier.fillMaxWidth()) { Text("Intake history") }
         Button(onClick = onPrinters, modifier = Modifier.fillMaxWidth()) { Text("Printers") }
         OutlinedButton(onClick = onSettings, modifier = Modifier.fillMaxWidth()) { Text("Settings") }
-        if (showPresets) PresetsCard(presets)
+        if (showPresets) PresetsCard(presets, onBuild = onBuildPresets, building = buildingPresets, buildNote = presetsNote, buildFailed = presetsNoteIsError)
 
         if (drafts.isNotEmpty()) {
             Text("Unfinished adds", style = MaterialTheme.typography.titleMedium)

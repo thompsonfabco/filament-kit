@@ -337,6 +337,14 @@ class Api(
 
     suspend fun profileStatus(): ProfileStatus = decode(call(request("api", "profiles", "status").get()))
 
+    /**
+     * Asks the server for a preset build (`POST /api/sync/rebuild`, 202). The server refuses with 409 `other_pc` while
+     * another paired PC is the sync PC; the setup page's Build now has no such rule.
+     */
+    suspend fun requestBuild() {
+        call(request("api", "sync", "rebuild").post(JsonObject(emptyMap()).toBody()))
+    }
+
     suspend fun profileLines(): List<ProfileLine> =
         call(request("api", "profiles", "lines").get()).jsonObject["lines"]?.jsonArray.orEmpty().map { decode(it) }
 

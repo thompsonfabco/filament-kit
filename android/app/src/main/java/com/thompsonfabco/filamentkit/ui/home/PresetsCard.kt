@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -47,6 +48,27 @@ fun presetLines(s: ProfileStatus, time: (String?) -> String = { formatStamp(it) 
     return out
 }
 
+/** Where the owner does what the phone cannot (Settings has the button that opens the setup page). */
+internal const val SETUP_PAGE_HINT = "open the setup page (Settings, Open the setup page)"
+
+/**
+ * What the card offers beyond the status. [canBuild]: the phone may ask for a build, which the server refuses while
+ * another paired PC is the sync PC (`other_pc`), so it is offered only while no PC sync is set up. [hints] say where to
+ * do the rest: accepting updates has no route for a paired phone, only the setup page and the command line have it.
+ */
+data class PresetActions(val canBuild: Boolean, val hints: List<String>)
+
+fun presetActions(s: ProfileStatus): PresetActions {
+    val hints = mutableListOf<String>()
+    val waiting = s.updates?.let { it.count - it.accepted } ?: 0
+    if (waiting > 0) {
+        hints += "${plural(waiting, "preset")} in your slicers can be updated. To see what would change and accept it, $SETUP_PAGE_HINT."
+    }
+    val canBuild = s.pc == null
+    if (!canBuild) hints += "To build now, $SETUP_PAGE_HINT."
+    return PresetActions(canBuild, hints)
+}
+
 private fun plural(n: Int, word: String) = "$n $word${if (n == 1) "" else "s"}"
 
 /** A server time as epoch millis: ISO-8601 with an offset, or epoch seconds (the PC sync's `at`). Null if unreadable. */
@@ -68,9 +90,19 @@ internal fun formatStamp(raw: String?, zone: TimeZone = TimeZone.getDefault()): 
     return f.format(Date(ms))
 }
 
-/** The Presets card on the home screen; [status] null while unknown (not loaded or not reachable). */
+/**
+ * The Presets card on the home screen; [status] null while unknown (not loaded or not reachable). [onBuild] asks for a
+ * build; [buildNote] is its outcome (an error when [buildFailed]), [building] while it runs.
+ */
 @Composable
-fun PresetsCard(status: ProfileStatus?, modifier: Modifier = Modifier) {
+fun PresetsCard(
+    status: ProfileStatus?,
+    modifier: Modifier = Modifier,
+    onBuild: () -> Unit = {},
+    building: Boolean = false,
+    buildNote: String? = null,
+    buildFailed: Boolean = false,
+) {
     Card(modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("Presets", style = MaterialTheme.typography.titleMedium)
@@ -82,6 +114,18 @@ fun PresetsCard(status: ProfileStatus?, modifier: Modifier = Modifier) {
                         line.text,
                         color = if (line.error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                         style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                val actions = presetActions(status)
+                actions.hints.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
+                if (actions.canBuild) {
+                    Button(onClick = onBuild, enabled = !building) { Text(if (building) "Asking…" else "Build now") }
+                }
+                buildNote?.let {
+                    Text(
+                        it,
+                        color = if (buildFailed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                        style = MaterialTheme.typography.bodySmall,
                     )
                 }
             }
