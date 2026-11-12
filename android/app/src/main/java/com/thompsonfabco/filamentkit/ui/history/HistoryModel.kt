@@ -181,9 +181,28 @@ object HistoryTexts {
     fun ranged(field: String) = field.endsWith("_range")
 
     /** What the label reader said about saved item [item] when it read the photos (local reader: colour, how sure,
-     *  least sure fields); null when the read had none or the item came from a later split. */
+     *  least sure fields); null when the read had none or its read item is not known for sure. */
     fun readLine(r: HistoryRecord, item: Int): String? =
-        r.read?.items?.getOrNull(item)?.let(com.thompsonfabco.filamentkit.ui.add.ReaderTexts::item)?.let { "When read: $it" }
+        readItem(r, item)?.let(com.thompsonfabco.filamentkit.ui.add.ReaderTexts::item)?.let { "When read: $it" }
+
+    /**
+     * The read item saved item [item] came from. Saved items are numbered in the add's order (only items that wrote
+     * spools), not the read's, so a removed card or an item with no spools shifts them: the one read item with the
+     * same vendor, name and material; else, when nothing was dropped (as many read as saved), the read item at the
+     * same place if its material matches; else null (no line beats a line under the wrong spool).
+     */
+    fun readItem(r: HistoryRecord, item: Int): JsonObject? {
+        val read = r.read?.items.orEmpty()
+        val saved = r.saved.firstOrNull { it.item == item } ?: return null
+        val key = matchKey(saved.values)
+        read.singleOrNull { matchKey(it) == key }?.let { return it }
+        if (read.size != r.saved.size) return null
+        return read.getOrNull(item)?.takeIf { matchKey(it).last() == key.last() }
+    }
+
+    private fun matchKey(o: JsonObject): List<String> = listOf("vendor", "name", "material").map {
+        (o[it] as? JsonPrimitive)?.contentOrNull?.trim()?.lowercase().orEmpty()
+    }
 }
 
 data class HistoryListState(
