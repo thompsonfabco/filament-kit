@@ -48,7 +48,7 @@ def test_record_and_entries():
     assert [x["id"] for x in got] == [e["id"]]
     assert got[0]["can_undo"] is False and got[0]["undone"] is False
     assert kusage.owns(e["id"]) and not kusage.owns("abc")
-    assert kusage.entries("sv08-max", 0) == [] or all(x["ended"] for x in kusage.entries("sv08-max", 0))
+    assert kusage.entries("sv08-max", 0) == []
 
 
 def test_real_timestamps_keep_full_precision():
@@ -68,6 +68,7 @@ def test_record_same_job_once():
 
 
 def test_cap_2000(monkeypatch):
+    assert kusage.KEEP == 2000     # the shortened cap below is only a stand-in for this one
     monkeypatch.setattr(kusage, "KEEP", 5)
     for i in range(8):
         kusage.record("p", history_job(job_id=f"{i:06d}"), 1)
