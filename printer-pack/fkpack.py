@@ -228,7 +228,6 @@ class Pack:
             self.out("  {}: skipped, Klipper has no gcode_shell_command extra (install it with KIAUH first)".format(
                 which))
             return False
-        scripts = os.path.join(self.dest, "scripts")
         if which == "check":
             self.write(m, "scripts/fk_spool_check.py", self._script("scripts/fk_spool_check.py"), 0o755)
             self.write(m, "fk_spool_check.cfg", self._read_pack("cfg/fk_spool_check.cfg").replace("@PACK@", self.dest))
@@ -239,7 +238,6 @@ class Pack:
             self.write(m, "fk_load_temp.cfg", self._read_pack("cfg/fk_load_temp.cfg").replace("@PACK@", self.dest))
             self.out("  load temperature written: _FK_LOAD_LOOKUP.temp holds the active spool's temperature")
             self.say_load_temp_trigger(m)
-        assert scripts
         return True
 
     def say_load_temp_trigger(self, m):
