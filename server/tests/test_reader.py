@@ -2,6 +2,7 @@
 XML) and their CLI, and the queue-on-empty port."""
 from __future__ import annotations
 
+import concurrent.futures
 import contextlib
 import hashlib
 import json
@@ -74,7 +75,7 @@ class FakeKit:
                                slot("Ext-R", kind="ext", present=None, typ="", say=["external", "right"])],
                       "SER2": [slot("A1")]}
         self.load_error: slots.SlotError | None = None
-        self.load_delay = 0.0
+        self.load_gate: threading.Event | None = None     # set: a load blocks until the test sets it
         self.preset = {"filament_id": "PFUS1", "name": "SUNLU PLA+ @H2D", "filament_type": "PLA"}
 
     def get(self, path):
@@ -98,8 +99,8 @@ class FakeKit:
     def post(self, path, body):
         with self.lock:
             self.loads.append((path, body))
-        if self.load_delay:
-            time.sleep(self.load_delay)
+        if self.load_gate is not None:
+            self.load_gate.wait(30)
         if self.load_error is not None:
             raise self.load_error
         return {"preset": dict(self.preset), "dry_run": body["dry_run"], "confirmed": None if body["dry_run"] else True,
@@ -393,12 +394,13 @@ def test_scan_offline_printer_and_bad_requests(app, token, kit):
 
 def test_scan_answers_before_a_slow_confirmation(app, token, kit, monkeypatch):
     monkeypatch.setattr(reader, "SCAN_WAIT", 0.2)
-    kit.load_delay = 1.0
-    t0 = time.monotonic()
-    with client(app) as c:
-        body = scan(c, token).json()
-    assert time.monotonic() - t0 < 0.9
-    assert body["status"] == "set" and "SUNLU PLA+ Grey" == body["filament"]
+    kit.load_gate = threading.Event()        # the load cannot finish until released, so a reply is an early one
+    try:
+        with client(app) as c:
+            body = scan(c, token).json()
+    finally:
+        kit.load_gate.set()
+    assert body["status"] == "set" and "SUNLU PLA+ Grey" == body["filament"] and body["message"].endswith("sent")
 
 
 def test_scan_on_an_empty_slot_is_queued(app, token, kit, queue):
@@ -550,13 +552,24 @@ def test_scan_reply_deadline_counts_from_the_start(app, token, kit, sm, monkeypa
         time.sleep(1.2)
         return slow_get(path)
     sm.get = get
-    kit.load_delay = 5.0
-    with client(app) as c:
-        t0 = time.monotonic()       # after the app's start, which a crowded machine makes slow
-        body = scan(c, token).json()
-        took = time.monotonic() - t0
-    # from the start of the scan: about 1.5 s. A wait counted from the lookups' end would be about 2.7 s
-    assert took < 2.4 and body["status"] == "set" and "sent" in body["message"]
+    kit.load_gate = threading.Event()
+    waits = []
+    real_result = concurrent.futures.Future.result
+
+    def result(self, timeout=None):
+        if timeout is not None:
+            waits.append(timeout)
+        return real_result(self, timeout)
+    monkeypatch.setattr(concurrent.futures.Future, "result", result)
+    try:
+        with client(app) as c:
+            body = scan(c, token).json()
+    finally:
+        kit.load_gate.set()
+    # the load's wait is what the 1.5 s deadline left after the 1.2 s lookups (about 0.3 s; slower lookups only shrink
+    # it). A wait counted from the lookups' end would have been the whole 1.5 s.
+    assert len(waits) == 1 and waits[0] < 1.0
+    assert body["status"] == "set" and "sent" in body["message"]
 
 
 def test_unconfirmed_comes_first_in_the_message(app, token, kit):

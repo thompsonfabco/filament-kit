@@ -121,19 +121,22 @@ def test_load_gcode_refused_word_for_word(printer, sm, fil):
     assert loc_of(sm, s["id"]) == "Shelf 2"
 
 
-def test_load_ws_drop_mid_confirm(printer, sm, fil):
+def test_load_ws_drop_mid_confirm(printer, sm, fil, monkeypatch):
     """Review Focus 1: the websocket closes between the gcode and the confirmation → not confirmed, no write."""
     fam, pid, fake = printer
+    monkeypatch.setattr(loads, "CONFIRM_TIMEOUT", 30.0)     # far from the test's own ceiling: only the drop can end it early
     fake.ignore_gcode = True                 # the printer takes the gcode but no update arrives ...
     s = spool(sm, fil, "Shelf 2")
 
     def drop_soon():
-        time.sleep(0.2)
-        fake.drop()
-    threading.Thread(target=drop_soon).start()
+        if wait_for(lambda: fake.gcode_log):         # ... the gcode has arrived: the kit is now waiting to confirm
+            fake.drop()
+    dropper = threading.Thread(target=drop_soon)
+    dropper.start()
     t0 = time.monotonic()
     r = fam.load(sm, pid, "T0", s["id"], False, sealed_location="Sealed stock")
-    assert time.monotonic() - t0 < loads.CONFIRM_TIMEOUT - 0.5     # the drop ended the wait, not the timeout
+    dropper.join(10)
+    assert time.monotonic() - t0 < 15      # the drop ended the wait, not the 30 s timeout
     assert r["confirmed"] is False
     assert loc_of(sm, s["id"]) == "Shelf 2"
 
@@ -298,10 +301,12 @@ def test_tap_during_kit_load(printer, sm, fil):
     fake.ignore_gcode = True                 # the kit's gcode never lands; the tap does
 
     def tap():
-        time.sleep(0.3)
-        fake.set_spool(b["id"])
-    threading.Thread(target=tap).start()
+        if wait_for(lambda: fake.gcode_log):         # the kit's gcode has gone out and it is waiting to confirm
+            fake.set_spool(b["id"])
+    tapper = threading.Thread(target=tap)
+    tapper.start()
     r = fam.load(sm, pid, "T0", a["id"], False, sealed_location="Sealed stock")
+    tapper.join(10)
     assert r["confirmed"] is False
     assert wait_for(lambda: loc_of(sm, b["id"]) == LOC)
     here = [x["id"] for x in sm.get("spool") if x.get("location") == LOC]
