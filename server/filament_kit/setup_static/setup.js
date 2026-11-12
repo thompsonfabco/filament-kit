@@ -213,7 +213,7 @@ let webQrUrls = [];
 function webAppCard() {
   const body = h("div");
   const el = card("iPhone: the web app", body);
-  api("webapp").then((r) => {
+  const load = (whole) => (whole ? api("webapp", { code: codeIn.value }) : api("webapp")).then((r) => {
     webQrUrls.forEach((u) => URL.revokeObjectURL(u));
     webQrUrls = [];
     const qr = (svg, alt) => {
@@ -228,8 +228,11 @@ function webAppCard() {
       h("p", { class: "muted", textContent: "Safari warns once about the server's own certificate: accept it to go on. It works on the home network only." }),
       r.public_url ? h("p", {}, "Away from home too (the web module): ", h("b", { textContent: r.public_url })) : null,
       r.public_url ? qr(r.public_qr_svg, "QR code of the web app's public address") : null,
+      r.public_hidden ? h("p", { class: "muted", textContent: "The public address is hidden until the setup code is given." }) : null,
+      r.public_hidden ? h("button", { class: "secondary", textContent: "Show the public address", on: { click: () => load(true).catch((e) => say(body, e.message, false)) } }) : null,
       h("p", { textContent: "To keep it on the iPhone: tap Share, then Add to Home Screen." }));
-  }).catch((e) => say(body, e.message, false));
+  });
+  load(false).catch((e) => say(body, e.message, false));
   return el;
 }
 
