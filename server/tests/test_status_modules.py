@@ -32,7 +32,7 @@ def _serve_station(body, status=200):
         def do_GET(self):
             self.send_response(status)
             self.end_headers()
-            self.wfile.write(json.dumps(body).encode())
+            self.wfile.write(body if isinstance(body, bytes) else json.dumps(body).encode())
 
         def log_message(self, *a):
             pass
@@ -59,6 +59,18 @@ def test_status_station_unreachable_fails_naming_url(capsys):
     assert cli.main(["status"]) == 1
     out = capsys.readouterr().out
     assert "FAIL" in out and "http://127.0.0.1:1" in out
+
+
+@pytest.mark.parametrize("status,body", [(500, {"error": "boom"}), (503, b""), (200, b"not json"), (200, [1, 2])])
+def test_status_station_error_or_invalid_body_fails_naming_url(capsys, status, body):
+    srv, url = _serve_station(body, status=status)
+    try:
+        _cfg(url)
+        assert cli.main(["status"]) == 1
+    finally:
+        srv.shutdown()
+    out = capsys.readouterr().out
+    assert "FAIL" in out and url in out and "station answering" not in out
 
 
 def test_status_station_not_seen_is_informational(capsys):
