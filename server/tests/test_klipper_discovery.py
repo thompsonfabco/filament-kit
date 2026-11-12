@@ -392,3 +392,11 @@ def test_klipper_add_cli_says_it_is_already_added(capsys):
     args = type("A", (), {"klipper_cmd": "add", "name": "Again", "host": "voron.home.arpa", "port": 7125})
     assert klipper_cli.run(args) == 1
     assert "Voron" in capsys.readouterr().err
+
+
+def test_cli_add_refuses_a_port_outside_1_65535(capsys):
+    for port in ("0", "99999"):
+        assert klipper_cli.main(["add", "Bad", "box.example", "--port", port]) == 1
+        assert "1 to 65535" in capsys.readouterr().err
+    assert registry.load() == {}
+

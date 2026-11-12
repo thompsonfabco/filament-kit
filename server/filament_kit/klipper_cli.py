@@ -247,6 +247,9 @@ def _describe(p: registry.Printer) -> int:
 def run(args) -> int:
     c = args.klipper_cmd
     if c == "add":
+        if not 1 <= args.port <= 65535:
+            print("error: the port must be a number from 1 to 65535", file=sys.stderr)
+            return 1
         host = hostaddr.clean(args.host)
         bad = hostaddr.form_error(host)
         if bad:
