@@ -225,13 +225,38 @@ def test_dry_run_writes_nothing(sm):
     assert inventory.by_tag(sm, UID) is None and sm.get("spool") == []
 
 
-def test_keep_sealed_link_does_not_open(sm):
-    c, h = client(sm), auth()
-    sid = save(c, h, gross_g=1180, item={**ITEM, "sealed": True, "sealed_reason": "bag"}).json()["spool_id"]
+def _unlinked_sealed_spool(sm, monkeypatch):
+    """A sealed spool Spoolman holds with no tag: the save whose link step failed (the retry's starting point)."""
+    real = inventory.link_tag
+    monkeypatch.setattr(inventory, "link_tag", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("tag did not land")))
+    sid = save(client(sm), auth(), gross_g=1180, item={**ITEM, "sealed": True, "sealed_reason": "bag"}).json()["spool_id"]
+    monkeypatch.setattr(inventory, "link_tag", real)
     s = sm.get(f"spool/{sid}")
-    before = copy.deepcopy(s)
-    inventory.link_tag(sm, sid, UID, force=False, dry=False, keep_sealed=True)  # already linked: no-op
-    assert sm.get(f"spool/{sid}")["comment"] == before["comment"]
+    assert tags.stored(s) is None and inventory.SEALED_COMMENT in s["comment"] and not s.get("first_used")
+    return sid
+
+
+def test_keep_sealed_link_does_not_open(sm, monkeypatch):
+    sid = _unlinked_sealed_spool(sm, monkeypatch)
+    inventory.link_tag(sm, sid, UID, force=False, dry=False, keep_sealed=True)
+    s = sm.get(f"spool/{sid}")
+    assert tags.stored(s) == tags.normalize_uid(UID)
+    assert inventory.SEALED_COMMENT in s["comment"] and not s.get("first_used")        # linked, still sealed
+
+
+def test_link_without_keep_sealed_opens_the_spool(sm, monkeypatch):
+    sid = _unlinked_sealed_spool(sm, monkeypatch)
+    inventory.link_tag(sm, sid, UID, force=False, dry=False, keep_sealed=False)
+    s = sm.get(f"spool/{sid}")
+    assert tags.stored(s) == tags.normalize_uid(UID)
+    assert inventory.SEALED_COMMENT not in (s.get("comment") or "") and s["first_used"]
+
+
+def test_linking_a_tag_the_spool_already_holds_changes_nothing(sm):
+    sid = save(client(sm), auth(), gross_g=1180, item={**ITEM, "sealed": True, "sealed_reason": "bag"}).json()["spool_id"]
+    before = copy.deepcopy(sm.get(f"spool/{sid}"))
+    assert inventory.link_tag(sm, sid, UID, force=False, dry=False, keep_sealed=False).noop is True
+    assert sm.get(f"spool/{sid}") == before
 
 
 def test_save_accepts_the_panels_filament_key(sm):
@@ -324,3 +349,48 @@ def test_the_retry_gives_an_opened_spool_its_first_used(sm, monkeypatch):
     monkeypatch.setattr(inventory, "link_tag", real)
     assert save(c, h, gross_g=900, spool_id=sid).status_code == 200
     assert sm.get(f"spool/{sid}")["first_used"]
+
+
+# ---------- refusals and fall-throughs ----------
+
+def test_a_local_recognizer_that_raises_falls_through_to_claude(sm, monkeypatch):
+    local = types.ModuleType(station_flow.LOCAL_MODULE)
+
+    def boom(sm, images, cfg):
+        raise RuntimeError("model file missing")
+    local.recognize = boom
+    monkeypatch.setitem(sys.modules, station_flow.LOCAL_MODULE, local)
+    cfg = config.load()
+    cfg["modules"] = {"spoolman": True, "server": True, "ai_intake": True, "local_ai": True}
+    config.save(cfg)
+    fake = FakeClaude(read_reply(vendor="SUNLU"))
+    r = recognize(client(sm, fake), auth())
+    assert r.status_code == 200 and r.json()["source"] == "claude" and fake.calls
+
+
+@pytest.mark.parametrize("uid", ["", "   ", None, 5])
+def test_save_needs_a_tag(sm, uid):
+    r = save(client(sm), auth(), gross_g=900, item=ITEM, uid=uid)
+    assert r.status_code == 400 and r.json()["error"] == "bad_request" and _spools(sm) == 0
+
+
+@pytest.mark.parametrize("sid", ["7", 7.5, True, [1]])
+def test_the_retry_takes_only_a_whole_number_spool_id(sm, sid):
+    r = save(client(sm), auth(), gross_g=900, spool_id=sid)
+    assert r.status_code == 400 and r.json()["error"] == "bad_request"
+
+
+def test_spoolman_failing_before_any_spool_exists_is_a_502_without_a_spool_id(sm, monkeypatch):
+    def fail(*a, **kw):
+        raise inventory.AddFailed("spoolman said no", inventory.AddResult())
+    monkeypatch.setattr(inventory, "add_and_link", fail)
+    r = save(client(sm), auth(), gross_g=900, item=ITEM)
+    assert r.status_code == 502 and r.json()["error"] == "spoolman_error" and "spool_id" not in r.json()
+
+
+def test_a_rejected_item_is_a_422(sm, monkeypatch):
+    def reject(*a, **kw):
+        raise ValueError("net weight must be positive")
+    monkeypatch.setattr(inventory, "add_and_link", reject)
+    r = save(client(sm), auth(), gross_g=900, item=ITEM)
+    assert r.status_code == 422 and r.json()["error"] == "invalid" and "net weight" in r.json()["message"]
