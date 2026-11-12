@@ -131,3 +131,12 @@ def test_hosts_from_preset_and_file(plugin, tmp_path):
     plugin.orca_stub.bundle = Bundle(PRESETS, ["a"])
     (tmp_path / "hosts.txt").write_text("# printers\nprinter2.home.arpa\nhttp://192.0.2.10/\n")
     assert plugin.printer_hosts() == ["http://192.0.2.10", "http://printer.home.arpa", "http://printer2.home.arpa"]
+
+
+def test_two_presets_listing_the_filament_id_are_scored_among_themselves(plugin):
+    def p(name, ids, user=False):
+        return {"name": name, "label": name, "type": "PLA", "vendor": "Acme", "is_user": user, "spoolman_ids": ids}
+    spool = {"filament_id": 5, "material": "PLA", "vendor": "Acme", "name": "Silk"}
+    presets = [p("Acme PLA Silk", {5}), p("Acme PLA", {5}), p("Acme PLA Silk tuned", set(), user=True)]
+    # the unlisted user preset scores 4.5 over everything; the pick is still one that lists id 5
+    assert plugin.choose(presets, spool, None, None)[0] == "Acme PLA Silk"
