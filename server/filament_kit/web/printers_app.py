@@ -40,7 +40,6 @@ from __future__ import annotations
 
 import logging
 import re
-import threading
 import time
 from pathlib import Path
 
@@ -454,10 +453,14 @@ class PrintersApp:
         if now - self.last_test < self.push.TEST_EVERY:
             raise Problem(f"wait {self.push.TEST_EVERY:.0f} s between test alerts")
         self.last_test = now
-        threading.Thread(target=self.push.send_all, daemon=True,
-                         args=(self.push_store, "Printers test", "Notifications are working.", "test"),
-                         kwargs={"sender": self.sender, "url": self.intake.base + "/"}).start()
-        return {"ok": True}
+        r = await anyio.to_thread.run_sync(lambda: self.push.send_all(
+            self.push_store, "Printers test", "Notifications are working.", "test", sender=self.sender,
+            url=self.intake.base + "/"))
+        if r["failed"] and not r["sent"]:
+            raise Problem("the test alert was not delivered: " + "; ".join(r["failed"][:3])
+                          + ". If the push service cannot be reached, the web service's network limits may block it "
+                          "(user guide, Web Push).")
+        return {"ok": True, **r}
 
     async def service_worker(self, request: Request):
         return Response((STATIC / "sw.js").read_bytes(), media_type="text/javascript",
