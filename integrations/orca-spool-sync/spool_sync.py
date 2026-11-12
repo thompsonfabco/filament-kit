@@ -412,8 +412,8 @@ SCRIPT = """
 PAGE = STYLE + """
 <h3>Spool Sync</h3>
 <p class="muted">Selects each filament slot's preset for the spools loaded on the active printer
-(lane_data from filament-kit or AFC; else slot 1 from the active spool). The chip shows slot 1's spool colour; set
-slot colours by hand if they matter.</p>
+(lane_data from filament-kit or AFC; else slot 1 from the active spool). The chip shows the colour of the printer's
+active spool (on a multi-tool printer, the active tool's); set slot colours by hand if they matter.</p>
 <div class="row"><span id="chip" class="chip"></span><span id="loaded" class="muted">Checking printer...</span>
   <button type="button" id="refresh">Refresh</button></div>
 <div class="row"><button type="button" id="sync" class="big">Sync filament from printer</button>
