@@ -99,6 +99,7 @@ class Recorder:
         return self.sm.patch(path, body)
 
     def post(self, path, body):
+        self.calls.append(("POST", path))
         return self.sm.post(path, body)
 
 
@@ -126,7 +127,7 @@ def test_job_end_records_entry(printer):
     assert wait_for(lambda: len(fam.usage(pid, 36500)) == 1)
     e = fam.usage(pid, 36500)[0]
     assert (e["job"], e["status"], e["source"]) == ("000200", "completed", "moonraker")
-    assert not any(c[0] == "PUT" for c in sm.calls)          # never writes usage to Spoolman
+    assert sm.calls == []                                    # never writes usage to Spoolman (no PUT, PATCH or POST)
 
 
 def test_shutdown_mid_job_records_history_only(printer):
