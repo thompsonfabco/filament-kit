@@ -105,7 +105,8 @@ CODE_SCAN = ("server/tests", "get.sh", "install", "reader", "tools")
 CODE_SCAN_SKIP = {"server/tests/test_readme.py", "reader/tools/test_ota_publish.py"}
 # the repository paths: filament-kit (README, get.sh), and the filament-library repo that release.yml builds from
 ALLOWED_REPO_PATHS = ("github.com/thompsonfabco/filament-kit", "thompsonfabco/filament-kit",
-                      "github.com/thompsonfabco/filament-library", "thompsonfabco/filament-library")
+                      "github.com/thompsonfabco/filament-library", "thompsonfabco/filament-library",
+                      "ko-fi.com/thompsonfabco")
 
 
 def _walk_code_scan() -> list[str]:
