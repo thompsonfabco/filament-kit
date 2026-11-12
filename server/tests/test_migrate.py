@@ -526,6 +526,26 @@ def test_export_script_bundle_opens_and_leaves_secrets_out(tmp_path, secrets):
         assert len(b.lines()) == 4
 
 
+@pytest.mark.skipif(os.name == "nt", reason="the export runs on the Linux VM (bash + python3)")
+def test_export_script_refuses_a_readable_stdout_file_with_secrets(tmp_path):
+    """FA-097: `... - > bundle` creates the file at the shell's umask; a full bundle must not land in a 0644 file."""
+    import subprocess
+    script = Path(__file__).resolve().parents[2] / "tools" / "export_ops.sh"
+    env = {**os.environ, "OPS_EXPORT_NOT_ROOT": "1", "OPS_ETC": str(tmp_path / "etc"), "OPS_STATE": str(tmp_path / "st"),
+           "OPS_OPT": str(tmp_path / "opt"), "OPS_DATA": str(tmp_path / "d")}
+    out = tmp_path / "bundle.tar.gz"
+    out.touch()
+    out.chmod(0o644)
+    with open(out, "wb") as fh:
+        r = subprocess.run(["bash", str(script), "-"], env=env, stdout=fh, stderr=subprocess.PIPE, text=True, timeout=60)
+    assert r.returncode != 0 and "readable by group/others" in r.stderr
+    assert out.stat().st_size == 0                               # nothing was written
+    out.chmod(0o600)
+    with open(out, "wb") as fh:                                  # a private file passes the check (and fails later: no data)
+        r = subprocess.run(["bash", str(script), "-"], env=env, stdout=fh, stderr=subprocess.PIPE, text=True, timeout=60)
+    assert "readable by group/others" not in r.stderr
+
+
 def test_h2d_listed_model_only_so_its_presets_are_built(env, lib):
     from filament_kit.bridge import models, registry
     b = make_bundle(env / "bundle")
