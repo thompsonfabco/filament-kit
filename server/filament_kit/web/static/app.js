@@ -52,8 +52,10 @@ const out = (res) => {
   return h("pre", { class: res && res.exit_code ? "err" : "ok", textContent: text });
 };
 const fail = (e) => h("pre", { class: "err", textContent: e.message || String(e) });
+const more = (shown, n) => n > shown ? h("p", { class: "muted", textContent: `Showing ${shown} of ${n}: narrow the search.` }) : null;
 const busy = (text) => h("p", {}, h("span", { class: "spin" }), text);
 async function run(box, label, fn) {
+  box.setAttribute("role", "status");   // a live region: a screen reader hears the spinner text and the result
   box.replaceChildren(busy(label));
   try { const node = await fn(); box.replaceChildren(...[node].flat().filter(Boolean)); }
   catch (e) { box.replaceChildren(fail(e)); }
@@ -160,14 +162,14 @@ const PRINTERS = document.body.dataset.printers === "1";   // the printers modul
 const HISTORY = document.body.dataset.history === "1";     // the kit's own page: the intake history is here
 const tabs = { add: addTab(), open: openTab(), presets: presetsTab(), ...(HISTORY ? { history: historyTab() } : {}),
                ...(PRINTERS ? { printers: printersTab() } : {}) };
-const bar = h("nav", { class: "tabs" });
+const bar = h("nav", { class: "tabs", role: "tablist" });
 for (const [key, label] of [["add", "Add spools"], ["open", "Open spool"], ["presets", "Presets"],
     ...(HISTORY ? [["history", "History"]] : []), ...(PRINTERS ? [["printers", "Printers"]] : [])]) {
-  bar.append(h("button", { textContent: label, dataset: { key }, on: { click: () => show(key) } }));
+  bar.append(h("button", { textContent: label, dataset: { key }, role: "tab", on: { click: () => show(key) } }));
 }
 app.append(bar, ...Object.values(tabs).map((t) => t.el));
 function show(key) {
-  for (const b of bar.children) b.classList.toggle("on", b.dataset.key === key);
+  for (const b of bar.children) { b.classList.toggle("on", b.dataset.key === key); b.setAttribute("aria-selected", String(b.dataset.key === key)); }
   for (const [k, t] of Object.entries(tabs)) { t.el.classList.toggle("hidden", k !== key); (k === key ? t.enter : t.leave)?.(); }
   try { localStorage.setItem("tab", key); } catch {}
 }
@@ -189,7 +191,7 @@ function addTab() {
   const itemsBox = h("div");
   const actBox = h("div");
   // ---- by hand: pick an existing filament, or start a new one ----
-  const fq = h("input", { type: "search", placeholder: "Existing filament: brand, colour, material", enterKeyHint: "search",
+  const fq = h("input", { type: "search", placeholder: "Existing filament: brand, colour, material", "aria-label": "Search existing filaments", enterKeyHint: "search",
                           on: { keydown: (e) => { if (e.key === "Enter") findFilaments(); } } });
   const filBox = h("div", { class: "list" });
   const vendorList = h("datalist", { id: "vendors" });
@@ -225,12 +227,13 @@ function addTab() {
     await run(filBox, "Searching…", async () => {
       const res = await api(`filaments?q=${encodeURIComponent(fq.value)}`);
       if (!res.filaments.length) return h("p", { class: "muted", textContent: "No filament matches: use New filament." });
-      return res.filaments.slice(0, 60).map((f) => h("button", {
+      return [...res.filaments.slice(0, 60).map((f) => h("button", {
         class: "pick", on: { click: () => addItem({ ...blankItem(), vendor: f.vendor, name: f.name, material: f.material || "",
           net: f.net ?? 1000, tare: f.tare, density: f.density, color_hex: f.color_hex || "", nozzle: f.nozzle, bed: f.bed,
           existing_filament_id: f.id, match: "existing filament" }) } },
         h("strong", { textContent: `F${f.id} ` }), `${f.vendor || "(no vendor)"} ${f.name}`,
-        h("div", { class: "muted", textContent: `${f.material || "?"} · ${f.net ?? "?"} g · ${f.spools} spool${f.spools === 1 ? "" : "s"}` })));
+        h("div", { class: "muted", textContent: `${f.material || "?"} · ${f.net ?? "?"} g · ${f.spools} spool${f.spools === 1 ? "" : "s"}` }))),
+        more(60, res.filaments.length)];
     });
   }
 
@@ -255,8 +258,8 @@ function addTab() {
     drawThumbs();
   }
   function drawThumbs() {
-    thumbs.replaceChildren(...photos.map((p, i) => h("figure", {}, h("img", { src: p.url, alt: `photo ${i}` }),
-      h("figcaption", { textContent: i }),
+    thumbs.replaceChildren(...photos.map((p, i) => h("figure", {}, h("img", { src: p.url, alt: `photo ${i + 1}` }),
+      h("figcaption", { textContent: i + 1 }),
       h("button", { textContent: "✕", "aria-label": "remove photo", on: { click: () => { URL.revokeObjectURL(p.url); photos.splice(i, 1); drawThumbs(); } } }))));
     readBtn.disabled = !photos.length;
   }
@@ -315,7 +318,7 @@ function addTab() {
       return h("div", { class: "card" },
         h("h3", {}, sw, h("span", { textContent: `${it.vendor} ${it.name}`.trim() || "New spool" }),
           h("span", { class: "badge " + (it.existing_filament_id ? "ok" : "new"), textContent: it.match })),
-        it.photos.length ? h("p", { class: "muted", textContent: `photos ${it.photos.join(", ")}${it.estimates.length ? " · estimated: " + it.estimates.join(", ") : ""}` }) : null,
+        it.photos.length ? h("p", { class: "muted", textContent: `photos ${it.photos.map((n) => n + 1).join(", ")}${it.estimates.length ? " · estimated: " + it.estimates.join(", ") : ""}` }) : null,
         h("p", { class: "muted", textContent: it.price_line ? it.price_line.replace(/^Price: /, "") : "no price" }),
         h("div", { class: "grid" },
           f("vendor", "Vendor"), f("material", "Material"),
@@ -361,7 +364,7 @@ function addTab() {
 function openTab() {
   let timer = null, picked = null, lastKey = null;
   const tagBox = h("div", { class: "card" }, busy("Reading the tag reader…"));
-  const q = h("input", { type: "search", placeholder: "Search: brand, colour, material", enterKeyHint: "search",
+  const q = h("input", { type: "search", placeholder: "Search: brand, colour, material", "aria-label": "Search spools", enterKeyHint: "search",
                          on: { keydown: (e) => { if (e.key === "Enter") find(); } } });
   const sealed = h("input", { type: "checkbox", checked: true });
   const results = h("div", { class: "list" });
@@ -404,10 +407,11 @@ function openTab() {
       const res = await api(`find?q=${encodeURIComponent(q.value)}&sealed=${sealed.checked ? 1 : 0}`);
       const rows = res.filaments.flatMap((f) => f.spools.map((s) => ({ f, s })));
       if (!rows.length) return h("p", { class: "muted", textContent: "No spools match." });
-      return rows.slice(0, 60).map(({ f, s }) => h("button", {
+      return [...rows.slice(0, 60).map(({ f, s }) => h("button", {
         class: "pick", on: { click: (e) => pick(e.currentTarget, f, s) } },
         h("strong", { textContent: `S${s.spool_id} ` }), `${f.vendor} ${f.name}`,
-        h("div", { class: "muted", textContent: `${s.location || "?"} · ${s.remaining_g} g${s.sealed ? " · sealed" : ""}${s.tagged ? " · has a tag" : ""}${s.lot ? " · lot " + s.lot : ""}` })));
+        h("div", { class: "muted", textContent: `${s.location || "?"} · ${s.remaining_g} g${s.sealed ? " · sealed" : ""}${s.tagged ? " · has a tag" : ""}${s.lot ? " · lot " + s.lot : ""}` }))),
+        more(60, rows.length)];
     });
   }
   function pick(btn, f, s) {
@@ -425,7 +429,8 @@ function openTab() {
       return out(res);
     });
   }
-  return { el, enter() { poll(); timer = setInterval(poll, 3000); }, leave() { clearInterval(timer); timer = null; } };
+  return { el, enter() { poll(); timer = setInterval(() => { if (!document.hidden) poll(); }, 3000); },   // not while the page is hidden or the phone locked
+    leave() { clearInterval(timer); timer = null; } };
 }
 
 // ---------- Presets ----------
