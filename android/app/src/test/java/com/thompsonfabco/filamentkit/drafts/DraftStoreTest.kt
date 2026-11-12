@@ -86,4 +86,43 @@ class DraftStoreTest {
         assertEquals(setOf("draft.json"), File(dir, d.id).list()!!.toSet())
         assertEquals("b", store.get(d.id)!!.hint)
     }
+
+    private val day = 24L * 60 * 60 * 1000
+
+    @Test fun purgeDeletesOldPhotolessAndUnreadableDraftsButKeepsTheRest() {
+        val store = DraftStore(dir)
+        val now = 100 * day
+        fun draft(ageDays: Long, photos: Int, addedBefore: List<Long>? = null): String {
+            val d = store.create()
+            repeat(photos) { store.addPhoto(d.id, byteArrayOf(1)) }
+            store.update(store.get(d.id)!!.copy(created = now - ageDays * day, addedBefore = addedBefore))
+            return d.id
+        }
+        val fresh = draft(ageDays = 2, photos = 1)
+        val old = draft(ageDays = 31, photos = 2)
+        val noPhotos = draft(ageDays = 1, photos = 0)
+        val warned = draft(ageDays = 60, photos = 0, addedBefore = listOf(7L))
+        val unreadable = draft(ageDays = 1, photos = 1)
+        File(dir, "$unreadable/draft.json").writeText("{not json")
+
+        assertEquals(3, store.purge(30 * day, now))
+        assertEquals(setOf(fresh, warned), dir.list()!!.toSet())
+        assertFalse(File(dir, old).exists())
+        assertFalse(File(dir, noPhotos).exists())
+        assertFalse(File(dir, unreadable).exists())
+    }
+
+    @Test fun purgeOfAnEmptyOrMissingFolderDeletesNothing() {
+        assertEquals(0, DraftStore(dir).purge(30 * day))
+        assertEquals(0, DraftStore(File(dir, "absent")).purge(30 * day))
+    }
+
+    @Test fun aDraftExactlyAtTheLimitIsKept() {
+        val store = DraftStore(dir)
+        val d = store.create()
+        store.addPhoto(d.id, byteArrayOf(1))
+        store.update(store.get(d.id)!!.copy(created = 70 * day))
+        assertEquals(0, store.purge(30 * day, now = 100 * day))
+        assertEquals(1, store.purge(30 * day, now = 100 * day + 1))
+    }
 }

@@ -296,6 +296,7 @@ private fun FilamentKitApp(app: AppViewModel = viewModel()) {
                 onHistory = { nav.navigate(Routes.HISTORY) },
                 onSettings = { nav.navigate(Routes.SETTINGS) },
                 onResumeDraft = { id -> nav.navigate(Routes.add(draft = id)) },
+                onDiscardDraft = app::discardDraft,
                 onRetryConnection = app.session::refresh,
                 onReviewCertificate = app.router::pairAgain,
                 onInstallUpdate = { updater?.install() },

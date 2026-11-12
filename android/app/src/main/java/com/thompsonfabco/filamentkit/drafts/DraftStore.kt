@@ -86,6 +86,25 @@ class DraftStore(private val dir: File) {
         }
     }
 
+    /**
+     * Housekeeping, run once when the app starts: deletes the draft folders whose `draft.json` cannot be read, drafts
+     * older than [maxAgeMs] and drafts with no photos (Home hides those, so nobody could discard them). A draft that
+     * holds [Draft.addedBefore] is kept: it carries the "may already be added" warning. Returns how many were deleted.
+     */
+    fun purge(maxAgeMs: Long, now: Long = System.currentTimeMillis()): Int {
+        var n = 0
+        for (folder in dir.listFiles { f -> f.isDirectory }.orEmpty()) {
+            val d = get(folder.name)
+            val drop = when {
+                d == null -> true
+                d.addedBefore != null -> false
+                else -> d.photos.isEmpty() || now - d.created > maxAgeMs
+            }
+            if (drop && folder.deleteRecursively()) n++
+        }
+        return n
+    }
+
     fun delete(id: String) {
         folder(id).deleteRecursively()
     }
@@ -118,8 +137,10 @@ class DraftStore(private val dir: File) {
 
     private fun photoIndex(f: File): Int = PHOTO.matchEntire(f.name)!!.groupValues[1].toInt()
 
-    private companion object {
-        const val DRAFT_FILE = "draft.json"
-        val PHOTO = Regex("""photo(\d+)\.jpg""")
+    companion object {
+        /** Drafts older than this are deleted at start ([purge]). */
+        const val MAX_AGE_MS = 30L * 24 * 60 * 60 * 1000
+        private const val DRAFT_FILE = "draft.json"
+        private val PHOTO = Regex("""photo(\d+)\.jpg""")
     }
 }
