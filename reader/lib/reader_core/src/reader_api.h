@@ -16,7 +16,7 @@ static const int MAX_SLOTS = 128;
 // A list reply larger than this is refused before it is read into RAM (74 slots
 // with long names are ~12 KB).
 static const size_t MAX_RESPONSE_BYTES = 20480;
-// Display/speech strings (label, name, say, type, spool) are cut to this many
+// Display strings (label, name, type, spool) are cut to this many
 // bytes, at a UTF-8 character boundary.
 static const size_t MAX_FIELD = 40;
 // Printer ids go back in URLs, so they are never cut; longer ones are dropped.
@@ -29,14 +29,12 @@ bool responseTooBig(int contentLength);
 struct PrinterEntry {
   std::string id;    // opaque; echoed back in URLs and the scan body
   std::string name;  // shown on the top line
-  std::string say;   // speech tokens, space separated (lowercase)
 };
 
 enum Presence { PRESENT_UNKNOWN = 0, PRESENT_YES = 1, PRESENT_NO = 2 };
 
 struct SlotEntry {
   std::string label;  // the kit label ("A1", "HT-B", "Ext-L"); what the reader saves and sends
-  std::string say;    // speech tokens, space separated (lowercase)
   std::string kind;   // unit kind from the server ("ams", "ams_ht", "external", ...)
   Presence present = PRESENT_UNKNOWN;
   std::string type;   // filament type the printer reports ("PLA"), may be empty

@@ -1821,6 +1821,7 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
     from . import reader_tokens
     ask_secret = ask_secret or secret_input.ask
     flashing = bool(a.source)
+    low = getattr(a, "buzzer", "high") == "low"
     who = rs.owner()            # under sudo: PlatformIO is looked for, and run, as the user who ran sudo
     pio = rs.find_pio(who) if flashing else None
     if flashing and pio is None:
@@ -1888,7 +1889,7 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
         print("error: the two passwords differ; nothing was changed", file=sys.stderr)
         return 1
     try:
-        rs.secrets_h(ssid, password, base, token or "x" * 43, key_pem)      # every check before a token is made
+        rs.secrets_h(ssid, password, base, token or "x" * 43, key_pem, low)  # every check before a token is made
         if a.out and not rs.out_ok(Path(a.out), who.uid if who else os.getuid() if hasattr(os, "getuid") else 0):
             raise rs.SetupError(f"{a.out} exists and is not a file of yours; choose a new name")
     except rs.SetupError as e:
@@ -1901,7 +1902,7 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
         except reader_tokens.TokenFileError as e:
             print(f"error: {e}; nothing was changed", file=sys.stderr)
             return 1
-    text = rs.secrets_h(ssid, password, base, token, key_pem)
+    text = rs.secrets_h(ssid, password, base, token, key_pem, low)
     if a.out:
         out = Path(a.out)
         try:
@@ -1934,6 +1935,10 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
                   file=sys.stderr)
             return 1
         print(f"Flashed. The reader joins {ssid} and calls {base}.")
+    if a.out or flashing:
+        print(f"Buzzer: {'low' if low else 'high'}-triggered"
+              + (" (the older 3-pin module)." if low else " (a buzzer behind a MOSFET). A reader with the older 3-pin "
+                 "buzzer module needs --buzzer low."))
     if tid:
         print(f"Reader token {tid} ({a.name or 'reader'}). Remove it later with: sudo filament-kit reader revoke {tid}")
     if not real_key:
@@ -2231,6 +2236,9 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     rds.add_argument("--token-file", help="a token made on the server (reader token) instead of a new one")
     rds.add_argument("--base", help="READER_BASE when this machine is not the server: <web.public_url>/reader")
     rds.add_argument("--secrets", help="flash a secrets.h written earlier with --out (needs --source)")
+    rds.add_argument("--buzzer", choices=("high", "low"), default="high",
+                     help="the buzzer's trigger: high (a buzzer behind a MOSFET, the default) or low (the older 3-pin "
+                          "module)")
     bk = sub.add_parser("backup", help="a whole-kit backup as one zip: make one, list them (root)")
     bksub = bk.add_subparsers(dest="backup_cmd", required=True)
     bkc = bksub.add_parser("create", help="write a backup zip (default: into /var/backups/filament-kit)")

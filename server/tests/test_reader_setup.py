@@ -124,7 +124,7 @@ def test_flash_builds_a_private_copy_and_deletes_it(tmp_path):
 
 def _args(**kw) -> argparse.Namespace:
     base = dict(name="bench", ssid="Home", source=None, port=None, out=None, ota_pubkey=None, token_file=None,
-                base=BASE, secrets=None)
+                base=BASE, secrets=None, buzzer="high")
     base.update(kw)
     return argparse.Namespace(**base)
 
@@ -311,3 +311,27 @@ def test_setup_refuses_an_out_path_it_must_not_replace(tmp_path, monkeypatch, ca
     assert cli.cmd_reader_setup(_args(out=str(victim)), ask_secret=_secret("p", "p")) == 1
     assert victim.read_text() == "127.0.0.1 localhost\n" and reader_tokens.TokenStore().list() == []
     assert "not a file of yours" in capsys.readouterr().err
+
+
+# ---------- the buzzer's trigger (reader/src/main.cpp: no line in secrets.h = the older low-triggered module) ----------
+
+def test_secrets_h_says_the_buzzer_trigger():
+    assert "#define READER_BUZZER_ACTIVE_LOW 0\n" in rs.secrets_h("Home", "p", BASE, TOKEN, KEY)
+    assert "#define READER_BUZZER_ACTIVE_LOW 1\n" in rs.secrets_h("Home", "p", BASE, TOKEN, KEY, buzzer_active_low=True)
+
+
+@pytest.mark.parametrize("buzzer,line,said", [("high", "0", "high-triggered"), ("low", "1", "low-triggered")])
+def test_setup_writes_the_buzzer_choice_and_says_it(tmp_path, monkeypatch, capsys, buzzer, line, said):
+    monkeypatch.setattr(cli, "_is_root", lambda: True)
+    monkeypatch.delenv("SUDO_UID", raising=False)
+    out = tmp_path / "secrets.h"
+    assert cli.cmd_reader_setup(_args(out=str(out), buzzer=buzzer), ask_secret=_secret("pw", "pw")) == 0
+    assert f"#define READER_BUZZER_ACTIVE_LOW {line}\n" in out.read_text()
+    assert f"Buzzer: {said}" in capsys.readouterr().out
+
+
+def test_the_buzzer_option_defaults_to_high(monkeypatch):
+    got = {}
+    monkeypatch.setattr(cli, "cmd_reader_setup", lambda a: got.update(vars(a)) or 0)
+    assert cli.main(["reader", "setup", "--out", "s.h"]) == 0 and got["buzzer"] == "high"
+    assert cli.main(["reader", "setup", "--out", "s.h", "--buzzer", "low"]) == 0 and got["buzzer"] == "low"

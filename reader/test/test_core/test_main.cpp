@@ -1,5 +1,5 @@
 // Host-side (PlatformIO native) tests for the reader's pure logic: reader API
-// parsing, say-token -> vocabulary mapping, knob/menu state, saved-choice recovery
+// parsing, knob/menu state, saved-choice recovery
 // and the marquee used for long labels.  Run: pio test -e native
 #include <unity.h>
 #include <cstring>
@@ -7,7 +7,6 @@
 #include <vector>
 
 #include "reader_api.h"
-#include "speech.h"
 #include "menu.h"
 
 using namespace reader;
@@ -25,8 +24,6 @@ void test_parse_printers_basic() {
   TEST_ASSERT_EQUAL(2, (int)p.size());
   TEST_ASSERT_EQUAL_STRING("h2d", p[0].id.c_str());
   TEST_ASSERT_EQUAL_STRING("H2D", p[0].name.c_str());
-  TEST_ASSERT_EQUAL_STRING("h two d", p[0].say.c_str());
-  TEST_ASSERT_EQUAL_STRING("x one carbon", p[1].say.c_str());  // array joined
 }
 
 void test_parse_printers_tolerant() {
@@ -36,12 +33,11 @@ void test_parse_printers_tolerant() {
   TEST_ASSERT_EQUAL(1, (int)p.size());
   TEST_ASSERT_EQUAL_STRING("7", p[0].id.c_str());
   TEST_ASSERT_EQUAL_STRING("7", p[0].name.c_str());  // name falls back to the id
-  TEST_ASSERT_EQUAL_STRING("", p[0].say.c_str());
 }
 
 void test_parse_printers_rejects_bad_json() {
   std::vector<PrinterEntry> p;
-  p.push_back({"keep", "Keep", ""});
+  p.push_back({"keep", "Keep"});
   TEST_ASSERT_FALSE(parsePrinters("not json", p));
   TEST_ASSERT_FALSE(parsePrinters(R"({"id":"obj, not list"})", p));
   TEST_ASSERT_EQUAL(1, (int)p.size());  // untouched on failure (last good list stays)
@@ -50,7 +46,7 @@ void test_parse_printers_rejects_bad_json() {
 
 void test_parse_printers_empty_list() {
   std::vector<PrinterEntry> p;
-  p.push_back({"old", "Old", ""});
+  p.push_back({"old", "Old"});
   TEST_ASSERT_TRUE(parsePrinters("[]", p));
   TEST_ASSERT_EQUAL(0, (int)p.size());
 }
@@ -80,7 +76,6 @@ void test_parse_slots_full() {
   ])", s));
   TEST_ASSERT_EQUAL(5, (int)s.size());
   TEST_ASSERT_EQUAL_STRING("A1", s[0].label.c_str());
-  TEST_ASSERT_EQUAL_STRING("a 1", s[0].say.c_str());
   TEST_ASSERT_EQUAL_STRING("ams", s[0].kind.c_str());
   TEST_ASSERT_EQUAL(PRESENT_YES, s[0].present);
   TEST_ASSERT_EQUAL_STRING("PLA", s[0].type.c_str());
@@ -90,7 +85,6 @@ void test_parse_slots_full() {
   TEST_ASSERT_EQUAL(PRESENT_UNKNOWN, s[3].present);   // missing -> unknown
   TEST_ASSERT_EQUAL_STRING("Spool 9", s[3].spool.c_str());
   TEST_ASSERT_EQUAL_STRING("#44", s[4].spool.c_str());  // bare id
-  TEST_ASSERT_EQUAL_STRING("", s[4].say.c_str());
 }
 
 void test_parse_slots_spool_without_name_uses_id() {
@@ -212,112 +206,6 @@ void test_join_url() {
                            joinUrl("https://h/filament/reader", "printers").c_str());
   TEST_ASSERT_EQUAL_STRING("https://h/filament/reader/printers",
                            joinUrl("https://h/filament/reader/", "/printers").c_str());
-}
-
-// ---- speech ------------------------------------------------------------------
-
-static std::vector<Word> utter(const char* say, Word lead = W_NONE) {
-  Word out[MAX_UTTERANCE];
-  size_t n = buildUtterance(say, lead, out, MAX_UTTERANCE);
-  return std::vector<Word>(out, out + n);
-}
-
-void test_speech_letters_and_digits() {
-  auto u = utter("a 1");
-  TEST_ASSERT_EQUAL(2, (int)u.size());
-  TEST_ASSERT_EQUAL(W_A, u[0]);
-  TEST_ASSERT_EQUAL(W_ONE, u[1]);
-  u = utter("h t b");
-  TEST_ASSERT_EQUAL(3, (int)u.size());
-  TEST_ASSERT_EQUAL(W_H, u[0]);
-  TEST_ASSERT_EQUAL(W_T, u[1]);
-  TEST_ASSERT_EQUAL(W_B, u[2]);
-}
-
-void test_speech_words_case_and_spacing() {
-  auto u = utter("  H   two  D ");
-  TEST_ASSERT_EQUAL(3, (int)u.size());
-  TEST_ASSERT_EQUAL(W_H, u[0]);
-  TEST_ASSERT_EQUAL(W_TWO, u[1]);
-  TEST_ASSERT_EQUAL(W_D, u[2]);
-}
-
-void test_speech_external_expands() {
-  auto u = utter("external left");
-  TEST_ASSERT_EQUAL(4, (int)u.size());
-  TEST_ASSERT_EQUAL(W_E, u[0]);
-  TEST_ASSERT_EQUAL(W_X, u[1]);
-  TEST_ASSERT_EQUAL(W_T, u[2]);
-  TEST_ASSERT_EQUAL(W_LEFT, u[3]);
-}
-
-void test_speech_numbers() {
-  auto u = utter("16");
-  TEST_ASSERT_EQUAL(2, (int)u.size());
-  TEST_ASSERT_EQUAL(W_SIX, u[0]);
-  TEST_ASSERT_EQUAL(W_TEEN, u[1]);
-  u = utter("thirteen");
-  TEST_ASSERT_EQUAL(1, (int)u.size());
-  TEST_ASSERT_EQUAL(W_THIRTEEN, u[0]);
-  u = utter("42");
-  TEST_ASSERT_EQUAL(2, (int)u.size());
-  TEST_ASSERT_EQUAL(W_FORTY, u[0]);
-  TEST_ASSERT_EQUAL(W_TWO, u[1]);
-  u = utter("20");
-  TEST_ASSERT_EQUAL(1, (int)u.size());
-  TEST_ASSERT_EQUAL(W_TWENTY, u[0]);
-  u = utter("10 11 12");
-  TEST_ASSERT_EQUAL(3, (int)u.size());
-  TEST_ASSERT_EQUAL(W_TEN, u[0]);
-  TEST_ASSERT_EQUAL(W_TWELVE, u[2]);
-  u = utter("100");  // out of range -> beep
-  TEST_ASSERT_EQUAL(1, (int)u.size());
-  TEST_ASSERT_EQUAL(W_BEEP, u[0]);
-}
-
-void test_speech_unknown_token_beeps() {
-  auto u = utter("x one carbon");
-  TEST_ASSERT_EQUAL(3, (int)u.size());
-  TEST_ASSERT_EQUAL(W_X, u[0]);
-  TEST_ASSERT_EQUAL(W_ONE, u[1]);
-  TEST_ASSERT_EQUAL(W_BEEP, u[2]);
-}
-
-void test_speech_lead_word() {
-  auto u = utter("a 3", W_SET);
-  TEST_ASSERT_EQUAL(3, (int)u.size());
-  TEST_ASSERT_EQUAL(W_SET, u[0]);
-  TEST_ASSERT_EQUAL(W_A, u[1]);
-  TEST_ASSERT_EQUAL(W_THREE, u[2]);
-}
-
-void test_speech_caps_length() {
-  Word out[4];
-  size_t n = buildUtterance("a b c d e f g", W_LOAD, out, 4);
-  TEST_ASSERT_EQUAL(4, (int)n);
-  TEST_ASSERT_EQUAL(W_LOAD, out[0]);
-  TEST_ASSERT_EQUAL(W_C, out[3]);
-}
-
-void test_speech_empty() {
-  TEST_ASSERT_EQUAL(0, (int)utter("").size());
-  TEST_ASSERT_EQUAL(0, (int)utter("   ").size());
-  TEST_ASSERT_EQUAL(1, (int)utter("", W_READY).size());
-}
-
-void test_speech_every_word_has_a_token() {
-  // every vocabulary entry except the internal markers is reachable from some token
-  bool seen[W_COUNT] = {false};
-  for (size_t i = 0; i < tokenCount(); i++) {
-    Word w[8];
-    size_t n = expandToken(tokenAt(i), w, 8);
-    TEST_ASSERT_TRUE_MESSAGE(n > 0, tokenAt(i));
-    for (size_t k = 0; k < n; k++) seen[w[k]] = true;
-  }
-  for (int k = 1; k < W_COUNT; k++) {
-    if (k == W_BEEP) continue;
-    TEST_ASSERT_TRUE_MESSAGE(seen[k], "a Word value no token reaches");
-  }
 }
 
 // ---- button --------------------------------------------------------------------
@@ -460,7 +348,7 @@ static std::vector<SlotEntry> slots(std::initializer_list<const char*> labels) {
 }
 
 void test_find_printer() {
-  std::vector<PrinterEntry> p = {{"a", "A", ""}, {"b", "B", ""}};
+  std::vector<PrinterEntry> p = {{"a", "A"}, {"b", "B"}};
   TEST_ASSERT_EQUAL(1, findPrinter(p, "b"));
   TEST_ASSERT_EQUAL(0, findPrinter(p, "gone"));   // removed -> first printer
   TEST_ASSERT_EQUAL(0, findPrinter(p, ""));
@@ -522,14 +410,12 @@ void test_oversize_fields_truncated() {
   TEST_ASSERT_TRUE(parseSlots(j.c_str(), s));
   TEST_ASSERT_EQUAL(1, (int)s.size());
   TEST_ASSERT_EQUAL((int)MAX_FIELD, (int)s[0].label.size());
-  TEST_ASSERT_EQUAL((int)MAX_FIELD, (int)s[0].say.size());
   TEST_ASSERT_EQUAL((int)MAX_FIELD, (int)s[0].type.size());
   TEST_ASSERT_EQUAL((int)MAX_FIELD, (int)s[0].spool.size());
   std::vector<PrinterEntry> p;
   std::string pj = "[{\"id\":\"p1\",\"name\":\"" + longName + "\",\"say\":[\"" + std::string(60, 'x') + "\"]}]";
   TEST_ASSERT_TRUE(parsePrinters(pj.c_str(), p));
   TEST_ASSERT_EQUAL((int)MAX_FIELD, (int)p[0].name.size());
-  TEST_ASSERT_EQUAL((int)MAX_FIELD, (int)p[0].say.size());
 }
 
 void test_truncation_keeps_utf8_whole() {
@@ -641,15 +527,6 @@ int main(int, char**) {
   RUN_TEST(test_scan_status_on_error_codes);
   RUN_TEST(test_url_encode);
   RUN_TEST(test_join_url);
-  RUN_TEST(test_speech_letters_and_digits);
-  RUN_TEST(test_speech_words_case_and_spacing);
-  RUN_TEST(test_speech_external_expands);
-  RUN_TEST(test_speech_numbers);
-  RUN_TEST(test_speech_unknown_token_beeps);
-  RUN_TEST(test_speech_lead_word);
-  RUN_TEST(test_speech_caps_length);
-  RUN_TEST(test_speech_empty);
-  RUN_TEST(test_speech_every_word_has_a_token);
   RUN_TEST(test_button_short);
   RUN_TEST(test_button_hold_menu);
   RUN_TEST(test_button_hold_ota);
