@@ -4,14 +4,12 @@ its ServerApi from those pairing files. Only the hardware is fake: the camera, t
 serial port. tag -> camera -> recognise -> weigh -> long press -> spool created and tag linked."""
 from __future__ import annotations
 
-import threading
 import time
 
 import pytest
 import uvicorn
 from fakes.claude_fake import FakeClaude
 
-from conftest import free_port
 from filament_kit import config, inventory, pairing, tags
 from filament_kit.api import create_app
 from filament_kit.spoolman import Spoolman
@@ -51,23 +49,16 @@ def fk_env(tmp_path, monkeypatch):
 def kit(spoolman_url, tmp_path):
     sm = Spoolman(spoolman_url)
     sm.ensure_fields()
-    port = free_port()
+    from fakes import serving
     etc = tmp_path / "etc"
-    srv = uvicorn.Server(uvicorn.Config(create_app(sm=sm, claude=FakeClaude({"questions": [], "items": [ITEM]})),
-                                        host="127.0.0.1", port=port, log_level="warning",
-                                        ssl_certfile=str(etc / "cert.pem"), ssl_keyfile=str(etc / "key.pem")))
-    t = threading.Thread(target=srv.run, daemon=True)
-    t.start()
-    for _ in range(100):
-        if srv.started:
-            break
-        time.sleep(0.05)
+    running = serving.start(create_app(sm=sm, claude=FakeClaude({"questions": [], "items": [ITEM]})),
+                            ssl_certfile=str(etc / "cert.pem"), ssl_keyfile=str(etc / "key.pem"))
+    port = running.port
     fp = pairing.fingerprint((etc / "cert.pem").read_bytes())
     tok = pairing.redeem_code(pairing.issue("station").code)
     server_api.save_pairing(server_api.Link("kit.example.com", port, tok, fp, ["127.0.0.1"]), owner=None)
     yield sm
-    srv.should_exit = True
-    t.join(5)
+    running.stop(5)
 
 
 @pytest.fixture
