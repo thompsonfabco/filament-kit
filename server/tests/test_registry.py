@@ -210,7 +210,7 @@ def test_detected_klipper_matches_a_name_whatever_its_case():
 def test_unconfigured_entries_are_capped_and_the_oldest_goes():
     configured = registry.add_klipper("Mine", "mine.home.arpa")
     for i in range(registry.MAX_FOUND + 5):
-        registry.detected_klipper(f"10.0.{i // 250}.{i % 250 + 1}", 7125)
+        registry.detected_klipper(f"10.0.{i // 250}.{i % 250 + 1}", 7125, lookups=False)   # no real DNS here
     printers = registry.load()
     assert configured.serial in printers
     hosts = [p.host for p in printers.values() if not p.configured]
