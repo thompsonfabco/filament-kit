@@ -201,6 +201,15 @@ def test_add_klipper_keeps_display_names_apart():
     assert registry.add_klipper("Voron", "c.home.arpa").name == "Voron 3"
 
 
+def test_bambu_adds_keep_display_names_apart():
+    registry.upsert(Printer("S1", "Bench", "C12", "10.0.0.5", "x", True))
+    assert registry.set_code("S2", "12345678", "bench").name == "bench 2"
+    assert registry.add_bambu("S3", "BENCH", "C12", "10.0.0.7", "12345678").name == "BENCH 3"
+    assert registry.add_bambu("S3", "BENCH", "C12", "10.0.0.7", "12345678").name == "BENCH 3"   # the same printer again
+    assert registry.set_code("S1", "87654321", replace=True).name == "Bench"                    # a code swap keeps the name
+    assert registry.add_bambu("S4", "", "", "10.0.0.8", "12345678").name == "S4"                # no name: the serial
+
+
 def test_detected_klipper_matches_a_name_whatever_its_case():
     first = registry.add_klipper("Voron", "Voron.home.arpa")
     assert registry.detected_klipper("voron.home.arpa", 7125).serial == first.serial

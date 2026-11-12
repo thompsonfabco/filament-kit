@@ -341,7 +341,21 @@ def set_code(serial: str, code: str, name: str | None = None, replace: bool = Fa
         p.access_code = code
         p.configured = True
         p.cert_fp = ""          # adding the printer again with its code = trust the leaf it presents next
-        p.name = (name or "").strip() or p.name or serial
+        given = (name or "").strip()
+        p.name = given or p.name or serial
+        if given or p.name == serial:   # a kept name is left alone, even if an older entry shares it
+            p.name = _free_name(p.name, printers, serial)
+        printers[serial] = p
+        _write(printers)
+        return p
+
+
+def add_bambu(serial: str, name: str, model: str, ip: str, code: str) -> Printer:
+    """Add (or add again) a configured Bambu printer as a fresh entry (clears the TLS pin). The name is made unique
+    ("name 2" ...) against the other printers; the printer's own current name never counts as taken."""
+    with _locked():
+        printers = _read()
+        p = Printer(serial, _free_name((name or "").strip() or serial, printers, serial), model, ip, code, True)
         printers[serial] = p
         _write(printers)
         return p
