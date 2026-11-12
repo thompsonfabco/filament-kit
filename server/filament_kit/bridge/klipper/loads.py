@@ -277,6 +277,8 @@ class LoadsMixin:
                 gcode = adapter.clear_gcode(plabel, model, system, self.hw(), st)
             except NotSupported:
                 gcode = None
+            except UnknownSlot as e:        # as load does: a message, not a server error
+                raise loading.NotFound(f"{label}: {e}") from e
         with self._slot_lock(pid, label):
             here = loading.occupants(sm, loc)
             if not here:

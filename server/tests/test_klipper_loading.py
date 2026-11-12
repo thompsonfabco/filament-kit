@@ -394,6 +394,20 @@ def test_unload_sends_back_and_clears(printer, sm, fil):
         fam.unload(sm, pid, "T0", False, sealed_location="Sealed stock")
 
 
+def test_unload_of_a_slot_with_no_safe_gcode_is_a_not_found(printer, sm, fil, monkeypatch):
+    from filament_kit.bridge.klipper.adapters.base import UnknownSlot
+    fam, pid, fake = printer
+    s = spool(sm, fil, "Shelf 1")
+    assert fam.load(sm, pid, "T0", s["id"], False, sealed_location="Sealed stock")["confirmed"] is True
+
+    def refuse(self, *a, **kw):
+        raise UnknownSlot("lane name not usable in gcode")
+    monkeypatch.setattr(type(fam.model(pid)[2]), "clear_gcode", refuse)
+    with pytest.raises(loading.NotFound, match="T0"):
+        fam.unload(sm, pid, "T0", False, sealed_location="Sealed stock")
+    assert loc_of(sm, s["id"]) == LOC        # nothing moved
+
+
 def test_unload_offline_is_spoolman_only(sm, fil):
     pid = registry.add_klipper("Gone", "127.0.0.1", 9).serial
     s = spool(sm, fil, "Gone – T0", prev="Shelf 4")
