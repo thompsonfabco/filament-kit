@@ -24,8 +24,10 @@ fixed.
    phone.
 ## iPhone web app
 
-6. **An https address and nginx are needed even at home.** The web service listens on 127.0.0.1 only, and
-   `web.public_url` must be `https://`. A home-only user has to tick `web` and `remote` and accept nginx's
+6. **An https address on your own name needs nginx.** At home the kit server serves the phone web app itself, at
+   `https://<server name>.local:8710/intake`, with no setup (v0.5.1); Safari warns once about its own certificate.
+   Only to avoid that warning or to use a name of your own, `web.public_url` must be `https://` and the
+   web service (127.0.0.1 only) sits behind nginx: tick `web` and `remote` and accept nginx's
    self-signed placeholder certificate in Safari. The placeholder lasts 825 days and is made again by an apply within
    30 days of its end, after which Safari asks again. Not tried on a real iPhone: whether Safari accepts it and a
    home-screen web app keeps working with an accepted self-signed certificate is unconfirmed.

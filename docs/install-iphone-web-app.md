@@ -27,18 +27,26 @@ There is no sign-in: anyone on your home Wi-Fi can use it.
 
 - The **filament-kit server installed and running**: [Install the server](install-server.md).
 - An **iPhone with Safari**, on the same Wi-Fi network as the server.
-- Access to the server's Terminal.
+- For way A or B: access to the server's Terminal.
 - For [way B](#way-b-a-public-name-with-a-real-certificate) only: a domain name you control, and access to your
   router's port forwarding.
 
 ## Choose a way
 
-| | Way A: home only | Way B: a public name |
-|---|---|---|
-| Address | `https://<computer name>.local/filament` | `https://filament.example.com/filament` (your own name) |
-| What you need | nothing extra | a domain name, ports 80 and 443 forwarded to the server |
-| Safari | warns about the certificate (you accept it once) | no warnings |
-| Also gives you | | the Claude connector from outside |
+| | The built-in address | Way A: home only, nginx | Way B: a public name |
+|---|---|---|---|
+| Address | `https://<server name>.local:8710/intake` | `https://<computer name>.local/filament` | `https://filament.example.com/filament` (your own name) |
+| What you need | nothing: the server serves it | the `web` and `remote` modules (the kit installs nginx) | a domain name, ports 80 and 443 forwarded to the server |
+| Safari | warns about the certificate (you accept it once) | warns about the certificate (you accept it once) | no warnings |
+| Also gives you | | an address without a port number | the Claude connector from outside |
+
+Start with the built-in address. Use way A or B only to avoid the warning or to use a name of your own.
+
+## The built-in address: no setup
+
+1. Open the setup page's **Devices** tab: it shows the address and a QR code. Or build it yourself: the server's name
+   from `hostname`, for example `https://my-server.local:8710/intake`.
+2. Go on to [Open it in Safari](#open-it-in-safari-and-add-it-to-the-home-screen) and use that address.
 
 ## Way A: home only
 
@@ -104,9 +112,9 @@ More about this, and keeping port 80 closed most of the time: [user guide, Remot
 ## Open it in Safari and add it to the home screen
 
 1. On the iPhone, connect to your home Wi-Fi.
-2. Open **Safari** and type your address followed by `/intake`, for example
-   `https://my-server.local/filament/intake`.
-3. **Way A only:** Safari says **This Connection Is Not Private**. Tap **Show Details**, then
+2. Open **Safari** and type your address. The built-in address already ends in `/intake`; for way A or B add `/intake`
+   to your address, for example `https://my-server.local/filament/intake`.
+3. **The built-in address and way A:** Safari says **This Connection Is Not Private**. Tap **Show Details**, then
    **visit this website**, and confirm with **Visit Website**.
 4. The web app opens on **Add spools**, with the tabs **Add spools**, **Open spool**, **Presets** and (with the
    printers module) **Printers** at the top.
