@@ -35,6 +35,16 @@ def test_detected_adds_unconfigured():
     assert registry.load()["S2"].ip == "10.0.0.6"
 
 
+def test_detected_keeps_at_most_max_found_unadded_entries_and_never_a_configured_one():
+    registry.upsert(Printer("MINE", "Mine", "O1D", "10.0.0.7", "55555555", True))
+    for i in range(registry.MAX_FOUND + 8):
+        registry.detected(f"N{i}", "10.0.0.6")
+    got = registry.load()
+    unadded = [s for s, p in got.items() if not p.configured]
+    assert len(unadded) == registry.MAX_FOUND and "MINE" in got
+    assert "N0" not in got and f"N{registry.MAX_FOUND + 7}" in got      # the oldest went
+
+
 def test_detected_updates_unconfigured_ip_model_name():
     registry.detected("S2", "10.0.0.6", "N2", "Shed")
     registry.detected("S2", "10.0.0.9", "N2", "Shed 2")

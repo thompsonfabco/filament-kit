@@ -36,7 +36,7 @@ except ImportError:  # Windows dev PCs: no cross-process lock (the service only 
 log = logging.getLogger(__name__)
 FILE = "printers.xml"
 OLD_FILE = "printers.json"
-MAX_FOUND = 32          # Klipper entries discovery made and nobody has added yet
+MAX_FOUND = 32          # Klipper or Bambu entries discovery made and nobody has added yet (each kind)
 FAMILIES = ("bambu", "klipper")
 SERIAL = re.compile(r"[A-Za-z0-9_-]{1,64}")      # also names the camera's runtime directory
 ACCESS_CODE = re.compile(r"[A-Za-z0-9]{1,32}")
@@ -300,12 +300,17 @@ def detected(serial: str, ip: str, model: str = "", name: str = "", keep_ip: boo
     """Record an SSDP announcement. New printer: unconfigured entry. Known one: IP follows the announcement
     (unless `keep_ip`: the caller has a live connection to the old IP, so a moved announce is ignored);
     only an unconfigured entry also takes model/name. A configured entry's Access Code and name are untouched.
-    Every IP change of a configured printer is logged as a warning (serial and both IPs, never the code)."""
+    Every IP change of a configured printer is logged as a warning (serial and both IPs, never the code).
+    At most MAX_FOUND unconfigured Bambu entries stay (a new one pushes the oldest out)."""
     with _locked():
         printers = _read()
         p = printers.get(serial)
         if p is None:
             p = Printer(serial=serial, name=name or serial, model=model, ip=ip)
+            # anything on the LAN can announce itself: keep at most MAX_FOUND unadded entries, the oldest goes
+            found = [s for s, o in printers.items() if _unadded_bambu(o)]
+            for s in found[:max(0, len(found) + 1 - MAX_FOUND)]:
+                del printers[s]
         else:
             before = (p.ip, p.model, p.name)
             by_name = p.configured and p.ip and not hostaddr.is_literal(p.ip)   # a name the owner typed stays: it resolves at use
@@ -534,6 +539,10 @@ def detected_klipper(host: str, port: int, name: str = "", lookups: bool = True)
             del printers[s]
         _write(printers)
         return p
+
+
+def _unadded_bambu(p: Printer) -> bool:
+    return p.family == "bambu" and not p.configured and not p.access_code
 
 
 def _forgettable(p: Printer) -> bool:

@@ -31,6 +31,8 @@ def discovery_callback(manager):
 
     def found(info: dict) -> None:
         serial = info["serial"]
+        if not registry.SERIAL.fullmatch(serial):   # an entry the owner could not remove again
+            return
         keep = manager.state(serial) in CONNECTED
         try:
             registry.detected(serial, info["ip"], info.get("model", ""), info.get("name", ""), keep_ip=keep)
