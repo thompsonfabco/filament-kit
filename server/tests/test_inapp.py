@@ -135,6 +135,17 @@ def test_deleted():
     assert inapp.deleted("C @H2D 0.4", snapshot=snap, live=live, before=set(), reset=False, restore=False) is False
 
 
+def test_deleted_class_folds_once_and_agrees_with_the_function():
+    """FA-055: `Deleted` answers like `deleted` for every combination, restore chosen per call."""
+    snap, live, before = {"A @H2D 0.4", "B @H2D 0.4"}, {"B @H2D 0.4"}, {"c @h2d 0.4"}
+    for reset in (False, True):
+        gone = inapp.Deleted(snapshot=snap, live=live, before=before, reset=reset)
+        for name in ("a @h2d 0.4", "B @H2D 0.4", "C @H2D 0.4", "D @H2D 0.4"):
+            for restore in (False, True):
+                assert gone(name, restore=restore) is inapp.deleted(
+                    name, snapshot=snap, live=live, before=before, reset=reset, restore=restore)
+
+
 def test_app_reset_keeps_note_lines_below_mark():
     """Final review C1: the live preset is gone (app reset): the owner's lines below MARK come from the installed
     copy (filament_notes is in IGNORE, so the edit record never carries them)."""

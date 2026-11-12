@@ -494,13 +494,12 @@ def _build_line(line: Line, fs: list[dict], ids: list[int], *, printers, store: 
                         "accept it: profiles apply-updates)")
 
     rows = []
+    gone = inapp.Deleted(snapshot=snap_names, live=seen_live, before=deleted_before, reset=reset)
     for printer, chamber, nozzle, name in plan:
-        if inapp.deleted(name, snapshot=snap_names, live=seen_live, before=deleted_before, reset=reset,
-                         restore=restore):
+        if gone(name, restore=restore):
             deleted.append(name)
             continue
-        brought_back = restore and inapp.deleted(name, snapshot=snap_names, live=seen_live, before=deleted_before,
-                                                 reset=reset, restore=False)
+        brought_back = restore and gone(name, restore=False)
         parent = store.parent_for(line.bambu_parent, printer, nozzle)
         if parent is None:
             problems.append(f"{name}: no system parent; skipped")
@@ -844,12 +843,12 @@ def _build_orca_line(line: Line, fs: list[dict], ids: list[int], *, t: OrcaTarge
 
     rows = []
     before = t.deleted_before or set()
+    gone = inapp.Deleted(snapshot=snap_names, live=seen_live, before=before, reset=reset)
     for p, nozzle, name in plan:
-        if inapp.deleted(name, snapshot=snap_names, live=seen_live, before=before, reset=reset, restore=restore):
+        if gone(name, restore=restore):
             deleted.append(name)
             continue
-        brought_back = restore and inapp.deleted(name, snapshot=snap_names, live=seen_live, before=before,
-                                                 reset=reset, restore=False)
+        brought_back = restore and gone(name, restore=False)
         if p.bambu:
             parent = store.system_parent_for(p.name, nozzle, line.bambu_parent)
             template = store.parent(parent) if parent is not None else None
