@@ -231,7 +231,7 @@ log (for example `setup: anthropic key replaced from 192.0.2.20`) without the va
 ### The tabs (v0.4.3)
 
 From v0.4.3 the page has tabs: **Overview**, **Modules**, **Printers**, **Devices**, **Settings** and **Updates**
-(`https://<computer name>.local:8710/setup#updates` opens one directly). v0.5.0 adds **Presets** and **Logs**. The table above says what is on **Printers**,
+(`https://<computer name>.local:8710/setup#updates` opens one directly). v0.5.0 adds **Presets** and **Logs**. **Flash a device** (between **Settings** and **Updates**) writes the kit's firmware to a Printer Station or an intake panel over USB ([the user guide](user-guide.md#flash-a-device)). The table above says what is on **Printers**,
 **Devices** and **Settings**.
 
 - **Overview.** The installed version and mode, with a note and a link to **Updates** when a newer release exists. Under
