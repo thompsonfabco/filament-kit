@@ -1125,6 +1125,10 @@ def cmd_printer_map(serial: str, manager_factory, manual: bool = False) -> int:
             _err_line("map by loading filament needs the running kit server (sudo systemctl start filament-kit)")
             return 1
         return _manual_map_via_server(api, serial)
+    if p.family != "bambu":
+        _err_line(f"{registry.display_name(p)} is a Klipper printer; Klipper printers are mapped by loading filament: "
+                  f"filament-kit printer map --manual {serial}")
+        return 1
     print(f"Mapping the slots of {registry.display_name(p)}. Each slot's colour changes briefly and the printer runs a "
           f"job with no heating and no motion.")
     api = _server_api()
