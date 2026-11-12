@@ -257,6 +257,38 @@ def test_connect_reconcile_is_retried_when_spoolman_was_down(moonraker, sm, fil,
         fam.stop()
 
 
+def test_reconnect_during_a_follow_move_keeps_the_rebaseline(printer, sm, fil, monkeypatch):
+    """A disconnect that pops the seen map while a move is in flight: the move's late write must not recreate it, or
+    the next status skips the connect baseline and unloads what Moonraker forgot."""
+    fam, pid, fake = printer
+    s = spool(sm, fil, "Shelf 3")
+    fam._seen[pid] = {"T0": None}
+    real = fam._move
+
+    def move_then_disconnect(*a, **kw):
+        r = real(*a, **kw)
+        fam._on_change(pid, "klippy", {"state": "disconnected"})
+        return r
+    monkeypatch.setattr(fam, "_move", move_then_disconnect)
+    fam._follow_move(pid, "T0", s["id"])
+    assert pid not in fam._seen
+
+
+def test_one_failing_slot_does_not_block_the_next(printer, monkeypatch):
+    fam, pid, fake = printer
+    fam._seen[pid] = {"T0": None, "T1": None}
+    monkeypatch.setattr(fam, "_current", lambda p: {"T0": 11, "T1": 12})
+    done = []
+
+    def move(p, label, sid):
+        if label == "T0":
+            raise OSError("bad patch")
+        done.append(label)
+    monkeypatch.setattr(fam, "_follow_move", move)
+    fam._follow_check(pid)
+    assert done == ["T1"]
+
+
 def test_tap_during_kit_load(printer, sm, fil):
     """Review Focus 2: a kit load of spool A is in flight and a tap sets spool B → one spool ends in the slot,
     the one the printer shows."""
