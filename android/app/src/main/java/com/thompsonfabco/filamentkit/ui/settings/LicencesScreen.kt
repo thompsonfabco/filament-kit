@@ -12,12 +12,15 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /** Asset names; the build copies both from the repository root (copyNotices in app/build.gradle.kts). */
 const val THIRD_PARTY_ASSET = "THIRD-PARTY.md"
@@ -80,9 +83,14 @@ private fun plain(s: String) = link.replace(s, "$1").replace("**", "").replace("
 @Composable
 fun LicencesScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    val notices = remember { noticeBlocks(readAsset(context, THIRD_PARTY_ASSET)) }
+    // the assets are read off the main thread
+    val notices by produceState(emptyList<NoticeBlock>()) {
+        value = withContext(Dispatchers.IO) { noticeBlocks(readAsset(context, THIRD_PARTY_ASSET)) }
+    }
     var showGpl by remember { mutableStateOf(false) }
-    val gpl = remember(showGpl) { if (showGpl) noticeBlocks(readAsset(context, LICENSE_ASSET)) else emptyList() }
+    val gpl by produceState(emptyList<NoticeBlock>(), showGpl) {
+        value = if (showGpl) withContext(Dispatchers.IO) { noticeBlocks(readAsset(context, LICENSE_ASSET)) } else emptyList()
+    }
     LazyColumn(
         modifier.fillMaxSize(),
         contentPadding = PaddingValues(24.dp),

@@ -81,7 +81,7 @@ fun AddProfileScreen(vm: AddProfileViewModel, onBack: () -> Unit, onPairAgain: (
             OutlinedButton(onClick = onBack) { Text(if (s.saved != null) "Done" else "Back") }
             Button(onClick = vm::save, enabled = s.canSave) { Text(if (s.saving) "Saving…" else "Save") }
         }
-        if (!s.canSave && !s.saving) Text("Fill in the fields marked *.", style = MaterialTheme.typography.bodySmall)
+        if (!s.filled && !s.saving) Text("Fill in the fields marked *.", style = MaterialTheme.typography.bodySmall)
     }
 }
 
