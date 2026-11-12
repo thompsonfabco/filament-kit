@@ -1,4 +1,5 @@
 """Release and packaging files: checked as text (CI files are written and linted here, run on GitHub)."""
+import functools
 import re
 import subprocess
 import sys
@@ -612,13 +613,16 @@ def test_custom_run_without_terminal_uses_the_saved_address_unless_one_is_given(
     assert "saved server address" not in r.stderr and "run as root" in r.stderr, r.stderr
 
 
+@functools.lru_cache(maxsize=None)       # asked by two skipif marks at collection: probe once per worker
 def _wsl() -> bool:
     import shutil
-    import subprocess
     if not shutil.which("wsl"):
         return False
-    r = subprocess.run(["wsl", "-d", "Ubuntu", "--exec", "sh", "-c", "command -v script && command -v python3"],
-                       capture_output=True, timeout=60)
+    try:
+        r = subprocess.run(["wsl", "-d", "Ubuntu", "--exec", "sh", "-c", "command -v script && command -v python3"],
+                           capture_output=True, timeout=60)
+    except (subprocess.TimeoutExpired, OSError):
+        return False                    # a WSL that does not answer is no WSL: skip, not a collection error
     return r.returncode == 0
 
 
@@ -948,7 +952,9 @@ def test_get_sh_refuses_while_a_printer_job_holds_its_lock(tmp_path):
                     "fk_die() { printf 'error: %s\n' \"$*\" >&2; exit 1; }\n"
                     + _get_sh_hold_function() +
                     'st=$(mktemp -d); mkdir -p "$st/printers/S1"; : > "$st/printers/S1/mapping.lock"\n'
-                    'flock -x "$st/printers/S1/mapping.lock" sleep 5 & sleep 0.5\n'
+                    # the lock is held once the child, running under flock, has written the ready file
+                    'flock -x "$st/printers/S1/mapping.lock" sh -c \': > "$1"; sleep 5\' sh "$st/ready" &\n'
+                    'for _ in $(seq 100); do [ -e "$st/ready" ] && break; sleep 0.1; done; [ -e "$st/ready" ]\n'
                     'FK_STATE=$st fk_hold_printers; echo REACHED\n', encoding="utf-8", newline="\n")
 
     def run(p):
