@@ -78,3 +78,6 @@ progress { width: 100%; height: .7rem; accent-color: var(--accent); }
 .sw { width: 1.1rem; height: 1.1rem; border-radius: 50%; border: 1px solid var(--line); flex: none; }
 p.err { color: var(--bad); }
 .slot button { min-height: 2.2rem; padding: .3rem .7rem; flex: none; }
+
+.thumb { max-width: 8rem; cursor: zoom-in; border-radius: 6px; }
+.thumb.big { max-width: 100%; cursor: zoom-out; }

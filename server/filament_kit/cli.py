@@ -603,6 +603,7 @@ def cmd_config() -> int:
               "  5) Printers\n"
               f"  6) Modules            {modules.mode_of(modules.enabled(cfg))}\n"
               f"  7) Station voice      {_tts_name(cfg)}\n"
+              f"  8) Intake records kept {(cfg.get('intake') or {}).get('history_keep', 20)} (with their photos; 0 = none)\n"
               "  0) save and exit")
         choice = _ask("> ")
         if choice is None or choice.strip() == "0":
@@ -636,6 +637,10 @@ def cmd_config() -> int:
             _modules_menu(cfg)
         elif choice == "7":
             _station_voice_menu(cfg)
+        elif choice == "8":
+            n = _ask_int("Intake records kept (0-500): ", 0)
+            if n is not None:
+                cfg.setdefault("intake", {})["history_keep"] = min(n, 500)
         else:
             print("Unknown choice.")
     changed = _module_state(cfg) != before
@@ -656,6 +661,112 @@ def cmd_config() -> int:
 
 
 # ---------- cert / ensure-fields ----------
+
+# ---------- intake history ----------
+
+def _intake_line(s: dict) -> str:
+    sp = s.get("spools") or []
+    what = ", ".join(sorted({f"{x.get('vendor')} {x.get('name')}" for x in sp})) or "no spools"
+    ids = ", ".join(str(x.get("spool_id")) for x in sp)
+    return f"{s['id']}  {s.get('at', '')[:16].replace('T', ' ')}  {s.get('source')}  {s.get('state')}  {what} (spool {ids})"
+
+
+def _show_values(v: dict) -> str:
+    from . import intake_history
+    return ", ".join(f"{k} {v.get(k)}" for k in intake_history.FIELDS if v.get(k) is not None)
+
+
+def cmd_intake(args) -> int:
+    from . import intake, intake_history
+    sm = Spoolman(config.load()["spoolman_url"])
+    try:
+        if args.intake_cmd == "history":
+            d = intake_history.list_records("ai_intake" in modules.enabled(config.load()))
+            print(f"Intake history: {d['count']} record(s), keeping {d['keep']}, "
+                  f"{d['photo_bytes'] / 1048576:.1f} MB of photos.")
+            for s in d["records"]:
+                print(_intake_line(s))
+                for p in intake_history.photo_paths(s["id"]):
+                    print(f"    photo {p}")
+            return 0
+        if args.intake_cmd == "show":
+            r = intake_history.get(args.id)
+            print(_intake_line(r))
+            for p in intake_history.photo_paths(args.id):
+                print(f"  photo {p}")
+            for s in r["saved"]:
+                print(f"  item {s['item']}: {_show_values(s['values'])} (spools {s['spool_ids']}, "
+                      f"filament {s['filament_id']})")
+            for rv in r["revisions"]:
+                ch = "; ".join(sorted({f"{c['field']} {c['old']} -> {c['new']}" for c in rv["changes"]}))
+                print(f"  revision {rv['n']} {rv['at'][:16].replace('T', ' ')} by {rv['by']}"
+                      f"{' (undone)' if rv.get('undone') else ''}: {ch}"
+                      + (f" | note: {rv['note']}" if rv.get("note") else ""))
+                if rv["filaments"].get("orphaned"):
+                    print(f"    filament {rv['filaments']['orphaned']} has no spools left (not deleted)")
+            return 0
+        if args.intake_cmd == "revise":
+            if "ai_intake" not in modules.enabled(config.load()):
+                _err_line("label reading (ai_intake) is off on this server: use filament-kit intake edit")
+                return 1
+            p = intake_history.revise(sm, args.id, args.note, args.item)
+            print(f"Before: {_show_values(p['before'])}\nAfter:  {_show_values(p['after'])}")
+            if not p["changes"]:
+                print("The AI changed nothing.")
+                return 0
+            print("Changes: " + ", ".join(p["changes"]) + (" (no photo was kept for this record)" if p["no_photo"] else ""))
+            if not args.yes:
+                a = _ask("Apply this? [y/N] ")
+                if not a or a.strip().lower() not in ("y", "yes"):
+                    print("Not applied.")
+                    return 0
+            r = intake_history.apply(sm, args.id, proposal=p["proposal"], device="command line")
+            return _say_revision(r)
+        if args.intake_cmd == "edit":
+            vals = {}
+            for kv in args.values:
+                k, sep, v = kv.partition("=")
+                if not sep:
+                    _err_line(f"{kv}: write field=value")
+                    return 1
+                vals[k.strip()] = _cli_value(k.strip(), v.strip())
+            return _say_revision(intake_history.apply(sm, args.id, item=args.item, values=vals, device="command line"))
+        if args.intake_cmd == "undo":
+            r = intake_history.undo(sm, args.id, None)
+            print(f"Undone. The record is now {r['state']}.")
+            return 0
+    except intake_history.HistoryError as e:
+        _err_line(str(e))
+        return 1
+    except intake.ReadError as e:
+        _err_line(str(e))
+        return 1
+    return 1
+
+
+def _cli_value(k: str, v: str):
+    if k in ("nozzle", "bed"):
+        return int(v) if v.lstrip("-").isdigit() else v
+    if k in ("net", "tare", "density", "price_per_kg"):
+        try:
+            return float(v)
+        except ValueError:
+            return v
+    return v or None
+
+
+def _say_revision(r: dict) -> int:
+    rv = r["revisions"][-1]
+    print(f"Saved as revision {rv['n']}: " + "; ".join(sorted({f"{c['field']} {c['old']} -> {c['new']}"
+                                                               for c in rv["changes"]})))
+    fl = rv["filaments"]
+    if fl["to"] != fl["from"]:
+        print(f"Spools {rv['spool_ids']} moved from filament {fl['from']} to {fl['to']}"
+              + (" (new)" if fl["created"] else "") + ".")
+    if fl.get("orphaned"):
+        print(f"Filament {fl['orphaned']} has no spools left; it was not deleted.")
+    return 0
+
 
 def cmd_cert() -> int:
     cert = config.paths().etc / "cert.pem"
@@ -2152,6 +2263,22 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     up.add_argument("device_id", nargs="?")
     sub.add_parser("config", help="interactive settings menu")
     sub.add_parser("cert", help="create the server certificate if missing")
+    ih = sub.add_parser("intake", help="the intake history: the last spool additions, their photos, revisions")
+    isub = ih.add_subparsers(dest="intake_cmd", required=True)
+    isub.add_parser("history", help="the newest records first, with their photo files")
+    ish = isub.add_parser("show", help="one record with its revisions")
+    ish.add_argument("id")
+    irv = isub.add_parser("revise", help="ask the AI again with a note, e.g. --note 'brand is Polymaker'")
+    irv.add_argument("id")
+    irv.add_argument("--note", required=True)
+    irv.add_argument("--item", type=int, default=None)
+    irv.add_argument("--yes", action="store_true", help="apply the proposal without asking")
+    ied = isub.add_parser("edit", help="change saved values by hand: field=value ...")
+    ied.add_argument("id")
+    ied.add_argument("values", nargs="+", metavar="field=value")
+    ied.add_argument("--item", type=int, default=None)
+    iun = isub.add_parser("undo", help="undo the record's newest revision")
+    iun.add_argument("id")
     sub.add_parser("ensure-fields", help="create the Spoolman extra fields")
     pr = sub.add_parser("printer", help="printer tasks: map slots, forget a certificate")
     psub = pr.add_subparsers(dest="printer_cmd", required=True)
@@ -2299,6 +2426,8 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
         return cmd_unpair(args.device_id)
     if args.cmd == "config":
         return cmd_config()
+    if args.cmd == "intake":
+        return cmd_intake(args)
     if args.cmd == "cert":
         return cmd_cert()
     if args.cmd == "printer":

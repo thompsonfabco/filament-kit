@@ -14,12 +14,23 @@ from .. import config, modules, redact, remote, setup_helper
 from ..spoolman import Spoolman, SpoolmanError
 
 
+def _history_use() -> dict:
+    """The intake history's records and photo bytes now, for the line beside its setting."""
+    from .. import intake_history
+    try:
+        d = intake_history.list_records(False)
+        return {"count": d["count"], "photo_bytes": d["photo_bytes"]}
+    except Exception:  # noqa: BLE001 - a line beside a setting
+        return {"count": 0, "photo_bytes": 0}
+
+
 def _view() -> dict:
     cfg = config.load()
     on = modules.enabled(cfg)
     values = {k: setup_helper.general_value(cfg, k) for k in setup_helper.GENERAL}
     return {"values": values, "station_on": "station" in on, "remote_on": "remote" in on, "web_on": "web" in on,
             "spoolman_external": "server" in on and "spoolman" not in on,
+            "intake_history": _history_use(),
             "spoolman_url": redact.text(str(cfg.get("spoolman_url") or ""), redact.known_values())}
 
 

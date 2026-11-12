@@ -142,7 +142,8 @@ class Tools:
         r = inventory.add_and_link(self.sm, items, self._rules(), bool(dry_run), uid)
         if r.dry:
             notes.append("dry run: nothing written. Show the user, then call again with dry_run=false.")
-        return {"output": "\n".join(r.lines + notes), "exit_code": 0, "spool_ids": r.spool_ids, "dry": r.dry}
+        return {"output": "\n".join(r.lines + notes), "exit_code": 0, "spool_ids": r.spool_ids, "dry": r.dry,
+                "saved": r.saved, "tag": uid}
 
     def _drop_lines_of_existing(self, items: list) -> list:
         have = {(((f.get("vendor") or {}).get("name") or "").lower(), (f.get("name") or "").lower())

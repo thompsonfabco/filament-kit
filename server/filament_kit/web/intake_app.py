@@ -138,6 +138,9 @@ class IntakeApp:
         (the kit server): the setup page's Host rule, checked with the address on every route. `push`: the Printers
         tab's alerts (only one process sends them: the web unit)."""
         self.tools, self.claude = tools, claude
+        # the intake history lives in the kit server's state: only the page the kit server serves itself (no public
+        # URL: home network, this process) records and shows it; the web module's page is another process and user
+        self.history = public_url is None
         self.nets = lan.parse_lan(lan_cidrs)
         u = urlparse(public_url) if public_url else None
         self.origin = f"{u.scheme}://{u.netloc}" if u else None
@@ -202,7 +205,79 @@ class IntakeApp:
             ("/intake/api/line_add", self.api(self.line_add), ["POST"]),
             ("/intake/api/line_new", self.api(self.line_new), ["POST"]),
             ("/intake/api/generate", self.api(self.generate), ["POST"]))] + (
-                self.printers.routes() if self.printers else [])
+                self.printers.routes() if self.printers else []) + (self._history_routes() if self.history else [])
+
+    # ---------- the intake history (intake_history.py; the kit's own page only, see __init__) ----------
+    def _history_routes(self) -> list[Route]:
+        return [Route(p, self.api(self._hist(fn)), methods=m) for p, fn, m in (
+            ("/intake/api/history", self.history_list, ["GET"]),
+            ("/intake/api/history/{hid}", self.history_get, ["GET"]),
+            ("/intake/api/history/{hid}/photos/{n:int}", self.history_photo, ["GET"]),
+            ("/intake/api/history/{hid}/revise", self.history_revise, ["POST"]),
+            ("/intake/api/history/{hid}/apply", self.history_apply, ["POST"]),
+            ("/intake/api/history/{hid}/undo", self.history_undo, ["POST"]))]
+
+    @staticmethod
+    def _hist(fn):
+        from .. import intake_history
+
+        async def route(request: Request):
+            try:
+                return await fn(request)
+            except intake_history.HistoryError as e:
+                return JSONResponse({"error": str(e), "code": e.code}, e.status)
+        return route
+
+    def _ai(self) -> bool:
+        return "ai_intake" in modules.enabled(self.tools.cfg())
+
+    async def history_list(self, request: Request):
+        from .. import intake_history
+        return await anyio.to_thread.run_sync(intake_history.list_records, self._ai())
+
+    async def history_get(self, request: Request):
+        from .. import intake_history
+        return await anyio.to_thread.run_sync(intake_history.get, request.path_params["hid"])
+
+    async def history_photo(self, request: Request):
+        from .. import intake_history
+        data = await anyio.to_thread.run_sync(intake_history.photo, request.path_params["hid"], request.path_params["n"])
+        return Response(data, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=300"})
+
+    async def history_revise(self, request: Request):
+        from .. import intake_history
+        body = await self._body(request)
+
+        def run() -> dict:
+            if not self._ai():
+                raise intake_history.HistoryError(409, "ai_off", "label reading (the ai_intake module) is off on this "
+                                                                 "server: edit the values by hand")
+            cap = KitCap(self.kit)              # a revision is a read: the kit's daily cap
+            cap.take()
+            try:
+                return intake_history.revise(self.tools.sm, request.path_params["hid"], body.get("note"),
+                                             body.get("item"), client=self.claude)
+            except Exception:
+                try:
+                    cap.refund()
+                except Exception as e:  # noqa: BLE001 - best effort
+                    log.warning("cap refund failed: %s", e)
+                raise
+        return await anyio.to_thread.run_sync(run)
+
+    async def history_apply(self, request: Request):
+        from .. import intake_history
+        b = await self._body(request)
+        return await anyio.to_thread.run_sync(lambda: intake_history.apply(
+            self.tools.sm, request.path_params["hid"], proposal=b.get("proposal"), item=b.get("item"),
+            values=b.get("values") if b.get("proposal") is None else None, spool_ids=b.get("spool_ids"),
+            device="phone web app"))
+
+    async def history_undo(self, request: Request):
+        from .. import intake_history
+        b = await self._body(request)
+        return await anyio.to_thread.run_sync(intake_history.undo, self.tools.sm, request.path_params["hid"],
+                                              b.get("revision"))
 
     # ---------- home network ----------
     def _lan(self, request: Request) -> bool:
@@ -238,7 +313,8 @@ class IntakeApp:
                 "picks": json.dumps([pl.get("pla_location") or ""]),
                 "ai": "1" if "ai_intake" in modules.enabled(cfg) else "0",  # label photos only with ai_intake
                 "printers": "1" if self.printers else "0",
-                "push": "1" if self.printers and self.printers.push_on else "0"}
+                "push": "1" if self.printers and self.printers.push_on else "0",
+                "history": "1" if self.history else "0"}
         attrs = " ".join(f"data-{k}='{html.escape(v, quote=True)}'" for k, v in data.items())
         return f"<body {attrs}><main id=app></main></body>"
 
@@ -367,7 +443,19 @@ class IntakeApp:
         dry = bool(body.get("dry_run", True))
         single_opened = sum(it["count"] for it in items) == 1 and items[0].get("sealed") is False
         link = body.get("link_tag") if single_opened and isinstance(body.get("link_tag"), str) else None
-        return await anyio.to_thread.run_sync(lambda: self.tools.add_spools(items, dry, link))
+        read_id = body.get("read_id") if isinstance(body.get("read_id"), str) else None
+
+        def run() -> dict:
+            out = self.tools.add_spools(items, dry, link)
+            saved = out.pop("saved", [])
+            tag = out.pop("tag", None)
+            if not out.get("dry") and self.history:     # the kit's own page: the kit's state is this process's
+                from .. import intake_history
+                hid = intake_history.record_save(saved, source="web", device="phone web app", read_id=read_id, tag=tag)
+                if hid:
+                    out["history_id"] = hid
+            return out
+        return await anyio.to_thread.run_sync(run)
 
     async def tag(self, request: Request):
         def run() -> dict:

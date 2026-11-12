@@ -523,6 +523,8 @@ def read_labels(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | Non
         raise
     _forget(rid)
     out["read_id"] = rid
+    from . import intake_history
+    intake_history.stash_read(rid, images, out, hint, tag_uid or (fresh_tag or {}).get("nfc_id"))
     return out
 
 

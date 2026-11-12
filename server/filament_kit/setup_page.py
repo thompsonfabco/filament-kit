@@ -293,7 +293,7 @@ class SetupPage:
         self.static = {n: (STATIC / n).read_bytes()
                        for n in ("setup.js", "setup_tabs.js", "setup_printers.js", "setup_trust.js", "setup_presets.js",
                                  "setup_backup.js",
-                                 "setup_logs.js",
+                                 "setup_logs.js", "setup_intake.js",
                                  "setup.css")}
 
     # ---------- routes ----------
@@ -325,6 +325,7 @@ class SetupPage:
                  Route("/setup/setup_presets.js", self.asset, methods=["GET"]),
                  Route("/setup/setup_backup.js", self.asset, methods=["GET"]),
                  Route("/setup/setup_logs.js", self.asset, methods=["GET"]),
+                 Route("/setup/setup_intake.js", self.asset, methods=["GET"]),
                  Route("/setup/setup.css", self.asset, methods=["GET"])]
                 + [Route("/setup/api" + p, fn, methods=[m]) for p, fn, m in table])
 
@@ -487,7 +488,7 @@ class SetupPage:
             f"<title>filament-kit setup: {name}</title><link rel=stylesheet href='/setup/setup.css'>"
             "<body><main id=app></main><script src='/setup/setup.js'></script>"
             "<script src='/setup/setup_tabs.js'></script><script src='/setup/setup_printers.js'></script>"
-            "<script src='/setup/setup_trust.js'></script><script src='/setup/setup_presets.js'></script><script src='/setup/setup_backup.js'></script><script src='/setup/setup_logs.js'></script></body></html>",
+            "<script src='/setup/setup_trust.js'></script><script src='/setup/setup_presets.js'></script><script src='/setup/setup_backup.js'></script><script src='/setup/setup_logs.js'></script><script src='/setup/setup_intake.js'></script></body></html>",
             headers=HEADERS)
 
     async def asset(self, request: Request):

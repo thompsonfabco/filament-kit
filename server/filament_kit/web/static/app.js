@@ -59,12 +59,110 @@ async function run(box, label, fn) {
   catch (e) { box.replaceChildren(fail(e)); }
 }
 
+// ---------- History: the intake history (the newest spool additions, their photos, revise, edit, undo) ----------
+const HIST_FIELDS = [["vendor", "Brand"], ["name", "Name"], ["material", "Material"], ["color_hex", "Colour (hex)"],
+  ["net", "Net g"], ["tare", "Spool g"], ["density", "Density"], ["nozzle", "Nozzle °C"], ["bed", "Bed °C"],
+  ["nozzle_range", "Nozzle range"], ["bed_range", "Bed range"], ["price_per_kg", "Price per kg"], ["line", "Line"]];
+const HIST_NUM = new Set(["net", "tare", "density", "nozzle", "bed", "price_per_kg"]);
+const HIST_STATE = { detected: "as detected", revised_ai: "revised by AI", edited: "edited by hand" };
+function historyTab() {
+  const box = h("div");
+  const el = h("section", { class: "hidden" }, h("h1", { textContent: "Intake history" }), box);
+  const hp = (id, what) => `history/${encodeURIComponent(id)}${what ? "/" + what : ""}`;
+  function photoImg(id, n) {
+    const img = h("img", { src: `${BASE}/api/${hp(id, "photos/" + n)}`, alt: `Photo ${n}`, loading: "lazy", class: "thumb" });
+    img.addEventListener("click", () => img.classList.toggle("big"));     // tap to enlarge
+    return img;
+  }
+  async function load() {
+    await run(box, "Loading…", async () => {
+      const d = await api("history");
+      return [h("p", { class: "muted", textContent: `The newest ${d.keep} additions, with their photos. The number is in the setup page's Settings.` }),
+        ...(d.records.length ? d.records.map((r) => row(r, d.ai)) : [h("p", { textContent: "Nothing added since the history started." })])];
+    });
+  }
+  function row(r, ai) {
+    const det = h("div");
+    det.mark = h("span", { textContent: HIST_STATE[r.state] || r.state });   // the state mark, redrawn after a change
+    const names = [...new Set(r.spools.map((s) => `${s.vendor} ${s.name}`))].join(", ");
+    return h("div", { class: "card" },
+      h("div", { class: "row" }, ...(r.photos ? [photoImg(r.id, 1)] : []),
+        h("p", {}, h("b", { textContent: names }), ` · ${(r.at || "").slice(0, 16).replace("T", " ")} · `, det.mark)),
+      h("button", { class: "secondary", textContent: "Open", on: { click: () => detail(r.id, ai, det) } }), det);
+  }
+  async function detail(id, ai, det) {
+    await run(det, "Loading…", async () => {
+      const rec = await api(hp(id));
+      const msg = h("div");
+      const parts = [];
+      if (rec.photos > 1) parts.push(h("div", { class: "row" }, ...Array.from({ length: rec.photos - 1 }, (_, i) => photoImg(id, i + 2))));
+      for (const s of rec.saved) {
+        const ins = {};
+        const fields = HIST_FIELDS.map(([k, label]) => {
+          ins[k] = h("input", { value: s.values[k] ?? "", "aria-label": label });
+          return h("label", {}, label, ins[k]);
+        });
+        const note = h("textarea", { rows: 2, placeholder: "e.g. brand is Polymaker", disabled: !ai });
+        parts.push(h("div", { class: "card" },
+          h("p", { class: "muted", textContent: `Spool ${s.spool_ids.join(", ")}${s.spool_ids.length > 1 ? ": a change applies to all of them" : ""}` }),
+          ...fields,
+          h("button", { textContent: "Save changes", on: { click: () => save(id, ai, det, msg, s, ins) } }),
+          note, h("button", { class: "secondary", textContent: "Ask the AI to correct it", disabled: !ai,
+                              on: { click: () => revise(id, ai, det, msg, s, note) } }),
+          ai ? null : h("p", { class: "muted", textContent: "Label reading is off on this server: edit by hand." })));
+      }
+      const live = rec.revisions.filter((v) => !v.undone);
+      const last = live[live.length - 1];
+      for (const v of rec.revisions) parts.push(h("p", { class: "muted", textContent: `Revision ${v.n} by ${v.by === "ai" ? "the AI" : "hand"}${v.undone ? " (undone)" : ""}: ${[...new Set(v.changes.map((c) => `${c.field} ${c.old} → ${c.new}`))].join("; ")}${v.note ? " · " + v.note : ""}` }));
+      if (last) parts.push(h("button", { class: "secondary", textContent: `Undo revision ${last.n}`, on: { click: () => act(id, ai, det, msg, "undo", { revision: last.n }) } }));
+      parts.push(msg);
+      return parts;
+    });
+  }
+  async function act(id, ai, det, msg, what, body) {
+    await run(msg, "Saving…", async () => {
+      const r = await api(hp(id, what), { body });
+      if (det.mark) det.mark.textContent = HIST_STATE[r.state] || r.state;
+      const v = r.revisions[r.revisions.length - 1] || {}, fl = v.filaments || {};
+      await detail(id, ai, det);
+      det.append(h("pre", { class: "ok", textContent: what === "undo" ? "Undone." : "Saved."
+        + (fl.to !== fl.from ? ` The spools now use filament ${fl.to}${fl.created ? " (new)" : ""}.` : "")
+        + (fl.orphaned && fl.orphaned.length ? ` Filament ${fl.orphaned.join(", ")} has no spools left; it was not deleted.` : "") }));
+      return [];
+    });
+  }
+  function save(id, ai, det, msg, s, ins) {
+    const values = {};
+    for (const [k] of HIST_FIELDS) {
+      const was = s.values[k] == null ? "" : String(s.values[k]), now = ins[k].value.trim();
+      if (now !== was) values[k] = now === "" ? null : (HIST_NUM.has(k) ? Number(now) : now);
+    }
+    if (!Object.keys(values).length) { msg.replaceChildren(h("p", { class: "muted", textContent: "Nothing changed." })); return; }
+    act(id, ai, det, msg, "apply", { item: s.item, values });
+  }
+  async function revise(id, ai, det, msg, s, note) {
+    await run(msg, "Asking the AI… (up to a minute)", async () => {
+      const p = await api(hp(id, "revise"), { body: { item: s.item, note: note.value } });
+      if (!p.changes.length) return [h("p", { textContent: "The AI changed nothing." })];
+      return [h("p", { textContent: "The AI suggests:" }),
+        ...p.changes.map((k) => h("p", { textContent: `${k}: ${p.before[k]} → ${p.after[k]}` })),
+        p.no_photo ? h("p", { class: "muted", textContent: "No photo was kept: it worked from the saved values and your note." }) : null,
+        h("div", { class: "row" },
+          h("button", { textContent: "Accept", on: { click: () => act(id, ai, det, msg, "apply", { proposal: p.proposal }) } }),
+          h("button", { class: "secondary", textContent: "Discard", on: { click: () => msg.replaceChildren() } }))];
+    });
+  }
+  return { el, enter: load };
+}
+
 // ---------- tabs ----------
 const PRINTERS = document.body.dataset.printers === "1";   // the printers module is on (printers.js is loaded)
-const tabs = { add: addTab(), open: openTab(), presets: presetsTab(), ...(PRINTERS ? { printers: printersTab() } : {}) };
+const HISTORY = document.body.dataset.history === "1";     // the kit's own page: the intake history is here
+const tabs = { add: addTab(), open: openTab(), presets: presetsTab(), ...(HISTORY ? { history: historyTab() } : {}),
+               ...(PRINTERS ? { printers: printersTab() } : {}) };
 const bar = h("nav", { class: "tabs" });
 for (const [key, label] of [["add", "Add spools"], ["open", "Open spool"], ["presets", "Presets"],
-    ...(PRINTERS ? [["printers", "Printers"]] : [])]) {
+    ...(HISTORY ? [["history", "History"]] : []), ...(PRINTERS ? [["printers", "Printers"]] : [])]) {
   bar.append(h("button", { textContent: label, dataset: { key }, on: { click: () => show(key) } }));
 }
 app.append(bar, ...Object.values(tabs).map((t) => t.el));
@@ -80,6 +178,7 @@ show(tabs[first] ? first : "add");
 
 // ---------- Add spools ----------
 function addTab() {
+  let readId = null;
   const photos = []; // {blob, url}
   let items = [], checked = false, tag = null; // tag: unlinked tag tapped just before the photos (server links it)
   const thumbs = h("div", { class: "thumbs" });
@@ -169,6 +268,7 @@ function addTab() {
     await run(readBox, `Claude is reading ${photos.length} photo${photos.length > 1 ? "s" : ""}… (up to a minute)`, async () => {
       const res = await api("read", { body: fd });
       tag = res.tag;
+      readId = res.read_id || null;                      // the intake history keeps this read's photos with the save
       const got = res.items.map((it) => ({ price_per_kg: "", ...it, location: it.sealed ? SEALED : "" }));
       items = [...items.filter((it) => it.hand), ...got]; // a new read replaces the last read, not spools added by hand
       checked = false; drawItems();
@@ -244,10 +344,10 @@ function addTab() {
   async function submit(dry) {
     const box = h("div"); actBox.replaceChildren(box);
     await run(box, dry ? "Checking…" : "Adding to Spoolman…", async () => {
-      const res = await api("add", { body: { items, dry_run: dry, link_tag: tag ? tag.nfc_id : null } });
+      const res = await api("add", { body: { items, dry_run: dry, link_tag: tag ? tag.nfc_id : null, read_id: readId } });
       checked = dry && !res.exit_code;
       if (!dry && !res.exit_code) {
-        items = []; tag = null; itemsBox.replaceChildren(); filBox.replaceChildren(); photos.splice(0).forEach((p) => URL.revokeObjectURL(p.url)); drawThumbs();
+        items = []; tag = null; readId = null; itemsBox.replaceChildren(); filBox.replaceChildren(); photos.splice(0).forEach((p) => URL.revokeObjectURL(p.url)); drawThumbs();
         return [out(res), h("p", {}, h("button", { textContent: "Next: presets for new filaments", on: { click: () => show("presets") } }))];
       }
       drawActions(out(res));
