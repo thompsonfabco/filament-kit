@@ -5,7 +5,7 @@
                                                     it finds, unconfigured, so it needs the code; one at a time, 30 s apart
     POST printers/pack {}                           the printer pack's commands, checked against the signed release
     POST printers/{serial}/rename {code, name}      POST printers/{serial}/address {code, address[, port]}
-    POST printers/{serial}/unpin {code}             Bambu: forget its pinned certificate
+    POST printers/{serial}/unpin {code, access_code}   Bambu: forget its pinned certificate; the Access Code comes with it
     POST printers/{serial}/connect {code[, api_key]}   Klipper: a scanned printer goes into use
     POST printers/{serial}/api_key {code, key}      Klipper: write-only; empty clears it
     POST printers/{serial}/lane_data {code, mode}   Klipper: auto, on or off
@@ -215,13 +215,16 @@ def routes(page) -> list[tuple]:
 
     async def unpin(request, body):
         serial = page._serial(request)
+        if "access_code" not in body:       # R103: the stored code never goes to a certificate it hasn't seen
+            raise Refused(400, "trusting a new certificate needs the printer's Access Code in the same request")
+        access = page._access_code(body)
 
         def run() -> None:
             bambu_entry(serial)
-            registry.clear_pin(serial)
+            registry.set_code(serial, access, replace=True)     # clears the pin, as adding the printer again
             page.printers.sync()
         await anyio.to_thread.run_sync(run)
-        page.audit(request, f"printer {serial} certificate pin cleared")
+        page.audit(request, f"printer {serial} certificate pin cleared, access code replaced")
         return {"ok": True}
 
     async def connect(request, body):

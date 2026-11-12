@@ -47,7 +47,10 @@ function bambuRow(p) {
       p.configured ? h("button", { class: "secondary", textContent: "Map by loading filament", on: { click: () => manualMap(p, mapBox) } }) : null,
       p.configured ? h("button", { class: p.report_why ? "" : "secondary", textContent: "Collect a report", on: { click: () => collectReport(p, reportBox) } }) : null,
       p.configured ? h("button", { class: "secondary", textContent: "Saved reports", on: { click: () => listReports(p, reportBox) } }) : null,
-      p.pinned ? h("button", { class: "secondary", textContent: "Forget certificate", on: { click: () => { if (window.confirm(`Forget the certificate pinned for ${p.name}? The next connection trusts whatever answers at its address.`)) change(box, printerPath(p, "unpin"), {}); } } }) : null,
+      p.pinned ? h("button", { class: "secondary", textContent: "Forget certificate", on: { click: () => {
+        if (!code.value.trim()) { say(box, "Type the printer's Access Code in the box above first: trusting a new certificate needs it.", false); return; }
+        if (window.confirm(`Forget the certificate pinned for ${p.name}? The next connection trusts whatever answers at its address, and the Access Code you typed is saved.`)) change(box, printerPath(p, "unpin"), { access_code: code.value }, null, [code]);
+      } } }) : null,
       forgetButton(p, box, "Its Access Code is deleted.")),
     p.report_why ? h("p", { class: "err", textContent: `${p.report_why} Collect a report and attach it to an issue.` }) : null,
     box, mapBox, reportBox);

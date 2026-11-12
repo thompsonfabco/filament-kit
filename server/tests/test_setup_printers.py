@@ -332,9 +332,27 @@ def test_controls_are_for_their_own_family(both, kl):
     assert post(c, f"printers/{SERIAL}/api_key", {"key": KEY}).status_code == 400
     assert post(c, f"printers/{SERIAL}/lane_data", {"mode": "on"}).status_code == 400
     assert post(c, f"printers/{SERIAL}/detect", {}, code=None).status_code == 400
-    assert post(c, f"printers/{kl.serial}/unpin", {}).status_code == 400
+    assert post(c, f"printers/{kl.serial}/unpin", {"access_code": "12345678"}).status_code == 400
     assert post(c, f"printers/{kl.serial}/map", {}).status_code == 400
     assert post(c, f"printers/{kl.serial}/code", {"access_code": "12345678"}).status_code == 400
+
+
+@pytest.mark.parametrize("body", [{}, {"access_code": ""}, {"access_code": "bad code!"}])
+def test_unpin_needs_the_access_code_in_the_same_request(both, body):
+    _bambu()
+    registry.pin(SERIAL, "ab" * 32)
+    c = client(both)
+    assert post(c, f"printers/{SERIAL}/unpin", body).status_code == 400
+    assert registry.load()[SERIAL].cert_fp == "ab" * 32       # nothing changed
+
+
+def test_unpin_with_an_access_code_clears_the_pin_and_saves_the_code(both):
+    _bambu()
+    registry.pin(SERIAL, "ab" * 32)
+    c = client(both)
+    assert post(c, f"printers/{SERIAL}/unpin", {"access_code": "87654321"}).status_code == 200
+    p = registry.load()[SERIAL]
+    assert p.cert_fp == "" and p.access_code == "87654321"
 
 
 def test_a_family_whose_module_is_off_has_no_controls(env, helper, manager, names):
