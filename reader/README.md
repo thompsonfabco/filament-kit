@@ -80,7 +80,7 @@ pinned root (ISRG Root X1 unless `READER_ROOT_CA` is set). This contract is fixe
   one reply only moves the selection until it is back. If the slots of a newly picked printer cannot be read, the
   reader shows "No slots" and refuses scans rather than keep the old printer's slots.
 
-`POST <READER_BASE>/scan` with `{"uid": "4:c7:96:11:9:22:89", "printer": "h2d", "slot": "A1", "dry_run": false}`
+`POST <READER_BASE>/scan` with `{"uid": "4:c7:96:11:9:22:89", "printer": "h2d", "slot": "A1"}`
 → a JSON object `{"status": ..., "message": ..., "filament": ...}`:
 
 - `status` is one of `set | queued | unknown_tag | unknown_spool | archived_spool | no_preset | offline | error`.

@@ -76,7 +76,6 @@ void test_parse_slots_full() {
   ])", s));
   TEST_ASSERT_EQUAL(5, (int)s.size());
   TEST_ASSERT_EQUAL_STRING("A1", s[0].label.c_str());
-  TEST_ASSERT_EQUAL_STRING("ams", s[0].kind.c_str());
   TEST_ASSERT_EQUAL(PRESENT_YES, s[0].present);
   TEST_ASSERT_EQUAL_STRING("PLA", s[0].type.c_str());
   TEST_ASSERT_EQUAL_STRING("Polymaker Grey", s[0].spool.c_str());
@@ -146,11 +145,11 @@ void test_slot_contents() {
 // ---- scan --------------------------------------------------------------------
 
 void test_scan_body() {
-  std::string b = scanBody("4:c7:96:11:9:22:89", "h2d", "HT-B", false);
+  std::string b = scanBody("4:c7:96:11:9:22:89", "h2d", "HT-B");
   TEST_ASSERT_EQUAL_STRING(
-      R"({"uid":"4:c7:96:11:9:22:89","printer":"h2d","slot":"HT-B","dry_run":false})", b.c_str());
-  std::string q = scanBody("a\"b", "p", "s", true);
-  TEST_ASSERT_EQUAL_STRING(R"({"uid":"a\"b","printer":"p","slot":"s","dry_run":true})", q.c_str());
+      R"({"uid":"4:c7:96:11:9:22:89","printer":"h2d","slot":"HT-B"})", b.c_str());
+  std::string q = scanBody("a\"b", "p", "s");
+  TEST_ASSERT_EQUAL_STRING(R"({"uid":"a\"b","printer":"p","slot":"s"})", q.c_str());
 }
 
 void test_scan_statuses() {

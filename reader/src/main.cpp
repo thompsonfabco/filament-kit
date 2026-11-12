@@ -459,7 +459,7 @@ void sendScan(const String& uid) {
   PrinterEntry printer = *p;
   SlotEntry slot = *s;
 
-  std::string payload = scanBody(uid.c_str(), printer.id, slot.label, false);
+  std::string payload = scanBody(uid.c_str(), printer.id, slot.label);
   String resp;
   uint32_t t0 = millis();
   int code = apiRequest(urlScan, payload.c_str(), resp);
