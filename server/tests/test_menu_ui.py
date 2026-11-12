@@ -3,6 +3,7 @@ the real curses screen in a pty (Linux only)."""
 import io
 import os
 import select
+import signal
 import subprocess
 import sys
 import time
@@ -233,40 +234,66 @@ def _run_in_pty(tmp_path, keys: list[bytes]):
     rd, wr = os.pipe()
     pid, master = pty.fork()
     if pid == 0:                                    # child: stdout to the pipe, stdin/tty the pty
-        os.close(rd)
-        os.dup2(wr, 1)
-        os.execve(sys.executable, [sys.executable, "-c", "import sys; from filament_kit import cli; "
-                                   "sys.exit(cli.main(['modules', 'menu', '--raw']))"], env)
+        try:
+            os.close(rd)
+            os.dup2(wr, 1)
+            os.execve(sys.executable, [sys.executable, "-c", "import sys; from filament_kit import cli; "
+                                       "sys.exit(cli.main(['modules', 'menu', '--raw']))"], env)
+        finally:
+            os._exit(127)                           # exec failed: never fall back into the parent's pytest run
     os.close(wr)
-    screen = _read_until(master, b"Up/Down")
-    for k in keys:
-        os.write(master, k)
-        time.sleep(0.15)
-        screen += _read_until(master, b"\xff", timeout=0.3)
-    deadline = time.time() + 15
-    out = b""
-    while time.time() < deadline:
-        r, _, _ = select.select([rd, master], [], [], 0.2)
-        if rd in r:
-            chunk = os.read(rd, 65536)
-            if not chunk:
-                break
-            out += chunk
-        if master in r:
+    status = None
+    try:
+        screen = _read_until(master, b"Up/Down")
+        for k in keys:
+            os.write(master, k)
+            time.sleep(0.15)
+            screen += _read_until(master, b"\xff", timeout=0.3)
+        deadline = time.time() + 15
+        out = b""
+        while time.time() < deadline:
+            r, _, _ = select.select([rd, master], [], [], 0.2)
+            if rd in r:
+                chunk = os.read(rd, 65536)
+                if not chunk:
+                    break
+                out += chunk
+            if master in r:
+                try:
+                    screen += os.read(master, 65536)
+                except OSError:
+                    pass
+        # the child may be stuck (a lost key): give it a moment, then kill it, so the run never hangs here
+        end = time.time() + 5
+        while status is None:
+            done, st = os.waitpid(pid, os.WNOHANG)
+            if done:
+                status = st
+            elif time.time() >= end:
+                os.kill(pid, signal.SIGKILL)
+                _, status = os.waitpid(pid, 0)
+                pytest.fail("the menu did not exit in time; screen: " + repr(screen[-2000:]))
+            else:
+                time.sleep(0.05)
+    finally:
+        if status is None:                          # an error above: the forked child must not outlive the test
             try:
-                screen += os.read(master, 65536)
+                os.kill(pid, signal.SIGKILL)
+                os.waitpid(pid, 0)
             except OSError:
                 pass
-    _, status = os.waitpid(pid, 0)
-    os.close(rd)
-    os.close(master)
+        os.close(rd)
+        os.close(master)
     return os.waitstatus_to_exitcode(status), out.decode(), screen
 
 
 @pytest.mark.skipif(sys.platform == "win32" or not _curses_ok(), reason="needs a pty and curses (Linux)")
 def test_real_curses_menu_in_a_pty(tmp_path):
     down = b"\x1bOB"                                # xterm's Down key in keypad mode
-    code, out, screen = _run_in_pty(tmp_path, [down] * 5 + [b" ", b"j", b"j", b"j", b"j", b"j", b"j", b" ", b"\r"])
+    names = list(modules.MODULES)                   # the keys walk the registry: down to library, then j on to updates
+    to_library = names.index("library")
+    to_updates = names.index("updates") - to_library
+    code, out, screen = _run_in_pty(tmp_path, [down] * to_library + [b" "] + [b"j"] * to_updates + [b" ", b"\r"])
     assert b"[x] spoolman" in screen and b"Up/Down" in screen
     assert code == 0, screen[-2000:]
     assert out.splitlines() == ["spoolman,server,printers,presets,library,backup,updates"]
