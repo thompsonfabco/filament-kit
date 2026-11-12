@@ -229,6 +229,25 @@ def test_a_failed_secondary_does_not_block_the_primary(two):
     assert rec["installed"]["stamp"] == STAMP and "error" not in rec
 
 
+def test_a_secondary_refused_for_a_running_slicer_is_tried_again_next_run(two):
+    stable, beta, dirs = two
+    state = {"open": True}
+
+    def busy(build_dir, folders, d, **kw):
+        if folders.variant == "BambuStudioBeta" and state["open"]:
+            raise installer.Refused(installer.ORCA_RUNNING, "studio_running")
+        return installer.install(build_dir, folders, d, **kw)
+
+    c = Client2(_state(stable, build=_build(STAMP, stable)), _zip(live_hash=_live(stable)))
+    assert _run(c, stable, dirs, [beta], install=busy) == "installed"
+    rec = sync.load_state(_sec(dirs))
+    assert "error_stamp" not in rec and "installed" not in rec
+    state["open"] = False
+    c.st["live_hash"] = _live(stable)
+    assert _run(c, stable, dirs, [beta], now=T0 + 600, install=busy) == "up_to_date"     # not 6 h later
+    assert sync.load_state(_sec(dirs))["installed"]["stamp"] == STAMP
+
+
 def test_a_failing_secondary_backs_off_and_a_new_build_retries_at_once(two):
     stable, beta, dirs = two
     tries = []
