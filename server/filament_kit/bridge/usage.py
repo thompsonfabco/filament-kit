@@ -83,8 +83,6 @@ import zipfile
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from pathlib import Path
 from typing import Any
-from xml.etree import ElementTree
-
 from defusedxml import ElementTree as SafeET
 
 from .. import config
@@ -101,6 +99,7 @@ TERMINAL = {'FINISH', 'FAILED'}
 DIRS = ('/', '/cache')
 CALIB_PREFIX = 'fk-calib-'      # our calibration job (calib3mf): not a print, its file is deleted afterwards
 MAX_SLICE_INFO = 4 * 1024 * 1024
+MAX_3MF = 512 * 1024 * 1024        # a sliced job is tens of MB; more is not read into memory
 MAX_USED_G = 5000.0        # more than this on one plate is a damaged or hostile file, not a print
 ENTRY_ID = re.compile(r"[0-9a-f]{32}")
 FIELDS = ('id', 'at', 'job', 'grams', 'spool_id', 'slot', 'observe')
@@ -321,7 +320,7 @@ def fetch_3mf(printer: registry.Printer, subtask: str, plate: str | None) -> tup
     with ftps.Client(printer) as c:
         for p in candidate_paths(subtask, plate):
             try:
-                data = c.download(p)
+                data = c.download(p, MAX_3MF)
             except ftps.FtpsError:
                 continue
             if data:
@@ -338,7 +337,7 @@ def fetch_3mf(printer: registry.Printer, subtask: str, plate: str | None) -> tup
         p = nlst_match(names, subtask, plate)
         if p:
             try:
-                data = c.download(p)
+                data = c.download(p, MAX_3MF)
             except ftps.FtpsError as e:
                 log.info("usage: printer %s: cannot download %s: %s", printer.serial, p, e)
                 return None, None
@@ -356,7 +355,7 @@ def parse_filaments(data: bytes) -> dict[str | None, list[dict]]:
         if name is None or z.getinfo(name).file_size > MAX_SLICE_INFO:
             return {}
         root = SafeET.fromstring(z.read(name))
-    except (zipfile.BadZipFile, ElementTree.ParseError, OSError, KeyError, ValueError):
+    except Exception:  # noqa: BLE001 - a damaged zip raises zlib.error, EOFError, RuntimeError ...; none may escape
         return {}
     plates = root.findall('plate') or [root]
     out: dict[str | None, list[dict]] = {}

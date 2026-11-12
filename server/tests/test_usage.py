@@ -529,6 +529,15 @@ def test_parse_slice_info_drops_nonfinite_or_absurd_grams(grams):
     assert plates["1"][0]["used_g"] == 0.0
 
 
+def test_parse_slice_info_of_a_damaged_zip_is_empty():
+    data = bytearray(build_3mf(TWO_COLOUR))
+    # corrupt the deflate stream of the slice_info member: zlib.error, not BadZipFile
+    name = b"Metadata/slice_info.config"
+    j = data.find(name) + len(name)
+    data[j:j + 8] = bytes([255]) * 8
+    assert usage.parse_filaments(bytes(data)) == {}
+
+
 def test_parse_slice_info_refuses_entities():
     bomb = ('<?xml version="1.0"?><!DOCTYPE c [<!ENTITY a "x">]><config><plate>'
             '<filament id="1" used_g="2"/></plate></config>')

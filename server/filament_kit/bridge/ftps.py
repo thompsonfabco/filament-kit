@@ -121,9 +121,18 @@ class Client:
     def upload(self, path: str, data: bytes) -> None:
         self._do(f"upload {path}", self._ftp.storbinary, f"STOR {path}", io.BytesIO(data))
 
-    def download(self, path: str) -> bytes:
+    def download(self, path: str, limit: int | None = None) -> bytes:
+        """The file's bytes; FtpsError when it is larger than `limit` bytes (None: no cap)."""
         buf = io.BytesIO()
-        self._do(f"download {path}", self._ftp.retrbinary, f"RETR {path}", buf.write)
+
+        def take(chunk: bytes) -> None:
+            if limit is not None and buf.tell() + len(chunk) > limit:
+                raise _TooBig()
+            buf.write(chunk)
+        try:
+            self._do(f"download {path}", self._ftp.retrbinary, f"RETR {path}", take)
+        except _TooBig:
+            raise FtpsError(f"download {path} on printer {self.printer.serial} failed: larger than {limit} bytes") from None
         return buf.getvalue()
 
     def nlst(self, d: str) -> list[str]:
@@ -131,6 +140,10 @@ class Client:
 
     def delete(self, path: str) -> None:
         self._do(f"delete {path}", self._ftp.delete, path)
+
+
+class _TooBig(Exception):
+    pass
 
 
 def _why(e: BaseException) -> str:
