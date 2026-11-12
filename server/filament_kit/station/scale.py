@@ -12,7 +12,7 @@ from . import state as st
 log = logging.getLogger("intake-station")
 
 SCALE_VENDOR = "00000922"  # DYMO (hidraw uevent HID_ID is bus:vendor:product, zero-padded hex)
-UNITS = {2: 1.0, 11: 28.349523125, 12: 453.59237}  # grams, ounces, pounds -> grams
+UNITS = {1: 0.001, 2: 1.0, 3: 1000.0, 11: 28.349523125, 12: 453.59237}  # milligrams, grams, kilograms, ounces, pounds -> grams
 STATUS = {1: "fault", 2: "zero", 3: "moving", 4: "stable", 5: "negative", 6: "overload", 7: "calibrate", 8: "re-zero"}
 
 
@@ -32,8 +32,10 @@ def parse_report(report: bytes) -> dict | None:
     `unit` is the raw unit byte; /state has always carried it."""
     if len(report) < 6 or report[0] != 3:
         return None
+    if report[2] not in UNITS:  # refuse the reading: guessing grams would show a kg scale as 1.2 g
+        return {"grams": 0.0, "status": f"unit {report[2]}", "unit": report[2], "stable": False}
     exp = report[3] - 256 if report[3] > 127 else report[3]
-    grams = (report[4] | report[5] << 8) * 10 ** exp * UNITS.get(report[2], 1.0)
+    grams = (report[4] | report[5] << 8) * 10 ** exp * UNITS[report[2]]
     if report[1] == 5:
         grams = -grams
     status = STATUS.get(report[1], str(report[1]))

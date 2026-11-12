@@ -40,6 +40,16 @@ def test_parse_report_pounds():
     assert r["grams"] == pytest.approx(453.6, abs=0.05)
 
 
+def test_parse_report_kilograms_and_milligrams():
+    assert scale.parse_report(bytes([3, 4, 3, 0xFD, 0xB0, 0x04]))["grams"] == 1200.0  # 1200 x 10^-3 kg
+    assert scale.parse_report(bytes([3, 4, 1, 0, 0xE8, 0x03]))["grams"] == 1.0  # 1000 mg
+
+
+def test_parse_report_unknown_unit_is_refused():
+    r = scale.parse_report(bytes([3, 4, 7, 0, 0xE8, 0x03]))
+    assert r["stable"] is False and r["grams"] == 0.0 and r["status"] == "unit 7"
+
+
 def test_parse_report_moving_not_stable():
     r = scale.parse_report(bytes([3, 3, 2, 0, 0x10, 0x00]))
     assert r["stable"] is False

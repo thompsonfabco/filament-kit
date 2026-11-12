@@ -5,7 +5,7 @@ idle -> (tag) lookup -> camera (new tag) -> (yellow) recognising -> weigh -> (ye
 -> done. A linked tag skips the camera (lookup -> weigh). "phone": the server or its AI can't help, use the phone app.
 
 The kit server does the thinking, statelessly (filament_kit/station_flow.py on the server): `server_api.ServerApi`
-looks the tag up, recognises the photo (local AI, then Claude) and saves; every answer carries `display`, ready-made
+looks the tag up, recognises the photo (Claude) and saves; every answer carries `display`, ready-made
 OLED lines. The station keeps the flow: which step, the spool or recognised filament, the photo and the taken weight.
 A sequence number drops any server answer that comes back after red or a new scan.
 
@@ -110,7 +110,7 @@ def lookup(seq, nfc_id):
 
 
 def recognise(seq, nfc_id):
-    """Picture -> the server's recognition (local AI, then Claude): the filament, or why not."""
+    """Picture -> the server's recognition (Claude): the filament, or why not."""
     with st.lock:
         if seq != flow["seq"]:  # red or a new tag since yellow: nothing to recognise
             return
@@ -132,7 +132,7 @@ def recognise(seq, nfc_id):
         if go("weigh", seq, filament=r.get("item"), display=d):
             beep.beep("hold")
             speech.say(" ".join(d[:2]) + ". Put it on the scale." if d else "Recognised. Put it on the scale.")
-    elif status == 409:  # no recognizer: neither local AI nor Claude
+    elif status == 409:  # no recognizer: ai_intake is off
         if go("phone", seq, display=d):
             speech.say("No recognition available. Use the phone.")
     elif go("camera", seq, message=d[0] if d else "No match, retry"):  # no match, failed, cap, unreachable
@@ -188,7 +188,8 @@ def on_yellow(long_press):
             if grams is not None:
                 st.state.update(held=grams, held_at=time.time())
         if grams is None:
-            go(step, seq, message="Scale not settled")
+            sc = st.state["scale"]
+            go(step, seq, message="Scale unit?" if sc and sc["status"].startswith("unit ") else "Scale not settled")
             beep.beep("nothing")
             speech.say("Put the spool on the scale and wait for it to settle.")
         else:
