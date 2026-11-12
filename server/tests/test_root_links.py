@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from filament_kit import acl, config, pairing, web_access
+from filament_kit import acl, config, nofollow, pairing, web_access
 from filament_kit.bridge import printer_report
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX only: root runs this on Linux")
@@ -404,3 +404,20 @@ def test_pin_upload_works_in_the_helper_units_own_sandbox(tmp_path, monkeypatch)
     finally:
         for d in (E, S, K):
             shutil.rmtree(d, ignore_errors=True)
+
+
+def test_open_node_skips_a_hard_linked_file(kit, caplog):
+    folder = kit / "folder"
+    folder.mkdir()
+    (folder / "plain").write_text("x", encoding="utf-8")
+    os.link(kit / "victim" / "a", folder / "linked")                  # the same file under a second name
+    dfd = os.open(folder, os.O_RDONLY)
+    try:
+        with caplog.at_level(logging.WARNING):
+            fd = nofollow.open_node("plain", dfd)
+            assert fd is not None
+            os.close(fd)
+            assert nofollow.open_node("linked", dfd) is None
+        assert "hard link" in caplog.text
+    finally:
+        os.close(dfd)

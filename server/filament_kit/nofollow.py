@@ -77,7 +77,7 @@ def lstat_at(name: str, dir_fd: int) -> os.stat_result | None:
 
 def open_node(name: str, dir_fd: int, where=None, *, dirs: bool = True) -> int | None:
     """A read-only descriptor of the regular file (or, with `dirs`, folder) `name` in `dir_fd`, never through a
-    link: None (a link or a FIFO/device logged as skipped) when it is anything else or missing."""
+    link: None (a link, a hard-linked file or a FIFO/device logged as skipped) when it is anything else or missing."""
     st = lstat_at(name, dir_fd)
     if st is None:
         return None
@@ -88,6 +88,9 @@ def open_node(name: str, dir_fd: int, where=None, *, dirs: bool = True) -> int |
     is_dir = stat.S_ISDIR(st.st_mode)
     if not (stat.S_ISREG(st.st_mode) or (dirs and is_dir)):
         skipped(where, "not a regular file" + (" or folder" if dirs else ""))
+        return None
+    if not is_dir and st.st_nlink > 1:
+        skipped(where, "a hard link (another name for a file that may be outside this folder)")
         return None
     try:
         fd = os.open(name, _NODE | (DIRECTORY if is_dir else 0), dir_fd=dir_fd)
