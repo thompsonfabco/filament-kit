@@ -201,3 +201,24 @@ def test_publishing_off_removes_the_kits_lanes(env, moonraker, sm):
         assert moonraker.db["lane_data"] == {"lane9": {"lane": "9", "source": "other"}}
     finally:
         fam.stop()
+
+
+def test_publishing_reads_only_the_printers_spools(env, moonraker, sm, monkeypatch):
+    moonraker.objects = ["print_stats", "toolhead", "extruder", "extruder1", "heater_bed", "virtual_sdcard",
+                         "gcode_macro FK_UNVERIFIED_M1D", "gcode_macro _FK_TOOL_SPOOLS"]
+    moonraker.status["gcode_macro _FK_TOOL_SPOOLS"] = {f"t{i}": 0 for i in range(7)}
+    pid = registry.add_klipper("M1D", moonraker.host, moonraker.port).serial
+    fam = KlipperFamily(sm, backoff=(0.1, 0.4))
+    fam.start()
+    try:
+        assert fam.wait_settled(pid, 8) == "connected"
+        s = _spool(sm)
+        assert fam.load(sm, pid, "C1", s["id"], False, sealed_location="Sealed stock")["confirmed"] is True
+        assert wait_for(lambda: (moonraker.db.get("lane_data") or {}).get("lane1", {}).get("spool_id") == s["id"])
+        asked = []
+        real = sm.get
+        monkeypatch.setattr(sm, "get", lambda path: asked.append(path) or real(path))
+        fam._publish(pid)
+        assert "spool" not in asked and f"spool/{s['id']}" in asked
+    finally:
+        fam.stop()

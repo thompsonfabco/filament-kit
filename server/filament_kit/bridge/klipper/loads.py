@@ -311,7 +311,9 @@ class LoadsMixin:
             return
         try:
             units = self.slots(pid)
-            by_id = {s.get("id"): s for s in (self.sm.get("spool") or [])}
+            ids = {s.spool_id for u in units for s in u.slots if s.spool_id is not None}
+            by_id = {i: self.sm.get(f"spool/{i}") for i in sorted(ids)}      # these spools only, not the whole inventory
+            by_id = {i: sp for i, sp in by_id.items() if sp}
             presets = {}
             for u in units:
                 for s in u.slots:
