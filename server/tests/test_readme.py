@@ -48,38 +48,68 @@ def test_module_table_matches_the_registry():
             assert m.needs_text in needs, (row, m.needs_text)
 
 
-OWNER_DATA = ("localdomain", "spoolman-vm", "h2d_token", "sv08", "G:\\")   # any other "thompsonfabco" is caught below
+# The owner's private values (home LAN addresses, the H2D serial, host, folder and account names) are NOT in this
+# repository. They live in a local, untracked JSON file: the path in $FK_OWNER_BANS, else <repo root>/.owner-bans.local
+# (git-ignored). Format: {"plain": [...] banned in docs and code, "code_plain": [...] banned in code only,
+# "fingerprints": [...] salted SHA-256[:20] of banned words/addresses, "tree_wide": [...] the same, checked over every
+# tracked file, "ota_plain": [...] for reader/tools/test_ota_publish.py, "salt": "..."}. Without the file the tests that
+# need it skip (a contributor has nothing to ban); with FK_REQUIRE_OWNER_BANS=1 a missing file FAILS (the premerge check).
+# What stays below is generic: private-network and local-domain shapes that no one should publish either.
+OWNER_DATA = ("localdomain", "h2d_token", "sv08", "G:\\")   # any other private-looking address is caught below
+_BANS_ENV = "FK_OWNER_BANS"
+_REQUIRE_ENV = "FK_REQUIRE_OWNER_BANS"
 
-# The owner's private values (home LAN addresses, the H2D serial, host and account names) are banned by salted
-# SHA-256 fingerprint, so this file does not publish them itself. A text is cut into IPv4 addresses and word runs.
-_OWNER_SALT = b"filament-kit owner-data v1:"
-OWNER_FINGERPRINTS = frozenset({
-    "d760cbea97a1228524ab", "92ce0773c1c5a2e0ca4a", "95fb2cac257df2546230", "87bf20b4038304003845",
-    "17b7f0c3556139cbbfd1", "107b22d060e0f4dce62d", "dbf1988c2971e2f59646", "4cff4dd88d4eba517032",
-    "c9f6ef41de056225a7cf", "e44aa6a688481d0bf3fb", "c65d6e88416e61346130", "e61de7055a6e495661f4",
-    # the owner's slicer user id, whole and its first 8 characters
-    "1f3476d753fa11e2fd72", "c20f08a058a35d78f08a"})
+
+def _load_bans(root=None):
+    """The local ban file as a dict, or None when there is none."""
+    import json
+    import os
+    path = Path(os.environ.get(_BANS_ENV) or (root or ROOT) / ".owner-bans.local")
+    if not path.is_file():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _need_bans():
+    """The local bans, or a skip; a failure when FK_REQUIRE_OWNER_BANS=1."""
+    import os
+    bans = _load_bans()
+    if bans is None:
+        msg = f"no local owner-ban file ($FK_OWNER_BANS or <repo root>/.owner-bans.local); the owner-specific scan is not run"
+        if os.environ.get(_REQUIRE_ENV) == "1":
+            pytest.fail(msg + f" and {_REQUIRE_ENV}=1 requires it")
+        pytest.skip(msg)
+    return bans
+
+
 _OWNER_TOKEN = re.compile(r"\d{1,3}(?:\.\d{1,3}){3}|[A-Za-z0-9][A-Za-z0-9-]*")
 # Some names are ordinary words alone, so only their host or user form is banned: a second pass, on top of the parts above.
 _OWNER_FORM = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]*(?:\.local\b|@)", re.I)
-TREE_WIDE_FINGERPRINTS = frozenset({"c65d6e88416e61346130", "e61de7055a6e495661f4", "1f3476d753fa11e2fd72", "c20f08a058a35d78f08a"})
+_NO_BANS = {"plain": [], "code_plain": [], "fingerprints": [], "tree_wide": [], "salt": ""}
 
 
 def _owner_tokens(text: str) -> set[str]:
     return set(_OWNER_TOKEN.findall(text)) | {m.lower() for m in _OWNER_FORM.findall(text)}
 
 
-def _fingerprint(token: str) -> str:
-    return hashlib.sha256(_OWNER_SALT + token.encode()).hexdigest()[:20]
+def _fingerprint(token: str, salt: str) -> str:
+    return hashlib.sha256(salt.encode() + token.encode()).hexdigest()[:20]
 
 
-def _owner_hits(text: str) -> list[str]:
-    return sorted(t for t in _owner_tokens(text) if _fingerprint(t) in OWNER_FINGERPRINTS)
+def _owner_hits(text: str, fingerprints, salt: str) -> list[str]:
+    fingerprints = set(fingerprints)
+    return sorted(t for t in _owner_tokens(text) if _fingerprint(t, salt) in fingerprints)
 
 
 # Every Markdown file under docs/ and release-notes/ is public (the owner's runbooks live outside the repository).
 PUBLIC_DOCS = ["README.md", "THIRD-PARTY.md", "reader/README.md"] + sorted(
     p.relative_to(ROOT).as_posix() for p in [*(ROOT / "docs").rglob("*.md"), *(ROOT / "release-notes").glob("*.md")])
+# the repository paths: filament-kit (README, get.sh), the filament-library repo that release.yml builds from, the app's
+# package name, and the owner's support link: the one allowed mention of the owner's account
+ALLOWED_REPO_PATHS = ("github.com/thompsonfabco/filament-kit", "-R thompsonfabco/filament-kit",
+                      "thompsonfabco/filament-kit", "github.com/thompsonfabco/filament-library",
+                      "thompsonfabco/filament-library", "com.thompsonfabco.filamentkit", "com/thompsonfabco/filamentkit",
+                      "ko-fi.com/thompsonfabco")
 
 
 @pytest.mark.parametrize("rel", PUBLIC_DOCS)
@@ -87,50 +117,99 @@ def test_public_docs_have_no_owner_specific_data(rel):
     text = (ROOT / rel).read_text(encoding="utf-8")
     for bad in OWNER_DATA:
         assert bad not in text, (rel, bad)
-    assert not _owner_hits(text), rel
-    # the GitHub repo paths are the one allowed mention of the owner's account
     rest = text
-    for ok in ("github.com/thompsonfabco/filament-kit", "-R thompsonfabco/filament-kit",
-               "github.com/thompsonfabco/filament-library", "thompsonfabco/filament-library",
-               "com.thompsonfabco.filamentkit", "com/thompsonfabco/filamentkit",  # the app's package name
-               "ko-fi.com/thompsonfabco"):  # the owner's support link
+    for ok in ALLOWED_REPO_PATHS:
         rest = rest.replace(ok, "")
     assert "thompsonfabco" not in rest, rel
 
 
-# Final review I4: the same ban over the public code and test files. `sv08` (a printer model the kit makes Orca
-# presets for) and `h2d_token` (the filament-ops token file name that `migrate-ops` reads) are product names
-# there, not the owner's data; the owner's scanner paths are added instead (the fingerprints apply as well).
-CODE_OWNER_DATA = tuple(b for b in OWNER_DATA if b not in ("sv08", "h2d_token")) + ("h2d-scanner",)
-CODE_SCAN = ("server/tests", "pc-sync", "get.sh", "install", "reader", "tools")
-# ban lists themselves
+def test_public_docs_have_no_local_owner_bans():
+    bans = _need_bans()
+    found = []
+    for rel in PUBLIC_DOCS:
+        text = (ROOT / rel).read_text(encoding="utf-8")
+        found += [f"{rel}: plain ban {i}" for i, bad in enumerate(bans["plain"]) if bad in text]
+        if _owner_hits(text, bans["fingerprints"], bans["salt"]):
+            found.append(f"{rel}: fingerprinted ban")
+    assert not found, "\n".join(found)
+
+
+# Final review I4: the same ban over every tracked text file. `sv08` (a printer model the kit makes Orca presets for) and
+# `h2d_token` (the filament-ops token file name that `migrate-ops` reads) are product names there, not the owner's data;
+# the owner's scanner paths come from the local ban file instead (its fingerprints apply as well).
+CODE_OWNER_DATA = tuple(b for b in OWNER_DATA if b not in ("sv08", "h2d_token"))   # plus the local "code_plain"
+GENERIC_SCOPE = ("server/tests/", "pc-sync/", "get.sh", "install/", "reader/", "tools/")
+# the ban-loading code itself, which names the generic bans
 CODE_SCAN_SKIP = {"server/tests/test_readme.py", "reader/tools/test_ota_publish.py"}
-# the repository paths: filament-kit (README, get.sh), and the filament-library repo that release.yml builds from
-ALLOWED_REPO_PATHS = ("github.com/thompsonfabco/filament-kit", "thompsonfabco/filament-kit",
-                      "github.com/thompsonfabco/filament-library", "thompsonfabco/filament-library",
-                      "ko-fi.com/thompsonfabco")
+# binary by extension: images, archives, firmware
+BINARY_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".zip", ".jar", ".bin", ".gz", ".pdf", ".ttf", ".otf",
+              ".woff", ".woff2", ".keystore", ".jks", ".apk", ".stl", ".3mf", ".pyc"}
 
 
-def _walk_code_scan() -> list[str]:
-    """A copy with no .git (an archive a reviewer unpacked): every file under CODE_SCAN. This is the leak guard, so it
-    never skips; it may read a few more files than git would list, which can only make it stricter."""
-    out = []
-    for item in CODE_SCAN:
-        p = ROOT / item
-        files = [p] if p.is_file() else [f for f in p.rglob("*") if f.is_file()]
-        out += [f.relative_to(ROOT).as_posix() for f in files if "__pycache__" not in f.parts and f.suffix != ".pyc"]
-    return out
+def _walk_files(root: Path) -> list[str]:
+    """A copy with no .git (an archive a reviewer unpacked): every file. This is the leak guard, so it never skips; it may
+    read a few more files than git would list, which can only make it stricter."""
+    skip = {".git", "__pycache__"}
+    return [f.relative_to(root).as_posix() for f in root.rglob("*")
+            if f.is_file() and not skip & set(f.relative_to(root).parts) and f.name != ".owner-bans.local"]
 
 
-def _public_code_files() -> list[str]:
+def _tracked_files(root: Path = ROOT) -> list[str]:
     import subprocess
     try:
-        out = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-z", "--", *CODE_SCAN], capture_output=True,
-                             check=True).stdout.decode("utf-8")
+        out = subprocess.run(["git", "-C", str(root), "ls-files", "-z"], capture_output=True, check=True).stdout.decode("utf-8")
         names = out.split("\0")
     except (subprocess.CalledProcessError, OSError):
-        names = _walk_code_scan()
+        names = _walk_files(root)
     return [f for f in names if f and f not in CODE_SCAN_SKIP]
+
+
+def _read_text_files(root: Path, names: list[str]):
+    """([(rel, text)], [problems]): a file that is neither binary by extension nor UTF-8 is a problem, not a skip."""
+    texts, problems = [], []
+    for rel in names:
+        if Path(rel).suffix.lower() in BINARY_EXT:
+            continue
+        try:
+            data = (root / rel).read_bytes()
+        except FileNotFoundError:
+            continue                     # listed by git, deleted in this checkout
+        except OSError:
+            problems.append(f"{rel}: unreadable")
+            continue
+        try:
+            texts.append((rel, data.decode("utf-8")))
+        except UnicodeDecodeError:
+            problems.append(f"{rel}: not UTF-8 and not a binary extension")
+    return texts, problems
+
+
+def _code_findings(root: Path, bans: dict, names: list[str] | None = None) -> list[str]:
+    """Where a banned value is: `path:line: what`, never the value. The generic bans always apply, `bans` adds the local ones."""
+    names = _tracked_files(root) if names is None else names
+    assert names, "the scan listed no files"
+    texts, _ = _read_text_files(root, names)
+    assert texts, "the scan read no file"
+    tree_wide = set(bans["tree_wide"])
+    found = []
+    for rel, text in texts:
+        # the generic suffixes are product knowledge in the app's own code (it redacts them), so they are banned only
+        # where code and tests never had a reason to name them; the local code-only bans are not for the docs
+        plain = ([*CODE_OWNER_DATA] if rel.startswith(GENERIC_SCOPE) else []) + bans["plain"] + (
+            [] if rel in PUBLIC_DOCS else bans["code_plain"])
+        if tree_wide & {_fingerprint(t, bans["salt"]) for t in _owner_tokens(text)}:
+            found.append(f"{rel}: fingerprinted host name")
+        for n, line in enumerate(text.splitlines(), 1):
+            found += [f"{rel}:{n}: fingerprinted ban" for _ in _owner_hits(line, bans["fingerprints"], bans["salt"])]
+            for i, bad in enumerate(plain):
+                if re.search(re.escape(bad) + (r"(?!\d)" if bad[-1].isdigit() else ""), line):
+                    found.append(f"{rel}:{n}: plain ban {i}")
+            rest = line
+            for ok in ALLOWED_REPO_PATHS:
+                rest = rest.replace(ok, "")
+            if "thompsonfabco" in rest:
+                found.append(f"{rel}:{n}: thompsonfabco")
+    return found
 
 
 def test_the_leak_guard_finds_the_files_without_git(monkeypatch):
@@ -140,71 +219,83 @@ def test_the_leak_guard_finds_the_files_without_git(monkeypatch):
     def no_git(*a, **k):
         raise subprocess.CalledProcessError(128, "git")
     monkeypatch.setattr(subprocess, "run", no_git)
-    files = _public_code_files()
-    assert "get.sh" in files and "server/tests/test_release_files.py" in files
+    files = _tracked_files()
+    assert "get.sh" in files and "server/tests/test_release_files.py" in files and "pc-sync/pyproject.toml" in files
     assert "server/tests/test_readme.py" not in files and not any("__pycache__" in f for f in files)
+    assert ".owner-bans.local" not in files
 
 
-def test_the_owners_host_name_is_nowhere_in_the_tree():
-    """Every tracked text file, the app and the workflows too, not only what the other scans cover."""
-    import subprocess
-    try:
-        names = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-z"], capture_output=True, check=True,
-                               ).stdout.decode("utf-8").split("\0")
-    except (subprocess.CalledProcessError, OSError):       # a copy with no .git: never a skip, this is the leak guard
-        names = [f.relative_to(ROOT).as_posix() for f in ROOT.rglob("*") if f.is_file()]
-    found = []
-    for rel in filter(None, names):
-        try:
-            text = (ROOT / rel).read_text(encoding="utf-8")
-        except (UnicodeDecodeError, OSError):
-            continue
-        if TREE_WIDE_FINGERPRINTS & {_fingerprint(t) for t in _owner_tokens(text)}:
-            found.append(rel)
-    assert not found, found
+def test_every_tracked_text_file_is_utf8():
+    names = _tracked_files()
+    assert "get.sh" in names
+    texts, problems = _read_text_files(ROOT, names)
+    assert len(texts) > 100 and not problems, "\n".join(problems)
+
+
+def test_no_generic_ban_is_in_any_tracked_file():
+    """Every tracked text file, the app, the stations and the workflows too (not the ban-loading code itself)."""
+    assert "get.sh" in _tracked_files()
+    found = _code_findings(ROOT, _NO_BANS)
+    assert not found, "\n".join(found)
+
+
+def test_no_local_owner_ban_is_in_any_tracked_file():
+    bans = {**_NO_BANS, **_need_bans()}
+    assert "get.sh" in _tracked_files()
+    found = _code_findings(ROOT, bans)
+    assert not found, "\n".join(found)
+
+
+def test_the_scan_catches_a_planted_value_and_an_unreadable_file(tmp_path):
+    salt = "test salt"
+    bans = {**_NO_BANS, "salt": salt, "fingerprints": [_fingerprint("plantedhost9", salt)],
+            "tree_wide": [_fingerprint("plantedhost9", salt)], "plain": ["planted-folder"], "code_plain": ["planted-id"]}
+    (tmp_path / "get.sh").write_text("echo clean\n", encoding="utf-8")
+    assert _code_findings(tmp_path, bans, _walk_files(tmp_path)) == []
+    for text in ("ssh plantedhost9.localdomain", "see planted-folder", "x = 'planted-id'", "ssh me@plantedhost9.local"):
+        (tmp_path / "a.txt").write_text(text + "\n", encoding="utf-8")
+        found = _code_findings(tmp_path, bans, _walk_files(tmp_path))
+        assert found and all(f.startswith("a.txt") for f in found) and not any("planted" in f for f in found), text
+    (tmp_path / "a.txt").write_bytes(b"\xff\xfe not text")
+    assert _read_text_files(tmp_path, _walk_files(tmp_path))[1] == ["a.txt: not UTF-8 and not a binary extension"]
+    (tmp_path / "a.txt").unlink()
+    (tmp_path / "a.png").write_bytes(b"\xff\xfe not text")
+    assert _read_text_files(tmp_path, _walk_files(tmp_path))[1] == []
+    with pytest.raises(AssertionError):
+        _code_findings(tmp_path, bans, [])           # a scan that listed nothing is a failure, not a pass
+
+
+def test_the_ban_file_is_optional_but_can_be_required(tmp_path, monkeypatch):
+    monkeypatch.setenv(_BANS_ENV, str(tmp_path / "absent.json"))
+    monkeypatch.delenv(_REQUIRE_ENV, raising=False)
+    with pytest.raises(pytest.skip.Exception) as skipped:
+        _need_bans()
+    assert "owner-ban" in str(skipped.value)
+    monkeypatch.setenv(_REQUIRE_ENV, "1")
+    with pytest.raises(pytest.fail.Exception):
+        _need_bans()
+    (tmp_path / "present.json").write_text('{"plain": ["x"]}', encoding="utf-8")
+    monkeypatch.setenv(_BANS_ENV, str(tmp_path / "present.json"))
+    assert _need_bans() == {"plain": ["x"]}
 
 
 def test_a_host_or_user_form_is_read_whole_and_its_parts_too():
     assert _owner_tokens("open Kit.local:8710 or me@host now") == {"open", "Kit", "local", "kit.local", "8710", "or", "me",
                                                                    "me@", "host", "now"}
-    assert not _owner_hits("kit.local")
+    assert not _owner_hits("kit.local", [_fingerprint("secrethost9", "s")], "s")
 
 
 @pytest.mark.parametrize("text", ["secrethost9", "http://secrethost9:7912", "secrethost9.local", "http://secrethost9.local:7912",
                                   "secrethost9.localdomain", "user@secrethost9.local"])
-def test_a_banned_bare_name_is_caught_in_every_form(monkeypatch, text):
-    monkeypatch.setitem(globals(), "OWNER_FINGERPRINTS", frozenset({_fingerprint("secrethost9")}))
-    assert _owner_hits(text) == ["secrethost9"]
+def test_a_banned_bare_name_is_caught_in_every_form(text):
+    assert _owner_hits(text, [_fingerprint("secrethost9", "s")], "s") == ["secrethost9"]
 
 
 @pytest.mark.parametrize("text,token", [("secrethost9.local", "secrethost9.local"), ("SecretHost9.LOCAL:1", "secrethost9.local"),
                                         ("ssh secrethost9@server", "secrethost9@"), ("SecretHost9@example.org", "secrethost9@")])
-def test_a_banned_form_is_caught_in_any_case_and_the_bare_word_is_not(monkeypatch, text, token):
-    monkeypatch.setitem(globals(), "OWNER_FINGERPRINTS", frozenset({_fingerprint(token)}))
-    assert _owner_hits(text) == [token]
-    assert not _owner_hits("the secrethost9 variable")
-
-
-def test_public_code_and_tests_have_no_owner_specific_data():
-    files = _public_code_files()
-    assert "get.sh" in files and any(f.startswith("server/tests/") for f in files)
-    found = []
-    for rel in files:
-        try:
-            text = (ROOT / rel).read_text(encoding="utf-8")
-        except (UnicodeDecodeError, FileNotFoundError):
-            continue                     # binaries (firmware images, fixtures)
-        for n, line in enumerate(text.splitlines(), 1):
-            found += [f"{rel}:{n}: owner value" for _ in _owner_hits(line)]
-            for bad in CODE_OWNER_DATA:
-                if re.search(re.escape(bad) + (r"(?!\d)" if bad[-1].isdigit() else ""), line):
-                    found.append(f"{rel}:{n}: {bad}")
-            rest = line
-            for ok in ALLOWED_REPO_PATHS:
-                rest = rest.replace(ok, "")
-            if "thompsonfabco" in rest:
-                found.append(f"{rel}:{n}: thompsonfabco")
-    assert not found, "\n".join(found)
+def test_a_banned_form_is_caught_in_any_case_and_the_bare_word_is_not(text, token):
+    assert _owner_hits(text, [_fingerprint(token, "s")], "s") == [token]
+    assert not _owner_hits("the secrethost9 variable", [_fingerprint(token, "s")], "s")
 
 
 def test_readme_sections_a_user_needs():
