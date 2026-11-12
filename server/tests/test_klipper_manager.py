@@ -420,6 +420,21 @@ def test_set_up_that_outlives_stop_leaves_no_subscriber_running(env, moonraker, 
     assert conn.sub is not None and conn.sub._stop.is_set() and not conn.sub.connected
 
 
+def test_a_failed_spoolman_read_is_not_retried_at_once(env, spoolman_url):
+    calls = []
+
+    class Down:
+        def get(self, path):
+            calls.append(path)
+            raise OSError("down")
+    fam = KlipperFamily(Down(), backoff=(0.1, 0.4))
+    assert fam._spool_list() == [] and fam._spool_list() == []
+    assert calls == ["spool"]
+    fam.forget_spools()                     # a load or unload asks again
+    fam._spool_list()
+    assert calls == ["spool", "spool"]
+
+
 # --- the Scan a client can ask for ------------------------------------------------------------------------------------
 OWN = ipaddress.ip_network("10.9.8.0/24")
 

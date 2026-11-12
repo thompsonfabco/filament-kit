@@ -40,6 +40,7 @@ COMMON = ("print_stats", "toolhead", "virtual_sdcard", "heater_bed", "webhooks",
 GCODE_STATE = {"printing": "RUNNING", "paused": "PAUSE", "complete": "FINISH", "cancelled": "FAILED",
                "error": "FAILED", "standby": "IDLE"}
 SPOOL_CACHE = 30.0
+SPOOL_RETRY = 5.0           # after a failed read, Spoolman is not asked again for this long (its timeout is 15 s)
 OFFLINE_AFTER = 10.0    # seconds a websocket may be down before the printer reads as offline
 SYNC_EVERY = 15.0       # seconds between registry re-reads (the CLI edits it in another process)
 HISTORY_WAIT = 10.0     # seconds to wait for Moonraker to close a finished job's history entry
@@ -488,6 +489,7 @@ class KlipperFamily(LoadsMixin):
             spools = self.sm.get("spool") or []
         except Exception as e:  # noqa: BLE001 - Spoolman down: slots show no spool, status still answers
             log.info("klipper status: Spoolman unavailable (%s)", type(e).__name__)
+            self._spools = (time.monotonic() - SPOOL_CACHE + SPOOL_RETRY, spools)    # the old list stands in meanwhile
             return spools
         self._spools = (time.monotonic(), spools)
         return spools
