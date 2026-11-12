@@ -260,10 +260,17 @@ def test_detect_returns_what_the_cli_prints(moonraker):
                               "connected": True, "warning": None}}
 
 
-def test_detect_spoolman_another_or_none(moonraker):
+def test_detect_spoolman_another_or_none(moonraker, monkeypatch):
+    real = socket.getaddrinfo     # only the fake printer's own address resolves: no real lookups of these names
+
+    def lookup(host, *a, **kw):
+        if host in ("127.0.0.1", socket.gethostname()):
+            return real(host, *a, **kw)
+        return [(0, 0, 0, "", ("192.0.2." + str(30 if host == "other.example.com" else 40), 0))]
+    monkeypatch.setattr(socket, "getaddrinfo", lookup)
     p = registry.add_klipper("Box", moonraker.host, moonraker.port)
     d = klipper_cli.detect(p, kit_spoolman="http://other.example.com:7912")
-    assert d["spoolman"]["match"] in ("different", "unknown") and d["spoolman"]["same_as_kit"] is False
+    assert d["spoolman"]["match"] == "different" and d["spoolman"]["same_as_kit"] is False
     assert d["spoolman"]["server"] == "spoolman.example.com:7912"
     moonraker.server_config = {}
     d = klipper_cli.detect(p, kit_spoolman="http://other.example.com:7912")
