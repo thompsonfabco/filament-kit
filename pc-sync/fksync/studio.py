@@ -269,7 +269,9 @@ def _proc_running(app: _LinuxApp, proc: Path) -> bool:
                 continue
             comm = (d / "comm").read_text(encoding="utf-8", errors="replace").strip()
             raw = (d / "cmdline").read_bytes()
-        except OSError:                                                 # gone mid-read, or unreadable: skipped
+        except PermissionError:
+            return True                                                 # present but unreadable: unsure
+        except OSError:                                                 # gone mid-read: skipped
             continue
         argv = [a.decode("utf-8", errors="replace") for a in raw.split(b"\0") if a]
         if _proc_matches(app, comm, argv):

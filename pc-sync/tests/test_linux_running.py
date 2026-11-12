@@ -78,6 +78,19 @@ def test_unsure_is_running(tmp_path):
     assert _both(proc) == (False, False)
 
 
+def test_unsure_is_running_for_a_present_process_that_cannot_be_read(tmp_path, monkeypatch):
+    proc = _proc(tmp_path, {7: ("bash", ["-bash"])})
+    assert _both(proc) == (False, False)
+    real = Path.read_bytes
+
+    def denied(self):
+        if self.name == "cmdline":
+            raise PermissionError(13, "Permission denied")
+        return real(self)
+    monkeypatch.setattr(Path, "read_bytes", denied)
+    assert _both(proc) == (True, True)
+
+
 def test_platform_choice(monkeypatch, tmp_path):
     proc = _proc(tmp_path, {9: ("bambu-studio", ["bambu-studio"])})
     monkeypatch.setattr(studio, "PROC", proc)
