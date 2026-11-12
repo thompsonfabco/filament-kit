@@ -60,6 +60,27 @@ def test_offline():
         mr.Moonraker("127.0.0.1", 9, timeout=0.5).info()
 
 
+def test_a_reply_cut_off_is_offline_not_a_raw_exception():
+    import socket
+    srv = socket.socket()
+    srv.bind(("127.0.0.1", 0))
+    srv.listen()
+
+    def serve():
+        conn, _ = srv.accept()
+        conn.recv(4096)
+        conn.sendall(b"garbage\r\n\r\n")        # not a status line: BadStatusLine, as when Moonraker restarts mid-reply
+        conn.close()
+    t = threading.Thread(target=serve, daemon=True)
+    t.start()
+    try:
+        with pytest.raises(mr.Offline):
+            mr.Moonraker("127.0.0.1", srv.getsockname()[1], timeout=3).info()
+    finally:
+        srv.close()
+        t.join(5)
+
+
 def test_print_actions_history_db_webcams(moonraker):
     c = _client(moonraker)
     c.print_action("pause")
