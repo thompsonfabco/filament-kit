@@ -18,7 +18,7 @@ STD, HF = TG.STD, TG.HF
 SV08 = {"name": "Sovol SV08 MAX", "slicer": "orca", "nozzles": ["0.4", "0.6", "1.0"],
         "compatible_printers": {"0.4": "Sovol SV08 MAX", "0.6": "Sovol SV08 MAX 0.6",
                                 "1.0": "Sovol SV08 MAX 1.0"}}
-OUSER = "f790a1c6-01c4-42b9-97ab-bd37fc89c553"
+OUSER = "0badc0de-0000-4000-8000-00000000cafe"
 LID = "sunlu--pla-plus-2-0"
 
 

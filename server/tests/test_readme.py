@@ -56,11 +56,13 @@ _OWNER_SALT = b"filament-kit owner-data v1:"
 OWNER_FINGERPRINTS = frozenset({
     "d760cbea97a1228524ab", "92ce0773c1c5a2e0ca4a", "95fb2cac257df2546230", "87bf20b4038304003845",
     "17b7f0c3556139cbbfd1", "107b22d060e0f4dce62d", "dbf1988c2971e2f59646", "4cff4dd88d4eba517032",
-    "c9f6ef41de056225a7cf", "e44aa6a688481d0bf3fb", "c65d6e88416e61346130", "e61de7055a6e495661f4"})
+    "c9f6ef41de056225a7cf", "e44aa6a688481d0bf3fb", "c65d6e88416e61346130", "e61de7055a6e495661f4",
+    # the owner's slicer user id, whole and its first 8 characters
+    "1f3476d753fa11e2fd72", "c20f08a058a35d78f08a"})
 _OWNER_TOKEN = re.compile(r"\d{1,3}(?:\.\d{1,3}){3}|[A-Za-z0-9][A-Za-z0-9-]*")
 # Some names are ordinary words alone, so only their host or user form is banned: a second pass, on top of the parts above.
 _OWNER_FORM = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]*(?:\.local\b|@)", re.I)
-TREE_WIDE_FINGERPRINTS = frozenset({"c65d6e88416e61346130", "e61de7055a6e495661f4"})
+TREE_WIDE_FINGERPRINTS = frozenset({"c65d6e88416e61346130", "e61de7055a6e495661f4", "1f3476d753fa11e2fd72", "c20f08a058a35d78f08a"})
 
 
 def _owner_tokens(text: str) -> set[str]:
@@ -100,7 +102,7 @@ def test_public_docs_have_no_owner_specific_data(rel):
 # presets for) and `h2d_token` (the filament-ops token file name that `migrate-ops` reads) are product names
 # there, not the owner's data; the owner's scanner paths are added instead (the fingerprints apply as well).
 CODE_OWNER_DATA = tuple(b for b in OWNER_DATA if b not in ("sv08", "h2d_token")) + ("h2d-scanner",)
-CODE_SCAN = ("server/tests", "get.sh", "install", "reader", "tools")
+CODE_SCAN = ("server/tests", "pc-sync", "get.sh", "install", "reader", "tools")
 # ban lists themselves
 CODE_SCAN_SKIP = {"server/tests/test_readme.py", "reader/tools/test_ota_publish.py"}
 # the repository paths: filament-kit (README, get.sh), and the filament-library repo that release.yml builds from

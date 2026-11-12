@@ -346,7 +346,7 @@ def _registry_entries() -> list[dict]:
 
 
 def _exe_dir(value: str) -> Path | None:
-    """The folder of a registry path value: '"G:\\x\\Uninstall.exe"' or 'G:\\x\\orca-slicer.exe,0'."""
+    """The folder of a registry path value: '"C:\\x\\Uninstall.exe"' or 'C:\\x\\orca-slicer.exe,0'."""
     v = (value or "").strip()
     v = v[1:].partition('"')[0] if v.startswith('"') else v.partition(",")[0]
     return Path(v).parent if v else None

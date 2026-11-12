@@ -764,11 +764,11 @@ def orca_system_zip() -> bytes:
 
 def test_orca_live_upload_goes_to_live_orca_user(env):
     data = zip_of({"SUNLU PLA+ 2.0 @SV08 MAX 0.4.json": "{}", "SUNLU PLA+ 2.0 @SV08 MAX 0.4.info": "x\n"})
-    h = builds.store_upload("orca_live", io.BytesIO(data), device_id="a", user_id="f790a1c6-1")
+    h = builds.store_upload("orca_live", io.BytesIO(data), device_id="a", user_id="0badc0de-1")
     dest = profiles_dir() / "live" / "orca" / "user"
     assert h == builds.tree_hash(dest) and (dest / "SUNLU PLA+ 2.0 @SV08 MAX 0.4.info").is_file()
     meta = builds.meta()
-    assert (meta["orca_live_hash"], meta["orca_user_id"], meta["owner"]) == (h, "f790a1c6-1", "a")
+    assert (meta["orca_live_hash"], meta["orca_user_id"], meta["owner"]) == (h, "0badc0de-1", "a")
     assert "live_hash" not in meta and "user_id" not in meta           # the Bambu Studio side is untouched
     assert not (profiles_dir() / "live" / "user").exists()
 
