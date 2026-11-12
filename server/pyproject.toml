@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "filament-kit"
-version = "0.5.2"
+dynamic = ["version"]  # filament_kit.__version__, the one place the number is typed
 description = "Pair phones, read filament labels with Claude, write spools to Spoolman"
 requires-python = ">=3.12"
 license = {text = "GPL-3.0-or-later"}
@@ -30,6 +30,9 @@ push = ["pywebpush>=2.0,<3"]  # only for config web.push (Printers tab alerts); 
 
 [project.scripts]
 filament-kit = "filament_kit.cli:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "filament_kit.__version__"}
 
 [tool.setuptools.packages.find]
 include = ["filament_kit*"]
