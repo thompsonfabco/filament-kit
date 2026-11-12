@@ -51,9 +51,9 @@ fixed.
 13. ~~Uninstalling after a one-command install needed the kept tarball.~~ Fixed in v0.3.0:
     `sudo filament-kit uninstall [--purge]` runs the kept release's uninstaller.
 14. **Not checked here:** pairing from a real phone, and the APK install on a phone.
-15. **Klipper printers (v0.4.0).** The Android app has no Add screen for them; they appear once added with
-    `sudo filament-kit klipper add`. The setup page (v0.4.1) lists and tests them (Moonraker Test and Forget) but can't add
-    one either. Sovol SV08 MAX is verified; Sovol M1D is an unverified placeholder. The usage entries the kit logs for a Klipper printer can't be undone
+15. **Klipper printers (v0.4.0).** The Android app has no Add screen for them; add one on the setup page's Printers
+    tab (**Add a printer**, type Klipper, v0.4.3), in the phone web app's **Manage printers**, or with
+    `sudo filament-kit klipper add`. Sovol SV08 MAX is verified; Sovol M1D is an unverified placeholder. The usage entries the kit logs for a Klipper printer can't be undone
     from the kit; correct the spool in Spoolman.
 
 16. **The setup page's data still shows serials and addresses on the home network (v0.4.3).** The new Overview and job

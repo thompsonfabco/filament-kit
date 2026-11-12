@@ -376,17 +376,22 @@ that to work:
 - A server inside **WSL**, a virtual machine with NAT networking, or a container without host networking does
   not receive the announcements (and phones can't reach it). In WSL, switch to mirrored networking
   (`networkingMode=mirrored` in `.wslconfig`; see [Running the server in WSL](install-server.md#running-the-server-in-wsl)).
-  Otherwise add the printers by hand: `sudo filament-kit config` → **Printers** → **add printer**, and enter the
-  name, IP address, serial number and Access Code shown on the printer's screen.
+  Otherwise add the printers by hand with **Add a printer** on the setup page's Printers tab (below), or with
+  `sudo filament-kit config` → **Printers** → **add printer**.
 
 A printer appears in the app once it has been seen on the network (or added by hand with its IP address or its name,
 which is kept as you typed it and looked up each time it is used); you then enter its Access Code in the app to set it up.
 
 ### Add a printer
 
-Use either way:
+Use any of these ways:
 
-- In the app: open **Printers**. The printer must already be in the list (the server finds it on the network). Tap it, and type its **Access Code** (shown on the printer's screen).
+- On the setup page ([Install the server](install-server.md#the-setup-page-v040)): open **Printers**, **Add a printer**, choose
+  the type (Bambu or Klipper), and give an IP address or a name. A Bambu printer also needs its **Access Code** (shown
+  on the printer's screen; the serial number can be left blank, the kit reads it from the printer). A Klipper printer
+  needs no Access Code. The phone web app's **Manage printers** adds a printer too.
+- In the Android app: open **Printers**. The printer must already be in the list (the server finds it on the network).
+  Tap it, and type its **Access Code**. The app does not add Klipper printers.
 - On the Ubuntu computer: `sudo filament-kit config`, then **Printers** and **add printer**. Enter the name, IP
   address, serial number and Access Code.
 

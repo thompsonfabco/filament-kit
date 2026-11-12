@@ -218,7 +218,7 @@ you trusted stay trusted (the command says so and how many), unless you add `--r
 | Section | What you do there |
 |---|---|
 | **Anthropic API key** | Set, replace, remove or check the key for AI label reading. The page never shows the key, only whether one is set. |
-| **Printers** | Add a Bambu Lab printer by its IP address and Access Code, change a wrong Access Code, test the connection, forget a printer. Printers on the network that announce themselves are listed. With the klipper module on, Klipper printers are listed too (v0.4.1), with **Test** and **Forget** (no Access Code; add them with `sudo filament-kit klipper add`, see [Klipper printers](klipper.md)). |
+| **Printers** | **Add a printer** (v0.4.3): choose the type, then give an IP address or a name. A Bambu Lab printer also needs its Access Code; a Klipper printer (with the klipper module on) needs none, only an optional Moonraker API key (see [Klipper printers](klipper.md)). Also change a wrong Access Code, test the connection, forget a printer. Printers on the network that announce themselves are listed. |
 | **Web passphrase** | Set the passphrase that approves Claude's connector at its sign-in page. |
 | **Library token** | Optional. A GitHub token that lets the filament library download from a private repository. |
 | **Phones, PC and station** | Make the pairing QR code and code for a phone, or the link for the PC sync or the intake station, and remove a paired device. |
