@@ -441,7 +441,7 @@ def test_ctrl_c_at_the_prompt_flashes_nothing(tmp_path, monkeypatch, capsys):
 
 def test_the_station_is_stopped_around_the_probe_and_the_flash_and_restarted_after(tmp_path, monkeypatch):
     log = []
-    def run(cmd, check=False):
+    def run(cmd, check=False, timeout=None):
         log.append(cmd[1])
         return subprocess.CompletedProcess(cmd, 0)
     real = cli._station_stopped
@@ -459,10 +459,101 @@ def test_the_station_is_started_again_when_the_block_fails(monkeypatch):
     log = []
     monkeypatch.setattr(cli, "_is_root", lambda: True)
     monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
-    def run(cmd, check=False):
+    def run(cmd, check=False, timeout=None):
         log.append(cmd[1])
         return subprocess.CompletedProcess(cmd, 0)
     with pytest.raises(KeyboardInterrupt):
         with cli._station_stopped(run):
             raise KeyboardInterrupt
     assert log == ["is-active", "stop", "start"]
+
+
+def _systemctl(monkeypatch, stop_rc=0, active_rc=0, stop_exc=None, active_exc=None):
+    """A root run with systemd, and a fake systemctl: returns the log of its verbs."""
+    monkeypatch.setattr(cli, "_is_root", lambda: True)
+    monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
+    log = []
+    def run(cmd, check=False, timeout=None):
+        assert timeout, "every systemctl call needs a timeout"
+        log.append(cmd[1])
+        exc = {"stop": stop_exc, "is-active": active_exc}.get(cmd[1])
+        if exc:
+            raise exc
+        return subprocess.CompletedProcess(cmd, {"stop": stop_rc, "is-active": active_rc}.get(cmd[1], 0))
+    return run, log
+
+
+@pytest.mark.parametrize("kw", [dict(stop_rc=1), dict(stop_exc=OSError("denied")),
+                                dict(stop_exc=subprocess.TimeoutExpired("systemctl", 60)),
+                                dict(active_exc=subprocess.TimeoutExpired("systemctl", 15))])
+def test_a_station_that_cannot_be_stopped_refuses_the_block(monkeypatch, kw):
+    run, log = _systemctl(monkeypatch, **kw)
+    ran = []
+    with pytest.raises(cli._StationBusy, match="Nothing was flashed"):
+        with cli._station_stopped(run):
+            ran.append(1)
+    assert ran == [] and "start" not in log[:2]
+
+
+def test_a_failed_stop_restarts_what_was_running(monkeypatch):
+    run, log = _systemctl(monkeypatch, stop_rc=1)
+    with pytest.raises(cli._StationBusy):
+        with cli._station_stopped(run):
+            pass
+    assert log == ["is-active", "stop", "start"]
+
+
+def test_a_service_that_is_not_loaded_is_fine_and_missing_systemctl_is_skipped(monkeypatch):
+    run, log = _systemctl(monkeypatch, stop_rc=5, active_rc=3)
+    with cli._station_stopped(run):
+        log.append("body")
+    assert log == ["is-active", "stop", "body"]
+    run, log = _systemctl(monkeypatch, active_exc=FileNotFoundError("systemctl"))
+    with cli._station_stopped(run):
+        log.append("body")
+    assert log == ["is-active", "body"]
+
+
+def test_without_root_it_says_the_service_is_not_stopped(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "_is_root", lambda: False)
+    monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
+    def run(*a, **k):
+        raise AssertionError("systemctl called")
+    with cli._station_stopped(run):
+        pass
+    assert "not root" in capsys.readouterr().err
+
+
+def test_a_start_that_fails_is_reported_not_raised(monkeypatch, capsys):
+    run, log = _systemctl(monkeypatch)
+    real = run
+    def flaky(cmd, check=False, timeout=None):
+        if cmd[1] == "start":
+            raise subprocess.TimeoutExpired("systemctl", 60)
+        return real(cmd, check, timeout)
+    with cli._station_stopped(flaky):
+        pass
+    assert "could not start" in capsys.readouterr().err
+
+
+def test_a_lone_board_is_not_probed_or_flashed_when_the_station_will_not_stop(tmp_path, monkeypatch, capsys):
+    calls = _flash_env(monkeypatch, tmp_path, rc=0)
+    run, log = _systemctl(monkeypatch, stop_rc=1)
+    monkeypatch.setattr(cli, "_station_stopped", lambda real=cli._station_stopped: real(run))
+    monkeypatch.setattr(cli, "_answers_as_panel", lambda port: log.append("probe"))
+    def boom(prompt):
+        raise AssertionError("asked")
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask=boom, ask_secret=_secret("p", "p")) == 1
+    assert "probe" not in log and calls == [] and reader_tokens.TokenStore().list() == []
+    assert "could not stop" in capsys.readouterr().err
+
+
+def test_with_a_port_a_station_that_will_not_stop_leaves_no_token(tmp_path, monkeypatch, capsys):
+    calls = _flash_env(monkeypatch, tmp_path, rc=0)
+    run, log = _systemctl(monkeypatch, stop_exc=OSError("denied"))
+    monkeypatch.setattr(cli, "_station_stopped", lambda real=cli._station_stopped: real(run))
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)), port="/dev/ttyACM9"),
+                                ask_secret=_secret("p", "p")) == 1
+    err = capsys.readouterr().err
+    assert calls == [] and reader_tokens.TokenStore().list() == []
+    assert "could not stop" in err and "token was removed" in err

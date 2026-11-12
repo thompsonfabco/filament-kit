@@ -1932,21 +1932,47 @@ def _port_hint(who) -> str:
             f"(sudo usermod -aG dialout {name if who else '$USER'}, then log in again)")
 
 
+class _StationBusy(Exception):
+    """filament-kit-station.service could not be stopped, so it may still hold the serial ports."""
+
+
 @contextlib.contextmanager
 def _station_stopped(run=subprocess.run):
     """filament-kit-station.service stopped for the block (it holds the panel's and the reader's serial ports), and
-    started again after it, even on an error or Ctrl-C. Does nothing without root or systemd."""
+    started again after it, even on an error or Ctrl-C. Raises _StationBusy when the stop fails, as `station
+    flash-panel` refuses; without root it says it cannot stop the service and goes on (the owner still confirms the
+    board). Does nothing without systemd or systemctl."""
     service = "filament-kit-station.service"
-    if _no_systemd() or not _is_root():
+    if _no_systemd():
         yield
         return
-    was_active = run(["systemctl", "is-active", service], check=False).returncode == 0  # only restart what was running
+    if not _is_root():
+        print(f"note: not root, so {service} (if it runs) is not stopped and may hold the board's port; run with "
+              "sudo for a reliable check.", file=sys.stderr)
+        yield
+        return
     try:
-        run(["systemctl", "stop", service], check=False)
+        was_active = run(["systemctl", "is-active", service], check=False, timeout=15).returncode == 0
+    except FileNotFoundError:  # no systemctl: no service holding a port
+        yield
+        return
+    except (OSError, subprocess.SubprocessError) as e:
+        raise _StationBusy(f"could not ask systemd about {service} ({e}). Nothing was flashed.")
+    try:
+        try:
+            stopped = run(["systemctl", "stop", service], check=False, timeout=60)
+        except (OSError, subprocess.SubprocessError) as e:
+            raise _StationBusy(f"could not stop {service} ({e}). Nothing was flashed.")
+        if stopped.returncode not in (0, 5):  # 5: the unit isn't loaded (no service to stop)
+            raise _StationBusy(f"could not stop {service} (systemctl exit {stopped.returncode}); it may hold the "
+                               "board's port. Nothing was flashed.")
         yield
     finally:
-        if was_active:
-            run(["systemctl", "start", service], check=False)
+        if was_active:  # only restart what was running
+            try:
+                run(["systemctl", "start", service], check=False, timeout=60)
+            except (OSError, subprocess.SubprocessError) as e:
+                print(f"could not start {service} again: {e}", file=sys.stderr)
 
 
 def _answers_as_panel(port: str) -> bool:
@@ -1999,8 +2025,12 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
         elif len(found) == 1:
             port = found[0].port
             what = f"{found[0].by_id or port} ({found[0].product})"
-            with _station_stopped():    # the service would hold the panel's port, and a probe would reset it
-                is_panel = _answers_as_panel(port)
+            try:
+                with _station_stopped():    # the service would hold the panel's port, and a probe would reset it
+                    is_panel = _answers_as_panel(port)
+            except _StationBusy as e:
+                print(f"error: {e}", file=sys.stderr)
+                return 1
             if is_panel:
                 print(f"error: {what} answers as the Printer Station's button panel, not a reader; it was not "
                       "flashed. Plug the reader in, or name its port with --port.", file=sys.stderr)
@@ -2033,8 +2063,12 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
         except OSError as e:
             print(f"error: cannot read {a.secrets} ({e.strerror or e})", file=sys.stderr)
             return 1
-        with _station_stopped():
-            rc = rs.flash(Path(a.source), text, port, pio, who=who)
+        try:
+            with _station_stopped():
+                rc = rs.flash(Path(a.source), text, port, pio, who=who)
+        except _StationBusy as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 1
         if rc != 0:
             print(f"error: the build or flash failed (PlatformIO exit {rc}){_port_hint(who)}", file=sys.stderr)
             return 1
@@ -2095,15 +2129,21 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
                   "pio run -e esp32-c3-supermini -t upload), or here with: filament-kit reader setup --secrets "
                   f"{out} --source <checkout>/reader")
     if flashing:
-        with _station_stopped():
-            rc = rs.flash(Path(a.source), text, port, pio, who=who)
+        busy = None
+        try:
+            with _station_stopped():
+                rc = rs.flash(Path(a.source), text, port, pio, who=who)
+        except _StationBusy as e:
+            rc, busy = 1, e
         if rc != 0:
             dropped = bool(tid) and not a.out
             if dropped:
                 reader_tokens.TokenStore().revoke(tid)
-            print(f"error: the build or flash failed (PlatformIO exit {rc})"
+            print(f"error: {busy}" if busy else f"error: the build or flash failed (PlatformIO exit {rc})"
                   + ("; the new token was removed, since nothing holds it" if dropped else "") + _port_hint(who),
                   file=sys.stderr)
+            if busy and dropped:
+                print("The new token was removed, since nothing holds it.", file=sys.stderr)
             return 1
         print(f"Flashed. The reader joins {ssid} and calls {base}.")
     if a.out or flashing:
