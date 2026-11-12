@@ -233,7 +233,6 @@ def test_fetch_keeps_the_model_when_the_json_fails(tmp_path, fake_voice):
     """M6: the .onnx that arrived stays (checked); only the missing .json is fetched on the next run."""
     assert voice.fetch(tmp_path, urlopen=urlopen_serving({MODEL: ONNX}, [])) == "offline"
     assert (tmp_path / MODEL).read_bytes() == ONNX and not (tmp_path / (MODEL + ".json")).exists()
-    assert "nothing kept" not in voice.fetch.__doc__ and "is kept" in voice.fetch.__doc__
     seen = []
     assert voice.fetch(tmp_path, urlopen=urlopen_serving({MODEL: ONNX, MODEL + ".json": JSON}, seen)) == "installed"
     assert seen == [URL + MODEL + ".json"]
@@ -298,7 +297,7 @@ def test_panel_md_and_panel_py_know_the_current_firmware():
     assert "10: ESP32-C3, I2S speech, V volume, chip token" in text
     assert "`V <percent>`" in text.split("## Serial protocol")[1]
     assert "11: PN532 on I2C, TAG and NFC lines" in text
-    assert "Protocol (firmware 11)" in panel.__doc__
+    assert panel.__doc__ is None or "Protocol (firmware 11)" in panel.__doc__     # python -OO strips docstrings
     assert "station module switched on later" in text or "modules enable station" in text
 
 
