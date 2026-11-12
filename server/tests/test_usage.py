@@ -1,6 +1,5 @@
 """Usage tracking: a fake printer (fake paho + fake FTPS) runs prints; deductions land in the fake Spoolman."""
 import io
-import json
 import os
 import zipfile
 

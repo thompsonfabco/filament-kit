@@ -1,5 +1,4 @@
 """P2: the layout fingerprint in the slot map, `stale` on a layout change, and the idle auto re-map."""
-import copy
 
 import pytest
 

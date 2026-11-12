@@ -14,7 +14,7 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
-from filament_kit.station import air, beep, camera, nfc, panel, speech, wire
+from filament_kit.station import air, beep, camera, panel, speech, wire
 from filament_kit.station import http as station_http
 from filament_kit.station import state as st
 
