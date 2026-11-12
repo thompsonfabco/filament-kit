@@ -1049,9 +1049,10 @@ def _firewall_note(cfg: dict, on: set) -> None:
         ports += [f"{int(cfg.get('port', 8710))}/tcp", "5353/udp"]
     if "spoolman" in on:
         ports.append("7912/tcp")
-    if "web" in on:
+    if "remote" in on:        # nginx's; the web unit listens on 127.0.0.1 only
         ports.append("443/tcp")
-    missing = [p for p in ports if p not in status]
+    words = status.split()      # whole rule words: a rule for 8443/tcp is not one for 443/tcp; "443" alone covers both
+    missing = [p for p in ports if p not in words and p.split("/")[0] not in words]
     if missing:
         print("\nThe ufw firewall is on, and the kit does not change it. For other devices to reach this computer, run:")
         for p in missing:

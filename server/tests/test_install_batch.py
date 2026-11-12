@@ -364,6 +364,22 @@ def test_finish_follows_the_configured_port(finish_env, monkeypatch, capsys):
     assert "sudo ufw allow 9000/tcp" in out and "8710/tcp" not in out
 
 
+def test_finish_asks_for_443_only_with_remote_and_matches_whole_rules(finish_env, monkeypatch, capsys):
+    calls, run = finish_env
+    base = "Status: active\n8710/tcp ALLOW\n5353/udp ALLOW\n7912/tcp ALLOW\n"
+    _ufw(monkeypatch, base)
+    _save({"server", "web"})
+    apply.finish(config.load(), run=run)
+    assert "443" not in capsys.readouterr().out                       # web alone: nginx is not there
+    _save({"server", "web", "remote"})
+    _ufw(monkeypatch, base + "8443/tcp ALLOW\n")
+    apply.finish(config.load(), run=run)
+    assert "sudo ufw allow 443/tcp" in capsys.readouterr().out         # 8443 is not 443
+    _ufw(monkeypatch, base + "443 ALLOW\n")
+    apply.finish(config.load(), run=run)
+    assert "ufw" not in capsys.readouterr().out
+
+
 def test_installer_messages_name_a_command_that_exists():
     root = Path(__file__).resolve().parents[2]
     text = (root / "install/install.sh").read_text(encoding="utf-8")
