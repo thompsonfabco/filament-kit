@@ -182,6 +182,8 @@ WEB_ROUTES = (
     ("POST", "/api/profiles/web/line_add"),
     ("POST", "/api/profiles/web/line_new"),
     ("POST", "/api/profiles/web/generate"),
+    ("POST", "/api/profiles/web/updates_accept"),
+    ("POST", "/api/profiles/web/restore_deleted"),
 )
 _WEB_MATCH = {(m, re.compile(re.sub(r"\{\w+\}", "[^/]+", re.sub(r"\{\w+:path\}", ".+", r)))) for m, r in WEB_ROUTES}
 WEB_ONLY_PREFIX = "/api/profiles/web/"  # the web unit's preset writes: no phone or PC calls them

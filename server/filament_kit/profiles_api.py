@@ -10,8 +10,12 @@ Content-Length over the cap is refused at once (413), then `request.stream()` is
 in the threadpool through a small blocking reader, which stops at the cap (never `await request.body()`).
 
 `GET /api/profiles/updates` lists the presets already in the slicers whose generated values differ (never written
-over until the owner accepts them, `filament-kit profiles apply-updates`; builds.updates_view); the install report
-(`POST /api/sync/installed`) may name what the PC wrote (`written`).
+over until the owner accepts them; builds.updates_view); the install report (`POST /api/sync/installed`) may name what
+the PC wrote (`written`). `POST /api/profiles/updates/accept {stamp, names}` accepts exactly what that list showed
+(the same checks as the setup page's accept: 409 `updates_changed` once a newer build has come, so nothing unseen ever
+replaces a preset); `POST /api/profiles/restore-deleted {}` has the next build bring back presets deleted in Bambu
+Studio. Both are for any paired device (the Android app); the web unit's phone page sends the same through
+`/api/profiles/web/updates_accept` and `/api/profiles/web/restore_deleted`.
 
 `PUT /api/sync/live?fresh=1`: the PC's Bambu Studio folder changed (stable <-> Beta); the server treats
 the upload as that folder's first sync (builds.store_upload `fresh`). `POST /api/sync/heartbeat`:
@@ -356,6 +360,17 @@ def routes(authed, sm) -> list[Route]:
         return JSONResponse(await run_in_threadpool(builds.updates_view))
 
     @authed
+    async def profiles_updates_accept(request: Request):
+        body = await _json(request)
+        return JSONResponse(await run_in_threadpool(
+            accept_updates, body, request.state.device, "preset updates accept"))
+
+    @authed
+    async def profiles_restore_deleted(request: Request):
+        await _json(request)
+        return JSONResponse(await run_in_threadpool(restore_deleted, request.state.device, "restore deleted presets"))
+
+    @authed
     async def profiles_lines(request: Request):
         def build() -> list[dict]:
             counts = _preset_counts()
@@ -442,6 +457,8 @@ def routes(authed, sm) -> list[Route]:
         Route("/api/sync/heartbeat", sync_heartbeat, methods=["POST"]),
         Route("/api/profiles/status", profiles_status),
         Route("/api/profiles/updates", profiles_updates),
+        Route("/api/profiles/updates/accept", profiles_updates_accept, methods=["POST"]),
+        Route("/api/profiles/restore-deleted", profiles_restore_deleted, methods=["POST"]),
         Route("/api/profiles/lines", profiles_lines),
         Route("/api/profiles/lines/{line_id}", line_patch, methods=["PATCH"]),
         Route("/api/profiles/parents", parents),
@@ -484,6 +501,44 @@ def _text_field(body: dict, key: str, required: bool = True) -> str:
     return v
 
 
+MAX_ACCEPT = 2000          # preset names in one accept
+
+
+def _accept_args(body: dict) -> tuple[str, set[str]]:
+    """(stamp, names) of an accept, checked as the setup page's route checks them."""
+    stamp, names = body.get("stamp"), body.get("names")
+    if not (isinstance(stamp, str) and 0 < len(stamp) <= 200 and isinstance(names, list) and names
+            and len(names) <= MAX_ACCEPT and all(isinstance(n, str) and 0 < len(n) <= 400 for n in names)):
+        raise _bad("accepting names what the list showed: stamp (text) and names (a list of preset names)")
+    return stamp, set(names)
+
+
+def accept_updates(body: dict, device, what: str) -> dict:
+    """Accept exactly the presets the owner was shown (builds.apply_updates with the list's stamp): {stamp,
+    accepted: [{line_id, target, name, file, keys}]}. ProfileError 409 `updates_changed` after a newer build."""
+    stamp, names = _accept_args(body)
+
+    def run() -> dict:
+        try:
+            return builds.apply_updates(all_=True, dry_run=False, only=names, expect_stamp=stamp)
+        except builds.UpdatesChanged:
+            raise ProfileError(409, "updates_changed",
+                               "the updates changed since this list: load them again") from None
+    r = _audit(what, device, run, names=len(names))
+    return {"stamp": r.get("stamp"),
+            "accepted": [{"line_id": u["line_id"], "target": u["target"], "name": u["name"], "file": u.get("file"),
+                          "keys": u["keys"]} for u in r.get("chosen") or []]}
+
+
+def restore_deleted(device, what: str) -> dict:
+    """The next build brings back the presets deleted in Bambu Studio (as the setup page's button), and is asked for."""
+    def run() -> None:
+        builds.restore_deleted_next()
+        builds.request_rebuild("restore presets deleted in Bambu Studio")
+    _audit(what, device, run)
+    return {"ok": True}
+
+
 def web_routes(authed, sm) -> list[Route]:
     """The MCP tools' and phone web app's preset writes, as the web unit sends them through its kit token:
     `web.presets` runs here, in the kit (the owner of profiles/), so the web unit only reads that folder."""
@@ -510,6 +565,19 @@ def web_routes(authed, sm) -> list[Route]:
         return JSONResponse(await run_in_threadpool(
             _audit, "web generate", request.state.device, presets.generate))
 
+    @authed
+    async def updates_accept(request: Request):
+        body = await _json(request)
+        return JSONResponse(await run_in_threadpool(
+            accept_updates, body, request.state.device, "web preset updates accept"))
+
+    @authed
+    async def restore(request: Request):
+        await _json(request)
+        return JSONResponse(await run_in_threadpool(restore_deleted, request.state.device, "web restore deleted"))
+
     return [Route("/api/profiles/web/line_add", line_add, methods=["POST"]),
             Route("/api/profiles/web/line_new", line_new, methods=["POST"]),
-            Route("/api/profiles/web/generate", generate, methods=["POST"])]
+            Route("/api/profiles/web/generate", generate, methods=["POST"]),
+            Route("/api/profiles/web/updates_accept", updates_accept, methods=["POST"]),
+            Route("/api/profiles/web/restore_deleted", restore, methods=["POST"])]
