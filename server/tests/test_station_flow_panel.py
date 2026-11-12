@@ -7,6 +7,7 @@ import json
 import os
 import threading
 import time
+import types
 import urllib.request
 from http.server import ThreadingHTTPServer
 
@@ -440,16 +441,37 @@ def test_the_flow_times_out_without_a_panel(rig, monkeypatch):
         rounds.append(s)
         if len(rounds) > 1:
             raise SystemExit
-    monkeypatch.setattr(flow.time, "sleep", one_round)
+    monkeypatch.setattr(flow, "time", types.SimpleNamespace(sleep=one_round, time=time.time))   # this module's clock only
     with pytest.raises(SystemExit):
         flow.tick_loop()
     assert rig.step() == "idle" and st.state["tag"] is None and rounds[0] == 1
 
 
-def test_main_starts_the_flow_timer():
-    import inspect
+def test_main_starts_the_flow_timer(monkeypatch):
     from filament_kit.station import __main__ as station_main
-    assert "flow.tick_loop" in inspect.getsource(station_main.main)
+    started = []
+
+    class FakeThread:
+        def __init__(self, target, daemon=False):
+            self.target = target
+
+        def start(self):
+            started.append(self.target)
+
+    class FakeServer:
+        def __init__(self, *a, **kw):
+            pass
+
+        def serve_forever(self):
+            pass
+    monkeypatch.setattr(station_main, "threading", types.SimpleNamespace(Thread=FakeThread))
+    monkeypatch.setattr(station_main, "ThreadingHTTPServer", FakeServer)
+    monkeypatch.setattr(station_main, "signal", types.SimpleNamespace(SIGTERM=15, SIGINT=2, signal=lambda *a: None))
+    monkeypatch.setattr(station_main.beep, "beep_device", lambda: None)
+    monkeypatch.setattr(station_main.camera, "camera_dev", lambda: None)
+    monkeypatch.setattr(station_main.flow, "api", lambda: types.SimpleNamespace(paired=True))
+    station_main.main()
+    assert flow.tick_loop in started
 
 
 # --- final fix wave: tag_not_linked keeps the spool, so the next long press can't add a second ----------------------

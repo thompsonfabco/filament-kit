@@ -1,4 +1,7 @@
 import asyncio
+import types
+
+import pytest
 
 from filament_kit import __main__ as m
 from filament_kit.bridge import camera, registry
@@ -85,7 +88,7 @@ def test_main_routes_app_info_logs_to_the_journal(tmp_path, monkeypatch):
     monkeypatch.setattr(log, "propagate", True)  # restored afterwards so caplog-based tests still see records
     m.main()
     assert log.isEnabledFor(logging.INFO)
-    assert log.handlers or logging.getLogger().handlers
+    assert log.handlers       # main() attached one to our logger (pytest's own are on the root logger, not here)
 
 
 def test_manager_start_failure_does_not_leak_listener(tmp_path, monkeypatch):
@@ -112,10 +115,8 @@ def test_manager_start_failure_does_not_leak_listener(tmp_path, monkeypatch):
     async def run():
         async with m.printer_lifespan(Bad(), listener_factory=L)(None):
             pass
-    try:
+    with pytest.raises(RuntimeError, match="boom"):
         asyncio.run(run())
-    except RuntimeError:
-        pass
     assert events == ["mx", "lx"]
 
 
@@ -166,10 +167,8 @@ def test_camera_hub_shut_down_even_if_manager_stop_fails(tmp_path, monkeypatch):
     async def run():
         async with m.printer_lifespan(Bad(), listener_factory=no_listener, camera_hub=Hub(events))(None):
             pass
-    try:
+    with pytest.raises(RuntimeError, match="stop failed"):
         asyncio.run(run())
-    except RuntimeError:
-        pass
     assert events == ["hub"]
 
 
@@ -282,7 +281,7 @@ def test_corrupt_registry_logged_at_most_once_a_minute(tmp_path, monkeypatch, ca
     monkeypatch.setenv("FK_STATE", str(tmp_path))
     (tmp_path / "printers.json").write_text("{broken")
     clock = [1000.0]
-    monkeypatch.setattr(m.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(m, "time", types.SimpleNamespace(monotonic=lambda: clock[0]))   # this module's clock only
     cb = m.discovery_callback(StateMgr({}))
     with caplog.at_level(logging.DEBUG):
         for _ in range(5):
