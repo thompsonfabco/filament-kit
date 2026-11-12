@@ -410,6 +410,16 @@ def test_a_spool_change_during_set_up_is_not_overwritten(moonraker, spoolman_url
         fam.stop()
 
 
+def test_set_up_that_outlives_stop_leaves_no_subscriber_running(env, moonraker, spoolman_url):
+    from filament_kit.bridge.klipper.manager import _Conn
+    pid = registry.add_klipper("P", moonraker.host, moonraker.port).serial
+    fam = KlipperFamily(Spoolman(spoolman_url), backoff=(0.1, 0.4))
+    conn = _Conn(fam, registry.load()[pid])
+    conn._stop.set()                        # the printer was removed while the set-up ran
+    conn._setup()
+    assert conn.sub is not None and conn.sub._stop.is_set() and not conn.sub.connected
+
+
 # --- the Scan a client can ask for ------------------------------------------------------------------------------------
 OWN = ipaddress.ip_network("10.9.8.0/24")
 

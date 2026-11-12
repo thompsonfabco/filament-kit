@@ -155,6 +155,8 @@ class _Conn:
         if self.sub is None:
             self.sub = Subscriber(c, wanted, self._on_status, self._on_event, backoff=self.fam.backoff,
                                   on_connect=self._on_subscribed).start()
+            if self._stop.is_set():         # stop() ran while this set-up did and found no subscriber to stop
+                self.sub.stop()
         else:
             self.sub.set_objects(wanted)
         # wait briefly for the first snapshot so callers see filled-in status
