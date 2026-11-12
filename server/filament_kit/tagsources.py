@@ -29,6 +29,18 @@ _failed: dict[str, float] = {}  # url -> monotonic time of its last failure
 _lock = threading.Lock()
 
 
+class _WebOnly(urllib.request.HTTPRedirectHandler):
+    """A source's server may answer with a 30x to any scheme urllib opens (ftp:); follow only http(s)."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not _web(newurl):
+            raise urllib.error.HTTPError(req.full_url, code, "redirect to a non-http(s) address refused", headers, fp)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+_opener = urllib.request.build_opener(_WebOnly)
+
+
 def _fetch(url: str) -> dict | None:
     """One source's tag, or None for no tag / a failure (which also starts its back-off)."""
     with _lock:
@@ -36,7 +48,7 @@ def _fetch(url: str) -> dict | None:
     if failed is not None and time.monotonic() - failed < BACKOFF:
         return None
     try:
-        with urllib.request.urlopen(url, timeout=TIMEOUT) as resp:
+        with _opener.open(url, timeout=TIMEOUT) as resp:
             if resp.status != 200:
                 raise ValueError(f"status {resp.status}")
             data = json.loads(resp.read())
