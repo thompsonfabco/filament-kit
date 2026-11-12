@@ -747,10 +747,17 @@ def cmd_intake(args) -> int:
                     print(f"    filament {rv['filaments']['orphaned']} has no spools left (not deleted)")
             return 0
         if args.intake_cmd == "revise":
-            if "ai_intake" not in modules.enabled(config.load()):
-                _err_line("label reading (ai_intake) is off on this server: use filament-kit intake edit")
+            from . import intake
+            cfg = config.load()
+            if not intake.reading_on(cfg):
+                _err_line("label reading (ai_intake or local_intake) is off on this server: use filament-kit intake "
+                          "edit")
                 return 1
             p = intake_history.revise(sm, args.id, args.note, args.item)
+            if p.get("reader"):
+                print(f"Read again by {'the local reader' if p['reader'] == 'local' else 'Claude'}"
+                      + (f", {round(p['confidence'] * 100)} % sure" if p.get("confidence") is not None else "")
+                      + (f" ({p['note']})" if p.get("note") else "") + ".")
             print(f"Before: {_show_values(p['before'])}\nAfter:  {_show_values(p['after'])}")
             if not p["changes"]:
                 print("The AI changed nothing.")

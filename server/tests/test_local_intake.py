@@ -46,7 +46,9 @@ def sm(spoolman_fake_store, spoolman_url):
     st["vendors"][1] = {"id": 1, "name": "SUNLU", "empty_spool_weight": 213}
     st["filaments"][1] = {"id": 1, "name": "PLA+ Grey", "vendor_id": 1, "material": "PLA", "weight": 1000,
                           "spool_weight": 213, "density": 1.24, "color_hex": "8A8C8E", "comment": "Price: $20/kg"}
-    return Spoolman(spoolman_url)
+    s = Spoolman(spoolman_url)
+    s.ensure_fields()
+    return s
 
 
 def setup(url: str, mods=None, reader="auto") -> None:
@@ -424,3 +426,67 @@ def test_cli_config_label_reader(monkeypatch):
     answers = iter(["", "not a url", "tpu"])
     cli._label_reader_menu(cfg)
     assert cfg["intake"]["reader"] == "cloud-then-local" and cfg["local_intake"]["tier"] == "gpu"
+
+
+# ---------- the intake history's "correct it" with the local reader ----------
+
+RULES = {"pla_location": "Rack 1", "box_prefix": "Storage box ", "box_count": 2, "overflow": "Overflow",
+         "sealed_location": "Sealed stock"}
+
+
+def _record(sm, photo=True):
+    from filament_kit import intake_history, inventory
+    it = {k: v for k, v in lrf.ITEM.items() if k not in ("photos", "existing_filament_id", "estimates",
+                                                         "sealed_reason", "line")}
+    if photo:
+        intake_history.stash_read("r1", [JPEG], {"items": [dict(lrf.ITEM)]}, "", None)
+    r = inventory.add_and_link(sm, [it], RULES, False, None)
+    return intake_history.record_save(r.saved, source="phone", read_id="r1" if photo else None)
+
+
+def test_the_local_reader_revises_a_record_for_free(sm, fake_reader):
+    from filament_kit import intake_history
+    url, data = fake_reader
+    setup(url, {"spoolman": True, "server": True, "local_intake": True})
+    hid, cap = _record(sm), Cap()
+    p = intake_history.revise(sm, hid, "brand is Polymaker", charge=cap.charge)
+    assert p["reader"] == "local" and p["after"]["vendor"] == "Polymaker" and "vendor" in p["changes"]
+    assert cap.taken == 0
+    body = data["revises"][0]["body"]
+    assert body["note"] == "brand is Polymaker" and body["previous"]["vendor"] == "SUNLU"
+    assert base64.b64decode(body["images_b64"][0]) == JPEG
+    rec = intake_history.apply(sm, hid, proposal=p["proposal"])
+    assert rec["state"] == "revised_ai"
+
+
+def test_a_local_reader_without_revise_gives_way_to_claude(sm, fake_reader):
+    from filament_kit import intake_history
+    url, data = fake_reader
+    setup(url)
+    data["errors"] = [(404, "not_found", None)]
+    hid, cap = _record(sm), Cap()
+    p = intake_history.revise(sm, hid, "brand is Polymaker", client=FakeClaude(CLOUD), charge=cap.charge)
+    assert p["reader"] == "cloud" and cap.taken == 1 and "cannot revise" in p["note"]
+
+
+def test_a_record_without_a_photo_is_not_sent_to_the_local_reader(sm, fake_reader):
+    from filament_kit import intake_history
+    url, data = fake_reader
+    setup(url, {"spoolman": True, "server": True, "local_intake": True})
+    hid = _record(sm, photo=False)
+    with pytest.raises(intake_history.HistoryError) as e:
+        intake_history.revise(sm, hid, "brand is X")
+    assert e.value.status == 409 and e.value.code == "no_photo" and not data["revises"]
+    setup(url)                                       # with Claude on as well, Claude revises it
+    p = intake_history.revise(sm, hid, "brand is Polymaker", client=FakeClaude(CLOUD))
+    assert p["reader"] == "cloud" and not data["revises"]
+
+
+def test_api_revise_with_the_local_reader_uses_no_cap(sm, fake_reader):
+    url, _ = fake_reader
+    setup(url, {"spoolman": True, "server": True, "local_intake": True})
+    hid = _record(sm)
+    c, h = _client(sm)
+    r = c.post(f"/api/intake/history/{hid}/revise", headers=h, json={"note": "brand is Polymaker"})
+    assert r.status_code == 200, r.text
+    assert r.json()["reader"] == "local" and intake.reads_today(config.paths().state / "reads.json") == 0

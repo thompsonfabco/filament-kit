@@ -421,10 +421,13 @@ def _cloud(cfg: dict, fils: list[dict], vendors: list[dict], images: list[bytes]
 
 
 def _local(cfg: dict, fils: list[dict], vendors: list[dict], images: list[bytes], hint: str, tag: dict | None,
-           orders: list[dict] | None) -> dict:
-    """One read by the local reader: {items, questions, usage, confidence, unsure, tier}. Raises ReadError."""
+           orders: list[dict] | None, revise: tuple[dict, str] | None = None) -> dict:
+    """One read by the local reader: {items, questions, usage, confidence, unsure, tier}; with `revise`
+    ((the saved values, the owner's note)) its /v1/revise. Raises ReadError."""
     fl, vl = local_reader.catalog(fils, vendors, lines._extra_line)   # the order history is not sent (contract v1)
     try:
+        if revise is not None:
+            return local_reader.revise(cfg, images, revise[0], revise[1], fl, vl)
         return local_reader.read(cfg, images, hint, fl, vl, tag)
     except local_reader.LocalReaderError as e:
         raise ReadError("local_" + e.code, str(e)) from None
@@ -472,6 +475,11 @@ READER_ORDERS = {"cloud": ("cloud",), "local": ("local",), "local-then-cloud": (
 READER_CHOICES = ("auto", *READER_ORDERS)
 
 
+def reading_on(cfg: dict) -> bool:
+    """A label reader (Claude or the local one) is switched on."""
+    return bool(reader_order(cfg))
+
+
 def reader_order(cfg: dict) -> list[str]:
     """The readers this server would try, in order: "cloud" needs ai_intake, "local" needs local_intake. Empty
     when neither is on."""
@@ -485,7 +493,8 @@ def reader_order(cfg: dict) -> list[str]:
 
 def _call(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | None, client, *,
           orders: list[dict] | None = None, station_state: dict | None = None,
-          fresh_tag: dict | None = None, readers: list[str] | None = None, charge=None) -> dict:
+          fresh_tag: dict | None = None, readers: list[str] | None = None, charge=None,
+          revise: tuple[dict, str] | None = None) -> dict:
     """Read with the configured readers (`readers` overrides; none configured: the cloud, as before the local
     reader existed). `charge()` is called just before a cloud read (the daily cap: it may raise CapReached) and
     returns a refund callable or None; a local read is free.
@@ -493,7 +502,11 @@ def _call(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | None, cli
     local then cloud: an unsure or failed local read goes on to the cloud; if the cloud cannot read (cap reached,
     error) an unsure local answer is returned with a `note`, a failed one gives the cloud's error. cloud then local
     is the same the other way round, except that a cloud answer is never "unsure". The result says which reader
-    answered (`reader`), its `confidence` (local only) and the local `tier`."""
+    answered (`reader`), its `confidence` (local only) and the local `tier`.
+
+    `revise` (the intake history's "correct it": (the saved values, the owner's note)): the local reader gets its
+    /v1/revise call; the cloud gets `hint` (the prompt with both). A local reader that cannot revise is a failed
+    local read, so the cloud may still answer."""
     cfg = config.load()
     order = list(readers) if readers is not None else (reader_order(cfg) or ["cloud"])
     fils, vendors = sm.get("/filament"), sm.get("/vendor")
@@ -505,7 +518,7 @@ def _call(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | None, cli
     for reader in order:
         if reader == "local":
             try:
-                raw = _local(cfg, fils, vendors, images, hint, tag, orders)
+                raw = _local(cfg, fils, vendors, images, hint, tag, orders, revise)
             except ReadError as e:
                 log.warning("local label reader: %s", e)
                 err, notes = err or e, notes + [f"local reader: {e}"]

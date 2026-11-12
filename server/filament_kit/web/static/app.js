@@ -147,6 +147,7 @@ function historyTab() {
       return [h("p", { textContent: "The AI suggests:" }),
         ...p.changes.map((k) => h("p", { textContent: `${k}: ${p.before[k]} → ${p.after[k]}` })),
         p.no_photo ? h("p", { class: "muted", textContent: "No photo was kept: it worked from the saved values and your note." }) : null,
+        p.reader ? h("p", { class: "muted", textContent: `Read again by ${p.reader === "local" ? "the local reader" : "Claude"}${p.confidence != null ? ", " + Math.round(p.confidence * 100) + " % sure" : ""}${p.note ? " (" + p.note + ")" : ""}.` }) : null,
         h("div", { class: "row" },
           h("button", { textContent: "Accept", on: { click: () => act(id, ai, det, msg, "apply", { proposal: p.proposal }) } }),
           h("button", { class: "secondary", textContent: "Discard", on: { click: () => msg.replaceChildren() } }))];

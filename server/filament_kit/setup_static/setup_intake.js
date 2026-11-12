@@ -26,7 +26,7 @@ function intakeTab() {
   const el = card("Intake history", body, box);
   api("intake/history").then((d) => fill(body,
     h("p", { class: "muted", textContent: `The newest ${d.keep} spool additions are kept with the photos that were taken (${intakeSize(d.photo_bytes)} of photos now). Change the number in Settings, General.` }),
-    d.ai ? null : h("p", { class: "muted", textContent: "Label reading (the ai_intake module) is off on this server: revisions are by hand." }),
+    d.ai ? null : h("p", { class: "muted", textContent: "Label reading (ai_intake or local_intake) is off on this server: revisions are by hand." }),
     ...(d.records.length ? d.records.map((r) => intakeRow(r, d.ai)) : [h("p", { class: "muted", textContent: "No spool has been added since the history started." })])))
     .catch((e) => say(body, e.message, false));
   return [el];
@@ -106,6 +106,7 @@ function intakeProposal(p, id, ai, detail, note) {
   fill(note,
     h("p", { textContent: p.changes.length ? "The AI suggests:" : "The AI changed nothing." }),
     p.no_photo ? h("p", { class: "muted", textContent: "No photo was kept for this record: it worked from the saved values and your note." }) : null,
+    p.reader ? h("p", { class: "muted", textContent: `Read again by ${p.reader === "local" ? "the local reader" : "Claude"}${p.confidence != null ? ", " + Math.round(p.confidence * 100) + " % sure" : ""}${p.note ? " (" + p.note + ")" : ""}.` }) : null,
     ...rows,
     p.changes.length ? h("div", { class: "row" },
       h("button", { textContent: "Accept", on: { click: () => intakePost(note, histPath(id, "apply"), { proposal: p.proposal }, (r) => intakeDone(r, id, ai, detail)) } }),

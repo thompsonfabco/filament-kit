@@ -228,7 +228,7 @@ class IntakeApp:
         return route
 
     def _ai(self) -> bool:
-        return "ai_intake" in modules.enabled(self.tools.cfg())
+        return {"ai_intake", "local_intake"} & modules.enabled(self.tools.cfg()) != set()
 
     async def history_list(self, request: Request):
         from .. import intake_history
@@ -249,19 +249,21 @@ class IntakeApp:
 
         def run() -> dict:
             if not self._ai():
-                raise intake_history.HistoryError(409, "ai_off", "label reading (the ai_intake module) is off on this "
-                                                                 "server: edit the values by hand")
-            cap = KitCap(self.kit)              # a revision is a read: the kit's daily cap
-            cap.take()
-            try:
-                return intake_history.revise(self.tools.sm, request.path_params["hid"], body.get("note"),
-                                             body.get("item"), client=self.claude)
-            except Exception:
+                raise intake_history.HistoryError(409, "ai_off", "label reading (ai_intake or local_intake) is off "
+                                                                 "on this server: edit the values by hand")
+            cap = KitCap(self.kit)              # a revision by Claude is a read: the kit's daily cap
+
+            def charge():
+                cap.take()
+                return refund
+
+            def refund():
                 try:
                     cap.refund()
                 except Exception as e:  # noqa: BLE001 - best effort
                     log.warning("cap refund failed: %s", e)
-                raise
+            return intake_history.revise(self.tools.sm, request.path_params["hid"], body.get("note"),
+                                         body.get("item"), client=self.claude, charge=charge)
         return await anyio.to_thread.run_sync(run)
 
     async def history_apply(self, request: Request):

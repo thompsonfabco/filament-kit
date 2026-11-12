@@ -1063,7 +1063,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         return route
 
     def _ai_on() -> bool:
-        return "ai_intake" in modules.enabled(config.load())
+        return intake.reading_on(config.load())
 
     async def history_list(request: Request):
         return await run_in_threadpool(lambda: intake_history.list_records(_ai_on()))
@@ -1079,17 +1079,12 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         body = await _json(request)
         device = getattr(request.state, "device", None)
 
-        def run() -> dict:
-            ticket = cap.take(device)       # a revision is a read: it counts against the daily cap
-            try:
-                return intake_history.revise(sm, request.path_params["hid"], body.get("note"), body.get("item"),
-                                             client=claude, ai_on=_ai_on())
-            except Exception:
-                intake.refund_quietly(cap, ticket, device)
-                raise
+        def run() -> dict:          # a revision by Claude is a read: it counts against the daily cap
+            return intake_history.revise(sm, request.path_params["hid"], body.get("note"), body.get("item"),
+                                         client=claude, ai_on=_ai_on(), charge=_charge(device))
         if not _ai_on():
-            raise intake_history.HistoryError(409, "ai_off", "label reading (the ai_intake module) is off on this "
-                                                             "server: edit the values by hand")
+            raise intake_history.HistoryError(409, "ai_off", "label reading (ai_intake or local_intake) is off on "
+                                                             "this server: edit the values by hand")
         return await run_in_threadpool(run)
 
     async def history_apply(request: Request):
