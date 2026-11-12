@@ -185,7 +185,7 @@ def open_panel(dev):
 
 def blank_c3_ports():
     """The ttyACM ports of an Espressif USB device (303a) that give no HELLO within 3 s: candidates for a first flash.
-    Never a ttyUSB port (the PN532 or an old panel). A bench reader plugged in for power looks the same as a blank
+    Never a ttyUSB port (the PN532 or an old panel). A Printer Station plugged in for power looks the same as a blank
     board, so these are only candidates; the owner confirms each one."""
     blank = []
     for dev in st.panel_ttys():

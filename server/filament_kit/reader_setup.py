@@ -1,4 +1,4 @@
-"""Setting up a bench reader (ESP32-C3) with the firmware as it is: its Wi-Fi, server address, token and update key
+"""Setting up a Printer Station (ESP32-C3) with the firmware as it is: its Wi-Fi, server address, token and update key
 are compiled in from `reader/src/secrets.h`, so a setup is a token, that file, a PlatformIO build and a USB flash
 (reader/README.md, "Build"). This module finds a reader on USB, writes `secrets.h` and runs the build and flash; the
 CLI is `filament-kit reader setup`. Nothing secret is printed or logged: the token and the Wi-Fi password go only
