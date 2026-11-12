@@ -69,6 +69,12 @@ class PrinterViewModelTest {
             addError?.let { throw it }
             return addResult!!
         }
+        val addedKlipper = mutableListOf<Triple<String, Int, String?>>()
+        override suspend fun addKlipperPrinter(host: String, port: Int, name: String?): Printer {
+            addedKlipper += Triple(host, port, name)
+            addError?.let { throw it }
+            return addResult!!
+        }
         override suspend fun printer(id: String): PrinterDetail {
             printerCalls++
             detailError?.let { throw it }
@@ -349,6 +355,64 @@ class PrinterViewModelTest {
         vm.submitAdd("1", "")
         runCurrent()
         assertTrue(vm.state.value.dialog!!.error!!.contains("already set up"))
+    }
+
+    @Test fun addKlipperSendsTrimmedAddressDefaultPortAndClosesTheDialog() = runTest(dispatcher) {
+        val vm = PrintersViewModel(backend)
+        vm.openAddKlipper()
+        backend.addResult = printer()
+        backend.list = listOf(printer())
+        vm.submitAddKlipper(" printer.example.com ", " ", " Shed ")
+        runCurrent()
+        assertEquals(Triple("printer.example.com", 7125, "Shed" as String?), backend.addedKlipper.single())
+        assertNull(vm.state.value.klipper)
+        assertEquals(1, backend.listCalls)
+        assertEquals(1, vm.state.value.printers.size)
+    }
+
+    @Test fun addKlipperOmitsABlankName() = runTest(dispatcher) {
+        val vm = PrintersViewModel(backend)
+        vm.openAddKlipper()
+        backend.addResult = printer()
+        vm.submitAddKlipper("192.0.2.10", "7126", "  ")
+        runCurrent()
+        assertEquals(Triple("192.0.2.10", 7126, null as String?), backend.addedKlipper.single())
+    }
+
+    @Test fun addKlipperChecksTheFieldsBeforeAskingTheServer() = runTest(dispatcher) {
+        val vm = PrintersViewModel(backend)
+        vm.openAddKlipper()
+        vm.submitAddKlipper("  ", "7125", "")
+        assertTrue(vm.state.value.klipper!!.error!!.contains("address"))
+        for (bad in listOf("0", "65536", "abc", "-1", "71.25")) {
+            vm.submitAddKlipper("192.0.2.10", bad, "")
+            assertTrue(bad, vm.state.value.klipper!!.error!!.contains("between 1 and 65535"))
+        }
+        runCurrent()
+        assertTrue(backend.addedKlipper.isEmpty())
+        assertFalse(vm.state.value.klipper!!.busy)
+    }
+
+    @Test fun addKlipperKeepsTheDialogWithTheServersSentence() = runTest(dispatcher) {
+        val vm = PrintersViewModel(backend)
+        vm.openAddKlipper()
+        backend.addError = ApiError(400, "bad_request", "a printer is already set up at 192.0.2.10")
+        vm.submitAddKlipper("192.0.2.10", "7125", "")
+        runCurrent()
+        val d = vm.state.value.klipper!!
+        assertEquals("a printer is already set up at 192.0.2.10", d.error)
+        assertFalse(d.busy)
+        backend.addError = ApiError(0, "offline", "x")
+        vm.submitAddKlipper("192.0.2.10", "7125", "")
+        runCurrent()
+        assertTrue(vm.state.value.klipper!!.error!!.contains("Could not reach the server"))
+    }
+
+    @Test fun cancelAddKlipperClosesTheDialog() {
+        val vm = PrintersViewModel(backend)
+        vm.openAddKlipper()
+        vm.cancelAddKlipper()
+        assertNull(vm.state.value.klipper)
     }
 
     // --- unload ---

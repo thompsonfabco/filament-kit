@@ -3,6 +3,7 @@ package com.thompsonfabco.filamentkit.net
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import mockwebserver3.MockResponse
@@ -161,7 +162,32 @@ class ApiPrintersTest {
         assertEquals("exists", e.code)
     }
 
-    @Test fun printerDetailDecodesFullStatus() = runBlocking {
+    @Test fun addKlipperPrinterPostsFamilyHostPortAndName() = runBlocking {
+        json("""{"printer":$printerJson}""")
+        api.addKlipperPrinter("printer.example.com", 7125, "Shed")
+        val r = take()
+        assertEquals("POST", r.method)
+        assertEquals("/api/printers", r.url.encodedPath)
+        val b = r.bodyJson()
+        assertEquals("klipper", b["family"]!!.jsonPrimitive.content)
+        assertEquals("printer.example.com", b["host"]!!.jsonPrimitive.content)
+        assertEquals(7125, b["port"]!!.jsonPrimitive.int)
+        assertEquals("Shed", b["name"]!!.jsonPrimitive.content)
+        assertFalse("the route takes no key", b.containsKey("api_key"))
+    }
+
+    @Test fun addKlipperPrinterOmitsBlankNameAndMapsARefusal() {
+        json("""{"printer":$printerJson}""")
+        runBlocking { api.addKlipperPrinter("192.0.2.10", 7125, " ") }
+        assertFalse(take().bodyJson().containsKey("name"))
+        json("""{"error":"bad_request","message":"port must be between 1 and 65535"}""", 400)
+        val e = failure { api.addKlipperPrinter("192.0.2.10", 0, null) }
+        assertEquals(400, e.status)
+        assertEquals("bad_request", e.code)
+        assertEquals("port must be between 1 and 65535", e.message)
+    }
+
+    @Test fun printerDetailDecodesFullStatus()= runBlocking {
         json("""{"printer":$printerJson,"status":{"gcode_state":"RUNNING","stage":"Printing","job":"Benchy",
             "percent":42,"layer":12,"total_layers":200,"remaining_min":31,"eta":"2026-11-01T14:10-05:00",
             "temps":{"nozzle":[{"current":220,"target":220},{"current":30,"target":0}],
