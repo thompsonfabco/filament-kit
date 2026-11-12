@@ -5,6 +5,7 @@ import copy
 import json
 import os
 import socket
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -135,8 +136,9 @@ def load() -> dict:
 def save(cfg: dict) -> None:
     f = _file()
     f.parent.mkdir(parents=True, exist_ok=True)
-    tmp = f.with_name(f.name + ".tmp")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o640)
+    # a name of its own (mkstemp, mode 0600 until the chmod below): two savers at once never write into one file
+    fd, tmp = tempfile.mkstemp(dir=f.parent, prefix=f.name + ".", suffix=".tmp")
+    tmp = Path(tmp)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             json.dump(cfg, fh, indent=2)

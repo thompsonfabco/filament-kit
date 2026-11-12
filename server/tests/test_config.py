@@ -47,6 +47,21 @@ def test_save_leaves_no_tmp_and_roundtrips(etc):
     assert config.load()["port"] == 1234
 
 
+def test_two_saves_at_once_each_write_their_own_temp_file(etc, monkeypatch):
+    real = config.grant_web_read
+    nested = []
+
+    def grant(path):
+        if not nested:      # the first save is between its write and its rename: a second one runs whole
+            nested.append(1)
+            config.save({"port": 2222})
+        real(path)
+    monkeypatch.setattr(config, "grant_web_read", grant)
+    config.save({"port": 1111})
+    assert not list(etc.glob("*.tmp"))
+    assert json.loads((etc / "config.json").read_text(encoding="utf-8"))["port"] == 1111
+
+
 def test_unknown_keys_kept(etc):
     config.save({"future_key": {"a": 1}})
     assert config.load()["future_key"] == {"a": 1}

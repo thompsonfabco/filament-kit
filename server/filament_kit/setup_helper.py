@@ -671,6 +671,7 @@ def _backup_keep(req: dict) -> dict:
     days = req.get("days")
     if not isinstance(days, int) or isinstance(days, bool) or not 1 <= days <= 365:
         raise Refused(400, "days must be a whole number from 1 to 365")
+    _not_applying()
     cfg = config.load()
     cfg.setdefault("backup", {})["keep_days"] = days
     config.save(cfg)
@@ -828,7 +829,7 @@ OPS = {"check": _check, "key_set": _key_set, "key_remove": _key_remove, "passphr
 
 
 # what may save a setting and start a job: these run under _job_lock, whole
-LOCKED_OPS = ("module", "setting", "general", "spoolman_url", "mode", "apply", "job")
+LOCKED_OPS = ("module", "setting", "general", "spoolman_url", "mode", "backup_keep", "apply", "job")
 NO_CODE_OPS = ("trust_status",)     # it answers only about the token it was given
 
 
