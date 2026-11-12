@@ -1031,3 +1031,12 @@ def test_the_recipe_refuses_a_windows_drive_and_tests_this_tree_not_its_venv():
     recipe = _read("tools/testenv.sh")
     assert "/mnt/*)" in recipe and "PYTHONPATH=$ROOT/server:$ROOT/pc-sync" in recipe and "sha256sum" in recipe
     assert "--basetemp=\"$RUN" in recipe and "/tmp" not in recipe.replace("/tmp can be", "")
+
+
+def test_release_version_job_refuses_a_tag_off_main_unless_switched_off():
+    """FA-095: a v* tag on a branch commit must not reach the signing jobs; the repo variable is the off switch."""
+    text = _read(".github/workflows/release.yml")
+    version_job = text.split("\n  version:\n", 1)[1].split("\n  server:", 1)[0] if "\n  server:" in text else text
+    assert "fetch-depth: 0" in version_job
+    assert 'git merge-base --is-ancestor "$GITHUB_SHA" origin/main' in version_job
+    assert "${{ vars.FK_RELEASE_ANY_BRANCH }}" in version_job
