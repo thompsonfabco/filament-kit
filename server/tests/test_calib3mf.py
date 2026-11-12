@@ -1052,11 +1052,11 @@ def test_the_job_is_traced_in_the_log_with_codes_only(fake_ftp, printer, caplog)
     assert any('"gcode_state": "FINISH"' in x for x in lines) and any("07008000_00020001" in x for x in lines)
     text = chr(10).join(x.split(": calibration trace", 1)[1] for x in lines)    # what the trace adds after the prefix
     assert SERIAL not in text and FILE not in text and "fk-calib" not in text and "127.0.0.1" not in text
-    every = chr(10).join(r.getMessage() for r in caplog.records)    # and no line names the printer by its serial
-    assert SERIAL not in every and all(x.startswith('printer "H2D": calibration trace') for x in lines), lines
+    every = chr(10).join(r.getMessage() for r in caplog.records)    # no line names the printer by serial or name
+    assert SERIAL not in every and all(x.startswith("printer 1 (H2D): calibration trace") for x in lines), lines
 
 
-def test_a_log_names_a_printer_without_its_serial():
+def test_a_log_names_a_printer_by_place_and_model_only():
     registry._LABELS.clear()
     registry.upsert(Printer(serial=SERIAL, name="Workshop H2D", model="O1D", ip="10.0.0.5", access_code=CODE,
                             configured=True))
@@ -1064,9 +1064,9 @@ def test_a_log_names_a_printer_without_its_serial():
                             configured=True))
     registry.upsert(Printer(serial="0948AB000000002", name="0948AB000000002", model="", ip="10.0.0.7",
                             access_code=CODE, configured=True))
-    assert registry.log_label(SERIAL) == 'printer "Workshop H2D"'
-    assert registry.log_label("0948AB000000001") == "printer 1 (C12)"      # no name: its place in the list
-    assert registry.log_label("0948AB000000002") == "printer 2"            # a name that is the serial is not used
+    assert registry.log_label(SERIAL) == "printer 3 (O1D)"                 # never the owner's name for it
+    assert registry.log_label("0948AB000000001") == "printer 1 (C12)"      # its place in the list, by serial
+    assert registry.log_label("0948AB000000002") == "printer 2"            # no model code: the place alone
     assert registry.log_label("unknown") == "a printer no longer in the list"
 
 

@@ -18,7 +18,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Callable
 
-from . import ams, layout, snapshot, status
+from . import ams, layout, registry, snapshot, status
 from .connection import PrinterOffline, UnknownPrinter
 
 log = logging.getLogger(__name__)
@@ -186,7 +186,7 @@ def run(manager, serial: str, on_step: Callable[[str], None],
         snapshot.save(serial, "slottest", [{"label": t.label, "ams_id": t.ams_id, "tray_id": t.tray_id,
                                             "setting": dict(t.snap)} for t in targets], plan)
     except Exception as e:               # no snapshot on disk: never touch the printer
-        log.exception("slot test on %s: cannot save the slot snapshot", serial)
+        log.exception("slot test on %s: cannot save the slot snapshot", registry.log_label(serial))
         res.problems.append(f"cannot save the slot snapshot ({type(e).__name__}: {e}); nothing was changed")
         return res
     changed: list[_Target] = []          # may differ from their snapshot now
@@ -231,7 +231,7 @@ def run(manager, serial: str, on_step: Callable[[str], None],
                 current.clear()
                 if t.kind != layout.EXT_KIND and not t.snap['tray_type']:
                     # no filament in it, and no presence bits said so: an empty slot takes no setting
-                    log.info("slot test on %s: %s has no filament and refused the write (%s): empty", serial,
+                    log.info("slot test on %s: %s has no filament and refused the write (%s): empty", registry.log_label(serial),
                              t.label, _reason(reply))
                     res.empty[t.label] = {'ams_id': t.ams_id, 'tray_id': t.tray_id}
                     reported.add(t.label)
@@ -272,10 +272,10 @@ def run(manager, serial: str, on_step: Callable[[str], None],
                 res.problems.append(f"{t.label}: not confirmed (its test colour appeared on {', '.join(where)})")
                 reported.add(t.label)
     except Exception as e:                  # never leave test colours behind because of a bug or callback
-        log.exception("slot test on %s failed", serial)
+        log.exception("slot test on %s failed", registry.log_label(serial))
         abort, reason = "The slot test stopped on an error in the kit; the slots are put back.", "kit_error"
     except BaseException as e:              # Ctrl-C, SystemExit ...: restore first, re-raise afterwards
-        log.warning("slot test on %s interrupted (%s); restoring the slots", serial, type(e).__name__)
+        log.warning("slot test on %s interrupted (%s); restoring the slots", registry.log_label(serial), type(e).__name__)
         abort, reason = INTERRUPTED, "interrupted"
         interrupted = e
     for t in current:                       # stopped in the middle of a write: it may have landed
@@ -294,7 +294,7 @@ def run(manager, serial: str, on_step: Callable[[str], None],
         try:
             snapshot.clear(serial)
         except OSError:
-            log.exception("slot test on %s: cannot delete the slot snapshot", serial)
+            log.exception("slot test on %s: cannot delete the slot snapshot", registry.log_label(serial))
     step("Slot test finished")
     if interrupted is not None:
         raise interrupted
@@ -323,7 +323,7 @@ def _restore(manager, serial: str, res: SlotTestResult, changed: list[_Target], 
             res.problems.append(f"{t.label}: not restored (the printer went offline); its test colour may still be set")
             res.restored = False
         except Exception as e:               # one slot's failure must not skip the others' restores
-            log.exception("slot test on %s: restoring %s failed", serial, t.label)
+            log.exception("slot test on %s: restoring %s failed", registry.log_label(serial), t.label)
             res.problems.append(f"{t.label}: not restored (error: {type(e).__name__}: {e}); "
                                 f"its test colour may still be set")
             res.restored = False
@@ -340,6 +340,6 @@ def _restore(manager, serial: str, res: SlotTestResult, changed: list[_Target], 
             res.problems.append("final check failed (no report from the printer); test colours may remain")
             res.restored = False
     except Exception as e:
-        log.exception("slot test on %s: final check failed", serial)
+        log.exception("slot test on %s: final check failed", registry.log_label(serial))
         res.problems.append(f"final check failed (error: {type(e).__name__}: {e}); test colours may remain")
         res.restored = False

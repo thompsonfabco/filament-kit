@@ -589,8 +589,8 @@ class Mapper:
         for t in threads:
             t.join(max(0.0, deadline - time.monotonic()))
             if t.is_alive():
-                log.warning("mapping: %s still running at shutdown; its slots may keep test colours until the "
-                            "next run", t.name)
+                log.warning("mapping: a mapping job is still running at shutdown; its slots may keep test colours "
+                            "until the next run")         # the thread's name holds the serial: not logged
 
     def running(self, serial: str) -> bool:
         """A job runs for `serial` in this process."""

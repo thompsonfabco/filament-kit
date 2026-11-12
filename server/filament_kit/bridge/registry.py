@@ -101,9 +101,10 @@ LABEL_TTL = 60.0
 
 
 def log_label(serial: str) -> str:
-    """How a log line names a printer: its own name when it has one, else "printer N (model)" by its place in the
-    registry. Never the serial (logs get attached to issues; the release notes promise no serial numbers in them).
-    Cached for LABEL_TTL seconds: a calibration logs many lines."""
+    """How a log line names a printer: "printer N (model code)", N its place in the registry sorted by serial. Never
+    the serial and never the owner's name for it: logs get attached to public issues, and the release notes promise
+    the calibration log holds no names or serial numbers. N changes when a printer is added or removed; the model
+    code in brackets helps across days. Cached for LABEL_TTL seconds: a calibration logs many lines."""
     import time
     now = time.monotonic()
     hit = _LABELS.get(serial)
@@ -114,10 +115,7 @@ def log_label(serial: str) -> str:
     except Exception:  # noqa: BLE001 - a log line must never fail on the registry
         printers = {}
     p = printers.get(serial)
-    name = (p.name or "").strip() if p is not None else ""
-    if name and serial not in name:
-        label = f'printer "{name}"'
-    elif p is not None:
+    if p is not None:
         n = sorted(printers).index(serial) + 1
         label = f"printer {n}" + (f" ({p.model})" if (p.model or "").strip() else "")
     else:
