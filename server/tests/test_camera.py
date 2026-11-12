@@ -152,21 +152,24 @@ def test_unknown_or_unconfigured_printers_are_refused(fake_hub):
 
 @pytest.fixture
 def ffmpeg_hub(printers, tmp_path):
-    hub = camera.Hub(lookup=printers.get, runtime_dir=tmp_path / "run", idle_stop=0.6, hls_window=0.5,
+    # a hold of 10 s between fetches: a test thread starved longer than the hold had the stream stopped under it while
+    # the fake started, and each stop on a loaded Windows box takes seconds (the flaky ffmpeg tests). The idle-stop
+    # test shortens it once the stream is up.
+    hub = camera.Hub(lookup=printers.get, runtime_dir=tmp_path / "run", idle_stop=5, hls_window=5,
                      ffmpeg=[sys.executable, "-I", str(FAKE_FFMPEG)])
     yield hub
     hub.shutdown()
 
 
 def _started(hub, serial):
-    """Wait for the fake ffmpeg's files, fetching as a viewer does meanwhile: one fetch holds the stream for only
-    hls_window + idle_stop (1.1 s here), and a loaded machine can take longer than that to start the fake."""
+    """Wait for the fake ffmpeg's files, fetching as a viewer does meanwhile (a loaded machine can take many seconds
+    to start the fake)."""
     d = hub.dir_for(serial)
 
     def up():
         hub.touch_hls(serial)
         return (d / "argv.json").exists() and (d / "index.m3u8").exists()
-    assert wait_until(up, 15, step=0.05)
+    assert wait_until(up, 60, step=0.05)
     return json.loads((d / "argv.json").read_text())
 
 
@@ -188,9 +191,7 @@ def test_ffmpeg_reads_the_loopback_relay_and_never_gets_the_access_code(ffmpeg_h
 
 
 def test_shutdown_kills_ffmpeg_and_its_children(ffmpeg_hub):
-    # the fixture's 1.1 s idle stop would beat a slow pid_alive (tasklist on Windows) to it, and this test is the only
-    # one of the taskkill path: shutdown must be what kills it here
-    ffmpeg_hub.idle_stop, ffmpeg_hub.hls_window = 5, 5
+    # this test is the only one of the taskkill path: shutdown, not the idle stop, must be what kills it here
     ffmpeg_hub.touch_hls("H1")
     info = _started(ffmpeg_hub, "H1")
     assert pid_alive(info["pid"]) and pid_alive(info["child"])
@@ -199,12 +200,23 @@ def test_shutdown_kills_ffmpeg_and_its_children(ffmpeg_hub):
     assert not ffmpeg_hub.running("H1")
 
 
+def test_a_slow_viewer_keeps_the_stream_it_is_waiting_for(ffmpeg_hub):
+    """The flaky ffmpeg tests (reproduced under load: idle stops in the middle of _started, each Windows stop taking
+    seconds, until the 15 s wait ran out): a test thread starved for longer than the hold between its fetches had
+    the stream stopped and started again under it. The fixture's hold now outlasts such a gap."""
+    src = ffmpeg_hub.touch_hls("H1")
+    for _ in range(3):
+        time.sleep(0.5)                                   # a starved thread: longer than the old 0.3 s hold
+        assert ffmpeg_hub.touch_hls("H1") is src
+
+
 def test_idle_stop_kills_ffmpeg(ffmpeg_hub):
     ffmpeg_hub.touch_hls("H1")
     info = _started(ffmpeg_hub, "H1")
-    assert wait_until(lambda: not pid_alive(info["pid"]) and not pid_alive(info["child"]), 10)
+    ffmpeg_hub.hls_window, ffmpeg_hub.idle_stop = 0.1, 0.2   # no more fetches: the stop comes at the next check
+    assert wait_until(lambda: not pid_alive(info["pid"]) and not pid_alive(info["child"]), 60)
     # the process goes first, then the stop removes its folder
-    assert wait_until(lambda: not ffmpeg_hub.dir_for("H1").exists(), 10), "segments are removed with the stream"
+    assert wait_until(lambda: not ffmpeg_hub.dir_for("H1").exists(), 60), "segments are removed with the stream"
 
 
 # ---------------------------------------------------------------- RTSP relay (TLS + Digest)
