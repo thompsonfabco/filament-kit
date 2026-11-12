@@ -123,6 +123,17 @@ def test_variant_temps_keep_offset():
     assert cfg["nozzle_temperature"] == ["210", "220"]
 
 
+def test_color_names_cut_only_at_whole_words():
+    """FA-059: a short material word inside another word ("Metallic", "PCTG", "Pastel") is not cut off."""
+    def colors(name):
+        return V.spoolman_values([{"name": name}]).colors
+    assert colors("Metallic Blue") == "Metallic Blue"
+    assert colors("PCTG Clear") == "PCTG Clear"
+    assert colors("Pastel Pink") == "Pastel Pink"
+    assert colors("ELEGOO PETG Black") == "Black"
+    assert colors("PLA+ 2.0 Blue") == "Blue"
+
+
 def test_spoolman_values_odd_input():
     fs = [{"id": 1, "name": "PLA+ Grey", "material": "PLA", "density": 1.24, "settings_extruder_temp": None,
            "settings_bed_temp": 0, "weight": 1000},
