@@ -582,6 +582,29 @@ def test_update_deadline(served, monkeypatch):
     _assert_kept(_bundled_version())
 
 
+def test_update_deadline_holds_while_a_server_trickles(monkeypatch):
+    now = [0.0]
+    monkeypatch.setattr(library, "_clock", lambda: now[0])
+
+    class Trickle:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self, n):
+            now[0] += 100       # every receive takes 100 s; the bytes never stop
+            return b"x"
+
+    fetch = library._Fetcher(lambda req, timeout=None: Trickle(), 0)
+    with pytest.raises(library._Abort, match="longer than"):
+        fetch.get("https://example.invalid/index.json", "index.json", 1024)
+    assert now[0] <= library.DEADLINE + 100
+
+
 def test_update_total_bytes_cap(served, monkeypatch):
     for rel in ("library/sunlu/pla-plus-2-0.json", "library/elegoo/petg-cf.json"):
         edit(served.root, rel, lambda e: e["published_ranges"].update({"_t": "a"}))
