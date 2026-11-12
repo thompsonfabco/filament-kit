@@ -13,6 +13,8 @@ What it accepts is a closed list (`OPS`), never a command, a path or a file name
     key_set {key}  key_remove                  the Anthropic key (cli.write_key / cli.remove_key)
     passphrase_set {passphrase}                the web passphrase (cli.write_passphrase: scrypt, root:filament-kit 640)
     library_token_set {token}  library_token_remove   /etc/filament-kit/github_token (library.write_token)
+    local_intake_token_set {token}  local_intake_token_remove   /etc/filament-kit/local_intake_token (the local label
+                                               reader's bearer token, local_reader.write_token)
     module {name, on[, settings]}              one module on/off with the checklist's rules (modules.toggle,
                                                cli._apply_selection, cli._plan_error), saved, then an apply
     setting {key, value}                       web.public_url or station.url, checked, saved, then an apply
@@ -368,6 +370,20 @@ def _library_token_set(req: dict) -> dict:
 def _library_token_remove(req: dict) -> dict:
     from . import library
     return {"removed": library.remove_token()}
+
+
+def _local_intake_token_set(req: dict) -> dict:
+    from . import local_reader
+    try:
+        local_reader.write_token(_text(req, "token", 400, word=True))
+    except ValueError as e:
+        raise Refused(400, str(e)) from None
+    return {}
+
+
+def _local_intake_token_remove(req: dict) -> dict:
+    from . import local_reader
+    return {"removed": local_reader.remove_token()}
 
 
 def _answers(raw) -> dict[str, str]:
@@ -854,6 +870,7 @@ def _apply(req: dict) -> dict:
 
 OPS = {"check": _check, "key_set": _key_set, "key_remove": _key_remove, "passphrase_set": _passphrase_set,
        "library_token_set": _library_token_set, "library_token_remove": _library_token_remove,
+       "local_intake_token_set": _local_intake_token_set, "local_intake_token_remove": _local_intake_token_remove,
        "module": _module, "setting": _setting, "general": _general, "spoolman_url": _spoolman_url, "apply": _apply, "mode": _mode, "job": _job,
        "journal": _journal, "backup_keep": _backup_keep, "backup_list": _backup_list, "backup_open": _backup_open, "restore_pin": _restore_pin,
        "restore_forget": _restore_forget, "station_pairing": _station_pairing, "trust_status": _trust_status, "trust_add": _trust_add,

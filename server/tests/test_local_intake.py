@@ -3,6 +3,7 @@ the daily cap only for cloud reads, and the HTTP client, against the fake reader
 from __future__ import annotations
 
 import base64
+import logging
 import socket
 
 import anthropic
@@ -526,3 +527,50 @@ def test_a_claude_call_that_never_reached_it_gives_its_read_back(sm, fake_reader
     out = intake.read_labels(sm, [JPEG], "", None, FakeClaude(raises=anthropic.APIConnectionError(request=None)),
                              charge=cap.charge)
     assert out["reader"] == "local" and cap.taken == 1 and cap.refunded == 1
+
+
+# ---------- the reader's token from the page and the CLI (decision after R127 note 4) ----------
+
+def test_the_page_sets_and_removes_the_reader_token_with_the_code(env, caplog):
+    from test_setup_page import Helper, client, make, post
+    app = make(env, Helper())
+    c = client(app)
+    assert post(c, "local_intake_token", {"token": "tok-secret-1"}, code=None).status_code in (401, 403)
+    assert not (config.paths().etc / local_reader.TOKEN_FILE).exists()
+    with caplog.at_level(logging.INFO):
+        r = post(c, "local_intake_token", {"token": "tok-secret-1"})
+    assert r.status_code == 200 and r.json() == {"ok": True, "set": True} and "tok-secret-1" not in r.text
+    assert (config.paths().etc / local_reader.TOKEN_FILE).read_text().strip() == "tok-secret-1"
+    assert "tok-secret-1" not in caplog.text
+    state = c.get("/setup/api/state")
+    assert state.json()["local_intake_token"]["set"] is True and "tok-secret-1" not in state.text
+    assert post(c, "local_intake_token", {"token": "has space"}).status_code == 400
+    assert post(c, "local_intake_token/remove", {}).json() == {"ok": True, "set": False}
+    assert not (config.paths().etc / local_reader.TOKEN_FILE).exists()
+
+
+def test_the_cli_sets_the_reader_token_hidden(monkeypatch, capsys):
+    from filament_kit import cli
+    monkeypatch.setattr(cli, "_is_root", lambda: True)
+    monkeypatch.setattr(cli.secret_input, "ask", lambda prompt: "tok-cli-2")
+    assert cli.main(["local-intake", "token"]) == 0
+    out = capsys.readouterr()
+    assert "tok-cli-2" not in out.out + out.err
+    assert (config.paths().etc / local_reader.TOKEN_FILE).read_text().strip() == "tok-cli-2"
+    monkeypatch.setattr(cli.secret_input, "ask", lambda prompt: "two words")
+    assert cli.main(["local-intake", "token"]) == 1
+    assert cli.main(["local-intake", "token", "--remove"]) == 0
+    assert not (config.paths().etc / local_reader.TOKEN_FILE).exists()
+
+
+def test_a_reader_that_needs_a_token_says_where_to_set_it(fake_reader):
+    url, data = fake_reader
+    data["health"] = {**data["health"], "auth_required": True}
+    assert "set it on the setup page" in local_reader_health(url)["error"]
+
+
+def test_the_cli_token_needs_root(monkeypatch, capsys):
+    from filament_kit import cli
+    monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
+    monkeypatch.setattr(cli, "_is_root", lambda: False)
+    assert cli.main(["local-intake", "token"]) == 1 and "run as root" in capsys.readouterr().err

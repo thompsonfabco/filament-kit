@@ -2384,6 +2384,25 @@ def cmd_local_intake_remove(yes: bool, run=None) -> int:
     return _save_and_apply(cfg, ["The local label reader is removed." if have else "local_intake is off."])
 
 
+def cmd_local_intake_token(remove: bool) -> int:
+    """Set (hidden prompt) or remove the local reader's bearer token, <etc>/local_intake_token (root). Never printed."""
+    from . import local_reader
+    if not _is_root() and not _no_systemd():
+        _err_line("run as root: sudo filament-kit local-intake token")
+        return 1
+    if remove:
+        print("Reader token removed." if local_reader.remove_token() else "No reader token was set.")
+        return 0
+    token = secret_input.ask("The local reader's token (hidden): ")
+    try:
+        local_reader.write_token(token)
+    except ValueError as e:
+        _err_line(f"{e}; nothing was changed")
+        return 1
+    print("Reader token saved; it goes with each read and revise.")
+    return 0
+
+
 def cmd_local_intake_test(photos: list[str]) -> int:
     """Read photos with the local reader only (no cloud, no daily read used) and print what it read."""
     from . import intake
@@ -2565,6 +2584,8 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     lii.add_argument("--yes", action="store_true", help="do not ask (the sizes are still printed)")
     lii.add_argument("--planned", action="store_true", help="the version and tier the last `local-intake plan` "
                                                             "saved (the setup page's job)")
+    litk = lisub.add_parser("token", help="set the local reader's bearer token (root; asked hidden, never shown)")
+    litk.add_argument("--remove", action="store_true", help="remove it instead")
     lisub.add_parser("plan", help="what installing the latest reader release needs, per tier (saved for the setup "
                                   "page when run as root)")
     lir = lisub.add_parser("remove", help="uninstall the local reader from this machine and switch local_intake off "
@@ -2701,6 +2722,8 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
             return cmd_local_intake_install(args.tier, args.version, args.yes, planned=args.planned)
         if args.li_cmd == "plan":
             return cmd_local_intake_plan()
+        if args.li_cmd == "token":
+            return cmd_local_intake_token(args.remove)
         if args.li_cmd == "remove":
             return cmd_local_intake_remove(args.yes)
         return cmd_local_intake_status() if args.li_cmd == "status" else cmd_local_intake_test(args.photos)
