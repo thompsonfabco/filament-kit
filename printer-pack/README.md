@@ -1,3 +1,5 @@
+If you enjoy what I do, consider supporting me! Every little bit means the world! https://ko-fi.com/thompsonfabco
+
 # filament-kit printer pack (Klipper)
 
 The part of filament-kit that runs on a Klipper printer. The kit's server talks to Moonraker without it; the pack adds:

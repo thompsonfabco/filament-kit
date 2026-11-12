@@ -17,6 +17,10 @@ def _readme() -> str:
 def test_readme_opens_with_the_goal_then_the_one_command_install():
     # The owner's order: what the kit is and what it is for first, then how to install it.
     text = _readme()
+    # the owner's support line (one paragraph with a ko-fi link) may sit above the title
+    first, _, rest = text.partition("\n\n")
+    if "ko-fi.com/thompsonfabco" in first and "\n" not in first.strip() and not first.startswith("#"):
+        text = rest
     assert text.startswith("# filament-kit\n")
     install = text.index("\n## Install\n")
     assert "## What you need" in text[:install]
@@ -86,7 +90,8 @@ def test_public_docs_have_no_owner_specific_data(rel):
     rest = text
     for ok in ("github.com/thompsonfabco/filament-kit", "-R thompsonfabco/filament-kit",
                "github.com/thompsonfabco/filament-library", "thompsonfabco/filament-library",
-               "com.thompsonfabco.filamentkit", "com/thompsonfabco/filamentkit"):  # the app's package name
+               "com.thompsonfabco.filamentkit", "com/thompsonfabco/filamentkit",  # the app's package name
+               "ko-fi.com/thompsonfabco"):  # the owner's support link
         rest = rest.replace(ok, "")
     assert "thompsonfabco" not in rest, rel
 
@@ -100,7 +105,8 @@ CODE_SCAN = ("server/tests", "get.sh", "install", "reader", "tools")
 CODE_SCAN_SKIP = {"server/tests/test_readme.py", "reader/tools/test_ota_publish.py"}
 # the repository paths: filament-kit (README, get.sh), and the filament-library repo that release.yml builds from
 ALLOWED_REPO_PATHS = ("github.com/thompsonfabco/filament-kit", "thompsonfabco/filament-kit",
-                      "github.com/thompsonfabco/filament-library", "thompsonfabco/filament-library")
+                      "github.com/thompsonfabco/filament-library", "thompsonfabco/filament-library",
+                      "ko-fi.com/thompsonfabco")
 
 
 def _walk_code_scan() -> list[str]:

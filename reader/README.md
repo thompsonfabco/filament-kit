@@ -1,3 +1,5 @@
+If you enjoy what I do, consider supporting me! Every little bit means the world! https://ko-fi.com/thompsonfabco
+
 # filament-kit reader (ESP32-C3)
 
 A small box next to the printer: tap a spool's NFC tag, pick the printer and slot with a knob, and the

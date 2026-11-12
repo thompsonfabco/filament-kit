@@ -1,3 +1,5 @@
+If you enjoy what I do, consider supporting me! Every little bit means the world! https://ko-fi.com/thompsonfabco
+
 # Spool Sync (OrcaSlicer plugin)
 
 Selects the filament presets in OrcaSlicer's slots from the spools loaded on a Klipper printer: every slot from
