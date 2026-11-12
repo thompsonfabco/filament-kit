@@ -156,11 +156,12 @@ catch {
 }
 $env:FK_KS_GEN_PW = $pw
 $ok = $false
+$keytoolOut = @()
 try {
     $ErrorActionPreference = 'Continue'   # keytool writes progress to stderr
     & $keytool -genkeypair -keystore $jks -storetype PKCS12 -alias filament-kit `
         -keyalg RSA -keysize 4096 -validity 10000 -dname 'CN=filament-kit' `
-        '-storepass:env' FK_KS_GEN_PW '-keypass:env' FK_KS_GEN_PW 2>$null | Out-Null
+        '-storepass:env' FK_KS_GEN_PW '-keypass:env' FK_KS_GEN_PW 2>&1 | ForEach-Object { $keytoolOut += "$_" }
     $code = $LASTEXITCODE
     $ErrorActionPreference = 'Stop'
     $ok = ($code -eq 0) -and (Test-Path $jks)
@@ -169,6 +170,8 @@ try {
     if (-not $ok) { Remove-Item -LiteralPath $jks, $pwFile -Force -ErrorAction SilentlyContinue }
 }
 if (-not $ok) {
+    # keytool's own words (the password goes in through the environment and is never in its output)
+    $keytoolOut | Select-Object -Last 5 | ForEach-Object { Write-Host "keytool: $_" }
     Write-Error "keytool failed (exit $code); signing key NOT created."
     exit 1
 }
