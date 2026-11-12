@@ -49,8 +49,8 @@ def test_release_workflow_builds_sync_on_windows_with_pinned_pyinstaller():
 def test_release_workflow_pins_every_action_by_commit():
     """M3: the release jobs hold signing secrets, so every action is a full commit SHA with its tag beside it."""
     text = _read(".github/workflows/release.yml")
-    uses = re.findall(r"^\s*- uses: (\S+)(.*)$", text, re.M)
-    assert uses
+    uses = re.findall(r"^\s*(?:- )?uses: (\S+)(.*)$", text, re.M)      # `- name: X` then `uses:` is a step too
+    assert uses and len(uses) == len([ln for ln in text.splitlines() if "uses:" in ln and not ln.lstrip().startswith("#")])
     for ref, rest in uses:
         assert re.fullmatch(r"[\w.-]+/[\w.-]+@[0-9a-f]{40}", ref), ref
         assert re.fullmatch(r"\s+# v\d+\.\d+\.\d+", rest), (ref, rest)
