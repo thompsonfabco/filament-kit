@@ -332,6 +332,11 @@ struct Display {
     }
     if (air.shownAt != airSeen) { airSeen = air.shownAt; dirty = true; }
     if (!dirty || now - drawn < 100) return;  // at most 10 redraws a second
+    Wire.beginTransmission(0x3C);
+    if (Wire.endTransmission() != 0) {  // unplugged or reset: probe again (and u8g2.begin()) as at boot
+      present = false; retry = now;
+      return;
+    }
     dirty = false; drawn = now;
     u8g2.clearBuffer();
     u8g2.setFont(u8g2_font_helvB10_tf);
