@@ -428,6 +428,31 @@ def test_cli_unpin_without_a_usable_access_code_changes_nothing(monkeypatch, cap
     assert capsys.readouterr().err
 
 
+def test_cli_unpin_refuses_a_klipper_printer(monkeypatch, capsys):
+    monkeypatch.setattr(secret_input, "ask", lambda prompt: pytest.fail("asked for a code"))
+    k = registry.add_klipper("Workshop", "printer.example.com", 7125)
+    assert cli.main(["printer", "unpin", k.serial]) == 1
+    assert "Bambu" in capsys.readouterr().err
+    assert registry.load()[k.serial].access_code == ""
+
+
+def test_cli_unpin_refuses_a_printer_never_set_up(monkeypatch, capsys):
+    monkeypatch.setattr(secret_input, "ask", lambda prompt: pytest.fail("asked for a code"))
+    registry.upsert(registry.Printer("01P00A222222222", "Found", "", "10.0.0.6", "", False))
+    assert cli.main(["printer", "unpin", "01P00A222222222"]) == 1
+    assert "not set up" in capsys.readouterr().err
+    assert not registry.load()["01P00A222222222"].configured
+
+
+def test_cli_unpin_without_a_terminal_changes_nothing(monkeypatch, capsys):
+    def no_tty(prompt):
+        raise EOFError
+    monkeypatch.setattr(secret_input, "ask", no_tty)
+    assert cli.main(["printer", "unpin", SERIAL]) == 1
+    assert "terminal" in capsys.readouterr().err
+    assert registry.load()[SERIAL].cert_fp == "ab" * 32 and registry.load()[SERIAL].access_code == CODE
+
+
 def test_cli_unpin_unknown_printer(monkeypatch, capsys):
     monkeypatch.setattr(secret_input, "ask", lambda prompt: pytest.fail("asked for a code for no printer"))
     assert cli.main(["printer", "unpin", "NOPE"]) == 1

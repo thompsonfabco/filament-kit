@@ -1235,7 +1235,17 @@ def cmd_printer_unpin(serial: str) -> int:
     if p is None:
         _err_line(f"no printer {serial}")
         return 1
-    code = secret_input.ask("Access Code: ").strip()
+    if p.family != "bambu":
+        _err_line("unpin is for a Bambu printer")
+        return 1
+    if not p.configured:
+        _err_line(f"{serial} is not set up here; add it with its Access Code first")
+        return 1
+    try:
+        code = secret_input.ask("Access Code: ").strip()
+    except (EOFError, RuntimeError, OSError):      # no terminal to ask on
+        _err_line("`printer unpin` needs a terminal to ask for the Access Code; nothing changed")
+        return 1
     if not code:
         _err_line("trusting a new certificate needs the printer's Access Code; nothing changed")
         return 1
@@ -2312,7 +2322,7 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
                          "running server; the same session as the setup page and the phone apps)")
     prp = psub.add_parser("report", help="make a report that helps add a printer or AMS the kit doesn't know yet")
     prp.add_argument("serial")
-    pu = psub.add_parser("unpin", help="forget the printer's pinned TLS certificate")
+    pu = psub.add_parser("unpin", help="forget a Bambu printer's pinned TLS certificate (asks for its Access Code)")
     pu.add_argument("serial")
     lb = sub.add_parser("library", help="the filament spec library: status, update, rollback, local additions")
     lsub = lb.add_subparsers(dest="library_cmd", required=True)

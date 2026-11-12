@@ -355,6 +355,14 @@ def test_unpin_with_an_access_code_clears_the_pin_and_saves_the_code(both):
     assert p.cert_fp == "" and p.access_code == "87654321"
 
 
+def test_unpin_refuses_a_printer_never_set_up(both):
+    registry.upsert(registry.Printer(SERIAL, "Found", "", "192.0.2.41", "", False))
+    c = client(both)
+    assert post(c, f"printers/{SERIAL}/unpin", {"access_code": "87654321"}).status_code == 409
+    p = registry.load()[SERIAL]
+    assert not p.configured and p.access_code == ""
+
+
 def test_a_family_whose_module_is_off_has_no_controls(env, helper, manager, names):
     app = make(env, helper, manager, drop=frozenset({"klipper"}))
     c = client(app)

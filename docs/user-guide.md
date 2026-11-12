@@ -344,7 +344,7 @@ Run these in a Terminal on the Ubuntu computer.
 | `sudo filament-kit profiles lines` / `set-parent <line_id> <parent>` | Lists the filament lines; sets a line's Bambu Studio parent (`--orca`: its Orca Slicer parent). |
 | `sudo filament-kit profiles restore-deleted` | Brings back, at the next build, the generated presets you deleted in Bambu Studio. |
 | `sudo filament-kit library status` / `update` / `rollback` | The spec library (see [Spec library updates](#spec-library-updates)). |
-| `sudo filament-kit printer unpin <serial>` | Forgets a printer's pinned certificate; the next connection trusts the one it presents. |
+| `sudo filament-kit printer unpin <serial>` | Forgets a Bambu printer's pinned certificate; the next connection trusts the one it presents. Asks for the printer's Access Code and saves it. |
 | `sudo filament-kit web passphrase` | Sets the sign-in passphrase of the Claude connector (see [Claude connector and phone web app](#claude-connector-and-phone-web-app)). |
 | `sudo filament-kit web status` | Checks the web part: public address, passphrase, the service, signed-in connectors. |
 | `sudo filament-kit remote firewall` | Prints the firewall and port-forward rules remote access needs (it changes nothing; see [Remote access](#remote-access)). |
@@ -467,7 +467,7 @@ A Klipper printer has the same button: it names its tools or lanes, and you make
 guide.
 
 If a printer's certificate changed, the server stops talking to it. If you reset the printer or its mainboard was
-replaced, add the printer again with its Access Code (or run `sudo filament-kit printer unpin <serial>`). If not,
+replaced, add the printer again with its Access Code. If not,
 something else may be answering at the printer's address: check the printer's IP before re-adding it.
 
 **Backups and restore (v0.4.0).** The web unit runs as its own user, `filament-kit-web`, with its state in

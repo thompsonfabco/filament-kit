@@ -220,7 +220,8 @@ def routes(page) -> list[tuple]:
         access = page._access_code(body)
 
         def run() -> None:
-            bambu_entry(serial)
+            if not bambu_entry(serial).configured:
+                raise Refused(409, "that printer is not set up here; add it with its Access Code first")
             registry.set_code(serial, access, replace=True)     # clears the pin, as adding the printer again
             page.printers.sync()
         await anyio.to_thread.run_sync(run)
