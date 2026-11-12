@@ -307,12 +307,17 @@ def test_printers_add_rename_remove(capsys, monkeypatch):
     assert "ACCESS1234" not in out
 
     assert _printers_session(monkeypatch, "5\n3\n1\nShed\n0\n0\n") == 0
+    assert "Renamed Office to Shed." in capsys.readouterr().out
     assert registry.load()["SER1"].name == "Shed"
     assert registry.load()["SER1"].access_code == "ACCESS1234"
 
-    assert _printers_session(monkeypatch, "5\n4\n1\n0\n0\n") == 0
+    assert _printers_session(monkeypatch, "5\n4\n1\n\n0\n0\n") == 0      # a bare Enter is a no
+    assert "SER1" in registry.load()
+    assert "Not removed." in capsys.readouterr().out
+    assert _printers_session(monkeypatch, "5\n4\n1\ny\n0\n0\n") == 0
     assert registry.load() == {}
-    assert "ACCESS1234" not in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "Removed Shed." in out and "ACCESS1234" not in out
 
 
 def test_printers_list_shows_detected_without_code(capsys, monkeypatch):

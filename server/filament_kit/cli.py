@@ -540,7 +540,11 @@ def _printers_action(choice: str, printers: list) -> None:
             name = (_ask("New name: ") or "").strip()
             if name:
                 registry.rename(p.serial, name)
+                print(f"Renamed {p.name} to {name}.")
         else:
+            if (_ask(f"Remove {p.name}? [y/N] ") or "").strip().lower() not in ("y", "yes"):
+                print("Not removed.")
+                return
             registry.remove(p.serial)
             print(f"Removed {p.name}.")
     else:
