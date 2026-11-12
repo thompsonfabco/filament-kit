@@ -1,4 +1,4 @@
-"""web.auth: OAuth provider + store, passphrase, LAN-only wrapper, /login page, lockout, cookie sessions.
+"""web.auth: OAuth provider + store, passphrase, LAN-only wrapper, /login page, lockout.
 
 Behaviour is a port of filament-ops vm/server.py (Provider, Store, LanOnly, /login); these tests pin it down.
 """
@@ -455,7 +455,7 @@ def test_login_wrong_passphrase_then_lockout(store, passfile, clock):
 def test_lockout_is_shared(store, passfile, clock):
     lock = auth.Lockout()
     for _ in range(5):
-        lock.fail()  # another wrong passphrase at /login
+        lock.attempt()  # another wrong passphrase at /login
     with TestClient(_app(store, passfile, lockout=lock), client=HOME) as c:
         cid = _register(c).json()["client_id"]
         r, _ = _sign_in(c, cid, _pkce()[1])
@@ -469,7 +469,7 @@ def test_login_without_passphrase_file(store, tmp_path):
         cid = _register(c).json()["client_id"]
         r, _ = _sign_in(c, cid, _pkce()[1])
         assert r.status_code == 503
-    assert not lock.blocked() and lock.fails == []  # a server problem is not a wrong guess
+    assert lock.fails == []  # a server problem is not a wrong guess
 
 
 def test_login_success_consumes_request(store, passfile):
@@ -545,12 +545,12 @@ def test_store_save_failure_leaves_old_file(store, monkeypatch):
 
 
 def test_store_prunes_expired_on_save(store, clock):
-    for k in ("codes", "access", "refresh", "used", "sessions"):
+    for k in ("codes", "access", "refresh", "used"):
         store.d[k] = {"old": {"client_id": "c", "expires_at": clock.now - 1},
                       "new": {"client_id": "c", "expires_at": clock.now + 60}}
     store.save()
     d = json.loads(store.path.read_text(encoding="utf-8"))
-    for k in ("codes", "access", "refresh", "used", "sessions"):
+    for k in ("codes", "access", "refresh", "used"):
         assert list(d[k]) == ["new"]
 
 
@@ -560,7 +560,7 @@ def test_store_loads_ops_oauth_json_unchanged(tmp_path):
     shutil.copy(src, path)
     original = json.loads(src.read_text(encoding="utf-8"))
     st = auth.Store(path)
-    assert st.d == original  # every key kept as-is
+    assert st.d == {k: v for k, v in original.items() if k != "sessions"}  # the gone "sessions" key is dropped
     p = auth.Provider(st, PUBLIC)
     cid = "8d3c2f0e-ops-client"
     client = run(p.get_client(cid))
@@ -569,12 +569,12 @@ def test_store_loads_ops_oauth_json_unchanged(tmp_path):
     assert run(p.load_refresh_token(client, "ops-refresh-token")).scopes == ["filament"]
     st.save()  # and writes it back in the same shape
     again = json.loads(path.read_text(encoding="utf-8"))
-    assert set(again) == {"clients", "codes", "access", "refresh", "used", "sessions"}
+    assert set(again) == {"clients", "codes", "access", "refresh", "used"}
     assert again["clients"] == original["clients"] and again["refresh"] == original["refresh"]
 
 
 def test_store_starts_empty(store):
-    assert set(store.d) == {"clients", "codes", "access", "refresh", "used", "sessions"}
+    assert set(store.d) == {"clients", "codes", "access", "refresh", "used"}
     assert all(v == {} for v in store.d.values()) and store.pending == {}
 
 
@@ -626,13 +626,12 @@ def test_check_passphrase_unset(tmp_path):
 def test_lockout_window(clock):
     lock = auth.Lockout()
     for _ in range(4):
-        lock.fail()
+        assert lock.attempt() is not None
         clock.now += 100
-    assert not lock.blocked()
-    lock.fail()
-    assert lock.blocked()
+    assert lock.attempt() is not None
+    assert lock.attempt() is None  # five counted in the window
     clock.now += 201  # the first failure is now older than 600 s
-    assert not lock.blocked()
+    assert lock.attempt() is not None
 
 
 # ---------- A-M1: the lockout counts an attempt before the (slow) check ----------
@@ -653,9 +652,9 @@ def test_lockout_attempts_are_counted_before_the_check():
     for t in ts:
         t.join()
     granted = [g for g in got if g is not None]
-    assert len(granted) == auth.LOCK_MAX and lock.blocked()
+    assert len(granted) == auth.LOCK_MAX and lock.attempt() is None
     lock.release(granted[0])                  # a right passphrase does not count
-    assert not lock.blocked() and lock.attempt() is not None and lock.blocked()
+    assert lock.attempt() is not None and lock.attempt() is None
 
 
 def test_parallel_wrong_passphrases_get_at_most_lock_max_checks(store, passfile, monkeypatch):
@@ -698,4 +697,4 @@ def test_right_passphrase_does_not_count_towards_the_lockout(store, passfile):
         for _ in range(auth.LOCK_MAX + 1):
             r, _ = _sign_in(c, cid, _pkce()[1])
             assert r.status_code == 302
-    assert not lock.blocked()
+    assert lock.fails == []
