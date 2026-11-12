@@ -131,6 +131,7 @@ def test_klipper_gone_before_the_subscription_is_not_connected(moonraker, fam):
     pid = add(moonraker)
     fam.start()
     assert wait_for(lambda: "klippy_not_ready" in states)
+    assert states[-1] == "klippy_not_ready" and fam.state(pid) == "klippy_not_ready"     # refused: not connected meanwhile
     moonraker.subscribe_refused = False
     assert wait_for(lambda: moonraker.event("notify_klippy_ready") or fam._conn(pid).sub.connected)
     assert wait_for(lambda: fam.state(pid) == "connected")
@@ -193,8 +194,11 @@ def test_offline_keeps_last_values(moonraker, fam):
     pid = add(moonraker)
     fam.start()
     assert wait_for(lambda: fam.state(pid) == "connected")
+    moonraker.subscribe_refused = True          # the reconnect does not get back to "connected" while we look
     moonraker.drop()
+    assert wait_for(lambda: fam.state(pid) != "connected")      # the status below is read after the loss, not before
     st = fam.status(pid)
+    assert st["state"] != "connected"
     assert st["ams"][0]["label"] == "T0"
 
 
@@ -321,12 +325,12 @@ def test_camera_url_only_http_on_the_printer(moonraker, fam, url, ok):
     assert (fam.camera_url(pid) is not None) is ok
 
 
-def test_job_record_never_blocks_follow_moves(moonraker, spoolman_url, monkeypatch):
+def test_job_record_never_blocks_follow_moves(moonraker, spoolman_url, monkeypatch, caplog):
     """Final review M4: waiting for Moonraker's history runs beside follow mode, and an entry still in progress
     after the wait is not recorded."""
     from filament_kit.bridge.klipper import manager as mgr_mod
     from filament_kit.spoolman import Spoolman
-    monkeypatch.setattr(mgr_mod, "HISTORY_WAIT", 2.0)
+    monkeypatch.setattr(mgr_mod, "HISTORY_WAIT", 1.0)
     as_sv08(moonraker)
     sm = Spoolman(spoolman_url)
     sm.ensure_fields()
@@ -341,12 +345,12 @@ def test_job_record_never_blocks_follow_moves(moonraker, spoolman_url, monkeypat
         moonraker.history = [{"job_id": "9", "status": "in_progress", "filename": "x.gcode"}]
         moonraker.push({"print_stats": {"state": "printing"}})
         moonraker.push({"print_stats": {"state": "complete"}})
-        time.sleep(0.2)
-        t0 = time.monotonic()
+        def gave_up():
+            return "still shows job" in caplog.text
         moonraker.set_spool(s["id"])
         assert wait_for(lambda: sm.get(f"spool/{s['id']}")["location"] == "SV08 MAX – T0", 5)
-        assert time.monotonic() - t0 < 1.5                  # not queued behind the 2 s history wait
-        time.sleep(2.5)
+        assert not gave_up()                                # moved while the record was still waiting on the history
+        assert wait_for(gave_up, 8)                         # the wait ended without the entry closing
         assert fam.usage(pid, 36500) == []                  # still in progress after the wait: not recorded
     finally:
         fam.stop()
