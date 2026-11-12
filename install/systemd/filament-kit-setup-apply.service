@@ -1,9 +1,0 @@
-[Unit]
-Description=filament-kit modules apply (the setup page's job unit under its name up to 0.4.0; removed in the next release)
-# The page starts filament-kit-setup-job.service now. Output: /run/filament-kit-setup/job.log (root:filament-kit 640).
-
-[Service]
-Type=oneshot
-# an apply may install packages (apt) or download the library
-TimeoutStartSec=30min
-ExecStart=/opt/filament-kit/venv/bin/python -I -m filament_kit.setup_helper apply-run

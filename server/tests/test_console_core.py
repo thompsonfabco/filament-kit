@@ -112,16 +112,8 @@ def test_a_job_writes_its_own_end_to_the_journal(env, caplog):  # noqa: F811
     assert "setup: job check finished (exit 0)" in caplog.text
 
 
-def test_the_old_units_entry_still_runs_the_apply(env, monkeypatch):  # noqa: F811
-    monkeypatch.setattr(setup_helper, "run_job", lambda n, cmd=None: {"apply": 5}[n])
-    assert setup_helper.main(["apply-run"]) == 5
-
-
-def test_a_job_removes_the_log_a_rollback_would_misread(env):  # noqa: F811
-    setup_helper.apply_log().parent.mkdir(parents=True)
-    setup_helper.apply_log().write_text("==> filament-kit modules apply\nhalf done\n", encoding="utf-8")
-    assert setup_helper.run_apply([sys.executable, "-c", "print('hello')"]) == 0
-    assert not setup_helper.apply_log().exists()
+def test_the_apply_job_output_is_in_the_log(env):  # noqa: F811
+    assert setup_helper.run_job("apply", [sys.executable, "-c", "print('hello')"]) == 0
     assert "hello" in jobs.view(0)["text"]
 
 
@@ -843,7 +835,7 @@ def test_the_job_unit_is_nothing_an_update_stops():
     cfg = {"modules": {n: True for n in modules.MODULES}}
     services, others = updates._units(cfg)
     for u in services + others + [x for m in modules.MODULES.values() for x in m.units]:
-        assert not u.startswith(setup_helper.JOB_PREFIX) and u != setup_helper.APPLY_UNIT
+        assert not u.startswith(setup_helper.JOB_PREFIX)
 
 
 def test_the_job_unit_as_shipped():
@@ -921,10 +913,10 @@ def test_the_klipper_hint_no_longer_promises_an_app_screen():
     assert "or in the app" not in (STATIC / "setup.js").read_text(encoding="utf-8")
 
 
-def test_a_rollback_target_older_than_the_job_unit_finds_what_it_needs():
-    """0.4.0's own install puts back the unit it uses; ours stays on disk unused, and the name it knew still works."""
-    assert (SYSTEMD / setup_helper.APPLY_UNIT).exists()
-    assert "setup_helper apply-run" in (SYSTEMD / setup_helper.APPLY_UNIT).read_text(encoding="utf-8")
+def test_the_0_4_0_job_unit_and_its_entry_are_gone():
+    assert not (SYSTEMD / "filament-kit-setup-apply.service").exists()
+    assert not hasattr(setup_helper, "run_apply") and not hasattr(setup_helper, "APPLY_UNIT")
+    assert setup_helper.main(["apply-run"]) == 2
 
 
 def test_helper_ops_are_the_closed_list():

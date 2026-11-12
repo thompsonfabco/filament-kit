@@ -54,8 +54,7 @@ job-run <name>`), so it goes on when it restarts the kit server (and the page wi
 here, is the unit's instance, and is checked against the list again by the job; no argument is ever a secret, since
 instance names show in systemctl and the journal. The job runs the same command the CLI has, with its output in
 /run/filament-kit-setup/job.log (root:filament-kit 640), which the page reads. Without a terminal those
-commands print neither the setup code nor a pairing link. filament-kit-setup-apply.service, the name up to 0.4.0, stays
-for one release and runs the job `apply` (`apply-run`)."""
+commands print neither the setup code nor a pairing link."""
 from __future__ import annotations
 
 import json
@@ -87,7 +86,6 @@ log = logging.getLogger(__name__)
 MAX_REQUEST = 16 * 1024
 READ_TIMEOUT = 5.0
 JOB_PREFIX = "filament-kit-setup-job@"              # one instance per job: filament-kit-setup-job@update.service
-APPLY_UNIT = "filament-kit-setup-apply.service"     # the job unit's name up to 0.4.0
 UPDATE_UNIT = "filament-kit-update.service"         # the timer's update; `sudo filament-kit update` at a terminal has no unit
 ACTIVE = ("activating", "active", "deactivating", "reloading")      # a oneshot is "activating" while it runs
 # The closed list of jobs: the `filament-kit` arguments each one runs.
@@ -133,11 +131,6 @@ class Refused(Exception):
 
 def run_dir() -> Path:
     return Path(os.environ.get("FK_SETUP_RUN", "/run/filament-kit-setup"))
-
-
-def apply_log() -> Path:
-    """Where 0.4.0's page reads its apply: never written now; removed by a job, so a rollback finds no stale one."""
-    return run_dir() / "apply.log"
 
 
 def job_log() -> Path:
@@ -247,7 +240,7 @@ def _running_jobs() -> list[str]:
 
 
 def _applying() -> bool:
-    """True while a job's unit runs or is queued (one job at a time), under either unit name. Raises CannotTell: the
+    """True while a job's unit runs or is queued (one job at a time). Raises CannotTell: the
     guards then refuse, and the log's reader keeps calling the job running."""
     if _no_systemd():
         return False
@@ -255,12 +248,10 @@ def _applying() -> bool:
 
 
 def _other_units() -> list[str]:
-    """The old job unit and the timer's update, when they run."""
-    out = []
-    for unit in (APPLY_UNIT, UPDATE_UNIT):
-        if _asked("show", "--property=ActiveState", "--value", unit).strip() in ACTIVE:
-            out.append(unit)
-    return out
+    """The timer's update, when it runs."""
+    if _asked("show", "--property=ActiveState", "--value", UPDATE_UNIT).strip() in ACTIVE:
+        return [UPDATE_UNIT]
+    return []
 
 
 def _busy_text() -> str:
@@ -864,7 +855,6 @@ def run_job(name: str, cmd: list[str] | None = None) -> int:
     root = hasattr(os, "geteuid") and os.geteuid() == 0
     if root:
         shutil.chown(d, user="root", group=setup_code.GROUP)
-    apply_log().unlink(missing_ok=True)
     fd = os.open(job_log(), os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o640)
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         if root:
@@ -894,10 +884,6 @@ def run_job(name: str, cmd: list[str] | None = None) -> int:
     # the page's own audit line says who started it; the page restarts during a job, so the end is logged here
     log.info("setup: job %s finished (exit %s)", name, code)
     return code
-
-
-def run_apply(cmd: list[str] | None = None) -> int:
-    return run_job("apply", cmd)
 
 
 def job_run(name: str) -> int:
@@ -983,10 +969,8 @@ def main(argv: list[str] | None = None) -> int:
     logging.getLogger("filament_kit").setLevel(logging.INFO)
     if len(argv) == 2 and argv[0] == "job-run":
         return job_run(argv[1])
-    if argv == ["apply-run"]:
-        return run_apply()
     if argv:
-        print("usage: python -m filament_kit.setup_helper [job-run NAME | apply-run]", file=sys.stderr)
+        print("usage: python -m filament_kit.setup_helper job-run NAME", file=sys.stderr)
         return 2
     reply_to = sys.stdout.buffer
     sys.stdout = sys.stderr            # whatever a CLI function prints goes to the journal, never into the reply

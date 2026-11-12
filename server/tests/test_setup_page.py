@@ -517,7 +517,7 @@ def test_addresses_are_checked_and_saved(app, env):
 def test_apply_output_is_read_from_the_log(app, env, monkeypatch):
     c = client(app)
     assert c.get("/setup/api/apply").json()["seen"] is False
-    code = setup_helper.run_apply([sys.executable, "-c", "print('==> Status'); print('OK  done')"])
+    code = setup_helper.run_job("apply", [sys.executable, "-c", "print('==> Status'); print('OK  done')"])
     assert code == 0
     r = c.get("/setup/api/apply?from=0").json()
     assert r["running"] is False and r["exit"] == 0 and "OK  done" in r["text"]
@@ -585,8 +585,8 @@ def test_helper_unit_files_keep_it_closed():
     assert "StandardInput=socket" in svc and "ProtectSystem=strict" in svc
     assert ("ReadWritePaths=/etc/filament-kit -/var/backups/filament-kit\n" in svc
             and "-m filament_kit.setup_helper\n" in svc)
-    run = (systemd / "filament-kit-setup-apply.service").read_text(encoding="utf-8")
-    assert "setup_helper apply-run" in run
+    run = (systemd / "filament-kit-setup-job@.service").read_text(encoding="utf-8")
+    assert "setup_helper job-run %i" in run
 
 
 # ---------- the setup code: CLI and installer ----------
@@ -745,7 +745,7 @@ def test_an_apply_counts_as_running_while_its_oneshot_is_activating(monkeypatch,
         return subprocess.CompletedProcess(cmd, 0, stdout=state + "\n", stderr="")
     monkeypatch.setattr(setup_helper.subprocess, "run", run)
     assert setup_helper._applying() is running
-    assert ["systemctl", "show", "--property=ActiveState", "--value", setup_helper.APPLY_UNIT] in seen
+    assert ["systemctl", "show", "--property=ActiveState", "--value", setup_helper.UPDATE_UNIT] in seen
 
 
 # ---------- the helper's ops, the page's guards and the apply log ----------

@@ -250,11 +250,11 @@ def test_remote_adds_apt_packages():
 
 def test_server_installs_the_setup_helper_units_and_starts_its_socket():
     acts = apply.plan(set_mode(_cfg(), "server"))
-    for u in ("filament-kit-setup.socket", "filament-kit-setup@.service", "filament-kit-setup-apply.service"):
+    for u in ("filament-kit-setup.socket", "filament-kit-setup@.service", "filament-kit-setup-job@.service"):
         assert u in _of(acts, "install_unit")
     en = _of(acts, "enable")
     assert en.index("filament-kit-setup.socket") == en.index("filament-kit.service") + 1
-    assert "filament-kit-setup@.service" not in en and "filament-kit-setup-apply.service" not in en
+    assert "filament-kit-setup@.service" not in en and "filament-kit-setup-job@.service" not in en
     off = apply.plan(_mode("station"), resolve=lambda h: [h])
     assert "filament-kit-setup.socket" in _of(off, "disable")
     assert "filament-kit-setup.socket" not in _of(off, "install_unit")
