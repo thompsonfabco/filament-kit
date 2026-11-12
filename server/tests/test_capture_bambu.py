@@ -1,6 +1,7 @@
 """tools/capture_bambu.py: the owner's read-only printer capture (spec P §6, plan P7). No network: a fake client."""
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -11,6 +12,7 @@ TOOL = Path(__file__).resolve().parents[2] / "tools" / "capture_bambu.py"
 SERIAL = "0948ZZ0A0000999"
 CODE = "Ab12Cd34"
 IP = "198.51.100.109"     # synthetic (RFC 5737)
+LEAF = b"synthetic-der-leaf"
 
 
 @pytest.fixture(scope="module")
@@ -33,7 +35,8 @@ class FakeClient:
         self.client_id, self.accept = client_id, accept
         self.published, self.subscribed, self.calls = [], [], []
         self.replies = replies if replies is not None else REPLIES
-        self.on_connect = self.on_message = None
+        self.on_connect = self.on_message = self.on_socket_open = None
+        self.leaf = LEAF                 # the DER leaf its socket presents
 
     def username_pw_set(self, user, password):
         self.user, self.password = user, password
@@ -43,6 +46,9 @@ class FakeClient:
 
     def connect(self, host, port, keepalive):
         self.host, self.port = host, port
+        if self.on_socket_open:          # paho: after the TLS handshake, before CONNECT
+            leaf = self.leaf
+            self.on_socket_open(self, None, type("Sock", (), {"getpeercert": lambda s, binary_form=False: leaf})())
 
     def subscribe(self, topic, qos=0):
         self.subscribed.append(topic)
@@ -88,7 +94,7 @@ def env_file(tmp_path, body=None):
     return p
 
 
-def run(cap, tmp_path, *extra, factory=None):
+def run(cap, tmp_path, *extra, factory=None, probe=lambda host: LEAF):
     made = []
 
     def f(cid):
@@ -97,7 +103,7 @@ def run(cap, tmp_path, *extra, factory=None):
         return c
     out = tmp_path / "out" / "h2d.json"
     rc = cap.main(["--env", str(env_file(tmp_path)), "--out", str(out), *extra], client_factory=f,
-                  sleep=lambda s: None)
+                  sleep=lambda s: None, probe=probe)
     return rc, out, made
 
 
@@ -173,6 +179,42 @@ def test_rejected_connection_writes_nothing(cap, tmp_path, capsys):
     rc, out, _ = run(cap, tmp_path, factory=lambda cid: FakeClient(cid, accept=False))
     err = capsys.readouterr().err
     assert rc == 1 and not out.exists() and CODE not in err and "access code" in err
+
+
+def test_the_code_goes_only_to_the_pinned_leaf(cap, tmp_path, capsys):
+    """FA-100: the leaf is read and printed first; a different leaf at connect time never gets the access code."""
+    rc, out, (c,) = run(cap, tmp_path)
+    assert rc == 0 and c.password == CODE
+    assert hashlib.sha256(LEAF).hexdigest() in capsys.readouterr().out
+
+    seen = []
+
+    class Spy(FakeClient):
+        def username_pw_set(self, user, password):
+            seen.append(password)
+            super().username_pw_set(user, password)
+    def swapped(cid):
+        c = Spy(cid)
+        c.leaf = b"another-leaf"
+        return c
+    out.unlink()
+    rc, out, _ = run(cap, tmp_path, factory=swapped)
+    err = capsys.readouterr().err
+    assert rc == 1 and not out.exists() and CODE not in err and "not the one read at the start" in err
+    assert CODE not in seen                                    # the code was never handed to the client
+
+
+def test_fingerprint_option_and_off_switch(cap, tmp_path, capsys):
+    good = hashlib.sha256(LEAF).hexdigest()
+    rc, out, _ = run(cap, tmp_path, "--fingerprint", good.upper())
+    assert rc == 0
+    rc, out, made = run(cap, tmp_path, "--fingerprint", "00" * 32)
+    assert rc == 1 and not made and CODE not in capsys.readouterr().err         # refused before connecting
+    # --no-pin: no probe at all, the code is set as before
+    def no_probe(host):
+        raise AssertionError("probed")
+    rc, out, (c,) = run(cap, tmp_path, "--no-pin", probe=no_probe)
+    assert rc == 0 and c.password == CODE
 
 
 def test_read_env_format(cap, tmp_path):

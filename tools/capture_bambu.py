@@ -7,6 +7,10 @@ format, `KEY=value` lines as systemd's EnvironmentFile reads them), connects to 
 8883, user bblp), subscribes to its report, sends ONLY two read-only requests, `pushall` (the full report) and
 `get_version` (the module list: AMS module codes), collects for --seconds (15), and disconnects.
 
+The printer's self-signed certificate is pinned as the kit does (bridge/tlspin.py): its SHA-256 is read first and printed,
+and the access code is sent only over a connection that presents that same certificate (--fingerprint HEX also requires
+a value you know; --no-pin turns the check off).
+
 The fixture (JSON) holds every message received (`messages`: topic, seconds since connect, payload) and the
 `print` payloads merged in order (`report`). The serial is replaced by SERIAL0000000000 everywhere (keys, topics,
 nested strings) and every IPv4 address by 192.0.2.1, also the packed uint32 form the firmware uses in
@@ -20,6 +24,7 @@ Standard library + paho-mqtt (the scanner's and the kit's venvs both have it).""
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import socket
@@ -201,13 +206,51 @@ def _paho_client(client_id: str):
     return mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=client_id)
 
 
+def fingerprint(der: bytes) -> str:
+    """The lowercase hex SHA-256 of the DER certificate (the kit's pin format)."""
+    return hashlib.sha256(der).hexdigest()
+
+
+def leaf_der(host: str, timeout: float = 10.0) -> bytes:
+    """The DER leaf the printer presents on the MQTT port. No credentials are sent."""
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    try:
+        with socket.create_connection((host, PORT), timeout=timeout) as raw:
+            with ctx.wrap_socket(raw) as s:
+                der = s.getpeercert(binary_form=True)
+    except OSError as e:
+        raise CaptureError(f"cannot read the printer's certificate at {host}:{PORT}: {e.strerror or type(e).__name__}") \
+            from None
+    if not der:
+        raise CaptureError(f"the printer at {host}:{PORT} presented no certificate")
+    return der
+
+
+def check_leaf_name(der: bytes, serial: str) -> None:
+    """The leaf's CN, when it has one, is the printer's serial (as tlspin requires on first use). Skipped without
+    the `cryptography` package or for a certificate it cannot read."""
+    try:
+        from cryptography import x509
+        from cryptography.x509.oid import NameOID
+        attrs = x509.load_der_x509_certificate(der).subject.get_attributes_for_oid(NameOID.COMMON_NAME)
+    except (ImportError, ValueError):
+        return
+    if attrs and str(attrs[0].value) != serial:
+        raise CaptureError("the certificate at this address names another device; check PRINTER_IP "
+                           "(the access code was not sent)")
+
+
 def capture(host: str, serial: str, code: str, seconds: float = SECONDS,
-            client_factory: Callable[[str], Any] = _paho_client, sleep: Callable[[float], None] = time.sleep) -> dict:
+            client_factory: Callable[[str], Any] = _paho_client, sleep: Callable[[float], None] = time.sleep,
+            pin: str | None = None) -> dict:
     """Connect, send the two read-only requests once connected, collect for `seconds`, disconnect. Returns the
-    raw (unscrubbed) capture: {"messages": [...], "connected": bool}."""
+    raw (unscrubbed) capture: {"messages": [...], "connected": bool}. With `pin` (a certificate fingerprint) the
+    access code is set only after the socket's TLS leaf matched it."""
     client = client_factory(f"fk-capture-{int(time.time())}")
     messages: list[dict] = []
-    state = {"connected": False, "sent": False, "rc": None}
+    state = {"connected": False, "sent": False, "rc": None, "mismatch": False}
     lock = threading.Lock()
     t0 = time.monotonic()
     request = f"device/{serial}/request"
@@ -237,7 +280,23 @@ def capture(host: str, serial: str, code: str, seconds: float = SECONDS,
         with lock:
             messages.append({"topic": msg.topic, "t": round(time.monotonic() - t0, 2), "payload": payload})
 
-    client.username_pw_set("bblp", code)
+    def on_socket_open(c, userdata, sock):
+        """paho: TLS handshake done, CONNECT not built yet. Raising an OSError aborts the attempt."""
+        try:
+            der = sock.getpeercert(binary_form=True)
+        except Exception:  # noqa: BLE001 - anything unreadable counts as no match
+            der = None
+        if not der or fingerprint(der) != pin:
+            c.username_pw_set("bblp", None)
+            state["mismatch"] = True
+            raise ConnectionAbortedError("the printer's certificate changed")
+        c.username_pw_set("bblp", code)
+
+    if pin is None:
+        client.username_pw_set("bblp", code)
+    else:
+        client.username_pw_set("bblp", None)           # set by on_socket_open once the leaf matched the pin
+        client.on_socket_open = on_socket_open
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE          # Bambu printers present a self-signed leaf (read-only capture)
@@ -247,6 +306,9 @@ def capture(host: str, serial: str, code: str, seconds: float = SECONDS,
     try:
         client.connect(host, PORT, keepalive=30)
     except OSError as e:
+        if state["mismatch"]:
+            raise CaptureError("the printer's certificate is not the one read at the start; "
+                               "the access code was not sent") from None
         raise CaptureError(f"cannot connect to the printer at {host}:{PORT}: {e.strerror or type(e).__name__}") \
             from None
     client.loop_start()
@@ -255,6 +317,8 @@ def capture(host: str, serial: str, code: str, seconds: float = SECONDS,
     finally:
         client.loop_stop()
         client.disconnect()
+    if state["mismatch"]:
+        raise CaptureError("the printer's certificate is not the one read at the start; the access code was not sent")
     if not state["connected"]:
         raise CaptureError(f"the printer did not accept the connection (result {state['rc']}); check the "
                            "access code and LAN mode on the printer")
@@ -278,12 +342,14 @@ def fixture(raw: dict, serial: str, code: str, seconds: float, host: str | None 
 
 
 def main(argv: list[str] | None = None, *, client_factory: Callable[[str], Any] = _paho_client,
-         sleep: Callable[[float], None] = time.sleep) -> int:
+         sleep: Callable[[float], None] = time.sleep, probe: Callable[[str], bytes] = leaf_der) -> int:
     ap = argparse.ArgumentParser(prog="capture_bambu.py", description=__doc__.split("\n\n")[0])
     ap.add_argument("--env", required=True, help="the env file with PRINTER_IP, PRINTER_SERIAL, PRINTER_CODE")
     ap.add_argument("--out", required=True, help="the fixture to write (JSON)")
     ap.add_argument("--seconds", type=float, default=SECONDS, help=f"how long to collect (default {SECONDS:g})")
     ap.add_argument("--force", action="store_true", help="allow --out inside the repository's tests directory")
+    ap.add_argument("--fingerprint", help="require the printer's certificate to have this SHA-256 (hex)")
+    ap.add_argument("--no-pin", action="store_true", help="do not pin the printer's certificate before sending the code")
     args = ap.parse_args(argv)
     out = Path(args.out)
     if inside_tests(out) and not args.force:
@@ -293,8 +359,18 @@ def main(argv: list[str] | None = None, *, client_factory: Callable[[str], Any] 
     try:
         env = read_env(args.env)
         host, serial, code = env["PRINTER_IP"], env["PRINTER_SERIAL"], env["PRINTER_CODE"]
+        pin = None
+        if not args.no_pin:
+            der = probe(host)
+            pin = fingerprint(der)
+            want = (args.fingerprint or "").replace(":", "").lower()
+            if want and want != pin:
+                raise CaptureError(f"the printer's certificate is {pin}, not the --fingerprint given; "
+                                   "the access code was not sent")
+            check_leaf_name(der, serial)
+            print(f"printer certificate SHA-256 {pin}; the access code goes only to this certificate")
         print(f"capturing from the printer for {args.seconds:g} s (pushall + get_version only) ...")
-        raw = capture(host, serial, code, args.seconds, client_factory, sleep)
+        raw = capture(host, serial, code, args.seconds, client_factory, sleep, pin)
     except CaptureError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
