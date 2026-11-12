@@ -3,6 +3,7 @@ server's user (owner of the state folder) or the web unit's user (owner of its o
 real os functions on a temp folder; the root test also checks owners (run it as root: sudo .../pytest -k root)."""
 from __future__ import annotations
 
+import errno
 import logging
 import os
 import shutil
@@ -97,9 +98,11 @@ def test_links_already_in_the_web_folder_are_not_followed(kit):
     os.symlink(kit / "victim" / "a", w / "oauth.json")
     (w / "sub").mkdir()
     os.symlink(kit / "victim", w / "sub" / "dir")
+    before = stat.S_IMODE(os.stat(kit / "victim").st_mode)          # read before migrate runs, not after
     web_access.migrate(*_ids()[:1] * 2)
     _same(kit / "victim" / "a", 0o600)
-    _same(kit / "victim", stat.S_IMODE(os.stat(kit / "victim").st_mode))
+    _same(kit / "victim", before)
+    assert sorted(os.listdir(kit / "victim")) == ["a", "b"]
 
 
 def test_pair_replaces_a_dangling_kit_token_link_and_never_writes_its_target(kit):
@@ -176,8 +179,9 @@ def test_root_never_reads_a_linked_devices_file_into_the_kits_state(kit):
     (kit / "victim" / "secret.json").write_text('[{"id": "x", "name": "SECRET-EXAMPLE", "hash": "h"}]',
                                                 encoding="utf-8")
     os.symlink(kit / "victim" / "secret.json", kit / "state" / "devices.json")
-    with pytest.raises(OSError):
+    with pytest.raises(OSError) as refused:
         web_access.pair(*_ids()[:1] * 2)
+    assert refused.value.errno == errno.ELOOP                       # O_NOFOLLOW met the link, not some other failure
     assert os.path.islink(kit / "state" / "devices.json")
     for f in (kit / "state").iterdir():
         if f.is_file() and not f.is_symlink():
