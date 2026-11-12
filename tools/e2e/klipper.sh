@@ -28,6 +28,12 @@ MOONRAKER_REF=${MOONRAKER_REF:-v0.9.3}
 PY=${PYTHON:-$(ls -d "$HOME"/.local/share/uv/python/cpython-3.12*/bin/python3.12 2>/dev/null | tail -1)}
 PY=${PY:-python3}
 log() { printf '\n== %s\n' "$*"; }
+checkout_ref() {   # $1 = clone dir, $2 = ref. A failed fetch is only tolerated (offline) when the ref is already here.
+    git -C "$1" fetch -q --tags || echo "warning: git fetch failed in $1; using what is there" >&2
+    git -C "$1" checkout -q "$2"
+    [ "$(git -C "$1" rev-parse HEAD)" = "$(git -C "$1" rev-parse "$2^{commit}")" ] \
+        || { echo "error: $1 is not at $2 after the checkout" >&2; exit 1; }
+}
 
 log "packages"
 if ! dpkg -s build-essential python3-venv python3-dev libffi-dev liblmdb-dev libsodium-dev zlib1g-dev \
@@ -56,29 +62,35 @@ exec 9>"$WORK/.setup.lock"   # a second run waits here: git and the venvs below 
 flock 9
 log "Klipper $KLIPPER_REF"
 [ -d "$WORK/klipper" ] || git clone -q https://github.com/Klipper3d/klipper.git "$WORK/klipper"
-git -C "$WORK/klipper" fetch -q --tags && git -C "$WORK/klipper" checkout -q "$KLIPPER_REF"
+checkout_ref "$WORK/klipper" "$KLIPPER_REF"
 cp "$REPO/tools/e2e/gcode_shell_command.py" "$WORK/klipper/klippy/extras/gcode_shell_command.py"
-venv() {   # $1 = env dir, then pip install arguments; redone until one install succeeds
-    local env=$1; shift
-    [ -f "$env/.fk-ok" ] && return 0
+venv() {   # $1 = env dir, $2 = what the env is made from (ref and requirements hash), then pip install arguments;
+           # redone until one install succeeds, and again when $2 changes
+    local env=$1 key=$2; shift 2
+    [ "$(cat "$env/.fk-ok" 2>/dev/null)" = "$key" ] && return 0
     rm -rf "$env"
     "$PY" -m venv "$env"
     "$env/bin/pip" install -q "$@"
-    touch "$env/.fk-ok"
+    printf '%s\n' "$key" > "$env/.fk-ok"
 }
-venv "$WORK/klippy-env" -r "$WORK/klipper/scripts/klippy-requirements.txt"
-if [ ! -x "$WORK/klipper/out/klipper.elf" ]; then
+reqkey() { printf '%s %s' "$1" "$(cat "${@:2}" | sha256sum | cut -d' ' -f1)"; }   # $1 = ref, then the requirements files
+venv "$WORK/klippy-env" "$(reqkey "$KLIPPER_REF" "$WORK/klipper/scripts/klippy-requirements.txt")" \
+    -r "$WORK/klipper/scripts/klippy-requirements.txt"
+if [ ! -x "$WORK/klipper/out/klipper.elf" ] || [ "$(cat "$WORK/klipper/out/.fk-ref" 2>/dev/null)" != "$KLIPPER_REF" ]; then
     printf 'CONFIG_LOW_LEVEL_OPTIONS=y\nCONFIG_MACH_LINUX=y\n' > "$WORK/klipper/.config"
+    make -C "$WORK/klipper" clean >/dev/null
     make -C "$WORK/klipper" olddefconfig >/dev/null && make -C "$WORK/klipper" -j"$(nproc)" >/dev/null
+    printf '%s\n' "$KLIPPER_REF" > "$WORK/klipper/out/.fk-ref"
 fi
 
 log "Moonraker $MOONRAKER_REF"
 [ -d "$WORK/moonraker" ] || git clone -q https://github.com/Arksine/moonraker.git "$WORK/moonraker"
-git -C "$WORK/moonraker" fetch -q --tags && git -C "$WORK/moonraker" checkout -q "$MOONRAKER_REF"
-venv "$WORK/moonraker-env" -r "$WORK/moonraker/scripts/moonraker-requirements.txt"
+checkout_ref "$WORK/moonraker" "$MOONRAKER_REF"
+venv "$WORK/moonraker-env" "$(reqkey "$MOONRAKER_REF" "$WORK/moonraker/scripts/moonraker-requirements.txt")" \
+    -r "$WORK/moonraker/scripts/moonraker-requirements.txt"
 
 log "kit test environment"
-venv "$WORK/kit-env" -e "$REPO/server[test]"
+venv "$WORK/kit-env" "$(reqkey kit "$REPO/server/pyproject.toml")" -e "$REPO/server[test]"
 exec 9>&-                    # setup is done; the processes started below must not hold the lock
 # kit-env's editable install points at whichever tree created it: PYTHONPATH makes it this one, and this checks it did
 PYTHONPATH=$REPO/server "$WORK/kit-env/bin/python" -c '
