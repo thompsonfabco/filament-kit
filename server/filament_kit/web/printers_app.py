@@ -66,7 +66,7 @@ HLS_NAME = re.compile(r"[A-Za-z0-9_-]{1,64}\.(ts|m3u8)")
 HLS_TYPES = {"m3u8": "application/vnd.apple.mpegurl", "ts": "video/mp2t"}
 MAX_SEGMENT = 16 * 1024 * 1024
 STATIC = Path(__file__).parent / "static"
-LIST_FIELDS = ("id", "name", "model", "state", "camera", "summary")
+LIST_FIELDS = ("id", "name", "model", "family", "state", "camera", "summary")
 # the kit path of each step, written out so test_web_token_scope sees every path this unit calls
 MANUAL_STEPS = {"start": "/api/printers/{serial}/manual-map/start", "confirm": "/api/printers/{serial}/manual-map/confirm",
                 "skip": "/api/printers/{serial}/manual-map/skip", "stop": "/api/printers/{serial}/manual-map/stop",

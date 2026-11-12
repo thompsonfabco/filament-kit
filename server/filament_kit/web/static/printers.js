@@ -19,6 +19,7 @@ function printersTab() {
   const slotMsg = h("div");
   const usageBox = h("div");
   const mapBox = h("div");
+  const reportBox = h("div");     // the saved report's link: outside mapBox, which loadMap redraws
   const manualBox = h("div");     // Map by loading filament: outside mapBox, which loadMap redraws
   const msg = h("div");
   const conn = h("p", { class: "muted" });
@@ -28,7 +29,7 @@ function printersTab() {
     h("h1", { textContent: "Printers" }), picker, head, conn, alerts, controls, camBtn, camBox, msg,
     h("h2", { textContent: "Filament" }), units, slotMsg, loadBox,
     h("h2", { textContent: "Usage" }), usageBox,
-    h("h2", { textContent: "Slots" }), mapBox, manualBox, pushBox,
+    h("h2", { textContent: "Slots" }), mapBox, reportBox, manualBox, pushBox,
     h("h2", { textContent: "Manage printers" }), manageBox);
 
   async function pj(path, body) {
@@ -53,9 +54,10 @@ function printersTab() {
     current = id; picker.value = id;
     try { localStorage.setItem("printer", id); } catch {}
     camera(false); camBtn.classList.toggle("hidden", !camKind()); closeLoad(); slotMsg.replaceChildren();
-    stream(); loadUsage(); loadMap(); manualStop(); manualBox.replaceChildren();
+    stream(); loadUsage(); loadMap(); manualStop(); manualBox.replaceChildren(); clearReport();
   }
   // "mjpeg" (an <img>) or "hls" (a <video>); null: this model has no camera we can show
+  const isKlipper = () => (printers.find((x) => x.id === current) || {}).family === "klipper";
   function camKind() {
     const p = printers.find((x) => x.id === current);
     const k = p && p.camera && p.camera.kind;
@@ -71,17 +73,20 @@ function printersTab() {
     es.onmessage = (ev) => {
       let d; try { d = JSON.parse(ev.data); } catch { return; }
       if (d.error) { conn.textContent = d.error; return; }
+      const was = lastStatus && isLive(lastStatus.status);
       conn.textContent = ""; lastStatus = d; render(d);
+      if (was && !isLive(d.status)) loadUsage();      // a job ended: its usage entry is new
     };
     es.onopen = () => { conn.textContent = ""; };
     es.onerror = () => { conn.textContent = "Reconnecting…"; };
   }
   function stopStream() { if (es) { es.close(); es = null; } }
 
+  const isLive = (s) => ["RUNNING", "PAUSE", "PREPARE"].includes((s || {}).gcode_state);
   function fmtMin(m) { return m > 0 ? (m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`) : ""; }
   function render(d) {
     const s = d.status || {}, p = d.printer || {};
-    const live = ["RUNNING", "PAUSE", "PREPARE"].includes(s.gcode_state);
+    const live = isLive(s);
     head.replaceChildren(
       h("h3", {}, p.name || current, h("span", { class: "pill", textContent: p.state === "connected" ? (s.gcode_state || "") : (p.state || "") })),
       s.job ? h("p", { textContent: s.job }) : null,
@@ -296,6 +301,10 @@ function printersTab() {
   async function loadMap() {
     clearTimeout(mapTimer);
     const id = current;
+    if (isKlipper()) {      // the kit's slot map and report are for Bambu printers; Klipper has only Map by loading filament
+      mapBox.replaceChildren(h("button", { class: "secondary", textContent: "Map by loading filament", on: { click: manualMap } }));
+      return;
+    }
     try {
       const m = await pj(`${encodeURIComponent(id)}/map`);
       if (id !== current) return;
@@ -316,13 +325,17 @@ function printersTab() {
     } catch (e) { mapBox.replaceChildren(fail(e)); }
   }
   // The report holds no serial, address, name or account id: the server builds it from an allow-list.
+  let reportUrl = null;
+  function clearReport() { if (reportUrl) URL.revokeObjectURL(reportUrl); reportUrl = null; reportBox.replaceChildren(); }
   async function collectReport() {
     try {
       const r = await pj(`${encodeURIComponent(current)}/report`, {});
-      const url = URL.createObjectURL(new Blob([r.xml], { type: "application/xml" }));
-      const a = h("a", { href: url, download: r.name, textContent: `Save ${r.name}, then attach it to a "Printer report" issue on the project's GitHub` });
-      if (r.live === false) mapBox.append(h("p", { class: "muted", textContent: "The printer could not be reached: this report is built from what the kit saved." }));
-      mapBox.append(h("p", {}, a));
+      clearReport();      // one link at a time; the old one's object URL is freed
+      reportUrl = URL.createObjectURL(new Blob([r.xml], { type: "application/xml" }));
+      const a = h("a", { href: reportUrl, download: r.name, textContent: `Save ${r.name}, then attach it to a "Printer report" issue on the project's GitHub` });
+      reportBox.replaceChildren(
+        ...(r.live === false ? [h("p", { class: "muted", textContent: "The printer could not be reached: this report is built from what the kit saved." })] : []),
+        h("p", {}, a));
     } catch (e) { say(e.message, false); }
   }
   // ----- Map by loading filament: the owner loads each slot, the printer says which one it sees (the kit's session,
@@ -336,7 +349,7 @@ function printersTab() {
     try { v = await pj(mpath(id, "start"), {}); } catch (e) { manualBox.replaceChildren(fail(e)); return; }
     if (id !== current) return;
     manualStop();
-    manual = { id, v, timer: null, shown: null, picks: {} };
+    manual = { id, v, timer: null, shown: null, picks: {}, fails: 0 };
     drawManual();
     manual.timer = setTimeout(manualTick, 2000);
   }
@@ -355,9 +368,16 @@ function printersTab() {
     if (!m) return;
     if (!m.v.open) { drawManual(); return; }
     const was = JSON.stringify(m.v);
-    try { m.v = await pj(mpath(m.id)); } catch (e) { if (m === manual) { manualBox.replaceChildren(fail(e)); manual = null; } return; }
+    try { m.v = await pj(mpath(m.id)); } catch (e) {
+      if (m !== manual) return;
+      // a Wi-Fi blip: the session is still open on the kit, so keep asking, slower each time (like the Android screen)
+      if (++m.fails >= 8) { manualBox.replaceChildren(fail(e)); manual = null; return; }
+      drawManual(`Lost touch with the kit (${e.message}); trying again…`, false);
+      m.timer = setTimeout(manualTick, Math.min(2000 * 2 ** m.fails, 20000));
+      return;
+    }
     if (m !== manual) return;
-    if (JSON.stringify(m.v) !== was) drawManual();   // unchanged: a choice being made stays as it is
+    if (JSON.stringify(m.v) !== was || m.fails) { m.fails = 0; drawManual(); }   // unchanged: a choice being made stays as it is
     m.timer = setTimeout(manualTick, 2000);
   }
   function drawManual(note, ok) {
@@ -416,39 +436,71 @@ function printersTab() {
   async function manageDo(path, body, done) {
     try {
       const r = await pj(path, body);
+      closeForm();
       await manage(`${done}${r.note ? " " + r.note : ""}`, true);
       const was = current;
       await load();
       if (printers.some((p) => p.id === was)) choose(was);
     } catch (e) { manageNote.replaceChildren(h("pre", { class: "err", textContent: e.message })); }
   }
-  const ask = (q, now) => { const a = window.prompt(q, now || ""); return a === null ? null : a.trim(); };
+  // An inline form in the page (not window.prompt): secrets are password fields, and a wrong value is named before anything is sent.
+  // fields: [{key, label, secret, optional, value}]; submit(values) returns an error text, or sends the change.
+  const formBox = h("div");
+  function closeForm() { formBox.replaceChildren(); }
+  function openForm(title, intro, fields, label, submit) {
+    const inputs = fields.map((f) => h("input", { type: f.secret ? "password" : "text", value: f.value || "", ariaLabel: f.label,
+      autocomplete: f.secret ? "new-password" : "off", autocapitalize: "off", spellcheck: false,
+      on: { keydown: (e) => { if (e.key === "Enter") go(); } } }));
+    const err = h("div");
+    function go() {
+      const v = {};
+      fields.forEach((f, i) => { v[f.key] = inputs[i].value.trim(); });
+      const miss = fields.find((f) => !f.optional && !v[f.key]);
+      const bad = miss ? `${miss.label} is needed.` : submit(v);
+      err.replaceChildren(...(bad ? [h("pre", { class: "err", textContent: bad })] : []));
+    }
+    formBox.replaceChildren(h("div", { class: "card" }, h("h3", { textContent: title }),
+      intro ? h("p", { class: "muted", textContent: intro }) : null,
+      ...fields.map((f, i) => h("label", {}, f.label, inputs[i])), err,
+      h("div", { class: "row" }, h("button", { textContent: label, on: { click: go } }),
+        h("button", { class: "secondary", textContent: "Cancel", on: { click: closeForm } }))));
+    inputs[0].focus();
+    formBox.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+  // a whole number from 1 to 65535, or null
+  function parsePort(t) { const n = /^\d{1,5}$/.test(t) ? Number(t) : 0; return n >= 1 && n <= 65535 ? n : null; }
   function manageRow(p, changes) {
     const bambu = p.family !== "klipper", id = encodeURIComponent(p.id), name = p.name || p.id;
     const where = bambu ? p.ip : p.host;
     const edit = (body, done) => manageDo(`${id}/edit`, body, done);
+    const CODE_AT = "on the printer: Settings > Network/LAN";
     const buttons = !changes ? [] : p.configured ? [
-      h("button", { class: "secondary", textContent: "Rename", on: { click: () => { const n = ask(`New name for ${name}:`, name); if (n) edit({ name: n }, "Renamed."); } } }),
+      h("button", { class: "secondary", textContent: "Rename", on: { click: () =>
+        openForm(`Rename ${name}`, "", [{ key: "name", label: "New name", value: name }], "Rename", (v) => { edit({ name: v.name }, "Renamed."); }) } }),
       h("button", { class: "secondary", textContent: "Address", on: { click: () => {
-        const a = ask(`${name}'s IP address or host name:`, where); if (!a) return;
         // the kit never sends a stored secret to a new host it can't vouch for: it asks for it again (review R103)
-        if (bambu && !p.pinned) { const c = ask(`${name} has no certificate pinned yet: its Access Code, to send with the new address:`); if (c) edit({ address: a, access_code: c }, "Address saved."); return; }
-        if (!bambu) { const k = ask(`${name}'s Moonraker API key, if it has one. It is sent only to the new address; empty means none (a stored key is cleared):`); if (k !== null) edit({ address: a, api_key: k }, "Address saved."); return; }
-        edit({ address: a }, "Address saved.");
+        const fields = [{ key: "address", label: "IP address or host name", value: where || "" }];
+        let intro = "";
+        if (bambu && !p.pinned) { fields.push({ key: "code", label: "Access Code", secret: true }); intro = `${name} has no certificate pinned yet: its Access Code is sent with the new address (${CODE_AT}).`; }
+        if (!bambu) { fields.push({ key: "key", label: "Moonraker API key (optional)", secret: true, optional: true }); intro = "The API key is sent only to the new address; empty means none (a stored key is cleared)."; }
+        openForm(`Address of ${name}`, intro, fields, "Save", (v) => {
+          edit({ address: v.address, ...(bambu && !p.pinned ? { access_code: v.code } : {}), ...(!bambu ? { api_key: v.key } : {}) }, "Address saved.");
+        });
       } } }),
-      bambu ? h("button", { class: "secondary", textContent: "Access Code", on: { click: () => { const c = ask(`${name}'s Access Code (on the printer: Settings > Network/LAN):`); if (c) edit({ access_code: c }, "Access Code saved."); } } }) : null,
-      bambu && p.pinned ? h("button", { class: "secondary", textContent: "Forget certificate", on: { click: () => {
-        const c = ask(`Forget the certificate pinned for ${name}? The next connection trusts whatever answers at its address, so give its Access Code (on the printer: Settings > Network/LAN):`);
-        if (c) edit({ unpin: true, access_code: c }, "Certificate forgotten; the Access Code is saved.");
-      } } }) : null,
-      bambu ? null : h("button", { class: "secondary", textContent: "API key", on: { click: () => { const k = ask(`${name}'s Moonraker API key (empty clears it):`); if (k !== null) edit({ api_key: k }, k ? "API key saved." : "API key cleared."); } } }),
+      bambu ? h("button", { class: "secondary", textContent: "Access Code", on: { click: () =>
+        openForm(`Access Code of ${name}`, `Find it ${CODE_AT}.`, [{ key: "code", label: "Access Code", secret: true }], "Save", (v) => { edit({ access_code: v.code }, "Access Code saved."); }) } }) : null,
+      bambu && p.pinned ? h("button", { class: "secondary", textContent: "Forget certificate", on: { click: () =>
+        openForm(`Forget the certificate of ${name}`, `The next connection trusts whatever answers at its address, so give its Access Code (${CODE_AT}).`,
+          [{ key: "code", label: "Access Code", secret: true }], "Forget certificate", (v) => { edit({ unpin: true, access_code: v.code }, "Certificate forgotten; the Access Code is saved."); }) } }) : null,
+      bambu ? null : h("button", { class: "secondary", textContent: "API key", on: { click: () =>
+        openForm(`Moonraker API key of ${name}`, "Empty clears it.", [{ key: "key", label: "API key", secret: true, optional: true }], "Save",
+          (v) => { edit({ api_key: v.key }, v.key ? "API key saved." : "API key cleared."); }) } }),
       h("button", { class: "secondary", textContent: "Forget", on: { click: () => { if (window.confirm(`Forget ${name}? ${bambu ? "Its Access Code is deleted." : "Its API key is deleted."}`)) manageDo(`${id}/forget`, {}, `${name} forgotten.`); } } }),
     ] : bambu && p.ip ? [
-      h("button", { textContent: "Add", on: { click: () => {
-        const c = ask(`${name}'s Access Code (on the printer: Settings > Network/LAN):`); if (!c) return;
-        const n = ask("A name for it (optional):", name);
-        manageDo("add", { serial: p.id, access_code: c, ...(n ? { name: n } : {}) }, `${n || name} added.`);
-      } } }),
+      h("button", { textContent: "Add", on: { click: () =>
+        openForm(`Add ${name}`, `Find the Access Code ${CODE_AT}.`,
+          [{ key: "code", label: "Access Code", secret: true }, { key: "name", label: "A name for it (optional)", value: name, optional: true }], "Add",
+          (v) => { manageDo("add", { serial: p.id, access_code: v.code, ...(v.name ? { name: v.name } : {}) }, `${v.name || name} added.`); }) } }),
     ] : [];
     return h("div", { class: "card" },
       h("p", {}, h("b", { textContent: name }), ` · ${p.model_name || p.model || (bambu ? "Bambu" : "Klipper")} · ${where || "no address yet"} · ${p.configured ? String(p.state).replace(/_/g, " ") : "seen on the network, not added"}`),
@@ -457,18 +509,19 @@ function printersTab() {
   async function manage(note, ok) {
     let list, changes;
     try { ({ printers: list, changes } = await pj("manage")); } catch (e) { manageBox.replaceChildren(fail(e)); return; }
-    const klipperAdd = h("button", { class: "secondary", textContent: "Add a Klipper printer", on: { click: () => {
-      const host = ask("Moonraker's IP address or host name:"); if (!host) return;
-      const port = ask("Moonraker's port:", "7125"); if (port === null) return;
-      const n = ask("A name for it (optional):");
-      manageDo("add", { family: "klipper", host, port: Number(port) || 7125, ...(n ? { name: n } : {}) }, "Klipper printer added.");
-    } } });
+    const klipperAdd = h("button", { class: "secondary", textContent: "Add a Klipper printer", on: { click: () =>
+      openForm("Add a Klipper printer", "", [{ key: "host", label: "Moonraker's IP address or host name" }, { key: "port", label: "Moonraker's port", value: "7125" },
+        { key: "name", label: "A name for it (optional)", optional: true }], "Add", (v) => {
+        const port = parsePort(v.port);
+        if (port === null) return "The port must be a whole number from 1 to 65535.";
+        manageDo("add", { family: "klipper", host: v.host, port, ...(v.name ? { name: v.name } : {}) }, "Klipper printer added.");
+      }) } });
     manageNote.replaceChildren(...(note ? [h("pre", { class: ok ? "ok" : "err", textContent: note })] : []));
     manageBox.replaceChildren(
       h("p", { class: "muted", textContent: changes
         ? "A Bambu printer on the network shows up here by itself; add it with its Access Code. Anyone on the home network can use this page."
         : "Read-only here: printer changes from the public address are off. Open this page on the home network to add, change or forget a printer, or turn them on in the setup page's Settings." }),
-      ...list.map((p) => manageRow(p, changes)), ...(changes ? [h("div", { class: "row" }, klipperAdd)] : []), manageNote);
+      ...list.map((p) => manageRow(p, changes)), ...(changes ? [h("div", { class: "row" }, klipperAdd)] : []), formBox, manageNote);
   }
   async function remap() {
     if (!window.confirm("Re-map the slots? The printer loads each slot briefly; do it when it is idle.")) return;
