@@ -141,8 +141,31 @@ begin
     RegisterTask;
 end;
 
+// Asks whether to delete the sync's data (pairing token, settings, log, preset backups) in
+// %LOCALAPPDATA%\filament-kit-sync, as `uninstall.sh --purge` does on Linux. The default is to keep it (a reinstall
+// pairs again without a new link); a silent uninstall keeps it. Either way the unpair hint is shown.
+procedure AskDeleteData;
+var
+  Data: string;
+  Wipe: Boolean;
+begin
+  Data := ExpandConstant('{localappdata}\filament-kit-sync');
+  if not DirExists(Data) then
+    exit;
+  Wipe := SuppressibleMsgBox('Also delete the sync''s data (pairing token, settings, log and the Bambu Studio and ' +
+    'Orca Slicer preset backups) in' + #13#10 + Data + ' ?' + #13#10 + #13#10 +
+    'Choose No to keep it; installing again then needs no new pairing.', mbConfirmation, MB_YESNO or MB_DEFBUTTON2,
+    IDNO) = IDYES;
+  if Wipe then
+    DelTree(Data, True, True, True);
+  SuppressibleMsgBox('This PC is still paired on the server. To free its place for another PC, run on the server:' +
+    #13#10 + 'sudo filament-kit unpair <id>' + #13#10 + '(the id is the "Device id" line of "filament-kit-sync status", run before uninstalling).', mbInformation, MB_OK, IDOK);
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if CurUninstallStep = usUninstall then
-    RemovePath(ExpandConstant('{app}'));
+    RemovePath(ExpandConstant('{app}'))
+  else if CurUninstallStep = usPostUninstall then
+    AskDeleteData;
 end;
