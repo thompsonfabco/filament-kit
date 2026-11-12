@@ -102,14 +102,14 @@ fun CaptureScreen(
         WeightFields(state, vm, enabled = !reading)
         OutlinedTextField(
             value = state.hint, onValueChange = vm::setHint, enabled = !reading,
-            label = { Text("Note for Claude (optional)") },
+            label = { Text("Note for the label reader (optional)") },
             placeholder = { Text("e.g. 3 of the grey ones") },
             modifier = Modifier.fillMaxWidth(),
         )
 
         state.error?.let { ErrorCard(it, vm, onPairAgain, kept = state.draftId != null) }
         if (reading) {
-            Busy("Claude is reading ${state.photos.size} photo${if (state.photos.size == 1) "" else "s"}… (up to a minute)")
+            Busy("Reading ${state.photos.size} photo${if (state.photos.size == 1) "" else "s"}… (up to a minute)")
         } else {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = onCancel) { Text("Close") }

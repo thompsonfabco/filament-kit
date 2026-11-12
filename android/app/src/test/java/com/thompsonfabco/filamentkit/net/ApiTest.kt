@@ -96,6 +96,27 @@ class ApiTest {
         assertTrue(body.contains("4:77"))
     }
 
+    @Test fun readSaysWhichReaderAnsweredAndHowSure() = runBlocking {
+        json("""{"items":[{"vendor":"SUNLU","confidence":0.86,"field_confidence":{"color":0.6},"color_name":"Charcoal",
+            "color_family":"grey"}],"questions":[],"tag":null,"read_id":"r4","reader":"local","confidence":0.86,
+            "unsure":false,"tier":"gpu","escalated":true,"note":"x","future":1}""")
+        val res = api.read(listOf(byteArrayOf(1)), "", null)
+        assertEquals("local", res.reader)
+        assertEquals(0.86, res.confidence!!, 0.0)
+        assertEquals("gpu", res.tier)
+        assertTrue(res.escalated)
+        assertTrue(!res.unsure)
+        assertEquals("x", res.note)
+        assertEquals("Charcoal", res.items[0].jsonObject["color_name"]!!.jsonPrimitive.content)
+        take()
+        json("""{"items":[],"questions":[],"tag":null,"read_id":"r5","reader":"cloud","confidence":null,"tier":null}""")
+        val cloud = api.read(listOf(byteArrayOf(1)), "", null)
+        assertEquals("cloud", cloud.reader)
+        assertNull(cloud.confidence)
+        take()
+        Unit
+    }
+
     @Test fun readOmitsTagWhenNull() = runBlocking {
         json("""{"items":[],"questions":[],"tag":null,"read_id":"r2"}""")
         val res = api.read(listOf(byteArrayOf(1)), "", null)

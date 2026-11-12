@@ -231,6 +231,9 @@ private fun RecordScreen(vm: RecordViewModel, list: HistoryListViewModel, ai: Bo
             title = { Text("The AI proposes") },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    com.thompsonfabco.filamentkit.ui.add.ReaderTexts.revisedBy(p)?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall)
+                    }
                     if (p.noPhoto) Text(HistoryTexts.NO_PHOTO, style = MaterialTheme.typography.bodySmall)
                     if (p.changes.isEmpty()) Text(HistoryTexts.NO_CHANGE)
                     p.changes.forEach { f ->

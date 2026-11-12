@@ -76,6 +76,17 @@ data class ReadResult(
     @Serializable(with = ReadTag::class) val tag: String? = null,
     val usage: JsonObject? = null,
     @SerialName("read_id") val readId: String? = null,
+    /** Which reader answered: "local" or "cloud" (null: a server from before the local reader). */
+    val reader: String? = null,
+    /** The local reader's confidence 0..1 (its least sure item); null for Claude. */
+    @Serializable(with = LenientDouble::class) val confidence: Double? = null,
+    @Serializable(with = LenientBool::class) val unsure: Boolean = false,
+    /** The local reader's tier ("cpu" or "gpu"). */
+    val tier: String? = null,
+    /** The local reader went on from its CPU tier to its GPU tier. */
+    @Serializable(with = LenientBool::class) val escalated: Boolean = false,
+    /** Why another reader answered, or an unsure answer was kept (e.g. "local reader: ..."). */
+    val note: String? = null,
 )
 
 /**
@@ -196,6 +207,10 @@ data class RevisionProposal(
     val after: JsonObject = JsonObject(emptyMap()),
     val changes: List<String> = emptyList(),
     @SerialName("no_photo") val noPhoto: Boolean = false,
+    /** Who read again: "local" or "cloud" (null: an older server), how sure (local), and the server's note. */
+    val reader: String? = null,
+    @Serializable(with = LenientDouble::class) val confidence: Double? = null,
+    val note: String? = null,
 )
 
 /**

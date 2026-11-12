@@ -358,7 +358,7 @@ private suspend fun <S> guard(
     }
 }
 
-internal fun errorText(e: ApiError): String = when (e.code) {
+internal fun errorText(e: ApiError): String = com.thompsonfabco.filamentkit.ui.add.ReaderTexts.localError(e.code) ?: when (e.code) {
     "ai_off" -> HistoryTexts.AI_OFF
     "stale" -> HistoryTexts.STALE
     "daily_cap" -> "Today's label reading limit is used up (revisions count too). Try again tomorrow, or edit by hand."

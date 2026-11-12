@@ -54,7 +54,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 
 /**
- * Step 2: what Claude read (questions on top), one editable card per proposed spool, then a preview (dry run) and
+ * Step 2: what the label reader read (questions on top), one editable card per proposed spool, then a preview (dry run) and
  * Add. Ends with the new spool ids. A manual add ([AddUiState.manual]) shows the filament picker on top instead and
  * offers [onClose] (Cancel) where the photo flow goes back to its photos.
  */
@@ -86,10 +86,14 @@ fun ReviewScreen(
         if (state.questions.isNotEmpty()) {
             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
                 Column(Modifier.padding(12.dp)) {
-                    Text("Claude asks", fontWeight = FontWeight.Bold)
+                    Text("${state.readInfo?.name ?: "Claude"} asks", fontWeight = FontWeight.Bold)
                     state.questions.forEach { Text("• $it") }
                 }
             }
+        }
+        state.readInfo?.let { r ->
+            r.line?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            r.note?.let { Text("Note: $it", style = MaterialTheme.typography.bodySmall) }
         }
         state.notices.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
         state.tag?.let {
@@ -112,6 +116,7 @@ fun ReviewScreen(
                     vendors = if (state.manual) state.vendors else emptyList(),
                     fieldErrors = state.fieldErrors[i].orEmpty(),
                     showFilamentFields = state.manual,
+                    readerName = state.readInfo?.name ?: "Claude",
                 )
             }
         }
@@ -270,6 +275,8 @@ private fun ItemCard(
     fieldErrors: Map<String, String> = emptyMap(),
     /** Manual add: also density, nozzle and bed (used for a new filament). */
     showFilamentFields: Boolean = false,
+    /** Who read the labels, for the reader's own remarks (sealed reason). */
+    readerName: String = "Claude",
 ) {
     val estimates = (item["estimates"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull }.toSet()
     fun label(text: String, key: String) = if (key in estimates) "$text (estimated)" else text
@@ -299,7 +306,8 @@ private fun ItemCard(
                 }
                 TextButton(onClick = { vm.removeItem(index) }, enabled = enabled) { Text("Remove") }
             }
-            item.str("sealed_reason")?.let { Text("Claude: $it", style = MaterialTheme.typography.bodySmall) }
+            item.str("sealed_reason")?.let { Text("$readerName: $it", style = MaterialTheme.typography.bodySmall) }
+            ReaderTexts.item(item)?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
 
             VendorField(label("Vendor", "vendor"), item.str("vendor"), vendors, enabled, err("vendor"),
                 onPick = { vm.pickVendor(index, it) }) { vm.setText(index, "vendor", it) }
