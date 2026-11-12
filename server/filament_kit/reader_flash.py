@@ -54,7 +54,69 @@ def bundled_image() -> tuple[Path, int] | None:
     return None
 
 
-CHUNK = 256            # an FK-SET line goes out in pieces this size, with a pause between, so the board keeps up
+def panel_image() -> tuple[Path, str] | None:
+    """The intake panel's image and version, as the station flashes it: the installed copy, else a checkout's."""
+    for d in (config.paths().opt / "resources" / "panel",
+              Path(__file__).resolve().parents[2] / "station" / "panel" / "firmware"):
+        try:
+            version = (d / "VERSION").read_text().strip()
+            if (d / "intake-panel.bin").is_file() and version:
+                return d / "intake-panel.bin", version
+        except OSError:
+            continue
+    return None
+
+
+# What the setup page's "Flash a device" tab can write (setup_console/flash_tab.py): the kit's own images, from the
+# installed version, never the internet. Both are merged images written at address 0 of an ESP32-C3.
+DEVICES = {"printer-station": "Printer Station", "intake-panel": "Intake panel"}
+
+
+def device_image(device: str) -> tuple[Path, str] | None:
+    """(image, version) of one of DEVICES, or None when this kit has none bundled."""
+    if device == "printer-station":
+        got = bundled_image()
+        return (got[0], str(got[1])) if got and got[0].is_file() else None
+    if device == "intake-panel":
+        return panel_image()
+    return None
+
+
+# The setup page's "plugged into the server" way: the root helper (op reader_usb) leaves the answers here, root only,
+# and starts the job `reader_setup` (`reader setup --pending`), which takes them and deletes the file at once. Job
+# arguments are never secret (they show in systemctl), so the Wi-Fi password travels this way.
+PENDING = "reader-setup.json"
+PENDING_MAX_AGE = 15 * 60
+
+
+def pending_path() -> Path:
+    return config.paths().etc / PENDING
+
+
+def write_pending(answers: dict) -> None:
+    import os
+    path = pending_path()
+    path.unlink(missing_ok=True)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        json.dump(answers, fh)
+
+
+def take_pending() -> dict | None:
+    """The answers the page left, once: the file is deleted whatever it holds. None when there are none, or they are
+    older than PENDING_MAX_AGE (a job that never ran)."""
+    path = pending_path()
+    try:
+        age = time.time() - path.stat().st_mtime
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        data, age = None, 0
+    finally:
+        path.unlink(missing_ok=True)
+    return data if isinstance(data, dict) and age <= PENDING_MAX_AGE else None
+
+
+CHUNK = 256           # an FK-SET line goes out in pieces this size, with a pause between, so the board keeps up
 
 
 def _open(port: str, timeout: float = 0.5):

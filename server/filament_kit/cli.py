@@ -2088,6 +2088,17 @@ def _reader_setup_usb(a, ask, ask_secret, run=subprocess.run) -> int:
     if not a.token_file and not _is_root():
         print("error: run as root: sudo filament-kit reader setup", file=sys.stderr)
         return 1
+    answers = None
+    if getattr(a, "pending", False):        # the setup page's job: the answers it was given, nothing asked
+        answers = rf.take_pending()
+        if answers is None:
+            print("error: no answers from the setup page (or they were older than 15 minutes); start it again "
+                  "there", file=sys.stderr)
+            return 1
+        a.ssid, a.port = str(answers.get("ssid") or ""), answers.get("port") or a.port
+        a.buzzer, a.name = answers.get("buzzer") or "high", answers.get("name") or a.name
+        typed = str(answers.get("pass") or "")
+        ask_secret = lambda _prompt: typed  # noqa: E731
     if rf.bundled_image() is None:
         print("error: this kit has no Printer Station firmware bundled (reader/firmware); update the kit, or build "
               "one yourself with --source <checkout>/reader", file=sys.stderr)
@@ -2102,6 +2113,10 @@ def _reader_setup_usb(a, ask, ask_secret, run=subprocess.run) -> int:
     elif len(found) == 1:
         port = found[0].port
         print(f"Found an ESP32 board on {found[0].by_id or port}.")
+    elif answers is not None:
+        print("error: there are several ESP32 boards on this server's USB: pick the Printer Station's port on the "
+              "setup page; nothing was changed", file=sys.stderr)
+        return 1
     else:
         for i, r in enumerate(found, 1):
             print(f"  {i}. {r.by_id or r.port} ({r.product})")
@@ -2830,6 +2845,8 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     rds.add_argument("--secrets", help="flash a secrets.h written earlier with --out (needs --source)")
     rds.add_argument("--reflash", action="store_true",
                      help="write the kit's firmware even when the board already runs that build")
+    rds.add_argument("--pending", action="store_true",
+                     help="take the answers the setup page left (its job runs this; nothing is asked)")
     rds.add_argument("--buzzer", choices=("high", "low"), default=None,
                      help="the buzzer's trigger: high (a buzzer behind a MOSFET, the default; asked when left out) "
                           "or low (the older 3-pin "

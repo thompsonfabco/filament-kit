@@ -17,6 +17,10 @@ This page lists the components a filament-kit release contains or the installer 
 | Button-panel firmware `install/panel/intake-panel.bin` | GPL-3.0-or-later (our source, `station/panel/src`), built with the ESP32 Arduino core (arduino-esp32 3.x, LGPL-2.1) for the panel's ESP32-C3 |
 | Button-panel firmware: U8g2 2.36.5 (olikraus), the OLED library | BSD-2-Clause |
 | Button-panel firmware: pioarduino platform-espressif32 and ESP-IDF components | Apache-2.0 |
+| Printer Station firmware `install/reader/printer-station.bin` | see [The Printer Station firmware](#the-printer-station-firmware-built-from-reader) |
+| [esptool-js](https://github.com/espressif/esptool-js) 0.7.0, its published `bundle.js` unchanged as `setup_static/esptool.bundle.js` (SHA-256 `00ebe6fb0b202976d3e2a3c6b9a6bd438c26a81d2af6739c95ac276a64c1a84e`), which the setup page's Flash a device tab loads to write firmware over Web Serial; licences in `setup_static/esptool.bundle.LICENSES.txt` | Apache-2.0 |
+| pako 2.1.0, inside that bundle | MIT AND Zlib |
+| atob-lite 2.0.0, inside that bundle | MIT |
 | The Android app `app/filament-kit.apk` | see [The Android app](#the-android-app) |
 
 ## Installed on the server by the installer
