@@ -1,4 +1,4 @@
-"""`filament-kit reader setup` (reader_setup.py): a bench reader set up with today's firmware, whose settings are
+"""`filament-kit reader setup` (reader_setup.py): a Printer Station set up with today's firmware, whose settings are
 compiled in from secrets.h. Nothing secret is printed; a token nobody holds is removed."""
 from __future__ import annotations
 

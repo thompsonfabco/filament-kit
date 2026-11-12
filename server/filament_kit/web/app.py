@@ -7,7 +7,7 @@
       /login                    the passphrase page that approves a sign-in (LAN only)
       /health                   "ok"
       /intake ...               the phone web app (LAN only, no sign-in; POSTs need its Origin)
-      /reader/...               the bench NFC reader's API (LAN only, reader token; reader.py)
+      /reader/...               the Printer Station reader API (LAN only, reader token; reader.py)
 
 The whole app is wrapped in `auth.lan_only`, so /authorize, /login, /intake and /reader answer the LAN only. Wrong
 passphrases at /login count in its Lockout. State: `FK_STATE/web/oauth.json`; the passphrase hash

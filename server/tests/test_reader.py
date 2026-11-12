@@ -1,4 +1,4 @@
-"""web.reader: the bench NFC reader's API (printers, slots, scan, healthz, fw/*), the reader tokens (stored hashed,
+"""web.reader: the Printer Station reader API (printers, slots, scan, healthz, fw/*), the reader tokens (stored hashed,
 XML) and their CLI, the queue-on-empty port, and the speech vocabulary of the hardware file's say= texts."""
 from __future__ import annotations
 

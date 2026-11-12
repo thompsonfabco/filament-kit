@@ -125,7 +125,7 @@ function tokenCard() {
 
 // ----- readers -----
 function readersCard() {
-  const R = S.readers, box = boxFor("readers"), name = h("input", { placeholder: "reader name, e.g. bench" });
+  const R = S.readers, box = boxFor("readers"), name = h("input", { placeholder: "reader name, e.g. printer-station" });
   return card("NFC readers",
     R.error ? h("p", { class: "err", textContent: R.error }) : null,
     ...R.list.map((t) => h("div", { class: "row item" }, h("span", { textContent: `${t.id} · ${t.name} · made ${t.created}` }),

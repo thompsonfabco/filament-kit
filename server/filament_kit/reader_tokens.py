@@ -1,4 +1,4 @@
-"""The bench NFC reader's tokens (`FK_STATE/web/reader_tokens`, XML, sha256 of each token only): made, listed and
+"""The Printer Station reader tokens (`FK_STATE/web/reader_tokens`, XML, sha256 of each token only): made, listed and
 revoked by `filament-kit reader token | tokens | revoke` and the server's /setup page, checked by the web unit's
 reader API (web/reader.py, which re-exports these). No `mcp` import here: the kit server uses it too."""
 from __future__ import annotations

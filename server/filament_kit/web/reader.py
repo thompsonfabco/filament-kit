@@ -1,4 +1,4 @@
-"""The bench NFC reader's API (firmware: reader/README.md, whose contract this file follows exactly).
+"""The Printer Station reader API (firmware: reader/README.md, whose contract this file follows exactly).
 
 Routes of the web process, under `<public path>/reader` (nginx strips the public path), LAN only (`auth.lan_only`
 and a check here), every one with the reader token in `X-Auth-Token`:

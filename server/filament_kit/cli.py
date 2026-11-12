@@ -218,7 +218,7 @@ def cmd_station_pair(ask=input) -> int:
 
 
 def cmd_station_flash_panel(ask=input, run=subprocess.run) -> int:
-    """On the station PC: write the panel firmware to a blank ESP32-C3 board. A bench reader plugged in for power looks
+    """On the station PC: write the panel firmware to a blank ESP32-C3 board. A Printer Station plugged in for power looks
     the same as a blank panel, so each candidate port is flashed only after the owner says yes to that port."""
     from .station import panel
     if not _is_root():
@@ -1813,7 +1813,7 @@ def _port_hint(who) -> str:
 
 
 def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
-    """`reader setup`: a bench reader set up with today's firmware, which takes its Wi-Fi, server address, token and
+    """`reader setup`: a Printer Station set up with today's firmware, which takes its Wi-Fi, server address, token and
     update key only at build time. Makes a token (root, unless --token-file), writes secrets.h (--out, 0600) and/or
     builds and flashes it over USB (--source, a checkout's reader/ folder, with PlatformIO). --secrets flashes a
     secrets.h made earlier. Nothing secret is printed."""
@@ -2069,7 +2069,7 @@ def cmd_reader(action: str, name: str | None = None, ref: str | None = None) -> 
             for t in rows:
                 print(f"{t['id']:<6} {t['name']:<24} {t['created']}")
             if not rows:
-                print("no reader tokens (make one: sudo filament-kit reader token --name bench)")
+                print("no reader tokens (make one: sudo filament-kit reader token --name printer-station)")
             return 0
         if store.revoke(ref or ""):
             print(f"revoked {ref}; a reader using it is refused from now on")
@@ -2213,16 +2213,16 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     wbsub = wb.add_subparsers(dest="web_cmd", required=True)
     wbsub.add_parser("passphrase", help="set the sign-in passphrase (root; typed twice, hidden)")
     wbsub.add_parser("status", help="check the web unit: public URL, passphrase, health, connectors")
-    rd = sub.add_parser("reader", help="the bench NFC reader's tokens: make, list, revoke")
+    rd = sub.add_parser("reader", help="the Printer Station reader tokens: make, list, revoke")
     rdsub = rd.add_subparsers(dest="reader_cmd", required=True)
     rdt = rdsub.add_parser("token", help="make a reader token and print it once, for secrets.h (root)")
-    rdt.add_argument("--name", help="what the token is for, e.g. bench")
+    rdt.add_argument("--name", help="what the token is for, e.g. printer-station")
     rdsub.add_parser("tokens", help="list the reader tokens (never the tokens themselves)")
     rdr = rdsub.add_parser("revoke", help="remove a reader token (root)")
     rdr.add_argument("ref", help="its id (r1 ...) or name")
     rds = rdsub.add_parser("setup", help="set up a reader with today's firmware: a token, its secrets.h, and a build "
                                          "and USB flash with PlatformIO (root to make the token)")
-    rds.add_argument("--name", help="what its token is for, e.g. bench")
+    rds.add_argument("--name", help="what its token is for, e.g. printer-station")
     rds.add_argument("--ssid", help="the Wi-Fi network it joins (asked if left out); the password is always asked")
     rds.add_argument("--source", help="the reader's source folder (a checkout's reader/): build and flash it here")
     rds.add_argument("--port", help="its USB serial port (found by itself when one ESP32 board is plugged in)")

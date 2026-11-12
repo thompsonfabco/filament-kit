@@ -12,7 +12,7 @@ It started as the H2D-only reader of h2d-filament-scanner; this version has no h
 ## Hardware
 
 An ESP32-C3 Super Mini with a PN532 NFC board, an SSD1306 OLED, a rotary encoder and a buzzer. The parts list, pins,
-wiring, board and case are in the [bench-reader guide](https://github.com/thompsonfabco/filament-kit-hardware/tree/main/devices/bench-reader) of the
+wiring, board and case are in the [Printer Station guide](https://github.com/thompsonfabco/filament-kit-hardware/tree/main/devices/bench-reader) of the
 [filament-kit-hardware](https://github.com/thompsonfabco/filament-kit-hardware) repository. Pins and polarities in the firmware are in the CONFIG block at the top of
 `src/main.cpp`.
 
@@ -114,7 +114,7 @@ SHA-256 `e42240daaba9d4dfb9cec7ec702b6c84a0605d34c7f03e1ad342bbee74fc1db8` (1,47
    time only; updates go over Wi-Fi).
 
 **Or let the kit do both steps:** on the kit server, with the reader plugged in by USB and PlatformIO installed,
-`sudo filament-kit reader setup --name bench --source <checkout>/reader --ota-pubkey <key.pem>` makes the token,
+`sudo filament-kit reader setup --name printer-station --source <checkout>/reader --ota-pubkey <key.pem>` makes the token,
 works out `READER_BASE` from `web.public_url`, asks the Wi-Fi name and password, and builds and flashes a private copy
 of this folder (the checkout never holds `secrets.h`). Install PlatformIO as yourself, not with sudo
 (`python3 -m pip install --user platformio`): under sudo the build and flash run as you, with your PlatformIO, and
