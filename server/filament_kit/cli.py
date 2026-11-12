@@ -2812,7 +2812,7 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     rds = rdsub.add_parser("setup", help="set up the Printer Station plugged into this server's USB: the kit's "
                                          "firmware, then its Wi-Fi and token (root to make the token). --source or "
                                          "--out build it with PlatformIO instead")
-    rds.add_argument("--name", help="what its token is for, e.g. bench")
+    rds.add_argument("--name", help="what its token is for, e.g. printer-station")
     rds.add_argument("--ssid", help="the Wi-Fi network it joins (asked if left out); the password is always asked")
     rds.add_argument("--source", help="the reader's source folder (a checkout's reader/): build and flash it here")
     rds.add_argument("--port", help="its USB serial port (found when one ESP32 board is plugged in, which you are asked to confirm)")
