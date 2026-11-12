@@ -682,3 +682,12 @@ def test_no_systemd_touches_no_unit_file(env, srv, key, unit_dir, monkeypatch):
     run = Runner({"filament-kit-1.0.0": _ships_then(env, 0, "filament-kit.service")})
     assert updates.rollback(cfg, run=run) == 0
     assert (unit_dir / "filament-kit-new.timer").exists()
+
+
+def test_summary_offers_the_release_that_the_stable_channel_would_install_over_a_nightly(env, monkeypatch):
+    monkeypatch.setattr(updates, "version_text", lambda: "1.0.0-nightly.20261109")
+    for latest, newer in (("1.0.0", True), ("1.0.1", True), ("0.9.0", False)):
+        updates._write_state(latest={"version": latest, "notes": "", "going_back": "", "at": 1.0})
+        assert updates.summary()["newer"] is newer, latest
+    updates._write_state(latest={"version": "1.0.0-nightly.20261110", "notes": "", "going_back": "", "at": 1.0})
+    assert updates.summary()["newer"] is True            # a newer nightly: unchanged

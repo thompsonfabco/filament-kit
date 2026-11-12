@@ -437,6 +437,8 @@ def summary() -> dict:
     latest = seen.get("version") if isinstance(seen.get("version"), str) else None
     try:       # a nightly orders by X.Y.Z then its date (nightly.nightly_key); a release has date 0
         newer = bool(latest) and nightly.nightly_key(latest) > nightly.nightly_key(version_text())
+        if latest and on_nightly() and not nightly.NIGHTLY_VERSION.fullmatch(latest):
+            newer = not _newer(current_version(), latest)       # as check_info: the stable channel replaces a nightly
     except ReleaseError:
         latest, newer = None, False
     return {"installed": cur, "latest": latest, "newer": newer, "checked_at": seen.get("at"),
