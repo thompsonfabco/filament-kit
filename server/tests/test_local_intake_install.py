@@ -106,7 +106,7 @@ def test_a_release_signed_with_another_key_is_refused(key, server):
     s = server({"0.1.0": mrf.make_release(ed25519.Ed25519PrivateKey.generate())})
     with pytest.raises(lii.InstallError, match="signature"):
         lii.install(config.load(), tier="cpu", fetcher=fetcher(s), run=Run())
-    assert not (config.paths().state / "local-intake.json").exists()
+    assert lii.installed() is None
 
 
 # ---------------------------------------------------------------- install, upgrade, remove
@@ -177,7 +177,8 @@ def test_upgrade_keeps_the_release_before_and_prunes_older_ones(key, server, tmp
     assert rec["version"] == "0.2.0" and rec["previous"] == "0.1.0"
     rels["0.3.0"] = mrf.make_release(key, "0.3.0")
     lii.install(config.load(), tier="cpu", fetcher=fetcher(s), run=Run())
-    assert sorted(d.name for d in (tmp_path / "store").iterdir()) == ["0.2.0", "0.3.0"]
+    assert sorted(d.name for d in (tmp_path / "store").iterdir() if d.is_dir()) == ["0.2.0", "0.3.0"]
+    assert (tmp_path / "store" / "installed.json").is_file()       # the record lives in root's store
 
 
 def test_remove_runs_the_installed_releases_uninstaller(key, server, tmp_path):
@@ -245,32 +246,148 @@ def test_cli_remove_with_nothing_installed_and_the_module_off(capsys):
 
 def test_cli_parses_the_commands(monkeypatch):
     seen = []
-    monkeypatch.setattr(cli, "cmd_local_intake_install", lambda *a: seen.append(("install", a)) or 0)
-    monkeypatch.setattr(cli, "cmd_local_intake_remove", lambda *a: seen.append(("remove", a)) or 0)
+    monkeypatch.setattr(cli, "cmd_local_intake_install", lambda *a, **k: seen.append(("install", a, k)) or 0)
+    monkeypatch.setattr(cli, "cmd_local_intake_remove", lambda *a: seen.append(("remove", a, {})) or 0)
+    monkeypatch.setattr(cli, "cmd_local_intake_plan", lambda: seen.append(("plan", (), {})) or 0)
     assert cli.main(["local-intake", "install", "--tier", "gpu", "--version", "0.2.0", "--yes"]) == 0
+    assert cli.main(["local-intake", "install", "--yes", "--planned"]) == 0
     assert cli.main(["local-intake", "remove"]) == 0
-    assert seen == [("install", ("gpu", "0.2.0", True)), ("remove", (False,))]
+    assert cli.main(["local-intake", "plan"]) == 0
+    assert seen == [("install", ("gpu", "0.2.0", True), {"planned": False}),
+                    ("install", (None, None, True), {"planned": True}), ("remove", (False,), {}), ("plan", (), {})]
 
 
 # ---------------------------------------------------------------- the setup page
 
 def test_the_page_runs_install_and_remove_as_jobs():
-    assert setup_helper.JOBS["local_intake_install"] == ("local-intake", "install", "--yes")
+    assert setup_helper.JOBS["local_intake_plan"] == ("local-intake", "plan")
+    assert setup_helper.JOBS["local_intake_install"] == ("local-intake", "install", "--yes", "--planned")
     assert setup_helper.JOBS["local_intake_remove"] == ("local-intake", "remove", "--yes")
     assert set(setup_helper.BUSY) == set(setup_helper.JOBS)
 
 
-def test_the_page_shows_the_plan(key, server, monkeypatch):
-    from test_setup_page import Helper, client, env, make  # noqa: F401
+def test_the_page_reads_the_saved_plan_and_never_fetches(key, server, monkeypatch):
+    """Review R148 finding 2: the kit server's unit cannot reach GitHub; the plan runs as a root job and the page
+    reads what it saved."""
+    from test_setup_page import Helper, client, make
     s = server({"0.1.0": mrf.make_release(key)})
-    monkeypatch.setattr(lii, "default_fetcher", lambda cfg: fetcher(s))
+    monkeypatch.setattr(lii, "default_fetcher", lambda cfg: (_ for _ in ()).throw(AssertionError("fetched")))
     cfg = config.load()
     cfg["web"] = {**cfg["web"], "lan": ["192.0.2.0/24"]}
     config.save(cfg)
     c = client(make([], Helper()))
-    r = c.get("/setup/api/settings/local-intake/plan")
-    assert r.status_code == 200, r.text
-    assert r.json()["version"] == "0.1.0" and r.json()["text"][0].startswith("Install the local label reader 0.1.0")
+    assert c.get("/setup/api/settings/local-intake/plan").json() == {"saved": None}
+    monkeypatch.setattr(lii, "default_fetcher", lambda cfg: fetcher(s))
+    assert cli.cmd_local_intake_plan() == 0                       # what the job runs (as root)
+    monkeypatch.setattr(lii, "default_fetcher", lambda cfg: (_ for _ in ()).throw(AssertionError("fetched")))
+    saved = c.get("/setup/api/settings/local-intake/plan").json()["saved"]
+    assert saved["fresh"] and saved["plan"]["version"] == "0.1.0"
+    assert saved["text"][0].startswith("Install the local label reader 0.1.0")
     assert c.get("/setup/api/settings/general").json()["local_intake_installed"] is None
-    monkeypatch.setattr(lii, "MODULE_PUBKEY", "")
-    assert c.get("/setup/api/settings/local-intake/plan").status_code == 409
+
+
+# ---------------------------------------------------------------- review R148
+
+def _record(tmp_path, d):
+    (tmp_path / "store").mkdir(exist_ok=True)
+    (tmp_path / "store" / "installed.json").write_text(json.dumps(d))
+
+
+@pytest.mark.parametrize("rec", [
+    {"version": "../../x", "tier": "cpu", "prefix": "/"},
+    {"version": "0.1.0/../../../x", "tier": "cpu"},
+    {"version": 7, "tier": "cpu"},
+    {"version": "0.1.0", "tier": "rm -rf"},
+])
+def test_a_record_that_is_not_one_is_never_acted_on(tmp_path, rec):
+    """Review R148 finding 1: remove (root) builds nothing from a record that is not an X.Y.Z version."""
+    _record(tmp_path, rec)
+    run = Run()
+    assert lii.installed() is None and lii.remove(run=run) is False and not run.calls
+
+
+def test_remove_takes_the_fixed_prefix_and_a_script_inside_the_store(key, server, tmp_path):
+    s = server({"0.1.0": mrf.make_release(key)})
+    lii.install(config.load(), tier="cpu", fetcher=fetcher(s), run=Run())
+    rec = json.loads((tmp_path / "store" / "installed.json").read_text())
+    _record(tmp_path, {**rec, "prefix": "/"})                       # a prefix in the record is never read
+    run = Run()
+    lii.remove(run=run)
+    assert run.calls[0][-2:] == ["--prefix", "/opt/filament-kit-image"]
+    assert run.calls[0][1].startswith(str((tmp_path / "store").resolve()))
+
+
+def test_remove_refuses_an_uninstaller_that_resolves_outside_the_store(key, server, tmp_path):
+    s = server({"0.1.0": mrf.make_release(key)})
+    lii.install(config.load(), tier="cpu", fetcher=fetcher(s), run=Run())
+    inst = tmp_path / "store" / "0.1.0" / "filament-kit-image-0.1.0" / "install"
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    (outside / "filament-kit-image.sh").write_text("echo evil")
+    import shutil
+    shutil.rmtree(inst)
+    try:
+        inst.symlink_to(outside, target_is_directory=True)
+    except OSError:
+        pytest.skip("this machine cannot make symlinks")
+    run = Run()
+    with pytest.raises(lii.InstallError, match="not in"):
+        lii.remove(run=run)
+    assert not run.calls
+
+
+def test_the_record_and_the_plan_live_in_roots_store_not_the_service_state(key, server, tmp_path):
+    s = server({"0.1.0": mrf.make_release(key)})
+    lii.install(config.load(), tier="cpu", fetcher=fetcher(s), run=Run())
+    lii.save_plan(lii.plan(config.load(), tier="cpu", fetcher=fetcher(s)))
+    assert {p.name for p in (tmp_path / "store").iterdir() if p.is_file()} == {"installed.json", "plan.json"}
+    assert not list(config.paths().state.glob("local-intake*"))
+
+
+def test_auto_on_a_release_without_an_auto_tier_is_its_cpu_tier(key, server):
+    """Review R148 finding 3."""
+    m = mrf.manifest("0.1.0")
+    del m["tiers"]["auto"]
+    s = server({"0.1.0": mrf.make_release(key, manifest_over={"tiers": m["tiers"]})})
+    p = lii.plan(config.load(), tier="auto", fetcher=fetcher(s))
+    assert p["tier"] == "cpu" and "This release has no auto tier: its cpu tier is used." in lii.plan_text(p)
+    run = Run()
+    rec = lii.install(config.load(), tier="auto", fetcher=fetcher(s), run=run)
+    assert rec["tier"] == "cpu" and run.calls[0][2:4] == ["--tier", "cpu"]
+
+
+def test_a_downgrade_is_labelled_and_needs_the_version_by_name(key, server):
+    """Review R148 finding 4."""
+    rels = {"0.2.0": mrf.make_release(key, "0.2.0")}
+    s = server(rels)
+    lii.install(config.load(), tier="cpu", fetcher=fetcher(s), run=Run())
+    s.releases = {"0.2.0": rels["0.2.0"], "0.1.0": mrf.make_release(key, "0.1.0")}     # 0.1.0 is "latest" now
+    p = lii.plan(config.load(), tier="cpu", fetcher=fetcher(s))
+    assert p["downgrade"] and lii.plan_text(p)[1].startswith("Go back (downgrade) to the local label reader 0.1.0")
+    with pytest.raises(lii.InstallError, match="older than the installed 0.2.0"):
+        lii.install(config.load(), tier="cpu", fetcher=fetcher(s), run=Run())
+    assert lii.install(config.load(), tier="cpu", version="0.1.0", fetcher=fetcher(s), run=Run())["version"] == "0.1.0"
+
+
+def test_a_record_with_a_bad_version_does_not_break_the_plan(key, server, tmp_path):
+    """Review R148 finding 5."""
+    s = server({"0.1.0": mrf.make_release(key)})
+    _record(tmp_path, {"version": "latest", "tier": "cpu"})
+    assert lii.plan(config.load(), fetcher=fetcher(s))["installed"] is None
+
+
+def test_the_page_job_installs_exactly_the_planned_version(key, server, applied, monkeypatch, capsys):
+    """Review R148 finding 6: a release published after the page showed its plan is not installed instead."""
+    rels = {"0.1.0": mrf.make_release(key, "0.1.0")}
+    s = server(rels)
+    monkeypatch.setattr(lii, "wait_healthy", lambda cfg, *a, **k: {"ok": True, "version": "x", "api_version": "1.0"})
+    assert cli.cmd_local_intake_install(None, None, True, fetcher=fetcher(s), run=Run(), planned=True) == 1
+    assert "no plan from the last hour" in capsys.readouterr().err
+    lii.save_plan(lii.plan(config.load(), tier="cpu", fetcher=fetcher(s)))
+    rels["0.2.0"] = mrf.make_release(key, "0.2.0")                  # published after the owner saw 0.1.0
+    assert cli.cmd_local_intake_install(None, None, True, fetcher=fetcher(s), run=Run(), planned=True) == 0
+    assert lii.installed()["version"] == "0.1.0"
+    plan = json.loads((lii.store() / "plan.json").read_text())
+    plan["at"] -= lii.PLAN_TTL + 1
+    (lii.store() / "plan.json").write_text(json.dumps(plan))
+    assert cli.cmd_local_intake_install(None, None, True, fetcher=fetcher(s), run=Run(), planned=True) == 1

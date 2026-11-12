@@ -99,7 +99,8 @@ JOBS = {"apply": ("modules", "apply", "--no-pair"), "update": ("update",), "roll
         "channel_nightly": ("update", "--channel", "nightly"), "channel_stable": ("update", "--channel", "stable"),
         "backup": ("backup", "create"), "restore": ("restore", "--uploaded", "--yes"),
         # the local label reader: the page showed the release's sizes and the owner confirmed (tier: local_intake.tier)
-        "local_intake_install": ("local-intake", "install", "--yes"),
+        "local_intake_plan": ("local-intake", "plan"),         # the server cannot reach GitHub: a job, as `check`
+        "local_intake_install": ("local-intake", "install", "--yes", "--planned"),
         "local_intake_remove": ("local-intake", "remove", "--yes")}
 WRAPPER = "/usr/local/bin/filament-kit"
 FINISHED = "==> finished (exit"
@@ -124,6 +125,7 @@ BUSY = {"apply": APPLYING, "update": "an update is running; wait until it has fi
         "channel_stable": "an update is running; wait until it has finished",
         "backup": "a backup is being written; wait until it has finished",
         "restore": "a restore is running; wait until it has finished",
+        "local_intake_plan": "the reader's release is being checked; try again in a moment",
         "local_intake_install": "the local label reader is being installed; wait until it has finished",
         "local_intake_remove": "the local label reader is being removed; wait until it has finished"}
 # the checklist's setting prompts, back to their keys (cli._apply_selection asks by prompt)

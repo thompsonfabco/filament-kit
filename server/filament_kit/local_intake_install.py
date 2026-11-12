@@ -18,8 +18,11 @@ filament-kit-image --prefix <PREFIX> --assets <dir>` (and `--uninstall --prefix 
 is idempotent (an upgrade is the newer release's installer over the old one), and exits 0 only when /v1/health
 answers. The kit then switches the module on, points `local_intake.url` at it and checks its health.
 
-Kept: the release folder of the installed version and of the one before (for its --uninstall), under STORE; what is
-installed in <state>/local-intake.json.
+Kept, all under STORE (root's: the kit's service user cannot write there, so nothing it writes ever reaches a root
+step): the release folder of the installed version and of the one before (for its --uninstall), the install record
+`installed.json`, and `plan.json`, what the last `local-intake plan` found. The kit's server cannot reach GitHub (its
+unit allows the LAN and Anthropic only), so the plan runs as a root job, like the updater's check, and the page reads
+plan.json; the install job installs exactly the version that plan showed (`--planned`).
 """
 from __future__ import annotations
 
@@ -32,7 +35,7 @@ import time
 from pathlib import Path, PurePosixPath
 from typing import Callable
 
-from . import config, local_reader, release
+from . import local_reader, release
 
 # The module's release key: ed25519, the raw 32 bytes in base64, as release.PUBKEY. A PLACEHOLDER until the module's
 # first signed release: empty means no release can be verified, so nothing is installed. Replace it with the key the
@@ -72,28 +75,69 @@ def store() -> Path:
     return Path(os.environ.get("FK_LOCAL_INTAKE_STORE") or STORE)
 
 
-def _state_file() -> Path:
-    return config.paths().state / "local-intake.json"
+RECORD = "installed.json"
+PLAN = "plan.json"
+PLAN_TTL = 3600                  # an install job takes the last plan only while it is this fresh
+
+
+def _valid_version(v) -> bool:
+    try:
+        release.parse_version(v if isinstance(v, str) else "")
+        return True
+    except release.ReleaseError:
+        return False
 
 
 def installed() -> dict | None:
-    """{version, tier, port, prefix, at} of the installed reader, or None."""
+    """{version, tier, port, at, previous} of the installed reader, or None (also for a record that is not one: a
+    version that is not X.Y.Z, a tier that is not one of TIERS)."""
     try:
-        d = json.loads(_state_file().read_text(encoding="utf-8"))
+        d = json.loads((store() / RECORD).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
-    return d if isinstance(d, dict) and isinstance(d.get("version"), str) else None
+    if not isinstance(d, dict) or not _valid_version(d.get("version")) or d.get("tier") not in local_reader.TIERS:
+        return None
+    if d.get("previous") is not None and not _valid_version(d["previous"]):
+        d["previous"] = None
+    return d
 
 
-def _write_state(d: dict | None) -> None:
-    f = _state_file()
+def _write_json(name: str, d: dict | None) -> None:
+    f = store() / name
     if d is None:
         f.unlink(missing_ok=True)
         return
     f.parent.mkdir(parents=True, exist_ok=True)
     tmp = f.with_suffix(".tmp")
     tmp.write_text(json.dumps(d, indent=2), encoding="utf-8")
+    os.chmod(tmp, 0o644)        # the page reads it as the service user; only root writes the store
     os.replace(tmp, f)
+
+
+def _write_state(d: dict | None) -> None:
+    _write_json(RECORD, d)
+
+
+def save_plan(p: dict) -> None:
+    """What a plan found, for the page (best effort: only root can write the store)."""
+    try:
+        _write_json(PLAN, {"at": time.time(), "plan": p, "text": plan_text(p)})
+    except OSError:
+        pass
+
+
+def saved_plan(now: float | None = None) -> dict | None:
+    """{at, plan, text, fresh} the last plan job saved, or None."""
+    try:
+        d = json.loads((store() / PLAN).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    p = d.get("plan") if isinstance(d, dict) else None
+    if not isinstance(p, dict) or not _valid_version(p.get("version")) or not isinstance(d.get("at"), (int, float)):
+        return None
+    now = time.time() if now is None else now
+    return {"at": d["at"], "plan": p, "text": [str(t) for t in d.get("text") or []],
+            "fresh": 0 <= now - d["at"] <= PLAN_TTL}
 
 
 def code_name(version: str) -> str:
@@ -134,10 +178,18 @@ def _plain_name(name: str) -> bool:
     return bool(name) and "/" not in name and "\\" not in name and not name.startswith(".") and len(name) < 200
 
 
+def resolve_tier(tiers, tier: str) -> str:
+    """The tier to install: the one asked for; "auto" on a release without an auto tier is its cpu tier (the
+    module's own default), so the installer is never handed a tier its release does not describe."""
+    if tier in tiers:
+        return tier
+    if tier == "auto" and "cpu" in tiers:
+        return "cpu"
+    raise InstallError(f"this release has no {tier} tier (it has: {', '.join(sorted(tiers))})")
+
+
 def _tier_entry(m: dict, tier: str) -> dict:
-    if tier not in m["tiers"]:
-        raise InstallError(f"this release has no {tier} tier (it has: {', '.join(sorted(m['tiers']))})")
-    return m["tiers"][tier]
+    return m["tiers"][resolve_tier(m["tiers"], tier)]
 
 
 def _mb(v) -> int | None:
@@ -157,11 +209,17 @@ def plan(cfg: dict, *, tier: str | None = None, version: str | None = None,
         tiers[t] = {"download_mb": _mb(d.get("download_mb")), "disk_mb": _mb(d.get("disk_mb")),
                     "minutes": _mb(d.get("minutes")), "assets": list(d["assets"]),
                     "fetched_at_install": str(d.get("fetched_at_install") or "")[:200]}
-    tier = tier or local_reader.settings(cfg)["tier"]
+    asked = tier or local_reader.settings(cfg)["tier"]
+    try:
+        tier = resolve_tier(tiers, asked)
+    except InstallError:
+        tier = asked                    # plan_text says the release has no such tier
     have = installed()
+    newer = bool(have) and release.parse_version(rel["version"]) > release.parse_version(have["version"])
+    older = bool(have) and release.parse_version(rel["version"]) < release.parse_version(have["version"])
     return {"version": rel["version"], "installed": have["version"] if have else None,
-            "installed_tier": have.get("tier") if have else None, "tier": tier, "tiers": tiers,
-            "upgrade": bool(have) and release.parse_version(rel["version"]) > release.parse_version(have["version"]),
+            "installed_tier": have.get("tier") if have else None, "tier": tier, "asked_tier": asked, "tiers": tiers,
+            "upgrade": newer, "downgrade": older,
             "same": bool(have) and have["version"] == rel["version"] and have.get("tier") == tier,
             "notes": rel.get("notes", "")[:2000]}
 
@@ -174,7 +232,8 @@ def plan_text(p: dict) -> list[str]:
     t = p["tiers"].get(p["tier"])
     if t is None:
         return lines + [f"Release {p['version']} has no {p['tier']} tier (it has: {', '.join(p['tiers'])})."]
-    what = "Upgrade to" if p["upgrade"] else ("Reinstall" if p["same"] else "Install")
+    what = ("Upgrade to" if p["upgrade"] else "Go back (downgrade) to" if p.get("downgrade")
+            else "Reinstall" if p["same"] else "Install")
     parts = []
     if t["download_mb"] is not None:
         parts.append(f"download about {t['download_mb']} MB")
@@ -184,6 +243,11 @@ def plan_text(p: dict) -> list[str]:
         parts.append(f"about {t['minutes']} min")
     lines.append(f"{what} the local label reader {p['version']}, {p['tier']} tier: " + (", ".join(parts) or
                                                                                          "sizes not stated") + ".")
+    if p.get("asked_tier") and p["asked_tier"] != p["tier"]:
+        lines.append(f"This release has no {p['asked_tier']} tier: its {p['tier']} tier is used.")
+    if p.get("downgrade"):
+        lines.append(f"That is older than the installed {p['installed']}: it is installed only when that version is "
+                     "asked for by name (filament-kit local-intake install --version " + p["version"] + ").")
     if t["fetched_at_install"]:
         lines.append(f"The installer also fetches: {t['fetched_at_install']}.")
     others = [f"{k}: {v['download_mb'] or '?'} MB download, {v['disk_mb'] or '?'} MB disk"
@@ -277,7 +341,7 @@ def _port(cfg: dict) -> int:
 
 def install(cfg: dict, *, tier: str | None = None, version: str | None = None,
             fetcher: release.Fetcher | None = None, run: Callable[..., int] | None = None,
-            say: Callable[[str], None] = print, health_wait: float = HEALTH_WAIT) -> dict:
+            say: Callable[[str], None] = print) -> dict:
     """Download, verify, unpack and install the reader on this machine; returns the new installed record. The
     caller switches the module on and applies (cli.cmd_local_intake_install). Raises InstallError; on a failure
     before the installer ran nothing on the machine changed."""
@@ -289,8 +353,13 @@ def install(cfg: dict, *, tier: str | None = None, version: str | None = None,
         raise InstallError(f"tier must be one of {', '.join(local_reader.TIERS)}")
     rel, table, sums, sig = _signed(fetcher, s, version)
     ver = rel["version"]
+    have = installed()
+    if have and version is None and release.parse_version(ver) < release.parse_version(have["version"]):
+        raise InstallError(f"the latest release {ver} is older than the installed {have['version']}: nothing was "
+                           f"installed (to go back, name it: --version {ver})")
     m = _manifest(_get_listed(fetcher, rel, table, MANIFEST, LIMIT_MANIFEST), ver)
-    entry = _tier_entry(m, tier)
+    tier = resolve_tier(m["tiers"], tier)
+    entry = m["tiers"][tier]
     home = store()
     work = home / f".{ver}.partial"
     shutil.rmtree(work, ignore_errors=True)
@@ -321,12 +390,12 @@ def install(cfg: dict, *, tier: str | None = None, version: str | None = None,
     if rc != 0:
         raise InstallError(f"the reader's installer failed (exit {rc}); its output is above. The kit's settings were "
                            "not changed")
-    before = installed()
-    rec = {"version": ver, "tier": tier, "port": port, "prefix": PREFIX, "at": int(time.time()),
+    before = have
+    rec = {"version": ver, "tier": tier, "port": port, "at": int(time.time()),
            "previous": before["version"] if before and before["version"] != ver else
            (before or {}).get("previous")}
     _write_state(rec)
-    _prune(keep={ver, rec.get("previous")})
+    _prune(keep={ver, rec.get("previous"), RECORD, PLAN})
     return rec
 
 
@@ -335,7 +404,7 @@ def _prune(keep: set) -> None:
     if not home.is_dir():
         return
     for d in home.iterdir():
-        if d.is_dir() and d.name not in keep:
+        if d.is_dir() and d.name not in keep:      # files (the record, the plan) are never pruned
             shutil.rmtree(d, ignore_errors=True)
 
 
@@ -353,16 +422,16 @@ def remove(*, run: Callable[..., int] | None = None, say: Callable[[str], None] 
     """Run the installed release's installer with --uninstall and forget the release folders. True when something
     was installed. The caller switches the module off and applies."""
     run = run or default_run
-    have = installed()
+    have = installed()                  # root's file, its version checked as X.Y.Z (installed())
     if have is None:
         return False
-    root = store() / have["version"] / f"{NAME}-{have['version']}"
-    script = root / "install" / f"{NAME}.sh"
-    if not script.is_file():
-        raise InstallError(f"the installed release's files are gone ({script}); remove the reader by hand: "
-                           f"{NAME}'s own uninstaller, then delete {_state_file()}")
+    home = store().resolve()
+    script = (home / have["version"] / f"{NAME}-{have['version']}" / "install" / f"{NAME}.sh").resolve()
+    if not script.is_relative_to(home) or not script.is_file():
+        raise InstallError(f"the installed release's uninstaller is not in {home}; remove the reader by hand: "
+                           f"{NAME}'s own uninstaller, then delete {home / RECORD}")
     say("Running the reader's own uninstaller...")
-    rc = run(["bash", str(script), "--uninstall", "--prefix", str(have.get("prefix") or PREFIX)], say)
+    rc = run(["bash", str(script), "--uninstall", "--prefix", PREFIX], say)   # the prefix is fixed, never read
     if rc != 0:
         raise InstallError(f"the reader's uninstaller failed (exit {rc}); its output is above. Nothing was changed")
     _write_state(None)

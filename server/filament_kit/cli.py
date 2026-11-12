@@ -2277,14 +2277,40 @@ def cmd_local_intake_status() -> int:
     return 0 if status_rows.print_rows(status_rows.local_reader_rows(cfg)) else 1
 
 
-def cmd_local_intake_install(tier: str | None, version: str | None, yes: bool, fetcher=None, run=None) -> int:
+def cmd_local_intake_plan(fetcher=None) -> int:
+    """What installing the latest reader release needs (download, disk, time per tier), printed; as root also saved
+    in the root-owned store for the setup page (its server cannot reach GitHub; this runs as its job)."""
+    from . import local_intake_install as lii
+    try:
+        p = lii.plan(config.load(), fetcher=fetcher)
+    except lii.InstallError as e:
+        _err_line(str(e))
+        return 1
+    for line in lii.plan_text(p):
+        print(line)
+    lii.save_plan(p)
+    return 0
+
+
+def cmd_local_intake_install(tier: str | None, version: str | None, yes: bool, fetcher=None, run=None,
+                             planned: bool = False) -> int:
     """Install or upgrade the local label reader from its signed release, switch the module on and apply. The
-    download, disk and time the release states are shown before anything is downloaded (--yes skips the question:
-    the setup page's job, after the owner confirmed on the page)."""
+    download, disk and time the release states are shown before anything is downloaded (--yes skips the question).
+    `planned` (the setup page's job, after the owner confirmed what the page showed): exactly the version and tier of
+    the last saved plan, if it is under an hour old, and never a downgrade."""
     from . import local_intake_install as lii, local_reader
     if not _require_root():
         return 1
     cfg = config.load()
+    if planned:
+        sp = lii.saved_plan()
+        if sp is None or not sp["fresh"]:
+            _err_line("no plan from the last hour: check for the release again on the page, then install")
+            return 1
+        if sp["plan"].get("downgrade"):
+            _err_line(f"the planned {sp['plan']['version']} is older than the installed one: nothing was installed")
+            return 1
+        version, tier = sp["plan"]["version"], sp["plan"]["tier"]
     if tier is not None and tier not in local_reader.TIERS:
         _err_line(f"--tier must be one of {', '.join(local_reader.TIERS)}")
         return 1
@@ -2533,6 +2559,10 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     lii.add_argument("--tier", choices=["auto", "cpu", "gpu"], help="default: local_intake.tier (auto)")
     lii.add_argument("--version", help="a release version instead of the latest")
     lii.add_argument("--yes", action="store_true", help="do not ask (the sizes are still printed)")
+    lii.add_argument("--planned", action="store_true", help="the version and tier the last `local-intake plan` "
+                                                            "saved (the setup page's job)")
+    lisub.add_parser("plan", help="what installing the latest reader release needs, per tier (saved for the setup "
+                                  "page when run as root)")
     lir = lisub.add_parser("remove", help="uninstall the local reader from this machine and switch local_intake off "
                                           "(root; its settings are kept)")
     lir.add_argument("--yes", action="store_true", help="do not ask")
@@ -2664,7 +2694,9 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
         return cmd_web_passphrase() if args.web_cmd == "passphrase" else cmd_web_status()
     if args.cmd == "local-intake":
         if args.li_cmd == "install":
-            return cmd_local_intake_install(args.tier, args.version, args.yes)
+            return cmd_local_intake_install(args.tier, args.version, args.yes, planned=args.planned)
+        if args.li_cmd == "plan":
+            return cmd_local_intake_plan()
         if args.li_cmd == "remove":
             return cmd_local_intake_remove(args.yes)
         return cmd_local_intake_status() if args.li_cmd == "status" else cmd_local_intake_test(args.photos)

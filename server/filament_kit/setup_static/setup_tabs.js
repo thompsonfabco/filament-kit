@@ -263,23 +263,27 @@ function readerCard() {
   api("settings/general").then((g) => {
     const have = g.local_intake_installed;
     const out = h("div");
-    const check = () => {
-      out.replaceChildren(h("p", { class: "muted", textContent: "Asking for the latest signed release…" }));
-      api("settings/local-intake/plan").then((p) => {
-        const t = p.tiers[p.tier];
-        const label = p.upgrade ? "Upgrade" : p.same ? "Reinstall" : "Install";
-        fill(out, ...p.text.map((line) => h("p", { textContent: line })),
-          t ? h("button", { textContent: `${label} ${p.version} (${p.tier} tier)`, on: { click: () => startJob(box, "local_intake_install",
-            `${p.text.filter((l) => !l.startsWith("Installed") && !l.startsWith("Other")).join(" ")} Go ahead?`) } }) : null,
-          h("p", { class: "muted", textContent: "The tier is the one under General (Local reader tier); change it there first for another one." }));
-      }).catch((e) => say(out, e.message, false));
-    };
+    // the check runs as a job (the server does not reach GitHub); what it saved is shown here, and Install takes
+    // exactly that version (the job refuses a plan older than an hour)
+    const check = () => startJob(box, "local_intake_plan");
+    api("settings/local-intake/plan").then((r) => {
+      const s = r.saved;
+      if (!s) return;
+      const p = s.plan, t = p.tiers[p.tier];
+      const when = new Date(s.at * 1000).toLocaleString();
+      const label = p.upgrade ? "Upgrade" : p.same ? "Reinstall" : "Install";
+      fill(out, h("p", { class: "muted", textContent: `Checked ${when}:` }), ...s.text.map((line) => h("p", { textContent: line })),
+        t && s.fresh && !p.downgrade ? h("button", { textContent: `${label} ${p.version} (${p.tier} tier)`, on: { click: () => startJob(box, "local_intake_install",
+          `${s.text.filter((l) => !l.startsWith("Installed") && !l.startsWith("Other")).join(" ")} Go ahead?`) } }) : null,
+        !s.fresh ? h("p", { class: "muted", textContent: "That check is over an hour old: check again to install." }) : null,
+        h("p", { class: "muted", textContent: "The tier is the one under General (Local reader tier); change it there, then check again." }));
+    }).catch((e) => say(out, e.message, false));
     fill(body,
       h("p", { class: "muted", textContent: have
         ? `Installed on this machine: version ${have.version}, ${have.tier} tier.`
         : "Not installed on this machine. It reads label photos without the cloud; a reader on another machine (one with a GPU) works too: switch local_intake on in Modules and give its address under General." }),
       h("div", { class: "row" },
-        h("button", { class: "secondary", textContent: have ? "Check for an upgrade" : "Show what an install needs", on: { click: check } }),
+        h("button", { class: "secondary", textContent: have ? "Check for an upgrade" : "Check what an install needs", on: { click: check } }),
         have ? h("button", { class: "secondary", textContent: "Remove", on: { click: () => startJob(box, "local_intake_remove",
           "Remove the local label reader from this machine and switch local_intake off? Its settings are kept.") } }) : null),
       out);
