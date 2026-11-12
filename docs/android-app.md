@@ -201,11 +201,13 @@ duplicates: check Spoolman first.
 
 **Intake history** on the home screen lists the last spools added (from the app, the phone web app, the intake station
 or the command line), newest first, with the label photo when there was one. Tap a record to see its photos (tap one
-to enlarge it), the values saved and every change since.
+to enlarge it), the values saved and every change since. A spool read by the local reader also shows what the reader
+said then (colour name and family, how sure, least sure fields).
 
 - **Revise with AI** (needs AI label reading): write what is wrong, for example `brand is Polymaker`, and tap **Ask the
   AI**. It looks at the photos again with your note and shows the values it would change, old and new. Nothing changes
-  until you tap **Accept**; **Discard** leaves the record as it was.
+  until you tap **Accept**; **Discard** leaves the record as it was. The proposal says who read again (Claude or the
+  local reader, and how sure it was).
 - **Edit by hand** changes any saved value directly, with no AI.
 - **Undo last change** takes back the newest change, one at a time.
 

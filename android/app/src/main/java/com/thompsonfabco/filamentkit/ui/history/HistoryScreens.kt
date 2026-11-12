@@ -186,6 +186,7 @@ private fun RecordScreen(vm: RecordViewModel, list: HistoryListViewModel, ai: Bo
                     HistoryTexts.FIELDS.filter { it in item.values }.forEach { f ->
                         Text("${HistoryTexts.label(f)}: ${HistoryTexts.value(item.values[f])}")
                     }
+                    HistoryTexts.readLine(r, item.item)?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                     OutlinedButton(onClick = { vm.openEdit(item.item) }) { Text(HistoryTexts.EDIT) }
                 }
             }
