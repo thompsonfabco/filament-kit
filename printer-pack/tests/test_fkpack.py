@@ -704,3 +704,13 @@ def test_load_temp_alone_says_it_needs_the_spool_part(data, moon):
     p = pack(data, moon)
     p.install(["loadtemp"])
     assert any("spool part" in s for s in p.said)
+
+
+def test_a_failed_step_ends_with_one_line_and_says_to_run_install_again(tmp_path, monkeypatch, capsys):
+    def boom(self, *a, **kw):
+        raise subprocess.CalledProcessError(128, ["git", "clone", "-q", "https://example.invalid/x.git", "/tmp/x"])
+    monkeypatch.setattr(fkpack.Pack, "install", boom)
+    assert fkpack.main(["install", "--data", str(tmp_path), "--parts", "nfc", "--yes"]) == 1
+    err = capsys.readouterr().err
+    assert "error: git clone -q https://example.invalid/x.git failed (exit 128); run install again to finish" in err
+    assert "Traceback" not in err

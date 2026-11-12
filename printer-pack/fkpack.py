@@ -728,6 +728,12 @@ def main(argv=None):
     except PackError as e:
         print("error: {}".format(e), file=sys.stderr)
         return 1
+    except subprocess.CalledProcessError as e:      # a git, pip or sudo step; what was done stays, install finishes it
+        step = " ".join(str(x) for x in (e.cmd if isinstance(e.cmd, (list, tuple)) else [e.cmd])[:4])
+        print("error: {} failed (exit {}){}".format(step, e.returncode,
+                                                  "; run install again to finish" if a.command == "install" else ""),
+              file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
