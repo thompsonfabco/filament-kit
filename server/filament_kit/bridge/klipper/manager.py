@@ -40,6 +40,7 @@ COMMON = ("print_stats", "toolhead", "virtual_sdcard", "heater_bed", "webhooks",
 GCODE_STATE = {"printing": "RUNNING", "paused": "PAUSE", "complete": "FINISH", "cancelled": "FAILED",
                "error": "FAILED", "standby": "IDLE"}
 SPOOL_CACHE = 30.0
+NOT_MJPEG = ("webrtc", "hls", "iframe")      # Moonraker webcam `service` values whose stream_url is not an MJPEG stream
 SPOOL_RETRY = 5.0           # after a failed read, Spoolman is not asked again for this long (its timeout is 15 s)
 OFFLINE_AFTER = 10.0    # seconds a websocket may be down before the printer reads as offline
 SYNC_EVERY = 15.0       # seconds between registry re-reads (the CLI edits it in another process)
@@ -586,6 +587,8 @@ class KlipperFamily(LoadsMixin):
             return None
         for cam in c.webcams:
             url = cam.get("stream_url") if cam.get("enabled", True) else None
+            if str(cam.get("service") or "").lower().startswith(NOT_MJPEG):
+                continue            # the camera hub reads MJPEG only; a WebRTC or HLS page would show nothing
             if isinstance(url, str) and url:
                 full = urllib.parse.urljoin(f"http://{hostaddr.url_host(c.p.host)}/", url)     # an IPv6 host in brackets
                 u = urllib.parse.urlsplit(full)

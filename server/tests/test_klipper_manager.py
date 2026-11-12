@@ -219,6 +219,17 @@ def test_camera_url(moonraker, fam):
     assert fam.camera_kind(pid) == "mjpeg"
 
 
+def test_camera_url_skips_a_webcam_that_is_not_mjpeg(moonraker, fam):
+    as_sv08(moonraker)
+    moonraker.webcams = [{"name": "Rtc", "enabled": True, "service": "webrtc-camerastreamer",
+                          "stream_url": "/webcam/webrtc"},
+                         {"name": "Hls", "enabled": True, "service": "hlsstream", "stream_url": "/webcam/hls"}]
+    pid = add(moonraker)
+    fam.start()
+    assert wait_for(lambda: fam.state(pid) == "connected")
+    assert fam.camera_url(pid) is None and fam.camera_kind(pid) is None
+
+
 # ---- final review I1 / I2 / M3 -----------------------------------------------------------------------------------
 
 def test_offline_when_the_websocket_stays_down(moonraker):
