@@ -68,7 +68,12 @@ class FakeKlipper(FakeBambu):
         return [{"id": "k-1", "source": "moonraker", "can_undo": False}]
 
 
-def _client(klipper=FakeKlipper()):
+_NEW = object()
+
+
+def _client(klipper=_NEW):
+    if klipper is _NEW:     # a fresh fake per client: tests must not share one fake's state
+        klipper = FakeKlipper()
     app = create_app(object(), printers=family.Printers(bambu=FakeBambu(), klipper=klipper), camera_hub=object(),
                      mapper=object(), enabled_modules=ON)
     c = TestClient(app)

@@ -8,8 +8,6 @@ from filament_kit import cli
 from filament_kit.station import panel
 from filament_kit.station import state as st
 
-SVC = ["systemctl", "{}", "filament-kit-station.service"]
-
 
 class Probe:
     """open_panel stand-in: ports in HELLO answer (and hand back a Serial to close); the rest stay silent."""
@@ -131,18 +129,15 @@ def test_flash_without_hello_afterwards_exits_1(bench, monkeypatch, capsys):
     assert bench.probe.opened == ["/dev/ttyACM0", "/dev/ttyACM1", "/dev/ttyACM0"]
 
 
-def test_flash_with_wrong_version_afterwards_exits_1(bench):
-    orig = panel.flash_panel
+def test_flash_with_wrong_version_afterwards_exits_1(bench, monkeypatch, capsys):
     bench.probe.version = "9"
 
     def flash(dev, version):
         bench.probe.hello.add(dev)
         return True
-    panel.flash_panel = flash
-    try:
-        assert cli.cmd_station_flash_panel(ask=lambda p: "y", run=bench.run) == 1
-    finally:
-        panel.flash_panel = orig
+    monkeypatch.setattr(panel, "flash_panel", flash)
+    assert cli.cmd_station_flash_panel(ask=lambda p: "y", run=bench.run) == 1
+    assert "does not answer with firmware" in capsys.readouterr().err
 
 
 def test_flash_with_matching_hello_exits_0(bench, capsys):
