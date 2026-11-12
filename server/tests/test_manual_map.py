@@ -283,3 +283,21 @@ def test_a_nozzle_on_a_single_nozzle_printer_is_refused(x1c):
     s = mm.start(SERIAL)
     with pytest.raises(manual.ManualError):
         mm.confirm(SERIAL, s["session"], "A1", {"ams_id": 0, "tray_id": 0}, nozzle="left", by_hand=True)
+
+
+def test_a_session_nobody_touches_closes_and_frees_the_automatic_job(x1c, clock):
+    mm = manual.ManualMaps(x1c)
+    s = mm.start(SERIAL)
+    clock["t"] += manual.IDLE_CLOSE - 1
+    mm.view(SERIAL)                                              # a poll keeps it open
+    clock["t"] += manual.IDLE_CLOSE - 1
+    assert mm.view(SERIAL)["open"] is True
+    clock["t"] += manual.IDLE_CLOSE
+    mm.expire(SERIAL)
+    assert mm.view(SERIAL)["open"] is False
+    with pytest.raises(manual.ManualError) as e:
+        mm.skip(SERIAL, s["session"], "A1")
+    assert e.value.code == "none"
+    assert mapping.manual_begin(SERIAL) is True                  # the printer is free for an automatic job again
+    mapping.manual_end(SERIAL)
+    assert mm.start(SERIAL)["session"] != s["session"]           # and a new session can start
