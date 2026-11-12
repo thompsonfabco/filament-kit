@@ -103,7 +103,11 @@ DEFAULTS: dict = {
     "slot_service": None,       # {"state_url", "set_url", "token_file"}
     "slicer_printers": [],
     "presets_orca": False,
-    "intake": {"tare_hints": {}, "model": None},
+    # reader: "auto" (local reader first, the cloud when it is unsure; or the one that is on) | cloud | local |
+    # local-then-cloud | cloud-then-local
+    "intake": {"tare_hints": {}, "model": None, "reader": "auto"},
+    # the local label reader (local_intake module): its address, here or on another machine, and its tier
+    "local_intake": {"url": "http://127.0.0.1:7915", "tier": "auto"},
     "web_instructions": None,
 }
 

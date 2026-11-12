@@ -4,9 +4,9 @@ The station runs the flow (its buttons, lamps, display, camera and scale are loc
 Every answer carries `display`: ready-made lines for the station's screen (a title of TITLE_WIDTH characters and
 up to two lines of DISPLAY_WIDTH; the station keeps its last rows for its own hints and the temperature line).
 
-Recognition order (the owner's rule): the local AI module when it is on and installed (`filament_kit.local_ai`,
-not written yet: `recognize(sm, images, cfg) -> dict | None` in read_labels' shape), then Claude when ai_intake is
-on, else nothing ("use phone"). A local recogniser that fails or answers None falls through to Claude.
+Recognition: `intake.read_labels` with the server's readers (`intake.reader_order`): the local reader
+(local_intake) and Claude (ai_intake), by default the local one first and Claude when it is unsure or fails; with
+neither on, nothing ("use phone"). The daily cap is taken only for a Claude read.
 
 Saving a new spool: the photo's sealed / opened decides; when the photo can't tell (sealed_reason 'unsure') or
 no recogniser read it, the weight decides: within SEALED_TOLERANCE g of a full spool (net + tare) is sealed. An
@@ -16,19 +16,17 @@ already linked) only gets its weight: remaining = gross - its tare.
 """
 from __future__ import annotations
 
-import importlib
 import logging
 import textwrap
 import unicodedata
 
-from . import intake, inventory, modules, tags
+from . import intake, inventory, tags
 
 log = logging.getLogger(__name__)
 
 # SSD1306 128x64: a bold title row (~16 chars), body rows of 21 chars; the station uses body rows 3-4 itself
 DISPLAY_LINES, TITLE_WIDTH, DISPLAY_WIDTH = 3, 16, 21
 SEALED_TOLERANCE = 20  # g: a gross weight this close to net + tare is a full (sealed) spool
-LOCAL_MODULE = "filament_kit.local_ai"
 
 
 class FlowError(Exception):
@@ -54,22 +52,12 @@ def lines(title: str, *parts: str) -> list[str]:
     return out[:DISPLAY_LINES]
 
 
-def _local(cfg: dict):
-    """The local AI module when it is switched on and installed, else None."""
-    if (cfg.get("modules") or {}).get("local_ai") is not True:
-        return None
-    try:
-        return importlib.import_module(LOCAL_MODULE)
-    except ImportError:
-        return None
+SOURCE = {"local": "local", "cloud": "claude"}       # the station's names for the readers
 
 
 def recognizers(cfg: dict) -> list[str]:
-    """The recognisers this server would try, in order."""
-    order = ["local"] if _local(cfg) is not None else []
-    if "ai_intake" in modules.enabled(cfg):
-        order.append("claude")
-    return order
+    """The recognisers this server would try, in order ("local", "claude")."""
+    return [SOURCE[r] for r in intake.reader_order(cfg)]
 
 
 def _spool_view(s: dict) -> dict:
@@ -103,28 +91,25 @@ def _confidence(item: dict, questions: list) -> str:
 def recognize(sm, cfg: dict, image: bytes, claude=None, cap=None, device=None) -> dict:
     """Read one spool photo with the first recogniser that answers. Raises FlowError (no recogniser, or the read
     failed) and lets intake.CapReached through (the API answers 429)."""
-    order = recognizers(cfg)
+    order = intake.reader_order(cfg)
     if not order:
-        raise FlowError(409, "no_recognizer", "no local AI and no Claude (ai_intake) on this server",
+        raise FlowError(409, "no_recognizer", "no local reader (local_intake) and no Claude (ai_intake) on this server",
                         lines("No AI on server", "use phone"))
-    out, source = None, None
-    if "local" in order:
-        try:
-            out = _local(cfg).recognize(sm, [image], cfg)
-            source = "local" if out else None
-        except Exception as e:  # noqa: BLE001 - a broken local recogniser falls through to Claude
-            log.warning("local AI recognise failed: %s: %s", e.__class__.__name__, e)
-            out = None
-    if out is None and "claude" in order:
-        ticket = cap.take(device) if cap is not None else None
-        try:
-            # no station weight and no reader tap: the photo alone decides sealed (the tap would force opened)
-            ctx = intake.read_context(cfg, sm, None, app_tag=True)
-            out, source = intake.read_labels(sm, [image], "", None, claude, **ctx), "claude"
-        except intake.ReadError as e:
-            if cap is not None and e.code in ("unreachable", "api_error"):
-                intake.refund_quietly(cap, ticket, device)
-            raise FlowError(502, "read_failed", str(e), lines("Read failed", "try again, or", "use the phone")) from e
+
+    def charge():
+        if cap is None:
+            return None
+        ticket = cap.take(device)
+        return lambda: intake.refund_quietly(cap, ticket, device)
+    try:
+        # no station weight and no reader tap: the photo alone decides sealed (the tap would force opened)
+        ctx = intake.read_context(cfg, sm, None, app_tag=True)
+        out = intake.read_labels(sm, [image], "", None, claude, **ctx, readers=order, charge=charge)
+    except intake.ReadError as e:
+        if e.refund is not None and e.code in ("unreachable", "api_error"):
+            e.refund()
+        raise FlowError(502, "read_failed", str(e), lines("Read failed", "try again, or", "use the phone")) from e
+    source = SOURCE.get(out.get("reader"), "claude")
     if not out or not out.get("items"):
         raise FlowError(422, "nothing_read", "no spool found in the photo", lines("No spool seen", "try again"))
     item = dict(out["items"][0])

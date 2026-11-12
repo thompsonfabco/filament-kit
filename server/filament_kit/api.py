@@ -966,6 +966,13 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         log.info("unpair device_id=%s result=%s", device, "ok" if revoked else "already-gone")
         return JSONResponse({"revoked": True})
 
+    def _charge(device):
+        """The daily cap, taken only when a read goes to the cloud (a local read is free); the refund gives it back."""
+        def take():
+            ticket = cap.take(device)
+            return lambda: intake.refund_quietly(cap, ticket, device)
+        return take
+
     @_authed
     async def intake_read(request: Request):
         async with request.form() as form:
@@ -983,13 +990,8 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         device = request.state.device
 
         def run() -> dict:
-            ticket = cap.take(device)
-            try:
-                ctx = intake.read_context(config.load(), sm, station_client(), app_tag=uid is not None)
-                return intake.read_labels(sm, images, hint[:MAX_HINT], uid, claude, **ctx)
-            except SpoolmanError:  # Spoolman down: the catalog fetch failed before Claude was called
-                intake.refund_quietly(cap, ticket, device)
-                raise
+            ctx = intake.read_context(config.load(), sm, station_client(), app_tag=uid is not None)
+            return intake.read_labels(sm, images, hint[:MAX_HINT], uid, claude, **ctx, charge=_charge(device))
         return JSONResponse(await run_in_threadpool(run))
 
     @_authed
@@ -1000,13 +1002,8 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         def run() -> dict:
             if not intake.is_kept(read_id):  # an unknown or expired read fails with not_found, using no read
                 return intake.retry(read_id, sm, claude)
-            ticket = cap.take(device)
-            try:
-                return intake.retry(read_id, sm, claude, orders=intake.read_context(
-                    config.load(), sm, None, app_tag=True)["orders"])
-            except SpoolmanError:  # Spoolman down: the catalog fetch failed before Claude was called
-                intake.refund_quietly(cap, ticket, device)
-                raise
+            return intake.retry(read_id, sm, claude, charge=_charge(device), orders=intake.read_context(
+                config.load(), sm, None, app_tag=True)["orders"])
         return JSONResponse(await run_in_threadpool(run))
 
     # ---------- the web unit's label reads: the kit's cap and order history, never its files ----------
@@ -1257,7 +1254,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
                 Route("/api/intake/cap/take", cap_take, methods=["POST"]),
                 Route("/api/intake/cap/refund", cap_refund, methods=["POST"]),
                 Route("/api/intake/orders", intake_orders),
-            ], "ai_intake", on),
+            ], "ai_intake" if "ai_intake" in on or "local_intake" not in on else "local_intake", on),
             Route("/api/intake/add", intake_add, methods=["POST"]),  # adding by hand needs no AI (spec R 2.4)
             Route("/api/intake/history", _hist(history_list)),
             Route("/api/intake/history/{hid}", _hist(history_get)),

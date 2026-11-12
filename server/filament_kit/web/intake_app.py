@@ -33,7 +33,6 @@ from starlette.routing import Route
 
 from .. import intake, inventory, lan, modules, tagsources
 from ..intake import CapReached, ReadError
-from ..spoolman import SpoolmanError
 from ..station_client import StationClient
 from . import mcp_tools, printers_app
 from .errors import Problem
@@ -313,7 +312,8 @@ class IntakeApp:
         data = {"base": self.base, "locations": json.dumps(cfg["locations"]),
                 "sealed": pl.get("sealed_location") or "", "auto": mcp_tools._placement_text(cfg),
                 "picks": json.dumps([pl.get("pla_location") or ""]),
-                "ai": "1" if "ai_intake" in modules.enabled(cfg) else "0",  # label photos only with ai_intake
+                # label photos with either reader: Claude (ai_intake) or the local reader (local_intake)
+                "ai": "1" if {"ai_intake", "local_intake"} & modules.enabled(cfg) else "0",
                 "printers": "1" if self.printers else "0",
                 "push": "1" if self.printers and self.printers.push_on else "0",
                 "history": "1" if self.history else "0"}
@@ -394,8 +394,8 @@ class IntakeApp:
 
     # ---------- label photos -> items (Claude) ----------
     async def read(self, request: Request):
-        if "ai_intake" not in modules.enabled(self.tools.cfg()):
-            raise Problem("label reading (the ai_intake module) is off on this server")
+        if not {"ai_intake", "local_intake"} & modules.enabled(self.tools.cfg()):
+            raise Problem("label reading (the ai_intake or local_intake module) is off on this server")
         async with request.form(max_files=intake.MAX_PHOTOS, max_fields=10) as form:
             photos = []
             for i, f in enumerate(form.getlist("photos")):
@@ -407,17 +407,19 @@ class IntakeApp:
 
         def run() -> dict:
             cfg = self.tools.cfg()
-            cap = KitCap(self.kit)                  # the kit's cap, through its API
-            cap.take()
-            try:
-                ctx = intake.read_context(cfg, self.tools.sm, self._station(), orders_from=self._orders)
-                return intake.read_labels(self.tools.sm, images, hint, None, self.claude, **ctx)
-            except SpoolmanError:  # as api.py: the catalog fetch failed before Claude was called
+            cap = KitCap(self.kit)                  # the kit's cap, through its API: only for a cloud read
+
+            def charge():
+                cap.take()
+                return refund
+
+            def refund():
                 try:
                     cap.refund()
-                except Exception as e:  # noqa: BLE001 - best effort: the Spoolman error is the one to show
+                except Exception as e:  # noqa: BLE001 - best effort
                     log.warning("cap refund failed: %s", e)
-                raise
+            ctx = intake.read_context(cfg, self.tools.sm, self._station(), orders_from=self._orders)
+            return intake.read_labels(self.tools.sm, images, hint, None, self.claude, **ctx, charge=charge)
         return await anyio.to_thread.run_sync(run)
 
     # ---------- writes ----------

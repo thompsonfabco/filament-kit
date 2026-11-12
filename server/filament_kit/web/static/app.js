@@ -8,7 +8,7 @@ const LOCATIONS = JSON.parse(document.body.dataset.locations);
 const SEALED = document.body.dataset.sealed;      // the sealed-stock location
 const AUTO = document.body.dataset.auto;          // what a blank location means (the placement rules)
 const PICKS = JSON.parse(document.body.dataset.picks); // extra places offered when opening a spool
-const AI = document.body.dataset.ai === "1";       // the ai_intake module is on: label photos can be read
+const AI = document.body.dataset.ai === "1";       // a label reader (ai_intake or local_intake) is on: photos can be read
 // typical densities (g/cm3), filled in for a spool added by hand while its density is still blank
 const DENSITY = { PLA: 1.24, PETG: 1.27, ABS: 1.04, ASA: 1.07, TPU: 1.21, PA: 1.14, PC: 1.2, PCTG: 1.23, PVA: 1.23, HIPS: 1.04 };
 // a material with no entry of its own ("PLA+", "PLA Silk", "PETG-CF") takes the longest known one it starts with

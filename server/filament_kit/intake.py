@@ -13,6 +13,11 @@ history (`load_orders`) and the prompt gains an orders block plus the order/pric
 with `order`, `price_per_kg` and `price_line`; config `intake.tare_hints` ({vendor: grams}) go into the prompt;
 a fresh unknown tag (`tagsources.fresh_unknown_tag`) with one item forces `sealed=false`, and then one opened single
 spool with a fresh (or held) station weight above its tare gets `gross`.
+
+Two readers: Claude (the cloud, ai_intake) and the local reader (local_intake, local_reader.py, a separate program
+on this network). `intake.reader` sets the order (`reader_order`); by default the local one first and the cloud when
+the local answer is unsure or fails. Both answers go through the same post-processing (`_finish`), and the result
+says which reader answered. The daily cap is taken only for a cloud read (`charge`).
 """
 from __future__ import annotations
 
@@ -28,7 +33,7 @@ import logging
 import time
 from pathlib import Path
 
-from . import config, library, locks, modules, tagsources
+from . import config, library, local_reader, locks, modules, tagsources
 from .profiles import builds, lines
 from .spoolman import Spoolman
 
@@ -122,6 +127,7 @@ class ReadError(Exception):
     def __init__(self, code: str, message: str, read_id: str | None = None):
         super().__init__(message)
         self.code, self.message, self.read_id = code, message, read_id
+        self.refund = None       # a cloud read's cap refund (callable), for callers that give the read back
 
 
 def check_photos(photos: list[tuple[str, bytes]]) -> list[bytes]:
@@ -339,7 +345,7 @@ def _forget(read_id: str) -> None:
     shutil.rmtree(_failed_dir() / read_id, ignore_errors=True)
 
 
-# ---------- Claude ----------
+# ---------- the readers: Claude (cloud) and the local reader (local_reader.py) ----------
 
 def _api_key() -> str:
     try:
@@ -351,14 +357,12 @@ def _api_key() -> str:
     return key
 
 
-def _call(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | None, client, *,
-          orders: list[dict] | None = None, station_state: dict | None = None,
-          fresh_tag: dict | None = None) -> dict:
+def _cloud(cfg: dict, fils: list[dict], vendors: list[dict], images: list[bytes], hint: str, tag: dict | None,
+           when: str, client, orders: list[dict] | None) -> dict:
+    """One read by Claude: {items, questions, usage}, items as the model wrote them (post-processing in _finish)."""
     import anthropic
-    cfg = config.load()
     if client is None:
         client = anthropic.Anthropic(api_key=_api_key(), timeout=CLAUDE_TIMEOUT, max_retries=CLAUDE_RETRIES)
-    fils, vendors = sm.get("/filament"), sm.get("/vendor")
     catalog = "\n".join(
         f"F{f['id']} | {(f.get('vendor') or {}).get('name', '?')} | {f['name']} | {f.get('material')} | "
         f"net {f.get('weight')} | tare {f.get('spool_weight')} | density {f.get('density')} | {f.get('color_hex') or '-'}"
@@ -380,10 +384,6 @@ def _call(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | None, cli
         content += [{"type": "text", "text": f"Photo {i}:"},
                     {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
                                                  "data": base64.standard_b64encode(data).decode()}}]
-    # the app's tag wins; else a fresh unknown tap on a reader (age known: say how long before the photos)
-    tag = {"nfc_id": tag_uid} if tag_uid else (dict(fresh_tag) if fresh_tag and fresh_tag.get("nfc_id") else None)
-    age = tag.get("age_seconds") if tag else None
-    when = f"{age} s before sending these photos" if age is not None else "just before sending these photos"
     if tag:
         content.append({"type": "text", "text": f"The user tapped an NFC tag ({tag['nfc_id']}) that isn't linked to "
                                                 f"any spool {when}: the pictured spool is an opened one "
@@ -413,6 +413,28 @@ def _call(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | None, cli
         items = out["items"]
     except (StopIteration, ValueError, KeyError, TypeError):
         raise ReadError("api_error", "Claude's answer could not be read; try again") from None
+    u = resp.usage
+    usage = {"model": resp.model, "input_tokens": u.input_tokens + (u.cache_read_input_tokens or 0)
+             + (u.cache_creation_input_tokens or 0), "cached": u.cache_read_input_tokens or 0,
+             "output_tokens": u.output_tokens}
+    return {"items": items, "questions": out.get("questions", []), "usage": usage}
+
+
+def _local(cfg: dict, fils: list[dict], vendors: list[dict], images: list[bytes], hint: str, tag: dict | None,
+           orders: list[dict] | None) -> dict:
+    """One read by the local reader: {items, questions, usage, confidence, unsure, tier}. Raises ReadError."""
+    fl, vl = local_reader.catalog(fils, vendors, lines._extra_line)
+    try:
+        return local_reader.read(cfg, images, hint, fl, vl, tag,
+                                 None if orders is None else filter_orders(orders, fils))
+    except local_reader.LocalReaderError as e:
+        raise ReadError("local_" + e.code, str(e)) from None
+
+
+def _finish(raw: dict, fils: list[dict], vendors: list[dict], tag: dict | None, station_state: dict | None) -> dict:
+    """The post-processing every reader's answer gets: the existing-filament match (its values win), colour, count
+    and price cleanup, the product line and its proposal, the fresh tag, the station's scale."""
+    items = raw["items"]
     by_id = {f["id"]: f for f in fils}
     for it in items:
         f = by_id.get(it.get("existing_filament_id"))
@@ -430,7 +452,9 @@ def _call(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | None, cli
         it["count"] = max(1, int(it.get("count") or 1))
         if isinstance(it.get("price_per_kg"), (int, float)) and not isinstance(it["price_per_kg"], bool):
             it["price_per_kg"] = round(float(it["price_per_kg"]), 2)
+        it.pop("confidence", None)              # a local reader's per-item score; the read's own is in `confidence`
     _add_lines(items, by_id)
+    age = tag.get("age_seconds") if tag else None
     if tag and len(items) == 1:  # a fresh unknown tap is the user opening this very spool
         ago = f" {age} s" if age is not None else ""
         items[0].update(sealed=False, sealed_reason=f"new tag {tag['nfc_id']} tapped{ago} before the photos")
@@ -439,13 +463,93 @@ def _call(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | None, cli
     if (weight and one and one["count"] == 1 and one.get("sealed") is False
             and weight["grams"] > (one.get("tare") or 0)):
         one["gross"] = weight["grams"]  # the opened spool on the station's scale: remaining = gross - tare
-    out["tag"] = tag
-    u = resp.usage
-    out["usage"] = {"model": resp.model, "input_tokens": u.input_tokens + (u.cache_read_input_tokens or 0)
-                    + (u.cache_creation_input_tokens or 0), "cached": u.cache_read_input_tokens or 0,
-                    "output_tokens": u.output_tokens}
-    return {"items": items, "questions": out.get("questions", []), "tag": out["tag"], "scale": weight,
-            "usage": out["usage"]}
+    return {"items": items, "questions": raw.get("questions", []), "tag": tag, "scale": weight,
+            "usage": raw["usage"]}
+
+
+# `intake.reader`: which reader reads, in what order. None / "auto": the local reader first and the cloud when the
+# local answer is unsure or fails, when both modules are on; else the one that is on.
+READER_ORDERS = {"cloud": ("cloud",), "local": ("local",), "local-then-cloud": ("local", "cloud"),
+                 "cloud-then-local": ("cloud", "local")}
+READER_CHOICES = ("auto", *READER_ORDERS)
+
+
+def reader_order(cfg: dict) -> list[str]:
+    """The readers this server would try, in order: "cloud" needs ai_intake, "local" needs local_intake. Empty
+    when neither is on."""
+    on = modules.enabled(cfg)
+    have = {r for r, m in (("cloud", "ai_intake"), ("local", "local_intake")) if m in on}
+    want = str((cfg.get("intake") or {}).get("reader") or "auto")
+    order = READER_ORDERS.get(want, READER_ORDERS["local-then-cloud"])
+    out = [r for r in order if r in have]
+    return out or [r for r in READER_ORDERS["local-then-cloud"] if r in have]
+
+
+def _call(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | None, client, *,
+          orders: list[dict] | None = None, station_state: dict | None = None,
+          fresh_tag: dict | None = None, readers: list[str] | None = None, charge=None) -> dict:
+    """Read with the configured readers (`readers` overrides; none configured: the cloud, as before the local
+    reader existed). `charge()` is called just before a cloud read (the daily cap: it may raise CapReached) and
+    returns a refund callable or None; a local read is free.
+
+    local then cloud: an unsure or failed local read goes on to the cloud; if the cloud cannot read (cap reached,
+    error) an unsure local answer is returned with a `note`, a failed one gives the cloud's error. cloud then local
+    is the same the other way round, except that a cloud answer is never "unsure". The result says which reader
+    answered (`reader`), its `confidence` (local only) and the local `tier`."""
+    cfg = config.load()
+    order = list(readers) if readers is not None else (reader_order(cfg) or ["cloud"])
+    fils, vendors = sm.get("/filament"), sm.get("/vendor")
+    # the app's tag wins; else a fresh unknown tap on a reader (age known: say how long before the photos)
+    tag = {"nfc_id": tag_uid} if tag_uid else (dict(fresh_tag) if fresh_tag and fresh_tag.get("nfc_id") else None)
+    age = tag.get("age_seconds") if tag else None
+    when = f"{age} s before sending these photos" if age is not None else "just before sending these photos"
+    kept, notes, err = None, [], None            # kept: an unsure local answer, used when nothing better comes
+    for reader in order:
+        if reader == "local":
+            try:
+                raw = _local(cfg, fils, vendors, images, hint, tag, orders)
+            except ReadError as e:
+                log.warning("local label reader: %s", e)
+                err, notes = err or e, notes + [f"local reader: {e}"]
+                continue
+            raw["reader"] = "local"
+            if not raw["unsure"] or reader == order[-1]:
+                return _result(raw, fils, vendors, tag, station_state, notes)
+            kept = raw
+            continue
+        refund = None
+        try:
+            if charge is not None:
+                refund = charge()
+            raw = _cloud(cfg, fils, vendors, images, hint, tag, when, client, orders)
+        except CapReached:
+            if kept is None and reader == order[-1]:
+                if err is None:
+                    raise
+                raise ReadError(err.code, f"{err}; and today's cloud reads are used up") from None
+            notes.append("today's cloud reads are used up")
+            continue
+        except ReadError as e:
+            e.refund = refund
+            if kept is None and reader == order[-1]:
+                raise
+            log.warning("cloud label reader: %s", e)
+            err, notes = err or e, notes + [f"cloud reader: {e}"]
+            continue
+        raw.update(reader="cloud", confidence=None, unsure=False, tier=None)
+        return _result(raw, fils, vendors, tag, station_state, notes)
+    if kept is not None:
+        return _result(kept, fils, vendors, tag, station_state, notes)
+    raise err if err is not None else ReadError("api_error", "no label reader could read these photos")
+
+
+def _result(raw: dict, fils, vendors, tag, station_state, notes: list[str]) -> dict:
+    out = _finish(raw, fils, vendors, tag, station_state)
+    out.update(reader=raw["reader"], confidence=raw.get("confidence"), unsure=bool(raw.get("unsure")),
+               tier=raw.get("tier"))
+    if notes:
+        out["note"] = "; ".join(notes)
+    return out
 
 
 def _add_lines(items: list[dict], by_id: dict) -> None:
@@ -505,17 +609,19 @@ def _fallback_line(it: dict, lib) -> str:
 
 def read_labels(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | None, client=None,
                 read_id: str | None = None, *, orders: list[dict] | None = None,
-                station_state: dict | None = None, fresh_tag: dict | None = None) -> dict:
+                station_state: dict | None = None, fresh_tag: dict | None = None,
+                readers: list[str] | None = None, charge=None) -> dict:
     """Read label photos. On a ReadError the photos are kept under state/failed/<read_id> (error.read_id).
 
     `orders`: the order history (`load_orders`), None when the `orders` module is off. `station_state`: the intake
     station's GET /state (its `last_weight` may become an opened spool's `gross`). `fresh_tag`: the reader's last
-    tag when it is fresh and unknown (`tagsources.fresh_unknown_tag`); `tag_uid` (from the app) wins over it."""
+    tag when it is fresh and unknown (`tagsources.fresh_unknown_tag`); `tag_uid` (from the app) wins over it.
+    `readers` / `charge`: as `_call` (the reader order, and the daily cap taken only for a cloud read)."""
     _sweep_failed()
     rid = read_id or secrets.token_hex(6)
     try:
         out = _call(sm, images, hint, tag_uid, client, orders=orders, station_state=station_state,
-                    fresh_tag=fresh_tag)
+                    fresh_tag=fresh_tag, readers=readers, charge=charge)
     except ReadError as e:
         # a retry has no reader context any more: keep the fresh tag as the tag the photos were sent with
         _keep(rid, images, hint, tag_uid or (fresh_tag or {}).get("nfc_id"))
@@ -536,7 +642,7 @@ def is_kept(read_id: str) -> bool:
     return (_failed_dir() / read_id).is_dir()
 
 
-def retry(read_id: str, sm: Spoolman, client=None, *, orders: list[dict] | None = None) -> dict:
+def retry(read_id: str, sm: Spoolman, client=None, *, orders: list[dict] | None = None, charge=None) -> dict:
     """Re-run a failed read from its kept photos (the tag it was sent with; no station weight, which is stale)."""
     if not is_kept(read_id):
         raise ReadError("not_found", "those photos are no longer kept (24 h); send them again")
@@ -547,4 +653,4 @@ def retry(read_id: str, sm: Spoolman, client=None, *, orders: list[dict] | None 
     except (OSError, ValueError):
         meta = {}
     return read_labels(sm, images, meta.get("hint") or "", meta.get("tag_uid"), client=client, read_id=read_id,
-                       orders=orders)
+                       orders=orders, charge=charge)

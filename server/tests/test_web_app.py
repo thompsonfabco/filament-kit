@@ -431,7 +431,9 @@ def test_web_read_failed_refund_never_hides_the_spoolman_error(sm, store, lockou
         r = c.post("/intake/api/read", files=[("photos", ("a.jpg", JPEG, "image/jpeg"))],
                    headers={"Origin": ORIGIN})
     assert r.status_code == 400 and "spoolman" in r.text.lower(), r.text
-    assert "refund" in caplog.text.lower()
+    # the cap is taken only just before a cloud read, after the catalog fetch: Spoolman down uses no read at all
+    from filament_kit import intake
+    assert intake.reads_today(config.paths().state / "reads.json") == 0
 
 
 def test_ai_off_page_hides_reading_and_manual_add_works(app, env, sm):

@@ -51,6 +51,35 @@ def spoolman_url(spoolman_fake_store):
     sock.close()
 
 
+def _serve(asgi):
+    """Serve `asgi` on a free 127.0.0.1 port in a thread; yields its URL (the socket is bound here and handed over)."""
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    port = sock.getsockname()[1]
+    server = uvicorn.Server(uvicorn.Config(asgi, log_level="warning"))
+    t = threading.Thread(target=server.run, kwargs={"sockets": [sock]}, daemon=True)
+    t.start()
+    for _ in range(200):
+        if server.started:
+            break
+        time.sleep(0.05)
+    else:
+        raise RuntimeError("fake did not start")
+    yield f"http://127.0.0.1:{port}"
+    server.should_exit = True
+    t.join(timeout=5)
+    sock.close()
+
+
+@pytest.fixture
+def local_reader():
+    """The fake local label reader: (url, data); change `data` (local_reader_fake.new_data) to steer it."""
+    from fakes import local_reader_fake
+    data = local_reader_fake.new_data()
+    for url in _serve(local_reader_fake.app(data)):
+        yield url, data
+
+
 @pytest.fixture(autouse=True)
 def _state_dir(tmp_path, monkeypatch):
     """Tests that read the printer registry indirectly (camera sources pin TLS leaves through it) never touch the

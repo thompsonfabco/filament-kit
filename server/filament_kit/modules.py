@@ -28,12 +28,13 @@ class Module:
     apt_lean: tuple[str, ...] = ()  # installed with --no-install-recommends (apply's apt_lean action)
     needs_text: str = ""            # extra "needs:" shown in the checklist that is not another module
     optional_ai: bool = False       # marked OPTIONAL AI in the checklist
+    depends_any: tuple[str, ...] = ()  # at least one of these must be on (orders: either label reader)
 
 
 def _m(name, title, description, units=(), depends=(), apt=(), apt_lean=(),
-       needs_text="", optional_ai=False) -> Module:
+       needs_text="", optional_ai=False, depends_any=()) -> Module:
     return Module(name, title, description, tuple(units), tuple(depends), tuple(apt), tuple(apt_lean),
-                  needs_text, optional_ai)
+                  needs_text, optional_ai, tuple(depends_any))
 
 
 MODULES: dict[str, Module] = {m.name: m for m in (
@@ -60,18 +61,23 @@ MODULES: dict[str, Module] = {m.name: m for m in (
     _m("remote", "Remote access", "Public https name for the web UI (nginx, certbot)",
        depends=("web",), apt=("nginx", "certbot")),
     _m("orders", "Orders", "Order history file for the shop tools",
-       depends=("ai_intake",)),
+       depends_any=("ai_intake", "local_intake")),
     _m("updates", "Auto-update", "Daily check for a new signed release; installs it and keeps the one before",
        units=("filament-kit-update.timer",)),
     _m("klipper", "Klipper printers", "Moonraker bridge: discovery, spool loads, usage log, camera",
        depends=("server",)),
+    # The reader itself is a separate program (its own repository and release, installed on request, or already
+    # running on another machine); the kit only talks to it over HTTP (local_reader.py). Appended last: numbers
+    # 1-13 keep their meaning in the checklist.
+    _m("local_intake", "Local AI intake", "A label reader on your own network reads spool photos, no cloud",
+       depends=("server",), needs_text="the local reader service (local_intake.url)", optional_ai=True),
 )}
 
 # Switched on by hand (modules set / config menu, the installer's question), never by a mode: a mode is the kit
 # as it was. ai_intake (spec R 2.4): AI is optional, so a new install has it off; one that had it keeps it. The
 # library is not bundled: switching it on downloads it; one without the key has none until asked. klipper is for
 # owners of Klipper printers only (Klipper spec: opt-in, runs inside filament-kit.service).
-OPT_IN = frozenset({"ai_intake", "web", "remote", "orders", "library", "updates", "klipper"})
+OPT_IN = frozenset({"ai_intake", "web", "remote", "orders", "library", "updates", "klipper", "local_intake"})
 
 MODES: dict[str, frozenset[str]] = {
     "server": frozenset(MODULES) - {"station"} - OPT_IN,
@@ -97,7 +103,7 @@ def enabled(cfg: dict) -> frozenset[str]:
 
 # Modules newer than an earlier release, with the version that added them. That release's `validate` refuses the
 # name even when false, and `update --rollback` ends in its `modules apply`.
-NEWER: dict[str, tuple[int, int, int]] = {"klipper": (0, 4, 0)}
+NEWER: dict[str, tuple[int, int, int]] = {"klipper": (0, 4, 0), "local_intake": (0, 5, 3)}
 
 
 def module_map(on, before: dict | None = None) -> dict[str, bool]:
@@ -140,13 +146,15 @@ def set_mode(cfg: dict, mode: str, say: Callable[[str], None] | None = print) ->
     if legacy and mode == "station":
         was = was - {"library"}
     on = set(MODES[mode])
-    dropped = []
-    for n in MODULES:                       # registry order: web before remote, so remote sees web's outcome
-        if n in OPT_IN and n in was:
-            if all(d in on for d in MODULES[n].depends):
+    keep = [n for n in MODULES if n in OPT_IN and n in was]
+    grew = True
+    while grew:                             # until stable: orders may need local_intake, which comes after it
+        grew = False
+        for n in keep:
+            if n not in on and _needs_met(n, on):
                 on.add(n)
-            else:
-                dropped.append(n)
+                grew = True
+    dropped = [n for n in keep if n not in on]
     out["modules"] = module_map(on, cfg)
     if dropped and say is not None:
         say(f"Mode {mode}: turned off {', '.join(dropped)} (they need modules this mode does not have).")
@@ -159,9 +167,15 @@ def set_mode(cfg: dict, mode: str, say: Callable[[str], None] | None = print) ->
     return out
 
 
+def _needs_met(name: str, on) -> bool:
+    m = MODULES[name]
+    return all(d in on for d in m.depends) and (not m.depends_any or bool(set(on) & set(m.depends_any)))
+
+
 def dependents(name: str, on: frozenset[str]) -> list[str]:
-    """Enabled modules (registry order) that depend on `name`."""
-    return [n for n, m in MODULES.items() if n in on and name in m.depends]
+    """Enabled modules (registry order) that depend on `name` (for depends_any: `name` is the only one of them on)."""
+    return [n for n, m in MODULES.items() if n in on and (name in m.depends or (
+        name in m.depends_any and not (set(on) - {name}) & set(m.depends_any)))]
 
 
 def _bad_allow(entry) -> bool:
@@ -187,6 +201,9 @@ def validate(cfg: dict) -> None:
             for dep in MODULES[n].depends:
                 if dep not in on:
                     raise ModuleError(f"{n} needs {dep}")
+            anyof = MODULES[n].depends_any
+            if anyof and not on & set(anyof):
+                raise ModuleError(f"{n} needs {' or '.join(anyof)}")
     if needs_spoolman_url(on, cfg):
         raise ModuleError(
             "server without the spoolman module needs spoolman_url "
@@ -227,6 +244,8 @@ def needs_of(name: str) -> list[str]:
     """What `name` needs, for display: its module dependencies, then its free-text needs."""
     m = MODULES[name]
     out = list(m.depends)
+    if m.depends_any:
+        out.append(" or ".join(m.depends_any))
     if m.needs_text:
         out.append(m.needs_text)
     return out
@@ -238,7 +257,11 @@ def needs_closure(names, on=frozenset()) -> list[str]:
     want = set(chosen)
     todo = list(chosen)
     while todo:
-        for d in MODULES[todo.pop()].depends:
+        m = MODULES[todo.pop()]
+        deps = list(m.depends)
+        if m.depends_any and not (want | set(on)) & set(m.depends_any):
+            deps.append(m.depends_any[0])           # none of them on: the first (orders: ai_intake, as before)
+        for d in deps:
             if d not in want:
                 want.add(d)
                 todo.append(d)
@@ -252,7 +275,8 @@ def dependents_closure(name: str, on) -> list[str]:
     while changed:
         changed = False
         for n, m in MODULES.items():
-            if n in on and n not in gone and gone & set(m.depends):
+            if n in on and n not in gone and (gone & set(m.depends) or (
+                    m.depends_any and not (set(on) - gone) & set(m.depends_any))):
                 gone.add(n)
                 changed = True
     return [n for n in MODULES if n in gone and n != name]

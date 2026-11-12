@@ -1,7 +1,5 @@
 """The intake station's button flow, server side: /api/station/tag, /recognize, /save (station_flow.py)."""
 import copy
-import sys
-import types
 
 import pytest
 from fakes.claude_fake import FakeClaude
@@ -129,27 +127,30 @@ def test_no_recognizer_says_use_phone(sm):
     assert r.json()["display"] == ["No AI on server", "use phone"]
 
 
-def test_local_ai_first_then_claude(sm, monkeypatch):
-    calls = []
-    local = types.ModuleType(station_flow.LOCAL_MODULE)
-    local.recognize = lambda sm, images, cfg: calls.append(len(images)) or read_reply(vendor="SUNLU")
-    monkeypatch.setitem(sys.modules, station_flow.LOCAL_MODULE, local)
+def test_local_reader_first_then_claude(sm, local_reader):
+    from fakes import local_reader_fake
+    url, data = local_reader
     cfg = config.load()
-    cfg["modules"] = {"spoolman": True, "server": True, "ai_intake": True, "local_ai": True}
+    cfg["modules"] = {"spoolman": True, "server": True, "ai_intake": True, "local_intake": True}
+    cfg["local_intake"] = {"url": url}
     config.save(cfg)
+    assert station_flow.recognizers(config.load()) == ["local", "claude"]
     fake = FakeClaude(read_reply())
     b = recognize(client(sm, fake), auth()).json()
-    assert b["source"] == "local" and b["item"]["vendor"] == "SUNLU" and calls == [1] and not fake.calls
-    local.recognize = lambda sm, images, cfg: None  # the local model can't tell: Claude reads it
+    assert b["source"] == "local" and b["item"]["vendor"] == "SUNLU" and len(data["reads"]) == 1 and not fake.calls
+    data["read"] = local_reader_fake.reply(confidence=0.3)       # the local reader is unsure: Claude reads it
     b = recognize(client(sm, fake), auth()).json()
     assert b["source"] == "claude" and len(fake.calls) == 1
 
 
-def test_local_ai_switched_on_but_not_installed_falls_to_claude(sm):
+def test_local_reader_alone(sm, local_reader):
+    url, _ = local_reader
     cfg = config.load()
-    cfg["modules"] = {"spoolman": True, "server": True, "ai_intake": True, "local_ai": True}
+    cfg["modules"] = {"spoolman": True, "server": True, "local_intake": True}
+    cfg["local_intake"] = {"url": url}
     config.save(cfg)
-    assert station_flow.recognizers(config.load()) == ["claude"]
+    assert station_flow.recognizers(config.load()) == ["local"]
+    assert recognize(client(sm), auth()).json()["source"] == "local"
 
 
 def test_read_failure_is_502_with_a_display(sm):
