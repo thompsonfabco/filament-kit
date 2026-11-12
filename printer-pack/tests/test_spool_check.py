@@ -108,3 +108,81 @@ def test_log_goes_to_printer_data_logs(tmp_path):
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     assert Path(mod.LOG) == tmp_path / "printer_data" / "logs" / "fk_spool_check.log"
+
+
+def _never_cancels(sc, monkeypatch):
+    monkeypatch.setattr(sc, "start_cancel", lambda msg: pytest.fail("cancel mode cancelled without a confirmed mismatch"))
+    monkeypatch.setattr(sc, "post_json", lambda *a, **kw: pytest.fail("cancel mode posted to Moonraker"))
+
+
+def test_cancel_mode_does_not_cancel_when_the_spool_lookup_fails(sc, monkeypatch, capsys):
+    _never_cancels(sc, monkeypatch)
+
+    def get_json(url):
+        raise OSError("moonraker down")
+    monkeypatch.setattr(sc, "get_json", get_json)
+    assert sc.main(["cancel", "PLA", "SUNLU"]) == 0
+    assert "skipped" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("spool_id", [None, 0])
+def test_cancel_mode_does_not_cancel_without_an_active_spool(sc, monkeypatch, capsys, spool_id):
+    _never_cancels(sc, monkeypatch)
+    monkeypatch.setattr(sc, "get_json", lambda url: {"result": {"spool_id": spool_id}})
+    assert sc.main(["cancel", "PLA", "SUNLU"]) == 0
+    assert "No active spool" in capsys.readouterr().out
+
+
+def test_cancel_mode_does_not_cancel_when_spoolman_cannot_be_asked(sc, monkeypatch, capsys):
+    _never_cancels(sc, monkeypatch)
+
+    def get_json(url):
+        if url.endswith("/server/spoolman/spool_id"):
+            return {"result": {"spool_id": 7}}
+        raise OSError("spoolman down")
+    monkeypatch.setattr(sc, "get_json", get_json)
+    assert sc.main(["cancel", "PLA", "SUNLU"]) == 0
+    assert "lookup for spool 7 failed" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("sliced,spool", [
+    (("PLA", "SUNLU"), _spool("SUNLU", "", "Grey")),              # the spool has no material: nothing to compare
+    (("PLA", "SUNLU"), _spool("", "PLA", "Grey")),                # the spool has no vendor
+    (("PLA", "SUNLU"), {"filament": None}),                       # no filament record at all
+    (("", "SUNLU"), _spool("SUNLU", "PETG", "Grey")),             # nothing sliced for the type
+    (("PLA", "Generic"), _spool("SUNLU", "PLA", "Grey")),         # a Generic profile names no vendor to hold against
+    (("PLA", "_"), _spool("SUNLU", "PLA", "Grey")),
+])
+def test_cancel_mode_does_not_cancel_on_missing_or_generic_data(sc, monkeypatch, sliced, spool):
+    _never_cancels(sc, monkeypatch)
+    _fake_get(sc, monkeypatch, spool)
+    assert sc.main(["cancel", *sliced]) == 0
+
+
+@pytest.mark.parametrize("sliced,loaded,same", [
+    ("PETG", "PETG", True), ("petg", "P.E.T.G", True),
+    ("PET", "PETG", True), ("PA", "PAHT", True), ("PETG", "PET", True),    # one type inside the other counts as a match
+    ("PLA", "PETG", False), ("ABS", "ASA", False),
+])
+def test_same_matches_a_type_contained_in_the_other(sc, sliced, loaded, same):
+    assert sc.same(sliced, loaded) is same
+
+
+def test_a_type_contained_in_the_loaded_one_does_not_cancel(sc, monkeypatch):
+    _never_cancels(sc, monkeypatch)
+    _fake_get(sc, monkeypatch, _spool("SUNLU", "PETG", "Grey"))
+    assert sc.main(["cancel", "PET", "SUNLU"]) == 0
+
+
+def test_the_print_is_still_cancelled_when_the_message_cannot_be_posted(sc, monkeypatch):
+    calls = []
+
+    def post_json(path, body, timeout=120):
+        calls.append(path)
+        if path == "/printer/gcode/script":
+            raise OSError("gcode queue busy")
+        return {"result": "ok"}
+    monkeypatch.setattr(sc, "post_json", post_json)
+    assert sc.cancel("Spool mismatch") == 0
+    assert calls == ["/printer/gcode/script", "/printer/print/cancel"]
+    assert "mismatch message not shown" in Path(sc.LOG).read_text()
