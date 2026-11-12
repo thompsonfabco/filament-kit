@@ -54,8 +54,8 @@ label > input, label > select, label > textarea { margin-top: .15rem; color: var
 .thumbs img { width: 84px; height: 84px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); display: block; }
 .thumbs figcaption { position: absolute; left: 4px; top: 4px; background: rgba(0,0,0,.6); color: #fff; font-size: .7rem;
                      padding: 0 .3rem; border-radius: 4px; }
-.thumbs button { position: absolute; right: -6px; top: -6px; min-height: 0; width: 24px; height: 24px; padding: 0;
-                 border-radius: 50%; background: var(--bad); font-size: .8rem; line-height: 24px; }
+.thumbs button { position: absolute; right: 0; top: 0; min-height: 0; width: 44px; height: 44px; padding: 0;
+                 border-radius: 0 8px 0 50%; background: var(--bad); font-size: 1rem; line-height: 44px; }
 pre { white-space: pre-wrap; word-break: break-word; background: var(--card); border: 1px solid var(--line); border-radius: 8px;
       padding: 10px; font-size: .82rem; margin: .5rem 0; }
 pre.err { border-color: var(--bad); color: var(--bad); }
@@ -79,7 +79,7 @@ progress { width: 100%; height: .7rem; accent-color: var(--accent); }
 .slot.active { font-weight: 600; }
 .sw { width: 1.1rem; height: 1.1rem; border-radius: 50%; border: 1px solid var(--line); flex: none; }
 p.err { color: var(--bad); }
-.slot button { min-height: 2.2rem; padding: .3rem .7rem; flex: none; }
+.slot button { min-height: 2.75rem; padding: .3rem .7rem; flex: none; }
 
 .thumb { max-width: 8rem; cursor: zoom-in; border-radius: 6px; }
 .thumb.big { max-width: 100%; cursor: zoom-out; }
