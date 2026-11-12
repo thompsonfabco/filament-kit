@@ -14,6 +14,7 @@ from starlette.testclient import TestClient
 from filament_kit import config, intake, local_reader, modules, pairing
 from filament_kit.api import create_app
 from filament_kit.spoolman import Spoolman
+from test_setup_page import env  # noqa: F401  (a fixture: the setup page's test settings)
 
 JPEG = b"\xff\xd8\xff\xe0" + b"x" * 100
 CLOUD = {"questions": [], "items": [{**lrf.ITEM, "vendor": "Polymaker", "name": "PolyLite PLA Grey",
@@ -356,3 +357,70 @@ def test_a_mode_change_keeps_orders_on_the_local_reader():
     assert {"orders", "local_intake"} <= modules.enabled(modules.set_mode(cfg, "all-in-one", say=None))
     assert modules.dependents("local_intake", frozenset(cfg["modules"])) == ["orders"]
     assert modules.dependents("local_intake", frozenset(cfg["modules"]) | {"ai_intake"}) == []
+
+
+# ---------- status, the setup page's reader test, the CLI ----------
+
+def test_status_rows(fake_reader, dead_url):
+    from filament_kit import status
+    url, data = fake_reader
+    setup(url)
+    rows = list(status.local_reader_rows(config.load()))
+    assert rows[0].state == status.OK and "cpu usable, gpu not usable" in rows[0].text
+    assert rows[-1].text == "label reading: the local reader, then Claude"
+    data["health"] = {**data["health"], "status": "degraded", "last_read_at": "2026-11-12T16:40:00Z"}
+    texts = [r.text for r in status.local_reader_rows(config.load())]
+    assert any("degraded: gpu: no CUDA device" in t for t in texts) and any("last read" in t for t in texts)
+    setup(dead_url)
+    bad = list(status.local_reader_rows(config.load()))[0]
+    assert bad.state == status.FAIL and "does not answer" in bad.text and "9) Label reader" in bad.fix
+    assert any("local label reader" in r.text for r in status.rows(config.load(), live_key=False))
+
+
+def test_the_setup_page_tests_the_reader(fake_reader, env):
+    from test_setup_page import Helper, client, make
+    url, _ = fake_reader
+    setup(url, {"spoolman": True, "server": True, "local_intake": True})
+    app = make(env, Helper())
+    r = client(app).get("/setup/api/settings/local-intake")
+    assert r.status_code == 200 and r.json()["ok"] and r.json()["revise"] is True
+    g = client(app).get("/setup/api/settings/general").json()
+    assert g["local_intake_on"] and not g["ai_intake_on"] and g["values"]["local_intake.url"] == url
+    setup(url, {"spoolman": True, "server": True, "ai_intake": True})
+    assert client(make(env, Helper())).get("/setup/api/settings/local-intake").status_code == 409
+
+
+def test_cli_status_and_test(sm, spoolman_url, fake_reader, dead_url, capsys, tmp_path):
+    from filament_kit import cli
+    url, data = fake_reader
+    setup(url, {"spoolman": True, "server": True, "local_intake": True})
+    cfg = config.load()
+    cfg["spoolman_url"] = spoolman_url
+    config.save(cfg)
+    assert cli.main(["local-intake", "status"]) == 0
+    assert "answering at" in capsys.readouterr().out
+    photo = tmp_path / "label.jpg"
+    photo.write_bytes(JPEG)
+    data["read"] = lrf.reply(color_name="Charcoal")
+    assert cli.main(["local-intake", "test", str(photo)]) == 0
+    out = capsys.readouterr().out
+    assert "Read by the local reader (cpu tier, 93 % sure" in out and "SUNLU PLA+ Grey (PLA), colour Charcoal" in out
+    assert intake.reads_today(config.paths().state / "reads.json") == 0
+    setup(dead_url, {"spoolman": True, "server": True, "local_intake": True})
+    assert cli.main(["local-intake", "status"]) == 1
+    setup(url, {"spoolman": True, "server": True})
+    assert cli.main(["local-intake", "test", str(photo)]) == 1
+
+
+def test_cli_config_label_reader(monkeypatch):
+    from filament_kit import cli
+    answers = iter(["2", "http://gpu-box.example:7915", "gpu"])
+    monkeypatch.setattr(cli, "_ask", lambda prompt: next(answers))
+    cfg = {"modules": BOTH}
+    cli._label_reader_menu(cfg)
+    assert cfg["intake"]["reader"] == "cloud-then-local" and cfg["local_intake"] == {
+        "url": "http://gpu-box.example:7915", "tier": "gpu"}
+    assert cli._reader_name(cfg) == "Claude then local"
+    answers = iter(["", "not a url", "tpu"])
+    cli._label_reader_menu(cfg)
+    assert cfg["intake"]["reader"] == "cloud-then-local" and cfg["local_intake"]["tier"] == "gpu"

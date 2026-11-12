@@ -207,6 +207,12 @@ function generalCard() {
         h("input", { type: "checkbox", checked: v["web.printer_changes"] === true, on: { change: (e) => save("web.printer_changes", e.target.checked) } }),
         " Allow printer changes from the public address")) : null,
       g.web_on ? h("p", { class: "muted", textContent: "Off: the phone web app at the web module's public address shows printers but cannot add, change or forget them. On the home network it always can." }) : null,
+      (g.ai_intake_on && g.local_intake_on) ? h("div", { class: "row" }, h("label", {}, "Label reader: ",
+        h("select", { on: { change: (e) => save("intake.reader", e.target.value) } },
+          ...[["auto", "Local first, Claude when unsure (default)"],
+              ["cloud-then-local", "Claude first, local when Claude fails"], ["local", "Local reader only"], ["cloud", "Claude only"]]
+            .map(([k, t]) => h("option", { value: k, textContent: t, selected: (v["intake.reader"] || "auto") === k }))))) : null,
+      g.local_intake_on ? localReaderRows(v, save) : null,
       text("Claude model", "model", v.model),
       count("Label reads per day", "reads_per_day", v.reads_per_day),
       count("Intake records kept", "intake.history_keep", v["intake.history_keep"] ?? 20),
@@ -220,6 +226,31 @@ function generalCard() {
         h("div", { class: "row" }, url, h("button", { class: "secondary", textContent: "Change", on: { click: () => change(box, "settings/spoolman", { url: url.value }, () => { box.replaceChildren(); followApply(true); }) } }))) : null);
   }).catch((e) => say(body, e.message, false));
   return el;
+}
+
+// the local label reader (local_intake): its address, its tier, and a test of /v1/health
+function localReaderRows(v, save) {
+  const url = h("input", { value: v["local_intake.url"] || "", placeholder: "http://127.0.0.1:7915", ariaLabel: "Local reader address" });
+  const out = h("div");
+  const test = () => {
+    out.replaceChildren(h("p", { class: "muted", textContent: "Asking the local reader…" }));
+    api("settings/local-intake").then((r) => {
+      const tiers = Object.entries(r.tiers || {}).map(([k, t]) => `${k} ${t.usable ? "usable" : "not usable" + (t.reason ? " (" + t.reason + ")" : "")}`).join(", ");
+      say(out, r.ok
+        ? `Answering: version ${r.version || "?"}, API ${r.api_version}; ${tiers || "no tiers listed"}${r.revise ? "; can revise readings" : ""}${r.degraded ? ". " + r.error : ""}.`
+        : `Not usable: ${r.error}`, r.ok);
+    }).catch((e) => say(out, e.message, false));
+  };
+  return h("div", {},
+    h("div", { class: "row" }, h("label", {}, "Local reader address: ", url),
+      h("button", { class: "secondary", textContent: "Save", on: { click: () => save("local_intake.url", url.value.trim()) } }),
+      h("button", { class: "secondary", textContent: "Test", on: { click: test } })),
+    h("div", { class: "row" }, h("label", {}, "Local reader tier: ",
+      h("select", { on: { change: (e) => save("local_intake.tier", e.target.value) } },
+        ...[["auto", "Auto: CPU, then GPU when unsure"], ["cpu", "CPU only"], ["gpu", "GPU only"]]
+          .map(([k, t]) => h("option", { value: k, textContent: t, selected: (v["local_intake.tier"] || "auto") === k }))))),
+    h("p", { class: "muted", textContent: "The reader may run on another computer on your network (one with a GPU). Only Claude's reads count against the reads per day." }),
+    out);
 }
 
 // ----- the remote module's certificate (Settings) -----

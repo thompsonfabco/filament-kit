@@ -513,6 +513,29 @@ def _bool(value) -> bool:
     return value
 
 
+def _reader(value) -> str:
+    from . import intake
+    if value not in intake.READER_CHOICES:
+        raise ValueError("must be one of: " + ", ".join(intake.READER_CHOICES))
+    return value
+
+
+def _reader_url(value) -> str:
+    from . import local_reader
+    text = _one_line(value, 200)
+    err = local_reader.check_url(text)
+    if err:
+        raise ValueError(f"is not usable: {err}")
+    return text.rstrip("/")
+
+
+def _reader_tier(value) -> str:
+    from . import local_reader
+    if value not in local_reader.TIERS:
+        raise ValueError("must be one of: " + ", ".join(local_reader.TIERS))
+    return value
+
+
 def _tts(value) -> str:
     if value not in ("auto", "espeak"):
         raise ValueError("must be auto or espeak")
@@ -535,6 +558,10 @@ GENERAL = {
     "station.tts": (_tts, "apply"),
     "setup.hosts": (_hosts, None),          # read on every request (setup_page.extra_hosts): no restart
     "web.printer_changes": (_bool, None),   # read on every request (printers_app.changes_allowed): no restart
+    # read on every label read (intake._call): no restart
+    "intake.reader": (_reader, None),
+    "local_intake.url": (_reader_url, None),
+    "local_intake.tier": (_reader_tier, None),
 }
 
 
