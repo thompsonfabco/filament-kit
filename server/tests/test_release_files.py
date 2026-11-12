@@ -217,7 +217,7 @@ def test_web_extra_pins_mcp_exactly():
 
 def test_wrapper_runs_modules_as_root():
     text = _read("install/filament-kit-cli.sh")
-    assert re.search(r"^\s+config \| cert \| modules \| remote \| migrate-scanner \| update \| uninstall \| station \| setup-code\)\s*$",
+    assert re.search(r"^\s+config \| cert \| modules \| remote \| update \| uninstall \| station \| setup-code\)\s*$",
                      text, re.M)
 
 
@@ -838,14 +838,6 @@ def test_inline_python_survives_shell_single_quotes(rel):
         compile(code, f"{rel} python -c block", "exec")
         blocks += 1
     assert blocks >= 1, f"{rel}: no python -c block left; update PYTHON_C_SCRIPTS"
-
-
-@pytest.mark.skipif(not _bash(), reason="needs bash")
-def test_wrapper_runs_migrate_scanner_as_root(tmp_path):
-    """`migrate-scanner --apply` refuses unless root and reads the old calibration from /root: the wrapper must not
-    drop it to the service user (final review I1)."""
-    assert (_wrapper_run(tmp_path, "migrate-scanner", "/root/calibration.json", "--apply")
-            == "as-root migrate-scanner /root/calibration.json --apply")
 
 
 # --- final review I3 (Ruling BU): CI builds, signs and publishes library.tar.gz ----------------------------------

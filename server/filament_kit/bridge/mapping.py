@@ -316,13 +316,6 @@ def job_held_elsewhere(serial: str) -> bool:
     return _ProcessLock.held_elsewhere(serial)
 
 
-def record_seeded(serial: str, step: str, problems: list[str] | None = None) -> None:
-    """Record a slot map that came from elsewhere (`migrate_scanner`: the scanner's calibration) as the last
-    finished mapping, so `view` (the app's mapping status) says where the map came from until a job maps again."""
-    _save_status(serial, _Job(id=uuid.uuid4().hex, state="done", step=step, problems=list(problems or []),
-                              finished=time.time()))
-
-
 def _load_status(serial: str) -> dict | None:
     try:
         d = json.loads((_dir(serial) / STATUS_FILE).read_text(encoding="utf-8"))
