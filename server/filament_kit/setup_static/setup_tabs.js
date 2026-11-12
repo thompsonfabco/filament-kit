@@ -249,7 +249,7 @@ function localReaderRows(v, save) {
       h("select", { on: { change: (e) => save("local_intake.tier", e.target.value) } },
         ...[["auto", "Auto: CPU, then GPU when unsure"], ["cpu", "CPU only"], ["gpu", "GPU only"]]
           .map(([k, t]) => h("option", { value: k, textContent: t, selected: (v["local_intake.tier"] || "auto") === k }))))),
-    h("p", { class: "muted", textContent: "The reader may run on another computer on your network (one with a GPU). Only Claude's reads count against the reads per day." }),
+    h("p", { class: "muted", textContent: "The reader may run on another computer on your network (one with a GPU). The label photos and your filament list go to this address (plain HTTP unless it starts with https), so give one you trust. Only Claude's reads count against the reads per day." }),
     out);
 }
 

@@ -490,3 +490,43 @@ def test_api_revise_with_the_local_reader_uses_no_cap(sm, fake_reader):
     r = c.post(f"/api/intake/history/{hid}/revise", headers=h, json={"note": "brand is Polymaker"})
     assert r.status_code == 200, r.text
     assert r.json()["reader"] == "local" and intake.reads_today(config.paths().state / "reads.json") == 0
+
+
+# ---------- review R127 notes ----------
+
+def test_a_redirect_is_never_followed_with_the_token(sm, tmp_path):
+    """Note 1: a reader that answers 302 to another host is a failed read; the other host never gets the token."""
+    from starlette.applications import Starlette
+    from starlette.responses import JSONResponse, RedirectResponse
+    from starlette.routing import Route
+    from fakes import serving
+    seen = []
+
+    async def other(request):
+        seen.append(request.headers.get("authorization"))
+        return JSONResponse(lrf.reply())
+    elsewhere = serving.start(Starlette(routes=[Route("/v1/read", other, methods=["GET", "POST"])]))
+
+    async def redirect(request):
+        return RedirectResponse(f"{elsewhere.url}/v1/read", status_code=302)
+    reader = serving.start(Starlette(routes=[Route("/v1/read", redirect, methods=["POST"])]))
+    try:
+        setup(reader.url, {"spoolman": True, "server": True, "local_intake": True})
+        (config.paths().etc / local_reader.TOKEN_FILE).write_text("tok-123\n")
+        with pytest.raises(intake.ReadError) as e:
+            intake.read_labels(sm, [JPEG], "", None, None)
+        assert e.value.code == "local_bad_answer" and "302" in str(e.value) and seen == []
+    finally:
+        reader.stop()
+        elsewhere.stop()
+
+
+def test_a_claude_call_that_never_reached_it_gives_its_read_back(sm, fake_reader):
+    """Note 3: local unsure, Claude unreachable: the unsure local answer is returned and the cap ticket refunded."""
+    url, data = fake_reader
+    setup(url)
+    data["read"] = lrf.reply(confidence=0.4)
+    cap = Cap()
+    out = intake.read_labels(sm, [JPEG], "", None, FakeClaude(raises=anthropic.APIConnectionError(request=None)),
+                             charge=cap.charge)
+    assert out["reader"] == "local" and cap.taken == 1 and cap.refunded == 1

@@ -118,6 +118,17 @@ def _error_of(raw: bytes) -> tuple[str, str]:
 REFUSALS = {"bad_request", "no_photos", "too_many_photos", "too_large", "bad_image"}
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Never follow a redirect: the reader answers at the address the owner set, and a redirect followed with the
+    bearer token would hand it to another host (review R127 note 1). A 3xx is then an HTTP error like any other."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+_OPENER = urllib.request.build_opener(_NoRedirect)
+
+
 def _request(url: str, *, body: dict | None, timeout: float, auth: bool = False) -> dict:
     _reachable(url)
     data = None if body is None else json.dumps(body).encode("utf-8")
@@ -129,7 +140,7 @@ def _request(url: str, *, body: dict | None, timeout: float, auth: bool = False)
     for attempt in (1, 2):
         req = urllib.request.Request(url, data=data, method="GET" if body is None else "POST", headers=headers)
         try:
-            with urllib.request.urlopen(req, timeout=max(1.0, deadline - time.monotonic())) as resp:  # noqa: S310
+            with _OPENER.open(req, timeout=max(1.0, deadline - time.monotonic())) as resp:  # noqa: S310
                 raw = resp.read()
             break
         except urllib.error.HTTPError as e:
