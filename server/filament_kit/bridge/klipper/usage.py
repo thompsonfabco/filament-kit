@@ -2,7 +2,8 @@
 
 `state/printers/<id>/usage.xml` holds `<entry>` elements (newest last, at most KEEP): id ("k-<job id>"), job,
 file, started, ended (unix seconds), status (Moonraker's job status: completed, cancelled, error, klippy_shutdown
-...), spool-id, filament-mm, grams (the file's `filament_weight_total` when the slicer wrote it) and
+...), spool-id, filament-mm, grams (the file's `filament_weight_total` when the slicer wrote it, scaled by `filament_used` / `filament_total`
+for a job that did not complete; empty when that share is unknown) and
 source="moonraker". Entries cannot be undone (Moonraker wrote Spoolman; the API answers 409 recorded_by_moonraker).
 Nothing here ever writes to Spoolman or Moonraker.
 
@@ -91,10 +92,15 @@ def record(pid: str, job: dict, spool_id) -> dict:
                 if isinstance(a, dict) and a.get("name") == "spool_ids"), None)
     if isinstance(aux, list) and aux and isinstance(aux[0], int):
         spool_id = aux[0]
+    status = str(job.get("status") or "")
+    used_mm, total_mm = _num(job.get("filament_used")), _num(meta.get("filament_total"))
+    grams = _num(meta.get("filament_weight_total"))      # the whole file's weight: right for a job that finished
+    if status != "completed" and grams is not None:
+        grams = round(grams * min(used_mm / total_mm, 1.0), 2) if used_mm is not None and total_mm else None
     e = {"id": f"{KLIPPER_ENTRY}{jid or int(time.time())}", "job": jid, "file": str(job.get("filename") or ""),
          "started": _num(job.get("start_time")), "ended": _num(job.get("end_time")) or time.time(),
-         "status": str(job.get("status") or ""), "spool_id": spool_id if isinstance(spool_id, int) else None,
-         "filament_mm": _num(job.get("filament_used")), "grams": _num(meta.get("filament_weight_total")),
+         "status": status, "spool_id": spool_id if isinstance(spool_id, int) else None,
+         "filament_mm": used_mm, "grams": grams,
          "source": "moonraker"}
     with _lock:
         entries = _read(pid)

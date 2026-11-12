@@ -51,6 +51,22 @@ def test_record_and_entries():
     assert kusage.entries("sv08-max", 0) == [] or all(x["ended"] for x in kusage.entries("sv08-max", 0))
 
 
+def test_a_stopped_job_gets_its_share_of_the_weight():
+    meta = {"filament_total": 4000.0, "filament_weight_total": 12.0}
+    job = history_job(status="cancelled", filament_used=1000.0, job_id="000101", metadata=meta)
+    assert kusage.record("p", job, None)["grams"] == pytest.approx(3.0)
+    over = history_job(status="error", filament_used=9000.0, job_id="000102", metadata=meta)
+    assert kusage.record("p", over, None)["grams"] == pytest.approx(12.0)
+
+
+def test_a_stopped_job_without_lengths_has_no_grams():
+    meta = {"filament_weight_total": 12.0}
+    job = history_job(status="cancelled", job_id="000103", metadata=meta)
+    assert kusage.record("p", job, None)["grams"] is None
+    done = history_job(status="completed", job_id="000104", metadata=meta)
+    assert kusage.record("p", done, None)["grams"] == pytest.approx(12.0)
+
+
 def test_real_timestamps_keep_full_precision():
     # a 6-significant-digit format turned both times of a 23-minute print into the same 10-digit number
     job = {**history_job(), "job_id": "000099", "start_time": 1767270001.917, "end_time": 1767271379.388,
