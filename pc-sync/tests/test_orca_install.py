@@ -324,5 +324,8 @@ def test_backups_keep_five_per_target(tmp_path):
         installer.install(e.build({N: _orca_preset(N, nozzle_temperature=[str(200 + i)])}), e.folders, e.dirs,
                           running=lambda: False, stamp_now=f"20261102-01000{i}", orca=e.orca,
                           orca_running=lambda: False)
-    assert len(list(e.dirs.orca_backups.iterdir())) == installer.KEEP_BACKUPS
-    assert len(list(e.dirs.backups.iterdir())) == installer.KEEP_BACKUPS
+    for folder in (e.dirs.orca_backups, e.dirs.backups):
+        kept = sorted(p.name for p in folder.iterdir())
+        assert len(kept) == installer.KEEP_BACKUPS
+        assert kept[-1] == "20261102-010006"    # the newest stays; the oldest are the ones pruned
+        assert "20261102-010000" not in kept
