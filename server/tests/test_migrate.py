@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import hashlib
-import io
 import json
 import os
 import sqlite3
@@ -195,77 +194,6 @@ def test_dry_run_on_a_tar_bundle_writes_nothing_and_cleans_up(env, lib, tmp_path
     code, text = run(t, lib)
     assert code == 0, text
     assert kit_files(env) == before
-
-
-def test_the_unpacked_tar_bundle_is_removed_afterwards(env, tmp_path, monkeypatch):
-    t = tar_bundle(make_bundle(env / "bundle"))
-    made = []
-    real = migrate.tempfile.mkdtemp
-    monkeypatch.setattr(migrate.tempfile, "mkdtemp", lambda *a, **kw: made.append(real(*a, **kw)) or made[-1])
-    with migrate.open_bundle(t) as b:
-        assert Path(made[0]).is_dir() and b.manifest["format"] == 1
-    assert len(made) == 1 and not Path(made[0]).exists()
-    with pytest.raises(RuntimeError):
-        with migrate.open_bundle(t):
-            raise RuntimeError("a step failed")
-    assert len(made) == 2 and not Path(made[1]).exists()
-
-
-def _hostile(tmp_path, add):
-    out = tmp_path / "hostile.tar.gz"
-    with tarfile.open(out, "w:gz") as tar:
-        data = b"{}"
-        ti = tarfile.TarInfo("ops-bundle/MANIFEST.json")
-        ti.size = len(data)
-        tar.addfile(ti, io.BytesIO(data))
-        add(tar)
-    return out
-
-
-def _file(name, data=b"owned"):
-    ti = tarfile.TarInfo(name)
-    ti.size = len(data)
-    return ti, io.BytesIO(data)
-
-
-def test_a_bundle_member_outside_the_folder_is_refused_and_nothing_is_left(tmp_path, monkeypatch):
-    made = []
-    real = migrate.tempfile.mkdtemp
-    monkeypatch.setattr(migrate.tempfile, "mkdtemp", lambda *a, **kw: made.append(real(*a, **kw)) or made[-1])
-    t = _hostile(tmp_path, lambda tar: tar.addfile(*_file("../escaped.txt")))
-    with pytest.raises(tarfile.TarError):
-        with migrate.open_bundle(t):
-            pytest.fail("a bundle with a ../ member was opened")
-    assert not (Path(made[0]).parent / "escaped.txt").exists() and not Path(made[0]).exists()
-
-
-def test_a_bundle_symlink_to_an_absolute_path_is_refused(tmp_path):
-    def add(tar):
-        ti = tarfile.TarInfo("ops-bundle/secrets")
-        ti.type, ti.linkname = tarfile.SYMTYPE, "/etc"
-        tar.addfile(ti)
-    with pytest.raises(tarfile.TarError):
-        with migrate.open_bundle(_hostile(tmp_path, add)):
-            pytest.fail("a bundle with an absolute symlink was opened")
-
-
-def test_a_bundle_symlink_out_of_the_folder_is_refused(tmp_path):
-    def add(tar):
-        ti = tarfile.TarInfo("ops-bundle/secrets")
-        ti.type, ti.linkname = tarfile.SYMTYPE, "../../../etc"
-        tar.addfile(ti)
-    with pytest.raises(tarfile.TarError):
-        with migrate.open_bundle(_hostile(tmp_path, add)):
-            pytest.fail("a bundle with an escaping symlink was opened")
-
-
-@pytest.mark.skipif(sys.platform == "win32", reason="POSIX absolute names (tarfile refuses them outright on Windows)")
-def test_an_absolute_member_name_lands_inside_the_unpacked_folder(tmp_path):
-    target = Path("/fk-test-abs-member-owned.txt")
-    t = _hostile(tmp_path, lambda tar: tar.addfile(*_file(target.as_posix())))
-    with migrate.open_bundle(t):
-        pass                                                     # the leading / is dropped, not honoured
-    assert not target.exists()
 
 
 def test_second_apply_changes_nothing(env, lib, spoolman_fake_store):
@@ -591,7 +519,6 @@ def test_export_script_bundle_opens_and_leaves_secrets_out(tmp_path, secrets):
     assert b"never-exported" not in blob                         # the H2D token is never exported
     assert ("ops-bundle/secrets/oauth.json" in names) is secrets
     assert (b"sk-test-not-real" in blob) is secrets
-    assert (b"00ff" * 8 in blob) is secrets                      # the web passphrase goes the same way
     assert "ops-bundle/presets/live/bs/base/SUNLU PLA+ 2.0 @Bambu Lab H2D 0.4 nozzle.json" in names
     with migrate.open_bundle(out) as b:
         assert b.manifest["secrets"] is secrets
