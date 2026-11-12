@@ -2277,6 +2277,83 @@ def cmd_local_intake_status() -> int:
     return 0 if status_rows.print_rows(status_rows.local_reader_rows(cfg)) else 1
 
 
+def cmd_local_intake_install(tier: str | None, version: str | None, yes: bool, fetcher=None, run=None) -> int:
+    """Install or upgrade the local label reader from its signed release, switch the module on and apply. The
+    download, disk and time the release states are shown before anything is downloaded (--yes skips the question:
+    the setup page's job, after the owner confirmed on the page)."""
+    from . import local_intake_install as lii, local_reader
+    if not _require_root():
+        return 1
+    cfg = config.load()
+    if tier is not None and tier not in local_reader.TIERS:
+        _err_line(f"--tier must be one of {', '.join(local_reader.TIERS)}")
+        return 1
+    try:
+        p = lii.plan(cfg, tier=tier, version=version, fetcher=fetcher)
+    except lii.InstallError as e:
+        _err_line(str(e))
+        return 1
+    for line in lii.plan_text(p):
+        print(line)
+    if p["tier"] not in p["tiers"]:
+        return 1
+    if not yes:
+        a = _ask("Go ahead? [y/N] ")
+        if not a or a.strip().lower() not in ("y", "yes"):
+            print("Nothing was installed.")
+            return 0
+    try:
+        rec = lii.install(cfg, tier=p["tier"], version=p["version"], fetcher=fetcher, run=run,
+                          say=lambda s: print(s, flush=True))
+    except lii.InstallError as e:
+        _err_line(str(e))
+        return 1
+    cfg = config.load()
+    cfg.setdefault("modules", {n: True for n in modules.enabled(cfg)})["local_intake"] = True
+    li = cfg.setdefault("local_intake", {})
+    li["url"], li["tier"] = f"http://127.0.0.1:{rec['port']}", rec["tier"]
+    rc = _save_and_apply(cfg, [f"The local label reader {rec['version']} is installed; local_intake is on."])
+    if rc != 0:
+        return rc
+    h = lii.wait_healthy(config.load())
+    if not h["ok"]:
+        _err_line(f"installed, but the reader does not answer yet: {h['error']}. Check: filament-kit local-intake status")
+        return 1
+    print(f"The reader answers: version {h['version'] or '?'}, API {h['api_version']}.")
+    return 0
+
+
+def cmd_local_intake_remove(yes: bool, run=None) -> int:
+    """Uninstall the reader installed by `local-intake install`, switch the module off (with whatever needs it only)
+    and apply. A reader on another machine is not touched: then only the module goes off."""
+    from . import local_intake_install as lii
+    if not _require_root():
+        return 1
+    cfg = config.load()
+    have = lii.installed()
+    on = modules.enabled(cfg)
+    if have is None and "local_intake" not in on:
+        print("The local label reader is not installed and local_intake is off: nothing to do.")
+        return 0
+    new_on, notes = modules.toggle(on, "local_intake") if "local_intake" in on else (on, [])
+    print(("Remove the local label reader " + have["version"] + " from this machine" if have else
+           "Switch local_intake off (no reader is installed on this machine)") + "; its settings are kept."
+          + (" " + " ".join(notes) if notes else ""))
+    if not yes:
+        a = _ask("Go ahead? [y/N] ")
+        if not a or a.strip().lower() not in ("y", "yes"):
+            print("Nothing was changed.")
+            return 0
+    if have is not None:
+        try:
+            lii.remove(run=run, say=lambda s: print(s, flush=True))
+        except lii.InstallError as e:
+            _err_line(str(e))
+            return 1
+    cfg["modules"] = modules.module_map(new_on, cfg)
+    return _save_and_apply(cfg, ["The local label reader is removed." if have else "local_intake is off."])
+
+
 def cmd_local_intake_test(photos: list[str]) -> int:
     """Read photos with the local reader only (no cloud, no daily read used) and print what it read."""
     from . import intake
@@ -2451,6 +2528,14 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     li = sub.add_parser("local-intake", help="the local label reader (local_intake module): status, test a photo")
     lisub = li.add_subparsers(dest="li_cmd", required=True)
     lisub.add_parser("status", help="does the local reader answer, which tiers it can use, the reader order")
+    lii = lisub.add_parser("install", help="install or upgrade the local reader from its signed release on this "
+                                           "machine (root; sizes are shown first)")
+    lii.add_argument("--tier", choices=["auto", "cpu", "gpu"], help="default: local_intake.tier (auto)")
+    lii.add_argument("--version", help="a release version instead of the latest")
+    lii.add_argument("--yes", action="store_true", help="do not ask (the sizes are still printed)")
+    lir = lisub.add_parser("remove", help="uninstall the local reader from this machine and switch local_intake off "
+                                          "(root; its settings are kept)")
+    lir.add_argument("--yes", action="store_true", help="do not ask")
     lit = lisub.add_parser("test", help="read photos with the local reader only and print the result (no Claude, "
                                         "no daily read used, nothing saved)")
     lit.add_argument("photos", nargs="+", help="JPEG photos of one or more labels")
@@ -2578,6 +2663,10 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     if args.cmd == "web":
         return cmd_web_passphrase() if args.web_cmd == "passphrase" else cmd_web_status()
     if args.cmd == "local-intake":
+        if args.li_cmd == "install":
+            return cmd_local_intake_install(args.tier, args.version, args.yes)
+        if args.li_cmd == "remove":
+            return cmd_local_intake_remove(args.yes)
         return cmd_local_intake_status() if args.li_cmd == "status" else cmd_local_intake_test(args.photos)
     if args.cmd == "reader" and args.reader_cmd == "setup":
         return cmd_reader_setup(args)

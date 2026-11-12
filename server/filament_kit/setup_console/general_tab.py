@@ -5,13 +5,15 @@
     POST settings/spoolman {code, url}   an external Spoolman: only after this server has reached it and it answered as one
     POST remote/firewall {code}          the rules the owner sets up by hand: printed only, and it names their networks
     GET  settings/local-intake           the local label reader's health (local_reader.health): a read, no code
+    GET  settings/local-intake/plan      what installing its latest signed release would download and need (no code;
+                                         the install and the removal are the jobs local_intake_install / _remove)
 The certificate itself is the job `remote_issue`.
 """
 from __future__ import annotations
 
 import anyio
 
-from .. import config, local_reader, modules, redact, remote, setup_helper
+from .. import config, local_intake_install, local_reader, modules, redact, remote, setup_helper
 from ..spoolman import Spoolman, SpoolmanError
 
 
@@ -31,6 +33,7 @@ def _view() -> dict:
     values = {k: setup_helper.general_value(cfg, k) for k in setup_helper.GENERAL}
     return {"values": values, "station_on": "station" in on, "remote_on": "remote" in on, "web_on": "web" in on,
             "ai_intake_on": "ai_intake" in on, "local_intake_on": "local_intake" in on,
+            "local_intake_installed": local_intake_install.installed(),
             "spoolman_external": "server" in on and "spoolman" not in on,
             "intake_history": _history_use(),
             "spoolman_url": redact.text(str(cfg.get("spoolman_url") or ""), redact.known_values())}
@@ -91,8 +94,18 @@ def routes(page) -> list[tuple]:
             return local_reader.health(cfg)
         return await anyio.to_thread.run_sync(check)
 
+    async def reader_plan(request, body):
+        def check() -> dict:
+            try:
+                p = local_intake_install.plan(config.load())
+            except local_intake_install.InstallError as e:
+                raise Refused(409, str(e)) from None
+            return {**p, "text": local_intake_install.plan_text(p)}
+        return await anyio.to_thread.run_sync(check)
+
     return [("/settings/general", page.guard(read), "GET"),
             ("/settings/local-intake", page.guard(reader_health), "GET"),
+            ("/settings/local-intake/plan", page.guard(reader_plan), "GET"),
             ("/settings/general", page.guard(write, write="helper"), "POST"),
             ("/settings/spoolman", page.guard(spoolman, write=True), "POST"),
             ("/remote/firewall", page.guard(firewall, write=True), "POST")]

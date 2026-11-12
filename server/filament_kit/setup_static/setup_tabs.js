@@ -253,6 +253,40 @@ function localReaderRows(v, save) {
     out);
 }
 
+// ----- the local label reader: install, upgrade, remove (Settings) -----
+// Sizes and time come from the release's signed manifest and are shown before the owner confirms; the install runs
+// as a job (filament-kit local-intake install --yes, tier: local_intake.tier). A reader on another machine needs no
+// install: switch local_intake on in Modules and give its address under General.
+function readerCard() {
+  const body = h("div"), box = boxFor("local_intake");
+  const el = card("Local label reader", body, box);
+  api("settings/general").then((g) => {
+    const have = g.local_intake_installed;
+    const out = h("div");
+    const check = () => {
+      out.replaceChildren(h("p", { class: "muted", textContent: "Asking for the latest signed release…" }));
+      api("settings/local-intake/plan").then((p) => {
+        const t = p.tiers[p.tier];
+        const label = p.upgrade ? "Upgrade" : p.same ? "Reinstall" : "Install";
+        fill(out, ...p.text.map((line) => h("p", { textContent: line })),
+          t ? h("button", { textContent: `${label} ${p.version} (${p.tier} tier)`, on: { click: () => startJob(box, "local_intake_install",
+            `${p.text.filter((l) => !l.startsWith("Installed") && !l.startsWith("Other")).join(" ")} Go ahead?`) } }) : null,
+          h("p", { class: "muted", textContent: "The tier is the one under General (Local reader tier); change it there first for another one." }));
+      }).catch((e) => say(out, e.message, false));
+    };
+    fill(body,
+      h("p", { class: "muted", textContent: have
+        ? `Installed on this machine: version ${have.version}, ${have.tier} tier.`
+        : "Not installed on this machine. It reads label photos without the cloud; a reader on another machine (one with a GPU) works too: switch local_intake on in Modules and give its address under General." }),
+      h("div", { class: "row" },
+        h("button", { class: "secondary", textContent: have ? "Check for an upgrade" : "Show what an install needs", on: { click: check } }),
+        have ? h("button", { class: "secondary", textContent: "Remove", on: { click: () => startJob(box, "local_intake_remove",
+          "Remove the local label reader from this machine and switch local_intake off? Its settings are kept.") } }) : null),
+      out);
+  }).catch((e) => say(body, e.message, false));
+  return el;
+}
+
 // ----- the remote module's certificate (Settings) -----
 function remoteCard() {
   const body = h("div"), box = boxFor("remote");
