@@ -570,7 +570,8 @@ class Mapper:
         Called from signal handlers, so it takes no lock (the main thread may hold `_lock` in `_begin` or `view`):
         only atomic set / dict operations and `_Flag.set`. The request is left pending for a job not registered
         yet (`_begin` registers the job, then takes up a pending request) and dropped once it reached a running
-        job; either order of the two ends with the job aborted. A pending request older than ABORT_PENDING_TTL is
+        job. That covers either order only when the `pending=True` caller runs on the thread that calls `_begin` (the
+        CLI's signal handler); from another thread, the check-then-record below could lose the request. A pending request older than ABORT_PENDING_TTL is
         stale and ignored. `pending=False` (a Stop button, not a signal racing `_begin`): with no job running it does
         nothing, so it cannot abort a later mapping."""
         j = self._jobs.get(serial)

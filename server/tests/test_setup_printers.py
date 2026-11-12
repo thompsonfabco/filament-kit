@@ -36,6 +36,7 @@ def names(monkeypatch):
 class FakeMapper:
     def __init__(self):
         self.started, self.stopped, self.fail = [], [], None
+        self.stop_pending = []
 
     def start(self, serial):
         if self.fail:
@@ -48,6 +49,7 @@ class FakeMapper:
 
     def abort(self, serial, pending=True):
         self.stopped.append(serial)
+        self.stop_pending.append(pending)
 
     def report(self, serial):
         if self.fail:
@@ -438,6 +440,7 @@ def test_map_starts_follows_and_stops(mapped):
     v = c.get(f"/setup/api/printers/{SERIAL}/map")
     assert v.status_code == 200 and v.json()["step"] == "testing slot A1"
     assert post(c, f"printers/{SERIAL}/map/stop", {}).status_code == 200 and fake.stopped == [SERIAL]
+    assert fake.stop_pending == [False]      # a Stop with no job must not leave a pending abort for the next map
 
 
 @pytest.mark.parametrize("error, words", [
