@@ -5,11 +5,7 @@
 # sqlite's online backup API into memory (never `cp` of a live database), and the bundle is streamed straight
 # into the output: give `-` to write it to stdout, so even the bundle never lands on this machine's disk:
 #
-#   (umask 077; ssh <ops-vm> 'sudo bash -s -- --no-secrets -' < tools/export_ops.sh > ops-bundle.tar.gz)
-#
-# The umask matters for a full bundle (without --no-secrets): the shell creates the output file, at its umask
-# (usually 0644), and the bundle holds the passphrase hash, oauth.json and the Anthropic key. Run here, with `-`
-# redirected into a group/world-readable file, the script refuses (OPS_EXPORT_ALLOW_READABLE=1 switches that off).
+#   ssh <ops-vm> 'sudo bash -s -- --no-secrets -' < tools/export_ops.sh > ops-bundle.tar.gz
 #
 # Usage: sudo bash export_ops.sh [--no-secrets] [--spoolman-db PATH [--force]] OUT.tar.gz|-
 #   --no-secrets   leave out the web passphrase hash, oauth.json and the Anthropic key (a rehearsal bundle);
@@ -31,11 +27,9 @@ if [ "$(id -u)" != 0 ] && [ "${OPS_EXPORT_NOT_ROOT:-0}" != 1 ]; then
     exit 1
 fi
 command -v python3 >/dev/null || { echo "error: python3 is needed" >&2; exit 1; }
-# Connection.serialize() (the in-memory database copy) is new in Python 3.11
-python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)'     || { echo "error: Python 3.11 or newer is needed (python3 here is $(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])'))" >&2; exit 1; }
 
 PROG=$(cat <<'PY'
-import io, json, os, shutil, socket, sqlite3, stat, subprocess, sys, tarfile, tempfile, time, urllib.request
+import io, json, os, shutil, socket, sqlite3, subprocess, sys, tarfile, tempfile, time, urllib.request
 
 args = sys.argv[1:]
 secrets, db_arg, out, force = True, None, None, False
@@ -53,12 +47,6 @@ while args:
         sys.exit(f"error: unknown argument {a!r}")
 if out is None:
     sys.exit("usage: export_ops.sh [--no-secrets] [--spoolman-db PATH [--force]] OUT.tar.gz|-")
-
-if out == "-" and secrets and os.environ.get("OPS_EXPORT_ALLOW_READABLE") != "1":
-    st = os.fstat(sys.stdout.fileno())
-    if stat.S_ISREG(st.st_mode) and st.st_mode & 0o077:
-        sys.exit(f"error: stdout is a file readable by group/others (mode {st.st_mode & 0o777:03o}) and the bundle holds secrets: "
-                 "run it under `umask 077`, give --no-secrets, or set OPS_EXPORT_ALLOW_READABLE=1")
 
 ETC = os.environ.get("OPS_ETC", "/etc/filament-mcp")
 STATE = os.environ.get("OPS_STATE", "/var/lib/filament-mcp")
