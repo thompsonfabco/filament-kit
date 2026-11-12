@@ -193,6 +193,7 @@ void buzzUnknown() { beep(2000, 600); }                                    // ta
 void buzzError()   { for (int i=0;i<3;i++){ beep(4000,120); delay(80);} }  // unreachable / error
 void buzzTick()    { beep(2000, 15); }                                     // knob/button
 void buzzQueued()  { beep(2000, 80); delay(80); beep(2000, 350); }         // queued: short-long
+void buzzStuck()   { for (int i=0;i<2;i++){ beep(4000,600); delay(200);} } // I2C bus stuck: unplug to power-cycle
 
 // ---- OLED screens -----------------------------------------------------------
 bool     updateReady = false;     // a newer signed build is on the server
@@ -758,7 +759,7 @@ void setup() {
   while (digitalRead(PIN_SCL) == LOW && millis() - w0 < 500) delay(1);
   if (digitalRead(PIN_SCL) == LOW) {
     Serial.println("I2C SCL stuck LOW (PN532 wedged?) -> unplug USB to power-cycle");
-    buzzError();                   // the OLED shares the stuck bus: the beeps and serial say it
+    buzzStuck();                   // the OLED shares the stuck bus: two long beeps (and serial) say it
   }
   Wire.begin(PIN_SDA, PIN_SCL);
   i2cScan();

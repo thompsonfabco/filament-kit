@@ -33,10 +33,13 @@ first slot.
 
 | Result | Screen | Sound |
 |---|---|---|
-| `set` | what was set | two short beeps, "set" + slot |
-| `queued` (slot is empty) | "Load into ..." for 15 s | short-long beep, "load" + slot |
+| `set` | what was set | two short beeps |
+| `queued` (slot is empty) | "Load into ..." for 15 s | short-long beep |
 | `unknown_tag`, `unknown_spool`, `archived_spool` | the server's message | one long beep |
 | `no_preset`, `offline`, `error`, no reply | the server's message or "Server down" | three high beeps |
+
+At start-up: two short beeps when it reached the server, three high beeps when Wi-Fi or the server failed. Two
+long high beeps mean the I2C bus is stuck (a PN532 left mid-transfer): unplug the reader to power-cycle it.
 
 ## Server API
 
