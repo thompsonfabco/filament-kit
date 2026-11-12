@@ -185,6 +185,7 @@ def _flash_env(monkeypatch, tmp_path, rc, readers=1):
     monkeypatch.setattr(cli, "_is_root", lambda: True)
     monkeypatch.setattr(rs, "find_pio", lambda who=None: "/usr/bin/pio")
     monkeypatch.setattr(rs, "owner", lambda: None)
+    monkeypatch.setattr(cli, "_answers_as_panel", lambda port: False)
     monkeypatch.setattr(rs, "find_readers", lambda: [rs.Reader(f"/dev/ttyACM{i}", None, "JTAG") for i in range(readers)])
     calls = []
 
@@ -197,14 +198,16 @@ def _flash_env(monkeypatch, tmp_path, rc, readers=1):
 
 def test_a_failed_flash_removes_the_token_nobody_holds(tmp_path, monkeypatch, capsys):
     calls = _flash_env(monkeypatch, tmp_path, rc=1)
-    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask_secret=_secret("p", "p")) == 1
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask=lambda p: "y",
+                                ask_secret=_secret("p", "p")) == 1
     assert calls and calls[0][0] == "/dev/ttyACM0"
     assert reader_tokens.TokenStore().list() == [] and "token was removed" in capsys.readouterr().err
 
 
 def test_a_good_flash_keeps_the_token(tmp_path, monkeypatch, capsys):
     _flash_env(monkeypatch, tmp_path, rc=0)
-    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask_secret=_secret("p", "p")) == 0
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask=lambda p: "y",
+                                ask_secret=_secret("p", "p")) == 0
     assert len(reader_tokens.TokenStore().list()) == 1 and "Flashed. The reader joins Home" in capsys.readouterr().out
 
 
@@ -335,3 +338,40 @@ def test_the_buzzer_option_defaults_to_high(monkeypatch):
     monkeypatch.setattr(cli, "cmd_reader_setup", lambda a: got.update(vars(a)) or 0)
     assert cli.main(["reader", "setup", "--out", "s.h"]) == 0 and got["buzzer"] == "high"
     assert cli.main(["reader", "setup", "--out", "s.h", "--buzzer", "low"]) == 0 and got["buzzer"] == "low"
+
+
+def _refused(monkeypatch, tmp_path, capsys, **kw):
+    calls = _flash_env(monkeypatch, tmp_path, rc=0)
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask_secret=_secret("p", "p"), **kw) == 1
+    assert calls == [] and reader_tokens.TokenStore().list() == []
+    return capsys.readouterr()
+
+
+def test_a_lone_board_is_not_flashed_unless_the_owner_says_yes(tmp_path, monkeypatch, capsys):
+    for answer in ("", "n", "no"):
+        out = _refused(monkeypatch, tmp_path, capsys, ask=lambda p, a=answer: a)
+        assert "Nothing was flashed" in out.out
+
+
+def test_a_lone_board_with_no_terminal_is_not_flashed(tmp_path, monkeypatch, capsys):
+    def no_tty(prompt):
+        raise EOFError
+    assert "--port" in _refused(monkeypatch, tmp_path, capsys, ask=no_tty).err
+
+
+def test_a_lone_board_that_answers_as_the_panel_is_never_asked_about(tmp_path, monkeypatch, capsys):
+    calls = _flash_env(monkeypatch, tmp_path, rc=0)
+    monkeypatch.setattr(cli, "_answers_as_panel", lambda port: True)
+    def boom(prompt):
+        raise AssertionError("asked")
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask=boom, ask_secret=_secret("p", "p")) == 1
+    assert calls == [] and "button panel" in capsys.readouterr().err
+
+
+def test_an_explicit_port_is_flashed_without_asking(tmp_path, monkeypatch):
+    calls = _flash_env(monkeypatch, tmp_path, rc=0)
+    def boom(prompt):
+        raise AssertionError("asked")
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)), port="/dev/ttyACM9"), ask=boom,
+                                ask_secret=_secret("p", "p")) == 0
+    assert calls[0][0] == "/dev/ttyACM9"

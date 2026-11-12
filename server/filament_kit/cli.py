@@ -1931,6 +1931,18 @@ def _port_hint(who) -> str:
             f"(sudo usermod -aG dialout {name if who else '$USER'}, then log in again)")
 
 
+def _answers_as_panel(port: str) -> bool:
+    """True when the board on port says HELLO as the intake panel (a few seconds); false if it doesn't or can't be asked."""
+    try:
+        from .station import panel
+        ser = panel.open_panel(port)
+    except Exception:  # no pyserial (the [station] extra), or no such port: nothing to say it is the panel
+        return False
+    if ser:
+        ser.close()
+    return ser is not None
+
+
 def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
     """`reader setup`: a Printer Station set up with today's firmware, which takes its Wi-Fi, server address, token and
     update key only at build time. Makes a token (root, unless --token-file), writes secrets.h (--out, 0600) and/or
@@ -1968,7 +1980,25 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
             port = a.port
         elif len(found) == 1:
             port = found[0].port
-            print(f"Reader on USB: {found[0].by_id or found[0].port} ({found[0].product})")
+            what = f"{found[0].by_id or port} ({found[0].product})"
+            if _answers_as_panel(port):
+                print(f"error: {what} answers as the Printer Station's button panel, not a reader; it was not "
+                      "flashed. Plug the reader in, or name its port with --port.", file=sys.stderr)
+                return 1
+            # A station's button panel is an ESP32-C3 too: with the reader unplugged it is the lone board.
+            print(f"Found a USB board: {what}")
+            try:
+                answer = ask(f"Flash the reader firmware to {port}? [y/N] ")
+            except (EOFError, RuntimeError, OSError):  # no terminal: no answer is a no
+                print("error: `reader setup --source` needs a terminal to ask which board to flash, or name the "
+                      "reader's port with --port. Nothing was flashed.", file=sys.stderr)
+                return 1
+            except KeyboardInterrupt:
+                print("\nNothing was flashed.")
+                return 1
+            if answer.strip().lower() not in ("y", "yes"):
+                print("Nothing was flashed.")
+                return 1
         elif not found:
             print("error: no ESP32 board on USB here. Plug the reader in with a data cable (a charge-only cable "
                   "shows nothing), or name the port with --port.", file=sys.stderr)
@@ -2366,7 +2396,7 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     rds.add_argument("--name", help="what its token is for, e.g. printer-station")
     rds.add_argument("--ssid", help="the Wi-Fi network it joins (asked if left out); the password is always asked")
     rds.add_argument("--source", help="the reader's source folder (a checkout's reader/): build and flash it here")
-    rds.add_argument("--port", help="its USB serial port (found by itself when one ESP32 board is plugged in)")
+    rds.add_argument("--port", help="its USB serial port (found when one ESP32 board is plugged in, which you are asked to confirm)")
     rds.add_argument("--out", help="write its secrets.h here (0600) to build elsewhere")
     rds.add_argument("--ota-pubkey", help="the PEM public key OTA images are signed with (ota_publish.py --init-key)")
     rds.add_argument("--token-file", help="a token made on the server (reader token) instead of a new one")
