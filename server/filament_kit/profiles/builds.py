@@ -619,6 +619,8 @@ def store_upload(kind: str, src: BinaryIO, *, device_id: str, user_id: str | Non
         jsons = _extract(zpath, tree, strict_json=strict)
         if kind == "orca_system":               # presets = BBL preset files + library index rows (fix M2)
             jsons = _orca_presets(tree)
+        if not is_live and not jsons:           # FA-053: a half-written slicer folder must not replace the good store
+            raise ProfileError(400, "bad_request", "the system upload has no presets; the stored ones are kept")
         h = tree_hash(tree)
         with _locked("live.lock"):
             check_owner(device_id)

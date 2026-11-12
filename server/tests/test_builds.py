@@ -461,6 +461,17 @@ def test_system_store_cached_by_hash_and_reloaded_on_a_new_upload():
     assert s2 is not s1 and s2.names() == set(fewer)
 
 
+def test_empty_system_upload_is_refused_and_keeps_the_old_store():
+    """FA-053: a system upload with no presets (a half-written slicer folder) does not replace the good store."""
+    pair("a")
+    builds.store_upload("system", io.BytesIO(system_zip()), device_id="a")
+    s1 = builds.system_store()
+    with pytest.raises(builds.ProfileError) as e:
+        builds.store_upload("system", io.BytesIO(zip_of({"readme.txt": "x"})), device_id="a")
+    assert e.value.status == 400
+    assert builds.system_store() is s1 and s1.names() == set(TG.presets())
+
+
 def test_system_store_parses_outside_the_live_lock(monkeypatch):
     pair("a")
     builds.store_upload("system", io.BytesIO(system_zip()), device_id="a")
