@@ -19,6 +19,9 @@ class SerialTimeoutException(Exception):
     pass
 
 
+_real_sleep = time.sleep       # the fixtures patch panel.time.sleep, and panel.time is this very module
+
+
 class FakeSerial:
     """pyserial stand-in: each port in HELLOS answers that line on open; the rest stay silent."""
     HELLOS: dict[str, bytes] = {}
@@ -36,7 +39,7 @@ class FakeSerial:
             self._lines.append(self.HELLOS[self.port] + b"\r\n")
 
     def readline(self):
-        time.sleep(0.005)
+        _real_sleep(0.005)          # still yields: a silent port waits out the panel's deadline without spinning
         return self._lines.pop(0) if self._lines else b""
 
     def write(self, data):

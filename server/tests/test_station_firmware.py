@@ -22,6 +22,9 @@ class Done:
         self.returncode, self.stdout, self.stderr = code, out, err
 
 
+_real_sleep = time.sleep       # the fixtures patch panel.time.sleep, and panel.time is this very module
+
+
 class FakeSerial:
     """pyserial stand-in: each port in VERSIONS says HELLO <version> on open; the rest stay silent."""
     VERSIONS: dict[str, str] = {}
@@ -38,7 +41,7 @@ class FakeSerial:
             self._lines.append(b"HELLO intake-panel %s\r\n" % self.VERSIONS[self.port].encode())
 
     def readline(self):
-        time.sleep(0.005)
+        _real_sleep(0.005)          # still yields: a silent port waits out the panel's deadline without spinning
         return self._lines.pop(0) if self._lines else b""
 
     def write(self, data):
