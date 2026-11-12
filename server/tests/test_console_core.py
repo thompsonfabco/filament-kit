@@ -118,26 +118,38 @@ def test_the_apply_job_output_is_in_the_log(env):  # noqa: F811
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="SIGTERM to a child")
-def test_sigterm_waits_for_the_command_and_its_exit_lands_in_the_log(env):  # noqa: F811
+def test_sigterm_waits_for_the_command_and_its_exit_lands_in_the_log(env, tmp_path):  # noqa: F811
     """As an update stopped by systemd: its own handler starts the kit again, so it must not be killed from here."""
     import os
     import threading
-    code = ("import signal, sys, time\n"
+    pidfile = tmp_path / "child.pid"
+    code = ("import os, signal, sys, time\n"
             "signal.signal(signal.SIGTERM, lambda *a: (print('putting the kit back', flush=True), sys.exit(143)))\n"
+            f"open({str(pidfile)!r}, 'w').write(str(os.getpid()))\n"
             "print('ready', flush=True)\ntime.sleep(20)\n")
+    problems = []
+
+    def child_pid():
+        return int(pidfile.read_text()) if pidfile.exists() and pidfile.read_text() else None
 
     def term():
-        for _ in range(100):
+        for _ in range(200):
             if setup_helper.job_log().exists() and "ready" in setup_helper.job_log().read_text(encoding="utf-8"):
                 break
             threading.Event().wait(0.05)
+        else:
+            problems.append("the command never said ready")      # no signal to ourselves: the handler may not be in place
+            if child_pid():
+                os.kill(child_pid(), signal.SIGTERM)
+            return
         os.kill(os.getpid(), signal.SIGTERM)
-        out = subprocess.run(["pgrep", "-f", "putting the kit back"], capture_output=True, text=True).stdout.split()
-        for pid in out:
-            if int(pid) != os.getpid():
-                os.kill(int(pid), signal.SIGTERM)
-    threading.Thread(target=term, daemon=True).start()
-    assert setup_helper.run_job("update", [sys.executable, "-c", code]) == 143
+        os.kill(child_pid(), signal.SIGTERM)          # systemd signals the whole group; the child by its own pid
+    t = threading.Thread(target=term, daemon=True)
+    t.start()
+    rc = setup_helper.run_job("update", [sys.executable, "-c", code])
+    t.join(10)
+    assert not problems, problems
+    assert rc == 143
     v = jobs.view(0)
     assert v["exit"] == 143 and "putting the kit back" in v["text"]
 
