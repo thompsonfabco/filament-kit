@@ -40,6 +40,7 @@ MAX_FOUND = 32          # Klipper entries discovery made and nobody has added ye
 FAMILIES = ("bambu", "klipper")
 SERIAL = re.compile(r"[A-Za-z0-9_-]{1,64}")      # also names the camera's runtime directory
 ACCESS_CODE = re.compile(r"[A-Za-z0-9]{1,32}")
+NAME_MAX = 64                                     # the longest printer name the API accepts
 BAD_SERIAL = "the serial number may only have letters, digits, - and _ (at most 64)"
 BAD_ACCESS_CODE = ("the Access Code is the letters and digits shown on the printer's screen "
                    "(at most 32, no spaces or symbols)")
@@ -338,12 +339,13 @@ def set_code(serial: str, code: str, name: str | None = None, replace: bool = Fa
         p = printers.get(serial) or Printer(serial=serial)
         if p.configured and not replace:
             raise AlreadyConfigured(serial)
+        first = not p.configured
         p.access_code = code
         p.configured = True
         p.cert_fp = ""          # adding the printer again with its code = trust the leaf it presents next
         given = (name or "").strip()
         p.name = given or p.name or serial
-        if given or p.name == serial:   # a kept name is left alone, even if an older entry shares it
+        if given or first or p.name == serial:   # a kept name is left alone, even if an older entry shares it
             p.name = _free_name(p.name, printers, serial)
         printers[serial] = p
         _write(printers)
@@ -355,7 +357,11 @@ def add_bambu(serial: str, name: str, model: str, ip: str, code: str) -> Printer
     ("name 2" ...) against the other printers; the printer's own current name never counts as taken."""
     with _locked():
         printers = _read()
-        p = Printer(serial, _free_name((name or "").strip() or serial, printers, serial), model, ip, code, True)
+        name = (name or "").strip() or serial
+        old = printers.get(serial)
+        if old is None or not old.configured or name != old.name:   # an entry added before keeps its stored name
+            name = _free_name(name, printers, serial)
+        p = Printer(serial, name, model, ip, code, True)
         printers[serial] = p
         _write(printers)
         return p
@@ -422,7 +428,8 @@ def _free_name(name: str, printers: dict[str, Printer], me: str = "") -> str:
     out, n = name, 1
     while out.lower() in taken:
         n += 1
-        out = f"{name} {n}"
+        suffix = f" {n}"
+        out = name[:NAME_MAX - len(suffix)].rstrip() + suffix   # stays within what a rename accepts
     return out
 
 

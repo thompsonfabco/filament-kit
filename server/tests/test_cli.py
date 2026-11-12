@@ -315,13 +315,14 @@ def test_printers_add_rename_remove(capsys, monkeypatch):
     assert "ACCESS1234" not in capsys.readouterr().out
 
 
-def test_printers_add_under_a_taken_name_gets_a_free_one(monkeypatch):
+def test_printers_add_under_a_taken_name_gets_a_free_one(capsys, monkeypatch):
     from filament_kit.bridge import registry
     assert _printers_session(monkeypatch, "5\n2\nOffice\n10.0.0.5\nSER1\n\n0\n0\n") == 0
     assert _printers_session(monkeypatch, "5\n2\nOffice\n10.0.0.6\nSER2\n\n0\n0\n") == 0
     assert _printers_session(monkeypatch, "5\n2\nOffice\n10.0.0.5\nSER1\n\n0\n0\n") == 0   # SER1 again: keeps its name
     got = registry.load()
     assert (got["SER1"].name, got["SER2"].name) == ("Office", "Office 2")
+    assert "Added Office 2." in capsys.readouterr().out
 
 
 def test_printers_list_shows_detected_without_code(capsys, monkeypatch):

@@ -210,6 +210,29 @@ def test_bambu_adds_keep_display_names_apart():
     assert registry.add_bambu("S4", "", "", "10.0.0.8", "12345678").name == "S4"                # no name: the serial
 
 
+def test_first_configure_of_a_found_printer_gets_a_free_name():
+    registry.upsert(Printer("S1", "Bench", "C12", "10.0.0.5", "x", True))
+    registry.detected("S2", "10.0.0.6", "C12", "Bench")          # announces itself under the taken name
+    assert registry.set_code("S2", "12345678").name == "Bench 2"
+
+
+def test_an_existing_entry_keeps_its_stored_name_even_when_shared():
+    registry.upsert(Printer("S1", "Bench", "C12", "10.0.0.5", "x", True))
+    registry.upsert(Printer("S2", "Bench", "C12", "10.0.0.6", "x", True))   # shared before the fix
+    assert registry.add_bambu("S2", "Bench", "C12", "10.0.0.6", "12345678").name == "Bench"
+    assert registry.set_code("S2", "87654321", replace=True).name == "Bench"
+    assert registry.add_bambu("S2", "Shed", "C12", "10.0.0.6", "12345678").name == "Shed"   # a new name still applies
+
+
+def test_free_names_stay_within_the_name_limit():
+    long = "x" * registry.NAME_MAX
+    registry.upsert(Printer("S1", long, "C12", "10.0.0.5", "x", True))
+    got = registry.add_bambu("S2", long, "C12", "10.0.0.6", "12345678").name
+    assert len(got) == registry.NAME_MAX and got.endswith(" 2") and got != long
+    k = registry.add_klipper(long, "a.home.arpa").name
+    assert len(k) == registry.NAME_MAX and k.endswith(" 3")
+
+
 def test_detected_klipper_matches_a_name_whatever_its_case():
     first = registry.add_klipper("Voron", "Voron.home.arpa")
     assert registry.detected_klipper("voron.home.arpa", 7125).serial == first.serial
