@@ -120,8 +120,9 @@ platform (Arduino core 3.1.3) and exact library versions. The platform zip,
 SHA-256 `e42240daaba9d4dfb9cec7ec702b6c84a0605d34c7f03e1ad342bbee74fc1db8` (1,472,729 bytes, checked 2026-11-03).
 
 `sh build.sh` (with no `src/secrets.h`) rebuilds `firmware/printer-station.bin` and `firmware/VERSION`, the image the
-kit ships; commit both. To build one with the settings compiled in instead (they apply until the kit writes any over
-USB):
+kit ships; commit both. To build one with the settings compiled in instead (the reader copies them into its flash on
+start whenever they differ from the ones it copied last, so a rebuilt `secrets.h` with a new token or password
+takes over; settings the kit writes over USB later win until a build with other compiled ones):
 
 1. `cp src/secrets.example.h src/secrets.h` and fill in Wi-Fi, `READER_BASE`, `READER_TOKEN` and `OTA_PUBKEY`
    (see below), and `READER_BUZZER_ACTIVE_LOW`: 0 for a buzzer behind a MOSFET (high-triggered), 1 for the older
@@ -150,7 +151,7 @@ firmware with the example secrets.
 A reader set up with `sudo filament-kit reader setup` and no `--ota-pubkey` refuses every update over Wi-Fi: to update
 it, run `reader setup` again with it plugged into the server (it keeps its settings and writes the kit's newer
 firmware). A reader built with a `secrets.h` copies those settings into its flash on its first start with this
-firmware, so a later image without them keeps working; one still on firmware from before that needs `reader setup`
+firmware (and again after a build whose compiled settings changed), so a later image without them keeps working; one still on firmware from before that needs `reader setup`
 once before it takes such an image, or it starts as "Not set up yet".
 
 1. Once: `py tools/ota_publish.py --init-key` creates the signing key (`~/.filament-kit/reader-ota-key.pem`,

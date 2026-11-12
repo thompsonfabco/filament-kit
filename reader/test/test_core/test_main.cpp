@@ -637,6 +637,26 @@ void test_settings_refused_leave_the_old_ones() {
   }
 }
 
+void test_compiled_settings_copied_again_when_they_change() {
+  Settings built; built.ssid = "Home"; built.pass = "pw"; built.base = "https://k/reader"; built.token = "abcdefghijklmnop";
+  std::string stamp = settingsStamp(built);
+  TEST_ASSERT_EQUAL(16, (int)stamp.size());
+  Settings empty;
+  TEST_ASSERT_TRUE(adoptCompiled(empty, "", stamp));               // first start: flash holds nothing
+  TEST_ASSERT_TRUE(adoptCompiled(empty, stamp, stamp));            // flash wiped but the stamp left: copy again
+  Settings usb = built; usb.token = "written_over_usb_1";        // FK-SET later; the stamp stays the build's
+  TEST_ASSERT_FALSE(adoptCompiled(usb, stamp, stamp));             // same build again: USB settings win
+  Settings rebuilt = built; rebuilt.token = "new_token_after_revoke";
+  TEST_ASSERT_TRUE(adoptCompiled(usb, stamp, settingsStamp(rebuilt)));   // new secrets.h: copied over them
+  TEST_ASSERT_TRUE(adoptCompiled(usb, "", stamp));                 // flash from before stamps: the build wins
+  // every field counts, and fields don't run into each other
+  Settings a = built; a.pass = "pw2"; TEST_ASSERT_TRUE(settingsStamp(a) != stamp);
+  a = built; a.otaKey = "k"; TEST_ASSERT_TRUE(settingsStamp(a) != stamp);
+  a = built; a.rootCa = "c"; TEST_ASSERT_TRUE(settingsStamp(a) != stamp);
+  a = built; a.buzzerLow = true; TEST_ASSERT_TRUE(settingsStamp(a) != stamp);
+  a = built; a.ssid = "Hom"; a.pass = "epw"; TEST_ASSERT_TRUE(settingsStamp(a) != stamp);
+}
+
 void test_commands() {
   std::string arg;
   TEST_ASSERT_EQUAL(CMD_HELLO, command("FK?", arg));
@@ -718,6 +738,7 @@ int main(int, char**) {
   RUN_TEST(test_settings_parse_the_required_ones);
   RUN_TEST(test_settings_optional_ones);
   RUN_TEST(test_settings_refused_leave_the_old_ones);
+  RUN_TEST(test_compiled_settings_copied_again_when_they_change);
   RUN_TEST(test_commands);
   RUN_TEST(test_line_reader_drops_cr_and_overlong_lines);
   RUN_TEST(test_hello_line);

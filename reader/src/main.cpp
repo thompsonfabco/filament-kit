@@ -30,7 +30,7 @@
 #include <mbedtls/base64.h>
 #include <Preferences.h>
 #if __has_include("secrets.h")
-#include "secrets.h"         // optional: a build with settings compiled in (they are used until the kit writes any)
+#include "secrets.h"         // optional: a build with settings compiled in (copied into flash; see loadSettings)
 #define HAVE_SECRETS 1
 #endif
 #include "fw_build.h"        // FW_BUILD, generated per build by fw_build.py
@@ -44,7 +44,7 @@ using namespace reader;
 // Wi-Fi, the server's base URL, the reader token, the OTA public key and the
 // buzzer's trigger are written into the reader over USB by `filament-kit reader
 // setup` or the setup page (settings.h: the FK-SET line) and kept in flash. A
-// build with secrets.h uses its values until then. Everything the reader calls
+// build with secrets.h copies its values in (again whenever they change). Everything the reader calls
 // hangs off the base URL:
 //   GET  printers                 GET  printers/<id>/slots      POST scan
 //   GET  healthz (OTA rollback)   GET  fw/manifest.json + fw/firmware.bin (OTA)
@@ -211,13 +211,27 @@ void loadSettings() {
   cfg.otaKey = p.getString("ota_key", "").c_str();
   cfg.rootCa = p.getString("root_ca", "").c_str();
   cfg.buzzerLow = p.getBool("buzzer_low", COMPILED_BUZZER_LOW);
+  std::string savedStamp = p.getString("src_stamp", "").c_str();
   p.end();
 #ifdef HAVE_SECRETS
-  if (cfg.base.empty()) {      // nothing written over USB yet: the compiled-in settings, kept in flash from now on,
-    cfg.ssid = WIFI_SSID; cfg.pass = WIFI_PASS; cfg.base = READER_BASE; cfg.token = READER_TOKEN;   // so a later
-    cfg.otaKey = OTA_PUBKEY;                                                                         // image built
-    if (cfg.otaKey.find("REPLACE-WITH") != std::string::npos) cfg.otaKey.clear();                  // without them
-    saveSettings(cfg);                                                                              // still runs
+  // The compiled-in settings go into flash (so a later image built without them still runs) when flash holds none,
+  // or when this build's differ from the ones last copied (a rebuilt secrets.h: new token, password, server, key).
+  // Settings written over USB afterwards keep the stamp, so they win until a build with other compiled ones.
+  Settings compiled;
+  compiled.ssid = WIFI_SSID; compiled.pass = WIFI_PASS; compiled.base = READER_BASE; compiled.token = READER_TOKEN;
+  compiled.otaKey = OTA_PUBKEY;
+  if (compiled.otaKey.find("REPLACE-WITH") != std::string::npos) compiled.otaKey.clear();
+#ifdef READER_ROOT_CA
+  compiled.rootCa = READER_ROOT_CA;
+#endif
+  compiled.buzzerLow = COMPILED_BUZZER_LOW;
+  std::string stamp = settingsStamp(compiled);
+  if (adoptCompiled(cfg, savedStamp, stamp)) {
+    cfg = compiled;
+    if (saveSettings(cfg)) {
+      Preferences w;
+      if (w.begin("fk-cfg", false)) { w.putString("src_stamp", stamp.c_str()); w.end(); }
+    }
   }
 #endif
   configured = !cfg.base.empty() && !cfg.token.empty() && !cfg.ssid.empty();

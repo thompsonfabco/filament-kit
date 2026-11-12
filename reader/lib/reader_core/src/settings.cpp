@@ -72,6 +72,23 @@ bool LineReader::push(char c, std::string& line) {
   return false;
 }
 
+std::string settingsStamp(const Settings& s) {
+  unsigned long long h = 1469598103934665603ULL;
+  auto mix = [&h](const std::string& f) {
+    for (unsigned char c : f) { h ^= c; h *= 1099511628211ULL; }
+    h ^= 0xff; h *= 1099511628211ULL;   // field separator: ("ab","c") and ("a","bc") differ
+  };
+  mix(s.ssid); mix(s.pass); mix(s.base); mix(s.token); mix(s.otaKey); mix(s.rootCa);
+  mix(s.buzzerLow ? "1" : "0");
+  char out[17];
+  snprintf(out, sizeof(out), "%016llx", h);
+  return out;
+}
+
+bool adoptCompiled(const Settings& flash, const std::string& savedStamp, const std::string& compiledStamp) {
+  return flash.base.empty() || savedStamp != compiledStamp;
+}
+
 std::string helloLine(long build, bool configured, const char* wifi, const char* server) {
   char out[96];
   snprintf(out, sizeof(out), "FK-READER %ld configured=%d wifi=%s server=%s", build, configured ? 1 : 0, wifi, server);

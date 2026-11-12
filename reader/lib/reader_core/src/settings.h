@@ -46,6 +46,14 @@ class LineReader {
   bool overflow_ = false;
 };
 
+// A build with a secrets.h copies its compiled settings into flash, with a stamp of them (FNV-1a 64, hex) beside
+// them. Settings written over USB later keep the stamp, so they win over the same build; a build whose compiled
+// settings differ (a new token, Wi-Fi password, server or OTA key) has another stamp and is copied again.
+std::string settingsStamp(const Settings& s);
+// Whether a secrets build's compiled settings replace those in flash: flash holds none yet, or the stamp saved with
+// the last copy is not this build's.
+bool adoptCompiled(const Settings& flash, const std::string& savedStamp, const std::string& compiledStamp);
+
 // The FK-READER answer.
 std::string helloLine(long build, bool configured, const char* wifi, const char* server);
 
