@@ -82,7 +82,7 @@ def printers():
 @pytest.fixture
 def fake_hub(printers, tmp_path):
     FakeSource.instances = []
-    hub = camera.Hub(lookup=printers.get, runtime_dir=tmp_path / "run", idle_stop=0.2, hls_window=0.1,
+    hub = camera.Hub(lookup=printers.get, runtime_dir=tmp_path / "run", idle_stop=0.6, hls_window=0.5,
                      sources={"hls": FakeSource, "mjpeg": FakeSource})
     yield hub
     hub.shutdown()
@@ -109,11 +109,11 @@ def test_two_viewers_one_leaves_keeps_running_both_leave_stops_after_delay(fake_
     src = FakeSource.instances[0]
     assert len(FakeSource.instances) == 1 and src.started == 1
     fake_hub.release("P1")
-    time.sleep(0.4)
+    time.sleep(0.9)                         # longer than the idle delay: another viewer is what keeps it up
     assert fake_hub.running("P1") and src.stopped == 0
     fake_hub.release("P1")
     assert fake_hub.running("P1"), "the stop waits for the idle delay"
-    assert wait_until(lambda: not fake_hub.running("P1"), 2)
+    assert wait_until(lambda: not fake_hub.running("P1"), 5)
     assert src.stopped == 1
 
 
@@ -121,7 +121,7 @@ def test_new_viewer_during_idle_delay_cancels_the_stop(fake_hub):
     fake_hub.acquire("P1")
     fake_hub.release("P1")
     fake_hub.acquire("P1")
-    time.sleep(0.4)
+    time.sleep(0.9)                         # longer than the idle delay, which the new viewer cancelled
     assert fake_hub.running("P1") and FakeSource.instances[0].stopped == 0
     assert len(FakeSource.instances) == 1
 
@@ -131,10 +131,10 @@ def test_hls_fetch_counts_as_viewer_for_its_window(fake_hub):
     fake_hub.touch_hls("H1")
     assert len(FakeSource.instances) == 1 and fake_hub.running("H1")
     for _ in range(5):  # keep fetching: stays up
-        time.sleep(0.08)
+        time.sleep(0.1)                 # a fifth of the window: a stall of 0.4 s between fetches is still tolerated
         fake_hub.touch_hls("H1")
     assert fake_hub.running("H1")
-    assert wait_until(lambda: not fake_hub.running("H1"), 2), "no fetch for window + idle delay stops it"
+    assert wait_until(lambda: not fake_hub.running("H1"), 5), "no fetch for window + idle delay stops it"
 
 
 def test_unknown_or_unconfigured_printers_are_refused(fake_hub):
@@ -153,7 +153,7 @@ def test_unknown_or_unconfigured_printers_are_refused(fake_hub):
 
 @pytest.fixture
 def ffmpeg_hub(printers, tmp_path):
-    hub = camera.Hub(lookup=printers.get, runtime_dir=tmp_path / "run", idle_stop=0.2, hls_window=0.1,
+    hub = camera.Hub(lookup=printers.get, runtime_dir=tmp_path / "run", idle_stop=0.6, hls_window=0.5,
                      ffmpeg=[sys.executable, "-I", str(FAKE_FFMPEG)])
     yield hub
     hub.shutdown()
@@ -161,7 +161,7 @@ def ffmpeg_hub(printers, tmp_path):
 
 def _started(hub, serial):
     """Wait for the fake ffmpeg's files, fetching as a viewer does meanwhile: one fetch holds the stream for only
-    hls_window + idle_stop (0.3 s here), and a loaded machine can take longer than that to start the fake."""
+    hls_window + idle_stop (1.1 s here), and a loaded machine can take longer than that to start the fake."""
     d = hub.dir_for(serial)
 
     def up():
@@ -189,7 +189,7 @@ def test_ffmpeg_reads_the_loopback_relay_and_never_gets_the_access_code(ffmpeg_h
 
 
 def test_shutdown_kills_ffmpeg_and_its_children(ffmpeg_hub):
-    # the fixture's 0.3 s idle stop would beat a slow pid_alive (tasklist on Windows) to it, and this test is the only
+    # the fixture's 1.1 s idle stop would beat a slow pid_alive (tasklist on Windows) to it, and this test is the only
     # one of the taskkill path: shutdown must be what kills it here
     ffmpeg_hub.idle_stop, ffmpeg_hub.hls_window = 5, 5
     ffmpeg_hub.touch_hls("H1")
@@ -891,3 +891,41 @@ def test_the_relay_refuses_another_users_connection_before_it_logs_in(tmp_path, 
     finally:
         relay.stop()
         srv.close()
+
+
+@pytest.mark.parametrize("seen,allowed", [(None, False), (4242, False), (1000, True)])
+def test_same_user_fails_closed_unless_the_peer_is_this_user(tmp_path, monkeypatch, seen, allowed):
+    """The glue around peer_uid, run as on Linux (a /proc/net/tcp to read, an euid to compare): a peer that cannot be
+    found (None) or is another user is refused; only this user's own connection passes."""
+    table = tmp_path / "tcp"
+    table.write_text("")
+    monkeypatch.setattr(camera, "PROC_TCP", str(table))
+    monkeypatch.setattr(os, "geteuid", lambda: 1000, raising=False)
+    monkeypatch.setattr(camera, "peer_uid", lambda conn: seen)
+    assert camera._same_user(object()) is allowed
+
+
+def test_the_relay_refuses_a_peer_that_is_not_loopback(monkeypatch):
+    """camera.py's accept loop closes a connection from any address but 127.0.0.1 without asking who owns it."""
+    class Conn:
+        closed = False
+
+        def close(self):
+            self.closed = True
+
+    class Listener:
+        def __init__(self, peers):
+            self.peers = list(peers)
+
+        def accept(self):
+            if not self.peers:
+                raise OSError("closed")           # ends the loop
+            return self.peers.pop(0)
+
+    def asked(conn):
+        raise AssertionError("the user check ran for a foreign address")
+    monkeypatch.setattr(camera, "_same_user", asked)
+    foreign = Conn()
+    relay = camera.RtspRelay(Printer("P1", "x", "O1D", "127.0.0.1", CODE, True), 1)
+    relay._accept(Listener([(foreign, ("192.0.2.9", 5555))]))
+    assert foreign.closed
