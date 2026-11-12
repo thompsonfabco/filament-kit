@@ -391,7 +391,8 @@ Use any of these ways:
   on the printer's screen; the serial number can be left blank, the kit reads it from the printer). A Klipper printer
   needs no Access Code. The phone web app's **Manage printers** adds a printer too.
 - In the Android app: open **Printers**. The printer must already be in the list (the server finds it on the network).
-  Tap it, and type its **Access Code**. The app does not add Klipper printers.
+  Tap it, and type its **Access Code**. To add a Klipper printer, tap **Add a Klipper printer** at the end of the list
+  (name, address, port; the API key, if it needs one, is set later from the printer's own screen).
 - On the Ubuntu computer: `sudo filament-kit config`, then **Printers** and **add printer**. Enter the name, IP
   address, serial number and Access Code.
 
