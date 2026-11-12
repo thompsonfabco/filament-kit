@@ -42,7 +42,9 @@ def test_release_workflow_uses_both_signing_secrets():
 def test_release_workflow_builds_sync_on_windows_with_pinned_pyinstaller():
     text = _read(".github/workflows/release.yml")
     assert "windows-2022" in text
-    assert "pyinstaller==6.11.1" in text
+    assert "--require-hashes --only-binary :all: -r tools/release-sync-requirements.txt" in text
+    assert "pyinstaller==6.11.1 \\" in _read("tools/release-sync-requirements.txt")
+    assert "choco install innosetup --version=" in text
     assert re.search(r"softprops/action-gh-release@[0-9a-f]{40}  # v2\.", text)
 
 
