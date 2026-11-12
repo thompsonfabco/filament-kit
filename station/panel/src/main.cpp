@@ -416,7 +416,6 @@ void setup() {
 }
 
 void loop() {
-  uint32_t now = millis();
   while (Serial.available()) {
     char c = Serial.read();
     if (binLeft) {
@@ -430,6 +429,9 @@ void loop() {
       line[len++] = c;
     }
   }
+  // read after the serial loop: handle() stamps lastL and Lamp::since with millis(), and an earlier `now` could be
+  // behind them, so the unsigned differences below would wrap to ~4.29e9
+  uint32_t now = millis();
   if (lastL && now - lastL > WATCHDOG_MS) { hold.set(0); discard.set(0); lastL = 0; display.setOffline(true); }
   if (beeping && (int32_t)(now - beepEnd) >= 0) { buzzerIdle(); beeping = false; }
   if (beepsLeft && (int32_t)(now - nextBeep) >= 0) {
