@@ -109,6 +109,17 @@ def sign_image(image, key, build):
             "sig": base64.b64encode(sig).decode()}
 
 
+def make_stage(host):
+    """A fresh private (mode 0700) staging folder on the host: the image carries the Wi-Fi
+    password and the token, so it must not sit in a predictable, world-readable /tmp path."""
+    print("+ ssh", host, "mktemp -d")
+    out = subprocess.run(["ssh", host, "mktemp -d"], check=True, capture_output=True, text=True).stdout
+    stage = out.strip()
+    if not stage.startswith("/") or "\n" in stage:
+        sys.exit(f"ssh mktemp -d on {host} printed no usable folder: {out!r}")
+    return stage
+
+
 def remote_install_cmd(stage, remote_dir, owner, group, sudo=True):
     """Shell command run on the host: image first, manifest last, so a reader never sees
     a manifest for a missing image."""
@@ -168,8 +179,7 @@ def main(argv=None):
     if args.dry_run:
         return
 
-    stage = f"/tmp/reader-fw-{build}"
-    run(["ssh", args.host, f"mkdir -p {shlex.quote(stage)}"])
+    stage = make_stage(args.host)
     run(["scp", "-q", str(build_dir / "firmware.bin"), str(build_dir / "manifest.json"),
          f"{args.host}:{stage}/"])
     run(["ssh", args.host, remote_install_cmd(stage, args.remote_dir, args.remote_owner,

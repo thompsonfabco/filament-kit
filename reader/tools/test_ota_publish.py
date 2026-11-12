@@ -6,6 +6,7 @@ import base64
 import hashlib
 import shlex
 import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -123,3 +124,22 @@ def test_live_check_does_not_follow_redirects():
         assert [p for p, _ in hits] == ["/fw/manifest.json"]   # /elsewhere never requested
     finally:
         srv.shutdown()
+
+
+def test_make_stage_uses_a_private_mktemp_folder(monkeypatch):
+    calls = []
+
+    def fake_run(cmd, **kw):
+        calls.append(cmd)
+        return types.SimpleNamespace(stdout="/tmp/tmp.Ab12Cd\n")
+
+    monkeypatch.setattr(op.subprocess, "run", fake_run)
+    assert op.make_stage("srv") == "/tmp/tmp.Ab12Cd"
+    assert calls == [["ssh", "srv", "mktemp -d"]]      # not a predictable /tmp/reader-fw-<time> path
+
+
+@pytest.mark.parametrize("out", ["", "relative\n", "/tmp/a\n/tmp/b\n"])
+def test_make_stage_refuses_an_unusable_reply(monkeypatch, out):
+    monkeypatch.setattr(op.subprocess, "run", lambda cmd, **kw: types.SimpleNamespace(stdout=out))
+    with pytest.raises(SystemExit):
+        op.make_stage("srv")
