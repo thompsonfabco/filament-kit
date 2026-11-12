@@ -84,10 +84,6 @@ def _api_answers(port: int) -> tuple[bool, str]:
         return False, url
 
 
-def _station_lines(url: str) -> bool:
-    return status_rows.print_rows(status_rows.station_rows(url))
-
-
 def _hardware_lines() -> bool:
     return status_rows.print_rows(status_rows.hardware_rows())
 
@@ -109,10 +105,6 @@ def _attempt_failed(st: dict) -> str | None:
     if la.get("ok") is False and la.get("error") and la["error"] != builds.NO_SYSTEM:
         return str(la["error"])
     return None
-
-
-def _profile_status_lines() -> bool:
-    return status_rows.print_rows(status_rows.profile_rows())
 
 
 # ---------- pair / unpair ----------
@@ -1738,6 +1730,7 @@ def cmd_modules_toggle(name: str, want_on: bool, server: str | None = None) -> i
             return 1
     notes: list[str] = []
     err = _change_module(cfg, name, want_on, confirm=_tty_confirm, server=server, notes=notes,
+                         ask_address=_ask_station_server if apply._tty() else None,
                          ask_settings=_ask_module_settings if apply._tty() else None)
     if err:
         print(f"error: {err}", file=sys.stderr)

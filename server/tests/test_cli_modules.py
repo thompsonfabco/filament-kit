@@ -468,3 +468,13 @@ def test_raw_menu_existing_legacy_config_keeps_legacy_set_and_station_preset_dro
     _stdin(monkeypatch, "t\n\n192.168.1.5\n")
     assert cli.main(["modules", "menu", "--raw"]) == 0
     assert capsys.readouterr().out.splitlines()[0] == "station"
+
+
+def test_enable_station_at_a_terminal_asks_for_the_server_address(applied, monkeypatch):
+    cfg = config.load()
+    cfg["modules"] = {n: n == "backup" for n in modules.MODULES}
+    config.save(cfg)
+    asked = _terminal(monkeypatch, "10.0.0.5")
+    assert cli.main(["modules", "enable", "station"]) == 0
+    assert any("Server address" in q for q in asked)
+    assert config.load()["station"]["allow"] == ["10.0.0.5"]
