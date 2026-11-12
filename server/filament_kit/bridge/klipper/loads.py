@@ -103,10 +103,7 @@ class LoadsMixin:
                     pending.append(more)
             for p in pending:
                 try:
-                    if isinstance(p, tuple):
-                        self._record_job(p[1])
-                    else:
-                        self._follow_check(p)
+                    self._follow_check(p)
                 except PrinterOffline:
                     log.info("klipper follow %s: the printer went offline; the reconcile at connect catches up", p)
                 except Exception:  # noqa: BLE001 - Spoolman down etc.: the next update tries again

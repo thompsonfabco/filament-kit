@@ -34,10 +34,6 @@ def _file(pid: str):
     return config.paths().state / "printers" / pid / FILE
 
 
-def owns(entry_id: str) -> bool:
-    return isinstance(entry_id, str) and entry_id.startswith(KLIPPER_ENTRY)
-
-
 def _num(v):
     try:
         f = float(v)
