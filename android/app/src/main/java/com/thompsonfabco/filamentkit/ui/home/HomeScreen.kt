@@ -76,6 +76,9 @@ fun HomeScreen(
     buildingPresets: Boolean = false,
     presetsNote: String? = null,
     presetsNoteIsError: Boolean = false,
+    /** The Presets card's Updates dialog; null: not offered (no server). [onPresetsChanged]: reload the card. */
+    presetUpdates: PresetUpdatesViewModel? = null,
+    onPresetsChanged: () -> Unit = {},
     /** Offer the label-photo add flow ([showLabelPhotos]). */
     labelPhotos: Boolean = false,
     /** Shown while [connection] is [Connection.NeedsLocalNetwork] (explanation, Allow, Open app settings). */
@@ -104,7 +107,17 @@ fun HomeScreen(
         OutlinedButton(onClick = onHistory, modifier = Modifier.fillMaxWidth()) { Text("Intake history") }
         Button(onClick = onPrinters, modifier = Modifier.fillMaxWidth()) { Text("Printers") }
         OutlinedButton(onClick = onSettings, modifier = Modifier.fillMaxWidth()) { Text("Settings") }
-        if (showPresets) PresetsCard(presets, onBuild = onBuildPresets, building = buildingPresets, buildNote = presetsNote, buildFailed = presetsNoteIsError)
+        if (showPresets) {
+            var updatesOpen by remember { mutableStateOf(false) }
+            PresetsCard(
+                presets, onBuild = onBuildPresets, building = buildingPresets, buildNote = presetsNote,
+                buildFailed = presetsNoteIsError,
+                onUpdates = presetUpdates?.takeIf { presets != null }?.let { vm -> { vm.load(); updatesOpen = true } },
+            )
+            if (updatesOpen && presetUpdates != null) {
+                PresetUpdatesDialog(presetUpdates, onClose = { updatesOpen = false; onPresetsChanged() })
+            }
+        }
 
         if (drafts.isNotEmpty()) {
             Text("Unfinished adds", style = MaterialTheme.typography.titleMedium)

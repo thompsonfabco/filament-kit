@@ -59,6 +59,50 @@ class ApiProfilesTest {
         assertEquals(409, e.status)
     }
 
+    @Test fun presetUpdatesListDecodes() = runBlocking {
+        json("""{"stamp":"20261112T180000Z","count":3,"lines":2,"accepted":1,"new":0,
+            "updates":[{"name":"SUNLU PLA+ @BBL H2D","target":"bambu_studio","line_id":"l1","keys":["nozzle_temperature"],"accepted":false},
+            {"name":"SUNLU PLA+ @Orca","target":"orca","line_id":null,"keys":[],"accepted":true,"file":"x.json"}],
+            "yours":["My PLA"],"future":1}""")
+        val u = api.presetUpdates()
+        assertEquals("20261112T180000Z", u.stamp)
+        assertEquals(listOf("SUNLU PLA+ @BBL H2D"), u.waiting.map { it.name })
+        assertEquals(listOf("nozzle_temperature"), u.updates[0].keys)
+        assertNull(u.updates[1].lineId)
+        assertEquals(listOf("My PLA"), u.yours)
+        val r = take()
+        assertEquals("GET", r.method)
+        assertEquals("/api/profiles/updates", r.url.encodedPath)
+        assertEquals("Bearer tok-9", r.headers["Authorization"])
+    }
+
+    @Test fun acceptSendsTheStampAndExactlyTheNames() = runBlocking {
+        json("""{"stamp":"s1","accepted":[{"line_id":"l1","target":"bambu_studio","name":"A","file":"A.json","keys":["k"]}]}""")
+        val r = api.acceptPresetUpdates("s1", listOf("A", "B"))
+        assertEquals(1, r.accepted.size)
+        val q = take()
+        assertEquals("POST", q.method)
+        assertEquals("/api/profiles/updates/accept", q.url.encodedPath)
+        assertEquals(Json.parseToJsonElement("""{"stamp":"s1","names":["A","B"]}"""), q.bodyJson())
+    }
+
+    @Test fun anAcceptAfterANewerBuildKeepsItsCode() {
+        json("""{"error":"updates_changed","message":"the updates changed since this list: load them again"}""", 409)
+        val e = failure { api.acceptPresetUpdates("old", listOf("A")) }
+        assertEquals("updates_changed", e.code)
+        assertEquals(409, e.status)
+    }
+
+    @Test fun restoreDeletedPostsAnEmptyObject() = runBlocking {
+        json("""{"ok":true}""")
+        api.restoreDeletedPresets()
+        val q = take()
+        assertEquals("POST", q.method)
+        assertEquals("/api/profiles/restore-deleted", q.url.encodedPath)
+        assertEquals("Bearer tok-9", q.headers["Authorization"])
+        assertEquals(JsonObject(emptyMap()), q.bodyJson())
+    }
+
     @Test fun profileStatusReadsEveryField() = runBlocking {
         json(
             """{"lines":12,"presets":96,

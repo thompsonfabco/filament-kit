@@ -215,6 +215,14 @@ A correction never edits a filament other spools also use: the spool is moved to
 created), and its tag, location, opened state and used weight stay. A filament left with no spools is named, not
 deleted. How many records the server keeps is a setting on the setup page (**Intake records kept**, 20 by default).
 
+### Presets: build, accept updates, restore deleted ones
+
+The **Presets** card on the home screen shows the last build and where your PC stands. **Build now** asks for a
+build (shown while no PC sync is set up). **Review n updates** (or **Updates**) lists each preset already in your
+slicers that a newer build would change, with what changes; **Accept n updates** accepts exactly that list, and your
+PC writes them at its next sync. If a newer build came meanwhile, nothing is accepted and the new list is shown.
+**Restore presets deleted in Bambu Studio** has the next build bring them back.
+
 ### Link an NFC tag, set the weight, and the rest
 
 With the app open, tap a spool's NFC tag on the back of the phone.

@@ -354,6 +354,26 @@ class Api(
         return decode(call(req.get()))
     }
 
+    /** `GET /api/profiles/updates`: the presets in the slicers a newer build would change. */
+    suspend fun presetUpdates(): PresetUpdates = decode(call(request("api", "profiles", "updates").get()))
+
+    /**
+     * Accepts exactly [names] from the list of build [stamp] (`POST /api/profiles/updates/accept`); the PC sync writes
+     * them at its next run. 409 `updates_changed` when a newer build came after that list: nothing was accepted.
+     */
+    suspend fun acceptPresetUpdates(stamp: String, names: List<String>): AcceptedUpdates {
+        val body = buildJsonObject {
+            put("stamp", stamp)
+            put("names", JsonArray(names.map(::JsonPrimitive)))
+        }
+        return decode(call(request("api", "profiles", "updates", "accept").post(body.toBody())))
+    }
+
+    /** The next build brings back presets deleted in Bambu Studio, and a build is asked for. */
+    suspend fun restoreDeletedPresets() {
+        call(request("api", "profiles", "restore-deleted").post(JsonObject(emptyMap()).toBody()))
+    }
+
     /** The line and parent the server would use for these values (nothing is saved). */
     suspend fun propose(vendor: String, line: String, material: String): Proposal {
         val body = buildJsonObject {

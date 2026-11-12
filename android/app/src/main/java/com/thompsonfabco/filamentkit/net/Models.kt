@@ -616,6 +616,35 @@ data class LibraryInfo(
     @SerialName("last_check") val lastCheck: BuildAttempt? = null,
 )
 
+/** One preset in the slicers a newer build would change ([keys]); [accepted]: the PC sync writes it at its next run. */
+@Serializable
+data class PresetUpdate(
+    val name: String = "",
+    /** The slicer: "bambu_studio" or "orca". */
+    val target: String = "",
+    @SerialName("line_id") val lineId: String? = null,
+    val keys: List<String> = emptyList(),
+    @Serializable(with = LenientBool::class) val accepted: Boolean = false,
+)
+
+/** `GET /api/profiles/updates` (FB-041): what a newer build would change, for the build [stamp]. */
+@Serializable
+data class PresetUpdates(
+    val stamp: String? = null,
+    @Serializable(with = LenientInt::class) val count: Int = 0,
+    @Serializable(with = LenientInt::class) val accepted: Int = 0,
+    val updates: List<PresetUpdate> = emptyList(),
+    /** Presets never written over: the owner's own preset of that name in Bambu Studio. */
+    val yours: List<String> = emptyList(),
+) {
+    /** What Accept takes: the updates not accepted yet, exactly as shown. */
+    val waiting: List<PresetUpdate> get() = updates.filter { !it.accepted }
+}
+
+/** `POST /api/profiles/updates/accept`: the presets accepted (one object each). */
+@Serializable
+data class AcceptedUpdates(val stamp: String? = null, val accepted: List<JsonObject> = emptyList())
+
 /** `GET /api/profiles/status`. [stale]: presets no longer generated, to delete in Bambu Studio. */
 @Serializable
 data class ProfileStatus(
