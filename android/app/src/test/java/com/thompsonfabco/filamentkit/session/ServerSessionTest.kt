@@ -195,6 +195,24 @@ class ServerSessionTest {
         await { s.connection.first { it == Connection.CertChanged(shown.fingerprint(), answering.fingerprint()) } }
     }
 
+    @Test fun trustGivesUpWhenTheStoredConfigNeverShowsTheNewPin() {
+        val configs = MutableStateFlow<ServerConfig?>(config(listOf("127.0.0.9"), 1))
+        val s = ServerSession(
+            scope = scope,
+            configs = configs,
+            save = { saved += it }, // a write that never reaches the config flow
+            discover = { emptyList() },
+            router = router,
+            clientFor = { fp: String -> pinnedClient(fp) },
+            trustWaitMs = 200,
+        )
+        await { s.config.first { it != null } }
+
+        assertFalse(await { s.trustCertificate(cert.fingerprint(), "cd".repeat(32)) })
+
+        assertEquals(1, saved.size)
+    }
+
     @Test fun trustSavesNothingWhenThePairingNoLongerPinsThatCertificate() {
         val configs = MutableStateFlow<ServerConfig?>(config(listOf("127.0.0.9"), 1))
         val s = session(configs)
