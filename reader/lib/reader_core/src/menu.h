@@ -46,7 +46,7 @@ enum Mode { MODE_SLOTS, MODE_PRINTERS };
 
 enum Action {
   ACT_NONE,
-  ACT_SLOT_MOVED,    // show + (after settling) speak and save the new slot
+  ACT_SLOT_MOVED,    // show + (after settling) save the new slot
   ACT_CURSOR_MOVED,  // redraw the printer list
   ACT_RESEND,        // re-send the last tag to the shown slot
   ACT_OPEN_LIST,     // show the printer list

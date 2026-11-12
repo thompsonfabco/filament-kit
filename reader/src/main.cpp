@@ -3,15 +3,15 @@
 // Thin client. Reads an NFC tag UID over I2C (PN532), lets you pick a printer and
 // one of its slots with a rotary encoder (shown on an SSD1306 OLED), and POSTs
 // {uid, printer, slot} to the filament-kit server's reader API. The server does
-// the Spoolman lookup + printer command and returns the result, which we buzz,
-// show and speak. The printer and slot lists come from the server, so a new
+// the Spoolman lookup + printer command and returns the result, which we beep
+// and show. The printer and slot lists come from the server, so a new
 // printer or AMS layout needs no firmware change. API contract: README.md.
 //
 // Target board: ESP32-C3 Super Mini. All wiring is in the CONFIG block below —
 // change pins freely. PN532 and OLED share the I2C bus (different addresses), so
 // the whole thing is 2 I2C pins + encoder (CLK/DT/SW) + buzzer.
 //
-// The pure logic (list parsing, scan statuses, say tokens, knob menu, saved
+// The pure logic (list parsing, scan statuses, knob menu, saved
 // choice) lives in lib/reader_core and is unit-tested on the host (pio test -e native).
 // -----------------------------------------------------------------------------
 #include <Arduino.h>
@@ -23,18 +23,15 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <ArduinoJson.h>
-#include <TalkiePCM.h>
-#include <Vocab_US_TI99.h>   // a few words Vocab_US_Large lacks (unused words are stripped at link)
 #include <Update.h>
 #include <esp_ota_ops.h>
 #include <mbedtls/pk.h>
 #include <mbedtls/sha256.h>
 #include <mbedtls/base64.h>
 #include <Preferences.h>
-#include "secrets.h"         // WIFI_SSID, WIFI_PASS, READER_BASE, READER_TOKEN, OTA_PUBKEY
+#include "secrets.h"         // WIFI_SSID, WIFI_PASS, READER_BASE, READER_TOKEN, OTA_PUBKEY[, READER_BUZZER_ACTIVE_LOW]
 #include "fw_build.h"        // FW_BUILD, generated per build by fw_build.py
 #include "reader_api.h"
-#include "speech.h"
 #include "menu.h"
 
 using namespace reader;
@@ -116,18 +113,21 @@ static const int PIN_ENC_SW  = 1;
 // pull-down, pressed = HIGH). false = switch to GND (internal pull-up, pressed = LOW).
 static const bool ENC_SW_TO_VCC = true;
 
-// --- Buzzer (passive piezo on a PWM-capable pin) ---
-//     3-pin module (GND, I/O, VCC) with a PNP driver = low-level trigger: I/O LOW
-//     turns the transistor on, so the pin must idle HIGH. Set false for a bare piezo.
+// --- Buzzer (on a PWM-capable pin) ---
+//     High-triggered (the default): a magnetic buzzer switched by an N-channel
+//     MOSFET such as a BS170, pin HIGH = on, so the pin idles LOW. A reader built
+//     with the older 3-pin module (GND, I/O, VCC, PNP driver) is low-triggered:
+//     `filament-kit reader setup --buzzer low` writes READER_BUZZER_ACTIVE_LOW 1
+//     into secrets.h. A secrets.h written before the setting existed has no line,
+//     and those readers were all built with that module, so no line means low.
 static const int  PIN_BUZZER        = 0;
+#ifdef READER_BUZZER_ACTIVE_LOW
+static const bool BUZZER_ACTIVE_LOW = READER_BUZZER_ACTIVE_LOW;
+#else
 static const bool BUZZER_ACTIVE_LOW = true;
+#endif
 
-// --- Voice (TI LPC speech via TalkiePCM, PWM'd out the buzzer pin) ---
-//     Speaks the server's `say` tokens for the slot once the knob settles, and
-//     "set" / "load" + slot after a tap. Tinny on a buzzer, but digits carry.
-static const bool     TALK_ENABLED    = true;
-static const float    TALK_VOLUME     = 6.0f;   // >1 louder (clips sooner); 3.3 V buzzer needs a lot
-static const uint32_t SPEAK_SETTLE_MS = 600;    // knob idle time before speaking (and saving)
+static const uint32_t SETTLE_MS = 600;   // knob idle time before the slot choice is saved
 
 // Re-scan guard: ignore the same tag if re-read within this window.
 static const uint32_t SCAN_COOLDOWN_MS = 2500;
@@ -175,9 +175,9 @@ const SlotEntry* curSlot() {
 }
 
 // ---- buzzer patterns --------------------------------------------------------
-// Park the pin at its "off" level (HIGH for the active-low module). Beeps drive
-// LEDC directly rather than tone(): tone()'s async task ends each note at duty 0
-// (pin LOW = transistor on) and can detach the pin after we've parked it.
+// Park the pin at its "off" level (LOW for a high-triggered buzzer, HIGH for the
+// low-triggered module). Beeps drive LEDC directly rather than tone(): tone()'s
+// async task ends each note at duty 0 and can detach the pin after we've parked it.
 void buzzIdle() { pinMode(PIN_BUZZER, OUTPUT); digitalWrite(PIN_BUZZER, BUZZER_ACTIVE_LOW ? HIGH : LOW); }
 void beep(int freq, int ms) {
   if (!ledcAttach(PIN_BUZZER, freq, 10))  // 10-bit keeps the divider legal down to ~300 Hz
@@ -193,88 +193,7 @@ void buzzUnknown() { beep(2000, 600); }                                    // ta
 void buzzError()   { for (int i=0;i<3;i++){ beep(4000,120); delay(80);} }  // unreachable / error
 void buzzTick()    { beep(2000, 15); }                                     // knob/button
 void buzzQueued()  { beep(2000, 80); delay(80); beep(2000, 350); }         // queued: short-long
-void buzzWord()    { beep(2000, 60); delay(60); }                          // a say token with no word
-
-// ---- voice -----------------------------------------------------------------
-// TalkiePCM decodes LPC frames to 8 kHz samples and hands each one to
-// talkSample(); we pace them with micros() and write them as the duty of a
-// 40 kHz PWM carrier, which the buzzer's coil low-passes back into audio.
-TalkiePCM voice;
-static const uint32_t TALK_SAMPLE_US = 125;  // 8 kHz
-static uint32_t talkNextUs = 0;
-
-void talkSample(int16_t* data, int len) {
-  int duty = (data[0] >> 8) + 128;            // int16 -> 0..255 around mid
-  if (BUZZER_ACTIVE_LOW) duty = 255 - duty;
-  while ((int32_t)(micros() - talkNextUs) < 0) {}
-  ledcWrite(PIN_BUZZER, duty);
-  talkNextUs += TALK_SAMPLE_US;
-}
-
-// LPC data for each vocabulary Word (reader_core/speech.h). Mostly Vocab_US_Large
-// (sp2_*); the TI99 set (spt_*) fills its gaps.
-const uint8_t* vocab(Word w) {
-  switch (w) {
-    case W_ZERO: return sp2_ZERO;   case W_ONE: return sp2_ONE;     case W_TWO: return sp2_TWO;
-    case W_THREE: return sp2_THREE; case W_FOUR: return sp2_FOUR;   case W_FIVE: return sp2_FIVE;
-    case W_SIX: return sp2_SIX;     case W_SEVEN: return sp2_SEVEN; case W_EIGHT: return sp2_EIGHT;
-    case W_NINE: return sp2_NINE;   case W_TEN: return sp2_TEN;     case W_ELEVEN: return sp2_ELEVEN;
-    case W_TWELVE: return sp2_TWELVE;      case W_THIRTEEN: return spt_THIRTEEN;
-    case W_FOURTEEN: return spt_FOURTEEN;  case W_FIFTEEN: return spt_FIFTEEN;
-    case W_TEEN: return sp2__TEEN;         case W_TWENTY: return sp2_TWENTY;
-    case W_THIRTY: return spt_THIRTY;      case W_FORTY: return spt_FORTY;
-    case W_FIFTY: return spt_FIFTY;        case W_SIXTY: return spt_SIXTY;
-    case W_SEVENTY: return spt_SEVENTY;    case W_EIGHTY: return spt_EIGHTY;
-    case W_NINETY: return spt_NINETY;
-    case W_A: return sp2_A; case W_B: return sp2_B; case W_C: return sp2_C; case W_D: return sp2_D;
-    case W_E: return sp2_E; case W_F: return sp2_F; case W_G: return sp2_G; case W_H: return sp2_H;
-    case W_I: return sp2_I; case W_J: return sp2_J; case W_K: return sp2_K; case W_L: return sp2_L;
-    case W_M: return sp2_M; case W_N: return sp2_N; case W_O: return sp2_O; case W_P: return sp2_P;
-    case W_Q: return sp2_Q; case W_R: return sp2_R; case W_S: return sp2_S; case W_T: return sp2_T;
-    case W_U: return sp2_U; case W_V: return sp2_V; case W_W: return sp2_W; case W_X: return sp2_X;
-    case W_Y: return sp2_Y; case W_Z: return sp2_Z;
-    case W_LEFT: return sp2_LEFT;     case W_RIGHT: return sp2_RIGHT;   case W_TOP: return spt_TOP;
-    case W_BOTTOM: return spt_BOTTOM; case W_MIDDLE: return spt_MIDDLE; case W_CENTER: return spt_CENTER;
-    case W_FRONT: return spt_FRONT;   case W_BACK: return spt_BACK;
-    case W_SET: return sp2_SET;       case W_LOAD: return spt_LOAD;     case W_READY: return sp2_READY;
-    case W_CONNECT: return sp2_CONNECT; case W_FAIL: return sp2_FAIL;   case W_POWER: return sp2_POWER;
-    case W_CYCLE: return sp2_CYCLE;   case W_PRINTER: return spt_PRINTER; case W_UNIT: return sp2_UNIT;
-    case W_NUMBER: return sp2_NUMBER; case W_PLUS: return sp2_PLUS;     case W_LIGHT: return sp2_LIGHT;
-    case W_HIGH: return sp2_HIGH;     case W_LOW: return sp2_LOW;       case W_UP: return sp2_UP;
-    case W_DOWN: return spt_DOWN;     case W_ON: return sp2_ON;         case W_OFF: return sp2_OFF;
-    case W_AND: return sp2_AND;       case W_ERROR: return spt_ERROR;
-    case W_RED: return sp2_RED;       case W_GREEN: return sp2_GREEN;   case W_BLUE: return spt_BLUE;
-    case W_YELLOW: return sp2_YELLOW; case W_BLACK: return spt_BLACK;   case W_WHITE: return spt_WHITE;
-    case W_GRAY: return spt_GRAY;
-    default: return nullptr;
-  }
-}
-
-// Say one utterance (blocks ~0.4 s per word). A W_BEEP (a token the vocabulary
-// lacks) is a short beep in its place.
-void speakWords(const Word* words, size_t n) {
-  if (!TALK_ENABLED || !n) return;
-  size_t i = 0;
-  while (i < n) {
-    if (words[i] == W_BEEP || !vocab(words[i])) { buzzWord(); i++; continue; }
-    if (!ledcAttach(PIN_BUZZER, 40000, 8)) Serial.println("say: ledcAttach failed");
-    ledcWrite(PIN_BUZZER, 128);
-    talkNextUs = micros();
-    for (; i < n && words[i] != W_BEEP && vocab(words[i]); i++) voice.say(vocab(words[i]));
-    ledcDetach(PIN_BUZZER); buzzIdle();
-  }
-}
-
-// lead (W_SET, W_LOAD, ... or W_NONE) followed by the server's say tokens.
-void speak(const std::string& sayText, Word lead = W_NONE) {
-  Word w[MAX_UTTERANCE];
-  size_t n = buildUtterance(sayText.c_str(), lead, w, MAX_UTTERANCE);
-  speakWords(w, n);
-}
-void speakWord(Word a, Word b = W_NONE) {
-  Word w[2] = {a, b};
-  speakWords(w, b == W_NONE ? 1 : 2);
-}
+void buzzStuck()   { for (int i=0;i<2;i++){ beep(4000,600); delay(200);} } // I2C bus stuck: unplug to power-cycle
 
 // ---- OLED screens -----------------------------------------------------------
 bool     updateReady = false;     // a newer signed build is on the server
@@ -504,7 +423,7 @@ bool fetchSlots(const std::string& label) {
   return ok;
 }
 
-uint32_t speakAt = 0;    // when to announce the selection after the knob stops (0 = none)
+uint32_t settleAt = 0;   // when to save the selection after the knob stops (0 = none)
 
 // Both lists. Re-selects the SAVED printer and slot label (the current ones only
 // while a knob turn is not saved yet), so a unit that drops out for one refresh
@@ -515,7 +434,7 @@ void refreshLists() {
   std::string wantPrinter = !savedPrinter.empty() ? savedPrinter
                                                   : (curPrinter() ? curPrinter()->id : std::string());
   std::string wantLabel = wantedLabel(savedLabel, curSlot() ? curSlot()->label : std::string(),
-                                      speakAt != 0 && menu.mode == MODE_SLOTS);
+                                      settleAt != 0 && menu.mode == MODE_SLOTS);
   String resp;
   int code = apiRequest(urlPrinters, nullptr, resp);
   bool ok = code == 200 && parsePrinters(resp.c_str(), printers);
@@ -562,7 +481,7 @@ void sendScan(const String& uid) {
     case FB_OK: {
       const std::string& what = !r.filament.empty() ? r.filament : r.message;
       showResult(head, what.empty() ? "set" : what.c_str(), false);
-      buzzOk(); speak(slot.say, W_SET);
+      buzzOk();
       listsAt = millis() - LIST_REFRESH_MS + LIST_AFTER_SET_MS;   // re-read contents in ~5 s
       break;
     }
@@ -574,7 +493,7 @@ void sendScan(const String& uid) {
       snprintf(line2, sizeof(line2), "%s\nwill set when loaded",
                !r.filament.empty() ? r.filament.c_str() : "filament");
       showResult(line1, line2, false, QUEUED_HOLD_MS);
-      buzzQueued(); speak(slot.say, W_LOAD);
+      buzzQueued();
       break;
     }
     case FB_UNKNOWN:
@@ -816,8 +735,6 @@ void setup() {
   pinMode(PIN_ENC_DT,  INPUT_PULLUP);
   pinMode(PIN_ENC_SW,  ENC_SW_TO_VCC ? INPUT_PULLDOWN : INPUT_PULLUP);
   buzzIdle();
-  voice.setDataCallback(talkSample);
-  voice.setVolume(TALK_VOLUME);
   // seed encoder state and watch both quadrature lines for edges
   encState = ((digitalRead(PIN_ENC_CLK) << 1) | digitalRead(PIN_ENC_DT)) & 0x03;
   attachInterrupt(digitalPinToInterrupt(PIN_ENC_CLK), encISR, CHANGE);
@@ -842,7 +759,7 @@ void setup() {
   while (digitalRead(PIN_SCL) == LOW && millis() - w0 < 500) delay(1);
   if (digitalRead(PIN_SCL) == LOW) {
     Serial.println("I2C SCL stuck LOW (PN532 wedged?) -> unplug USB to power-cycle");
-    speakWord(W_POWER, W_CYCLE);   // the OLED shares the stuck bus, so speak it
+    buzzStuck();                   // the OLED shares the stuck bus: two long beeps (and serial) say it
   }
   Wire.begin(PIN_SDA, PIN_SCL);
   i2cScan();
@@ -882,9 +799,8 @@ void setup() {
   checkForUpdate();
   lastActivity = millis();
   redraw();
-  if (WiFi.status() != WL_CONNECTED) speakWord(W_CONNECT, W_FAIL);
-  else if (!serverOk)                speakWord(W_ERROR);
-  else                               speakWord(W_READY);
+  if (WiFi.status() != WL_CONNECTED || !serverOk) buzzError();
+  else                                            buzzOk();
 }
 
 bool swallowPress = false;  // this press woke a dark screen: ignore the rest of it
@@ -894,7 +810,7 @@ void handleAction(Action a) {
     case ACT_SLOT_MOVED:
     case ACT_CURSOR_MOVED:
       buzzTick(); scrollStep = 0; redraw();
-      speakAt = millis() + SPEAK_SETTLE_MS;   // re-armed by every detent
+      settleAt = millis() + SETTLE_MS;        // re-armed by every detent
       break;
     case ACT_RESEND:
       buzzTick();
@@ -907,19 +823,18 @@ void handleAction(Action a) {
       break;
     case ACT_OPEN_LIST:
       buzzTick(); scrollStep = 0; redraw();
-      speakAt = millis() + SPEAK_SETTLE_MS;
+      settleAt = millis() + SETTLE_MS;
       break;
     case ACT_CLOSE_LIST:
-      speakAt = 0; scrollStep = 0; redraw();
+      settleAt = 0; scrollStep = 0; redraw();
       break;
     case ACT_PICK_PRINTER:
-      buzzTick(); speakAt = 0; scrollStep = 0;
+      buzzTick(); settleAt = 0; scrollStep = 0;
       if (curPrinter()) savePrinter(curPrinter()->id);
       showProgress(curPrinter() ? curPrinter()->name.c_str() : "Printer", "loading slots...", -1);
       serverOk = fetchSlots(savedLabel);   // fails -> no slots, no scans (never the old printer's)
       listsAt = millis();
       redraw();
-      if (curPrinter()) speak(curPrinter()->say);
       break;
     case ACT_OTA:
       buzzTick(); otaCheck();
@@ -944,14 +859,9 @@ void loop() {
     if (wake()) redraw();                     // dark screen: this turn only wakes it
     else { resultUntil = 0; handleAction(menu.rotate(d, np, ns, now)); }
   }
-  if (speakAt && (int32_t)(millis() - speakAt) >= 0) {
-    speakAt = 0;
-    if (menu.mode == MODE_PRINTERS) {
-      if (menu.cursor < np) speak(printers[menu.cursor].say);
-    } else if (curSlot()) {
-      saveSlot(curSlot()->label);
-      speak(curSlot()->say);
-    }
+  if (settleAt && (int32_t)(millis() - settleAt) >= 0) {
+    settleAt = 0;
+    if (menu.mode == MODE_SLOTS && curSlot()) saveSlot(curSlot()->label);
   }
 
   // encoder push: short = re-send; hold 1 s = printer list; hold 4 s = OTA
@@ -970,7 +880,7 @@ void loop() {
   if (resultUntil && millis() > resultUntil) { resultUntil = 0; redraw(); }
 
   // background refreshes (skipped while a result or the printer list is showing)
-  if (!resultUntil && menu.mode == MODE_SLOTS && !speakAt) {
+  if (!resultUntil && menu.mode == MODE_SLOTS && !settleAt) {
     if (scr != SCR_OFF && millis() - listsAt > LIST_REFRESH_MS) { refreshLists(); redraw(); }
     if (millis() - updCheckAt > UPD_CHECK_MS) { checkForUpdate(); if (scr != SCR_OFF) redraw(); }
   }

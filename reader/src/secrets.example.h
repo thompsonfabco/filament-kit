@@ -21,6 +21,10 @@ REPLACE-WITH-THE-KEY-FROM-ota_publish.py--init-key
 -----END PUBLIC KEY-----
 )KEY";
 
+// The buzzer's trigger: 0 = high-triggered (a buzzer behind a MOSFET such as a BS170),
+// 1 = low-triggered (the older 3-pin module). Without this line the reader assumes 1.
+#define READER_BUZZER_ACTIVE_LOW 0
+
 // Optional: the root CA of a server whose certificate is not from Let's Encrypt
 // (the default pin is ISRG Root X1). Uncomment and paste the PEM.
 // #define READER_ROOT_CA R"CERT(-----BEGIN CERTIFICATE-----

@@ -1,7 +1,6 @@
 #include "reader_api.h"
 
 #include <ArduinoJson.h>
-#include <cctype>
 #include <cstdio>
 #include <cstring>
 
@@ -30,26 +29,6 @@ std::string cut(std::string s) {
   return s;
 }
 
-std::string lower(std::string s) {
-  for (char& c : s) c = (char)tolower((unsigned char)c);
-  return s;
-}
-
-// "say" may be a string ("h two d") or a list (["h","two","d"]); either way the
-// result is one lowercase, space-separated string.
-std::string sayText(JsonVariantConst v) {
-  if (v.is<JsonArrayConst>()) {
-    std::string out;
-    for (JsonVariantConst w : v.as<JsonArrayConst>()) {
-      std::string t = text(w);
-      if (t.empty()) continue;
-      if (!out.empty()) out += ' ';
-      out += t;
-    }
-    return lower(out);
-  }
-  return lower(text(v));
-}
 
 // spool: {"id":12,"name":"Polymaker Grey",...} | "name" | 12 | null
 std::string spoolText(JsonVariantConst v) {
@@ -80,7 +59,7 @@ bool responseTooBig(int contentLength) {
 bool parsePrinters(const char* json, std::vector<PrinterEntry>& out) {
   JsonDocument filter;
   JsonObject f = filter[0].to<JsonObject>();
-  f["id"] = true; f["name"] = true; f["say"] = true;
+  f["id"] = true; f["name"] = true;
   JsonDocument doc;
   if (!parseArray(json, doc, filter)) return false;
   std::vector<PrinterEntry> list;
@@ -92,7 +71,6 @@ bool parsePrinters(const char* json, std::vector<PrinterEntry>& out) {
     if (e.id.empty() || e.id.size() > MAX_ID) continue;
     e.name = cut(text(p["name"]));
     if (e.name.empty()) e.name = cut(e.id);
-    e.say = cut(sayText(p["say"]));
     list.push_back(std::move(e));
   }
   out.swap(list);
@@ -102,7 +80,7 @@ bool parsePrinters(const char* json, std::vector<PrinterEntry>& out) {
 bool parseSlots(const char* json, std::vector<SlotEntry>& out) {
   JsonDocument filter;
   JsonObject f = filter[0].to<JsonObject>();
-  f["label"] = true; f["say"] = true; f["kind"] = true;
+  f["label"] = true; f["kind"] = true;
   f["present"] = true; f["type"] = true; f["spool"] = true;
   JsonDocument doc;
   if (!parseArray(json, doc, filter)) return false;
@@ -113,7 +91,6 @@ bool parseSlots(const char* json, std::vector<SlotEntry>& out) {
     SlotEntry e;
     e.label = cut(text(s["label"]));
     if (e.label.empty()) continue;
-    e.say = cut(sayText(s["say"]));
     e.kind = cut(text(s["kind"]));
     JsonVariantConst pr = s["present"];
     if (pr.is<bool>()) e.present = pr.as<bool>() ? PRESENT_YES : PRESENT_NO;

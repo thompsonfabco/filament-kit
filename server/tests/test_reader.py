@@ -1,5 +1,5 @@
 """web.reader: the Printer Station reader API (printers, slots, scan, healthz, fw/*), the reader tokens (stored hashed,
-XML) and their CLI, the queue-on-empty port, and the speech vocabulary of the hardware file's say= texts."""
+XML) and their CLI, and the queue-on-empty port."""
 from __future__ import annotations
 
 import contextlib
@@ -17,7 +17,6 @@ from defusedxml import ElementTree as DET  # noqa: E402
 from starlette.testclient import TestClient  # noqa: E402
 
 from filament_kit import cli, config, modules  # noqa: E402
-from filament_kit.bridge import hardware  # noqa: E402
 from filament_kit.web import app as web_app, auth, reader, slots  # noqa: E402
 
 PUBLIC = "https://mcp.example.test/filament"
@@ -27,41 +26,6 @@ AWAY = ("203.0.113.9", 50000)
 UID = "4:c7:96:11:9:22:89"
 UID_OLD = "4:c7:96:11:9:22:8a"
 UID_NEW = "4:c7:96:11:9:22:8b"
-
-# The reader firmware's speech table (reader/lib/reader_core/src/speech.cpp, TABLE[]), copied here.
-# KEEP IN SYNC with the firmware: a say= token missing there is spoken as a beep. Numbers 0-99 written as digits
-# are spoken too (expandToken), so they are not listed.
-FIRMWARE_VOCAB = frozenset("""
-zero oh one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen
-seventeen eighteen nineteen twenty thirty forty fifty sixty seventy eighty ninety
-a b c d e f g h i j k l m n o p q r s t u v w x y z
-external ext left right top bottom middle center front back set load ready connect fail power cycle printer
-unit number plus light high low up down on off and error red green blue yellow black white gray grey
-""".split())
-
-
-def speakable(token: str) -> bool:
-    t = token.lower()
-    return t in FIRMWARE_VOCAB or (t.isdigit() and len(t) <= 2)
-
-
-# ---------- speech vocabulary ----------
-
-def test_every_say_token_in_the_hardware_file_is_in_the_firmware_vocabulary():
-    xml = Path(hardware.__file__).with_name("bambu_hardware.xml").read_bytes()
-    root = DET.fromstring(xml)
-    bad = [(el.tag, el.get("code") or el.get("label") or el.get("key") or el.get("text"), tok)
-           for el in root.iter() if el.get("say") is not None
-           for tok in el.get("say").split() if not speakable(tok)]
-    assert bad == []
-
-
-def test_generic_and_label_say_tokens_are_speakable():
-    hw = hardware.load()
-    assert all(speakable(t) for t in hw.model("NOPE").say.split())
-    for label in ("A1", "AA4", "HT-A", "HT-AB", "Ext", "Ext-L", "Ext-R"):
-        assert all(speakable(t) for t in hw.say(label, "O1D")), label
-
 
 # ---------- environment ----------
 
@@ -276,7 +240,6 @@ def test_printer_list(app, token):
     ps = r.json()
     assert [p["id"] for p in ps] == ["SER1", "SER2"]             # configured printers only, ids as strings
     assert ps[0] == {"id": "SER1", "name": "H2D", "say": ["h", "two", "d"]}
-    assert all(speakable(t) for p in ps for t in p["say"])
 
 
 def _strings(v):

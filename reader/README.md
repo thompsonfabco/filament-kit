@@ -18,8 +18,8 @@ wiring, board and case are in the [Printer Station guide](https://github.com/tho
 
 ## Using it
 
-- **Turn** the knob: next / previous slot. After a moment the reader says the slot ("a one", "h t b").
-- **Tap** a tag: the reader sends it to the shown slot and shows, beeps and says the result.
+- **Turn** the knob: next / previous slot. After a moment the reader keeps it as its choice.
+- **Tap** a tag: the reader sends it to the shown slot and shows and beeps the result.
 - **Press**: send the last tag again to the shown slot (tapped the wrong slot? turn, then press).
 - **Hold 1 s** (a tick tells you when), then let go: the printer list. Turn to a printer, press to pick it.
   Hold 1 s again, or leave it for 20 s, to close the list without changing printer.
@@ -35,10 +35,13 @@ first slot.
 
 | Result | Screen | Sound |
 |---|---|---|
-| `set` | what was set | two short beeps, "set" + slot |
-| `queued` (slot is empty) | "Load into ..." for 15 s | short-long beep, "load" + slot |
+| `set` | what was set | two short beeps |
+| `queued` (slot is empty) | "Load into ..." for 15 s | short-long beep |
 | `unknown_tag`, `unknown_spool`, `archived_spool` | the server's message | one long beep |
 | `no_preset`, `offline`, `error`, no reply | the server's message or "Server down" | three high beeps |
+
+At start-up: two short beeps when it reached the server, three high beeps when Wi-Fi or the server failed. Two
+long high beeps mean the I2C bus is stuck (a PN532 left mid-transfer): unplug the reader to power-cycle it.
 
 ## Server API
 
@@ -66,7 +69,7 @@ pinned root (ISRG Root X1 unless `READER_ROOT_CA` is set). This contract is fixe
   saves and sends back. The kit server keeps to this within what the reader keeps: it never sends a label over
   40 bytes (that slot is left out, since a cut label would come back wrong), and never two slots of one printer
   whose labels are equal ignoring case (the kit matches labels whatever their case; only the first is listed).
-- `say` is a list of tokens or one space-separated string; optional.
+- `say` is ignored by the reader (it has no speech).
 - `present`: `true`, `false` or `null`/missing (unknown). `type`: filament type the printer reports.
 - `spool`: an object with `name` (or just `id`), a name string, an id number, or `null`.
 - Other fields are ignored. At most 16 printers and 128 slots are kept.
@@ -93,14 +96,6 @@ answers; otherwise the reader rolls back to the previous firmware on the next re
 `GET <READER_BASE>/fw/manifest.json` and `GET <READER_BASE>/fw/firmware.bin`: the OTA files written by
 `tools/ota_publish.py`, served behind the same token (the image contains the Wi-Fi password and the token).
 
-### Speech tokens
-
-`say` tokens are matched case-insensitively against the vocabulary the reader has: the letters `a`-`z`, numbers
-`0`-`99` (as digits or as words such as `two`, `sixteen`), `external`/`ext` (spelled "E X T"), `left`, `right`,
-`top`, `bottom`, `middle`, `center`, `front`, `back`, `set`, `load`, `ready`, `printer`, `unit`, `number`, `plus`,
-`light`, `high`, `low`, `up`, `down`, `on`, `off`, `and`, `error` and a few colours. A token it does not have
-becomes a short beep, so new labels only need a `say` text on the server (the table is in `lib/reader_core/src/speech.cpp`).
-
 ## Build
 
 Needs [PlatformIO](https://platformio.org/) (`pip install platformio`). `platformio.ini` pins the pioarduino
@@ -109,7 +104,9 @@ platform (Arduino core 3.1.3) and exact library versions. The platform zip,
 SHA-256 `e42240daaba9d4dfb9cec7ec702b6c84a0605d34c7f03e1ad342bbee74fc1db8` (1,472,729 bytes, checked 2026-11-03).
 
 1. `cp src/secrets.example.h src/secrets.h` and fill in Wi-Fi, `READER_BASE`, `READER_TOKEN` and `OTA_PUBKEY`
-   (see below). `secrets.h` is ignored by git; never commit it.
+   (see below), and `READER_BUZZER_ACTIVE_LOW`: 0 for a buzzer behind a MOSFET (high-triggered), 1 for the older
+   3-pin module (low-triggered; also what a `secrets.h` without the line means). `secrets.h` is ignored by git;
+   never commit it.
 2. `pio run -e esp32-c3-supermini` builds; `pio run -e esp32-c3-supermini -t upload` flashes over USB (the first
    time only; updates go over Wi-Fi).
 
@@ -120,10 +117,11 @@ of this folder (the checkout never holds `secrets.h`). Install PlatformIO as you
 (`python3 -m pip install --user platformio`): under sudo the build and flash run as you, with your PlatformIO, and
 you need to be in the `dialout` group for the serial port. With `--out secrets.h` instead of `--source`, it only writes
 the file (mode 600) for a build on another PC. On a PC that is not the server, pass `--token-file` (a token from
-`reader token`) and `--base <web.public_url>/reader`. Nothing secret is printed.
+`reader token`) and `--base <web.public_url>/reader`. `--buzzer low` is for a reader with the older 3-pin buzzer
+module; the default is a high-triggered buzzer. Nothing secret is printed.
 
-Tests: `pio test -e native` runs the host unit tests of `lib/reader_core` (list parsing, scan statuses, speech
-tokens, knob and menu, saved choice, scrolling). Needs a host C++ compiler (on Windows, run it in WSL).
+Tests: `pio test -e native` runs the host unit tests of `lib/reader_core` (list parsing, scan statuses,
+knob and menu, saved choice, scrolling). Needs a host C++ compiler (on Windows, run it in WSL).
 `pytest reader/tools` tests the publish tool. CI (`.github/workflows/reader.yml`) runs both and builds the
 firmware with the example secrets.
 
@@ -149,4 +147,4 @@ firmware is dropped; the reader starts on the first slot of the first printer on
 
 ## License
 
-GPL-3.0, like the rest of filament-kit. The firmware links TalkiePCM (GPL-3.0) for speech.
+GPL-3.0, like the rest of filament-kit.

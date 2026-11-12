@@ -108,7 +108,9 @@ def pubkey(text: str | None) -> tuple[str, bool]:
     return pem, True
 
 
-def secrets_h(ssid: str, password: str, base: str, token: str, key_pem: str) -> str:
+def secrets_h(ssid: str, password: str, base: str, token: str, key_pem: str, buzzer_active_low: bool = False) -> str:
+    """secrets.h for the build. `buzzer_active_low`: the reader's buzzer is the older low-triggered 3-pin module; the
+    default is a high-triggered buzzer behind a MOSFET (reader/src/main.cpp, Buzzer)."""
     if not ssid or len(ssid.encode()) > 32:
         raise SetupError("the Wi-Fi name must be 1 to 32 bytes")
     if len(password.encode()) > 63:
@@ -122,7 +124,8 @@ def secrets_h(ssid: str, password: str, base: str, token: str, key_pem: str) -> 
             f"static const char* WIFI_PASS = {c_string(password)};\n"
             f"static const char* READER_BASE = {c_string(base)};\n"
             f"static const char* READER_TOKEN = {c_string(token)};\n"
-            f'static const char* OTA_PUBKEY = R"KEY({key_pem})KEY";\n')
+            f'static const char* OTA_PUBKEY = R"KEY({key_pem})KEY";\n'
+            f"#define READER_BUZZER_ACTIVE_LOW {1 if buzzer_active_low else 0}\n")
 
 
 def write_private(path: Path, text: str) -> None:
