@@ -661,11 +661,20 @@ def test_server_setup_makes_the_code_once(env, monkeypatch):
     assert "setup_code.ensure()" in src[src.index("def _server_setup"):src.index("def _remote_install")]
 
 
-def test_setup_script_never_uses_innerhtml():
-    lines = (STATIC / "setup.js").read_text(encoding="utf-8").splitlines()
-    src = " ".join(ln for ln in lines if not ln.lstrip().startswith("//"))
-    assert not re.search(r"innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(", src)
-    assert re.findall(r"fetch\(([^,)]*)", src) == ['"/setup/api/" + path']     # nothing from elsewhere
+def _script_text(path):
+    lines = path.read_text(encoding="utf-8").splitlines()
+    return " ".join(ln for ln in lines if not ln.lstrip().startswith("//"))
+
+
+def test_setup_scripts_never_use_innerhtml():
+    scripts = sorted(STATIC.glob("*.js"))
+    assert len(scripts) >= 7 and STATIC / "setup.js" in scripts       # the page loads them all; none may escape the guard
+    for script in scripts:
+        src = _script_text(script)
+        assert not re.search(r"innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(", src), script.name
+        # nothing from elsewhere: the only fetch target is the setup API (setup_backup.js posts to it by itself)
+        assert set(re.findall(r"fetch\(([^,)]*)", src)) <= {'"/setup/api/" + path'}, script.name
+    assert re.findall(r"fetch\(([^,)]*)", _script_text(STATIC / "setup.js")) == ['"/setup/api/" + path']
 
 
 @pytest.mark.skipif(not hasattr(__import__("socket"), "AF_UNIX") or sys.platform == "win32",
