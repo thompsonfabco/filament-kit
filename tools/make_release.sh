@@ -51,10 +51,14 @@ rm -rf server/build
 ls "$stage"/filament_kit-"$version"-*.whl >/dev/null 2>&1 \
     || { echo "error: wheel for $version not built" >&2; exit 1; }
 # The wheel bundles no library entries (the library is downloaded on request); a wheel that still carries them
-# would ship the old 4 MB snapshot. Not `grep -q`: it stops at the first match, unzip then dies of SIGPIPE and
-# pipefail fails the check.
+# would ship the old 4 MB snapshot. The listing is read first (python's zipfile: Git Bash may lack unzip), so a
+# failed listing stops the build instead of reading as "no match"; and not `grep -q`: it stops at the first
+# match, the lister then dies of SIGPIPE and pipefail fails the check.
+zpy=python3
+command -v "$zpy" >/dev/null 2>&1 || zpy=python
 for whl in "$stage"/filament_kit-"$version"-*.whl; do
-    if unzip -l "$whl" | grep -E ' filament_kit/library_data/library/' >/dev/null; then
+    listing=$("$zpy" -m zipfile -l "$whl") || { echo "error: cannot list $whl" >&2; exit 1; }
+    if printf '%s\n' "$listing" | grep -E '(^| )filament_kit/library_data/library/' >/dev/null; then
         echo "error: $whl bundles library entries; they belong in the library-<date>.tar.gz asset" >&2
         exit 1
     fi
