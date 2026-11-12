@@ -120,6 +120,18 @@ def make_stage(host):
     return stage
 
 
+def live_problem(base, token, build):
+    """Why the live check failed (a string), or None when the server reports `build`."""
+    try:
+        live = fetch_manifest(base, token)
+    except (OSError, ValueError) as e:   # URLError/HTTPError/timeouts are OSError; bad JSON is ValueError
+        return f"{type(e).__name__}: {e}"
+    reported = live.get("build") if isinstance(live, dict) else live
+    if reported != build:
+        return f"the server still reports build {reported}"
+    return None
+
+
 def remote_install_cmd(stage, remote_dir, owner, group, sudo=True):
     """Shell command run on the host: image first, manifest last, so a reader never sees
     a manifest for a missing image."""
@@ -193,9 +205,9 @@ def main(argv=None):
     if not base or not token:
         sys.exit("uploaded, but cannot check it: no READER_BASE/READER_TOKEN (use --base-url and "
                  "the READER_TOKEN environment variable, or --no-verify)")
-    live = fetch_manifest(base, token)
-    if live.get("build") != build:
-        sys.exit(f"published, but the server still reports build {live.get('build')}")
+    problem = live_problem(base, token, build)
+    if problem:
+        sys.exit(f"uploaded, but the live check failed: {problem}")
     print(f"published build {build}. Hold the reader's knob for 4 s to install it.")
 
 

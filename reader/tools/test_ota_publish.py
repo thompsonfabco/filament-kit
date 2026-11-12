@@ -4,6 +4,7 @@
 """
 import base64
 import hashlib
+import json
 import shlex
 import sys
 import types
@@ -143,3 +144,25 @@ def test_make_stage_refuses_an_unusable_reply(monkeypatch, out):
     monkeypatch.setattr(op.subprocess, "run", lambda cmd, **kw: types.SimpleNamespace(stdout=out))
     with pytest.raises(SystemExit):
         op.make_stage("srv")
+
+
+def test_live_problem_reports_instead_of_raising(monkeypatch):
+    import urllib.error
+
+    def boom(exc):
+        def f(base, token):
+            raise exc
+        return f
+
+    for exc in (urllib.error.HTTPError("u", 502, "Bad Gateway", {}, None),
+                urllib.error.URLError("refused"), TimeoutError("timed out"),
+                json.JSONDecodeError("bad", "x", 0)):
+        monkeypatch.setattr(op, "fetch_manifest", boom(exc))
+        msg = op.live_problem("https://h", "tok", 5)
+        assert msg and type(exc).__name__ in msg
+    monkeypatch.setattr(op, "fetch_manifest", lambda b, t: {"build": 4})
+    assert "build 4" in op.live_problem("https://h", "tok", 5)
+    monkeypatch.setattr(op, "fetch_manifest", lambda b, t: [1])
+    assert op.live_problem("https://h", "tok", 5)
+    monkeypatch.setattr(op, "fetch_manifest", lambda b, t: {"build": 5})
+    assert op.live_problem("https://h", "tok", 5) is None
