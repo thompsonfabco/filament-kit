@@ -236,7 +236,7 @@ def test_cli_remote_firewall_only_prints(capsys, tmp_path, monkeypatch):
 
 def test_wrapper_runs_remote_as_root():
     text = (INSTALL / "filament-kit-cli.sh").read_text()
-    assert "config | cert | modules | remote | migrate-ops | migrate-scanner | update | uninstall | station | setup-code)" in text
+    assert "config | cert | modules | remote | migrate-scanner | update | uninstall | station | setup-code)" in text
 
 
 def test_no_firewall_command_anywhere_in_the_remote_code_or_files():

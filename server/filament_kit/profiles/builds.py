@@ -378,7 +378,7 @@ def _forget_old_pc(meta: dict) -> None:
     rec = _owner_record(raw.get("stamp"), raw.get("orca_stamp"))
     if rec is not None:
         if "orca_inapp" not in rec:             # no Orca install yet: the owner's Orca record kept so far (e.g.
-            kept = _owner_edits() or {}         # seeded by migrate-ops) still counts (B-I3)
+            kept = _owner_edits() or {}         # seeded before the first install) still counts (B-I3)
             rec.update({k: kept[k] for k in ("orca_inapp", "orca_notes") if k in kept})
         _write_json(_dir() / OWNER_EDITS, rec)
     for name in ("installed.json", "deleted.json"):

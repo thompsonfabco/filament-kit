@@ -1,5 +1,5 @@
 """Command line: status, pair, unpair, config, cert, ensure-fields, printer map / unpin, library, profiles, modules,
-web, remote, migrate-ops, setup-code."""
+web, remote, migrate-scanner, setup-code."""
 from __future__ import annotations
 
 import argparse
@@ -2221,18 +2221,6 @@ def cmd_web_status() -> int:
     return 0 if status_rows.print_rows(status_rows.web_rows()) else 1
 
 
-# ---------- migrate-ops (from filament-ops, sub-project 4) ----------
-
-def cmd_migrate_ops(bundle: str, apply_: bool, replace_spoolman: bool, allow_unknown_spoolman: bool = False) -> int:
-    """Report (default) or carry out the move of a filament-ops export bundle into this install."""
-    from . import migrate
-    if apply_ and not _is_root():
-        print(f"error: run as root: sudo filament-kit migrate-ops {bundle} --apply", file=sys.stderr)
-        return 1
-    return migrate.run(bundle, apply=apply_, replace_spoolman=replace_spoolman,
-                       allow_unknown_spoolman=allow_unknown_spoolman)
-
-
 def cmd_migrate_scanner(calibration: str, apply_: bool, replace_map: bool, serial: str | None) -> int:
     """Report (default) or carry out the move of the H2D from h2d-filament-scanner (Spoolman slot locations and
     the slot map seeded from the scanner's calibration)."""
@@ -2389,14 +2377,6 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     rmsub = rm_.add_subparsers(dest="remote_cmd", required=True)
     rmsub.add_parser("issue", help="get the certificate with certbot (standalone on port 80) (root)")
     rmsub.add_parser("firewall", help="print the firewall and port-forward rules to set up by hand")
-    mo = sub.add_parser("migrate-ops", help="move a filament-ops export bundle into this install (dry run unless "
-                                            "--apply)")
-    mo.add_argument("bundle", help="the bundle tools/export_ops.sh wrote (tar.gz or its folder)")
-    mo.add_argument("--apply", action="store_true", help="do it (root); without it nothing is written")
-    mo.add_argument("--replace-spoolman", action="store_true",
-                    help="replace a Spoolman database that already holds spools (a backup is kept)")
-    mo.add_argument("--allow-unknown-spoolman", action="store_true",
-                    help="accept a bundle database without a schema revision (only if it came from Spoolman 0.27.0)")
     msc = sub.add_parser("migrate-scanner", help="move the H2D from h2d-filament-scanner: Spoolman slot locations "
                                                  "and the slot map from its calibration (dry run unless --apply)")
     msc.add_argument("calibration", help="the scanner's calibration.json (/var/lib/h2d-usage/calibration.json)")
@@ -2481,8 +2461,6 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
         return cmd_reader_setup(args)
     if args.cmd == "reader":
         return cmd_reader(args.reader_cmd, getattr(args, "name", None), getattr(args, "ref", None))
-    if args.cmd == "migrate-ops":
-        return cmd_migrate_ops(args.bundle, args.apply, args.replace_spoolman, args.allow_unknown_spoolman)
     if args.cmd == "migrate-scanner":
         return cmd_migrate_scanner(args.calibration, args.apply, args.replace_map, args.printer)
     if args.cmd == "backup":

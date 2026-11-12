@@ -168,10 +168,10 @@ def test_release_copies_spoolman_script():
     assert '"$stage/install/spoolman.sh"' in text  # made executable in the stage
 
 
-def test_release_ships_the_ops_export_script():
-    text = _read("tools/make_release.sh")
-    assert 'cp tools/export_ops.sh "$stage/install/"' in text
-    assert '"$stage/install/export_ops.sh"' in text  # made executable in the stage
+def test_release_ships_no_ops_export_script():
+    """filament-ops never went public: no install migrates from it, so the release carries no export script."""
+    assert "export_ops" not in _read("tools/make_release.sh")
+    assert not (ROOT / "tools" / "export_ops.sh").exists()
 
 
 def test_install_hands_over_to_modules_apply():
@@ -217,7 +217,7 @@ def test_web_extra_pins_mcp_exactly():
 
 def test_wrapper_runs_modules_as_root():
     text = _read("install/filament-kit-cli.sh")
-    assert re.search(r"^\s+config \| cert \| modules \| remote \| migrate-ops \| migrate-scanner \| update \| uninstall \| station \| setup-code\)\s*$",
+    assert re.search(r"^\s+config \| cert \| modules \| remote \| migrate-scanner \| update \| uninstall \| station \| setup-code\)\s*$",
                      text, re.M)
 
 

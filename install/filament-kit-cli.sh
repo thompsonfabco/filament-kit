@@ -2,8 +2,7 @@
 # Installed as /usr/local/bin/filament-kit.
 # Settings and the certificate live in /etc/filament-kit (root-owned), so
 # `config` and `cert` run as root; so does `modules`, which installs and starts
-# services, `migrate-ops`, which replaces the Spoolman database and installs
-# secrets, `migrate-scanner`, which reads the old calibration from /root and
+# services, `migrate-scanner`, which reads the old calibration from /root and
 # writes the map, `update`, which installs a new release, `uninstall`, which runs the kept release's
 # uninstall.sh, `station` (the station PC: its pairing files in /etc/filament-kit-station), and `setup-code`,
 # which shows or replaces the setup page's code in /etc/filament-kit, and `backup` and `restore`, which read and write
@@ -38,7 +37,7 @@ if [ -d "$KIT_OPT" ] && [ ! -f "$KIT_OPT/.fk-installed" ] && ! kit_installing; t
 fi
 
 case "${1:-}" in
-    config | cert | modules | remote | migrate-ops | migrate-scanner | update | uninstall | station | setup-code)
+    config | cert | modules | remote | migrate-scanner | update | uninstall | station | setup-code)
         exec "$BIN" "$@"
         ;;
 esac

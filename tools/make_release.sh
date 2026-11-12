@@ -67,7 +67,6 @@ if [ "$nightly" = 1 ]; then
     printf '%s\n' "$version-nightly.$FK_NIGHTLY_DATE" > "$stage/NIGHTLY"     # install.sh says so; the setup page shows it
 fi
 cp install/backup.sh install/filament-kit-cli.sh install/spoolman.sh "$stage/install/"
-cp tools/export_ops.sh "$stage/install/"    # runs on a filament-ops VM (docs/migrate-from-filament-ops.md)
 cp install/systemd/*.service install/systemd/*.timer install/systemd/*.path install/systemd/*.socket "$stage/install/systemd/"
 cp install/avahi/filament-kit.service "$stage/install/avahi/"
 cp install/remote/* "$stage/install/remote/"
@@ -76,7 +75,7 @@ cp station/panel/firmware/intake-panel.bin station/panel/firmware/VERSION "$stag
 find "$stage" -type f \( -name '*.sh' -o -name '*.service' -o -name '*.timer' -o -name '*.path' -o -path '*/install/remote/*' \) \
     -exec sed -i 's/\r$//' {} +
 chmod 755 "$stage/install.sh" "$stage/uninstall.sh" "$stage/install/backup.sh" \
-    "$stage/install/filament-kit-cli.sh" "$stage/install/spoolman.sh" "$stage/install/export_ops.sh"
+    "$stage/install/filament-kit-cli.sh" "$stage/install/spoolman.sh"
 
 # ---------- Android app (optional) ----------
 # versionCode: FK_VERSION_CODE is passed to the Gradle build AND written to app/version.txt, so the update check on
