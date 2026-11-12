@@ -2,10 +2,9 @@ name: server
 
 on:
   push:
-    branches-ignore: [nightly]     # no tests on the nightly branch: docs/maintainer.md, Nightly builds
+    branches: ['**']
     tags: ['**']
   pull_request:
-    branches-ignore: [nightly]     # no tests on the nightly branch: docs/maintainer.md, Nightly builds
 
 jobs:
   test:

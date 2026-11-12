@@ -95,8 +95,6 @@ JOBS = {"apply": ("modules", "apply", "--no-pair"), "update": ("update",), "roll
         "check": ("update", "--check"), "station_pair": ("station", "pair", "--local"),
         "library_update": ("library", "update"), "library_rollback": ("library", "rollback"),
         "remote_issue": ("remote", "issue"),
-        # the Updates tab's "Follow nightly builds" switch: save updates.channel and update on it now
-        "channel_nightly": ("update", "--channel", "nightly"), "channel_stable": ("update", "--channel", "stable"),
         "backup": ("backup", "create"), "restore": ("restore", "--uploaded", "--yes")}
 WRAPPER = "/usr/local/bin/filament-kit"
 FINISHED = "==> finished (exit"
@@ -117,8 +115,6 @@ BUSY = {"apply": APPLYING, "update": "an update is running; wait until it has fi
         "library_update": "the library is being updated; wait until it has finished",
         "library_rollback": "the library is going back; wait until it has finished",
         "remote_issue": "the certificate is being issued; wait until it has finished",
-        "channel_nightly": "an update is running; wait until it has finished",
-        "channel_stable": "an update is running; wait until it has finished",
         "backup": "a backup is being written; wait until it has finished",
         "restore": "a restore is running; wait until it has finished"}
 # the checklist's setting prompts, back to their keys (cli._apply_selection asks by prompt)

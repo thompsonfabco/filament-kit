@@ -47,7 +47,7 @@ try:
 except ImportError:  # Windows dev PCs: tests only
     fcntl = None
 
-from . import __version__, config, modules, nightly, release
+from . import __version__, config, modules, release
 from .release import ReleaseError
 
 SCHEDULES = {"daily": 20 * 3600, "weekly": 6.5 * 86400}
@@ -66,23 +66,18 @@ class Busy(Exception):
     """A printer is mapping or loading."""
 
 
-CHANNELS = ("stable", "nightly")      # updates.channel: signed releases (releases/latest), or nightly prereleases
-
-
 def settings(cfg: dict) -> dict:
     u = cfg.get("updates") if isinstance(cfg.get("updates"), dict) else {}
     s = {"schedule": u.get("schedule") or "daily", "token_file": u.get("token_file") or None,
-         "repo": u.get("repo") or release.REPO, "api": u.get("api") or release.API,
-         "channel": u.get("channel") or "stable"}
+         "repo": u.get("repo") or release.REPO, "api": u.get("api") or release.API}
     if s["schedule"] not in SCHEDULES:
         raise ReleaseError(f"updates.schedule must be one of {', '.join(SCHEDULES)}, not {s['schedule']!r}")
-    if s["channel"] not in CHANNELS:
-        raise ReleaseError(f"updates.channel must be one of {', '.join(CHANNELS)}, not {s['channel']!r}")
     return s
 
 
 def on_nightly() -> bool:
-    """The program in place is a nightly build (its NIGHTLY file): not a signed release, never a rollback target."""
+    """The program in place is a nightly build from before nightlies were dropped (its NIGHTLY file): not a signed
+    release, never a rollback target, and the next update replaces it with the latest signed release."""
     return version_text() != current_version()
 
 
@@ -233,25 +228,11 @@ def _start_again(run, services: list[str], timers: list[str]) -> None:
             print(f"error: could not start {', '.join(group)}: {e}", file=sys.stderr)
 
 
-def _nightly_tarball(version: str) -> Path:
-    """The kept nightly's tarball, checked again against its own (unsigned) SHA256SUMS."""
-    d = store() / version
-    tarball = d / f"filament-kit-{version}.tar.gz"
-    try:
-        table = release.parse_sums((d / release.SUMS).read_bytes())
-    except OSError as e:
-        raise ReleaseError(f"the downloaded nightly {version} is gone: {e}") from None
-    nightly.check_nightly(tarball, table)
-    return tarball
-
-
 def _install(cfg: dict, version: str, run: Callable[[list[str]], int]) -> bool:
     """Re-verify the kept release, unpack it, stop the module timers and services, run its install.sh (whose
     `modules apply` starts them again). Unless install.sh succeeded, whatever happened (a failure, an exception,
-    SIGTERM), the stopped units are started again before this returns or raises. A nightly (X.Y.Z-nightly.DATE) is
-    checked against its own SHA256SUMS only: nightlies are not signed."""
-    tarball = (_nightly_tarball(version) if nightly.NIGHTLY_VERSION.fullmatch(version)
-               else release.verify_dir(store() / version, version))
+    SIGTERM), the stopped units are started again before this returns or raises."""
+    tarball = release.verify_dir(store() / version, version)
     work = store() / ".work"
     shutil.rmtree(work, ignore_errors=True)
     work.mkdir(mode=0o700, parents=True)
@@ -387,19 +368,12 @@ def check_info(cfg: dict, *, fetcher: release.Fetcher | None = None, now: float 
     from the installed version means. Raises ReleaseError when the latest release cannot be read."""
     s = settings(cfg)
     fetcher = fetcher or default_fetcher(cfg)
-    if s["channel"] == "nightly":
-        rel = nightly.latest_nightly(fetcher, s["repo"])
-        latest, cur = rel["version"], version_text()
-        _remember(latest, rel.get("notes") or "", "", time.time() if now is None else now)
-        return {"installed": cur, "latest": latest, "newer": nightly.nightly_key(latest) > nightly.nightly_key(cur),
-                "held": _read_state().get("held"), "notes": rel.get("notes") or "", "going_back": "",
-                "channel": "nightly"}
     rel = fetcher.release(s["repo"])
     latest, cur = rel["version"], current_version()
     newer = _newer(latest, cur) or (on_nightly() and not _newer(cur, latest))
     notes, back = _note_release(fetcher, s["repo"], rel, time.time() if now is None else now)
     return {"installed": version_text(), "latest": latest, "newer": newer, "held": _read_state().get("held"),
-            "notes": notes, "going_back": back, "channel": "stable"}
+            "notes": notes, "going_back": back}
 
 
 def check(cfg: dict, *, fetcher: release.Fetcher | None = None) -> int:
@@ -435,8 +409,8 @@ def summary() -> dict:
     cur = current_version()
     seen = st.get("latest") if isinstance(st.get("latest"), dict) else {}
     latest = seen.get("version") if isinstance(seen.get("version"), str) else None
-    try:       # a nightly orders by X.Y.Z then its date (nightly.nightly_key); a release has date 0
-        newer = bool(latest) and nightly.nightly_key(latest) > nightly.nightly_key(version_text())
+    try:       # a nightly from before they were dropped: the latest signed release replaces it, even an older one
+        newer = bool(latest) and (_newer(latest, cur) or (on_nightly() and not _newer(cur, latest)))
     except ReleaseError:
         latest, newer = None, False
     return {"installed": cur, "latest": latest, "newer": newer, "checked_at": seen.get("at"),
@@ -456,11 +430,7 @@ def view(cfg: dict) -> dict:
         schedule = settings(cfg)["schedule"]
     except ReleaseError:
         schedule = None
-    try:
-        channel = settings(cfg)["channel"]
-    except ReleaseError:
-        channel = "stable"
-    return {**summary(), "installed_text": version_text(), "channel": channel,
+    return {**summary(), "installed_text": version_text(),
             "notes": seen.get("notes") or "", "going_back": seen.get("going_back") or "",
             "held": st.get("held"), "failed": st.get("failed"), "previous": target,
             "module_on": MODULE in modules.enabled(cfg), "schedule": schedule,
@@ -516,14 +486,12 @@ def update(cfg: dict, *, scheduled: bool = False, fetcher: release.Fetcher | Non
             print("update check not due yet")
             return 0
         fetcher = fetcher or default_fetcher(cfg)
-        if s["channel"] == "nightly":
-            return _update_nightly(cfg, s, scheduled, fetcher, run, now)
         rel = fetcher.release(s["repo"])
         latest = rel["version"]
         cur = current_version()
         nightly_now = on_nightly()
         _note_release(fetcher, s["repo"], rel, now)     # the console shows it, and the timer keeps it fresh
-        # back on the stable channel from a nightly: the latest signed release always replaces it, even an older one
+        # a nightly from before they were dropped: the latest signed release always replaces it, even an older one
         # (R77 review: keeping the unsigned build would leave the owner believing they are back on releases)
         downgrade = nightly_now and _newer(cur, latest)
         if downgrade and not _modules_fit(latest):
@@ -577,76 +545,6 @@ def update(cfg: dict, *, scheduled: bool = False, fetcher: release.Fetcher | Non
     print(f"updated filament-kit {version_text() if nightly_now else cur} -> {latest}"
           + ("" if previous else " (no rollback copy)"))
     return _feed_after_install(cfg, fetcher, rel, run)
-
-
-def _update_nightly(cfg: dict, s: dict, scheduled: bool, fetcher: release.Fetcher, run, now: float) -> int:
-    """`updates.channel` nightly: install the newest nightly prerelease when it is newer than what is in place (its
-    X.Y.Z, then its date). Unsigned: only its own SHA256SUMS is checked, and this says so. The signed release that was
-    in place stays the rollback target; a nightly never is one. Busy and ReleaseError go to update()'s handlers."""
-    rel = nightly.latest_nightly(fetcher, s["repo"])
-    latest, installed, cur = rel["version"], version_text(), current_version()
-    _remember(latest, rel.get("notes") or "", "", now)
-    if not scheduled:           # once per run: here by hand, before an install from the timer
-        print(nightly.NIGHTLY_UNSIGNED)
-    if nightly.nightly_key(latest) <= nightly.nightly_key(installed):
-        _write_state(last_ok_at=now)
-        print(f"filament-kit {installed} is up to date with the nightly channel (newest nightly {latest})")
-        return 0
-    st = _read_state()
-    if scheduled and latest in (st.get("held"), st.get("failed")):
-        _write_state(last_ok_at=now)
-        print(f"{latest} was rolled back or failed before; the timer leaves it (sudo filament-kit update installs it)")
-        return 0
-    if scheduled:
-        print(nightly.NIGHTLY_UNSIGNED)
-    nightly_now = installed != cur
-    if not nightly_now and not _kept(cur):
-        try:
-            _download(fetcher, s["repo"], cur)
-        except ReleaseError as e:
-            print(f"warning: no verified copy of the installed {cur} for a rollback: {e}", file=sys.stderr)
-    tmp = store() / ".download"
-    shutil.rmtree(tmp, ignore_errors=True)
-    try:
-        nightly.fetch_nightly(tmp, rel, fetcher=fetcher)
-        shutil.rmtree(store() / latest, ignore_errors=True)
-        os.replace(tmp, store() / latest)
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)
-    with printers_idle():
-        kept = _kept(cur) and not nightly_now
-        old_previous = st.get("previous")
-        _write_state(failed=latest, last_ok_at=now, **({"previous": cur} if kept else {}))
-        try:
-            ok = _install(cfg, latest, run)
-        except ReleaseError:
-            _write_state(previous=old_previous)
-            raise
-        if not ok:
-            return _restore(cfg, cur, kept, old_previous, run)
-    previous = cur if kept else old_previous if isinstance(old_previous, str) else None
-    _write_state(last_ok_at=now, previous=previous, held=None, failed=None)
-    _prune({latest} | ({previous} if previous else set()))
-    print(f"updated filament-kit {installed} -> {latest} (nightly)"
-          + (f"; sudo filament-kit update --rollback goes back to {previous}" if previous else " (no rollback copy)"))
-    return 0
-
-
-def set_channel(cfg: dict, channel: str) -> int:
-    """`filament-kit update --channel X` (root): save updates.channel, then update on that channel now."""
-    if channel not in CHANNELS:
-        print(f"error: the channel is stable or nightly, not {channel!r}", file=sys.stderr)
-        return 2
-    if not _require_root():
-        return 1
-    u = dict(cfg.get("updates") or {})
-    before = u.get("channel") or "stable"
-    u["channel"] = channel
-    cfg = {**cfg, "updates": u}
-    config.save(cfg)
-    if before != channel:
-        print(f"update channel: {before} -> {channel}")
-    return update(config.load())       # on nightly it says, once, that the builds are unsigned
 
 
 # ---------------------------------------------------------------- hardware data feed
