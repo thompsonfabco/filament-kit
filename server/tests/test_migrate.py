@@ -232,11 +232,11 @@ def test_a_bundle_member_outside_the_folder_is_refused_and_nothing_is_left(tmp_p
     made = []
     real = migrate.tempfile.mkdtemp
     monkeypatch.setattr(migrate.tempfile, "mkdtemp", lambda *a, **kw: made.append(real(*a, **kw)) or made[-1])
-    t = _hostile(tmp_path, lambda tar: tar.addfile(*_file("../escaped.txt")))
+    t = _hostile(tmp_path, lambda tar: tar.addfile(*_file("../fk-escape-probe-b2.txt")))
     with pytest.raises(tarfile.TarError):
         with migrate.open_bundle(t):
             pytest.fail("a bundle with a ../ member was opened")
-    assert not (Path(made[0]).parent / "escaped.txt").exists() and not Path(made[0]).exists()
+    assert not (Path(made[0]).parent / "fk-escape-probe-b2.txt").exists() and not Path(made[0]).exists()
 
 
 def test_a_bundle_symlink_to_an_absolute_path_is_refused(tmp_path):
