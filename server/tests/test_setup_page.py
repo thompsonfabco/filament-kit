@@ -672,8 +672,10 @@ def test_setup_scripts_never_use_innerhtml():
     for script in scripts:
         src = _script_text(script)
         assert not re.search(r"innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(", src), script.name
-        # nothing from elsewhere: the only fetch target is the setup API (setup_backup.js posts to it by itself)
-        assert set(re.findall(r"fetch\(([^,)]*)", src)) <= {'"/setup/api/" + path'}, script.name
+        # nothing from elsewhere: every fetch target is the setup API, as a string or a template literal
+        # (setup_backup.js posts to it by itself, setup_flash.js reads the firmware image from it)
+        for target in re.findall(r"fetch\(([^,)]*)", src):
+            assert re.match(r"""\s*["`]/setup/api/""", target), (script.name, target)
     assert re.findall(r"fetch\(([^,)]*)", _script_text(STATIC / "setup.js")) == ['"/setup/api/" + path']
 
 
