@@ -308,7 +308,7 @@ def _save_status(serial: str, job: _Job) -> None:
                 "finished": job.finished}
         _write_atomic(d / STATUS_FILE, json.dumps(data, indent=2).encode("utf-8"), 0o600, state_owned=True)
     except OSError:
-        log.exception("mapping %s: cannot write the status file", serial)
+        log.exception("mapping on %s: cannot write the status file", registry.log_label(serial))
 
 
 def job_held_elsewhere(serial: str) -> bool:
@@ -477,9 +477,9 @@ def _delete_leftover_job(serial: str) -> None:
         return
     problems = calib3mf.delete_leftover(serial)
     if problems:
-        log.warning("mapping %s: the killed calibration's file was not deleted: %s", serial, problems)
+        log.warning("mapping on %s: the killed calibration's file was not deleted: %s", registry.log_label(serial), problems)
     else:
-        log.info("mapping %s: deleted the file a killed calibration left on the printer", serial)
+        log.info("mapping on %s: deleted the file a killed calibration left on the printer", registry.log_label(serial))
 
 
 def _distrust(serial: str) -> None:
@@ -533,7 +533,7 @@ class Mapper:
                 self._abort_pending.discard(serial)
                 job.abort.set()
         _save_status(serial, job)
-        log.info("mapping %s: job %s started", serial, job.id)
+        log.info("mapping on %s: job %s started", registry.log_label(serial), job.id)
         return job, plock
 
     def start(self, serial: str, auto: bool = False) -> str:
@@ -620,8 +620,8 @@ class Mapper:
                     self._m.wait_report(serial, lambda r: "gcode_state" in r, 0.5) is not None:
                 break
             if time.monotonic() >= deadline:
-                log.warning("mapping %s: a slot snapshot is pending but the printer did not connect; the next "
-                            "mapping run restores it", serial)
+                log.warning("mapping on %s: a slot snapshot is pending but the printer did not connect; the next "
+                            "mapping run restores it", registry.log_label(serial))
                 return
             self._closing.wait(0.5)
         if self._closing.is_set():
@@ -629,25 +629,25 @@ class Mapper:
         try:
             plock = _take_for_mapping(serial)
         except AlreadyRunning:
-            log.info("mapping %s: busy; the pending slot snapshot is restored by the job", serial)
+            log.info("mapping on %s: busy; the pending slot snapshot is restored by the job", registry.log_label(serial))
             return
         try:
             try:
                 slottest.check_idle(self._m, serial)
             except (PrinterBusy, PrinterOffline) as e:
-                log.warning("mapping %s: a slot snapshot is pending but the printer is not idle (%s); the next "
-                            "mapping run restores it", serial, type(e).__name__)
+                log.warning("mapping on %s: a slot snapshot is pending but the printer is not idle (%s); the next "
+                            "mapping run restores it", registry.log_label(serial), type(e).__name__)
                 return
-            log.info("mapping %s: restoring the slots a stopped mapping left (slot snapshot)", serial)
+            log.info("mapping on %s: restoring the slots a stopped mapping left (slot snapshot)", registry.log_label(serial))
             _delete_leftover_job(serial)
             problems = snapshot.restore(self._m, serial)
             if problems:
-                log.warning("mapping %s: restore from the slot snapshot not confirmed: %s", serial, problems)
+                log.warning("mapping on %s: restore from the slot snapshot not confirmed: %s", registry.log_label(serial), problems)
                 _distrust(serial)
             else:
-                log.info("mapping %s: slots restored from the slot snapshot", serial)
+                log.info("mapping on %s: slots restored from the slot snapshot", registry.log_label(serial))
         except Exception:
-            log.exception("mapping %s: restore from the slot snapshot failed", serial)
+            log.exception("mapping on %s: restore from the slot snapshot failed", registry.log_label(serial))
         finally:
             _give_back(serial, plock)
 
@@ -660,18 +660,18 @@ class Mapper:
                 try:
                     on_step(text)
                 except Exception:
-                    log.exception("mapping %s: progress callback failed", serial)
+                    log.exception("mapping on %s: progress callback failed", registry.log_label(serial))
         try:
             self._map(serial, job, step)
         except BaseException as e:            # a bug, or Ctrl-C / SystemExit: failed, never a trusted map
-            log.exception("mapping %s: job failed", serial)
+            log.exception("mapping on %s: job failed", registry.log_label(serial))
             job.state = "failed"
             job.reason = "kit_error"        # the exception is in the log above
             job.problems.append("The mapping stopped on an error in the kit; nothing from it is trusted.")
             try:
                 _distrust(serial)
             except Exception:
-                log.exception("mapping %s: cannot downgrade the slot map", serial)
+                log.exception("mapping on %s: cannot downgrade the slot map", registry.log_label(serial))
             if not isinstance(e, Exception):
                 raise
         finally:
@@ -688,7 +688,7 @@ class Mapper:
                     with _MANUAL_GUARD:
                         _MAPPING_NOW.discard(serial)
                     job.released.set()
-            log.info("mapping %s: job %s %s; problems %s", serial, job.id, job.state, job.problems)
+            log.info("mapping on %s: job %s %s; problems %s", registry.log_label(serial), job.id, job.state, job.problems)
 
     def _map(self, serial: str, job: _Job, step) -> None:
         def fail(problems: list[str], reason: str = "none") -> None:
@@ -777,7 +777,7 @@ class Mapper:
             printer_report.save(serial, printer_report.build(report, model, trail=job.trail, wanted=job.report_wanted),
                                 model)
         except OSError:
-            log.exception("mapping %s: cannot save the printer report", serial)
+            log.exception("mapping on %s: cannot save the printer report", registry.log_label(serial))
 
     def report(self, serial: str) -> dict:
         """A report from the printer as it is now and the last mapping's attempts: {name, xml, path, live, saved_until}.
@@ -1002,19 +1002,19 @@ class LayoutWatch:
         stale = not same or bool(missing)
         if m.fingerprint is None:
             new_fp = fp
-            log.info("mapping %s: the slot map adopted the printer's current layout", serial)
+            log.info("mapping on %s: the slot map adopted the printer's current layout", registry.log_label(serial))
         else:
             new_fp = _merge_fp(m.fingerprint, fp) if same else m.fingerprint
         if new_fp == m.fingerprint and stale == m.stale:
             return stale or m.suspect
         if stale and not m.stale:
-            log.warning("mapping %s: the slot map is stale (%s)", serial,
+            log.warning("mapping on %s: the slot map is stale (%s)", registry.log_label(serial),
                         "the printer's AMS layout changed" if not same else f"no slot {', '.join(missing)} now")
         m.fingerprint, m.stale = new_fp, stale
         try:
             ams.save_map(serial, m)
         except OSError:
-            log.exception("mapping %s: cannot save the slot map", serial)
+            log.exception("mapping on %s: cannot save the slot map", registry.log_label(serial))
         return m.stale or m.suspect
 
     def _due(self, serial: str, seen: _Seen, report: dict, now: float) -> bool:
@@ -1040,9 +1040,9 @@ class LayoutWatch:
         def go():
             try:
                 self._mapper.start(serial, auto=True)
-                log.info("mapping %s: re-mapping, the AMS layout changed", serial)
+                log.info("mapping on %s: re-mapping, the AMS layout changed", registry.log_label(serial))
             except Exception as e:  # noqa: BLE001 - busy, offline, a load running: tried again later
-                log.warning("mapping %s: automatic re-map not started (%s: %s)", serial, type(e).__name__, e)
+                log.warning("mapping on %s: automatic re-map not started (%s: %s)", registry.log_label(serial), type(e).__name__, e)
         if self._sync:
             go()
         else:
