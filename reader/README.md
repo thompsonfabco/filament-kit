@@ -103,6 +103,9 @@ Plug the Printer Station into the kit server's USB port with a data cable and ru
 
     sudo filament-kit reader setup
 
+Or open the kit's setup page, tab **Flash a device**: it does the same with the board plugged into the server,
+or writes it from the computer you sit at (Chrome or Edge, over Web Serial).
+
 It finds the board, asks the Wi-Fi name and password and the buzzer's trigger (high for a buzzer behind a MOSFET, as
 in the parts list; low for the older 3-pin module), makes the reader's token, writes the kit's own firmware
 (`firmware/printer-station.bin`, which holds no settings) unless the board already runs that build, sends the
