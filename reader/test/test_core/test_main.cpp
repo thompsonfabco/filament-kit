@@ -121,6 +121,19 @@ void test_parse_slots_sixteen_units() {
   TEST_ASSERT_EQUAL_STRING("Ext-R", s[73].label.c_str());
 }
 
+void test_parse_slots_caps_count() {
+  std::string j = "[";
+  for (int i = 0; i < MAX_SLOTS + 1; i++) {
+    if (i) j += ",";
+    j += "{\"label\":\"S" + std::to_string(i) + "\"}";
+  }
+  j += "]";
+  std::vector<SlotEntry> s;
+  TEST_ASSERT_TRUE(parseSlots(j.c_str(), s));
+  TEST_ASSERT_EQUAL(128, (int)s.size());   // the cap the server's cap_slots relies on
+  TEST_ASSERT_EQUAL_STRING("S127", s[127].label.c_str());
+}
+
 void test_slot_contents() {
   SlotEntry e;
   e.label = "A1";
@@ -520,6 +533,7 @@ int main(int, char**) {
   RUN_TEST(test_parse_slots_spool_without_name_uses_id);
   RUN_TEST(test_parse_slots_skips_unlabelled_and_rejects_bad);
   RUN_TEST(test_parse_slots_sixteen_units);
+  RUN_TEST(test_parse_slots_caps_count);
   RUN_TEST(test_slot_contents);
   RUN_TEST(test_scan_body);
   RUN_TEST(test_scan_statuses);
