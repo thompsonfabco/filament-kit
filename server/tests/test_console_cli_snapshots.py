@@ -48,6 +48,14 @@ def test_status_lines_when_things_fail(cfg, capsys, monkeypatch):
     def down(self):
         raise cli.SpoolmanError("no answer")
     monkeypatch.setattr(cli.Spoolman, "ping", down)
+
+    class Station:      # no real request to a made-up address: it only has to be unreachable
+        def __init__(self, url, backoff=0):
+            pass
+
+        def state(self):
+            raise cli.StationUnreachable("no")
+    monkeypatch.setattr(cli, "StationClient", Station)
     cfg["station"] = {**cfg["station"], "url": "http://192.0.2.30:5003"}
     cfg["modules"]["ai_intake"] = True
     config.save(cfg)

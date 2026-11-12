@@ -86,6 +86,25 @@ def test_an_empty_entry_is_refused(app, monkeypatch, entry):
     assert post(client(app), "library/add", {"entry": entry}).status_code == 400
 
 
+def test_an_entry_over_the_size_limit_is_refused_and_nothing_is_added(app, monkeypatch):
+    """The page reads a request body only up to setup_page.MAX_BODY, far under library.LOCAL_LIMIT, so that 413 answers
+    first: the route's own LOCAL_LIMIT 400 cannot be reached through the page."""
+    monkeypatch.setattr(library, "add_local", lambda data: pytest.fail("must not run"))
+    monkeypatch.setattr(builds, "request_rebuild", lambda reason: pytest.fail("no build"))
+    r = post(client(app), "library/add", {"entry": "x" * (library.LOCAL_LIMIT + 1)})
+    assert r.status_code == 413
+
+
+def test_an_entry_under_the_page_body_limit_goes_to_the_library(app, monkeypatch):
+    from filament_kit import setup_page
+    seen = []
+    monkeypatch.setattr(library, "add_local",
+                        lambda data: seen.append(len(data)) or ({"vendor": "V", "product": "P"}, "v--p"))
+    monkeypatch.setattr(builds, "request_rebuild", lambda reason: None)
+    r = post(client(app), "library/add", {"entry": "x" * (setup_page.MAX_BODY // 2)})
+    assert r.status_code == 200 and seen == [setup_page.MAX_BODY // 2]
+
+
 def test_the_settings_tab_has_the_card():
     src = (STATIC / "setup.js").read_text(encoding="utf-8")
     assert "libraryCard()" in src
