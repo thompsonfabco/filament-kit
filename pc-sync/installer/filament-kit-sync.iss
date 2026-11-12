@@ -70,8 +70,7 @@ Name: "{group}\filament-kit sync status"; Filename: "{cmd}"; Parameters: "/k """
 Name: "{group}\Uninstall filament-kit sync"; Filename: "{uninstallexe}"
 
 [Run]
-; 1) Register the scheduled task (every 10 minutes and at logon, as the current user).
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ""{app}\install_task.ps1"" -ExePath ""{app}\{#TaskExeName}"""; StatusMsg: "Registering the scheduled task..."; Flags: runhidden waituntilterminated
+; 1) The scheduled task is registered in [Code] (CurStepChanged), where its exit code is checked.
 ; 2) Pair this PC with the server, in a console (paste the link from 'sudo filament-kit pair --pc').
 Filename: "{cmd}"; Parameters: "/k """"{app}\{#ExeName}"" pair"""; WorkingDir: "{app}"; Description: "Pair this PC with the filament-kit server now"; Flags: postinstall nowait skipifsilent
 
@@ -111,6 +110,35 @@ begin
     RegDeleteValue(HKEY_CURRENT_USER, 'Environment', 'Path')
   else
     RegWriteExpandStringValue(HKEY_CURRENT_USER, 'Environment', 'Path', Paths);
+end;
+
+// Registers the scheduled task (every 10 minutes and at logon, as the current user). A failure is shown, with the
+// way to finish by hand; the install itself stays (the files are there, and the task can be registered later).
+procedure RegisterTask;
+var
+  ResultCode: Integer;
+  Script, Exe: string;
+begin
+  WizardForm.StatusLabel.Caption := 'Registering the scheduled task...';
+  Script := ExpandConstant('{app}\install_task.ps1');
+  Exe := ExpandConstant('{app}\{#TaskExeName}');
+  ResultCode := -1;
+  if not Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+      '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + Script + '" -ExePath "' + Exe + '"',
+      '', SW_HIDE, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then
+  begin
+    Log('install_task.ps1 failed, exit code ' + IntToStr(ResultCode));
+    SuppressibleMsgBox('The scheduled task that runs the sync every 10 minutes could not be registered (exit code ' +
+      IntToStr(ResultCode) + '). The sync will not run by itself until it is.' + #13#10 + #13#10 +
+      'To finish, run this in PowerShell:' + #13#10 + 'powershell -ExecutionPolicy Bypass -File "' + Script +
+      '" -ExePath "' + Exe + '"' + #13#10 + 'or run this installer again.', mbError, MB_OK, IDOK);
+  end;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+    RegisterTask;
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
