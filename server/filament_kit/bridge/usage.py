@@ -40,6 +40,7 @@ Log: `state/printers/<serial>/usage.jsonl`, append-only, one JSON object per lin
 only (one uvicorn worker; a module lock serialises appends and undo). Two kinds of lines:
   entry: {"id", "at", "job", "grams", "spool_id", "slot", "observe"[, "error"]}
   undo:  {"undo": <entry id>, "at"}
+  undo_failed: {"undo_failed": <entry id>, "at"}   (takes the entry's last undo line back: Spoolman refused the credit)
 Undo never rewrites the file: it appends an undo line, and `entries` folds them into `undone`.
 
 Entry shape returned by `entries` / `undo` (what `GET /api/printers/{id}/usage` and `POST /api/usage/{id}/undo`
@@ -66,7 +67,7 @@ Exceptions (each has `.code` and `.status` for the API to map):
   AlreadyUndone  409 already_undone   undone before
   NothingToUndo  409 nothing_to_undo  the entry wrote nothing (observe, no spool, error)
   SpoolChanged   409 spool_changed    that spool id is another spool now, or the spool is gone
-A Spoolman failure during undo raises `SpoolmanError` and records nothing."""
+A Spoolman failure during undo raises `SpoolmanError` and leaves the entry not undone."""
 from __future__ import annotations
 
 import datetime as dt
@@ -105,6 +106,7 @@ ENTRY_ID = re.compile(r"[0-9a-f]{32}")
 FIELDS = ('id', 'at', 'job', 'grams', 'spool_id', 'slot', 'observe')
 
 _lock = threading.Lock()
+_undoing: set[str] = set()      # entries an Undo is working on (guarded by _lock)
 
 
 class UsageError(Exception):
@@ -227,6 +229,8 @@ def _read(serial: str) -> tuple[list[dict], dict[str, str]]:
             continue
         if 'undo' in rec:
             undone.setdefault(str(rec['undo']), rec.get('at'))
+        elif 'undo_failed' in rec:
+            undone.pop(str(rec['undo_failed']), None)
         elif isinstance(rec.get('id'), str):
             out.append(rec)
     return out, undone
@@ -258,11 +262,15 @@ def _written(rec: dict) -> bool:
 
 
 def undo(entry_id: str, spoolman) -> dict:
-    """Give an entry's grams back to its spool (`use_weight` negative) once, within 7 days; returns the entry."""
+    """Give an entry's grams back to its spool (`use_weight` negative) once, within 7 days; returns the entry.
+    The undo line is written before the spool is credited, so a failed write credits nothing and a second Undo
+    cannot credit twice; a failed credit takes the line back. Spoolman is called outside the module lock, and
+    `_undoing` keeps a second Undo of the same entry out meanwhile."""
     if not isinstance(entry_id, str) or not ENTRY_ID.fullmatch(entry_id):
         raise UsageNotFound(f"no usage entry {entry_id!r}")
     root = config.paths().state / "printers"
     with _lock:
+        found = None
         for d in sorted(root.iterdir()) if root.is_dir() else []:
             if not d.is_dir() or not registry.SERIAL.fullmatch(d.name):
                 continue
@@ -270,21 +278,38 @@ def undo(entry_id: str, spoolman) -> dict:
             rec = next((r for r in recs if r['id'] == entry_id), None)
             if rec is None:
                 continue
-            if entry_id in undone:
+            if entry_id in undone or entry_id in _undoing:
                 raise AlreadyUndone(f"usage entry {entry_id} was undone already")
             at = _epoch(rec.get('at'))
             if at is None or _now() - at > UNDO_DAYS * 86400:
                 raise TooOld(f"usage entry {entry_id} is older than {UNDO_DAYS} days")
             if not _written(rec):
                 raise NothingToUndo(f"usage entry {entry_id} wrote nothing to Spoolman")
-            _same_spool(spoolman, rec, at)
+            found = d.name, rec, at, undone
+            _undoing.add(entry_id)
+            break
+    if found is None:
+        raise UsageNotFound(f"no usage entry {entry_id}")
+    serial, rec, at, undone = found
+    try:
+        _same_spool(spoolman, rec, at)
+        with _lock:
+            _write_line(serial, {'undo': entry_id, 'at': _iso(_now())})
+        try:
             spoolman.use(int(rec['spool_id']), -float(rec['grams']))
-            _write_line(d.name, {'undo': entry_id, 'at': _iso(_now())})
-            log.info("usage: printer %s: undid %s g on spool %s (%s)", d.name, rec['grams'], rec['spool_id'],
-                     rec.get('job'))
-            undone[entry_id] = _iso(_now())
-            return _view(rec, undone)
-    raise UsageNotFound(f"no usage entry {entry_id}")
+        except BaseException:
+            try:
+                with _lock:
+                    _write_line(serial, {'undo_failed': entry_id, 'at': _iso(_now())})
+            except OSError as e:
+                log.error("usage: printer %s: undo of %s failed and could not be taken back: %s", serial, entry_id, e)
+            raise
+    finally:
+        with _lock:
+            _undoing.discard(entry_id)
+    log.info("usage: printer %s: undid %s g on spool %s (%s)", serial, rec['grams'], rec['spool_id'], rec.get('job'))
+    undone[entry_id] = _iso(_now())
+    return _view(rec, undone)
 
 
 # ---------------------------------------------------------------- the job's 3MF

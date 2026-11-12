@@ -409,6 +409,37 @@ def _undoable(rig, sd, sm):
     return next(e for e in usage.entries(SERIAL, 7) if e["slot"] == "A2")
 
 
+def test_undo_that_cannot_write_its_line_credits_nothing(rig, sd, spoolman_fake_store, sm, monkeypatch):
+    e = _undoable(rig, sd, sm)
+    before = list(spoolman_fake_store["uses"])
+    real = usage._write_line
+
+    def broken(serial, rec):
+        if "undo" in rec:
+            raise OSError("disk full")
+        real(serial, rec)
+    monkeypatch.setattr(usage, "_write_line", broken)
+    for _ in range(2):
+        with pytest.raises(OSError):
+            usage.undo(e["id"], sm)
+    assert spoolman_fake_store["uses"] == before
+    monkeypatch.setattr(usage, "_write_line", real)
+    assert usage.undo(e["id"], sm)["undone"] is True
+    assert spoolman_fake_store["uses"][len(before):] == [(A2, -21.92)]
+
+
+def test_undo_that_spoolman_refuses_leaves_the_entry_undoable(rig, sd, spoolman_fake_store, sm, monkeypatch):
+    e = _undoable(rig, sd, sm)
+    real = sm.use
+    monkeypatch.setattr(sm, "use", lambda *a: (_ for _ in ()).throw(usage.SpoolmanError("down", status=None)))
+    with pytest.raises(usage.SpoolmanError):
+        usage.undo(e["id"], sm)
+    assert next(x for x in usage.entries(SERIAL, 7) if x["id"] == e["id"])["undone"] is False
+    monkeypatch.setattr(sm, "use", real)
+    assert usage.undo(e["id"], sm)["undone"] is True
+    assert spoolman_fake_store["uses"][-1] == (A2, -21.92)
+
+
 class _Reused:
     """Spoolman with one spool's answer changed."""
 
