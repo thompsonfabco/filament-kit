@@ -325,3 +325,37 @@ def test_check_idle_needs_a_status_from_the_printer():
     with pytest.raises(slottest.NoStatus) as e:
         slottest.check_idle(M(), SERIAL)
     assert isinstance(e.value, PrinterOffline) and "no status from the printer yet" in str(e.value)
+
+
+def test_an_older_full_report_never_lands_after_a_newer_write(rig, monkeypatch):
+    """The flaky misaddressed_write tests (2026-11-08; reproduced with random scheduler gaps: 'A1: test colour
+    FA0100FF still in the slot' after A1's restore was confirmed). The full report a pushall asks for is taken on the
+    pushall's timer thread; a thread held between taking it and queueing it let a later write's report go out first,
+    and the older full report then put the test colour back. A printer's one stream never does that."""
+    import json
+    import threading
+    import time
+    m, printer, c = rig
+    monkeypatch.setattr(connection, "PUSHALL_AFTER_COMMAND", 60)   # no later full report to hide it
+    respond = printer.respond
+    gate = threading.Event()
+
+    def held(topic, body):
+        out = respond(topic, body)
+        if body.get("pushing", {}).get("command") == "pushall" and threading.current_thread() is not threading.main_thread():
+            gate.wait(2)                                      # held after taking the report, before it is queued
+        return out
+    c.responder = held
+    t = threading.Thread(target=c.publish, args=(f"device/{SERIAL}/request",
+                                                 json.dumps({"pushing": {"sequence_id": "0", "command": "pushall"}})))
+    t.start()
+    time.sleep(0.05)                                          # it has taken the report and is held
+    threading.Timer(0.2, gate.set).start()
+    m.set_slot(SERIAL, 0, 0, dict(original("A1"), tray_color="FA0100FF"))
+    t.join(5)
+    deadline = time.monotonic() + 5
+    while (c._outbox or c._sending) and time.monotonic() < deadline:
+        time.sleep(0.02)
+    time.sleep(0.1)
+    now = m.wait_report(SERIAL, lambda r: True, 0)
+    assert now["ams"]["ams"][0]["tray"][0]["tray_color"] == "FA0100FF"
