@@ -1,5 +1,3 @@
-import itertools
-
 import pytest
 
 from filament_kit import apply, config, modules
@@ -80,10 +78,24 @@ def test_validation_error_propagates():
         apply.plan({"modules": {"server": True, "spoolman": False}})
 
 
-@pytest.mark.parametrize("a,b", list(itertools.permutations(modules.MODES, 2)))
-def test_switch_never_removes_data(a, b):
-    for mode in (a, b):
-        acts = apply.plan(_mode(mode), resolve=lambda h: [h])
+# plan() sees only the target configuration, never the previous mode, so one pass over the modes covers every switch.
+# Every action that takes something away is listed here with the only arguments any mode may give it.
+DESTRUCTIVE_KINDS = {
+    "remove_file": {"/etc/udev/rules.d/99-filament-kit-station.rules"},
+    "remove_pkg": {"brltty"},
+    "disable_ext": {"ModemManager"},
+    "mask_sleep": {""},
+    "remote_off": {"filament"},
+}
+
+
+def test_switch_never_removes_data():
+    for mode in [None, *modules.MODES]:
+        acts = apply.plan({} if mode is None else _mode(mode), resolve=lambda h: [h])
+        for a in acts:
+            if a.kind.startswith(("remove", "disable_ext", "mask", "purge", "delete", "drop", "wipe")) or a.kind == "remote_off":
+                assert a.kind in DESTRUCTIVE_KINDS, (mode, a.kind, a.arg)
+                assert a.arg in DESTRUCTIVE_KINDS[a.kind], (mode, a.kind, a.arg)
         for p in _of(acts, "remove_file"):
             assert not p.startswith(("/var/lib", "/etc/filament-kit", "/var/backups"))
 
