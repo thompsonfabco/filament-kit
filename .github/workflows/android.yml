@@ -7,6 +7,8 @@ on:
   pull_request:
     branches-ignore: [nightly]     # no tests on the nightly branch: docs/maintainer.md, Nightly builds
     paths: ['android/**', '.github/workflows/android.yml']
+permissions:
+  contents: read
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -14,12 +16,12 @@ jobs:
       run:
         working-directory: android
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+      - uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00  # v4.7.1
         with:
           distribution: temurin
           java-version: '21'
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407  # v3.2.2
         with:
           # the default also asks for the legacy 'tools' package, which current sdkmanager no longer has;
           # AGP downloads the platform and build-tools it needs itself
