@@ -20,7 +20,7 @@ name="filament-kit-$version"
 stage_root="$dist/stage"
 stage="$stage_root/$name"
 rm -rf "$stage_root"
-mkdir -p "$stage/install/systemd" "$stage/install/avahi" "$stage/install/remote" "$stage/install/panel"
+mkdir -p "$stage/install/systemd" "$stage/install/avahi" "$stage/install/remote" "$stage/install/panel" "$stage/install/reader"
 
 # ---------- wheel ----------
 case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) windows=1 ;; *) windows=0 ;; esac
@@ -57,6 +57,7 @@ cp install/systemd/*.service install/systemd/*.timer install/systemd/*.path inst
 cp install/avahi/filament-kit.service "$stage/install/avahi/"
 cp install/remote/* "$stage/install/remote/"
 cp station/panel/firmware/intake-panel.bin station/panel/firmware/VERSION "$stage/install/panel/"
+cp reader/firmware/printer-station.bin reader/firmware/VERSION "$stage/install/reader/"
 # A Windows checkout may have CRLF line endings; Linux needs LF.
 find "$stage" -type f \( -name '*.sh' -o -name '*.service' -o -name '*.timer' -o -name '*.path' -o -path '*/install/remote/*' \) \
     -exec sed -i 's/\r$//' {} +

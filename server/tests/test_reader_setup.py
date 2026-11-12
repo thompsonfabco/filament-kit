@@ -176,9 +176,11 @@ def test_a_bad_wifi_name_is_refused_before_a_token_is_made(tmp_path, monkeypatch
     assert reader_tokens.TokenStore().list() == []
 
 
-def test_nothing_to_do_is_an_error(capsys):
-    assert cli.cmd_reader_setup(_args()) == 1
-    assert "--source" in capsys.readouterr().err
+def test_nothing_else_said_is_the_usb_setup(monkeypatch):
+    """No --source, --out or --secrets: the Printer Station on this server's USB (test_reader_flash.py)."""
+    got = []
+    monkeypatch.setattr(cli, "_reader_setup_usb", lambda a, ask, ask_secret: got.append(a) or 0)
+    assert cli.cmd_reader_setup(_args()) == 0 and len(got) == 1
 
 
 def _flash_env(monkeypatch, tmp_path, rc, readers=1):
@@ -337,7 +339,7 @@ def test_setup_writes_the_buzzer_choice_and_says_it(tmp_path, monkeypatch, capsy
 def test_the_buzzer_option_defaults_to_high(monkeypatch):
     got = {}
     monkeypatch.setattr(cli, "cmd_reader_setup", lambda a: got.update(vars(a)) or 0)
-    assert cli.main(["reader", "setup", "--out", "s.h"]) == 0 and got["buzzer"] == "high"
+    assert cli.main(["reader", "setup", "--out", "s.h"]) == 0 and got["buzzer"] is None     # high in a build; asked over USB
     assert cli.main(["reader", "setup", "--out", "s.h", "--buzzer", "low"]) == 0 and got["buzzer"] == "low"
 
 

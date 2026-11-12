@@ -2063,14 +2063,128 @@ def _answers_as_panel(port: str) -> bool:
     return ser is not None
 
 
+def _ask_choice(ask, prompt: str, choices: dict[str, str], default: str) -> str | None:
+    """One of `choices` (answer -> value) from the owner; the default on an empty answer; None when it can't ask."""
+    for _ in range(3):
+        try:
+            got = ask(prompt).strip().lower()
+        except (EOFError, RuntimeError, OSError):
+            return None
+        if not got:
+            return default
+        if got in choices:
+            return choices[got]
+        print("Please answer " + " or ".join(sorted(choices)) + ".")
+    return None
+
+
+def _reader_setup_usb(a, ask, ask_secret, run=subprocess.run) -> int:
+    """`reader setup` with nothing to build: the Printer Station plugged into this server's USB port gets the kit's own
+    firmware (no PlatformIO) and then its settings over USB (reader_flash.py). The owner answers the Wi-Fi name and
+    password and the buzzer's trigger; the rest is found or made here. Nothing secret is printed."""
+    from . import reader_flash as rf
+    from . import reader_setup as rs
+    from . import reader_tokens
+    if not a.token_file and not _is_root():
+        print("error: run as root: sudo filament-kit reader setup", file=sys.stderr)
+        return 1
+    if rf.bundled_image() is None:
+        print("error: this kit has no Printer Station firmware bundled (reader/firmware); update the kit, or build "
+              "one yourself with --source <checkout>/reader", file=sys.stderr)
+        return 1
+    found = rs.find_readers()
+    if a.port:
+        port = a.port
+    elif not found:
+        print("error: no ESP32 board on this server's USB. Plug the Printer Station in with a data cable (a "
+              "charge-only cable shows nothing), or name the port with --port.", file=sys.stderr)
+        return 1
+    elif len(found) == 1:
+        port = found[0].port
+        print(f"Found an ESP32 board on {found[0].by_id or port}.")
+    else:
+        for i, r in enumerate(found, 1):
+            print(f"  {i}. {r.by_id or r.port} ({r.product})")
+        pick = _ask_choice(ask, "Which one is the Printer Station? [number] ",
+                           {str(i): r.port for i, r in enumerate(found, 1)}, "")
+        if not pick:
+            print("error: no board picked; nothing was changed", file=sys.stderr)
+            return 1
+        port = pick
+    try:
+        base = a.base.rstrip("/") if a.base else rs.reader_base(config.load())
+        if not base.startswith("https://"):
+            raise rs.SetupError("--base must be the kit's public https address plus /reader")
+        key_pem, real_key = rs.pubkey(Path(a.ota_pubkey).read_text(encoding="utf-8") if a.ota_pubkey else None)
+        token = Path(a.token_file).read_text(encoding="utf-8").strip() if a.token_file else None
+    except (rs.SetupError, OSError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    try:
+        ssid = a.ssid or ask("Wi-Fi name the Printer Station joins: ").strip()
+    except (EOFError, RuntimeError, OSError):
+        print("error: `reader setup` needs a terminal to ask you; nothing was changed", file=sys.stderr)
+        return 1
+    password = ask_secret("Its Wi-Fi password: ")
+    if ask_secret("The password again: ") != password:
+        print("error: the two passwords differ; nothing was changed", file=sys.stderr)
+        return 1
+    buzzer = a.buzzer or _ask_choice(
+        ask, "Its buzzer: [h]igh-triggered (behind a MOSFET, as in the parts list) or [l]ow-triggered (the older "
+             "3-pin module)? [h] ", {"h": "high", "high": "high", "l": "low", "low": "low"}, "high")
+    if buzzer is None:
+        print("error: no answer for the buzzer; nothing was changed", file=sys.stderr)
+        return 1
+    try:
+        rs.secrets_h(ssid, password, base, token or "x" * 43, key_pem)      # the same checks as a build's
+    except rs.SetupError as e:
+        print(f"error: {e}; nothing was changed", file=sys.stderr)
+        return 1
+    tid = None
+    if token is None:
+        try:
+            tid, token = reader_tokens.TokenStore().issue(a.name or "printer-station")
+        except reader_tokens.TokenFileError as e:
+            print(f"error: {e}; nothing was changed", file=sys.stderr)
+            return 1
+    settings = {"ssid": ssid, "pass": password, "base": base, "token": token, "buzzer_low": buzzer == "low"}
+    if real_key:
+        settings["ota_key"] = key_pem
+    service = "filament-kit-station.service"      # its panel watcher also opens ESP32 boards: off while we work
+    was_active = run(["systemctl", "is-active", service], check=False, capture_output=True).returncode == 0
+    if was_active:
+        run(["systemctl", "stop", service], check=False, capture_output=True)
+    try:
+        result = rf.setup(port, settings, reflash=bool(getattr(a, "reflash", False)), run=run)
+    finally:
+        if was_active:
+            run(["systemctl", "start", service], check=False, capture_output=True)
+    if not result.ok:
+        if tid:
+            reader_tokens.TokenStore().revoke(tid)
+        print(f"error: {result.message}" + ("; the new token was removed" if tid else ""), file=sys.stderr)
+        return 1
+    print(result.message)
+    if tid:
+        print(f"Reader token {tid} ({a.name or 'printer-station'}). Remove it later with: "
+              f"sudo filament-kit reader revoke {tid}")
+    print(f"Buzzer: {buzzer}-triggered. Unplug it from the server and power it where it lives; it keeps its settings.")
+    if not real_key:
+        print("Note: without --ota-pubkey it refuses updates over Wi-Fi; running this again with the board plugged in "
+              "here updates it.")
+    return 0
+
+
 def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
-    """`reader setup`: a Printer Station set up with today's firmware, which takes its Wi-Fi, server address, token and
-    update key only at build time. Makes a token (root, unless --token-file), writes secrets.h (--out, 0600) and/or
-    builds and flashes it over USB (--source, a checkout's reader/ folder, with PlatformIO). --secrets flashes a
-    secrets.h made earlier. Nothing secret is printed."""
+    """`reader setup`: with nothing else said, the Printer Station on this server's USB gets the kit's firmware and its
+    settings (_reader_setup_usb). --source builds the firmware here with PlatformIO and the settings compiled in;
+    --out writes that secrets.h for a build elsewhere; --secrets flashes one written earlier. Makes a token (root,
+    unless --token-file). Nothing secret is printed."""
     from . import reader_setup as rs
     from . import reader_tokens
     ask_secret = ask_secret or secret_input.ask
+    if not (a.source or a.out or getattr(a, "secrets", None)):
+        return _reader_setup_usb(a, ask, ask_secret)
     flashing = bool(a.source)
     low = getattr(a, "buzzer", "high") == "low"
     who = rs.owner()            # under sudo: PlatformIO is looked for, and run, as the user who ran sudo
@@ -2085,10 +2199,6 @@ def cmd_reader_setup(a, ask=input, ask_secret=None) -> int:
     if flashing and not rs.is_source(Path(a.source)):
         print(f"error: {a.source} is not the reader's source folder (a checkout's reader/, with platformio.ini)",
               file=sys.stderr)
-        return 1
-    if not flashing and not a.out:
-        print("error: say what to do: --source <checkout>/reader to build and flash a reader on USB here, and/or "
-              "--out FILE to write its secrets.h", file=sys.stderr)
         return 1
     if a.secrets and not flashing:
         print("error: --secrets flashes a secrets.h made earlier, so it needs --source", file=sys.stderr)
@@ -2699,9 +2809,10 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     rdsub.add_parser("tokens", help="list the reader tokens (never the tokens themselves)")
     rdr = rdsub.add_parser("revoke", help="remove a reader token (root)")
     rdr.add_argument("ref", help="its id (r1 ...) or name")
-    rds = rdsub.add_parser("setup", help="set up a reader with today's firmware: a token, its secrets.h, and a build "
-                                         "and USB flash with PlatformIO (root to make the token)")
-    rds.add_argument("--name", help="what its token is for, e.g. printer-station")
+    rds = rdsub.add_parser("setup", help="set up the Printer Station plugged into this server's USB: the kit's "
+                                         "firmware, then its Wi-Fi and token (root to make the token). --source or "
+                                         "--out build it with PlatformIO instead")
+    rds.add_argument("--name", help="what its token is for, e.g. bench")
     rds.add_argument("--ssid", help="the Wi-Fi network it joins (asked if left out); the password is always asked")
     rds.add_argument("--source", help="the reader's source folder (a checkout's reader/): build and flash it here")
     rds.add_argument("--port", help="its USB serial port (found when one ESP32 board is plugged in, which you are asked to confirm)")
@@ -2710,8 +2821,11 @@ def _main(argv: list[str] | None = None, *, client_factory=None, manager_factory
     rds.add_argument("--token-file", help="a token made on the server (reader token) instead of a new one")
     rds.add_argument("--base", help="READER_BASE when this machine is not the server: <web.public_url>/reader")
     rds.add_argument("--secrets", help="flash a secrets.h written earlier with --out (needs --source)")
-    rds.add_argument("--buzzer", choices=("high", "low"), default="high",
-                     help="the buzzer's trigger: high (a buzzer behind a MOSFET, the default) or low (the older 3-pin "
+    rds.add_argument("--reflash", action="store_true",
+                     help="write the kit's firmware even when the board already runs that build")
+    rds.add_argument("--buzzer", choices=("high", "low"), default=None,
+                     help="the buzzer's trigger: high (a buzzer behind a MOSFET, the default; asked when left out) "
+                          "or low (the older 3-pin "
                           "module)")
     bk = sub.add_parser("backup", help="a whole-kit backup as one zip: make one, list them (root)")
     bksub = bk.add_subparsers(dest="backup_cmd", required=True)

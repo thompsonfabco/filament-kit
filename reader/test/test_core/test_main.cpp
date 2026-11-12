@@ -8,6 +8,7 @@
 
 #include "reader_api.h"
 #include "menu.h"
+#include "settings.h"
 
 using namespace reader;
 
@@ -593,6 +594,73 @@ void test_tag_gate_held_tag_does_not_post_after_refused_tap() {
   TEST_ASSERT_FALSE(g.accept("b", 60001, 2500));     // a different tag needs a lift too
   g.noTag();                                         // lifted
   TEST_ASSERT_TRUE(g.accept("a", 60100, 2500));      // presented again: counts
+
+// ---- settings over USB (settings.h) -----------------------------------------------
+
+static const char* GOOD = R"({"ssid":"Home","pass":"pw","base":"https://kit.example.net/filament/reader/","token":"abcdefghijklmnop_-12"})";
+
+void test_settings_parse_the_required_ones() {
+  Settings s; std::string why;
+  TEST_ASSERT_TRUE(parseSettings(GOOD, s, why));
+  TEST_ASSERT_EQUAL_STRING("Home", s.ssid.c_str());
+  TEST_ASSERT_EQUAL_STRING("https://kit.example.net/filament/reader", s.base.c_str());   // trailing slash dropped
+  TEST_ASSERT_FALSE(s.buzzerLow);
+  TEST_ASSERT_TRUE(s.otaKey.empty() && s.rootCa.empty());
+}
+
+void test_settings_optional_ones() {
+  Settings s; std::string why;
+  TEST_ASSERT_TRUE(parseSettings(R"({"ssid":"H","pass":"","base":"https://k/reader","token":"abcdefghijklmnop",)"
+                                 R"("buzzer_low":true,"ota_key":"-----BEGIN PUBLIC KEY-----\nAAA\n-----END PUBLIC KEY-----\n"})",
+                                 s, why));
+  TEST_ASSERT_TRUE(s.buzzerLow);
+  TEST_ASSERT_TRUE(s.otaKey.find("BEGIN PUBLIC KEY") != std::string::npos);
+}
+
+void test_settings_refused_leave_the_old_ones() {
+  Settings s; s.ssid = "keep"; std::string why;
+  const char* bad[] = {
+    "not json", "[1]",
+    R"({"pass":"p","base":"https://k/r","token":"abcdefghijklmnop"})",                          // no ssid
+    R"({"ssid":"0123456789012345678901234567890123","base":"https://k/r","token":"abcdefghijklmnop"})",
+    R"({"ssid":"H","base":"http://k/r","token":"abcdefghijklmnop"})",                            // not https
+    R"({"ssid":"H","base":"https://k/r","token":"short"})",
+    R"({"ssid":"H","base":"https://k/r","token":"abcdefghijklmnop q"})",
+    R"({"ssid":"H","base":"https://k/r","token":"abcdefghijklmnop","ota_key":"nope"})",
+    R"({"ssid":"H","base":"https://k/r","token":"abcdefghijklmnop","root_ca":"nope"})",
+  };
+  for (const char* j : bad) {
+    why.clear();
+    TEST_ASSERT_FALSE_MESSAGE(parseSettings(j, s, why), j);
+    TEST_ASSERT_FALSE(why.empty());
+    TEST_ASSERT_EQUAL_STRING("keep", s.ssid.c_str());
+  }
+}
+
+void test_commands() {
+  std::string arg;
+  TEST_ASSERT_EQUAL(CMD_HELLO, command("FK?", arg));
+  TEST_ASSERT_EQUAL(CMD_SET, command("FK-SET {\"a\":1}", arg));
+  TEST_ASSERT_EQUAL_STRING("{\"a\":1}", arg.c_str());
+  TEST_ASSERT_EQUAL(CMD_OTHER, command("hello", arg));
+  TEST_ASSERT_EQUAL(CMD_NONE, command("", arg));
+}
+
+void test_line_reader_drops_cr_and_overlong_lines() {
+  LineReader r; std::string line;
+  for (char c : std::string("FK?\r")) TEST_ASSERT_FALSE(r.push(c, line));
+  TEST_ASSERT_TRUE(r.push('\n', line));
+  TEST_ASSERT_EQUAL_STRING("FK?", line.c_str());
+  for (size_t i = 0; i < MAX_LINE + 10; i++) r.push('x', line);
+  TEST_ASSERT_FALSE(r.push('\n', line));                     // too long: thrown away whole
+  for (char c : std::string("FK?")) r.push(c, line);
+  TEST_ASSERT_TRUE(r.push('\n', line));
+  TEST_ASSERT_EQUAL_STRING("FK?", line.c_str());
+}
+
+void test_hello_line() {
+  TEST_ASSERT_EQUAL_STRING("FK-READER 1731400000 configured=1 wifi=ok server=unauth",
+                           helloLine(1731400000L, true, "ok", "unauth").c_str());
 }
 
 int main(int, char**) {
@@ -647,5 +715,11 @@ int main(int, char**) {
   RUN_TEST(test_tag_gate_held_tag_does_not_post_after_refused_tap);
   RUN_TEST(test_wanted_label_prefers_saved);
   RUN_TEST(test_unit_dropping_out_briefly_keeps_selection);
+  RUN_TEST(test_settings_parse_the_required_ones);
+  RUN_TEST(test_settings_optional_ones);
+  RUN_TEST(test_settings_refused_leave_the_old_ones);
+  RUN_TEST(test_commands);
+  RUN_TEST(test_line_reader_drops_cr_and_overlong_lines);
+  RUN_TEST(test_hello_line);
   return UNITY_END();
 }

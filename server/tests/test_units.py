@@ -74,6 +74,15 @@ def test_install_ships_units_and_state_dirs():
             '"$STATE/profiles" "$STATE/library" "$STATE/library-local"') in text
 
 
+def test_install_copies_the_printer_station_firmware_pair_as_a_resource():
+    text = _text(INSTALL / "install.sh")
+    assert '"$OPT/resources/reader/"' in text and "printer-station.bin" in text
+    assert "reader/firmware/printer-station.bin" in _text(INSTALL.parent / "tools" / "make_release.sh")
+    fw = INSTALL.parent / "reader" / "firmware"
+    assert (fw / "printer-station.bin").read_bytes()[:1] == b"\xe9"          # an ESP32 image starts 0xE9
+    assert (fw / "VERSION").read_text().strip().isdigit()
+
+
 def test_install_copies_the_panel_firmware_pair_as_a_resource():
     text = _text(INSTALL / "install.sh")
     assert '"$OPT/resources/panel/"' in text and "intake-panel.bin" in text and "VERSION" in text

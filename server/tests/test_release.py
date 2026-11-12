@@ -581,7 +581,7 @@ def test_make_release_tarball_passes_extract_and_the_sums_check(tmp_path, key):
     for rel in ("install.sh", "uninstall.sh", "install/backup.sh", "install/filament-kit-cli.sh",
                 "install/spoolman.sh", "install/avahi/filament-kit.service",
                 "install/remote/route.template", "install/remote/mcp-proxy.conf", "install/panel/VERSION",
-                "install/panel/intake-panel.bin"):
+                "install/panel/intake-panel.bin", "install/reader/VERSION", "install/reader/printer-station.bin"):
         assert (root / rel).is_file(), rel
     assert not (root / "install" / "export_ops.sh").exists()     # the filament-ops export is gone (no ops installs)
     units = {p.name for p in (ROOT / "install/systemd").iterdir()}
