@@ -307,6 +307,8 @@ class LoadsMixin:
             return
         _model, _system, adapter = self.model(pid)
         if not lanes.should_publish(p, adapter):
+            if adapter.name not in lanes.NEVER and getattr(p, "lane_data", "auto") == "off":
+                self._retract_lanes(pid, c)
             return
         try:
             units = self.slots(pid)
@@ -318,11 +320,25 @@ class LoadsMixin:
                     if sp is not None:
                         pr = self._preset(sp.get("filament") or {}, pid)
                         presets[s.label] = pr["name"] if pr else None
-            wrote = lanes.publish(c.client, lanes.payload(units, by_id, presets), c.lane_last)
+            pl = lanes.payload(units, by_id, presets)
+            wrote = lanes.publish(c.client, pl, c.lane_last)
             if wrote:
                 log.info("klipper %s: lane_data %s updated", pid, ", ".join(wrote))
+            gone = lanes.retract(c.client, pl, c.lane_last)
+            if gone:
+                log.info("klipper %s: lane_data %s removed", pid, ", ".join(gone))
         except Exception as e:  # noqa: BLE001 - publishing is a convenience: never fail a load over it
             log.warning("klipper %s: cannot publish lane_data (%s)", pid, e)
+
+    def _retract_lanes(self, pid: str, c) -> None:
+        """The printer's setting is `off`: take the lanes the kit published out of lane_data (the slicer would read
+        them as the loaded spools). Lanes without the kit's source stay."""
+        try:
+            gone = lanes.retract(c.client, {}, c.lane_last, c.client.db_get(lanes.NAMESPACE))
+            if gone:
+                log.info("klipper %s: lane_data %s removed (publishing is off)", pid, ", ".join(gone))
+        except Exception as e:  # noqa: BLE001 - a convenience: never fail a load over it
+            log.warning("klipper %s: cannot clear lane_data (%s)", pid, e)
 
     def _nozzle(self, pid: str) -> tuple[float, bool]:
         """(nozzle mm, assumed): Klipper's [extruder] nozzle_diameter, else the model's first Orca nozzle, else 0.4."""

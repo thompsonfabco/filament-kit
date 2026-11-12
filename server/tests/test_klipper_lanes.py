@@ -64,6 +64,33 @@ def test_only_changed_lanes_posted():
     assert [k for _, k, _ in posted] == ["lane1"]
 
 
+def test_retract_deletes_only_the_kits_lanes():
+    deleted = []
+
+    class C:
+        def db_delete(self, ns, key):
+            deleted.append((ns, key))
+    kit = {"lane": "0", "source": "filament-kit"}
+    db = {"lane0": kit, "lane1": kit, "lane2": {"lane": "2", "source": "afc"}, "lane3": "junk"}
+    last = {"lane0": kit, "lane1": kit}
+    # a unit lost a slot: lane1 goes, lane0 stays
+    assert lanes.retract(C(), {"lane0": kit}, last) == ["lane1"] and list(last) == ["lane0"]
+    assert deleted == [("lane_data", "lane1")]
+    deleted.clear()
+    # publishing off, from what the namespace holds after a restart: the kit's lanes, not another source's
+    assert lanes.retract(C(), {}, {}, db) == ["lane0", "lane1"]
+    assert deleted == [("lane_data", "lane0"), ("lane_data", "lane1")]
+
+
+def test_db_delete_removes_a_key_and_ignores_a_missing_one(moonraker):
+    from filament_kit.bridge.klipper.moonraker import Moonraker
+    moonraker.db["lane_data"] = {"lane0": {"source": "filament-kit"}}
+    c = Moonraker(moonraker.host, moonraker.port)
+    c.db_delete("lane_data", "lane0")
+    c.db_delete("lane_data", "lane0")
+    assert moonraker.db["lane_data"] == {}
+
+
 def test_lane_data_mode_saved_in_registry(tmp_path, monkeypatch):
     monkeypatch.setenv("FK_STATE", str(tmp_path))
     p = registry.add_klipper("M1D", "m1d.home.arpa")
@@ -152,5 +179,25 @@ def test_single_SV08_never_writes_lane_data(env, moonraker, sm):
         assert fam.load(sm, pid, "T0", s["id"], False, sealed_location="Sealed stock")["confirmed"] is True
         time.sleep(0.5)
         assert "lane_data" not in moonraker.db
+    finally:
+        fam.stop()
+
+
+def test_publishing_off_removes_the_kits_lanes(env, moonraker, sm):
+    moonraker.objects = ["print_stats", "toolhead", "extruder", "extruder1", "heater_bed", "virtual_sdcard",
+                         "gcode_macro FK_UNVERIFIED_M1D", "gcode_macro _FK_TOOL_SPOOLS"]
+    moonraker.status["gcode_macro _FK_TOOL_SPOOLS"] = {f"t{i}": 0 for i in range(7)}
+    pid = registry.add_klipper("M1D", moonraker.host, moonraker.port).serial
+    fam = KlipperFamily(sm, backoff=(0.1, 0.4))
+    fam.start()
+    try:
+        assert fam.wait_settled(pid, 8) == "connected"
+        s = _spool(sm)
+        assert fam.load(sm, pid, "C1", s["id"], False, sealed_location="Sealed stock")["confirmed"] is True
+        assert wait_for(lambda: "lane1" in (moonraker.db.get("lane_data") or {}))
+        moonraker.db["lane_data"]["lane9"] = {"lane": "9", "source": "other"}
+        registry.set_lane_data(pid, "off")
+        fam.unload(sm, pid, "C1", False, sealed_location="Sealed stock")
+        assert moonraker.db["lane_data"] == {"lane9": {"lane": "9", "source": "other"}}
     finally:
         fam.stop()

@@ -164,6 +164,12 @@ class Moonraker:
     def db_post(self, ns: str, key: str, value) -> None:
         self._call("POST", "/server/database/item", body={"namespace": ns, "key": key, "value": value})
 
+    def db_delete(self, ns: str, key: str) -> None:
+        try:
+            self._call("DELETE", "/server/database/item", query={"namespace": ns, "key": key})
+        except NotFound:
+            pass        # already gone
+
     # --- websocket -----------------------------------------------------------------------------------------------
     def ws_url(self) -> str:
         return f"ws://{_host_part(self.host)}:{self.port}/websocket"

@@ -61,3 +61,15 @@ def publish(client, pl: dict, last: dict) -> list[str]:
         last[key] = value
         wrote.append(key)
     return wrote
+
+
+def retract(client, pl: dict, last: dict, db: dict | None = None) -> list[str]:
+    """Delete the kit's own lanes that `pl` no longer holds (a unit lost slots; `pl` empty = publishing is off):
+    those it wrote this run (`last`, updated in place) and, when `db` (the namespace as read) is given, those it wrote
+    earlier. A lane without the kit's source is never touched. Returns the keys deleted."""
+    mine = set(last) | {k for k, v in (db or {}).items() if isinstance(v, dict) and v.get("source") == SOURCE}
+    gone = sorted(k for k in mine if k not in pl)
+    for key in gone:
+        client.db_delete(NAMESPACE, key)
+        last.pop(key, None)
+    return gone
