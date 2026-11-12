@@ -41,6 +41,7 @@ class AddResult:
     lines: list[str] = field(default_factory=list)
     dry: bool = False
     added: list[dict] = field(default_factory=list, repr=False)   # items that got at least one spool
+    saved: list[dict] = field(default_factory=list, repr=False)   # [{values, spool_ids, filament_id}] (intake history)
 
 
 @dataclass
@@ -223,6 +224,9 @@ def _write_items(sm, placed, vendors, fils, result, dry) -> None:
                 result.added.append(it)
             _read_back(sm, sid)
             ids.append(sid)
+        if not dry and any(ids):
+            result.saved.append({"values": dict(it), "spool_ids": [i for i in ids if i is not None],
+                                 "filament_id": f.get("id")})
         # a sentence a person reads (the app shows these lines as the result of Add), not a log line
         n = it["count"]
         gross_note = f" (weighed {it['gross']} g, the spool itself {tare} g)" if it.get("gross") is not None else ""

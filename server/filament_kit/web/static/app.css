@@ -36,9 +36,11 @@ label.check input { width: 1.3rem; height: 1.3rem; min-height: 0; margin: 0; pad
 .grid .wide { grid-column: 1 / -1; }
 label { display: block; font-size: .8rem; color: var(--muted); }
 label > input, label > select, label > textarea { margin-top: .15rem; color: var(--ink); font-size: 1rem; }
-.tabs { position: sticky; top: 0; z-index: 2; display: flex; gap: 4px; padding: calc(8px + env(safe-area-inset-top)) 0 8px;
-        background: var(--bg); }
-.tabs button { flex: 1; background: var(--card); color: var(--ink); border: 1px solid var(--line); font-weight: 500; }
+.tabs { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 4px;
+        padding: calc(8px + env(safe-area-inset-top)) 0 8px; background: var(--bg); }
+/* Up to five tabs: one row while they fit, a second row on a narrow phone; never wider than the page. */
+.tabs button { flex: 1 1 auto; min-width: 0; padding: .65rem .6rem; white-space: nowrap;
+               background: var(--card); color: var(--ink); border: 1px solid var(--line); font-weight: 500; }
 .tabs button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin: 10px 0; }
 .card h3 { margin: 0 0 .4rem; font-size: 1rem; display: flex; gap: .5rem; align-items: center; }
@@ -78,3 +80,6 @@ progress { width: 100%; height: .7rem; accent-color: var(--accent); }
 .sw { width: 1.1rem; height: 1.1rem; border-radius: 50%; border: 1px solid var(--line); flex: none; }
 p.err { color: var(--bad); }
 .slot button { min-height: 2.2rem; padding: .3rem .7rem; flex: none; }
+
+.thumb { max-width: 8rem; cursor: zoom-in; border-radius: 6px; }
+.thumb.big { max-width: 100%; cursor: zoom-out; }

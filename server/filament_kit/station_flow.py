@@ -129,6 +129,8 @@ def recognize(sm, cfg: dict, image: bytes, claude=None, cap=None, device=None) -
         raise FlowError(422, "nothing_read", "no spool found in the photo", lines("No spool seen", "try again"))
     item = dict(out["items"][0])
     item.pop("gross", None)
+    if out.get("read_id"):
+        item["read_id"] = out["read_id"]    # sent back with the save: the history keeps this read's photo
     conf = _confidence(item, out.get("questions") or [])
     state = {True: "sealed", False: "opened"}.get(None if item.get("sealed_reason") == "unsure"
                                                   else item.get("sealed"), "?")
@@ -225,6 +227,9 @@ def save(sm, rules: dict, body: dict) -> dict:
     if dry:
         return {"spool_id": None, "created": True, "dry": True, "sealed": sealed, "lines": r.lines,
                 "display": lines("Would save", f"{it['vendor']} {it['name']}", "sealed" if sealed else "opened")}
+    from . import intake_history
+    intake_history.record_save(r.saved, source="station", device="intake station", read_id=item.get("read_id"),
+                               tag=uid, weight=gross)
     v = _spool_view(sm.get(f"spool/{r.spool_ids[0]}"))
     return {"spool_id": v["id"], "created": True, "dry": False, "sealed": sealed, "remaining_g": v["remaining_g"],
             "location": v["location"],

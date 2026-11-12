@@ -121,7 +121,7 @@ class Tools:
         return {"matches": len(res), "filaments": res[:MAX_FILAMENTS], "truncated": len(res) > MAX_FILAMENTS}
 
     def add_spools(self, items: list[dict], dry_run: bool = True, link_tag: str | None = None, *,
-                   new_filaments_only_lines: bool = False) -> dict:
+                   new_filaments_only_lines: bool = False, with_saved: bool = False) -> dict:
         """Add spools (vendor + name reuse an existing filament). `link_tag` (the web app): the tag a label read
         saw; it is linked to the one opened spool only while it is still the readers' last tap.
         `new_filaments_only_lines` (the MCP path, Ruling AC): `line` / `bambu_parent` are dropped from items that
@@ -142,7 +142,10 @@ class Tools:
         r = inventory.add_and_link(self.sm, items, self._rules(), bool(dry_run), uid)
         if r.dry:
             notes.append("dry run: nothing written. Show the user, then call again with dry_run=false.")
-        return {"output": "\n".join(r.lines + notes), "exit_code": 0, "spool_ids": r.spool_ids, "dry": r.dry}
+        out = {"output": "\n".join(r.lines + notes), "exit_code": 0, "spool_ids": r.spool_ids, "dry": r.dry}
+        if with_saved:                  # the kit's own page records the save in the intake history
+            out.update(saved=r.saved, tag=uid)
+        return out
 
     def _drop_lines_of_existing(self, items: list) -> list:
         have = {(((f.get("vendor") or {}).get("name") or "").lower(), (f.get("name") or "").lower())

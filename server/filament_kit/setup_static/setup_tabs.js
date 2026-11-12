@@ -209,6 +209,8 @@ function generalCard() {
       g.web_on ? h("p", { class: "muted", textContent: "Off: the phone web app at the web module's public address shows printers but cannot add, change or forget them. On the home network it always can." }) : null,
       text("Claude model", "model", v.model),
       count("Label reads per day", "reads_per_day", v.reads_per_day),
+      count("Intake records kept", "intake.history_keep", v["intake.history_keep"] ?? 20),
+      h("p", { class: "muted", textContent: `The intake history keeps the newest spool additions with their photos (0 keeps none). Now: ${(g.intake_history || {}).count || 0} records, ${Math.ceil(((g.intake_history || {}).photo_bytes || 0) / 1024)} KB of photos; a record with photos takes about 0.5 to 2 MB.` }),
       h("p", { class: "muted", textContent: "Changing the model or the reads per day restarts the server." }),
       g.station_on ? h("div", { class: "row" }, "Station voice: ",
         h("button", { class: "secondary", textContent: "Piper (natural; a 60-80 MB download)", on: { click: () => save("station.tts", "auto") } }),

@@ -526,6 +526,7 @@ GENERAL = {
     "server_name": (lambda v: _one_line(v, 100), None),
     "model": (_model, "restart"),
     "reads_per_day": (lambda v: _whole(v, 1, 100000), "restart"),
+    "intake.history_keep": (lambda v: _whole(v, 0, 500), None),     # read per record (intake_history.keep)
     "locations": (_locations, None),
     "placement.pla_location": (lambda v: _one_line(v, 100), None),
     "placement.box_prefix": (lambda v: _one_line(v, 100, keep_spaces=True), None),

@@ -18,10 +18,10 @@ from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 from starlette.exceptions import HTTPException
 from starlette.requests import Request
-from starlette.responses import FileResponse, JSONResponse
+from starlette.responses import FileResponse, JSONResponse, Response
 from starlette.routing import Route
 
-from . import (API_VERSION, __version__, config, hostaddr, intake, inventory, modules, pairing, profiles_api, setup_page,
+from . import (API_VERSION, __version__, config, hostaddr, intake, intake_history, inventory, modules, pairing, profiles_api, setup_page,
                station_flow, station_requests, tags)
 from .intake import CapReached, PhotoError, ReadCap, ReadError, RefundRefused
 from .bridge import camera, family, hardware, loading, mapping, registry, usage
@@ -185,6 +185,16 @@ WEB_ROUTES = (
 )
 _WEB_MATCH = {(m, re.compile(re.sub(r"\{\w+\}", "[^/]+", re.sub(r"\{\w+:path\}", ".+", r)))) for m, r in WEB_ROUTES}
 WEB_ONLY_PREFIX = "/api/profiles/web/"  # the web unit's preset writes: no phone or PC calls them
+
+
+def _device_name(device: str | None) -> str:
+    """The paired device's name for a log or a history record (its id when it has none)."""
+    if not device:
+        return ""
+    try:
+        return next((d.get("name") or device for d in pairing.devices() if d.get("id") == device), device)
+    except Exception:  # noqa: BLE001 - a name is a courtesy
+        return device
 
 
 def _web_may(method: str, path: str) -> bool:
@@ -1032,8 +1042,70 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
         body = await _json(request)
         dry = _opt(body, "dry_run", bool, True)
         uid = _opt(body, "tag", str) or None
-        r = await run_in_threadpool(lambda: inventory.add_and_link(sm, body.get("items"), rules(), dry, uid))
-        return JSONResponse({"spool_ids": r.spool_ids, "lines": r.lines, "dry": r.dry})
+        read_id = _opt(body, "read_id", str) or None
+        device = getattr(request.state, "device", None)
+
+        def run():
+            r = inventory.add_and_link(sm, body.get("items"), rules(), dry, uid)
+            hid = None if r.dry else intake_history.record_save(r.saved, source="phone", device=_device_name(device),
+                                                                read_id=read_id, tag=uid)
+            return r, hid
+        r, hid = await run_in_threadpool(run)
+        return JSONResponse({"spool_ids": r.spool_ids, "lines": r.lines, "dry": r.dry,
+                             **({"history_id": hid} if hid else {})})
+
+    # ---------- the intake history (intake_history.py) ----------
+    def _hist(fn):
+        @_authed
+        async def route(request: Request):
+            try:
+                out = await fn(request)
+            except intake_history.HistoryError as e:
+                return _err(e.status, e.code, str(e))
+            return out if isinstance(out, Response) else JSONResponse(out)
+        return route
+
+    def _ai_on() -> bool:
+        return "ai_intake" in modules.enabled(config.load())
+
+    async def history_list(request: Request):
+        return await run_in_threadpool(lambda: intake_history.list_records(_ai_on()))
+
+    async def history_get(request: Request):
+        return await run_in_threadpool(intake_history.get, request.path_params["hid"])
+
+    async def history_photo(request: Request):
+        data = await run_in_threadpool(intake_history.photo, request.path_params["hid"], request.path_params["n"])
+        return Response(data, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=300"})
+
+    async def history_revise(request: Request):
+        body = await _json(request)
+        device = getattr(request.state, "device", None)
+
+        def run() -> dict:
+            ticket = cap.take(device)       # a revision is a read: it counts against the daily cap
+            try:
+                return intake_history.revise(sm, request.path_params["hid"], body.get("note"), body.get("item"),
+                                             client=claude, ai_on=_ai_on())
+            except Exception:
+                intake.refund_quietly(cap, ticket, device)
+                raise
+        if not _ai_on():
+            raise intake_history.HistoryError(409, "ai_off", "label reading (the ai_intake module) is off on this "
+                                                             "server: edit the values by hand")
+        return await run_in_threadpool(run)
+
+    async def history_apply(request: Request):
+        body = await _json(request)
+        device = _device_name(getattr(request.state, "device", None))
+        return await run_in_threadpool(lambda: intake_history.apply(
+            sm, request.path_params["hid"], proposal=_opt(body, "proposal", str), item=body.get("item"),
+            values=body.get("values") if "proposal" not in body else None, spool_ids=body.get("spool_ids"),
+            device=device))
+
+    async def history_undo(request: Request):
+        body = await _json(request)
+        return await run_in_threadpool(intake_history.undo, sm, request.path_params["hid"], body.get("revision"))
 
     # ---------- the intake station's button flow (station_flow.py) ----------
     def _flow(fn):
@@ -1187,6 +1259,12 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
                 Route("/api/intake/orders", intake_orders),
             ], "ai_intake", on),
             Route("/api/intake/add", intake_add, methods=["POST"]),  # adding by hand needs no AI (spec R 2.4)
+            Route("/api/intake/history", _hist(history_list)),
+            Route("/api/intake/history/{hid}", _hist(history_get)),
+            Route("/api/intake/history/{hid}/photos/{n:int}", _hist(history_photo)),
+            Route("/api/intake/history/{hid}/revise", _hist(history_revise), methods=["POST"]),
+            Route("/api/intake/history/{hid}/apply", _hist(history_apply), methods=["POST"]),
+            Route("/api/intake/history/{hid}/undo", _hist(history_undo), methods=["POST"]),
             Route("/api/tags/{uid}", tag_lookup),
             Route("/api/spools", spool_search),
             Route("/api/filaments", filament_list),
