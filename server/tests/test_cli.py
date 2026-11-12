@@ -412,6 +412,12 @@ from filament_kit import library as library_mod  # noqa: E402
 from filament_kit.profiles import builds, lines as lines_mod  # noqa: E402
 
 
+def _ensure_saved(vendor, product, material, *, bambu_parent, library, store):
+    with lines_mod.transaction() as ls:
+        return lines_mod.ensure(ls, vendor, product, material, bambu_parent=bambu_parent, library=library,
+                                store=store, used_fids=set())
+
+
 def _spoolman_cfg(url):
     cfg = config.load()
     cfg["spoolman_url"] = url
@@ -576,7 +582,7 @@ def test_status_failed_build_and_library_update_warning(capsys, monkeypatch, spo
 
 def test_profiles_lines_and_set_parent(capsys, monkeypatch):
     lib = library_mod.load()
-    lines_mod.ensure_saved("ELEGOO", "PETG HF", "PETG", bambu_parent=None, library=lib, store=None)
+    _ensure_saved("ELEGOO", "PETG HF", "PETG", bambu_parent=None, library=lib, store=None)
     assert cli.main(["profiles", "lines"]) == 0
     out = capsys.readouterr().out
     assert "elegoo--petg-hf" in out and "Bambu PETG HF (library)" in out
@@ -598,7 +604,7 @@ def test_profiles_set_parent_unknown_with_store(capsys, monkeypatch):
 
     import test_builds as TB
     lib = library_mod.load()
-    lines_mod.ensure_saved("ELEGOO", "PETG HF", "PETG", bambu_parent=None, library=lib, store=None)
+    _ensure_saved("ELEGOO", "PETG HF", "PETG", bambu_parent=None, library=lib, store=None)
     TB.pair("a")
     builds.store_upload("system", _io.BytesIO(TB.system_zip()), device_id="a")
     monkeypatch.setattr(builds, "request_rebuild", lambda reason, live_hash=None, *, orca_live_hash=None: None)
@@ -626,7 +632,7 @@ def test_profiles_lines_shows_orca_parent_and_set_parent_orca(capsys, monkeypatc
 
     import test_builds as TB
     lib = library_mod.load()
-    lines_mod.ensure_saved("ELEGOO", "PETG HF", "PETG", bambu_parent=None, library=lib, store=None)
+    _ensure_saved("ELEGOO", "PETG HF", "PETG", bambu_parent=None, library=lib, store=None)
     assert cli.main(["profiles", "lines"]) == 0
     assert "orca Generic PETG (material)" in capsys.readouterr().out
     asked = []
@@ -653,7 +659,7 @@ def test_profiles_set_parent_orca_canonical_spelling(capsys, monkeypatch):
     import io as _io
 
     import test_builds as TB
-    lines_mod.ensure_saved("ELEGOO", "PETG HF", "PETG", bambu_parent=None, library=library_mod.load(), store=None)
+    _ensure_saved("ELEGOO", "PETG HF", "PETG", bambu_parent=None, library=library_mod.load(), store=None)
     monkeypatch.setattr(builds, "request_rebuild", lambda reason, live_hash=None, *, orca_live_hash=None: None)
     TB.pair("a")
     builds.store_upload("orca_system", _io.BytesIO(TB.orca_system_zip()), device_id="a")

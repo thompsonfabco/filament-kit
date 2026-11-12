@@ -15,7 +15,6 @@ import re
 from pathlib import Path
 
 STD = "Direct Drive Standard"
-HF = "Direct Drive High Flow"
 MAX_DEPTH = 32  # presets in one inherits/include chain; real Bambu chains are under 10
 
 
@@ -215,17 +214,3 @@ class Store:
                 if m:
                     sizes.setdefault(float(m.group(1)), m.group(1))
         return [sizes[k] for k in sorted(sizes)]
-
-    def variants(self, name: str) -> list[str]:
-        v = self.resolve(name).get("filament_extruder_variant")
-        if isinstance(v, list) and v:
-            return [str(x) for x in v]
-        return [STD]
-
-    def gcode_values(self) -> set[str]:
-        out = set()
-        for j in self._raw.values():
-            for k, v in j.items():
-                if "gcode" in k:
-                    out.add(json.dumps(v, sort_keys=True))
-        return out

@@ -332,8 +332,9 @@ def test_read_without_line_gets_derived_line_and_parent(sm):
 def test_new_filament_line_from_claude_and_existing_line(sm):
     from filament_kit import library
     from filament_kit.profiles import lines
-    lines.ensure_saved("ELEGOO", "PETG HF", "PETG", bambu_parent="Generic PETG", library=library.load(),
-                       store=None)
+    with lines.transaction() as ls:
+        lines.ensure(ls, "ELEGOO", "PETG HF", "PETG", bambu_parent="Generic PETG", library=library.load(),
+                     store=None, used_fids=set())
     r = recorded()
     r["items"][0].update(existing_filament_id=None, vendor="ELEGOO", name="PETG HF Black", line="PETG HF")
     it = read_labels(sm, [JPEG], "", None, client=FakeClaude(r))["items"][0]
