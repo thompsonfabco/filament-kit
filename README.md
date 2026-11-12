@@ -1,3 +1,5 @@
+If you enjoy what I do, consider supporting me! Every little bit means the world! https://ko-fi.com/thompsonfabco
+
 # filament-kit
 
 filament-kit keeps track of your 3D printer filament. It runs on a small computer at home, keeps every spool you
