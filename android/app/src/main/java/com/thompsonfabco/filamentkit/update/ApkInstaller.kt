@@ -37,6 +37,7 @@ class ApkInstaller(context: Context) : ApkInstall {
 
     override suspend fun install(apk: File) = withContext(Dispatchers.IO) {
         PendingConfirm.failure.value = null
+        PendingConfirm.intent.value = null // a "Tap to install" of an abandoned session would open the old confirmation
         val installer = context.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
             .apply { setAppPackageName(context.packageName) }

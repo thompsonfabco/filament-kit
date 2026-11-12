@@ -198,8 +198,10 @@ class Api(
         call(request("api", "locations").get()).jsonObject["locations"]?.jsonArray.orEmpty()
             .map { it.jsonPrimitive.content }
 
-    /** Streams `/app.apk` into [to]; [to] is only replaced when the whole file arrived. */
-    /** [onProgress] gets (bytes so far, total or -1 when the server sends no length) as the file is written. */
+    /**
+     * Streams `/app.apk` into [to]; [to] is only replaced when the whole file arrived. [onProgress] gets (bytes so
+     * far, total or -1 when the server sends no length) as the file is written.
+     */
     suspend fun downloadApk(to: File, onProgress: (Long, Long) -> Unit = { _, _ -> }) {
         val part = File(to.parentFile, to.name + ".part")
         try {
