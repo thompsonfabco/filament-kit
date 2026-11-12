@@ -13,6 +13,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -85,7 +86,7 @@ private fun ConfirmStep(ui: PairUi, onConfirm: () -> Unit, onReject: () -> Unit)
 
 @Composable
 private fun CodeStep(ui: PairUi, onSubmit: (String) -> Unit, onBack: () -> Unit) {
-    var code by rememberSaveable { mutableStateOf("") }
+    var code by remember { mutableStateOf("") } // not saved state: a secret, as the Access Code fields
     Text("Enter the pairing code", style = MaterialTheme.typography.titleMedium)
     Text(PairTexts.CODE_INTRO)
     OutlinedTextField(
