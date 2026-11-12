@@ -2302,6 +2302,7 @@ def cmd_local_intake_install(tier: str | None, version: str | None, yes: bool, f
     if not _require_root():
         return 1
     cfg = config.load()
+    named_version = version is not None and not planned        # only a version typed at the terminal may go back
     if planned:
         sp = lii.saved_plan()
         if sp is None or not sp["fresh"]:
@@ -2330,6 +2331,7 @@ def cmd_local_intake_install(tier: str | None, version: str | None, yes: bool, f
             return 0
     try:
         rec = lii.install(cfg, tier=p["tier"], version=p["version"], fetcher=fetcher, run=run,
+                          allow_downgrade=named_version,
                           say=lambda s: print(s, flush=True))
     except lii.InstallError as e:
         _err_line(str(e))
@@ -2337,7 +2339,9 @@ def cmd_local_intake_install(tier: str | None, version: str | None, yes: bool, f
     cfg = config.load()
     cfg.setdefault("modules", {n: True for n in modules.enabled(cfg)})["local_intake"] = True
     li = cfg.setdefault("local_intake", {})
-    li["url"], li["tier"] = f"http://127.0.0.1:{rec['port']}", rec["tier"]
+    li["url"] = f"http://127.0.0.1:{rec['port']}"
+    if tier is not None and not planned:
+        li["tier"] = tier               # the tier the owner named; a release without `auto` leaves the setting as it was
     rc = _save_and_apply(cfg, [f"The local label reader {rec['version']} is installed; local_intake is on."])
     if rc != 0:
         return rc

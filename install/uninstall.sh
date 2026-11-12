@@ -108,6 +108,20 @@ if [ "$REMOTE_GONE" -eq 1 ]; then
     echo "Removed the kit's own remote files. nginx, certbot, the certificate in /etc/mcp-router and"
     echo "mcp-route were left; remove them with apt and rm if nothing else uses them."
 fi
+# The local label reader (local_intake) has its own unit and prefix: its own uninstaller removes them, from the release
+# folder the kit kept, before /opt/filament-kit (which holds that folder and its record) goes. The version is read as
+# digits and dots only, so the path stays inside the root-owned store.
+LI_STORE=/opt/filament-kit/local-intake
+if [ -f "$LI_STORE/installed.json" ]; then
+    LI_VER=$(sed -n 's/.*"version": *"\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)".*/\1/p' "$LI_STORE/installed.json" | head -n 1)
+    LI_SH="$LI_STORE/$LI_VER/filament-kit-image-$LI_VER/install/filament-kit-image.sh"
+    if [ -n "$LI_VER" ] && [ -f "$LI_SH" ]; then
+        bash "$LI_SH" --uninstall --prefix /opt/filament-kit-image \
+            || echo "The local label reader's uninstaller failed: its unit and /opt/filament-kit-image may be left."
+    else
+        echo "The local label reader's uninstaller was not found: its unit and /opt/filament-kit-image may be left."
+    fi
+fi
 rm -rf /opt/filament-kit
 if [ "$KIT_SPOOLMAN" -eq 1 ]; then
     rm -rf /opt/spoolman /opt/spoolman.new /opt/spoolman.old /etc/systemd/system/spoolman.service.d

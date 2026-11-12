@@ -341,7 +341,7 @@ def _port(cfg: dict) -> int:
 
 def install(cfg: dict, *, tier: str | None = None, version: str | None = None,
             fetcher: release.Fetcher | None = None, run: Callable[..., int] | None = None,
-            say: Callable[[str], None] = print) -> dict:
+            say: Callable[[str], None] = print, allow_downgrade: bool = False) -> dict:
     """Download, verify, unpack and install the reader on this machine; returns the new installed record. The
     caller switches the module on and applies (cli.cmd_local_intake_install). Raises InstallError; on a failure
     before the installer ran nothing on the machine changed."""
@@ -354,9 +354,11 @@ def install(cfg: dict, *, tier: str | None = None, version: str | None = None,
     rel, table, sums, sig = _signed(fetcher, s, version)
     ver = rel["version"]
     have = installed()
-    if have and version is None and release.parse_version(ver) < release.parse_version(have["version"]):
-        raise InstallError(f"the latest release {ver} is older than the installed {have['version']}: nothing was "
-                           f"installed (to go back, name it: --version {ver})")
+    # checked against what is installed now, not when a plan was made; only an owner who named the version at the
+    # terminal (`--version`) may go back
+    if have and not allow_downgrade and release.parse_version(ver) < release.parse_version(have["version"]):
+        raise InstallError(f"release {ver} is older than the installed {have['version']}: nothing was installed "
+                           f"(to go back, name it: filament-kit local-intake install --version {ver})")
     m = _manifest(_get_listed(fetcher, rel, table, MANIFEST, LIMIT_MANIFEST), ver)
     tier = resolve_tier(m["tiers"], tier)
     entry = m["tiers"][tier]

@@ -366,7 +366,10 @@ def test_a_downgrade_is_labelled_and_needs_the_version_by_name(key, server):
     assert p["downgrade"] and lii.plan_text(p)[1].startswith("Go back (downgrade) to the local label reader 0.1.0")
     with pytest.raises(lii.InstallError, match="older than the installed 0.2.0"):
         lii.install(config.load(), tier="cpu", fetcher=fetcher(s), run=Run())
-    assert lii.install(config.load(), tier="cpu", version="0.1.0", fetcher=fetcher(s), run=Run())["version"] == "0.1.0"
+    with pytest.raises(lii.InstallError, match="older than the installed 0.2.0"):      # a version alone is not enough
+        lii.install(config.load(), tier="cpu", version="0.1.0", fetcher=fetcher(s), run=Run())
+    assert lii.install(config.load(), tier="cpu", version="0.1.0", fetcher=fetcher(s), run=Run(),
+                       allow_downgrade=True)["version"] == "0.1.0"
 
 
 def test_a_record_with_a_bad_version_does_not_break_the_plan(key, server, tmp_path):
@@ -391,3 +394,80 @@ def test_the_page_job_installs_exactly_the_planned_version(key, server, applied,
     plan["at"] -= lii.PLAN_TTL + 1
     (lii.store() / "plan.json").write_text(json.dumps(plan))
     assert cli.cmd_local_intake_install(None, None, True, fetcher=fetcher(s), run=Run(), planned=True) == 1
+
+
+# ---------------------------------------------------------------- review R148, second round
+
+def _installed_020(key, server, monkeypatch):
+    rels = {"0.2.0": mrf.make_release(key, "0.2.0")}
+    s = server(rels)
+    lii.install(config.load(), tier="cpu", fetcher=fetcher(s), run=Run())
+    s.releases = {"0.2.0": rels["0.2.0"], "0.1.0": mrf.make_release(key, "0.1.0")}      # an older "latest"
+    monkeypatch.setattr(lii, "wait_healthy", lambda cfg, *a, **k: {"ok": True, "version": "x", "api_version": "1.0"})
+    return s
+
+
+def test_the_cli_never_goes_back_unless_the_version_is_named(key, server, applied, monkeypatch, capsys):
+    """Re-review finding 1: `install --yes` with an older latest refuses; `--version 0.1.0` goes back."""
+    s = _installed_020(key, server, monkeypatch)
+    assert cli.cmd_local_intake_install("cpu", None, True, fetcher=fetcher(s), run=Run()) == 1
+    assert "older than the installed 0.2.0" in capsys.readouterr().err and lii.installed()["version"] == "0.2.0"
+    assert cli.cmd_local_intake_install("cpu", "0.1.0", True, fetcher=fetcher(s), run=Run()) == 0
+    assert lii.installed()["version"] == "0.1.0"
+
+
+def test_a_planned_install_is_checked_against_what_is_installed_now(key, server, applied, monkeypatch, capsys):
+    """Re-review finding 2: a plan for 0.1.0 saved while 0.1.0 was new, then 0.2.0 installed at the terminal: the
+    page's job must not put 0.1.0 back."""
+    rels = {"0.1.0": mrf.make_release(key, "0.1.0")}
+    s = server(rels)
+    monkeypatch.setattr(lii, "wait_healthy", lambda cfg, *a, **k: {"ok": True, "version": "x", "api_version": "1.0"})
+    lii.save_plan(lii.plan(config.load(), tier="cpu", fetcher=fetcher(s)))
+    rels["0.2.0"] = mrf.make_release(key, "0.2.0")
+    lii.install(config.load(), tier="cpu", version="0.2.0", fetcher=fetcher(s), run=Run())
+    assert cli.cmd_local_intake_install(None, None, True, fetcher=fetcher(s), run=Run(), planned=True) == 1
+    assert "older than the installed 0.2.0" in capsys.readouterr().err and lii.installed()["version"] == "0.2.0"
+
+
+def test_the_tier_setting_is_left_as_the_owner_set_it(key, server, applied, monkeypatch):
+    """Re-review finding 3: a release without an auto tier installs cpu but leaves local_intake.tier = auto."""
+    m = mrf.manifest("0.1.0")
+    del m["tiers"]["auto"]
+    s = server({"0.1.0": mrf.make_release(key, manifest_over={"tiers": m["tiers"]})})
+    monkeypatch.setattr(lii, "wait_healthy", lambda cfg, *a, **k: {"ok": True, "version": "x", "api_version": "1.0"})
+    cfg = config.load()
+    cfg["local_intake"]["tier"] = "auto"
+    config.save(cfg)
+    assert cli.cmd_local_intake_install(None, None, True, fetcher=fetcher(s), run=Run()) == 0
+    assert config.load()["local_intake"]["tier"] == "auto" and lii.installed()["tier"] == "cpu"
+    assert cli.cmd_local_intake_install("gpu", None, True, fetcher=fetcher(s), run=Run()) == 0
+    assert config.load()["local_intake"]["tier"] == "gpu"                 # a tier the owner named is kept
+
+
+def test_the_kits_uninstaller_removes_the_reader_first():
+    """Re-review finding 4: uninstall.sh runs the reader's own uninstaller before /opt/filament-kit goes."""
+    from pathlib import Path
+    text = (Path(__file__).resolve().parents[2] / "install" / "uninstall.sh").read_text(encoding="utf-8")
+    block = text.index('LI_STORE=/opt/filament-kit/local-intake')
+    assert block < text.index("rm -rf /opt/filament-kit\n")
+    assert '--uninstall --prefix /opt/filament-kit-image' in text[block:]
+
+
+def test_the_uninstallers_version_read_is_digits_only(tmp_path):
+    import shutil
+    import subprocess
+    bash = shutil.which("bash")
+    if not bash:
+        pytest.skip("needs bash")
+    from pathlib import Path
+    text = (Path(__file__).resolve().parents[2] / "install" / "uninstall.sh").read_text(encoding="utf-8")
+    line = next(x for x in text.splitlines() if x.strip().startswith("LI_VER=$(sed"))
+    expr = line.split("sed -n '", 1)[1].split("'", 1)[0]
+    for rec, want in ((json.dumps({"version": "0.2.0", "tier": "cpu"}, indent=2), "0.2.0"),
+                      (json.dumps({"version": "../../x", "tier": "cpu"}, indent=2), ""),
+                      (json.dumps({"version": "0.2.0/../../x"}, indent=2), "")):
+        f = tmp_path / "installed.json"
+        f.write_text(rec)
+        out = subprocess.run([bash, "-c", f"sed -n '{expr}' \"$1\" | head -n 1", "x", f.as_posix()],
+                             capture_output=True, text=True).stdout.strip()
+        assert out == want, rec
