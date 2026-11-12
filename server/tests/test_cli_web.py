@@ -6,7 +6,6 @@ import stat
 
 import pytest
 
-from conftest import free_port
 from filament_kit import cli, config, modules, secret_input
 
 pytest.importorskip("mcp")
@@ -84,8 +83,9 @@ def test_web_passphrase_mismatch_or_short(monkeypatch, chown, capsys):
 
 
 def test_web_status(monkeypatch, capsys):
-    port = free_port()
     app = Starlette(routes=[Route("/health", lambda r: PlainTextResponse("ok"))])
+    served = readers_fake.Served(app)      # the port is held from here; nothing answers until `with`
+    port = served.port
     mods = {n: True for n in modules.MODES["server"]}
     mods["web"] = True
     config.save({"modules": mods, "web": {"port": port, "public_url": "https://mcp.example.test/filament"}})
@@ -93,7 +93,7 @@ def test_web_status(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "FAIL" in out and "filament-kit web passphrase" in out
     (config.paths().etc / "web_passphrase").write_text(auth.hash_passphrase(PASS), encoding="utf-8")
-    with readers_fake.Served(app, port):
+    with served:
         assert cli.main(["web", "status"]) == 0
     out = capsys.readouterr().out
     assert "https://mcp.example.test/filament/mcp" in out and "FAIL" not in out

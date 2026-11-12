@@ -9,14 +9,12 @@ One Starlette app, state in a dict the test mutates:
 """
 from __future__ import annotations
 
-import threading
-import time
-
-import uvicorn
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
+
+from . import serving
 
 
 def new_data() -> dict:
@@ -44,21 +42,16 @@ def app(data: dict) -> Starlette:
 
 
 class Served:
-    """Run an ASGI app on 127.0.0.1:<port> in a thread (`with Served(app, port) as url:`)."""
+    """Run an ASGI app on 127.0.0.1 in a thread (`with Served(app) as url:`). The port is bound when this object is
+    made (`.port`, `.url`), so a test can name it in a config first; nothing answers there until `with`."""
 
-    def __init__(self, asgi, port: int):
-        self.server = uvicorn.Server(uvicorn.Config(asgi, host="127.0.0.1", port=port, log_level="warning"))
-        self.url = f"http://127.0.0.1:{port}"
+    def __init__(self, asgi, port: int = 0):
+        self.running = serving.Running(asgi, serving.bind(port))
+        self.port, self.url = self.running.port, self.running.url
 
     def __enter__(self) -> str:
-        self.thread = threading.Thread(target=self.server.run, daemon=True)
-        self.thread.start()
-        for _ in range(200):
-            if self.server.started:
-                return self.url
-            time.sleep(0.05)
-        raise RuntimeError("fake did not start")
+        self.running.start()
+        return self.url
 
     def __exit__(self, *exc) -> None:
-        self.server.should_exit = True
-        self.thread.join(timeout=5)
+        self.running.stop()

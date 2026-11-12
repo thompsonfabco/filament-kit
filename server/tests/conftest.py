@@ -1,10 +1,7 @@
 import logging
 import socket
-import threading
-import time
 
 import pytest
-import uvicorn
 
 from fakes import spoolman_fake
 
@@ -33,42 +30,17 @@ def spoolman_fake_store():
 
 @pytest.fixture
 def spoolman_url(spoolman_fake_store):
-    sock = socket.socket()      # bound here and handed over: with parallel workers, a port chosen first can be taken before it's used
-    sock.bind(("127.0.0.1", 0))
-    port = sock.getsockname()[1]
-    server = uvicorn.Server(uvicorn.Config(spoolman_fake.app(spoolman_fake_store), log_level="warning"))
-    t = threading.Thread(target=server.run, kwargs={"sockets": [sock]}, daemon=True)
-    t.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        raise RuntimeError("fake spoolman did not start")
-    yield f"http://127.0.0.1:{port}"
-    server.should_exit = True
-    t.join(timeout=5)
-    sock.close()
+    yield from _serve(spoolman_fake.app(spoolman_fake_store))
 
 
 def _serve(asgi):
-    """Serve `asgi` on a free 127.0.0.1 port in a thread; yields its URL (the socket is bound here and handed over)."""
-    sock = socket.socket()
-    sock.bind(("127.0.0.1", 0))
-    port = sock.getsockname()[1]
-    server = uvicorn.Server(uvicorn.Config(asgi, log_level="warning"))
-    t = threading.Thread(target=server.run, kwargs={"sockets": [sock]}, daemon=True)
-    t.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        raise RuntimeError("fake did not start")
-    yield f"http://127.0.0.1:{port}"
-    server.should_exit = True
-    t.join(timeout=5)
-    sock.close()
+    """Serve `asgi` on a free 127.0.0.1 port in a thread (fakes.serving); yields its URL."""
+    from fakes import serving
+    running = serving.start(asgi)
+    try:
+        yield running.url
+    finally:
+        running.stop()
 
 
 @pytest.fixture

@@ -45,7 +45,7 @@ def sm(spoolman_url):
 @pytest.fixture
 def readers():
     data = readers_fake.new_data()
-    with readers_fake.Served(readers_fake.app(data), free_port()) as url:
+    with readers_fake.Served(readers_fake.app(data)) as url:
         yield data, url
 
 

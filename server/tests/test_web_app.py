@@ -16,7 +16,6 @@ from mcp.client.client import Client  # noqa: E402
 from mcp.client.streamable_http import streamable_http_client  # noqa: E402
 from starlette.testclient import TestClient  # noqa: E402
 
-from conftest import free_port  # noqa: E402
 from filament_kit import config, modules, tags, tagsources  # noqa: E402
 from filament_kit.spoolman import Spoolman  # noqa: E402
 from filament_kit.web import __main__ as web_main  # noqa: E402
@@ -56,7 +55,7 @@ def _sse_not_shutting_down():
 @pytest.fixture
 def readers():
     data = readers_fake.new_data()
-    with readers_fake.Served(readers_fake.app(data), free_port()) as url:
+    with readers_fake.Served(readers_fake.app(data)) as url:
         yield data, url
 
 
@@ -153,7 +152,7 @@ def _mcp(app, token, fn):
                                                "Host": "mcp.example.test"}) as hc:
             async with Client(streamable_http_client(url + "/mcp", http_client=hc), mode="legacy") as c:
                 return await fn(c)
-    with readers_fake.Served(app, free_port()) as url:
+    with readers_fake.Served(app) as url:
         return anyio.run(main, url)
 
 

@@ -384,7 +384,7 @@ def test_events_route_over_http(env, kit):
                 async for line in s.aiter_lines():
                     if line.startswith("data: "):
                         return json.loads(line[6:])
-    with readers_fake.Served(app, free_port()) as url:
+    with readers_fake.Served(app) as url:
         ev = asyncio.run(main(url))
     assert ev["status"]["gcode_state"] == "RUNNING"
 
@@ -489,7 +489,7 @@ def test_kitapi_raw_streams_and_errors_carry_the_http_status(env, monkeypatch):
         return JSONResponse({"error": "not_found", "message": "no such printer"}, 404)
     app = Starlette(routes=[Route("/api/printers/a/camera.mjpeg", cam), Route("/api/printers/b", gone)])
     monkeypatch.setattr(slots.KitApi, "_token", lambda self: "tok")
-    with readers_fake.Served(app, free_port()) as url:
+    with readers_fake.Served(app) as url:
         kit = slots.KitApi(base_url=url)
         status, ctype, r = kit.raw("/api/printers/a/camera.mjpeg")
         try:
@@ -599,7 +599,7 @@ def test_stream_count_returns_to_zero_when_the_client_closes(env, kit, monkeypat
                 return True
             await asyncio.sleep(0.05)
         return False
-    with readers_fake.Served(app, free_port()) as url:
+    with readers_fake.Served(app) as url:
         assert asyncio.run(main(url)) is True
         n = len(kit.calls)
         asyncio.run(asyncio.sleep(0.3))
