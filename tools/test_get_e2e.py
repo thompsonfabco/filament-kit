@@ -118,6 +118,25 @@ def leftover_tmp() -> list[str]:
     return sorted(str(p) for p in Path("/tmp").glob("filament-kit-get.*"))
 
 
+def _descendants(pid: int) -> list[int]:
+    """`pid` and every process below it (Linux /proc): `script` puts its command in a session of its own, so the
+    process group of the one this test started does not reach it."""
+    kids: dict[int, list[int]] = {}
+    for d in Path("/proc").iterdir():
+        if d.name.isdigit():
+            try:
+                ppid = int(d.joinpath("stat").read_text().rsplit(")", 1)[1].split()[1])
+            except (OSError, ValueError, IndexError):
+                continue
+            kids.setdefault(ppid, []).append(int(d.name))
+    found, todo = [], [pid]
+    while todo:
+        p = todo.pop()
+        found.append(p)
+        todo.extend(kids.get(p, []))
+    return found
+
+
 def run_get(get_sh: Path, args: list[str], *, tty: bool, env_extra: dict | None = None, piped: bool = True,
             timeout: float = 300):
     """`cat get.sh | sudo bash -s -- args` (or `sudo bash get.sh args` with piped=False); without tty in a new
@@ -127,16 +146,20 @@ def run_get(get_sh: Path, args: list[str], *, tty: bool, env_extra: dict | None 
     env = " ".join(f"{k}={v}" for k, v in (env_extra or {}).items())
     line = (f"cat '{get_sh}' | sudo -n {env} bash -s -- {quoted}" if piped
             else f"sudo -n {env} bash '{get_sh}' {quoted}")
-    if tty:
-        cmd = ["script", "-qec", line, "/dev/null"]
-    else:
-        cmd = ["setsid", "-w", "bash", "-c", line]
+    cmd = ["script", "-qec", line, "/dev/null"] if tty else ["bash", "-c", line]
+    # a session of its own (no controlling terminal, as `setsid` would give): on a timeout only this run's processes are
+    # stopped, never another get.sh on the machine
+    proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                            start_new_session=True)
     try:
-        return subprocess.run(cmd, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=timeout)
-    except subprocess.TimeoutExpired as e:
-        subprocess.run(["sudo", "-n", "pkill", "-KILL", "-f", "filament-kit-get[.]"], capture_output=True)
-        out = e.stdout.decode(errors="replace") if isinstance(e.stdout, bytes) else (e.stdout or "")
-        return subprocess.CompletedProcess(cmd, None, out, "timed out (stopped on the terminal?)")
+        out, err = proc.communicate(timeout=timeout)
+        return subprocess.CompletedProcess(cmd, proc.returncode, out, err)
+    except subprocess.TimeoutExpired:
+        pids = _descendants(proc.pid)               # before the parents die and the children are re-parented
+        subprocess.run(["sudo", "-n", "kill", "-KILL", *map(str, pids)], capture_output=True)   # sudo's child runs as root
+        proc.kill()
+        out, _ = proc.communicate()
+        return subprocess.CompletedProcess(cmd, None, out or "", "timed out (stopped on the terminal?)")
 
 
 def run_get_keys(get_sh: Path, args: list[str], *, piped: bool) -> tuple[int | None, bytes, bool]:
