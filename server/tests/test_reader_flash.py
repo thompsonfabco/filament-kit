@@ -40,8 +40,15 @@ class Board:
         class Port:
             def __init__(self):
                 self.out = []
+                self.buf = b""
 
             def write(self, data):
+                self.buf += data
+                while b"\n" in self.buf:
+                    one, self.buf = self.buf.split(b"\n", 1)
+                    self._line(one + b"\n")
+
+            def _line(self, data):
                 board.lines.append(data.decode())
                 cmd = data.decode().strip()
                 if board.build is None:
@@ -261,3 +268,51 @@ def test_not_root_without_a_token_file_changes_nothing(usb, monkeypatch, capsys)
     monkeypatch.setattr(cli, "_is_root", lambda: False)
     assert cli._reader_setup_usb(_args(), _answers(), _answers(), run=_run()[0]) == 1
     assert "run as root" in capsys.readouterr().err and "settings" not in usb
+
+
+# ---------------------------------------------------------------- the port (review RK14)
+
+def test_the_port_opens_with_dtr_and_rts_low(monkeypatch):
+    """As station/panel.py opens the intake panel on the same boards: not held in reset or in its flash mode."""
+    import sys
+    import types
+    seen = {}
+
+    class Serial:
+        def __init__(self):
+            self.dtr = self.rts = True
+
+        def open(self):
+            seen.update(dtr=self.dtr, rts=self.rts, port=self.port, baud=self.baudrate)
+    monkeypatch.setitem(sys.modules, "serial", types.SimpleNamespace(Serial=Serial))
+    rf._open("/dev/ttyACM0")
+    assert seen == {"dtr": False, "rts": False, "port": "/dev/ttyACM0", "baud": rf.BAUD}
+
+
+def test_settings_go_after_an_answer_and_in_pieces(env):
+    """FK? first in the same session, then FK-SET in CHUNK-sized writes that make one line."""
+    clock = Clock()
+    board = Board(clock, build=BUILD)
+    writes = []
+    real = board.port
+
+    def port(name):
+        p = real(name)
+        w = p.write
+        p.write = lambda data: writes.append(data) or w(data)
+        return p
+    dev = rf.Device("/dev/ttyACM0", opener=port, clock=clock, sleep=clock.sleep)
+    big = dict(SETTINGS, root_ca="-----BEGIN CERTIFICATE-----\n" + "A" * 2000 + "\n-----END CERTIFICATE-----\n")
+    dev.send_settings(big)
+    assert writes[0] == b"FK?\n" and board.settings == big
+    sets = [w for w in writes[1:] if w != b"FK?\n"]
+    assert len(sets) > 1 and all(len(w) <= rf.CHUNK for w in sets)
+
+
+def test_settings_are_not_sent_to_a_board_that_does_not_answer(env):
+    clock = Clock()
+    board = Board(clock)                      # blank: no answer to FK?
+    dev = rf.Device("/dev/ttyACM0", opener=board.port, clock=clock, sleep=clock.sleep)
+    with pytest.raises(rf.FlashError, match="did not answer before the settings"):
+        dev.send_settings(dict(SETTINGS))
+    assert not any(l.startswith("FK-SET") for l in board.lines)

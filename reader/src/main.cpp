@@ -199,6 +199,8 @@ const char* serverState = "-";   // ok / fail / unauth / -
 
 const char* rootCa() { return cfg.rootCa.empty() ? DEFAULT_ROOT_CA : cfg.rootCa.c_str(); }
 
+bool saveSettings(const Settings& s);
+
 void loadSettings() {
   Preferences p;
   p.begin("fk-cfg", true);
@@ -211,9 +213,11 @@ void loadSettings() {
   cfg.buzzerLow = p.getBool("buzzer_low", COMPILED_BUZZER_LOW);
   p.end();
 #ifdef HAVE_SECRETS
-  if (cfg.base.empty()) {      // nothing written over USB yet: the compiled-in settings
-    cfg.ssid = WIFI_SSID; cfg.pass = WIFI_PASS; cfg.base = READER_BASE; cfg.token = READER_TOKEN;
-    cfg.otaKey = OTA_PUBKEY;
+  if (cfg.base.empty()) {      // nothing written over USB yet: the compiled-in settings, kept in flash from now on,
+    cfg.ssid = WIFI_SSID; cfg.pass = WIFI_PASS; cfg.base = READER_BASE; cfg.token = READER_TOKEN;   // so a later
+    cfg.otaKey = OTA_PUBKEY;                                                                         // image built
+    if (cfg.otaKey.find("REPLACE-WITH") != std::string::npos) cfg.otaKey.clear();                  // without them
+    saveSettings(cfg);                                                                              // still runs
   }
 #endif
   configured = !cfg.base.empty() && !cfg.token.empty() && !cfg.ssid.empty();
@@ -860,6 +864,9 @@ void i2cScan() {
 }
 
 void setup() {
+  // An FK-SET line can be MAX_LINE bytes (a root CA and an OTA key) and arrives while the loop is busy elsewhere:
+  // the USB serial's default receive buffer is a few hundred bytes. Before begin(), or it keeps the default.
+  Serial.setRxBufferSize(MAX_LINE + 64);
   Serial.begin(115200);
   loadSettings();
   pinMode(PIN_ENC_CLK, INPUT_PULLUP);

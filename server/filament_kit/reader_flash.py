@@ -54,9 +54,19 @@ def bundled_image() -> tuple[Path, int] | None:
     return None
 
 
+CHUNK = 256            # an FK-SET line goes out in pieces this size, with a pause between, so the board keeps up
+
+
 def _open(port: str, timeout: float = 0.5):
+    """The port the way station/panel.py opens the intake panel on the same boards: DTR and RTS low before it opens,
+    so the board is not held in reset or in its flash mode."""
     import serial       # pyserial: the station and web extras install it
-    return serial.Serial(port, BAUD, timeout=timeout)
+    ser = serial.Serial()
+    ser.port, ser.baudrate, ser.timeout = port, BAUD, timeout
+    ser.write_timeout = 2
+    ser.dtr = ser.rts = False
+    ser.open()
+    return ser
 
 
 class Device:
@@ -101,13 +111,26 @@ class Device:
         return last if last is not None and done(last) else None
 
     def send_settings(self, settings: dict, wait: float = 5.0) -> None:
-        """FK-SET; FlashError with the reader's reason when it refuses. The line is never logged."""
+        """FK-SET; FlashError with the reader's reason when it refuses. The line is never logged. In one session: FK?
+        first, so the board is known to be up and listening (a board that resets when the port opens is answering
+        again) before the settings go, in CHUNK-sized pieces."""
         line = ("FK-SET " + json.dumps(settings, separators=(",", ":")) + "\n").encode("utf-8")
         s = self._session()
         if s is None:
             raise FlashError(f"cannot open {self.port}")
         try:
-            s.write(line)
+            end = self._clock() + wait
+            while True:
+                if self._clock() >= end:
+                    raise FlashError("the reader did not answer before the settings")
+                s.write(b"FK?\n")
+                got = s.readline().decode("utf-8", "replace")
+                if got and parse_hello(got) is not None:
+                    break
+                self._sleep(0.3)
+            for i in range(0, len(line), CHUNK):
+                s.write(line[i:i + CHUNK])
+                self._sleep(0.02)
             end = self._clock() + wait
             while self._clock() < end:
                 got = s.readline().decode("utf-8", "replace").strip()

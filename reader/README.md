@@ -94,7 +94,8 @@ pinned root (ISRG Root X1 unless `READER_ROOT_CA` is set). This contract is fixe
 answers; otherwise the reader rolls back to the previous firmware on the next reset.
 
 `GET <READER_BASE>/fw/manifest.json` and `GET <READER_BASE>/fw/firmware.bin`: the OTA files written by
-`tools/ota_publish.py`, served behind the same token (the image contains the Wi-Fi password and the token).
+`tools/ota_publish.py`, served behind the same token (an image built with a `secrets.h` contains its Wi-Fi password
+and token; one built without holds no settings, and the reader keeps the ones it has in flash).
 
 ## Set it up (no toolchain)
 
@@ -145,6 +146,12 @@ knob and menu, saved choice, scrolling). Needs a host C++ compiler (on Windows, 
 firmware with the example secrets.
 
 ## Updates over Wi-Fi (OTA)
+
+A reader set up with `sudo filament-kit reader setup` and no `--ota-pubkey` refuses every update over Wi-Fi: to update
+it, run `reader setup` again with it plugged into the server (it keeps its settings and writes the kit's newer
+firmware). A reader built with a `secrets.h` copies those settings into its flash on its first start with this
+firmware, so a later image without them keeps working; one still on firmware from before that needs `reader setup`
+once before it takes such an image, or it starts as "Not set up yet".
 
 1. Once: `py tools/ota_publish.py --init-key` creates the signing key (`~/.filament-kit/reader-ota-key.pem`,
    keep it on that PC) and prints the public key. Paste it into `src/secrets.h` as `OTA_PUBKEY` and flash once
