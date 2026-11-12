@@ -318,6 +318,8 @@ def test_add_and_link_conflict_writes_nothing(sm, spoolman_fake_store):
     {"vendor": 5}, {"name": ["x"]}, {"material": None}, {"price_per_kg": "12"}, {"nozzle": "220"},
     {"bed": [1]}, {"location": 3}, {"color_hex": 1}, {"lot": 1}, {"note": 1}, {"nozzle_range": 1},
     {"bed_range": 1}, {"spool_note": 1}, {"gross": "5"}, {"sealed": "no"}, {"net": 0}, {"density": "1.2"},
+    {"color_hex": "#8A8C8E"}, {"color_hex": "GG0000"}, {"color_hex": "8A8C8"}, {"nozzle": 2200}, {"nozzle": -5},
+    {"bed": 600},
 ])
 def test_validation_covers_every_item_before_any_write(sm, spoolman_fake_store, bad):
     with pytest.raises(ValueError):
