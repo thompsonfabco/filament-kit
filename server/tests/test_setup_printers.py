@@ -572,6 +572,41 @@ def test_only_a_kept_report_downloads(mapped, name):
     assert post(client(app), f"printers/{SERIAL}/reports/{name}", {}).status_code == 404
 
 
+@pytest.mark.parametrize("name", ["printers.xml", "printers.xml.bak", "notes.txt", "..%2Fdecoy.txt", "%2E%2E%2Fdecoy.txt",
+                                  "printer-report-H2D-20261110-120000.xml.bak", "printer-report-H2D-20261110-120000.XML"])
+def test_a_file_that_exists_but_is_not_a_report_name_is_refused(mapped, name):
+    """The 404s above could come from a file that is simply not there; here every name has a real file behind it."""
+    app, _ = mapped
+    _bambu()
+    from filament_kit import config
+    d = config.paths().state / "printers" / SERIAL
+    d.mkdir(parents=True, exist_ok=True)
+    for decoy in (d / "printers.xml", d / "printers.xml.bak", d / "notes.txt", d.parent / "decoy.txt",
+                  d / "printer-report-H2D-20261110-120000.xml.bak", d / "printer-report-H2D-20261110-120000.XML"):
+        decoy.write_text("<secret/>")
+    good = d / "printer-report-H2D-20261110-120000.xml"
+    good.write_text("<printer-report format='1'/>")
+    c = client(app)
+    assert post(c, f"printers/{SERIAL}/reports/{name}", {}).status_code == 404
+    assert post(c, f"printers/{SERIAL}/reports/{good.name}", {}).status_code == 200        # the folder is the right one
+
+
+@pytest.mark.parametrize("name", ["", None, "printers.xml", "../printers.xml", "printer-report-H2D-20261110-120000.xml.bak",
+                                  "printer-report-H2D-20261110-120000.xml/", "x/printer-report-H2D-20261110-120000.xml",
+                                  "printer-report-H2D-20261110-120000.xml\n"])
+def test_read_saved_takes_only_a_report_name(mapped, name):
+    from filament_kit import config
+    from filament_kit.bridge import printer_report
+    d = config.paths().state / "printers" / SERIAL
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "printers.xml").write_text("<secret/>")
+    (d.parent / "printers.xml").write_text("<secret/>")
+    (d / "printer-report-H2D-20261110-120000.xml").write_bytes(b"ok")
+    assert printer_report.read_saved(SERIAL, "printer-report-H2D-20261110-120000.xml") == b"ok"
+    with pytest.raises(FileNotFoundError):
+        printer_report.read_saved(SERIAL, name)
+
+
 @pytest.mark.skipif(__import__("sys").platform == "win32", reason="POSIX links")
 def test_a_planted_link_is_not_followed(mapped, tmp_path):
     app, _ = mapped
