@@ -43,7 +43,7 @@ internal enum class SwButtonKind {
 }
 
 /** Marks the filled main button for the one-filled-button tests (05-android-app 5). */
-internal const val MAIN_BUTTON_TAG = "sw-main-button"
+internal val MAIN_BUTTON_TAG = SwTag.MainButton.name
 
 /** A label and what it does: the buttons of a notice or an empty state. */
 internal class SwAction(val label: String, val onClick: () -> Unit)

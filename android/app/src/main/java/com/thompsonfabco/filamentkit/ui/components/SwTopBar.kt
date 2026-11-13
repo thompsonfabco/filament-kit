@@ -23,7 +23,7 @@ import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import com.thompsonfabco.filamentkit.ui.theme.WindowClass
 
 /** The semantics tag of the top bar, for the semantics tests (AUT-8). */
-internal enum class SwTag { TopBar }
+internal enum class SwTag { TopBar, MainButton }
 
 internal val TOP_BAR_TAG = SwTag.TopBar.name
 
