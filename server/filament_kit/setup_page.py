@@ -495,7 +495,9 @@ class SetupPage:
         return HTMLResponse(
             "<!doctype html><html lang=en><meta charset=utf-8>"
             "<meta name=viewport content='width=device-width,initial-scale=1'>"
-            f"<title>filament-kit setup: {name}</title><link rel=stylesheet href='/setup/setup.css'>"
+            "<script src='/setup/shared/theme-init.js'></script>"
+            f"<title>filament-kit setup: {name}</title><link rel=stylesheet href='/setup/shared/tokens.css'>"
+            "<link rel=stylesheet href='/setup/shared/components.css'><link rel=stylesheet href='/setup/setup.css'>"
             f"<body>{shared_files.sprite_inline(self.shared)}<main id=app></main><script src='/setup/setup.js'></script>"
             "<script src='/setup/setup_tabs.js'></script><script src='/setup/setup_printers.js'></script>"
             "<script src='/setup/setup_trust.js'></script><script src='/setup/setup_presets.js'></script><script src='/setup/setup_backup.js'></script><script src='/setup/setup_logs.js'></script><script src='/setup/setup_intake.js'></script><script src='/setup/setup_flash.js'></script></body></html>",

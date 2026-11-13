@@ -151,7 +151,10 @@ def test_shared_files_are_served_and_the_sprite_comes_first(app):
     assert r.headers["content-security-policy"] == SETUP_CSP
     check_files(c.get, "/setup")
     assert client(app, AWAY).get("/setup/shared/tokens.css").status_code == 403
-    assert 'rel=stylesheet' in r.text and "/setup/shared/" not in r.text       # not linked yet
+    head = r.text.split("<body>")[0]                                            # S1.1: theme first, then tokens, components, own
+    links = ["/setup/shared/theme-init.js", "/setup/shared/tokens.css", "/setup/shared/components.css", "/setup/setup.css"]
+    assert [head.index(x) for x in links] == sorted(head.index(x) for x in links)
+    assert "/setup/shared/strings.js" not in r.text and "/setup/shared/components.js" not in r.text   # S1.3 and later
 
 
 def test_page_and_api_answer_only_the_home_network(app):
