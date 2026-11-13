@@ -315,8 +315,22 @@ def test_accepted_orca_update_that_cannot_go_in_does_not_reinstall_every_run(tmp
 # --- fix round 1 ---------------------------------------------------------------------------------------------
 
 import unicodedata  # noqa: E402
+import tempfile  # noqa: E402
 
 
+def _case_sensitive_fs() -> bool:
+    """The host's file system, which the "windows"/"linux" layouts do not change (they only move the folders)."""
+    with tempfile.TemporaryDirectory() as d:
+        (Path(d) / "a").write_text("x")
+        return not (Path(d) / "A").exists()
+
+
+needs_case_sensitive_fs = pytest.mark.skipif(
+    not _case_sensitive_fs(), reason="the regression is a case-sensitive file system's (Linux): a name differing "
+                                     "only by case is a second file there and the same file here")
+
+
+@needs_case_sensitive_fs
 @pytest.mark.parametrize("layout", LAYOUTS)
 def test_case_only_file_name_match_is_kept_and_never_blocks_later_installs(tmp_path, layout):
     """I1: `acme pla @bbl h2d.json` holds the generated preset: kept, not in the snapshot (not ours to diff), and the
@@ -335,6 +349,7 @@ def test_case_only_file_name_match_is_kept_and_never_blocks_later_installs(tmp_p
     assert sorted(p.name for p in (e.dirs.installed / "base").glob("*.json")) == [f"{B}.json"]
 
 
+@needs_case_sensitive_fs
 @pytest.mark.parametrize("layout", LAYOUTS)
 def test_upper_case_suffix_of_a_kept_preset(tmp_path, layout):
     """M5 + round 2: a kept `<name>.JSON` is "another file" (only an exact `<name>.json` is the preset's own): kept,

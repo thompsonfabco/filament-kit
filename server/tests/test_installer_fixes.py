@@ -219,6 +219,43 @@ def test_uninstall_without_a_kept_release_says_how_to_get_one(tmp_path, fake_rel
     assert "no kept copy" in err and "filament-kit-1.2.0.tar.gz" in err and "./uninstall.sh" in err
 
 
+def _verify_fails_for(monkeypatch, *versions):
+    real = release.verify_dir
+
+    def verify(folder, version, pubkey_b64=None):
+        if version in versions:
+            raise release.ReleaseError(f"{version}: the signature does not match")
+        return real(folder, version, pubkey_b64)
+    monkeypatch.setattr(release, "verify_dir", verify)
+
+
+def test_uninstall_skips_a_kept_copy_that_does_not_verify_and_uses_the_next(tmp_path, fake_release, monkeypatch, capsys):
+    _kept(tmp_path, "1.2.0")
+    _kept(tmp_path, "1.1.0")
+    _kept(tmp_path, "1.0.0")
+    _verify_fails_for(monkeypatch, "1.2.0")                   # the running version's copy was tampered with
+    ran = []
+    assert cli.cmd_uninstall(purge=False, run=lambda cmd: ran.append(Path(cmd[1]).read_text()) or 0) == 0
+    assert ran == ["# 1.1.0\n"]                              # never the tampered one, not the older one either
+    assert "uninstall.sh of 1.1.0" in capsys.readouterr().out
+
+
+def test_uninstall_runs_nothing_when_no_kept_copy_verifies(tmp_path, fake_release, monkeypatch, capsys):
+    _kept(tmp_path, "1.2.0")
+    _kept(tmp_path, "1.1.0")
+    _verify_fails_for(monkeypatch, "1.2.0", "1.1.0")
+    assert cli.cmd_uninstall(purge=True, run=lambda cmd: pytest.fail("ran an unverified uninstall.sh")) == 1
+    assert "no kept copy" in capsys.readouterr().err
+
+
+def test_uninstall_refuses_when_not_root(tmp_path, fake_release, monkeypatch, capsys):
+    _kept(tmp_path, "1.2.0")
+    monkeypatch.delenv("FK_NO_SYSTEMD")
+    monkeypatch.setattr(cli, "_is_root", lambda: False)
+    assert cli.cmd_uninstall(purge=False, run=lambda cmd: pytest.fail("ran uninstall.sh as a normal user")) == 1
+    assert "run as root" in capsys.readouterr().err
+
+
 def test_uninstall_is_a_cli_command_run_as_root():
     wrapper = (ROOT / "install" / "filament-kit-cli.sh").read_text(encoding="utf-8")
     assert "| update | uninstall | station | setup-code)" in wrapper

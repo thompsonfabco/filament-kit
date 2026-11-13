@@ -165,6 +165,11 @@ def test_tarball_traversal_name_is_ignored_and_nothing_escapes(fresh, served, en
     r = library.update(put(served, "library.tar.gz", tar_bytes(files)))
     assert r.error is None
     assert not (env / "escape.json").exists() and not (env / "state" / "escape.json").exists()
+    # the archive is read in memory, so the proof is in what got installed: only the real files, not the odd names
+    version = library._dir() / "versions" / library._pointer("current.json")["dir"]
+    installed = sorted(p.relative_to(version).as_posix() for p in version.rglob("*") if p.is_file())
+    assert installed == sorted(fixture_files())
+    assert not list(env.rglob("escape.json")) and not list(env.rglob("x.json"))
 
 
 def test_garbage_archive_is_an_error_not_a_crash(fresh, served):
@@ -191,12 +196,21 @@ def test_default_url_is_a_release_asset():
 
 # ---------- upgrades ----------
 
-def test_upgrade_keeps_the_last_downloaded_copy(fresh, served):
+def test_upgrade_keeps_the_last_downloaded_copy(fresh, served, tmp_path, monkeypatch):
     assert library.update(put(served, "library.tar.gz", tar_bytes(fixture_files()))).error is None
     version = library.load().version
     # the new program ships the same empty index: the downloaded copy is still the one in use
     assert library.load().source == "updated" and library.load().version == version
-    assert library.rollback() == 0                  # nothing earlier: back to none
+    # ... and when the new program ships a different (newer, non-empty) index, the downloaded copy still wins
+    newer = tmp_path / "newer-program"
+    newer.mkdir()
+    (newer / "index.json").write_text(json.dumps({"schema_version": 1, "library_version": version + 50, "count": 0,
+                                                  "entries": [{"vendor": "X", "product": "Y"}]}), encoding="utf-8")
+    monkeypatch.setattr(library, "BUNDLED", newer)
+    assert library.load().source == "updated" and library.load().version == version
+    assert library.rollback() == version + 50       # nothing earlier: back to what the program ships
+    assert library.load().source == "bundled" and library.load().version == version + 50
+    monkeypatch.setattr(library, "BUNDLED", PACKAGED)
     assert library.load().source == "none"
 
 

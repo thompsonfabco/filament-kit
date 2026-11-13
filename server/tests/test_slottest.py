@@ -327,6 +327,50 @@ def test_check_idle_needs_a_status_from_the_printer():
     assert isinstance(e.value, PrinterOffline) and "no status from the printer yet" in str(e.value)
 
 
+
+def test_a_write_the_printer_acks_but_never_shows_is_not_confirmed_and_nothing_is_left(rig, monkeypatch):
+    monkeypatch.setattr(slottest, "CONFIRM_TIMEOUT", 0.3)
+    m, printer, c = rig
+    printer.frozen = True                                    # success replies, but no report ever shows the colour
+    res = slottest.run(m, SERIAL, lambda s: None)
+    assert res.confirmed == {} and res.reason == "none"
+    for label in LABELS:
+        assert any(p.startswith(f"{label}: not confirmed (no report showed its test colour") for p in res.problems), label
+    assert len(printer.writes) == 12                         # every slot was tried, then every one was put back
+    assert res.restored is True and no_test_colour_left(printer)
+    assert_back_to_original(printer)
+
+
+def test_a_lost_ack_is_settled_by_the_report(rig, monkeypatch):
+    monkeypatch.setattr(slottest, "CONFIRM_TIMEOUT", 0.3)
+    monkeypatch.setattr(connection, "COMMAND_TIMEOUT", 0.3)
+    m, printer, c = rig
+    printer.silent = True                                    # the write is applied, the reply never arrives
+    res = slottest.run(m, SERIAL, lambda s: None)
+    assert len(res.confirmed) == 6 and res.problems == [] and res.restored is True
+    assert_back_to_original(printer)
+
+
+def test_a_bug_in_the_kit_mid_test_still_restores_every_slot_touched(rig):
+    m, printer, c = rig
+    real = m.set_slot
+    calls = []
+
+    def set_slot(serial, ams_id, tray_id, setting, *a, **kw):
+        calls.append((ams_id, tray_id, setting.get("tray_color")))
+        if (ams_id, tray_id) == (0, 1) and is_test(setting.get("tray_color", "")):
+            raise RuntimeError("a bug in the kit")
+        return real(serial, ams_id, tray_id, setting, *a, **kw)
+    m.set_slot = set_slot
+    res = slottest.run(m, SERIAL, lambda s: None)
+    assert res.reason == "kit_error" and "error in the kit" in res.problems[0]
+    assert set(res.confirmed) == {"A1"}
+    assert any(p.startswith("A3:") and "not confirmed" in p for p in res.problems)      # never reached
+    assert res.restored is True and no_test_colour_left(printer)
+    assert_back_to_original(printer)
+    assert (0, 0, original("A1")["tray_color"]) in calls and (0, 1, original("A2")["tray_color"]) in calls   # restores
+
+
 def test_an_older_full_report_never_lands_after_a_newer_write(rig, monkeypatch):
     """The flaky misaddressed_write tests (2026-11-08; reproduced with random scheduler gaps: 'A1: test colour
     FA0100FF still in the slot' after A1's restore was confirmed). The full report a pushall asks for is taken on the

@@ -57,6 +57,13 @@ def _set(app, key, value):
     ("intake.reader", "cloud-then-local", lambda c: c["intake"]["reader"] == "cloud-then-local"),
     ("local_intake.url", "http://gpu-box.example:7915/", lambda c: c["local_intake"]["url"] == "http://gpu-box.example:7915"),
     ("local_intake.tier", "gpu", lambda c: c["local_intake"]["tier"] == "gpu"),
+    ("web.printer_changes", True, lambda c: c["web"]["printer_changes"] is True),
+    ("web.printer_changes", False, lambda c: c["web"]["printer_changes"] is False),
+    ("setup.hosts", "Kit.Example.Test, other.example.test.", lambda c: c["setup"]["hosts"] == ["kit.example.test", "other.example.test"]),
+    ("setup.hosts", [], lambda c: c["setup"]["hosts"] == []),
+    ("server_name", "x" * 100, lambda c: c["server_name"] == "x" * 100),             # the accepted maximums
+    ("reads_per_day", 100000, lambda c: c["reads_per_day"] == 100000),
+    ("placement.box_count", 999, lambda c: c["placement"]["box_count"] == 999),
 ])
 def test_each_key_saves(app, restarts, applies, key, value, read):
     r = _set(app, key, value)
@@ -74,6 +81,10 @@ def test_each_key_saves(app, restarts, applies, key, value, read):
     ("intake.reader", "fastest"), ("intake.reader", None),
     ("local_intake.url", "gpu-box:7915"), ("local_intake.url", "http://h:7915/v1/read"), ("local_intake.url", "file:///x"),
     ("local_intake.tier", "tpu"),
+    ("web.printer_changes", "true"), ("web.printer_changes", 1), ("web.printer_changes", None), ("web.printer_changes", "yes"),
+    ("setup.hosts", "192.0.2.5"), ("setup.hosts", "bad_name!"), ("setup.hosts", [5]), ("setup.hosts", ["a.example.test"] * 21),
+    ("setup.hosts", 5),
+    ("reads_per_day", 100001),
 ])
 def test_a_bad_value_is_refused_and_nothing_saved(app, restarts, applies, key, value):
     before = config.load()

@@ -189,10 +189,20 @@ def test_not_a_zip(kit, tmp_path):
 
 def test_a_setuid_bit_never_comes_back(kit, tmp_path):
     bad = tmp_path / "bad.zip"
-    _rewrite(backup.create(), bad, lambda n, d: d.replace(b'path="devices.json" sha256', b'path="devices.json" x="1" sha256')
-             if n == "manifest.xml" else d)
+    seen = []
+
+    def setuid(name, data):
+        if name != "manifest.xml":
+            return data
+        text = data.decode("utf-8")
+        seen.append(len(re.findall(r'mode="\d{4}"', text)))
+        return re.sub(r'mode="\d{4}"', 'mode="6755"', text).encode("utf-8")
+    _rewrite(backup.create(), bad, setuid)
+    assert seen[0] > 2                                       # files and folders both had a mode to rewrite
     m = backup.verify(bad)
-    assert all(i.mode & 0o4000 == 0 for i in m.items)
+    assert m.items and all(i.mode & 0o4000 == 0 for i in m.items)
+    assert {i.mode for i in m.items if i.kind == "file"} == {0o755}            # setuid and setgid both gone
+    assert {i.mode for i in m.items if i.kind != "file"} == {0o2755}           # a folder keeps setgid only
     assert backup._mode("4755", "file") == 0o755 and backup._mode("2750", "dir") == 0o2750
 
 
@@ -339,6 +349,69 @@ def test_a_nightly_backup_becomes_the_same_zip(kit, tmp_path):
     with zipfile.ZipFile(out) as zf:
         assert "files/var/lib/filament-kit/profiles/live/system/huge.json" not in zf.namelist()
     assert backup.restore(out, yes=True, run=Runner()) == 0
+
+
+def _daily(tmp_path, members, name="2026-11-09.tar.gz"):
+    tgz = tmp_path / name
+    with tarfile.open(tgz, "w:gz") as tf:
+        for n, data in members:
+            if isinstance(data, tarfile.TarInfo):
+                data.name, data.mtime = n, 1762700000
+                tf.addfile(data)
+            else:
+                ti = tarfile.TarInfo(n)
+                ti.size, ti.mtime = len(data), 1762700000
+                tf.addfile(ti, io.BytesIO(data))
+    return tgz
+
+
+def test_a_hostile_nightly_tar_adds_only_what_belongs(kit, tmp_path):
+    link = tarfile.TarInfo("x")
+    link.type, link.linkname = tarfile.SYMTYPE, "/etc/passwd"
+    dev = tarfile.TarInfo("x")
+    dev.type = tarfile.CHRTYPE
+    root = "var/lib/filament-kit"
+    tgz = _daily(tmp_path, [
+        (f"{root}/devices.json", b"[]"),
+        (f"{root}/../escape.txt", b"no"),
+        (f"{root}/a/../../escape2.txt", b"no"),
+        (f"{root}//double.txt", b"no"),
+        (f"{root}/link", link),
+        (f"{root}/node", dev),
+        (f"{root}/profiles/live/system/huge.json", b"excluded"),
+        ("elsewhere/other.txt", b"no"),
+        ("etc/filament-kit/config.json", b"{ not json"),
+    ])
+    out = tmp_path / "out.zip"
+    with open(out, "wb") as fh:
+        backup.from_daily(tgz, fh)
+    with zipfile.ZipFile(out) as zf:
+        names = [n for n in zf.namelist() if n.startswith("files/")]
+    joined = " ".join(names)
+    for gone in ("escape", "double", "link", "node", "huge.json", "other.txt"):
+        assert gone not in joined, gone
+    assert f"files/{root}/devices.json" in names and "files/etc/filament-kit/config.json" in names
+    m = backup.verify(out)
+    assert m.modules == []                                   # a config.json that is not JSON names no modules
+
+
+def test_a_nightly_config_json_that_is_not_an_object_names_no_modules(kit, tmp_path):
+    tgz = _daily(tmp_path, [("etc/filament-kit/config.json", b"[1, 2]")])
+    out = tmp_path / "out.zip"
+    with open(out, "wb") as fh:
+        backup.from_daily(tgz, fh)
+    assert backup.verify(out).modules == []
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX links")
+def test_a_linked_backup_name_is_not_listed_or_opened(kit, tmp_path):
+    folder = tmp_path / "backups"
+    folder.mkdir(exist_ok=True)
+    real = _daily(tmp_path, [("etc/filament-kit/config.json", b"{}")], name="2026-11-08.tar.gz")
+    (folder / "2026-11-09.tar.gz").symlink_to(real)
+    assert [e.name for e in backup.listing()] == []
+    with pytest.raises(backup.BackupError, match="no such backup"):
+        backup.open_for_download("2026-11-09.tar.gz")
 
 
 def test_listing_names_each_kind(kit, tmp_path):

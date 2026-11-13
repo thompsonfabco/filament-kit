@@ -131,3 +131,84 @@ def test_hosts_from_preset_and_file(plugin, tmp_path):
     plugin.orca_stub.bundle = Bundle(PRESETS, ["a"])
     (tmp_path / "hosts.txt").write_text("# printers\nprinter2.home.arpa\nhttp://192.0.2.10/\n")
     assert plugin.printer_hosts() == ["http://192.0.2.10", "http://printer.home.arpa", "http://printer2.home.arpa"]
+
+
+def test_a_second_sync_is_refused_while_one_runs(plugin, monkeypatch):
+    plugin.orca_stub.bundle = Bundle(PRESETS, ["a"])
+    monkeypatch.setattr(plugin, "http_json", fake_http(None, active=3))
+    assert plugin._sync_lock.acquire(blocking=False)
+    try:
+        assert plugin.run_sync() == (False, "A sync is already running")
+    finally:
+        plugin._sync_lock.release()
+    assert plugin.orca_stub.selected == []
+    assert plugin.run_sync()[0]      # and the lock was not left held by the refused call
+
+
+def test_lanes_that_fit_no_slot_say_so(plugin, monkeypatch):
+    plugin.orca_stub.bundle = Bundle(PRESETS, ["a"])
+    monkeypatch.setattr(plugin, "http_json", fake_http({"lane5": {"lane": "5", "spool_id": 3}}))
+    ok, text = plugin.run_sync()
+    assert not ok and "lists no slot" in text and plugin.orca_stub.selected == []
+
+
+def test_an_unexpected_error_comes_back_as_text_not_a_raise(plugin, monkeypatch):
+    plugin.orca_stub.bundle = Bundle(PRESETS, ["a"])
+
+    def boom(url, body=None):
+        raise RuntimeError("moonraker fell over")
+    monkeypatch.setattr(plugin, "http_json", boom)
+    assert plugin.run_sync() == (False, "RuntimeError: moonraker fell over")
+    assert plugin._sync_lock.acquire(blocking=False)      # released on the error path
+    plugin._sync_lock.release()
+
+
+def test_a_remembered_pick_beats_the_ranking(plugin, monkeypatch, tmp_path):
+    plugin.orca_stub.bundle = Bundle(PRESETS, ["a"])
+    (tmp_path / "picks.json").write_text('{"91": "Generic PETG"}')
+    monkeypatch.setattr(plugin, "http_json", fake_http(None, active=9))
+    ok, text = plugin.run_sync()
+    assert ok and plugin.orca_stub.selected == [(1, "Generic PETG")] and "remembered pick" in text
+
+
+def test_a_remembered_pick_for_a_preset_that_is_gone_is_ignored(plugin, monkeypatch, tmp_path):
+    plugin.orca_stub.bundle = Bundle(PRESETS, ["a"])
+    (tmp_path / "picks.json").write_text('{"91": "Deleted Preset"}')
+    monkeypatch.setattr(plugin, "http_json", fake_http(None, active=9))
+    ok, text = plugin.run_sync()
+    assert ok and plugin.orca_stub.selected == [(1, "Bambu PETG Basic @M1D")]
+
+
+@pytest.mark.parametrize("content", ["{not json", "[1, 2", ""])
+def test_a_corrupt_picks_file_is_treated_as_no_picks(plugin, monkeypatch, tmp_path, content):
+    plugin.orca_stub.bundle = Bundle(PRESETS, ["a"])
+    (tmp_path / "picks.json").write_text(content)
+    assert plugin.load_picks() == {}
+    monkeypatch.setattr(plugin, "http_json", fake_http(None, active=3))
+    ok, text = plugin.run_sync()
+    assert ok and plugin.orca_stub.selected == [(1, "SUNLU PLA+ @M1D")]
+
+
+def test_a_tie_keeps_the_current_preset_and_remembers_it(plugin, monkeypatch, tmp_path):
+    twins = [Preset("SUNLU PLA A", "SUNLU", "PLA"), Preset("SUNLU PLA B", "SUNLU", "PLA")]
+    plugin.orca_stub.bundle = Bundle(twins, ["SUNLU PLA B"])
+    monkeypatch.setattr(plugin, "http_json", fake_http(None, active=3))
+    ok, text = plugin.run_sync()
+    assert ok and "kept" in text and plugin.orca_stub.selected == [(1, "SUNLU PLA B")]
+    assert plugin.load_picks() == {"31": "SUNLU PLA B"}
+
+
+def test_a_tie_with_no_current_choice_names_the_candidates(plugin, monkeypatch, tmp_path):
+    twins = [Preset("SUNLU PLA A", "SUNLU", "PLA"), Preset("SUNLU PLA B", "SUNLU", "PLA")]
+    plugin.orca_stub.bundle = Bundle(twins, ["something else"])
+    monkeypatch.setattr(plugin, "http_json", fake_http(None, active=3))
+    ok, text = plugin.run_sync()
+    assert not ok and "2 presets match equally" in text and "SUNLU PLA A, SUNLU PLA B" in text
+    assert plugin.orca_stub.selected == [] and plugin.load_picks() == {}
+
+
+def test_no_compatible_preset_for_the_material_is_a_reported_failure(plugin, monkeypatch):
+    plugin.orca_stub.bundle = Bundle([Preset("Only ABS", "X", "ABS")], ["a"])
+    monkeypatch.setattr(plugin, "http_json", fake_http(None, active=3))
+    ok, text = plugin.run_sync()
+    assert not ok and "no compatible PLA filament preset" in text and plugin.orca_stub.selected == []

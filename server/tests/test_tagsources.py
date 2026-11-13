@@ -1,6 +1,9 @@
 import json
 import threading
 import time
+import types
+import urllib.error
+import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
@@ -108,7 +111,7 @@ def test_failing_source_skipped_for_60s(fakes, monkeypatch):
     tagsources.latest(cfg)
     assert bad.hits == 1  # backing off
     t0 = time.monotonic()
-    monkeypatch.setattr(tagsources.time, "monotonic", lambda: t0 + 61)
+    monkeypatch.setattr(tagsources, "time", types.SimpleNamespace(monotonic=lambda: t0 + 61))   # this module's clock only
     tagsources.latest(cfg)
     assert bad.hits == 2
 
@@ -240,3 +243,57 @@ def test_only_http_and_https_sources_are_read(monkeypatch):
            "station": {"url": "file:///tmp"}}
     tagsources.latest(cfg)
     assert seen == ["http://lasttag.example.lan:5002/last-tag", "HTTPS://reader.example.lan/last-tag"]
+
+
+class Redirector:
+    """A web server that answers every GET with a 302 to `to`."""
+
+    def __init__(self, to):
+        outer = self
+        self.hits = 0
+
+        class H(BaseHTTPRequestHandler):
+            def do_GET(self):
+                outer.hits += 1
+                self.send_response(302)
+                self.send_header("Location", to)
+                self.end_headers()
+
+            def log_message(self, *a):
+                pass
+
+        self.srv = HTTPServer(("127.0.0.1", 0), H)
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+        self.url = f"http://127.0.0.1:{self.srv.server_port}"
+
+    def close(self):
+        self.srv.shutdown()
+        self.srv.server_close()
+
+
+@pytest.mark.parametrize("target", ["ftp://127.0.0.1:1/last-tag", "file:///etc/passwd", "gopher://127.0.0.1:1/x"])
+def test_a_source_that_redirects_to_another_scheme_is_not_followed(monkeypatch, target):
+    """A-M2 again: the configured URL is http(s), but the server there can answer with a 30x to anything urllib opens."""
+    opened = []
+
+    def ftp_open(self, req):
+        opened.append(req.full_url)
+        raise urllib.error.URLError("not for real")
+    monkeypatch.setattr(urllib.request.FTPHandler, "ftp_open", ftp_open)
+    r = Redirector(target)
+    try:
+        assert tagsources.latest({"tag_sources": [{"name": "r", "url": r.url}]}) is None
+        assert r.hits == 1
+    finally:
+        r.close()
+    assert opened == []
+    assert tagsources._failed.get(r.url) is not None          # and it backs off like any failing source
+
+
+def test_a_source_that_redirects_to_http_is_still_followed(fakes):
+    good = fakes(tag("GGG", 5))
+    r = Redirector(good.url + "/last-tag")
+    try:
+        assert tagsources.latest({"tag_sources": [{"name": "r", "url": r.url}]})["nfc_id"] == "GGG"
+    finally:
+        r.close()

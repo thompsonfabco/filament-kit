@@ -77,7 +77,7 @@ def test_download_needs_the_code(app):
     assert post(client(app), "backups/download", {"name": z.name}, code="0000-0000").status_code == 403
 
 
-def _upload(app, data: bytes, code=CODE):
+def _upload(app, data, code=CODE):
     headers = {**H, "Content-Type": "application/zip"}
     if code is not None:
         headers["X-Setup-Code"] = code
@@ -111,6 +111,26 @@ def test_a_bad_upload_is_refused_and_removed(app, tmp_path):
     assert r.status_code == 400 and "damaged" in r.json()["error"]
     assert not backup.uploaded().parent.exists()
     assert _upload(app, b"not a zip").status_code == 400
+
+
+def test_an_upload_over_the_limit_is_refused_by_its_declared_size(app, monkeypatch):
+    from filament_kit.setup_console import backup_tab
+    monkeypatch.setattr(backup_tab, "MAX_UPLOAD", 100)
+    r = _upload(app, b"x" * 101)
+    assert r.status_code == 413 and "filament-kit restore" in r.json()["error"]
+    assert not backup.uploaded().parent.exists() and not backup.pending().exists()
+
+
+def test_an_upload_over_the_limit_is_cut_off_while_streaming_and_removed(app, monkeypatch):
+    from filament_kit.setup_console import backup_tab
+    monkeypatch.setattr(backup_tab, "MAX_UPLOAD", 100)
+
+    def chunks():       # no Content-Length: the size is only known as it arrives
+        for _ in range(5):
+            yield b"x" * 40
+    r = _upload(app, chunks())
+    assert r.status_code == 413
+    assert not backup.uploaded().parent.exists() and not backup.pending().exists()
 
 
 def test_a_newer_kits_upload_is_refused(app, monkeypatch):
