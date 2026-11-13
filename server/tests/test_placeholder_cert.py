@@ -192,6 +192,31 @@ def test_each_write_on_the_way_leaves_a_mark_that_holds_the_cert_on_disk(tmp_pat
     assert x509.load_pem_x509_certificate(pem).public_key().public_numbers() == public
 
 
+def test_a_stop_after_the_certificate_replace_keeps_the_new_pair(tmp_path, monkeypatch):
+    """The chmod after the certificate's replace is part of the write: a stop there must not put the old key beside
+    the new certificate."""
+    tls = _tls(tmp_path)
+    tls.mkdir(parents=True)
+    old = self_signed(days=30, start=datetime.datetime.now(datetime.timezone.utc))
+    (tls / "fullchain.pem").write_bytes(old)
+    (tls / "privkey.pem").write_bytes(_key().private_bytes(
+        Encoding.PEM, serialization.PrivateFormat.TraditionalOpenSSL, serialization.NoEncryption()))
+    real = apply.os.chmod
+
+    def chmod(path, mode, *a, **k):
+        real(path, mode, *a, **k)
+        if Path(path) == tls / "fullchain.pem" and mode == 0o644:    # the chmod of the replaced file, not the .tmp
+            raise KeyboardInterrupt
+    monkeypatch.setattr(apply.os, "chmod", chmod)
+    with pytest.raises(KeyboardInterrupt):
+        _install(tmp_path)
+    monkeypatch.undo()
+    pem = (tls / "fullchain.pem").read_bytes()
+    assert pem != old
+    public = serialization.load_pem_private_key((tls / "privkey.pem").read_bytes(), None).public_key().public_numbers()
+    assert x509.load_pem_x509_certificate(pem).public_key().public_numbers() == public
+
+
 def test_a_mark_of_junk_bytes_is_just_not_ours(tmp_path):
     tls = _tls(tmp_path)
     tls.mkdir(parents=True)
