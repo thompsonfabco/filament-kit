@@ -19,7 +19,7 @@ input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; accent
 /* buttons: the plain one is the primary button, .secondary the neutral one, .danger the danger one */
 button { position: relative; display: inline-flex; align-items: center; justify-content: center; padding: 0 var(--s4);
          min-height: var(--ctl); border: 1px solid var(--border-strong); border-radius: var(--r); background: var(--surface);
-         color: var(--on-accent); font-size: var(--fs-m); font-weight: var(--fw-label); line-height: var(--lh-title);
+         color: var(--text); font-size: var(--fs-m); font-weight: var(--fw-label); line-height: var(--lh-title);
          cursor: pointer; }
 /* the page script gives every button without a class the main-button class (CON-9: --accent fills a labelled part) */
 button.btn--primary { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
