@@ -3119,8 +3119,11 @@
     <string name="recent_arrow">→</string>
     <!-- 1=field 2=old 3=new -->
     <string name="recent_change">%1$s %2$s → %3$s</string>
+    <!-- 1=change 2=spools -->
+    <string name="recent_change_for">%1$s (%2$s)</string>
     <!-- 1=field 2=old 3=new 4=unit -->
     <string name="recent_change_unit">%1$s %2$s → %3$s %4$s</string>
+    <string name="recent_edit_gone">This record has no spools to edit now.</string>
     <string name="recent_error_brand">Enter a brand.</string>
     <string name="recent_error_colour">Enter 6 hex digits, like 2B2B2E.</string>
     <string name="recent_error_degrees_max">Enter degrees below 500.</string>

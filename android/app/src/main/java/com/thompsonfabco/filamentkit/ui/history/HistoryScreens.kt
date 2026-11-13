@@ -65,6 +65,7 @@ fun HistoryListEntry(current: () -> Api, client: Any?, onOpen: (String) -> Unit,
 fun HistoryRecordEntry(
     current: () -> Api,
     client: Any?,
+    online: Boolean,
     id: String,
     listOwner: ViewModelStoreOwner,
     onBack: () -> Unit,
@@ -77,7 +78,7 @@ fun HistoryRecordEntry(
     val list = viewModel(viewModelStoreOwner = listOwner) { HistoryListViewModel(HistoryBackend.of(current)) }
     val vm = viewModel(key = recordKey(id)) { RecordViewModel(HistoryBackend.of(current), id) }
     RecordScreen(
-        vm, list, client, onBack = { list.refresh(); onBack() }, onOpenRecord = onOpenRecord, onEdit = onEdit,
+        vm, list, client, online = online, onBack = { list.refresh(); onBack() }, onOpenRecord = onOpenRecord, onEdit = onEdit,
         onOpenPhoto = onOpenPhoto, onOpenSpool = onOpenSpool, onPairAgain = onPairAgain,
     )
 }
@@ -90,7 +91,7 @@ internal fun HistoryListScreen(vm: HistoryListViewModel, client: Any?, onOpen: (
         vm.refresh()
         onStopOrDispose { }
     }
-    ReloadOnNewClient(client) { vm.refresh() }
+    ReloadOnNewClient(client, vm::clientSeen)
     val space = SpoolwardenTheme.space
     val h = s.history
     val failure = s.error

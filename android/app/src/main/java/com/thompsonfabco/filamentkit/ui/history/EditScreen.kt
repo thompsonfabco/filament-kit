@@ -24,6 +24,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -44,6 +45,7 @@ import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
 import com.thompsonfabco.filamentkit.ui.components.SwDialog
 import com.thompsonfabco.filamentkit.ui.components.SwDialogButton
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
+import kotlinx.coroutines.delay
 
 /**
  * Edit by hand (05-android-app 10.3) on saved item [item] of record [id]. The form lives in the record's view model
@@ -52,6 +54,8 @@ import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 @Composable
 fun HistoryEditEntry(
     current: () -> Api,
+    client: Any?,
+    online: Boolean,
     id: String,
     item: Int,
     recordOwner: ViewModelStoreOwner,
@@ -59,14 +63,30 @@ fun HistoryEditEntry(
     onPairAgain: () -> Unit,
 ) {
     val vm = viewModel(viewModelStoreOwner = recordOwner, key = recordKey(id)) { RecordViewModel(HistoryBackend.of(current), id) }
-    EditScreen(vm, item, onClose, onPairAgain)
+    EditScreen(vm, item, onClose, onPairAgain, client, online)
 }
 
 @Composable
-internal fun EditScreen(vm: RecordViewModel, item: Int, onClose: () -> Unit, onPairAgain: () -> Unit) {
+internal fun EditScreen(
+    vm: RecordViewModel,
+    item: Int,
+    onClose: () -> Unit,
+    onPairAgain: () -> Unit,
+    client: Any? = null,
+    online: Boolean = false,
+) {
     val s by vm.state.collectAsState()
     val space = SpoolwardenTheme.space
     LaunchedEffect(vm) { vm.ensureLoaded() }
+    ReloadOnNewClient(client, vm::clientSeen)
+    LaunchedEffect(online) { if (online) vm.hubBack() }
+    // out of reach: keep trying; the typing stays and Save comes back with the connection (05-android-app 3.2)
+    LaunchedEffect(s.offline) {
+        while (s.offline) {
+            delay(RETRY_MS)
+            vm.load()
+        }
+    }
     LaunchedEffect(vm, item, s.record) { vm.startEdit(item) }
     val e = s.edit
     var leaving by rememberSaveable { mutableStateOf(false) }
@@ -85,13 +105,15 @@ internal fun EditScreen(vm: RecordViewModel, item: Int, onClose: () -> Unit, onP
             Text(stringResource(R.string.recent_edit_title), Modifier.semantics { heading() }, style = MaterialTheme.typography.titleLarge)
             ScreenState(
                 loaded = e != null,
-                loading = s.loading || (e == null && s.record != null),
+                loading = s.loading,
                 error = if (failure != null && failure != RecentFailure.Offline) failureText(failure) else null,
                 onTryAgain = vm::load,
                 offline = failure == RecentFailure.Offline,
             ) {
                 if (e != null) EditFields(vm, s, e)
             }
+            // the form cannot be opened (it was just saved, or the item is gone): say so, with a way back
+            if (e == null && s.record != null && !s.loading) Closed(s.saved, onClose)
         }
         if (e != null) {
             ActionBar(
@@ -115,6 +137,20 @@ internal fun EditScreen(vm: RecordViewModel, item: Int, onClose: () -> Unit, onP
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
+    }
+}
+
+@Composable
+private fun Closed(saved: SavedEdit?, onClose: () -> Unit) {
+    val space = SpoolwardenTheme.space
+    Column(verticalArrangement = Arrangement.spacedBy(space.s3)) {
+        if (saved != null) {
+            val names = saved.fields.map { stringResource(it.label) }.joinToString(", ")
+            NoticeCard(NoticeKind.Ok, pluralStringResource(R.plurals.recent_edit_saved, saved.fields.size, saved.fields.size, names))
+        } else {
+            NoticeCard(NoticeKind.Info, stringResource(R.string.recent_edit_gone))
+        }
+        SwButton(stringResource(R.string.common_back), onClose)
     }
 }
 

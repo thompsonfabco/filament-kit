@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -133,6 +134,19 @@ internal fun fieldValue(field: RecentField?, v: JsonElement?): String? {
 @Composable
 internal fun fieldName(wire: String): String = RecentField.of(wire)?.let { stringResource(it.label) } ?: wire.replace('_', ' ')
 
+/** A merged change: one line for every spool it applied to; the spools are named only when the fields differ between them. */
+@Composable
+internal fun mergedChangeText(c: MergedChange, nameSpools: Boolean): String {
+    val line = changeText(c.field, c.old, c.new)
+    if (!nameSpools || c.spoolIds.isEmpty()) return line
+    return stringResource(
+        R.string.recent_change_for, line, pluralStringResource(R.plurals.recent_spool_label, c.spoolIds.size, RecentValues.idList(c.spoolIds)),
+    )
+}
+
+/** Whether a field's changes differ between spools, so that the lines must say which spools they are for. */
+internal fun needsSpoolNames(all: List<MergedChange>, c: MergedChange): Boolean = all.count { it.field == c.field } > 1
+
 /** "Empty spool weight 150 → 140 g", the unit once at the end. */
 @Composable
 internal fun changeText(wire: String, old: JsonElement?, new: JsonElement?): String {
@@ -203,16 +217,10 @@ private const val READER_LOCAL = "local"
 private const val READER_CLOUD = "cloud"
 private const val PERCENT = 100
 
-/** Runs [reload] when the session's client changes (paired again, a certificate trusted), not on the first composition. */
+/** Tells the view model which client the session has now; the view model remembers the last one and reloads on a change. */
 @Composable
-internal fun ReloadOnNewClient(client: Any?, reload: () -> Unit) {
-    var seen by remember { mutableStateOf(client) }
-    LaunchedEffect(client) {
-        if (client !== seen) {
-            seen = client
-            reload()
-        }
-    }
+internal fun ReloadOnNewClient(client: Any?, seen: (Any?) -> Unit) {
+    LaunchedEffect(client) { seen(client) }
 }
 
 /** A dashed `border` outline in [shape] (the box that stands for a photo that is not there). */

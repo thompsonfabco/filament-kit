@@ -96,6 +96,7 @@ internal fun RecordScreen(
     onOpenPhoto: (Int) -> Unit,
     onOpenSpool: (JsonObject) -> Unit,
     onPairAgain: () -> Unit,
+    online: Boolean = false,
 ) {
     val s by vm.state.collectAsState()
     val ls by list.state.collectAsState()
@@ -105,9 +106,10 @@ internal fun RecordScreen(
         list.ensureLoaded()
     }
     ReloadOnNewClient(client) {
-        vm.load()
-        list.refresh()
+        vm.clientSeen(it)
+        list.clientSeen(it)
     }
+    LaunchedEffect(online) { if (online) vm.hubBack() }
     var note by rememberSaveable { mutableStateOf("") }
     val space = SpoolwardenTheme.space
     // out of reach: keep trying, the data on screen stays and what needs the Hub waits (05-android-app 3.2)
@@ -473,7 +475,8 @@ private fun RevisionsPanel(vm: RecordViewModel, s: RecordState, r: HistoryRecord
 @Composable
 private fun RevisionLine(rev: HistoryRevision) {
     val colors = SpoolwardenTheme.colors
-    val changes = rev.changes.map { changeText(it.field, it.old, it.new) }.joinToString("; ")
+    val merged = mergedChanges(rev.changes)
+    val changes = merged.map { mergedChangeText(it, needsSpoolNames(merged, it)) }.joinToString("; ")
     val time = RecentValues.time(rev.at)
     val line = stringResource(if (rev.by == READER) R.string.recent_revision_reader else R.string.recent_revision_by_hand, rev.n, time, changes)
     Column(verticalArrangement = Arrangement.spacedBy(SpoolwardenTheme.space.s1)) {
@@ -514,13 +517,14 @@ private const val READER = "ai"
 private fun UndoneLines(rev: HistoryRevision) {
     val space = SpoolwardenTheme.space
     val empty = stringResource(R.string.recent_value_empty)
-    val first = rev.changes.firstOrNull()
+    val merged = mergedChanges(rev.changes)
+    val first = merged.firstOrNull()
     Column(verticalArrangement = Arrangement.spacedBy(space.s2)) {
         if (first == null) {
             NoticeCard(NoticeKind.Ok, stringResource(R.string.recent_result_undone, rev.n))
         } else {
             val line = stringResource(R.string.recent_undo_done, rev.n, fieldName(first.field), fieldValue(RecentField.of(first.field), first.old) ?: empty)
-            val more = rev.changes.drop(1).map {
+            val more = merged.drop(1).map {
                 stringResource(R.string.recent_undo_again, fieldName(it.field), fieldValue(RecentField.of(it.field), it.old) ?: empty)
             }
             NoticeCard(NoticeKind.Ok, line)
@@ -545,7 +549,7 @@ private fun UndoDialog(vm: RecordViewModel, s: RecordState) {
         confirm = SwDialogButton(stringResource(R.string.common_undo), vm::undo, busy = s.undoBusy),
         cancel = SwAction(stringResource(R.string.common_cancel), vm::cancelUndo),
     ) {
-        t.changes.forEach {
+        mergedChanges(t.changes).forEach {
             Text(
                 stringResource(R.string.recent_undo_body, fieldName(it.field), fieldValue(RecentField.of(it.field), it.old) ?: empty),
                 style = MaterialTheme.typography.bodyMedium,

@@ -8,6 +8,7 @@ import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.net.Api
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
+import com.thompsonfabco.filamentkit.net.HistoryChange
 import com.thompsonfabco.filamentkit.net.HistoryRecord
 import com.thompsonfabco.filamentkit.net.HistoryRevision
 import com.thompsonfabco.filamentkit.net.HistorySaved
@@ -338,6 +339,15 @@ class ReadDetails(
     }
 }
 
+/** One change of a revision for every spool it applied to: the Hub writes one entry per spool and field. */
+class MergedChange(val field: String, val old: JsonElement?, val new: JsonElement?, val spoolIds: List<Int>)
+
+/** Identical entries across spools become one; the order of first appearance stays. */
+fun mergedChanges(changes: List<HistoryChange>): List<MergedChange> =
+    changes.groupBy { Triple(it.field, it.old, it.new) }.map { (k, v) ->
+        MergedChange(k.first, k.second, k.third, v.mapNotNull { it.spoolId }.distinct())
+    }
+
 data class HistoryListState(
     val history: IntakeHistory? = null,
     val loading: Boolean = false,
@@ -380,6 +390,17 @@ class HistoryListViewModel(
             }
             _state.update { it.copy(loading = false) }
         }
+    }
+
+    private var client: Any? = null
+    private var clientKnown = false
+
+    /** The session's client as the screen sees it now: a different one (paired again) than last time reloads. */
+    fun clientSeen(now: Any?) {
+        val changed = clientKnown && client !== now
+        client = now
+        clientKnown = true
+        if (changed) refresh()
     }
 
     /** Loads the list once when nothing is loaded or loading (a record restored on its own needs the Label Reader flag). */
@@ -455,6 +476,11 @@ data class RecordState(
     val undoTarget: HistoryRevision? get() = record?.takeIf { it.undoable }?.revisions?.lastOrNull { !it.undone }
 }
 
+/** Two values are the same when they read the same: 140.0 and 140, "190-230" and the range 190–230, nothing and null. */
+internal fun sameValue(a: JsonElement?, b: JsonElement?): Boolean = norm(a) == norm(b)
+
+private fun norm(v: JsonElement?): String? = RecentValues.text(v)?.replace('–', '-')?.trim()
+
 /** One record: load, ask the Label Reader (proposal, then accept or discard), edit by hand, undo. */
 class RecordViewModel(
     private val backend: HistoryBackend,
@@ -464,6 +490,21 @@ class RecordViewModel(
     private val _state = MutableStateFlow(RecordState())
     val state: StateFlow<RecordState> = _state.asStateFlow()
     private var lastNote = ""
+    private var client: Any? = null
+    private var clientKnown = false
+
+    /** The session's client as a screen sees it now: a different one (paired again) than last time reloads the record. */
+    fun clientSeen(now: Any?) {
+        val changed = clientKnown && client !== now
+        client = now
+        clientKnown = true
+        if (changed) load()
+    }
+
+    /** The connection is back: leave the offline state at once, keeping what was typed. */
+    fun hubBack() {
+        if (_state.value.offline) load()
+    }
 
     /** The item whose form was just saved: the screen leaving must not open it again while it fades out. */
     private var sealed: Int? = null
@@ -491,7 +532,12 @@ class RecordViewModel(
         viewModelScope.launch {
             guard(_state, { f -> _state.update { it.copy(error = f) } }, auth) {
                 val r = backend.record(id)
-                _state.update { it.copy(record = r, error = null, loadedAt = now(), unauthorized = false, mismatch = null) }
+                _state.update {
+                    it.copy(
+                        record = r, error = null, loadedAt = now(), unauthorized = false, mismatch = null,
+                        edit = it.edit?.let { e -> if (e.failure == RecentFailure.Offline) e.copy(failure = null) else e },
+                    )
+                }
             }
             _state.update { it.copy(loading = false) }
         }
@@ -576,7 +622,7 @@ class RecordViewModel(
         val errors = mutableMapOf<RecentField, FieldError>()
         for (field in e.changed) {
             when (val p = RecentValues.parse(e.texts.getValue(field), field)) {
-                is Parsed.Ok -> if (p.value != (old[field.wire] ?: JsonNull)) changes[field] = p.value
+                is Parsed.Ok -> if (!sameValue(p.value, old[field.wire])) changes[field] = p.value
                 is Parsed.Bad -> errors[field] = p.error
             }
         }

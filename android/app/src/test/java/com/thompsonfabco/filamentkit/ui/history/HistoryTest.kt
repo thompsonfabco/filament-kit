@@ -686,4 +686,34 @@ class HistoryTest {
         vm.retry(); runCurrent()
         assertNull(vm.state.value.mismatch)
     }
+
+    @Test fun identicalChangesAcrossSpoolsAreOneLine() {
+        val c = { id: Int -> HistoryChange(id, "name", JsonPrimitive("A"), JsonPrimitive("B")) }
+        val m = mergedChanges(listOf(c(41), c(42), HistoryChange(41, "tare", JsonPrimitive(150), JsonPrimitive(140))))
+        assertEquals(2, m.size)
+        assertEquals(listOf(41, 42), m[0].spoolIds)
+        assertEquals(listOf(41), m[1].spoolIds)
+    }
+
+    @Test fun equalNumbersAndRangesAreNotChanges() = runTest(dispatcher) {
+        assertTrue(sameValue(JsonPrimitive(140.0), JsonPrimitive(140)))
+        assertTrue(sameValue(JsonPrimitive("190-230"), values["nozzle_range"]))
+        assertTrue(sameValue(JsonNull, null))
+        val vm = loaded()
+        edited(vm, RecentField.Nozzle to "210.0")
+        vm.saveEdit {}; runCurrent()
+        assertTrue(fake.edits.isEmpty())
+        assertTrue(vm.state.value.edit!!.nothingChanged)
+    }
+
+    @Test fun aNewClientReloadsTheRecordAndClearsTheNotice() = runTest(dispatcher) {
+        val vm = RecordViewModel(fake, "a1")
+        vm.clientSeen("one"); runCurrent()
+        fake.error = null
+        vm.load(); runCurrent()
+        val before = fake.rec
+        vm.clientSeen("one"); runCurrent()
+        vm.clientSeen("two"); runCurrent()
+        assertEquals(before, vm.state.value.record)
+    }
 }

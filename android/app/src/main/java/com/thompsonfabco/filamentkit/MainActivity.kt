@@ -730,7 +730,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                         }
                         val list = remember(e) { nav.getBackStackEntry<RecentRoute>() }
                         HistoryRecordEntry(
-                            ::currentApi, a, e.toRoute<RecordRoute>().hid, listOwner = list,
+                            ::currentApi, a, online, e.toRoute<RecordRoute>().hid, listOwner = list,
                             onBack = { if (nav.currentBackStackEntry?.id == e.id) nav.popBackStack() },
                             // Newer and Older record step through the list without going back
                             onOpenRecord = { hid -> nav.navigate(RecordRoute(hid)) { popUpTo<RecordRoute> { inclusive = true } } },
@@ -750,7 +750,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                         val route = e.toRoute<RecordEditRoute>()
                         val record = remember(e) { nav.getBackStackEntry<RecordRoute>() }
                         HistoryEditEntry(
-                            ::currentApi, route.hid, route.item, recordOwner = record,
+                            ::currentApi, a, online, route.hid, route.item, recordOwner = record,
                             // a late answer must not pop whatever is showing by then
                             onClose = { if (nav.currentBackStackEntry?.id == e.id) nav.popBackStack() },
                             onPairAgain = app.router::pairAgain,
