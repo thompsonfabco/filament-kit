@@ -275,6 +275,7 @@ def _read(write: bool = True) -> dict[str, Printer]:
 def _write(printers: dict[str, Printer]) -> None:
     """printers.json first (the release before this one reads it), then printers.xml with that file's hash: a stop
     in between leaves a hash that doesn't match, and the next read takes the newer JSON's Bambu printers."""
+    _LABELS.clear()            # a log line names the printer by its place and model in the list as it is now
     state = config.paths().state
     state.mkdir(parents=True, exist_ok=True)
     js = _to_json(printers)
