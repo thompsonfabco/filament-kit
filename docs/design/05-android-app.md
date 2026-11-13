@@ -1303,6 +1303,22 @@ Trailing "Undo" (text button, 48 dp) where allowed. Undo asks: dialog "Put it ba
 2026-11-12 14:05)"), buttons "Keep" and "Put it back" (main). Result: the row shows "undone" and a notice line
 "12.4 g put back on spool 214." Empty: "Nothing logged in the last 7 days."
 
+### 9.11 Lines and results the printer screens also use
+
+The same texts on the Hub page and in the web app, where they show the same thing.
+
+| Where | Text |
+|---|---|
+| Progress line (9.4), facts joined by " · " | "<n> %" · "layer <n> of <m>" · "<time> left" · "done about <clock time>" |
+| Results of the controls (9.4) | "Resumed." · "Paused." · "Stopped." · "Light on." · "Light off." |
+| Stop dialog title (9.4) | "Stop <file name>?" or, when the printer gives no name, "Stop the print?" (two whole sentences, not a name filled into one) |
+| Load preview rows (9.6) | "Preset: <name>" or "Preset: none" · "Nozzle: <n> mm" or "The printer does not report its nozzle size; assuming <n> mm." · "Spool <id>, now in <slot>, goes back to <location>." (when the place is not known: "Spool <id>, now in <slot>, goes back to its previous place.") |
+| Map by loading rows (9.8) | "<slot>: <status>"; the nozzle as "Right nozzle" or "Left nozzle" |
+| Printer settings (9.9) | Field "Name", error "Enter a name."; results "Saved." |
+| Sharing a printer report | No app can take the file: "No app on this phone can share or save the file." |
+| Back or a tap outside while a dialog or sheet is still writing | Snackbar "Still working. Wait for it to finish."; for a load: "Still loading into the printer. Wait for its answer." The dialog stays open. |
+
+
 ---
 
 ## 10. Recently added
@@ -1735,6 +1751,7 @@ Every route, screen, dialog and flow of today's app (`filament-kit` Android app)
 | "Add spool" | Home "Add by hand" 5 |
 | "Add from label photos" | Home "Add from label photos" 5 |
 | "Add profile" | Slicer presets screen 11.2 and spool panel overflow 6.3, opening `catalog/new` 8 |
+| Printer screen: progress facts, control results, load preview rows, the busy message on Back | 9.11 |
 | History record: "When read" line, "Read again by …", "Weighed … · Tag read", a revision's note and device, re-link lines, the text when nothing is kept | Read facts of Recently added 10.2 (texts in `02-components.md` 7.2) |
 | "Existing lines" list on the Add profile screen, with "Change parent" on each line | Product lines panel of the Slicer presets screen 11.2 ("Change parent" opens a sheet) |
 | "Search" | Bottom bar "Spools" 2.3 |
