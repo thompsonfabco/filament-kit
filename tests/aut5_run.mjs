@@ -30,10 +30,11 @@
 import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-process.exitCode = 2;      // anything that ends the run early (a lost browser included) is a failed run, never a pass
+const IS_MAIN = !!process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);   // not when a test imports connectToPage
+if (IS_MAIN) process.exitCode = 2;      // anything that ends the run early (a lost browser included) is a failed run, never a pass
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, all) =>
@@ -121,6 +122,37 @@ function sweepOldProfiles() {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+function openSocket(url) {
+  return new Promise((res, rej) => {
+    const ws = new WebSocket(url);
+    ws.onopen = () => res(ws);
+    ws.onerror = () => rej(new Error("could not reach the browser"));
+  });
+}
+
+// The port file is written before the browser's HTTP endpoint answers and before its page exists (seen under load), so
+// the target list is asked again until a page is there, within limitMs; the WebSocket open is tried twice. A failure
+// names the phase that did not finish: "target list" (no answer), "page target" (answered, no page yet), "socket".
+export async function connectToPage(port, { limitMs = 15000, open = openSocket } = {}) {
+  const deadline = Date.now() + limitMs;
+  let phase = "target list", why = "no answer", page;
+  while (!page) {
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/json/list`);
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      phase = "page target"; why = "no page target yet";
+      page = (await res.json()).find((t) => t.type === "page" && t.webSocketDebuggerUrl);
+    } catch (e) { if (phase === "target list") why = e.cause?.code || e.message; }
+    if (page) break;
+    if (Date.now() >= deadline) throw new Error(`the browser's DevTools endpoint: ${phase} not ready after ${limitMs / 1000} s (${why})`);
+    await sleep(100);
+  }
+  try { return { ws: await open(page.webSocketDebuggerUrl), page }; }
+  catch { await sleep(300); }
+  try { return { ws: await open(page.webSocketDebuggerUrl), page }; }
+  catch (e) { throw new Error(`the browser's DevTools endpoint: socket did not open twice (${e.message})`); }
+}
+
 async function main() {
   if (!URL_BASE || !VIEWS.length) { console.error("usage: --url <page> --views <#a,#b>"); return 2; }
   const exe = findBrowser();
@@ -155,10 +187,7 @@ async function main() {
         : "it exited: " + browserExit})\n${browserErr.trim().split("\n").slice(-8).join("\n")}`);
       return 3;
     }
-    const targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
-    const page = targets.find((t) => t.type === "page");
-    const ws = new WebSocket(page.webSocketDebuggerUrl);
-    await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error("could not reach the browser")); });
+    const { ws } = await connectToPage(port);
     let id = 0;
     const waiting = new Map(), errors = [];
     ws.onmessage = (m) => {
@@ -269,4 +298,4 @@ async function main() {
   }
 }
 
-main().then((code) => { process.exitCode = code; }, (e) => { console.error("AUT-5:", e.message); process.exitCode = 2; });
+if (IS_MAIN) main().then((code) => { process.exitCode = code; }, (e) => { console.error("AUT-5:", e.message); process.exitCode = 2; });
