@@ -136,6 +136,20 @@ def test_add_returns_first_state(client, mgr):
     assert registry.load()[SERIAL].access_code == CODE and mgr.synced == 1
 
 
+def test_add_under_a_taken_name_gets_a_free_one(client, mgr):
+    """Spoolman slot locations join on the name: two printers must not share one."""
+    other = "01P00A222222222"
+    registry.detected(SERIAL, "10.0.0.5", "C12", "")
+    registry.detected(other, "10.0.0.6", "C12", "")
+    a = client.post("/api/printers", json={"serial": SERIAL, "access_code": CODE, "name": "Bench"})
+    b = client.post("/api/printers", json={"serial": other, "access_code": CODE, "name": "bench"})
+    assert (a.json()["printer"]["name"], b.json()["printer"]["name"]) == ("Bench", "bench 2")
+    mgr.states[SERIAL] = "wrong_code"   # re-keying the first printer under its own name keeps that name
+    c = client.post("/api/printers", json={"serial": SERIAL, "access_code": CODE, "name": "Bench"})
+    assert c.json()["printer"]["name"] == "Bench"
+    assert registry.load()[other].name == "bench 2"
+
+
 def test_add_with_name_and_wrong_code(client, mgr):
     mgr.settle = "wrong_code"
     registry.detected(SERIAL, "10.0.0.5", "C12", "Shop P1S")

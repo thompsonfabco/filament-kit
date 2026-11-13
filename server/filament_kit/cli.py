@@ -538,8 +538,8 @@ def _printers_action(choice: str, printers: list) -> None:
             return
         old = registry.load().get(serial)
         # a fresh entry: adding the printer again also clears its TLS pin (cert_fp), as POST /api/printers does
-        registry.upsert(registry.Printer(serial, name, model or (old.model if old else ""), ip, code, True))
-        print(f"Added {name}.")
+        added = registry.add_bambu(serial, name, model or (old.model if old else ""), ip, code)
+        print(f"Added {added.name}.")
     elif choice in ("3", "4"):
         p = _pick_printer(printers)
         if p is None:

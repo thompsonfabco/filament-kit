@@ -326,6 +326,17 @@ def test_printer_added_by_ip_with_the_serial_from_its_certificate(app, manager, 
     assert f"setup: printer {SERIAL} added from 192.0.2.20" in caplog.text
 
 
+def test_printer_added_under_a_taken_name_gets_a_free_one(app, manager, monkeypatch):
+    from filament_kit import setup_page
+    serials = iter([SERIAL, "03W00X123456789", SERIAL])
+    monkeypatch.setattr(setup_page, "setup_serial", lambda ip: next(serials))
+    c = client(app)
+    for ip in ("192.0.2.40", "192.0.2.41", "192.0.2.40"):   # the third is the first printer added again
+        assert post(c, "printers", {"ip": ip, "access_code": "12345678", "name": "H2D"}).status_code == 200
+    got = registry.load()
+    assert (got[SERIAL].name, got["03W00X123456789"].name) == ("H2D", "H2D 2")
+
+
 def test_printer_typed_serial_is_upper_cased_and_checked_against_the_certificate(app, monkeypatch):
     from filament_kit import setup_page
 

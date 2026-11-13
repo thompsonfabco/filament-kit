@@ -675,8 +675,7 @@ class SetupPage:
                 raise Refused(400, problem)
             old = registry.load().get(serial)
             # as the CLI's add: a fresh entry (adding the printer again also clears its TLS pin)
-            registry.upsert(registry.Printer(serial, name or (old.name if old else "") or serial,
-                                             model or (old.model if old else ""), ip, access, True))
+            registry.add_bambu(serial, name or (old.name if old else ""), model or (old.model if old else ""), ip, access)
             manager.sync()
             return {"serial": serial, "replaced": old is not None and old.configured, "note": note}
         r = await anyio.to_thread.run_sync(run)
