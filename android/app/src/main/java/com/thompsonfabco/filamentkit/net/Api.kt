@@ -512,7 +512,7 @@ class Api(
         val message = obj?.get("message")?.jsonPrimitive?.contentOrNull ?: apiStandIn(status)
         val extra = JsonObject(obj.orEmpty().filterKeys { it != "error" && it != "message" })
         val sent = if (status == 401) auth?.removePrefix("Bearer ")?.trim()?.ifBlank { null } else null
-        return ApiError(status, code, message, extra, sent)
+        return ApiError(status, code, message, extra, sent, noHubMessage = obj?.get("message") == null)
     }
 
     private fun genericCode(status: Int) = when {

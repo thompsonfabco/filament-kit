@@ -63,6 +63,15 @@ class ApiTest {
         assertNull(r.bearer())
     }
 
+    @Test fun anErrorPageThatIsNotJsonCarriesNoHubMessage() {
+        server.enqueue(MockResponse.Builder().code(502).body("<html>Bad Gateway</html>").build())
+        val page = failure { api.pair("123456") }
+        assertEquals(502, page.status)
+        assertEquals(true, page.noHubMessage)
+        json("""{"error":"rate_limited","message":"Too many tries."}""", 429)
+        assertEquals(false, failure { api.pair("123456") }.noHubMessage)
+    }
+
     @Test fun infoApkVersionMayBeNull() = runBlocking {
         json("""{"name":"Kit","version":"1.2","api":1,"apk_version":null}""")
         assertNull(api.info().apkVersion)

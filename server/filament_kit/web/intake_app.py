@@ -32,7 +32,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Route
 
-from .. import intake, inventory, lan, modules, shared_files, tagsources
+from .. import __version__, intake, inventory, lan, modules, shared_files, tagsources
 from ..intake import CapReached, ReadError
 from ..station_client import StationClient
 from . import mcp_tools, pages, printers_app
@@ -231,6 +231,7 @@ class IntakeApp:
         return [Route(p, fn, methods=m) for p, fn, m in (
             ("/intake", self.page, ["GET"]), ("/intake/app.js", self.asset, ["GET"]),
             ("/intake/app.css", self.asset, ["GET"]), ("/intake/printers.js", self.asset, ["GET"]),
+            ("/intake/sw.js", self.api(self.service_worker), ["GET"]),   # S3.14: scope is the app; Printers tab or not
             ("/intake/signin.js", self.asset, ["GET"]),   # the sign-in page's Show button (auth.py, web unit)
             ("/intake/shared/{name}", self.shared_asset, ["GET"]),
             ("/intake/icon.png", self.icon_route, ["GET"]),
@@ -404,6 +405,15 @@ class IntakeApp:
         name = request.url.path.rsplit("/", 1)[-1]
         return Response(self.static[name], media_type="text/javascript" if name.endswith(".js") else "text/css",
                         headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"})
+
+    async def service_worker(self, request: Request):
+        """sw.js with the Hub version in its cache name (print alerts and the Printers tab are not needed to serve it).
+        Service-Worker-Allowed lets the page register it for the app's own path, so the page at <base> (no slash) is
+        in its scope as well as <base>/..."""
+        body = (STATIC / "sw.js").read_bytes().replace(b"__VERSION__", __version__.encode())
+        return Response(body, media_type="text/javascript",
+                        headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff",
+                                 "Service-Worker-Allowed": self.base})
 
     async def shared_asset(self, request: Request):
         return shared_files.response(self.shared, request.path_params["name"])

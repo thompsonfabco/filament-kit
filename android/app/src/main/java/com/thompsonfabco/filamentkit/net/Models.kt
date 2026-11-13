@@ -229,9 +229,11 @@ class ApiError(
     override val message: String,
     val extra: JsonObject = JsonObject(emptyMap()),
     val sentToken: String? = null,
+    /** The reply carried no `message` of the Hub's: an error page of some other service, so [message] is the app's own. */
+    val noHubMessage: Boolean = false,
 ) : Exception(message) {
     /** The reply was not the Hub speaking: unreadable (`bad_response`) or an error page without the Hub's own `message`. */
-    val notFromHub: Boolean get() = code == BAD_RESPONSE || message.isBlank() || message == apiStandIn(status)
+    val notFromHub: Boolean get() = code == BAD_RESPONSE || noHubMessage || message.isBlank() || message == apiStandIn(status)
 
     companion object {
         const val BAD_RESPONSE = "bad_response"

@@ -20,11 +20,11 @@ import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.rule.GrantPermissionRule
-import com.thompsonfabco.filamentkit.session.UNPAIRED_MESSAGE
+import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.tags.TagEvents
 import com.thompsonfabco.filamentkit.tags.formatUid
 import com.thompsonfabco.filamentkit.ui.add.DebugPhotos
-import com.thompsonfabco.filamentkit.ui.pair.groupFingerprint
+import com.thompsonfabco.filamentkit.ui.pair.fingerprintLines
 import java.security.SecureRandom
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -52,6 +52,10 @@ private const val TAG = "FkE2E"
  */
 @RunWith(AndroidJUnit4::class)
 class EndToEndTest {
+    /** The notice at the top of the first pairing screen when the Hub stopped accepting this phone (05-android-app 4.1). */
+    private val unpairedBanner: String
+        get() = InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.pair_banner_unpaired)
+
     /** Skips before any other rule runs unless `fkPhase` is passed. */
     private val onlyWithPhase = TestRule { base, _ ->
         object : Statement() {
@@ -85,7 +89,7 @@ class EndToEndTest {
         val uid = newUid()
         Log.i(TAG, "tag uid $uid, photo ${photo.size} bytes")
 
-        waitFor("Pair with your server")
+        waitFor("Pair with your Hub")
         pairManually(need("fkCode"))
 
         // Printers: the test server has none (it is behind NAT), so only the empty state is checked here.
@@ -157,51 +161,51 @@ class EndToEndTest {
     private fun unpairedOnServerLandsOnPair(uid: String) {
         Log.i(TAG, "UNPAIR_NOW tag=$uid")
         val until = System.currentTimeMillis() + 180_000
-        while (!exists(UNPAIRED_MESSAGE) && System.currentTimeMillis() < until) {
-            if (!exists("Pair with your server")) TagEvents.emit(uid)
+        while (!exists(unpairedBanner) && System.currentTimeMillis() < until) {
+            if (!exists("Pair with your Hub")) TagEvents.emit(uid)
             Thread.sleep(3_000)
             compose.waitForIdle()
         }
-        waitFor(UNPAIRED_MESSAGE)
-        waitFor("Pair with your server")
+        waitFor(unpairedBanner)
+        waitFor("Pair with your Hub")
         assertFalse("the spool card must not stay open", exists("Gross weight (g)"))
         Log.i(TAG, "UNPAIRED_SHOWN")
     }
 
     @Test fun cold() {
         assumeTrue(arg("fkPhase") == "cold")
-        waitFor("Pair with your server")
-        waitFor(UNPAIRED_MESSAGE)
+        waitFor("Pair with your Hub")
+        waitFor(unpairedBanner)
         assertFalse(exists("Add by hand"))
     }
 
     @Test fun forget() {
         assumeTrue(arg("fkPhase") == "forget")
-        waitFor("Pair with your server")
+        waitFor("Pair with your Hub")
         pairManually(need("fkCode"))
-        assertFalse(exists(UNPAIRED_MESSAGE))
+        assertFalse(exists(unpairedBanner))
 
         click("Settings")
         click("Forget server")
         waitFor("Forget this server?")
         click("Forget")
-        waitFor("Pair with your server")
-        assertFalse("a forgotten server is not an unpaired one", exists(UNPAIRED_MESSAGE))
+        waitFor("Pair with your Hub")
+        assertFalse("a forgotten server is not an unpaired one", exists(unpairedBanner))
         compose.activityRule.scenario.recreate()
-        waitFor("Pair with your server")
+        waitFor("Pair with your Hub")
     }
 
     // ---------- steps ----------
 
     private fun pairManually(code: String) {
-        click("Enter address")
-        field("Host name or IP address").performTextClearance()
-        field("Host name or IP address").performTextInput(need("fkHost"))
+        click("Enter the address instead")
+        field("IP address or name").performTextClearance()
+        field("IP address or name").performTextInput(need("fkHost"))
         field("Port").performTextClearance()
         field("Port").performTextInput(arg("fkPort") ?: "8710")
         click("Connect")
-        waitFor("Check the server's fingerprint", timeoutMs = 30_000)
-        arg("fkFingerprint")?.let { compose.onNodeWithText(groupFingerprint(it.lowercase())).assertExists() }
+        waitFor("Check the Hub's fingerprint", timeoutMs = 30_000)
+        arg("fkFingerprint")?.let { compose.onNodeWithText(fingerprintLines(it.lowercase()).joinToString("\n")).assertExists() }
         click("It matches")
         field("6-digit code").performTextInput(code)
         click("Pair")
