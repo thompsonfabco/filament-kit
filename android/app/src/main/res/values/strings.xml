@@ -25,7 +25,7 @@
     <string name="common_hub_unreachable">Cannot reach the Hub. Check that this phone is on the home network.</string>
     <string name="common_hub_answer_unknown">The Hub sent an answer this app does not understand. Update the app or the Hub, then try again.</string>
     <!-- 1=feature -->
-    <string name="common_feature_off">%1$s is switched off on this Hub. Switch it on on the Hub page under Features.</string>
+    <string name="common_feature_off">%1$s is switched off on this Hub. Switch it on in Features on the Hub page.</string>
     <string name="common_spoolman_unreachable">The Hub can\'t reach Spoolman right now. Try again in a minute.</string>
     <string name="common_still_waiting">Still waiting for the Hub…</string>
     <!-- 1=time -->
@@ -1761,7 +1761,7 @@
     <string name="common_error_access_code">Enter the Access Code shown on the printer.</string>
     <string name="common_error_address">Enter the printer\'s address.</string>
     <string name="common_error_port">Enter a port from 1 to 65535.</string>
-    <string name="common_feature_off_hint">Switch it on on the Hub page under Features.</string>
+    <string name="common_feature_off_hint">Switch it on in Features on the Hub page.</string>
     <string name="common_field_bed">Bed</string>
     <string name="common_field_bed_range">Bed range</string>
     <string name="common_field_brand">Brand</string>
