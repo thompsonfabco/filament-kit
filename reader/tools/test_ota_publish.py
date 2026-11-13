@@ -50,6 +50,16 @@ def test_sig2_signs_the_build_number_with_the_hash(tmp_path):
     pub.verify(base64.b64decode(m["sig"]), sha, pre)
 
 
+def test_sig2_preimage_matches_the_firmware():
+    # The same vector and hex as test_ota_sig_preimage_matches_publisher in
+    # reader/test/test_core/test_main.cpp (the firmware's otaSigPreimage); change both or neither.
+    sha = bytes(range(32))
+    pre_hex = ("666b2d7265616465722d6f746101000102030405060708090a0b0c0d0e0f1011121314151617"
+               "18191a1b1c1d1e1f000000006ae82a00")
+    assert op.SIG2_PREFIX + sha + (1793600000).to_bytes(8, "big") == bytes.fromhex(pre_hex)
+    assert op.build_digest(sha, 1793600000) == hashlib.sha256(bytes.fromhex(pre_hex)).digest()
+
+
 def test_key_file_is_created_once_and_reused(tmp_path):
     p = tmp_path / "sub" / "k.pem"
     k1 = op.load_or_create_key(p, create=True)
