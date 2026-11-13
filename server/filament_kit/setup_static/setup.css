@@ -15,13 +15,15 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 input:hover, select:hover, textarea:hover { border-color: var(--text); }
 input:focus, select:focus, textarea:focus { border-color: var(--focus); outline: 2px solid var(--focus); outline-offset: 0; }
 input:disabled, select:disabled, textarea:disabled { border-color: var(--border); background: var(--surface-2); color: var(--muted); }
-input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; accent-color: var(--accent); }
+input[type="checkbox"], input[type="radio"] { width: auto; min-height: 0; accent-color: var(--accent-text); }
 /* buttons: the plain one is the primary button, .secondary the neutral one, .danger the danger one */
 button { position: relative; display: inline-flex; align-items: center; justify-content: center; padding: 0 var(--s4);
-         min-height: var(--ctl); border: 1px solid var(--accent); border-radius: var(--r); background: var(--accent);
+         min-height: var(--ctl); border: 1px solid var(--border-strong); border-radius: var(--r); background: var(--surface);
          color: var(--on-accent); font-size: var(--fs-m); font-weight: var(--fw-label); line-height: var(--lh-title);
          cursor: pointer; }
-button:hover, button:active { border-color: var(--accent-hover); background: var(--accent-hover); }
+/* the page script gives every button without a class the main-button class (CON-9: --accent fills a labelled part) */
+button.btn--primary { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+button.btn--primary:hover, button.btn--primary:active { border-color: var(--accent-hover); background: var(--accent-hover); }
 button.secondary { border-color: var(--border-strong); background: var(--surface); color: var(--text); }
 button.secondary:hover, button.secondary:active { border-color: var(--text); background: var(--surface); }
 button.danger { border-color: var(--bad); background: transparent; color: var(--bad); }

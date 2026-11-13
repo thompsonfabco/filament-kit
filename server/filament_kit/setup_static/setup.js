@@ -8,6 +8,7 @@ const app = document.getElementById("app");
 
 function h(tag, props, ...kids) {
   const el = document.createElement(tag);
+  if (tag === "button" && !(props && props.class)) el.className = "btn--primary";   // the main button look (CON-9)
   for (const [k, v] of Object.entries(props || {})) {
     if (v === undefined) continue;
     if (k === "on") for (const [ev, fn] of Object.entries(v)) el.addEventListener(ev, fn);
