@@ -4,7 +4,6 @@ import androidx.compose.ui.graphics.Color
 import com.thompsonfabco.filamentkit.net.AmsSlot
 import com.thompsonfabco.filamentkit.net.SlotSpool
 import com.thompsonfabco.filamentkit.ui.printers.PrinterHelp
-import com.thompsonfabco.filamentkit.ui.spool.LoadHelp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -50,12 +49,6 @@ class ColorSwatchTest {
 
     @Test fun anInventorySpoolInASlotWithNoSettingIsLoaded() {
         assertFalse(PrinterHelp.slotEmpty(slot(type = "", hex = "", spool = SlotSpool(id = 7))))
-    }
-
-    @Test fun theLoadFlowSaysEmptyByTheSameRule() {
-        assertEquals("A1 · empty", LoadHelp.slotLine(slot(type = "PLA", hex = "FFFFFF", present = false)))
-        assertEquals("A1 · x", LoadHelp.slotLine(slot(type = "", hex = "", spool = SlotSpool(id = 7, name = "x"))))
-        assertEquals("A1 · PLA", LoadHelp.slotLine(slot(type = "PLA", hex = "FFFFFF")))
     }
 
     private fun slot(type: String, hex: String, present: Boolean? = null, spool: SlotSpool? = null) =

@@ -2,18 +2,20 @@ package com.thompsonfabco.filamentkit.ui.spool
 
 import com.thompsonfabco.filamentkit.net.ApiError
 import com.thompsonfabco.filamentkit.net.FingerprintMismatch
-import kotlinx.coroutines.CompletableDeferred
+import androidx.lifecycle.SavedStateHandle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
-import kotlinx.serialization.json.JsonNull
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -21,381 +23,404 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SpoolViewModelTest {
-    @Before fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
+    private val dispatcher = StandardTestDispatcher()
+    private val backend = FakeSpoolBackend()
+    private val first = spoolJson(214).toSpoolSummary()
+
+    @Before fun setUp() {
+        Dispatchers.setMain(dispatcher)
+        SpoolCache.clear()
+    }
+
     @After fun tearDown() = Dispatchers.resetMain()
 
-    private fun spool(id: Int, remaining: Double = 800.0, location: String? = "Shelf A") = buildJsonObject {
-        put("id", id)
-        put("filament", buildJsonObject {
-            put("name", "Grey")
-            put("material", "PLA")
-            put("color_hex", "808080")
-            put("vendor", buildJsonObject { put("name", "SUNLU") })
-        })
-        location?.let { put("location", it) }
-        put("remaining_weight", remaining)
+    private fun vm(initial: SpoolSummary? = first, tag: String? = null) = SpoolViewModel(214, backend, initial, tag)
+
+    @Test fun itOpensWithTheSummaryItWasGivenAndAsksNothing() = runTest(dispatcher) {
+        val vm = vm(tag = "04A1B2")
+        runCurrent()
+        assertEquals(first, vm.state.value.spool)
+        assertEquals("04A1B2", vm.state.value.openedByTag)
+        assertFalse(vm.state.value.loading)
+        assertTrue(backend.calls.isEmpty())
     }
 
-    class Call(val name: String, val args: Map<String, Any?>)
+    @Test fun afterARestartItFindsTheSpoolAmongTheHubsSpools() = runTest(dispatcher) {
+        backend.spools = listOf(spoolJson(7), spoolJson(214, remaining = 500.0))
+        val vm = vm(initial = null)
+        assertTrue(vm.state.value.loading)
+        advanceUntilIdle()
+        assertEquals(500.0, vm.state.value.spool!!.remaining!!, 0.0)
+        assertFalse(vm.state.value.loading)
+        assertEquals(listOf("spool:214"), backend.calls)
+    }
 
-    private class FakeBackend : SpoolBackend {
-        val calls = mutableListOf<Call>()
-        var tagResult: JsonObject? = null
-        var tagError: Exception? = null
-        val tagGates = mutableMapOf<String, CompletableDeferred<JsonObject?>>()
-        var updateError: Exception? = null
-        var searchError: Exception? = null
-        var locationsError: Exception? = null
-        var linkError: ((Boolean) -> Exception?)? = null
-        var sealed: List<JsonObject> = emptyList()
-        var updateResult: JsonObject = buildJsonObject { put("id", 1) }
-        var linkResult: JsonObject = buildJsonObject { put("id", 2) }
+    @Test fun refreshAsksForThisSpoolByItsNumberEvenWhenTheTagMovedAway() = runTest(dispatcher) {
+        val tagged = spoolJson(214, tag = "04A1B2").toSpoolSummary()
+        // the tag was moved to spool 300 meanwhile; spool 214 is still there
+        backend.tagAnswer = spoolJson(300, tag = "04A1B2", remaining = 10.0)
+        backend.spools = listOf(spoolJson(214, remaining = 480.0))
+        val vm = vm(initial = tagged)
+        vm.refresh()
+        assertTrue(vm.state.value.loading)
+        advanceUntilIdle()
+        assertEquals(214, vm.state.value.spool!!.id)
+        assertEquals(480.0, vm.state.value.spool!!.remaining!!, 0.0)
+        assertEquals(listOf("spool:214"), backend.calls)
+    }
 
-        override suspend fun tag(uid: String): JsonObject? {
-            calls += Call("tag", mapOf("uid" to uid))
-            tagError?.let { throw it }
-            tagGates[uid]?.let { return it.await() }
-            return tagResult
+    @Test fun aSpoolTheHubDoesNotHaveIsAFailureWithTryAgainNeverABlankScreen() = runTest(dispatcher) {
+        val vm = vm(initial = null)
+        advanceUntilIdle()
+        assertNull(vm.state.value.spool)
+        assertFalse(vm.state.value.loading)
+        assertEquals(HubFailure.Message("spool 214 was not found"), vm.state.value.failure)
+        assertEquals(Retry.Refresh, vm.state.value.retry)
+        backend.spools = listOf(spoolJson(214))
+        vm.retry()
+        advanceUntilIdle()
+        assertEquals(214, vm.state.value.spool!!.id)
+        assertNull(vm.state.value.failure)
+    }
+
+    @Test fun aFailedRefreshKeepsTheSpoolAndSaysWhy() = runTest(dispatcher) {
+        backend.failure = "spool" to ApiError(0, "offline", "no route")
+        val vm = vm()
+        vm.refresh()
+        advanceUntilIdle()
+        assertEquals(first, vm.state.value.spool)
+        assertEquals(HubFailure.Unreachable, vm.state.value.failure)
+        assertFalse(vm.state.value.loading)
+    }
+
+    // ---- Update weight ----
+
+    @Test fun aValidWeightIsPreviewedAfter400msAndTypingAgainDropsThePreview() = runTest(dispatcher) {
+        backend.updateAnswer = { gross, _, _, _ -> spoolJson(214, remaining = (gross ?: 0.0) - 140) }
+        val vm = vm()
+        vm.openWeight()
+        vm.setWeight("622")
+        runCurrent()
+        assertTrue(vm.state.value.weight!!.previewing)
+        advanceTimeBy(399)
+        assertTrue(backend.calls.isEmpty())
+        advanceTimeBy(2)
+        runCurrent()
+        val w = vm.state.value.weight!!
+        assertEquals(482.0, w.preview!!.becomes!!, 0.0)
+        assertEquals(620.0, w.preview!!.now!!, 0.0)
+        assertTrue(w.canSave)
+        assertEquals(listOf("update:214:gross=622.0:location=null:empty=false:dry=true"), backend.calls)
+
+        vm.setWeight("6225")
+        assertNull(vm.state.value.weight!!.preview)
+        assertFalse(vm.state.value.weight!!.canSave)
+    }
+
+    @Test fun anInvalidWeightIsNeverSent() = runTest(dispatcher) {
+        val vm = vm()
+        vm.openWeight()
+        for (bad in listOf("0", "-5", "abc", "1e400", "NaN")) {
+            vm.setWeight(bad)
+            advanceTimeBy(1_000)
         }
-        override suspend fun link(spoolId: Int, tag: String, force: Boolean, dryRun: Boolean, gross: Double?): JsonObject {
-            calls += Call("link", mapOf("id" to spoolId, "tag" to tag, "force" to force, "dry" to dryRun, "gross" to gross))
-            linkError?.invoke(dryRun)?.let { throw it }
-            return linkResult
-        }
-        override suspend fun update(spoolId: Int, gross: Double?, location: String?, empty: Boolean, dryRun: Boolean): JsonObject {
-            calls += Call("update", mapOf("id" to spoolId, "gross" to gross, "location" to location, "empty" to empty, "dry" to dryRun))
-            updateError?.let { throw it }
-            return updateResult
-        }
-        override suspend fun searchSealed(q: String): List<JsonObject> {
-            calls += Call("search", mapOf("q" to q))
-            searchError?.let { throw it }
-            return sealed
-        }
-        override suspend fun locations(): List<String> {
-            locationsError?.let { throw it }
-            return listOf("Shelf A", "Dry box")
-        }
+        assertTrue(backend.calls.isEmpty())
+        assertTrue(vm.state.value.weight!!.invalid)
+        vm.saveWeight()
+        assertTrue(backend.calls.isEmpty())
     }
 
-    private val backend = FakeBackend()
-    private fun vm() = SpoolViewModel(backend)
-
-    @Test fun knownTagShowsCard() {
-        backend.tagResult = spool(1)
+    @Test fun savingNeedsThePreviewFirst() = runTest(dispatcher) {
         val vm = vm()
-        vm.onTag("4:77:90:e")
-        val s = vm.state.value as SpoolUiState.Card
-        assertEquals("SUNLU", s.spool.brand)
-        assertEquals("Grey", s.spool.name)
-        assertEquals("808080", s.spool.colorHex)
-        assertEquals("Shelf A", s.spool.location)
-        assertEquals(800.0, s.spool.remaining!!, 0.0)
+        vm.openWeight()
+        vm.setWeight("622")
+        vm.saveWeight()
+        advanceTimeBy(100)
+        assertTrue("no save before the preview is shown", backend.calls.none { it.endsWith("dry=false") })
     }
 
-    @Test fun unknownTagShowsChoice() {
+    @Test fun savingWritesTheWeightClosesTheSheetAndSetsTheResultLine() = runTest(dispatcher) {
+        backend.updateAnswer = { gross, _, _, dry -> spoolJson(214, remaining = if (dry) 482.0 else 481.5) }
         val vm = vm()
-        vm.onTag("a:b")
-        assertEquals(SpoolUiState.UnknownTag("a:b"), vm.state.value)
+        vm.openWeight()
+        vm.setWeight("622")
+        advanceTimeBy(500)
+        runCurrent()
+        vm.saveWeight()
+        assertTrue(vm.state.value.weight!!.saving)
+        assertTrue("a save in flight is waited for", vm.state.value.writing)
+        vm.closeWeight()
+        assertNotNull("the sheet cannot be closed while it saves", vm.state.value.weight)
+        advanceUntilIdle()
+        assertNull(vm.state.value.weight)
+        assertEquals(SpoolResult.WeightUpdated(481.5), vm.state.value.result)
+        assertEquals(481.5, vm.state.value.spool!!.remaining!!, 0.0)
+        assertTrue(backend.calls.last().endsWith("gross=622.0:location=null:empty=false:dry=false"))
     }
 
-    @Test fun apiErrorsAndOtherExceptionsBecomeMessages() {
-        backend.tagError = ApiError(0, "offline", "x")
+    @Test fun aRefusedSaveKeepsTheSheetAndTheTypedWeight() = runTest(dispatcher) {
         val vm = vm()
-        vm.onTag("a")
-        assertTrue((vm.state.value as SpoolUiState.Failed).message.contains("reach", ignoreCase = true))
-        backend.tagError = IllegalStateException("boom")
-        vm.onTag("a")
-        assertEquals("Unexpected response from the server", (vm.state.value as SpoolUiState.Failed).message)
+        vm.openWeight()
+        vm.setWeight("100")
+        advanceTimeBy(500)
+        runCurrent()
+        backend.failure = "update" to ApiError(400, "bad_request", "gross 100 g is below the spool tare 140 g - check the weight")
+        vm.saveWeight()
+        advanceUntilIdle()
+        val w = vm.state.value.weight!!
+        assertEquals("100", w.text)
+        assertFalse(w.saving)
+        assertEquals(HubFailure.Message("gross 100 g is below the spool tare 140 g - check the weight"), w.failure)
+        assertNull(vm.state.value.result)
     }
 
-    @Test fun weightPreviewIsDryRunThenConfirmIsNot() {
-        backend.tagResult = spool(1)
+    @Test fun closingWithoutATypedWeightJustCloses() = runTest(dispatcher) {
         val vm = vm()
-        vm.onTag("a")
-        backend.updateResult = spool(1, remaining = 640.0)
-        vm.previewWeight(900.0)
-        var c = vm.state.value as SpoolUiState.Card
-        assertEquals(640.0, c.weightPreview!!.remaining!!, 0.0)
-        assertEquals(true, backend.calls.last().args["dry"])
-        assertEquals(900.0, backend.calls.last().args["gross"])
-        vm.confirmWeight()
-        assertEquals(false, backend.calls.last().args["dry"])
-        c = vm.state.value as SpoolUiState.Card
-        assertNull(c.weightPreview)
-        assertEquals(640.0, c.spool.remaining!!, 0.0)
+        vm.openWeight()
+        assertFalse(vm.state.value.weight!!.dirty)
+        vm.closeWeight()
+        assertNull(vm.state.value.weight)
     }
 
-    @Test fun nonFiniteOrNonPositiveWeightsAreNeverSent() {
-        backend.tagResult = spool(1)
-        val vm = vm()
-        vm.onTag("a")
-        for (bad in listOf(Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY, 0.0, -3.0)) vm.previewWeight(bad)
-        assertTrue(backend.calls.none { it.name == "update" })
+    // ---- Move ----
 
-        backend.tagResult = null
-        vm.onTag("b:c")
-        backend.sealed = listOf(spool(2))
-        vm.startLink()
-        vm.search("sun")
-        vm.pick(2, Double.NaN)
-        vm.pick(2, Double.POSITIVE_INFINITY)
-        vm.pick(2, 0.0)
-        assertTrue(backend.calls.none { it.name == "link" })
+    @Test fun movingToAnotherLocationSavesAtOnceAndOffersUndo() = runTest(dispatcher) {
+        backend.updateAnswer = { _, location, _, _ -> spoolJson(214, location = location) }
+        val vm = vm()
+        vm.openMove()
+        advanceUntilIdle()
+        assertEquals(listOf("Shelf B", "Workshop X1 A1", "Dry box 1"), vm.state.value.move!!.locations)
+        vm.move("Shelf B")
+        assertEquals("Shelf B", vm.state.value.move!!.movingTo)
+        assertTrue(vm.state.value.writing)
+        advanceUntilIdle()
+        assertNull(vm.state.value.move)
+        assertEquals("Shelf B", vm.state.value.spool!!.location)
+        assertEquals(SpoolResult.Moved("Shelf B"), vm.state.value.result)
+        assertEquals(MoveToast("Shelf B", previous = "Workshop X1 A1"), vm.state.value.moveToast)
+
+        vm.toastShown()
+        vm.undoMove("Workshop X1 A1")
+        advanceUntilIdle()
+        assertEquals("Workshop X1 A1", vm.state.value.spool!!.location)
+        assertNull("undoing a move offers no second undo", vm.state.value.moveToast)
+        assertEquals(
+            listOf("locations", "update:214:gross=null:location=Shelf B:empty=false:dry=false", "update:214:gross=null:location=Workshop X1 A1:empty=false:dry=false"),
+            backend.calls,
+        )
     }
 
-    @Test fun markEmptySendsEmptyAfterConfirmation() {
-        backend.tagResult = spool(1)
+    @Test fun theCurrentLocationOnlyClosesTheSheet() = runTest(dispatcher) {
         val vm = vm()
-        vm.onTag("a")
+        vm.openMove()
+        advanceUntilIdle()
+        vm.move("Workshop X1 A1")
+        assertNull(vm.state.value.move)
+        assertEquals(listOf("locations"), backend.calls)
+    }
+
+    @Test fun aFailedMoveStaysInTheSheetWithItsNotice() = runTest(dispatcher) {
+        val vm = vm()
+        vm.openMove()
+        advanceUntilIdle()
+        backend.failure = "update" to ApiError(0, "offline", "gone")
+        vm.move("Shelf B")
+        advanceUntilIdle()
+        assertEquals(HubFailure.Unreachable, vm.state.value.move!!.failure)
+        assertNull(vm.state.value.move!!.movingTo)
+        assertEquals("Workshop X1 A1", vm.state.value.spool!!.location)
+        assertNull(vm.state.value.result)
+    }
+
+    @Test fun noLocationsIsAnEmptyListNotAFailure() = runTest(dispatcher) {
+        backend.locations = emptyList()
+        val vm = vm()
+        vm.openMove()
+        advanceUntilIdle()
+        assertEquals(emptyList<String>(), vm.state.value.move!!.locations)
+        assertNull(vm.state.value.move!!.failure)
+    }
+
+    // ---- Mark empty ----
+
+    @Test fun markingEmptyAsksThenWritesAndSetsTheResult() = runTest(dispatcher) {
+        backend.updateAnswer = { _, _, empty, _ -> spoolJson(214, remaining = 0.0, archived = empty) }
+        val vm = vm()
         vm.askMarkEmpty()
-        assertTrue((vm.state.value as SpoolUiState.Card).confirmEmpty)
-        assertTrue(backend.calls.none { it.name == "update" })
-        backend.updateResult = spool(1, remaining = 0.0)
-        vm.confirmEmpty()
-        val u = backend.calls.last()
-        assertEquals(true, u.args["empty"])
-        assertEquals(false, u.args["dry"])
-        assertEquals(0.0, (vm.state.value as SpoolUiState.Card).spool.remaining!!, 0.0)
-    }
-
-    @Test fun moveSendsLocation() {
-        backend.tagResult = spool(1)
-        val vm = vm()
-        vm.onTag("a")
-        backend.updateResult = spool(1, location = "Dry box")
-        vm.move("Dry box")
-        assertEquals("Dry box", backend.calls.last().args["location"])
-        assertEquals("Dry box", (vm.state.value as SpoolUiState.Card).spool.location)
-    }
-
-    @Test fun linkPreviewIsDryRunConfirmIsNot() {
-        val vm = vm()
-        vm.onTag("a:b")
-        backend.sealed = listOf(spool(2))
-        vm.startLink()
-        vm.search("sun")
-        assertEquals(1, (vm.state.value as SpoolUiState.LinkSearch).results.size)
-        assertEquals("sun", backend.calls.last().args["q"])
-        vm.pick(2, 1000.0)
-        val p = vm.state.value as SpoolUiState.LinkPreview
-        assertEquals(true, backend.calls.last().args["dry"])
-        assertEquals(false, backend.calls.last().args["force"])
-        assertEquals(1000.0, backend.calls.last().args["gross"])
-        assertEquals(2, p.spool.id)
-        vm.confirmLink()
-        val last = backend.calls.last()
-        assertEquals(false, last.args["dry"])
-        assertEquals(2, last.args["id"])
-        assertEquals("a:b", last.args["tag"])
-        assertTrue(vm.state.value is SpoolUiState.Card)
-    }
-
-    @Test fun tagOnOtherSpoolConflictThenForce() {
-        val vm = vm()
-        vm.onTag("a:b")
-        val extra = buildJsonObject {
-            put("reason", "tag_on_other_spool")
-            put("other_spool", spool(9))
-        }
-        backend.linkError = { dry -> if (dry) ApiError(409, "tag_conflict", "conflict", extra) else null }
-        vm.pick(2, null)
-        val c = vm.state.value as SpoolUiState.Conflict
-        assertEquals(ConflictReason.TagOnOtherSpool, c.reason)
-        assertEquals(9, c.otherSpool!!.id)
-        assertTrue(c.message.contains("SUNLU"))
-        vm.moveTagHere()
-        val last = backend.calls.last()
-        assertEquals(true, last.args["force"])
-        assertEquals(false, last.args["dry"])
-        assertTrue(vm.state.value is SpoolUiState.Card)
-    }
-
-    @Test fun spoolHasOtherTagConflictHasNoOtherSpool() {
-        val vm = vm()
-        vm.onTag("a:b")
-        val extra = buildJsonObject {
-            put("reason", "spool_has_other_tag")
-            put("other_spool", JsonNull)
-        }
-        backend.linkError = { ApiError(409, "tag_conflict", "conflict", extra) }
-        vm.pick(2, null)
-        val c = vm.state.value as SpoolUiState.Conflict
-        assertEquals(ConflictReason.SpoolHasOtherTag, c.reason)
-        assertNull(c.otherSpool)
-        assertTrue(c.message.contains("different tag"))
-        assertTrue(c.message.contains("replaces"))
-
-        backend.linkError = null
-        vm.moveTagHere()
-        val last = backend.calls.last()
-        assertEquals(true, last.args["force"])
-        assertEquals(false, last.args["dry"])
-        assertEquals(2, last.args["id"])
-        assertTrue(vm.state.value is SpoolUiState.Card)
-    }
-
-    @Test fun secondTapWinsEvenWhenFirstAnswersLast() {
-        val first = CompletableDeferred<JsonObject?>()
-        val second = CompletableDeferred<JsonObject?>()
-        backend.tagGates["t1"] = first
-        backend.tagGates["t2"] = second
-        val vm = vm()
-        vm.onTag("t1")
-        vm.onTag("t2")
-        second.complete(spool(22))
-        first.complete(spool(11))
-        assertEquals(22, (vm.state.value as SpoolUiState.Card).spool.id)
-    }
-
-    @Test fun newTapCancelsPendingSearch() {
-        val vm = vm()
-        vm.onTag("t1")
-        vm.startLink()
-        backend.tagGates["t2"] = CompletableDeferred<JsonObject?>().also { it.complete(spool(5)) }
-        vm.onTag("t2")
-        assertEquals(5, (vm.state.value as SpoolUiState.Card).spool.id)
-    }
-
-    private val unauthorized = ApiError(401, "unauthorized", "no")
-
-    @Test fun unauthorizedOnEveryPathOffersPairAgain() {
-        // tag lookup
-        backend.tagError = unauthorized
-        var vm = vm()
-        vm.onTag("a")
-        assertEquals(SpoolUiState.Unauthorized, vm.state.value)
-        backend.tagError = null
-
-        // card actions
-        backend.tagResult = spool(1)
-        vm = vm()
-        vm.onTag("a")
-        backend.updateError = unauthorized
-        vm.previewWeight(500.0)
-        assertEquals(SpoolUiState.Unauthorized, vm.state.value)
-        vm.onTag("a"); vm.move("Dry box")
-        assertEquals(SpoolUiState.Unauthorized, vm.state.value)
-        vm.onTag("a"); vm.askMarkEmpty(); vm.confirmEmpty()
-        assertEquals(SpoolUiState.Unauthorized, vm.state.value)
-        backend.updateError = null
-        backend.locationsError = unauthorized
-        vm.onTag("a"); vm.openMove()
-        assertEquals(SpoolUiState.Unauthorized, vm.state.value)
-        backend.locationsError = null
-
-        // search and link
-        backend.tagResult = null
-        vm = vm()
-        vm.onTag("a"); vm.startLink()
-        backend.searchError = unauthorized
-        vm.search("x")
-        assertEquals(SpoolUiState.Unauthorized, vm.state.value)
-        backend.searchError = null
-        backend.linkError = { unauthorized }
-        vm.onTag("a"); vm.pick(2, null)
-        assertEquals(SpoolUiState.Unauthorized, vm.state.value)
-    }
-
-    @Test fun fingerprintMismatchHasOwnState() {
-        backend.tagError = FingerprintMismatch("aa", "bb")
-        val vm = vm()
-        vm.onTag("a")
-        assertEquals(SpoolUiState.Mismatch("aa", "bb"), vm.state.value)
-    }
-
-    @Test fun conflictOnConfirmLinkShowsConflict() {
-        val vm = vm()
-        vm.onTag("a:b")
-        vm.pick(2, null)
-        assertTrue(vm.state.value is SpoolUiState.LinkPreview)
-        val extra = buildJsonObject {
-            put("reason", "tag_on_other_spool")
-            put("other_spool", spool(9))
-        }
-        backend.linkError = { dry -> if (!dry) ApiError(409, "tag_conflict", "conflict", extra) else null }
-        vm.confirmLink()
-        val c = vm.state.value as SpoolUiState.Conflict
-        assertEquals(9, c.otherSpool!!.id)
-        assertEquals(2, c.spoolId)
-    }
-
-    @Test fun aSuccessMessageIsNotMarkedAsAnError() {
-        backend.tagResult = spool(1)
-        val vm = vm()
-        vm.onTag("a")
-        vm.move("Dry box")
-        val c = vm.state.value as SpoolUiState.Card
-        assertEquals("Moved to Dry box", c.message)
-        assertEquals(false, c.messageIsError)
-    }
-
-    @Test fun failuresKeepTheScreenWithAnInlineMessage() {
-        backend.tagResult = spool(1)
-        val vm = vm()
-        vm.onTag("a")
-
-        backend.updateError = ApiError(500, "internal", "Server broke")
-        vm.previewWeight(500.0)
-        assertEquals("Server broke", (vm.state.value as SpoolUiState.Card).message)
-        assertTrue((vm.state.value as SpoolUiState.Card).messageIsError)
-        backend.updateError = IllegalStateException("boom")
-        vm.move("Dry box")
-        assertEquals("Unexpected response from the server", (vm.state.value as SpoolUiState.Card).message)
+        assertTrue(vm.state.value.confirmEmpty)
+        vm.cancelEmpty()
+        assertFalse(vm.state.value.confirmEmpty)
+        assertTrue(backend.calls.isEmpty())
         vm.askMarkEmpty()
         vm.confirmEmpty()
-        val c = vm.state.value as SpoolUiState.Card
-        assertEquals("Unexpected response from the server", c.message)
-        assertEquals(false, c.confirmEmpty)
-        assertEquals(1, c.spool.id)
-
-        // link flow keeps its screen
-        backend.tagResult = null
-        vm.onTag("t")
-        vm.startLink()
-        backend.searchError = ApiError(0, "offline", "x")
-        vm.search("q")
-        assertTrue((vm.state.value as SpoolUiState.LinkSearch).error!!.contains("reach"))
-        backend.searchError = null
-        backend.linkError = { IllegalStateException("x") }
-        vm.pick(2, null)
-        assertTrue((vm.state.value as SpoolUiState.LinkSearch).error != null)
-        backend.linkError = null
-        vm.pick(2, null)
-        backend.linkError = { IllegalStateException("x") }
-        vm.confirmLink()
-        assertTrue((vm.state.value as SpoolUiState.LinkPreview).error != null)
+        assertTrue(vm.state.value.emptying)
+        advanceUntilIdle()
+        assertFalse(vm.state.value.confirmEmpty)
+        assertEquals(SpoolState.Empty, vm.state.value.spool!!.state)
+        assertEquals(SpoolResult.MarkedEmpty, vm.state.value.result)
+        assertEquals(listOf("update:214:gross=null:location=null:empty=true:dry=false"), backend.calls)
     }
 
-    @Test fun moveTagHereFailureStaysOnConflict() {
+    // ---- Hub notices and results from other screens ----
+
+    @Test fun aHubNoticeClearsAfterTheNextSuccessfulCall() = runTest(dispatcher) {
+        backend.spools = listOf(spoolJson(214))
         val vm = vm()
-        vm.onTag("a:b")
-        val extra = buildJsonObject { put("reason", "spool_has_other_tag") }
-        backend.linkError = { ApiError(409, "tag_conflict", "conflict", extra) }
-        vm.pick(2, null)
-        backend.linkError = { IllegalStateException("x") }
-        vm.moveTagHere()
-        assertTrue((vm.state.value as SpoolUiState.Conflict).error != null)
+        backend.failure = "spool" to ApiError(401, "unauthorized", "nope")
+        vm.refresh()
+        advanceUntilIdle()
+        assertEquals(HubFailure.NotPaired, vm.state.value.failure)
+        vm.refresh()
+        advanceUntilIdle()
+        assertNull(vm.state.value.failure)
     }
 
-    @Test fun freshCardGetsNewRevision() {
-        backend.tagResult = spool(1)
+    @Test fun aChangedCertificateIsItsOwnNotice() = runTest(dispatcher) {
         val vm = vm()
-        vm.onTag("a")
-        val r1 = (vm.state.value as SpoolUiState.Card).rev
-        vm.onTag("a")
-        assertTrue((vm.state.value as SpoolUiState.Card).rev != r1)
+        backend.failure = "spool" to FingerprintMismatch("aa", "bb")
+        vm.refresh()
+        advanceUntilIdle()
+        assertEquals(HubFailure.CertificateChanged, vm.state.value.failure)
     }
 
-    @Test fun openFromSearchShowsCardWithoutATagLookup() {
+    @Test fun aResultTheLoadStepsEndedWithIsShownAndTakenFromTheSavedState() = runTest(dispatcher) {
+        val handle = SavedStateHandle()
+        val vm = SpoolViewModel(214, backend, first, handle = handle)
+        runCurrent()
+        // what the load step does: the spool as the Hub has it now goes to the cache, the result to the entry's saved state
+        SpoolCache.put(spoolJson(214, location = "Workshop X1 A2").toSpoolSummary())
+        handle[SpoolViewModel.RESULT_KEY] = SpoolResult.Loaded("Workshop X1", "A2").encode()
+        runCurrent()
+        assertEquals(SpoolResult.Loaded("Workshop X1", "A2"), vm.state.value.result)
+        assertEquals("Workshop X1 A2", vm.state.value.spool!!.location)
+        assertNull("it is shown once", handle.get<String>(SpoolViewModel.RESULT_KEY))
+    }
+
+    @Test fun aResultTheLinkEndedWithIsThereFromTheStart() = runTest(dispatcher) {
+        val vm = SpoolViewModel(214, backend, first, startResult = SpoolResult.TagLinked)
+        assertEquals(SpoolResult.TagLinked, vm.state.value.result)
+    }
+
+    @Test fun theTopBarTitleIsTheSpoolsName() = runTest(dispatcher) {
+        vm()
+        advanceUntilIdle()
+        assertNull(SpoolCache.title(214))
+        SpoolCache.put(first)
+        assertEquals("PolyTerra PLA Charcoal Black", SpoolCache.title(214))
+    }
+
+    @Test fun aRestoredSpoolWithNoAnswerShowsOnlyTheFailure() = runTest(dispatcher) {
+        backend.failure = "spool" to ApiError(0, "offline", "gone")
+        val vm = vm(initial = null)
+        advanceUntilIdle()
+        assertNull(vm.state.value.spool)
+        assertFalse(vm.state.value.loading)
+        assertEquals(HubFailure.Unreachable, vm.state.value.failure)
+    }
+
+    // ---- rotation, process death, Try again ----
+
+    @Test fun aTypedWeightAndTheLeavingQuestionSurviveTheProcessBeingStopped() = runTest(dispatcher) {
+        val handle = SavedStateHandle()
+        backend.updateAnswer = { _, _, _, _ -> spoolJson(214, remaining = 482.0) }
+        val vm = SpoolViewModel(214, backend, first, handle = handle)
+        vm.openWeight()
+        vm.setWeight("622")
+        vm.askLeaveWeight()
+        assertTrue(vm.state.value.weight!!.leaving)
+        // a new process: a new view model over the saved state
+        val again = SpoolViewModel(214, backend, first, handle = handle)
+        assertEquals("622", again.state.value.weight!!.text)
+        assertTrue(again.state.value.weight!!.leaving)
+        advanceTimeBy(500)
+        runCurrent()
+        assertTrue("the preview is asked for again", again.state.value.weight!!.canSave)
+        again.stayWeight()
+        assertFalse(again.state.value.weight!!.leaving)
+        assertFalse(SpoolViewModel(214, backend, first, handle = handle).state.value.weight!!.leaving)
+    }
+
+    @Test fun leavingDropsTheTextForGood() = runTest(dispatcher) {
+        val handle = SavedStateHandle()
+        val vm = SpoolViewModel(214, backend, first, handle = handle)
+        vm.openWeight()
+        vm.setWeight("622")
+        vm.askLeaveWeight()
+        vm.closeWeight()
+        assertNull(vm.state.value.weight)
+        assertNull(SpoolViewModel(214, backend, first, handle = handle).state.value.weight)
+    }
+
+    @Test fun backOnAnEmptySheetJustClosesItAndASaveInFlightIsWaitedFor() = runTest(dispatcher) {
         val vm = vm()
-        vm.open(spool(3, location = "Dry box"))
-        val c = vm.state.value as SpoolUiState.Card
-        assertEquals(3, c.spool.id)
-        assertEquals("Dry box", c.spool.location)
-        assertTrue(backend.calls.none { it.name == "tag" })
+        vm.openWeight()
+        vm.askLeaveWeight()
+        assertNull(vm.state.value.weight)
+        vm.openWeight()
+        vm.setWeight("622")
+        advanceTimeBy(500)
+        runCurrent()
+        vm.saveWeight()
+        vm.askLeaveWeight()
+        assertFalse("no question while it saves", vm.state.value.weight!!.leaving)
+        advanceUntilIdle()
+    }
+
+    @Test fun tryAgainInTheWeightSheetRepeatsThePreviewOrTheSave() = runTest(dispatcher) {
+        val vm = vm()
+        vm.openWeight()
+        backend.failure = "update" to ApiError(0, "offline", "gone")
+        vm.setWeight("622")
+        advanceTimeBy(500)
+        runCurrent()
+        assertEquals(HubFailure.Unreachable, vm.state.value.weight!!.failure)
+        assertFalse(vm.state.value.weight!!.failedSave)
+        vm.retryWeight()
+        advanceTimeBy(500)
+        runCurrent()
+        assertTrue(vm.state.value.weight!!.canSave)
+        backend.failure = "update" to ApiError(503, "spoolman_unreachable", "Spoolman is not reachable")
+        vm.saveWeight()
+        advanceUntilIdle()
+        assertTrue(vm.state.value.weight!!.failedSave)
+        vm.retryWeight()
+        advanceUntilIdle()
+        assertEquals(SpoolResult.WeightUpdated(620.0), vm.state.value.result)
+        assertNull(vm.state.value.weight)
+    }
+
+    @Test fun tryAgainInTheMoveSheetReloadsTheListOrRepeatsTheMove() = runTest(dispatcher) {
+        val vm = vm()
+        backend.failure = "locations" to ApiError(0, "offline", "gone")
+        vm.openMove()
+        advanceUntilIdle()
+        assertNull(vm.state.value.move!!.locations)
+        vm.retryMove()
+        advanceUntilIdle()
+        assertEquals(3, vm.state.value.move!!.locations!!.size)
+        backend.failure = "update" to ApiError(0, "offline", "gone")
+        vm.move("Shelf B")
+        advanceUntilIdle()
+        assertEquals("Shelf B", vm.state.value.move!!.lastTry)
+        vm.retryMove()
+        advanceUntilIdle()
+        assertEquals(SpoolResult.Moved("Shelf B"), vm.state.value.result)
+    }
+
+    @Test fun tryAgainRepeatsMarkEmptyAndTheUndo() = runTest(dispatcher) {
+        backend.updateAnswer = { _, _, empty, _ -> spoolJson(214, archived = empty) }
+        val vm = vm()
+        backend.failure = "update" to ApiError(0, "offline", "gone")
         vm.askMarkEmpty()
         vm.confirmEmpty()
-        assertEquals(3, backend.calls.last().args["id"])
+        advanceUntilIdle()
+        assertEquals(Retry.MarkEmpty, vm.state.value.retry)
+        vm.retry()
+        advanceUntilIdle()
+        assertEquals(SpoolResult.MarkedEmpty, vm.state.value.result)
+        backend.failure = "update" to ApiError(0, "offline", "gone")
+        vm.undoMove("Shelf B")
+        advanceUntilIdle()
+        assertEquals(Retry.UndoMove("Shelf B"), vm.state.value.retry)
     }
 }

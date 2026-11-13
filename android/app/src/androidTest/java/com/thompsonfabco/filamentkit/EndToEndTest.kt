@@ -45,7 +45,7 @@ private const val TAG = "FkE2E"
  *
  * - `main` (`fkCode`, `fkHost`, `fkPhoto`, optional `fkPort`, `fkFingerprint`): manual pair → Printers (empty) →
  *   Add spools with the label photo injected instead of the camera, a new tag and a weight → Read → Preview → Add →
- *   the tag tapped on Home opens the new spool's card → Update weight → the device is unpaired on the server (the
+ *   the tag tapped on Home opens the new spool's screen → Update weight → the device is unpaired on the server (the
  *   driver does that when it sees `UNPAIR_NOW` in logcat) → the next call lands on Pair with the unpaired message.
  * - `cold`: a cold start after that unpair opens Pair, still explaining why.
  * - `forget` (`fkCode`, `fkHost`, ...): pair again → Settings → Forget server → Pair.
@@ -134,17 +134,16 @@ class EndToEndTest {
         click("Done")
         waitFor("Add by hand")
 
-        // Tap the new tag on Home: the card shows the new spool.
-        emitUntil(uid) { exists("Gross weight (g)") }
-        assertTrue("card: ${allText()}", compose.onAllNodes(hasText("conjure", substring = true, ignoreCase = true))
+        // Tap the new tag on Home: the tag screen opens the new spool's screen.
+        emitUntil(uid) { exists("Update weight") }
+        assertTrue("spool: ${allText()}", compose.onAllNodes(hasText("conjure", substring = true, ignoreCase = true))
             .fetchSemanticsNodes().isNotEmpty())
-        field("Gross weight (g)").performTextInput("700")
         click("Update weight")
-        waitFor("Remaining would change from", substring = true, timeoutMs = 30_000)
-        click("Confirm")
-        waitFor("Weight updated", timeoutMs = 30_000)
-        Log.i(TAG, "card after update: ${allText()}")
-        click("Done")
+        field("Weight with spool").performTextInput("700")
+        waitFor("Remaining becomes", substring = true, timeoutMs = 30_000)
+        click("Save weight")
+        waitFor("Weight updated", substring = true, timeoutMs = 30_000)
+        Log.i(TAG, "spool after update: ${allText()}")
 
         Log.i(TAG, "spool=$spoolId tag=$uid")
         unpairedOnServerLandsOnPair(uid)
@@ -168,7 +167,7 @@ class EndToEndTest {
         }
         waitFor(unpairedBanner)
         waitFor("Pair with your Hub")
-        assertFalse("the spool card must not stay open", exists("Gross weight (g)"))
+        assertFalse("the spool screen must not stay open", exists("Update weight"))
         Log.i(TAG, "UNPAIRED_SHOWN")
     }
 
