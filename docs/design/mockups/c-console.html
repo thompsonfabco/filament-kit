@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Printers · Workshop kit</title>
+<title>Printers · Workshop hub</title>
 <style>
 /* Layout concept: "Console" - dense technical console; icon rail + hairline tables on desktop/tablet, bottom bar + stacked cards on phone. */
 :root{
@@ -486,7 +486,7 @@ dialog,dialog.wide,dialog.drawer{width:100vw;max-width:100vw;height:auto;max-hei
 <header class="top">
  <div class="brand">
   <span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24"><defs><linearGradient id="mg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:var(--accent)"/><stop offset="1" style="stop-color:var(--accent-2)"/></linearGradient></defs><rect x="1" y="1" width="22" height="22" rx="5" style="fill:url(#mg)"/><circle cx="12" cy="12" r="6.2" style="fill:none;stroke:var(--on-accent);stroke-width:1.8"/><circle cx="12" cy="12" r="2.2" style="fill:var(--on-accent)"/><path d="M12 5.8v3.6" style="stroke:var(--on-accent);stroke-width:1.8"/></svg></span>
-  <span class="bt"><b>Spoolwarden</b><span class="srv"><span class="sep" aria-hidden="true">/</span><span id="srvName">Workshop kit</span><span class="ver mono"><span class="sr">version </span>0.5.2</span></span></span>
+  <span class="bt"><b>Spoolwarden</b><span class="srv"><span class="sep" aria-hidden="true">/</span><span id="srvName">Workshop hub</span><span class="ver mono"><span class="sr">version </span>0.5.2</span></span></span>
  </div>
  <button class="chipb jobind" id="jobInd" type="button" aria-controls="dock" hidden></button>
  <button class="chipb lock" id="lockBtn" type="button" aria-haspopup="dialog"></button>
@@ -751,7 +751,7 @@ function show(v,det){
 }
 addEventListener('hashchange',route);
 $('.skip').addEventListener('click',e=>{e.preventDefault();const m=$('#main');m.focus({preventScroll:true});m.scrollIntoView()});
-const SRV={name:'Workshop kit'};
+const SRV={name:'Workshop hub'};
 const slug=()=>esc(SRV.name.toLowerCase().replace(/\s+/g,'-'));
 function crumb(t){return '<p class="crumb">'+slug()+' / '+t+'</p>'}
 
@@ -1100,7 +1100,7 @@ function renderSettings(){
  sgrp('appearance','sun','Appearance','Light, dark and theme are stored in this browser. Theme for new devices is a Hub setting.','', '<div class="fr"><p class="lbl" id="thL">Light or dark</p><div class="fc"><fieldset class="seg" aria-labelledby="thL">'+themeRadios('th3')+'</fieldset><p class="hint">System follows the light or dark setting of this device.</p><p class="fb" id="fb-mode" aria-live="polite" style="margin-top:6px"></p></div></div>'+
   '<div class="fr"><p class="lbl" id="lookL">Theme</p><div class="fc">'+lookTiles()+'<p class="fb" id="fb-look" aria-live="polite" style="margin-top:6px"></p></div></div>'+
   '<div class="fr"><label for="lookNew">Theme for new devices</label><div class="fc"><select class="in" id="lookNew" data-g="appearance" data-l="Theme for new devices" aria-describedby="lookNew-h">'+LOOKS.map(l=>'<option value="'+l[0]+'"'+(l[0]==='console'?' selected':'')+'>'+l[1]+'</option>').join('')+'</select><p class="hint" id="lookNew-h">New phones and browsers start with this theme.</p></div></div>',sfoot('appearance','Save appearance'))+
- sgrp('general','overview','General','','',sf('general','gName','Display name','Workshop kit')+sf('general','gHosts','Names for this page','kit.example.net',{mono:1,hint:'Space separated.'}),sfoot('general','Save general'))+
+ sgrp('general','overview','General','','',sf('general','gName','Display name','Workshop hub')+sf('general','gHosts','Names for this page','kit.example.net',{mono:1,hint:'Space separated.'}),sfoot('general','Save general'))+
  sgrp('storage','archive','Storage locations','Where spools are put away.','',sf('storage','sLoc','Locations','Shelf A, Shelf B, Dry box 1, Dry box 2',{hint:'Comma separated.'})+sf('storage','sPla','PLA rack','Shelf A')+sf('storage','sPre','Box location prefix','Dry box')+sf('storage','sBox','Number of storage boxes','2',{num:1,mono:1})+sf('storage','sOver','Overflow location','Shelf B'),sfoot('storage','Save storage locations'))+
  sgrp('ai','ai','Label Reader','Reads spool labels from photos.','<span class="st ok sm" id="keySt">API key set</span>',
   '<div class="fr"><p class="lbl" id="keyL">Anthropic API key</p><div class="fc"><div class="keyrow"><span class="mono muted" id="keyMask">sk-ant-…••••</span><div class="acts"><button type="button" class="btn" id="keyCheck">Check</button><button type="button" class="btn" id="keyRep">Replace</button><button type="button" class="btn danger" id="keyRem">Remove</button></div></div><div id="keyEd" hidden><label class="sr" for="keyIn">New Anthropic API key</label><div class="inl" style="margin-top:8px"><div><input class="in mono" id="keyIn" type="password" autocomplete="off" placeholder="sk-ant-…" aria-describedby="keyIn-e"><p class="err" id="keyIn-e" hidden></p></div><button type="button" class="btn pri" id="keySave">Save key</button><button type="button" class="btn ghost" id="keyCancel">Cancel</button></div></div><p class="fb" id="fb-key" aria-live="polite" style="margin-top:6px"></p></div></div>'+

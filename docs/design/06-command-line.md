@@ -684,10 +684,10 @@ the Hub page.
 
 ```
 $ sudo spoolwarden config
-Settings · Workshop kit
+Settings · Workshop hub
 
    1  Appearance             Theme for new devices: Console
-   2  General                Workshop kit
+   2  General                Workshop hub
    3  Storage locations      4 locations · PLA rack Shelf A · 2 boxes
    4  Label Reader           Cloud (Claude) · 40 reads a day · key set
    5  Backups and restore    Nightly backups kept 14 days
@@ -722,7 +722,7 @@ Number of storage boxes [2]:
   Unchanged.
 Number: q
 
-Settings · Workshop kit · 1 change not saved
+Settings · Workshop hub · 1 change not saved
   (the main list again)
 Number: q
 Leave without saving 1 change (PLA rack)? [y/N] y
@@ -993,7 +993,7 @@ line, aligned with the text. Detail lines (no glyph) are aligned with the text t
 
 ```
 $ spoolwarden status
-Spoolwarden 0.5.2 · Workshop kit · Hub with Weigh Station
+Spoolwarden 0.5.2 · Workshop hub · Hub with Weigh Station
 
 Hub
   ● OK            Services running: 6 of 6
@@ -1414,7 +1414,7 @@ $ spoolwarden config show
 Appearance
   Theme for new devices    Console
 General
-  Display name             Workshop kit
+  Display name             Workshop hub
 Storage locations
   Locations                Shelf A, Shelf B, Dry box 1, Dry box 2
   PLA rack                 Shelf A
@@ -1501,7 +1501,7 @@ Folder: <backup folder on this Hub>
   for the typed word (section 7):
 
   ```
-  Backup of Workshop kit made 2026-11-12 03:00 by Spoolwarden 0.5.2:
+  Backup of Workshop hub made 2026-11-12 03:00 by Spoolwarden 0.5.2:
   412 files and the Spoolman database. Features: Spoolman, Hub, Label Reader…
   This replaces the spools, settings, printers and pairings on this Hub.
   What is here now is saved as a backup first.

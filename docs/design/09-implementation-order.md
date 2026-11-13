@@ -90,8 +90,9 @@ Tooling · S · Depends on: S0.1 · Beside: none
 - **Files today:** `tokens/tokens.json`.
 - **Change:** add the proposed keys of 08 3.4 (`size.content-max` in every theme;
   `type.android`; `elevation.android`) and the proposed `size` entries of 05 1 (`label-col`, `thumb-s`,
-  `swatch-row`, `swatch-head`, `empty-mark`, `chip`, `slot-label`, `port-field`, `column-max`, `preview-max`,
-  `list-pane`); raise `version` to 2; regenerate `tokens.css`. Values not yet given are open points 2 and 3.
+  `swatch-row-w`, `swatch-row-h`, `swatch-head`, `empty-mark`, `chip`, `slot-label`, `port-field`, `column-max`,
+  `preview-max`, `list-pane`) with the values 05 1 gives for each of the four themes; raise `version` to 2;
+  regenerate `tokens.css`.
 - **Keep:** every existing token value; Console's values of foundations section 4.
 - **Check:** 08 test 2 (`tokens.json` complete and well-formed); `build_tokens.py --check`; contrast unchanged.
 
@@ -1229,17 +1230,15 @@ Things the design parts leave open. Each needs a decision before the step named;
    different endpoints (03 5.5, 04 6.8); until one rule exists every interface asks for the Access Code. Needed
    before S1.6 changes its interim, and before S3.11, S4.11 and S5.5 settle their dialogs and prompts.
 2. **Settled: `size.side-w` and `size.list-w`.** They are in `tokens.json` in every theme (256px and 360px); nothing is left to set.
-3. **The proposed `size` entries of 05 1 in the other three themes.** 05 gives Console values only for `label-col`,
-   `thumb-s`, `swatch-row`, `swatch-head`, `empty-mark`, `chip`, `slot-label`, `port-field`, `column-max`,
-   `preview-max` and `list-pane`. Needed by S0.2 (or by S6.5, S6.7 and S6.9 at the latest).
+3. **Settled: the `size` entries of 05 1 in every theme.** 05 1 gives the value of each entry for Console,
+   Workbench, Spool and Panes; `swatch-row` is two entries, `swatch-row-w` and `swatch-row-h`. S0.2 adds them.
 4. **How the checks start on today's code.** S0.6 and S0.7 list today's findings in the allow-lists so the build stays
    green, and each step removes its files' entries. 08 describes the allow-lists only as reviewed exceptions; whether
    they may carry today's findings for a time, or the checks start in a report-only mode, is open.
 5. **Where the shared files are served, and the component script's name.** N29 asks for one place for both pages but
    names no path; 08 13 names `components.css` but not the shared component script. Needed by S0.10 and S0.11.
-6. **The fake data for the tests.** `mockups/CONTENT-SPEC.md` still describes nine sections with the old names
-   (Modules, Intake) and the product name filament-kit, and the parts name the example Hub differently ("Workshop
-   kit", "Workshop hub", "Workshop"). AUT-5 needs one fake data set with the ten sections of F8. Needed by S1.11.
+6. **Settled: the fake data for the tests.** `mockups/CONTENT-SPEC.md` is one example Hub, "Workshop hub", with
+   data for all ten sections of foundations 8, and an Empty Hub variant for the empty states. S1.11 serves it.
 7. **The poll interval of a running slot mapping (N32).** Optional; until set, the interfaces poll as today. Needed
    only if S2.4, S3.11 or S4.11 change the interval.
 8. **The headless browser for AUT-5.** 07 15 names a headless browser but not which; it runs only in tests, and its
