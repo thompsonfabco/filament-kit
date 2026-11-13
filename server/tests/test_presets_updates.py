@@ -323,3 +323,17 @@ def test_root_presets_are_kept_not_pending_and_acceptance_flag_casefolds(env):
     builds._write_json(TB.profiles_dir() / "updates.json", {"accepted": {"base": {N06.upper(): h}, "orca": {}}})
     assert {u["name"] for u in builds.updates_view()["updates"] if u["accepted"]} == {N06}
     assert builds.state_view("a")["accepted_updates"]["base"] == [N06]
+
+
+def test_update_items_are_kept_until_a_file_behind_them_changes(env, monkeypatch):
+    _first_install(env)
+    b2 = _rebuild(env, 1.31, TG.NOW + 1)
+    first = builds.state_view("a")
+    hashed = []
+    real = updates.pending
+    monkeypatch.setattr(updates, "pending", lambda *a, **k: hashed.append(1) or real(*a, **k))
+    assert builds.state_view("a")["accepted_updates"] == first["accepted_updates"] and hashed == []
+    assert builds.status()["updates"]["count"] and hashed == []        # the status view shares the answer
+    assert cli.main(["profiles", "apply-updates", "--all"]) == 0       # an acceptance moves updates.json
+    assert builds.state_view("a")["accepted_updates"]["base"] and hashed
+    assert builds.state_view("a")["accepted_updates"]["stamp"] == b2
