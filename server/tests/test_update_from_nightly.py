@@ -104,5 +104,5 @@ def test_the_page_shows_version_text_and_still_compares_the_version():
     js = (ROOT / "server/filament_kit/setup_static/setup_tabs.js").read_text(encoding="utf-8")
     js += (ROOT / "server/filament_kit/setup_static/setup_overview.js").read_text(encoding="utf-8")
     jobs = (ROOT / "web-shared/components-jobs.js").read_text(encoding="utf-8")   # the job strip reloads on a new release
-    assert "${r.version_text || r.version}" in js and "version: () => (S ? S.version : null)" in js
+    assert "r.version_text || r.version" in js and "version: () => (S ? S.version : null)" in js
     assert "r.version !== o.version()" in jobs and "version_text" not in jobs

@@ -226,9 +226,11 @@ def test_the_header_of_a_section_left_before_its_read_returns_is_not_drawn(hub, 
 await until(() => $('main [aria-busy="true"]'), "the slow read to start");
 location.hash = "#overview";
 await sleep(3500);
-return { hash: location.hash, build: !!$('[data-action="build"]'), meta: !!$(".page-head__meta"), title: text($("h1")) };
+return { hash: location.hash, build: !!$('[data-action="build"]'), meta: text($(".page-head__meta")), title: text($("h1")) };
 """)
-    assert page == {"hash": "#overview", "build": False, "meta": False, "title": T("nav_overview")}
+    # Overview draws its own meta line (S2.2); what must not be there is the presets one
+    assert {k: page[k] for k in ("hash", "build", "title")} == {"hash": "#overview", "build": False, "title": T("nav_overview")}, page
+    assert "Last build" not in (page["meta"] or "") and T("presets_meta_sync") not in (page["meta"] or ""), page
 
 
 def test_without_orca_slicer_presets_nothing_says_zero_for_orca(hub, monkeypatch, tmp_path):
