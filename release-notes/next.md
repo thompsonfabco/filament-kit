@@ -30,9 +30,15 @@ doing>` as a step starts, on the command line and in the setup page's job log. T
 - **The setup code can be checked without changing anything.** A right code costs no try, a wrong one says how many tries are left, and an error about a form names the field it is about (the address, the code). The setup page also reports when a trusted computer's trust expires.
 - **The phone web app** has light and dark manifests, and its theme colour follows the appearance.
 
+## The phone web app is on the new look
+
+- **The web app uses the shared design values and components**, the same as the setup page.
+- **A new shell.** A top bar and a bottom bar (a side rail on tablets), with Add, Spools, Printers, Recent, Slicer presets and Settings; a **More** sheet holds the places that do not fit. A place whose feature is switched off says so instead of showing an empty page.
+- **The page shown outside the home network, and the sign-in page,** use the same styles and the shared texts.
+
 ## The Android app is on the new look
 
-- The app draws in the Console theme from the shared design values, with an app shell (bottom bar, side rail on wide screens, top bar), 44 dp controls and a new launcher icon. Its name and texts come from the shared catalogue.
+- The app draws in the Console theme from the shared design values, with an app shell (bottom bar, side rail on wide screens, top bar), 44 dp controls and a new launcher icon. Its name and texts come from the shared catalogue. The shared parts every screen uses (page states such as loading and empty, dialogs) now exist, with tests for their accessibility semantics.
 
 ## Still to come
 
