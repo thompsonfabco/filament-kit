@@ -185,6 +185,8 @@ def _flash_env(monkeypatch, tmp_path, rc, readers=1):
     monkeypatch.setattr(cli, "_is_root", lambda: True)
     monkeypatch.setattr(rs, "find_pio", lambda who=None: "/usr/bin/pio")
     monkeypatch.setattr(rs, "owner", lambda: None)
+    monkeypatch.setattr(cli, "_answers_as_panel", lambda port: False)
+    monkeypatch.setenv("FK_NO_SYSTEMD", "1")                 # no systemctl here; the stop/start has its own test
     monkeypatch.setattr(rs, "find_readers", lambda: [rs.Reader(f"/dev/ttyACM{i}", None, "JTAG") for i in range(readers)])
     calls = []
 
@@ -197,14 +199,16 @@ def _flash_env(monkeypatch, tmp_path, rc, readers=1):
 
 def test_a_failed_flash_removes_the_token_nobody_holds(tmp_path, monkeypatch, capsys):
     calls = _flash_env(monkeypatch, tmp_path, rc=1)
-    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask_secret=_secret("p", "p")) == 1
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask=lambda p: "y",
+                                ask_secret=_secret("p", "p")) == 1
     assert calls and calls[0][0] == "/dev/ttyACM0"
     assert reader_tokens.TokenStore().list() == [] and "token was removed" in capsys.readouterr().err
 
 
 def test_a_good_flash_keeps_the_token(tmp_path, monkeypatch, capsys):
     _flash_env(monkeypatch, tmp_path, rc=0)
-    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask_secret=_secret("p", "p")) == 0
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask=lambda p: "y",
+                                ask_secret=_secret("p", "p")) == 0
     assert len(reader_tokens.TokenStore().list()) == 1 and "Flashed. The reader joins Home" in capsys.readouterr().out
 
 
@@ -335,3 +339,221 @@ def test_the_buzzer_option_defaults_to_high(monkeypatch):
     monkeypatch.setattr(cli, "cmd_reader_setup", lambda a: got.update(vars(a)) or 0)
     assert cli.main(["reader", "setup", "--out", "s.h"]) == 0 and got["buzzer"] == "high"
     assert cli.main(["reader", "setup", "--out", "s.h", "--buzzer", "low"]) == 0 and got["buzzer"] == "low"
+
+
+def _refused(monkeypatch, tmp_path, capsys, **kw):
+    calls = _flash_env(monkeypatch, tmp_path, rc=0)
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask_secret=_secret("p", "p"), **kw) == 1
+    assert calls == [] and reader_tokens.TokenStore().list() == []
+    return capsys.readouterr()
+
+
+def test_a_lone_board_is_not_flashed_unless_the_owner_says_yes(tmp_path, monkeypatch, capsys):
+    for answer in ("", "n", "no"):
+        out = _refused(monkeypatch, tmp_path, capsys, ask=lambda p, a=answer: a)
+        assert "Nothing was flashed" in out.out
+
+
+def test_a_lone_board_with_no_terminal_is_not_flashed(tmp_path, monkeypatch, capsys):
+    def no_tty(prompt):
+        raise EOFError
+    assert "--port" in _refused(monkeypatch, tmp_path, capsys, ask=no_tty).err
+
+
+def test_a_lone_board_that_answers_as_the_panel_is_never_asked_about(tmp_path, monkeypatch, capsys):
+    calls = _flash_env(monkeypatch, tmp_path, rc=0)
+    monkeypatch.setattr(cli, "_answers_as_panel", lambda port: True)
+    def boom(prompt):
+        raise AssertionError("asked")
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask=boom, ask_secret=_secret("p", "p")) == 1
+    assert calls == [] and "button panel" in capsys.readouterr().err
+
+
+def test_an_explicit_port_is_flashed_without_asking(tmp_path, monkeypatch):
+    calls = _flash_env(monkeypatch, tmp_path, rc=0)
+    def boom(prompt):
+        raise AssertionError("asked")
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)), port="/dev/ttyACM9"), ask=boom,
+                                ask_secret=_secret("p", "p")) == 0
+    assert calls[0][0] == "/dev/ttyACM9"
+
+
+class _FakeSerial:
+    """pyserial stand-in for the real HELLO probe: `line` is what the board says on open, b"" is silence."""
+    line = b""
+    fail = False
+    made: list = []
+
+    def __init__(self):
+        self.closed = False
+        self._lines = []
+        _FakeSerial.made.append(self)
+
+    def open(self):
+        if _FakeSerial.fail:
+            raise OSError("busy")
+        if _FakeSerial.line:
+            self._lines.append(_FakeSerial.line + b"\r\n")
+
+    def readline(self):
+        return self._lines.pop(0) if self._lines else b""
+
+    def write(self, data):
+        pass
+
+    def close(self):
+        self.closed = True
+
+
+@pytest.fixture
+def fake_serial(monkeypatch):
+    import types
+    from filament_kit.station import panel
+    monkeypatch.setitem(sys.modules, "serial", types.SimpleNamespace(Serial=_FakeSerial))
+    clock = iter(x * 0.5 for x in range(10000))              # the 3 s wait for a HELLO passes without waiting
+    monkeypatch.setattr(panel, "time", types.SimpleNamespace(time=lambda: next(clock)))
+    _FakeSerial.line, _FakeSerial.fail, _FakeSerial.made = b"", False, []
+    return _FakeSerial
+
+
+def test_the_real_probe_sees_a_panel_hello_and_closes_the_port(fake_serial):
+    fake_serial.line = b"HELLO intake-panel 9 esp32c3"
+    assert cli._answers_as_panel("/dev/ttyACM0") is True
+    assert fake_serial.made[0].closed
+
+
+def test_the_real_probe_says_no_to_silence_and_to_an_open_error(fake_serial):
+    assert cli._answers_as_panel("/dev/ttyACM0") is False
+    fake_serial.fail = True
+    assert cli._answers_as_panel("/dev/ttyACM0") is False
+
+
+def test_the_real_probe_says_no_without_pyserial(monkeypatch):
+    monkeypatch.setitem(sys.modules, "serial", None)         # import serial raises ImportError
+    assert cli._answers_as_panel("/dev/ttyACM0") is False
+
+
+def test_ctrl_c_at_the_prompt_flashes_nothing(tmp_path, monkeypatch, capsys):
+    def interrupt(prompt):
+        raise KeyboardInterrupt
+    assert "Nothing was flashed" in _refused(monkeypatch, tmp_path, capsys, ask=interrupt).out
+
+
+def test_the_station_is_stopped_around_the_probe_and_the_flash_and_restarted_after(tmp_path, monkeypatch):
+    log = []
+    def run(cmd, check=False, timeout=None):
+        log.append(cmd[1])
+        return subprocess.CompletedProcess(cmd, 0)
+    real = cli._station_stopped
+    monkeypatch.setattr(cli, "_station_stopped", lambda: real(run))
+    _flash_env(monkeypatch, tmp_path, rc=0)                  # makes _is_root true
+    monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
+    monkeypatch.setattr(cli, "_answers_as_panel", lambda port: log.append("probe") or False)
+    monkeypatch.setattr(rs, "flash", lambda *a, **k: log.append("flash") or 0)
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask=lambda p: "y",
+                                ask_secret=_secret("p", "p")) == 0
+    assert log == ["is-active", "stop", "probe", "start", "is-active", "stop", "flash", "start"]
+
+
+def test_the_station_is_started_again_when_the_block_fails(monkeypatch):
+    log = []
+    monkeypatch.setattr(cli, "_is_root", lambda: True)
+    monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
+    def run(cmd, check=False, timeout=None):
+        log.append(cmd[1])
+        return subprocess.CompletedProcess(cmd, 0)
+    with pytest.raises(KeyboardInterrupt):
+        with cli._station_stopped(run):
+            raise KeyboardInterrupt
+    assert log == ["is-active", "stop", "start"]
+
+
+def _systemctl(monkeypatch, stop_rc=0, active_rc=0, stop_exc=None, active_exc=None):
+    """A root run with systemd, and a fake systemctl: returns the log of its verbs."""
+    monkeypatch.setattr(cli, "_is_root", lambda: True)
+    monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
+    log = []
+    def run(cmd, check=False, timeout=None):
+        assert timeout, "every systemctl call needs a timeout"
+        log.append(cmd[1])
+        exc = {"stop": stop_exc, "is-active": active_exc}.get(cmd[1])
+        if exc:
+            raise exc
+        return subprocess.CompletedProcess(cmd, {"stop": stop_rc, "is-active": active_rc}.get(cmd[1], 0))
+    return run, log
+
+
+@pytest.mark.parametrize("kw", [dict(stop_rc=1), dict(stop_exc=OSError("denied")),
+                                dict(stop_exc=subprocess.TimeoutExpired("systemctl", 60)),
+                                dict(active_exc=subprocess.TimeoutExpired("systemctl", 15))])
+def test_a_station_that_cannot_be_stopped_refuses_the_block(monkeypatch, kw):
+    run, log = _systemctl(monkeypatch, **kw)
+    ran = []
+    with pytest.raises(cli._StationBusy, match="Nothing was flashed"):
+        with cli._station_stopped(run):
+            ran.append(1)
+    assert ran == [] and "start" not in log[:2]
+
+
+def test_a_failed_stop_restarts_what_was_running(monkeypatch):
+    run, log = _systemctl(monkeypatch, stop_rc=1)
+    with pytest.raises(cli._StationBusy):
+        with cli._station_stopped(run):
+            pass
+    assert log == ["is-active", "stop", "start"]
+
+
+def test_a_service_that_is_not_loaded_is_fine_and_missing_systemctl_is_skipped(monkeypatch):
+    run, log = _systemctl(monkeypatch, stop_rc=5, active_rc=3)
+    with cli._station_stopped(run):
+        log.append("body")
+    assert log == ["is-active", "stop", "body"]
+    run, log = _systemctl(monkeypatch, active_exc=FileNotFoundError("systemctl"))
+    with cli._station_stopped(run):
+        log.append("body")
+    assert log == ["is-active", "body"]
+
+
+def test_without_root_it_says_the_service_is_not_stopped(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "_is_root", lambda: False)
+    monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
+    def run(*a, **k):
+        raise AssertionError("systemctl called")
+    with cli._station_stopped(run):
+        pass
+    assert "not root" in capsys.readouterr().err
+
+
+def test_a_start_that_fails_is_reported_not_raised(monkeypatch, capsys):
+    run, log = _systemctl(monkeypatch)
+    real = run
+    def flaky(cmd, check=False, timeout=None):
+        if cmd[1] == "start":
+            raise subprocess.TimeoutExpired("systemctl", 60)
+        return real(cmd, check, timeout)
+    with cli._station_stopped(flaky):
+        pass
+    assert "could not start" in capsys.readouterr().err
+
+
+def test_a_lone_board_is_not_probed_or_flashed_when_the_station_will_not_stop(tmp_path, monkeypatch, capsys):
+    calls = _flash_env(monkeypatch, tmp_path, rc=0)
+    run, log = _systemctl(monkeypatch, stop_rc=1)
+    monkeypatch.setattr(cli, "_station_stopped", lambda real=cli._station_stopped: real(run))
+    monkeypatch.setattr(cli, "_answers_as_panel", lambda port: log.append("probe"))
+    def boom(prompt):
+        raise AssertionError("asked")
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path))), ask=boom, ask_secret=_secret("p", "p")) == 1
+    assert "probe" not in log and calls == [] and reader_tokens.TokenStore().list() == []
+    assert "could not stop" in capsys.readouterr().err
+
+
+def test_with_a_port_a_station_that_will_not_stop_leaves_no_token(tmp_path, monkeypatch, capsys):
+    calls = _flash_env(monkeypatch, tmp_path, rc=0)
+    run, log = _systemctl(monkeypatch, stop_exc=OSError("denied"))
+    monkeypatch.setattr(cli, "_station_stopped", lambda real=cli._station_stopped: real(run))
+    assert cli.cmd_reader_setup(_args(source=str(_source(tmp_path)), port="/dev/ttyACM9"),
+                                ask_secret=_secret("p", "p")) == 1
+    err = capsys.readouterr().err
+    assert calls == [] and reader_tokens.TokenStore().list() == []
+    assert "could not stop" in err and "token was removed" in err
