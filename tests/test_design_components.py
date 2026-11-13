@@ -5,14 +5,16 @@ components-media.js and components-lock.js (the Hub page's lock chip and unlock 
 The size limits of foundations 12 rule 7, every class the script uses is drawn by the stylesheet, every catalogue key
 the script names is in strings/en.json, and the page audit (AUT-5, tests/page_audit.js) is a script that parses. The
 lints of test_design_lints.py and test 4 of test_design_sources.py read the two files with the page sources. The audit
-itself runs on the sample page in headless Microsoft Edge (tests/run_page_audit.js) where Edge is installed.
+itself runs on the sample page through tests/aut5_run.mjs (the one AUT-5 runner) in a Chrome, Edge or Chromium already
+on the machine.
 """
+import http.server
 import json
 import os
 import re
 import shutil
 import subprocess
-import sys
+import threading
 from pathlib import Path
 
 import pytest
@@ -27,7 +29,7 @@ ADDITIONS = [SHARED / "components-jobs.css", SHARED / "components-media.css"]
 MEDIA_JS = SHARED / "components-media.js"
 LOCK_JS = SHARED / "components-lock.js"
 AUDIT = ROOT / "tests" / "page_audit.js"
-RUNNER = ROOT / "tests" / "run_page_audit.js"
+RUNNER = ROOT / "tests" / "aut5_run.mjs"
 SAMPLE = ROOT / "tests" / "components-sample.html"
 CATALOGUE = json.loads((ROOT / "strings" / "en.json").read_text(encoding="utf-8"))
 
@@ -138,52 +140,51 @@ def test_scripts_parse(path):
     assert r.returncode == 0, r.stderr
 
 
-def edge():
-    """The Microsoft Edge executable: $SW_EDGE, Edge on the PATH, or (Windows) the one the registry names; else None."""
-    if os.environ.get("SW_EDGE"):
-        return os.environ["SW_EDGE"] if Path(os.environ["SW_EDGE"]).is_file() else None
-    for name in ("msedge", "microsoft-edge", "microsoft-edge-stable"):
-        if shutil.which(name):
-            return shutil.which(name)
-    if sys.platform == "win32":
-        import winreg
-        for hive in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
-            try:
-                with winreg.OpenKey(hive, r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\msedge.exe") as key:
-                    path = winreg.QueryValue(key, None)
-            except OSError:
-                continue
-            if Path(path).is_file():
-                return path
-    mac = Path("/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge")
-    return str(mac) if mac.is_file() else None
+def _node():
+    """Node 22 or later (the runner talks to the browser with Node's own WebSocket), or None."""
+    node = shutil.which("node")
+    if not node:
+        return None
+    major = subprocess.run([node, "--version"], capture_output=True, text=True).stdout.strip().lstrip("v").split(".")[0]
+    return node if major.isdigit() and int(major) >= 22 else None
 
 
-EDGE = edge()
+def _missing(why):
+    """No Node 22 or no browser: a skip, or a failure where the run is required (AUT5_REQUIRED=1, e.g. in CI)."""
+    if os.environ.get("AUT5_REQUIRED") == "1":
+        pytest.fail(f"AUT5_REQUIRED=1 but {why}")
+    pytest.skip(why)
 
 
-def _node_has_websocket():
-    """The runner talks to the browser with Node's own WebSocket (Node 22 and later); older Node has none."""
-    if not shutil.which("node"):
-        return False
-    r = subprocess.run(["node", "-e", "process.exit(typeof WebSocket === 'function' ? 0 : 1)"], capture_output=True)
-    return r.returncode == 0
+class _Quiet(http.server.SimpleHTTPRequestHandler):
+    extensions_map = {**http.server.SimpleHTTPRequestHandler.extensions_map, ".js": "text/javascript", ".mjs": "text/javascript",
+                      ".css": "text/css", ".svg": "image/svg+xml", ".json": "application/json", "": "application/octet-stream"}
+
+    def __init__(self, *a, **k):
+        super().__init__(*a, directory=str(ROOT), **k)
+
+    def log_message(self, *a):
+        pass
 
 
-NODE_WS = _node_has_websocket()
-
-
-# 09 S0.11 "Check": AUT-5 on the sample page at 1280 px and 320 px (touch), light and dark; every view has no finding
-@pytest.mark.skipif(not NODE_WS, reason="node 22 or later (with WebSocket) is not installed, so the page audit (AUT-5) did not run")
-@pytest.mark.skipif(EDGE is None, reason="Microsoft Edge is not installed (or set SW_EDGE to its path), so the page "
-                                         "audit (AUT-5) on the sample page did not run")
+# 09 S0.11 "Check": AUT-5 on the sample page at 1280 px and 320 px (touch), light and dark; every view has no finding.
+# One runner for every page (09 S1.11): tests/aut5_run.mjs, with no allow-list here.
 def test_page_audit_on_the_sample():
-    r = subprocess.run(["node", str(RUNNER), EDGE], capture_output=True, text=True, encoding="utf-8", timeout=300)
-    assert r.returncode == 0, r.stderr
-    views = json.loads(r.stdout)
-    assert sorted(views) == ["1280 dark", "1280 light", "320 dark", "320 light"]
-    for name, view in views.items():
-        width, scheme = name.split()
-        assert (view["innerWidth"], view["dark"], view["coarse"]) == (int(width), scheme == "dark", width == "320"), name
-    found = {name: view["findings"] for name, view in views.items() if view["findings"]}
-    assert not found, "page audit findings on tests/components-sample.html: " + json.dumps(found, indent=1)
+    node = _node()
+    if not node:
+        _missing("AUT-5 needs Node 22 or later")
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Quiet)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        r = subprocess.run([node, str(RUNNER), "--url", f"http://127.0.0.1:{server.server_address[1]}/tests/components-sample.html",
+                            "--views", "#printers"], capture_output=True, text=True, encoding="utf-8", timeout=300)
+    finally:
+        server.shutdown()
+        server.server_close()
+    if r.returncode == 2 and "no Chrome, Edge or Chromium" in r.stderr:
+        _missing("AUT-5 needs a Chrome, Edge or Chromium (set AUT5_BROWSER)")
+    if r.returncode == 3:          # a browser was found but cannot run headless on this machine (its error is shown)
+        _missing("AUT-5: " + r.stderr.strip().replace("AUT-5: ", "", 1))
+    assert r.returncode == 0, r.stdout + r.stderr
+    out = json.loads(r.stdout)
+    assert out["views"] == 4 and out["failing"] == 0 and not out.get("allowed")      # 1280 / 320 px, light / dark

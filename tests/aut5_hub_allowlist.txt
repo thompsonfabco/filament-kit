@@ -1,0 +1,31 @@
+# AUT-5 findings on the Hub page that a later step removes (tests/aut5_run.mjs --allow). One line each:
+#   <check> | <where, as the audit prints it> | <count> | <reason: the step that removes that markup>
+# <count> is how often the finding appears in the test's whole run (10 sections x 1280/320 x light/dark = 40 passes): a
+# run that finds it more often fails, and one that finds it less often fails as stale, so a rebuilt section has to lower
+# or drop its lines (09 S1.11). The Hub page's selectors are generic (div.row > input), so one line covers the sections
+# it names. The audit also reads the fields of hidden regions. S1.11 changes no shipped file; the Hub page steps S2.x
+# rebuild each section on the shared components (labelled fields, 44 px controls) and delete their lines.
+field attribute differs from 07 9.1 | div > div.row > label > input | 12 | Settings (today's markup); removed by S2.19
+field without a label | div > div > div.row > input | 4 | Settings (today's markup); removed by S2.19
+field without a label | div > section.card > div.row > input | 32 | Printers, Devices, Settings (today's markup); removed by S2.4, S2.5, S2.9 and S2.19
+field without a label | section.card > div > div.row > input | 36 | Printers, Settings, Flash a device (today's markup); removed by S2.4, S2.5, S2.16 and S2.19
+field without a label | section.card > div > div.row > select | 8 | Logs (today's markup); removed by S2.14
+field without a label | section.card > div.item > div.row > input | 8 | Printers (today's markup); removed by S2.4 and S2.5
+field without a label | section.card > div.item > div.row > select | 4 | Printers (today's markup); removed by S2.4 and S2.5
+field without a label | section.page > div > section.card > textarea | 4 | Settings (today's markup); removed by S2.19
+hit area under 44 x 44 | div > div > div.row > button.secondary | 2 | Settings (today's markup); removed by S2.19
+hit area under 44 x 44 | div > div > div.row > input | 2 | Settings (today's markup); removed by S2.19
+hit area under 44 x 44 | div > div.item > div.row > button.secondary | 2 | Recently added (today's markup); removed by S2.7
+hit area under 44 x 44 | div > section.card > div.row > button.btn--primary | 18 | Devices, Slicer presets, Settings (today's markup); removed by S2.9, S2.10 and S2.19
+hit area under 44 x 44 | div > section.card > div.row > button.secondary | 62 | Printers, Devices, Slicer presets, Features, Settings, Updates (today's markup); removed by S2.4, S2.5, S2.9, S2.10, S2.12, S2.13 and S2.19
+hit area under 44 x 44 | div > section.card > div.row > input | 16 | Printers, Devices, Settings (today's markup); removed by S2.4, S2.5, S2.9 and S2.19
+hit area under 44 x 44 | section.card > div > div.row > button.btn--primary | 10 | Printers, Settings, Flash a device, Logs (today's markup); removed by S2.4, S2.5, S2.14, S2.16 and S2.19
+hit area under 44 x 44 | section.card > div > div.row > button.secondary | 28 | Settings, Flash a device (today's markup); removed by S2.16 and S2.19
+hit area under 44 x 44 | section.card > div > div.row > input | 18 | Printers, Settings, Flash a device (today's markup); removed by S2.4, S2.5, S2.16 and S2.19
+hit area under 44 x 44 | section.card > div > div.row > select | 4 | Logs (today's markup); removed by S2.14
+hit area under 44 x 44 | section.card > div.item > div.row > button.btn--primary | 4 | Printers (today's markup); removed by S2.4 and S2.5
+hit area under 44 x 44 | section.card > div.item > div.row > button.secondary | 30 | Printers, Slicer presets (today's markup); removed by S2.4, S2.5 and S2.10
+hit area under 44 x 44 | section.card > div.item > div.row > input | 4 | Printers (today's markup); removed by S2.4 and S2.5
+hit area under 44 x 44 | section.card > div.item > div.row > select | 2 | Printers (today's markup); removed by S2.4 and S2.5
+img alt is "photo N" | div > div.item > div.row > img | 4 | Recently added (today's markup); removed by S2.7
+sideways scroll | page | 2 | Overview at 320 px: the certificate fingerprint (64 characters, no break) is wider than the page (today's markup); removed by S2.2

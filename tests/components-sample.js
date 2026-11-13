@@ -493,12 +493,4 @@ if (loadingView) {
 // ----- the shell -----
 if (!location.hash) history.replaceState(null, "", "#printers");
 SW.shell({ hub: "Workshop hub", home: "printers", titleOf: () => document.querySelector("main h1").textContent });
-
-// ?audit: run tests/page_audit.js once the page has settled and write its findings into the page (for a test runner)
-if (query.has("audit")) setTimeout(() => {
-  const s = document.createElement("script");
-  s.src = "page_audit.js";
-  s.onload = () => document.body.append(h("pre", { id: "audit-result", text: JSON.stringify(window.swPageAudit()) }));
-  document.body.append(s);
-}, 3000);
 })();
