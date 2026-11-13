@@ -1,7 +1,7 @@
 """Lint checks of docs/design/07-accessibility.md section 15 (AUT-2, AUT-3, AUT-4, AUT-6, AUT-7) and of
 docs/design/08-platform-mapping.md 3.4 test 5, one test function per lint.
 
-They read the web sources (`setup_static/*`, `web/static/*`) and the app's Kotlin (see test_design_sources.py). Today's
+They read the web sources (`setup_static/*`, `web/static/*`, `web-shared/*`) and the app's Kotlin (see test_design_sources.py). Today's
 findings are in the allow-lists next to this file, one line each: `<path> | <finding> | <reason>`. A finding outside
 its allow-list fails, and so does an allow-list line that no longer matches anything (09 open point 4), so a step that
 rewrites a file removes that file's lines.
@@ -18,8 +18,8 @@ FIELD_ALLOWLIST = TESTS / "field_allowlist.txt"
 PRESS_ALLOWLIST = TESTS / "press_allowlist.txt"
 WORDS_ALLOWLIST = TESTS / "words_allowlist.txt"
 
-# The field component (07 AUT-4) does not exist yet; the file that holds it goes here when S0.10/S0.11 add it.
-FIELD_COMPONENT_FILES = frozenset()
+# The field component (07 AUT-4): the one file allowed to create fields; it always renders a visible label.
+FIELD_COMPONENT_FILES = frozenset({"web-shared/components.js"})
 TOKEN_CSS = frozenset({"tokens.css"})       # the generated token block: literals belong there (foundations 12.5)
 
 # ---- Reading the sources ----

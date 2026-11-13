@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<title>Component sample</title>
+<!-- The component sample of design step S0.11: every component of docs/design/02-components.md sections 2 to 10 in
+     its states, with the fake data of mockups/CONTENT-SPEC.md. Serve the repository root over HTTP (the script fetches
+     ../icons/sprite.svg) and open /tests/components-sample.html; add ?view=loading for the loading states. -->
+<script src="../tokens/theme-init.js"></script>
+<link rel="stylesheet" href="../tokens/tokens.css">
+<link rel="stylesheet" href="../web-shared/components.css">
+<link rel="stylesheet" href="components-sample.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="shell">
+  <header class="topbar">
+    <a class="topbar__brand" href="#overview">
+      <svg class="topbar__mark" aria-hidden="true" focusable="false"><use href="#i-spoolwarden"/></svg>
+      <span class="topbar__name">Spoolwarden</span>
+      <span class="topbar__hub"><span aria-hidden="true">/</span> Workshop hub
+        <span class="topbar__version mono"><span class="sr">version </span>0.5.2</span></span>
+    </a>
+    <div class="topbar__tools" id="tools"></div>
+  </header>
+  <nav class="nav" aria-label="Sections">
+    <h2 class="nav__heading" id="nav-everyday">Everyday</h2>
+    <ul class="nav__group" data-group="everyday" aria-labelledby="nav-everyday">
+      <li><a class="nav__item" href="#overview" data-tab>
+        <svg class="icon nav__icon" aria-hidden="true" focusable="false"><use href="#i-overview"/></svg>
+        <span class="nav__label">Overview</span><span class="nav__summary">1 needs a look</span>
+        <svg class="icon icon--s nav__chevron" aria-hidden="true" focusable="false"><use href="#i-chevron"/></svg></a></li>
+      <li><a class="nav__item" href="#printers" data-tab>
+        <svg class="icon nav__icon" aria-hidden="true" focusable="false"><use href="#i-printer"/></svg>
+        <span class="nav__label">Printers</span><span class="nav__summary">2 connected · 1 offline</span>
+        <svg class="icon icon--s nav__chevron" aria-hidden="true" focusable="false"><use href="#i-chevron"/></svg></a></li>
+      <li><a class="nav__item" href="#recent" data-tab>
+        <svg class="icon nav__icon" aria-hidden="true" focusable="false"><use href="#i-recent"/></svg>
+        <span class="nav__label"><span class="nav__label-full">Recently added</span><span class="nav__label-short" aria-hidden="true">Recent</span></span>
+        <span class="nav__summary">5 records, 14.2 MB of photos</span>
+        <svg class="icon icon--s nav__chevron" aria-hidden="true" focusable="false"><use href="#i-chevron"/></svg></a></li>
+      <li><a class="nav__item" href="#devices">
+        <svg class="icon nav__icon" aria-hidden="true" focusable="false"><use href="#i-devices"/></svg>
+        <span class="nav__label">Devices</span><span class="nav__summary">3 paired, 2 Tag Readers</span>
+        <svg class="icon icon--s nav__chevron" aria-hidden="true" focusable="false"><use href="#i-chevron"/></svg></a></li>
+      <li><a class="nav__item" href="#presets" data-state="off">
+        <svg class="icon nav__icon" aria-hidden="true" focusable="false"><use href="#i-presets"/></svg>
+        <span class="nav__label">Slicer presets</span><span class="sr">, switched off</span>
+        <span class="nav__summary">Not available</span>
+        <svg class="icon icon--s nav__chevron" aria-hidden="true" focusable="false"><use href="#i-chevron"/></svg></a></li>
+    </ul>
+    <h2 class="nav__heading" id="nav-system">System</h2>
+    <ul class="nav__group" data-group="system" aria-labelledby="nav-system">
+      <li><a class="nav__item" href="#features">
+        <svg class="icon nav__icon" aria-hidden="true" focusable="false"><use href="#i-features"/></svg>
+        <span class="nav__label">Features</span><span class="nav__summary">10 on, 4 off</span>
+        <svg class="icon icon--s nav__chevron" aria-hidden="true" focusable="false"><use href="#i-chevron"/></svg></a></li>
+      <li><a class="nav__item" href="#settings" data-tab>
+        <svg class="icon nav__icon" aria-hidden="true" focusable="false"><use href="#i-settings"/></svg>
+        <span class="nav__label">Settings</span><span class="nav__summary">9 groups</span>
+        <svg class="icon icon--s nav__chevron" aria-hidden="true" focusable="false"><use href="#i-chevron"/></svg></a></li>
+      <li><a class="nav__item" href="#flash">
+        <svg class="icon nav__icon" aria-hidden="true" focusable="false"><use href="#i-flash"/></svg>
+        <span class="nav__label">Flash a device</span><span class="nav__summary">Tag Reader · Weigh Station display</span>
+        <svg class="icon icon--s nav__chevron" aria-hidden="true" focusable="false"><use href="#i-chevron"/></svg></a></li>
+      <li><a class="nav__item" href="#updates">
+        <svg class="icon nav__icon" aria-hidden="true" focusable="false"><use href="#i-updates"/></svg>
+        <span class="nav__label">Updates</span><span class="nav__summary">0.5.3 is available</span>
+        <svg class="icon icon--s nav__chevron" aria-hidden="true" focusable="false"><use href="#i-chevron"/></svg></a></li>
+      <li><a class="nav__item" href="#logs">
+        <svg class="icon nav__icon" aria-hidden="true" focusable="false"><use href="#i-logs"/></svg>
+        <span class="nav__label">Logs</span><span class="nav__summary">6 services</span>
+        <svg class="icon icon--s nav__chevron" aria-hidden="true" focusable="false"><use href="#i-chevron"/></svg></a></li>
+    </ul>
+    <button class="nav__more" type="button" aria-haspopup="dialog">
+      <svg class="icon nav__icon" aria-hidden="true" focusable="false"><use href="#i-more"/></svg>
+      <span class="nav__label">More</span><span class="sr nav__more-current"></span>
+    </button>
+  </nav>
+  <main class="shell__main" id="main" tabindex="-1">
+    <div class="page" id="sample"></div>
+  </main>
+</div>
+<section class="job" id="job" aria-label="Background job" hidden></section>
+<div class="toasts" aria-live="polite"></div>
+<div class="sr" id="announcer" aria-live="polite"></div>
+<dialog class="sheet sheet--detail" id="detail-host"></dialog>
+<dialog class="dialog dialog--drawer" id="drawer-host"></dialog>
+<dialog class="dialog dialog--wide" id="form-host"></dialog>
+<script src="../strings/strings.js"></script>
+<script src="../web-shared/components.js"></script>
+<script src="components-sample.js"></script>
+</body>
+</html>

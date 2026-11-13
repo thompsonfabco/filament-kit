@@ -149,6 +149,7 @@ def test_profile_choices(name, t):
 # ---- Test 4: every token a component uses is a token ----
 
 SERVER = ROOT / "server" / "filament_kit"
+SHARED = ROOT / "web-shared"
 KOTLIN_DIR = ROOT / "android" / "app" / "src" / "main" / "java"
 ALLOWLIST = ROOT / "tests" / "design_source_allowlist.txt"
 BREAKPOINTS = {600, 601, 1024, 1025}
@@ -182,7 +183,10 @@ def _token_names():
     return {n[: -len("-phone")] if n.endswith("-phone") else n for n in names}
 
 
-TOKEN_NAMES = _token_names()
+# 02-components 1.4: "These three are the only script-set custom properties" (a swatch's colour, a level, a loading
+# button's kept width). They are not tokens, and no other non-token name may appear.
+SCRIPT_SET = {"swatch", "level", "btn-min"}
+TOKEN_NAMES = _token_names() | SCRIPT_SET
 
 
 def _kotlin_fields():
@@ -203,6 +207,7 @@ def _kotlin_fields():
 def _web_sources():
     files = [p for d in ("setup_static", "web/static") for p in sorted((SERVER / d).iterdir())
              if p.suffix in (".css", ".js") and "bundle" not in p.name]
+    files += sorted(p for p in SHARED.iterdir() if p.suffix in (".css", ".js"))    # the shared components (S0.11)
     assert files
     return files
 
