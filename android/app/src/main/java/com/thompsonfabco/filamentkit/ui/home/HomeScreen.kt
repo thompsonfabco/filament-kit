@@ -34,6 +34,8 @@ import com.thompsonfabco.filamentkit.net.ProfileStatus
 import com.thompsonfabco.filamentkit.net.ServerInfo
 import com.thompsonfabco.filamentkit.session.Connection
 import com.thompsonfabco.filamentkit.update.UpdateTexts
+import com.thompsonfabco.filamentkit.ui.components.NoticeCard
+import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
 import com.thompsonfabco.filamentkit.update.UpdateUi
 import java.text.DateFormat
@@ -166,7 +168,7 @@ private fun UpdateBanner(update: UpdateUi, onInstall: () -> Unit, onConfirm: () 
                 Text(UpdateTexts.bannerTitle(update.offeredVersion), style = MaterialTheme.typography.titleMedium)
             }
             if (update.needsPermission) Text("Allow filament-kit to install apps, then tap Install again.")
-            update.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            update.error?.let { NoticeCard(NoticeKind.Bad, it) }
             val refused = UpdateTexts.refused(update)
             if (refused) {
                 val links = LocalUriHandler.current

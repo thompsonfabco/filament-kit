@@ -14,6 +14,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.ui.theme.SpoolwardenTheme
@@ -44,7 +46,7 @@ internal fun SwTopBar(
             title = {
                 Column {
                     Text(
-                        title, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        title, modifier = Modifier.semantics { heading() }, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         style = if (SpoolwardenTheme.window == WindowClass.Phone) {
                             MaterialTheme.typography.titleMedium
                         } else {

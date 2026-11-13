@@ -42,6 +42,8 @@ import androidx.compose.ui.unit.dp
 import com.thompsonfabco.filamentkit.net.ParentList
 import com.thompsonfabco.filamentkit.net.VendorChoice
 import com.thompsonfabco.filamentkit.ui.ColorSwatch
+import com.thompsonfabco.filamentkit.ui.components.NoticeCard
+import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 import com.thompsonfabco.filamentkit.ui.TARE_PROBLEM
 import com.thompsonfabco.filamentkit.ui.parseWeight
 import com.thompsonfabco.filamentkit.ui.tareProblem
@@ -125,12 +127,7 @@ fun ReviewScreen(
 
         state.error?.let { ErrorCard(it, vm, onPairAgain, kept = state.draftId != null) }
         state.addedBefore?.let { before ->
-            Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
-                Column(Modifier.padding(12.dp)) {
-                    Text(before.note, fontWeight = FontWeight.Bold)
-                    Text("Check Spoolman before adding these spools again.", style = MaterialTheme.typography.bodySmall)
-                }
-            }
+            NoticeCard(NoticeKind.Bad, "Check Spoolman before adding these spools again.", title = before.note)
         }
         if (state.askAddAgain) AddAgainDialog(state.addedBefore, vm)
         when (state.stage) {
