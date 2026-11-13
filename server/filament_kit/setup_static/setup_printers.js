@@ -324,12 +324,12 @@ function reportTable(p, reports, result) {
     E("div", "coll__head", { role: "rowgroup" }, E("div", "coll__row", { role: "row" }, cols.map(([col, key]) =>
       X("div", { class: "coll__cell", role: "columnheader", "data-col": col }, col === "actions" ? E("span", "sr", SW.t(key)) : SW.t(key))))),
     reports.map((r) => E("div", "coll__item", { role: "rowgroup", "data-id": r.name }, E("div", "coll__row", { role: "row" },
-      cell("report", [E("span", "mono", r.name), r.at ? E("span", "coll__sub", `${SW.t("printers_reports_made")} ${new Date(r.at * 1000).toLocaleString()}`) : null], SW.t("printers_reports_col_report")),
-      cell("size", SW.t("printers_reports_size", { size: Math.max(1, Math.round(r.size / 1024)) }), SW.t("common_col_size")),
-      cell("actions", SW.btn(SW.t("common_download"), { cls: "btn--ghost", name: `${SW.t("common_download")}: ${r.name}`,
+      pcell("report", [E("span", "mono", r.name), r.at ? E("span", "coll__sub", `${SW.t("printers_reports_made")} ${new Date(r.at * 1000).toLocaleString()}`) : null], SW.t("printers_reports_col_report")),
+      pcell("size", SW.t("printers_reports_size", { size: Math.max(1, Math.round(r.size / 1024)) }), SW.t("common_col_size")),
+      pcell("actions", SW.btn(SW.t("common_download"), { cls: "btn--ghost", name: `${SW.t("common_download")}: ${r.name}`,
         run: () => coded(result, () => download(printerPath(p, `reports/${encodeURIComponent(r.name)}`), { code: theCode() }, r.name)) }))))));
 }
-const cell = (col, content, key) => X("div", { class: "coll__cell", role: "cell", "data-col": col, "data-prio": col === "address" || col === "connection" ? 3 : 1 },
+const pcell = (col, content, key) => X("div", { class: "coll__cell", role: "cell", "data-col": col, "data-prio": col === "address" || col === "connection" ? 3 : 1 },
   key ? E("span", "coll__key", { "aria-hidden": "true" }, key) : null, content);
 
 // ----- Map by loading filament: the owner loads each slot, the printer says which one it sees -----
@@ -394,7 +394,7 @@ function openLoadDrawer(p, box, first) {
       E("div", "coll__head", { role: "rowgroup" }, E("div", "coll__row", { role: "row" },
         ["position", "status"].map((c) => X("div", { class: "coll__cell", role: "columnheader", "data-col": c }, SW.t(c === "position" ? "printers_load_col_position" : "common_field_status"))))),
       v.positions.map((q) => E("div", "coll__item", { role: "rowgroup", "data-id": q.id }, E("div", "coll__row", { role: "row" },
-        cell("position", E("span", "mono", q.label), SW.t("printers_load_col_position")), cell("status", status(q), SW.t("common_field_status"))))));
+        pcell("position", E("span", "mono", q.label), SW.t("printers_load_col_position")), pcell("status", status(q), SW.t("common_field_status"))))));
     const idle = !st && !v.open && !v.summary;
     sheet.replaceChildren(...[
       E("p", null, st ? st.say : v.summary || SW.t("printers_load_idle")),
