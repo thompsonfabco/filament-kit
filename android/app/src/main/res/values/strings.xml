@@ -878,6 +878,7 @@
     <string name="logs_lines">Lines</string>
     <string name="logs_locked">Logs hold addresses and serial numbers, so reading them needs the setup code.</string>
     <string name="logs_none">No services are switched on.</string>
+    <string name="logs_read_error">Could not read the log.</string>
     <string name="logs_service">Service</string>
     <string name="logs_show_again">Show again</string>
     <string name="logs_truncated">Only the end is shown: the rest is too long for this page.</string>
