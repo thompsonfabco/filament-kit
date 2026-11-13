@@ -558,9 +558,15 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                         val profileVm: AddProfileViewModel = viewModel(factory = viewModelFactory {
                             initializer { AddProfileViewModel(ProfileApi.of(::currentApi)) }
                         })
+                        val savedText = stringResource(R.string.catalog_saved)
                         AddProfileScreen(
                             vm = profileVm,
                             onBack = { nav.popBackStack() },
+                            // back to the screen it came from; the toast outlives this screen, so it runs in the shell's scope
+                            onSaved = {
+                                nav.popBackStack()
+                                pairScope.launch { toast.show(savedText) }
+                            },
                             onPairAgain = app.router::pairAgain,
                         )
                     }

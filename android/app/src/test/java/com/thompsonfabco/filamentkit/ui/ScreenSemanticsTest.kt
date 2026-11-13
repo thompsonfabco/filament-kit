@@ -1,5 +1,15 @@
 package com.thompsonfabco.filamentkit.ui
 
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import com.thompsonfabco.filamentkit.net.ApiError
+import com.thompsonfabco.filamentkit.net.LocalEntryResult
+import com.thompsonfabco.filamentkit.net.ParentList
+import com.thompsonfabco.filamentkit.ui.profile.ProfileField
+import com.thompsonfabco.filamentkit.ui.profile.ProfileApi
+import com.thompsonfabco.filamentkit.ui.profile.AddProfileViewModel
+import com.thompsonfabco.filamentkit.ui.profile.AddProfileScreen
 import android.os.Build
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -207,6 +217,25 @@ class ScreenSemanticsTest {
     )
     private fun group(title: String, group: SettingsGroup, facts: SettingsFacts = facts()) =
         host(title) { SettingsGroupPage(group, facts, actions()) }
+
+    @Test fun catalogLine() {
+        val vm = AddProfileViewModel(FakeCatalog(refuse = false))
+        host("New catalog line") { AddProfileScreen(vm, onBack = {}, onSaved = {}, onPairAgain = {}) }
+        auditAllFour("Save to the catalog")
+    }
+
+    @Test fun catalogLineRefused() {
+        val vm = AddProfileViewModel(FakeCatalog(refuse = true))
+        host("New catalog line") { AddProfileScreen(vm, onBack = {}, onSaved = {}, onPairAgain = {}) }
+        vm.set(ProfileField.Vendor, "Example Filaments")
+        vm.set(ProfileField.Line, "PolyTerra")
+        vm.set(ProfileField.Material, "PLA")
+        vm.set(ProfileField.Density, "9")
+        vm.save()
+        rule.waitForIdle()
+        rule.onNodeWithText("The Hub could not use these values:").assertExists()
+        auditAllFour("Save to the catalog")
+    }
 
     @Test fun settings() {
         host("Settings") { SettingsScreen(facts(UpdateUi(available = 7, offeredVersion = "0.5.3")), onOpen = {}) }
@@ -427,6 +456,19 @@ class ScreenSemanticsTest {
         override suspend fun printer(id: String) = PrinterDetail(online, status)
         override suspend fun command(id: String, action: String) = CommandResult(ok = true)
         override suspend fun unload(id: String, label: String, dryRun: Boolean): UnloadResult = error("not used")
+    }
+
+    private class FakeCatalog(private val refuse: Boolean) : ProfileApi {
+        override suspend fun parents(material: String) = ParentList(listOf("Generic PLA", "Example PLA Basic"), synced = true)
+        override suspend fun addLocalProfile(entry: JsonObject): LocalEntryResult {
+            if (refuse) {
+                throw ApiError(
+                    400, "invalid_entry", "not valid",
+                    JsonObject(mapOf("problems" to JsonArray(listOf(JsonPrimitive("fields.filament_density '9' is outside 0.5-3.0 g/cm3"))))),
+                )
+            }
+            return LocalEntryResult(entry, "example--polyterra")
+        }
     }
 
     private class FakeTools : PrinterToolsBackend {
