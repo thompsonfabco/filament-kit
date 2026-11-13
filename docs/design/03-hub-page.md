@@ -32,7 +32,7 @@ Contents: 1 Conventions · 2 Page-wide behaviour · 3 Global chrome · 4 Overvie
 | Choice cards | The segmented choice, cards variant (`02-components.md` section 5.7): one card per option, each with its name and one line of text (used where options need explaining). |
 | Button kinds | Primary, default, ghost, danger and icon buttons of `02-components.md`. Every section, card and row has at most one primary button (foundations principle 2). |
 
-Example values in this document are invented: the Hub is named "Workshop hub", version 0.5.2, at
+Example values in this document are those of `mockups/CONTENT-SPEC.md`: the Hub is named "Workshop hub", version 0.5.2, at
 `https://192.0.2.10:8710/setup`; printers Workshop X1 (192.0.2.40), Garage Voron (voron.example:7125) and Study
 A1 mini (192.0.2.41); devices "Kitchen phone" and "Desk PC". `http://127.0.0.1:7915` is not an example but the
 product's own default address of the On this Hub engine (section 10.5).
@@ -1134,7 +1134,7 @@ Desktop
 | | A Weigh Station only machine has no Hub page. To make one, on that machine run                 | |
 | |   sudo spoolwarden features setup weigh-station --hub <the Hub's address>          [Copy]      | |
 | +----------------------------------------------------------------------------------------------+ |
-| +-- Features -------------------------------------------------------- [On 9 | Off 5 | All] ----+ |
+| +-- Features -------------------------------------------------------- [On 10 | Off 4 | All] ----+ |
 | |  FEATURE                     STATE     WHAT IT DOES                           NEEDS             | |
 | |  Label Reader: Cloud (Claude)  Uses AI  (*) On  Claude reads spool labels from photos.  Hub service  [Turn off] | |
 | |  Klipper printers            ( ) Off   Connects Klipper printers through ...  Hub service  [Turn on]  | |

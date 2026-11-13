@@ -328,6 +328,7 @@ group of every theme with the same values; they no longer sit in `extra.size`.
 | Key | Console value | Purpose |
 |---|---|---|
 | `size.content-max` in every theme | `1400px` | The widest the content column gets on Desktop (foundations section 7; `--content-max`, `sizes.contentMax`) |
+| The `size` entries of `05-android-app.md` section 1 marked "new" (`label-col`, `thumb-s`, `swatch-row-w`, `swatch-row-h`, `swatch-head`, `empty-mark`, `chip`, `slot-label`, `port-field`, `column-max`, `preview-max`, `list-pane`) | per theme, in that table | Fixed dimensions of parts the app draws; one `SwSizes` field each |
 | `type.android.sans` / `.mono` | `default` / `monospace` | Android system family, one of `default`, `monospace`, `serif`, `sans-serif`; `default` and `monospace` in all four themes (Spool's rounded stack has no Android equivalent, section 14) |
 | `elevation.android.e0` / `.e2` | `0px` / `8px` | Shadow depth Android uses for that level; the same in all four themes |
 
