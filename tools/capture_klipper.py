@@ -6,8 +6,9 @@ fixtures. It writes into --out:
     spoolman_status.json  server_config.json  db_namespaces.json  lane_data.json (only if present)
 status.json holds print_stats, toolhead, every extruder*, heater_bed, virtual_sdcard, every gcode_macro whose name has
 SPOOL / TOOL / T<n>, every AFC* object and mmu. Any key named like *key*, *token*, *password* or *secret* is dropped
-from every file. The host name, IPv4 addresses, the host part of absolute URLs (webcams, spoolman) and the user
-name in home paths are replaced too (printer.example, 192.0.2.1, user); --keep-addresses turns that off. Skim the
+from every file. The host name, IPv4/IPv6 addresses, local-network host names (*.local, *.lan, *.arpa ...), the
+host part of absolute URLs (webcams, spoolman), dict keys with such values and the user name in home paths are
+replaced too (printer.example, 192.0.2.1, 2001:db8::1, user); --keep-addresses turns that off. Skim the
 files once before sharing anyway: free text (macro names, file names) is not touched.
 
     python tools/capture_klipper.py --host printer.home.arpa [--port 7125] [--keep-addresses] --out DIR
@@ -16,6 +17,7 @@ files once before sharing anyway: free text (macro names, file names) is not tou
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import os
 import re
@@ -26,10 +28,12 @@ import urllib.request
 from pathlib import Path
 
 SECRET = re.compile(r"key|token|password|secret|passwd", re.I)
-HOST_OUT, IP_OUT, USER_OUT = "printer.example", "192.0.2.1", "user"
+HOST_OUT, IP_OUT, IP6_OUT, USER_OUT = "printer.example", "192.0.2.1", "2001:db8::1", "user"
 _OCTET = r"(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)"
 _IPV4 = re.compile(rf"(?<![\w.]){_OCTET}(?:\.{_OCTET}){{3}}(?![\w.])")
 _URL_HOST = re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://(?:[^/@\s]*@)?)(\[[0-9a-f:]+\]|[^/:?#\s]+)")
+_IPV6 = re.compile(r"(?i)(?<![\w:.])[0-9a-f:]*:[0-9a-f:]*(?![\w:.])")     # candidates; ipaddress decides
+_LOCAL_NAME = re.compile(r"(?i)(?<![\w-])(?:[a-z0-9-]+\.)+(?:local|lan|arpa|localdomain|home|internal|intranet|corp)(?!\.?[\w-])")
 _HOME = re.compile(r"(?i)(/home/|/Users/|[A-Z]:\\Users\\|[A-Z]:/Users/)([^/\\\s\"']+)")
 MACRO = re.compile(r"gcode_macro .*(SPOOL|TOOL|\bT\d+\b)", re.I)
 
@@ -42,19 +46,31 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 OPENER = urllib.request.build_opener(NoRedirect)
 
 
+def _ipv6_out(m) -> str:
+    try:
+        ok = ":" in m.group(0) and isinstance(ipaddress.ip_address(m.group(0)), ipaddress.IPv6Address)
+    except ValueError:
+        ok = False      # a time, a version, a C++ scope: not an address
+    return IP6_OUT if ok else m.group(0)
+
+
 def scrub_text(s: str, host: str | None = None) -> str:
-    """An address-free copy of a string: the capture host, URL hosts, IPv4 addresses, the user in home paths."""
+    """An address-free copy of a string: the capture host, URL hosts, IPv4/IPv6 addresses, local-network host names
+    (*.local, *.lan, *.arpa ...), the user in home paths."""
     if host:
         s = re.sub(re.escape(host), HOST_OUT, s, flags=re.I)
     s = _URL_HOST.sub(lambda m: m.group(1) + HOST_OUT, s)
     s = _IPV4.sub(IP_OUT, s)
+    s = _IPV6.sub(_ipv6_out, s)
+    s = _LOCAL_NAME.sub(HOST_OUT, s)
     return _HOME.sub(lambda m: m.group(1) + USER_OUT, s)
 
 
 def scrub(v, host: str | None = None, addresses: bool = True, key: str = ""):
     """Drops secret-named keys; with `addresses` also scrubs strings and any `hostname` value."""
     if isinstance(v, dict):
-        return {k: scrub(x, host, addresses, str(k)) for k, x in v.items() if not SECRET.search(str(k))}
+        return {(scrub_text(str(k), host) if addresses and isinstance(k, str) else k): scrub(x, host, addresses, str(k))
+                for k, x in v.items() if not SECRET.search(str(k))}
     if isinstance(v, list):
         return [scrub(x, host, addresses, key) for x in v]
     if addresses and isinstance(v, str):

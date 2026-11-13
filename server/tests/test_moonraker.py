@@ -176,6 +176,17 @@ def test_capture_scrubs_host_name_addresses_urls_and_user_paths(moonraker, tmp_p
     assert json.loads((tmp_path / "info.json").read_text())["hostname"] == "printer.example"
 
 
+def test_capture_scrubs_bare_ipv6_local_names_and_dict_keys():
+    cap = _capture_tool()
+    got = cap.scrub({"trusted_clients": ["fe80::1/64", "2001:db8:aaaa::5", "10:30:45 v1.2"],
+                     "cors_domains": ["mainsail.lab-home.arpa", "*.cam-box.lan"],
+                     "webcam cam-box.local": {"service": "mjpegstreamer"}, "spoolman box-7.lan": 1}, "other.test")
+    assert got["trusted_clients"] == ["2001:db8::1/64", "2001:db8::1", "10:30:45 v1.2"]
+    assert got["cors_domains"] == ["printer.example", "*.printer.example"]
+    assert set(got) == {"trusted_clients", "cors_domains", "webcam printer.example", "spoolman printer.example"}
+    assert cap.scrub({"webcam cam-box.local": 1}, None, addresses=False) == {"webcam cam-box.local": 1}
+
+
 def test_capture_keep_addresses_leaves_them(moonraker, tmp_path):
     blob = _capture_with_private_values(moonraker, tmp_path, "--keep-addresses")
     assert "voron-lab" in blob and "cam-lab" in blob and "/home/tester/" in blob
