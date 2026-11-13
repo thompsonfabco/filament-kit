@@ -238,6 +238,33 @@ class HistoryTest {
         assertNull(HistoryTexts.readLine(record, 0))
     }
 
+    private fun readItem(vendor: String, name: String, colour: String) = buildJsonObject {
+        put("vendor", vendor); put("name", name); put("material", "PLA"); put("color_name", colour); put("confidence", 0.9)
+    }
+
+    @Test fun aRemovedCardDoesNotShiftTheWhenReadLine() {
+        // the read had two items; the first card was removed, so saved item 0 is read item 1
+        val r = record.copy(read = com.thompsonfabco.filamentkit.net.HistoryRead(listOf(
+            readItem("eSUN", "PLA+ Black", "Black"), readItem("SUNLU", "PLA+ Grey", "Charcoal"))),
+            saved = listOf(HistorySaved(0, listOf(41), buildJsonObject {
+                put("vendor", "SUNLU"); put("name", "PLA+ Grey"); put("material", "PLA") })))
+        assertEquals("When read: Colour: Charcoal · 90 % sure", HistoryTexts.readLine(r, 0))
+    }
+
+    @Test fun noWhenReadLineWhenTheReadItemIsNotKnownForSure() {
+        val read = com.thompsonfabco.filamentkit.net.HistoryRead(listOf(
+            readItem("eSUN", "PLA+ Black", "Black"), readItem("SUNLU", "PLA+ Grey", "Charcoal")))
+        val renamed = buildJsonObject { put("vendor", "Polymaker"); put("name", "PolyLite Grey"); put("material", "PLA") }
+        // renamed and one card dropped: no match, counts differ
+        assertNull(HistoryTexts.readLine(record.copy(read = read, saved = listOf(HistorySaved(0, listOf(41), renamed))), 0))
+        // renamed, nothing dropped: same place, same material
+        val two = listOf(HistorySaved(0, listOf(40), buildJsonObject { put("vendor", "eSUN"); put("name", "PLA+ Black"); put("material", "PLA") }),
+            HistorySaved(1, listOf(41), renamed))
+        assertEquals("When read: Colour: Charcoal · 90 % sure", HistoryTexts.readLine(record.copy(read = read, saved = two), 1))
+        // a saved item the record does not have
+        assertNull(HistoryTexts.readLine(record.copy(read = read, saved = two), 5))
+    }
+
     @Test fun valuesReadPlainly() {
         assertEquals("210", HistoryTexts.value(JsonPrimitive(210.0)))
         assertEquals("1.24", HistoryTexts.value(JsonPrimitive(1.24)))
