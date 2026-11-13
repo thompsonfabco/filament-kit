@@ -361,6 +361,10 @@ class E2E:
         self.printer = None
         self.installed = False                 # a) installed the kit (the later scenarios need it)
         self.v1_published = False              # v1 is on the fake release server under OWNER_REPO
+        # f installs another build (the --previous tag's, then a rollback to it). Its version can be this checkout's
+        # own (main still says 0.5.2 after v0.5.2 is tagged), so the version alone cannot tell the known state: after f
+        # the next scenario always reinstalls it (and forgets the pairing, the spool and the printer of the old one).
+        self.foreign_install = False
 
     # ---- a) fake release server and get.sh
     def a_install(self, sc="a") -> None:
@@ -419,7 +423,7 @@ class E2E:
             self.rel.serve()
 
     def _is_server_v1(self) -> bool:
-        if installed_version() != self.v1:
+        if self.foreign_install or installed_version() != self.v1:
             return False
         try:
             mods = read_cfg().get("modules") or {}
@@ -459,6 +463,7 @@ class E2E:
             if r.returncode:
                 raise Fail("could not bring the host to the known state; see the log")
             self.installed = True
+            self.foreign_install = False
             self.token = self.spool = None          # the pairing and the spool went with the old install
             if self.printer is not None:            # and the printer entry: g then has none to compare
                 self.printer.close()
@@ -727,6 +732,7 @@ class E2E:
             raise Skip("no --previous tag given")
         if nothing_installed():
             uninstall(run, rel, "uninstall-before-cross-tag")
+        self.foreign_install = True                 # from here the host holds the --previous tag's build, not v1
         left = nothing_installed()
         run.check(sc, "starts from a host with no kit on it", not left, ", ".join(left))
         tree, old, dist = rel.build_previous(self.previous)
