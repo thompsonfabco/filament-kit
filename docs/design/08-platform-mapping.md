@@ -16,7 +16,12 @@ Contents: 1 Files and who owns them · 2 `tokens/tokens.json` · 3 The generator
 
 One source per kind of thing. Everything else is generated from it by a script, and the generated files are checked
 in, so nobody installing Spoolwarden runs a build step (foundations, section 12, rule 2). The token files live
-together in one folder, `tokens/` (in the design set, `design/tokens/`).
+together in one folder, `tokens/`, at the top of the repository, beside the code that is generated from them.
+That folder is the only place they exist: the design folder holds no copy of `tokens.json`, `tokens.css` or the
+two scripts, so there is nothing to keep in step. Values quoted in the design documents (foundations section 4,
+`05-android-app.md` section 1) and the colours inside the mockups are illustrations of `tokens/tokens.json` at the
+time of writing; where they differ, `tokens/tokens.json` is right for a value, and a change of the design starts
+there (README, "Changing the design").
 
 The files marked "exists" are the token schema and tooling as they are today. The files marked "proposed" are
 additions this mapping needs; they are specified in section 3.4 and are not yet in the files.
