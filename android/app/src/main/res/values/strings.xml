@@ -3116,6 +3116,27 @@
     <!-- 1=n -->
     <string name="recent_undo_title">Undo revision %1$s?</string>
     <string name="recent_value_empty">(empty)</string>
+    <string name="recent_arrow">→</string>
+    <!-- 1=field 2=old 3=new -->
+    <string name="recent_change">%1$s %2$s → %3$s</string>
+    <!-- 1=field 2=old 3=new 4=unit -->
+    <string name="recent_change_unit">%1$s %2$s → %3$s %4$s</string>
+    <string name="recent_error_colour">Enter 6 hex digits, e.g. #2B2B2E.</string>
+    <string name="recent_error_number">Enter a number.</string>
+    <string name="recent_error_range">Enter a range like 190-230.</string>
+    <string name="recent_item_note_all">A change applies to all of them.</string>
+    <string name="recent_leave_thing">this record</string>
+    <string name="recent_mark_estimated">Estimated: check this</string>
+    <!-- 1=time 2=source -->
+    <string name="recent_meta_line">%1$s · %2$s</string>
+    <!-- 1=time 2=spools -->
+    <string name="recent_row_meta">%1$s · %2$s</string>
+    <!-- 1=count -->
+    <string name="recent_times">×%1$d</string>
+    <!-- 1=field 2=value -->
+    <string name="recent_undo_again">%1$s is %2$s again.</string>
+    <!-- 1=value 2=unit -->
+    <string name="recent_value_unit">%1$s %2$s</string>
     <string name="spool_details_title">Details</string>
     <!-- 1=name 2=id -->
     <string name="spool_empty_body">%1$s (spool %2$s) will be marked as used up.</string>
