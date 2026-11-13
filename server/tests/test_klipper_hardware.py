@@ -82,14 +82,15 @@ def test_template_with_newline_is_error(etc):
     _override(etc, '<filament-systems><system key="single" adapter="single">'
                    '<set-gcode>SET_ACTIVE_SPOOL ID={spool}\nFIRMWARE_RESTART</set-gcode></system></filament-systems>')
     hw = kh.load()
-    assert hw.errors
+    assert len(hw.errors) == 1 and "must be one line" in hw.errors[0]
     assert hw.system("single").set_gcode == "SET_ACTIVE_SPOOL ID={spool}"   # last good kept
 
 
 def test_template_with_unknown_placeholder_is_error(etc):
     _override(etc, '<filament-systems><system key="single" adapter="single">'
                    '<set-gcode>X {bed}</set-gcode></system></filament-systems>')
-    assert kh.load().errors
+    errors = kh.load().errors
+    assert len(errors) == 1 and "unknown placeholder(s) bed" in errors[0]
 
 
 def test_override_merges_per_key(etc):
@@ -103,7 +104,8 @@ def test_override_merges_per_key(etc):
 
 def test_model_with_unknown_system_is_error(etc):
     _override(etc, '<models><model key="x" name="X" system="nope"/></models>')
-    assert kh.load().errors
+    errors = kh.load().errors
+    assert len(errors) == 1 and "system 'nope' is not a <system> key" in errors[0]
 
 
 def test_unknown_element_warning(etc):
@@ -131,4 +133,23 @@ def test_light_gcode_with_a_placeholder_is_refused(etc):
     """Final review M7: light gcode has nothing to fill in."""
     _override(etc, '<models><model key="x" name="X" system="single"><light on="SET_LED ID={spool}" off="OFF"/>'
                    '</model></models>')
-    assert kh.load().errors
+    errors = kh.load().errors
+    assert len(errors) == 1 and "may not have placeholders" in errors[0]
+
+
+def test_an_override_version_that_is_not_above_the_bundled_one_is_ignored_with_a_warning(etc):
+    body = '<models><model key="x" name="X printer" system="single"/></models>'
+    _override(etc, body, version="1.0")
+    hw = kh.load()
+    assert hw.errors == [] and "x" not in hw.models
+    assert any("not newer than the kit's own" in w for w in hw.warnings)
+    _override(etc, body, version="1.1")
+    assert "x" in kh.load().models
+
+
+@pytest.mark.parametrize("version", ["0.9", "2.0", "abc"])
+def test_an_override_of_another_major_version_is_an_error_and_the_bundled_data_stays(etc, version):
+    _override(etc, '<models><model key="x" name="X printer" system="single"/></models>', version=version)
+    hw = kh.load()
+    assert len(hw.errors) == 1 and f"version '{version}' not supported" in hw.errors[0]
+    assert "x" not in hw.models and hw.model("SOVOL-SV08-MAX").name == "Sovol SV08 MAX"

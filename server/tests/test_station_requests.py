@@ -117,6 +117,23 @@ def test_a_refused_request_answers_gone_and_its_address_waits_out_the_window(env
     assert again.status_code == 429 and again.json()["error"] == "refused"
 
 
+def test_a_refused_address_is_let_in_again_only_after_the_window(env):  # noqa: F811
+    r, s = hx(), hx()
+    sr.ask(r, sr.commitment(s), "x", "192.0.2.31", now=1000.0)
+    sr.reveal(r, s, now=1000.0)
+    sr.decide(sr.pending(now=1000.0)[0]["id"], False, now=1000.0)
+    with pytest.raises(sr.RequestError) as e:
+        sr.ask(hx(), sr.commitment(hx()), "x", "192.0.2.31", now=1000.0 + sr.TTL - 1)
+    assert (e.value.status, e.value.code) == (429, "refused")
+    assert sr.ask(hx(), sr.commitment(hx()), "x", "192.0.2.31", now=1000.0 + sr.TTL + 1)["nonce"]
+
+
+def test_revealing_an_unknown_request_is_404(env):  # noqa: F811
+    with pytest.raises(sr.RequestError) as e:
+        sr.reveal(hx(), hx())
+    assert (e.value.status, e.value.code) == (404, "not_found")
+
+
 def test_requests_run_out(env):  # noqa: F811
     r, s = hx(), hx()
     sr.ask(r, sr.commitment(s), "x", "192.0.2.30", now=1000.0)

@@ -65,6 +65,11 @@ def _serve(view, allow):
     return srv, f"http://127.0.0.1:{srv.server_address[1]}"
 
 
+def _stop(srv):
+    srv.shutdown()
+    srv.server_close()
+
+
 def _get(url):
     try:
         with urllib.request.urlopen(url, timeout=5) as r:
@@ -85,6 +90,17 @@ def _raw(now, **kw):
     return s
 
 
+def _ages_near(doc, expect):
+    """The handler reads the clock itself, a moment after the test took `now`: ages are compared to within 2 s and
+    taken out of the document, so the rest can be compared exactly."""
+    out = {}
+    for key, want in expect.items():
+        node = doc[key]
+        assert abs(node.pop("age_seconds") - want) <= 2, (key, node)
+        out[key] = node
+    return out
+
+
 def test_state_and_last_tag_shapes():
     """Same output as filament-ops station/intake_station.py for the same state (shapes are a contract with the
     owner's filament-mcp)."""
@@ -97,23 +113,23 @@ def test_state_and_last_tag_shapes():
         assert set(st) == {"tag", "scale", "last_weight", "panel", "panel_version", "panel_nfc", "air", "photo",
                        "flow"}
         iso = station_http.iso(now - 10)
-        tag = {"status": "ok", "nfc_id": "a:b:c:d:e:f:1", "read_at": iso, "read_at_unix": now - 10,
-               "age_seconds": 10, "held": False}
+        tag = {"status": "ok", "nfc_id": "a:b:c:d:e:f:1", "read_at": iso, "read_at_unix": now - 10, "held": False}
+        _ages_near(st, {"tag": 10, "scale": 1, "last_weight": 2})
         assert st == {
             "tag": tag,
-            "scale": {"grams": 1000.0, "status": "stable", "unit": 2, "stable": True, "age_seconds": 1},
-            "last_weight": {"grams": 1000.0, "age_seconds": 2, "held": False},
+            "scale": {"grams": 1000.0, "status": "stable", "unit": 2, "stable": True},
+            "last_weight": {"grams": 1000.0, "held": False},
             "panel": "/dev/ttyUSB1", "panel_version": "2", "panel_nfc": True, "air": None, "photo": None,
             "flow": IDLE}
         code, lt = _get(base + "/last-tag")
         assert code == 200
+        assert abs(lt.pop("age_seconds") - 10) <= 2
         assert lt == tag
-        assert {"status", "nfc_id", "read_at", "read_at_unix", "age_seconds"} <= set(lt)
         code, body = _get(base + "/other")
         assert code == 404
         assert body == {"status": "error", "message": "not found"}
     finally:
-        srv.shutdown()
+        _stop(srv)
 
 
 def test_state_held_and_empty():
@@ -124,7 +140,8 @@ def test_state_held_and_empty():
     srv, base = _serve(lambda: dict(next(views)), {"127.0.0.1"})
     try:
         _, st = _get(base + "/state")
-        assert st["last_weight"] == {"grams": 812.5, "age_seconds": 30, "held": True}
+        assert abs(st["last_weight"].pop("age_seconds") - 30) <= 2
+        assert st["last_weight"] == {"grams": 812.5, "held": True}
         assert st["tag"]["held"] is True
         _, st = _get(base + "/state")
         assert st == {"tag": {"status": "ok", "nfc_id": None, "read_at": None, "read_at_unix": None,
@@ -132,7 +149,37 @@ def test_state_held_and_empty():
                       "scale": None, "last_weight": None, "panel": None, "panel_version": None, "panel_nfc": None, "air": None,
                       "photo": None, "flow": IDLE}
     finally:
-        srv.shutdown()
+        _stop(srv)
+
+
+def test_state_air_goes_stale_after_a_minute_and_a_zero_last_weight_is_none():
+    now = time.time()
+    air = {"temp_c": 21.5, "humidity": 40}
+    views = iter([_raw(now, air=air, air_at=now - 5), _raw(now, air=air, air_at=now - 61, last=0.0, last_at=now)])
+    srv, base = _serve(lambda: dict(next(views)), {"127.0.0.1"})
+    try:
+        _, st = _get(base + "/state")
+        assert st["air"]["temp_c"] == 21.5 and 3 <= st["air"]["age_seconds"] <= 8
+        _, st = _get(base + "/state")
+        assert st["air"] is None                                       # the panel is gone: no stale reading
+        assert st["last_weight"] is None                               # 0.0 g is "no weight", not a reading
+    finally:
+        _stop(srv)
+
+
+def test_photo_is_served_as_a_jpeg_and_is_a_404_without_one():
+    now = time.time()
+    jpeg = bytes([0xFF, 0xD8, 0xFF, 0xE0]) + b"fake"
+    views = iter([_raw(now, photo=jpeg, photo_at=now - 3), _raw(now, photo=jpeg, photo_at=now - 3), _raw(now)])
+    srv, base = _serve(lambda: dict(next(views)), {"127.0.0.1"})
+    try:
+        _, st = _get(base + "/state")
+        assert st["photo"]["url"] == "/photo" and 1 <= st["photo"]["age_seconds"] <= 6
+        with urllib.request.urlopen(base + "/photo", timeout=5) as r:
+            assert r.status == 200 and r.headers["Content-Type"] == "image/jpeg" and r.read() == jpeg
+        assert _get(base + "/photo")[0] == 404
+    finally:
+        _stop(srv)
 
 
 def test_refuses_client_not_in_allow():
@@ -141,11 +188,17 @@ def test_refuses_client_not_in_allow():
         assert _get(base + "/state") == (403, {"status": "error", "message": "forbidden"})
         assert _get(base + "/last-tag")[0] == 403
     finally:
-        srv.shutdown()
+        _stop(srv)
+
+
+def _no_station_env(monkeypatch):
+    import os
+    for k in [k for k in os.environ if k.startswith("STATION_")] + ["NFC_DEVICE"]:
+        monkeypatch.delenv(k, raising=False)
 
 
 def test_allow_default_and_split(monkeypatch):
-    monkeypatch.delenv("STATION_ALLOW", raising=False)
+    _no_station_env(monkeypatch)
     assert state.settings_from_env()["allow"] == {"127.0.0.1"}
     monkeypatch.setenv("STATION_ALLOW", "127.0.0.1 192.0.2.10  198.51.100.7")
     s = state.settings_from_env()
@@ -155,8 +208,7 @@ def test_allow_default_and_split(monkeypatch):
 
 
 def test_flow_settings_from_env(monkeypatch):
-    for k in ("STATION_FLOW_TIMEOUT", "STATION_RECOGNISE_TIMEOUT"):
-        monkeypatch.delenv(k, raising=False)
+    _no_station_env(monkeypatch)
     s = state.settings_from_env()
     assert (s["flow_timeout"], s["recognise_timeout"]) == (600, 90)
     monkeypatch.setenv("STATION_FLOW_TIMEOUT", "120")

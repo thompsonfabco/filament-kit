@@ -13,7 +13,7 @@ from fksync import client, installer, store, studio, sync, treehash
 from test_sync import INFO, PRESET, STAMP, T0, FakeClient, _build_zip
 
 UID = "1234567890"
-A, B = "Acme PLA @BBL H2D", "Acme PLA @BBL H2D 0.6 nozzle"
+A = "Acme PLA @BBL H2D"
 NEW = "Acme PLA @BBL H2D 0.8 nozzle"
 BETA_KEY = f"BambuStudioBeta-{UID}"
 STAMP2 = "20261103-010203"
@@ -141,7 +141,7 @@ def test_secondary_never_replaces_and_lists_what_differs(two):
     assert _bs(beta, A)["nozzle_temperature"] == ["230"] and _bs(stable, A)["nozzle_temperature"] == ["215"]
     lines = [ln for ln in _log(dirs).splitlines() if "differ from build" in ln]
     assert len(lines) == 2                                                # one per folder
-    assert any(f"BambuStudioBeta user {UID}" in ln and f"1 presets" in ln and A in ln for ln in lines)
+    assert any(f"BambuStudioBeta user {UID}" in ln and "1 presets" in ln and A in ln for ln in lines)
     assert sync.load_state(_sec(dirs))["differing"] == [A]
     assert sync.load_state(dirs)["differing"] == [A]
 
@@ -271,6 +271,25 @@ def test_a_failing_secondary_backs_off_and_a_new_build_retries_at_once(two):
     assert len(tries) == 2
 
 
+def test_a_failing_secondary_is_tried_again_after_six_hours(two):
+    stable, beta, dirs = two
+    tries = []
+
+    def broken(build_dir, folders, d, **kw):
+        if folders.variant == "BambuStudioBeta":
+            tries.append(1)
+            raise OSError("disk full")
+        return installer.install(build_dir, folders, d, **kw)
+
+    c = Client2(_state(stable, build=_build(STAMP, stable)), _zip(live_hash=_live(stable)))
+    _run(c, stable, dirs, [beta], install=broken)
+    c.st["live_hash"] = _live(stable)
+    _run(c, stable, dirs, [beta], now=T0 + sync.UPLOAD_BACKOFF - 60, install=broken)
+    assert len(tries) == 1                                                # still inside the back-off
+    _run(c, stable, dirs, [beta], now=T0 + sync.UPLOAD_BACKOFF + 60, install=broken)
+    assert len(tries) == 2                                                # six hours on: the same build again
+
+
 def test_an_interrupted_secondary_install_is_resumed(two):
     stable, beta, dirs = two
     calls = []
@@ -335,6 +354,18 @@ def test_main_passes_no_secondaries_when_switched_off(tmp_path):
     assert cli._secondaries(appdata, {"secondaries": False}, stable) == ([beta], False)
 
 
+def test_a_run_with_secondaries_off_hands_the_sync_no_installs(two, monkeypatch):
+    from fksync import __main__ as cli
+    stable, beta, dirs = two
+    seen = {}
+    monkeypatch.setattr(store, "load_config", lambda d: {"host": "h", "fp": "f", "secondaries": False})
+    monkeypatch.setattr(store, "load_token", lambda d: "tok")
+    monkeypatch.setattr(cli, "_locate_orca", lambda *a, **kw: None)
+    monkeypatch.setattr(sync, "run_once", lambda c, f, d, **kw: seen.update(kw) or "up_to_date")
+    assert cli.cmd_run(dirs, stable.root.parent, quiet=True) == 0
+    assert seen["secondaries"] is False and seen["others"] == [beta]     # found, but not installed into
+
+
 # --- a change of primary ----------------------------------------------------------------------
 
 def _installed_into_beta(two):
@@ -383,9 +414,9 @@ def test_primary_change_back_and_forth_never_pairs_folders(two):
     assert ups[0] == ("upload", "live", UID, "fresh") and all("fresh" not in x for x in ups[1:])
     assert sync.load_state(dirs)["folder"]["key"] == BETA_KEY
     assert (dirs.base / "folders" / f"BambuStudio-{UID}").is_dir()     # stable's (empty) record, kept apart
-    # Beta's install is made again from its own live presets (the server forgot the pairing): its snapshot is Beta's
-    snap = dirs.installed / "base" / f"{A}.json"
-    assert not snap.exists() or json.loads(snap.read_text())["nozzle_temperature"] == ["230"]
+    # the server forgot the pairing and asks for a rebuild from Beta's live presets: until it is installed, the primary
+    # has no snapshot at all (neither stable's nor a stale Beta one)
+    assert "installed" not in sync.load_state(dirs) and not dirs.installed.exists()
 
 
 def test_an_older_server_that_ignores_fresh_is_logged(two):
@@ -643,7 +674,7 @@ def test_apply_updates_for_one_folder(two, closed, capsys):
     assert rec["differing"] == []
     assert json.loads((_sec(dirs).installed / "base" / f"{A}.json").read_text())["nozzle_temperature"] == ["220"]
     assert A not in json.loads((_sec(dirs).installed / installer.KEPT).read_text())["base"]   # the kit's now
-    assert "apply-updates" in _log(dirs) or "build's copy" in _log(dirs)
+    assert f"wrote the build's copy of 1 presets in {BETA_KEY}" in _log(dirs)     # the earlier "apply-updates" hint is not it
 
 
 def test_apply_updates_refuses_what_is_not_listed(two, closed, capsys):

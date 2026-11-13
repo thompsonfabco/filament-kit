@@ -36,9 +36,7 @@ def test_file_overrides_and_nested_merge(etc):
 @pytest.mark.skipif(os.name == "nt", reason="POSIX modes")
 def test_save_is_atomic_and_640(etc):
     config.save({"port": 1234})
-    assert not list(etc.glob("*.tmp"))
     assert stat.S_IMODE((etc / "config.json").stat().st_mode) == 0o640
-    assert config.load()["port"] == 1234
 
 
 def test_save_leaves_no_tmp_and_roundtrips(etc):
@@ -75,3 +73,32 @@ def test_paths_env_and_defaults(monkeypatch):
         "/etc/filament-kit", "/var/lib/filament-kit", "/var/backups/filament-kit", "/opt/filament-kit")
     monkeypatch.setenv("FK_STATE", "/x")
     assert str(config.paths().state).replace("\\", "/") == "/x"
+
+
+def test_a_failed_write_keeps_the_old_file_and_leaves_no_tmp(etc, monkeypatch):
+    config.save({"port": 1234})
+
+    def boom(src, dst):
+        raise OSError("disk full")
+    monkeypatch.setattr(config.os, "replace", boom)
+    with pytest.raises(OSError):
+        config.save({"port": 9999})
+    monkeypatch.undo()
+    assert not list(etc.glob("*.tmp"))
+    assert json.loads((etc / "config.json").read_text())["port"] == 1234
+
+
+def test_a_corrupt_config_file_is_an_error_not_silently_the_defaults(etc):
+    (etc / "config.json").write_text("{not json", encoding="utf-8")
+    with pytest.raises(ValueError):
+        config.load()
+
+
+def test_paths_web_follows_the_state_folder_unless_told(monkeypatch, tmp_path):
+    monkeypatch.delenv("FK_WEB_STATE", raising=False)
+    monkeypatch.delenv("FK_STATE", raising=False)
+    assert str(config.paths().web).replace("\\", "/") == "/var/lib/filament-kit-web"
+    monkeypatch.setenv("FK_STATE", str(tmp_path / "state"))
+    assert config.paths().web == tmp_path / "state-web"
+    monkeypatch.setenv("FK_WEB_STATE", str(tmp_path / "elsewhere"))
+    assert config.paths().web == tmp_path / "elsewhere"

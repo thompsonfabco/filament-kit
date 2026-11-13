@@ -8,7 +8,7 @@ import pytest
 from starlette.routing import Route
 from starlette.testclient import TestClient
 
-from filament_kit import api, pairing
+from filament_kit import api, config, pairing
 from filament_kit.api import create_app
 from filament_kit.spoolman import Spoolman
 
@@ -70,11 +70,14 @@ def test_every_other_route_refuses_the_web_token(app):
 
 
 def test_every_listed_route_lets_the_web_token_through(app):
+    """Through means the handler answered: not 401, and not a 403 either (the printer-change switch is on here, so
+    the three registry writes are not refused for it)."""
+    config.save({**config.load(), "web": {"printer_changes": True}})
     h = _web_token()
     c = TestClient(app, raise_server_exceptions=False)
     for method, template in api.WEB_ROUTES:
         r = c.request(method, _example(template), headers=h)
-        assert r.status_code != 401 and "web unit's routes only" not in r.text, (method, template)
+        assert r.status_code not in (401, 403), (method, template, r.status_code, r.text[:100])
 
 
 def _calls_in_web() -> set[str]:
