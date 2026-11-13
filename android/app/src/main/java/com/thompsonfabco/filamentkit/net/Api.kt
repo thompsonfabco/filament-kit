@@ -234,6 +234,19 @@ class Api(
         return decode(printer)
     }
 
+    /** Adds a Klipper printer by the address of its Moonraker; the API key is set afterwards, from the printer's own screen. */
+    suspend fun addKlipperPrinter(host: String, port: Int, name: String?): Printer {
+        val body = buildJsonObject {
+            put("family", "klipper")
+            put("host", host)
+            put("port", port)
+            name?.takeIf { it.isNotBlank() }?.let { put("name", it) }
+        }
+        val printer = call(request("api", "printers").post(body.toBody())).jsonObject["printer"]
+            ?: throw ApiError(200, "bad_response", "The server did not return the printer")
+        return decode(printer)
+    }
+
     suspend fun printer(id: String): PrinterDetail = decode(call(request("api", "printers", id).get()))
 
     /**

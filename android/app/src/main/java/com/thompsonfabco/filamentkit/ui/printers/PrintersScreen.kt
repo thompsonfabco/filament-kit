@@ -62,7 +62,8 @@ fun PrintersScreen(viewModel: PrintersViewModel, onOpen: (id: String) -> Unit, o
         state.message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         if (state.printers.isEmpty() && !state.loading && state.message == null) {
             Text("No printers found yet. The server finds Bambu printers on its network by itself; make sure the " +
-                "printer is turned on, then tap Refresh.")
+                "printer is turned on, then tap Refresh. A Klipper printer is added by its address.")
+            Button(onClick = viewModel::openAddKlipper) { Text("Add a Klipper printer") }
         }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(state.printers, key = { it.id }) { p ->
@@ -70,9 +71,13 @@ fun PrintersScreen(viewModel: PrintersViewModel, onOpen: (id: String) -> Unit, o
                     if (!p.configured || p.state == "wrong_code") viewModel.openAdd(p) else onOpen(p.id)
                 }
             }
+            if (state.printers.isNotEmpty()) item {
+                OutlinedButton(onClick = viewModel::openAddKlipper) { Text("Add a Klipper printer") }
+            }
         }
     }
     state.dialog?.let { AddPrinterDialog(it, viewModel) }
+    state.klipper?.let { AddKlipperDialog(it, viewModel) }
 }
 
 @Composable
@@ -133,6 +138,38 @@ private fun AddPrinterDialog(d: AddDialog, viewModel: PrintersViewModel) {
         },
         dismissButton = {
             TextButton(onClick = viewModel::cancelAdd, enabled = !d.busy) { Text("Cancel") }
+        },
+    )
+}
+
+/** Asks for a Klipper printer's name and the address of its Moonraker (the API key, if it needs one, is set later). */
+@Composable
+private fun AddKlipperDialog(d: KlipperDialog, viewModel: PrintersViewModel) {
+    var name by remember { mutableStateOf("") }
+    var host by remember { mutableStateOf("") }
+    var port by remember { mutableStateOf(PrintersViewModel.DEFAULT_KLIPPER_PORT.toString()) }
+    AlertDialog(
+        onDismissRequest = { if (!d.busy) viewModel.cancelAddKlipper() },
+        title = { Text("Add a Klipper printer") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(name, { name = it }, label = { Text("Name (optional)") }, singleLine = true,
+                    enabled = !d.busy)
+                OutlinedTextField(host, { host = it }, label = { Text("Address") }, singleLine = true,
+                    enabled = !d.busy, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false))
+                OutlinedTextField(port, { port = it }, label = { Text("Port") }, singleLine = true, enabled = !d.busy,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                Text("The IP address or host name of the printer's Moonraker, and its port (usually 7125).",
+                    style = MaterialTheme.typography.bodySmall)
+                if (d.busy) Text("Connecting to the printer…")
+                d.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        confirmButton = {
+            Button(onClick = { viewModel.submitAddKlipper(host, port, name) }, enabled = !d.busy) { Text("Add") }
+        },
+        dismissButton = {
+            TextButton(onClick = viewModel::cancelAddKlipper, enabled = !d.busy) { Text("Cancel") }
         },
     )
 }
