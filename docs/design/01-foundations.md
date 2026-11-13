@@ -156,7 +156,7 @@ No web fonts are downloaded; a theme may only choose among system font stacks.
 |---|---|
 | Space | `--s1` 4 · `--s2` 8 · `--s3` 12 · `--s4` 16 · `--s5` 24 · `--s6` 32 · `--s7` 48 (px). Only these steps. |
 | Rhythm | `--row` (height of a collection row: 48 px in Console) · `--gap` (space between items of a group: `--s3` in Console). Themes set these two for density. |
-| Control height | `--ctl` 40 px on wide screens, 44 px at 600 px and below. A control shorter than 44 px gets an invisible hit area that reaches 44 px. |
+| Control height | `--ctl` 44 px at 1024 px and below and wherever the main pointer is coarse (a finger); 40 px only on desktop width with a fine pointer (a mouse). There, a button or chip shorter than 44 px gets an invisible hit area that reaches 44 px; a text field is 40 px tall, which a mouse does not need larger. |
 | Chrome sizes | `--top` 52 px (top bar) · `--rail` 76 px (navigation rail) · `--tab` 60 px (phone bottom bar, plus the safe-area inset) |
 | Radius | `--r-s` 4 px (chips, small parts) · `--r` 6 px (controls, cards) · `--r-l` 10 px (dialogs, sheets) |
 | Elevation | `--e0` none: things are separated by hairlines, not shadows. `--e2`: dialogs, sheets, drawers, menus and toasts only. |
@@ -332,7 +332,10 @@ except progress indicators. Everything respects `prefers-reduced-motion`.
 5. Every colour, size and duration comes from a token. A check fails the build on a literal colour in a component
    rule.
 6. Every page works by keyboard alone and with a screen reader (`07-accessibility.md`).
-7. Fast on a phone: the shared stylesheet stays under 40 KB and the shared script under 60 KB uncompressed; no
-   layout shift after the first paint; lists of more than 50 items are paged or virtualised.
+7. Fast on a phone: the shared core stylesheet stays under 40 KB and the shared core script under 60 KB
+   uncompressed. Parts only some pages need (the job strip, photos and the photo viewer) are separate files of
+   at most 30 KB each, loaded only by those pages; no page loads more than 80 KB of styles or 120 KB of script in
+   all, its own included. No layout shift after the first paint; lists of more than 50 items are paged or
+   virtualised.
 8. No owner data in examples, placeholders, screenshots or tests: example addresses use `192.0.2.x`,
    `printer.local`, `*.example`.

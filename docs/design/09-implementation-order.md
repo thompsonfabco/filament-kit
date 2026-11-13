@@ -190,14 +190,16 @@ Hub · S · Depends on: S0.3, S0.8, S0.9, S0.11 (it serves the files S0.11 makes
 Hub page, web app · L · Depends on: S0.3, S0.8, S0.9 · Beside: S1.8
 - **Files today:** none; each page styles its own elements (`setup_static/setup.css`, 51 lines; `web/static/app.css`,
   85 lines).
-- **Change:** `components.css` and the shared component script with the components of 02 sections 2 to 10 in the
+- **Change:** `components.css` and the shared component script (the core), and the two additions
+  `components-jobs` and `components-media` (02 1, "Files"), with the components of 02 sections 2 to 10 in the
   Console profile (`rail`, `table`, `inline`), the `data-look` profile groups present but keyed on Console only, and
   a component sample page under `tests/` that shows every component in every state with fake data. The script is
   the one implementation of the element builder, the Hub request helper, the dialog, the toast, the inline result
   and the announcer (02 1.4, "One shared script"); each page's own copies (`h()`, `api()` and their variants in
   `setup_static/` and `web/static/`) are removed in the step that moves that page onto it (S1.3 to S1.7, S3.2 to
   S3.6). No page uses them yet.
-- **Keep:** both pages unchanged; the size limits of F12 rule 7 (stylesheet under 40 KB, script under 60 KB).
+- **Keep:** both pages unchanged; the size limits of F12 rule 7 (core stylesheet under 40 KB, core script under
+  60 KB, each addition under 30 KB), checked by a test.
 - **Check:** AUT-2, AUT-3, AUT-4, AUT-6 and 08 tests 4 and 5 with no allow-list entry for the new files; AUT-5 run
   on the sample page at 1280 px and 320 px, light and dark.
 
@@ -766,14 +768,21 @@ app · L · Depends on: S4.1 · Beside: Stage 3 steps
 - **Check:** manual: release checklist step 7 (dialogs announced, focus returned, Back).
 
 ### S4.3 `strings.xml`
-app · M · Depends on: S4.2, S0.8 · Beside: Stage 3 steps
-- **Files today:** every Kotlin file under `<app>/ui/` (texts written inline, `PairTexts.kt`, `UpdateTexts.kt`).
-- **Change:** 05 15: every visible text, content description and snackbar text comes from the generated
-  `strings.xml` (through `strings/en.json`), with plurals and positional arguments. Texts move unchanged; each screen
-  step rewrites its own keys.
-- **Keep:** every text as it reads today.
-- **Check:** 08 test 7 with no Kotlin entry left in `tests/strings_allowlist.txt` other than routes, keys, log tags
-  and MIME types.
+app · S · Depends on: S4.2, S0.8 · Beside: Stage 3 steps
+- **Files today:** every Kotlin file under `<app>/ui/` (texts written inline, `PairTexts.kt`, `UpdateTexts.kt`);
+  the shell of S4.2.
+- **Change:** 05 15: the app reads the generated `strings.xml` (through `strings/en.json`), with plurals and
+  positional arguments. The texts of the shell (bar, top bar, connection chip, appearance menu) and the app's name
+  (`app_name`, 08 12) come from it in this step. The texts of a screen move when that screen is rebuilt (S4.4 to
+  S4.15): the screen switches to the keys of 05, with the wording of 05, in its own step. Today's wording is never
+  copied into the catalogue: the catalogue holds the design's texts only, one key per meaning.
+- **Keep:** every text of a screen that is not rebuilt yet, as it reads today, written in the code and listed in
+  `tests/strings_allowlist.txt` with its file and count (S0.7); each screen step removes its file's entries.
+- **Editing the catalogue:** a step adds or changes only the keys of its own screens; a shared key (`common_…`,
+  `status_…`, `nav_…`, `unit_…`) is changed by the step that owns the catalogue's tests, on request, so two
+  branches never give one key two texts. Whoever edits `strings/en.json` regenerates in the same change.
+- **Check:** 08 test 7 passes with the shell's Kotlin literals gone from the allow-list; the app builds; the app's
+  name on the launcher and in the top bar comes from `app_name`.
 
 ### S4.4 Shared parts, states and semantics tests
 app · M · Depends on: S4.3 · Beside: Stage 3 steps

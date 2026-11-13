@@ -134,6 +134,20 @@ hover, focus, pressed, disabled, loading, error) · **Behaviour and keyboard** �
 (what changes with `nav`, `collection` and `detail`; token values change with every theme and are not repeated) ·
 **Android** (the Material 3 component it maps to; details in `08-platform-mapping.md`) · **HTML**.
 
+**Files.** The components ship as a core and two additions, so a page loads only what it shows (foundations
+section 12, rule 7):
+
+| File pair | Holds | Loaded by |
+|---|---|---|
+| `components.css`, `components.js` (the core) | Shell and navigation, lock, appearance control, buttons, menu, every field (without the photos variant of the file field), form group and saving, collection, detail region, status, confidence, swatch and slot strip, spinner, step progress and bar, inline result, toast, banner, dialogs, sheet, page states, code block, key-value list, change list, revision list, tooltip | Every page |
+| `components-jobs.css`, `components-jobs.js` | Background-job strip (8.4), the Hub is restarting (8.5) | The Hub page (the web app starts no jobs) |
+| `components-media.css`, `components-media.js` | The photos variant of the file field (5.9), photo thumbnail and viewer (7.6), QR block with its expiry (7.8) | Pages that show photos or a pairing code |
+
+The core's forms call two hooks, `waitJob` and `waitHub`, that do nothing until `components-jobs.js` is loaded.
+What belongs to one page only is that page's own code, not a shared file: the Settings sub-navigation's
+scroll-following, form drafts of the web app's Add flow, selection in a collection. The spool ring (7.4) is drawn
+by the Palette theme and ships with that theme's styles.
+
 ---
 
 ## 2. App shell
@@ -239,9 +253,11 @@ appearance icon button; the job indicator and version move out (the job strip is
 bottom bar). With `nav` = `list` on phones the top bar shows a Back button in front of the mark when the page is
 deeper than the section list (2.3).
 
-**Accessibility.** `header` landmark. The mark is `aria-hidden`. The version reads "version 0.5.2" through a hidden
-prefix. The job indicator's name is "Background job: <title>, <state>. Show the job panel."; it has
-`aria-controls` pointing at the job strip.
+**Accessibility.** `header` landmark. The mark is `aria-hidden`. The brand link holds the product name and the
+Hub's name only, and its accessible name is exactly that visible text. The version stands after the link as plain
+text, not inside it, and reads "version 0.5.2" through a hidden prefix. The job indicator's accessible name
+starts with its visible words: "<title>, <state>, background job. Show the job panel." ("Backup, running,
+background job. Show the job panel."); it has `aria-controls` pointing at the job strip.
 
 **Theme profiles.** `nav` = `pills`: on desktop the pill row sits in the top bar; on tablet it forms a second row of
 the top bar, full width. `nav` = `list`: Back button on phones as above. `collection`, `detail`: no change.
@@ -443,7 +459,7 @@ hidden section's `nav__item`, cloned from 2.3, with its icon, label, summary and
 - Error: "Not available" summary.
 
 **Behaviour and keyboard.** Opening moves focus to the first row. Choosing a row closes the sheet and navigates;
-focus goes to the new page's title (not back to More). Escape, the Close button, the scrim or a downward swipe close
+focus goes to the new page's title (not back to More). Escape, the Close button or a tap on the scrim close
 it without navigating, focus back on More.
 
 **Accessibility.** The sheet is a modal `dialog` labelled "More sections"; inside, `nav aria-label="More sections"`.
@@ -817,7 +833,7 @@ actions are default or ghost; when a thing has more than three secondary actions
 then the confirming button. On phones, footer buttons share the row equally in the same order; a page header's
 primary takes the full width.
 
-**Sizes and tokens.** Min height `--ctl` (40 px wide, 44 px phones); padding `0 var(--s4)`; gap `--s2`; `--fs-m`
+**Sizes and tokens.** Min height `--ctl` (44 px at 1024 px and below or with a coarse pointer, 40 px on a desktop with a mouse); padding `0 var(--s4)`; gap `--s2`; `--fs-m`
 weight 600, line height 1.2; `--r`; no shadow. Icon button width `--ctl`. Transition of ground, border and colour
 over `--t-fast`. Every button also has an `::after` hit area reaching 44 px.
 
@@ -3042,8 +3058,8 @@ bottom); `--surface`, top corners `--r-l`, `--e2`, `--scrim` behind; handle `cal
 - Error: the body shows the error state (10.2).
 
 **Behaviour and keyboard.** Opened with `showModal()`; focus moves to the first item or field. It closes with Close,
-Escape, a tap on the scrim, or a downward swipe that starts on the handle or head (more than a third of its height,
-or a quick flick); the swipe always has the Close button as its equivalent. When the on-screen keyboard opens, the
+Escape or a tap on the scrim; there is no swipe to close (the web has no press-down handlers outside the photo
+viewer, `07-accessibility.md` TGT-5), and the handle is a drawing, not a control. When the on-screen keyboard opens, the
 sheet shrinks to stay above it (`visualViewport`). Focus returns to the opener on close.
 
 **Accessibility.** As a modal dialog: labelled by its title; the handle is `aria-hidden`.
