@@ -53,9 +53,10 @@ import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isSelected
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.performClick
 
 import androidx.compose.ui.test.onNodeWithContentDescription
-
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.onRoot
@@ -67,16 +68,6 @@ import com.thompsonfabco.filamentkit.net.AmsUnit
 import com.thompsonfabco.filamentkit.net.CommandResult
 import com.thompsonfabco.filamentkit.net.DiscoveredServer
 import com.thompsonfabco.filamentkit.net.KlipperFound
-
-import com.thompsonfabco.filamentkit.net.HistoryChange
-import com.thompsonfabco.filamentkit.net.HistoryRead
-import com.thompsonfabco.filamentkit.net.HistoryRecord
-import com.thompsonfabco.filamentkit.net.HistoryRevision
-import com.thompsonfabco.filamentkit.net.HistorySaved
-import com.thompsonfabco.filamentkit.net.HistorySpool
-import com.thompsonfabco.filamentkit.net.HistorySummary
-import com.thompsonfabco.filamentkit.net.IntakeHistory
-import com.thompsonfabco.filamentkit.net.RevisionProposal
 import com.thompsonfabco.filamentkit.net.MapStatus
 import com.thompsonfabco.filamentkit.net.Printer
 import com.thompsonfabco.filamentkit.net.PrinterDetail
@@ -93,12 +84,6 @@ import com.thompsonfabco.filamentkit.ui.components.SwTopBar
 import com.thompsonfabco.filamentkit.ui.components.TopBarActions
 import com.thompsonfabco.filamentkit.ui.components.TOP_BAR_TAG
 import com.thompsonfabco.filamentkit.ui.home.HomePrintersState
-import com.thompsonfabco.filamentkit.ui.history.EditScreen
-import com.thompsonfabco.filamentkit.ui.history.HistoryBackend
-import com.thompsonfabco.filamentkit.ui.history.HistoryListScreen
-import com.thompsonfabco.filamentkit.ui.history.HistoryListViewModel
-import com.thompsonfabco.filamentkit.ui.history.RecordScreen
-import com.thompsonfabco.filamentkit.ui.history.RecordViewModel
 import com.thompsonfabco.filamentkit.ui.home.HomeScreen
 import com.thompsonfabco.filamentkit.ui.pair.Mismatch
 import com.thompsonfabco.filamentkit.ui.pair.MismatchSource
@@ -150,6 +135,21 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import com.thompsonfabco.filamentkit.net.HistoryChange
+import com.thompsonfabco.filamentkit.net.HistoryRead
+import com.thompsonfabco.filamentkit.net.HistoryRecord
+import com.thompsonfabco.filamentkit.net.HistoryRevision
+import com.thompsonfabco.filamentkit.net.HistorySaved
+import com.thompsonfabco.filamentkit.net.HistorySpool
+import com.thompsonfabco.filamentkit.net.HistorySummary
+import com.thompsonfabco.filamentkit.net.IntakeHistory
+import com.thompsonfabco.filamentkit.net.RevisionProposal
+import com.thompsonfabco.filamentkit.ui.history.EditScreen
+import com.thompsonfabco.filamentkit.ui.history.HistoryBackend
+import com.thompsonfabco.filamentkit.ui.history.HistoryListScreen
+import com.thompsonfabco.filamentkit.ui.history.HistoryListViewModel
+import com.thompsonfabco.filamentkit.ui.history.RecordScreen
+import com.thompsonfabco.filamentkit.ui.history.RecordViewModel
 
 /**
  * AUT-8 (07-accessibility 15): Home (with the Label Reader on and off, with printers loading, empty and listed), Spools, Printers, Printer and the pairing screens as they are, Settings as rebuilt (S4.15), drawn under the top bar that
@@ -762,6 +762,7 @@ class ScreenSemanticsTest {
     @Test fun theScannerWhoseCameraFailed() {
         host("Pair with your Hub") { ScanProblem(denied = false, onPrimary = {}, onEnterAddress = {}) }
         auditAllFour("Enter the address instead")
+    }
 
     @Test fun recentList() {
         val history = FakeHistory()
