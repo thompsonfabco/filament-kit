@@ -54,6 +54,7 @@ import com.thompsonfabco.filamentkit.ui.components.NeedsHubReason
 import com.thompsonfabco.filamentkit.ui.components.NoticeCard
 import com.thompsonfabco.filamentkit.ui.components.NoticeKind
 import com.thompsonfabco.filamentkit.ui.components.ScreenState
+import com.thompsonfabco.filamentkit.ui.components.ScreenTopBarActions
 import com.thompsonfabco.filamentkit.ui.components.StatusKind
 import com.thompsonfabco.filamentkit.ui.components.StatusLabel
 import com.thompsonfabco.filamentkit.ui.components.SwAction
@@ -98,15 +99,13 @@ fun PrintersScreen(
     }
     val space = SpoolwardenTheme.space
     val offline = state.problem is Problem.Unreachable
+    ScreenTopBarActions { Overflow(viewModel::refresh, viewModel::openFind, { viewModel.openAddKlipper() }) }
     // the progress line shows a refresh, so the pull gesture only starts one
     PullToRefreshBox(isRefreshing = false, onRefresh = viewModel::refresh, modifier = modifier.fillMaxSize()) {
         Column(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(space.s4),
             verticalArrangement = Arrangement.spacedBy(space.s3),
         ) {
-            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-                Overflow(viewModel::refresh, viewModel::openFind, { viewModel.openAddKlipper() })
-            }
             if (state.mismatch != null) HubNotice(HubNoticeKind.CertificateChanged, onPairAgain)
             if (state.unauthorized) HubNotice(HubNoticeKind.NoLongerPaired, onPairAgain)
             ScreenState(
@@ -165,7 +164,7 @@ private fun ColumnScope.PrinterLists(
         Panel {
             configured.forEachIndexed { i, p ->
                 if (i > 0) Divider()
-                PrinterRow(p, state.swatches[p.id].orEmpty()) { onOpen(p.id) }
+                PrinterRow(p, state.swatches[p.id].orEmpty()) { if (p.state == "wrong_code") onAdd(p) else onOpen(p.id) }
             }
         }
     }
@@ -334,12 +333,22 @@ private fun FoundRow(p: Printer, enabled: Boolean, onAdd: () -> Unit) {
 private fun AddBambuDialog(d: AddDialog, viewModel: PrintersViewModel) {
     var code by remember(d.serial) { mutableStateOf("") }
     var name by remember(d.serial) { mutableStateOf(d.name) }
-    val title = stringResource(R.string.printer_add_title, d.model)
+    val title = if (d.rekey) {
+        stringResource(R.string.printers_access_code_title, d.model)
+    } else {
+        stringResource(R.string.printer_add_title, d.model)
+    }
     SwDialog(
         title = title,
         onClose = { if (!d.busy) viewModel.cancelAdd() },
         confirm = SwDialogButton(
-            label = stringResource(if (d.busy) R.string.printer_add_connecting else R.string.printer_add_button),
+            label = stringResource(
+                when {
+                    d.busy -> R.string.printer_add_connecting
+                    d.rekey -> R.string.printers_replace_access_code
+                    else -> R.string.printer_add_button
+                },
+            ),
             onClick = { viewModel.submitAdd(code, name) },
             kind = SwButtonKind.Main,
             enabled = code.isNotBlank(),

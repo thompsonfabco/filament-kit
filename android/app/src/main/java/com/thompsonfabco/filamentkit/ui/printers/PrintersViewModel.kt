@@ -50,6 +50,8 @@ data class AddDialog(
     /** The model, or the printer's name when the Hub does not know the model. */
     val model: String,
     val name: String,
+    /** The Access Code of a printer that is set up is entered again (it was refused), not a new printer added. */
+    val rekey: Boolean = false,
     val busy: Boolean = false,
     val codeMissing: Boolean = false,
     val problem: Problem? = null,
@@ -144,6 +146,7 @@ class PrintersViewModel(
             dialog = AddDialog(
                 serial = p.serial, model = p.shownModel ?: p.name,
                 name = if (p.name == p.serial) "" else p.name,
+                rekey = p.configured,
             ),
         )
     }

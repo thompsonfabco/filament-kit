@@ -786,6 +786,7 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewM
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | wrong_code | today's literal in the app; moves to the string catalogue when its screen is rebuilt (S4.3)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | connected | Hub identifier (printer state, job state, error code or field name), never shown
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | klipper | Hub identifier (printer state, job state, error code or field name), never shown
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersScreen.kt | wrong_code | Hub identifier (printer state, job state, error code or field name), never shown
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersViewModel.kt | bad_response | Hub identifier (printer state, job state, error code or field name), never shown
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersViewModel.kt | connected | Hub identifier (printer state, job state, error code or field name), never shown
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersViewModel.kt | local_network | Hub identifier (printer state, job state, error code or field name), never shown

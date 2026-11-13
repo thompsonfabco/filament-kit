@@ -147,6 +147,8 @@ import com.thompsonfabco.filamentkit.ui.components.HubSheet
 import com.thompsonfabco.filamentkit.ui.components.HubSheetActions
 import com.thompsonfabco.filamentkit.ui.components.LocalNetworkNotice
 import com.thompsonfabco.filamentkit.ui.components.LocalToast
+import com.thompsonfabco.filamentkit.ui.components.LocalTopBarActions
+import com.thompsonfabco.filamentkit.ui.components.TopBarActions
 import com.thompsonfabco.filamentkit.ui.components.SwAction
 import com.thompsonfabco.filamentkit.ui.components.SwButtonKind
 import com.thompsonfabco.filamentkit.ui.components.SwConnectionChip
@@ -229,8 +231,11 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(appearance) { applyNightMode(appearance) }
                 // the shell's toast queue: screens reach it through LocalToast
                 val toast = remember { SwToastState() }
+                val topBarActions = remember { TopBarActions() }
                 AppFrame(appearance, handleInsets = false) {
-                    CompositionLocalProvider(LocalToast provides toast) { FilamentKitApp(app, start.paired, appearance, toast) }
+                    CompositionLocalProvider(LocalToast provides toast, LocalTopBarActions provides topBarActions) {
+                        FilamentKitApp(app, start.paired, appearance, toast, topBarActions)
+                    }
                 }
             }
         }
@@ -253,7 +258,7 @@ class MainActivity : ComponentActivity() {
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appearance, toast: SwToastState) {
+private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appearance, toast: SwToastState, topBarActions: TopBarActions) {
     // API 37: every LAN socket needs ACCESS_LOCAL_NETWORK. Asked once at start; the session waits for it.
     val localNetwork = rememberLocalNetworkAccess(autoRequest = true, onGranted = app.session::refresh)
     val nav = rememberNavController()
@@ -421,6 +426,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                 ) {
                     if (!inPairing) SwConnectionChip(shown, onClick = { sheetOpen = true })
                     AppearanceMenu(appearance, app::setAppearance)
+                    topBarActions.content?.invoke(this)
                 }
             },
             snackbarHost = { SwToastHost(toast) },

@@ -199,6 +199,14 @@ class PrintersListTest {
         assertFalse(vm.state.value.loading)
     }
 
+    @Test fun aSetUpPrinterOpensTheReKeyFormAndAFoundOneTheAddForm() = runTest(dispatcher) {
+        val vm = PrintersViewModel(backend)
+        vm.openAdd(printer("A", state = "wrong_code"))
+        assertTrue(vm.state.value.dialog!!.rekey)
+        vm.openAdd(printer("B", state = "not_configured", configured = false))
+        assertFalse(vm.state.value.dialog!!.rekey)
+    }
+
     // --- Add a Klipper printer ---
 
     @Test fun theFormOpensWithAFoundAddressAndPort() {
