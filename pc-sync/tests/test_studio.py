@@ -1,4 +1,5 @@
 import os
+import subprocess
 import time
 from pathlib import Path
 
@@ -95,6 +96,21 @@ def test_running_parses_tasklist():
     assert studio.running(lambda: '"Bambu-Studio.EXE","1","Console","1","1 K"') is True
     assert studio.running(lambda: "INFO: No tasks are running which match the specified criteria.\r\n") is False
     assert studio.running(lambda: "") is False
+
+
+def test_a_failed_tasklist_counts_as_running(monkeypatch):
+    monkeypatch.setattr(studio.sys, "platform", "win32")
+    ok = subprocess.CompletedProcess([], 0, stdout="", stderr="")
+    monkeypatch.setattr(studio.subprocess, "run", lambda *a, **k: ok)
+    assert studio.running() is False
+    bad = subprocess.CompletedProcess([], 1, stdout="", stderr="denied")
+    monkeypatch.setattr(studio.subprocess, "run", lambda *a, **k: bad)
+    assert studio.running() is True and studio.orca_running() is True
+
+    def missing(*a, **k):
+        raise FileNotFoundError("tasklist")
+    monkeypatch.setattr(studio.subprocess, "run", missing)
+    assert studio.running() is True
 
 
 def test_running_false_when_not_windows_or_linux(monkeypatch):

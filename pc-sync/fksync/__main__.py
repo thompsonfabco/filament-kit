@@ -14,6 +14,7 @@ import ipaddress
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -334,6 +335,21 @@ def _fail(dirs: store.AppDirs, echo, msg: str, kind: str, cfg: dict | None = Non
     return 1
 
 
+TASK_NAME = "filament-kit sync"     # the scheduled task installer/install_task.ps1 registers
+
+
+def _task_registered() -> bool | None:
+    """Windows: whether the scheduled task exists; None when that is not known (another OS, schtasks missing)."""
+    if sys.platform != "win32":
+        return None
+    try:
+        r = subprocess.run(["schtasks", "/query", "/tn", TASK_NAME], capture_output=True,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except OSError:
+        return None
+    return r.returncode == 0
+
+
 def cmd_status(dirs: store.AppDirs, appdata: Path | None, layout: studio.LinuxLayout | None = None) -> int:
     with contextlib.suppress(store.AlreadyRunning):
         with store.single_instance(dirs):
@@ -419,6 +435,9 @@ def cmd_status(dirs: store.AppDirs, appdata: Path | None, layout: studio.LinuxLa
         _out(f"Last run:        {last.get('outcome')} at {when}: {last.get('detail', '')}")
     else:
         _out("Last run:        none yet")
+    if _task_registered() is False:
+        _out(f"Scheduled task:  '{TASK_NAME}' is not registered, so nothing runs the sync by itself; run "
+             f"install_task.ps1 from the install folder (or install again)")
     stamp = None
     try:
         stamp = json.loads((dirs.installed / "BUILD.json").read_text(encoding="utf-8")).get("stamp")

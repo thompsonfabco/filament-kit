@@ -187,10 +187,16 @@ def folder_key(f: StudioFolders) -> str:
 
 
 def _tasklist(image: str = "bambu-studio.exe") -> str:
-    return subprocess.run(
-        ["tasklist", "/fo", "csv", "/nh", "/fi", f"IMAGENAME eq {image}"],
-        capture_output=True, text=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-    ).stdout
+    """tasklist's output. A tasklist that failed (non-zero exit, or could not start) is unsure: answered as if
+    `image` were listed, so the sync waits rather than write presets under an open slicer."""
+    try:
+        r = subprocess.run(
+            ["tasklist", "/fo", "csv", "/nh", "/fi", f"IMAGENAME eq {image}"],
+            capture_output=True, text=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except OSError:
+        return image
+    return r.stdout if r.returncode == 0 else image
 
 
 def _running(image: str, tasklist: Callable[[], str] | None, proc: Path | None, app: "_LinuxApp") -> bool:

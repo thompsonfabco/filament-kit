@@ -383,3 +383,32 @@ def test_a_heartbeat_that_fails_changes_nothing(srv, paths, monkeypatch):  # noq
     assert _main(paths, "run", "--quiet") == 1
     assert json.dumps(sync.load_state(_dirs(paths))["last_error"]["class"]) == '"crash"'
 
+
+
+def test_status_says_when_the_scheduled_task_is_missing(paths, monkeypatch, capsys):  # noqa: F811
+    from fksync import __main__ as cli
+    monkeypatch.setattr(cli, "_task_registered", lambda: False)
+    assert _main(paths, "status") == 0
+    assert "Scheduled task:  'filament-kit sync' is not registered" in capsys.readouterr().out
+    for known in (True, None):
+        monkeypatch.setattr(cli, "_task_registered", lambda known=known: known)
+        assert _main(paths, "status") == 0
+        assert "Scheduled task" not in capsys.readouterr().out
+
+
+def test_task_registered_reads_the_schtasks_exit_code(monkeypatch):
+    import subprocess
+
+    from fksync import __main__ as cli
+    monkeypatch.setattr(cli.sys, "platform", "win32")
+    for code, want in ((0, True), (1, False)):
+        monkeypatch.setattr(cli.subprocess, "run",
+                            lambda *a, code=code, **k: subprocess.CompletedProcess(a, code))
+        assert cli._task_registered() is want
+
+    def missing(*a, **k):
+        raise FileNotFoundError("schtasks")
+    monkeypatch.setattr(cli.subprocess, "run", missing)
+    assert cli._task_registered() is None
+    monkeypatch.setattr(cli.sys, "platform", "linux")
+    assert cli._task_registered() is None

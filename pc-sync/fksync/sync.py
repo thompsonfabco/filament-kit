@@ -820,6 +820,9 @@ class _Run:
             err = e.reason if isinstance(e, installer.Refused) else f"{type(e).__name__}: {e}"
             if isinstance(e, installer.Refused):
                 marker_path(sd).unlink(missing_ok=True)     # refused: nothing was written
+            if isinstance(e, installer.Refused) and e.code == "studio_running":
+                self.log(f"install of build {stamp} into {where} waits: {err}; trying again next run")
+                return                                      # no back-off: the slicer is closed soon
             rec.update(error=err, error_stamp=stamp, error_at=self.now)
             rec["last"] = {"outcome": "failed", "at": self.now, "detail": err}
             _save_state(sd, rec)
