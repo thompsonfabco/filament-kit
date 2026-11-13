@@ -5,8 +5,9 @@
     POST settings/spoolman {code, url}   an external Spoolman: only after this server has reached it and it answered as one
     POST remote/firewall {code}          the rules the owner sets up by hand: printed only, and it names their networks
     GET  settings/local-intake           the local label reader's health (local_reader.health): a read, no code
-    GET  settings/local-intake/test?url=&tier=   the same health for an address not saved yet (S2.18): a read, no code;
-                                         nothing is stored, no token is sent, no redirect is followed
+    POST settings/local-intake/test {code, url, tier}   the same health for an address not saved yet (S2.18): the
+                                         Hub contacts a host the user names, so it takes the code; nothing is stored,
+                                         no token is sent, no redirect is followed
     GET  settings/local-intake/plan      what the last plan job (local_intake_plan) saved: no network here, the server's
                                          unit does not reach GitHub (install / removal: jobs local_intake_install, _remove)
 The certificate itself is the job `remote_issue`.
@@ -98,8 +99,11 @@ def routes(page) -> list[tuple]:
         return await anyio.to_thread.run_sync(check)
 
     async def reader_test(request, body):
-        url = request.query_params.get("url", "").strip().rstrip("/")
-        tier = request.query_params.get("tier", "auto")
+        url = body.get("url")
+        tier = body.get("tier", "auto")
+        if not isinstance(url, str) or not isinstance(tier, str):
+            raise Refused(400, "give the address and the tier as text", field="url")
+        url = url.strip().rstrip("/")
         err = local_reader.check_url(url)
         if err:
             raise Refused(400, err, field="url")
@@ -119,7 +123,7 @@ def routes(page) -> list[tuple]:
 
     return [("/settings/general", page.guard(read), "GET"),
             ("/settings/local-intake", page.guard(reader_health), "GET"),
-            ("/settings/local-intake/test", page.guard(reader_test), "GET"),
+            ("/settings/local-intake/test", page.guard(reader_test, write=True), "POST"),
             ("/settings/local-intake/plan", page.guard(reader_plan), "GET"),
             ("/settings/general", page.guard(write, write="helper"), "POST"),
             ("/settings/spoolman", page.guard(spoolman, write=True), "POST"),
