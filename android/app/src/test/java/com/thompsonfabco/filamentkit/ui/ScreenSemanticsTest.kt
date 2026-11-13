@@ -58,6 +58,7 @@ import androidx.compose.ui.test.performClick
 
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
@@ -66,6 +67,7 @@ import com.thompsonfabco.filamentkit.net.AmsSlot
 import com.thompsonfabco.filamentkit.net.AmsUnit
 import com.thompsonfabco.filamentkit.net.CommandResult
 import com.thompsonfabco.filamentkit.net.DiscoveredServer
+import com.thompsonfabco.filamentkit.net.KlipperFound
 import com.thompsonfabco.filamentkit.net.MapStatus
 import com.thompsonfabco.filamentkit.net.Printer
 import com.thompsonfabco.filamentkit.net.PrinterDetail
@@ -77,7 +79,9 @@ import com.thompsonfabco.filamentkit.net.UsageEntry
 import com.thompsonfabco.filamentkit.R
 import com.thompsonfabco.filamentkit.session.Connection
 import com.thompsonfabco.filamentkit.ui.LocalNetworkAccess
+import com.thompsonfabco.filamentkit.ui.components.LocalTopBarActions
 import com.thompsonfabco.filamentkit.ui.components.SwTopBar
+import com.thompsonfabco.filamentkit.ui.components.TopBarActions
 import com.thompsonfabco.filamentkit.ui.components.TOP_BAR_TAG
 import com.thompsonfabco.filamentkit.ui.home.HomePrintersState
 import com.thompsonfabco.filamentkit.ui.home.HomeScreen
@@ -148,6 +152,7 @@ class ScreenSemanticsTest {
     private var fontScale by mutableStateOf(1f)
     private var density = 1f
     private var title: String? = ""
+    private val actions = TopBarActions()
 
     private fun host(title: String, screen: @Composable () -> Unit) {
         this.title = title
@@ -156,9 +161,11 @@ class ScreenSemanticsTest {
             density = base.density
             CompositionLocalProvider(LocalDensity provides Density(base.density, fontScale)) {
                 SpoolwardenTheme(Look.Console, if (dark) Appearance.Dark else Appearance.Light) {
-                    Column(Modifier.fillMaxSize()) {
-                        SwTopBar(title = title)
-                        Box(Modifier.weight(1f)) { screen() }
+                    CompositionLocalProvider(LocalTopBarActions provides actions) {
+                        Column(Modifier.fillMaxSize()) {
+                            SwTopBar(title = title) { actions.content?.invoke(this) }
+                            Box(Modifier.weight(1f)) { screen() }
+                        }
                     }
                 }
             }
@@ -173,6 +180,28 @@ class ScreenSemanticsTest {
             density = base.density
             CompositionLocalProvider(LocalDensity provides Density(base.density, fontScale)) {
                 SpoolwardenTheme(Look.Console, if (dark) Appearance.Dark else Appearance.Light) { screen() }
+            }
+        }
+    }
+
+    /** The audit's controls rules on every window root besides the screen's own (a dialog, a sheet). */
+    private fun auditWindows(): List<String> {
+        rule.waitForIdle()
+        val merged = rule.onAllNodes(isRoot()).fetchSemanticsNodes()
+        val unmerged = rule.onAllNodes(isRoot(), useUnmergedTree = true).fetchSemanticsNodes()
+        assertTrue("a window root besides the screen is open", merged.size > 1)
+        return merged.indices.drop(1).flatMap { SemanticsAudit.findings(merged[it], unmerged[it], density, title, screenRoot = false) }
+    }
+
+    /** Light and dark, font scale 1 and 2, on a dialog or sheet already open over the screen. */
+    private fun auditWindowsAllFour(shows: String) {
+        rule.waitForIdle()
+        rule.onNodeWithText(shows).assertExists()
+        for (isDark in listOf(false, true)) {
+            for (scale in listOf(1f, 2f)) {
+                dark = isDark
+                fontScale = scale
+                assertEquals("dark=$isDark fontScale=$scale", emptyList<String>(), auditWindows())
             }
         }
     }
@@ -278,7 +307,48 @@ class ScreenSemanticsTest {
         val backend = FakePrinters()
         val vm = PrintersViewModel(backend)
         host("Printers") { PrintersScreen(vm, onOpen = {}, onPairAgain = {}) }
-        auditAllFour("Spare P1S")
+        auditAllFour("Bambu Lab P1S")
+        // the set-up printers with their status words and fix lines, the group of found ones, and the Klipper button
+        for (shown in listOf("Workshop X1", "Garage Voron", "Study A1 mini", "Found on the network".uppercase(), "Add a Klipper printer")) {
+            rule.onNodeWithText(shown, substring = true).assertExists()
+        }
+        rule.onNodeWithText("The printer did not accept the Access Code. Enter the Access Code again.").assertExists()
+        // the overflow is in the top bar, and it is audited with it
+        rule.onNodeWithContentDescription("More actions").assertExists()
+    }
+
+    @Test fun theAddBambuFormAndTheReKeyFormOnPhone() {
+        val vm = PrintersViewModel(FakePrinters())
+        host("Printers") { PrintersScreen(vm, onOpen = {}, onPairAgain = {}) }
+        rule.waitForIdle()
+        vm.openAdd(vm.state.value.printers.first { !it.configured })
+        auditWindowsAllFour("Access Code")
+        vm.cancelAdd()
+        rule.waitForIdle()
+        vm.openAdd(vm.state.value.printers.first { it.state == "wrong_code" })
+        auditWindowsAllFour("Replace Access Code: Study A1 mini")
+    }
+
+    @Test fun theAddKlipperFormOnPhone() {
+        val vm = PrintersViewModel(FakePrinters())
+        host("Printers") { PrintersScreen(vm, onOpen = {}, onPairAgain = {}) }
+        rule.waitForIdle()
+        vm.openAddKlipper("192.0.2.57", 7125)
+        auditWindowsAllFour("Moonraker API key (optional)")
+    }
+
+    @Test fun theFindSheetOnPhone() {
+        val vm = PrintersViewModel(FakePrinters())
+        host("Printers") { PrintersScreen(vm, onOpen = {}, onPairAgain = {}) }
+        rule.waitForIdle()
+        vm.openFind()
+        auditWindowsAllFour("Network to search (optional)")
+    }
+
+    @Test fun printersEmpty() {
+        val vm = PrintersViewModel(FakePrinters(emptyList()))
+        host("Printers") { PrintersScreen(vm, onOpen = {}, onPairAgain = {}) }
+        auditAllFour("No printers yet")
     }
 
     @Test fun printer() {
@@ -742,20 +812,30 @@ class ScreenSemanticsTest {
         assertTrue(audit().any { "own click" in it })
     }
 
-    private class FakePrinters : PrinterBackend {
+    private class FakePrinters(private val list: List<Printer>? = null) : PrinterBackend {
         private val online = Printer(
             id = "ABC123", name = "Workshop X1", model = "X1C", serial = "ABC123", ip = "192.0.2.40", configured = true,
             state = "connected", summary = PrinterSummary("RUNNING", 42, 31, "Benchy"),
         )
         private val unset = Printer(id = "DEF456", name = "Spare P1S", model = "P1S", serial = "DEF456", ip = "192.0.2.41")
+        private val klipper = Printer(
+            id = "klipper-1", name = "Garage Voron", model = "Voron 2.4", serial = "klipper-1", configured = true,
+            state = "connected", family = "klipper", host = "voron.example", summary = PrinterSummary("IDLE", 0, 0),
+        )
+        private val wrongCode = Printer(
+            id = "GHI789", name = "Study A1 mini", model = "A1 mini", serial = "GHI789", ip = "192.0.2.42",
+            configured = true, state = "wrong_code",
+        )
         private val status = PrinterStatus(
             gcodeState = "RUNNING", job = "Benchy", percent = 42, remainingMin = 31,
             ams = listOf(AmsUnit(unit = 0, slots = listOf(AmsSlot(slot = 0, label = "A1", type = "PLA", colorHex = "2B2B2E")))),
         )
 
-        override suspend fun printers() = listOf(online, unset)
+        override suspend fun printers() = list ?: listOf(online, klipper, wrongCode, unset)
         override suspend fun addPrinter(serial: String, accessCode: String, name: String?) = online
         override suspend fun addKlipperPrinter(host: String, port: Int, name: String?) = online
+        override suspend fun scanKlipper(subnet: String?) = emptyList<KlipperFound>()
+        override suspend fun setApiKey(id: String, key: String) = Unit
         override suspend fun printer(id: String) = PrinterDetail(online, status)
         override suspend fun command(id: String, action: String) = CommandResult(ok = true)
         override suspend fun unload(id: String, label: String, dryRun: Boolean): UnloadResult = error("not used")

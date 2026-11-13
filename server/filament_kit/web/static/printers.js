@@ -307,7 +307,7 @@ function printersTab() {
       const name = sp.name || `spool #${sp.id}`;
       clear(slotMsg);
       const r = await sheetAsk({ kind: "confirm", title: SW.t("printer_unload_title", { slot: sl.label }),
-        text: SW.t("printer_unload_body", { spool: name, slot: sl.label, location: where }), confirm: SW.t("common_unload"),
+        text: SW.t("printer_unload_body", { name, slot: sl.label, location: where }), confirm: SW.t("common_unload"),
         run: () => pj(`${slotPath(sl.label)}/unload`, { dry_run: false }) });
       if (!r) return;
       SW.toast(SW.t("printer_unload_line", { name, slot: sl.label }));
@@ -530,26 +530,26 @@ function printersTab() {
           : addressField(SW.t("common_address"), SW.t("printer_address_klipper_help"), where || "");
         const code = bambu ? codeField(SW.t("printer_address_code_help")) : null;
         const key = bambu ? null : keyField({ optional: true, hint: SW.t("printer_address_key_help") });
-        change({ title: SW.t("printers_change_address_title", { printer: name }), confirm: SW.t("printers_change_address"), fields: [addr, code, key].filter(Boolean) },
+        change({ title: SW.t("printers_change_address_title", { name }), confirm: SW.t("printers_change_address"), fields: [addr, code, key].filter(Boolean) },
           ([a, c]) => edit({ address: a, ...(bambu ? { access_code: c } : { api_key: c }) }, SW.t("printer_set_address_changed", { address: a })));
       } } }),
       bambu ? h("button", { class: "secondary", textContent: "Access Code", on: { click: () =>
-        change({ title: SW.t("printers_access_code_title", { printer: name }), confirm: SW.t("printers_replace_access_code"), fields: [codeField(SW.t("common_hint_access_code"))] },
+        change({ title: SW.t("printers_access_code_title", { name }), confirm: SW.t("printers_replace_access_code"), fields: [codeField(SW.t("common_hint_access_code"))] },
           ([c]) => edit({ access_code: c }, SW.t("printer_set_code_replaced"))) } }) : null,
       bambu && p.pinned ? h("button", { class: "secondary", textContent: "Forget certificate", on: { click: () =>
-        change({ kind: "destructive", title: SW.t("printers_forget_cert_title", { printer: name }), text: SW.t("printer_set_cert_text", { printer: name }),
+        change({ kind: "destructive", title: SW.t("printers_forget_cert_title", { name }), text: SW.t("printer_set_cert_text", { name }),
           confirm: SW.t("printers_forget_cert"), fields: [codeField(SW.t("common_hint_access_code"))] },
           ([c]) => edit({ unpin: true, access_code: c }, SW.t("printer_set_cert_forgotten"))) } }) : null,
       bambu ? null : h("button", { class: "secondary", textContent: "API key", on: { click: () =>
-        change({ title: SW.t("printers_key_title", { printer: name }), confirm: SW.t("common_save_key"),
+        change({ title: SW.t("printers_key_title", { name }), confirm: SW.t("common_save_key"),
           fields: [keyField({ check: needs("printers_error_key") })] },
           ([k]) => edit({ api_key: k }, SW.t("printer_set_key_saved"))) } }),
       h("button", { class: "secondary", textContent: "Forget", on: { click: async () => {
         let r = null;
-        const ok = await sheetAsk({ kind: "destructive", title: SW.t("printers_forget_title", { printer: name }),
+        const ok = await sheetAsk({ kind: "destructive", title: SW.t("printers_forget_title", { name }),
           text: SW.t(bambu ? "printers_forget_body_bambu" : "printers_forget_body_klipper", { product: SW.t("app_name") }), confirm: SW.t("printers_forget"),
           busy: SW.t("common_working"), run: async () => { r = await pj(`${id}/forget`, {}); } });
-        if (ok) await manageAfter(SW.t("printers_forgotten", { printer: name }), r);
+        if (ok) await manageAfter(SW.t("printers_forgotten", { name }), r);
       } } }),
     ] : bambu && p.ip ? [
       h("button", { textContent: "Add", on: { click: () => {
@@ -581,7 +581,7 @@ function printersTab() {
       ...list.map((p) => manageRow(p, changes)), ...(changes ? [h("div", { class: "row" }, klipperAdd)] : []));
   }
   async function remap() {
-    const go = await sheetAsk({ kind: "confirm", title: SW.t("printers_map_title", { printer: printerName() }), text: SW.t("printers_map_body"),
+    const go = await sheetAsk({ kind: "confirm", title: SW.t("printers_map_title", { name: printerName() }), text: SW.t("printers_map_body"),
       confirm: SW.t("printers_map_slots"), run: () => pj(`${encodeURIComponent(current)}/map`, {}) });
     if (go) loadMap();
   }

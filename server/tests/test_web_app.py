@@ -18,7 +18,7 @@ from mcp.client.client import Client  # noqa: E402
 from mcp.client.streamable_http import streamable_http_client  # noqa: E402
 from starlette.testclient import TestClient  # noqa: E402
 
-from filament_kit import config, modules, tags, tagsources  # noqa: E402
+from filament_kit import config, inventory, modules, tags, tagsources  # noqa: E402
 from filament_kit.spoolman import Spoolman  # noqa: E402
 from filament_kit.web import __main__ as web_main  # noqa: E402
 from filament_kit.web import app as web_app, auth  # noqa: E402
@@ -340,7 +340,7 @@ def test_public_page_has_hub_name_presets_and_no_hub_page_address(app, env):
         r = c.get("/intake")
         a = _body_attrs(r.text)
         assert a["hub"] == config.load()["server_name"] and "hub-page" not in a
-        assert a["presets"] == "1" and a["spool-edit"] == "0"
+        assert a["presets"] == "1" and a["spool-edit"] == "1"
         assert a["base"] == BASE and a["history"] == "0" and a["ai"] == "1"      # today's attributes stay
         assert r.headers["content-security-policy"] in (INTAKE_CSP, INTAKE_CSP_PRINTERS)
 
@@ -738,3 +738,168 @@ def test_the_print_alert_controls_moved_to_settings():
         assert call in panel, call                                                     # what a subscription does is unchanged
     assert "SW.toggle(" in panel and "alertsPanel(" in _app_js() and "PUSH &&" in _app_js()   # only when alerts are offered
     assert 'localStorage.getItem("spoolwarden.printer")' in printers
+
+
+# ---------- S3.7: the add preview per item, colour in find, search paging ----------
+
+def _stock(sm) -> str:
+    return json.dumps({k: sm.get(k) for k in ("vendor", "filament", "spool")}, sort_keys=True)
+
+
+def _preview_items(sm):
+    """One item for a filament Spoolman has, one for a new filament (opened, so each spool gets its own box)."""
+    base = {"vendor": "SUNLU", "name": "PETG Grey", "material": "PETG", "net": 1000, "tare": 213, "density": 1.27,
+            "count": 2, "color_hex": "8A8C8E"}
+    inventory.add_spools(sm, [{**base, "count": 1}], RULES, dry=False)
+    return base, {**base, "name": "PETG Blue", "sealed": False, "color_hex": "0000FF"}
+
+
+def test_add_preview_answers_per_item_and_writes_nothing(app, sm):
+    ok, new = _preview_items(sm)
+    before = _stock(sm)
+    with _client(app) as c:
+        r = c.post("/intake/api/add", json={"items": [ok, new], "dry_run": True}, headers={"Origin": ORIGIN})
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["dry"] is True and body["spool_ids"] == [] and "Would add" in body["output"]     # today's fields
+        first, second = body["items"]
+        (grey,) = [f for f in sm.get("filament") if f["name"] == "PETG Grey"]
+        assert (first["index"], first["filament"], first["filament_id"], first["new_vendor"]) == (
+            0, "existing", grey["id"], False)
+        assert (first["spools"], first["location"], first["problems"]) == (2, "Sealed stock", [])
+        assert (second["index"], second["filament"], second["filament_id"], second["new_vendor"]) == (
+            1, "new", None, False)
+        assert second["spools"] == 2 and second["location"] == "Storage box 01" and second["problems"] == []
+        assert [(p["location"], p["spools"]) for p in second["placements"]] == [("Storage box 01", 1),
+                                                                             ("Storage box 02", 1)]
+        assert _stock(sm) == before                                                                 # nothing written
+        r = c.post("/intake/api/add", json={"items": [ok, new], "dry_run": False}, headers={"Origin": ORIGIN})
+        first, second = r.json()["items"]
+        assert len(first["spool_ids"]) == 2 and len(second["spool_ids"]) == 2 and second["filament"] == "new"
+
+
+def test_add_preview_problems_name_their_item_and_field(app, sm):
+    ok, new = _preview_items(sm)
+    before = _stock(sm)
+    with _client(app) as c:
+        r = c.post("/intake/api/add", json={"items": [ok, {**new, "net": 0, "color_hex": "blue"}], "dry_run": True},
+                   headers={"Origin": ORIGIN})
+    body = r.json()
+    assert r.status_code == 400 and body["field"] == "items"
+    assert [(p["item"], p["field"]) for p in body["problems"]] == [(1, "net"), (1, "color_hex")]
+    assert "net must be a positive number" in body["error"] and body["problems"][0]["message"] == body["error"]
+    assert _stock(sm) == before
+
+
+def test_find_results_carry_the_filament_colour_and_page(app, sm):
+    for n in range(3):
+        inventory.add_spools(sm, [{"vendor": "SUNLU", "name": f"PETG Grey {n}", "material": "PETG", "net": 1000,
+                                   "tare": 213, "density": 1.27, "count": 1, "color_hex": "8A8C8E"}],
+                             RULES, dry=False)
+    with _client(app) as c:
+        found = c.get("/intake/api/find", params={"q": "grey"}).json()
+        assert [f["color_hex"] for f in found["filaments"]] == ["8A8C8E"] * 3
+        assert (found["matches"], found["total"], found["offset"], found["has_more"]) == (3, 3, 0, False)
+        page = c.get("/intake/api/find", params={"q": "grey", "limit": 2}).json()
+        rest = c.get("/intake/api/find", params={"q": "grey", "limit": 2, "offset": 2}).json()
+        assert [f["name"] for f in page["filaments"]] == ["PETG Grey 0", "PETG Grey 1"] and page["has_more"] is True
+        assert [f["name"] for f in rest["filaments"]] == ["PETG Grey 2"] and rest["has_more"] is False
+        fils = c.get("/intake/api/filaments", params={"limit": 2, "offset": 1}).json()
+        assert [f["name"] for f in fils["filaments"]] == ["PETG Grey 1", "PETG Grey 2"]
+        assert (fils["total"], fils["offset"], fils["has_more"]) == (3, 1, False)
+        r = c.get("/intake/api/find", params={"offset": "x"})
+        assert r.status_code == 400 and r.json()["field"] == "offset"
+
+
+def _web_refused(c, items):
+    r = c.post("/intake/api/add", json={"items": items, "dry_run": True}, headers={"Origin": ORIGIN})
+    assert r.status_code == 400, r.text
+    return r.json()
+
+
+def test_web_type_and_required_errors_name_their_item_and_field(app, sm):
+    ok, _ = _preview_items(sm)
+    with _client(app) as c:
+        # two items of the same filament, the second missing net
+        body = _web_refused(c, [ok, {k: v for k, v in ok.items() if k != "net"}])
+        assert body["field"] == "items" and [(p["item"], p["field"]) for p in body["problems"]] == [(1, "net")]
+        assert "SUNLU PETG Grey: net" in body["error"]
+        body = _web_refused(c, [ok, {**ok, "net": "abc"}])
+        assert [(p["item"], p["field"]) for p in body["problems"]] == [(1, "net")]
+        body = _web_refused(c, [{**ok, "count": 1.5}, ok])
+        assert [(p["item"], p["field"]) for p in body["problems"]] == [(0, "count")]
+        body = _web_refused(c, [{**ok, "net": "abc", "count": 1.5}])          # one entry per error
+        assert sorted(p["field"] for p in body["problems"]) == ["count", "net"]
+
+
+def test_web_gross_and_non_object_problems_name_their_item(app, sm):
+    ok, _ = _preview_items(sm)
+    with _client(app) as c:
+        low = {**ok, "tare": 100, "count": 1, "sealed": False, "gross": 150}
+        body = _web_refused(c, [low])
+        assert [(p["item"], p["field"]) for p in body["problems"]] == [(0, "gross")]
+        body = _web_refused(c, [ok, 5])
+        assert body["problems"] == [{"item": 1, "field": None, "message": "each item must be an object"}]
+
+
+def _web_spool(sm, **kw) -> int:
+    it = {"vendor": "SUNLU", "name": "PETG Grey", "material": "PETG", "net": 1000, "tare": 213, "density": 1.27,
+          "count": 1, **kw}
+    return inventory.add_spools(sm, [it], RULES, dry=False).spool_ids[0]
+
+
+def test_web_spool_read(app, sm, spoolman_fake_store):
+    sid = _web_spool(sm)
+    spoolman_fake_store["spools"][sid]["lot_nr"] = "L-42"       # the fake does not keep a lot from an add
+    with _client(app) as c:
+        r = c.get(f"/intake/api/spools/{sid}")
+        assert r.status_code == 200 and r.json()["spool"]["id"] == sid
+        v = r.json()["view"]
+        assert (v["location"], v["remaining_g"], v["net_g"], v["tare_g"], v["tag"], v["state"], v["lot"]) == (
+            "Sealed stock", 1000, 1000, 213, None, "sealed", "L-42")
+        assert (v["vendor"], v["name"], v["material"], v["filament_id"] is not None) == ("SUNLU", "PETG Grey", "PETG", True)
+        r = c.get("/intake/api/spools/99999")
+        assert r.status_code == 404 and "99999" in r.json()["error"]
+    away = _client(app, AWAY)                                   # no lifespan: the app ran once above
+    assert away.get(f"/intake/api/spools/{sid}").status_code == 403
+
+
+def test_web_spool_edit_previews_then_saves_moves_and_marks_empty(app, sm):
+    sid = _web_spool(sm)
+    post = {"headers": {"Origin": ORIGIN}}
+    with _client(app) as c:
+        r = c.post(f"/intake/api/spools/{sid}", json={"gross": 713}, **post)                  # no dry_run: a preview
+        assert r.status_code == 200 and r.json()["dry"] is True
+        assert (r.json()["before"]["remaining_g"], r.json()["view"]["remaining_g"]) == (1000, 500)
+        r = c.post(f"/intake/api/spools/{sid}", json={"gross": 713, "dry_run": True}, **post)
+        assert sm.get(f"spool/{sid}")["remaining_weight"] == 1000
+        r = c.post(f"/intake/api/spools/{sid}", json={"gross": 713, "dry_run": False}, **post)
+        assert r.status_code == 200 and r.json()["dry"] is False and r.json()["view"]["remaining_g"] == 500
+        assert sm.get(f"spool/{sid}")["remaining_weight"] == 500
+        r = c.post(f"/intake/api/spools/{sid}", json={"location": "Rack 1", "dry_run": False}, **post)
+        assert r.status_code == 200 and sm.get(f"spool/{sid}")["location"] == "Rack 1"
+        r = c.post(f"/intake/api/spools/{sid}", json={"empty": True, "dry_run": False}, **post)
+        assert r.status_code == 200 and r.json()["view"]["state"] == "empty"
+        stored = sm.get(f"spool/{sid}")
+        assert stored["remaining_weight"] == 0 and stored["archived"] is True
+
+
+def test_web_spool_edit_refusals_name_their_field_and_write_nothing(app, sm):
+    sid = _web_spool(sm)
+    before = sm.get(f"spool/{sid}")
+    post = {"headers": {"Origin": ORIGIN}}
+    with _client(app) as c:
+        for sent, field in (({"gross": 10}, "gross"), ({"gross": "heavy"}, "gross"), ({"remaining": -5}, "remaining"),
+                            ({"location": "Nowhere Shelf"}, "location"), ({"location": 7}, "location"),
+                            ({"gross": 800, "remaining": 5}, "remaining"), ({"empty": "yes"}, "empty"),
+                            ({"dry_run": "no"}, "dry_run")):
+            r = c.post(f"/intake/api/spools/{sid}", json={"dry_run": False, **sent}, **post)
+            assert r.status_code == 400 and r.json()["field"] == field, (sent, r.text)
+        assert sm.get(f"spool/{sid}") == before
+        assert c.post("/intake/api/spools/99999", json={"gross": 700, "dry_run": False}, **post).status_code == 404
+        assert c.post(f"/intake/api/spools/{sid}", json={"gross": 713, "dry_run": False}).status_code == 403   # no Origin
+        assert c.post(f"/intake/api/spools/{sid}", json={"gross": 713, "dry_run": False},
+                      headers={"Origin": "https://evil.example"}).status_code == 403
+    away = _client(app, AWAY)
+    assert away.post(f"/intake/api/spools/{sid}", json={"gross": 713, "dry_run": False}, **post).status_code == 403
+    assert sm.get(f"spool/{sid}") == before

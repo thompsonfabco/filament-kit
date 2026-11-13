@@ -599,7 +599,7 @@ function addTab() {
   async function addFiles() {
     const files = [...picker.files]; picker.value = "";
     for (const f of files) {
-      if (photos.length >= 8) { SW.result(readBox.line, "warn", SW.t("add_photo_limit", { max: 8 })); break; }
+      if (photos.length >= 8) { SW.result(readBox.line, "warn", SW.t("add_photo_limit", { count: 8 })); break; }
       try { const blob = await shrink(f); photos.push({ blob, url: URL.createObjectURL(blob) }); }
       catch (e) { SW.result(readBox.line, "warn", SW.t("add_photo_unreadable", { name: f.name })); }
     }

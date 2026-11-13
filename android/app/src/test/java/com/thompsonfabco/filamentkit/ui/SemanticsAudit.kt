@@ -30,6 +30,8 @@ internal object SemanticsAudit {
         density: Float,
         title: String?,
         sectionTitles: List<String> = emptyList(),
+        /** False for the root of a dialog or sheet window: it has no top bar, only the controls rules apply. */
+        screenRoot: Boolean = true,
     ): List<String> = buildList {
         val all = merged.flatten()
         all.filter { it.isClickable() }.forEach { node ->
@@ -49,6 +51,7 @@ internal object SemanticsAudit {
         val bar = all2.firstOrNull { it.config.getOrNull(SemanticsProperties.TestTag) == TOP_BAR_TAG }
         val inBar = bar?.flatten().orEmpty().filter { it.isHeading() }
         when {
+            !screenRoot -> Unit
             title == null -> if (bar != null) add("a top app bar where the screen has none")
             bar == null -> add("no top app bar in the screen")
             inBar.size != 1 -> add("expected exactly one heading in the top app bar, found ${inBar.size}")

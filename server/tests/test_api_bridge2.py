@@ -414,9 +414,21 @@ def test_usage_newest_first(client):
     assert r.status_code == 200
     es = r.json()["entries"]
     assert [e["id"] for e in es] == [c["id"], b["id"], a["id"]]
-    assert es[2] == {"id": a["id"], "at": a["at"], "job": "first", "grams": 12.5, "spool_id": 2, "slot": "A1",
-                     "observe": False, "undone": False}
+    assert {k: v for k, v in es[2].items() if k != "spool"} == {
+        "id": a["id"], "at": a["at"], "job": "first", "grams": 12.5, "spool_id": 2, "slot": "A1", "observe": False,
+        "undone": False}
     assert es[0]["error"] == "file_not_found" and "error" not in es[1]
+
+
+def test_usage_names_the_spool_it_was_taken_from(client, sm):
+    entry(job="on spool 2")
+    entry(job="on a gone spool", spool_id=77)
+    entry(job="no spool", spool_id=None, observe=True)
+    es = client.get(f"/api/printers/{SERIAL}/usage").json()["entries"]
+    assert es[2]["spool"] == {"id": 2, "vendor": "SUNLU", "name": "PLA+ Grey", "material": "PLA",
+                              "color_hex": "808080", "state": "opened"}
+    assert es[1]["spool_id"] == 77 and es[1]["spool"] is None            # Spoolman no longer has it
+    assert es[0]["spool_id"] is None and es[0]["spool"] is None
 
 
 @pytest.mark.parametrize("code", ["file_not_found", "no_slice_info", "plate_not_found", "printer_unreachable",

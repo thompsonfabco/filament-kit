@@ -10,6 +10,7 @@ import com.thompsonfabco.filamentkit.net.PrinterCamera
 import com.thompsonfabco.filamentkit.net.PrinterDetail
 import com.thompsonfabco.filamentkit.net.PrinterStatus
 import com.thompsonfabco.filamentkit.net.PrinterSummary
+import com.thompsonfabco.filamentkit.net.KlipperFound
 import com.thompsonfabco.filamentkit.net.LoadSlot
 import com.thompsonfabco.filamentkit.net.MovedBack
 import com.thompsonfabco.filamentkit.net.SlotSpool
@@ -74,6 +75,20 @@ class PrinterViewModelTest {
             addedKlipper += Triple(host, port, name)
             addError?.let { throw it }
             return addResult!!
+        }
+        var scanResult: List<KlipperFound> = emptyList()
+        var scanError: Exception? = null
+        val scans = mutableListOf<String?>()
+        override suspend fun scanKlipper(subnet: String?): List<KlipperFound> {
+            scans += subnet
+            scanError?.let { throw it }
+            return scanResult
+        }
+        val keys = mutableListOf<Pair<String, String>>()
+        var keyError: Exception? = null
+        override suspend fun setApiKey(id: String, key: String) {
+            keys += id to key
+            keyError?.let { throw it }
         }
         override suspend fun printer(id: String): PrinterDetail {
             printerCalls++
@@ -276,7 +291,7 @@ class PrinterViewModelTest {
         runCurrent()
         assertEquals(Triple("0948AB", "SECRET42", "Garage"), backend.added.single())
         val d = vm.state.value.dialog!!
-        assertTrue(d.error!!.contains("Access Code"))
+        assertEquals("a printer in the wrong state is explained by its fix line", Problem.PrinterState("wrong_code"), d.problem)
         assertFalse("the Access Code is never kept in state", vm.state.value.toString().contains("SECRET42"))
     }
 
@@ -320,7 +335,7 @@ class PrinterViewModelTest {
         backend.addError = ApiError(404, "not_found", "That printer hasn't been seen on the network yet")
         vm.submitAdd("1", "")
         runCurrent()
-        assertEquals("That printer hasn't been seen on the network yet", vm.state.value.dialog!!.error)
+        assertEquals(Problem.HubSaid("That printer hasn't been seen on the network yet"), vm.state.value.dialog!!.problem)
     }
 
     @Test fun controlsOnlyWhenConnected() {
@@ -342,6 +357,7 @@ class PrinterViewModelTest {
         runCurrent()
         assertNull(vm.state.value.dialog)
         assertEquals(null, backend.added.single().third)
+        assertEquals("the screen is told to say 'Added <name>.'", "Garage H2D", vm.state.value.added)
         assertEquals(2, backend.listCalls)
         assertEquals("connected", vm.state.value.printers[0].state)
     }
@@ -351,10 +367,10 @@ class PrinterViewModelTest {
         val vm = PrintersViewModel(backend)
         vm.refresh(); runCurrent()
         vm.openAdd(vm.state.value.printers[0])
-        backend.addError = ApiError(409, "exists", "x")
+        backend.addError = ApiError(409, "exists", "this printer is already set up")
         vm.submitAdd("1", "")
         runCurrent()
-        assertTrue(vm.state.value.dialog!!.error!!.contains("already set up"))
+        assertEquals(Problem.HubSaid("this printer is already set up"), vm.state.value.dialog!!.problem)
     }
 
     @Test fun addKlipperSendsTrimmedAddressDefaultPortAndClosesTheDialog() = runTest(dispatcher) {
@@ -383,10 +399,12 @@ class PrinterViewModelTest {
         val vm = PrintersViewModel(backend)
         vm.openAddKlipper()
         vm.submitAddKlipper("  ", "7125", "")
-        assertTrue(vm.state.value.klipper!!.error!!.contains("address"))
+        assertTrue(vm.state.value.klipper!!.addressMissing)
+        assertFalse(vm.state.value.klipper!!.portInvalid)
         for (bad in listOf("0", "65536", "abc", "-1", "71.25")) {
             vm.submitAddKlipper("192.0.2.10", bad, "")
-            assertTrue(bad, vm.state.value.klipper!!.error!!.contains("between 1 and 65535"))
+            assertTrue(bad, vm.state.value.klipper!!.portInvalid)
+            assertFalse(bad, vm.state.value.klipper!!.addressMissing)
         }
         runCurrent()
         assertTrue(backend.addedKlipper.isEmpty())
@@ -400,12 +418,12 @@ class PrinterViewModelTest {
         vm.submitAddKlipper("192.0.2.10", "7125", "")
         runCurrent()
         val d = vm.state.value.klipper!!
-        assertEquals("a printer is already set up at 192.0.2.10", d.error)
+        assertEquals(Problem.HubSaid("a printer is already set up at 192.0.2.10"), d.problem)
         assertFalse(d.busy)
         backend.addError = ApiError(0, "offline", "x")
         vm.submitAddKlipper("192.0.2.10", "7125", "")
         runCurrent()
-        assertTrue(vm.state.value.klipper!!.error!!.contains("Could not reach the server"))
+        assertEquals(Problem.Unreachable, vm.state.value.klipper!!.problem)
     }
 
     @Test fun cancelAddKlipperClosesTheDialog() {
@@ -549,6 +567,6 @@ class PrinterViewModelTest {
         vm.submitAdd("  ", "")
         runCurrent()
         assertTrue(backend.added.isEmpty())
-        assertNotNull(vm.state.value.dialog!!.error)
+        assertTrue(vm.state.value.dialog!!.codeMissing)
     }
 }

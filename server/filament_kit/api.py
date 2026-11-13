@@ -89,7 +89,9 @@ def _to_response(e: Exception) -> JSONResponse:
         return bridge
     if isinstance(e, ValueError):
         field = getattr(e, "field", None)
-        return _err(400, "bad_request", str(e), **({"field": field} if isinstance(field, str) else {}))
+        problems = getattr(e, "problems", None)         # a refused add: every problem, with its item and field
+        return _err(400, "bad_request", str(e), **({"field": field} if isinstance(field, str) else {}),
+                    **({"problems": problems} if isinstance(problems, list) else {}))
     log.error("internal error", exc_info=e)
     return _err(500, "internal", "internal error")
 
@@ -862,7 +864,8 @@ def _bridge_routes(printers, mapper: mapping.Mapper, sm) -> list[Route]:
         def build() -> list[dict]:
             known(serial)
             kf = klipper_of(serial)
-            return kf.usage(serial, days) if kf is not None else usage.entries(serial, days)
+            got = kf.usage(serial, days) if kf is not None else usage.entries(serial, days)
+            return inventory.with_spools(got, sm)
         return JSONResponse({"entries": await run_in_threadpool(build)})
 
     @_authed
@@ -1059,7 +1062,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
                                                                 read_id=read_id, tag=uid)
             return r, hid
         r, hid = await run_in_threadpool(run)
-        return JSONResponse({"spool_ids": r.spool_ids, "lines": r.lines, "dry": r.dry,
+        return JSONResponse({"spool_ids": r.spool_ids, "lines": r.lines, "dry": r.dry, "items": r.items,
                              **({"history_id": hid} if hid else {})})
 
     # ---------- the intake history (intake_history.py) ----------
@@ -1197,22 +1200,33 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
     @_authed
     async def spool_update(request: Request):
         body = await _json(request)
-        spool = await run_in_threadpool(functools.partial(
-            inventory.update_spool, sm, request.path_params["id"], gross=_opt(body, "gross", float),
+        out = await run_in_threadpool(functools.partial(
+            inventory.edit_spool, sm, request.path_params["id"], gross=_opt(body, "gross", float),
             remaining=_opt(body, "remaining", float), location=_opt(body, "location", str),
             empty=_opt(body, "empty", bool, False), dry=_opt(body, "dry_run", bool, True)))
-        return JSONResponse({"spool": spool})
+        return JSONResponse(out)       # `spool` as before; `view`, `before` and `dry` are added (S3.9)
+
+    @_authed
+    async def spool_get(request: Request):
+        spool = await run_in_threadpool(sm.get, f"spool/{request.path_params['id']}")
+        return JSONResponse({"spool": spool, "view": inventory.spool_view(spool)})   # raw and phone shape, as PATCH gives
 
     @_authed
     async def spool_search(request: Request):
         q = request.query_params.get("q", "")
         sealed = request.query_params.get("sealed", "").lower() in ("1", "true", "yes")
-        return JSONResponse({"spools": await run_in_threadpool(inventory.find, sm, q, sealed)})
+        offset, limit = inventory.page_args(request.query_params)
+        rows = await run_in_threadpool(inventory.find, sm, q, sealed)
+        rows, paging = inventory.page(rows, offset, limit)
+        return JSONResponse({"spools": rows, **paging})
 
     @_authed
     async def filament_list(request: Request):
         q = request.query_params.get("q", "")
-        return JSONResponse({"filaments": await run_in_threadpool(inventory.filaments, sm, q)})
+        offset, limit = inventory.page_args(request.query_params)
+        rows = await run_in_threadpool(inventory.filaments, sm, q)
+        rows, paging = inventory.page(rows, offset, limit)
+        return JSONResponse({"filaments": rows, **paging})
 
     @_authed
     async def vendor_list(request: Request):
@@ -1273,6 +1287,7 @@ def create_app(sm: Spoolman | None = None, claude=None, printers=None, camera_hu
             Route("/api/filaments", filament_list),
             Route("/api/vendors", vendor_list),
             Route("/api/spools/{id:int}/link", spool_link, methods=["POST"]),
+            Route("/api/spools/{id:int}", spool_get),
             Route("/api/spools/{id:int}", spool_update, methods=["PATCH"]),
             Route("/api/locations", locations),
             Route("/app.apk", apk),

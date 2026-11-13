@@ -1039,6 +1039,7 @@
     <string name="printers_add_serial_hint">Read from the printer when left empty.</string>
     <string name="printers_add_serial_optional">Serial (optional)</string>
     <string name="printers_add_type">Printer type</string>
+    <string name="printers_add_wait">The Hub is adding the printer. Wait for its answer.</string>
     <!-- 1=name -->
     <string name="printers_added">Added %1$s.</string>
     <string name="printers_added_next">Added. Test the connection next.</string>
@@ -1218,6 +1219,7 @@
     <!-- 1=serial -->
     <string name="printers_serial_line">SN %1$s</string>
     <string name="printers_set_key">Set Moonraker API key</string>
+    <string name="printers_set_code_wait">The Hub is saving the Access Code. Wait for its answer.</string>
     <string name="printers_slots_ams">AMS slots</string>
     <!-- 1=loaded 2=total -->
     <string name="printers_slots_loaded">%1$s/%2$s loaded</string>
@@ -1994,6 +1996,8 @@
     <string name="printer_set_address_changed">Address changed to %1$s. The Hub reconnects now.</string>
     <string name="printer_set_cert_forgotten">Certificate forgotten. The next connection pins a new one.</string>
     <string name="printer_set_code_replaced">Access Code replaced.</string>
+    <!-- 1=name -->
+    <string name="printer_set_code_done">Access Code replaced for %1$s.</string>
     <string name="printer_set_home_note">Anyone on the home network can use this page.</string>
     <string name="printer_set_key_saved">API key saved.</string>
     <string name="printer_set_not_pinned">Not pinned</string>
@@ -2408,6 +2412,7 @@
     <string name="printer_add_facts">%1$s · serial %2$s</string>
     <!-- 1=model -->
     <string name="printer_add_title">Add %1$s</string>
+    <string name="printer_add_name_placeholder">e.g. Workshop X1</string>
     <!-- 1=code -->
     <string name="printer_alert_code">Printer alert %1$s</string>
     <string name="printer_available_idle">Available when the printer is idle.</string>
@@ -2425,6 +2430,9 @@
     <!-- 1=network -->
     <string name="printer_find_none">No Klipper printers answered on %1$s.</string>
     <string name="printer_find_placeholder">e.g. 192.0.2.0/24</string>
+    <!-- 1=name -->
+    <string name="printer_find_add_for">Add %1$s</string>
+    <string name="printer_find_none_own">No Klipper printers answered on the Hub\'s own network.</string>
     <string name="common_searching">Searching…</string>
     <!-- 1=name -->
     <string name="printer_forget_done">Forgot %1$s.</string>
@@ -2436,6 +2444,7 @@
     <string name="printer_job_printing">Printing</string>
     <string name="printer_job_slicing">Slicing</string>
     <string name="printer_klipper_connecting">Connecting to Moonraker…</string>
+    <string name="printer_klipper_address_placeholder">192.0.2.57 or printer.local</string>
     <string name="printer_light_off">Turn the light off</string>
     <string name="printer_light_on">Turn the light on</string>
     <string name="printer_map_confirmed_loaded">Slots mapped: confirmed for the loaded slots</string>
@@ -2558,6 +2567,13 @@
     <!-- 1=grams 2=id -->
     <string name="printer_usage_undone">%1$s g put back on spool %2$s.</string>
     <string name="printer_waiting">Waiting for the printer…</string>
+    <string name="printer_list_empty_text">The Hub finds Bambu Lab printers on its network by itself: turn the printer on, then add it here with its Access Code. A Klipper printer is added by its address.</string>
+    <!-- 1=state 2=percent -->
+    <string name="printer_list_job_percent">%1$s · %2$s %%</string>
+    <!-- 1=model -->
+    <string name="printer_list_model_bambu">Bambu Lab %1$s</string>
+    <!-- 1=model -->
+    <string name="printer_list_model_klipper">%1$s (Klipper)</string>
     <string name="printers_empty_text">The Hub finds Bambu printers on its network by itself. Turn the printer on, then refresh. Klipper printers are added by address.</string>
     <string name="printers_fix_cert_changed">The printer\'s certificate changed. Forget its old certificate in Printer settings.</string>
     <string name="printers_fix_developer_mode">The printer refuses remote control. Turn on LAN mode and Developer Mode on the printer.</string>
