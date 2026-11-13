@@ -2003,6 +2003,7 @@
   "printer_no_status": "No live status from the printer yet.",
   "printer_pause": "Pause",
   "printer_pick_tag_hint": "Or hold the spool's tag to the back of the phone.",
+  "printer_pick_tag_unlinked": "This tag is not linked to a spool yet. Search for the spool instead.",
   "printer_pick_title": "Load into {printer}, slot {slot}",
   "printer_progress_detail": "layer {layer} of {layers} · {time} left · done about {clock}",
   "printer_report_collecting": "Collecting a report…",

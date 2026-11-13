@@ -99,6 +99,10 @@ data class PickUiState(
     val unlinkedTag: String? = null,
     /** The load went through: [confirmed] is whether the printer already shows it. */
     val loaded: Boolean? = null,
+    /** A tag tapped while the load was written: it opens when the load ends (the last tap wins). */
+    val heldTag: String? = null,
+    /** Counts the taps held, so the screen says "Tag read. It opens when loading has finished." for each. */
+    val tagWaits: Int = 0,
 )
 
 /**
@@ -164,16 +168,20 @@ class PickSpoolViewModel(
 
     /**
      * A tag held to the phone picks the spool it is linked to (05 9.6), as a tap on its row would. A tag linked to no
-     * spool picks nothing and says so; a load being written takes no tap.
+     * spool picks nothing and says so. A load being written holds the tap (05 2.6): the screen says so, and the tag
+     * opens when the load ends.
      */
     fun onTag(uid: String) {
-        if (_state.value.preview?.writing == true) return
+        if (_state.value.preview?.writing == true) {
+            _state.update { it.copy(heldTag = uid, tagWaits = it.tagWaits + 1) }
+            return
+        }
         tagLookup?.cancel()
         _state.update { it.copy(unlinkedTag = null, problem = null) }
         tagLookup = viewModelScope.launch {
             try {
                 val found = backend.tag(uid)
-                if (found == null) _state.update { it.copy(unlinkedTag = uid) } else pick(found.toSpoolSummary())
+                if (found == null) _state.update { it.copy(unlinkedTag = uid) } else open(found.toSpoolSummary())
             } catch (e: CancellationException) {
                 throw e
             } catch (e: FingerprintMismatch) {
@@ -188,6 +196,13 @@ class PickSpoolViewModel(
 
     /** Picks [spool]: asks the Hub what loading it here would do (a dry run) and shows the preview. */
     fun pick(spool: SpoolSummary) {
+        if (_state.value.preview?.writing == true) return
+        // a tag lookup still out is over: its late answer must not replace this pick
+        tagLookup?.cancel()
+        open(spool)
+    }
+
+    private fun open(spool: SpoolSummary) {
         if (_state.value.preview?.writing == true) return
         // an earlier pick's dry run is over: its late answer must not fill this spool's preview
         dryRun?.cancel()
@@ -236,9 +251,14 @@ class PickSpoolViewModel(
                 throw e
             } catch (e: Exception) {
                 val problem = previewProblem(e, writing = true)
+                val dropped = unknownAnswer(e)
                 _state.update {
-                    it.copy(preview = it.preview?.copy(writing = false, problem = problem.first, hubNotice = problem.second, dropped = unknownAnswer(e)))
+                    it.copy(preview = it.preview?.copy(writing = false, problem = problem.first, hubNotice = problem.second, dropped = dropped))
                 }
+                // the load is over and not lost: the tag that waited is read as on any other tap (after a lost answer it is let go)
+                val held = _state.value.heldTag
+                _state.update { it.copy(heldTag = null) }
+                if (held != null && !dropped) onTag(held)
             } finally {
                 gate.set(false)
             }
@@ -250,7 +270,7 @@ class PickSpoolViewModel(
     }
 
     /** The screen has said how the load went. */
-    fun loadedShown() = _state.update { it.copy(loaded = null) }
+    fun loadedShown() = _state.update { it.copy(loaded = null, heldTag = null) }
 
     /**
      * Words for a failed dry run or load. A 401 to the real load is the Hub refusing before it did anything; a lost
@@ -291,18 +311,24 @@ fun PickSpoolScreen(
     onLoaded: (confirmed: Boolean) -> Unit,
     onPairAgain: () -> Unit,
     onLeave: () -> Unit = {},
+    onOpenTag: (String) -> Unit = {},
 ) {
     val s by viewModel.state.collectAsState()
     val toast = LocalToast.current
     val wait = stringResource(R.string.common_load_wait)
+    val tagWait = stringResource(R.string.tag_read_wait)
     TagTaps(viewModel::onTag)
     // the load being written ignores Back and says why (05-android-app 2.5 rule 2)
     val scope = rememberCoroutineScope()
     BackHandler(enabled = s.preview?.writing == true) { scope.launch { toast?.show(wait) } }
+    LaunchedEffect(s.tagWaits) { if (s.tagWaits > 0) toast?.show(tagWait) }
     LaunchedEffect(s.loaded) {
         s.loaded?.let {
+            val held = s.heldTag
             viewModel.loadedShown()
             onLoaded(it)
+            // the tag that waited for the load opens now, where the screen went back to
+            held?.let(onOpenTag)
         }
     }
     val space = SpoolwardenTheme.space
@@ -329,7 +355,7 @@ fun PickSpoolScreen(
             }
         }
         if (s.busy) SwProgress(null)
-        s.unlinkedTag?.let { NoticeCard(NoticeKind.Warn, stringResource(R.string.spool_load_tag_unlinked, it)) }
+        if (s.unlinkedTag != null) NoticeCard(NoticeKind.Warn, stringResource(R.string.printer_pick_tag_unlinked))
         s.problem?.let {
             if (it.isHubNotice) ProblemNotice(it, onPairAgain) else NoticeCard(
                 NoticeKind.Bad, problemText(it),
@@ -351,7 +377,7 @@ fun PickSpoolScreen(
             }
         }
     }
-    s.preview?.let { PreviewDialog(it, printerName.orEmpty(), slot, viewModel, onPairAgain, onLeave) }
+    s.preview?.let { PreviewDialog(it, s.unlinkedTag != null, printerName.orEmpty(), slot, viewModel, onPairAgain, onLeave) }
 }
 
 @Composable
@@ -384,7 +410,8 @@ private fun SpoolRow(spool: SpoolSummary, onClick: () -> Unit) {
 /** The preview step of 7.6 for this slot: the Hub's dry run as rows, then "Back" and "Load". */
 @Composable
 private fun PreviewDialog(
-    p: LoadPreview, printerName: String, slot: String, viewModel: PickSpoolViewModel, onPairAgain: () -> Unit, onLeave: () -> Unit,
+    p: LoadPreview, unlinkedTag: Boolean, printerName: String, slot: String, viewModel: PickSpoolViewModel, onPairAgain: () -> Unit,
+    onLeave: () -> Unit,
 ) {
     val r = p.result
     val say = rememberBusySay(R.string.common_load_wait)
@@ -399,6 +426,8 @@ private fun PreviewDialog(
         cancelEnabled = !p.writing,
     ) {
         BusyBack(p.writing, say)
+        // a tag linked to no spool, tapped with this preview open: the page behind the dialog is not seen
+        if (unlinkedTag) NoticeCard(NoticeKind.Warn, stringResource(R.string.printer_pick_tag_unlinked))
         if (r == null && p.problem == null && p.hubNotice == null) {
             SwProgress(null)
             Text(stringResource(R.string.common_checking), style = MaterialTheme.typography.bodyMedium)

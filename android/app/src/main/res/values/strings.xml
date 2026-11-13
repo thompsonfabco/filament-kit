@@ -2706,6 +2706,7 @@
     <string name="printer_no_status">No live status from the printer yet.</string>
     <string name="printer_pause">Pause</string>
     <string name="printer_pick_tag_hint">Or hold the spool\'s tag to the back of the phone.</string>
+    <string name="printer_pick_tag_unlinked">This tag is not linked to a spool yet. Search for the spool instead.</string>
     <!-- 1=printer 2=slot -->
     <string name="printer_pick_title">Load into %1$s, slot %2$s</string>
     <!-- 1=layer 2=layers 3=time 4=clock -->

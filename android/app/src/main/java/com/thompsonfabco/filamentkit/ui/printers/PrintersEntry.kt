@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.lifecycle.ViewModelProvider
 import com.thompsonfabco.filamentkit.session.AppViewModel
+import com.thompsonfabco.filamentkit.tags.TagEvents
 import com.thompsonfabco.filamentkit.ui.spool.LoadGate
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -99,14 +100,21 @@ fun PickSpoolEntry(currentApi: () -> Api, id: String, slot: String, onLoaded: (p
     val name = printer.state.collectAsState().value.printer?.name ?: PrinterTitles.name(id)
     // the app's load gate: the activity's AppViewModel is the one MainActivity holds (same class, same store)
     val context = LocalContext.current
-    val gate = remember(context) { context.componentActivity()?.let { ViewModelProvider(it)[AppViewModel::class.java].loadGate } ?: LoadGate() }
+    val gate = remember(context) { context.appLoadGate() }
     val vm = viewModel { PickSpoolViewModel(ApiPickBackend(currentApi), id, slot, gate) }
     // the pick screen sits directly on the printer's screen, so leaving is Back
     val back = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
     PickSpoolScreen(
         vm, name, slot, onLoaded = { confirmed -> onLoaded(name.orEmpty(), confirmed) }, onPairAgain = onPairAgain,
         onLeave = { back?.onBackPressed() },
+        onOpenTag = { TagEvents.emitWhenListening(it) },
     )
+}
+
+/** The app's load gate, the one MainActivity's [AppViewModel] holds; a screen outside the activity is a bug, not a private gate. */
+internal fun Context.appLoadGate(): LoadGate {
+    val activity = checkNotNull(componentActivity())
+    return ViewModelProvider(activity)[AppViewModel::class.java].loadGate
 }
 
 private fun Context.componentActivity(): ComponentActivity? {

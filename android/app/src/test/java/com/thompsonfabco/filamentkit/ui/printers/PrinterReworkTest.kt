@@ -37,8 +37,15 @@ import com.thompsonfabco.filamentkit.nav.PrinterSettingsRoute
 import com.thompsonfabco.filamentkit.nav.PrintersRoute
 import com.thompsonfabco.filamentkit.nav.Tab
 import com.thompsonfabco.filamentkit.nav.settingsOverPairing
+import com.thompsonfabco.filamentkit.tags.TagEvents
 import com.thompsonfabco.filamentkit.ui.spool.SpoolSummary
+import androidx.compose.ui.test.onAllNodesWithText
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
@@ -85,8 +92,13 @@ class PickSpoolViewModelTest {
         /** The spool each tag is linked to; a tag not in here is linked to none. */
         val tags = mutableMapOf<String, JsonObject>()
         var tagError: Exception? = null
+        /** The lookup of this tag waits here, and ignores being cancelled, so a late answer really arrives. */
+        val tagGates = mutableMapOf<String, CompletableDeferred<Unit>>()
         override suspend fun search(query: String, sealedOnly: Boolean): List<JsonObject> = emptyList()
         override suspend fun tag(uid: String): JsonObject? {
+            tagGates[uid]?.let { withContext(NonCancellable) { it.await() } }
+            // a real call that was cancelled does not return an answer
+            currentCoroutineContext().ensureActive()
             tagError?.let { throw it }
             return tags[uid]
         }
@@ -152,7 +164,7 @@ class PickSpoolViewModelTest {
         assertEquals(Problem.Unreachable, v.state.value.problem)
     }
 
-    @Test fun aTagTapWhileTheLoadIsWrittenIsIgnored() = runTest(dispatcher) {
+    @Test fun aTagTapWhileTheLoadIsWrittenIsHeldAndTheLastTapWins() = runTest(dispatcher) {
         fake.tags["4:77:90:e"] = spoolJson(7)
         fake.writeGate = CompletableDeferred()
         val v = vm()
@@ -161,8 +173,60 @@ class PickSpoolViewModelTest {
         v.onTag("4:77:90:e"); runCurrent()
         v.onTag("4:77:90:f"); runCurrent()
         assertEquals(1, v.state.value.preview!!.spool.id)
-        assertEquals(listOf(1 to true, 1 to false), fake.loads)
+        assertEquals("no lookup while the load is written", listOf(1 to true, 1 to false), fake.loads)
+        assertEquals("4:77:90:f", v.state.value.heldTag)
+        assertEquals("each tap says it is waiting", 2, v.state.value.tagWaits)
         assertNull("no message appears over the load being written", v.state.value.unlinkedTag)
+    }
+
+    @Test fun aHeldTagIsReadWhenTheLoadIsRefused() = runTest(dispatcher) {
+        fake.tags["4:77:90:e"] = spoolJson(7)
+        val open = CompletableDeferred<Unit>()
+        fake.writeGate = open
+        fake.writeError = ApiError(409, "printer_busy", "The printer is printing.")
+        val v = vm()
+        v.pick(spool(1)); runCurrent()
+        v.confirm(); runCurrent()
+        v.onTag("4:77:90:e"); runCurrent()
+        open.complete(Unit); runCurrent()
+        assertNull("used once", v.state.value.heldTag)
+        assertEquals("the tag's spool is picked as on any other tap", 7, v.state.value.preview!!.spool.id)
+    }
+
+    @Test fun aHeldTagIsLetGoWhenTheAnswerToTheLoadWasLost() = runTest(dispatcher) {
+        fake.tags["4:77:90:e"] = spoolJson(7)
+        val open = CompletableDeferred<Unit>()
+        fake.writeGate = open
+        fake.writeError = ApiError(0, "offline", "x")
+        val v = vm()
+        v.pick(spool(1)); runCurrent()
+        v.confirm(); runCurrent()
+        v.onTag("4:77:90:e"); runCurrent()
+        open.complete(Unit); runCurrent()
+        assertNull(v.state.value.heldTag)
+        assertEquals("the unknown load stays on screen", 1, v.state.value.preview!!.spool.id)
+        assertTrue(v.state.value.preview!!.dropped)
+    }
+
+    @Test fun aSlowTagLookupDoesNotReplaceALaterRowTap() = runTest(dispatcher) {
+        fake.tags["4:77:90:e"] = spoolJson(7)
+        val slow = CompletableDeferred<Unit>()
+        fake.tagGates["4:77:90:e"] = slow
+        val v = vm()
+        v.onTag("4:77:90:e"); runCurrent()
+        v.pick(spool(2)); runCurrent()
+        slow.complete(Unit); runCurrent()
+        assertEquals(2, v.state.value.preview!!.spool.id)
+        assertEquals(listOf(2 to true), fake.loads)
+    }
+
+    @Test fun aBadGatewayPageInAnswerToTheLoadIsUnknownToo() = runTest(dispatcher) {
+        fake.writeError = ApiError(502, "bad_response", "Bad Gateway")
+        val v = vm()
+        v.pick(spool(1)); runCurrent()
+        v.confirm(); runCurrent()
+        assertTrue("not the Hub speaking: nobody knows if it worked", v.state.value.preview!!.dropped)
+        assertEquals(Say.Words(R.string.spool_load_dropped), v.state.value.preview!!.problem)
     }
 
     @Test fun theLoadGateIsHeldWhileTheLoadIsWritten() = runTest(dispatcher) {
@@ -376,5 +440,126 @@ class PrinterShellPartsTest {
         }
         rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
         rule.waitForIdle()
+    }
+}
+
+/** The pick screen's wiring of tag taps (05-android-app 2.6, 9.6), in a real activity. */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [Build.VERSION_CODES.S])
+class PickSpoolScreenTapsTest {
+    @get:Rule val rule = createAndroidComposeRule<ComponentActivity>()
+
+    private class Backend : PickBackend {
+        val linked = buildJsonObject {
+            put("id", 7)
+            put("filament", buildJsonObject { put("name", "PolyTerra 7") })
+        }
+        var writeGate: CompletableDeferred<Unit>? = null
+        override suspend fun search(query: String, sealedOnly: Boolean): List<JsonObject> = emptyList()
+        override suspend fun tag(uid: String): JsonObject? = if (uid == "04:aa") linked else null
+        override suspend fun load(printerId: String, label: String, spoolId: Int, dryRun: Boolean): LoadResult {
+            if (!dryRun) writeGate?.await()
+            return LoadResult(slot = LoadSlot(label, 0, 0), nozzleMm = 0.4, confirmed = !dryRun)
+        }
+    }
+
+    private val backend = Backend()
+    private val opened = mutableListOf<String>()
+    private val loaded = mutableListOf<Boolean>()
+
+    private fun show(): PickSpoolViewModel {
+        val vm = PickSpoolViewModel(backend, "ABC123", "A4", LoadGate())
+        rule.setContent {
+            SpoolwardenTheme(Look.Console, Appearance.Light) {
+                val toast = remember { SwToastState() }
+                CompositionLocalProvider(LocalToast provides toast) {
+                    Box {
+                        PickSpoolScreen(
+                            vm, "Workshop X1", "A4", onLoaded = { loaded += it }, onPairAgain = {}, onOpenTag = { opened += it },
+                        )
+                        SwToastHost(toast)
+                    }
+                }
+            }
+        }
+        rule.waitForIdle()
+        return vm
+    }
+
+    private fun text(id: Int) = rule.activity.getString(id)
+
+    @Test fun aTagTapOnTheScreenPicksItsSpool() {
+        val vm = show()
+        TagEvents.emit("04:aa")
+        rule.waitForIdle()
+        assertEquals(7, vm.state.value.preview!!.spool.id)
+    }
+
+    @Test fun aTapOfAnUnlinkedTagSaysSoEvenWithThePreviewOpen() {
+        val vm = show()
+        TagEvents.emit("04:bb")
+        rule.waitForIdle()
+        rule.onNodeWithText(text(R.string.printer_pick_tag_unlinked)).assertExists()
+        TagEvents.emit("04:aa")
+        rule.waitForIdle()
+        assertNull("the preview of the linked tag is open", vm.state.value.unlinkedTag)
+        TagEvents.emit("04:bb")
+        rule.waitForIdle()
+        assertEquals("04:bb", vm.state.value.unlinkedTag)
+        assertNotNull(vm.state.value.preview)
+        // the dialog and the page both carry it: one of the two is behind the dialog's scrim
+        assertEquals(2, rule.onAllNodesWithText(text(R.string.printer_pick_tag_unlinked), useUnmergedTree = true).fetchSemanticsNodes().size)
+    }
+
+    @Test fun aTapDuringTheWriteSaysItWaitsAndOpensWhenTheLoadEnds() {
+        val open = CompletableDeferred<Unit>()
+        backend.writeGate = open
+        val vm = show()
+        vm.pick(SpoolSummary(1, "Example", "PolyTerra 1", "PLA", "2B2B2E", null, 620.0))
+        rule.waitForIdle()
+        vm.confirm()
+        rule.waitForIdle()
+        TagEvents.emit("04:cc")
+        rule.waitForIdle()
+        rule.onNodeWithText(text(R.string.tag_read_wait)).assertExists()
+        assertTrue("nothing opens while the load is written", opened.isEmpty())
+        open.complete(Unit)
+        rule.waitForIdle()
+        assertEquals(listOf(true), loaded)
+        assertEquals(listOf("04:cc"), opened)
+    }
+}
+
+/** A tap handed on to a screen that is not listening yet. */
+@OptIn(ExperimentalCoroutinesApi::class)
+class TagEventsHandOnTest {
+    @Test fun aHandedOnTapReachesTheNextListener() = runTest {
+        val got = mutableListOf<String>()
+        TagEvents.emitWhenListening("04:dd", this)
+        runCurrent()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { TagEvents.taps.collect { got += it } }
+        runCurrent()
+        assertEquals(listOf("04:dd"), got)
+    }
+
+    @Test fun aHandedOnTapComesAnywayWhenNobodyListens() = runTest {
+        val got = mutableListOf<String>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { TagEvents.taps.collect { got += it } }
+        runCurrent()
+        // the old listener never leaves: the wait is over after its time
+        TagEvents.emitWhenListening("04:ee", this, waitMs = 500)
+        advanceTimeBy(600); runCurrent()
+        assertEquals(listOf("04:ee"), got)
+    }
+}
+
+/** The load gate comes from the app's activity; there is no private one. */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [Build.VERSION_CODES.S])
+class LoadGateSourceTest {
+    @Test fun withoutTheAppsActivityTheGateIsAnError() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val e = runCatching { context.appLoadGate() }.exceptionOrNull()
+        assertTrue(e is IllegalStateException)
     }
 }
