@@ -56,7 +56,7 @@ SW.spinner(), E("span", "chip__word", t("job_title_backup")));
 const appearanceValue = document.documentElement.getAttribute("data-theme") || "system";
 const appearanceOptions = [["light", "sun", "appearance_light"], ["dark", "moon", "appearance_dark"], ["system", "half-circle", "appearance_system"]]
   .map(([value, icon, key]) => ({ value, icon, label: t(key) }));
-tools.append(jobChip, SW.lockChip(),
+tools.append(jobChip, SW_LOCK.lockChip(),
   SW.segmented({ legend: t("appearance_title"), legendSr: true, cls: "appearance", value: appearanceValue, options: appearanceOptions }),
   h("button", { class: "btn btn--ghost btn--icon appearance appearance--menu", type: "button",
     "aria-label": t("appearance_name", { choice: t("appearance_system") }) }, ic("half-circle")));
@@ -99,7 +99,7 @@ section("3 Lock and appearance",
   row(state("Lock chip: Locked, Unlocked, Trusted computer", row(lockDemo("locked", "lock", "lock_locked", "lock_hint_locked", "lock_name_locked"),
     lockDemo("unlocked", "lock-open", "lock_unlocked", "lock_hint_unlocked", "lock_name_unlocked"),
     lockDemo("trusted", "shield", "lock_trusted", "lock_hint_trusted", "lock_name_trusted"))),
-  state("Lock chip loading", (() => { const c = SW.lockChip({ loading: true }); return c; })()),
+  state("Lock chip loading", (() => { const c = SW_LOCK.lockChip({ loading: true }); return c; })()),
   state("Connection chip: Offline, Connecting", row(
     h("button", { class: "chip chip--connection", type: "button", "data-state": "offline", "aria-label": t("connection_name_offline") }, ic("wifi-off", "icon--s"), E("span", "chip__word", t("status_offline"))),
     h("button", { class: "chip chip--connection", type: "button", "data-state": "connecting", "aria-disabled": "true", "aria-label": t("connection_name_connecting") }, SW.spinner(), E("span", "chip__word", t("common_connecting")))))),

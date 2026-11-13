@@ -68,7 +68,7 @@ function whenOpen(el, paint) {
 }
 document.addEventListener("sw:lock", () => { for (const p of places) if (p.el.isConnected) p.paint(); else places.delete(p); });
 // Unlock to show: the unlock dialog as the chip opens it; the places then read by themselves
-const unlockToShow = () => SW.btn(SW.t("common_unlock_to_show"), { run: (e) => SW.unlock(null, null, null, e.currentTarget) });
+const unlockToShow = () => SW.btn(SW.t("common_unlock_to_show"), { run: (e) => SW_LOCK.unlock(null, null, null, e.currentTarget) });
 // the locked placeholder (`key`: its sentence) and the hidden-values note ("lock_hidden_note")
 const lockNote = (key) => h("div", { class: "banner banner--info banner--inline" }, SW.icon("lock", "icon--s"),
   h("p", { class: "banner__text" }, SW.t(key)), h("div", { class: "actions" }, unlockToShow()));
@@ -168,7 +168,7 @@ function topBar() {
     h("a", { class: "topbar__brand", href: "#overview" }, SW.h("svg", { class: "topbar__mark", "aria-hidden": "true", focusable: "false" }, SW.h("use", { href: "#i-spoolwarden" })),
       h("span", { class: "topbar__name" }, SW.t("app_name")), " ", hub),
     hubVersion,
-    h("div", { class: "topbar__tools" }, SW.lockChip({ loading: true }), appearanceControl(), appearanceButton()));
+    h("div", { class: "topbar__tools" }, SW_LOCK.lockChip({ loading: true }), appearanceControl(), appearanceButton()));
 }
 
 function navigation() {

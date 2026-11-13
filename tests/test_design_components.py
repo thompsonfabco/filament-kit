@@ -1,6 +1,6 @@
 """Checks of the shared component files of design step S0.11 (docs/design/09-implementation-order.md):
-web-shared/components.css and web-shared/components.js, and the additions components-jobs.css, components-media.css and
-components-media.js.
+web-shared/components.css and web-shared/components.js, and the additions components-jobs.css, components-media.css,
+components-media.js and components-lock.js (the Hub page's lock chip and unlock dialog).
 
 The size limits of foundations 12 rule 7, every class the script uses is drawn by the stylesheet, every catalogue key
 the script names is in strings/en.json, and the page audit (AUT-5, tests/page_audit.js) is a script that parses. The
@@ -25,6 +25,7 @@ CSS = SHARED / "components.css"
 JS = SHARED / "components.js"
 ADDITIONS = [SHARED / "components-jobs.css", SHARED / "components-media.css"]
 MEDIA_JS = SHARED / "components-media.js"
+LOCK_JS = SHARED / "components-lock.js"
 AUDIT = ROOT / "tests" / "page_audit.js"
 RUNNER = ROOT / "tests" / "run_page_audit.js"
 SAMPLE = ROOT / "tests" / "components-sample.html"
@@ -32,7 +33,7 @@ CATALOGUE = json.loads((ROOT / "strings" / "en.json").read_text(encoding="utf-8"
 
 # foundations 12 rule 7: "under 40 KB" and "under 60 KB", uncompressed, and each addition "at most 30 KB"; read as
 # thousands of bytes (the stricter reading)
-LIMITS = {CSS: 40_000, JS: 60_000, **{a: 30_000 for a in ADDITIONS + [MEDIA_JS]}}
+LIMITS = {CSS: 40_000, JS: 60_000, **{a: 30_000 for a in ADDITIONS + [MEDIA_JS, LOCK_JS]}}
 
 CLASS = r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:__[a-z0-9]+(?:-[a-z0-9]+)*)?(?:--[a-z0-9]+(?:-[a-z0-9]+)*)?"
 CLASS_TOKEN = re.compile(rf"^{CLASS}$")
@@ -94,14 +95,14 @@ def test_bare_marks_are_found():
 
 def test_every_class_of_the_script_is_drawn():
     css = "\n".join(p.read_text(encoding="utf-8") for p in [CSS] + ADDITIONS)
-    used = script_classes(JS.read_text(encoding="utf-8")) | script_classes(MEDIA_JS.read_text(encoding="utf-8"))
+    used = set().union(*(script_classes(p.read_text(encoding="utf-8")) for p in (JS, MEDIA_JS, LOCK_JS)))
     assert {"btn", "result", "dialog__title", "field__control", "coll__sort"} <= used
     missing = sorted(c for c in used if not css_has(c, css))
     assert not missing, "classes the script uses that the shared stylesheets do not draw: " + ", ".join(missing)
 
 
 def test_every_key_of_the_script_is_in_the_catalogue():
-    keys = script_keys(JS.read_text(encoding="utf-8"))
+    keys = set().union(*(script_keys(p.read_text(encoding="utf-8")) for p in (JS, MEDIA_JS, LOCK_JS)))
     assert {"common_close", "unlock_title", "status_needs_look", "form_saved_fields"} <= keys
     missing = sorted(k for k in keys if k not in CATALOGUE)
     assert not missing, "keys the script names that strings/en.json does not hold: " + ", ".join(missing)
@@ -125,12 +126,13 @@ def test_page_audit_and_sample_exist():
     assert "<script>" not in sample and " style=" not in sample        # no inline script or style (strict CSP)
     for src in ("../tokens/theme-init.js", "../tokens/tokens.css", "../web-shared/components.css", "../web-shared/components-jobs.css",
                 "../web-shared/components-media.css", "../strings/strings.js",
-                "../web-shared/components.js", "../web-shared/components-media.js", "components-sample.js"):
+                "../web-shared/components.js", "../web-shared/components-media.js", "../web-shared/components-lock.js",
+                "components-sample.js"):
         assert src in sample, src
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="no JavaScript parser (node) on this machine")
-@pytest.mark.parametrize("path", [AUDIT, RUNNER, JS, MEDIA_JS, ROOT / "tests" / "components-sample.js"], ids=lambda p: p.name)
+@pytest.mark.parametrize("path", [AUDIT, RUNNER, JS, MEDIA_JS, LOCK_JS, ROOT / "tests" / "components-sample.js"], ids=lambda p: p.name)
 def test_scripts_parse(path):
     r = subprocess.run(["node", "--check", str(path)], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
