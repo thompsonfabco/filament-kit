@@ -40,8 +40,6 @@ new MutationObserver(followAppearance).observe(document.documentElement, { attri
 
 function h(tag, props, ...kids) {
   const el = document.createElement(tag);
-  // the main button look (CON-9) for a button without a class; a tab keeps the tab bar's own look
-  if (tag === "button" && !(props && (props.class || props.role === "tab"))) el.className = "btn--primary";
   for (const [k, v] of Object.entries(props || {})) {
     if (v === undefined) continue;
     if (k === "on") for (const [ev, fn] of Object.entries(v)) el.addEventListener(ev, fn);
@@ -50,6 +48,8 @@ function h(tag, props, ...kids) {
     else if (k in el && k !== "list" && k !== "style") el[k] = v;
     else el.setAttribute(k, v);
   }
+  // the main button look (CON-9) for a button left without a class (checked after the props: class "" counts as none)
+  if (tag === "button" && !el.className) el.className = "btn--primary";
   for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid instanceof Node ? kid : String(kid));
   return el;
 }
@@ -87,7 +87,7 @@ const HIST_NUM = new Set(["net", "tare", "density", "nozzle", "bed", "price_per_
 const HIST_STATE = { detected: "as detected", revised_ai: "revised by AI", edited: "edited by hand" };
 function historyTab() {
   const box = h("div");
-  const el = h("section", { class: "hidden" }, h("h1", { textContent: "Intake history" }), box);
+  const el = h("section", { class: "hidden" }, box);
   const hp = (id, what) => `history/${encodeURIComponent(id)}${what ? "/" + what : ""}`;
   function photoImg(id, n) {
     const img = h("img", { src: `${BASE}/api/${hp(id, "photos/" + n)}`, alt: `Photo ${n}`, loading: "lazy", class: "thumb" });
@@ -176,26 +176,259 @@ function historyTab() {
   return { el, enter: load };
 }
 
-// ---------- tabs ----------
+// ---------- the shell (04 2 and 9): top bar, bottom bar (a rail on tablets), More, Settings; the places and their addresses ----------
 const PRINTERS = document.body.dataset.printers === "1";   // the printers module is on (printers.js is loaded)
 const HISTORY = document.body.dataset.history === "1";     // the kit's own page: the intake history is here
-const tabs = { add: addTab(), open: openTab(), presets: presetsTab(), ...(HISTORY ? { history: historyTab() } : {}),
-               ...(PRINTERS ? { printers: printersTab() } : {}) };
-const bar = h("nav", { class: "tabs", role: "tablist" });
-for (const [key, label] of [["add", "Add spools"], ["open", "Open spool"], ["presets", "Presets"],
-    ...(HISTORY ? [["history", "History"]] : []), ...(PRINTERS ? [["printers", "Printers"]] : [])]) {
-  bar.append(h("button", { textContent: label, dataset: { key }, role: "tab", on: { click: () => show(key) } }));
+const PRESETS = document.body.dataset.presets === "1";     // Slicer presets are on
+const PUSH = document.body.dataset.push === "1";           // print alerts can be offered
+const HUB = document.body.dataset.hub || "";               // the Hub's name; empty until the Hub reports one
+const HUB_PAGE = document.body.dataset.hubPage || "";      // the Hub page's address; absent on the public address
+const PRODUCT = SW.t("app_name");
+SW.configure({ lock: false, hub: HUB || PRODUCT });          // no lock in the web app: the home network is the gate (04 1.1)
+
+// a destination whose Feature is off, or that this address does not serve, opens a page that says so (04 6.10, 7.4)
+const hubLink = () => HUB_PAGE ? h("a", { class: "btn", href: HUB_PAGE }, SW.t("common_open_hub_page")) : null;
+const notice = (icon, title, text, link) => ({ el: h("section", { class: "hidden" }, SW.empty({ icon, title, text, actions: link ? hubLink() : null })) });
+const settingsPage = h("section", { class: "hidden" });    // Settings as a page, from 601 px (04 2.3)
+const tabs = {
+  add: addTab(),
+  spools: openTab(),
+  printers: PRINTERS ? printersTab() : notice("printer", SW.t("common_feature_off_title", { feature: SW.t("nav_printers") }), SW.t("common_feature_off_hint"), true),
+  recent: HISTORY ? historyTab() : notice("recent", SW.t("web_recent_public_title"), SW.t("web_recent_public_text", { product: PRODUCT })),
+  presets: PRESETS ? presetsTab() : notice("presets", SW.t("presets_off_title"), SW.t("presets_off_text"), true),
+  settings: { el: settingsPage, enter: () => settingsPage.replaceChildren(...settingsBody(true)), leave: () => settingsPage.replaceChildren() },
+};
+const PLACES = ["add", "spools", "printers", "recent", "presets"];    // what `spoolwarden.place` can hold
+const TITLES = { add: "web_add_title", spools: "nav_spools", printers: "nav_printers", recent: "nav_recently_added", presets: "nav_slicer_presets", settings: "nav_settings" };
+const ALIAS = { open: "spools", history: "recent" };                  // the old addresses, and the old `tab` values
+const PLACE_KEY = "spoolwarden.place";
+
+const pageTitle = h("h1", { class: "page-head__title", tabindex: "-1" });
+const page = h("section", { class: "page" }, h("header", { class: "page-head" }, h("div", { class: "page-head__text" }, pageTitle)),
+  ...Object.values(tabs).map((t) => t.el));
+let place = null, shellView = null;                          // the place on show; SW.shell's handle
+
+function storedPlace() {
+  let v = null;
+  try { v = localStorage.getItem(PLACE_KEY) || localStorage.getItem("tab"); } catch {}   // "tab" is the key before S3.3
+  v = ALIAS[v] || v;
+  return PLACES.includes(v) ? v : null;
 }
-app.append(bar, ...Object.values(tabs).map((t) => t.el));
 function show(key) {
-  for (const b of bar.children) { b.classList.toggle("on", b.dataset.key === key); b.setAttribute("aria-selected", String(b.dataset.key === key)); }
-  for (const [k, t] of Object.entries(tabs)) { t.el.classList.toggle("hidden", k !== key); (k === key ? t.enter : t.leave)?.(); }
-  try { localStorage.setItem("tab", key); } catch {}
+  if (key !== place) {
+    for (const [k, t] of Object.entries(tabs)) { t.el.classList.toggle("hidden", k !== key); (k === key ? t.enter : t.leave)?.(); }
+    window.scrollTo(0, 0);
+  }
+  place = key;
+  page.dataset.section = key;
+  pageTitle.textContent = SW.t(TITLES[key]);
+  if (key !== "settings") { try { localStorage.setItem(PLACE_KEY, key); } catch {} }   // #settings is never the stored place (04 2.4)
+  paintMore();
 }
-let first = "add";
-try { first = localStorage.getItem("tab") || "add"; } catch {}
-if (Object.hasOwn(tabs, location.hash.slice(1))) first = location.hash.slice(1);   // a link to a tab, e.g. the setup page's #printers
-show(tabs[first] ? first : "add");
+
+// ----- addresses (04 2.4): #<place>[/<more>]; #settings is a sheet over the place on phones and a page from 601 px -----
+function route(initial) {
+  const raw = location.hash.slice(1), head = raw.split(/[/?]/)[0], name = ALIAS[head] || head;
+  if (name !== head) history.replaceState(history.state, "", "#" + name + raw.slice(head.length));
+  if (name === "settings") {
+    if (SW.phone()) {
+      if (!place || place === "settings") show(storedPlace() || "add");
+      openSettings(initial);
+    } else { closeSettings(); show("settings"); }
+    return;
+  }
+  closeSettings();
+  if (PLACES.includes(name)) return show(name);
+  const keep = storedPlace() || "add";                       // no address, or one the page does not know: the last place
+  history.replaceState(history.state, "", "#" + keep);
+  show(keep);
+}
+
+// ----- sheets: Back closes them (04 2.4). More and the other sheets keep the address and push a same-address entry;
+// the Settings sheet is a place of its own, so its entry is the #settings one. -----
+const sheets = [];
+let settling = 0, settingsRec = null;
+function track(dlg, mode, direct) {
+  const rec = { dlg, mode, direct, popped: false };
+  sheets.push(rec);
+  dlg.addEventListener("close", () => {
+    sheets.splice(sheets.indexOf(rec), 1);
+    if (rec === settingsRec) settingsRec = null;
+    paintMore();
+    if (rec.popped) return;                                  // Back, or a link, already moved the address
+    if (direct) history.replaceState(history.state, "", "#" + place);   // #settings was the first entry: no page of ours to go back to
+    else { settling++; history.back(); }
+  });
+  return rec;
+}
+function openHere(dlg, opener, reuse) {                      // reuse: the entry of a sheet that just closed
+  if (!reuse) history.pushState({ sheet: true }, "", location.href);
+  const rec = track(dlg, "same");
+  SW.openModal(dlg, opener);
+  return rec;
+}
+window.addEventListener("popstate", () => {
+  if (settling) { settling--; return; }
+  const top = sheets[sheets.length - 1];
+  if (top) { top.popped = true; top.dlg.close(); }
+});
+function openSettings(direct) {
+  if (settingsRec) return;
+  const dlg = SW.sheet({ title: SW.t("nav_settings"), body: settingsBody(false) });
+  settingsRec = track(dlg, "address", direct);
+  SW.openModal(dlg, moreBtn);
+  paintMore();
+}
+function closeSettings() {
+  if (!settingsRec) return;
+  settingsRec.popped = true;
+  settingsRec.dlg.close();
+}
+// leaving a sheet for an address: the sheet's own history entry becomes that address
+function goFrom(rec, hash) {
+  rec.popped = true; rec.dlg._noReturn = true;
+  history.replaceState(null, "", hash);
+  rec.dlg.close();
+  route();
+  shellView.paint(true);
+}
+
+// ----- appearance (02 3.3, F5): the three choices on this device, applied at once and kept by the shared script -----
+const APPEARANCE = [["light", "sun"], ["dark", "moon"], ["system", "half-circle"]];
+const appearanceNow = () => { const v = document.documentElement.getAttribute("data-theme"); return v === "light" || v === "dark" ? v : "system"; };
+const appearanceControl = (o = {}) => SW.segmented({ legend: SW.t("appearance_title"), legendSr: true, cls: "appearance", value: appearanceNow(),
+  options: APPEARANCE.map(([value, icon]) => ({ value, icon, label: SW.t("appearance_" + value) })), ...o });
+function appearanceButton() {                               // the phone form: an icon button; SW.shell gives it its menu
+  const [v, icon] = APPEARANCE.find(([x]) => x === appearanceNow());
+  return h("button", { class: "btn btn--ghost btn--icon appearance appearance--menu", type: "button",
+    "aria-label": SW.t("appearance_name", { choice: SW.t("appearance_" + v) }) }, SW.icon(icon));
+}
+window.addEventListener("storage", (e) => {                 // another tab chose: follow it
+  if (e.key !== "spoolwarden.appearance" && e.key !== null) return;
+  const v = e.key === null ? null : e.newValue;
+  SW.setAppearance(v === "light" || v === "dark" ? v : "system");
+});
+
+// ----- the Settings sheet or page (04 9.2) -----
+const LOOKS = ["console", "workbench", "palette", "panes"];
+const installed = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+let installPrompt = null;                                    // a browser that offers installing (04 10.1)
+window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installPrompt = e; });
+function themePicker() {
+  const now = document.documentElement.getAttribute("data-look");
+  const fs = h("fieldset", { class: "theme-picker" }, h("legend", { class: "sr" }, SW.t("appearance_theme_title")));
+  for (const look of LOOKS) {
+    const line = SW.uid("look");
+    fs.append(h("label", { class: "theme-picker__tile" },
+      h("input", { class: "theme-picker__input", type: "radio", name: "look", value: look, checked: look === (LOOKS.includes(now) ? now : "console"), "aria-describedby": line }),
+      h("span", { class: "theme-picker__preview", "data-preview": look, "aria-hidden": "true" },
+        h("span", { class: "theme-picker__bar" }), h("span", { class: "theme-picker__nav" }), h("span", { class: "theme-picker__rows" })),
+      h("span", { class: "theme-picker__name" }, SW.t(`theme_${look}_name`)),
+      h("span", { class: "theme-picker__line", id: line }, SW.t(`theme_${look}_line`)),
+      SW.icon("check", "icon--s theme-picker__check")));
+  }
+  return fs;
+}
+// wide: Settings as a page, which also holds "Add to Home Screen" (the More sheet is not there)
+function settingsBody(wide) {
+  const group = (title, ...kids) => h("section", { class: "settings__group" }, h("h2", { class: "settings__title" }, title), ...kids);
+  const live = () => h("p", { class: "result", role: "status" });   // the choice's own sentence goes here (shared script)
+  const hubPageLink = () => HUB_PAGE ? h("a", { class: "btn", href: HUB_PAGE }, SW.t("common_open_hub_page")) : null;
+  return [h("div", { class: "settings" },
+    group(SW.t("appearance_title"), appearanceControl({ wide: true, name: null }), h("p", { class: "muted" }, SW.t("web_settings_saved")), live()),
+    group(SW.t("appearance_theme_title"), themePicker(), h("p", { class: "muted" }, SW.t("web_settings_theme_help")), live()),
+    PUSH && typeof alertsPanel === "function" ? group(SW.t("web_settings_alerts_title"), alertsPanel(() => installSheet())) : null,
+    group(SW.t("web_settings_this_hub"), HUB ? h("p", { class: "settings__hub" }, HUB) : null,
+      h("p", { class: "settings__address" }, location.origin + location.pathname), hubPageLink()),
+    wide && !installed() ? group(SW.t("web_more_home_screen"), h("p", { class: "muted" }, SW.t("web_more_home_screen_summary", { product: PRODUCT })),
+      h("p", {}, h("button", { class: "btn", type: "button", on: { click: (e) => addToHome(e.currentTarget) } }, installPrompt ? SW.t("web_more_install") : SW.t("web_more_home_screen")))) : null)];
+}
+function addToHome(opener) {
+  if (installPrompt) { installPrompt.prompt(); installPrompt = null; } else installSheet(opener);
+}
+function installSheet(opener, reuse) {                       // the steps for an iPhone (04 10.1)
+  const dlg = SW.sheet({ title: SW.t("web_install_title", { product: PRODUCT }),
+    body: [h("ol", { class: "install" }, [1, 2, 3].map((n) => h("li", {}, SW.t("web_install_step_" + n)))),
+      SW.banner({ kind: "info", text: SW.t("web_install_note"), inline: true })],
+    foot: SW.btn(SW.t("common_done"), { cls: "btn--primary", action: "done", run: () => dlg.close() }) });
+  openHere(dlg, opener, reuse);
+}
+
+// ----- More (04 9.1): Slicer presets, Settings, Add to Home Screen, Open the Hub page -----
+const moreBtn = h("button", { class: "nav__more", type: "button", "aria-haspopup": "dialog", "aria-expanded": "false" },
+  SW.icon("more", "nav__icon"), h("span", { class: "nav__label" }, SW.t("nav_more")), h("span", { class: "sr nav__more-current" }));
+function moreRow(icon, name, summary, props, run) {
+  return h(props.href ? "a" : "button", { class: "more__row", ...(props.href ? {} : { type: "button" }), ...props, on: run ? { click: run } : undefined },
+    SW.icon(icon, "more__icon"), h("span", { class: "more__name" }, name), summary ? h("span", { class: "more__summary" }, summary) : null,
+    SW.icon("chevron", "icon--s more__chevron"));
+}
+moreBtn.addEventListener("click", () => {
+  const cur = (k) => (place === k ? "page" : undefined);
+  const standalone = installed();
+  let rec = null;
+  const to = (hash) => (e) => { e.preventDefault(); goFrom(rec, hash); };
+  const rows = [
+    moreRow("presets", SW.t("nav_slicer_presets"), "", { href: "#presets", "aria-current": cur("presets"),
+      ...(PRESETS ? {} : { "data-state": "off", "aria-label": SW.t("nav_slicer_presets") + SW.t("nav_off_suffix") }) }, to("#presets")),
+    moreRow("settings", SW.t("nav_settings"), SW.t("web_more_settings_summary"), { href: "#settings" }, to("#settings")),
+    standalone ? null : moreRow("plus", SW.t(installPrompt ? "web_more_install" : "web_more_home_screen"), SW.t("web_more_home_screen_summary", { product: PRODUCT }), {},
+      () => { rec.popped = true; rec.dlg._noReturn = true; rec.dlg.close(); if (installPrompt) { installPrompt.prompt(); installPrompt = null; settling++; history.back(); } else installSheet(moreBtn, true); }),
+    HUB_PAGE ? moreRow("overview", SW.t("common_open_hub_page"), SW.t("web_more_hub_page_summary"),
+      { href: HUB_PAGE, ...(standalone ? { target: "_blank", rel: "noopener" } : {}) }) : null,
+  ];
+  const dlg = SW.sheet({ title: SW.t("nav_more"), bodyTag: "nav", bodyLabel: SW.t("nav_more_sections"), body: h("div", { class: "more" }, rows),
+    onClose: () => moreBtn.setAttribute("aria-expanded", "false") });
+  rec = openHere(dlg, moreBtn);
+  moreBtn.setAttribute("aria-expanded", "true");
+  const first = dlg.querySelector(".more__row");
+  if (first) first.focus();
+});
+function paintMore() {                                       // More is current while Slicer presets or the Settings sheet is
+  const key = settingsRec ? "settings" : place === "presets" ? "presets" : null, name = key ? SW.t(TITLES[key]) : "";
+  moreBtn.querySelector(".nav__more-current").textContent = key ? ", " + name : "";
+  if (key) { moreBtn.dataset.state = "current"; moreBtn.setAttribute("aria-label", SW.t("nav_more_current", { section: name })); }
+  else { delete moreBtn.dataset.state; moreBtn.removeAttribute("aria-label"); }
+}
+
+// ----- the frame: skip link, top bar, navigation, the page -----
+function topBar() {
+  const hub = HUB ? h("span", { class: "topbar__hub" }, h("span", { "aria-hidden": "true" }, "/"), " ", HUB) : null;
+  return h("header", { class: "topbar" },
+    h("div", { class: "topbar__brand" }, SW.h("svg", { class: "topbar__mark", "aria-hidden": "true", focusable: "false" }, SW.h("use", { href: "#i-spoolwarden" })),
+      h("span", { class: "topbar__name" }, PRODUCT), " ", hub),
+    h("div", { class: "topbar__tools" }, appearanceControl({ name: "appearance" }), appearanceButton()));
+}
+function navItem([key, name, icon], tab) {
+  const label = key === "recent"                             // the bar shows the short name; the full one is read (02 2.4)
+    ? h("span", { class: "nav__label" }, h("span", { class: "nav__label-full" }, SW.t("nav_recently_added")), h("span", { class: "nav__label-short", "aria-hidden": "true" }, SW.t("nav_recent")))
+    : h("span", { class: "nav__label" }, SW.t(name));
+  const a = h("a", { class: "nav__item", href: "#" + key }, SW.icon(icon, "nav__icon"), label);
+  if (tab) a.setAttribute("data-tab", "");
+  const off = key === "printers" && !PRINTERS ? SW.t("nav_printers_off") : key === "recent" && !HISTORY ? SW.t("nav_recent_public")
+    : key === "presets" && !PRESETS ? SW.t("nav_slicer_presets") + SW.t("nav_off_suffix") : null;
+  if (off) { a.dataset.state = "off"; a.setAttribute("aria-label", off); }   // dimmed, and the name says why (04 2.1)
+  return h("li", {}, a);
+}
+function navigation() {
+  const main = [["add", "nav_add", "plus"], ["spools", "nav_spools", "spool"], ["printers", "nav_printers", "printer"], ["recent", "nav_recent", "recent"]];
+  const rest = [["presets", "nav_slicer_presets", "presets"], ["settings", "nav_settings", "settings"]];   // in More on phones
+  return h("nav", { class: "nav", "aria-label": SW.t("nav_label") },
+    h("h2", { class: "nav__heading", id: "nav-main" }, SW.t("nav_everyday")), h("ul", { class: "nav__group", "aria-labelledby": "nav-main" }, main.map((i) => navItem(i, true))),
+    h("h2", { class: "nav__heading", id: "nav-rest" }, SW.t("nav_more")), h("ul", { class: "nav__group", "aria-labelledby": "nav-rest" }, rest.map((i) => navItem(i, false))));
+}
+{
+  const skip = h("a", { class: "skip", href: "#main" }, SW.t("shell_skip"));
+  const main = h("main", { class: "shell__main", id: "main", tabindex: "-1" }, page);
+  skip.addEventListener("click", (e) => { e.preventDefault(); main.focus(); });   // the address keeps the place
+  const nav = navigation();
+  app.replaceWith(skip, h("div", { class: "shell" }, topBar(), nav, main),
+    h("div", { class: "toasts", "aria-live": "polite" }), h("div", { class: "sr", id: "announcer", "aria-live": "polite" }));
+  route(true);
+  shellView = SW.shell({ hub: HUB || PRODUCT, home: "add", titleOf: (s) => SW.t(TITLES[ALIAS[s] || s] || TITLES[place]), onSection: () => route() });
+  nav.append(moreBtn);                                       // after SW.shell: this More has its own sheet
+  paintMore();
+  matchMedia("(max-width: 600px)").addEventListener("change", () => route());   // Settings: a sheet or a page
+}
 
 // ---------- Add spools ----------
 function addTab() {
@@ -228,7 +461,7 @@ function addTab() {
     h("label", { class: "filebtn wide" }, h("button", { textContent: "Take or choose photos", tabIndex: -1 }), picker),
     thumbs, hint, h("p", {}, readBtn), readBox] : [];
   const el = h("section", {},
-    h("h1", { textContent: "Add spools" }), byHand, ...photoPart, itemsBox, actBox);
+    byHand, ...photoPart, itemsBox, actBox);
   api("vendors").then((res) => {
     vendorTare = new Map(res.vendors.map((v) => [v.name.toLowerCase(), v.tare]));
     vendorList.replaceChildren(...res.vendors.map((v) => h("option", { value: v.name })));
@@ -392,7 +625,7 @@ function addTab() {
       checked = dry && !res.exit_code;
       if (!dry && !res.exit_code) {
         items = []; tag = null; readId = null; itemsBox.replaceChildren(); filBox.replaceChildren(); photos.splice(0).forEach((p) => URL.revokeObjectURL(p.url)); drawThumbs();
-        return [out(res), h("p", {}, h("button", { textContent: "Next: presets for new filaments", on: { click: () => show("presets") } }))];
+        return [out(res), h("p", {}, h("button", { textContent: "Next: presets for new filaments", on: { click: () => { location.hash = "#presets"; } } }))];
       }
       drawActions(out(res));
       return null;
@@ -421,7 +654,6 @@ function openTab() {
     actBox);
   for (const inp of [gross, loc, hum]) inp.addEventListener("input", () => { linkBtn.disabled = true; });
   const el = h("section", { class: "hidden" },
-    h("h1", { textContent: "Open a spool" }),
     h("p", { class: "muted", textContent: "Tap the spool's tag on a reader, pick the spool, weigh it (the station scale fills it in), link." }),
     tagBox, h("datalist", { id: "locs" }, ...[...new Set([...PICKS, ...LOCATIONS])].map((l) => h("option", { value: l }))),
     h("h2", { textContent: "Which spool?" }), h("div", { class: "row" }, q, h("button", { class: "fit", textContent: "Search", on: { click: find } })),
@@ -480,7 +712,6 @@ function presetsTab() {
   const genBox = h("div");
   const upBox = h("div");      // presets in the slicers that a newer build would change: shown, then accepted
   const el = h("section", { class: "hidden" },
-    h("h1", { textContent: "Slicer presets" }),
     h("p", { class: "muted", textContent: "New filaments need a preset line before a build covers them. The desktop installs a build by itself the next time the slicers are closed." }),
     box, h("p", {}, h("button", { textContent: "Build presets now", on: { click: build } })), genBox, upBox);
 

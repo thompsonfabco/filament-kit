@@ -70,6 +70,7 @@
     </plurals>
     <string name="nav_settings_update">Settings, update available</string>
     <string name="nav_printers_off">Printers, switched off on this Hub</string>
+    <string name="nav_recent_public">Recent, on the home address only</string>
     <string name="hub_chip_checking">Hub connection: checking</string>
     <!-- 1=hub 2=address -->
     <string name="hub_state_connected">Connected to %1$s at %2$s.</string>
@@ -2129,7 +2130,7 @@
     <string name="web_more_home_screen_summary">Open filament-kit like an app</string>
     <string name="web_more_hub_page_summary">Features, settings, backups</string>
     <string name="web_more_install">Install app</string>
-    <string name="web_more_presets_summary">Appearance, theme, print alerts</string>
+    <string name="web_more_settings_summary">Appearance, theme, print alerts</string>
     <!-- 1=count -->
     <plurals name="web_nav_add_waiting">
         <item quantity="one">Add, %1$d spool waiting</item>

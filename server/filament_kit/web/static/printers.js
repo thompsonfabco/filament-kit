@@ -3,7 +3,6 @@
 // Everything from the server goes in through textContent / element properties, never innerHTML.
 "use strict";
 function printersTab() {
-  const PUSH = document.body.dataset.push === "1";
   const API = BASE + "/api/printers";
   const HEX = /^[0-9A-Fa-f]{6}$/;
   let printers = [], current = null, es = null, lastStatus = null, camOn = false;
@@ -23,13 +22,12 @@ function printersTab() {
   const manualBox = h("div");     // Map by loading filament: outside mapBox, which loadMap redraws
   const msg = h("div");
   const conn = h("p", { class: "muted" });
-  const pushBox = h("div");
   const manageBox = h("div");     // Manage printers: add, rename, address, Access Code, certificate, forget
   const el = h("section", { class: "hidden" },
-    h("h1", { textContent: "Printers" }), picker, head, conn, alerts, controls, camBtn, camBox, msg,
+    picker, head, conn, alerts, controls, camBtn, camBox, msg,
     h("h2", { textContent: "Filament" }), units, slotMsg, loadBox,
     h("h2", { textContent: "Usage" }), usageBox,
-    h("h2", { textContent: "Slots" }), mapBox, reportBox, manualBox, pushBox,
+    h("h2", { textContent: "Slots" }), mapBox, reportBox, manualBox,
     h("h2", { textContent: "Manage printers" }), manageBox);
 
   async function pj(path, body) {
@@ -46,13 +44,13 @@ function printersTab() {
     manageClosed();
     if (!printers.length) { head.replaceChildren(h("p", { class: "muted", textContent: "No printer is set up on the server yet: add one under Manage printers." })); manage(); return; }
     let want = null;
-    try { want = localStorage.getItem("printer"); } catch {}
+    try { want = localStorage.getItem("spoolwarden.printer") || localStorage.getItem("printer"); } catch {}   // "printer" is the key before S3.3
     choose(printers.some((p) => p.id === want) ? want : printers[0].id);
   }
 
   function choose(id) {
     current = id; picker.value = id;
-    try { localStorage.setItem("printer", id); } catch {}
+    try { localStorage.setItem("spoolwarden.printer", id); } catch {}
     camera(false); camBtn.classList.toggle("hidden", !camKind()); closeLoad(); slotMsg.replaceChildren();
     stream(); loadUsage(); loadMap(); manualStop(); manualBox.replaceChildren(); clearReport();
   }
@@ -529,42 +527,6 @@ function printersTab() {
     loadMap();
   }
 
-  // ----- Web Push (only when the server has web.push on) -----
-  function pushUi() {
-    if (!PUSH) return;
-    const ok = "serviceWorker" in navigator && "PushManager" in window;
-    pushBox.replaceChildren(h("h2", { textContent: "Alerts" }), ok
-      ? h("div", { class: "row" },
-        h("button", { class: "secondary", textContent: "Notify this phone", on: { click: subscribe } }),
-        h("button", { class: "secondary", textContent: "Stop", on: { click: unsubscribe } }),
-        h("button", { class: "secondary", textContent: "Test", on: { click: () => pj("push/test", {}).then(() => say("Sent.", true), (e) => say(e.message, false)) } }))
-      : h("p", { class: "muted", textContent: "This browser cannot receive push alerts (on iPhone, add the app to the home screen first)." }));
-  }
-  function b64(s) {
-    const pad = "=".repeat((4 - (s.length % 4)) % 4);
-    const raw = atob((s + pad).replace(/-/g, "+").replace(/_/g, "/"));
-    return Uint8Array.from(raw, (c) => c.charCodeAt(0));
-  }
-  async function subscribe() {
-    try {
-      if ((await Notification.requestPermission()) !== "granted") throw new Error("Notifications are blocked for this site.");
-      const reg = await navigator.serviceWorker.register(BASE + "/sw.js");
-      await navigator.serviceWorker.ready;
-      const key = (await pj("push/key")).key;
-      const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64(key) });
-      await pj("push/subscribe", { subscription: sub.toJSON() });
-      say("This phone will get print alerts.", true);
-    } catch (e) { say(e.message, false); }
-  }
-  async function unsubscribe() {
-    try {
-      const reg = await navigator.serviceWorker.getRegistration(BASE + "/");
-      const sub = reg && (await reg.pushManager.getSubscription());
-      if (sub) { await pj("push/unsubscribe", { endpoint: sub.endpoint }); await sub.unsubscribe(); }
-      say("Alerts off for this phone.", true);
-    } catch (e) { say(e.message, false); }
-  }
-
   document.addEventListener("visibilitychange", () => {
     if (el.classList.contains("hidden")) return;
     if (document.hidden) { stopStream(); camera(false); } else if (current) stream();
@@ -572,7 +534,63 @@ function printersTab() {
   let loaded = false;
   return {
     el,
-    enter() { if (!loaded) { loaded = true; pushUi(); load(); } else if (current) { stream(); loadUsage(); loadMap(); } },
+    enter() { if (!loaded) { loaded = true; load(); } else if (current) { stream(); loadUsage(); loadMap(); } },
     leave() { stopStream(); camera(false); clearTimeout(mapTimer); closeLoad(); },
   };
+}
+
+// ----- Print alerts on this phone (04 9.2): the group of the Settings sheet; the Hub's push/key, push/subscribe,
+// push/unsubscribe and push/test, as when it was on the Printers tab. Called by app.js only when print alerts are offered. -----
+function alertsPanel(addToHome) {
+  const ok = "serviceWorker" in navigator && "PushManager" in window;
+  const pj = (path, body) => api("printers/" + path, body === undefined ? {} : { method: "POST", body });
+  const said = (e) => Object.assign(e, { text: () => e.message });          // SW.toggle and SW.result show err.text()
+  const line = h("p", { class: "alerts__state" });
+  const testBox = h("p", { class: "result", role: "status" });
+  const setState = (word, text) => line.replaceChildren(SW.status(word, text ? { text } : {}));
+  const b64 = (s) => {
+    const pad = "=".repeat((4 - (s.length % 4)) % 4);
+    const raw = atob((s + pad).replace(/-/g, "+").replace(/_/g, "/"));
+    return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+  };
+  async function subscribe() {
+    if ((await Notification.requestPermission()) !== "granted") { paint(false); throw said(new Error(SW.t("web_settings_alerts_blocked"))); }
+    const reg = await navigator.serviceWorker.register(BASE + "/sw.js");
+    await navigator.serviceWorker.ready;
+    const key = (await pj("push/key")).key;
+    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64(key) });
+    await pj("push/subscribe", { subscription: sub.toJSON() });
+  }
+  async function unsubscribe() {
+    const reg = await navigator.serviceWorker.getRegistration(BASE + "/");
+    const sub = reg && (await reg.pushManager.getSubscription());
+    if (sub) { await pj("push/unsubscribe", { endpoint: sub.endpoint }); await sub.unsubscribe(); }
+  }
+  function paint(on) {
+    if (!ok) setState("note", SW.t("web_settings_alerts_unsupported", { product: SW.t("app_name") }));
+    else if (window.Notification && Notification.permission === "denied") setState("needs_look", SW.t("web_settings_alerts_blocked"));
+    else if (on) setState("on", SW.t("web_settings_alerts_on"));
+    else setState("off");
+  }
+  paint(false);
+  if (!ok) {                                                  // an iPhone in the browser: the way to a Home Screen app (04 10.1)
+    return h("div", { class: "alerts" }, line, addToHome ? SW.btn(SW.t("web_more_home_screen"), { run: addToHome, action: "home" }) : null);
+  }
+  const makeToggle = (checked) => SW.toggle({ label: SW.t("web_settings_alerts_toggle"), checked,
+    apply: async (on) => {
+      try { if (on) await subscribe(); else await unsubscribe(); } catch (e) { paint(!on); throw said(e); }
+      paint(on);
+      return on ? SW.t("web_settings_alerts_on") : SW.t("status_off");
+    } });
+  const slot = h("div", {}, makeToggle(false));
+  navigator.serviceWorker.getRegistration(BASE + "/").then((reg) => reg && reg.pushManager.getSubscription()).then((sub) => {
+    if (sub) { slot.replaceChildren(makeToggle(true)); paint(true); }     // this phone is already subscribed
+  }).catch(() => {});
+  const test = SW.btn(SW.t("web_settings_alerts_test"), { action: "test", run: async () => {
+    SW.busy(test, SW.t("common_working"));
+    try { await pj("push/test", {}); SW.result(testBox, "ok", SW.t("web_settings_alerts_sent")); }
+    catch (e) { SW.result(testBox, "bad", e.message); }
+    finally { SW.idle(test); }
+  } });
+  return h("div", { class: "alerts" }, line, slot, test, testBox);
 }
