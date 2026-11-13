@@ -376,6 +376,10 @@ def test_what_ffmpeg_sends_just_before_it_closes_reaches_the_printer(tmp_path, w
         assert seen["got"] == frames
 
 
+# Windows throws away what a peer sent just before its reset unless a read was already waiting for it (a read 1 ms
+# late got the TEARDOWN 0 times in 50 there), so this was flaky on a loaded Windows box; Linux keeps it readable, which
+# the relay relies on (_pump.cli_ended) and the next test pins. The server runs on Linux.
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows drops data sent just before a reset; the server runs on Linux")
 def test_teardown_reaches_the_printer_when_ffmpeg_closes_with_unread_video(tmp_path):
     """The ordinary stop: video is flowing, so ffmpeg's socket holds unread bytes and its close is a reset."""
     video = b"$\x00\x40\x00" + b"v" * 0x4000
@@ -427,6 +431,33 @@ def test_teardown_reaches_the_printer_when_ffmpeg_closes_with_unread_video(tmp_p
             relay.stop()
             srv.close()
         assert b"TEARDOWN" in seen.get("after", b""), round_no
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows drops data sent just before a reset; the server runs on Linux")
+def test_what_a_peer_sent_before_its_reset_stays_readable():
+    """What the relay counts on when ffmpeg stops while video flows (_pump.cli_ended): its close is a reset, and the
+    TEARDOWN it sent first must still be readable afterwards, however late the relay's thread gets to it."""
+    srv = socket.socket()
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(1)
+    cli = socket.create_connection(srv.getsockname())
+    conn, _ = srv.accept()
+    try:
+        conn.sendall(b"v" * 0x4000)                  # unread by cli: its close is a reset
+        time.sleep(0.05)
+        cli.sendall(b"TEARDOWN rtsp://127.0.0.1/streaming/live/1 RTSP/1.0\r\nCSeq: 9\r\n\r\n")
+        cli.close()
+        time.sleep(0.2)                              # the relay's thread is late
+        got = b""
+        try:
+            while d := conn.recv(65536):
+                got += d
+        except ConnectionResetError:
+            pass
+        assert got.startswith(b"TEARDOWN ")
+    finally:
+        conn.close()
+        srv.close()
 
 
 def test_for_printer_holds_a_part_message_back():
