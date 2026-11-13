@@ -33,15 +33,10 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/PresetUpdates.kt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/PresetsCard.kt | pc sync | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/PresetsCard.kt | presets | 2 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/PresetsCard.kt | setup page | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/ManualMap.kt | the server | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterEdit.kt | module | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterEdit.kt | the kit | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterEdit.kt | the server | 2 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterNotices.kt | the server | 2 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | presets | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterViewModel.kt | the server | 6 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersViewModel.kt | module | 2 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/SlotMapHelp.kt | the server | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/update/ApkInstaller.kt | filament-kit | 1 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 android/app/src/main/java/com/thompsonfabco/filamentkit/update/UpdateTexts.kt | filament-kit | 2 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
 server/filament_kit/setup_static/setup.js | "station" | 2 | today's string, route, key or identifier; reviewed when the file moves to the string catalogue; S7.2 removes the last
@@ -105,4 +100,4 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/spool/SpoolModel.kt |
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/AddViewModel.kt | color | 3 | wire identifier (the item key `color_hex`), never shown (S4.7)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/PreviewScreen.kt | color | 1 | wire identifier (the item key `color_hex`), never shown (S4.7)
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/add/SpoolPanel.kt | color | 6 | wire identifier (the item key `color_hex`), never shown (S4.7)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersEntry.kt | color | Hub identifier (field name), not text
+android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrintersEntry.kt | color | 1 | Hub identifier (field name), not text

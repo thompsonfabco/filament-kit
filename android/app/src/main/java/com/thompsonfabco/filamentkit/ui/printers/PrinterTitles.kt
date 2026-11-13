@@ -36,6 +36,6 @@ internal fun printerPlaceTitle(destination: NavDestination?, entry: NavBackStack
     destination == null -> null
     destination.hasRoute(PrinterRoute::class) -> entry?.toRoute<PrinterRoute>()?.id?.let { PrinterTitles.name(it) }
     destination.hasRoute(PrinterSettingsRoute::class) -> stringResource(R.string.printer_settings_title)
-    destination.hasRoute(PrinterMapRoute::class) -> stringResource(R.string.printer_map_by_loading)
+    destination.hasRoute(PrinterMapRoute::class) -> stringResource(R.string.printers_map_loading)
     else -> null
 }

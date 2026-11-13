@@ -227,7 +227,7 @@ private fun Overflow(onSettings: () -> Unit, onReport: () -> Unit, onRefresh: ()
         SwMenu(open, { open = false }) {
             SwMenuItem(stringResource(R.string.printer_settings_title), { open = false; onSettings() }, icon = R.drawable.sw_ic_settings)
             SwMenuItem(
-                stringResource(R.string.printer_report_collect), { open = false; onReport() }, icon = R.drawable.sw_ic_download,
+                stringResource(R.string.printers_collect_report), { open = false; onReport() }, icon = R.drawable.sw_ic_download,
                 enabled = reportEnabled,
             )
             SwMenuItem(stringResource(R.string.common_refresh), { open = false; onRefresh() }, icon = R.drawable.sw_ic_refresh)
@@ -362,7 +362,7 @@ private fun Controls(printer: Printer, state: PrinterUiState, viewModel: Printer
             }
         }
         when {
-            printer.state != "connected" -> Reason(R.string.printer_available_connected)
+            printer.state != "connected" -> Reason(R.string.slot_load_disabled)
             state.commandBusy -> Reason(R.string.printer_waiting)
         }
     }
@@ -482,7 +482,7 @@ private const val NOT_SAVED = Int.MIN_VALUE
 @Composable
 private fun SlotsPanel(printer: Printer, state: PrinterUiState, onSlot: (AmsSlot) -> Unit) {
     val units = state.status?.ams.orEmpty()
-    PrinterPanel(title = stringResource(R.string.printer_slots_title), padded = false) {
+    PrinterPanel(title = stringResource(R.string.printers_col_slots), padded = false) {
         if (units.isEmpty()) {
             Text(
                 stringResource(R.string.spool_load_no_slots), Modifier.padding(SpoolwardenTheme.space.s4),
@@ -515,7 +515,7 @@ private fun SlotRow(slot: AmsSlot, onClick: () -> Unit) {
     val spool = slot.spool
     val material = slot.type.ifBlank { spool?.material.orEmpty() }
     val headline = if (empty) {
-        stringResource(R.string.printers_slot_empty)
+        stringResource(R.string.common_empty)
     } else {
         listOfNotNull(material.ifBlank { null }, spool?.name?.ifBlank { null }).joinToString(SEPARATOR)
     }
@@ -537,7 +537,7 @@ private fun SlotRow(slot: AmsSlot, onClick: () -> Unit) {
             if (left != null) Text(left, color = colors.muted, style = SpoolwardenTheme.type.dataSmall)
         }
         if (slot.active) {
-            Text(stringResource(R.string.printer_slot_in_use), color = colors.accentText, style = MaterialTheme.typography.labelMedium)
+            Text(stringResource(R.string.slot_in_use), color = colors.accentText, style = MaterialTheme.typography.labelMedium)
         }
         SwIcon(R.drawable.sw_ic_chevron, null, tint = colors.muted)
     }
@@ -583,7 +583,7 @@ private fun SlotSheet(
                     }
                     SwButton(stringResource(R.string.printer_slot_open_spool), { onOpenSpool(spool) }, Modifier.fillMaxWidth(), kind = SwButtonKind.Main)
                     SwButton(
-                        stringResource(R.string.printer_slot_unload), onUnload, Modifier.fillMaxWidth(),
+                        stringResource(R.string.common_unload), onUnload, Modifier.fillMaxWidth(),
                         enabled = state.slotBusy == null && !state.unloading, busy = state.slotBusy == slot.label,
                     )
                 }
@@ -594,7 +594,7 @@ private fun SlotSheet(
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     SwButton(stringResource(R.string.printer_slot_load), onLoad, Modifier.fillMaxWidth(), kind = SwButtonKind.Main, enabled = connected)
-                    if (!connected) Reason(R.string.printer_available_connected)
+                    if (!connected) Reason(R.string.slot_load_disabled)
                 }
             }
             state.slotNote?.takeIf { !it.ok }?.let { ResultLine(it) }
@@ -609,7 +609,7 @@ private fun UnloadDialog(ask: UnloadAsk, state: PrinterUiState, viewModel: Print
         title = stringResource(R.string.printer_unload_title, ask.label),
         onClose = { if (state.unloading) say() else viewModel.cancelUnload() },
         confirm = SwDialogButton(
-            stringResource(R.string.printer_slot_unload), viewModel::confirmUnload, kind = SwButtonKind.Main, busy = state.unloading,
+            stringResource(R.string.common_unload), viewModel::confirmUnload, kind = SwButtonKind.Main, busy = state.unloading,
         ),
         cancel = SwAction(stringResource(R.string.common_cancel), viewModel::cancelUnload),
         cancelEnabled = !state.unloading,
@@ -681,7 +681,7 @@ private fun MappingPanel(
                 )
             }
             SwButton(
-                stringResource(R.string.printer_map_by_loading), onMapByLoading,
+                stringResource(R.string.printers_map_loading), onMapByLoading,
                 kind = if (main == MainButton.MapByLoading) SwButtonKind.Main else SwButtonKind.Plain, enabled = manualEnabled,
             )
         }
@@ -696,7 +696,7 @@ private fun CollectReport(s: ToolsUiState, tools: PrinterToolsViewModel, filled:
     val space = SpoolwardenTheme.space
     ReportHelp.why(s.map)?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
     SwButton(
-        stringResource(if (s.reportBusy) R.string.printer_report_collecting else R.string.printer_report_collect),
+        stringResource(if (s.reportBusy) R.string.printer_report_collecting else R.string.printers_collect_report),
         tools::collectReport,
         kind = if (filled) SwButtonKind.Main else SwButtonKind.Plain, enabled = !s.reportBusy,
     )
@@ -716,14 +716,14 @@ private fun CollectReport(s: ToolsUiState, tools: PrinterToolsViewModel, filled:
 private fun MapDialog(printer: Printer, s: ToolsUiState, tools: PrinterToolsViewModel) {
     val say = rememberBusySay()
     SwDialog(
-        title = stringResource(R.string.printer_map_dialog_title, printer.name),
+        title = stringResource(R.string.printers_map_title, printer.name),
         onClose = { if (s.mapBusy) say() else tools.cancelMap() },
-        confirm = SwDialogButton(stringResource(R.string.printer_map_slots), tools::confirmMap, kind = SwButtonKind.Main, busy = s.mapBusy),
+        confirm = SwDialogButton(stringResource(R.string.printers_map_slots), tools::confirmMap, kind = SwButtonKind.Main, busy = s.mapBusy),
         cancel = SwAction(stringResource(R.string.common_cancel), tools::cancelMap),
         cancelEnabled = !s.mapBusy,
     ) {
         BusyBack(s.mapBusy, say)
-        Text(stringResource(R.string.printer_map_dialog_body), style = MaterialTheme.typography.bodyMedium)
+        Text(stringResource(R.string.printers_map_body), style = MaterialTheme.typography.bodyMedium)
     }
 }
 

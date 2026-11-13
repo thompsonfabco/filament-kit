@@ -182,8 +182,8 @@ class PrinterReworkRulesTest {
 
     @Test fun theAccessCodeRowSaysNotSetUntilThePrinterHasOne() {
         val p = Printer(id = "A", name = "Workshop X1", serial = "A", configured = true)
-        assertEquals(R.string.printer_set_value_set, accessCodeValue(p))
-        assertEquals(R.string.printer_set_value_not_set, accessCodeValue(p.copy(configured = false)))
+        assertEquals(R.string.status_set, accessCodeValue(p))
+        assertEquals(R.string.status_not_set, accessCodeValue(p.copy(configured = false)))
     }
 }
 
@@ -227,7 +227,7 @@ class PrinterShellPartsTest {
         title().assertTextEquals("title:" + rule.activity.getString(R.string.printer_settings_title))
         rule.runOnUiThread { nav.navigate(PrinterMapRoute("A1")) }
         rule.waitForIdle()
-        title().assertTextEquals("title:" + rule.activity.getString(R.string.printer_map_by_loading))
+        title().assertTextEquals("title:" + rule.activity.getString(R.string.printers_map_loading))
         rule.runOnUiThread { nav.navigate(PrinterPickRoute("A1", "A4")) }
         rule.waitForIdle()
         title().assertTextEquals("title:none")

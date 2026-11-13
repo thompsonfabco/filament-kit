@@ -211,7 +211,6 @@ import com.thompsonfabco.filamentkit.ui.printers.PickSpoolEntry
 import com.thompsonfabco.filamentkit.ui.printers.PrinterEntry
 import com.thompsonfabco.filamentkit.ui.printers.PrinterSettingsEntry
 import com.thompsonfabco.filamentkit.ui.printers.printerPlaceTitle
-import com.thompsonfabco.filamentkit.ui.printers.slotSpoolJson
 import com.thompsonfabco.filamentkit.ui.printers.PrintersListEntry
 import com.thompsonfabco.filamentkit.ui.profile.AddProfileScreen
 import com.thompsonfabco.filamentkit.ui.profile.AddProfileViewModel
@@ -1030,8 +1029,7 @@ private fun FilamentKitApp(app: AppViewModel, paired: Boolean, appearance: Appea
                             onOpenSettings = { nav.navigate(PrinterSettingsRoute(id)) },
                             onMapByLoading = { nav.navigate(PrinterMapRoute(id)) },
                             onPickSlot = { nav.navigate(PrinterPickRoute(id, it)) },
-                            // the spool card opens over the printer until the spool has a screen of its own (7.2)
-                            onOpenSpool = { sp -> spoolVm?.open(slotSpoolJson(sp)) },
+                            onOpenSpool = { sp -> sp.id?.let { nav.navigate(SpoolRoute(it)) } },
                         )
                     }
 

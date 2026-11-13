@@ -153,7 +153,7 @@ class SlotMapHelpTest {
         assertFalse(SlotMapHelp.canStart("connected", printing = true))
         assertFalse(SlotMapHelp.canStart("offline", printing = false))
         assertEquals(R.string.printer_available_idle, SlotMapHelp.blockedReason("connected", printing = true))
-        assertEquals(R.string.printer_available_connected, SlotMapHelp.blockedReason("offline", printing = false))
+        assertEquals(R.string.slot_load_disabled, SlotMapHelp.blockedReason("offline", printing = false))
         assertNull(SlotMapHelp.blockedReason("connected", printing = false))
     }
 
@@ -173,8 +173,8 @@ class SlotMapHelpTest {
     }
 
     @Test fun theButtonSaysAgainOnceAResultExists() {
-        assertEquals(R.string.printer_map_slots, SlotMapHelp.buttonLabel(null))
-        assertEquals(R.string.printer_map_slots, SlotMapHelp.buttonLabel(MapStatus(state = "none")))
+        assertEquals(R.string.printers_map_slots, SlotMapHelp.buttonLabel(null))
+        assertEquals(R.string.printers_map_slots, SlotMapHelp.buttonLabel(MapStatus(state = "none")))
         assertEquals(R.string.printer_map_slots_again, SlotMapHelp.buttonLabel(MapStatus(state = "done")))
         assertEquals(R.string.printer_map_slots_again, SlotMapHelp.buttonLabel(MapStatus(state = "failed")))
     }

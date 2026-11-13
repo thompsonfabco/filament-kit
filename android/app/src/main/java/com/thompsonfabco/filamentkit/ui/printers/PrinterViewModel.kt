@@ -432,7 +432,7 @@ class PrinterViewModel(
                     "stop" -> R.string.printer_result_stopped
                     "light_on" -> R.string.printer_result_light_on
                     "light_off" -> R.string.printer_result_light_off
-                    else -> R.string.common_ok
+                    else -> R.string.status_ok
                 }
                 return Note(Say.Words(done))
             }

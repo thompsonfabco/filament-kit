@@ -96,8 +96,7 @@ fun PrintersScreen(
     val toast = LocalToast.current
     val scope = rememberCoroutineScope()
     val addedText = state.added?.let { stringResource(R.string.printers_added, it) }
-        ?: state.replaced?.let { stringResource(R.string.printer_set_code_done, it) }
-    LaunchedEffect(state.added, state.replaced) {
+    LaunchedEffect(state.added) {
         if (addedText != null) {
             viewModel.addedShown()
             scope.launch { toast?.show(addedText) }
@@ -353,20 +352,10 @@ private fun AddBambuDialog(d: AddDialog, onPairAgain: () -> Unit, viewModel: Pri
         stringResource(R.string.printer_list_model_bambu, d.model)
     }
     SwDialog(
-        title = if (d.rekey) {
-            stringResource(R.string.printers_access_code_title, d.printerName)
-        } else {
-            stringResource(R.string.printer_add_title, model)
-        },
+        title = stringResource(R.string.printer_add_title, model),
         onClose = { if (!d.busy) viewModel.cancelAdd() },
         confirm = SwDialogButton(
-            label = stringResource(
-                when {
-                    d.busy -> busyWords
-                    d.rekey -> R.string.printers_replace_access_code
-                    else -> R.string.common_add_printer
-                },
-            ),
+            label = stringResource(if (d.busy) R.string.printer_add_connecting else R.string.common_add_printer),
             onClick = { viewModel.submitAdd(code, name) },
             kind = SwButtonKind.Main,
             enabled = code.isNotBlank(),
@@ -382,12 +371,10 @@ private fun AddBambuDialog(d: AddDialog, onPairAgain: () -> Unit, viewModel: Pri
             hint = stringResource(R.string.common_hint_access_code),
             error = if (d.codeMissing) stringResource(R.string.common_error_access_code) else null,
         )
-        if (!d.rekey) {
-            FormField(
-                name, { name = it }, stringResource(R.string.common_field_name_optional), enabled = !d.busy,
-                placeholder = stringResource(R.string.printer_add_name_placeholder),
-            )
-        }
+        FormField(
+            name, { name = it }, stringResource(R.string.common_field_name_optional), enabled = !d.busy,
+            placeholder = stringResource(R.string.printer_add_name_placeholder),
+        )
         d.problem?.let { ProblemNotice(it, onPairAgain) }
         if (d.busy) BusyReason(R.string.printers_add_wait)
     }

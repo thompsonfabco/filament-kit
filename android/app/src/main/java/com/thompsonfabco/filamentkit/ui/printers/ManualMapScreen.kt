@@ -99,7 +99,7 @@ fun ManualMapScreen(viewModel: ManualMapViewModel, printerName: String?, onBack:
                     if (m.dualNozzle && !seen.nozzleReported) {
                         Text(stringResource(R.string.printer_mbl_which_nozzle), style = MaterialTheme.typography.bodyMedium)
                         Row(horizontalArrangement = Arrangement.spacedBy(space.s2)) {
-                            listOf("left" to R.string.printer_mbl_left_nozzle, "right" to R.string.printer_mbl_right_nozzle)
+                            listOf("left" to R.string.printers_load_nozzle_left, "right" to R.string.printers_load_nozzle_right)
                                 .forEach { (n, label) ->
                                     FilterChip(
                                         modifier = Modifier.heightIn(min = SpoolwardenTheme.sizes.row), selected = s.nozzle == n, onClick = { viewModel.chooseNozzle(n) },
@@ -127,7 +127,7 @@ fun ManualMapScreen(viewModel: ManualMapViewModel, printerName: String?, onBack:
                     stringResource(R.string.printer_mbl_skip, step.position.label), viewModel::skip,
                     kind = SwButtonKind.Quiet, enabled = !s.busy,
                 )
-                SwButton(stringResource(R.string.printer_mbl_stop), viewModel::askStop, kind = SwButtonKind.Quiet, enabled = !s.busy)
+                SwButton(stringResource(R.string.common_stop), viewModel::askStop, kind = SwButtonKind.Quiet, enabled = !s.busy)
             }
         }
         if (s.lost) NoticeCard(NoticeKind.Info, stringResource(R.string.printer_mbl_lost))
@@ -135,16 +135,16 @@ fun ManualMapScreen(viewModel: ManualMapViewModel, printerName: String?, onBack:
         if (!m.open) {
             Text(m.summary, style = MaterialTheme.typography.bodyLarge)
             if (m.offerReport) {
-                Text(stringResource(R.string.printer_mbl_share), style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.printers_load_offer), style = MaterialTheme.typography.bodyMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(space.s2)) {
                     SwButton(stringResource(R.string.printer_mbl_share_yes), { viewModel.offer(true) }, enabled = !s.busy)
-                    SwButton(stringResource(R.string.printer_mbl_share_no), { viewModel.offer(false) }, kind = SwButtonKind.Quiet, enabled = !s.busy)
+                    SwButton(stringResource(R.string.printers_load_offer_no), { viewModel.offer(false) }, kind = SwButtonKind.Quiet, enabled = !s.busy)
                 }
             }
             s.note?.let { NoticeCard(NoticeKind.Info, it) }
         }
         PositionsPanel(m.positions, m.open)
-        if (!m.open) SwButton(stringResource(R.string.common_done), onBack, Modifier.fillMaxWidth(), kind = SwButtonKind.Main)
+        if (!m.open) SwButton(stringResource(R.string.status_done), onBack, Modifier.fillMaxWidth(), kind = SwButtonKind.Main)
     }
 
     if (s.pickingOther) {
@@ -162,14 +162,14 @@ fun ManualMapScreen(viewModel: ManualMapViewModel, printerName: String?, onBack:
     }
     if (s.confirmStop) {
         SwDialog(
-            title = stringResource(R.string.printer_mbl_stop_title, printerName.orEmpty()),
+            title = stringResource(R.string.printers_load_stop_title, printerName.orEmpty()),
             onClose = viewModel::cancelStop,
             confirm = SwDialogButton(
-                stringResource(R.string.printer_mbl_stop_confirm), viewModel::confirmStop, kind = SwButtonKind.DestructiveFilled,
+                stringResource(R.string.printers_load_stop), viewModel::confirmStop, kind = SwButtonKind.DestructiveFilled,
             ),
-            cancel = SwAction(stringResource(R.string.printer_mbl_stop_keep), viewModel::cancelStop),
+            cancel = SwAction(stringResource(R.string.printers_load_keep), viewModel::cancelStop),
         ) {
-            Text(stringResource(R.string.printer_mbl_stop_body), style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(R.string.printers_load_stop_body), style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
@@ -178,7 +178,7 @@ fun ManualMapScreen(viewModel: ManualMapViewModel, printerName: String?, onBack:
 @Composable
 private fun PositionsPanel(positions: List<ManualPosition>, open: Boolean) {
     val space = SpoolwardenTheme.space
-    PrinterPanel(title = stringResource(R.string.printer_slots_title), padded = false) {
+    PrinterPanel(title = stringResource(R.string.printers_col_slots), padded = false) {
         positions.forEachIndexed { i, p ->
             if (i > 0) PanelDivider()
             Row(

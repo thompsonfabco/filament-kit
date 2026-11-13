@@ -333,7 +333,7 @@ private fun PreviewDialog(p: LoadPreview, printerName: String, slot: String, vie
         title = stringResource(R.string.spool_load_confirm_title, printerName, slot),
         onClose = { if (p.writing) say() else viewModel.back() },
         confirm = SwDialogButton(
-            stringResource(if (p.writing) R.string.spool_load_loading else R.string.spool_load_button),
+            stringResource(if (p.writing) R.string.spool_load_loading else R.string.common_load),
             viewModel::confirm, kind = SwButtonKind.Main, enabled = r != null && !p.writing, busy = p.writing,
         ),
         cancel = SwAction(stringResource(R.string.common_back), viewModel::back),

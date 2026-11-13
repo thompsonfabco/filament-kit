@@ -173,14 +173,14 @@ object SlotMapHelp {
     /** Why [canStart] is false, for the line under the greyed button. */
     @StringRes
     fun blockedReason(printerState: String, printing: Boolean): Int? = when {
-        printerState !in STARTABLE -> R.string.printer_available_connected
+        printerState !in STARTABLE -> R.string.slot_load_disabled
         printing -> R.string.printer_available_idle
         else -> null
     }
 
     @StringRes
     fun buttonLabel(m: MapStatus?): Int =
-        if (m?.state == "done" || m?.state == "failed") R.string.printer_map_slots_again else R.string.printer_map_slots
+        if (m?.state == "done" || m?.state == "failed") R.string.printer_map_slots_again else R.string.printers_map_slots
 
     /** A Developer Mode refusal never blocks mapping: the slot test finds out for itself and says so. */
     private val STARTABLE = setOf("connected", "needs_developer_mode")

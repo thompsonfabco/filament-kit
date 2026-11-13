@@ -29,6 +29,9 @@ import org.junit.Test
 class PrinterLoadTest {
     private val dispatcher = StandardTestDispatcher()
 
+    @Before fun setUp() = Dispatchers.setMain(dispatcher)
+    @After fun tearDown() = Dispatchers.resetMain()
+
     // ---- map slots + filament used --------------------------------------------------------------------
 
     private class FakeTools : PrinterToolsBackend {

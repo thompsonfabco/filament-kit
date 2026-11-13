@@ -6,21 +6,4 @@ android/app/src/main/java/com/thompsonfabco/filamentkit/ui/ColorSwatch.kt | Colo
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/PresetUpdates.kt | 6.dp | 1 | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/PresetsCard.kt | 16.dp | 1 | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/home/PresetsCard.kt | 4.dp | 1 | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/HlsPlayer.kt | 16.dp | 1 | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/HlsPlayer.kt | 8.dp | 1 | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/HlsPlayer.kt | Color.White | 1 | text over the camera image (always on black)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/ManualMapScreen.kt | 12.dp | 1 | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/ManualMapScreen.kt | 16.dp | 1 | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/ManualMapScreen.kt | 8.dp | 6 | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/MjpegView.kt | 16.dp | 1 | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/MjpegView.kt | 8.dp | 1 | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/MjpegView.kt | Color.White | 1 | text over the camera image (always on black)
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterEdit.kt | 6.dp | 1 | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterEdit.kt | 8.dp | 1 | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
 android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterNotices.kt | 8.dp | 3 | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterScreen.kt | 12.dp | 3 | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterScreen.kt | 16.dp | 1 | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterScreen.kt | 4.dp | 2 | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterScreen.kt | 6.dp | 3 | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterScreen.kt | 8.dp | 4 | today's literal colour or length; replaced by theme tokens when the screen is rebuilt
-android/app/src/main/java/com/thompsonfabco/filamentkit/ui/printers/PrinterScreen.kt | Color.Black | 1 | camera image ground

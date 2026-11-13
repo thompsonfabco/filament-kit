@@ -1466,6 +1466,8 @@
   "printer_reconnecting": "Reconnecting…",
   "printer_resumed_line": "Resumed.",
   "printer_said_no": "The printer said no: {error}",
+  "printer_error_said_no": "The printer said no: {error}.",
+  "printer_slot_left": "{left} g left",
   "printer_stopped_line": "Stopped.",
   "printer_temperature": "{name} {current} / {target} °C",
   "printer_time_hours": "{hours} h {minutes} min",

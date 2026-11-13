@@ -103,7 +103,7 @@ fun PrinterSettingsScreen(
                 }
             }
             SwButton(
-                stringResource(R.string.printer_forget), edit::askForget, kind = SwButtonKind.Destructive,
+                stringResource(R.string.printers_forget), edit::askForget, kind = SwButtonKind.Destructive,
                 enabled = !editState.busy,
             )
         }
@@ -117,11 +117,11 @@ fun PrinterSettingsScreen(
 @Composable
 private fun settingLabel(field: EditField): String = stringResource(
     when (field) {
-        EditField.NAME -> R.string.printer_set_row_name
-        EditField.ADDRESS -> R.string.printer_set_row_address
-        EditField.ACCESS_CODE -> R.string.printer_set_row_access_code
+        EditField.NAME -> R.string.common_field_name
+        EditField.ADDRESS -> R.string.common_address
+        EditField.ACCESS_CODE -> R.string.common_field_access_code
         EditField.API_KEY -> R.string.printer_set_row_api_key
-        EditField.TRUST_CERT -> R.string.printer_set_row_certificate
+        EditField.TRUST_CERT -> R.string.printers_fact_certificate
     },
 )
 
@@ -131,14 +131,14 @@ private fun settingValue(field: EditField, p: Printer): String? = when (field) {
     EditField.NAME -> p.name
     EditField.ADDRESS -> (if (p.family == "klipper") p.host else null) ?: p.ip
     EditField.ACCESS_CODE -> stringResource(accessCodeValue(p))
-    EditField.TRUST_CERT -> stringResource(R.string.printer_set_value_pinned)
+    EditField.TRUST_CERT -> stringResource(R.string.printers_cert_pinned_short)
     EditField.API_KEY -> null
 }
 
 /** "Set" once the Hub holds an Access Code for the printer, "Not set" until then (05 9.9). */
 @androidx.annotation.StringRes
 internal fun accessCodeValue(p: Printer): Int =
-    if (p.configured) R.string.printer_set_value_set else R.string.printer_set_value_not_set
+    if (p.configured) R.string.status_set else R.string.status_not_set
 
 @Composable
 private fun SettingRow(field: EditField, printer: Printer, onClick: () -> Unit) {
@@ -182,18 +182,18 @@ private fun EditFieldDialog(printer: Printer, d: EditDialog, edit: PrinterEditVi
     var second by remember(d.field) { mutableStateOf("") }      // a secret: never in saved state
     val busyWords = if (d.field == EditField.NAME) R.string.common_saving else R.string.printer_set_connecting
     val action = when (d.field) {
-        EditField.NAME -> R.string.printer_set_rename
-        EditField.ADDRESS -> R.string.printer_set_address_button
-        EditField.ACCESS_CODE -> R.string.printer_set_code_button
-        EditField.API_KEY -> R.string.printer_set_key_button
-        EditField.TRUST_CERT -> R.string.printer_set_cert_button
+        EditField.NAME -> R.string.common_rename
+        EditField.ADDRESS -> R.string.printers_change_address
+        EditField.ACCESS_CODE -> R.string.printers_replace_access_code
+        EditField.API_KEY -> R.string.common_save_key
+        EditField.TRUST_CERT -> R.string.printers_forget_cert
     }
     val title = when (d.field) {
-        EditField.NAME -> stringResource(R.string.printer_set_rename_title)
-        EditField.ADDRESS -> stringResource(R.string.printer_set_address_title, printer.name)
-        EditField.ACCESS_CODE -> stringResource(R.string.printer_set_code_title, printer.name)
-        EditField.API_KEY -> stringResource(R.string.printer_set_key_title, printer.name)
-        EditField.TRUST_CERT -> stringResource(R.string.printer_set_cert_title, printer.name)
+        EditField.NAME -> stringResource(R.string.printers_rename_title)
+        EditField.ADDRESS -> stringResource(R.string.printers_change_address_title, printer.name)
+        EditField.ACCESS_CODE -> stringResource(R.string.printers_access_code_title, printer.name)
+        EditField.API_KEY -> stringResource(R.string.printers_key_title, printer.name)
+        EditField.TRUST_CERT -> stringResource(R.string.printers_forget_cert_title, printer.name)
     }
     val say = rememberBusySay()
     SwDialog(
@@ -218,43 +218,43 @@ private fun EditFieldDialog(printer: Printer, d: EditDialog, edit: PrinterEditVi
             )
             EditField.ADDRESS -> {
                 FormField(
-                    value, { value = it }, stringResource(R.string.printer_field_address), enabled = !d.busy, mono = true,
+                    value, { value = it }, stringResource(R.string.common_address), enabled = !d.busy, mono = true,
                     hint = stringResource(R.string.printer_set_address_hint), keyboard = KeyboardType.Uri,
-                    error = error(FieldError.Address, R.string.printer_error_address),
+                    error = error(FieldError.Address, R.string.common_error_address),
                 )
                 if (klipper) {
                     FormField(
                         port, { port = it.filter(Char::isDigit).take(MAX_PORT_DIGITS) }, stringResource(R.string.printer_field_port),
                         enabled = !d.busy, mono = true, keyboard = KeyboardType.Number,
                         hint = stringResource(R.string.printer_set_port_hint),
-                        error = error(FieldError.Port, R.string.printer_error_port),
+                        error = error(FieldError.Port, R.string.common_error_port),
                     )
                     FormField(
-                        second, { second = it }, stringResource(R.string.printer_field_moonraker_key_optional), secret = true,
+                        second, { second = it }, stringResource(R.string.printers_key_optional), secret = true,
                         enabled = !d.busy, hint = stringResource(R.string.printer_moonraker_key_hint),
                     )
                 } else {
                     FormField(
-                        second, { second = it }, stringResource(R.string.common_access_code), secret = true, enabled = !d.busy,
+                        second, { second = it }, stringResource(R.string.common_field_access_code), secret = true, enabled = !d.busy,
                         hint = stringResource(R.string.printer_set_address_code_hint),
-                        error = error(FieldError.AccessCode, R.string.printer_error_access_code),
+                        error = error(FieldError.AccessCode, R.string.common_error_access_code),
                     )
                 }
             }
             EditField.ACCESS_CODE -> FormField(
-                value, { value = it }, stringResource(R.string.common_access_code), secret = true, enabled = !d.busy,
-                hint = stringResource(R.string.common_access_code_help),
-                error = error(FieldError.AccessCode, R.string.printer_error_access_code),
+                value, { value = it }, stringResource(R.string.common_field_access_code), secret = true, enabled = !d.busy,
+                hint = stringResource(R.string.common_hint_access_code),
+                error = error(FieldError.AccessCode, R.string.common_error_access_code),
             )
             EditField.API_KEY -> FormField(
-                value, { value = it }, stringResource(R.string.printer_field_moonraker_key), secret = true, enabled = !d.busy,
+                value, { value = it }, stringResource(R.string.common_moonraker_key), secret = true, enabled = !d.busy,
                 hint = stringResource(R.string.printer_set_key_hint),
             )
             EditField.TRUST_CERT -> {
                 Text(stringResource(R.string.printer_set_cert_text, printer.name), style = MaterialTheme.typography.bodyMedium)
                 FormField(
-                    value, { value = it }, stringResource(R.string.common_access_code), secret = true, enabled = !d.busy,
-                    error = error(FieldError.AccessCode, R.string.printer_error_access_code),
+                    value, { value = it }, stringResource(R.string.common_field_access_code), secret = true, enabled = !d.busy,
+                    error = error(FieldError.AccessCode, R.string.common_error_access_code),
                 )
             }
         }
@@ -268,10 +268,10 @@ private const val MAX_PORT_DIGITS = 5
 private fun ForgetDialog(printer: Printer, s: PrinterEditUiState, edit: PrinterEditViewModel) {
     val say = rememberBusySay()
     SwDialog(
-        title = stringResource(R.string.printer_forget_question, printer.name),
+        title = stringResource(R.string.printers_forget_title, printer.name),
         onClose = { if (s.busy) say() else edit.cancelForget() },
         confirm = SwDialogButton(
-            stringResource(R.string.printer_forget), edit::confirmForget, kind = SwButtonKind.DestructiveFilled, busy = s.busy,
+            stringResource(R.string.printers_forget), edit::confirmForget, kind = SwButtonKind.DestructiveFilled, busy = s.busy,
         ),
         cancel = SwAction(stringResource(R.string.common_cancel), edit::cancelForget),
         cancelEnabled = !s.busy,
@@ -279,7 +279,7 @@ private fun ForgetDialog(printer: Printer, s: PrinterEditUiState, edit: PrinterE
         BusyBack(s.busy, say)
         Text(
             stringResource(
-                if (printer.family == "klipper") R.string.printer_forget_body_klipper else R.string.printer_forget_body_bambu,
+                if (printer.family == "klipper") R.string.printers_forget_body_klipper else R.string.printers_forget_body_bambu,
             ),
             style = MaterialTheme.typography.bodyMedium,
         )
