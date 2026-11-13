@@ -82,6 +82,48 @@ def check_url(url: str) -> str | None:
     return None
 
 
+def write_token(token: str):
+    """Store the reader's bearer token (root: the setup page's helper, `filament-kit local-intake token`),
+    root:filament-kit 640 like the other secrets the service reads. The value is never printed or logged. ValueError
+    for one that is not a single word of printable characters."""
+    import os
+    import shutil
+    token = (token or "").strip()
+    if not token or not token.isprintable() or " " in token or len(token) > 400:
+        raise ValueError("the reader's token is one word of printable characters")
+    dest = config.paths().etc / TOKEN_FILE
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(dest.name + ".tmp")
+    try:
+        if os.name == "nt":
+            tmp.write_bytes((token + "\n").encode())
+        else:
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o640)
+            with os.fdopen(fd, "wb") as fh:
+                os.fchmod(fh.fileno(), 0o640)
+                fh.write((token + "\n").encode())
+                fh.flush()
+                os.fsync(fh.fileno())
+            if os.geteuid() == 0:
+                try:
+                    shutil.chown(tmp, user="root", group="filament-kit")
+                except (LookupError, OSError):
+                    pass
+        os.replace(tmp, dest)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    return dest
+
+
+def remove_token() -> bool:
+    try:
+        (config.paths().etc / TOKEN_FILE).unlink()
+        return True
+    except FileNotFoundError:
+        return False
+
+
 def _token() -> str:
     try:
         return (config.paths().etc / TOKEN_FILE).read_text(encoding="utf-8").strip()
@@ -118,6 +160,17 @@ def _error_of(raw: bytes) -> tuple[str, str]:
 REFUSALS = {"bad_request", "no_photos", "too_many_photos", "too_large", "bad_image"}
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Never follow a redirect: the reader answers at the address the owner set, and a redirect followed with the
+    bearer token would hand it to another host (review R127 note 1). A 3xx is then an HTTP error like any other."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+_OPENER = urllib.request.build_opener(_NoRedirect)
+
+
 def _request(url: str, *, body: dict | None, timeout: float, auth: bool = False) -> dict:
     _reachable(url)
     data = None if body is None else json.dumps(body).encode("utf-8")
@@ -129,7 +182,7 @@ def _request(url: str, *, body: dict | None, timeout: float, auth: bool = False)
     for attempt in (1, 2):
         req = urllib.request.Request(url, data=data, method="GET" if body is None else "POST", headers=headers)
         try:
-            with urllib.request.urlopen(req, timeout=max(1.0, deadline - time.monotonic())) as resp:  # noqa: S310
+            with _OPENER.open(req, timeout=max(1.0, deadline - time.monotonic())) as resp:  # noqa: S310
                 raw = resp.read()
             break
         except urllib.error.HTTPError as e:
@@ -137,8 +190,8 @@ def _request(url: str, *, body: dict | None, timeout: float, auth: bool = False)
             what = f"the local reader answered HTTP {e.code}" + (f" ({code})" if code else "") + (
                 f": {msg}" if msg else "")
             if e.code == 401 or code == "unauthorized":
-                raise LocalReaderError("unauthorized", "the local reader's token is wrong or missing "
-                                                       f"(<etc>/{TOKEN_FILE})") from None
+                raise LocalReaderError("unauthorized", "the local reader's token is wrong or missing (set it on "
+                                                       "the setup page or with sudo filament-kit local-intake token)") from None
             if code == "unsupported_api_version":
                 raise LocalReaderError("version", "the local reader does not speak this kit's API version: "
                                                   "update the local reader") from None
@@ -226,7 +279,8 @@ def health(cfg: dict, timeout: float = HEALTH_TIMEOUT) -> dict:
     else:
         out["error"] = f"the local reader is not ready ({h.get('status')!r})"
     if out["auth_required"] and out["ok"] and not _token():
-        out["ok"], out["error"] = False, f"the local reader needs a token: put it in <etc>/{TOKEN_FILE}"
+        out["ok"], out["error"] = False, ("the local reader needs a token: set it on the setup page (Settings, Local "
+                                          "label reader) or with sudo filament-kit local-intake token")
     return out
 
 

@@ -3,6 +3,7 @@ the daily cap only for cloud reads, and the HTTP client, against the fake reader
 from __future__ import annotations
 
 import base64
+import logging
 import socket
 
 import anthropic
@@ -82,21 +83,20 @@ def test_the_module_is_opt_in_last_and_newer():
     assert modules.MODULES["local_intake"].optional_ai
 
 
-def test_orders_works_with_either_reader():
+def test_orders_needs_the_claude_reader():
+    """Decision after review R127 note 2: the order history goes only into Claude's prompt, so orders needs ai_intake
+    even with the local reader on, and every place that refuses or adds it says why."""
     base = {"spoolman": True, "server": True, "orders": True}
-    for reader in ("ai_intake", "local_intake"):
-        modules.validate({"modules": {**base, reader: True}, "orders": {"file": "/x.json"}})
-    with pytest.raises(modules.ModuleError, match="orders needs ai_intake or local_intake"):
-        modules.validate({"modules": base, "orders": {"file": "/x.json"}})
+    modules.validate({"modules": {**base, "ai_intake": True}, "orders": {"file": "/x.json"}})
+    with pytest.raises(modules.ModuleError, match=r"orders needs ai_intake \(order matching needs the Claude reader\)"):
+        modules.validate({"modules": {**base, "local_intake": True}, "orders": {"file": "/x.json"}})
+    on, notes = modules.toggle(frozenset({"spoolman", "server", "local_intake"}), "orders")
+    assert "ai_intake" in on and "it needs ai_intake, now on too" in notes[0]
+    assert modules.needs_of("orders") == ["ai_intake", "order matching needs the Claude reader"]
     on = frozenset({"spoolman", "server", "ai_intake", "local_intake", "orders"})
-    assert "orders" in modules.toggle(on, "ai_intake")[0]                    # the local reader still reads
-    off, notes = modules.toggle(on - {"local_intake"}, "ai_intake")
-    assert "orders" not in off and "orders" in notes[0]
-    on2, _ = modules.toggle(frozenset({"spoolman", "server"}), "orders")      # neither on: ai_intake, as before
-    assert "ai_intake" in on2
-    on3, _ = modules.toggle(frozenset({"spoolman", "server", "local_intake"}), "orders")   # one reader is enough
-    assert "ai_intake" not in on3
-    assert modules.needs_of("orders")[0] == "ai_intake or local_intake"
+    assert "orders" in modules.toggle(on, "local_intake")[0]               # the local reader is not what it needs
+    assert "orders" not in modules.toggle(on, "ai_intake")[0]
+    assert any("order matching needs the Claude reader" in line for line in modules.menu_lines({}, on))
 
 
 # ---------- the reader order ----------
@@ -353,12 +353,9 @@ def test_api_with_no_reader_is_module_off(sm, dead_url):
     assert r.status_code == 409 and r.json()["module"] == "ai_intake"
 
 
-def test_a_mode_change_keeps_orders_on_the_local_reader():
-    cfg = {"modules": {"spoolman": True, "server": True, "local_intake": True, "orders": True},
-           "orders": {"file": "/x.json"}}
-    assert {"orders", "local_intake"} <= modules.enabled(modules.set_mode(cfg, "all-in-one", say=None))
-    assert modules.dependents("local_intake", frozenset(cfg["modules"])) == ["orders"]
-    assert modules.dependents("local_intake", frozenset(cfg["modules"]) | {"ai_intake"}) == []
+def test_a_mode_change_keeps_the_local_reader():
+    cfg = {"modules": {"spoolman": True, "server": True, "local_intake": True}}
+    assert "local_intake" in modules.enabled(modules.set_mode(cfg, "all-in-one", say=None))
 
 
 # ---------- status, the setup page's reader test, the CLI ----------
@@ -490,3 +487,90 @@ def test_api_revise_with_the_local_reader_uses_no_cap(sm, fake_reader):
     r = c.post(f"/api/intake/history/{hid}/revise", headers=h, json={"note": "brand is Polymaker"})
     assert r.status_code == 200, r.text
     assert r.json()["reader"] == "local" and intake.reads_today(config.paths().state / "reads.json") == 0
+
+
+# ---------- review R127 notes ----------
+
+def test_a_redirect_is_never_followed_with_the_token(sm, tmp_path):
+    """Note 1: a reader that answers 302 to another host is a failed read; the other host never gets the token."""
+    from starlette.applications import Starlette
+    from starlette.responses import JSONResponse, RedirectResponse
+    from starlette.routing import Route
+    from fakes import serving
+    seen = []
+
+    async def other(request):
+        seen.append(request.headers.get("authorization"))
+        return JSONResponse(lrf.reply())
+    elsewhere = serving.start(Starlette(routes=[Route("/v1/read", other, methods=["GET", "POST"])]))
+
+    async def redirect(request):
+        return RedirectResponse(f"{elsewhere.url}/v1/read", status_code=302)
+    reader = serving.start(Starlette(routes=[Route("/v1/read", redirect, methods=["POST"])]))
+    try:
+        setup(reader.url, {"spoolman": True, "server": True, "local_intake": True})
+        (config.paths().etc / local_reader.TOKEN_FILE).write_text("tok-123\n")
+        with pytest.raises(intake.ReadError) as e:
+            intake.read_labels(sm, [JPEG], "", None, None)
+        assert e.value.code == "local_bad_answer" and "302" in str(e.value) and seen == []
+    finally:
+        reader.stop()
+        elsewhere.stop()
+
+
+def test_a_claude_call_that_never_reached_it_gives_its_read_back(sm, fake_reader):
+    """Note 3: local unsure, Claude unreachable: the unsure local answer is returned and the cap ticket refunded."""
+    url, data = fake_reader
+    setup(url)
+    data["read"] = lrf.reply(confidence=0.4)
+    cap = Cap()
+    out = intake.read_labels(sm, [JPEG], "", None, FakeClaude(raises=anthropic.APIConnectionError(request=None)),
+                             charge=cap.charge)
+    assert out["reader"] == "local" and cap.taken == 1 and cap.refunded == 1
+
+
+# ---------- the reader's token from the page and the CLI (decision after R127 note 4) ----------
+
+def test_the_page_sets_and_removes_the_reader_token_with_the_code(env, caplog):
+    from test_setup_page import Helper, client, make, post
+    app = make(env, Helper())
+    c = client(app)
+    assert post(c, "local_intake_token", {"token": "tok-secret-1"}, code=None).status_code in (401, 403)
+    assert not (config.paths().etc / local_reader.TOKEN_FILE).exists()
+    with caplog.at_level(logging.INFO):
+        r = post(c, "local_intake_token", {"token": "tok-secret-1"})
+    assert r.status_code == 200 and r.json() == {"ok": True, "set": True} and "tok-secret-1" not in r.text
+    assert (config.paths().etc / local_reader.TOKEN_FILE).read_text().strip() == "tok-secret-1"
+    assert "tok-secret-1" not in caplog.text
+    state = c.get("/setup/api/state")
+    assert state.json()["local_intake_token"]["set"] is True and "tok-secret-1" not in state.text
+    assert post(c, "local_intake_token", {"token": "has space"}).status_code == 400
+    assert post(c, "local_intake_token/remove", {}).json() == {"ok": True, "set": False}
+    assert not (config.paths().etc / local_reader.TOKEN_FILE).exists()
+
+
+def test_the_cli_sets_the_reader_token_hidden(monkeypatch, capsys):
+    from filament_kit import cli
+    monkeypatch.setattr(cli, "_is_root", lambda: True)
+    monkeypatch.setattr(cli.secret_input, "ask", lambda prompt: "tok-cli-2")
+    assert cli.main(["local-intake", "token"]) == 0
+    out = capsys.readouterr()
+    assert "tok-cli-2" not in out.out + out.err
+    assert (config.paths().etc / local_reader.TOKEN_FILE).read_text().strip() == "tok-cli-2"
+    monkeypatch.setattr(cli.secret_input, "ask", lambda prompt: "two words")
+    assert cli.main(["local-intake", "token"]) == 1
+    assert cli.main(["local-intake", "token", "--remove"]) == 0
+    assert not (config.paths().etc / local_reader.TOKEN_FILE).exists()
+
+
+def test_a_reader_that_needs_a_token_says_where_to_set_it(fake_reader):
+    url, data = fake_reader
+    data["health"] = {**data["health"], "auth_required": True}
+    assert "set it on the setup page" in local_reader_health(url)["error"]
+
+
+def test_the_cli_token_needs_root(monkeypatch, capsys):
+    from filament_kit import cli
+    monkeypatch.delenv("FK_NO_SYSTEMD", raising=False)
+    monkeypatch.setattr(cli, "_is_root", lambda: False)
+    assert cli.main(["local-intake", "token"]) == 1 and "run as root" in capsys.readouterr().err

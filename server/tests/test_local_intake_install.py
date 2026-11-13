@@ -226,17 +226,18 @@ def test_cli_install_says_when_the_reader_does_not_answer(key, server, applied, 
     assert "installed, but the reader does not answer yet: it does not answer" in capsys.readouterr().err
 
 
-def test_cli_remove_switches_off_what_needs_only_this_reader(key, server, applied, capsys):
+def test_cli_remove_leaves_orders_on_the_claude_reader(key, server, applied, capsys):
+    """orders needs Claude, not the local reader (decision after R127 note 2): removing the reader keeps it."""
     s = server({"0.1.0": mrf.make_release(key)})
     lii.install(config.load(), tier="cpu", fetcher=fetcher(s), run=Run())
     cfg = config.load()
-    cfg["modules"].update(local_intake=True, orders=True)
+    cfg["modules"].update(local_intake=True, ai_intake=True, orders=True)
     cfg["orders"] = {"file": "/x.json"}
     config.save(cfg)
     assert cli.cmd_local_intake_remove(True, run=Run()) == 0
     cfg = config.load()
-    assert cfg["modules"]["local_intake"] is False and cfg["modules"]["orders"] is False
-    assert "that also turns off: orders" in capsys.readouterr().out and lii.installed() is None
+    assert cfg["modules"]["local_intake"] is False and cfg["modules"]["orders"] is True
+    assert "also turns off" not in capsys.readouterr().out and lii.installed() is None
 
 
 def test_cli_remove_with_nothing_installed_and_the_module_off(capsys):

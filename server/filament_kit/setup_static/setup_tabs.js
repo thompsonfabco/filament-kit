@@ -249,7 +249,7 @@ function localReaderRows(v, save) {
       h("select", { on: { change: (e) => save("local_intake.tier", e.target.value) } },
         ...[["auto", "Auto: CPU, then GPU when unsure"], ["cpu", "CPU only"], ["gpu", "GPU only"]]
           .map(([k, t]) => h("option", { value: k, textContent: t, selected: (v["local_intake.tier"] || "auto") === k }))))),
-    h("p", { class: "muted", textContent: "The reader may run on another computer on your network (one with a GPU). Only Claude's reads count against the reads per day." }),
+    h("p", { class: "muted", textContent: "The reader may run on another computer on your network (one with a GPU). The label photos and your filament list go to this address (plain HTTP unless it starts with https), so give one you trust. Only Claude's reads count against the reads per day." }),
     out);
 }
 
@@ -278,6 +278,13 @@ function readerCard() {
         !s.fresh ? h("p", { class: "muted", textContent: "That check is over an hour old: check again to install." }) : null,
         h("p", { class: "muted", textContent: "The tier is the one under General (Local reader tier); change it there, then check again." }));
     }).catch((e) => say(out, e.message, false));
+    const tok = secret("Local reader token"), tokBox = h("div");
+    const tokenRow = h("div", {},
+      h("p", { class: "muted", textContent: `Reader token: ${S.local_intake_token && S.local_intake_token.set ? "set" : "not set"}. Only for a reader installed with a token (one on another machine, usually); it is sent with each read, never shown again.` }),
+      h("div", { class: "row" }, tok,
+        h("button", { class: "secondary", textContent: S.local_intake_token && S.local_intake_token.set ? "Replace" : "Set", on: { click: () => change(tokBox, "local_intake_token", { token: tok.value }, null, [tok]) } }),
+        S.local_intake_token && S.local_intake_token.set ? h("button", { class: "secondary", textContent: "Remove", on: { click: () => change(tokBox, "local_intake_token/remove", {}) } }) : null),
+      tokBox);
     fill(body,
       h("p", { class: "muted", textContent: have
         ? `Installed on this machine: version ${have.version}, ${have.tier} tier.`
@@ -286,7 +293,7 @@ function readerCard() {
         h("button", { class: "secondary", textContent: have ? "Check for an upgrade" : "Check what an install needs", on: { click: check } }),
         have ? h("button", { class: "secondary", textContent: "Remove", on: { click: () => startJob(box, "local_intake_remove",
           "Remove the local label reader from this machine and switch local_intake off? Its settings are kept.") } }) : null),
-      out);
+      out, tokenRow);
   }).catch((e) => say(body, e.message, false));
   return el;
 }

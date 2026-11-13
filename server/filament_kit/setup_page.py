@@ -37,6 +37,7 @@ Routes (JSON under /setup/api; every POST body is a JSON object, `code` = the se
         and setup_console/printers_tab.py adds one); Test is a TLS handshake for Bambu, Moonraker's /printer/info for
         Klipper (its API key never shown). An address is an IP or a name, kept as typed (hostaddr).
     POST passphrase {code, passphrase}  library_token {code, token}  library_token/remove {code}
+    POST local_intake_token {code, token}  local_intake_token/remove {code}   (the local label reader's bearer token)
     POST readers {code[, name]} (the token, shown once)  readers/{id}/revoke {code}
     POST pair {code, kind: phone|pc|station}  devices/{id}/revoke {code}
     POST modules {code, name, on[, settings]}  settings {code, key, value}  apply {code}
@@ -313,6 +314,8 @@ class SetupPage:
             ("/passphrase", hw(self.passphrase), "POST"),
             ("/library_token", hw(self.library_token), "POST"),
             ("/library_token/remove", hw(self.library_token_remove), "POST"),
+            ("/local_intake_token", hw(self.local_intake_token), "POST"),
+            ("/local_intake_token/remove", hw(self.local_intake_token_remove), "POST"),
             ("/readers", w(self.reader_add), "POST"), ("/readers/{id}/revoke", w(self.reader_revoke), "POST"),
             ("/pair", w(self.pair), "POST"), ("/devices/{id}/revoke", w(self.device_revoke), "POST"),
             ("/modules", hw(self.module), "POST"), ("/settings", hw(self.setting), "POST"),
@@ -539,6 +542,7 @@ class SetupPage:
             "anthropic": {"set": _present(cli.KEY_FILE), "ai_intake": "ai_intake" in on},
             "passphrase": {"set": _present(cli.WEB_PASSPHRASE), "web": "web" in on},
             "library_token": {"set": _present("github_token"), "library": "library" in on},
+            "local_intake_token": {"set": _present("local_intake_token"), "on": "local_intake" in on},
             "printers": {"on": bool(self.families), "bambu": "bambu" in self.families,
                          "klipper": "klipper" in self.families, "list": self._printer_rows()},
             "readers": {"list": readers, "error": readers_error},
@@ -768,6 +772,18 @@ class SetupPage:
         r = await self._helper({"op": "library_token_remove", "code": body["code"]})
         if r.get("removed"):
             self.audit(request, "library token removed")
+        return {"ok": True, "set": False}
+
+    async def local_intake_token(self, request: Request, body: dict):
+        had = _present("local_intake_token")
+        await self._helper({"op": "local_intake_token_set", "code": body["code"], "token": body.get("token")})
+        self.audit(request, "local reader token replaced" if had else "local reader token set")
+        return {"ok": True, "set": True}
+
+    async def local_intake_token_remove(self, request: Request, body: dict):
+        r = await self._helper({"op": "local_intake_token_remove", "code": body["code"]})
+        if r.get("removed"):
+            self.audit(request, "local reader token removed")
         return {"ok": True, "set": False}
 
     # ---------- readers, pairings (the server's own state, as `reader` and `pair` / `unpair`) ----------

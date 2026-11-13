@@ -544,6 +544,10 @@ def _call(sm: Spoolman, images: list[bytes], hint: str, tag_uid: str | None, cli
             e.refund = refund
             if kept is None and reader == order[-1]:
                 raise
+            # the read goes on without Claude: a call that never reached it gives its read back, as the station's
+            # path does when this error reaches it (review R127 note 3)
+            if refund is not None and e.code in ("unreachable", "api_error"):
+                refund()
             log.warning("cloud label reader: %s", e)
             err, notes = err or e, notes + [f"cloud reader: {e}"]
             continue

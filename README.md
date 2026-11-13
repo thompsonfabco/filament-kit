@@ -93,7 +93,7 @@ the library and auto-update are off until you turn them on. Change them any time
 | `station` | USB scale and PN532 reader, read-only HTTP | a DYMO M10 USB scale and a PN532 NFC reader |
 | `web` | Phone web app and the Claude connector (MCP), on top of the server | `server`, an https address (`web.public_url`) |
 | `remote` | nginx in front of the web part, and a public https name (certbot) | `web`; for a public name: DNS, ports 443 and 80 |
-| `orders` | Order history file for the shop tools | `ai_intake` or `local_intake`, an order history file (`orders.file`) |
+| `orders` | Order history file for the shop tools | `ai_intake` (order matching needs the Claude reader), an order history file (`orders.file`) |
 | `updates` | Daily check for a new signed release; installs it and keeps the one before | nothing |
 | `klipper` | Klipper printers through Moonraker: discovery, spool loads, usage log, camera ([docs/klipper.md](docs/klipper.md)) | `server`, a Klipper printer with Moonraker |
 | `local_intake` | **Optional AI**: a label reader on your own network reads spool photos, no cloud | `server`, the local reader service (local_intake.url) |
