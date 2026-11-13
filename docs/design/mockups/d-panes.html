@@ -1,0 +1,754 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Spoolwarden · Workshop kit</title>
+<style>
+/* Layout concept: "Panes" - flat grouped-list master-detail (one screen on phone, two panes on tablet, three on desktop). */
+:root{
+--bg:#f2f2f5;--surface:#ffffff;--surface-2:#f6f6f8;--sunk:#e8e8ec;--text:#1b1b1f;--muted:#606067;--hair:#dadade;--line:#87878e;--knob:#ffffff;
+--accent:#19763f;--on-accent:#ffffff;--accent-soft:#e2f1e7;
+--ok:#176b3a;--ok-soft:#e2f1e7;--warn:#835000;--warn-soft:#fbefd4;--bad:#b3261e;--on-bad:#ffffff;--bad-soft:#fce5e2;--info:#1d56a0;--info-soft:#e3ecf8;
+--inverse:#1b1b1f;--on-inverse:#f6f6f8;--scrim:rgb(20 20 24 / .42);
+--fs-xs:.75rem;--fs-sm:.8125rem;--fs-md:.9375rem;--fs-lg:1.0625rem;--fs-xl:1.375rem;--fs-2xl:1.75rem;
+--s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:32px;--s7:48px;
+--r-sm:6px;--r-md:10px;--r-lg:16px;--r-pill:999px;
+--e-dlg:0 18px 48px rgb(0 0 0 / .22),0 2px 6px rgb(0 0 0 / .12);
+--t-fast:120ms;--t-med:220ms;
+--font:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+--mono:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;
+color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+--bg:#0e0e10;--surface:#1c1c1f;--surface-2:#242428;--sunk:#2e2e33;--text:#f1f1f3;--muted:#a3a3ab;--hair:#323237;--line:#7a7a82;--knob:#f1f1f3;
+--accent:#55c98a;--on-accent:#06210f;--accent-soft:#163324;
+--ok:#62d394;--ok-soft:#163324;--warn:#f0bd5a;--warn-soft:#382a0e;--bad:#ff8b80;--on-bad:#2a0705;--bad-soft:#3d1a17;--info:#8fb5f6;--info-soft:#172842;
+--inverse:#f1f1f3;--on-inverse:#1b1b1f;--scrim:rgb(0 0 0 / .62);--e-dlg:0 18px 48px rgb(0 0 0 / .6),0 2px 6px rgb(0 0 0 / .4);
+color-scheme:dark}}
+:root[data-theme="dark"]{
+--bg:#0e0e10;--surface:#1c1c1f;--surface-2:#242428;--sunk:#2e2e33;--text:#f1f1f3;--muted:#a3a3ab;--hair:#323237;--line:#7a7a82;--knob:#f1f1f3;
+--accent:#55c98a;--on-accent:#06210f;--accent-soft:#163324;
+--ok:#62d394;--ok-soft:#163324;--warn:#f0bd5a;--warn-soft:#382a0e;--bad:#ff8b80;--on-bad:#2a0705;--bad-soft:#3d1a17;--info:#8fb5f6;--info-soft:#172842;
+--inverse:#f1f1f3;--on-inverse:#1b1b1f;--scrim:rgb(0 0 0 / .62);--e-dlg:0 18px 48px rgb(0 0 0 / .6),0 2px 6px rgb(0 0 0 / .4);
+color-scheme:dark}
+
+*,*::before,*::after{box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);font:400 var(--fs-md)/1.45 var(--font);-webkit-font-smoothing:antialiased}
+h1,h2,h3,p,ul,ol{margin:0;padding:0}
+ul,ol{list-style:none}
+button,input,select,textarea{font:inherit;color:inherit}
+button,label[for]{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:var(--r-sm)}
+.sr{position:absolute!important;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;padding:0}
+input.sr:focus-visible+label{outline:2px solid var(--accent);outline-offset:2px}
+.ic{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.ic.lg{width:40px;height:40px;stroke-width:1.4}
+.mono{font-family:var(--mono);font-size:.94em}
+.muted{color:var(--muted)}
+.strike{text-decoration:line-through}
+
+/* Shell: one pane visible on phone, chosen by depth */
+.main{display:contents}
+.pane{display:none;min-width:0}
+.app[data-depth="0"] .side,.app[data-depth="1"] .list,.app[data-depth="2"] .detail{display:block}
+.phead{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:var(--s2);min-height:calc(52px + env(safe-area-inset-top));padding:env(safe-area-inset-top) max(var(--s2),env(safe-area-inset-right)) 0 max(var(--s2),env(safe-area-inset-left));background:var(--bg);border-bottom:1px solid var(--hair)}
+.back{display:inline-flex;align-items:center;gap:2px;min-height:44px;min-width:44px;max-width:40%;padding:0 var(--s2) 0 2px;border:0;background:none;color:var(--accent);font-weight:600}
+.back span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.phead .sp{width:44px;flex:none}
+.pt{flex:1;min-width:0;text-align:center;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lockchip{display:inline-flex;align-items:center;min-height:44px;padding:0 2px;border:0;background:none;flex:none}
+.pill{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px 0 10px;border-radius:var(--r-pill);background:var(--sunk);font-size:var(--fs-sm);font-weight:600}
+.pill .ic{width:16px;height:16px}
+.lockchip[data-s="unlocked"] .pill,.lockrow[data-s="unlocked"] .tile{background:var(--ok-soft);color:var(--ok)}
+.lockchip[data-s="trusted"] .pill,.lockrow[data-s="trusted"] .tile{background:var(--info-soft);color:var(--info)}
+.pbody{padding:var(--s4) max(var(--s4),env(safe-area-inset-right)) calc(var(--dockh,64px) + var(--s5)) max(var(--s4),env(safe-area-inset-left))}
+.h1{font-size:var(--fs-2xl);font-weight:700;letter-spacing:-.01em;line-height:1.2;padding:var(--s1) var(--s1) var(--s4)}
+.h1:focus,[data-h]:focus{outline:none}
+.h1:focus-visible,[data-h]:focus-visible{outline:2px solid var(--accent)}
+.brand,.sfoot{display:none}
+
+/* Grouped lists */
+.grp{margin:0 0 var(--s5)}
+.gh{padding:0 var(--s4) var(--s2);font-size:var(--fs-lg);font-weight:650;line-height:1.25;color:var(--text)}
+.side .gh{padding-bottom:6px;font-size:var(--fs-xs);font-weight:600;line-height:1.45;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.tpk{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s3);padding:var(--s3)}
+.tt{display:flex;flex-direction:column;align-items:stretch;gap:2px;min-width:0;padding:var(--s2) var(--s2) var(--s3);border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);text-align:left;transition:background var(--t-fast)}
+.tt:hover{border-color:var(--text)}
+.tt:active{background:var(--surface-2)}
+.tt[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);background:var(--accent-soft)}
+.tpv{display:block;aspect-ratio:4/3;margin-bottom:var(--s2);border-radius:var(--r-sm);overflow:hidden;border:1px solid var(--hair)}
+.tpv svg{display:block;width:100%;height:100%}
+.tn{display:flex;align-items:center;justify-content:space-between;gap:var(--s1);font-weight:650}
+.tchk{width:18px;height:18px;color:var(--accent)}
+.tl{font-size:var(--fs-sm);color:var(--muted)}
+@media (min-width:1280px){.tpk{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.gf{padding:6px var(--s4) 0;font-size:var(--fs-sm);color:var(--muted)}
+.lst{background:var(--surface);border-radius:var(--r-md);overflow:hidden}
+.lst>*{position:relative}
+.lst>:empty{display:none}
+.lst>*+*::before{content:"";position:absolute;top:0;right:0;left:var(--inset,var(--s4));border-top:1px solid var(--hair);pointer-events:none}
+.lst>.res::before{display:none}
+.row{display:flex;align-items:center;gap:var(--s3);width:100%;min-height:48px;padding:10px var(--s4);border:0;background:none;text-align:left;color:inherit;text-decoration:none;font:inherit}
+.row.hi{--inset:58px}
+button.row,a.row,label.row{cursor:pointer;transition:background var(--t-fast)}
+button.row:hover,a.row:hover,label.row:hover{background:var(--surface-2)}
+button.row:active,a.row:active{background:var(--sunk)}
+.row:focus-visible{outline-offset:-2px;border-radius:0}
+.row[aria-current]{background:var(--sunk)}
+.tile{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;background:var(--sunk);color:var(--text);flex:none}
+.tile .ic{width:18px;height:18px}
+.tile.num{font-size:var(--fs-sm);font-weight:700}
+.row[aria-current] .tile{background:var(--accent);color:var(--on-accent)}
+.rm{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.rt{overflow-wrap:anywhere}
+.rs{font-size:var(--fs-sm);color:var(--muted);overflow-wrap:anywhere}
+.rv{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:6px;max-width:58%;color:var(--muted);text-align:right;overflow-wrap:anywhere}
+.chev{width:16px;height:16px;color:var(--line);margin-right:-4px}
+.act .rt{color:var(--accent);font-weight:600}
+.dng .rt{color:var(--bad);font-weight:600}
+.dng .tile{background:var(--bad-soft);color:var(--bad)}
+.rb{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.rb .bdg,.ib .bdg{white-space:normal}
+.wrap{flex-wrap:wrap}
+.wrap>.rm{flex:1 1 170px}
+.rbtn{display:flex;flex-wrap:wrap;gap:var(--s2);margin-left:auto}
+.btnrow{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s2);padding:var(--s3) var(--s4)}
+.tick{color:var(--accent);visibility:hidden}
+[aria-checked="true"]>.rv .tick{visibility:visible}
+.row input[type=radio]{width:20px;height:20px;margin:0;accent-color:var(--accent);flex:none}
+
+/* Badges, results, progress */
+.bdg{display:inline-flex;align-items:center;gap:4px;min-height:22px;padding:1px 8px 1px 6px;border-radius:var(--r-pill);background:var(--sunk);color:var(--text);font-size:var(--fs-xs);font-weight:600;line-height:1.3;white-space:nowrap}
+.bdg .ic{width:14px;height:14px;stroke-width:2.2}
+.bdg.ok{background:var(--ok-soft);color:var(--ok)}
+.bdg.warn{background:var(--warn-soft);color:var(--warn)}
+.bdg.bad{background:var(--bad-soft);color:var(--bad)}
+.bdg.info{background:var(--info-soft);color:var(--info)}
+.res{display:flex;flex-direction:column;gap:6px;padding:0 var(--s4) var(--s3) 58px;font-size:var(--fs-sm)}
+.res.ni{padding:var(--s2) var(--s4) var(--s3)}
+.note .res{padding:var(--s2) 0 0}
+.res:empty,.stat:empty{display:none}
+.stat{display:inline-flex;flex-direction:column;gap:4px;min-width:0;font-size:var(--fs-sm)}
+.ln{display:flex;gap:6px;align-items:flex-start}
+.ln .ic{width:16px;height:16px;margin-top:1px}
+.r-ok{color:var(--ok)}.r-bad{color:var(--bad)}.r-warn{color:var(--warn)}.r-info,.r-note,.r-run{color:var(--muted)}
+.r-ok,.r-bad{font-weight:600}
+.bar{display:block;width:100%;max-width:260px;height:4px;border-radius:2px;background:var(--sunk);overflow:hidden}
+.bar>i{display:block;height:100%;background:var(--accent);transition:width var(--t-med)}
+.spin{width:16px;height:16px;flex:none;border-radius:50%;border:2px solid var(--hair);border-top-color:var(--accent);animation:spin .9s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Buttons and fields */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--s2);min-height:44px;min-width:44px;padding:0 var(--s4);border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);color:var(--text);font-weight:600;font-size:var(--fs-md);text-decoration:none;white-space:nowrap;transition:background var(--t-fast)}
+.btn .ic{width:18px;height:18px}
+.btn:hover{background:var(--surface-2)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn.pri:hover{filter:brightness(1.07)}
+.btn.dng{color:var(--bad);border-color:var(--bad)}
+.btn.dngf{background:var(--bad);border-color:var(--bad);color:var(--on-bad)}
+.btn.ghost{border-color:transparent;background:none;color:var(--accent);padding:0 var(--s3)}
+.btn.ghost:hover{background:var(--surface-2)}
+.btn.icon{padding:0;width:44px}
+.btn:disabled{opacity:.45;cursor:not-allowed;filter:none}
+.seg{display:inline-flex;gap:2px;padding:2px;border-radius:var(--r-md);background:var(--sunk)}
+.seg button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;min-width:44px;padding:0 var(--s3);border:1px solid transparent;border-radius:8px;background:none;color:var(--muted);font-size:var(--fs-sm);font-weight:600}
+.seg button .ic{width:16px;height:16px}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--text);border-color:var(--line)}
+.segwrap{margin:0 0 var(--s4)}
+.segwrap .seg{display:flex}.segwrap .seg button{flex:1}
+.fld{display:block;padding:var(--s3) var(--s4)}
+.fld>label{display:block;margin-bottom:6px;font-size:var(--fs-sm);font-weight:600}
+.fc{min-width:0}
+.in{display:block;width:100%;min-height:44px;padding:9px var(--s3);border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface);color:var(--text)}
+textarea.in{resize:vertical;min-height:84px;line-height:1.45}
+.in::placeholder{color:var(--muted);opacity:1}
+.in[aria-invalid="true"]{border:2px solid var(--bad);padding:8px 11px}
+.in:disabled{background:var(--surface-2);color:var(--muted)}
+.rm .in{margin-top:6px}
+.hint{margin-top:6px;font-size:var(--fs-sm);color:var(--muted)}
+.err{display:flex;gap:6px;align-items:flex-start;margin-top:6px;font-size:var(--fs-sm);font-weight:600;color:var(--bad)}
+.err .ic{width:16px;height:16px;margin-top:1px}
+.secret{display:flex;gap:var(--s2)}.secret .in{flex:1;min-width:0}
+.inl{display:flex;align-items:center;gap:var(--s2)}.inl .in{width:96px}
+.unit{color:var(--muted);font-size:var(--fs-sm);white-space:nowrap}
+.sw{position:relative;flex:none;width:56px;height:44px;padding:0;border:0;background:none;border-radius:22px}
+.sw::before{content:"";position:absolute;left:3px;top:8px;width:50px;height:28px;border-radius:14px;background:var(--line);transition:background var(--t-fast)}
+.sw::after{content:"";position:absolute;left:5px;top:10px;width:24px;height:24px;border-radius:50%;background:var(--knob);transition:transform var(--t-fast)}
+.sw[aria-checked="true"]::before{background:var(--accent)}
+.sw[aria-checked="true"]::after{transform:translateX(22px);background:var(--on-accent)}
+.chk{display:flex;gap:var(--s3);align-items:center;min-height:44px;margin-top:var(--s2)}
+.chk input{width:20px;height:20px;margin:0;accent-color:var(--accent);flex:none}
+.savebar{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s3);margin:0 0 var(--s5);padding:0 var(--s1)}
+
+/* Blocks */
+.note{display:flex;gap:var(--s3);align-items:flex-start;padding:var(--s3) var(--s4);margin:0 0 var(--s5);border-radius:var(--r-md);background:var(--warn-soft)}
+.note>.ic{color:var(--warn);margin-top:1px}
+.note.info{background:var(--info-soft)}.note.info>.ic{color:var(--info)}
+.note>div{flex:1;min-width:0}
+.nb{margin-top:var(--s3)}
+.ihead{display:flex;align-items:center;gap:var(--s4);padding:var(--s2) var(--s1) var(--s5)}
+.ihead .tile{width:56px;height:56px;border-radius:14px}
+.ihead .tile .ic{width:30px;height:30px}
+.ihead h2{font-size:var(--fs-xl);font-weight:700;line-height:1.25;overflow-wrap:anywhere}
+.ihead .rs{margin-top:2px}
+.ib{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.swc{display:inline-block;width:20px;height:20px;border-radius:50%;border:1px solid var(--line);flex:none}
+.swc.none{border-style:dashed}
+.slot{display:grid;place-items:center;min-width:34px;height:26px;padding:0 6px;border-radius:6px;background:var(--sunk);font:600 var(--fs-xs)/1 var(--mono);flex:none}
+.meter{display:inline-block;width:48px;height:6px;border-radius:3px;background:var(--sunk);overflow:hidden}
+.meter>i{display:block;height:100%;background:var(--muted)}
+.pct{min-width:3.2ch;text-align:right;font-variant-numeric:tabular-nums;color:var(--text)}
+.thumb{display:grid;place-items:center;flex:none;width:44px;height:44px;border-radius:8px;overflow:hidden;border:1px solid var(--hair);background:var(--sunk);color:var(--muted)}
+.thumb svg{display:block;width:100%;height:100%}
+.thumb .ic{width:20px;height:20px}
+.thumb.lg{width:64px;height:64px;border-radius:12px}
+.row.rec{align-items:flex-start;padding-top:12px;padding-bottom:12px;--inset:72px}
+.row.rec .chev{align-self:center}
+.photos{display:flex;gap:var(--s3);padding:var(--s3) var(--s4);overflow-x:auto}
+.pbtn{flex:none;width:120px;height:90px;padding:0;border:1px solid var(--hair);border-radius:var(--r-sm);background:none;overflow:hidden}
+.pbtn svg,.phbig svg{display:block;width:100%;height:100%}
+.phbig{border-radius:var(--r-md);overflow:hidden;margin-bottom:var(--s3);aspect-ratio:4/3}
+.kv .ein{display:flex;align-items:center;gap:6px;width:min(58%,260px)}
+.kv .ein .in{min-width:0}
+.kv label.rt{flex:1;min-width:0}
+.code{margin:0;padding:var(--s3) var(--s4);background:var(--sunk);font:var(--fs-xs)/1.7 var(--mono);overflow-x:auto;white-space:pre}
+.empty{display:flex;flex-direction:column;align-items:center;text-align:center;gap:var(--s2);padding:var(--s6) var(--s5);margin:0 0 var(--s5);background:var(--surface);border-radius:var(--r-md)}
+.empty>.ic{color:var(--muted);margin-bottom:var(--s1)}
+.et{font-weight:600;font-size:var(--fs-lg)}
+.es{color:var(--muted);max-width:34ch}
+.empty .btn{margin-top:var(--s3)}
+.blank{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:var(--s2);min-height:70vh;color:var(--muted)}
+.prop{padding:var(--s3) var(--s4) var(--s4)}
+.prop .ptl{display:flex;align-items:center;gap:6px;font-weight:600}
+.prop .ptl .ic{color:var(--info)}
+.diff{margin:var(--s2) 0 var(--s3)}
+.diff li{display:flex;flex-direction:column;gap:2px;padding:var(--s2) 0;border-top:1px solid var(--hair)}
+.diff .k{font-size:var(--fs-xs);font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.dv{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.dv .ic{width:16px;height:16px;color:var(--muted)}
+.was{color:var(--muted);text-decoration:line-through}
+.now{font-weight:600}
+.btnrow0{display:flex;flex-wrap:wrap;gap:var(--s2)}
+
+/* Background job, dock, toasts */
+.dock{position:fixed;left:0;right:0;bottom:0;z-index:10}
+.toasts{position:absolute;left:0;right:0;bottom:100%;display:flex;flex-direction:column;align-items:center;gap:var(--s2);padding:0 var(--s4) var(--s3);pointer-events:none}
+.toast{display:flex;gap:var(--s2);align-items:center;max-width:100%;padding:var(--s3) var(--s4);border-radius:var(--r-md);background:var(--inverse);color:var(--on-inverse);font-size:var(--fs-sm);font-weight:500;animation:fade var(--t-med) ease-out}
+.toast .ic{width:18px;height:18px}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}}
+.bbar{display:flex;align-items:center;justify-content:space-between;gap:var(--s3);padding:var(--s1) max(var(--s4),env(safe-area-inset-right)) calc(var(--s1) + env(safe-area-inset-bottom)) max(var(--s4),env(safe-area-inset-left));background:var(--surface);border-top:1px solid var(--hair)}
+.bbar .seg button{flex-direction:column;gap:0;min-width:58px;padding:2px 6px;font-size:var(--fs-xs);line-height:1.2}
+.bb-brand{min-width:0}
+.bn{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bv{font-size:var(--fs-xs);color:var(--muted)}
+.job{display:flex;flex-direction:column;gap:var(--s2);padding:var(--s2) var(--s3) var(--s3) var(--s4);background:var(--surface);border-radius:var(--r-md)}
+.jh{display:flex;align-items:center;gap:var(--s3)}
+.jh .okj{color:var(--ok)}
+.jt{font-weight:600}
+.js{font-size:var(--fs-sm);color:var(--muted)}
+.job .bar{max-width:none}
+.job .jl{align-self:flex-start;margin:-4px 0 -6px -12px;font-size:var(--fs-sm)}
+.jl .ic{transition:transform var(--t-fast)}.jl[aria-expanded="true"] .ic{transform:rotate(90deg)}
+.jlog{font:var(--fs-xs)/1.7 var(--mono);color:var(--muted)}
+.jlog li:last-child{color:var(--text)}
+#jobP .job{border-radius:0;border-top:1px solid var(--hair);padding-left:max(var(--s4),env(safe-area-inset-left));padding-right:max(var(--s3),env(safe-area-inset-right))}
+
+/* Dialogs and sheets */
+.scrim{position:fixed;inset:0;z-index:30;background:var(--scrim)}
+.dlg{position:fixed;z-index:31;left:0;right:0;bottom:0;max-height:88vh;overflow:auto;padding:var(--s5) max(var(--s4),env(safe-area-inset-right)) calc(var(--s4) + env(safe-area-inset-bottom)) max(var(--s4),env(safe-area-inset-left));background:var(--surface);border-radius:var(--r-lg) var(--r-lg) 0 0;box-shadow:var(--e-dlg);animation:sheet var(--t-med) ease-out}
+.dlg::before{content:"";position:absolute;top:8px;left:50%;width:36px;height:4px;margin-left:-18px;border-radius:2px;background:var(--hair)}
+@keyframes sheet{from{transform:translateY(32px);opacity:0}}
+.dlg h2{font-size:var(--fs-lg);font-weight:700;margin-bottom:var(--s3)}
+.dlg .fld{padding:var(--s2) 0}
+.dlg .lst{border:1px solid var(--hair)}
+.dp{margin-bottom:var(--s3)}
+.dp.m{color:var(--muted);font-size:var(--fs-sm)}
+.acts{display:flex;flex-wrap:wrap;gap:var(--s2);margin-top:var(--s5)}
+.acts .btn{flex:1 1 120px}
+
+/* Tablet: section list beside one content pane */
+@media (min-width:601px){
+.app{display:grid;grid-template-columns:280px minmax(0,1fr);height:100vh;height:100dvh;overflow:hidden}
+.pane{height:100vh;height:100dvh;overflow-y:auto;overscroll-behavior:contain}
+.side{display:block;border-right:1px solid var(--hair)}
+.app[data-depth="0"] .list{display:block}
+.side .phead,.list .phead,.bbar,#jobP,.ph-only{display:none}
+.phead .lockchip{display:none}
+.pbody{padding:var(--s5) var(--s5) var(--s6)}
+.list .pbody,.detail .pbody{max-width:760px}
+.side .pbody{display:flex;flex-direction:column;min-height:100%;padding:var(--s4) var(--s3) 0}
+.brand{display:flex;align-items:center;gap:var(--s3);padding:var(--s2) var(--s2) var(--s5)}
+.brand .tile{width:40px;height:40px;border-radius:10px;background:var(--accent);color:var(--on-accent)}
+.brand .tile .ic{width:24px;height:24px}
+.side .lst{background:none}
+.side .lst>*+*::before{display:none}
+.side .row{border-radius:var(--r-md);min-height:52px;padding:7px var(--s3)}
+.side .rs{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.side .chev{display:none}
+.side .grp{margin-bottom:var(--s4)}
+.side .gh{padding-left:var(--s3)}
+.sfoot{position:sticky;bottom:0;z-index:2;display:flex;flex-direction:column;gap:var(--s3);margin:auto calc(-1 * var(--s3)) 0;padding:var(--s3) var(--s3) var(--s4);background:var(--bg);border-top:1px solid var(--hair)}
+.side .sfoot .lst{background:var(--surface)}
+.sfoot .seg{display:flex}.sfoot .seg button{flex:1}
+.h1{font-size:var(--fs-xl);padding:var(--s1) var(--s1) var(--s4)}
+.fld{display:grid;grid-template-columns:minmax(9rem,32%) minmax(0,1fr);gap:0 var(--s4);align-items:start}
+.fld>label{margin:11px 0 0;font-size:var(--fs-md);font-weight:500}
+.dlg .fld{display:block}.dlg .fld>label{margin:0 0 6px;font-size:var(--fs-sm);font-weight:600}
+.dock{left:auto;right:var(--s5);bottom:var(--s5);width:min(380px,calc(100vw - 48px));pointer-events:none}
+.toasts{position:static;align-items:flex-end;padding:0}
+.dlg{left:50%;top:50%;right:auto;bottom:auto;width:min(460px,calc(100vw - 48px));transform:translate(-50%,-50%);border-radius:var(--r-lg);padding:var(--s5);animation:pop var(--t-med) ease-out}
+.dlg::before{display:none}
+@keyframes pop{from{opacity:0}}
+.acts{justify-content:flex-end}.acts .btn{flex:none}
+.acts .btn.dng{margin-right:auto}
+}
+/* Desktop: sections | list | detail */
+@media (min-width:1025px){
+.app{grid-template-columns:280px 360px minmax(0,1fr)}
+.app .list,.app .detail{display:block}
+.list{border-right:1px solid var(--hair)}
+.detail .phead{display:none}
+.list .pbody{padding:var(--s5) var(--s4)}
+.detail .pbody{padding:var(--s5) var(--s6) var(--s7)}
+}
+@media (max-width:600px){.meter{display:none}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app" id="app" data-depth="1">
+<nav class="pane side" id="side" aria-label="Sections"></nav>
+<main class="main">
+<section class="pane list" id="list" aria-label="Section list"></section>
+<section class="pane detail" id="detail" aria-label="Details"></section>
+</main>
+</div>
+<div class="dock" id="dock">
+<div class="toasts" id="toasts" aria-hidden="true"></div>
+<div id="jobP"></div>
+<div class="bbar"><div class="bb-brand"><p class="bn" data-dname>Workshop kit</p><p class="bv">Spoolwarden 0.5.2</p></div><div id="bbSeg"></div></div>
+</div>
+<div id="live" class="sr" aria-live="polite"></div>
+<div class="scrim" id="scrim" hidden></div>
+<div class="dlg" id="dlg" role="dialog" aria-modal="true" aria-labelledby="dlgT" hidden><form id="dlgF" novalidate><h2 id="dlgT"></h2><div id="dlgB"></div></form></div>
+<script>
+(()=>{'use strict';
+const d=document,root=d.documentElement,$=(s,r=d)=>r.querySelector(s),$$=(s,r=d)=>Array.from(r.querySelectorAll(s));
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
+const IC={
+back:'<path d="M15 5l-7 7 7 7"/>',chev:'<path d="M9 6l6 6-6 6"/>',
+lock:'<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+unlock:'<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 7.6-1.7"/>',
+shield:'<path d="M12 3l7 3v5c0 4.4-2.9 7.9-7 10-4.1-2.1-7-5.6-7-10V6z"/><path d="M9 12l2 2 4-4"/>',
+sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>',
+moon:'<path d="M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10z"/>',
+auto:'<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+home:'<path d="M4 11l8-7 8 7"/><path d="M6 9.5V20h12V9.5"/><path d="M10 20v-5h4v5"/>',
+printer:'<rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M3.5 8h17M10 8v3.5h4V8M12 11.5V14M7 17h10"/>',
+inbox:'<path d="M4 13l2.4-8h11.2L20 13v6H4z"/><path d="M4 13h4.5a3.5 3.5 0 0 0 7 0H20"/>',
+layers:'<path d="M12 3.5l8.5 4.5-8.5 4.5L3.5 8z"/><path d="M3.5 12.5l8.5 4.5 8.5-4.5"/><path d="M3.5 16.5l8.5 4.5 8.5-4.5"/>',
+phone:'<rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18.5h2"/>',
+blocks:'<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><path d="M16.5 13.5v6M13.5 16.5h6"/>',
+sliders:'<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
+down:'<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5"/><path d="M5 19.5h14"/>',
+lines:'<path d="M9 6h11M9 12h11M9 18h7"/><path d="M4.5 6h.01M4.5 12h.01M4.5 18h.01"/>',
+check:'<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+okc:'<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16 9.8"/>',
+warn:'<path d="M12 4L2.8 19.5h18.4z"/><path d="M12 10v4M12 16.8v.01"/>',
+bad:'<circle cx="12" cy="12" r="9"/><path d="M9.2 9.2l5.6 5.6M14.8 9.2l-5.6 5.6"/>',
+info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.8v.01"/>',
+plus:'<path d="M12 5v14M5 12h14"/>',
+search:'<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>',
+copy:'<rect x="8.5" y="8.5" width="11.5" height="11.5" rx="2"/><path d="M15.5 8.5V5.5A1.5 1.5 0 0 0 14 4H5.5A1.5 1.5 0 0 0 4 5.5V14a1.5 1.5 0 0 0 1.5 1.5h3"/>',
+ext:'<path d="M14 4h6v6M20 4l-8.5 8.5"/><path d="M18 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"/>',
+spark:'<path d="M11 3.5l1.9 5.1 5.1 1.9-5.1 1.9-1.9 5.1-1.9-5.1L4 10.5l5.1-1.9z"/><path d="M18.5 15.5v5M16 18h5"/>',
+pencil:'<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/>',
+pulse:'<path d="M3 12h4l2.5-6 5 12 2.5-6h4"/>',
+grid:'<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
+spool:'<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="2.5"/><path d="M12 3.5v6M4.6 16.3l5.2-3M19.4 16.3l-5.2-3"/>',
+doc:'<path d="M6 3.5h8l4 4v13H6z"/><path d="M14 3.5v4h4M9 12.5h6M9 16h6"/>',
+trash:'<path d="M4 7h16M9.5 7V4.5h5V7M6 7l1 13h10l1-13"/>',
+cam:'<rect x="3" y="7" width="13" height="11" rx="2"/><path d="M16 11l5-3v9l-5-3"/>',
+wifi:'<path d="M2.5 9a14 14 0 0 1 19 0M5.5 12.5a9.5 9.5 0 0 1 13 0M8.7 16a5 5 0 0 1 6.6 0"/><path d="M12 19.5v.01"/>',
+key:'<circle cx="8" cy="15" r="4"/><path d="M10.8 12.2L19 4M15.5 7.5l2.5 2.5M13.5 9.5l2 2"/>',
+globe:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.4 2.6 3.6 5.6 3.6 9s-1.2 6.4-3.6 9c-2.4-2.6-3.6-5.6-3.6-9S9.6 5.6 12 3z"/>',
+book:'<path d="M5 5.5A2.5 2.5 0 0 1 7.5 3H19v15H7.5A2.5 2.5 0 0 0 5 20.5z"/><path d="M5 20.5A2.5 2.5 0 0 1 7.5 18H19v3H7.5"/>',
+speaker:'<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 9a4 4 0 0 1 0 6M19 6.5a7.5 7.5 0 0 1 0 11"/>',
+archive:'<rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/>',
+box:'<path d="M3.5 7.5L12 3.5l8.5 4v9L12 20.5l-8.5-4z"/><path d="M3.5 7.5l8.5 4 8.5-4M12 11.5v9"/>',
+tag:'<path d="M3.5 12V3.5H12l8.5 8.5-8.5 8.5z"/><circle cx="8" cy="8" r="1.5"/>',
+refresh:'<path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4v5h-5"/>',
+undo:'<path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>',
+arrow:'<path d="M5 12h14M13 6l6 6-6 6"/>',x:'<path d="M6 6l12 12M18 6L6 18"/>',
+upload:'<path d="M12 15V4M7.5 8.5L12 4l4.5 4.5"/><path d="M5 19.5h14"/>',
+flash:'<path d="M13 3L5.5 13.5H11L10 21l8.5-11H13z"/>',
+sfill:'<circle cx="12" cy="12" r="6.5" fill="currentColor"/>',shol:'<circle cx="12" cy="12" r="6.5"/>',
+stri:'<path d="M12 4.5l8 14H4z" fill="currentColor"/>',soct:'<path d="M9 4.5h6L19.5 9v6L15 19.5H9L4.5 15V9z" fill="currentColor"/>',
+shalf:'<circle cx="12" cy="12" r="6.5"/><path d="M12 5.5a6.5 6.5 0 0 1 0 13z" fill="currentColor"/>',sdia:'<path d="M12 4.5l7.5 7.5-7.5 7.5L4.5 12z" fill="currentColor"/>'};
+const ic=(n,c)=>`<svg class="ic${c?' '+c:''}" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${IC[n]||''}</svg>`;
+
+/* ---------- Data (fixed by the content spec) ---------- */
+const SECS=[['overview','Overview','home','Everyday'],['printers','Printers','printer','Everyday'],['recent','Recently added','inbox','Everyday'],['devices','Devices','phone','Everyday'],['presets','Slicer presets','layers','Everyday'],['features','Features','blocks','System'],['settings','Settings','sliders','System'],['flash','Flash a device','flash','System'],['updates','Updates','down','System'],['logs','Logs','lines','System']].map(([id,t,i,g])=>({id,t,i,g}));
+const ALIAS={intake:'recent','intake-detail':'recent-detail',modules:'features'};
+const isSec=h=>SECS.some(s=>s.id===h),SEC=id=>SECS.find(s=>s.id===id);
+const PH={
+overview:['Hub status at a glance','The Hub at a glance: printers, spools and jobs.',[['Printers','2 connected, 1 offline'],['Study A1 mini','Needs a look'],['Background jobs','None running']]],
+presets:['Slicer filament presets','Filament presets for your slicers, made from the spool list.',[['Slicer presets','Made from the spool list'],['Refresh presets','After spool changes']]],
+devices:['Phones and the Weigh Station','Phones and the Weigh Station that talk to this Hub.',[['Weigh Station','Weigh Station feature'],['Web app','Opened on phones']]],
+features:['Weigh Station feature on','Parts of Spoolwarden you can switch on or off.',[['Weigh Station','On'],['Label Reader','On']]],
+flash:['Tag Reader and Weigh Station display','Flash a Tag Reader or a Weigh Station display, plugged into this computer or the Hub.',[['Tag Reader','Plugged into this computer or the Hub'],['Weigh Station display','Plugged into this computer or the Hub']]],
+updates:['Version 0.5.2 installed','Updates for Spoolwarden itself.',[['Installed version','0.5.2'],['Filament Catalog','2026.11.2']]],
+logs:['Hub, jobs and printers','What the Hub, the jobs and the printers reported.',[['Hub log',''],['Job log',''],['Printer log','']]]};
+const P=[
+{id:'x1',name:'Workshop X1',kind:'bambu',model:'Bambu Lab X1 Carbon',addr:'192.0.2.40',serial:'00M00A000000001',ok:true,cert:'Pinned',mapped:'Mapped',slots:[['A1','Polymaker PolyTerra PLA Charcoal Black','#2B2B2E',62],['A2','Bambu Lab PETG HF Orange','#F2762E',88],['A3','eSUN ABS+ White','#F4F4F2',35],['A4']]},
+{id:'voron',name:'Garage Voron',kind:'klipper',model:'Klipper (Voron 2.4)',addr:'voron.example:7125',ok:true,key:true,lane:'auto',slots:[['T0','Prusament PLA Galaxy Silver','#8D9199',47],['T1','Overture TPU Blue','#2E6FD9',71]]},
+{id:'a1',name:'Study A1 mini',kind:'bambu',model:'Bambu Lab A1 mini',addr:'192.0.2.41',serial:'03000A000000002',ok:false,cert:'Pinned',mapped:'Stopped twice',problem:'The last slot mapping stopped twice. A report would help.',slots:[]}];
+const LANE={auto:'Auto',on:'On',off:'Off'};
+const R=[
+{id:'r1',t:'Polymaker PolyTerra PLA Charcoal Black',hex:'#2B2B2E',when:'2026-11-12 14:05',src:'phone',st:'det',sp:[214],ph:2,conf:[['warn','warn','Colour: medium'],['neu','info','Price per kg: not on label']]},
+{id:'r2',t:'Bambu Lab PETG HF Orange x2',hex:'#F2762E',when:'2026-11-12 09:41',src:'phone',st:'ai',sp:[212,213],ph:1},
+{id:'r3',t:'eSUN ABS+ White',hex:'#F4F4F2',when:'2026-11-11 19:22',src:'station',st:'hand',sp:[211],ph:1},
+{id:'r4',t:'Prusament PLA Galaxy Silver',hex:'#8D9199',when:'2026-11-10 08:15',src:'hand',st:'det',sp:[210],ph:0},
+{id:'r5',t:'Overture TPU Blue',hex:'#2E6FD9',when:'2026-11-09 17:48',src:'phone',st:'det',sp:[209],ph:3,conf:[['bad','warn','Low: material, net weight. Check these.']]}];
+const confB=r=>(r.conf||[]).map(c=>bdg(c[0],SHP[c[0]],c[2])).join('');
+const SRC={phone:'From phone photo',station:'From the Weigh Station',hand:'Added by hand'};
+const DAY={'2026-11-12':'Today · Thu 12 Nov','2026-11-11':'Yesterday · Wed 11 Nov','2026-11-10':'Tue 10 Nov','2026-11-09':'Mon 9 Nov'};
+const FLD=[['Identity',[['brand','Brand'],['name','Name'],['mat','Material'],['col','Colour'],['line','Line']]],['Weights',[['net','Net weight','g'],['spool','Spool weight','g'],['dens','Density','g/cm³']]],['Temperatures',[['noz','Nozzle','°C'],['bed','Bed','°C'],['nozr','Nozzle range','°C'],['bedr','Bed range','°C']]],['Other',[['price','Price per kg']]]];
+const LBL={};FLD.forEach(([,fs])=>fs.forEach(([k,l])=>{LBL[k]=l}));
+const REC={brand:'Polymaker',name:'PolyTerra PLA Charcoal Black',mat:'PLA',col:'#2B2B2E',line:'PolyTerra PLA',net:'1000',spool:'140',dens:'1.31',noz:'210',bed:'55',nozr:'190-230',bedr:'25-60',price:''};
+const CONF={col:['warn','Medium'],price:['neu','Not on label']};
+const UNIT={};FLD.forEach(([,fs])=>fs.forEach(([k,,u])=>{if(u)UNIT[k]=u}));
+const fv=(k,x)=>x===''?'empty':x.replace(/(\d)-(\d)/,'$1–$2')+(UNIT[k]?' '+UNIT[k]:'');
+const chTxt=ch=>ch.map(([k,o,n])=>`${LBL[k]} ${fv(k,o)} → ${fv(k,n)}`).join('; ');
+const REV=[{n:1,when:'2026-11-12 14:09',by:'by hand',ch:[['spool','150','140']],undo:true,done:false}];
+REV[0].what=chTxt(REV[0].ch);
+const AIP=[['Name','PolyTerra PLA Charcoal Black','PolyTerra PLA Charcoal Black (Matte)'],['Nozzle range','190–230 °C','190–220 °C']];
+const PACK='curl -fsSL https://kit.example/pack/install.sh -o kit-pack.sh\ncurl -fsSL https://kit.example/pack/install.sh.sig -o kit-pack.sh.sig';
+const S={sec:'printers',item:null,root:false,lock:'locked',emptyP:false,emptyI:false,found:true,scanned:null,st:{},job:null,jobOpen:false,addType:'bambu',addPre:null,edit:false,ai:null,recSt:'det',key:true,pass:false,libAdds:3,tokenSet:false,
+set:{dname:'Workshop kit',hosts:'kit.example.net',locs:'Shelf A, Shelf B, Dry box 1, Dry box 2',pla:'Shelf A',prefix:'Dry box',boxes:'2',over:'Shelf B',model:'',reads:'40',kept:'20',pub:'',station:'',allow:false,keep:'14',token:'',voice:'piper',newlook:'Console'},
+bk:[['2026-11-12 03:00','nightly','4,812 KiB'],['2026-11-11 03:00','nightly','4,790 KiB'],['2026-11-10 16:32','made here','4,771 KiB']]};
+const FK={general:['dname','hosts'],storage:['locs','pla','over','prefix','boxes'],network:['pub','station','allow'],ai:['model','reads','kept'],backups:['keep'],library:['token'],voice:['voice'],look:['newlook']};
+const SF={general:['General','tag'],storage:['Storage locations','box'],network:['Network and addresses','globe'],pass:['Web passphrase','key'],ai:['Label Reader','spark'],library:['Filament Catalog','book'],voice:['Weigh Station voice','speaker'],backups:['Backups','archive'],appearance:['Appearance','sun'],look:['Theme for new devices','sun']};
+const LOOKS=[['console','Console','Dense and technical','c-console.html','#0b0f12','#3cccd8'],['workbench','Workbench','Calm cards','a-workbench.html','#F3F4FA','#3949C0'],['spool','Spool','Colourful and roomy','b-spool.html','#FAF6F1','#F59A2E'],['panes','Panes','Simple lists','d-panes.html','#f2f2f5','#1b7a43']];
+const SG=[['This Hub',['general','storage','network','pass']],['Spools and labels',['ai','library','voice']],['Safety',['backups']],['This browser',['appearance']]];
+const TL={light:'Light',dark:'Dark',system:'System'};
+const LK={locked:['lock','Locked','Locked','Changes need the setup code'],unlocked:['unlock','Unlocked','Unlocked','Changes work in this browser'],trusted:['shield','Trusted','Trusted computer','No code needed here until 2027-02-10']};
+
+/* ---------- Layout ---------- */
+const app=$('#app'),side=$('#side'),list=$('#list'),detail=$('#detail'),dock=$('#dock'),D=$('#dlg');
+const mqT=matchMedia('(min-width: 601px)'),mqD=matchMedia('(min-width: 1025px)');
+const lay=()=>mqD.matches?'d':mqT.matches?'t':'p';
+const DEF={printers:()=>(!S.emptyP&&P[0])?P[0].id:null,recent:()=>S.emptyI?null:'r1',settings:()=>'general'};
+const eff=()=>S.item||(lay()==='d'&&DEF[S.sec]?DEF[S.sec]():null);
+const byId=id=>P.find(p=>p.id===id);
+const locs=()=>S.set.locs.split(',').map(s=>s.trim()).filter(Boolean);
+const hhmm=()=>{const n=new Date();return String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0')};
+
+/* ---------- Small builders ---------- */
+const bdg=(k,i,t)=>`<span class="bdg ${k}">${ic(i)}${esc(t)}</span>`;
+const pBdg=p=>p.ok?bdg('ok','sfill','Connected'):bdg('warn','shol','Offline');
+const stB=st=>st==='ai'?bdg('info','sdia','Revised by AI'):st==='hand'?bdg('neu','pencil','Edited by hand'):bdg('neu','shol','As detected');
+const SHP={ok:'sfill',warn:'stri',bad:'soct',neu:'shol',info:'sdia'};
+const grp=(h,b,f,at)=>`<section class="grp">${h?`<h3 class="gh">${h}</h3>`:''}<div class="lst"${at||''}>${b}</div>${f?`<p class="gf">${f}</p>`:''}</section>`;
+function row(o){const tag=o.tag||(o.a?'button':'div');const a=o.a?`${tag==='button'?' type="button"':''} data-a="${o.a}"${o.id!=null?` data-id="${esc(o.id)}"`:''}${o.v!=null?` data-v="${esc(o.v)}"`:''}`:'';
+return `<${tag} class="row${o.icon?' hi':''}${o.cls?' '+o.cls:''}"${a}${o.at||''}>${o.lead||''}${o.icon?`<span class="tile">${ic(o.icon)}</span>`:''}<span class="rm"><span class="rt">${o.t}</span>${o.s?`<span class="rs">${o.s}</span>`:''}${o.x||''}</span>${o.val!=null&&o.val!==''?`<span class="rv">${o.val}</span>`:''}${o.chev?ic('chev','chev'):''}</${tag}>`}
+const h1=t=>`<h1 class="h1" data-h tabindex="-1">${esc(t)}</h1>`;
+const ihead=(lead,t,s,b)=>`<header class="ihead">${lead}<div class="rm"><h2 data-h tabindex="-1">${esc(t)}</h2>${s?`<p class="rs">${s}</p>`:''}${b?`<div class="ib">${b}</div>`:''}</div></header>`;
+const tileL=i=>`<span class="tile">${ic(i)}</span>`;
+const RI={ok:'sfill',bad:'soct',warn:'stri',info:'sdia',note:'sdia'};
+const resHTML=s=>s?`<span class="ln r-${s.k}">${s.k==='run'?'<span class="spin" aria-hidden="true"></span>':ic(RI[s.k])}<span>${esc(s.m)}</span></span>${s.p!=null?`<span class="bar"><i style="width:${Math.round(s.p*100)}%"></i></span>`:''}`:'';
+const stEl=(k,tag,c)=>`<${tag||'div'} class="${c||'res'}" data-st="${k}">${resHTML(S.st[k])}</${tag||'div'}>`;
+const swRow=(t,k,on,s,a)=>`<div class="row"><span class="rm"><span class="rt" id="l-${k}">${t}</span>${s?`<span class="rs">${s}</span>`:''}</span><button type="button" class="sw" role="switch" aria-checked="${!!on}" aria-labelledby="l-${k}" data-a="${a||'sw'}" data-k="${k}"></button></div>`;
+const photo=hex=>`<svg viewBox="0 0 120 90" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false"><rect width="120" height="90" style="fill:var(--sunk)"/><circle cx="46" cy="45" r="37" fill="${hex}" style="stroke:var(--line)"/><circle cx="46" cy="45" r="26" style="fill:none;stroke:var(--line)"/><circle cx="46" cy="45" r="8" style="fill:var(--sunk);stroke:var(--line)"/><rect x="62" y="22" width="50" height="44" rx="3" style="fill:var(--surface);stroke:var(--line)"/><path d="M68 31h30M68 38h38M68 45h24M68 56h14" style="stroke:var(--muted);stroke-width:2.4;stroke-linecap:round"/></svg>`;
+function fld(k,label,o){o=o||{};const id='f-'+k,v=o.val!=null?o.val:(S.set[k]!=null?S.set[k]:''),hid=o.hint?id+'-h':'';
+let c;
+if(o.opts)c=`<select class="in" id="${id}" data-k="${k}">${o.opts.map(x=>`<option${x===v?' selected':''}>${esc(x)}</option>`).join('')}</select>`;
+else if(o.area)c=`<textarea class="in${o.mono?' mono':''}" id="${id}" data-k="${k}" rows="4" spellcheck="false"${o.ph?` placeholder="${esc(o.ph)}"`:''}>${esc(v)}</textarea>`;
+else c=`<input class="in${o.mono?' mono':''}" id="${id}" data-k="${k}" type="${o.secret?'password':'text'}" value="${esc(v)}"${o.ph?` placeholder="${esc(o.ph)}"`:''}${o.im?` inputmode="${o.im}"`:''} autocomplete="${o.ac||'off'}"${hid?` aria-describedby="${hid}" data-hint="${hid}"`:''}>`;
+if(o.secret)c=`<div class="secret">${c}<button type="button" class="btn ghost" data-a="reveal">Show</button></div>`;
+return `<div class="fld"><label for="${id}">${esc(label)}</label><div class="fc">${c}${o.hint?`<p class="hint" id="${hid}">${o.hint}</p>`:''}<div class="err" id="${id}-e" hidden></div></div></div>`}
+
+/* ---------- Chrome pieces ---------- */
+let pref='system',cur='system';
+try{const v=localStorage.getItem('fk-theme');if(v==='light'||v==='dark'||v==='system')pref=v}catch(e){}
+const segHTML=()=>`<div class="seg" role="group" aria-label="Appearance">${[['light','sun'],['dark','moon'],['system','auto']].map(([v,i])=>`<button type="button" data-a="theme" data-v="${v}" aria-pressed="${cur===v}">${ic(i)}<span>${TL[v]}</span></button>`).join('')}</div>`;
+const chipIn=()=>{const l=LK[S.lock];return `<span class="pill">${ic(l[0])}<span>${l[1]}</span></span>`};
+const lockRowIn=()=>{const l=LK[S.lock];return `<span class="tile">${ic(l[0])}</span><span class="rm"><span class="rt">${l[2]}</span><span class="rs">${l[3]}</span></span>`};
+const phead=(t,back,dn)=>`<div class="phead">${back?`<button type="button" class="back" data-a="back">${ic('back')}<span${dn?' data-dname':''}>${esc(back)}</span></button>`:'<span class="sp"></span>'}<p class="pt">${esc(t||'')}</p><button type="button" class="lockchip" data-a="lock" data-s="${S.lock}" aria-label="${LK[S.lock][2]}: setup code">${chipIn()}</button></div>`;
+function sum(id){const c=P.filter(p=>p.ok).length,o=P.length-c;
+switch(id){case'overview':return o?(o===1?'1 printer needs a look':o+' printers need a look'):'All printers answer';
+case'printers':return S.emptyP||!P.length?'No printers yet':`${c} connected${o?`, ${o} offline`:''}`;
+case'recent':return S.emptyI?'No additions yet':'Newest: today 14:05';
+case'settings':return S.pass?'All groups saved':'Web passphrase not set';
+default:return PH[id][0]}}
+
+/* ---------- Panes ---------- */
+function sideHTML(){const g={};SECS.forEach(s=>{(g[s.g]=g[s.g]||[]).push(s)});
+let out='';for(const k in g)out+=grp(esc(k),g[k].map(s=>row({a:'sec',id:s.id,icon:s.i,t:s.t,s:esc(sum(s.id)),chev:1})).join(''));
+return phead('',null)+`<div class="pbody"><div class="brand"><span class="tile">${ic('spool')}</span><div class="bb-brand"><p class="bn" data-dname>${esc(S.set.dname)}</p><p class="bv">Spoolwarden 0.5.2</p></div></div><h1 class="h1 ph-only" data-h tabindex="-1" data-dname>${esc(S.set.dname)}</h1>${out}<div class="sfoot"><div id="jobS"></div><div class="lst"><button type="button" class="row hi lockrow" data-a="lock" data-s="${S.lock}">${lockRowIn()}</button></div>${segHTML()}</div></div>`}
+function listHTML(){const s=S.sec;const b=s==='printers'?pList():s==='recent'?iList():s==='settings'?sList():phList(s);
+return phead('',S.set.dname,1)+`<div class="pbody">${h1(SEC(s).t)}${b}</div>`}
+function pList(){let h='';
+if(S.emptyP||!P.length)h+=`<div class="empty">${ic('printer','lg')}<p class="et">No printers yet</p><p class="es">Printers on the network appear here once they announce themselves.</p><button type="button" class="btn pri" data-a="item" data-id="add">${ic('plus')}Add a printer</button></div>`;
+else h+=grp('',P.map(p=>row({a:'item',id:p.id,icon:'printer',t:esc(p.name),s:esc(p.model+' · '+p.addr),val:pBdg(p),chev:1})).join(''));
+if(S.found&&!S.emptyP)h+=grp('Found on the network, not added yet',`<div class="row hi wrap"><span class="tile">${ic('wifi')}</span><span class="rm"><span class="rt">Klipper printer “mainsailos”</span><span class="rs">192.0.2.57:7125</span></span><span class="rbtn"><button type="button" class="btn" data-a="useFound">Use this printer</button><button type="button" class="btn ghost" data-a="dismiss">Dismiss</button></span></div>`);
+h+=grp('Add',row({a:'item',id:'add',icon:'plus',t:'Add a printer',s:'Bambu Lab or Klipper',chev:1,cls:'act'})+row({a:'item',id:'scan',icon:'search',t:'Find Klipper printers',s:'Scan a subnet for Moonraker',chev:1})+row({a:'item',id:'pack',icon:'box',t:'Klipper add-on',s:'Spool macros and Moonraker settings',chev:1}));
+h+=grp('',row({tag:'a',a:'live',at:' href="#printers"',icon:'cam',t:'Open the live printer view',s:'Camera, pause and resume. Opens the web app.',val:ic('ext','chev')}));
+h+=grp('',swRow('Preview empty state','emptyP',S.emptyP,'Shows this list as it looks before any printer is added.','emptyP'));
+return h}
+const recRow=r=>{const st=r.id==='r1'?S.recSt:r.st;return row({a:'item',id:r.id,cls:'rec',lead:`<span class="thumb">${r.ph?photo(r.hex):ic('doc')}</span>`,t:esc(r.t),s:`${r.when.slice(11)} · ${SRC[r.src]} · ${r.sp.length>1?'spools':'spool'} ${r.sp.join(', ')} · ${r.ph?r.ph+(r.ph>1?' photos':' photo'):'no photo'}`,x:`<span class="rb">${stB(st)}${confB(r)}</span>`,chev:1})};
+function iList(){let h=grp('',row({icon:'spark',t:'Label Reader',val:bdg('ok','sfill','On')}),'The newest 20 spool additions are kept with their photos (14.2 MB now).');
+if(S.emptyI)h+=`<div class="empty">${ic('inbox','lg')}<p class="et">Nothing here yet</p><p class="es">No spool has been added since the history started.</p></div>`;
+else{const by={};R.forEach(r=>{const k=r.when.slice(0,10);(by[k]=by[k]||[]).push(r)});for(const k in by)h+=grp(DAY[k],by[k].map(recRow).join(''))}
+h+=grp('',swRow('Preview empty state','emptyI',S.emptyI,'Shows Recently added as it looks before the first spool.','emptyI'));
+return h}
+function sVal(k){switch(k){case'general':return esc(S.set.dname);case'storage':return locs().length+' locations';case'network':return S.set.pub?'Public address set':'No public address';case'pass':return S.pass?bdg('ok','sfill','Set'):bdg('warn','shol','Not set');case'ai':return S.key?'On':'No key';case'library':return '2026.11.2';case'voice':return S.set.voice==='piper'?'Piper':'espeak-ng';case'backups':return 'Nightly';case'appearance':return TL[cur]}return ''}
+const sList=()=>SG.map(([h,ks])=>grp(h,ks.map(k=>row({a:'item',id:k,icon:SF[k][1],t:SF[k][0],val:`<span data-sv="${k}">${sVal(k)}</span>`,chev:1})).join(''))).join('')+'<p class="gf">Each group saves on its own. Changes need the setup code unless this is a trusted computer.</p>';
+const phList=s=>`<div class="note info">${ic('info')}<div><p><strong>Not part of this mockup.</strong> ${esc(PH[s][1])}</p></div></div>`+grp('Sample rows',PH[s][2].map(([t,v])=>row({t:esc(t),val:esc(v)})).join(''));
+function detailHTML(){const it=eff(),s=S.sec;let t='',b='';
+if(s==='printers'&&it){const p=byId(it);if(it==='add'){t='Add a printer';b=addHTML()}else if(it==='scan'){t='Find Klipper printers';b=scanHTML()}else if(it==='pack'){t='Klipper add-on';b=packHTML()}else if(p){t=p.name;b=pDetail(p)}}
+else if(s==='recent'&&it){const r=R.find(x=>x.id===it);if(r){t=r.t;b=rDetail(r)}}
+else if(s==='settings'&&it&&FORM[it]){t=SF[it][0];b=FORM[it]()}
+if(!b){const sc=SEC(s);b=`<div class="blank">${ic(sc.i,'lg')}<p class="et">${PH[s]?esc(sc.t)+' is not part of this mockup':'Nothing selected'}</p><p class="es">${PH[s]?'Printers, Recently added and Settings are fully designed.':'Pick a row in the list.'}</p></div>`}
+return phead(t,SEC(s).t)+`<div class="pbody">${b}</div>`}
+/* ---------- Printers detail ---------- */
+function pDetail(p){const bam=p.kind==='bambu',id=p.id;let h=ihead(tileL('printer'),p.name,esc(p.model+' · '+p.addr),pBdg(p));
+if(p.problem)h+=`<div class="note">${ic('warn')}<div><p>${esc(p.problem)}</p><div class="nb"><button type="button" class="btn pri" data-a="report" data-id="${id}">${ic('doc')}Collect a report</button></div>${stEl('rep-'+id)}</div></div>`;
+h+=grp('',row({a:'test',id,icon:'pulse',t:'Test connection',cls:'act'})+stEl('test-'+id)+(bam?row({a:'map',id,icon:'grid',t:'Map slots',cls:'act'})+stEl('map-'+id):row({a:'detect',id,icon:'search',t:'Detect model and slots',cls:'act'})+stEl('det-'+id)));
+const sl=p.slots.length?p.slots.map(x=>x[1]?`<div class="row"><span class="slot">${x[0]}</span><span class="swc" style="background:${x[2]}"></span><span class="rm"><span class="rt">${esc(x[1])}</span><span class="rs">${x[2]}</span></span><span class="rv"><span class="meter" aria-hidden="true"><i style="width:${x[3]}%"></i></span><span class="pct">${x[3]}%</span></span></div>`:`<div class="row"><span class="slot">${x[0]}</span><span class="swc none"></span><span class="rm"><span class="rt muted">Empty</span></span></div>`).join(''):`<div class="row"><span class="rm"><span class="rs">Slots show up here when the printer answers.</span></span></div>`;
+h+=grp(bam?'AMS slots':'Tool slots',sl+row({a:'soon',v:'Map by loading filament',icon:'spool',t:'Map by loading filament',chev:1}));
+const det=[row({t:'Model',val:esc(p.model)})];
+if(bam)det.push(row({t:'Serial',val:`<span class="mono">${esc(p.serial)}</span>`}),row({t:'Certificate',val:p.cert==='Pinned'?bdg('ok','sfill','Pinned'):bdg('neu','shol','Not pinned')}),row({t:'Slot mapping',val:esc(p.mapped)}));
+else det.push(row({t:'Moonraker API key',val:p.key?bdg('ok','sfill','Set'):bdg('neu','shol','Not set')}));
+h+=grp('Details',det.join(''));
+let c=row({a:'rename',id,icon:'pencil',t:'Rename',val:esc(p.name),chev:1})+row({a:'addr',id,icon:'globe',t:'Change address',val:esc(p.addr),chev:1});
+c+=bam?row({a:'code',id,icon:'key',t:'Replace Access Code',val:'Set',chev:1}):row({a:'apikey',id,icon:'key',t:p.key?'Replace or clear API key':'Set Moonraker API key',val:p.key?'Set':'Not set',chev:1})+row({a:'lane',id,icon:'layers',t:'Lane data',val:LANE[p.lane],chev:1});
+h+=grp('Connection',c);
+if(bam)h+=grp('Reports',(p.problem?'':row({a:'report',id,icon:'doc',t:'Collect a report',cls:'act'})+stEl('rep-'+id))+row({a:'soon',v:'Saved reports',icon:'lines',t:'Saved reports',chev:1}));
+h+=grp('',(bam?row({a:'forgetCert',id,icon:'shield',t:'Forget certificate',cls:'dng'}):'')+row({a:'forget',id,icon:'trash',t:'Forget printer',cls:'dng'}),bam?'Forget printer also deletes its Access Code.':'Forget printer also deletes its Moonraker API key.');
+return h}
+function addHTML(){const k=S.addType,pre=S.addPre||{};
+return ihead(tileL('plus'),'Add a printer','Bambu Lab printers need the Access Code shown on the printer. Klipper printers need the Moonraker address.')
++`<div class="segwrap"><div class="seg" role="group" aria-label="Printer type">${[['bambu','Bambu Lab'],['klipper','Klipper']].map(([v,t])=>`<button type="button" aria-pressed="${k===v}" data-a="addType" data-v="${v}">${t}</button>`).join('')}</div></div><form data-add novalidate>`
++(k==='bambu'?grp('Bambu Lab printer',fld('a-addr','IP address or name',{ph:'192.0.2.40 or printer.local',val:pre.addr})+fld('a-code','Access Code',{secret:1,mono:1,hint:'On the printer: Settings &gt; Network/LAN'})+fld('a-name','Name (optional)',{val:pre.name})+fld('a-serial','Serial (optional)',{mono:1,hint:'Read from the printer when left empty.'}))
+:grp('Klipper printer',fld('a-addr','Address',{ph:'192.0.2.57 or voron.example',val:pre.addr})+fld('a-port','Port',{val:pre.port||'7125',im:'numeric'})+fld('a-name','Name (optional)',{val:pre.name})+fld('a-key','Moonraker API key (optional)',{secret:1,mono:1})))
++`<div class="savebar"><button type="submit" class="btn pri">${ic('plus')}Add printer</button>${stEl('add','span','stat')}</div></form>`}
+const scanRes=()=>S.scanned?grp('Result',`<div class="row hi wrap"><span class="tile">${ic('wifi')}</span><span class="rm"><span class="rt">${esc(S.scanned)}</span><span class="rs">Klipper printer “mainsailos”</span></span><span class="rbtn"><button type="button" class="btn" data-a="useFound">Use this printer</button></span></div>`):'';
+const scanHTML=()=>ihead(tileL('search'),'Find Klipper printers','Looks for Moonraker on port 7125.')+grp('',fld('subnet','Subnet (optional)',{ph:'192.0.2.0/24',mono:1,hint:'Leave empty to scan the network this Hub is on.'}))+`<div class="savebar"><button type="button" class="btn pri" data-a="scan">${ic('search')}Scan</button>${stEl('scan','span','stat')}</div><div id="scanRes">${scanRes()}</div>`;
+const packHTML=()=>ihead(tileL('box'),'Klipper add-on','Installs the spool macros and the Spoolwarden Moonraker settings on a Klipper printer.')+grp('Commands',`<pre class="code" id="packCode">${esc(PACK)}</pre><div class="btnrow"><button type="button" class="btn" data-a="copy">${ic('copy')}Copy</button>${stEl('copy','span','stat')}</div>`,'Run them on the Klipper printer.');
+
+/* ---------- Intake detail ---------- */
+function fldsHTML(){const e=S.edit;let h=e?`<div class="note info">${ic('pencil')}<div><p>Change what is wrong. Only changed fields are sent.</p></div></div>`:`<div class="savebar"><button type="button" class="btn" data-a="edit">${ic('pencil')}Edit by hand</button>${stEl('rec','span','stat')}</div>`;
+h+=FLD.map(([g,fs])=>grp(g,fs.map(([k,l,u])=>{const v=REC[k],c=CONF[k];
+if(e)return `<div class="row kv"><label class="rt" for="e-${k}">${l}</label><span class="ein"><input class="in" id="e-${k}" data-rk="${k}" value="${esc(v)}" autocomplete="off"${k==='price'?' placeholder="Not on label"':''}>${u?`<span class="unit">${u}</span>`:''}</span></div>`;
+const sw=k==='col'&&/^#[0-9a-f]{6}$/i.test(v)?`<span class="swc" style="background:${v}"></span>`:'';
+const shown=v===''?'<span class="muted">Empty</span>':sw+`<span>${esc(v.replace(/(\d)-(\d)/,'$1–$2'))}${u?' '+u:''}</span>`;
+return row({t:l,val:shown+(c?bdg(c[0],SHP[c[0]],c[1]):'')})}).join(''),g==='Identity'?'Read confidence is high unless a field is marked.':'')).join('');
+if(e)h+=`<div class="savebar"><button type="button" class="btn pri" data-a="editSave">Save changes</button><button type="button" class="btn" data-a="editCancel">Cancel</button>${stEl('rec','span','stat')}</div>`;
+return h}
+const propHTML=()=>S.ai!=='prop'?'':`<div class="prop"><p class="ptl">${ic('spark')}Proposed changes</p><ul class="diff">${AIP.map(([l,a,b])=>`<li><span class="k">${l}</span><span class="dv"><span class="sr">Before: </span><span class="was">${esc(a)}</span>${ic('arrow')}<span class="sr">After: </span><span class="now">${esc(b)}</span></span></li>`).join('')}</ul><div class="btnrow0"><button type="button" class="btn pri" data-a="aiAccept">Accept</button><button type="button" class="btn" data-a="aiDiscard">Discard</button></div></div>`;
+const revHTML=()=>grp('Revisions',REV.slice().reverse().map(v=>`<div class="row wrap"><span class="rm"><span class="rt">Revision ${v.n} · ${esc(v.when)} · ${v.by}</span><span class="rs${v.done?' strike':''}">${esc(v.what)}</span></span><span class="rbtn">${v.done?bdg('neu','shol','Undone'):v.undo?`<button type="button" class="btn" data-a="undoRev" data-v="${v.n}">${ic('undo')}Undo revision ${v.n}</button>`:''}</span></div>`).join(''));
+function rDetail(r){const one=r.id==='r1',st=one?S.recSt:r.st;
+let h=ihead(`<span class="thumb lg">${r.ph?photo(r.hex):ic('doc')}</span>`,r.t,esc(r.when+' · '+SRC[r.src]),stB(st)+confB(r));
+h+=grp('Photos',r.ph?`<div class="photos">${Array.from({length:r.ph},(_,i)=>`<button type="button" class="pbtn" data-a="photo" data-id="${r.id}" data-v="${i+1}" aria-label="Enlarge photo ${i+1} of ${r.ph}">${photo(r.hex)}</button>`).join('')}</div>`:row({t:'No photo',s:'This spool was added by hand.'}),r.ph?'Tap a photo to enlarge it.':'');
+h+=grp('Spools',row({t:r.sp.length>1?'Spools':'Spool',val:r.sp.join(', ')})+row({t:'Source',val:SRC[r.src]}));
+if(!one)return h+`<div class="note info">${ic('info')}<div><p>Field details are filled in only for the newest record in this mockup.</p></div></div>`;
+h+=`<div id="flds">${fldsHTML()}</div>`;
+h+=grp('Ask the AI to correct it',`<div class="fld"><label for="aiq">What is wrong?</label><div class="fc"><textarea class="in" id="aiq" rows="2" placeholder="e.g. brand is Polymaker"></textarea></div></div><div class="btnrow"><button type="button" class="btn" data-a="ask">${ic('spark')}Ask the AI</button></div>${stEl('ai','div','res ni')}<div id="aiProp">${propHTML()}</div>`);
+return h+`<div id="revs">${revHTML()}</div>`}
+
+/* ---------- Settings forms (one Save per form) ---------- */
+const sb=(f,label)=>`<div class="savebar"><button type="button" class="btn pri" data-a="save" data-f="${f}">${label||'Save'}</button>${stEl('save-'+f,'span','stat')}</div>`;
+const fhead=(k,s)=>ihead(tileL(SF[k][1]),SF[k][0],s);
+const keyB=()=>S.key?bdg('ok','sfill','Set'):bdg('warn','shol','Not set');
+const pv=(k,g,a)=>{const f=(x,y,w,h,o,r)=>`<rect x="${x}" y="${y}" width="${w}" height="${h}"${r?` rx="${r}"`:''} fill="${a}"${o<1?` fill-opacity="${o}"`:''}/>`;let s=`<rect width="120" height="90" fill="${g}"/>`;
+if(k==='console'){s+=f(0,0,120,12,.16)+f(0,12,18,78,.09)+f(5,18,8,8,1,2)+f(5,31,8,8,.4,2)+f(5,44,8,8,.4,2)+f(5,57,8,8,.4,2);for(let i=0;i<6;i++)s+=f(24,20+i*11,40,3,.7)+f(76,20+i*11,30,3,.35)+f(24,27+i*11,90,1,.3)}
+else if(k==='workbench'){s+=f(0,0,32,90,.1)+f(4,10,24,7,1,3.5)+f(4,22,24,5,.35,2.5)+f(4,32,24,5,.35,2.5)+f(4,42,24,5,.35,2.5);for(let i=0;i<4;i++)s+=f(38+(i%2)*40,10+Math.floor(i/2)*40,34,34,.14,6)+f(43+(i%2)*40,16+Math.floor(i/2)*40,20,4,.7,2)}
+else if(k==='spool'){s+=f(8,6,26,10,1,5)+f(38,6,22,10,.25,5)+f(64,6,22,10,.25,5);for(let i=0;i<2;i++)s+=f(8+i*54,24,50,60,.13,10)+`<circle cx="${33+i*54}" cy="50" r="13" fill="none" stroke="${a}" stroke-width="6"${i?' stroke-opacity=".55"':''}/>`+f(18+i*54,72,30,4,.6,2)}
+else{s+=f(6,8,40,74,.09,5)+f(10,14,32,7,1,3);for(let i=0;i<4;i++)s+=f(10,27+i*12,26,3,.5);s+=f(52,8,62,74,.09,5);for(let i=0;i<5;i++)s+=f(57,15+i*13,36,3,.7)+`<path d="M106 ${13+i*13}l3 3-3 3" fill="none" stroke="${a}" stroke-width="1.5"/>`+(i?f(57,10+i*13,52,1,.3):'')}
+return `<svg viewBox="0 0 120 90" preserveAspectRatio="xMidYMid slice" focusable="false">${s}</svg>`};
+const tilesHTML=()=>`<div class="tpk" role="group" aria-label="Theme">${LOOKS.map(([k,n,l,f,g,a])=>`<button type="button" class="tt" data-a="look" data-v="${f}" aria-pressed="${k==='panes'}"><span class="tpv" aria-hidden="true">${pv(k,g,a)}</span><span class="tn">${n}${k==='panes'?ic('check','tchk'):''}</span><span class="tl">${l}</span></button>`).join('')}</div>`;
+const bkList=()=>grp('Backups on this Hub',S.bk.map(([w,k,s])=>row({icon:'archive',t:w,s:`${k} · ${s}`,val:`<button type="button" class="btn ghost" data-a="dl" data-v="${w}" aria-label="Download backup ${w}">${ic('down')}Download</button>`})).join(''));
+const restoreHTML=()=>`<div class="row hi wrap"><span class="tile num">1</span><span class="rm"><span class="rt">Choose a backup zip</span><span class="rs" id="rzName">No zip chosen</span></span><span class="rbtn"><input type="file" id="rzip" accept=".zip,application/zip" class="sr"><label class="btn" for="rzip">${ic('upload')}Choose a zip</label></span></div>`
++`<div class="row hi wrap"><span class="tile num">2</span><span class="rm"><span class="rt">Upload and check</span><span class="rs">Nothing changes yet. The Hub first shows what is in the zip.</span></span><span class="rbtn"><button type="button" class="btn" id="rzCheck" data-a="rzCheck" disabled>Upload and check</button></span></div>${stEl('rz')}`
++`<div class="row hi"><span class="tile num">3</span><span class="rm"><label class="rt" for="rzType">Type restore to go on</label><input class="in mono" id="rzType" autocomplete="off" disabled placeholder="restore"></span></div>`
++`<div class="btnrow"><button type="button" class="btn dngf" id="rzGo" data-a="restore" disabled>Restore</button><button type="button" class="btn" data-a="rzCancel">Cancel</button></div>`;
+const FORM={
+appearance:()=>fhead('appearance','How this page looks in this browser.')+grp('Light or dark',[['light','sun','Light'],['dark','moon','Dark'],['system','auto','System','Follows this device']].map(([v,i,t,s])=>row({a:'theme',v,icon:i,t,s,at:` role="radio" aria-checked="${cur===v}"`,val:ic('check','tick')})).join(''),'Saved in this browser right away. No setup code needed.',' role="radiogroup" aria-label="Appearance"')
++grp('Theme',tilesHTML(),'Each theme is its own mockup file here: choosing one opens it at this view.')
++`<div data-form="look">`+grp('',fld('newlook','Theme for new devices',{opts:LOOKS.map(x=>x[1]),hint:'For devices that have not chosen a theme. A Hub setting: changes need the setup code.'}))+sb('look')+'</div>',
+general:()=>fhead('general','How this Hub is named and reached.')+`<div data-form="general">`+grp('',fld('dname','Display name')+fld('hosts','Names for this page',{mono:1,hint:'Space separated.'}))+sb('general')+'</div>',
+storage:()=>fhead('storage','Where spools are kept. Used for new spools and the location lists.')+`<div data-form="storage">`+grp('Locations',fld('locs','Locations',{hint:'Comma separated.'})+fld('pla','PLA rack',{opts:locs()})+fld('over','Overflow location',{opts:locs()}))+grp('Storage boxes',fld('prefix','Box location prefix')+fld('boxes','Number of storage boxes',{im:'numeric'}))+sb('storage')+'</div>',
+network:()=>fhead('network','Addresses this Hub answers on, and what may change from outside.')+`<div data-form="network">`+grp('Addresses',fld('pub','Web public address',{mono:1,ph:'https://mcp.example.com/filament'})+fld('station','Weigh Station address',{mono:1,ph:'http://station.local:5003'}))+grp('Public address',swRow('Allow printer changes from the public address','allow',S.set.allow,'Off: printers can be changed only from the local network.'))+sb('network')+'</div>'+grp('Remote access',row({a:'soon',v:'Firewall rules',icon:'shield',t:'Show the firewall rules',chev:1})+row({a:'soon',v:'Certificate',icon:'doc',t:'Get the certificate',chev:1})),
+pass:()=>fhead('pass','A passphrase for opening this page from outside the local network.')+grp('',row({t:'Web passphrase',val:`<span data-pst>${S.pass?bdg('ok','sfill','Set'):bdg('warn','shol','Not set')}</span>`}))+`<div data-form="pass">`+grp(S.pass?'Replace passphrase':'New passphrase',fld('p1','New passphrase',{secret:1,ac:'new-password',hint:'At least 12 characters.'})+fld('p2','New passphrase again',{secret:1,ac:'new-password'}))+`<div class="savebar"><button type="button" class="btn pri" data-a="passSet">Set passphrase</button>${stEl('save-pass','span','stat')}</div></div>`,
+ai:()=>fhead('ai','Reads spool labels from photos.')+grp('Anthropic API key',row({t:'API key',val:`<span data-kst>${keyB()}</span>`})+`<div class="btnrow"><button type="button" class="btn" data-a="keyCheck">${ic('pulse')}Check</button><button type="button" class="btn" data-a="keyRep" aria-expanded="false" aria-controls="keyRep">${ic('key')}Replace</button><button type="button" class="btn dng" data-a="keyDel">${ic('trash')}Remove</button></div>${stEl('key','div','res ni')}<div id="keyRep" hidden>${fld('newkey','New API key',{secret:1,mono:1,ph:'sk-ant-…'})}<div class="btnrow"><button type="button" class="btn pri" data-a="keySave">Save key</button></div></div>`)
++`<div data-form="ai">`+grp('Reading',fld('model','Claude model',{mono:1})+fld('reads','Label reads per day',{im:'numeric'})+fld('kept','Recently added records kept',{im:'numeric',hint:'Now: 20 records, 14.2 MB of photos'}))+`<div class="note info">${ic('info')}<div><p>Changing the model or the reads per day restarts the Hub.</p></div></div>`+sb('ai')+'</div>',
+backups:()=>fhead('backups','Back up, download and restore.')+`<div class="note">${ic('warn')}<div><p>One zip with everything Spoolwarden keeps. It is not encrypted and holds the setup secrets: store it somewhere safe.</p></div></div><div class="savebar"><button type="button" class="btn pri" data-a="backup">${ic('archive')}Back up now</button>${stEl('bk','span','stat')}</div><div id="bkList">${bkList()}</div>`
++`<div data-form="backups">`+grp('Nightly backups',`<div class="fld"><label for="f-keep">Keep nightly backups for</label><div class="fc"><span class="inl"><input class="in" id="f-keep" data-k="keep" inputmode="numeric" autocomplete="off" value="${esc(S.set.keep)}"><span class="unit">days</span></span><div class="err" id="f-keep-e" hidden></div></div></div>`)+sb('backups')+'</div>'+grp('Restore',restoreHTML(),'Restoring replaces everything Spoolwarden keeps now.'),
+library:()=>fhead('library','Filament data Spoolwarden uses to fill in new spools.')+grp('Catalog',row({icon:'book',t:'Catalog version 2026.11.2 (signed release)',s:`<span id="libS">${S.libAdds} local additions. Last check 2026-11-12 03:10: ok.</span>`})+row({a:'libUp',icon:'refresh',t:'Update now',cls:'act'})+stEl('lib')+row({a:'libBack',icon:'undo',t:'Go back to the version before'}))
++`<div data-form="library">`+grp('Catalog token',row({t:'Catalog token',s:'Optional',val:`<span data-tst>${S.tokenSet?bdg('ok','sfill','Set'):bdg('neu','shol','Not set')}</span>`})+fld('token','New token',{secret:1,mono:1}))+sb('library','Save token')+'</div>'
++grp('Add your own entry',fld('entry','Entry (JSON)',{area:1,mono:1,val:'',ph:'{ "brand": "…", "name": "…", "material": "PLA" }'})+`<div class="btnrow"><button type="button" class="btn" data-a="entryAdd">${ic('plus')}Add entry</button>${stEl('entry','span','stat')}</div>`),
+voice:()=>fhead('voice','How the Weigh Station speaks. The Weigh Station feature is on.')+`<div data-form="voice">`+grp('Voice',[['piper','Piper','Natural; a 60-80 MB download'],['espeak','espeak-ng','Robotic; no download']].map(([v,t,s])=>`<label class="row" for="v-${v}"><input type="radio" name="voice" id="v-${v}" value="${v}"${S.set.voice===v?' checked':''}><span class="rm"><span class="rt">${t}</span><span class="rs">${s}</span></span></label>`).join(''))+sb('voice')+'</div>'};
+/* ---------- Render, focus, paint ---------- */
+function fkey(){const a=d.activeElement;return a&&a!==d.body&&a.dataset?[a.dataset.a||'',a.dataset.id||'',a.dataset.v||'',a.id||'']:null}
+function refocus(k){if(!k||(d.activeElement&&d.activeElement!==d.body))return;const e=k[3]?d.getElementById(k[3]):k[0]?$$('[data-a]').find(x=>x.dataset.a===k[0]&&(x.dataset.id||'')===k[1]&&(x.dataset.v||'')===k[2]):null;if(e&&e.offsetParent!==null)e.focus({preventScroll:true})}
+function render(parts){parts=parts||'sld';const k=fkey();app.dataset.depth=S.item?2:S.root?0:1;
+if(parts.includes('s'))side.innerHTML=sideHTML();if(parts.includes('l'))list.innerHTML=listHTML();if(parts.includes('d'))detail.innerHTML=detailHTML();
+paint();refocus(k)}
+function focusHead(){const L=lay();const pane=S.item?detail:(S.root&&L==='p')?side:list;if(L==='p')window.scrollTo(0,0);else if(S.item)detail.scrollTop=0;const h=$('[data-h]',pane);if(h&&h.offsetParent!==null)h.focus({preventScroll:true})}
+function paint(){paintLock();paintTheme();paintJob();$$('[data-dname]').forEach(e=>{e.textContent=S.set.dname});
+const L=lay(),it=eff();$$('#side [data-a="sec"]').forEach(e=>{if(L!=='p'&&e.dataset.id===S.sec)e.setAttribute('aria-current','page');else e.removeAttribute('aria-current')});
+$$('#list [data-a="item"]').forEach(e=>{if(L!=='p'&&e.dataset.id===it)e.setAttribute('aria-current','true');else e.removeAttribute('aria-current')})}
+function paintLock(){const l=LK[S.lock];$$('.lockchip').forEach(e=>{e.dataset.s=S.lock;e.setAttribute('aria-label',l[2]+': setup code');e.innerHTML=chipIn()});$$('.lockrow').forEach(e=>{e.dataset.s=S.lock;e.innerHTML=lockRowIn()})}
+function paintTheme(){$$('[data-a="theme"]').forEach(e=>{const on=String(e.dataset.v===cur);if(e.getAttribute('role')==='radio')e.setAttribute('aria-checked',on);else e.setAttribute('aria-pressed',on)});$$('[data-sv="appearance"]').forEach(e=>{e.textContent=TL[cur]})}
+function applyTheme(t){cur=t==='light'||t==='dark'?t:'system';if(cur==='system')root.removeAttribute('data-theme');else root.setAttribute('data-theme',cur);paintTheme()}
+function setTheme(t){pref=t;try{localStorage.setItem('fk-theme',t)}catch(e){}applyTheme(t);say('Appearance: '+TL[cur]+'.')}
+let sayT;function say(m){const l=$('#live');l.textContent='';clearTimeout(sayT);sayT=setTimeout(()=>{l.textContent=m},60)}
+function toast(m,k){const t=d.createElement('div');t.className='toast';t.innerHTML=(k?ic(RI[k]||'info'):'')+`<span>${esc(m)}</span>`;$('#toasts').appendChild(t);say(m);setTimeout(()=>t.remove(),3800)}
+function setSt(k,s,quiet){if(s)S.st[k]=s;else delete S.st[k];$$(`[data-st="${k}"]`).forEach(e=>{e.innerHTML=resHTML(s)});if(s&&!quiet&&s.k!=='note')say(s.m)}
+function ferr(id,m,nofocus){const i=d.getElementById(id),e=d.getElementById(id+'-e');if(!i)return;i.setAttribute('aria-invalid','true');if(e){e.innerHTML=ic('soct')+`<span>${esc(m)}</span>`;e.hidden=false;i.setAttribute('aria-describedby',[i.dataset.hint,id+'-e'].filter(Boolean).join(' '))}if(!nofocus)i.focus();say(m)}
+function fclr(id){const i=d.getElementById(id),e=d.getElementById(id+'-e');if(!i)return;i.removeAttribute('aria-invalid');if(e){e.hidden=true;e.innerHTML=''}if(i.dataset.hint)i.setAttribute('aria-describedby',i.dataset.hint);else i.removeAttribute('aria-describedby')}
+
+/* ---------- Background job (visible from every view) ---------- */
+const JSTEPS=['Collecting the settings and setup secrets','Adding the spool database','Adding 20 Recently added records with photos','Writing the zip'];
+function jobHTML(){const j=S.job;if(!j)return'';const run=j.k==='run';
+return `<div class="job" role="group" aria-label="Background job"><div class="jh">${run?'<span class="spin" aria-hidden="true"></span>':ic('sfill','okj')}<div class="rm"><p class="jt">Backup</p><p class="js">${run?`Running · step ${j.n} of 4`:`Done at ${j.at}`}</p></div>${run?'':`<button type="button" class="btn ghost icon" data-a="jobClear" aria-label="Dismiss the finished job">${ic('x')}</button>`}</div><span class="bar"><i style="width:${run?j.n*25:100}%"></i></span><button type="button" class="btn ghost jl" data-a="jobLog" aria-expanded="${S.jobOpen}">${ic('chev')}${S.jobOpen?'Hide log':`Show log (${j.log.length} ${j.log.length===1?'line':'lines'})`}</button>${S.jobOpen?`<ol class="jlog">${j.log.map(l=>`<li>${esc(l)}</li>`).join('')}</ol>`:''}</div>`}
+function paintJob(){const k=fkey(),h=jobHTML();const s=$('#jobS'),p=$('#jobP');if(s)s.innerHTML=h?'<h3 class="gh">Activity</h3>'+h:'';if(p)p.innerHTML=h;refocus(k)}
+function startJob(){S.job={k:'run',n:0,log:[]};paintJob();setSt('bk',{k:'run',m:'Backup running. Follow it from any view.'});let i=0;
+const done=()=>{S.job.k='ok';S.job.log.push('Backup: done.');S.job.at=hhmm();S.bk.unshift(['2026-11-12 '+S.job.at,'made here','4,812 KiB']);paintJob();setSt('bk',{k:'ok',m:'Backup: done.'});const b=$('#bkList');if(b)b.innerHTML=bkList()};
+const tick=()=>{S.job.log.push(JSTEPS[i]);S.job.n=++i;paintJob();if(i<4)setTimeout(tick,950);else setTimeout(done,700)};setTimeout(tick,250)}
+
+/* ---------- Dialogs and the setup-code gate ---------- */
+let prevF=null;
+const focusables=r=>$$('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),a[href],[tabindex]:not([tabindex="-1"])',r).filter(e=>!e.closest('[hidden]'));
+function dlg(t,b,ok,alt){if(D.hidden)prevF=d.activeElement;$('#dlgT').textContent=t;$('#dlgB').innerHTML=b;D._ok=ok;D._alt=alt;D.hidden=false;$('#scrim').hidden=false;app.inert=true;dock.inert=true;const f=$('[autofocus]',D)||focusables(D)[0];if(f){f.focus();if(f.select&&f.value)f.select()}}
+function closeDlg(){if(D.hidden)return;D.hidden=true;$('#scrim').hidden=true;app.inert=false;dock.inert=false;$('#dlgB').innerHTML='';D._ok=D._alt=null;if(prevF&&prevF.isConnected&&prevF.offsetParent!==null)prevF.focus();else focusHead()}
+const acts=(ok,cls,extra)=>`<div class="acts">${extra||''}<button type="button" class="btn" data-a="dclose">Cancel</button><button type="submit" class="btn ${cls||'pri'}">${ok}</button></div>`;
+function lockDlg(what,then){dlg('Enter the setup code',`<p class="dp">${what?`To ${esc(what)}, enter the 8-digit setup code.`:'Changes need the 8-digit setup code.'} Viewing needs no code.</p><div class="fld"><label for="code">Setup code</label><div class="fc"><input class="in mono" id="code" inputmode="numeric" autocomplete="one-time-code" placeholder="1234-5678" maxlength="9" autofocus><div class="err" id="code-e" hidden></div></div></div><label class="chk" for="trust"><input type="checkbox" id="trust"><span>Trust this computer <span class="muted">(no code needed here for 90 days)</span></span></label>`+acts(what?'Unlock and go on':'Unlock'),
+()=>{const v=$('#code').value.replace(/\D/g,'');if(v.length!==8)return ferr('code','Enter all 8 digits of the setup code.');S.lock=$('#trust').checked?'trusted':'unlocked';closeDlg();paintLock();if(then){say('Unlocked.');then()}else toast(S.lock==='trusted'?'Unlocked. This computer is trusted for 90 days.':'Unlocked. Changes work in this browser.','ok')})}
+const need=(what,fn)=>S.lock==='locked'?lockDlg(what,fn):fn();
+function fDlg(title,label,value,okL,o,fn){dlg(title,`${o.p?`<p class="dp">${o.p}</p>`:''}<div class="fld"><label for="dv">${label}</label><div class="fc">${o.secret?`<div class="secret"><input class="in mono" id="dv" type="password" autocomplete="off" autofocus><button type="button" class="btn ghost" data-a="reveal">Show</button></div>`:`<input class="in" id="dv" value="${esc(value)}" autocomplete="off" autofocus>`}${o.hint?`<p class="hint">${o.hint}</p>`:''}<div class="err" id="dv-e" hidden></div></div></div>`+acts(okL,'pri',o.extra),
+()=>{const v=$('#dv').value.trim();if(!v)return ferr('dv',o.empty);closeDlg();fn(v)},o.alt)}
+const confirmDlg=(t,msg,okL,fn)=>dlg(t,`<p class="dp">${msg}</p>`+acts(okL,'dngf'),()=>{closeDlg();fn()});
+
+/* ---------- Navigation ---------- */
+const hashName=()=>S.sec==='recent'&&S.item==='r1'?'recent-detail':S.sec;
+const setHash=()=>{try{history.replaceState(null,'','#'+hashName())}catch(e){}};
+function parse(){let h='';try{h=decodeURIComponent(location.hash.slice(1)).toLowerCase()}catch(e){}let t=null;const m=h.match(/^(.*)-(light|dark)$/);if(m){h=m[1];t=m[2]}if(ALIAS[h])h=ALIAS[h];let item=null;if(h==='recent-detail'){h='recent';item='r1'}if(!isSec(h))h='printers';return{h,item,t}}
+function fromHash(){const p=parse();S.sec=p.h;S.item=p.item;S.root=false;applyTheme(p.t||pref);render()}
+
+/* ---------- Actions ---------- */
+const A={
+sec:el=>{S.sec=el.dataset.id;S.item=null;S.root=false;setHash();render();if(lay()==='p')focusHead();else list.scrollTop=0},
+item:el=>{const id=el.dataset.id;if(S.sec==='printers'&&id==='add'&&!S.addPre)S.addType=S.addType||'bambu';S.item=id;setHash();if(lay()==='d'){render('d');detail.scrollTop=0}else{render();focusHead()}},
+back:()=>{if(S.item){const it=S.item;S.item=null;setHash();render();focusHead();if(lay()!=='p'){const r=$$('#list [data-a="item"]').find(e=>e.dataset.id===it);if(r)r.focus()}}else{S.root=true;render();focusHead()}},
+lock:()=>{if(S.lock==='locked')return lockDlg();const t=S.lock==='trusted';
+dlg(t?'Trusted computer':'Unlocked',`<p class="dp">${t?'This browser is a trusted computer. No setup code is needed here until 2027-02-10.':'Changes work in this browser without the code until you lock it again.'}</p>${t?'':`<div class="note info">${ic('shield')}<div><p>Trust this computer: no code needed here for 90 days.</p></div></div>`}<div class="acts">${t?'<button type="button" class="btn dng" data-a="dalt" data-v="untrust">Stop trusting</button>':'<button type="button" class="btn" data-a="dalt" data-v="trust">Trust this computer</button>'}<button type="submit" class="btn pri">${ic('lock')}Lock now</button></div>`,
+()=>{S.lock='locked';closeDlg();paintLock();toast('Locked. Changes need the setup code again.','info')},v=>{S.lock=v==='trust'?'trusted':'locked';closeDlg();paintLock();toast(v==='trust'?'This computer is trusted for 90 days.':'This computer is no longer trusted.','ok')})},
+theme:el=>setTheme(el.dataset.v),
+look:el=>{const f=el.dataset.v;if(f==='d-panes.html')return say('Theme: Panes. This is the mockup you are in.');location.href=f+'#'+hashName()+(cur==='system'?'':'-'+cur)},
+dclose:()=>closeDlg(),dalt:el=>{if(D._alt)D._alt(el.dataset.v)},
+reveal:el=>{const i=el.parentElement.querySelector('input');const show=i.type==='password';i.type=show?'text':'password';el.textContent=show?'Hide':'Show'},
+sw:el=>{el.setAttribute('aria-checked',String(el.getAttribute('aria-checked')!=='true'));const f=el.closest('[data-form]');if(f)setSt('save-'+f.dataset.form,{k:'note',m:'Not saved yet.'},1)},
+emptyP:()=>{S.emptyP=!S.emptyP;if(S.emptyP&&byId(S.item)){S.item=null;setHash()}render();say(S.emptyP?'Showing the empty state.':'Showing the printers.')},
+emptyI:()=>{S.emptyI=!S.emptyI;if(S.emptyI&&S.item){S.item=null;setHash()}render();say(S.emptyI?'Showing the empty state.':'Showing the records.')},
+soon:el=>toast(el.dataset.v+': not part of this mockup.','info'),
+live:()=>toast('The live printer view opens in the web app. Not part of this mockup.','info'),
+dl:()=>toast('Downloads are not part of this mockup.','info'),
+test:el=>{const p=byId(el.dataset.id),k='test-'+p.id;if(S.st[k]&&S.st[k].k==='run')return;setSt(k,{k:'run',m:'Testing '+p.addr+'…'});
+setTimeout(()=>setSt(k,p.ok?{k:'ok',m:p.kind==='bambu'?(p.cert==='Pinned'?p.addr+' answers; its certificate matches the pinned one.':p.addr+' answers; its certificate is pinned now.'):p.addr+' answers.'}:{k:'bad',m:'No answer from '+p.addr+':8883: check that it is on.'}),1500)},
+map:el=>{const p=byId(el.dataset.id),k='map-'+p.id;if(S.st[k]&&S.st[k].k==='run')return;if(!p.ok)return setSt(k,{k:'bad',m:'Map slots needs the printer to answer. Test the connection first.'});
+need('map the slots of '+p.name,()=>{let n=1;const step=()=>{setSt(k,{k:'run',m:`Mapping… step ${n} of 4`,p:n/4},n>1);if(n<4){n++;setTimeout(step,800)}else setTimeout(()=>{p.mapped='Mapped';setSt(k,{k:'ok',m:'Slots: '+(p.slots.map(s=>s[0]).join(', ')||'none found')})},800)};step()})},
+detect:el=>{const p=byId(el.dataset.id),k='det-'+p.id;need('detect the model and slots',()=>{setSt(k,{k:'run',m:'Asking Moonraker…'});setTimeout(()=>setSt(k,{k:'ok',m:p.slots.length?`Found ${p.slots.length} slots: ${p.slots.map(s=>s[0]).join(', ')}.`:'Found no slots.'}),1400)})},
+report:el=>{const p=byId(el.dataset.id),k='rep-'+p.id;setSt(k,{k:'run',m:'Collecting a report…'});setTimeout(()=>setSt(k,{k:'ok',m:'Report saved at '+hhmm()+'. Find it in Saved reports.'}),1600)},
+rename:el=>{const p=byId(el.dataset.id);fDlg('Rename printer','Name',p.name,'Rename',{empty:'Enter a name.'},v=>need('rename '+p.name,()=>{const o=p.name;p.name=v;render();toast(`Renamed ${o} to ${v}.`,'ok')}))},
+addr:el=>{const p=byId(el.dataset.id),bam=p.kind==='bambu';fDlg('Change address',bam?'IP address or name':'Address',p.addr,'Save address',{empty:'Enter an address.',hint:bam?'For example 192.0.2.40 or printer.local':'For example voron.example:7125'},v=>need('change the address',()=>{p.addr=v;render();toast('Address changed to '+v+'.','ok')}))},
+code:el=>{const p=byId(el.dataset.id);fDlg('Replace Access Code','New Access Code','','Replace',{secret:1,p:`For ${esc(p.name)}. The old code is deleted.`,hint:'On the printer: Settings &gt; Network/LAN',empty:'Enter the Access Code shown on the printer.'},()=>need('replace the Access Code',()=>toast('Access Code replaced for '+p.name+'.','ok')))},
+apikey:el=>{const p=byId(el.dataset.id);fDlg(p.key?'Replace Moonraker API key':'Set Moonraker API key','API key','',p.key?'Replace':'Set key',{secret:1,empty:'Paste the API key from Moonraker.',extra:p.key?'<button type="button" class="btn dng" data-a="dalt" data-v="clear">Clear key</button>':'',
+alt:()=>{closeDlg();need('clear the API key',()=>{p.key=false;render();toast('API key cleared for '+p.name+'.','ok')})}},()=>need('set the API key',()=>{p.key=true;render();toast('API key saved for '+p.name+'.','ok')}))},
+lane:el=>{const p=byId(el.dataset.id);dlg('Lane data',`<p class="dp m">How ${esc(p.name)} reports which lane feeds the toolhead.</p><div class="lst" role="radiogroup" aria-label="Lane data">${['auto','on','off'].map(v=>row({a:'dalt',v,t:LANE[v],at:` role="radio" aria-checked="${p.lane===v}"`,val:ic('check','tick')})).join('')}</div><div class="acts"><button type="button" class="btn" data-a="dclose">Close</button></div>`,null,
+v=>{closeDlg();if(v===p.lane)return;need('change lane data',()=>{p.lane=v;render();toast('Lane data: '+LANE[v]+'.','ok')})})},
+forget:el=>{const p=byId(el.dataset.id);confirmDlg('Forget printer',`Forget ${esc(p.name)}? Its ${p.kind==='bambu'?'Access Code':'API key'} is deleted.`,'Forget',()=>need('forget '+p.name,()=>{P.splice(P.indexOf(p),1);S.item=null;setHash();render();focusHead();toast('Forgot '+p.name+'.','ok')}))},
+forgetCert:el=>{const p=byId(el.dataset.id);confirmDlg('Forget certificate',`Forget the pinned certificate of ${esc(p.name)}? The next connection pins the certificate the printer shows then.`,'Forget certificate',()=>need('forget the certificate',()=>{p.cert='Not pinned';render();toast('Certificate forgotten for '+p.name+'.','ok')}))},
+useFound:()=>{S.addType='klipper';S.addPre={addr:'192.0.2.57',port:'7125',name:'mainsailos',found:1};S.sec='printers';S.item='add';setHash();render();focusHead()},
+dismiss:()=>{S.found=false;render();focusHead();toast('Dismissed mainsailos. It shows up again on the next scan.','ok')},
+addType:el=>{S.addType=el.dataset.v;S.addPre=null;delete S.st.add;render('d')},
+scan:()=>{const i=$('#f-subnet');fclr('f-subnet');const sn=i.value.trim()||'192.0.2.0/24';if(!/^\d{1,3}(\.\d{1,3}){3}\/\d{1,2}$/.test(sn))return ferr('f-subnet','Use the form 192.0.2.0/24, or leave it empty.');
+setSt('scan',{k:'run',m:'Scanning '+sn+'…'});setTimeout(()=>{S.scanned='Found on '+sn+': 192.0.2.57:7125';setSt('scan',{k:'ok',m:'1 Klipper printer found.'});const r=$('#scanRes');if(r)r.innerHTML=scanRes()},1500)},
+copy:()=>{const ok=()=>setSt('copy',{k:'ok',m:'Copied.'}),no=()=>{const r=d.createRange();r.selectNodeContents($('#packCode'));const s=getSelection();s.removeAllRanges();s.addRange(r);setSt('copy',{k:'info',m:'Selected. Press Ctrl+C to copy.'})};try{navigator.clipboard.writeText(PACK).then(ok,no)}catch(e){no()}},
+photo:el=>{const r=R.find(x=>x.id===el.dataset.id);dlg(`Photo ${el.dataset.v} of ${r.ph}`,`<div class="phbig">${photo(r.hex)}</div><p class="dp m">A placeholder: photos are not part of this mockup.</p><div class="acts"><button type="button" class="btn" data-a="dclose">Close</button></div>`)},
+edit:()=>{S.edit=true;delete S.st.rec;$('#flds').innerHTML=fldsHTML();const f=$('#e-brand');if(f)f.focus()},
+editCancel:()=>{S.edit=false;delete S.st.rec;$('#flds').innerHTML=fldsHTML();const b=$('[data-a="edit"]');if(b)b.focus()},
+editSave:()=>{const ch=[];$$('[data-rk]').forEach(i=>{const k=i.dataset.rk,v=i.value.trim();if(v!==REC[k])ch.push([k,v])});if(!ch.length)return setSt('rec',{k:'info',m:'Nothing changed.'});
+need('save the record',()=>{const names=ch.map(([k])=>LBL[k]),rc=ch.map(([k,v])=>[k,REC[k],v]);ch.forEach(([k,v])=>{REC[k]=v});S.edit=false;S.recSt='hand';REV.push({n:REV.length+1,when:'just now',by:'by hand',ch:rc,what:chTxt(rc),undo:true,done:false});S.st.rec={k:'ok',m:`Saved ${ch.length} ${ch.length>1?'changes':'change'}: ${names.join(', ')}.`};render();say(S.st.rec.m);const b=$('#detail [data-a="edit"]');if(b)b.focus()})},
+ask:()=>{if(S.ai==='run')return;S.ai='run';$('#aiProp').innerHTML='';setSt('ai',{k:'run',m:'Asking the AI… (up to a minute)'});setTimeout(()=>{S.ai='prop';setSt('ai',{k:'info',m:'The AI proposes 2 changes. Check them, then accept or discard.'});const p=$('#aiProp');if(p)p.innerHTML=propHTML()},2000)},
+aiAccept:()=>need('accept the AI proposal',()=>{const rc=[['name',REC.name,'PolyTerra PLA Charcoal Black (Matte)'],['nozr',REC.nozr,'190-220']];rc.forEach(([k,,v])=>{REC[k]=v});S.ai=null;S.recSt='ai';REV.push({n:REV.length+1,when:'just now',by:'by AI',ch:rc,what:chTxt(rc),undo:true,done:false});S.st.ai={k:'ok',m:'Accepted: Name and Nozzle range changed.'};render();say(S.st.ai.m);const b=$('#detail [data-a="ask"]');if(b)b.focus()}),
+aiDiscard:()=>{S.ai=null;$('#aiProp').innerHTML='';setSt('ai',{k:'info',m:'Proposal discarded. Nothing changed.'});$('[data-a="ask"]').focus()},
+undoRev:el=>{const v=REV.find(x=>x.n===+el.dataset.v);need('undo revision '+v.n,()=>{v.done=true;v.ch.forEach(([k,o])=>{REC[k]=o});render();toast(`Revision ${v.n} undone. `+v.ch.map(([k,o])=>`${LBL[k]} is ${fv(k,o)} again`).join('; ')+'.','ok');const h=$('#revs .gh');if(h){h.tabIndex=-1;h.focus()}})},
+save:el=>{const f=el.dataset.f,ks=FK[f];ks.forEach(k=>fclr('f-'+k));const val=k=>{if(k==='voice'){const c=$('input[name="voice"]:checked');return c?c.value:S.set.voice}const e=$(`#detail [data-k="${k}"]`);if(!e)return S.set[k];if(e.getAttribute('role')==='switch')return e.getAttribute('aria-checked')==='true';return e.value.trim()};
+if(f==='general'&&!val('dname'))return ferr('f-dname','Enter a display name.');
+if(f==='storage'){if(!val('locs'))return ferr('f-locs','Enter at least one location.');if(!/^\d{1,2}$/.test(val('boxes')))return ferr('f-boxes','Enter a whole number, for example 2.')}
+if(f==='ai'){if(!/^\d{1,4}$/.test(val('reads')))return ferr('f-reads','Enter a whole number, for example 40.');if(!/^\d{1,3}$/.test(val('kept')))return ferr('f-kept','Enter a whole number, for example 20.')}
+if(f==='backups'&&!/^\d{1,3}$/.test(val('keep')))return ferr('f-keep','Enter a number of days, for example 14.');
+const ch=ks.filter(k=>val(k)!==S.set[k]);if(!ch.length)return setSt('save-'+f,{k:'info',m:'Nothing changed.'});
+const vals={};ch.forEach(k=>{vals[k]=val(k)});
+need('save '+SF[f][0],()=>{Object.assign(S.set,vals);let m='Saved.';
+if(f==='ai'&&('model' in vals||'reads' in vals))m='Saved. The Hub is restarting.';
+if(f==='library'){S.tokenSet=true;S.set.token='';const t=$('#f-token');if(t)t.value='';$$('[data-tst]').forEach(e=>{e.innerHTML=bdg('ok','sfill','Set')});m='Token saved.'}
+S.st['save-'+f]={k:'ok',m};render(f==='storage'?'sld':'sl');setSt('save-'+f,S.st['save-'+f]);
+$$('[data-sv]').forEach(e=>{e.innerHTML=sVal(e.dataset.sv)})})},
+passSet:()=>{const a=$('#f-p1').value,b=$('#f-p2').value;fclr('f-p1');fclr('f-p2');let bad=0;
+if(a.length<12){ferr('f-p1','Use at least 12 characters.');bad=1}
+if(a!==b){ferr('f-p2','The two passphrases do not match.',bad);bad=1}
+if(bad)return;need('set the web passphrase',()=>{S.pass=true;$('#f-p1').value='';$('#f-p2').value='';$$('[data-pst]').forEach(e=>{e.innerHTML=bdg('ok','sfill','Set')});render('sl');setSt('save-pass',{k:'ok',m:'Passphrase set.'})})},
+keyCheck:()=>{setSt('key',{k:'run',m:'Checking the key…'});setTimeout(()=>setSt('key',S.key?{k:'ok',m:'The key works.'}:{k:'warn',m:'No key is set. Add one with Replace.'}),1200)},
+keyRep:el=>{const b=$('#keyRep'),open=b.hidden;b.hidden=!open;el.setAttribute('aria-expanded',String(open));if(open)$('#f-newkey').focus()},
+keySave:()=>{const v=$('#f-newkey').value.trim();fclr('f-newkey');if(!/^sk-ant-\S{8,}$/.test(v))return ferr('f-newkey','This does not look like an Anthropic API key. It starts with sk-ant-.');
+need('replace the API key',()=>{S.key=true;$('#f-newkey').value='';$('#keyRep').hidden=true;$('[data-a="keyRep"]').setAttribute('aria-expanded','false');$$('[data-kst]').forEach(e=>{e.innerHTML=keyB()});$$('[data-sv="ai"]').forEach(e=>{e.innerHTML=sVal('ai')});setSt('key',{k:'ok',m:'Key replaced.'})})},
+keyDel:()=>confirmDlg('Remove API key','Remove the Anthropic API key? The Label Reader stops until a key is added again.','Remove key',()=>need('remove the API key',()=>{S.key=false;$$('[data-kst]').forEach(e=>{e.innerHTML=keyB()});$$('[data-sv="ai"]').forEach(e=>{e.innerHTML=sVal('ai')});setSt('key',{k:'warn',m:'Key removed. The Label Reader is off until a key is added.'})})),
+backup:()=>{if(S.job&&S.job.k==='run')return toast('A backup is already running.','info');need('back up now',startJob)},
+jobLog:()=>{S.jobOpen=!S.jobOpen;paintJob()},
+jobClear:()=>{S.job=null;S.jobOpen=false;paintJob();focusHead()},
+rzCheck:()=>{const f=$('#rzip').files[0];setSt('rz',{k:'run',m:'Uploading and checking…'});setTimeout(()=>{setSt('rz',{k:'ok',m:`${f?f.name:'The zip'} is a Spoolwarden backup. Restoring it replaces the settings, setup secrets, spools and Recently added records of this Hub.`});$('#rzType').disabled=false;$('#rzType').focus()},1200)},
+rzCancel:()=>{const i=$('#rzip');i.value='';$('#rzName').textContent='No zip chosen';$('#rzCheck').disabled=true;const t=$('#rzType');t.value='';t.disabled=true;$('#rzGo').disabled=true;setSt('rz',null);say('Restore cancelled.')},
+restore:()=>need('restore the backup',()=>toast('Restore is not part of this mockup.','info')),
+libUp:()=>{setSt('lib',{k:'run',m:'Checking for a newer Catalog…'});setTimeout(()=>setSt('lib',{k:'ok',m:'Already the newest: 2026.11.2.'}),1400)},
+libBack:()=>dlg('Go back to the version before',`<p class="dp">Spoolwarden uses the Catalog version it had before 2026.11.2. Update now brings 2026.11.2 back.</p>`+acts('Go back'),()=>{closeDlg();need('go back to the version before',()=>setSt('lib',{k:'ok',m:'Went back to the version before. Update now brings 2026.11.2 back.'}))}),
+entryAdd:()=>{const t=$('#f-entry');fclr('f-entry');const v=t.value.trim();if(!v)return ferr('f-entry','Paste an entry first.');let o;try{o=JSON.parse(v)}catch(e){return ferr('f-entry','That is not valid JSON. Check the quotes and brackets.')}
+if(!o||typeof o!=='object'||Array.isArray(o))return ferr('f-entry','Use one object in curly brackets.');
+need('add a Catalog entry',()=>{S.libAdds++;t.value='';const s=$('#libS');if(s)s.textContent=`${S.libAdds} local additions. Last check 2026-11-12 03:10: ok.`;setSt('entry',{k:'ok',m:`Entry added. ${S.libAdds} local additions now.`})})}};
+
+function addSubmit(){const bam=S.addType==='bambu',v=k=>{const e=d.getElementById('f-'+k);return e?e.value.trim():''};['a-addr','a-code','a-port'].forEach(k=>fclr('f-'+k));
+const addr=v('a-addr'),code=v('a-code'),port=v('a-port'),name=v('a-name'),serial=v('a-serial'),key=v('a-key'),pre=S.addPre;let bad=0;
+if(!addr){ferr('f-a-addr',bam?'Enter the printer’s IP address or name.':'Enter the printer’s address.');bad=1}
+if(bam&&!code){ferr('f-a-code','Enter the Access Code shown on the printer.',bad);bad=1}
+if(!bam&&!/^\d{2,5}$/.test(port)){ferr('f-a-port','Enter a port number, for example 7125.',bad);bad=1}
+if(bad)return;
+need('add the printer',()=>{setSt('add',{k:'run',m:'Connecting to '+addr+'…'});setTimeout(()=>{const id='n'+Date.now();
+const p=bam?{id,name:name||addr,kind:'bambu',model:'Bambu Lab printer',addr,serial:serial||'Read from the printer',ok:true,cert:'Pinned',mapped:'Not yet',slots:[]}:{id,name:name||addr,kind:'klipper',model:'Klipper',addr:addr+':'+port,ok:true,key:!!key,lane:'auto',slots:[]};
+P.push(p);if(pre&&pre.found)S.found=false;S.addPre=null;S.addType='bambu';delete S.st.add;S.emptyP=false;S.item=id;setHash();render();focusHead();toast('Added '+p.name+'.','ok')},1200)})}
+
+/* ---------- Events ---------- */
+d.addEventListener('click',e=>{const el=e.target.closest('[data-a]');if(!el||el.disabled)return;if(el.tagName==='A')e.preventDefault();const f=A[el.dataset.a];if(f)f(el,e)});
+d.addEventListener('submit',e=>{e.preventDefault();if(e.target.id==='dlgF'){if(D._ok)D._ok()}else if(e.target.matches('[data-add]'))addSubmit()});
+d.addEventListener('input',e=>{const t=e.target;
+if(t.id==='code'){const v=t.value.replace(/\D/g,'').slice(0,8);t.value=v.length>4?v.slice(0,4)+'-'+v.slice(4):v}
+if(t.id==='rzType')$('#rzGo').disabled=t.value.trim().toLowerCase()!=='restore';
+if(t.id==='f-locs'){const l=t.value.split(',').map(s=>s.trim()).filter(Boolean);['pla','over'].forEach(k=>{const s=d.getElementById('f-'+k);if(!s)return;const c=s.value;s.innerHTML=l.map(x=>`<option${x===c?' selected':''}>${esc(x)}</option>`).join('')})}
+if(t.getAttribute&&t.getAttribute('aria-invalid')==='true')fclr(t.id);
+const f=t.closest&&t.closest('[data-form]');if(f&&f.dataset.form!=='pass')setSt('save-'+f.dataset.form,{k:'note',m:'Not saved yet.'},1)});
+d.addEventListener('change',e=>{if(e.target.id==='rzip'){const f=e.target.files[0];$('#rzName').textContent=f?f.name:'No zip chosen';$('#rzCheck').disabled=!f;setSt('rz',null)}});
+d.addEventListener('keydown',e=>{if(D.hidden)return;if(e.key==='Escape'){e.preventDefault();closeDlg()}else if(e.key==='Tab'){const f=focusables(D);if(!f.length)return;const a=f[0],z=f[f.length-1];if(e.shiftKey&&d.activeElement===a){e.preventDefault();z.focus()}else if(!e.shiftKey&&d.activeElement===z){e.preventDefault();a.focus()}}});
+$('#scrim').addEventListener('click',closeDlg);
+const onLay=()=>render();
+[mqT,mqD].forEach(m=>{if(m.addEventListener)m.addEventListener('change',onLay);else m.addListener(onLay)});
+addEventListener('hashchange',fromHash);
+if(window.ResizeObserver)new ResizeObserver(()=>root.style.setProperty('--dockh',dock.offsetHeight+'px')).observe(dock);
+$('#bbSeg').innerHTML=segHTML();
+fromHash();
+})();
+</script>
+</body>
+</html>
