@@ -1341,7 +1341,12 @@ outside the home network and shows no Hub data, so its title is "Spoolwarden"; t
 ### 11.1 Refusal page (outside the home network)
 
 Served instead of the web app, with status 403, to any address outside the home network. No navigation, no data.
-It uses the web app's stylesheet and the appearance script only.
+It uses the web app's stylesheet and the appearance script only. So that a refused phone can load them, four files
+answer every address and every Host name: the appearance script, the token stylesheet, the shared component stylesheet
+and the web app's own stylesheet. They are fixed files that hold no data, no name and no setting of the Hub, are
+served for reading only, and set no cookie. Every other file of the web app (its scripts, the string catalogue, the
+API) stays on the home network only; the refusal page loads no script but the appearance script and its texts are
+written into the page by the Hub.
 
 ```
 +------------------------------------------+
